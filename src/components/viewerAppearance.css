@@ -1,0 +1,25 @@
+.viewer.cad-viewer { background:#f5f6f9; }
+.cad-viewer .viewer-canvas { background:linear-gradient(180deg,#f7f8fc 0%,#e3e6ef 70%,#d8deea 100%); }
+.cad-viewer .viewer-toolbar { background:#f7f8fb; border-color:#d9dee8; }
+.cad-viewer .viewer-toolbar button { color:#52627e; }
+.cad-viewer .viewer-toolbar button.selected { color:#294d92; background:#e3eafa; border-color:#c3cfe7; }
+.cad-viewer .viewer-projection { display:flex; align-items:center; gap:5px; margin-left:auto; color:#58667c; font-size:10px; }
+.cad-viewer .viewer-projection select { padding:3px 5px; border:1px solid #cbd3e2; border-radius:3px; background:#fff; color:#354969; font:inherit; }
+.cad-viewer .viewer-model-legend { display:flex; flex-wrap:wrap; align-items:center; gap:5px 12px; padding:6px 12px; border-top:1px solid #ccd4e2; background:#eef1f7; font-size:9px; color:#52617a; }
+.viewer-model-legend span { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+.viewer-model-legend i { display:inline-block; width:9px; height:9px; border:1px solid #0003; border-radius:1px; }
+.viewer-model-legend small { margin-left:auto; font-size:8px; color:#66758d; }
+.cad-viewer .viewer-options,.cad-viewer .viewer-inspect,.cad-viewer .viewer-load-controls { background:#f7f8fb; color:#51617b; border-color:#d9dee8; }
+.cad-viewer select { border-color:#cbd3e2; color:#354969; }
+.cad-viewer input[type=checkbox] { accent-color:#5373ad; }
+.cad-viewer .viewer-axis { padding:3px 5px; left:9px; bottom:7px; border-radius:3px; background:#f5f7fbe6; }
+.cad-viewer .viewer-axis small { color:#56657c; }
+.cad-viewer .viewer-axis span:first-child { color:#b64747; }
+.cad-viewer .viewer-axis span:nth-child(2) { color:#497c4a; }
+.cad-viewer .viewer-axis span:nth-child(3) { color:#4569af; }
+@media (max-width:1100px) { .cad-viewer .viewer-projection > span { display:none; } }
+@media (max-width:520px) {
+ .cad-viewer .viewer-toolbar { flex-wrap:wrap; gap:5px; }
+ .cad-viewer .viewer-projection { margin-left:0; }
+ .cad-viewer .viewer-actions { margin-left:auto; }
+}

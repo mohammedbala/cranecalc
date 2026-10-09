@@ -1,0 +1,237 @@
+import {flangeTieGeometry} from './tieGeometry';
+import {flangeTieResponse} from './flangeTieDesign';
+import {cappedMechanics} from './cappedMechanics';
+import {createBracketCollector} from './bracketDesign';
+import {createExistingBracketCollector} from './existingBracket';
+import { LateralTorsionBeam } from './lateralTorsion';
+import { beamSystem,momentAt } from './beam';
+import { boltProperties,plateMember } from './connectionStrength';
+import type { RunwayCaseEvent,RunwayCaseObserver } from './designAnalysis';
+import type { ProjectInput,Properties } from './types';
+import type { FatigueDetailResult,InterfaceAction,RunwayDetailResults } from './runwayDetails';
+import { railKeeperResponse } from './railKeeper';
+import {tractionBays,railKeeperStations,girderSegments,independentBearings} from './simpleSupports';
+
+export function braceSystem(p:ProjectInput){
+ const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875);
+ const member=plateMember(b.width,b.thickness,b.length,p.section.E,m.Fy,m.Fu,b.width-holes,p.method),cos=b.reach/b.length;
+ // Two flat bars in parallel, two end connections in series. The connection
+ // model includes gusset axial strain and conservative bolt shear deformation;
+ // no stiffness from the excluded supporting building is inferred.
+ const n=2*b.connection.rows,G=p.section.E/2.6,grip=2*b.thickness+b.gussetThickness;
+ const plateK=p.section.E*b.gussetThickness*(b.connection.gauge+2*b.connection.edge)/b.connectionLength;
+ const boltK=n*2*G*bolt.area/grip;
+ const weldArea=2*b.connection.weldLength*b.connection.weldSize/Math.sqrt(2);
+ const weldK=G*weldArea/(2*b.connection.weldSize);
+ const connectionK=1/(1/plateK+1/boltK+1/weldK);
+ const localCompliance=flangeTieGeometry(p)?flangeTieResponse(p,1).compliance:0;
+ const stiffness=cos*cos/(1/(2*member.stiffness)+2/connectionK+localCompliance);
+ return {member,cos,connectionK,stiffness,capacity:2*Math.min(member.tension,member.compression.capacity)*cos};
+}
+export function restraintStations(p:ProjectInput){
+ const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
+ const L=supports.at(-1)!,stations=[...supports];
+ // Both flanges restrained at every station. The stricter of the two specified
+ // spacings is used; unbraced lengths must agree with the actual drawing layout.
+ const spacing=Math.min(p.lateralBraceSpacing,p.aist?.bottomBraceSpacing||L);
+ for(let x=spacing;x<L-1e-6;x+=spacing)stations.push(x);
+ return [...new Set(stations)].sort((a,b)=>a-b);
+}
+const constants={A:[25,165],B:[12,110],B1:[6.1,83],C:[4.4,69],D:[2.2,48],E:[1.1,31],E1:[.39,18]} as const;
+export function fatigueSpectrumBin(category:keyof typeof constants,range:number,cycles:number){
+ const [cf]=constants[category];
+ const allowable=6900*(cf/cycles)**(1/3);
+ // Palmgren–Miner cumulative damage using the AISC cubic S-N curve. Below
+ // the threshold receives damage too: no endurance-limit credit for a mixed spectrum.
+ const damage=range===0?0:cycles/(cf*(6900/range)**3);
+ return {allowable,damage};
+}
+function automaticFatigueDetails(p:ProjectInput){
+ const d=p.details!,L=p.spans.reduce((s,v)=>s+v,0),list=[...d.fatigueDetails];
+ const tie=flangeTieGeometry(p);
+ if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of ['top-right','bottom-right'] as const)list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} edge ${sign} / ${point}`,x:v.tieX+sign*tie.attachment.saddleLength/2,point,category:'E1',reference:'AISC Table A-3.1 attachment, conservative E-prime; global stress plus local flange strip bending'});
+ const category=d.rail.clipWidth<50?'C':d.rail.clipWidth<=Math.min(12*d.rail.clipThickness,100)?'D':d.rail.clipThickness<=20?'E':'E1';
+ for(const [i,x] of railKeeperStations(p).entries()){
+  for(const side of ['left','right'] as const)list.push({id:`RC${i}-${side}`,name:`Rail keeper ${i+1} · ${side}`,x,point:`top-${side}`,category,reference:'AISC Table A-3.1, 7.1 · attachment length/thickness from keeper geometry'});
+ }
+ if(p.section.kind==='cap'){
+  // Continuous longitudinal welds: Category B base metal. End terminations:
+  // conservative Category E; evaluated at both ends of each physical segment.
+  const positions=list.filter(f=>f.id.startsWith('RC')&&f.id.endsWith('left')).map(f=>f.x);
+  for(const [i,x] of positions.entries())for(const side of ['left','right'] as const)list.push({id:`CW${i}-${side}`,name:`Cap weld base metal ${i+1} · ${side}`,x,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 3.1; continuous longitudinal weld'});
+  const ends=p.system==='continuous'?[0,L]:girderSegments(p).flatMap(m=>[m.start,m.end]);
+  for(const [i,x] of ends.entries())for(const side of ['left','right'] as const)list.push({id:`CE${i}-${side}`,name:`Cap end termination ${i+1} · ${side}`,x,point:`top-${side}`,category:'E',reference:'AISC Table A-3.1, conservative Category E termination bound'});
+ }
+ return list;
+}
+export function createDetailCollector(p:ProjectInput,props:Properties,subdivisions:number){
+ const bracket=createBracketCollector(p);
+ const existingBracket=createExistingBracketCollector(p);
+ const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+p.railHeight-cap.shearCenter:p.railHeight+p.section.d/2,allStations=restraintStations(p);
+ const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
+ const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
+ const bearings=independentBearings(p);
+ const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
+ const detailInputs=automaticFatigueDetails(p);
+ const fatigue:FatigueDetailResult[]=detailInputs.map(f=>({id:f.id,name:f.name,x:f.x,category:f.category,reference:f.reference,bins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,minimum:0,maximum:0,range:0,allowable:0,damage:0})),damage:0,range:0,peak:0}));
+ const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,flangeStress:0,plateStress:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
+ if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
+ const mechanics=cap?{Iy:cap.Iy,topOffset:cap.topOffset,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
+ const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>();
+ const braceFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
+ function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
+ const evaluate=(e:RunwayCaseEvent,bin=-1)=>{
+  const key=JSON.stringify([e.kind,bin,e.wheels,e.q,e.railTorquePerLength,e.axial,e.horizontalCrane,e.cranes]);
+  if(seen.has(key))return;seen.add(key);result.cases++;
+  const majorLoads=e.wheels.map(w=>({x:w.x,p:w.p}));
+  const moment=(x:number)=>momentAt(x,e.verticalReactions,majorLoads,e.q);
+  const reactions=new Map<number,{top:number;bottom:number}>();
+  const endActions:{x:number;bay:number;end:'left'|'right';vertical:number;top:number;bottom:number;longitudinal:number;offset:number}[]=[];
+  for(const [bayIndex,[start,end]] of groups.entries()){
+   const wheels=e.wheels.filter(w=>w.x>=start-1e-6&&(w.x<end-1e-6||(end===L&&w.x<=end+1e-6)));
+   const stations=allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6);
+   const strength=e.kind==='strength',stiffnessFactor=strength?.8:1;
+   const beam=new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
+    loads:wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),
+    restraints:stations.map(x=>({x:x-start,top:brace.stiffness*stiffnessFactor,bottom:brace.stiffness*stiffnessFactor})),
+    axial:strength?e.axial:0,moment:strength?x=>moment(x+start):undefined,
+    distributedTorque:e.railTorquePerLength,
+    // Apply the full UDL at rail height for the stability test conservatively.
+    distributedVertical:strength?e.q:0,distributedHeight:z
+   });
+   if(strength&&!beam.isStable(result.criticalMultiplier)){
+    const critical=beam.criticalMultiplier(result.criticalMultiplier);
+    if(critical.value<result.criticalMultiplier){result.criticalMultiplier=critical.value;result.governing.criticalMultiplier={id:e.id,combination:e.combination,x:start,value:critical.value};}
+   }
+   const geometry=strength?(p.method==='LRFD'?1:1.6):0;
+   const r=beam.solve(geometry);result.residual=Math.max(result.residual,r.residual);
+   if(p.system==='simple')for(const [endName,x] of [['left',start],['right',end]] as const){
+    const lateral=r.restraints.find(re=>Math.abs(re.x-(x-start))<1e-6)!;
+    const vertical=e.q*(end-start)/2+wheels.reduce((sum,w)=>sum+w.p*(endName==='left'?(end-w.x):(w.x-start))/(end-start),0);
+    const bearing=bearings.find(v=>v.bay===bayIndex+1&&v.end===endName)!;
+    endActions.push({x,bay:bayIndex+1,end:endName,vertical,top:lateral?.top??0,bottom:lateral?.bottom??0,longitudinal:0,offset:bearing.center-x});
+   }
+   for(const re of r.restraints){const x=re.x+start,old=reactions.get(x)??{top:0,bottom:0};reactions.set(x,{top:old.top+re.top,bottom:old.bottom+re.bottom});}
+   for(const s of r.stations){
+    const x=s.x+start,M=moment(x),warping=E*Math.abs(s.warpingCurvature)*props.h0*p.section.bf/4;
+    if(strength){
+     // Sum component magnitudes for a conservative corner-stress envelope.
+     // Whole-section bending + explicit warping replaces force-couple stresses
+     // in this supplementary check; no double counting of the old flange model.
+     const normal=Math.abs(e.axial)/props.A+Math.abs(M)/props.Sx+E*Math.abs(s.curvature)*(cap?p.section.capWidth:p.section.bf)/2+Math.abs(M*s.twist)/props.Sy+(cap?E*Math.abs(s.warpingCurvature)*cap.omegaMax:warping);
+     peak('normalStress',normal,e,x);
+     const V=e.verticalReactions.reduce((a,v)=>a+(v.x<=x+1e-7?v.r:0),0)-e.wheels.reduce((a,w)=>a+(w.x<=x+1e-7?w.p:0),0)-e.q*x;
+     const h=p.section.d-2*p.section.tf;
+     const tauWeb=1.5*Math.abs(V)/(h*p.section.tw)+G*p.section.tw*Math.abs(s.twistRate);
+     const totalH=e.wheels.reduce((a,w)=>a+Math.abs(w.h),0);
+     const tauFlange=1.5*totalH/(cap?Math.min(2*p.section.bf*p.section.tf,p.section.capWidth*p.section.capTw):2*p.section.bf*p.section.tf)+G*(cap?.maxThickness??p.section.tf)*Math.abs(s.twistRate)+E*Math.abs(s.warpingThird)*(cap?.shearCoefficient??props.h0*p.section.bf**2/16);
+     peak('shearStress',Math.max(tauWeb,tauFlange),e,x);
+    }
+    if(cap&&(strength||e.kind==='fatigue')){
+     const V=e.verticalReactions.reduce((a,v)=>a+(v.x<=x+1e-7?v.r:0),0)-e.wheels.reduce((a,w)=>a+(w.x<=x+1e-7?w.p:0),0)-e.q*x;
+     const flow=Math.abs(V)*cap.channelQ/(2*props.Ix)+E*Math.abs(s.lateralThird)*cap.channelHalfFirstMoment+E*Math.abs(s.warpingThird)*cap.channelHalfWarpBound;
+     if(strength)result.cap!.longitudinalFlow=Math.max(result.cap!.longitudinalFlow,flow);
+     else result.cap!.fatigueFlows[bin]=Math.max(result.cap!.fatigueFlows[bin],flow);
+    }
+    if(e.kind==='service'){peak('railDisplacement',Math.abs(s.v+z*s.twist),e,x);peak('twist',Math.abs(s.twist),e,x);}
+   }
+   if(e.kind==='fatigue')for(let i=0;i<fatigue.length;i++){
+    const f=detailInputs[i];if(f.x<start||f.x>end)continue;
+    const s=r.at(f.x-start),y=f.point.startsWith('top')?props.h0/2:-props.h0/2,xEdge=f.point.endsWith('right')?p.section.bf/2:-p.section.bf/2;
+    const points=cap?cap.fibres.filter(v=>(f.point.startsWith('top')?v.y>0:v.y<0)&&(f.point.endsWith('right')?v.x>0:v.x<0)):[{x:xEdge,y,omega:xEdge*y}];
+    const b=fatigue[i].bins[bin];
+    for(const point of points){const stress=-moment(f.x)*point.y/props.Ix-E*s.curvature*point.x-E*s.warpingCurvature*point.omega;b.minimum=Math.min(b.minimum,stress);b.maximum=Math.max(b.maximum,stress);}
+   }
+  }
+  if(bracket||existingBracket)for(const x of supports){
+   const loads=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({vertical:v.vertical,offset:v.offset})):[{vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,offset:0}];
+   bracket?.observe(e.kind,e.id,x,loads,bin);
+   existingBracket?.observe(e.kind,e.id,x,loads,bin);
+  }
+  if(e.kind==='strength'){
+   for(const [x,r] of reactions){
+    result.demands.brace=Math.max(result.demands.brace,Math.abs(r.top),Math.abs(r.bottom));
+    // Independent bays deliver traction at their own locating (left) end.
+    // For a straddling crane, each occupied bay receives the FULL traction in
+    // a separate bounding scenario, avoiding an invented drive-wheel split.
+    for(const bay of p.system==='simple'?tractionBays(p,e):[-1])for(const longitudinalSign of [-1,1]){
+     const ends=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({...v,longitudinal:v.bay===bay&&v.end==='left'?longitudinalSign*e.axial:0})):undefined;
+     const item:InterfaceAction={id:p.system==='simple'?`${e.id}-T${bay}`:e.id,combination:e.combination,x,vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,top:r.top,bottom:r.bottom,longitudinal:ends?ends.reduce((a,v)=>a+v.longitudinal,0):(x===0||x===L)?longitudinalSign*e.axial:0,torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
+     if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);
+     for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
+      const k=`${e.combination}:${x}:${component}:${dir}`,old=interfaceExtremes.get(k);
+      if(!old||dir*item[component]>dir*old[component])interfaceExtremes.set(k,{...item,controls:[`${component} ${dir===1?'max':'min'}`]});
+     }
+     // Retain individual end-bearing extrema, with the OTHER end's
+     // simultaneous force intact. Combined bracket maxima alone miss these.
+     for(const end of ends??[])for(const dir of [-1,1]){
+      const k=`${e.combination}:${x}:bay${end.bay}:${dir}`,old=interfaceExtremes.get(k),previous=old?.ends?.find(v=>v.bay===end.bay)?.vertical;
+      if(previous===undefined||dir*end.vertical>dir*previous)interfaceExtremes.set(k,{...item,controls:[`bay ${end.bay} bearing ${dir===1?'max':'min'}`]});
+     }
+     if(ends)for(const dir of [-1,1]){const k=`${e.combination}:${x}:seatMoment:${dir}`,old=interfaceExtremes.get(k);if(!old||dir*item.seatMoment!>dir*old.seatMoment!)interfaceExtremes.set(k,{...item,controls:[`seat eccentricity moment ${dir===1?'max':'min'}`]});}
+    }
+   }
+   result.demands.endLongitudinal=Math.max(result.demands.endLongitudinal,e.axial);
+   // Group every wheel in a conservative moving window at least as long as
+   // the clip interval or 45-degree wheel-bearing patch. No load sharing credit.
+   const window=Math.max(p.aist!.clipSpacing,2*(p.aist!.railDepth+p.section.tf));
+   for(const w of e.wheels){const group=e.wheels.filter(v=>v.x>=w.x-1e-6&&v.x<=w.x+window+1e-6);result.demands.railLateral=Math.max(result.demands.railLateral,group.reduce((n,v)=>n+Math.abs(v.h),0));result.demands.railVertical=Math.max(result.demands.railVertical,group.reduce((n,v)=>n+v.p,0));}
+  }
+  if(e.kind==='fatigue'){
+   const window=Math.max(p.aist!.clipSpacing,2*(p.aist!.railDepth+p.section.tf));
+   for(const w of e.wheels){
+    const group=e.wheels.filter(v=>v.x>=w.x-1e-6&&v.x<=w.x+window+1e-6),P=group.reduce((n,v)=>n+v.p,0),H=group.reduce((n,v)=>n+Math.abs(v.h),0);
+    result.demands.railFatigueVertical=Math.max(result.demands.railFatigueVertical,P);result.demands.railFatigueLateral=Math.max(result.demands.railFatigueLateral,H);
+    const bound=result.railFatigueBins[bin];bound.vertical=Math.max(bound.vertical,P);bound.lateral=Math.max(bound.lateral,H);
+   }
+   for(const r of reactions.values()){braceFatigue.min=Math.min(braceFatigue.min,r.top,r.bottom);braceFatigue.max=Math.max(braceFatigue.max,r.top,r.bottom);}
+   for(const r of e.verticalReactions){verticalFatigue.min=Math.min(verticalFatigue.min,r.r);verticalFatigue.max=Math.max(verticalFatigue.max,r.r);}
+  }
+ };
+ const observe:RunwayCaseObserver=e=>{
+  if(e.kind!=='fatigue'){evaluate(e);return;}
+  for(let bin=0;bin<details.spectrum.length;bin++){
+   const fraction=details.spectrum[bin].liftFraction;
+   const wheels=e.cranes.flatMap(c=>p.cranes[c.index].wheels.map(w=>({x:c.origin+w.offset,p:w.unloaded+(c.loaded?fraction*(w.loaded/(p.cranes[c.index].includesImpact?1+p.cranes[c.index].impact:1)-w.unloaded):0)}))).filter(w=>w.x>=0&&w.x<=L);
+   const loads=e.wheels.map((w,i)=>({...w,p:wheels[i].p}));
+   evaluate({...e,wheels:loads,verticalReactions:vertical.evaluate(loads.map(w=>({x:w.x,p:w.p}))).reactions},bin);
+  }
+ };
+ const finish=()=>{
+  const q=p.deadLoad+p.railWeight+props.weight+(p.aist?.liveLoad??0);
+  const dead=vertical.evaluate([],q);
+  const deadBounds=detailInputs.map(f=>Math.abs(momentAt(f.x,dead.reactions,[],q))/props.Sx);
+  for(const [start,end] of groups){
+   const beam=new LateralTorsionBeam({length:end-start,E,G,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
+    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:brace.stiffness,bottom:brace.stiffness})),
+    loads:[],distributedTorque:p.railWeight*p.railEccentricity});
+   const deadT=beam.solve();
+   detailInputs.forEach((f,i)=>{if(f.x>=start&&f.x<=end){const v=deadT.at(f.x-start);deadBounds[i]+=E*Math.abs(v.curvature)*(cap?p.section.capWidth:p.section.bf)/2+E*Math.abs(v.warpingCurvature)*(cap?.omegaMax??props.h0*p.section.bf/4);}});
+  }
+  // TR13 §3.10.2.3: Cds + liftFraction*Cvs + 0.5Css, without impact or
+  // strength factors. Bound each bin by its own wheel-group force envelope.
+  // Full local reversal and independent global/local superposition remain
+  // conservative; no position coincidence, load sharing or endurance credit.
+  for(const bound of result.railFatigueBins){
+   const local=railKeeperResponse(details.rail,p.aist!.railDepth,p.railEccentricity,cap?p.section.capTw:p.section.tf,bound.vertical,bound.lateral);
+   bound.flangeStress=local.flangeStress;bound.plateStress=local.plateStress;bound.weldStress=local.weldStress;
+  }
+  for(const f of fatigue)if(f.id.startsWith('RC'))for(const [i,bin] of f.bins.entries()){
+   const local=result.railFatigueBins[i].flangeStress;bin.minimum-=local;bin.maximum+=local;
+  }
+  if(cap)for(const f of fatigue)if(f.id.startsWith('CE'))for(const bin of f.bins){const traction=Math.max(...p.cranes.map(c=>c.longitudinal))/props.A;bin.minimum-=traction;bin.maximum+=traction;}
+  result.braceForce=result.demands.brace;
+  result.demands.braceFatigue=braceFatigue.max-braceFatigue.min;
+  result.demands.verticalFatigue=verticalFatigue.max-verticalFatigue.min;
+  if(flangeTieGeometry(p)){const localRange=flangeTieResponse(p,result.demands.braceFatigue).flange;for(const f of fatigue)if(f.id.startsWith('SA'))for(const b of f.bins){b.minimum-=localRange/2;b.maximum+=localRange/2;}}
+
+  for(const [i,f] of fatigue.entries()){for(const b of f.bins){b.range=b.maximum-b.minimum;Object.assign(b,fatigueSpectrumBin(f.category as keyof typeof constants,b.range,b.cycles));}f.range=Math.max(...f.bins.map(b=>b.range));f.damage=f.bins.reduce((a,b)=>a+b.damage,0);f.peak=deadBounds[i]+Math.max(...f.bins.flatMap(b=>[Math.abs(b.minimum),Math.abs(b.maximum)]));}
+  const grouped=new Map<string,InterfaceAction>();
+  for(const v of interfaceExtremes.values()){const key=`${v.x}:${v.id}:${v.longitudinal}`;const old=grouped.get(key);if(old)old.controls.push(...v.controls);else grouped.set(key,{...v,controls:[...v.controls]});}
+  result.interfaces=[...grouped.values()].sort((a,b)=>a.x-b.x||a.combination.localeCompare(b.combination));
+  if(bracket)result.bracket=bracket.result;
+  if(existingBracket)result.existingBracket=existingBracket.result;
+  return result;
+ };
+ return {observe,finish};
+}

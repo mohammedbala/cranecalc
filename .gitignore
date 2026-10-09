@@ -1,0 +1,14 @@
+node_modules/
+dist/
+tmp/
+output/
+playwright-report/
+test-results/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+.claude/
+.codex-backups/
+*.tsbuildinfo

@@ -1,0 +1,18 @@
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {calculate} from '../src/engine/calculate';
+import {cappedDemonstrationProject} from '../src/engine/demonstration';
+import {interfaceCsv} from '../src/engine/detailExports';
+import {lineworkDxf} from '../src/components/drafting';
+import {drawingSheetSet} from '../src/components/planSheet';
+import {demonstrationFraming} from '../src/components/framingSettings';
+const input=cappedDemonstrationProject(),s=calculate(input),root='output/capped-demonstration';
+if(!s.eligible||s.checks.some(c=>c.status==='fail'))throw Error(JSON.stringify({errors:s.errors,checks:s.checks.filter(c=>!['pass','not-applicable'].includes(c.status))}));
+mkdirSync(root,{recursive:true});mkdirSync('output/pdf',{recursive:true});
+writeFileSync(`${root}/project.json`,JSON.stringify(input,null,2));writeFileSync(`${root}/snapshot.json`,JSON.stringify(s,null,2));writeFileSync(`${root}/interface-forces.csv`,interfaceCsv(s));writeFileSync(`${root}/runway-details.dxf`,lineworkDxf(s));
+for(const sheet of drawingSheetSet(s,demonstrationFraming))writeFileSync(`${root}/${sheet.name}.svg`,sheet.svg);
+writeFileSync(`${root}/reference-framing.json`,JSON.stringify(demonstrationFraming,null,2));
+const response=await fetch('http://127.0.0.1:5173/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({input,revision:s.revision,framing:demonstrationFraming})});
+if(!response.ok)throw Error(await response.text());
+if(response.headers.get('x-calculation-revision')!==s.revision)throw Error('Stale report revision');
+writeFileSync('output/pdf/crane-runway-capped-demonstration.pdf',Buffer.from(await response.arrayBuffer()));
+console.log(JSON.stringify({revision:s.revision,checks:s.checks.length,passes:s.checks.filter(c=>c.status==='pass').length,notApplicable:s.checks.filter(c=>c.status==='not-applicable').length,pdf:'output/pdf/crane-runway-capped-demonstration.pdf'}));

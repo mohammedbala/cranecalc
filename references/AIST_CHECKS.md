@@ -1,0 +1,50 @@
+# AIST runway worksheet implementation
+
+Reference: **AIST Technical Report 13**, using the user's supplied source dated February 24, 2020; AISC 360-16 (June 2018 printing); and DG7 third edition with its appended February 2023 corrections. Source verification is distinct from project applicability. Exact file identity and provenance are retained in SOURCE_REGISTER.md.
+
+| Check | Implementation / limits |
+| --- | --- |
+| Building classification | Owner A–D class and building load repetitions, Table 1.1. Fatigue stress fluctuations are entered separately. |
+| Impact, side thrust, traction | §3.6.2/Table 3.2 cab/radio/pendant/type rules and greatest-of side thrust. Design adopts the greater of minimum and supplied forces; lateral wheel pattern is proportionally scaled, never reduced. A zero pattern requires input. |
+| Crane load split | Static loaded wheel minus unloaded wheel is lifted contribution. Manufacturer must confirm the same trolley position; impact normalized once. |
+| LRFD / ASD | §3.10.2 runway-only projections; crane bridge/trolley dead weight and lifted loads separately factored. Single-crane Css/Cls/Ci/Cbs; empty, loaded and absent states; minimum lift conservatively zero. Project must exclude environmental/building actions on this girder. Nonnegative uniform runway occupancy L may be entered. |
+| Serviceability | §5.8.7 one crane, static vertical, no impact; A/B L/1000, C/D L/600, lateral L/400 or stricter owner criterion. Shortest bay governs conservatively. Lateral result is independent flange bending, with rail-head force couple, not complete rail twist. |
+| Compactness | AISC B4.1b; AIST requires compact top flange/web. Catalogue kdes determines clear web depth. Custom sections receive no fillet credit. Noncompact and cap-channel flexure remain unsupported. |
+| Major flexure | AISC F2, Cb=1.0, phi=.90/Omega=1.67, all three Lb branches, only compact symmetric I-section. Actual bracing and rail load-height stability remain separate. Approximate welded thin-plate J receives no favorable resistance credit (J=0 in F2/E4 strength). |
+| Tension flange rupture | F13.1/B4.3, entered least actual net flange area across both flanges. Where required, the F13 strength cap also controls major flexure and H1. No viewer hole dimensions are inferred. Zero is missing input. |
+| Lateral flexure | DG7 §14.1 rail-head force couple to both flange centroids. Flange-only rectangular plate resistance, without web contribution. This is more conservative than substituting the whole-section Manual minor strength appearing in the DG7 worked example. |
+| Axial / interaction | E3/E4/E7 with supplied effective lengths, H1 at concurrent stations/cases, conservative Appendix 8 B1 with Cm=1.0. No frame sidesway analysis. Flange moment/resistance used conservatively with the unresolved torsion check kept visible. |
+| Web shear | G2.1, kv=5.34 without stiffener credit; stocky rolled-web phi=1/Omega=1.5 where applicable. AIST prohibits tension field action. |
+| Wheel / bearing | AIST lb=2(rail depth+tf). J10 web yielding, crippling, sidesway and compression buckling; end-zone and support checks conservative. Overlapping bearing patches require a grouped patch-load model. No stiffener resistance credit. |
+| Fatigue | Appendix 3 category constants/thresholds; selected outer flange edge at entered x; complete empty/loaded/absent/reversed-side envelope; Cds+Cvs+0.5Css, no impact/factors. All-crane superposition is included conservatively. Owner must specify equivalent full-range stress fluctuations and actual detail classification/fabrication. The exact cube-root power is conservatively used in place of the rounded 0.333 exponent. Local stress concentration, local weld/connection fatigue, thermal/corrosive exclusions and variable-amplitude spectrum verification require the actual detail. |
+| Peak cyclic stress | 0.66Fy at the same selected material point; includes dead-load major/flange bending, eccentric rail weight and possible occupancy live load. Warping stress remains unresolved. |
+| Detailing | Minimum thickness; paired rail-clip spacing/pads; hook-bolt restrictions; bracket support below 50 kip total unfactored reactions, including impact; long-span camber and backup bracing flags. Bracket rule is suitability, not a capacity calculation. |
+| Brace requirements | Appendix 6 point-brace flexural strength/stiffness displayed; Cd=2 for continuous members conservatively. Actual axial/lateral effects, connections and flexibility require a full brace-system model. |
+| Connection screening | Minimum bolt pitch and one effective fillet weld line in direct shear. No bolt-group, plate, block-shear, slip, prying, local weld fatigue, eccentric weld-group or bearing-stiffener capacity is implied. |
+
+## Remaining models and export gates
+
+Saint-Venant/warping torsion, rail twist and above-centroid load stability; actual stability brace system; actual girder bearing/end/tieback/longitudinal connections and required bearing stiffeners are **not solved by the generic source provisions or representative 3D details**. These remain explicit input/design/model blockers. Disabling connection templates does not waive required design checks. The supporting prefab building, brackets, columns, roof, knee bolts and other viewer hardware are not designed by this girder worksheet.
+
+The supplied-load analysis report remains available in analysis scope. A complete design report stays blocked while any applicable model/input/source requirement is unresolved. Verified engineering failures remain reportable only after numerical and completeness gates pass; no source checkbox bypasses the engine. Server and browser share the calculation engine.
+
+## Verification
+
+- DG7 Example 14.1.1: W24×131 ASD available major strength 605 kip-ft and whole-section minor strength 203 kip-ft; Example 14.1.2 LRFD major strength 909 kip-ft. Flange-only resistance is checked separately, about 99.65 kip-ft ASD.
+- Two 38.1-kip static wheels at 12-ft spacing on 30 ft: the concurrent exact UDL/wheel moment agrees within 1% with DG7's conservative 478-kip-ft impact and 386-kip-ft static sums. DG7 adds independent UDL/wheel maxima; our calculation retains concurrency. Web sidesway agrees within 2% after tabulated rounding.
+- Hand substitution checks for end yielding/crippling, F13 rupture strength cap, conservative welded torsional-property treatment, split load factors, minimum force rules, fatigue constants/thresholds, impact normalization, unit invariance, continuous multiple cranes, single-crane deflection, zero-data gates, every catalogue shape's finite primitives and KaTeX rendering.
+
+## Optional detailed rolled-girder package
+
+The preceding table describes the original general worksheet. Projects containing `details` now have an additional explicitly defined package. It replaces the legacy torsion, brace, bearing and connection blockers only when the detailed model actually runs. Catalogue rolled symmetric W-sections are required; existing gates for other sections, overlapping local web bearing patches, guide rollers, long spans and missing owner/supplier information remain. A girder-mounted eccentric bumper is outside this template; a stated full-speed force is delivered to a separate building-mounted stop.
+
+Implemented additions:
+
+- Coupled lateral/Vlasov warping response with finite both-flange springs, load-height geometric stiffness, normal/shear stress bounds, critical-load factor, rail-head movement and twist. Independent analytical torsion/LTB/Pz/axial benchmarks, force residual and separate travel/mesh refinements.
+- Paired flat-bar ties with E3 compression, net tension, Appendix 6 imperfection loads and member/gusset/bolt/weld stiffness in series. Symmetric double-cover end and tie templates evaluate elastic bolt groups, slip, bearing, net section/block shear, plate flexure/compression and eccentric weld groups. The in-plane template excludes prying, rather than assuming a capacity for an arbitrary out-of-plane load path.
+- Fitted bearing stiffener pairs and seat plate, including lateral diaphragm strength, full reaction/lateral weld transfer, dimensions, end rotation allowance and connection fatigue.
+- Idealized rail bending and pad pressure, integral stepped keepers and local girder flange response, rail-joint bars/slots/thermal travel and cyclic checks. Close wheels are grouped for rail components; overlapping girder-web wheel patches still block design export.
+- Multiple signed fatigue points, automatic keeper locations, duty bins, local/warping stress, dead-load peak bound, all-cycle conservative check, C-double-prime weld roots and Category F throats. Environmental applicability is validated.
+- Signed simultaneous interface forces and bumper bypass demand, dimensioned SVG/DXF sheets, fabrication/inspection notes, project JSON and compact/detailed PDF formats. Supporting building/frame/bracket/anchor/foundation capacities remain excluded.
+
+`demonstrationProject()` supplies a clearly marked fictitious 10-ton example. Fictional data are permitted only for demonstration purpose; project purpose retains manufacturer-data gates. Numerical/engineering checks do not change with report purpose. No source certification checkbox or forged eligibility flag is accepted by the report endpoint.

@@ -1,0 +1,1487 @@
+{
+  "referenceVersion": "2026-10-06.aist-tr13-2",
+  "accessed": "2026-10-06",
+  "summary": {
+    "reports": 12,
+    "comparisons": 50,
+    "matches": 36,
+    "differences": 14
+  },
+  "sources": [
+    {
+      "id": "everett",
+      "title": "DeShazo runway design — Boeing, Everett",
+      "document": "SE-DS-RPT-17691 rev. 1",
+      "reportDate": "2023-07-25",
+      "permit": "B2306-034",
+      "url": "https://lfportal.everettwa.gov/WebLink/DocView.aspx?dbid=0&id=2096929&page=1",
+      "sha256": null,
+      "category": "crane",
+      "basis": "AIST TR 13 (2021); AISC 360-16; LRFD",
+      "pages": "Printed 20, 24, 25; viewer 39, 43, 44",
+      "scope": "Base W24X76 local web checks, fatigue resistance and crane load factors. C15X33.9 cap, complete frame and stress demand excluded. Municipal scan visually inspected; no downloaded PDF hash."
+    },
+    {
+      "id": "red-dot",
+      "title": "Red Dot Corporation bridge crane evaluation",
+      "document": "AHBL 2220760.20",
+      "reportDate": "2022-10-26",
+      "permit": "PRCTI20230447",
+      "url": "https://permits.puyallupwa.gov/Portal/Permit/GetFile?docId=107692",
+      "sha256": "3b936d0731a824ffbd6d90d8386b709e315e58606df379ac5f75b18e8bfd99b8",
+      "category": "crane",
+      "basis": "RISA-2D 20; AISC 360-10 ASD; site IBC 2018",
+      "pages": "PDF 25, 27, 51; RISA 1, 3, 27",
+      "scope": "M4 W18X76 support-frame beam flexural resistance only. Lb replayed as member length 4.75 ft; yielding governs even with Cb=1. The capped W30 runway and frame analysis are excluded. Same AHBL report in PRCTI20221709 is not a second case."
+    },
+    {
+      "id": "headrick",
+      "title": "Headrick Residence",
+      "document": "Quantum 21271.01",
+      "reportDate": "2022-02-04",
+      "permit": "2202-128",
+      "url": "https://permitbulletin.mercerisland.gov/public/2022/2202-128/SUB1/structural%20calculations.pdf",
+      "sha256": "b2d67ffd038a229c62d98a1c9a4bb082206d86720525d574247d4a830b8a18a3",
+      "category": "steel",
+      "basis": "ForteWEB; AISC 360-16 ASD; A992",
+      "pages": "PDF 48; C-23",
+      "scope": "L2B1 W12X50 continuously braced flexure and shear capacities. Fy=50 ksi from A992 designation, E=29,000 ksi standard steel replay; bearing offsets and load bypass are not reconstructed."
+    },
+    {
+      "id": "intrachat",
+      "title": "Intrachat Hoang Residence",
+      "document": "Quantum 22252.01",
+      "reportDate": "2022-09-15",
+      "permit": "2211-165",
+      "url": "https://permitbulletin.mercerisland.gov/public/2022/2211-165/SUB1/structural%20calcs%20-%2022-09-15%20-%20intrachat%20hoang%20structural%20calculations.pdf",
+      "sha256": "85316e781cbf5ec454dd80948423cc2f8a8abada9595ac735f3d3c1d4355b232",
+      "category": "steel",
+      "basis": "ENERCALC; AISC 360-16 ASD; ASCE 7-16",
+      "pages": "PDF 168; printed 166",
+      "scope": "Grid 8 W16X26, simple 21.33 ft span: D+L forces, live/total deflections and fully braced strengths. Dead line load includes 26 plf self weight exactly once."
+    },
+    {
+      "id": "zimmer",
+      "title": "Zimmer Residence",
+      "document": "Buker Engineering; Yield-Link beam 1001",
+      "reportDate": "2024-11-11",
+      "permit": "CAO24-037",
+      "url": "https://permitbulletin.mercerisland.gov/public/CAO24-037/SUB1/zimmer%20residence%20-%20structural%20calcualtions%20-%2011-13-24.pdf",
+      "sha256": "c01976f929ca1b6df6c32a1f841edf9838d3f051c80e9026d485683870ef4d48",
+      "category": "steel",
+      "basis": "Simpson Yield-Link V4.1.2; AISC 360-16 LRFD",
+      "pages": "PDF 57, 58, 61; L55, L56, L59 (11/13/2024 sheets)",
+      "scope": "W16X67 compactness, LTB limits, flexural and shear resistance at Lb=220 in. Source Cb=2.19; app retains Cb=1. No moment connection, seismic system or full H1 interaction validation."
+    },
+    {
+      "id": "dish",
+      "title": "Dish Wireless rooftop — SESEA00351A",
+      "document": "SESEA00351A structural calculations",
+      "reportDate": "2023-04-27",
+      "permit": "WCF23-004",
+      "url": "https://permitbulletin.mercerisland.gov/public/WCF23-004/SUB1/sesea00351adishsarev0stamped.pdf",
+      "sha256": "59d7c3b1f8c5d941aea95609d3d1f25fda343cf08b1f6a56dd6d50da964e3609",
+      "category": "steel",
+      "basis": "ENERCALC; AISC 360-16 LRFD; ASCE 7-16",
+      "pages": "PDF 65",
+      "scope": "Beta sector W6X15, simple 16.333 ft span: 1.2D+W forces, D+0.6W deflection and shear/flexure strength. Printed flexural capacity exceeds the Cb=1 replay; source Cb is not printed. Wind generation, antenna mount and connections excluded."
+    },
+    {
+      "id": "seifert",
+      "title": "Seifert Residence Remodel",
+      "document": "Dibble 24-005",
+      "reportDate": "2024-03-07",
+      "permit": "SHL24-005",
+      "url": "https://permitbulletin.mercerisland.gov/public/SHL24-005/SUB1/structural%20calculation%20package.pdf",
+      "sha256": "42a3bea453637f4270aecc1a2dbbb0d6c03a14feea561df8061947b507ba2f77",
+      "category": "steel",
+      "basis": "ENERCALC; AISC 360-16 ASD; IBC 2021 combinations",
+      "pages": "PDF 52",
+      "scope": "UBM2 W8X40 fully braced flexure and shear resistance. Partial tributary loads, lateral/seismic cases and supports excluded from this resistance-only case."
+    },
+    {
+      "id": "yusen",
+      "title": "Yusen Residence",
+      "document": "O.G. Engineering 25014 — permit submission",
+      "reportDate": "2025-12-22",
+      "permit": "2601-016",
+      "url": "https://permitbulletin.mercerisland.gov/public/2601-016/SUB1/25014_yusen_struct%20permit%20calcs_122225.pdf",
+      "sha256": "97d9b78fcfbf6e6f188a4be265bdd12b28e13b4b0030f44521d29ad4ce2e094a",
+      "category": "steel",
+      "basis": "ENERCALC; AISC 360-16 ASD; IBC 2021 combinations",
+      "pages": "PDF/printed 35",
+      "scope": "UFB11 W12X30, simple 18.25 ft span. Published D line load 0.440 kip/ft is used without adding weight again; source D reactions confirm it. D+0.75L+0.75S demand, D+L/live deflection and fully braced strengths only."
+    },
+    {
+      "id": "fused",
+      "title": "Fused Elements Residence",
+      "document": "KPFF 2200638 — permit submittal",
+      "reportDate": "2023-07-19",
+      "permit": "2309-118",
+      "url": "https://permitbulletin.mercerisland.gov/public/2309-118/SUB1/structural%20calculations.pdf",
+      "sha256": "52b9252c4c1c9c1ba305067356aac6c609ada95fde060e19d4f329ce9c2eaf3b",
+      "category": "steel",
+      "basis": "ENERCALC; AISC 360-16 LRFD; IBC 2021 combinations",
+      "pages": "PDF 61–62; B42–B43",
+      "scope": "UL-B5 W10X26, simple 18.34 ft span: 1.2D+1.6L forces, live/total deflections and fully braced strengths. Dead load includes 26 plf once. Other submittals are not additional independent reports."
+    },
+    {
+      "id": "henne",
+      "title": "Henne Residence Addition",
+      "document": "L120 S250130-2",
+      "reportDate": "2025-04-11",
+      "permit": "2505-033",
+      "url": "https://permitbulletin.mercerisland.gov/public/2505-033/SUB1/structural%20calcs.pdf",
+      "sha256": "a576571be714ba0ee39ec454130105db91b930e7fa0dfbd8f9e7a1b47ca48071",
+      "category": "steel",
+      "basis": "StruCalc Plus; AISC 360-16 ASD (04/10/2025 member sheet)",
+      "pages": "PDF 53",
+      "scope": "C10X20, simple 17.5 ft span: beam mechanics only using supplied Ix=78.9 in4. Partial 180 plf dead load and 20 plf self weight, source D+0.7S demand and snow deflection. Channel strength, Cb and the choice of snow factor are not validated."
+    },
+    {
+      "id": "macintyre",
+      "title": "Macintyre addition and remodel",
+      "document": "CSES 2023.102",
+      "reportDate": "2024-01-26",
+      "permit": "2402-026",
+      "url": "https://permitbulletin.mercerisland.gov/public/2402-026/SUB1/structural%20calcs.pdf",
+      "sha256": "8f0f3337f982a9d3f4aed94c4c6a77d8d6ceadd7a4f5abe738d60d378d41e994",
+      "category": "beam-mechanics",
+      "basis": "IBC 2018; NDS 2018",
+      "pages": "PDF 2; R1",
+      "scope": "Timber roof rafter, simple 14 ft span: material-independent beam forces and deflections only, using supplied E and I. No timber/NDS strength or crane design check is claimed."
+    },
+    {
+      "id": "falkner",
+      "title": "Falkner Residence Carport",
+      "document": "CK Engineering 24-031",
+      "reportDate": "2024-11-15",
+      "permit": "2412-283",
+      "url": "https://permitbulletin.mercerisland.gov/public/2412-283/SUB1/structural%20calcs.pdf",
+      "sha256": "6a78d4783e46b00a7a6faa8d29bc35b340309e10c38bf0fd64bbd6430dcfcf29",
+      "category": "beam-mechanics",
+      "basis": "ENERCALC; NDS 2018; IBC 2021",
+      "pages": "PDF 23–24; printed 9–10",
+      "scope": "Timber BM3 4x12, simple 13 ft span: material-independent beam reactions and elastic deflections only. Density 30.59 pcf; actual 3.5x11.25 in rectangular section. NDS resistance and shear stress reductions excluded."
+    }
+  ],
+  "inputs": {
+    "strength": [
+      {
+        "sourceId": "red-dot",
+        "shape": "W18X76",
+        "method": "ASD",
+        "Fy": 50,
+        "E": 29000,
+        "LbIn": 57,
+        "values": [
+          {
+            "key": "major",
+            "published": 406.687,
+            "unit": "kip-ft",
+            "page": 51,
+            "printedPage": "RISA 27",
+            "note": "M4 LC1; source Cb=2.326, but both computations reach the plastic moment limit. AISC 360-10/16 F2 yielding agreement only."
+          }
+        ]
+      },
+      {
+        "sourceId": "headrick",
+        "shape": "W12X50",
+        "method": "ASD",
+        "Fy": 50,
+        "E": 29000,
+        "LbIn": 0,
+        "values": [
+          {
+            "key": "major",
+            "published": 179.391,
+            "unit": "kip-ft",
+            "page": 48,
+            "printedPage": "C-23"
+          },
+          {
+            "key": "shear",
+            "published": 90.28,
+            "unit": "kip",
+            "page": 48,
+            "printedPage": "C-23"
+          }
+        ]
+      },
+      {
+        "sourceId": "intrachat",
+        "shape": "W16X26",
+        "method": "ASD",
+        "Fy": 50,
+        "E": 29000,
+        "LbIn": 0,
+        "values": [
+          {
+            "key": "major",
+            "published": 110.279,
+            "unit": "kip-ft",
+            "page": 168,
+            "printedPage": "166"
+          },
+          {
+            "key": "shear",
+            "published": 70.509,
+            "unit": "kip",
+            "page": 168,
+            "printedPage": "166"
+          }
+        ]
+      },
+      {
+        "sourceId": "zimmer",
+        "shape": "W16X67",
+        "method": "LRFD",
+        "Fy": 50,
+        "E": 29000,
+        "LbIn": 220,
+        "values": [
+          {
+            "key": "flangeRatio",
+            "published": 7.67,
+            "unit": "ratio",
+            "page": 57,
+            "printedPage": "L55"
+          },
+          {
+            "key": "Lp",
+            "published": 104.27,
+            "unit": "in",
+            "page": 58,
+            "printedPage": "L56",
+            "expectation": "rounding",
+            "note": "Sheet uses rounded ry=2.460 in; catalogue/engine uses sqrt(Iy/A). Independent F2-5 substitution with 2.460 reproduces 104.273 in. Difference remains visible."
+          },
+          {
+            "key": "Lr",
+            "published": 312.8,
+            "unit": "in",
+            "page": 58,
+            "printedPage": "L56"
+          },
+          {
+            "key": "major",
+            "published": 5850,
+            "unit": "kip-in",
+            "page": 59,
+            "printedPage": "L57",
+            "expectation": "conservative",
+            "note": "Source Cb=2.19 reaches Mp; app Cb=1 reduces available LTB resistance. The comparison retains that conservative assumption."
+          },
+          {
+            "key": "shear",
+            "published": 193.2,
+            "unit": "kip",
+            "page": 61,
+            "printedPage": "L59"
+          }
+        ]
+      },
+      {
+        "sourceId": "dish",
+        "shape": "W6X15",
+        "method": "LRFD",
+        "Fy": 50,
+        "E": 29000,
+        "LbIn": 195.99599999999998,
+        "values": [
+          {
+            "key": "major",
+            "published": 29.529,
+            "unit": "kip-ft",
+            "page": 65,
+            "expectation": "conservative",
+            "note": "App Cb=1 gives a lower available resistance. A source moment-gradient benefit is likely but unconfirmed because actual source Cb is not printed on this page."
+          },
+          {
+            "key": "shear",
+            "published": 41.331,
+            "unit": "kip",
+            "page": 65
+          }
+        ]
+      },
+      {
+        "sourceId": "seifert",
+        "shape": "W8X40",
+        "method": "ASD",
+        "Fy": 50,
+        "E": 29000,
+        "LbIn": 0,
+        "values": [
+          {
+            "key": "major",
+            "published": 99.301,
+            "unit": "kip-ft",
+            "page": 52
+          },
+          {
+            "key": "shear",
+            "published": 59.4,
+            "unit": "kip",
+            "page": 52
+          }
+        ]
+      },
+      {
+        "sourceId": "yusen",
+        "shape": "W12X30",
+        "method": "ASD",
+        "Fy": 50,
+        "E": 29000,
+        "LbIn": 0,
+        "values": [
+          {
+            "key": "major",
+            "published": 107.535,
+            "unit": "kip-ft",
+            "page": 35
+          },
+          {
+            "key": "shear",
+            "published": 63.96,
+            "unit": "kip",
+            "page": 35
+          }
+        ]
+      },
+      {
+        "sourceId": "fused",
+        "shape": "W10X26",
+        "method": "LRFD",
+        "Fy": 50,
+        "E": 29000,
+        "LbIn": 0,
+        "values": [
+          {
+            "key": "major",
+            "published": 117.375,
+            "unit": "kip-ft",
+            "page": 61,
+            "printedPage": "B42"
+          },
+          {
+            "key": "shear",
+            "published": 80.34,
+            "unit": "kip",
+            "page": 61,
+            "printedPage": "B42"
+          }
+        ]
+      }
+    ],
+    "beam": [
+      {
+        "sourceId": "intrachat",
+        "shape": "W16X26",
+        "E": 29000,
+        "span": 21.33,
+        "page": 168,
+        "printedPage": "166",
+        "strength": {
+          "q": 0.858
+        },
+        "service": {
+          "q": 0.858
+        },
+        "live": {
+          "q": 0.64
+        },
+        "values": [
+          {
+            "key": "moment",
+            "published": 48.804
+          },
+          {
+            "key": "reaction",
+            "published": 9.152
+          },
+          {
+            "key": "totalDeflection",
+            "published": 0.46,
+            "absoluteTolerance": 0.0006
+          },
+          {
+            "key": "liveDeflection",
+            "published": 0.343,
+            "absoluteTolerance": 0.0006
+          }
+        ]
+      },
+      {
+        "sourceId": "dish",
+        "shape": "W6X15",
+        "E": 29000,
+        "span": 16.333,
+        "page": 65,
+        "strength": {
+          "q": 0.018,
+          "points": [
+            {
+              "x": 4.25,
+              "p": 0.7108
+            },
+            {
+              "x": 8.167,
+              "p": 0.772
+            },
+            {
+              "x": 12.084,
+              "p": 0.7108
+            }
+          ]
+        },
+        "service": {
+          "q": 0.015,
+          "points": [
+            {
+              "x": 4.25,
+              "p": 0.5144
+            },
+            {
+              "x": 8.167,
+              "p": 0.4632
+            },
+            {
+              "x": 12.084,
+              "p": 0.5144
+            }
+          ]
+        },
+        "values": [
+          {
+            "key": "moment",
+            "published": 6.773
+          },
+          {
+            "key": "reaction",
+            "published": 1.244
+          },
+          {
+            "key": "totalDeflection",
+            "published": 0.251,
+            "absoluteTolerance": 0.0006
+          }
+        ]
+      },
+      {
+        "sourceId": "yusen",
+        "shape": "W12X30",
+        "E": 29000,
+        "span": 18.25,
+        "page": 35,
+        "strength": {
+          "q": 0.9724999999999999,
+          "points": [
+            {
+              "x": 15.5,
+              "p": 11.735
+            }
+          ]
+        },
+        "service": {
+          "q": 1.15,
+          "points": [
+            {
+              "x": 15.5,
+              "p": 6.56
+            }
+          ]
+        },
+        "live": {
+          "q": 0.71
+        },
+        "values": [
+          {
+            "key": "moment",
+            "published": 58.231
+          },
+          {
+            "key": "reaction",
+            "published": 18.841
+          },
+          {
+            "key": "totalDeflection",
+            "published": 0.51,
+            "absoluteTolerance": 0.0006
+          },
+          {
+            "key": "liveDeflection",
+            "published": 0.258,
+            "absoluteTolerance": 0.0006
+          }
+        ]
+      },
+      {
+        "sourceId": "fused",
+        "shape": "W10X26",
+        "E": 29000,
+        "span": 18.34,
+        "page": 61,
+        "printedPage": "B42",
+        "strength": {
+          "q": 1.0623840000000002
+        },
+        "service": {
+          "q": 0.72692
+        },
+        "live": {
+          "q": 0.47520000000000007
+        },
+        "values": [
+          {
+            "key": "moment",
+            "published": 44.667
+          },
+          {
+            "key": "reaction",
+            "published": 9.742
+          },
+          {
+            "key": "totalDeflection",
+            "published": 0.4451,
+            "page": 62,
+            "absoluteTolerance": 0.0006
+          },
+          {
+            "key": "liveDeflection",
+            "published": 0.291,
+            "absoluteTolerance": 0.0006
+          }
+        ]
+      },
+      {
+        "sourceId": "henne",
+        "E": 29000,
+        "I": 78.9,
+        "span": 17.5,
+        "page": 53,
+        "strength": {
+          "q": 0.22999999999999998,
+          "partial": [
+            {
+              "from": 0,
+              "to": 17,
+              "q": 0.18
+            }
+          ]
+        },
+        "live": {
+          "q": 0.3
+        },
+        "dead": {
+          "q": 0.02,
+          "partial": [
+            {
+              "from": 0,
+              "to": 17,
+              "q": 0.18
+            }
+          ]
+        },
+        "values": [
+          {
+            "key": "moment",
+            "published": 15.6841
+          },
+          {
+            "key": "reaction",
+            "published": 3.5862
+          },
+          {
+            "key": "liveDeflection",
+            "published": 0.277,
+            "absoluteTolerance": 0.0006
+          },
+          {
+            "key": "deadReaction",
+            "published": 1.749,
+            "absoluteTolerance": 0.0006
+          }
+        ]
+      },
+      {
+        "sourceId": "macintyre",
+        "E": 1300,
+        "I": 177.98,
+        "span": 14,
+        "page": 2,
+        "printedPage": "R1",
+        "strength": {
+          "q": 0.08
+        },
+        "service": {
+          "q": 0.08
+        },
+        "live": {
+          "q": 0.05
+        },
+        "values": [
+          {
+            "key": "moment",
+            "published": 1.96
+          },
+          {
+            "key": "reaction",
+            "published": 0.56
+          },
+          {
+            "key": "totalDeflection",
+            "published": 0.3,
+            "absoluteTolerance": 0.005
+          },
+          {
+            "key": "liveDeflection",
+            "published": 0.19,
+            "absoluteTolerance": 0.005
+          }
+        ]
+      },
+      {
+        "sourceId": "falkner",
+        "E": 1300,
+        "I": 415.283203125,
+        "span": 13,
+        "page": 23,
+        "printedPage": "9",
+        "strength": {
+          "q": 0.248364453125
+        },
+        "service": {
+          "q": 0.248364453125
+        },
+        "live": {
+          "q": 0.15000000000000002
+        },
+        "values": [
+          {
+            "key": "reaction",
+            "published": 1.614,
+            "page": 24,
+            "absoluteTolerance": 0.0006
+          },
+          {
+            "key": "totalDeflection",
+            "published": 0.2974,
+            "page": 24,
+            "absoluteTolerance": 0.0001
+          },
+          {
+            "key": "liveDeflection",
+            "published": 0.18,
+            "absoluteTolerance": 0.0006
+          }
+        ]
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "lrfd-2b",
+      "check": "LRFD 2b factor vector",
+      "page": 20,
+      "unit": "D, Cd, Cv, H, Ls, I",
+      "published": [
+        1.2,
+        1.2,
+        1.6,
+        1.6,
+        1.6,
+        0
+      ],
+      "computed": [
+        1.2,
+        1.2,
+        1.6,
+        1.6,
+        1.6,
+        0
+      ],
+      "tolerance": 0,
+      "note": "Runway/crane terms only. This comparison excludes building, roof and seismic actions.",
+      "relativeDifference": 0,
+      "status": "match",
+      "sourceId": "everett",
+      "absoluteTolerance": 0,
+      "expectation": "agreement"
+    },
+    {
+      "id": "lrfd-2c",
+      "check": "LRFD 2c factor vector",
+      "page": 20,
+      "unit": "D, Cd, Cv, H, Ls, I",
+      "published": [
+        1.2,
+        1.2,
+        1.6,
+        0,
+        1.6,
+        1.6
+      ],
+      "computed": [
+        1.2,
+        1.2,
+        1.6,
+        0,
+        1.6,
+        1.6
+      ],
+      "tolerance": 0,
+      "note": "Runway/crane terms only. This comparison excludes building, roof and seismic actions.",
+      "relativeDifference": 0,
+      "status": "match",
+      "sourceId": "everett",
+      "absoluteTolerance": 0,
+      "expectation": "agreement"
+    },
+    {
+      "id": "end-yielding",
+      "check": "End web local yielding",
+      "page": 25,
+      "unit": "kip",
+      "published": 360.8,
+      "computed": 360.80000001231906,
+      "tolerance": 0.001,
+      "note": "AISC 360-16 J10-3, phi=1.00; base W-section web only.",
+      "relativeDifference": 3.414370535503174e-11,
+      "status": "match",
+      "sourceId": "everett",
+      "absoluteTolerance": 0,
+      "expectation": "agreement"
+    },
+    {
+      "id": "end-crippling",
+      "check": "End web crippling",
+      "page": 25,
+      "unit": "kip",
+      "published": 187.91,
+      "computed": 179.76130302984222,
+      "tolerance": 0.001,
+      "note": "Unresolved difference using the printed dimensions and stated replay material basis. Independent US-unit J10-5b substitution agrees with the app. Do not raise capacity to the permit value.",
+      "relativeDifference": 0.0433648926090031,
+      "status": "difference",
+      "sourceId": "everett",
+      "absoluteTolerance": 0,
+      "expectation": "unresolved"
+    },
+    {
+      "id": "end-compression",
+      "check": "End web compression buckling",
+      "page": 25,
+      "unit": "kip",
+      "published": 102.86,
+      "computed": 51.430421914840075,
+      "tolerance": 0.001,
+      "note": "Published value matches unreduced J10-8. The app applies the 50% reduction for an opposing load pair within d/2 of the member end. Actual load location/stiffeners need separate verification.",
+      "relativeDifference": 0.49999589816410583,
+      "status": "difference",
+      "sourceId": "everett",
+      "absoluteTolerance": 0,
+      "expectation": "unresolved"
+    },
+    {
+      "id": "fatigue-A",
+      "check": "Category A fatigue resistance, 500,000 cycles",
+      "page": 24,
+      "unit": "ksi",
+      "published": 36.84,
+      "computed": 36.86832800688504,
+      "tolerance": 0.001,
+      "note": "Resistance curve only, not composite-girder stress range or detail selection. AISC rounded SI coefficient 6900 versus US coefficient 1000 explains the small conversion difference.",
+      "relativeDifference": 0.000768946983849976,
+      "status": "match",
+      "sourceId": "everett",
+      "absoluteTolerance": 0,
+      "expectation": "agreement"
+    },
+    {
+      "id": "red-dot-major",
+      "sourceId": "red-dot",
+      "check": "W18X76 available major-axis flexure",
+      "page": 51,
+      "printedPage": "RISA 27",
+      "unit": "kip-ft",
+      "published": 406.687,
+      "computed": 406.6866268359819,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "M4 LC1; source Cb=2.326, but both computations reach the plastic moment limit. AISC 360-10/16 F2 yielding agreement only.",
+      "relativeDifference": 9.17570559493151e-7,
+      "status": "match"
+    },
+    {
+      "id": "headrick-major",
+      "sourceId": "headrick",
+      "check": "W12X50 available major-axis flexure",
+      "page": 48,
+      "printedPage": "C-23",
+      "unit": "kip-ft",
+      "published": 179.391,
+      "computed": 179.39121760433804,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "ASD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 0.0000012130170301034875,
+      "status": "match"
+    },
+    {
+      "id": "headrick-shear",
+      "sourceId": "headrick",
+      "check": "W12X50 available web shear",
+      "page": 48,
+      "printedPage": "C-23",
+      "unit": "kip",
+      "published": 90.28,
+      "computed": 90.28000000308248,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "ASD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 3.414351457991212e-11,
+      "status": "match"
+    },
+    {
+      "id": "intrachat-major",
+      "sourceId": "intrachat",
+      "check": "W16X26 available major-axis flexure",
+      "page": 168,
+      "printedPage": "166",
+      "unit": "kip-ft",
+      "published": 110.279,
+      "computed": 110.279441142027,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "ASD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 0.000004000236010485191,
+      "status": "match"
+    },
+    {
+      "id": "intrachat-shear",
+      "sourceId": "intrachat",
+      "check": "W16X26 available web shear",
+      "page": 168,
+      "printedPage": "166",
+      "unit": "kip",
+      "published": 70.509,
+      "computed": 70.50898203833559,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "ASD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 2.547428613625796e-7,
+      "status": "match"
+    },
+    {
+      "id": "zimmer-flangeRatio",
+      "sourceId": "zimmer",
+      "check": "W16X67 flange width/thickness ratio",
+      "page": 57,
+      "printedPage": "L55",
+      "unit": "ratio",
+      "published": 7.67,
+      "computed": 7.669172932330827,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "LRFD; Fy=50 ksi, E=29000 ksi, Lb=220 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 0.00010783150836670415,
+      "status": "match"
+    },
+    {
+      "id": "zimmer-Lp",
+      "sourceId": "zimmer",
+      "check": "W16X67 Lp",
+      "page": 58,
+      "printedPage": "L56",
+      "unit": "in",
+      "published": 104.27,
+      "computed": 104.44126168740561,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "rounding",
+      "note": "Sheet uses rounded ry=2.460 in; catalogue/engine uses sqrt(Iy/A). Independent F2-5 substitution with 2.460 reproduces 104.273 in. Difference remains visible.",
+      "relativeDifference": 0.001642482856100682,
+      "status": "difference"
+    },
+    {
+      "id": "zimmer-Lr",
+      "sourceId": "zimmer",
+      "check": "W16X67 Lr",
+      "page": 58,
+      "printedPage": "L56",
+      "unit": "in",
+      "published": 312.8,
+      "computed": 312.8205545333894,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "LRFD; Fy=50 ksi, E=29000 ksi, Lb=220 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 0.0000657114238790678,
+      "status": "match"
+    },
+    {
+      "id": "zimmer-major",
+      "sourceId": "zimmer",
+      "check": "W16X67 available major-axis flexure",
+      "page": 59,
+      "printedPage": "L57",
+      "unit": "kip-in",
+      "published": 5850,
+      "computed": 4649.655736190075,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "conservative",
+      "note": "Source Cb=2.19 reaches Mp; app Cb=1 reduces available LTB resistance. The comparison retains that conservative assumption.",
+      "relativeDifference": 0.20518705364272222,
+      "status": "difference"
+    },
+    {
+      "id": "zimmer-shear",
+      "sourceId": "zimmer",
+      "check": "W16X67 available web shear",
+      "page": 61,
+      "printedPage": "L59",
+      "unit": "kip",
+      "published": 193.2,
+      "computed": 193.15500000659503,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "LRFD; Fy=50 ksi, E=29000 ksi, Lb=220 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 0.00023291922052255277,
+      "status": "match"
+    },
+    {
+      "id": "dish-major",
+      "sourceId": "dish",
+      "check": "W6X15 available major-axis flexure",
+      "page": 65,
+      "unit": "kip-ft",
+      "published": 29.529,
+      "computed": 25.677726105469862,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "conservative",
+      "note": "App Cb=1 gives a lower available resistance. A source moment-gradient benefit is likely but unconfirmed because actual source Cb is not printed on this page.",
+      "relativeDifference": 0.1304234445639926,
+      "status": "difference"
+    },
+    {
+      "id": "dish-shear",
+      "sourceId": "dish",
+      "check": "W6X15 available web shear",
+      "page": 65,
+      "unit": "kip",
+      "published": 41.331,
+      "computed": 41.3310000014112,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "LRFD; Fy=50 ksi, E=29000 ksi, Lb=195.99599999999998 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 3.414373512952553e-11,
+      "status": "match"
+    },
+    {
+      "id": "seifert-major",
+      "sourceId": "seifert",
+      "check": "W8X40 available major-axis flexure",
+      "page": 52,
+      "unit": "kip-ft",
+      "published": 99.301,
+      "computed": 99.30139722743607,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "ASD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 0.0000040002360103900005,
+      "status": "match"
+    },
+    {
+      "id": "seifert-shear",
+      "sourceId": "seifert",
+      "check": "W8X40 available web shear",
+      "page": 52,
+      "unit": "kip",
+      "published": 59.4,
+      "computed": 59.40000000202813,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "ASD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 3.4143611993088966e-11,
+      "status": "match"
+    },
+    {
+      "id": "yusen-major",
+      "sourceId": "yusen",
+      "check": "W12X30 available major-axis flexure",
+      "page": 35,
+      "unit": "kip-ft",
+      "published": 107.535,
+      "computed": 107.53493016337929,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "ASD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 6.49431540525055e-7,
+      "status": "match"
+    },
+    {
+      "id": "yusen-shear",
+      "sourceId": "yusen",
+      "check": "W12X30 available web shear",
+      "page": 35,
+      "unit": "kip",
+      "published": 63.96,
+      "computed": 63.96000000218384,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "ASD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 3.414382250631571e-11,
+      "status": "match"
+    },
+    {
+      "id": "fused-major",
+      "sourceId": "fused",
+      "check": "W10X26 available major-axis flexure",
+      "page": 61,
+      "printedPage": "B42",
+      "unit": "kip-ft",
+      "published": 117.375,
+      "computed": 117.37500002582361,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "LRFD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 2.2000945616270247e-10,
+      "status": "match"
+    },
+    {
+      "id": "fused-shear",
+      "sourceId": "fused",
+      "check": "W10X26 available web shear",
+      "page": 61,
+      "printedPage": "B42",
+      "unit": "kip",
+      "published": 80.34,
+      "computed": 80.34000000274312,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "LRFD; Fy=50 ksi, E=29000 ksi, Lb=0 in. Shared AISC strength engine; Cb=1.",
+      "relativeDifference": 3.414390447691614e-11,
+      "status": "match"
+    },
+    {
+      "id": "intrachat-moment",
+      "sourceId": "intrachat",
+      "check": "Applied peak bending moment",
+      "page": 168,
+      "printedPage": "166",
+      "unit": "kip-ft",
+      "published": 48.804,
+      "computed": 48.79541437594736,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 21.33 ft span, E=29000 ksi, I=301 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.0001759204993984615,
+      "status": "match"
+    },
+    {
+      "id": "intrachat-reaction",
+      "sourceId": "intrachat",
+      "check": "Peak support reaction / shear",
+      "page": 168,
+      "printedPage": "166",
+      "unit": "kip",
+      "published": 9.152,
+      "computed": 9.150569987310497,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 21.33 ft span, E=29000 ksi, I=301 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.00015625138652774652,
+      "status": "match"
+    },
+    {
+      "id": "intrachat-totalDeflection",
+      "sourceId": "intrachat",
+      "check": "Total service deflection",
+      "page": 168,
+      "printedPage": "166",
+      "unit": "in",
+      "published": 0.46,
+      "computed": 0.45779256335975904,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "unresolved",
+      "note": "Shared Euler–Bernoulli solver; simple 21.33 ft span, E=29000 ksi, I=301 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. Published displacement is slightly higher than the bending-only replay; source analysis details are insufficient to establish why. Independent uniform-load closed-form checks agree with this engine; do not relabel this comparison matched. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.004798775304871692,
+      "status": "difference"
+    },
+    {
+      "id": "intrachat-liveDeflection",
+      "sourceId": "intrachat",
+      "check": "Transient/live deflection",
+      "page": 168,
+      "printedPage": "166",
+      "unit": "in",
+      "published": 0.343,
+      "computed": 0.3414769703382822,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "unresolved",
+      "note": "Shared Euler–Bernoulli solver; simple 21.33 ft span, E=29000 ksi, I=301 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. Published displacement is slightly higher than the bending-only replay; source analysis details are insufficient to establish why. Independent uniform-load closed-form checks agree with this engine; do not relabel this comparison matched. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.004440319713462975,
+      "status": "difference"
+    },
+    {
+      "id": "dish-moment",
+      "sourceId": "dish",
+      "check": "Applied peak bending moment",
+      "page": 65,
+      "unit": "kip-ft",
+      "published": 6.773,
+      "computed": 6.7730390390083315,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 16.333 ft span, E=29000 ksi, I=29.1 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.000005763916777173806,
+      "status": "match"
+    },
+    {
+      "id": "dish-reaction",
+      "sourceId": "dish",
+      "check": "Peak support reaction / shear",
+      "page": 65,
+      "unit": "kip",
+      "published": 1.244,
+      "computed": 1.2438641503834658,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 16.333 ft span, E=29000 ksi, I=29.1 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.00010920387181208503,
+      "status": "match"
+    },
+    {
+      "id": "dish-totalDeflection",
+      "sourceId": "dish",
+      "check": "Total service deflection",
+      "page": 65,
+      "unit": "in",
+      "published": 0.251,
+      "computed": 0.2503408503203734,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "unresolved",
+      "note": "Shared Euler–Bernoulli solver; simple 16.333 ft span, E=29000 ksi, I=29.1 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. Published displacement is slightly higher than the bending-only replay; source analysis details are insufficient to establish why. Independent uniform-load closed-form checks agree with this engine; do not relabel this comparison matched. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.0026260943411418438,
+      "status": "difference"
+    },
+    {
+      "id": "yusen-moment",
+      "sourceId": "yusen",
+      "check": "Applied peak bending moment",
+      "page": 35,
+      "unit": "kip-ft",
+      "published": 58.231,
+      "computed": 58.231165413035946,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 18.25 ft span, E=29000 ksi, I=238 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.000002840635330735934,
+      "status": "match"
+    },
+    {
+      "id": "yusen-reaction",
+      "sourceId": "yusen",
+      "check": "Peak support reaction / shear",
+      "page": 35,
+      "unit": "kip",
+      "published": 18.841,
+      "computed": 18.840774829112522,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 18.25 ft span, E=29000 ksi, I=238 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.000011951111272159328,
+      "status": "match"
+    },
+    {
+      "id": "yusen-totalDeflection",
+      "sourceId": "yusen",
+      "check": "Total service deflection",
+      "page": 35,
+      "unit": "in",
+      "published": 0.51,
+      "computed": 0.50738217611818,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "unresolved",
+      "note": "Shared Euler–Bernoulli solver; simple 18.25 ft span, E=29000 ksi, I=238 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. Published displacement is slightly higher than the bending-only replay; source analysis details are insufficient to establish why. Independent uniform-load closed-form checks agree with this engine; do not relabel this comparison matched. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.005132988003568568,
+      "status": "difference"
+    },
+    {
+      "id": "yusen-liveDeflection",
+      "sourceId": "yusen",
+      "check": "Transient/live deflection",
+      "page": 35,
+      "unit": "in",
+      "published": 0.258,
+      "computed": 0.2567540994881771,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "unresolved",
+      "note": "Shared Euler–Bernoulli solver; simple 18.25 ft span, E=29000 ksi, I=238 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. Published displacement is slightly higher than the bending-only replay; source analysis details are insufficient to establish why. Independent uniform-load closed-form checks agree with this engine; do not relabel this comparison matched. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.004829071751251488,
+      "status": "difference"
+    },
+    {
+      "id": "fused-moment",
+      "sourceId": "fused",
+      "check": "Applied peak bending moment",
+      "page": 61,
+      "printedPage": "B42",
+      "unit": "kip-ft",
+      "published": 44.667,
+      "computed": 44.66735101702464,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 18.34 ft span, E=29000 ksi, I=144 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.000007858531458156234,
+      "status": "match"
+    },
+    {
+      "id": "fused-reaction",
+      "sourceId": "fused",
+      "check": "Peak support reaction / shear",
+      "page": 61,
+      "printedPage": "B42",
+      "unit": "kip",
+      "published": 9.742,
+      "computed": 9.742061304634865,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 18.34 ft span, E=29000 ksi, I=144 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.000006292818195816659,
+      "status": "match"
+    },
+    {
+      "id": "fused-totalDeflection",
+      "sourceId": "fused",
+      "check": "Total service deflection",
+      "page": 62,
+      "unit": "in",
+      "published": 0.4451,
+      "computed": 0.4431043076311341,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "unresolved",
+      "note": "Shared Euler–Bernoulli solver; simple 18.34 ft span, E=29000 ksi, I=144 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. Published displacement is slightly higher than the bending-only replay; source analysis details are insufficient to establish why. Independent uniform-load closed-form checks agree with this engine; do not relabel this comparison matched. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.004483694380736634,
+      "status": "difference"
+    },
+    {
+      "id": "fused-liveDeflection",
+      "sourceId": "fused",
+      "check": "Transient/live deflection",
+      "page": 61,
+      "printedPage": "B42",
+      "unit": "in",
+      "published": 0.291,
+      "computed": 0.2896648420545791,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "unresolved",
+      "note": "Shared Euler–Bernoulli solver; simple 18.34 ft span, E=29000 ksi, I=144 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. Published displacement is slightly higher than the bending-only replay; source analysis details are insufficient to establish why. Independent uniform-load closed-form checks agree with this engine; do not relabel this comparison matched. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.004588171633748742,
+      "status": "difference"
+    },
+    {
+      "id": "henne-moment",
+      "sourceId": "henne",
+      "check": "Applied peak bending moment",
+      "page": 53,
+      "unit": "kip-ft",
+      "published": 15.6841,
+      "computed": 15.684064410395226,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 17.5 ft span, E=29000 ksi, I=78.9 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.0000022691518655418067,
+      "status": "match"
+    },
+    {
+      "id": "henne-reaction",
+      "sourceId": "henne",
+      "check": "Peak support reaction / shear",
+      "page": 53,
+      "unit": "kip",
+      "published": 3.5862,
+      "computed": 3.5862142736490363,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 17.5 ft span, E=29000 ksi, I=78.9 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.00000398015978933141,
+      "status": "match"
+    },
+    {
+      "id": "henne-liveDeflection",
+      "sourceId": "henne",
+      "check": "Transient/live deflection",
+      "page": 53,
+      "unit": "in",
+      "published": 0.277,
+      "computed": 0.2766820373806839,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 17.5 ft span, E=29000 ksi, I=78.9 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.0011478794921158965,
+      "status": "match"
+    },
+    {
+      "id": "henne-deadReaction",
+      "sourceId": "henne",
+      "check": "Peak dead-load support reaction",
+      "page": 53,
+      "unit": "kip",
+      "published": 1.749,
+      "computed": 1.7487142798400634,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 17.5 ft span, E=29000 ksi, I=78.9 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.00016336201254240384,
+      "status": "match"
+    },
+    {
+      "id": "macintyre-moment",
+      "sourceId": "macintyre",
+      "check": "Applied peak bending moment",
+      "page": 2,
+      "printedPage": "R1",
+      "unit": "kip-ft",
+      "published": 1.96,
+      "computed": 1.960000001302349,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 14 ft span, E=1300 ksi, I=177.98 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 6.64463835427543e-10,
+      "status": "match"
+    },
+    {
+      "id": "macintyre-reaction",
+      "sourceId": "macintyre",
+      "check": "Peak support reaction / shear",
+      "page": 2,
+      "printedPage": "R1",
+      "unit": "kip",
+      "published": 0.56,
+      "computed": 0.5600000001860499,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 14 ft span, E=1300 ksi, I=177.98 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 3.322318610697396e-10,
+      "status": "match"
+    },
+    {
+      "id": "macintyre-totalDeflection",
+      "sourceId": "macintyre",
+      "check": "Total service deflection",
+      "page": 2,
+      "printedPage": "R1",
+      "unit": "in",
+      "published": 0.3,
+      "computed": 0.29886158323351425,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.005,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 14 ft span, E=1300 ksi, I=177.98 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.003794722554952464,
+      "status": "match"
+    },
+    {
+      "id": "macintyre-liveDeflection",
+      "sourceId": "macintyre",
+      "check": "Transient/live deflection",
+      "page": 2,
+      "printedPage": "R1",
+      "unit": "in",
+      "published": 0.19,
+      "computed": 0.18678848952094648,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.005,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 14 ft span, E=1300 ksi, I=177.98 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.01690268673186063,
+      "status": "match"
+    },
+    {
+      "id": "falkner-reaction",
+      "sourceId": "falkner",
+      "check": "Peak support reaction / shear",
+      "page": 24,
+      "unit": "kip",
+      "published": 1.614,
+      "computed": 1.6143689431810664,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "agreement",
+      "note": "Shared Euler–Bernoulli solver; simple 13 ft span, E=1300 ksi, I=415.283203125 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.00022858933151566514,
+      "status": "match"
+    },
+    {
+      "id": "falkner-totalDeflection",
+      "sourceId": "falkner",
+      "check": "Total service deflection",
+      "page": 24,
+      "unit": "in",
+      "published": 0.2974,
+      "computed": 0.2956362237940871,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0001,
+      "expectation": "unresolved",
+      "note": "Shared Euler–Bernoulli solver; simple 13 ft span, E=1300 ksi, I=415.283203125 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. Published displacement is slightly higher than the bending-only replay; source analysis details are insufficient to establish why. Independent uniform-load closed-form checks agree with this engine; do not relabel this comparison matched. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.0059306530124845075,
+      "status": "difference"
+    },
+    {
+      "id": "falkner-liveDeflection",
+      "sourceId": "falkner",
+      "check": "Transient/live deflection",
+      "page": 23,
+      "printedPage": "9",
+      "unit": "in",
+      "published": 0.18,
+      "computed": 0.17854984081314706,
+      "tolerance": 0.001,
+      "absoluteTolerance": 0.0006,
+      "expectation": "unresolved",
+      "note": "Shared Euler–Bernoulli solver; simple 13 ft span, E=1300 ksi, I=415.283203125 in4. Explicit published loading; extrema use 160 displacement intervals and exact moment stations. Published displacement is slightly higher than the bending-only replay; source analysis details are insufficient to establish why. Independent uniform-load closed-form checks agree with this engine; do not relabel this comparison matched. No building-code load generation or whole-building analysis.",
+      "relativeDifference": 0.008056439926960713,
+      "status": "difference"
+    }
+  ]
+}
