@@ -1,6 +1,8 @@
 import type {ReactNode} from 'react';
 import {aiscWShapes,aiscShapeByName} from '../data/aiscSections';
 import {defaultExistingColumn,existingLoadKeys,type ExistingColumnInput} from '../engine/existingColumnInputs';
+import {defaultLongitudinalBracing,type LongitudinalBracingInput} from '../engine/longitudinalBracingInputs';
+import {aiscAngles} from '../data/aiscAngles';
 import type {CalculationSnapshot,ProjectInput} from '../engine/types';
 import {format,type Quantity} from '../engine/units';
 
@@ -41,4 +43,26 @@ export function SupportReactionTable({snapshot}:{snapshot:CalculationSnapshot}){
   <p>Downward positive, per support, for checking the building. Cd, Cv and Ci come from the crane arrangement that maximizes them; Css is the largest single-crane side thrust at the support, taken with it. Runway longitudinal force Cls = {f(r.Cls)} goes to the support or bracing that locates the girder.</p>
   <div className="combination-scroll"><table><thead><tr><th>Station</th><th>D</th><th>L</th><th>Crane empty Cd</th><th>Lifted Cv</th><th>Impact Ci</th><th>Side thrust Css</th><th>Least crane</th></tr></thead>
   <tbody>{r.supports.map(s=><tr key={s.x}><td>{format(s.x,'length',u,3)}</td><td>{f(s.D)}</td><td>{f(s.L)}</td><td>{f(s.Cd)}</td><td>{f(s.Cv)}</td><td>{f(s.Ci)}</td><td>{f(s.Css)}</td><td>{f(s.craneMinimum)}</td></tr>)}</tbody></table></div></details>;
+}
+
+export function LongitudinalBracingInputs({project,update,numeric}:{project:ProjectInput;update:(fn:(p:ProjectInput)=>void)=>void;numeric:NumericField}){
+ const b=project.longitudinalBracing,count=(v:number,max:number)=>Math.min(max,Math.max(1,Math.round(v)));
+ const set=(patch:Partial<LongitudinalBracingInput>)=>update(p=>{p.longitudinalBracing={...(p.longitudinalBracing??structuredClone(defaultLongitudinalBracing)),...patch};});
+ return <div className="aist-inputs">
+  <div className="form-section-title"><span>03</span>Crane-level longitudinal bracing</div>
+  <label className="checkbox-field"><input type="checkbox" checked={!!b?.enabled} onChange={e=>set({enabled:e.target.checked})}/>Check the bracing that carries crane traction and stop forces</label>
+  <p className="form-note">Braced bays of one runway column line share the larger of crane traction and the crane stop force, combined with the building's own wind and seismic forces on that line under ASCE 7. Collectors, brace connections, braced-bay columns and foundations remain separate.</p>
+  {b?.enabled&&<>
+   <div className="field-grid"><label className="field"><span>Bracing system</span><select value={b.system} onChange={e=>set({system:e.target.value as LongitudinalBracingInput['system']})}><option value="rod-x">Rod X</option><option value="angle-x">Angle X</option><option value="angle-single">Single angle</option></select></label>
+    {numeric('Braced bays on the line',b.bays,v=>set({bays:count(v,6)}),'ratio','Rod X bracing is tension only: one rod of each X acts.')}{numeric('Tiers per bay',b.tiers,v=>set({tiers:count(v,4)}),'ratio')}</div>
+   <div className="field-grid">{numeric('Braced bay width',b.bayWidth,v=>set({bayWidth:v}))}{numeric('Base to brace work point',b.height,v=>set({height:v}))}</div>
+   {b.system==='rod-x'?<div className="field-grid">{numeric('Rod diameter',b.rod.diameter,v=>set({rod:{...b.rod,diameter:v}}))}{numeric('Rod Fy',b.rod.Fy,v=>set({rod:{...b.rod,Fy:v}}),'stress')}{numeric('Rod Fu',b.rod.Fu,v=>set({rod:{...b.rod,Fu:v}}),'stress')}</div>
+   :<div className="field-grid"><label className="field"><span>Angle</span><select value={b.angle.shape} onChange={e=>set({angle:{...b.angle,shape:e.target.value}})}>{aiscAngles.map(a=><option key={a.name} value={a.name}>{a.name}</option>)}</select></label>
+    {numeric('Angle Fy',b.angle.Fy,v=>set({angle:{...b.angle,Fy:v}}),'stress')}{numeric('Angle Fu',b.angle.Fu,v=>set({angle:{...b.angle,Fu:v}}),'stress')}{numeric('Bolts in line (3 or more)',b.angle.bolts,v=>set({angle:{...b.angle,bolts:Math.min(12,Math.max(3,Math.round(v)))}}),'ratio')}{numeric('Bolt diameter',b.angle.boltDiameter,v=>set({angle:{...b.angle,boltDiameter:v}}))}</div>}
+   <div className="field-grid">{numeric('Existing wind W on this line',b.existing.W,v=>set({existing:{...b.existing,W:v}}),'force')}{numeric('Existing seismic E on this line',b.existing.E,v=>set({existing:{...b.existing,E:v}}),'force')}{numeric('Crane-level drift limit h / n',b.driftLimit,v=>set({driftLimit:v}),'ratio')}</div>
+   <label className="checkbox-field"><input type="checkbox" checked={b.bumperToBracing} onChange={e=>set({bumperToBracing:e.target.checked})}/>Building-mounted crane stops on this line deliver the bumper force to the bracing</label>
+   <label className="field"><span>Source of bracing survey and existing forces</span><input value={b.source} placeholder="Drawings, survey or wind/seismic analysis reference" onChange={e=>set({source:e.target.value})}/></label>
+   <label className="checkbox-field"><input type="checkbox" checked={b.confirmed} onChange={e=>set({confirmed:e.target.checked})}/>Bracing members, geometry and existing forces are confirmed from the stated source</label>
+  </>}
+ </div>;
 }

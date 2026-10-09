@@ -20,8 +20,8 @@ export const longitudinalBracingSchema=z.object({
  source:z.string().max(500),confirmed:z.boolean()
 });
 export type LongitudinalBracingInput=z.infer<typeof longitudinalBracingSchema>;
-const inch=25.4,foot=304.8;
+const inch=25.4,foot=304.8,ksi=6.894757293;
 // Illustrative starting point (PEMB-style 3/4 in A36 rod X-bracing); replace with the surveyed bracing.
 export const defaultLongitudinalBracing:LongitudinalBracingInput={enabled:false,system:'rod-x',bays:1,bayWidth:25*foot,height:20*foot,tiers:1,
- rod:{diameter:.75*inch,Fy:250,Fu:400},angle:{shape:'L3X3X1/4',Fy:250,Fu:400,bolts:3,boltDiameter:.75*inch},
+ rod:{diameter:.75*inch,Fy:36*ksi,Fu:58*ksi},angle:{shape:'L3X3X1/4',Fy:36*ksi,Fu:58*ksi,bolts:3,boltDiameter:.75*inch},
  existing:{W:0,E:0},bumperToBracing:true,driftLimit:240,source:'',confirmed:false};

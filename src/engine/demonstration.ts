@@ -8,6 +8,7 @@ import type { ProjectInput } from './types';
 import type { LapConnection,RunwayDetails } from './runwayDetails';
 import {defaultSimpleSupport} from './simpleSupports';
 import {defaultExistingColumn} from './existingColumnInputs';
+import {defaultLongitudinalBracing} from './longitudinalBracingInputs';
 const inch=25.4,foot=304.8,kip=4448.221615,ksi=6.894757293;
 const lap=():LapConnection=>({rows:2,gauge:3*inch,pitch:3*inch,edge:1.5*inch,thickness:.5*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:2*inch,weldSize:.25*inch,weldLength:6*inch});
 export function demonstrationDetails():RunwayDetails{return {
@@ -73,6 +74,9 @@ export function cappedDemonstrationProject():ProjectInput {
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,height:26*foot,seatElevation:18*foot,Lcx:26*foot,Lcy:8*foot,Lcz:8*foot,
   existing:{D:{P:25*kip,Mx:15*kip*foot,My:0,V:1*kip},L:{...none},Lr:{P:12*kip,Mx:6*kip*foot,My:0,V:.5*kip},S:{P:20*kip,Mx:10*kip*foot,My:0,V:.8*kip},R:{...none},W:{P:-8*kip,Mx:40*kip*foot,My:0,V:4*kip},E:{P:0,Mx:20*kip*foot,My:0,V:2*kip}},
   source:'Fictitious demonstration: original building calculation sheets 14-17, column line B',confirmed:true};
+ // Fictitious sidewall rod bracing up to the crane-level strut, with the building's own longitudinal wind and seismic forces.
+ p.longitudinalBracing={...structuredClone(defaultLongitudinalBracing),enabled:true,bayWidth:25*foot,height:18*foot,existing:{W:6*kip,E:3*kip},
+  source:'Fictitious demonstration: sidewall rod bracing at grid lines 2-3 and the original wind/seismic report',confirmed:true};
  // Revised independent ties: shorter, shifted clear of bearing stiffeners,
  // directly attached to flange saddles. No holes or cuts in the cap channel.
  Object.assign(p.details!.brace,{length:18*inch,reach:18*inch,width:3.75*inch,connectionLength:6*inch,

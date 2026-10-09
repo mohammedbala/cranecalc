@@ -17,12 +17,13 @@ describe('existing building outputs',()=>{
   expect(r.governing.U.U).toBe(Math.max(...r.bySupport.map(v=>v.U)));
   // Interior supports carry two girder ends of dead load.
   expect(r.station).toBeGreaterThan(0);expect(r.station).toBeLessThan(s.supportReactions!.supports.at(-1)!.x);
-  expect(s.checks.filter(c=>c.status==='excluded').map(c=>c.id).sort()).toEqual(['bracket-load-path','column-longitudinal','supporting-structure']);
+  expect(s.checks.filter(c=>c.status==='excluded').map(c=>c.id).sort()).toEqual(['brace-by-others','bracket-load-path','supporting-structure']);
  });
  it('prints unfactored reactions and the column check, and labels the factored interface forces',()=>{
   const html=reportHtml(s);
   expect(html).toContain('06A / Existing building: support reactions by load type');
   expect(html).toContain('06B / Existing column check');
+  expect(html).toContain('06C / Crane-level longitudinal bracing');
   expect(html).toContain('Factored AIST runway combinations');
   expect(html).toContain('Fictitious demonstration: original building calculation sheets');
  });

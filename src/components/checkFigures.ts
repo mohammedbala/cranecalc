@@ -19,7 +19,8 @@ export const checkGroupPurpose:Record<string,string>={
  'Rail details':'Transfer wheel and side forces through the rail, keepers, joints and their attachments.',
  Analysis:'Verify equilibrium and numerical convergence before relying on calculated demands.',
  'Existing column':'Check the receiving column for the crane reactions combined with the loads it already carries.',
- 'Supporting structure':'Identify building elements that must be verified outside this calculation for the reported forces.'
+ 'Supporting structure':'Identify building elements that must be verified outside this calculation for the reported forces.',
+ 'Longitudinal bracing':'Carry crane traction and stop forces, with the building\'s own wind and seismic forces, to the foundation.'
 };
 export const worksheetFigureTopics:Record<string,string>={Geometry:'Geometry','Crane loads':'Loading',Criteria:'Criteria',Connections:'Connections',Validation:'Analysis','Existing building':'Interfaces',Project:'Project'};
 const escape=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -108,6 +109,7 @@ export function checkFigure(topic:string,p?:ProjectInput):{title:string;note:str
   case 'Column bracket':({title,note,linework:drawing}=bracket(p));break;
   case 'Rail details':title='Rail, keeper and local flange';drawing=rect(48,84,151,6)+path('M101 78V47H94V39H143V47H136V78H155V84H82V78Z')+rect(68,77,21,7,true)+rect(149,77,21,7,true)+circle(119,24,12)+arrow(119,2,119,10)+arrow(169,55,139,55)+label(181,58,'H', 'start',true)+path('M37 53L68 77')+label(42,46,'KEEPER');break;
   case 'Analysis':title='Equilibrium and refinement';drawing=beam(48)+[82,155].map(x=>arrow(x,12,x,43)).join('')+arrow(30,105,30,78)+arrow(210,105,210,78)+[55,82,109,136,163,190].map(x=>circle(x,52,2,true)).join('')+label(120,92,'ΣR = ΣP', 'middle',true)+label(120,112,'refine travel + stations');break;
+  case 'Longitudinal bracing':title='Crane-level longitudinal bracing';drawing=path('M40 100H200')+path('M60 100V22M180 100V22M60 22H180')+path('M60 100L180 22M60 22L180 100',true)+arrow(18,22,56,22)+label(30,15,'H')+label(120,113,'BRACED BAY · TIERS · DIAGONALS');note='Traction or stop force and building wind/seismic forces resolve into the braced-bay diagonals; columns and foundation take the overturning.';break;
   case 'Existing column':case 'Supporting structure':case 'Interfaces':title=topic==='Existing column'?'Existing column: crane plus building loads':'Forces transferred to the building';drawing=column()+rect(49,47,145,8)+arrow(107,17,107,42)+arrow(129,33,184,33)+arrow(210,69,210,93)+label(103,13,'V')+label(151,25,'H / N')+label(116,89,'CONCURRENT ACTIONS');note='Retain simultaneous signed reactions when transferring forces to the separately designed building.';break;
   default:title='Inputs, checks and report record';drawing=[26,100,174].map((x,i)=>rect(x,29,43,45)+path(`M${x+9} 42h25M${x+9} 51h25M${x+9} 60h17`)+label(x+21,93,['INPUT','CHECK','REPORT'][i])).join('')+arrow(75,51,94,51)+arrow(149,51,168,51);note='Record project inputs, calculation revision and references. Export is controlled by the actual validation results.';
  }
