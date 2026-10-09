@@ -10,7 +10,8 @@ const inch=25.4,kip=4448.221615,ksi=kip/inch**2;
 
 describe('TR13 unfactored rail keeper fatigue',()=>{
  it('reproduces an independent US-unit keeper force path',()=>{
-  const p=demonstrationProject(),r=p.details!.rail;
+  // Hand-checked keeper geometry, independent of the example's current keeper: 3 x 1 in plate, 1/2 in projection.
+  const p=demonstrationProject(),r={...p.details!.rail,clipWidth:3*inch,clipThickness:1*inch,clipProjection:.5*inch};
   const v=railKeeperResponse(r,6*inch,.25*inch,1.125*inch,20*kip,1*kip);
   // U=(1*6+20*.25)/6=11/6 kip; M=U*.5+1*(.75+1/2)=13/6 kip-in.
   expect(v.uplift/kip).toBeCloseTo(11/6,10);
