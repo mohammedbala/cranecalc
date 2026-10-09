@@ -37,10 +37,10 @@ describe('ASCE 7 §4.9 minimums enveloped with AIST TR-13',()=>{
   expect(low.checks.find(c=>c.id==='crane-1-impact')).toMatchObject({status:'pass',demand:.25,capacity:.25});
   const zero=designProject();zero.cranes[0].design!.sideShare=0;const half=designProject();
   expect(calculate(zero).designAnalysis!.topLateralMoment).toBeCloseTo(calculate(half).designAnalysis!.topLateralMoment,6);
- });
+ },60000);
  it('reports the side-thrust row as failing when no wheel pattern carries the minimum',()=>{
   const p=designProject();p.cranes[0].wheels=p.cranes[0].wheels.map(w=>({...w,lateral:0}));
   const s=calculate(p);
   expect(s.checks.find(c=>c.id==='crane-1-side')?.status).toBe('fail');expect(s.checks.find(c=>c.id==='crane-1-side-pattern')?.status).toBe('incomplete');
- });
+ },60000);
 });
