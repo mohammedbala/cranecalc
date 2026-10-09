@@ -146,7 +146,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    if(e.kind==='fatigue')for(let i=0;i<fatigue.length;i++){
     const f=detailInputs[i];if(f.x<start||f.x>end)continue;
     const s=r.at(f.x-start),y=f.point.startsWith('top')?props.h0/2:-props.h0/2,xEdge=f.point.endsWith('right')?p.section.bf/2:-p.section.bf/2;
-    const points=cap?cap.fibres.filter(v=>(f.point.startsWith('top')?v.y>0:v.y<0)&&(f.point.endsWith('right')?v.x>0:v.x<0)):[{x:xEdge,y,omega:xEdge*y}];
+    // Major-axis stress at the outer flange face; the sectorial coordinate uses the flange centroid distance h0/2.
+    const points=cap?cap.fibres.filter(v=>(f.point.startsWith('top')?v.y>0:v.y<0)&&(f.point.endsWith('right')?v.x>0:v.x<0)):[{x:xEdge,y:Math.sign(y)*p.section.d/2,omega:xEdge*y}];
     const b=fatigue[i].bins[bin];
     for(const point of points){const stress=-moment(f.x)*point.y/props.Ix-E*s.curvature*point.x-E*s.warpingCurvature*point.omega;b.minimum=Math.min(b.minimum,stress);b.maximum=Math.max(b.maximum,stress);}
    }
