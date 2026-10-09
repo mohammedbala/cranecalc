@@ -49,7 +49,7 @@ export function checkPurpose(c:CheckResult):string{
 // These engine comparisons encode confirmations, not physical demand/capacity.
 const isConfirmation=(c:CheckResult)=>['building-class','design-scope','load-basis'].includes(c.id)||/^crane-\d+-(split|bumper)$/.test(c.id);
 const utilization=(c:CheckResult)=>!isConfirmation(c)&&['pass','fail'].includes(c.status)&&Number.isFinite(c.utilization)?c.utilization:undefined;
-const statusLabels:Record<CheckResult['status'],string>={pass:'PASS',fail:'FAIL',unsupported:'MODEL REQUIRED',incomplete:'INPUT REQUIRED',unverified:'VERIFY BASIS','not-applicable':'N/A'};
+const statusLabels:Record<CheckResult['status'],string>={pass:'PASS',fail:'FAIL',unsupported:'MODEL REQUIRED',incomplete:'INPUT REQUIRED',unverified:'VERIFY BASIS','not-applicable':'N/A',excluded:'BY OTHERS'};
 export function MathEquation({tex}:{tex:string}){return <div className="equation" dangerouslySetInnerHTML={{__html:katex.renderToString(tex,{throwOnError:false,displayMode:true,strict:'ignore'})}}/>;}
 export function CheckCard({check,units}:{check:CheckResult;units:'US'|'SI'}){
  const [open,setOpen]=useState(false),resolved=['pass','fail'].includes(check.status),ratio=utilization(check),confirmation=isConfirmation(check);
@@ -75,9 +75,9 @@ export function CheckGroup({name,checks,units,issuesOnly,project}:{name:string;c
  const rows=checks.filter(c=>c.group===name),issues=rows.filter(c=>!['pass','not-applicable'].includes(c.status)),visible=issuesOnly?issues:rows;
  if(!rows.length)return null;
  const utilizations=rows.map(utilization).filter((v):v is number=>v!==undefined);
- const max=utilizations.length?Math.max(...utilizations):undefined,pass=rows.filter(c=>c.status==='pass').length,fail=rows.filter(c=>c.status==='fail').length,na=rows.filter(c=>c.status==='not-applicable').length;
+ const max=utilizations.length?Math.max(...utilizations):undefined,pass=rows.filter(c=>c.status==='pass').length,fail=rows.filter(c=>c.status==='fail').length,na=rows.filter(c=>c.status==='not-applicable').length,others=rows.filter(c=>c.status==='excluded').length;
  return <details className={`worksheet-checks ${issues.length?'has-issues':''}`} open={issues.length>0||rows.length<=6}>
-  <summary><ChevronRight size={13}/><strong>{name}</strong><span>{pass} pass{fail?` · ${fail} fail`:''}{issues.length-fail?` · ${issues.length-fail} pending`:''}{na?` · ${na} N/A`:''}</span><b className={max!==undefined&&max>1?'danger':''}>{max===undefined?'—':max.toFixed(3)}<small>MAX D/C</small></b></summary>
+  <summary><ChevronRight size={13}/><strong>{name}</strong><span>{pass} pass{fail?` · ${fail} fail`:''}{issues.length-fail-others?` · ${issues.length-fail-others} pending`:''}{others?` · ${others} by others`:''}{na?` · ${na} N/A`:''}</span><b className={max!==undefined&&max>1?'danger':''}>{max===undefined?'—':max.toFixed(3)}<small>MAX D/C</small></b></summary>
   <CheckFigure topic={name} project={project}/>
   {visible.length?<><div className="check-column-head"><span>CHECK / WHY IT MATTERS</span><span>DEMAND / REQ.</span><span>LIMIT / PROVIDED</span><span>D/C · STATUS</span></div>{visible.map(c=><CheckCard key={c.id} check={c} units={units}/>)}</>:<p className="form-note">No checks need review in this group.</p>}
  </details>;

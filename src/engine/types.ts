@@ -12,7 +12,8 @@ export const projectSchema = z.object({ schemaVersion:z.literal(1), reportPurpos
 export type ProjectInput = z.infer<typeof projectSchema>;
 export type Section = ProjectInput['section'];
 export type Crane = ProjectInput['cranes'][number];
-export type Status = 'pass'|'fail'|'not-applicable'|'incomplete'|'unsupported'|'unverified';
+// 'excluded': required but outside this calculation (shown as BY OTHERS); never a pass, does not block export.
+export type Status = 'pass'|'fail'|'not-applicable'|'incomplete'|'unsupported'|'unverified'|'excluded';
 export interface ReferenceRecord { id:string; title:string; edition:string; clause:string; url:string; status:'verified'|'partial'|'unverified'; evidence:string; }
 export interface CheckResult { id:string; group:string; title:string; status:Status; demand?:number; capacity?:number; utilization?:number; quantity?:'length'|'force'|'moment'|'stress'|'ratio'|'stiffness'; equation:string; substitution?:string; referenceIds:string[]; note:string; caseId?:string; }
 export interface Properties { A:number; Ix:number; Iy:number; Sx:number; Sy:number; Zx:number; Zy:number; J:number; Cw:number; cy:number; h0:number; weight:number; }

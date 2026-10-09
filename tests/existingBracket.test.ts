@@ -37,6 +37,9 @@ describe('existing bracket assessment and new seat',()=>{
   let checks=existingBracketChecks(p,c.result);expect(checks.find(v=>v.id==='existing-vertical')?.status).toBe('unverified');expect(checks.find(v=>v.id==='existing-assessment')?.status).toBe('unverified');expect(checks.find(v=>v.id==='existing-seat-flexure')?.capacity).toBeGreaterThan(0);expect(c.result.fatigue[0].vertical).toBe(18000);
   const e=p.details!.bracket!.existing!;e.rating={...e.rating,vertical:100000,rootMoment:1e8,seatMoment:1e8,fatigueRange:100000,fatigueRootMoment:1e8,fatigueSeatMoment:1e8,cycles:1e9,source:'Unit test assessment, not project data',confirmed:true};
   checks=existingBracketChecks(p,c.result);expect(checks.find(v=>v.id==='existing-assessment')?.status).toBe('pass');expect(checks.find(v=>v.id==='existing-contact')?.status).toBe('unverified');expect(checks.find(v=>v.id==='existing-attachment')?.status).toBe('unverified');
+  // Confirmed assessments of effects this calculation does not compute are reported as BY OTHERS, not PASS.
+  e.rating={...e.rating,contactConfirmed:true,serviceConfirmed:true,attachmentConfirmed:true};checks=existingBracketChecks(p,c.result);
+  for(const id of ['contact','service','attachment'])expect(checks.find(v=>v.id==='existing-'+id)?.status).toBe('excluded');
   p.method='ASD';expect(existingBracketChecks(p,c.result).find(v=>v.id==='existing-assessment')?.status).toBe('unverified');
  });
  it('evaluates simultaneous interaction and fails overload and gravity uplift',()=>{
