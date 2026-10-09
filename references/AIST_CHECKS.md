@@ -5,7 +5,7 @@ Reference: **AIST Technical Report 13**, using the user's supplied source dated 
 | Check | Implementation / limits |
 | --- | --- |
 | Building classification | Owner A–D class and building load repetitions, Table 1.1. Fatigue stress fluctuations are entered separately. |
-| Impact, side thrust, traction | §3.6.2/Table 3.2 cab/radio/pendant/type rules and greatest-of side thrust. Design adopts the greater of minimum and supplied forces; lateral wheel pattern is proportionally scaled, never reduced. A zero pattern requires input. |
+| Impact, side thrust, traction | §3.6.2/Table 3.2 cab/radio/pendant/type rules and greatest-of side thrust, enveloped with ASCE 7 §§4.9.3–4.9.5 (25% cab/remote or 10% pendant impact; 0.2(Q+T) lateral; 10% of maximum static wheel loads longitudinal). Design adopts the greatest of AIST, ASCE 7 and supplied forces; runway side-thrust share is not taken below 0.5; lateral wheel pattern is proportionally scaled, never reduced. A zero pattern requires input. |
 | Crane load split | Static loaded wheel minus unloaded wheel is lifted contribution. Manufacturer must confirm the same trolley position; impact normalized once. |
 | LRFD / ASD | §3.10.2 runway-only projections; crane bridge/trolley dead weight and lifted loads separately factored. Single-crane Css/Cls/Ci/Cbs; empty, loaded and absent states; minimum lift conservatively zero. Project must exclude environmental/building actions on this girder. Nonnegative uniform runway occupancy L may be entered. |
 | Serviceability | §5.8.7 one crane, static vertical, no impact; A/B L/1000, C/D L/600, lateral L/400 or stricter owner criterion. Shortest bay governs conservatively. Lateral result is independent flange bending, with rail-head force couple, not complete rail twist. |
@@ -48,3 +48,18 @@ Implemented additions:
 - Signed simultaneous interface forces and bumper bypass demand, dimensioned SVG/DXF sheets, fabrication/inspection notes, project JSON and compact/detailed PDF formats. Supporting building/frame/bracket/anchor/foundation capacities remain excluded.
 
 `demonstrationProject()` supplies a clearly marked fictitious 10-ton example. Fictional data are permitted only for demonstration purpose; project purpose retains manufacturer-data gates. Numerical/engineering checks do not change with report purpose. No source certification checkbox or forged eligibility flag is accepted by the report endpoint.
+
+
+## Audit corrections — 9 October 2026
+
+Changes from the full-application audit (Phase 0 safety fixes):
+
+- **ASCE 7 §4.9 floors.** Minimum impact, side thrust and longitudinal force are the greater of AIST TR-13 and ASCE 7 §4.9. Minimum-load rows report the adopted design value with the AIST, ASCE 7 and supplied values; a missing wheel side-force pattern still fails.
+- **Per-flange bracing.** Top and bottom flanges are restrained only at their own brace stations (both at supports) in the detailed lateral/torsional model. Lb must be at least the compression-flange restraint gap (top flange on simple spans, either flange on continuous spans); torsional effective length is checked against stations restraining both flanges.
+- **Fatigue fibre and ASD panel zone.** Detailed rolled-girder fatigue takes major-axis stress at the outer flange face (d/2). J10.6 uses alpha = 1.6 for ASD.
+- **Rail inputs.** Design rail height above the flange must equal the AIST rail depth. Detailed projects design for a rail eccentricity of at least the rail setting allowance on the drawings.
+- **BY OTHERS status.** Confirmations of adequacy this calculation does not compute (bracket column-side horizontal load paths; existing-bracket contact, stiffness/movement and horizontal attachments) report BY OTHERS rather than PASS. Every design states that the existing columns, frame, longitudinal bracing and stops, anchors and foundations are not checked and must be verified by the EOR with ASCE 7 building loads. BY OTHERS never blocks export and is never counted as a pass.
+- **Detail clashes.** Validation rejects a rail keeper whose inner fillet (plus 1/16 in fit-up) does not fit between keeper and rail foot, and girder-end cover plates that overlap the bearing stiffeners. Both examples were revised to buildable details and remain all-pass.
+- **Drawings.** Sheets and sketches state the number of failed calculation checks.
+
+Remaining audit items (existing-column module, interface load-type breakdown with ASCE 7 combinations, longitudinal load path, tieback movement compatibility, drawings driven only by project inputs, engine-side clash/clearance rules, package issuance) are tracked in the audit report.

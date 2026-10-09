@@ -1,7 +1,7 @@
 import { exampleProject } from '../../src/engine/defaults';
 import { emptyAistInputs,emptyCraneDesign } from '../../src/engine/aistLoads';
 export function designProject(){
- const p=structuredClone(exampleProject);
+ const p=structuredClone(exampleProject);p.railHeight=150; // same rail depth as aist.railDepth
  p.aist={...emptyAistInputs,buildingClass:'A',buildingCycles:600000,classConfirmed:true,railDepth:150,bearingLength:200,bottomBraceSpacing:7620,axialLength:7620,torsionalLength:7620,runwayOnly:true,fatigueReference:'A-3.1 item 5.8; actual transverse stiffener detail S12',cycleSource:'Owner: 2,000,000 equivalent full-range stress fluctuations including loaded/empty return and each wheel'};
  p.fatigue.detail='Continuous transverse stiffener weld toe at selected flange edge; cyclic AWS detail on S12';
  p.cranes[0].loadSource='Manufacturer project wheel schedule, revision 3';

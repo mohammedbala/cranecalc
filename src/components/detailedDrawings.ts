@@ -6,7 +6,7 @@ import {flangeTieGeometry} from '../engine/tieGeometry';
 import {bearingStiffenerProfile} from './bearingStiffenerGeometry';
 import { Draft, type CadDrawing } from './drafting';
 import { boltProperties } from '../engine/connectionStrength';
-import { restraintStations } from '../engine/detailAnalysis';
+import { flangeRestraintStations } from '../engine/detailAnalysis';
 import type { CalculationSnapshot } from '../engine/types';
 import { format } from '../engine/units';
 import { plateInches } from './drawingFormat';
@@ -24,7 +24,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  dr.dimH(cx-bs.width*k/2,cx+bs.width*k/2,y+b.d*k+bs.thickness*k,400,`SEAT WIDTH ${f(bs.width)}`);
  dr.dimV(y,y+b.d*k,right,430,`${b.name} / d ${f(b.d)}`);
  if(b.kind==='cap'){dr.rect(cx-b.capWidth*k/2,y-b.capTw*k,b.capWidth*k,b.capTw*k);for(const sign of [-1,1])dr.rect(cx+sign*b.capWidth*k/2-(sign>0?b.capTf*k:0),y,b.capTf*k,(b.capDepth-b.capTw)*k);}
- const notes=[`Bearing plate: ${f(bs.width)} wide x ${f(bs.length)} along girder x ${f(bs.thickness)}`,`Pair fitted stiffeners: outstand ${f(bs.stiffenerWidth)} x ${f(bs.stiffenerThickness)}`,`Web-side corner cope: ${f(bs.cope)}; web fillets: ${f(bs.weldSize)}, four lines`,b.kind==='cap'?`Fit/mill ends; top flange CJP; continuous web fillets`:`Fit/mill ends; continuous web AND flange fillets`,`Both-flange ties at x: ${restraintStations(p).map(f).join(', ')}`,`Tie stiffness at EACH flange: ${format(s.detailResults?.braceStiffness??0,'stiffness',p.units)}`,`Bearing reaction envelope: ${force(s.designAnalysis?.reaction??0)}`,`End rotation clearance: ${f(d.criteria.rotationClearance)}`];
+ const notes=[`Bearing plate: ${f(bs.width)} wide x ${f(bs.length)} along girder x ${f(bs.thickness)}`,`Pair fitted stiffeners: outstand ${f(bs.stiffenerWidth)} x ${f(bs.stiffenerThickness)}`,`Web-side corner cope: ${f(bs.cope)}; web fillets: ${f(bs.weldSize)}, four lines`,b.kind==='cap'?`Fit/mill ends; top flange CJP; continuous web fillets`:`Fit/mill ends; continuous web AND flange fillets`,`Top-flange ties at x: ${flangeRestraintStations(p).top.map(f).join(', ')}`,`Bottom-flange ties at x: ${flangeRestraintStations(p).bottom.map(f).join(', ')}`,`Tie stiffness at EACH flange: ${format(s.detailResults?.braceStiffness??0,'stiffness',p.units)}`,`Bearing reaction envelope: ${force(s.designAnalysis?.reaction??0)}`,`End rotation clearance: ${f(d.criteria.rotationClearance)}`];
  notes.forEach((n,i)=>dr.text(500,85+29*i,n,10));dr.text(80,55,'SECTION AT SUPPORT; STIFFENERS ALSO AT EACH RESTRAINT',10);output.push(dr.drawing);
  }
  for(const [key,c,title,number,central] of [['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw],['tie',d.brace.connection,'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const){

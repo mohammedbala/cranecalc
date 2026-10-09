@@ -13,7 +13,9 @@ let snapshot:CalculationSnapshot;
 beforeAll(()=>{snapshot=calculate(demonstrationProject());},60000);
 describe('representative runway package',()=>{
  it('recomputes an exportable design with passing model and engineering gates',()=>{
-  expect(snapshot.errors).toEqual([]);expect(snapshot.checks.filter(c=>!['pass','not-applicable'].includes(c.status))).toEqual([]);expect(snapshot.eligible).toBe(true);
+  expect(snapshot.errors).toEqual([]);expect(snapshot.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status))).toEqual([]);expect(snapshot.eligible).toBe(true);
+  // Building adequacy is stated as outside the calculation, never as a pass.
+  expect(snapshot.checks.filter(c=>c.status==='excluded').map(c=>c.id)).toEqual(['supporting-structure']);
   expect(snapshot.detailResults!.fatigue.length).toBeGreaterThan(20);
   expect(snapshot.detailResults!.travelChange).toBeLessThan(.01);expect(snapshot.detailResults!.meshChange).toBeLessThan(.01);
  });
@@ -41,7 +43,7 @@ describe('representative runway package',()=>{
  it('rejects fictional project source certification and invalid detail geometry',()=>{
   const p=demonstrationProject();p.reportPurpose='project';delete p.details;
   const s=calculate(p);expect(s.eligible).toBe(false);expect(s.checks.some(c=>c.note.includes('manufacturer')&&c.status==='incomplete')).toBe(true);
-  const p2=demonstrationProject();p2.unbracedLength=1000;expect(validateProject(p2).join()).toContain('actual modeled restraint');
+  const p2=demonstrationProject();p2.unbracedLength=1000;expect(validateProject(p2).join()).toContain('top (compression) flange restraint spacing');
   p2.unbracedLength=p2.spans[0];const spacing=p2.aist!.clipSpacing;p2.aist!.clipSpacing=.1;expect(validateProject(p2).join()).toContain('200 rail-keeper');p2.aist!.clipSpacing=spacing;p2.details!.spectrum[0].cycles++;expect(validateProject(p2).join()).toContain('sum');
   p2.details!.spectrum[0].cycles--;p2.cranes[0].design!.bumperBypassesGirder=false;expect(validateProject(p2).join()).toContain('building-mounted end stop');
  });
@@ -50,7 +52,7 @@ describe('representative runway package',()=>{
   expect(sheets.find(s=>s.number==='SK-05')!.entities.filter(e=>e.type==='circle')).toHaveLength(8);
   const dxf=lineworkDxf(snapshot);expect(dxf.includes('4 A325 bolts, diameter 7/8"')).toBe(true);expect(dxf).toContain(snapshot.revision);
   const csv=interfaceCsv(snapshot);expect(csv).toContain(snapshot.input.units==='US'?'vertical_down_kip':'vertical_down_N');expect(csv).toContain('BUMPER-1');
-  const html=reportHtml(snapshot);expect(html).toContain('FICTITIOUS');expect(html).toContain('signed');expect(html).toContain('SK-07');expect(html).not.toContain('class="json"');
+  const html=reportHtml(snapshot);expect(html).toContain('FICTITIOUS');expect(html).toContain('OUTSIDE THIS CALCULATION - BY OTHERS');expect(html).toContain('signed');expect(html).toContain('SK-07');expect(html).not.toContain('class="json"');
   const p=structuredClone(snapshot.input);p.details!.rail.clipThickness*=1.1;expect(fingerprint(p)).not.toBe(snapshot.revision);
  });
 });

@@ -85,6 +85,9 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+='</g></g>';
   svg+=`<g data-stamp="blank">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${text(2466,1534,'RESERVED / UNSEALED',9,'middle')}</g>`;
   svg+=text(2360,1494,'NOT FOR FABRICATION',11,'end',700)+text(2360,1513,'REFERENCE FRAMING SHOWN DASHED',10,'end');
+  // A detail on a sheet must never be read as acceptable while any calculation check fails.
+  const failed=s.checks.filter(c=>c.status==='fail').length;
+  if(failed)svg+=`<g data-flag="failed-checks">${text(2360,1532,`${failed} FAILED CHECK${failed>1?'S':''} - SEE CALCULATION`,11,'end',700)}</g>`;
   return svg;
 }
 

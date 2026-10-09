@@ -29,7 +29,7 @@ function base(id:string,span=30):ProjectInput {
   p.number=id;p.title=`Benchmark ${id} - source comparison`;p.engineer='Software verification - project engineer not assigned';p.spans=[span*ft];
   p.section=loadAiscSection(p.section,'W24X131');p.section.Fy=50*ksi;p.section.Fu=65*ksi;p.section.E=29000*ksi;
   p.section.density=131*.45359237/.3048/(p.section.A*1e-6);
-  p.unbracedLength=p.lateralBraceSpacing=span*ft;p.railWeight=.05*kip/ft;
+  p.unbracedLength=p.lateralBraceSpacing=span*ft;p.railWeight=.05*kip/ft;p.railHeight=6*inch;
   p.aist={...emptyAistInputs,buildingClass:'A',buildingCycles:600000,classConfirmed:true,railDepth:6*inch,bearingLength:8*inch,netFlangeArea:p.section.bf*p.section.tf,bottomBraceSpacing:span*ft,axialLength:span*ft,torsionalLength:span*ft,runwayOnly:true,fatigueReference:'Benchmark detail category only; fabrication detail has not been designed',cycleSource:'Numerical test: 2,000,000 equivalent cycles'};
   p.fatigue.location=span*ft/2;p.fatigue.detail='Benchmark category C resistance; no approved project detail';
   const c=p.cranes[0];c.name='Reference wheel train';c.travelStart=-12*ft;c.travelEnd=span*ft;c.loadSource='DG7 Example 14.1.1 numerical benchmark; empty wheel 19.65 kip is an explicit replay assumption';
