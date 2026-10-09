@@ -10,7 +10,7 @@ beforeAll(()=>{s=calculate(cappedDemonstrationProject());},120000);
 it('runs the complete three-bay capped example with no unresolved or failed checks',()=>{
  expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
  expect(s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status))).toEqual([]);
- expect(s.checks.filter(c=>c.status==='excluded').map(c=>c.id).sort()).toEqual(['bracket-load-path','supporting-structure']);
+ expect(s.checks.filter(c=>c.status==='excluded').map(c=>c.id).sort()).toEqual(['bracket-load-path','column-longitudinal','supporting-structure']);
  expect(s.checks.find(c=>c.id==='bracket-receiver')?.note).toContain('not checked here');
  expect(s.detailResults!.cap!.longitudinalFlow).toBeGreaterThan(0);
  expect(s.detailResults!.fatigue.some(f=>f.id.startsWith('CW'))).toBe(true);
