@@ -17,9 +17,11 @@ export const checkGroupPurpose:Record<string,string>={
  'Column bracket':'Carry support reactions and eccentric moments into the receiving column.',
  'Flange attachment':'Transfer flange tie forces through the saddle, local flange and welds.',
  'Rail details':'Transfer wheel and side forces through the rail, keepers, joints and their attachments.',
- Analysis:'Verify equilibrium and numerical convergence before relying on calculated demands.'
+ Analysis:'Verify equilibrium and numerical convergence before relying on calculated demands.',
+ 'Existing column':'Check the receiving column for the crane reactions combined with the loads it already carries.',
+ 'Supporting structure':'Identify building elements that must be verified outside this calculation for the reported forces.'
 };
-export const worksheetFigureTopics:Record<string,string>={Geometry:'Geometry','Crane loads':'Loading',Criteria:'Criteria',Connections:'Connections',Validation:'Analysis',Project:'Project'};
+export const worksheetFigureTopics:Record<string,string>={Geometry:'Geometry','Crane loads':'Loading',Criteria:'Criteria',Connections:'Connections',Validation:'Analysis','Existing building':'Interfaces',Project:'Project'};
 const escape=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const ink='#34454a',accent='#146b78',muted='#65767b';
 const path=(d:string,focus=false,dashed=false)=>`<path d="${d}" fill="none" stroke="${focus?accent:ink}" stroke-width="${focus?2.2:1.3}"${dashed?' stroke-dasharray="4 3"':''} stroke-linejoin="round" stroke-linecap="round"/>`;
@@ -106,7 +108,7 @@ export function checkFigure(topic:string,p?:ProjectInput):{title:string;note:str
   case 'Column bracket':({title,note,linework:drawing}=bracket(p));break;
   case 'Rail details':title='Rail, keeper and local flange';drawing=rect(48,84,151,6)+path('M101 78V47H94V39H143V47H136V78H155V84H82V78Z')+rect(68,77,21,7,true)+rect(149,77,21,7,true)+circle(119,24,12)+arrow(119,2,119,10)+arrow(169,55,139,55)+label(181,58,'H', 'start',true)+path('M37 53L68 77')+label(42,46,'KEEPER');break;
   case 'Analysis':title='Equilibrium and refinement';drawing=beam(48)+[82,155].map(x=>arrow(x,12,x,43)).join('')+arrow(30,105,30,78)+arrow(210,105,210,78)+[55,82,109,136,163,190].map(x=>circle(x,52,2,true)).join('')+label(120,92,'ΣR = ΣP', 'middle',true)+label(120,112,'refine travel + stations');break;
-  case 'Interfaces':title='Forces transferred to the building';drawing=column()+rect(49,47,145,8)+arrow(107,17,107,42)+arrow(129,33,184,33)+arrow(210,69,210,93)+label(103,13,'V')+label(151,25,'H / N')+label(116,89,'CONCURRENT ACTIONS');note='Retain simultaneous signed reactions when transferring forces to the separately designed building.';break;
+  case 'Existing column':case 'Supporting structure':case 'Interfaces':title=topic==='Existing column'?'Existing column: crane plus building loads':'Forces transferred to the building';drawing=column()+rect(49,47,145,8)+arrow(107,17,107,42)+arrow(129,33,184,33)+arrow(210,69,210,93)+label(103,13,'V')+label(151,25,'H / N')+label(116,89,'CONCURRENT ACTIONS');note='Retain simultaneous signed reactions when transferring forces to the separately designed building.';break;
   default:title='Inputs, checks and report record';drawing=[26,100,174].map((x,i)=>rect(x,29,43,45)+path(`M${x+9} 42h25M${x+9} 51h25M${x+9} 60h17`)+label(x+21,93,['INPUT','CHECK','REPORT'][i])).join('')+arrow(75,51,94,51)+arrow(149,51,168,51);note='Record project inputs, calculation revision and references. Export is controlled by the actual validation results.';
  }
  return {title,note,svg:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="${escape(title)}" data-check-figure="${escape(topic)}"><title>${escape(title)}</title><desc>${escape(note)} Schematic, not to scale. Highlighted lines identify the reviewed action or component; dashed lines show context or an idealized response.</desc>${drawing}</svg>`};

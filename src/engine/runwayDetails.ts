@@ -34,7 +34,7 @@ export type LapConnection=z.infer<typeof lapConnectionSchema>;
 export interface InterfaceAction {
  id:string;combination:string;x:number;vertical:number;top:number;bottom:number;longitudinal:number;torque:number;
  cranes:{index:number;origin:number;loaded:boolean}[];lateralSign:number;controls:string[];
- ends?:{bay:number;end:'left'|'right';vertical:number;top:number;bottom:number;longitudinal:number;offset:number}[];
+ ends?:{x:number;bay:number;end:'left'|'right';vertical:number;top:number;bottom:number;longitudinal:number;offset:number}[];
  seatMoment?:number;
 }
 export interface FatigueDetailResult {

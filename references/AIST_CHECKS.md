@@ -63,3 +63,11 @@ Changes from the full-application audit (Phase 0 safety fixes):
 - **Drawings.** Sheets and sketches state the number of failed calculation checks.
 
 Remaining audit items (existing-column module, interface load-type breakdown with ASCE 7 combinations, longitudinal load path, tieback movement compatibility, drawings driven only by project inputs, engine-side clash/clearance rules, package issuance) are tracked in the audit report.
+
+## Existing building checks — 9 October 2026
+
+For adding or replacing runway supports on an existing building.
+
+- **Support reactions by load type** (worksheet 05, report page 06A, CSV): unfactored D, occupancy L, crane empty Cd, lifted Cv and impact Ci for the crane arrangement maximizing them at each support (order, separation and absent cranes enumerated), the largest single-crane side thrust Css at the support and the runway longitudinal force Cls. Governing AIST/ASCE 7 minimums apply. Verified against the closed-form shared-support reaction and the moving-load envelope.
+- **Existing column** (report page 06B): the bracket's surveyed receiving column (or an AISC W shape, or plates) under ASCE 7 §2.3 LRFD / §2.4 ASD combinations with every crane component as live load L (§4.9), W and E in both directions, and entered unfactored existing P/Mx/My/V for D, L, Lr, S, R, W and E. Crane effects come from a single-column elastic model per axis (pinned or fixed base, braced or free top): eccentric reaction at the seat, side thrust at the rail head, longitudinal force on the weak axis when the column resists it. AISC 360-16 E3/E4/E7, F2 with F3 flange local buckling, F6, G2 and H1 with B1 (Cm = 1); effective lengths may not be below the AISC Commentary Table C-A-7.1 K for the end conditions. Every support is evaluated and the worst governs. Runway-level drift is compared with h/n (DG7 guidance about h/240 cab, h/100 pendant). W14X90 reproduces AISC Manual Table 3-2 phi*Mpx = 574 kip-ft.
+- **Limits:** existing effects are added to the crane peaks without sign or location credit (conservative). Frame action, base flexibility, a direct-analysis stability model, column-side bracket and tie connections, crane-level longitudinal bracing and stops, anchors and foundations remain BY OTHERS. Noncompact or slender column webs (AISC F4/F5) are not implemented and report MODEL REQUIRED.

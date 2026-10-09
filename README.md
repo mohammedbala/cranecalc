@@ -135,6 +135,10 @@ Keeper fatigue uses each duty bin's unfactored wheel groups per Reference AIST T
 The cap-channel dropdown contains 72 AISC v16 C/MC sections. Elastic properties use the tabulated components, channel centroid and rotated axes. Three DG7 table assemblies verify this transformation. Published approximate torsional properties are shown separately for research and are never credited to resistance. The earlier elastic-only restriction is superseded by the bounded capped design branch described below; missing applicability and attachment inputs still block design export. See `references/CAP_AND_KEEPER_VALIDATION.md` for the sizing trials, actual permit comparisons and model limits.
 
 
+## Existing building checks
+
+Worksheet section **05 Existing building & supports** is for adding or replacing runway supports on an existing building. It lists unfactored support reactions by load type (D, L, crane Cd/Cv/Ci, side thrust Css, longitudinal Cls), downloadable as CSV. Enable **Check the existing column** to check the receiving column for those crane reactions plus its existing D, L, Lr, S, R, W and E effects under ASCE 7 combinations and AISC 360 compression, flexure, shear and H1 interaction, with a runway-level drift check. With a column bracket, the column section, eccentricity and flange unbraced length come from the bracket's surveyed receiving column. Frame action, bracing, anchors and foundations remain by others. See [references/AIST_CHECKS.md](references/AIST_CHECKS.md).
+
 ## Capped runway design
 
 Choose **I-girder with cap channel** under Geometry, select the AISC W and C/MC shapes, and complete **Cap material & attachment**. Live checks include conservative F5 flexure for both bending signs, separate flange lateral resistance, E4/E7 compression, shear-center-based torsion/warping, cap weld shear flow and end development, and weld/base-metal fatigue. The channel web alone carries the local keeper bending check. Full contact, continuous full-length welds and unperforated top elements are required; CMAA E/F and unsupported geometries stay gated.
