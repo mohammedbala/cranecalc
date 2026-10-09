@@ -1,5 +1,5 @@
 import { beamSystem, momentAt, type BeamResult } from './beam';
-import { craneCombinations, emptyAistInputs, aistCraneMinimum } from './aistLoads';
+import { craneCombinations, emptyAistInputs, craneDesignMinimum } from './aistLoads';
 import { interaction, type GirderStrength } from './aiscStrength';
 import type { ProjectInput, Properties, DesignAnalysis, DesignCaseSummary } from './types';
 import {cappedElasticProperties} from './capChannel';
@@ -33,7 +33,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  const railLever=(cap?p.section.d+p.section.capTw+p.railHeight-cap.topY:p.railHeight+p.section.tf/2)/props.h0,verticalLever=p.railEccentricity/props.h0;
  let eq=Math.max(dead.equilibriumError,live.equilibriumError);
  const responses=p.cranes.map(c=>{
-  const minimum=aistCraneMinimum(c),impact=Math.max(c.impact,minimum.impact),totalSide=c.wheels.reduce((sum,w)=>sum+w.lateral,0),sideFactor=totalSide>0?Math.max(1,minimum.runwaySide/totalSide):1;
+  const minimum=craneDesignMinimum(c),impact=Math.max(c.impact,minimum.impact),totalSide=c.wheels.reduce((sum,w)=>sum+w.lateral,0),sideFactor=totalSide>0?Math.max(1,minimum.runwaySide/totalSide):1;
   const origins=new Set<number>(Array.from({length:steps+1},(_,i)=>c.travelStart+(c.travelEnd-c.travelStart)*i/steps));
   for(const x of criticalStations)for(const w of c.wheels){const origin=x-w.offset;if(origin>=c.travelStart&&origin<=c.travelEnd)origins.add(origin);}
   return [...origins].sort((a,b)=>a-b).map(origin=>{
@@ -95,7 +95,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
     for(const hi of ids)for(const sign of factors.h?[-1,1]:[1]){
      if(++result.cases>800000)throw Error('AIST design search exceeds 800,000 cases. Reduce cranes or travel ranges.');
      const f=chosen.map((_,i)=>factors.minimumLift?0:full[i]?factors.cv:0);
-     const axial=hi<0?0:factors.l*Math.max(p.cranes[chosen[hi].index].longitudinal,aistCraneMinimum(p.cranes[chosen[hi].index]).traction)+factors.bumper*(p.cranes[chosen[hi].index].design?.bumperBypassesGirder?0:p.cranes[chosen[hi].index].design?.bumperForce??0);
+     const axial=hi<0?0:factors.l*Math.max(p.cranes[chosen[hi].index].longitudinal,craneDesignMinimum(p.cranes[chosen[hi].index]).traction)+factors.bumper*(p.cranes[chosen[hi].index].design?.bumperBypassesGirder?0:p.cranes[chosen[hi].index].design?.bumperForce??0);
      const record=records.get(factors.id)!;
      const c:DesignCaseSummary={id:record.id,equation:record.equation,moment:0,lateralMoment:0,shear:0,reaction:0,interaction:0,positions:chosen.map(s=>s.response.origin),axial,location:0};
      const wheels=chosen.flatMap((s,i)=>s.response.wheels.map(w=>({x:w.x,p:factors.cd*w.unloaded+f[i]*(w.static-w.unloaded)+factors.i*w.static*s.response.impact,h:i===hi?factors.h*w.lateral*sign:0})));

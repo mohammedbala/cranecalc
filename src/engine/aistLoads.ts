@@ -12,6 +12,23 @@ export function aistCraneMinimum(c:Crane){
  const totalSide=d.control==='pendant'?.1*(Q+T+B+A):Math.max(side*Q,(d.type==='stacker'?.4:.2)*(Q+T+A),(d.type==='stacker'?.15:.1)*(Q+T+B+A));
  return {impact:d.control==='pendant'?.1:impact,totalSide,runwaySide:totalSide*d.sideShare,traction:.2*d.drivenWheelLoad};
 }
+// ASCE/SEI 7-16 §§4.9.3-4.9.5 (unchanged in 7-22) powered bridge cranes:
+// impact 25% cab/remote, 10% pendant; lateral 20% of rated load plus
+// trolley/hoist; longitudinal 10% of this runway's maximum static wheel loads.
+export function asceCraneMinimum(c:Crane){
+ const d=c.design??emptyCraneDesign;
+ const wheels=c.wheels.reduce((sum,w)=>sum+w.loaded/(c.includesImpact?1+c.impact:1),0);
+ return {impact:d.control==='pendant'?.1:.25,totalSide:.2*(d.ratedLoad+d.trolleyWeight),longitudinal:.1*wheels};
+}
+// Without a stiffness analysis of both runways, neither runway is credited
+// with less than half of the whole-crane side thrust.
+export const minimumSideShare=.5;
+/** Governing design minimum: the greater of AIST TR-13 and ASCE 7 §4.9. */
+export function craneDesignMinimum(c:Crane){
+ const d=c.design??emptyCraneDesign,aist=aistCraneMinimum(c),asce=asceCraneMinimum(c);
+ const share=Math.max(d.sideShare,minimumSideShare),totalSide=Math.max(aist.totalSide,asce.totalSide);
+ return {aist,asce,share,impact:Math.max(aist.impact,asce.impact),totalSide,runwaySide:totalSide*share,traction:Math.max(aist.traction,asce.longitudinal)};
+}
 export interface CraneCombination {id:string;equation:string;d:number;cd:number;cv:number;h:number;l:number;i:number;live:number;bumper:number;single?:boolean;minimumLift?:boolean;}
 // TR13 February 24, 2020 ballot draft §§3.10.2.1/2.2. These are the
 // runway-only projections: roof, wind, seismic, fluid, soil and thermal loads
