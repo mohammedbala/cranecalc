@@ -28,15 +28,23 @@ export function braceSystem(p:ProjectInput){
  const stiffness=cos*cos/(1/(2*member.stiffness)+2/connectionK+localCompliance);
  return {member,cos,connectionK,stiffness,capacity:2*Math.min(member.tension,member.compression.capacity)*cos};
 }
-export function restraintStations(p:ProjectInput){
+const mergeStations=(xs:number[])=>[...xs].sort((a,b)=>a-b).filter((x,i,s)=>!i||x-s[i-1]>1e-6);
+/** Each flange is restrained only at its own brace stations; both flanges are tied at supports. */
+export function flangeRestraintStations(p:ProjectInput){
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
- const L=supports.at(-1)!,stations=[...supports];
- // Both flanges restrained at every station. The stricter of the two specified
- // spacings is used; unbraced lengths must agree with the actual drawing layout.
- const spacing=Math.min(p.lateralBraceSpacing,p.aist?.bottomBraceSpacing||L);
- for(let x=spacing;x<L-1e-6;x+=spacing)stations.push(x);
- return [...new Set(stations)].sort((a,b)=>a-b);
+ const L=supports.at(-1)!;
+ const series=(spacing:number)=>{const s=[...supports];for(let i=1;i*spacing<L-1e-6;i++)s.push(i*spacing);return mergeStations(s);};
+ return {top:series(p.lateralBraceSpacing),bottom:series(p.aist?.bottomBraceSpacing||L)};
 }
+export function restraintStations(p:ProjectInput){const f=flangeRestraintStations(p);return mergeStations([...f.top,...f.bottom]);}
+/** Largest restraint gap of each flange, and between stations restraining both flanges against twist. */
+export function flangeRestraintGaps(p:ProjectInput){
+ const gap=(s:number[])=>Math.max(...s.slice(1).map((x,i)=>x-s[i])),f=flangeRestraintStations(p);
+ const both=f.top.filter(x=>f.bottom.some(y=>Math.abs(x-y)<=1e-6));
+ return {top:gap(f.top),bottom:gap(f.bottom),twist:gap(both)};
+}
+/** Compression-flange unbraced length: top flange on simple spans, either flange on continuous spans. */
+export function compressionFlangeGap(p:ProjectInput){const g=flangeRestraintGaps(p);return p.system==='continuous'?Math.max(g.top,g.bottom):g.top;}
 const constants={A:[25,165],B:[12,110],B1:[6.1,83],C:[4.4,69],D:[2.2,48],E:[1.1,31],E1:[.39,18]} as const;
 export function fatigueSpectrumBin(category:keyof typeof constants,range:number,cycles:number){
  const [cf]=constants[category];
@@ -67,7 +75,7 @@ function automaticFatigueDetails(p:ProjectInput){
 export function createDetailCollector(p:ProjectInput,props:Properties,subdivisions:number){
  const bracket=createBracketCollector(p);
  const existingBracket=createExistingBracketCollector(p);
- const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+p.railHeight-cap.shearCenter:p.railHeight+p.section.d/2,allStations=restraintStations(p);
+ const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+p.railHeight-cap.shearCenter:p.railHeight+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
  const bearings=independentBearings(p);
@@ -93,7 +101,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const strength=e.kind==='strength',stiffnessFactor=strength?.8:1;
    const beam=new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
     loads:wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),
-    restraints:stations.map(x=>({x:x-start,top:brace.stiffness*stiffnessFactor,bottom:brace.stiffness*stiffnessFactor})),
+    restraints:stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?brace.stiffness*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?brace.stiffness*stiffnessFactor:0})),
     axial:strength?e.axial:0,moment:strength?x=>moment(x+start):undefined,
     distributedTorque:e.railTorquePerLength,
     // Apply the full UDL at rail height for the stability test conservatively.
@@ -203,7 +211,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const deadBounds=detailInputs.map(f=>Math.abs(momentAt(f.x,dead.reactions,[],q))/props.Sx);
   for(const [start,end] of groups){
    const beam=new LateralTorsionBeam({length:end-start,E,G,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
-    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:brace.stiffness,bottom:brace.stiffness})),
+    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:restrains(flanges.top,x)?brace.stiffness:0,bottom:restrains(flanges.bottom,x)?brace.stiffness:0})),
     loads:[],distributedTorque:p.railWeight*p.railEccentricity});
    const deadT=beam.solve();
    detailInputs.forEach((f,i)=>{if(f.x>=start&&f.x<=end){const v=deadT.at(f.x-start);deadBounds[i]+=E*Math.abs(v.curvature)*(cap?p.section.capWidth:p.section.bf)/2+E*Math.abs(v.warpingCurvature)*(cap?.omegaMax??props.h0*p.section.bf/4);}});
