@@ -100,7 +100,7 @@ describe('Concurrent design, fatigue and export safety',()=>{
   expect(s.checks.find(c=>c.id==='vertical')?.capacity).toBe(7620/1000);expect(s.checks.find(c=>c.id==='rail-clips')?.status).toBe('fail');expect(s.checks.find(c=>c.id==='local')?.status).toBe('incomplete');expect(s.checks.find(c=>c.id==='connections-scope')?.status).toBe('incomplete');expect(s.eligible).toBe(false);
  });
  it('keeps above-centroid vertical stability and placeholder fatigue details visible',()=>{
-  const p=designProject();p.railHeight=0;p.railEccentricity=0;p.cranes[0].wheels.forEach(w=>w.lateral=0);p.cranes[0].design!.sideShare=0;
+  const p=designProject();p.railHeight=0;p.aist!.railDepth=0;p.railEccentricity=0;p.cranes[0].wheels.forEach(w=>w.lateral=0);p.cranes[0].design!.sideShare=0;
   p.fatigue.detail='Select and document the actual fatigue detail';const s=calculate(p);
   expect(s.checks.find(c=>c.id==='torsion')?.status).toBe('unsupported');expect(s.checks.find(c=>c.id==='fatigue')?.status).toBe('incomplete');expect(s.checks.find(c=>c.id==='flange-net')?.status).toBe('incomplete');
  });

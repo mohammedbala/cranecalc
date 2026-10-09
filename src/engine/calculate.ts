@@ -38,6 +38,9 @@ export function validateProject(input:unknown):string[]{
  // Lb is the compression-flange brace spacing; bracing the other flange does not shorten it.
  const spacingValid=p.lateralBraceSpacing>=L/100&&p.lateralBraceSpacing<=L&&!(p.aist&&p.aist.bottomBraceSpacing>0&&p.aist.bottomBraceSpacing<L/100);
  if((p.scope==='design'||p.details)&&spacingValid){const gap=compressionFlangeGap(p);if(p.unbracedLength+1e-6<gap)errors.push(`unbracedLength: cannot be shorter than the ${p.system==='continuous'?'larger top- or bottom-flange':'top (compression) flange'} restraint spacing of the modeled supports and braces.`);}
+ // One rail depth drives both the wheel bearing length and the rail-head force couple.
+ if(p.scope==='design'&&p.aist&&p.aist.railDepth>0&&Math.abs(p.railHeight-p.aist.railDepth)>.5)errors.push('railHeight: rail height above the flange must equal the actual rail depth (aist.railDepth) used for wheel bearing.');
+ if(p.details&&Math.abs(p.railEccentricity)+1e-9<p.details.criteria.alignmentTolerance)errors.push('railEccentricity: design rail eccentricity cannot be less than the rail setting allowance permitted on the drawings (details.criteria.alignmentTolerance).');
  if(p.aist){for(const key of ['bottomBraceSpacing','axialLength','torsionalLength'] as const)if(p.aist[key]>L)errors.push(`aist.${key}: cannot exceed the modeled runway length.`);if(p.aist.bottomBraceSpacing>0&&p.aist.bottomBraceSpacing<L/100)errors.push('aist.bottomBraceSpacing: model supports at most 100 brace intervals.');}
  if((p.aist?.netFlangeArea??0)>s.bf*s.tf*(1+1e-9))errors.push('aist.netFlangeArea: cannot exceed the gross area bf × tf of one flange.');
  if(p.fatigue.location>L)errors.push('fatigue.location: detail location must be on the runway.');

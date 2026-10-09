@@ -58,7 +58,8 @@ export function cappedDemonstrationProject():ProjectInput {
  p.notes=p.notes.replace('column brackets, ','');
  p.title='Cedar Works · Three-bay 2-ton capped runway';p.number='DEMO-CAP-002';
  p.section=loadCappedSection(p.section,'W24X94','C15X33.9');
- p.railEccentricity=0;
+ // Design for the rail-to-web offset the rail setting allowance permits, as in the rolled example.
+ p.railEccentricity=.25*inch;
  p.capDesign={...emptyCapDesign,Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi,weldSize:.3125*inch,developmentLength:60*inch,cmaaClass:'C',fullLength:true,continuousWelds:true,contactConfirmed:true,unperforated:true,topStiffenerCjp:true,materialSource:'Fictitious ASTM A572 Grade 50 channel; E70XX welds',dutySource:'Fictitious supplier confirms CMAA C, 2-US-ton crane; 1,000,000 wheel stress fluctuations',fitupNote:'Fictitious full-bearing fit-up: straighten and fit cap before continuous welding; inspect contact along full length; no gaps accepted.'};
  const c=p.cranes[0];c.name='Demo capped crane · 2 US tons';c.operatingClass='Fictitious CMAA C crane; AIST Class C building';
  c.wheels=c.wheels.map(w=>({...w,loaded:w.loaded*.2,unloaded:w.unloaded*.2,lateral:w.lateral*.2}));c.longitudinal*=.2;
