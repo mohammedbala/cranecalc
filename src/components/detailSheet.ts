@@ -1,5 +1,5 @@
 import type {CalculationSnapshot} from '../engine/types';
-import {sheetStart,titleBlock,viewTitle,line,text,esc,n,textWidth,sheetFormat,sheetArea} from './sheetGraphics';
+import {sheetStart,titleBlock,viewTitle,line,text,esc,n,textWidth,sheetFormat,sheetArea,withDetailRoom} from './sheetGraphics';
 import {sheetEntities} from './svgEntities';
 import {heading,numbered,noteFit,noteStack,detailNoteSizes,type Block,type Style} from './noteBlocks';
 
@@ -123,6 +123,42 @@ export function contentBounds(svg:string){
 }
 
 /**
+ * Text that overlaps other text or has linework through it in a drawn detail. A detail is drawn at a
+ * larger scale in a tall cell only when that adds no such clash. Text boxes are shrunk as on review:
+ * descenders, underlines and lines touching the box edge are tolerated.
+ */
+export function annotationClashes(svg:string){
+ const pt=(q:readonly number[]):[number,number]=>[q[0]*72,sheetFormat.height-q[1]*72];
+ const boxes:{x0:number;y0:number;x1:number;y1:number;short:boolean}[]=[],segments:{a:[number,number];b:[number,number];note:boolean}[]=[];
+ for(const e of sheetEntities(`<g data-sheet-content="detail">${svg}</g>`,'US')){
+  if(e.type==='text'){
+   const size=e.height*72/.716,w=textWidth(e.value,size,e.bold),[x,y]=pt(e.at),a=e.align===1?-w/2:e.align===2?-w:0,up=size*.72,down=size*.21;
+   const b=Math.abs(e.angle)<1?{x0:x+a,x1:x+a+w,y0:y-up,y1:y+down}:Math.abs(e.angle-90)<1?{x0:x-up,x1:x+down,y0:y-a-w,y1:y-a}:{x0:x-down,x1:x+up,y0:y+a,y1:y+a+w};
+   boxes.push({x0:b.x0+size*.12,x1:b.x1-size*.12,y0:b.y0+size*.12,y1:b.y1-size*.25,short:e.value.length<=2});
+  }
+  else if((e.type==='line'||e.type==='poly')&&e.layer!=='S-PATT'){
+   const p=(e.type==='line'?[e.a,e.b]:e.points).map(pt),note=e.layer==='S-ANNO'||e.layer==='S-GRID';
+   for(let i=1;i<p.length;i++)segments.push({a:p[i-1],b:p[i],note});
+   if(e.type==='poly'&&e.closed)segments.push({a:p[p.length-1],b:p[0],note});
+  }
+ }
+ // Liang-Barsky: does the segment pass through the box?
+ const through=(a:[number,number],b:[number,number],r:{x0:number;y0:number;x1:number;y1:number})=>{
+  let t0=0,t1=1;const dx=b[0]-a[0],dy=b[1]-a[1];
+  for(const [p,q] of [[-dx,a[0]-r.x0],[dx,r.x1-a[0]],[-dy,a[1]-r.y0],[dy,r.y1-a[1]]] as const){
+   if(p===0){if(q<0)return false;continue;}
+   const t=q/p;if(p<0){if(t>t1)return false;if(t>t0)t0=t;}else{if(t<t0)return false;if(t<t1)t1=t;}
+  }
+  return t1-t0>1e-6;
+ };
+ let count=0;
+ for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];if(a.x0<b.x1&&b.x0<a.x1&&a.y0<b.y1&&b.y0<a.y1)count++;}
+ // Bubble numbers sit on white fills, so only leaders and grids count against them.
+ for(const box of boxes)for(const s of segments)if((s.note||!box.short)&&through(s.a,s.b,box))count++;
+ return count;
+}
+
+/**
  * Draw one detail sheet: grid, details with their titles, and the notes column. A sheet of three rows
  * spreads them over the full height; each detail is centered in its cell above its title.
  */
@@ -133,9 +169,14 @@ export function detailSheetSvg(s:CalculationSnapshot,number:string,title:string,
  svg+=`<g data-detail-grid="3x${rows}">${gridLines(layout.placed,h,rows)}</g>`;
  let fits=layout.fits;
  for(const p of layout.placed){
-  const r=p.view.render(),b=contentBounds(r.svg),ax=p.col*w+w/2,ay=(p.row+p.rows)*h-titleDrop;
+  const ax=p.col*w+w/2,ay=(p.row+p.rows)*h-titleDrop,top=p.row*h+14,bottom=ay-22;
+  const within=(v:ViewRender)=>{const c=contentBounds(v.svg);return c.y1-c.y0<=bottom-top&&c.x1-c.x0<=w-16;};
+  // A cell taller than the module lets the detail take a larger standard scale when it still fits and
+  // its annotation stays as clear as at the standard scale.
+  const roomy=h>detailGrid.cell.h?withDetailRoom(h/detailGrid.cell.h,()=>p.view.render()):undefined;
+  const standard=p.view.render(),r=roomy&&within(roomy)&&annotationClashes(roomy.svg)<=annotationClashes(standard.svg)?roomy:standard,b=contentBounds(r.svg);
   // Clear of the cell edges and of the title: centered, but no farther than 70 above the title.
-  const top=p.row*h+14,bottom=ay-22,height=b.y1-b.y0;
+  const height=b.y1-b.y0;
   const dy=height>bottom-top?bottom-b.y1:Math.max((top+bottom)/2-(b.y0+b.y1)/2,bottom-70-b.y1),dx=ax-(b.x0+b.x1)/2;
   if(height>bottom-top+10||b.x1-b.x0>w-16)fits=false;
   svg+=`<g data-detail-cell="${p.col+1},${p.row+1},${p.rows}" data-cell-height="${n(h)}" transform="translate(${n(dx)} ${n(dy)})">${r.svg}</g>${viewTitle(ax,ay,p.view.title,r.scale)}`;
