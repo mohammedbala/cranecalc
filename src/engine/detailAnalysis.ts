@@ -140,7 +140,12 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     if(critical.value<result.criticalMultiplier){result.criticalMultiplier=critical.value;result.governing.criticalMultiplier={id:e.id,combination:e.combination,x:start,value:critical.value};ownMultiplier=critical.value;}
    }
    const geometry=strength?(p.method==='LRFD'?1:1.6):0;
-   r=beam.solve(geometry);result.residual=Math.max(result.residual,r.residual);
+   // A girder that buckles below the applied load has no equilibrium state to recover: record the case and let
+   // the stability check (whose multiplier is then below 1) report the failure instead of stopping the analysis.
+   try{r=beam.solve(geometry);}catch(error){if(!(strength&&error instanceof Error&&error.message.startsWith('Lateral/torsional instability')))throw error;}
+   if(!r){result.unstableCases=(result.unstableCases??0)+1;restraintForces=stations.map(x=>({x:x-start,top:0,bottom:0}));bayStates.set(bayKey,restraintForces);}
+   else{
+   result.residual=Math.max(result.residual,r.residual);
    if(strength){
     // Load-height LTB in the inelastic range: the elastic critical moment of this case (wheels at the rail head,
     // UDL at rail height, axial load, modeled restraints and moment gradient) is Mcr = lambda M / 0.8 because the
@@ -164,6 +169,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     }
    }
    restraintForces=r.restraints.map(v=>({x:v.x,top:v.top,bottom:v.bottom}));bayStates.set(bayKey,restraintForces);
+   }
    }
    if(p.system==='simple')for(const [endName,x] of [['left',start],['right',end]] as const){
     const lateral=restraintForces.find(re=>Math.abs(re.x-(x-start))<1e-6)!;
