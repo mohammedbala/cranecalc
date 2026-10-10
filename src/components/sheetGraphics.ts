@@ -10,9 +10,15 @@ export const sheetOrdinalToken='{{SHEET_ORDINAL}}';
 export const sheetFormat = { widthIn:36, heightIn:24, width:2592, height:1728, contentScale:1 } as const;
 /** Drawing area of a sheet in layout units at content scale 1: inside the border, above the title band. */
 export const sheetArea={x:0,y:0,width:2520,height:1512,seal:{x:2340,y:1332}} as const;
+let detailRoom=1;
+/**
+ * Draw a detail with its scale budgets enlarged by `factor`, for a cell taller than the module: the
+ * detail takes the next standard scale where its enlarged budget allows one.
+ */
+export function withDetailRoom<T>(factor:number,draw:()=>T):T{const was=detailRoom;detailRoom=factor;try{return draw();}finally{detailRoom=was;}}
 /** Select and label the actual printed scale for a sheet drawn at the given content scale. */
 export function sheetDrawingScale(maxLayoutUnitsPerMm:number,units:CalculationSnapshot['input']['units'],contentScale:number=sheetFormat.contentScale){
- const scale=drawingScale(maxLayoutUnitsPerMm*contentScale,units);
+ const scale=drawingScale(maxLayoutUnitsPerMm*contentScale*detailRoom,units);
  return {...scale,pointsPerMm:scale.pointsPerMm/contentScale};
 }
 export type XY = [number, number];
