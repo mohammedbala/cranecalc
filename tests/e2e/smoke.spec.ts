@@ -42,3 +42,17 @@ test('runs the demonstration package: checks, drawing set and printable report',
  expect(html).toContain('counter(pages)');expect(html).toContain('NOT SEALED');
  expect(errors).toEqual([]);
 });
+
+test('designs new freestanding columns with base plates and footings',async({page})=>{
+ const errors=watch(page);
+ await page.goto('/');
+ await page.getByRole('button',{name:'Load new-column example'}).first().click();
+ await expect(page.getByRole('button',{name:'Generate output',exact:true})).toBeEnabled({timeout:540000});
+ await page.getByRole('button',{name:'Drawings'}).click();
+ const tabs=page.locator('.drafting-views button');
+ await expect(tabs.filter({hasText:'S-08'})).toHaveCount(1,{timeout:120000});
+ await tabs.filter({hasText:'S-08'}).first().click();
+ await expect(page.locator('.drafting-linework svg')).toHaveAttribute('aria-label',/^S-08/);
+ await expect(page.locator('.drafting-linework svg')).toContainText('FOOTING / SECTION');
+ expect(errors).toEqual([]);
+});

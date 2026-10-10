@@ -1,3 +1,4 @@
+import {supportColumn} from '../engine/drawingData';
 import type {CalculationSnapshot} from '../engine/types';
 import {flangeTieGeometry,tieRelease} from '../engine/tieGeometry';
 import {boltProperties} from '../engine/connectionStrength';
@@ -44,7 +45,7 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,compact
   {at:[X(g.rootStart+g.rootLength*.4),Y(a.saddleThickness/2)],labels:[`SADDLE PL ${sz(a.saddleThickness)}`,`${dim(a.saddleLength)} LONG X ${dim(g.rootLength)} W`]},
   {at:[X(g.rootStart+g.rootLength*.5),Y(a.saddleThickness)],labels:['GUSSET / SADDLE AND','SADDLE / FLANGE: BOTH SIDES'],weld:sz(a.weldSize)},
   {at:[X(g.start+t.length/2),Y(drop-t.width/2)],labels:[`2 FL ${sz(t.thickness)} X ${sz(t.width)}`,`GIRDER END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC,`,`${sz(hole)} STD HOLES; PL ${sz(t.gussetThickness)} GUSSETS`]},
-  {at:[X(g.face),Y(drop+hg/2-3)],labels:[`${g.receiver?'EXISTING ':''}COLUMN GUSSET ROOT, BOTH SIDES`,`X ${dim(hg)}; ${detailRef('TIE AND STIFFENER LOCATIONS / PLAN')}`],weld:sz(c.weldSize),field:true},
+  {at:[X(g.face),Y(drop+hg/2-3)],labels:[`${supportColumn(p).isNew?'SHOP WELD NEW ':g.receiver?'EXISTING ':''}COLUMN GUSSET ROOT, BOTH SIDES`,`X ${dim(hg)}; ${detailRef('TIE AND STIFFENER LOCATIONS / PLAN')}`],weld:sz(c.weldSize),field:!supportColumn(p).isNew},
   {at:[X(g.face-g.connection*.5),Y(drop+hg/2)],labels:rel?[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} PRETENSIONED`,`AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)};`,`${sz(rel.width)} X ${sz(rel.slot)} VERT. SLOTS IN GUSSET`]:[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC,`,`${sz(hole)} STD HOLES`]}
  ];
  svg+=labelColumn(items,nx,top,bottom);
@@ -72,10 +73,10 @@ export function flangeTieSheetSvg(s:CalculationSnapshot){
   svg+=dimH(Math.min(tx,sx),Math.max(tx,sx),cy-b.bf*k/2,105,dim(a.longitudinalSetback));
  }
  const rw=g.receiver?.width??14*25.4,rt=g.receiver?.flangeThickness??25.4;
- svg+=rect(cx-rw*k/2,cy+g.face*k,rw*k,rt*k,'reference-line');
+ svg+=rect(cx-rw*k/2,cy+g.face*k,rw*k,rt*k,supportColumn(p).isNew?'runway-line':'reference-line');
  const rootX=cx+((pair.at(-1)?.tieX??grid)-grid)*k;
- svg+=fieldFilletLeader([[rootX,cy+g.face*k]],[1027,285],sz(t.connection.weldSize),[g.receiver?'FIELD WELD TO EXISTING COLUMN':'FIELD WELD TO COLUMN',`BOTH SIDES X ${dim(g.columnGusset)} / EACH GUSSET`],true);
- svg+=text(cx-20,325,g.receiver?'EXISTING COLUMN / SEPARATE TIES EACH GIRDER':'COLUMN BY OTHERS (REF.) / SEPARATE TIES EACH GIRDER',8,'middle');
+ const sc=supportColumn(p);svg+=(sc.field?fieldFilletLeader:filletLeader)([[rootX,cy+g.face*k]],[1027,285],sz(t.connection.weldSize),[sc.isNew?`SHOP WELD TO ${sc.name}`:g.receiver?'FIELD WELD TO EXISTING COLUMN':'FIELD WELD TO COLUMN',`BOTH SIDES X ${dim(g.columnGusset)} / EACH GUSSET`],true);
+ svg+=text(cx-20,325,sc.isNew?`${sc.reference} / SEPARATE TIES EACH GIRDER`:g.receiver?'EXISTING COLUMN / SEPARATE TIES EACH GIRDER':'COLUMN BY OTHERS (REF.) / SEPARATE TIES EACH GIRDER',8,'middle');
  svg+=viewTitle(906,351,'TIE AND STIFFENER LOCATIONS / PLAN',scale.label)+'</g>';
  const bs=drawingScale(1.25,p.units),bk=bs.pointsPerMm,bx=200,by=462;
  svg+='<g data-view="saddle-longitudinal-section">';
@@ -91,7 +92,7 @@ export function flangeTieSheetSvg(s:CalculationSnapshot){
  const rel=tieRelease(p),support=s.checks.find(c=>c.id==='tie-move-support'),bottom=g.sides.includes(-1);
  const notes=[`TIES: ${dim(t.length)} LONG, ${bottom?'AT BOTH FLANGES':`AT THE TOP FLANGE. THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef('GIRDER END BEARINGS / LOCATING AND SLIDING')})`}. SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS.`,
   'GIRDER FORCE TRANSFERS THROUGH THE GUSSET AND SADDLE DIRECTLY TO THE FLANGE. DO NOT WELD THE GUSSET TO THE WEB.',
-  `FIELD WELD COLUMN GUSSET TO ${g.receiver?'EXISTING COLUMN':'THE COLUMN'}: TWO ${sz(t.connection.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}. VERIFY STEEL GRADE, WELDABILITY AND SURFACE CONDITION.`,
+  supportColumn(p).isNew?`SHOP WELD COLUMN GUSSET TO THE ${supportColumn(p).name}: TWO ${sz(t.connection.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}.`:`FIELD WELD COLUMN GUSSET TO ${g.receiver?'EXISTING COLUMN':'THE COLUMN'}: TWO ${sz(t.connection.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}. VERIFY STEEL GRADE, WELDABILITY AND SURFACE CONDITION.`,
   rel?`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)} LONG (FY 50 KSI MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. PROVIDE A ${sz(rel.clearance)} FILLER (CLASS B SURFACES) AT THE GIRDER GUSSET SO THE BARS STAY PARALLEL.`:'COLUMN END: STANDARD HOLES; THE BARS ALSO FLEX WITH SUPPORT DEFLECTION.',
   `TIE BARS FLEX OUT OF PLANE WITH GIRDER END ROTATION AND, AT SLIDING ENDS, THERMAL TRAVEL; SEE THE TIE MOVEMENT CHECKS.${support?.capacity!==undefined?` BRACKET BY OTHERS: VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${dim(support.capacity)} MAX.`:''}`,
   `GIRDER END: STANDARD HOLES, PRETENSIONED A325 BOLTS, CLASS B FAYING SURFACES. NO HOLES OR CUTS THROUGH THE ${b.kind==='cap'?'CAP OR ':''}W FLANGES.` ];

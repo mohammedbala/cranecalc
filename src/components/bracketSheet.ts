@@ -1,3 +1,4 @@
+import {supportColumn} from '../engine/drawingData';
 import {heading,numbered,table,noteStack,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,plateInches} from './drawingFormat';
@@ -16,7 +17,8 @@ export function bracketSheetSvg(s:CalculationSnapshot){
   const scale=sheetDrawingScale(Math.min(.25,180/(b.ribDepth+b.seatThickness+d.bearing.thickness)),p.units),k=scale.pointsPerMm;
   const face=319,tip=face-b.seatProjection*k,seatY=144,rootY=seatY+b.seatThickness*k,bot=rootY+b.ribDepth*k,center=face-b.reach*k;
   svg+='<g data-view="welded-bracket-side">';
-  svg+=rect(face,111,b.receiver.flangeThickness*k,bot-85,'reference-line')+line([face+b.receiver.flangeThickness*k,rootY+b.ribDepth*k/2],[face+56,rootY+b.ribDepth*k/2],'reference-line');
+  const colLine=supportColumn(p).isNew?'runway-line':'reference-line';
+  svg+=rect(face,111,b.receiver.flangeThickness*k,bot-85,colLine)+line([face+b.receiver.flangeThickness*k,rootY+b.ribDepth*k/2],[face+56,rootY+b.ribDepth*k/2],'reference-line');
   svg+=rect(tip,seatY,b.seatProjection*k,b.seatThickness*k,'runway-line')+rect(tip,rootY,b.seatProjection*k,b.ribDepth*k,'runway-line');
   svg+=rect(center-d.bearing.width*k/2,seatY-d.bearing.thickness*k,d.bearing.width*k,d.bearing.thickness*k,'runway-line');
   svg+=line([center,101],[center,bot+9],'grid-line');
@@ -24,16 +26,17 @@ export function bracketSheetSvg(s:CalculationSnapshot){
   svg+=dimH(tip,face,bot,bot+22,dim(b.seatProjection));
   svg+=dimV(rootY,bot,tip,tip-22,dim(b.ribDepth));
   svg+=multiLeader([[center,seatY-d.bearing.thickness*k]],[48,87],['RUNWAY BEARING PLATE / S-02']);
-  svg+=multiLeader([[face+3,116]],[398,116],['EXISTING COLUMN (REF.)','LOCAL CHECKS PER ENTERED DATA']);
+  const sc=supportColumn(p);
+  svg+=multiLeader([[face+3,116]],[398,116],[sc.reference,sc.isNew?'CHECKED UNDER NEW COLUMN':'LOCAL CHECKS PER ENTERED DATA']);
   svg+=multiLeader([[tip+20,seatY+b.seatThickness*k/2]],[398,163],[`SEAT PL ${size(b.seatThickness)}`]);
-  svg+=fieldFilletLeader([[face,rootY+b.ribDepth*k*.56]],[398,238],size(b.rootWeld),['FIELD WELD TO EXISTING COLUMN','BOTH SIDES OF EACH RIB','CONT. FULL RIB DEPTH'],true);
+  svg+=(sc.field?fieldFilletLeader:filletLeader)([[face,rootY+b.ribDepth*k*.56]],[398,238],size(b.rootWeld),[`${sc.weld} TO ${sc.name}`,'BOTH SIDES OF EACH RIB','CONT. FULL RIB DEPTH'],true);
   svg+=viewTitle(318,350,'COLUMN BRACKET / TRANSVERSE SECTION',scale.label)+'</g>';
  }
  // Plan: no bolts in the welded bracket. Ribs under seat dashed as hidden edges.
  {
   const scale=sheetDrawingScale(Math.min(.24,165/b.seatProjection,280/b.seatLength),p.units),k=scale.pointsPerMm,cx=821,face=120,tip=face+b.seatProjection*k;
   svg+='<g data-view="welded-bracket-plan">';
-  svg+=rect(cx-b.receiver.width*k/2,face-b.receiver.flangeThickness*k,b.receiver.width*k,b.receiver.flangeThickness*k,'reference-line');
+  svg+=rect(cx-b.receiver.width*k/2,face-b.receiver.flangeThickness*k,b.receiver.width*k,b.receiver.flangeThickness*k,supportColumn(p).isNew?'runway-line':'reference-line');
   svg+=rect(cx-b.seatLength*k/2,face,b.seatLength*k,b.seatProjection*k,'runway-line');
   for(const sign of [-1,1]){const x=cx+sign*b.ribSpacing*k/2;for(const edge of [-1,1])svg+=line([x+edge*b.ribThickness*k/2,face],[x+edge*b.ribThickness*k/2,tip],'reference-line');}
   svg+=line([cx-b.seatLength*k/2-10,face+b.reach*k],[cx+b.seatLength*k/2+10,face+b.reach*k],'grid-line');
@@ -47,7 +50,7 @@ export function bracketSheetSvg(s:CalculationSnapshot){
  {
   const scale=sheetDrawingScale(Math.min(.24,175/(b.ribDepth+b.seatThickness),290/b.seatLength),p.units),k=scale.pointsPerMm,cx=224,top=435,bot=top+(b.seatThickness+b.ribDepth)*k;
   svg+='<g data-view="welded-bracket-face">';
-  svg+=rect(cx-b.receiver.width*k/2,409,b.receiver.width*k,bot-397,'reference-line');
+  svg+=rect(cx-b.receiver.width*k/2,409,b.receiver.width*k,bot-397,supportColumn(p).isNew?'runway-line':'reference-line');
   svg+=rect(cx-b.seatLength*k/2,top,b.seatLength*k,b.seatThickness*k,'runway-line');
   for(const side of [-1,1])svg+=rect(cx+(side*b.ribSpacing-b.ribThickness)*k/2,top+b.seatThickness*k,b.ribThickness*k,b.ribDepth*k,'runway-line');
   svg+=dimH(cx-b.ribSpacing*k/2,cx+b.ribSpacing*k/2,bot,bot+23,dim(b.ribSpacing));
@@ -60,9 +63,9 @@ export function bracketSheetSvg(s:CalculationSnapshot){
   const notes=[
    'TWO RECTANGULAR RIBS AND SEAT PLATE. GRAVITY BEARINGS ONLY. NO CREDIT FOR BOLTS, KNEE PLATES OR COMPOSITE RIB/SEAT ACTION.',
    `PLATES: ${format(d.material.Fy,'stress',p.units)} MIN. YIELD. WELDS: ${format(d.material.Fexx,'stress',p.units)} ELECTRODE. CONTINUOUS FILLETS AS SHOWN.`,
-   'SHOP WELD SEAT TO RIBS. FIELD WELD RIB ROOTS TO EXISTING COLUMN AS FLAGGED. PROVIDE ACCESS TO BOTH ROOT WELDS BEFORE PLACING THE RUNWAY; INSPECT STARTS, STOPS AND TOES.',
+   supportColumn(p).isNew?`SHOP WELD SEAT TO RIBS AND RIB ROOTS TO THE ${supportColumn(p).name} BEFORE ERECTION; INSPECT STARTS, STOPS AND TOES.`:'SHOP WELD SEAT TO RIBS. FIELD WELD RIB ROOTS TO EXISTING COLUMN AS FLAGGED. PROVIDE ACCESS TO BOTH ROOT WELDS BEFORE PLACING THE RUNWAY; INSPECT STARTS, STOPS AND TOES.',
    'KEEP GIRDER ENDS AND BEARINGS INDEPENDENT. DO NOT WELD THE SLIDING BEARING TO THE GIRDER. LATERAL TIES, LOCATING GUIDES AND HOLD-DOWNS HAVE SEPARATE COLUMN LOAD PATHS.',
-   p.existingColumn?.enabled?'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. THE EXISTING COLUMN IS CHECKED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT; FRAME, ANCHORS AND FOUNDATIONS ARE BY OTHERS.':'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. LOCAL COLUMN CHECKS DO NOT VERIFY THE COMPLETE FRAME, COLUMN AXIAL/BENDING INTERACTION OR FOUNDATIONS.',
+   supportColumn(p).isNew?`THE ${supportColumn(p).name} IS DESIGNED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT${p.columnBase?.enabled?'; BASE PLATE, ANCHOR RODS AND FOOTING ON S-08':'; ITS BASE AND FOUNDATION ARE BY OTHERS'}.`:p.existingColumn?.enabled?'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. THE EXISTING COLUMN IS CHECKED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT; FRAME, ANCHORS AND FOUNDATIONS ARE BY OTHERS.':'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. LOCAL COLUMN CHECKS DO NOT VERIFY THE COMPLETE FRAME, COLUMN AXIAL/BENDING INTERACTION OR FOUNDATIONS.',
    'REACTIONS BELOW ARE CONCURRENT AT THE CASE OF MAXIMUM RIB FORCE AT EACH GRID. DO NOT ADD ALTERNATIVE CASES. RIB FORCE MAY REVERSE UNDER AN OFFSET BEARING.'
   ];
   const rows=(s.detailResults?.bracket?.stations??[]).map((r,i)=>[String(i+1),...[r.vertical,r.leftRib,r.rightRib].map(v=>format(v,'force',p.units,3))]);

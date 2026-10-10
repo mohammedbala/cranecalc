@@ -13,6 +13,8 @@ export type ExistingLoadKey=typeof existingLoadKeys[number];
  */
 export const existingColumnSchema=z.object({
  enabled:z.boolean(),
+ /** A new column designed here, with its base and footing; it carries no existing building loads. */
+ isNew:z.boolean().optional(),
  shape:z.string().max(30),
  d:pos,bf:pos,tf:pos,tw:pos,Fy:pos,Fu:pos,
  height:pos,seatElevation:pos,eccentricity:pos,
