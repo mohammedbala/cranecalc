@@ -5,7 +5,8 @@ import {drawingSheetSet,resolveSheetSet,sheetIndex,detailReferences} from '../sr
 import {sheetsDxf,sheetEntities,drawingSetDxf,sheetLayers} from '../src/components/sheetDxf';
 import {runwayElevations,issueStatus,girderMarks} from '../src/engine/drawingData';
 import {drawingLength} from '../src/components/drawingFormat';
-import {multiLeader,textWidth,wrapToWidth,viewTitle,detailRef} from '../src/components/sheetGraphics';
+import {multiLeader,textWidth,wrapToWidth,viewTitle,detailRef,sheetDrawingScale,withDetailRoom,text,line} from '../src/components/sheetGraphics';
+import {annotationClashes} from '../src/components/detailSheet';
 import {format} from '../src/engine/units';
 import type {CalculationSnapshot} from '../src/engine/types';
 
@@ -158,6 +159,17 @@ describe('sheet text layout',()=>{
   expect(textWidth('W',10)).toBeCloseTo(9.44,2);expect(textWidth('ii',10)).toBeCloseTo(4.44,2);expect(textWidth('A',10,true)).toBeGreaterThan(textWidth('A',10));
   const rows=wrapToWidth('VERIFY ALL DIMENSIONS AND EXISTING CONDITIONS BEFORE FABRICATION',100,6);
   expect(rows.length).toBeGreaterThan(1);for(const r of rows)expect(textWidth(r,6)).toBeLessThanOrEqual(100);
+ });
+ it('gives a detail in a taller cell a larger standard scale only while drawing it',()=>{
+  expect(sheetDrawingScale(.24,'US').label).toBe(`SCALE: 1" = 1'-0"`);
+  expect(withDetailRoom(1.5,()=>sheetDrawingScale(.24,'US').label)).toBe(`SCALE: 1 1/2" = 1'-0"`);
+  expect(sheetDrawingScale(.24,'US').label).toBe(`SCALE: 1" = 1'-0"`);
+  expect(sheetDrawingScale(.22,'SI').label).toBe('SCALE: 1:20');expect(withDetailRoom(4/3,()=>sheetDrawingScale(.22,'SI').label)).toBe('SCALE: 1:10');
+ });
+ it('counts linework through text and overlapping text as annotation clashes',()=>{
+  expect(annotationClashes(text(0,0,'LABEL')+line([-5,8],[40,8]))).toBe(0);
+  expect(annotationClashes(text(0,0,'LABEL')+line([-5,-3],[40,-3]))).toBe(1);
+  expect(annotationClashes(text(0,0,'LABEL')+text(10,2,'OTHER'))).toBe(1);
  });
  it('lands a leader on the label end facing its target',()=>{
   expect(multiLeader([[300,50]],[100,80],['LABEL'])).toContain('data-landing="right"');
