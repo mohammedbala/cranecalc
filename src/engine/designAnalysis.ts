@@ -6,6 +6,7 @@ import type { ProjectInput, Properties, DesignAnalysis, DesignCaseSummary } from
 import {cappedElasticProperties} from './capChannel';
 import {railKeeperStations,girderSegments} from './simpleSupports';
 import {adjacentReactions} from './continuation';
+import {railTopAboveSteel} from './railSeat';
 
 const abs=(xs:number[])=>Math.max(0,...xs.map(Math.abs));
 export interface RunwayCaseEvent {
@@ -39,8 +40,8 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  const atDetail=(r:BeamResult,loads:{x:number;p:number}[])=>momentAt(p.fatigue.location,r.reactions,loads,0);
  const flangeY=(p.section.d-p.section.tf)/2;
  // Rail head and bumper above the girder bearing surface.
- const railTop=(cap?p.section.d+p.section.capTw:p.section.d)+(di.railDepth||p.railHeight),bumperLever=railTop+(p.details?.endStop?.bumperHeight??0);
- const railLever=(cap?p.section.d+p.section.capTw+p.railHeight-cap.topY:p.railHeight+p.section.tf/2)/props.h0,verticalLever=p.railEccentricity/props.h0;
+ const railTop=(cap?p.section.d+p.section.capTw:p.section.d)+railTopAboveSteel(p),bumperLever=railTop+(p.details?.endStop?.bumperHeight??0);
+ const railLever=(cap?p.section.d+p.section.capTw+railTopAboveSteel(p)-cap.topY:railTopAboveSteel(p)+p.section.tf/2)/props.h0,verticalLever=p.railEccentricity/props.h0;
  let eq=Math.max(dead.equilibriumError,live.equilibriumError);
  const positions=cranePositions(p,steps,criticalStations);
  const responses=p.cranes.map((c,craneIndex)=>{
@@ -147,7 +148,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
      // The couple can load either end of the bay that carries the force: bound both signs at every support.
      const sr=vr.map((r,j)=>r.r+ar[j].r),shift=stations.map((_,j)=>longitudinalCouple/Math.min(...[p.spans[j-1],p.spans[j]].filter(v=>v>0)));c.reaction=Math.max(0,...sr.map((r,j)=>r+shift[j]));
      govern('shear',c.shear,c);govern('reaction',c.reaction,c);govern('uplift',Math.max(0,...sr.map((r,j)=>-(r-shift[j]))),c);govern('axial',axial,c);
-     for(const w of wheels){result.wheelLoad=Math.max(result.wheelLoad,w.p);if(p.system==='simple'?stations.some(x=>Math.abs(w.x-x)<=p.section.d):Math.min(w.x,L-w.x)<=p.section.d)result.wheelNearEndLoad=Math.max(result.wheelNearEndLoad,w.p);result.torsion=Math.max(result.torsion,Math.abs(w.p*p.railEccentricity+w.h*(p.railHeight+flangeY)));}
+     for(const w of wheels){result.wheelLoad=Math.max(result.wheelLoad,w.p);if(p.system==='simple'?stations.some(x=>Math.abs(w.x-x)<=p.section.d):Math.min(w.x,L-w.x)<=p.section.d)result.wheelNearEndLoad=Math.max(result.wheelNearEndLoad,w.p);result.torsion=Math.max(result.torsion,Math.abs(w.p*p.railEccentricity+w.h*(railTopAboveSteel(p)+flangeY)));}
      record.moment=Math.max(record.moment,c.moment);record.lateralMoment=Math.max(record.lateralMoment,c.lateralMoment);record.shear=Math.max(record.shear,c.shear);record.reaction=Math.max(record.reaction,c.reaction);record.axial=Math.max(record.axial,axial);if(c.interaction>=record.interaction){record.interaction=c.interaction;record.positions=c.positions;record.location=c.location;}
     }
    }

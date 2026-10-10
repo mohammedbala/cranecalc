@@ -14,6 +14,7 @@ import type { CalculationSnapshot } from '../engine/types';
 import { format } from '../engine/units';
 import { plateInches } from './drawingFormat';
 import { detailSheetNumbers } from './planSheet';
+import {railSeat} from '../engine/railSeat';
 export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  const p=s.input,d=p.details;if(!d)return [];
  if(connectionOptionChecks(p).length)return [];
@@ -63,9 +64,12 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  {
  const r=d.rail,k=1.25,depth=p.aist!.railDepth,dr=new Draft(s,'rail-detail','Sliding rail keepers / bolted expansion joint','SK-07',620,1/k,'Idealized rail without fillets. Pad rating per entered supplier basis. Rail wheel-contact wear/hardness is a supplier selection item.');
  const cx=215,y=85;dr.rect(cx-r.headWidth*k/2,y,r.headWidth*k,r.headThickness*k,'RAIL');dr.rect(cx-r.webThickness*k/2,y+r.headThickness*k,r.webThickness*k,(depth-r.headThickness-r.baseThickness)*k,'RAIL');dr.rect(cx-r.baseWidth*k/2,y+(depth-r.baseThickness)*k,r.baseWidth*k,r.baseThickness*k,'RAIL');
- for(const sign of [-1,1]){const edge=cx+sign*r.baseWidth*k/2,root=edge+sign*r.clipProjection*k/2;dr.rect(sign<0?root-r.clipThickness*k:root,y+(depth-r.baseThickness-r.clipThickness)*k,r.clipThickness*k,(r.baseThickness+r.clipThickness)*k);dr.rect(sign<0?root:root-r.clipProjection*k,y+(depth-r.baseThickness-r.clipThickness)*k,r.clipProjection*k,r.clipThickness*k);}
+ // Keepers stand on the girder beside the pad and rail base; the lip bears on the rail base.
+ const seat=railSeat(p),K=seat.keeper,pt=seat.pad?.thickness??0,base=y+depth*k,steel=base+pt*k;
+ if(seat.pad)dr.rect(cx-seat.pad.width*k/2,base,seat.pad.width*k,pt*k,'RAIL');
+ for(const sign of [-1,1]){const xi=cx+sign*K.inner*k,xo=cx+sign*K.outer*k,xt=cx+sign*K.tip*k,lip=steel-K.height*k;dr.rect(Math.min(xi,xo),steel-K.bodyHeight*k,Math.abs(xo-xi),K.bodyHeight*k);dr.rect(Math.min(xt,xo),lip,Math.abs(xo-xt),K.lip*k);}
  dr.dimV(y,y+depth*k,cx-r.baseWidth*k/2,80,`RAIL DEPTH ${f(depth)}`);dr.dimH(cx-r.baseWidth*k/2,cx+r.baseWidth*k/2,y+depth*k,310,`BASE ${f(r.baseWidth)}`);
- const rn=[`Head ${f(r.headWidth)} x ${f(r.headThickness)}; web ${f(r.webThickness)}`,`Base ${f(r.baseWidth)} x ${f(r.baseThickness)}; rail Fy ${format(r.Fy,'stress',p.units)}`,`Integral stepped keeper pairs at ${f(p.aist!.clipSpacing)} maximum`,`Keeper along rail ${f(r.clipWidth)}; thickness ${f(r.clipThickness)}`,`Root-to-load projection ${f(r.clipProjection)}; two ${f(r.clipWeld)} fillets`,`Rail pad compression rating ${format(r.padAllowable,'stress',p.units)}`,`Rail expansion gap ${f(r.jointGap)}; temperature swing ${r.temperatureRange} C`,`Keepers permit longitudinal sliding; no rail/girder composite action`];rn.forEach((n,i)=>dr.text(420,85+i*26,n,10));
+ const rn=[`Head ${f(r.headWidth)} x ${f(r.headThickness)}; web ${f(r.webThickness)}`,`Base ${f(r.baseWidth)} x ${f(r.baseThickness)}; rail Fy ${format(r.Fy,'stress',p.units)}`,`Integral stepped keeper pairs at ${f(p.aist!.clipSpacing)} maximum, ${f(K.clearance)} clear of the rail-base toes`,`Keeper ${f(K.length)} along rail; lip ${f(K.lip)} over a ${f(K.bodyWidth)} body, overlap ${f(K.overlap)}`,`${f(K.weld)} fillets on the outer face and both ends; rail-side face not welded`,seat.pad?`Rail pad ${f(pt)} x ${f(seat.pad.width)}, compression rating ${format(r.padAllowable,'stress',p.units)}`:'No rail pad: rail bears on the girder',`Anchor keepers in rail-base notches at mid-length of each rail piece`,`Rail expansion gap ${f(r.jointGap)}; temperature swing ${r.temperatureRange} C`,`Other keepers permit longitudinal sliding; no rail/girder composite action`];rn.forEach((n,i)=>dr.text(420,85+i*26,n,10));
  const barLength=2*(2*r.jointEdge+r.jointPitch)+r.jointGap,jx=80,jy=365;
  dr.rect(jx,jy,barLength*k,r.jointPlateHeight*k);dr.line(jx+barLength*k/2-r.jointGap*k/2,jy-8,jx+barLength*k/2-r.jointGap*k/2,jy+r.jointPlateHeight*k+8,'CENTER');dr.line(jx+barLength*k/2+r.jointGap*k/2,jy-8,jx+barLength*k/2+r.jointGap*k/2,jy+r.jointPlateHeight*k+8,'CENTER');
  const dh=boltProperties('A325',r.jointBoltDiameter).hole;

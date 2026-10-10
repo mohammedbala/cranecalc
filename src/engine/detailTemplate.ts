@@ -7,6 +7,7 @@ import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {wrenchClearance} from './endStop';
 import {columnGussetHeight} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
+import {keeperGeometry} from './railSeat';
 
 const inch=25.4,ksi=6.894757293;
 /** Marker for inputs the template cannot know; any string starting with it blocks eligibility. */
@@ -49,7 +50,9 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   bearing:{width:up(b.bf+2*inch,.5*inch),length:bearingLength,thickness:1*inch,stiffenerWidth,stiffenerThickness,cope:up(Math.max(k1-b.tw/2,.75*inch),.125*inch),weldSize:.3125*inch},
   // Proportions of a typical crane rail of the entered depth; replace with the supplier's section.
   rail:{name:`${toBeEntered} rail designation and supplier`,headWidth:up(.55*h,1.5875),headThickness:up(.3*h,1.5875),baseWidth:up(h,1.5875),baseThickness:up(.17*h,1.5875),webThickness:up(.12*h,1.5875),Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:`${toBeEntered} rail pad rating source`,
-   clipWidth:4*inch,clipThickness:.75*inch,clipProjection:1.5*inch,clipWeld:.3125*inch,jointGap:.25*inch,jointPlateThickness:1*inch,jointPlateHeight:up(.55*h,1.5875),jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+   padThickness:.25*inch,padWidth:up(h,1.5875),
+   // Keeper under 4 in long (AISC Table A-3.1 Category D at the flange), 1/16 in clear of the rail-base toe, lip overlapping 1/2 in.
+   clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.3125*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1*inch,jointPlateHeight:up(.55*h,1.5875),jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
   criteria:{twistLimit:.005,railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],
@@ -79,8 +82,8 @@ export function startDetailedDesign(p:ProjectInput):ProjectInput{
  q.aist??={...emptyAistInputs,railDepth:q.railHeight,bottomBraceSpacing:longest,axialLength:longest,torsionalLength:longest,clipSpacing:24*inch};
  if(!q.aist.railDepth)q.aist.railDepth=q.railHeight;
  q.details=neutralDetails(q);
- // Design for at least the rail setting allowance the drawings permit.
- q.railEccentricity=Math.sign(q.railEccentricity||1)*Math.max(Math.abs(q.railEccentricity),q.details.criteria.alignmentTolerance);
+ // Design for at least the rail setting allowance the drawings permit plus the float the keepers allow.
+ q.railEccentricity=Math.sign(q.railEccentricity||1)*Math.max(Math.abs(q.railEccentricity),q.details.criteria.alignmentTolerance+keeperGeometry(q.details.rail).clearance);
  q.aist.bearingLength||=q.details.bearing.length;q.aist.netFlangeArea||=q.section.bf*q.section.tf;
  q.drawing??={originator:'',checker:'',datumElevation:0,datumLabel:'Finished floor'};
  return q;

@@ -1,20 +1,22 @@
 import type {CalculationSnapshot,ProjectInput} from './types';
 import {girderSegments} from './simpleSupports';
 import {columnBaseElevation} from './columnBaseInputs';
+import {railTopAboveSteel} from './railSeat';
 
 /**
  * Runway elevations above the floor datum, from project data only: the
  * surveyed column seat when the existing column is checked, the seat above
  * the new column's base plate on its footing, otherwise the entered
- * top-of-rail elevation. The 3D reference building is never used.
+ * top-of-rail elevation. The 3D reference building is never used. The top of rail is above the top of
+ * steel by the rail and any rail pad under it.
  */
 export function runwayElevations(p:ProjectInput){
  const datum=p.drawing?.datumElevation??0,cap=p.section.kind==='cap'?p.section.capTw:0,bearing=p.details?.bearing.thickness??0,c=p.existingColumn;
  if(c?.enabled){
   const designedBase=c.isNew&&p.columnBase?.enabled,seat=datum+(designedBase?columnBaseElevation(p.columnBase!):0)+c.seatElevation,tos=seat+bearing+p.section.d;
-  return {source:designedBase?'new column base' as const:'surveyed column seat' as const,datum,seat,tos,tor:tos+cap+p.railHeight};
+  return {source:designedBase?'new column base' as const:'surveyed column seat' as const,datum,seat,tos,tor:tos+cap+railTopAboveSteel(p)};
  }
- if(p.drawing?.railElevation){const tor=datum+p.drawing.railElevation,tos=tor-p.railHeight-cap;return {source:'entered top of rail' as const,datum,seat:tos-p.section.d-bearing,tos,tor};}
+ if(p.drawing?.railElevation){const tor=datum+p.drawing.railElevation,tos=tor-railTopAboveSteel(p)-cap;return {source:'entered top of rail' as const,datum,seat:tos-p.section.d-bearing,tos,tor};}
  return undefined;
 }
 

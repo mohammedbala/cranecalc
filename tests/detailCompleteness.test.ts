@@ -92,9 +92,10 @@ describe('dimensions and weld callouts of the tie, keeper and bearing details',(
   expect(notes).toContain('NO HOLES OR CUTS THROUGH THE W FLANGES EXCEPT THOSE DETAILED FOR THE END BEARINGS AND END STOPS.');
   expect(notes).toMatch(/TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT \(MAX\. D\/C \d\.\d\d\)\./);
  });
- it('dimensions the keeper lip, rail clearance and keeper width',()=>{
+ it('dimensions the keeper, its clearance to the rail base, its lip bearing and length',()=>{
   const t=texts(view(demo,'RAIL KEEPER / GIRDER ATTACHMENT').render().svg);
-  expect(t).toEqual(expect.arrayContaining(['13/16" LIP','13/16" CLEAR','3 7/8" KEEPER']));
+  // K1: 2 9/16 overall, 2 body, 9/16 lip projection, 3/4 lip, 7/8 under the lip, 1 5/8 high, 3 7/8 long.
+  expect(t).toEqual(expect.arrayContaining(['K1 1/16" CLEAR OF RAIL-BASE TOE (1/8" MAX.),','LIP BEARS 1/2"; SHIM, WELD, REMOVE SHIM','2 9/16"','2"','9/16"','3/4"','7/8"','1 5/8"','3 7/8"','3 7/8" LONG ALONG THE RAIL']));
  });
  it('gives the capped bearing stiffeners a CJP groove callout at the top flange and fits the bottom end only',()=>{
   const s=calculate(cappedDemonstrationProject()),svg=view(s,'GIRDER BEARING / COLUMN BRACKET').render().svg,t=texts(svg).join(' | ');

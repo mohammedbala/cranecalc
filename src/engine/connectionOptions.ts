@@ -7,6 +7,7 @@ import {aiscShapeByName} from '../data/aiscSections';
 import {independentBearings} from './simpleSupports';
 import {validateExistingBracket} from './existingBracket';
 import {isAngleTie,angleTie,topFlangeAngleData,defaultSingleAngle,defaultDoubleAngle} from './angleTie';
+import {keeperGeometry} from './railSeat';
 
 export const bracketOptions=[
  {id:'twin-rib',name:'Welded twin-rib seat',status:'Component checks available',basis:'Reference AIST Technical Report 13 §5.9.2',url:'',description:'Two rectangular ribs and a spreader seat welded to the column. Uses the existing gravity-bracket component model; movement and whole-building design remain separate.',required:'Seat and rib strength, eccentric root welds, local column effects, fatigue and service rotation.'},
@@ -94,7 +95,7 @@ export function validateConnectionOptions(p:ProjectInput):string[]{
     const headDepth=top.shimThickness+top.thickness+top.washerThickness+top.boltDiameter*.81;
     add(top.shimThickness+top.leg*.65-top.boltDiameter<headDepth+3.175,'lap bolt hardware must clear the column bolt heads. Increase angle leg size.');
     add(top.columnEnd<=top.edge||top.boltZ-top.holeDiameter/2<=top.edge,'column angle lap bolts must lie outside the girder flange/cap edge.');
-    const railEdge=Math.abs(p.railEccentricity)+(d.rail.baseWidth/2+d.rail.clipProjection+d.rail.clipWeld);
+    const keeper=keeperGeometry(d.rail),railEdge=Math.abs(p.railEccentricity)+keeper.outer+keeper.weld;
     add(top.edge-top.lap<railEdge+6.35,'tie-plate overlap must clear the rail and keeper/weld envelope. Reduce overlap or use a wider top element.');
     add(top.weldSize>=Math.min(top.plateThickness,p.section.kind==='cap'?p.section.capTw:p.section.tf),'reference flange weld must be smaller than the connected plate thicknesses.');
     add(xs.some(({e,x})=>x-top.width/2-top.weldSize<e.start-1e-6||x+top.width/2+top.weldSize>e.finish+1e-6),'top tie plate and welds must stay within their own girder end.');

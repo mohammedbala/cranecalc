@@ -4,6 +4,7 @@ import {cappedMechanics} from './cappedMechanics';
 import {aiscChannelByName} from '../data/aiscChannels';
 import {available} from './aiscStrength';
 import {minimumFillet} from './connectionStrength';
+import {railTopAboveSteel} from './railSeat';
 
 export function capInputChecks(p:ProjectInput):CheckResult[]{
  if(p.section.kind!=='cap')return [];
@@ -34,7 +35,7 @@ export function capAttachmentChecks(s:CalculationSnapshot):CheckResult[]{
  const local=(P:number,H:number)=>{
   const patch=2*p.aist!.railDepth;
   // Both local transverse shear and overturning are assigned to ONE weld.
-  return (Math.abs(H)+(Math.abs(P*p.railEccentricity)+Math.abs(H*p.railHeight))/p.section.bf)/patch;
+  return (Math.abs(H)+(Math.abs(P*p.railEccentricity)+Math.abs(H*railTopAboveSteel(p)))/p.section.bf)/patch;
  };
  const tractionFlow=(s.detailResults!.demands.endLongitudinal??0)*Ac/cap.elastic.A/(2*beta*d.developmentLength);
  const demand=r.longitudinalFlow+local(s.detailResults!.demands.railVertical,s.detailResults!.demands.railLateral)+tractionFlow;

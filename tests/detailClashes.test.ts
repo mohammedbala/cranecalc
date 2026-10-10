@@ -2,14 +2,16 @@ import {describe,it,expect} from 'vitest';
 import {validateProject} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 
-const inch=25.4,keeperError='rail keeper inner fillet',endError='girder-end cover plates';
+const inch=25.4,endError='girder-end cover plates';
 const errors=(p:ReturnType<typeof demonstrationProject>)=>validateProject(p).join(' | ');
 describe('detail clash validation',()=>{
- it('rejects a keeper whose inner fillet would be welded into the rail foot',()=>{
-  // Former 10-ton keeper: 1/2 in projection leaves 1/4 in for a 3/4 in fillet.
-  const p=demonstrationProject();Object.assign(p.details!.rail,{clipProjection:.5*inch,clipWeld:.75*inch});
-  expect(errors(p)).toContain(keeperError);
-  const c=cappedDemonstrationProject();c.details!.rail.clipProjection=.125*inch;expect(errors(c)).toContain(keeperError);
+ it('rejects keepers whose welds or lip do not fit, and keepers off the girder surface',()=>{
+  // Keepers are welded on the outer face and both ends; the end fillets need twice the weld size.
+  const p=demonstrationProject();Object.assign(p.details!.rail,{clipBodyWidth:.75*inch,clipWeld:.375*inch});
+  expect(errors(p)).toContain('rail keeper end fillets');
+  const lip=demonstrationProject();lip.details!.rail.clipProjection=.25*inch;expect(errors(lip)).toContain('rail keeper lip must overlap');
+  const off=demonstrationProject();off.details!.rail.clipBodyWidth=3.5*inch;expect(errors(off)).toContain('rail keepers and their outer fillets must fit');
+  const notch=demonstrationProject();notch.details!.rail.anchorNotch=.125*inch;expect(errors(notch)).toContain('rail anchor notch must engage');
  });
  it('rejects end cover plates that overlap the bearing stiffeners',()=>{
   // Former 10-ton bearing: stiffener and weld leave 4.19 in for a 6 in cover plate.
@@ -21,7 +23,8 @@ describe('detail clash validation',()=>{
  it('keeps both examples buildable under these rules',()=>{
   for(const p of [demonstrationProject(),cappedDemonstrationProject()]){
    const r=p.details!.rail,b=p.details!.bearing,e=p.details!.end;
-   expect(r.clipWeld+1.5875).toBeLessThanOrEqual(r.clipProjection/2+1e-6);
+   // End fillets at least twice the weld size; 1/16 in keeper clearance, so the rail float stays within the eccentricity.
+   expect((r.clipBodyWidth??r.clipThickness)-r.clipWeld).toBeGreaterThanOrEqual(2*r.clipWeld-1e-6);expect(r.clipClearance).toBeCloseTo(inch/16,10);
    expect(e.gauge+2*e.edge).toBeLessThanOrEqual(b.length/2-b.stiffenerThickness/2-b.weldSize+1e-6);
    expect(validateProject(p)).toEqual([]);
   }

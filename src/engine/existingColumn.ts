@@ -11,6 +11,7 @@ import {format} from './units';
 import {latexNumber} from './math';
 import {cantileverHeightLimit,cantileverSystems,sdcFromSDS,seismicBasis,seismicCombinations,type SeismicBasis} from './runwaySeismic';
 import {alongSeismic,baseWarping,braceCases,braceShare,designsBracing,girderOffset} from './newColumnBracing';
+import {railTopAboveSteel} from './railSeat';
 
 /** Recommended design K for the ideal end conditions (AISC 360-16 Commentary Table C-A-7.1). */
 const minimumK={braced:{pinned:1,fixed:.8},free:{pinned:Infinity,fixed:2.1}} as const;
@@ -32,7 +33,7 @@ export function existingColumnEccentricity(p:ProjectInput){
 /** Column flange unbraced length: the bracket's receiving-column value when a bracket is enabled. */
 export function existingColumnUnbracedLength(p:ProjectInput){const b=p.details?.bracket;return b?.enabled?b.receiver.unbracedLength:p.existingColumn!.Lb;}
 /** Rail head elevation above the column base: seat, bearing plate, girder (and cap) and rail; matches runwayElevations. */
-export function existingColumnRailElevation(p:ProjectInput){return p.existingColumn!.seatElevation+(p.details?.bearing.thickness??0)+p.section.d+(p.section.kind==='cap'?p.section.capTw:0)+p.railHeight;}
+export function existingColumnRailElevation(p:ProjectInput){return p.existingColumn!.seatElevation+(p.details?.bearing.thickness??0)+p.section.d+(p.section.kind==='cap'?p.section.capTw:0)+railTopAboveSteel(p);}
 
 /** Seismic mass of the runway at the girder's mid-depth, from the column base. */
 export const seismicHeight=(p:ProjectInput)=>p.existingColumn!.seatElevation+(p.details?.bearing.thickness??0)+p.section.d/2;
@@ -58,7 +59,7 @@ export function validateExistingColumn(p:ProjectInput):string[]{
  if(c.isNew&&p.details&&p.details.bracket?.enabled){
   const d=p.details,b=d.bracket!,tie=c.seatElevation+d.bearing.thickness+p.section.d-p.section.tf,rail=existingColumnRailElevation(p);
   add(c.height+1e-6<tie,`height: the new column must reach the top-flange tie, ${format(tie,'length',p.units,3)} above its base.`);
-  add(c.height>rail-p.railHeight+1e-6,`height: stop the new column at or below the top of the girder, ${format(rail-p.railHeight,'length',p.units,3)} above its base, clear of the crane end trucks; a column above the rail needs the crane supplier's clearance and is not drawn here.`);
+  add(c.height>rail-railTopAboveSteel(p)+1e-6,`height: stop the new column at or below the top of the girder, ${format(rail-railTopAboveSteel(p),'length',p.units,3)} above its base, clear of the crane end trucks; a column above the rail needs the crane supplier's clearance and is not drawn here.`);
   const shape=aiscShapeByName(c.shape??''),r=b.receiver;
   if(shape)add([[r.depth,shape.d],[r.width,shape.bf],[r.flangeThickness,shape.tf],[r.webThickness,shape.tw]].some(([v,x])=>Math.abs(v-x*25.4)>.5)||Math.abs(r.Fy-c.Fy)>.01||Math.abs(r.Fu-c.Fu)>.01,`shape: the bracket's receiving column must be the new ${c.shape} (plates and material); set it under Connections.`);
  }

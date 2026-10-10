@@ -10,15 +10,25 @@ const inch=25.4,kip=4448.221615,ksi=kip/inch**2;
 
 describe('TR13 unfactored rail keeper fatigue',()=>{
  it('reproduces an independent US-unit keeper force path',()=>{
-  // Hand-checked keeper geometry, independent of the example's current keeper: 3 x 1 in plate, 1/2 in projection.
-  const p=demonstrationProject(),r={...p.details!.rail,clipWidth:3*inch,clipThickness:1*inch,clipProjection:.5*inch};
-  const v=railKeeperResponse(r,6*inch,.25*inch,1.125*inch,20*kip,1*kip);
-  // U=(1*6+20*.25)/6=11/6 kip; M=U*.5+1*(.75+1/2)=13/6 kip-in.
-  expect(v.uplift/kip).toBeCloseTo(11/6,10);
-  expect(v.rootMoment/(kip*inch)).toBeCloseTo(13/6,10);
-  expect(v.flangeStress/ksi).toBeCloseTo(13/(3*1.125**2),10);
-  expect(v.plateStress/ksi).toBeCloseTo(13/3,10);
-  expect(railKeeperResponse(r,6*inch,-.25*inch,1.125*inch,20*kip,-kip)).toEqual(v);
+  // Hand-checked keeper, independent of the example's keeper: 4 in long, 1 in lip over a 2 in body, 1/16 in
+  // clear of the toe, 1/2 in lip overlap, 1/4 in fillets on the outer face and both ends; no pad.
+  const p=demonstrationProject();p.aist!.railPad=false;
+  Object.assign(p.details!.rail,{clipWidth:4*inch,clipThickness:1*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.25*inch});
+  const v=railKeeperResponse(p,20*kip,1*kip);
+  // Hold-down keeper: U=(1*6+20*.25)/6=11/6 kip, no side force. Bearing keeper: P|e|/b=5/6 kip with H=1 kip.
+  expect(v.roles[1].uplift/kip).toBeCloseTo(11/6,10);expect(v.roles[0].uplift/kip).toBeCloseTo(5/6,10);expect(v.roles[0].lateral/kip).toBe(1);
+  // Weld lines: outer face 4 in, ends 2-1/4=1.75 in. A=7.5 in, centroid 1.75^2/7.5 in from the outer face.
+  const A=7.5,xc=1.75**2/A,Iy=4*xc**2+2*(1.75*(.875-xc)**2+1.75**3/12),arm=2+1/16+.25-xc;
+  expect(v.group.A/inch).toBeCloseTo(A,10);expect(v.group.x/inch).toBeCloseTo(xc,10);expect(v.group.Iy/inch**3).toBeCloseTo(Iy,8);
+  // Uplift at mid-overlap of the lip; the side force at the top of the rail base (3/4 in).
+  const Mh=11/6*arm,Mb=5/6*arm+.75;
+  expect(v.rootMoment/(kip*inch)).toBeCloseTo(Math.max(Mh,Mb),8);
+  expect(v.flangeStress/ksi).toBeCloseTo(6*Mh/(4*(p.section.tf/inch)**2),8);
+  expect(v.lipStress/ksi).toBeCloseTo(6*(11/6)*(1/16+.25)/(4*1**2),8);
+  // Largest weld force at the inner ends of the end fillets in the hold-down role, on a 1/4 in fillet throat.
+  expect(v.weldStress/ksi).toBeCloseTo((11/6/A+Mh*(1.75-xc)/Iy)/(.25/Math.SQRT2),8);
+  expect(railKeeperResponse(p,20*kip,-1*kip)).toEqual(v);
+  p.railEccentricity=-p.railEccentricity;expect(railKeeperResponse(p,20*kip,1*kip).weldStress).toBeCloseTo(v.weldStress,10);
  });
  function collect(method:'LRFD'|'ASD',impact=.25,enteredImpact=false,strengthMultiplier=1){
   const p=demonstrationProject();p.method=method;
@@ -52,7 +62,8 @@ describe('TR13 unfactored rail keeper fatigue',()=>{
      expect(b[key]).toBeCloseTo(original.r.fatigue[i].bins[j][key],8);
    }));
    const checks=railChecks({input:alternate.p,detailResults:alternate.r} as CalculationSnapshot);
-   expect(checks.find(c=>c.id==='rail-keeper-fatigue')!.demand).toBeCloseTo(2*Math.max(...original.r.railFatigueBins.map(b=>b.weldStress)),10);
+   // One-signed keeper weld force: each cycle ranges from zero to the bin value.
+   expect(checks.find(c=>c.id==='rail-keeper-fatigue')!.demand).toBeCloseTo(Math.max(...original.r.railFatigueBins.map(b=>b.weldStress)),10);
   }
  });
  it('retains absent-to-present fatigue cycles when the lifted load fraction is zero',()=>{

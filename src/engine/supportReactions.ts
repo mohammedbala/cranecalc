@@ -3,6 +3,7 @@ import { beamSystem, type BeamResult } from './beam';
 import { craneDesignMinimum, emptyAistInputs } from './aistLoads';
 import type { ProjectInput, Properties } from './types';
 import { adjacentReactions } from './continuation';
+import { railTopAboveSteel } from './railSeat';
 
 /**
  * Unfactored support reactions by load type, for checking the building that
@@ -77,7 +78,7 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
  }
  visit(0);
  const Cls=Math.max(0,...p.cranes.map(c=>Math.max(c.longitudinal,craneDesignMinimum(c).traction)));
- const railTop=(p.section.kind==='cap'?p.section.d+p.section.capTw:p.section.d)+(di.railDepth||p.railHeight);
+ const railTop=(p.section.kind==='cap'?p.section.d+p.section.capTw:p.section.d)+railTopAboveSteel(p);
  supports.forEach((s,j)=>{s.Clv=Cls*railTop/Math.min(...[p.spans[j-1],p.spans[j]].filter(v=>v>0));});
  return {supports,Cls};
 }
