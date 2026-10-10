@@ -201,7 +201,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   for(const at of [r.jointEdge,r.jointEdge+r.jointPitch,bar-r.jointEdge-r.jointPitch,bar-r.jointEdge])svg+=rect(jl+(at-.75*r.jointBoltDiameter)*jk,web+(r.jointPlateHeight-hole)*jk/2,1.5*r.jointBoltDiameter*jk,hole*jk,'reference-line')+circle(jl+at*jk,web+r.jointPlateHeight*jk/2,r.jointBoltDiameter*jk/2,'runway-line');
   svg+=dimH(jl,jl+bar*jk,web,top-8,dim(bar),'left');
   svg+=text(jc,612,'RAIL JOINT / ELEVATION',7.5,'middle',700)+text(jc,622,js.label,7,'middle');
-  svg+=text(jc,632,`2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)}; 4 - ${size(r.jointBoltDiameter)} A325 SNUG-TIGHT`,6.6,'middle')+text(jc,640.5,`SLOTS ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG RAIL; GAP ${size(r.jointGap)}`,6.6,'middle')+'</g>';
+  svg+=text(jc,632,`2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)}; 4 - ${size(r.jointBoltDiameter)} A325 SNUG-TIGHT`,7.2,'middle')+text(jc,640.5,`SLOTS ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG RAIL; GAP ${size(r.jointGap)}`,7.2,'middle')+'</g>';
   return {svg:svg+'</g>',scale:scale.label};
  }});
  return topic;

@@ -30,7 +30,7 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  const wb=d.bracket?.enabled?d.bracket:undefined;
  const joint=p.spans.length>1,sides=joint?[-1,1]:[1];
  // The detail is typical: interior grids for adjacent ends, both grids of a single span.
- const gridLabel=joint?'2':'1',gridNote=joint?(p.spans.length>2?`TYP. GRIDS 2 TO ${p.spans.length}`:'GRID 2'):'TYP. GRIDS 1 AND 2';
+ const gridLabel=joint?'2':'1',gridNote=joint?(p.spans.length>3?`TYP. GRIDS 2 THRU ${p.spans.length}`:p.spans.length>2?'TYP. GRIDS 2 AND 3':'GRID 2'):'TYP. GRIDS 1 AND 2';
  const bracketRef=detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket),views:DetailView[]=[];
  views.push({title:detailTitles.supportEnd(joint),render:()=>{
  let svg='';
@@ -60,7 +60,7 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
   svg+=text(cx+side*(g+l),nameY,b.name,8.5,'middle',700);
  }
  if(joint)svg+=dimH(cx-g,cx+g,top,111,dim(c.endGap));
- svg+=line([cx+extent,top],[lx-5,top])+text(lx,top+3,'T.O.S. = S-01',8);
+ svg+=line([cx+extent,top],[lx-5,top])+text(lx,top+3,'T.O.S. EL., SEE S-01',8);
  svg+=multiLeader([[cx+g+l/2,top+b.d*k*.46]],[lx,stiffY],['PAIRED FITTED STIFFENERS',`PL ${size(bs.stiffenerThickness)} X ${size(bs.stiffenerWidth)}`,`EACH GIRDER END / SEE ${detailRef(detailTitles.bearing)}`]);
  svg+=multiLeader([[cx+g+l,bottom+bs.thickness*k/2]],[lx,bearingY],[`SEPARATE BEARING PL ${size(bs.thickness)}`,`${dim(bs.width)} W X ${dim(bs.length)} L`]);
  // Both girder ends are alike, so the stiffener welds are called out on the right one with the others.

@@ -10,7 +10,7 @@ import {packDetailSheets,detailSheetSvg,detailSheetTitle,type DetailTopic} from 
 import type { CalculationSnapshot } from '../engine/types';
 import { defaultFraming, framingSchema, type FramingSettings } from './framingSettings';
 import { planSheetGeometry, type Point, type Segment } from './planSheetGeometry';
-import { drawingLength } from './drawingFormat';
+import { drawingLength, drawingElevation } from './drawingFormat';
 import { sheetDrawingScale as drawingScale, n, text, rect, line, bubble, dimH, dimV, short, titleBlock, sheetStart, viewTitle, multiLeader, detailRef, detailTitles, sheetRef, breakLine, textWidth, type XY } from './sheetGraphics';
 import { heading, table, numbered, noteStack, type Style } from './noteBlocks';
 import { sheetOrdinalToken, detailNumberToken, sheetNumberToken } from './sheetGraphics';
@@ -105,13 +105,13 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   // Elevations of the project, stacked so close levels never overlap.
   const ex=SX(uMax)+14;
   const target=(y:number,labelY:number,label:string,datum:string)=>`<g data-elevation-datum="${datum}">${line([ex+2,y],[ex+12,y])}<path class="leader-arrow" d="M${n(ex+12)},${n(y)}l-2.4,-2.4h4.8z"/>${line([ex+12,y],[ex+16,labelY])}${line([ex+16,labelY],[ex+20,labelY])}${text(ex+22,labelY+3,label,8.5)}</g>`;
-  const yTor=SY(railTop),yTos=SY(m.d/2),ySeat=SY(seat),el=(v:number|undefined,name:string)=>v===undefined?`${name} EL. NOT ENTERED`:`${name} EL. ${drawingLength(v,p.units)}`;
+  const yTor=SY(railTop),yTos=SY(m.d/2),ySeat=SY(seat),el=(v:number|undefined,name:string)=>v===undefined?`${name} EL. NOT ENTERED`:`${name} EL. ${drawingElevation(v,p.units)}`;
   svg+=target(yTor,Math.min(yTor,yTos-11),el(elevations?.tor,'T.O.R.'),'top-of-rail')+target(yTos,Math.max(yTos,yTor+11),el(elevations?.tos,'T.O.S.'),'top-of-steel');
   svg+=target(ySeat,ySeat,el(elevations?.seat,'BRG. SEAT'),'bearing-seat');
   // Callouts at runway A, between the runways; runway B is opposite hand.
   const lx=SX(uRA)+70,headW=(d?.rail.headWidth??65)/1000;
   svg+=multiLeader([[SX(uRA+headW/2),SY(railTop-.01)]],[lx,SY(railTop)-2],[`CRANE RAIL${d?`, SEE ${detailRef(detailTitles.railKeeper)}`:''}`]);
-  svg+=multiLeader([[SX(m.bf/2),SY(m.d/4)]],[lx,SY(m.d/4)+3],[`${p.section.name} RUNWAY GIRDER`,'SEE GIRDER SCHEDULE']);
+  svg+=multiLeader([[SX(m.bf/2),SY(m.d/4)]],[lx,SY(m.d/4)+3],[`${p.section.name} RUNWAY GIRDER`,'SEE RUNWAY GIRDER SCHEDULE']);
   svg+=multiLeader([[SX(0),SY(seat-Math.min(.05,m.bracketDepth/3))]],[lx,SY(seat)+16],d?[`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`]:['BRACKET BY BUILDING DESIGNER (REF.)']);
   svg+=multiLeader([[SX(uA+m.column.d/2),SY(vBottom+.2)]],[lx,SY(vBottom+.2)+3],o.newColumns?[`NEW ${o.columnName} COLUMN, SEE ${detailRef(detailTitles.newColumn)}`]:['EXISTING BUILDING COLUMN (REF.), FIELD VERIFY']);
   svg+=text(SX(uRB)-70,SY(vBottom+.2)+3,'RUNWAY AT GRID B OPPOSITE HAND',8.5,'end');
@@ -228,10 +228,10 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const ex=er+(adjacent.some(b=>b.end==='right')?stub+4:0);
   const target=(y:number,labelY:number,label:string,datum:string)=>`<g data-elevation-datum="${datum}">${line([ex+2,y],[ex+12,y])}<path class="leader-arrow" d="M${n(ex+12)},${n(y)}l-2.4,-2.4h4.8z"/>${line([ex+12,y],[ex+16,labelY])}${line([ex+16,labelY],[ex+20,labelY])}${text(ex+22,labelY+3,label,8.5)}</g>`;
   const torY=Math.min(railTop,top-9),tosY=Math.max(top,railTop+9);
-  svg+=target(top,tosY,elevations?`T.O.S. EL. ${drawingLength(elevations.tos,p.units)}`:'T.O.S. EL. NOT ENTERED','top-of-steel');
-  svg+=target(railTop,torY,elevations?`T.O.R. EL. ${drawingLength(elevations.tor,p.units)}`:'T.O.R. EL. NOT ENTERED','top-of-rail');
+  svg+=target(top,tosY,elevations?`T.O.S. EL. ${drawingElevation(elevations.tos,p.units)}`:'T.O.S. EL. NOT ENTERED','top-of-steel');
+  svg+=target(railTop,torY,elevations?`T.O.R. EL. ${drawingElevation(elevations.tor,p.units)}`:'T.O.R. EL. NOT ENTERED','top-of-rail');
   svg+=dimH(el,er,bottom+62,bottom+82,`${dim(m.length)} OVERALL`);
-  svg+=text(el,bottom+108,`DATUM EL. ${drawingLength(datum,p.units)} = ${short(datumLabel.toUpperCase(),60)}. T.O.S. = TOP OF W STEEL${p.section.kind==='cap'?`; CAP ABOVE T.O.S.${capDetailed?` / SEE ${detailRef(detailTitles.capSection)}`:''}`:''}. ELEVATIONS FROM ${elevations?elevations.source.toUpperCase():'PROJECT DATA (NOT ENTERED)'}.`,8.5);
+  svg+=text(el,bottom+108,`DATUM EL. ${drawingElevation(datum,p.units)} = ${short(datumLabel.toUpperCase(),60)}. T.O.S. = TOP OF W STEEL${p.section.kind==='cap'?`; CAP ABOVE T.O.S.${capDetailed?` / SEE ${detailRef(detailTitles.capSection)}`:''}`:''}. ELEVATIONS FROM ${elevations?{'new column base':'THE NEW COLUMN BASE','surveyed column seat':'THE SURVEYED COLUMN SEAT','entered top of rail':'THE SPECIFIED TOP OF RAIL'}[elevations.source]:'PROJECT DATA (NOT ENTERED)'}.`,8.5);
   svg+=viewTitle(gaLayout.elevation.x,bottom+150,'RUNWAY GIRDER ELEVATION - GRID A',elevationScale.label,ga)+'</g>';
   svg+=typicalSection(s,m,bottom+180,{newColumns,columnName});
 
@@ -246,12 +246,13 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
   const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LEFT END LOCATES, RIGHT END SLIDES; SEE ${detailRef(detailTitles.movement)}`;
   const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
-    return [mark,String(all.length*2),`${p.section.name}${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE',ends];});
+    return [mark,String(all.length*2),`${p.section.name}${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
   const notes=[
     'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
     newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
-    `SET RAIL C/L SPACING (CRANE SPAN) TO ${d?len(d.criteria.railGauge):'THE CRANE MANUFACTURER\'S GAUGE'}; RAIL C/L IS ${len(Math.abs(p.railEccentricity))} FROM THE GIRDER WEB C/L${p.railEccentricity?p.railEccentricity>0?', OUTBOARD TOWARD THE SUPPORTING COLUMNS':', INBOARD TOWARD THE CRANE':''}.`,
+    `ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`,
+    `SET RAIL C/L SPACING (CRANE SPAN) TO ${d?len(d.criteria.railGauge):'THE CRANE MANUFACTURER\'S GAUGE'}, EACH RAIL ON ITS GIRDER WEB C/L${d?` WITHIN ${len(d.criteria.alignmentTolerance)}`:''}. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${len(Math.abs(p.railEccentricity))}; IT IS NOT A SETTING DIMENSION.`,
     p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE ${detailRef(detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
     ...adjacentBays(p).map(b=>`AT GRID ${b.end==='left'?1:p.spans.length+1} THE EXISTING RUNWAY CONTINUES (${short((p.continuation?.source??'').toUpperCase(),70)}). THE EXISTING ${len(b.length)} GIRDER BEARS ON THE SAME SUPPORT AND STAYS IN PLACE; ITS REACTION IS INCLUDED IN THE SUPPORT DESIGN. FIELD VERIFY ITS SPAN, BEARING, TIE AND RAIL JOINT BEFORE FABRICATION.`)
   ];
