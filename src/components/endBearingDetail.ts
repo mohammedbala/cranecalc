@@ -4,7 +4,8 @@ import {simpleSupportInput} from '../engine/simpleSupports';
 import {bracketArrangement} from '../engine/connectionOptions';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,viewTitle,bubble,detailRef,labelColumn,n,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,bubble,detailRef,detailTitles,labelColumn,n,type XY} from './sheetGraphics';
+import type {ViewRender} from './detailSheet';
 
 const inch=25.4;
 const breakX=(x:number,y1:number,y2:number)=>{const m=(y1+y2)/2;return `<polyline class="annotation" points="${[[x,y1],[x,m-3],[x-3,m-1],[x+3,m+1],[x,m+3],[x,y2]].map(p=>`${n(p[0])},${n(p[1])}`).join(' ')}"/>`;};
@@ -13,11 +14,11 @@ const breakY=(y:number,x1:number,x2:number)=>{const m=(x1+x2)/2;return `<polylin
 function slot(cx:number,cy:number,length:number,width:number,cls:string){const r=width/2,a=cx-length/2+r,b=cx+length/2-r;return `<path class="${cls}" d="M${n(a)},${n(cy-r)}L${n(b)},${n(cy-r)}A${n(r)},${n(r)} 0 0 1 ${n(b)},${n(cy+r)}L${n(a)},${n(cy+r)}A${n(r)},${n(r)} 0 0 1 ${n(a)},${n(cy-r)}Z"/>`;}
 
 /**
- * S-02 view 2 with bolted end bearings: a shared interior support with the
+ * Connection detail with bolted end bearings: a shared interior support with the
  * sliding right end of one bay and the locating left end of the next, in
  * elevation and in plan on the bottom flange.
  */
-export function endBearingView(s:CalculationSnapshot){
+export function endBearingView(s:CalculationSnapshot):ViewRender{
  const p=s.input,d=p.details!,e=activeEndBearing(p)!,b=p.section,bs=d.bearing,g=endBearingGeometry(p,e),ss=simpleSupportInput(p);
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,gap=ss.endGap;
  const wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&bracketArrangement(wb)==='twin-rib',seatT=wb?.seatThickness??bs.thickness,seatL=wb?.seatLength??(2*bs.length+gap+2*inch);
@@ -72,18 +73,18 @@ export function endBearingView(s:CalculationSnapshot){
  // Baseline dimensions from the locating girder end; each label sits past the end of its own line.
  [[g.rows[0],'BOLTS'],[g.rows[1],'BOLTS']].forEach(([x,label],i)=>{const y=zb+9+9*i;svg+=dimH(X(gap/2),X(gap/2+(x as number)),zb,y,'')+text(X(gap/2+(x as number))+4,y+3,`${dim(x as number)} ${label}`,7.2);});
  const zt=Z(-Math.max(b.bf,bs.width)/2);svg+=dimH(X(-gap/2),X(gap/2),zt,zt-7,'')+text(X(gap/2)+4,zt-4,`${dim(gap)} GAP`,7.2);
- svg+=dimV(Z(-gauge/2),Z(gauge/2),X(gap/2+g.rows[1]),X(extent)+24,dim(gauge));
+ svg+=dimV(Z(-gauge/2),Z(gauge/2),X(-gap/2-g.rows[1]),X(-extent)-24,dim(gauge));
  svg+='</g>';
  for(const {side,role} of ends){const cx=X(side*(gap/2+bs.length/2));svg+=text(cx,yTop-6,`${role} END`,8,'middle',700);}
  const lx=X(extent)+44;
  svg+=labelColumn([
-  {at:[X(gap/2+g.stiffener)+bs.stiffenerThickness*kk/2,(yTop+Y(b.tf))/2],labels:['BEARING STIFFENERS',`SEE ${detailRef('GIRDER BEARING / COLUMN BRACKET')}`]},
+  {at:[X(gap/2+g.stiffener)+bs.stiffenerThickness*kk/2,(yTop+Y(b.tf))/2],labels:['BEARING STIFFENERS',`SEE ${detailRef(detailTitles.bearing)}`]},
   {at:[X(gap/2+g.rows[1])+.8*db*kk,Y(b.tf)-.3*db*kk],labels:[`LOCATING: 4 - ${size(db)} ${e.bolts.grade} SC,`,`PRETENSIONED; ${size(g.hole)} STD HOLES`]},
   {at:[X(gap/2+bs.length*.85),yB+bs.thickness*kk/2],labels:[`BEARING PL ${size(bs.thickness)} X ${size(bs.width)} X ${size(bs.length)}`]},
-  {at:[X(seatL/2)-4,yBearing+seatT*kk/2],labels:wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?'BRACKET / TRANSVERSE SECTION':'COLUMN BRACKET / TRANSVERSE SECTION')}`]:['BRACKET SEAT BY OTHERS:','MATCH HOLES, NUT CLEARANCE']}
+  {at:[X(seatL/2)-4,yBearing+seatT*kk/2],labels:wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS:','MATCH HOLES, NUT CLEARANCE']}
  ],lx,92,200);
  svg+=labelColumn([
   {at:[X(-gap/2-g.rows[0])+g.washer.length*kk/2,Z(-gauge/2)],labels:g.sleeve?[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} PRETENSIONED AGAINST`,`STEEL SLEEVES ${size(g.sleeve.od)} OD X ${size(g.sleeve.length)}; ${size(g.slotWidth)} X`,`${size(g.slot)} SLOT IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]:[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} SNUG-TIGHT`,`+ JAM NUTS, DO NOT PRETENSION; ${size(g.hole)} X`,`${size(g.slot)} LSL IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]}
  ],lx,252,252);
- return svg+viewTitle(906,362,'GIRDER END BEARINGS / LOCATING AND SLIDING',k.label)+'</g>';
+ return {svg:svg+'</g>',scale:k.label};
 }

@@ -5,7 +5,7 @@ import {defaultExistingColumn} from '../src/engine/existingColumnInputs';
 import {anchorHardware,columnBaseElevation,defaultColumnBase,type ColumnBaseInput} from '../src/engine/columnBaseInputs';
 import {anchorArea,anchorStrength,baseDrift,basePlate,footingStrength,nutBearingArea,soilPressure,type BaseAction} from '../src/engine/columnBase';
 import {runwayElevations} from '../src/engine/drawingData';
-import {drawingSheetSet} from '../src/components/planSheet';
+import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import type {ProjectInput} from '../src/engine/types';
 
 const inch=25.4,foot=304.8,kip=4448.2216152605,ksi=6.894757293168,ksf=.04788025898;
@@ -120,16 +120,19 @@ describe('New freestanding column package',()=>{
   const el=runwayElevations(p)!;
   expect(el.source).toBe('new column base');
   expect(el.tor).toBeCloseTo(p.drawing!.datumElevation+p.drawing!.railElevation!,3);
-  // The issued set adds S-08 and every reference to it resolves.
-  const set=drawingSheetSet(s),s08=set.find(v=>v.number==='S-08')!;
-  expect(s08.title).toBe('NEW RUNWAY COLUMNS & FOOTINGS');
+  // The issued set adds the new column details and every reference to them resolves.
+  const set=drawingSheetSet(s),columns=set.find(v=>v.svg.includes('data-view="new-column-elevation"'))!;
+  expect(columns.title).toContain('NEW COLUMNS & FOOTINGS');
+  for(const view of ['base-plate-plan','footing-plan','footing-section','new-column-notes'])expect(columns.svg).toContain(`data-view="${view}"`);
   const all=set.map(v=>texts(v.svg)).join(' ');
   expect(all).not.toContain('NOT IN SET');
-  expect(texts(s08.svg)).toContain('4 - 1" DIA. ASTM F1554 GR. 36');
-  expect(texts(s08.svg)).toContain(`T.O.R. EL. 120'-0"`);
-  expect(texts(set.find(v=>v.number==='S-00')!.svg)).toContain('S-08');
+  expect(texts(columns.svg)).toContain('4 - 1" DIA. ASTM F1554 GR. 36');
+  expect(texts(columns.svg)).toContain(`T.O.R. EL. 120'-0"`);
+  const elevation=detailReferences(set).get('NEW RUNWAY COLUMN / ELEVATION')!;
+  expect(elevation).toMatch(new RegExp(`^\\d+/${columns.number}$`));
+  expect(texts(set[0].svg)).toContain(columns.number);expect(texts(set[0].svg)).toContain(elevation);
   // A new column is shop welded: no field-weld flags or existing-column labels on the column-side details.
-  for(const n of ['S-02','S-05','S-06']){const sheet=set.find(v=>v.number===n)!;expect(texts(sheet.svg)).not.toMatch(/EXISTING COLUMN|FIELD WELD TO/);}
+  for(const sheet of set.slice(2))expect(texts(sheet.svg)).not.toMatch(/EXISTING COLUMN|FIELD WELD TO/);
  });
  it('reports geometry clashes and drawing mismatches as input errors',()=>{
   const p=newColumnDemonstrationProject();

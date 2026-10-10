@@ -11,9 +11,11 @@ import {angleTie,isAngleTie,topFlangeAngleData} from '../engine/angleTie';
 import {createHardwareBuilder} from './connectionDetails';
 import {independentBearings} from '../engine/simpleSupports';
 
+/** The reference-only arrangement sheet keeps the enlarged drawing of earlier sheets. */
+const concept=2;
 /** Project edges from the same solids used in the viewer. No old fabrication
  * detail is substituted when a selected arrangement has no design model. */
-export function projection(group:THREE.Group,axes:(v:THREE.Vector3)=>[number,number],box:{x:number;y:number;w:number;h:number},units:'US'|'SI'){
+export function projection(group:THREE.Group,axes:(v:THREE.Vector3)=>[number,number],box:{x:number;y:number;w:number;h:number},units:'US'|'SI',contentScale=1){
  group.updateMatrixWorld(true);const segments:[number,number,number,number][]= [];let curvedSilhouettes=0;
  const existingSegments=new Set<number[]>();
  group.traverse(o=>{
@@ -36,7 +38,7 @@ export function projection(group:THREE.Group,axes:(v:THREE.Vector3)=>[number,num
  });
  if(!segments.length)return {svg:'',label:'NTS',project:(_v:THREE.Vector3):XY=>[0,0]};
  const xs=segments.flatMap(s=>[s[0],s[2]]),ys=segments.flatMap(s=>[s[1],s[3]]),xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
- const scale=sheetDrawingScale(Math.min(box.w/Math.max(.001,xmax-xmin),box.h/Math.max(.001,ymax-ymin))/1000,units),k=scale.pointsPerMm*1000;
+ const scale=sheetDrawingScale(Math.min(box.w/Math.max(.001,xmax-xmin),box.h/Math.max(.001,ymax-ymin))/1000,units,contentScale),k=scale.pointsPerMm*1000;
  const x=(v:number)=>box.x+box.w/2+(v-(xmin+xmax)/2)*k,y=(v:number)=>box.y+box.h/2+(v-(ymin+ymax)/2)*k;
  const paths=(existing:boolean)=>segments.filter(s=>existingSegments.has(s)===existing).filter(([a,b,c,d])=>Math.hypot(c-a,d-b)>.00001).map(([a,b,c,d])=>`M${n(x(a))},${n(y(b))}L${n(x(c))},${n(y(d))}`).join('');
  return {svg:`<path class="reference-line" d="${paths(true)}"/><path class="runway-line" data-curved-silhouettes="${curvedSilhouettes}" d="${paths(false)}"/>`,label:scale.label,project:(v:THREE.Vector3):XY=>{const p=axes(v);return [x(p[0]),y(p[1])];}};
@@ -47,7 +49,7 @@ export function connectionConceptSheetSvg(s:CalculationSnapshot){
  if(!d||!b)return '';
  const bracket=bracketOptions.find(o=>o.id===bracketArrangement(b))!,tie=tieOptions.find(o=>o.id===tieArrangement(d))!;
  const material=new THREE.MeshBasicMaterial(),edge=new THREE.LineBasicMaterial(),bracketGroup=buildWeldedBrackets(b,[0],0,material,edge);
- const side=projection(bracketGroup,v=>[v.z,-v.y],{x:50,y:110,w:285,h:180},p.units),front=projection(bracketGroup,v=>[v.x,-v.y],{x:680,y:110,w:450,h:180},p.units);
+ const side=projection(bracketGroup,v=>[v.z,-v.y],{x:50,y:110,w:285,h:180},p.units,concept),front=projection(bracketGroup,v=>[v.x,-v.y],{x:680,y:110,w:450,h:180},p.units,concept);
  const whole=tie.id==='paired-bars'?buildIndependentSupports(p,b.reach/1000,material,edge):buildAlternativeTies(p,b.reach/1000,material,edge,material,createHardwareBuilder(material));
  const station=-p.spans.reduce((a,b)=>a+b,0)/2000+(p.spans.length>1?p.spans[0]/1000:0);
  const selected=new THREE.Group();whole.traverse(o=>{if(o instanceof THREE.Mesh&&Math.abs((o.userData.part?.support?.x??Infinity)-station)<.0001)selected.add(o.clone());});
@@ -61,8 +63,8 @@ export function connectionConceptSheetSvg(s:CalculationSnapshot){
   // Context solids participate in both projections so true scales include the girder.
   selected.add(context);
  }
- const plan=projection(selected,v=>[v.x,v.z],{x:60,y:405,w:285,h:180},p.units);
- const tieElevation=topAngle?projection(selected,v=>[v.z,-v.y],{x:665,y:405,w:285,h:180},p.units):null;
+ const plan=projection(selected,v=>[v.x,v.z],{x:60,y:405,w:285,h:180},p.units,concept);
+ const tieElevation=topAngle?projection(selected,v=>[v.z,-v.y],{x:665,y:405,w:285,h:180},p.units,concept):null;
  const face=b.reach/1000,depth=bracketModelDepth(b)/1000,seat=b.seatThickness/1000;
  const rectangle=(a:XY,z:XY)=>rect(Math.min(a[0],z[0]),Math.min(a[1],z[1]),Math.abs(a[0]-z[0]),Math.abs(a[1]-z[1]),'reference-line');
  const existingSide=rectangle(side.project(new THREE.Vector3(0,.07,face)),side.project(new THREE.Vector3(0,-seat-depth-.07,face+b.receiver.flangeThickness/1000)));
@@ -70,24 +72,24 @@ export function connectionConceptSheetSvg(s:CalculationSnapshot){
  const existingPlan=rectangle(plan.project(new THREE.Vector3(station-b.receiver.width/2000,0,face)),plan.project(new THREE.Vector3(station+b.receiver.width/2000,0,face+b.receiver.flangeThickness/1000)));
  let tieRoot=new THREE.Vector3(station,0,face);
  selected.traverse(o=>{if(o instanceof THREE.Mesh&&/column|receiver|receiving gusset/i.test(o.userData.part?.family??'')){const box=new THREE.Box3().setFromObject(o);if(Math.abs(box.max.z-face)<.001){tieRoot=box.getCenter(new THREE.Vector3());tieRoot.z=face;}}});
- let svg=sheetStart(s,'S-02','CONNECTION ARRANGEMENTS / REFERENCE ONLY');
+ let svg=sheetStart(s,'S-02','CONNECTION ARRANGEMENTS / REFERENCE ONLY',concept);
  svg+=text(612,80,'REFERENCE ARRANGEMENT — PROJECT DESIGN REQUIRED — NOT FOR FABRICATION',12,'middle',700);
  svg+=existingSide+side.svg+existingFront+front.svg;
  svg+=multiLeader([side.project(new THREE.Vector3(0,.045,face))],[409,132],['EXISTING COLUMN (REF.)']);
  svg+=isExistingBracketType(bracket.id)?multiLeader([side.project(new THREE.Vector3(0,-seat-depth*.5,face))],[409,219],['EXISTING BRACKET AND ROOT WELDS','SURVEY / ASSESSMENT REQUIRED']):fieldFilletLeader([side.project(new THREE.Vector3(0,-seat-depth*.5,face))],[409,219],plateInches(b.rootWeld,p.units),['FIELD WELD TO EXISTING COLUMN',bracket.id==='rolled-corbel'?'CORBEL WEB / FLANGE ROOTS':'BOTH SIDES OF EACH RIB','REFERENCE SIZE / SEE DESIGN SCOPE'],true);
- svg+=viewTitle(310,325,bracket.name.toUpperCase()+' / SIDE',side.label)+viewTitle(905,325,'BRACKET / FRONT',front.label);
+ svg+=viewTitle(310,325,bracket.name.toUpperCase()+' / SIDE',side.label,concept)+viewTitle(905,325,'BRACKET / FRONT',front.label,concept);
  svg+=line([24,352],[1200,352],'divider')+(topAngle?'':existingPlan)+plan.svg;
  if(topAngle&&tieElevation){
   const at=topAngle,xc=station+(p.system==='simple'?at.endSetback/1000:0);
   svg+=multiLeader([plan.project(new THREE.Vector3(xc,at.top/1000,face))],[405,529],['BOLTED COLUMN ANGLE',`${at.paired?'2 - ':''}${at.shape?.name??'VERIFY SECTION'}`]);
   svg+=multiLeader([plan.project(new THREE.Vector3(xc,at.top/1000,(face+at.edge/1000)/2))],[405,442],['TOP FLANGE / CAP TIE PLATE',`PL ${plateInches(at.plateThickness,p.units)}`,'NO LOWER-FLANGE TIE']);
-  svg+=tieElevation.svg+viewTitle(900,615,'TOP-FLANGE TIE / ELEVATION',tieElevation.label);
+  svg+=tieElevation.svg+viewTitle(900,615,'TOP-FLANGE TIE / ELEVATION',tieElevation.label,concept);
   svg+=multiLeader([tieElevation.project(new THREE.Vector3(xc,(at.top-at.boltLevel)/1000,face-at.shimThickness/2000))],[988,430],['SHIM PACK',plateInches(at.shimThickness,p.units)]);
   svg+=multiLeader([tieElevation.project(new THREE.Vector3(xc,(at.top-at.boltLevel)/1000,face-(at.shimThickness+at.thickness)/1000))],[988,516],['HORIZONTAL SLOTS / X',`${plateInches(at.slotLength,p.units)} LONG`, 'PLATE WASHERS']);
   svg+=text(645,654,'SLOTS, BOLTS, PRYING, COLUMN EFFECTS, MOVEMENT AND FATIGUE: DESIGN REQUIRED.',8);
   svg+=text(645,668,'SUPPLIED FIGURE 14 INSPIRED; CAP / PAIRED-ANGLE VARIATIONS REQUIRE REVIEW.',8);
  }else svg+=fieldFilletLeader([plan.project(tieRoot)],[409,530],tie.id==='paired-bars'?plateInches(d.brace.connection.weldSize,p.units):'',['FIELD WELD TO EXISTING COLUMN',tie.id==='paired-bars'?'BOTH SIDES OF COLUMN GUSSET':'SIZE / EXTENT BY CONNECTION DESIGN'],tie.id==='paired-bars');
- svg+=viewTitle(315,615,tie.name.toUpperCase()+' / PLAN',plan.label);
+ svg+=viewTitle(315,615,tie.name.toUpperCase()+' / PLAN',plan.label,concept);
  if(isAngleTie(tie.id)&&!topAngle){
   const a=angleTie(d);svg+=text(315,644,`${a.paired?'2 - ':''}${a.shape?.name??'VERIFY ANGLE'} / VERTICAL LEG TO GUSSET`,9,'middle');
   svg+=text(315,658,`LAP ${plateInches(a.lap,p.units)} / GUSSET ${plateInches(a.gussetThickness,p.units)} / REFERENCE GEOMETRY`,8,'middle');

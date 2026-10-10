@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {calculate} from '../src/engine/calculate';
-import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
-import {drawingSheetSet,resolveSheetSet,sheetIndex} from '../src/components/planSheet';
+import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
+import {drawingSheetSet,resolveSheetSet,sheetIndex,detailReferences} from '../src/components/planSheet';
 import {sheetsDxf,sheetEntities,drawingSetDxf,sheetLayers} from '../src/components/sheetDxf';
 import {runwayElevations,issueStatus,girderMarks} from '../src/engine/drawingData';
 import {drawingLength} from '../src/components/drawingFormat';
@@ -10,8 +10,12 @@ import {format} from '../src/engine/units';
 import type {CalculationSnapshot} from '../src/engine/types';
 
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
-const capped=calculate(cappedDemonstrationProject()),demo=calculate(demonstrationProject());
-const cappedSet=drawingSheetSet(capped),demoSet=drawingSheetSet(demo);
+const capped=calculate(cappedDemonstrationProject()),demo=calculate(demonstrationProject()),newColumn=calculate(newColumnDemonstrationProject());
+const cappedSet=drawingSheetSet(capped),demoSet=drawingSheetSet(demo),newColumnSet=drawingSheetSet(newColumn);
+const si=(s:CalculationSnapshot)=>{const v=structuredClone(s);v.input.units='SI';return v;};
+// The three demonstrations as issued, and the same sets drawn in SI units.
+let drawn:Record<string,ReturnType<typeof drawingSheetSet>>|undefined;
+const sets=()=>drawn??=({demo:demoSet,capped:cappedSet,newColumn:newColumnSet,demoSI:drawingSheetSet(si(demo)),cappedSI:drawingSheetSet(si(capped)),newColumnSI:drawingSheetSet(si(newColumn))});
 
 describe('issued drawing set',()=>{
  it('leads with the cover sheet and numbers every sheet in the set',()=>{
@@ -19,22 +23,48 @@ describe('issued drawing set',()=>{
    expect(set[0].number).toBe('S-00');
    set.forEach((sheet,i)=>{expect(sheet.svg).toContain(`${i+1} OF ${set.length}`);expect(sheet.svg).toContain(`SHEET ${sheet.number}`);});
   }
-  expect(cappedSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03','S-04','S-05','S-06','S-07']);
+  // Cover, general arrangement and the details on as few sheets as fit: one for the rolled
+  // demonstration, two for the capped and new-column demonstrations.
+  expect(demoSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02']);
+  expect(cappedSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
+  expect(newColumnSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
+  for(const set of [demoSet,cappedSet,newColumnSet])for(const sheet of set.slice(2)){const n=sheet.svg.match(/data-view-title="below"/g)!.length;expect(n,sheet.number).toBeGreaterThanOrEqual(8);expect(n,sheet.number).toBeLessThanOrEqual(12);}
   expect(sheetIndex(capped).map(v=>v.title)).toEqual(cappedSet.map(v=>v.title));
   const index=texts(cappedSet[0].svg).join(' | ');
   for(const sheet of cappedSet.slice(1))expect(index).toContain(`${sheet.number} | ${sheet.title}`);
  },120000);
  it('resolves every token, detail number and sheet reference',()=>{
-  for(const set of [cappedSet,demoSet]){
-   const numbers=new Set(set.map(v=>v.number));
+  for(const [name,set] of Object.entries(sets())){
+   const numbers=new Set(set.map(v=>v.number)),refs=new Set(detailReferences(set).values());
    for(const sheet of set){
-    expect(sheet.svg).not.toMatch(/\{\{|NOT IN SET|NaN|undefined|Infinity|data-overflow/);
-    for(const ref of texts(sheet.svg).join(' ').match(/\b(?:S|SK)-\d\d\b/g)??[])expect(numbers.has(ref),`${sheet.number} refers to ${ref}`).toBe(true);
+    expect(sheet.svg,`${name} ${sheet.number}`).not.toMatch(/\{\{|NOT IN SET|NaN|undefined|Infinity|data-overflow/);
+    const words=texts(sheet.svg).join(' ');
+    // Every sheet reference names a sheet of this set, and every detail reference a detail drawn on it.
+    for(const ref of words.match(/\b(?:S|SK)-\d\d\b/g)??[])expect(numbers.has(ref),`${name} ${sheet.number} refers to ${ref}`).toBe(true);
+    for(const ref of words.match(/\b\d+\/S-\d\d\b/g)??[])expect(refs.has(ref),`${name} ${sheet.number} refers to detail ${ref}`).toBe(true);
     const details=[...sheet.svg.matchAll(/data-detail-title="[^"]*">(?:(?!<\/g>)[\s\S])*?font-weight="700">(\d+)<\/text>/g)].map(m=>Number(m[1]));
     expect(details).toEqual(details.map((_,i)=>i+1));
    }
   }
- },120000);
+ },300000);
+ it('prints standard text heights inside the drawing area, clear of the title band and seal',()=>{
+  for(const [name,set] of Object.entries(sets()))for(const sheet of set){
+   // Content group only: the title band keeps its own sizes.
+   const content=sheet.svg.slice(sheet.svg.indexOf('<g data-sheet-content'),sheet.svg.indexOf('<g data-title-block'));
+   for(const e of sheetEntities(content,'US')){
+    const at=e.type==='text'?[e.at]:e.type==='line'?[e.a,e.b]:e.type==='circle'?[e.center]:e.points;
+    for(const [x,y] of at){
+     // Paper inches, origin at the lower left: inside the border and above the 2-in title band.
+     expect(x,`${name} ${sheet.number}`).toBeGreaterThanOrEqual(.5);expect(x,`${name} ${sheet.number}`).toBeLessThanOrEqual(35.5);
+     expect(y,`${name} ${sheet.number}`).toBeGreaterThanOrEqual(2.5-1e-6);expect(y,`${name} ${sheet.number}`).toBeLessThanOrEqual(23.5);
+     // The 2.5-in seal box at the lower right stays clear.
+     expect(x>33&&y<5,`${name} ${sheet.number} enters the seal box`).toBe(false);
+    }
+    // No text under about 0.09 in (6.5 points); cap height is 0.716 of the font size.
+    if(e.type==='text')expect(e.height/.716*72,`${name} ${sheet.number} "${e.value}"`).toBeGreaterThanOrEqual(6.5-1e-6);
+   }
+  }
+ },300000);
  it('resolves detail references by title across sheets',()=>{
   const sheets=resolveSheetSet([
    {number:'S-01',name:'a',title:'A',svg:`<svg>${viewTitle(0,0,'PLAN','NTS')}${viewTitle(0,0,'ELEVATION','NTS')}</svg>`},
@@ -75,8 +105,33 @@ describe('drawings agree with the calculation',()=>{
   for(const c of p.cranes)expect(cover).toContain(`CRANE DATA · ${c.name.toUpperCase()}`);
   expect(cover).toContain('DEMONSTRATION - NOT FOR CONSTRUCTION');
  },120000);
+ it('keeps text clear of other text and of leader and dimension lines',()=>{
+  // Text boxes from Arial advance widths, cap height to descender, in sheet points; slightly shrunk so
+  // touching descenders and title underlines are tolerated.
+  type Box={x0:number;y0:number;x1:number;y1:number};
+  const overlap=(a:Box,b:Box)=>a.x0<b.x1&&b.x0<a.x1&&a.y0<b.y1&&b.y0<a.y1;
+  const crosses=(p:number[],q:number[],r:Box)=>{let t0=0,t1=1;const dx=q[0]-p[0],dy=q[1]-p[1];
+   for(const [a,b] of [[-dx,p[0]-r.x0],[dx,r.x1-p[0]],[-dy,p[1]-r.y0],[dy,r.y1-p[1]]]){if(a===0){if(b<0)return false;continue;}const t=b/a;if(a<0){if(t>t1)return false;t0=Math.max(t0,t);}else{if(t<t0)return false;t1=Math.min(t1,t);}}
+   return t1-t0>1e-6;};
+  for(const [name,set] of Object.entries(sets()))for(const sheet of set){
+   const content=sheet.svg.slice(sheet.svg.indexOf('<g data-sheet-content'),sheet.svg.indexOf('<g data-title-block'));
+   const entities=sheetEntities(content,'US'),pt=(q:number[])=>[q[0]*72,1728-q[1]*72];
+   const boxes=entities.flatMap(e=>{
+    if(e.type!=='text')return [];
+    const size=e.height*72/.716,w=textWidth(e.value,size,e.bold),[x,y]=pt(e.at),a=e.align===1?-w/2:e.align===2?-w:0,m=size*.12;
+    const box=Math.abs(e.angle)<1?{x0:x+a,x1:x+a+w,y0:y-size*.72,y1:y+size*.21}:e.angle>0?{x0:x-size*.72,x1:x+size*.21,y0:y-a-w,y1:y-a}:{x0:x-size*.21,x1:x+size*.72,y0:y+a,y1:y+a+w};
+    return [{value:e.value,box:{x0:box.x0+m,x1:box.x1-m,y0:box.y0+m,y1:box.y1-m*2}}];
+   });
+   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++)expect(overlap(boxes[i].box,boxes[j].box),`${name} ${sheet.number}: "${boxes[i].value}" overlaps "${boxes[j].value}"`).toBe(false);
+   for(const e of entities){
+    if((e.type!=='line'&&e.type!=='poly')||e.layer!=='S-ANNO')continue;
+    const points=(e.type==='line'?[e.a,e.b]:e.points).map(pt);
+    for(let k=1;k<points.length;k++)for(const b of boxes)expect(crosses(points[k-1],points[k],b.box),`${name} ${sheet.number}: line through "${b.value}"`).toBe(false);
+   }
+  }
+ },300000);
  it('lists bracket reactions for every grid',()=>{
-  const s05=texts(cappedSet.find(v=>v.number==='S-05')!.svg),stations=capped.detailResults!.bracket!.stations;
+  const s05=texts(cappedSet.find(v=>v.svg.includes('data-view="bracket-notes"'))!.svg),stations=capped.detailResults!.bracket!.stations;
   stations.forEach((r,i)=>{const at=s05.indexOf(String(i+1),s05.indexOf('RIGHT RIB'));expect(at).toBeGreaterThan(-1);expect(s05[at+1]).toBe(format(r.vertical,'force',capped.input.units,3).toUpperCase());});
  },120000);
 });

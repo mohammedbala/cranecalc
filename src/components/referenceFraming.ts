@@ -136,7 +136,7 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
       const n=newColumn,pt=n.plate.t,top=columnBottom-pt-n.grout;
       const holes=n.anchors.map(a=>({x:a.x,z:a.z,diameter:a.d+.0016*(a.d<.0254?5:8)}));
       plate(`base-plate-${code}`,n.plate.B,pt,n.plate.N,x,columnBottom-pt/2,columnOffset,holes,'New column base plate');
-      if(hardware)n.anchors.forEach((a,j)=>hardware.bolt(group,{id:`${code}-AR-${j+1}`,family:'Headed anchor rod',description:'New column base plate to footing; see S-08',diameter:a.d,grip:pt+n.grout,support:{x,z:columnOffset}},new THREE.Vector3(x+a.x,columnBottom-pt,columnOffset+a.z)));
+      if(hardware)n.anchors.forEach((a,j)=>hardware.bolt(group,{id:`${code}-AR-${j+1}`,family:'Headed anchor rod',description:'New column base plate to footing; see the new column details',diameter:a.d,grip:pt+n.grout,support:{x,z:columnOffset}},new THREE.Vector3(x+a.x,columnBottom-pt,columnOffset+a.z)));
       box(group,`footing-${code}`,n.footing.B,n.footing.h,n.footing.L,x,top-n.footing.h/2,columnOffset,materials.foundation);
     }else{
     plate(`base-plate-${code}`,baseX,plateT,baseZ,x,columnBottom-plateT/2,columnOffset,baseHoles,'Column base plate');

@@ -3,20 +3,44 @@ import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {craneDesignMinimum} from '../engine/aistLoads';
-import {runwayElevations,issueStatus} from '../engine/drawingData';
+import {runwayElevations,issueStatus,supportColumn} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {drawingLength} from './drawingFormat';
-import {line,sheetStart,titleBlock} from './sheetGraphics';
+import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,n,sheetStart,titleBlock,detailRef,detailTitles} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
 import {tieRelease} from '../engine/tieGeometry';
 
-export interface SheetEntry {number:string;title:string;}
-// Content coordinates inside the ARCH D drawing region (scaled by sheetFormat.contentScale).
-// The third column stops above the seal and issue labels at the lower right.
-const columns=[24,436,848],columnWidth=388,top=26,limits=[748,748,654];
+/** A sheet of the set as the cover indexes it, with the titles of its details in drawing order. */
+export interface SheetEntry {number:string;title:string;details?:readonly string[];}
+// Four note columns in the ARCH D drawing area at content scale 1 (layout units print at 1/72 in).
+// The last column stops above the seal and issue labels at the lower right.
+const columnWidth=594,columns=[0,1,2,3].map(i=>14+i*(columnWidth+40)),top=18,limits=[1494,1494,1494,1318];
+/** Symbols and line types used on the sheets, each drawn as it appears with its meaning. */
+function legend(t:Style):Block{
+ const sample=150,row=Math.max(22,t.leading*2.2);
+ const items:[(x:number,y:number)=>string,string][]=[
+  [(x,y)=>line([x,y],[x+sample-20,y],'runway-line'),'NEW STEEL, PLATES AND WELDS (SOLID)'],
+  [(x,y)=>line([x,y],[x+sample-20,y],'reference-line'),'EXISTING OR REFERENCE CONSTRUCTION, BY OTHERS (DASHED)'],
+  [(x,y)=>line([x,y],[x+sample-20,y],'hidden-line'),'HIDDEN EDGES'],
+  [(x,y)=>line([x,y],[x+sample-20,y],'grid-line'),'GRID LINES AND CENTERLINES'],
+  [(x,y)=>rect(x,y-3,sample-20,6,'rail-line'),'CRANE RAIL'],
+  [(x,y)=>bubble(x+12,y,'A',10),'GRID DESIGNATION'],
+  [(x,y)=>`${circle(x+14,y,13,'divider')}${line([x+1,y],[x+27,y],'annotation')}${text(x+14,y-3,'1',10,'middle',700)}${text(x+14,y+8.5,'S-02',6.6,'middle')}`,'DETAIL NUMBER OVER THE SHEET WHERE IT IS DRAWN; REFERENCES READ 1/S-02'],
+  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],false),'FILLET WELD, ARROW SIDE; SIZE LEFT OF THE SYMBOL'],
+  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],true),'FILLET WELD, BOTH SIDES'],
+  [(x,y)=>fieldFilletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],true),'FIELD WELD (FLAG); SHOP WELD U.N.O.'],
+  [(x,y)=>`${line([x,y],[x+40,y])}<path class="leader-arrow" d="M${n(x+40)},${n(y)}l-2.4,-3.2h4.8z"/>${line([x+40,y],[x+50,y-6])}${line([x+50,y-6],[x+56,y-6])}${text(x+60,y-3,'EL.',7.5)}`,'ELEVATION DATUM']
+ ];
+ const head=heading(t,'SYMBOLS AND LINE TYPES');
+ return {height:head.height+items.length*row,keep:true,render:(x,y)=>{
+  let svg=head.render(x,y),yy=y+head.height+row*.55;
+  for(const [draw,label] of items){svg+=draw(x+4,yy)+text(x+sample+10,yy+t.body*.36,t.caps(label),t.body);yy+=row;}
+  return `<g data-legend="symbols">${svg}</g>`;
+ }};
+}
 /** Greedy column flow; a heading stays with the block after it. Returns undefined when the blocks do not fit. */
 function flow(blocks:Block[],limit:number,overflow=false){
  const placed:{x:number;y:number;b:Block}[]=[];let column=0,y=top;
@@ -53,7 +77,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   'DO NOT CUT, DRILL OR WELD EXISTING STEEL UNTIL ITS MATERIAL AND WELDABILITY ARE CONFIRMED (MILL DATA OR CHEMICAL ANALYSIS AND CARBON EQUIVALENT PER AWS D1.1). REMOVE COATINGS AND PREHEAT AS REQUIRED BY THE APPROVED WPS.',
   'SHORE OR UNLOAD EXISTING MEMBERS AS REQUIRED BY THE ERECTION PROCEDURE. DO NOT REMOVE EXISTING BRACING WITHOUT A TEMPORARY REPLACEMENT APPROVED BY THE ENGINEER.',
   ...(p.existingColumn?.enabled&&!p.existingColumn.isNew?[`EXISTING COLUMN: ${p.existingColumn.source||'SOURCE NOT ENTERED'}.`]:[]),
-  ...(p.existingColumn?.enabled&&p.existingColumn.isNew?[`NEW RUNWAY COLUMNS ARE INDEPENDENT OF THE EXISTING BUILDING${p.columnBase?.enabled?' AND BEAR ON NEW FOOTINGS (S-08)':''}. SAW CUTTING AND EXCAVATION OF THE EXISTING SLAB SHALL NOT UNDERMINE EXISTING FOOTINGS; REPORT CONFLICTS TO THE ENGINEER OF RECORD.`]:[]),
+  ...(p.existingColumn?.enabled&&p.existingColumn.isNew?[`NEW RUNWAY COLUMNS ARE INDEPENDENT OF THE EXISTING BUILDING${p.columnBase?.enabled?` AND BEAR ON NEW FOOTINGS${supportColumn(p).detailed?` (${detailRef(detailTitles.newColumn)})`:''}`:''}. SAW CUTTING AND EXCAVATION OF THE EXISTING SLAB SHALL NOT UNDERMINE EXISTING FOOTINGS; REPORT CONFLICTS TO THE ENGINEER OF RECORD.`]:[]),
   ...(p.longitudinalBracing?.enabled?[`${p.existingColumn?.isNew&&p.existingColumn.enabled?'CRANE-LEVEL':'EXISTING'} LONGITUDINAL BRACING: ${p.longitudinalBracing.source||'SOURCE NOT ENTERED'}.`]:[]),
   ...(usesExistingBracket(p)?['EXISTING BRACKETS ARE REUSED ONLY WITH THE DOCUMENTED ASSESSMENT IN THE CALCULATION REPORT.']:[]),
   'ITEMS MARKED BY OTHERS IN THE CALCULATION REPORT (FRAME, CONNECTIONS TO EXISTING MEMBERS, ANCHORS AND FOUNDATIONS NOT CHECKED HERE) SHALL BE VERIFIED BY THE ENGINEER OF RECORD FOR THE REPORTED FORCES.'
@@ -63,7 +87,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   `RAIL GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)}. VERIFY WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
   d.fabrication.railAlignment,
   'SURVEY RAIL ALIGNMENT, GAUGE AND ELEVATION AFTER ERECTION AND BEFORE THE LOAD TEST; SUBMIT THE SURVEY.',
-  ...(activeEndStop(p)?[`INSTALL THE RUNWAY END STOPS (S-07) AT ${stopLocation(p).toUpperCase()} BEFORE THE CRANE IS OPERATED OR LOAD TESTED.`]:[]),
+  ...(activeEndStop(p)?[`INSTALL THE RUNWAY END STOPS (${detailRef(detailTitles.endStop)}) AT ${stopLocation(p).toUpperCase()} BEFORE THE CRANE IS OPERATED OR LOAD TESTED.`]:[]),
   'LOAD TEST THE CRANE PER ASME B30.2 AND THE MANUFACTURER. THE TEST LOAD SHALL NOT EXCEED 125% OF THE RATED LOAD; COORDINATE ANY TEST LOAD ABOVE THE RATED LOAD WITH THE ENGINEER OF RECORD BEFORE TESTING.'
  ].map(v=>v.toUpperCase())));
  // Column 2: criteria.
@@ -110,6 +134,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, PER SUPPORT'),T(['STATION','D','Cd','Cv','Ci','Css','Cls·e/L'],r.supports.map(v=>[len(v.x),f(v.D),f(v.Cd),f(v.Cv),f(v.Ci),f(v.Css),'±'+f(v.Clv)]),[1.25,1,1,1,1,1,1.05]),P(`Cd CRANE EMPTY, Cv LIFTED, Ci IMPACT, Css SIDE THRUST AT RAIL HEAD (ONE CRANE). RUNWAY LONGITUDINAL FORCE Cls = ${f(r.Cls)} AT THE RAIL HEAD; Cls·e/L IS ITS END COUPLE AT THE BEARINGS OF THE BAY THAT CARRIES IT. ALL CRANE COMPONENTS ARE LIVE LOAD L (ASCE 7 §4.9).${adjacentBays(p).map(b=>` AT ${len(b.station)} THE REACTIONS INCLUDE THE EXISTING ADJACENT ${len(b.length)} BAY (SAME GIRDER, RAIL AND DEAD LOAD ASSUMED).`).join('')} FACTORED INTERFACE FORCES: SEE CALCULATION REPORT.`));
  // Column 3: index, materials, inspection.
  blocks.push(H('SHEET INDEX'),T(['SHEET','TITLE'],sheets.map(v=>[v.number,v.title]),[.7,3.3]));
+ // Every detail by number and sheet; references resolve when the set is assembled.
+ const details=sheets.flatMap(v=>(v.details??[]).map(t=>[detailRef(t),t]));
+ if(details.length)blocks.push(H('DETAIL INDEX'),T(['DETAIL','TITLE'],details,[.7,3.3]));
  const bolt=d?.end.grade==='A490'?'ASTM F3125 GRADE A490 (GROUP 150)':'ASTM F3125 GRADE A325 (GROUP 120)';
  blocks.push(H('MATERIALS'),T(['ITEM','SPECIFICATION'],[
   ['RUNWAY GIRDER',p.section.kind==='welded'?`PLATE, Fy = ${ksi(p.section.Fy)}`:`ASTM A992, Fy = ${ksi(p.section.Fy)}`],
@@ -143,25 +170,30 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(bypass?['BUILDING-MOUNTED CRANE END STOPS AND THEIR SUPPORT FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!d?.bracket?.enabled?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE SUPPORT REACTIONS LISTED${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${len(support.capacity)} MAX.`:'.'}`]:[]),
-  ...(p.system==='simple'&&d&&!activeEndBearing(p)?['COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (S-04) FOR THE INTERFACE FORCES IN THE CALCULATION REPORT.']:[]),
+  ...(p.system==='simple'&&d&&!activeEndBearing(p)?[`COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (${detailRef(detailTitles.movement)}) FOR THE INTERFACE FORCES IN THE CALCULATION REPORT.`]:[]),
   ...s.checks.filter(c=>c.status==='excluded'&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY OTHERS FOR THE REPORTED FORCES.`)
  ];
  blocks.push(H('DEFERRED SUBMITTALS / BY OTHERS'),P('SUBMIT THE FOLLOWING TO THE ENGINEER OF RECORD FOR REVIEW AND TO THE BUILDING OFFICIAL FOR APPROVAL BEFORE INSTALLATION:'),...N(deferred));
+ blocks.push(legend(t));
  blocks.push(H('ABBREVIATIONS'),P('(E) EXISTING · (N) NEW · C/L CENTERLINE · EL. ELEVATION · T.O.S. TOP OF STEEL · T.O.R. TOP OF RAIL · TYP. TYPICAL · U.N.O. UNLESS NOTED OTHERWISE · SC SLIP-CRITICAL · STD STANDARD HOLE · SSL / LSL SHORT / LONG SLOT · CJP COMPLETE JOINT PENETRATION · FW FIELD WELD · REF. REFERENCE (EXISTING OR BY OTHERS)'));
  blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} CALCULATION REVISION ${s.revision}.`));
  return blocks;};
- // Largest legible text that fits, with the columns balanced to the shortest height that still fits.
+ // Largest legible text that fits (body 1/8 in down to 0.09 in), with the columns balanced to the
+ // shortest height that still fits.
  let placed:ReturnType<typeof flow>;
- for(const k of [1.25,1.18,1.1,1,.92,.85,.8]){
-  const t:Style={width:columnWidth,body:5.4*k,leading:7.1*k,heading:7*k,caps:capsFor(u)},blocks=build(t);
+ const style=(body:number):Style=>({width:columnWidth,body,leading:body*1.31,heading:body*1.3,caps:capsFor(u)});
+ for(const body of [9,8.6,8.2,7.8,7.4,7,6.6]){
+  const blocks=build(style(body));
   for(let h=Math.max(...blocks.map(b=>b.height))+top;h<=limits[0]+.01&&!placed;h+=4)placed=flow(blocks,h);
   if(placed)break;
  }
  let svg=sheetStart(s,'S-00','COVER, GENERAL NOTES & DESIGN CRITERIA')+`<g data-view="cover">`;
  // Content that cannot fit is drawn at the smallest size and marked so set checks report it.
- if(!placed){placed=flow(build({width:columnWidth,body:5.4*.8,leading:7.1*.8,heading:7*.8,caps:capsFor(u)}),limits[0],true)!;svg+='<g data-overflow="cover"/>';}
+ if(!placed){placed=flow(build(style(6.6)),limits[0],true)!;svg+='<g data-overflow="cover"/>';}
  for(const v of placed)svg+=v.b.render(v.x,v.y);
- for(const x of [430,842])svg+=line([x,18],[x,limits[0]+4],'divider');
+ // Column rules run to the foot of the longest column.
+ const foot=Math.max(...placed.map(v=>v.y+v.b.height))+10;
+ for(const x of columns.slice(1))if(placed.some(v=>v.x===x))svg+=line([x-18,top-6],[x-18,foot],'divider');
  svg+=`</g>`;
  return svg+titleBlock(s,'S-00','COVER, GENERAL NOTES & DESIGN CRITERIA')+'</svg>';
 }

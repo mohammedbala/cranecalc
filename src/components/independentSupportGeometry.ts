@@ -21,7 +21,7 @@ export function buildIndependentSupports(p:ProjectInput,columnFace:number,materi
  const L=p.spans.reduce((a,b)=>a+b,0)/1000,b=p.section,bs=p.details?.bearing,d=b.d/1000,tf=b.tf/1000,tw=b.tw/1000;
  const plate=(name:string,l:number,h:number,w:number,x:number,y:number,z:number,family:string)=>{
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(l,h,w),material);mesh.position.set(x,y,z);mesh.name=name;mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),edge));
-  mesh.userData.part={id:name,family,description:activeEndBearing(p)?'Independent girder end bearing, bolted to the seat: standard holes at the locating end, long slots at the sliding end; see S-02 / S-04.':'Independent girder end; see S-04. Receiving bracket and movement-compatible column attachment require project design.',support:{x,z:0}} satisfies PartInfo;group.add(mesh);return mesh;
+  mesh.userData.part={id:name,family,description:activeEndBearing(p)?'Independent girder end bearing, bolted to the seat: standard holes at the locating end, long slots at the sliding end; see the end bearing and support details.':'Independent girder end; see the support details. Receiving bracket and movement-compatible column attachment require project design.',support:{x,z:0}} satisfies PartInfo;group.add(mesh);return mesh;
  };
  for(const end of independentBearings(p)){
   const x=end.center/1000-L/2,t=(bs?.thickness??25.4)/1000,w=(bs?.width??b.bf)/1000,len=(end.finish-end.start)/1000,id=`bay-${end.bay}-${end.end}`;
@@ -31,7 +31,7 @@ export function buildIndependentSupports(p:ProjectInput,columnFace:number,materi
    const mesh=new THREE.Mesh(bearingStiffenerGeometry(bs.stiffenerWidth/1000,d-2*tf,bs.stiffenerThickness/1000,bs.cope/1000,side),material);
    mesh.position.set(x,0,side*tw/2);mesh.name=`${id}-stiffener-${side}`;
    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),edge));
-   mesh.userData.part={id:mesh.name,family:'Independent bearing stiffener',description:'Full depth between flange faces, fitted at both ends; only web-side corners are coped for fillet clearance. See S-02 / S-04.',support:{x:end.station/1000-L/2,z:0}} satisfies PartInfo;
+   mesh.userData.part={id:mesh.name,family:'Independent bearing stiffener',description:'Full depth between flange faces, fitted at both ends; only web-side corners are coped for fillet clearance. See the bearing and support details.',support:{x:end.station/1000-L/2,z:0}} satisfies PartInfo;
    group.add(mesh);
   }
   stiffenerWelds(group,id,x,d,tf,tw,bs.stiffenerWidth/1000,bs.stiffenerThickness/1000,bs.cope/1000,bs.weldSize/1000,p.section.kind==='cap'&&!!p.capDesign?.topStiffenerCjp,weldMaterial,{x:end.station/1000-L/2,z:0});
