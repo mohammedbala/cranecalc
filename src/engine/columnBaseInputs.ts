@@ -18,19 +18,23 @@ export const columnBaseSchema=z.object({
  concrete:z.object({fc:pos}),
  /** soil: top of footing below the finished floor, with soil or slab over it; slab: existing slab thickness, saw cut for the footing. */
  footing:z.object({L:pos,B:pos,thickness:pos,cover:pos,soil:nn,slab:nn,bar:z.enum(barSizes),spacing:pos,fy:pos}),
- /** Allowable (service) soil bearing pressure, base friction coefficient, soil unit weight and frost depth below the floor (zero for an interior footing protected from frost), from the geotechnical report and the building code. */
- soil:z.object({allowable:pos,friction:pos,unitWeight:pos,frost:nn}),
+ /**
+  * Allowable (service) soil bearing pressure, base friction coefficient, soil unit weight, frost depth below the
+  * floor (zero for an interior footing protected from frost) and modulus of subgrade reaction for the footing's
+  * rotation, from the geotechnical report and the building code.
+  */
+ soil:z.object({allowable:pos,friction:pos,unitWeight:pos,frost:nn,subgrade:pos}),
  source:z.string().max(300),confirmed:z.boolean()
 });
 export type ColumnBaseInput=z.infer<typeof columnBaseSchema>;
-const inch=25.4,foot=304.8,ksi=6.894757293168,psf=0.04788025898e-3,pcf=1.570874638e-7;
+const inch=25.4,foot=304.8,ksi=6.894757293168,psf=0.04788025898e-3,pcf=1.570874638e-7,pci=4.4482216152605/inch**3;
 // Illustrative starting point for a light runway column; size it for the actual reactions and soil report.
 export const defaultColumnBase:ColumnBaseInput={enabled:false,
  plate:{N:22*inch,B:18*inch,thickness:1.5*inch,Fy:50*ksi,weld:.3125*inch},
  anchors:{grade:'F1554-36',diameter:1.25*inch,perRow:2,edge:2*inch,gauge:12*inch,embedment:18*inch},
  grout:1.5*inch,concrete:{fc:4*ksi},
  footing:{L:8*foot,B:8*foot,thickness:30*inch,cover:3*inch,soil:0,slab:6*inch,bar:'#7',spacing:10*inch,fy:60*ksi},
- soil:{allowable:3000*psf,friction:.35,unitWeight:120*pcf,frost:0},source:'',confirmed:false};
+ soil:{allowable:3000*psf,friction:.35,unitWeight:120*pcf,frost:0,subgrade:100*pci},source:'',confirmed:false};
 /** Column base (top of base plate) above the finished floor: plate and grout on the footing, its top `soil` below the floor. */
 export const columnBaseElevation=(b:ColumnBaseInput)=>b.plate.thickness+b.grout-b.footing.soil;
 /** AISC Design Guide 1 Table 2.3: base plate hole diameter and plate washer size and thickness for a rod diameter. */

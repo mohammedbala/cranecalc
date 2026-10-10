@@ -3,7 +3,7 @@ import {calculate,validateProject} from '../src/engine/calculate';
 import {demonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {defaultExistingColumn} from '../src/engine/existingColumnInputs';
 import {anchorHardware,columnBaseElevation,defaultColumnBase,type ColumnBaseInput} from '../src/engine/columnBaseInputs';
-import {anchorArea,anchorStrength,basePlate,footingStrength,nutBearingArea,soilPressure,type BaseAction} from '../src/engine/columnBase';
+import {anchorArea,anchorStrength,baseDrift,basePlate,footingStrength,nutBearingArea,soilPressure,type BaseAction} from '../src/engine/columnBase';
 import {runwayElevations} from '../src/engine/drawingData';
 import {drawingSheetSet} from '../src/components/planSheet';
 import type {ProjectInput} from '../src/engine/types';
@@ -111,6 +111,11 @@ describe('New freestanding column package',()=>{
   expect(base.map(c=>c.id)).toEqual(expect.arrayContaining(['base-bearing','base-plate','base-weld','base-anchor-tension','base-anchor-shear','base-anchor-interaction','base-soil','base-overturning','base-sliding','base-frost','base-one-way','base-two-way','base-flexure','base-min-steel','base-development','base-bar-spacing']));
   expect(s.checks.filter(c=>c.status==='fail').map(c=>c.id)).toEqual([]);
   expect(s.eligible).toBe(true);
+  // The footing rotating on the soil adds to the fixed-base column drift at the rail.
+  const drift=s.checks.find(c=>c.id==='base-drift')!,column=s.checks.find(c=>c.id==='column-drift')!;
+  const d=baseDrift(p,s.existingColumn!);
+  expect(drift.demand).toBeCloseTo(column.demand!+d.theta*d.lever,6);
+  expect(drift.demand!).toBeGreaterThan(column.demand!);expect(drift.capacity).toBe(column.capacity);
   // Elevations come from the base on the footing and agree with the entered top of rail.
   const el=runwayElevations(p)!;
   expect(el.source).toBe('new column base');

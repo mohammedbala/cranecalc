@@ -22,13 +22,14 @@ export const sheetLayers:Record<string,LayerDef>={
  'S-EXISTING':{color:8,weight:18,ltype:'DASHED'},
  'S-GRID':{color:1,weight:18,ltype:'CENTER'},
  'S-ANNO':{color:2,weight:18,ltype:'Continuous'},
+ 'S-PATT':{color:8,weight:13,ltype:'Continuous'},
  'S-ANNO-HEAVY':{color:7,weight:35,ltype:'Continuous'},
  'S-ANNO-SYMB':{color:3,weight:25,ltype:'Continuous'},
  'S-ANNO-TEXT':{color:7,weight:25,ltype:'Continuous'},
  'G-TTLB':{color:7,weight:50,ltype:'Continuous'},
  'G-TTLB-TEXT':{color:7,weight:25,ltype:'Continuous'}
 };
-const classLayer:Record<string,string>={'runway-line':'S-STEEL-NEW','hidden-line':'S-STEEL-HIDDEN','rail-line':'S-RAIL','reference-line':'S-EXISTING','grid-line':'S-GRID','annotation':'S-ANNO','divider':'S-ANNO-HEAVY','bubble':'S-ANNO-SYMB','leader-arrow':'S-ANNO','dot':'S-ANNO'};
+const classLayer:Record<string,string>={'runway-line':'S-STEEL-NEW','hidden-line':'S-STEEL-HIDDEN','rail-line':'S-RAIL','reference-line':'S-EXISTING','grid-line':'S-GRID','annotation':'S-ANNO','divider':'S-ANNO-HEAVY','bubble':'S-ANNO-SYMB','leader-arrow':'S-ANNO','dot':'S-ANNO','hatch':'S-PATT','hatch-dot':'S-PATT'};
 
 const identity:Matrix=[1,0,0,1,0,0];
 const multiply=(m:Matrix,n:Matrix):Matrix=>[m[0]*n[0]+m[2]*n[1],m[1]*n[0]+m[3]*n[1],m[0]*n[2]+m[2]*n[3],m[1]*n[2]+m[3]*n[3],m[0]*n[4]+m[2]*n[5]+m[4],m[1]*n[4]+m[3]*n[5]+m[5]];

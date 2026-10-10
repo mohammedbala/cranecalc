@@ -17,14 +17,14 @@ function concrete(x:number,y:number,w:number,h:number,density=1){
  const count=Math.round(w*h/110*density);
  for(let i=0;i<count;i++){
   const px=x+2+rnd()*(w-4),py=y+2+rnd()*(h-4);
-  if(i%3===0){const r=.8+rnd()*.5,a=rnd()*Math.PI;svg+=`<polyline class="annotation" points="${[0,1,2,0].map(k=>`${n(px+r*Math.cos(a+k*2.0944))},${n(py+r*Math.sin(a+k*2.0944))}`).join(' ')}"/>`;}
-  else svg+=circle(px,py,.22,'dot');
+  if(i%3===0){const r=.8+rnd()*.5,a=rnd()*Math.PI;svg+=`<polyline class="hatch" points="${[0,1,2,0].map(k=>`${n(px+r*Math.cos(a+k*2.0944))},${n(py+r*Math.sin(a+k*2.0944))}`).join(' ')}"/>`;}
+  else svg+=circle(px,py,.22,'hatch-dot');
  }
  return `<g data-hatch="concrete">${svg}</g>`;
 }
 /** Undisturbed earth below a line: groups of three short diagonals. */
 function earth(x1:number,x2:number,y:number){
- let svg='';for(let x=x1+3;x<x2-6;x+=11)for(let j=0;j<3;j++)svg+=line([x+j*2,y+.6],[x+j*2-3.2,y+4],'annotation');
+ let svg='';for(let x=x1+3;x<x2-6;x+=11)for(let j=0;j<3;j++)svg+=line([x+j*2,y+.6],[x+j*2-3.2,y+4],'hatch');
  return `<g data-hatch="earth">${svg}</g>`;
 }
 /** Elevation datum: triangle on the extension line and the label beside it, spread to clear its neighbours. */
@@ -45,7 +45,7 @@ function wPlan(cx:number,cy:number,d:number,bf:number,tf:number,tw:number,k:numb
 /** S-08: new freestanding runway column, its base plate, anchor rods and spread footing. */
 export function newColumnSheetSvg(s:CalculationSnapshot){
  const p=s.input,u=p.units,col=p.existingColumn!,b=p.columnBase!,d=p.details!,br=d.bracket?.enabled?d.bracket:undefined,g=p.section,r=s.columnBase;
- const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,3);return u==='US'?t.toUpperCase():t;};
+ const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'?0:3);return u==='US'?t.toUpperCase():t;};
  const c=existingColumnSection(p).section,name=col.shape||`BUILT-UP ${size(c.d)} X ${size(c.bf)}`;
  const tb=b.plate.thickness,gr=b.grout,ft=b.footing,hf=ft.thickness,a=b.anchors,hw=anchorHardware(a.diameter),row=b.plate.N/2-a.edge;
  const bt=d.bearing.thickness,seat=col.seatElevation,H=col.height,cap=g.kind==='cap'?g.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,rl=d.rail;
@@ -221,7 +221,7 @@ export function newColumnSheetSvg(s:CalculationSnapshot){
    [`GOVERNING BASE ACTION (${p.method})`,act?`${act.id}: P ${force(act.P)}, M ${force(act.Mx,'moment')}, V ${force(act.Vx)}`:'-'],
    ['ANCHOR TENSION / SHEAR (LRFD)',r&&anchorAct?`${force(r.anchors.T)} / ${force(r.anchors.V)} (${anchorAct.id})`:'-'],
    ['SOIL: ALLOWABLE / MAX. SERVICE',r?`${force(b.soil.allowable,'pressure')} / ${force(r.footing.qMax,'pressure')}`:'-'],
-   ['RATIOS: PLATE / RODS / SOIL / OVERTURNING',`${ratio('base-plate')} / ${ratio('base-anchor-interaction')} / ${ratio('base-soil')} / ${ratio('base-overturning')}`],
+   ['RATIOS: PLATE / RODS / SOIL / OVERTURNING / DRIFT',`${ratio('base-plate')} / ${ratio('base-anchor-interaction')} / ${ratio('base-soil')} / ${ratio('base-overturning')} / ${ratio('base-drift')}`],
    ['DATA SOURCE',b.source||'NOT ENTERED']
   ];
   const notes=[

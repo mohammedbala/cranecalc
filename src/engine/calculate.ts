@@ -97,7 +97,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
    // Unfactored reactions by load type for the building that carries the runway.
    snapshot.supportReactions=supportReactions(p,props);
    if(p.existingColumn?.enabled){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn));}
-   if(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled){snapshot.columnBase=columnBaseAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...columnBaseChecks(p,snapshot.columnBase));}
+   if(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled){snapshot.columnBase=columnBaseAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...columnBaseChecks(p,snapshot.columnBase,snapshot.existingColumn));}
    // Drawings print elevations from project data only.
    if(p.details&&!runwayElevations(p))snapshot.checks.push({id:'drawing-elevation',group:'Detailing',title:'Runway elevation for drawings',status:'incomplete',equation:'',note:'Enter the top-of-rail elevation above the datum under Project, or check the existing column with its surveyed seat elevation. Drawing elevations are never taken from the 3D reference model.',referenceIds:['criteria']});
    if(p.longitudinalBracing?.enabled){snapshot.longitudinalBracing=longitudinalBracingAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...longitudinalBracingChecks(p,snapshot.longitudinalBracing));}

@@ -7,6 +7,7 @@ import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 import type {SupportReactionSet} from './supportReactions';
 import type {CheckResult,ProjectInput} from './types';
+import type {ExistingColumnResult} from './existingColumn';
 
 const inch=25.4,psi=0.006894757293168,lbf=4.4482216152605,concreteWeight=23.6e-6;
 const futa:Record<typeof anchorGrades[number],number>={'F1554-36':58000*psi,'F1554-55':75000*psi,'F1554-105':125000*psi};
@@ -229,9 +230,26 @@ export function columnBaseAnalysis(p:ProjectInput,reactions:SupportReactionSet):
 }
 
 /** Every check at the support where it governs; the same base and footing are used at every support. */
-export function columnBaseChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
+export function columnBaseChecks(p:ProjectInput,r:ColumnBaseResult,column?:ExistingColumnResult):CheckResult[]{
  const all=(r.supports??[r]).map(v=>supportChecks(p,v)),rank=(c:CheckResult)=>(c.status==='fail'?1e13:0)+(c.utilization??0);
- return all[0].map((c,i)=>all.map(list=>list[i]).reduce((x,y)=>rank(y)>rank(x)?y:x));
+ const checks=all[0].map((c,i)=>all.map(list=>list[i]).reduce((x,y)=>rank(y)>rank(x)?y:x));
+ if(column){
+  const d=baseDrift(p,column),u=p.units,f=(v:number)=>format(v,'length',u,3);
+  checks.push({id:'base-drift',group:'New column base',title:'Runway drift with footing rotation',demand:d.total,capacity:d.limit,quantity:'length',utilization:d.total/d.limit,status:withinLimit(d.total,d.limit)?'pass':'fail',
+   equation:'\\Delta=\\Delta_{col}+\\theta\\,h,\\quad\\theta=\\frac{M}{k_s\\,BL^3/12}\\le h_{rail}/n',substitution:`\\frac{${latexNumber(d.total)}}{${latexNumber(d.limit)}}=${(d.total/d.limit).toFixed(4)}`,
+   note:`Column alone ${f(d.column)} plus the footing's rotation ${d.theta.toExponential(3)} rad on the soil (modulus of subgrade reaction ${format(p.columnBase!.soil.subgrade,'subgrade',u,3)}, full contact) times ${f(d.lever)} from the footing base to the rail, under the service side thrust and static eccentric reaction of the drift check.`,referenceIds:['dg7','aci-318']});
+ }
+ return checks;
+}
+/** Rail drift with the footing rotating on the soil: base moment over k_s B L^3/12, the footing in full contact. */
+export function baseDrift(p:ProjectInput,column:ExistingColumnResult){
+ const b=p.columnBase!,c=p.existingColumn!,{section}=existingColumnSection(p),props=sectionProperties(section),E=section.E;
+ const e=existingColumnEccentricity(p),ht=existingColumnRailElevation(p);
+ const eccentric=columnResponse(c.height,E*props.Ix,c.strong,[{x:c.seatElevation,moment:1}],[Math.min(ht,c.height)]),side=columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,ht)],[c.seatElevation]);
+ const arm=b.footing.thickness+b.grout+b.plate.thickness;
+ const M=Math.abs(column.crane.lateral*(side.reactions.baseMoment+side.reactions.base*arm))+Math.abs(column.crane.liveStatic*e*(eccentric.reactions.baseMoment+eccentric.reactions.base*arm));
+ const theta=M/(b.soil.subgrade*b.footing.B*b.footing.L**3/12),lever=ht+arm;
+ return {theta,lever,column:column.drift.value,total:column.drift.value+theta*lever,limit:column.drift.limit};
 }
 function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
  const b=p.columnBase!,u=p.units,f=(v:number,q:Parameters<typeof format>[1]='force')=>format(v,q,u,3),checks:CheckResult[]=[];

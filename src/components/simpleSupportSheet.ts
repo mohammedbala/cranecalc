@@ -1,3 +1,4 @@
+import {supportColumn} from '../engine/drawingData';
 import {activeEndBearing,slidingPhrase} from '../engine/endBearingInputs';
 import {flangeTieGeometry,tieRelease,tieSides} from '../engine/tieGeometry';
 import type {CalculationSnapshot} from '../engine/types';
@@ -59,7 +60,8 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
  // The column outline and its label stay above the view note at y = 335.
  const ps=drawingScale(Math.min(.24,175/(b.bf/2+d.brace.length+150),335/(4*bs.length+c.endGap),118/tieReach),p.units),pk=ps.pointsPerMm,px=895,py=155,pg=joint?c.endGap*pk/2:0,pl=bs.length*pk,span=2*pl+pg;
  const colY=py+tieReach*pk,bar=d.brace.thickness*pk,gus=d.brace.gussetThickness*pk;
- svg+=rect(px-m.column.bf*1000*pk/2,colY,m.column.bf*1000*pk,37,'reference-line');
+ const sc=supportColumn(p),colLine=sc.isNew?'runway-line':'reference-line';
+ svg+=rect(px-m.column.bf*1000*pk/2,colY,m.column.bf*1000*pk,37,colLine);
  svg+=line([px,93],[px,colY+45],'grid-line')+bubble(px,86,gridLabel)+text(px-12,89,gridNote,7.2,'end');
  for(const side of sides){
   const x=side<0?px-span:px+pg,at=px+side*(pg+pl/2-(tieLayout?.attachment.longitudinalSetback??0)*pk);
@@ -67,12 +69,12 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
   if(tieLayout)svg+=rect(at-tieLayout.attachment.saddleLength*pk/2,py+tieLayout.rootStart*pk,tieLayout.attachment.saddleLength*pk,tieLayout.rootLength*pk,'runway-line');
   // Paired bars on opposite sides of each independent receiving gusset.
   for(const ply of [-1,1])svg+=rect(at+ply*(gus+bar)/2-bar/2,py+tieStart*pk,bar,d.brace.length*pk,'runway-line');
-  svg+=rect(at-gus/2,py+(tieLayout?.rootStart??0)*pk,gus,(tieLayout?tieLayout.gussetEnd-tieLayout.rootStart:d.brace.connectionLength)*pk,'runway-line')+rect(at-gus/2,colY-(tieLayout?.connection??d.brace.connectionLength)*pk,gus,(tieLayout?.connection??d.brace.connectionLength)*pk,'reference-line');
+  svg+=rect(at-gus/2,py+(tieLayout?.rootStart??0)*pk,gus,(tieLayout?tieLayout.gussetEnd-tieLayout.rootStart:d.brace.connectionLength)*pk,'runway-line')+rect(at-gus/2,colY-(tieLayout?.connection??d.brace.connectionLength)*pk,gus,(tieLayout?.connection??d.brace.connectionLength)*pk,colLine);
  }
  if(joint)svg+=dimH(px-pg,px+pg,py-b.bf*pk/2,111,dim(c.endGap));
  if(joint)svg+=multiLeader([[px-pg-pl/2+(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[643,247],['LEFT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieLayout?'S-06':'S-02'}`],8.5,[[[629,py+d.brace.length*pk*.55]]]);
  svg+=multiLeader([[px+pg+pl/2-(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[1025,247],['RIGHT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieLayout?'S-06':'S-02'}`]);
- svg+=text(918,colY+48,'BUILDING COLUMN (REF.)',8,'middle');
+ svg+=text(918,colY+48,sc.isNew?sc.reference:'BUILDING COLUMN (REF.)',8,'middle');
  svg+=text(635,335,tieRelease(p)?'COLUMN GUSSETS: SLEEVED BOLTS IN VERTICAL SLOTS. BARS FLEX WITH END ROTATION AND THERMAL TRAVEL.':'COLUMN-SIDE ATTACHMENTS: BARS FLEX WITH END ROTATION, THERMAL TRAVEL AND SUPPORT DEFLECTION.',7.6);
  svg+=viewTitle(906,364,'INDEPENDENT FLANGE TIES / PLAN',ps.label)+'</g>';
 

@@ -76,6 +76,8 @@ export function sheetStart(s: CalculationSnapshot, number: string, title: string
   .runway-plan-sheet .grid-line{stroke:#81888d;stroke-width:.4;stroke-dasharray:8 2 1 2}
   .runway-plan-sheet .bubble{stroke:#31383e;stroke-width:.6;fill:white}
   .runway-plan-sheet .dot{stroke:#111;fill:#111;stroke-width:.5}
+  .runway-plan-sheet .hatch{stroke:#6b7075;stroke-width:.3}
+  .runway-plan-sheet .hatch-dot{stroke:#6b7075;fill:#6b7075;stroke-width:.3}
   </style><rect x="0" y="0" width="2592" height="1728" style="fill:white;stroke:none"/>
   ${rect(36,36,2520,1656,'divider')}
   <g data-sheet-content="ARCH-D" transform="translate(72 36) scale(${sheetFormat.contentScale})">`;
