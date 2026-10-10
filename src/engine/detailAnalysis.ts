@@ -16,7 +16,9 @@ import { railKeeperResponse } from './railKeeper';
 import { railTopAboveSteel } from './railSeat';
 import {tractionBays,railKeeperStations,girderSegments,independentBearings} from './simpleSupports';
 import {activeEndStop,stopBoltRows,stopEnds} from './endStopInputs';
-import {activeEndBearing} from './endBearingInputs';
+import {activeEndBearing,locatingSupport} from './endBearingInputs';
+import {craneCombinations} from './aistLoads';
+import {runwayEnds} from './continuation';
 
 export function braceSystem(p:ProjectInput){
  const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875);
@@ -67,9 +69,11 @@ export function fatigueSpectrumBin(category:keyof typeof constants,range:number,
 export function automaticFatigueDetails(p:ProjectInput){
  const d=p.details!,L=p.spans.reduce((s,v)=>s+v,0),list=[...d.fatigueDetails];
  const tie=flangeTieGeometry(p);
- // Saddle welded across the flange: AISC Table A-3.1 item 7.2 by its length a along the stress and thickness b.
+ // Saddle welded to the flange by transverse end fillets across it: a short attachment, AISC Table A-3.1 item 7.1
+ // (welds transverse to the stress) by its length a along the stress and thickness b. The crack starts at the
+ // toe of each end fillet on the flange, one weld leg beyond the saddle end.
  const sa=tie?.attachment,inch=25.4,saddleCategory=!sa?'E1':sa.saddleLength<2*inch?'C':sa.saddleLength<=Math.min(12*sa.saddleThickness,4*inch)?'D':sa.saddleThickness<=.8*inch?'E':'E1';
- if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} edge ${sign} / ${point}`,x:v.tieX+sign*tie.attachment.saddleLength/2,point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.2, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment; global stress plus local flange strip bending`});
+ if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} · end fillet toe ${sign<0?1:2} / ${point}`,x:v.tieX+sign*(tie.attachment.saddleLength/2+tie.attachment.weldSize),point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.1, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment: toe of the transverse end fillet on the flange; global stress plus local flange strip bending`});
  // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
  const stop=activeEndStop(p);
  if(stop)for(const [end,x0,dir] of ([['left',0,1],['right',L,-1]] as const).filter(([end])=>stopEnds(p).includes(end)))for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:x0+dir*row,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});
@@ -90,12 +94,37 @@ export function automaticFatigueDetails(p:ProjectInput){
  }
  return list;
 }
+/**
+ * Where the girder's longitudinal force reaches the supports. Simple bays: traction at the locating (left) end of
+ * each occupied bay, either way; the crane stop force (AIST stop combinations) only on an end bay that carries a
+ * stop, with the crane on it, toward the stop: bay 1 for a stop at the left runway end, the last bay for one at
+ * the right end, which that bay delivers to its own locating end. A continuous girder with bolted bearings locates
+ * at one support; otherwise the runway ends take it.
+ */
+export function longitudinalPaths(p:ProjectInput,supports:number[]){
+ const stops=new Set(craneCombinations(p.method).filter(c=>c.bumper>0).map(c=>`${p.method} ${c.id}`));
+ const ends=stopEnds(p).length?stopEnds(p):runwayEnds(p),stopBays=[...(ends.includes('left')?[{bay:1,sign:-1}]:[]),...(ends.includes('right')?[{bay:p.spans.length,sign:1}]:[])];
+ const L=supports.at(-1)!,locating=p.system==='continuous'&&activeEndBearing(p)?supports[locatingSupport(p)]:undefined;
+ return {
+  actions(e:RunwayCaseEvent):{bay:number;sign:number}[]{
+   const stop=stops.has(e.combination);
+   if(p.system!=='simple')return stop?stopBays.map(v=>({bay:-1,sign:v.sign})):[{bay:-1,sign:-1},{bay:-1,sign:1}];
+   const occupied=tractionBays(p,e);
+   if(!stop)return occupied.flatMap(bay=>[-1,1].map(sign=>({bay,sign})));
+   const struck=stopBays.filter(v=>occupied.includes(v.bay));
+   return struck.length?struck:[{bay:-1,sign:1}];
+  },
+  continuousAt:(x:number)=>locating===undefined?Math.abs(x)<1e-6||Math.abs(x-L)<1e-6:Math.abs(x-locating)<1e-6,
+  stopBays
+ };
+}
 export function createDetailCollector(p:ProjectInput,props:Properties,subdivisions:number){
  const bracket=createBracketCollector(p);
  const existingBracket=createExistingBracketCollector(p);
  const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+railTopAboveSteel(p)-cap.shearCenter:railTopAboveSteel(p)+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
+ const longitudinal=longitudinalPaths(p,supports);
  // Bolted end bearings restrain the bottom flange at each support through four bolts into the seat: bolt shear
  // deformation over the flange, bearing plate and seat grip. Otherwise the bottom flange tie is the brace pair.
  const eb=activeEndBearing(p),ebBolt=eb?boltProperties(eb.bolts.grade,eb.bolts.diameter):undefined;
@@ -223,28 +252,36 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   // A wheel over a shared grid bears on the girder end on either side of the joint: both are bounded.
   const moved=joints.filter(v=>v.p>0),simple=p.system==='simple',Lbr=details.bearing.length;
   const splits=[{tag:'',ends:endActions},...(moved.length?[{tag:'-J',ends:endActions.map(v=>{const m=v.existing?undefined:moved.find(g=>g.bay===(v.end==='left'?v.bay:v.bay+1));return m?{...v,vertical:v.vertical+(v.end==='left'?-m.p:m.p)}:v;})}]:[])];
-  // Concurrent girder end forces at a station. Independent bays deliver traction at their own locating (left) end;
-  // for a straddling crane each occupied bay receives the FULL traction in a separate bounding scenario, avoiding
-  // an invented drive-wheel split. The bay carrying the force also carries its end couple: its left end lifts and
-  // its right end presses down for a force toward the right, and the reverse for the opposite sign.
+  // Concurrent girder end forces at a station. Independent bays deliver the longitudinal force at their own
+  // locating (left) end. Traction acts either way; for a straddling crane each occupied bay receives the FULL
+  // traction in a separate bounding scenario, avoiding an invented drive-wheel split. The crane stop force acts
+  // only on a bay that carries a stop, with the crane on it, toward the stop. The bay carrying the force also
+  // carries its end couple: its left end lifts and its right end presses down for a force toward the right, and
+  // the reverse for the opposite sign. A continuous girder delivers it at its locating support.
+  const actions=e.kind==='strength'&&e.axial?longitudinal.actions(e):[{bay:-1,sign:1}];
   const concurrent=(x:number)=>{
    const here=splits.map(s=>({tag:s.tag,ends:s.ends.filter(v=>Math.abs(v.x-x)<1e-6)})),out:{id:string;sign:number;couple:number;ends?:typeof endActions}[]=[];
    for(const [i,s] of here.entries()){
     if(i&&s.ends.every((v,j)=>v.vertical===here[0].ends[j].vertical))continue;
-    for(const bay of e.kind==='strength'&&simple?tractionBays(p,e):[-1])for(const sign of e.kind==='strength'&&e.axial?[-1,1]:[1]){
+    for(const {bay,sign} of actions){
      const couple=(v:{bay:number;end:'left'|'right';existing?:boolean})=>v.bay===bay&&!v.existing?(v.end==='left'?-1:1)*sign*(e.longitudinalCouple??0)/p.spans[v.bay-1]:0;
      out.push({id:simple?`${e.id}-T${bay}${s.tag}`:e.id,sign,couple:s.ends.reduce((a,v)=>a+couple(v),0),ends:simple?s.ends.map(v=>({...v,vertical:v.vertical+couple(v),longitudinal:v.bay===bay&&v.end==='left'?sign*e.axial:0})):undefined});
     }
    }
    return out;
   };
+  // Longitudinal force delivered at a station by a concurrent set: its bays' locating ends, or the continuous girder's locating support.
+  const delivered=(x:number,c:{sign:number;ends?:typeof endActions})=>c.ends?c.ends.reduce((a,v)=>a+v.longitudinal,0):e.kind==='strength'&&longitudinal.continuousAt(x)?c.sign*e.axial:0;
   // The bracket takes the same concurrent sets as the support force envelope, each girder reaction over the
   // inner 0.4 of its bearing plate.
   // A bay carrying the force away from this support leaves its reactions unchanged: each distinct set once.
+  // The seat also takes the locating bearing's longitudinal force and, through the bearing bolts, the bottom-flange
+  // lateral force of the girder ends at the grid, at their bearings' mean offset along the runway.
   if(bracket||existingBracket)for(const x of supports){const distinct=new Set<string>();for(const c of concurrent(x)){
    const loads=c.ends?c.ends.map(v=>({vertical:v.vertical,offset:seatOffset(v,Lbr),length:.4*Lbr})):[{vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,offset:0}];
-   const key=loads.map(v=>v.vertical).join();if(distinct.has(key))continue;distinct.add(key);
-   bracket?.observe(e.kind,c.id,x,loads,bin);
+   const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:delivered(x,c),bottom:reactions.get(x)?.bottom??0,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:0};
+   const key=[...loads.map(v=>v.vertical),horizontal.longitudinal].join();if(distinct.has(key))continue;distinct.add(key);
+   bracket?.observe(e.kind,c.id,x,loads,bin,horizontal);
    existingBracket?.observe(e.kind,c.id,x,loads,bin);
   }}
   if(e.kind==='strength'){
@@ -252,7 +289,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     result.demands.brace=Math.max(result.demands.brace,Math.abs(r.top),Math.abs(r.bottom));
     const support=supports.indexOf(x);
     for(const {id,sign,couple,ends} of concurrent(x)){
-     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple,top:r.top,bottom:r.bottom,longitudinal:ends?ends.reduce((a,v)=>a+v.longitudinal,0):(x===0||x===L)?sign*e.axial:0,torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
+     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple,top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);
      if(support>=0)forces.add(support,{id,combination:e.combination,vertical:ends?ends.reduce((sum,v)=>sum+v.vertical,0):item.vertical,moment:ends?ends.reduce((sum,v)=>sum+v.vertical*seatOffset(v,Lbr),0):0,longitudinal:item.longitudinal,top:r.top,bottom:r.bottom,ends:(ends??[]).map(v=>({bay:v.bay,end:v.end,vertical:v.vertical,offset:seatOffset(v,Lbr),...(v.existing?{existing:true}:{})}))});
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){

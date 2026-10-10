@@ -61,7 +61,8 @@ export function tieMovementChecks(s:CalculationSnapshot,ctx:{force:number;member
  // Gussets: two bars deliver their end shear and moment about the vertical axis; the plates bend out of plane.
  const V=(delta:number)=>2*12*E*Iy*delta/L**3,M=(delta:number)=>2*6*E*Iy*delta/L**2;
  const girderRoot=g?{b:g.rootLength,arm:g.topDrop-g.attachment.saddleThickness,weld:g.attachment.weldSize,name:'flange saddle gusset'}:{b:c.weldLength,arm:c.projection,weld:c.weldSize,name:'girder gusset'};
- const roots=[girderRoot,{b:hg,arm:g?.connection??(c.rows-1)*c.pitch+2*c.edge,weld:c.weldSize,name:'column gusset'}];
+ // The column gusset spans the bolt group and the clear gap from the bar ends to the column flange.
+ const roots=[girderRoot,{b:hg,arm:g?.columnGussetLength??(c.rows-1)*c.pitch+2*c.edge,weld:c.weldSize,name:'column gusset'}];
  const tg=t.gussetThickness,F=ctx.force;
  const plate=(x:typeof roots[number],delta:number,force:number)=>6*(M(delta)+V(delta)*x.arm)/(x.b*tg**2)+force/(x.b*tg);
  const weld=(x:typeof roots[number],delta:number,force:number)=>(force/(2*x.b)+(M(delta)+V(delta)*x.arm)/(tg*x.b)+V(delta)/(2*x.b))/(x.weld/Math.SQRT2);
@@ -88,7 +89,7 @@ export function tieMovementChecks(s:CalculationSnapshot,ctx:{force:number;member
   const lines=(c.rows-1)*c.pitch+c.edge,Agv=2*lines*tg,Anv=2*(lines-(c.rows-.5)*rel.width)*tg,Ant=(c.gauge-rel.slot)*tg;
   checks.push(compared('tie-release-block','Column gusset · block shear through the slots',F,blockShear(Agv,Anv,Ant,m.Fy,m.Fu,method),'force','R_n=\\min(0.6F_uA_{nv},0.6F_yA_{gv})+F_uA_{nt}','Block between the two slot lines toward the free end; slot width deducted on the shear planes and slot length on the tension plane.'));
   checks.push(compared('tie-release-ligament','Column gusset · material between slots',8/3*db-hole,c.gauge-rel.slot,'length','g-l_{slot}\\ge(8/3)d_b-d_h','Same clear material as standard holes at the minimum spacing.'));
-  checks.push(compared('tie-release-edge','Column gusset · edge beyond slot ends',rel.edge,(rel.height-c.gauge)/2-rel.travel,'length','(h_g-g)/2-u\\ge1.5d_b-d_h/2+w_{slot}/2','Same clear material as a standard hole at the AISC J3.4 minimum edge distance.'));
+  checks.push(compared('tie-release-edge','Column gusset · edge beyond slot ends',rel.edge+rel.tolerance,(rel.height-c.gauge)/2-rel.travel,'length','(h_g-g)/2-u\\ge1.5d_b-d_h/2+w_{slot}/2+\\delta_{slot}','Same clear material as a standard hole at the AISC J3.4 minimum edge distance, plus a 1/16 in slot location tolerance at each slot end. The gusset height is that requirement rounded up to a 1/4 in cutting increment, and the root welds run the full height.'));
   checks.push(compared('tie-release-end-edge','Column gusset · end edge beyond slots',rel.edge,c.edge,'length','e\\ge1.5d_b-d_h/2+w_{slot}/2','Toward the girder; the tie force pulls the sleeves toward this edge.'));
   if(byOthers)checks.push({id:'tie-move-support',group:'Tie movement',title:'Bracket by others · vertical deflection limit for the tie slots',status:'excluded',equation:'\\Delta_{support}\\le u-\\theta d_{setback}-1/16\\,in',demand:undefined,capacity:Math.max(0,rel.travel-mv.vertical-install),quantity:'length',note:`Criterion for the bracket designer: vertical deflection at the bearing under all crane loads with impact at most ${fmt(Math.max(0,rel.travel-mv.vertical-install))}, within the column gusset slot travel.`,referenceIds:['tieback-practice']});
  }else if(byOthers){

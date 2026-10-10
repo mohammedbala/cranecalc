@@ -20,7 +20,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
   expect(s.checks.filter(c=>c.status==='fail').map(c=>c.id)).toEqual([]);
   for(const id of ['brace-tension','brace-pin','brace-pin-bearing','brace-gusset-rupture','brace-gusset-tearout','brace-gusset-yield','brace-gusset-weld','brace-column-web',
    'brace-strut','brace-strut-slenderness','brace-strut-tension','brace-strut-bolts','brace-strut-bearing','brace-strut-block','brace-strut-tab','brace-seat-weld','brace-collector-bearing',
-   'brace-seismic-basis','brace-seismic-drift','brace-separation','column-torsion','base-uplift'])expect(check(id)?.status,id).toBe('pass');
+   'brace-seismic-basis','brace-seismic-drift','brace-separation','column-torsion','base-uplift','brace-rod-crossing','brace-offset-gusset','brace-rod-torsion'])expect(check(id)?.status,id).toBe('pass');
   // Nothing of the new structure is left to others.
   expect(s.checks.some(c=>c.id==='supporting-structure'||c.id==='brace-by-others')).toBe(false);
  });
@@ -57,6 +57,8 @@ describe('rod X-bracing between new freestanding columns',()=>{
   const dead=sp.D+sectionProperties(column).weight*p.existingColumn!.height;
   expect(comp.P).toBeCloseTo(1.2*dead+1.2*sp.Cd+sp.Cv+V,3);expect(comp.Vy).toBe(0);expect(comp.torque).toBeCloseTo(Cbs*e,3);
   expect(lift.P).toBeCloseTo(1.2*dead+1.2*Math.min(0,sp.craneMinimum)-V,3);expect(lift.uplift).toBeCloseTo(V,3);expect(lift.Vy).toBeCloseTo(Cbs,3);
+  // The offset rod (upper end at grid 3) lands on the grid 2 base off the column centerline: its torque adds there.
+  expect(lift.torque).toBeCloseTo(Cbs*e+Cbs*bracingGeometry(p,column).cross.offset,3);
   // Grid 1 locates its girder but is not braced; grid 4 does neither.
   expect(base1.actions.some(a=>a.id.endsWith('brace uplift'))).toBe(false);expect(base1.actions.find(a=>a.id==='LRFD AIST bumper · brace')!.torque).toBeCloseTo(Cbs*e,3);
   expect(base4.actions.some(a=>a.id.includes('· brace'))).toBe(false);
@@ -79,6 +81,19 @@ describe('rod X-bracing between new freestanding columns',()=>{
   expect(sep.building).toBeCloseTo(1.5*inch,6);expect(sep.buildingEntered).toBe(true);
   expect(sep.required).toBeCloseTo(Math.hypot(Math.max(sep.across,sep.along),sep.building),9);
   expect(sep.along).toBeCloseTo(s.bracingSystem!.seismic!.drift,9);
+ });
+ it('passes the two rods of the X in parallel planes, one offset by the strut web and a filler',()=>{
+  const g=bracingGeometry(p,column),b=p.longitudinalBracing!,d=b.design!,cr=g.cross,r=s.bracingSystem!;
+  // Rod B's plane: the gusset thickness, the strut web and the filler from rod A's, at least 1/4 in clear of it.
+  expect(cr.offset).toBeCloseTo(d.gusset.thickness+g.strut.tw+cr.filler,9);expect(cr.clear).toBeGreaterThanOrEqual(inch/4-1e-9);
+  expect(cr.filler/(inch/16)).toBeCloseTo(Math.round(cr.filler/(inch/16)),9);expect(cr.offset-inch/16-b.rod.diameter).toBeLessThan(inch/4);
+  expect(check('brace-rod-crossing')!.capacity).toBeCloseTo(cr.offset,9);
+  // J5.2(b): a filler over 1/4 in reduces the strut bolt shear.
+  expect(check('brace-strut-bolts')!.note).toContain('filler lies under the strut web');
+  if(cr.filler>inch/4)expect(check('brace-strut-bolts')!.equation).toContain('0.4(t_f-0.25)');
+  // The strut force acts off rod B's gusset by the offset less the lap; the rod's torque adds to the column torsion.
+  expect(check('brace-offset-gusset')!.note).toMatch(/acts e = [\d.]+ in off the gusset plane/);
+  expect(r.rodTorsion!.T).toBeCloseTo(r.strutForce.H/r.layout.spans.length*cr.offset,6);expect(r.rodTorsion!.U).toBeGreaterThan(r.rodTorsion!.base);
  });
  it('checks the bracket seat fillet for the girder force and its couple',()=>{
   const d=p.longitudinalBracing!.design!,br=p.details!.bracket!,F=s.bracingSystem!.seatForce.F,Lw=Math.min(br.seatLength,column.bf)-inch/2,e=girderOffset(p)-column.d/2;

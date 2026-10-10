@@ -6,7 +6,7 @@ import {sectionProperties} from './section';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 import {seismicBasis,seismicCombinations} from './runwaySeismic';
-import {alongSeismic,braceCases,braceShare,designsBracing,girderOffset} from './newColumnBracing';
+import {alongSeismic,braceCases,braceShare,bracingGeometry,bracingLayout,designsBracing,girderOffset,offsetRodEnds} from './newColumnBracing';
 import type {SupportReactionSet} from './supportReactions';
 import type {CheckResult,ProjectInput} from './types';
 import type {ExistingColumnResult} from './existingColumn';
@@ -89,16 +89,17 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
   // Braced new columns: the rod whose top ends at this column compresses it; the rod whose bottom ends here lifts
   // the base and shears it along the runway; at a locating column the girder's longitudinal force is a torque.
   if(designed){
-   const share=braceShare(p,j);
+   // The offset rod B lands on the base of the lower-numbered column of each braced span off the column centerline.
+   const share=braceShare(p,j),rodOffset=offsetRodEnds(p).base(j)?bracingGeometry(p,section).cross.offset/bracingLayout(p).spans.length:0;
    for(const k of designed.cases)if(share.vertical||share.locating){
     const torque=share.locating?k.Hbay*designed.offset:0,V=k.H*share.vertical;
-    const at=(crane:number,tag:string,brace:number,Vy:number):BaseAction=>{
+    const at=(crane:number,tag:string,brace:number,Vy:number,rod=0):BaseAction=>{
      const runway=k.D*sp.D+crane,Mh=Math.abs(k.side*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.side*sp.Css*side.reactions.base);
      return {id:`${k.id}${tag}`,equation:k.equation,P:k.D*dead+crane+brace,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:0,Vy,
-      Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:k.seismic||undefined,uplift:Math.max(0,-brace),torque};
+      Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:k.seismic||undefined,uplift:Math.max(0,-brace),torque:torque+rod};
     };
     actions.push(at(k.live*live+k.Cd*sp.Cd+k.Cv*sp.Cv,' · brace',V,0));
-    if(V>0)actions.push(at(Math.max(k.live,k.Cd,k.Cv)*lift,' · brace uplift',-V,k.H*share.shear));
+    if(V>0)actions.push(at(Math.max(k.live,k.Cd,k.Cv)*lift,' · brace uplift',-V,k.H*share.shear,k.H*rodOffset));
    }
   }
   // Seismic across the runway at the girder, with overstrength for the base, anchors and footing (ASCE 7 §12.2.5.2).

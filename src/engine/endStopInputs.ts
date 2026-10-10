@@ -20,17 +20,23 @@ export const endStopSchema=z.object({
  face:z.object({thickness:pos,height:pos}),
  /** Two stiffeners behind the face plate; spacing is center to center across the runway. */
  stiffener:z.object({thickness:pos,length:pos,spacing:pos}),
- /** Front bolts sit frontClear behind the face plate; back bolts sit edge from the back of the base plate. */
+ /**
+  * Front bolts sit frontClear (bolt C/L to the back face of the face plate) behind the face plate; back bolts sit
+  * edge from the back of the base plate. The gauge straddles the stiffeners: heads clear the face plate and
+  * stiffener weld toes by the socket clearance.
+  */
  bolts:z.object({diameter:pos,grade:z.enum(['A325','A490']),gauge:pos,frontClear:pos,edge:pos}),
  weldSize:pos,
  source:z.string().max(300)
 });
 export type EndStopInput=z.infer<typeof endStopSchema>;
 const inch=25.4;
-// Illustrative 3/4 in A325 stop for a light crane; size it for the supplier bumper force.
+// Illustrative 3/4 in A325 stop for a light crane; size it for the supplier bumper force. The 7 in gauge and the
+// front bolts 1 3/4 in behind the face plate keep the heads 1 1/4 in (socket clearance) clear of the 5/16 fillet
+// toes at the 3 in stiffeners and the face plate; the 10 in plates keep 1 1/2 in edge distance.
 export const defaultEndStop:EndStopInput={enabled:false,bumperHeight:6*inch,bumperDiameter:6*inch,setback:.5*inch,railGap:1*inch,
- base:{length:9*inch,width:9*inch,thickness:1*inch},face:{thickness:1*inch,height:14*inch},stiffener:{thickness:.75*inch,length:7*inch,spacing:3*inch},
- bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.5*inch,edge:1.5*inch},weldSize:5/16*inch,source:''};
+ base:{length:9*inch,width:10*inch,thickness:1*inch},face:{thickness:1*inch,height:14*inch},stiffener:{thickness:.75*inch,length:7*inch,spacing:3*inch},
+ bolts:{diameter:.75*inch,grade:'A325',gauge:7*inch,frontClear:1.75*inch,edge:1.5*inch},weldSize:5/16*inch,source:''};
 
 
 /** A crane whose stop force is not taken by a building-mounted stop needs girder-mounted stops. */

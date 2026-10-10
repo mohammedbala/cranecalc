@@ -4,7 +4,7 @@ import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationPr
 import {drawingSheetSet,resolveSheetSet,sheetIndex,detailReferences,detailTopics} from '../src/components/planSheet';
 import {sheetsDxf,sheetEntities,drawingSetDxf,sheetLayers} from '../src/components/sheetDxf';
 import {runwayElevations,issueStatus,girderMarks} from '../src/engine/drawingData';
-import {drawingLength} from '../src/components/drawingFormat';
+import {drawingLength,plateInches} from '../src/components/drawingFormat';
 import {multiLeader,textWidth,wrapToWidth,viewTitle,detailRef,sheetDrawingScale,withDetailRoom,text,line} from '../src/components/sheetGraphics';
 import {annotationClashes} from '../src/components/detailSheet';
 import {coverSheetSvg} from '../src/components/coverSheet';
@@ -156,9 +156,18 @@ describe('drawings agree with the calculation',()=>{
    expect(f[1].reversible.vertical&&f[2].reversible.vertical&&f[1].reversible.moment).toBe(true);expect(Math.abs(M[2])).toBeCloseTo(Math.abs(M[1]),3);
    for(const v of f)expect(cells).toContain(kip(v.maxVertical.vertical));
    expect(cells).toContain(`±${format(Math.abs(f[1].maxVertical.moment),'moment','US',2).toUpperCase()}`);
-   // Longitudinal force at the three locating bearings, none at the sliding end; the bumper governs.
+   // Longitudinal force at the three locating bearings, none at the sliding end. The crane stop force reaches only
+   // the locating ends of the end bays that carry the stops (grids 1 and 3), toward the stop; grid 2 takes traction.
    expect(f.map(v=>Math.abs(v.longitudinal.longitudinal)>0)).toEqual([true,true,true,false]);
-   expect(cells).toContain(`±${kip(Math.abs(f[0].longitudinal.longitudinal))} (8)`);expect(cells).toContain(`±${kip(Math.abs(f[0].top.top))} (${f[0].top.combination.split(' ')[1].toUpperCase()})`);
+   expect([f[0],f[2]].map(v=>v.longitudinal.combination)).toEqual(['LRFD 8','LRFD 8']);expect(f[1].longitudinal.combination).not.toBe('LRFD 8');
+   expect(f[0].longitudinal.longitudinal).toBeLessThan(0);expect(f[2].longitudinal.longitudinal).toBeGreaterThan(0);
+   expect(Math.abs(f[1].longitudinal.longitudinal)).toBeLessThan(Math.abs(f[0].longitudinal.longitudinal));
+   expect(f.slice(0,3).map(v=>v.reversible.longitudinal)).toEqual([false,true,false]);
+   expect(cells).toContain(`-${kip(-f[0].longitudinal.longitudinal)}`);expect(cells).toContain(`+${kip(f[2].longitudinal.longitudinal)}`);expect(cells).toContain(`±${kip(Math.abs(f[1].longitudinal.longitudinal))}`);
+   // H TOP and H BOTTOM of one case act together, opposite: a couple, signed relative to each other.
+   expect(Math.sign(f[0].top.top)).toBe(-Math.sign(f[0].top.bottom));
+   expect(cells).toContain(`±${kip(Math.abs(f[0].top.top))}`);expect(cells).toContain(`-${kip(Math.abs(f[0].top.bottom))}`);
+   expect(cells.join(' ')).toContain('H BOTTOM IS SIGNED RELATIVE TO H TOP');expect(cells.join(' ')).not.toContain('ITS OWN MAXIMUM');
   }
   // The bracket is checked for the same concurrent sets, so its governing rows mirror too.
   const st=capped.detailResults!.bracket!.stations;expect(st[3].vertical).toBeCloseTo(st[0].vertical,6);expect(st[3].leftRib).toBeCloseTo(st[0].rightRib,6);
@@ -168,13 +177,55 @@ describe('drawings agree with the calculation',()=>{
  },120000);
 });
 
+describe('welded bracket, new-column and bracing details',()=>{
+ // A detail's own drawing, from its view group to the next view group on the sheet.
+ const view=(svg:string,name:string)=>{const i=svg.indexOf(`data-view="${name}"`);expect(i,name).toBeGreaterThan(0);const j=svg.indexOf('data-view="',i+12);return svg.slice(i,j<0?undefined:j);};
+ const sheetWith=(set:ReturnType<typeof drawingSheetSet>,name:string)=>set.find(v=>v.svg.includes(`data-view="${name}"`))!;
+ it('lays out the bearing holes on the bracket seat, keys its sections and defines the seat-to-column weld',()=>{
+  for(const [s,set,field] of [[capped,cappedSet,true],[newColumn,newColumnSet,false]] as const){
+   const sheet=sheetWith(set,'welded-bracket-plan').svg,plan=view(sheet,'welded-bracket-plan'),side=view(sheet,'welded-bracket-side'),eb=s.input.details!.endBearing!;
+   // Two bearing plates, each with four standard holes at the end bearing gauge, as ordinates from the grid.
+   expect(plan.match(/<circle class="runway-line"/g)).toHaveLength(8);
+   expect(texts(plan).join(' ')).toContain(`8 - 13/16" STD. HOLES IN SEAT`);expect(texts(plan)).toContain('0\'-2 1/2"');expect(texts(plan)).toContain('0\'-10 1/2"');
+   expect(texts(plan).join(' ')).toContain(`ROWS AT ${drawingLength(eb.bolts.gauge,'US')} GAUGE ON THE GIRDER C/L`);
+   expect(plan).toContain('data-section-cut="COLUMN BRACKET / TRANSVERSE SECTION"');expect(plan).toContain('data-section-cut="BRACKET ELEVATION / LOOKING AT COLUMN"');
+   // The transverse section: no stray reference line from the column; the seat fillet with its length in every case.
+   expect(side).not.toMatch(/<line class="reference-line"/);
+   expect(texts(side)).toContain(`SEAT PL TO COL. FLANGE, TOP, ${field?'FIELD':'SHOP'}`);expect(texts(side)).toContain(drawingLength(Math.min(s.input.details!.bracket!.seatLength,s.input.details!.bracket!.receiver.width)-12.7,'US'));
+   const notes=texts(view(sheet,'bracket-notes')).join(' ');
+   expect(notes).not.toContain('GRAVITY BEARINGS ONLY');expect(notes).not.toContain('SEPARATE COLUMN LOAD PATHS');
+   expect(notes).toContain('H TOP DOES NOT ENTER THE BRACKET');expect(notes).toContain('AS ONE WELD GROUP WITH THE CONCURRENT VERTICAL LOAD');
+   for(const id of ['bracket-column-weld','bracket-seat-flange','bracket-seat-web','bracket-fatigue-columnWeld'])expect(s.checks.find(c=>c.id===id)?.status,id).toBe('pass');
+  }
+ },120000);
+ it('fills the new-column and bracing sheet and draws the strut, gussets, rod crossing and section keys',()=>{
+  const sheet=sheetWith(newColumnSet,'braced-bay-elevation').svg;
+  // Every cell of the 3 x 4 grid is taken: the column elevation, braced bay and strut plans span two rows.
+  const cells=[...sheet.matchAll(/data-detail-cell="(\d+),(\d+),(\d+)"/g)].flatMap(m=>Array.from({length:+m[3]},(_,i)=>`${m[1]},${+m[2]+i}`));
+  expect(new Set(cells).size).toBe(12);expect(cells).toHaveLength(12);
+  const elevation=texts(view(sheet,'new-column-elevation')).join(' ');
+  expect(elevation).toContain('W8X24 STRUT AT W.P.,');expect(elevation).toContain('ROD GUSSETS, BRACED COLUMNS;');
+  expect(view(sheet,'footing-plan')).toContain('data-section-cut="FOOTING / SECTION"');
+  expect(view(sheet,'braced-bay-elevation')).toContain('data-section-cut="ROD CROSSING / SECTION AT MID-BAY"');
+  const crossing=texts(view(sheet,'rod-crossing')).join(' '),g=newColumn.bracingSystem!.geometry;
+  expect(crossing).toContain(`${drawingLength(g.cross.clear,'US')} CLEAR`);expect(crossing).toContain('ROD 3-2, IN THE PLANE OF ITS');
+  expect(texts(view(sheet,'strut-plan')).join(' ')).toContain(`${plateInches(g.cross.filler,'US')} FILLER UNDER`);
+  expect(texts(sheet).join(' ')).toContain('ANCHOR GROUP (LRFD): TENSION ON THE 2-ROD ROW / SHEAR ON ALL 4 RODS');
+  for(const id of ['brace-rod-crossing','brace-offset-gusset','brace-rod-torsion'])expect(newColumn.checks.find(c=>c.id===id)?.status,id).toBe('pass');
+  // SI: no inch, psi, psf, ksi or kip residue in these details and their notes.
+  const siSheet=sheetWith(sets().newColumnSI,'braced-bay-elevation').svg,siBracket=sheetWith(sets().cappedSI,'welded-bracket-plan').svg;
+  for(const [svg,names] of [[siSheet,['new-column-elevation','base-plate-plan','footing-plan','footing-section','braced-bay-elevation','strut-plan','brace-top-connection','brace-base-connection','rod-crossing','new-column-notes','bracing-notes']],[siBracket,['welded-bracket-side','welded-bracket-plan','welded-bracket-face','bracket-notes']]] as const)
+   for(const name of names){const t=texts(view(svg,name)).join(' ');expect(t,name).not.toMatch(/"|\bPSF\b|\bPSI\b|\bKSI\b|\bKIP\b/);}
+ },300000);
+});
+
 describe('issue status',()=>{
  const issued=(patch:(s:CalculationSnapshot)=>void)=>{const s=structuredClone(capped);s.input.reportPurpose='project';patch(s);return issueStatus(s);};
  it('only issues validated, sealed-ready packages',()=>{
   expect(issueStatus(capped).label).toBe('DEMONSTRATION - NOT FOR CONSTRUCTION');
   const preliminary=issued(()=>{});expect(preliminary.issued).toBe(false);expect(preliminary.reasons).toContain('Enter the engineer of record, firm and license');expect(preliminary.reasons).toContain('Select an issue purpose');
   // Structure the calculation leaves unchecked needs the engineer's evaluation referenced before issue.
-  const unreferenced=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};});
+  const unreferenced=issued(s=>{delete s.input.drawing!.existingEvaluation;s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};});
   expect(unreferenced.reasons).toEqual(['Reference the engineer of record\'s evaluation of the structure not checked by this calculation']);
   const ready=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};s.input.drawing!.existingEvaluation='Existing structure evaluation, report 24-117';});
   expect(ready).toEqual({issued:true,label:'ISSUED FOR PERMIT',reasons:[]});

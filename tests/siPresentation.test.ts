@@ -30,7 +30,7 @@ describe('SI project presentation',()=>{
   const input=withSiUnits(cappedDemonstrationProject()),s:CalculationSnapshot={input,revision:'SI-review',createdAt:'2026-10-09',checks:[],properties:null,analysis:null,errors:[],warnings:[],referenceVersion:'',eligible:false};
   const notes=structuralGeneralNotes(s).join(' '),svg=capSheetSvg(s),html=renderToStaticMarkup(createElement(AistInputs,{units:'SI',input:input.aist,onChange:()=>{},numeric:()=>null}));
   expect(notes).toContain('MPA WELD METAL');expect(notes).not.toContain('KSI');
-  expect(svg).toContain('914.4 X 609.6 MM');expect(svg).toContain('width="914.4mm" height="609.6mm"');expect(svg).toContain('SCALE: 1:');expect(svg).not.toContain('KSI');
+  expect(svg).toContain('914 X 610 MM');expect(svg).toContain('width="914.4mm" height="609.6mm"');expect(svg).toContain('SCALE: 1:');expect(svg).not.toContain('KSI');
   expect(html).toContain('6.35 mm');expect(html).toContain('7.9375 mm');expect(html).toContain('222.41 kN');expect(html).toContain('609.6 mm');expect(html).not.toMatch(/\bkip\b|\bin minimum\b/);
  });
 });

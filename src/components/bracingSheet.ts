@@ -3,9 +3,10 @@ import {format} from '../engine/units';
 import {existingColumnSection} from '../engine/existingColumn';
 import {anchorHardware,columnBaseElevation} from '../engine/columnBaseInputs';
 import {bracingDesign,girderOffset} from '../engine/newColumnBracing';
+import {seatColumnWeld} from '../engine/bracketDesign';
 import {runwayElevations} from '../engine/drawingData';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import type {DetailTopic,DetailView} from './detailSheet';
 
@@ -60,13 +61,16 @@ function rodLine(a:XY,b:XY,rod:number,k:number,gaps:[number,number][]=[]){
  return spans.map(([s0,s1])=>[-h,h].map(w=>line([a[0]+u[0]*s0+v[0]*w,a[1]+u[1]*s0+v[1]*w],[a[0]+u[0]*s1+v[0]*w,a[1]+u[1]*s1+v[1]*w],'runway-line')).join('')).join('');
 }
 
+/** Section at mid-bay showing how the two rods of an X pass each other; keyed on the braced bay elevation. */
+export const rodCrossingTitle='ROD CROSSING / SECTION AT MID-BAY';
 /** Rod X-bracing between the new columns: braced bay elevation, the connections at the work points and the plan at the strut. */
 export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,u=p.units,r=s.bracingSystem!,g=r.geometry,L=r.layout,b=p.longitudinalBracing!,d=bracingDesign(p),col=p.existingColumn!,base=p.columnBase!;
  const c=existingColumnSection(p).section,colName=col.shape||'BUILT-UP',sg=g.strut,dt=p.details!,br=dt.bracket?.enabled?dt.bracket:undefined;
- const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,2);return u==='US'?t.toUpperCase():t;};
- const rodName=`${size(b.rod.diameter)} DIA. ROD`,pinName=`${size(g.dp)} DIA. PIN`,gussetName=`PL ${size(g.t)} GUSSET`,boltName=`2 - ${size(d.strut.boltDiameter)} ${d.strut.grade} BOLTS`;
- const grids=(i:number)=>[i,i+1].map(String),spanGrids=L.spans.map(i=>grids(i).join('-')).join(', ');
+ const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
+ const cr=g.cross,rodName=`${size(b.rod.diameter)} DIA. ROD`,pinName=`${size(g.dp)} DIA. PIN`,gussetName=`PL ${size(g.t)} GUSSET`,boltName=`2 - ${size(d.strut.boltDiameter)} ${d.strut.grade} BOLTS`;
+ const grids=(i:number)=>[i,i+1].map(String),spanGrids=L.spans.map(i=>grids(i).join('-')).join(', '),[gridA,gridB]=grids(L.spans[0]);
+ const offsetLabel=`${dim(cr.offset)} OFF COLUMN C/L TOWARD GIRDER`;
  const el=runwayElevations(p),datum=p.drawing?.datumElevation??0,elev=(z:number)=>`EL. ${dim(datum+columnBaseElevation(base)+z)}`;
  const weldLabel=size(d.weld),views:DetailView[]=[];
  const turnAt=.25;
@@ -98,12 +102,15 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   for(const x of [-sg.end,W+sg.end])svg+=line([X(x),Y(h+half)],[X(x),Y(h-half)],'runway-line');
   for(const x of [xMin,xMax])svg+=breakLine([X(x),Y(h+half)-4],[X(x),Y(h-half)+4])+breakLine([X(x),Y(gt)-4],[X(x),Y(gb)+4]);
   // Rods pin to pin with a turnbuckle near the lower end; the X crosses at mid-bay without a connection.
-  const rods:{from:XY;to:XY}[]=[];
+  const rods:{from:XY;to:XY}[]=[],rodWidth=Math.max(b.rod.diameter,.6/kk);
   for(const [x0,dir] of [[0,1],[W,-1]] as const){
    const tp:XY=[X(x0+dir*g.top.pin[0]),Y(h+g.top.pin[1])],bp:XY=[X(W-x0-dir*g.bottom.pin[0]),Y(g.bottom.pin[1])];
    const Lr=Math.hypot(bp[0]-tp[0],bp[1]-tp[1]),uu:XY=[(bp[0]-tp[0])/Lr,(bp[1]-tp[1])/Lr],tb:XY=[tp[0]+uu[0]*Lr*(1-turnAt),tp[1]+uu[1]*Lr*(1-turnAt)];
    const cl=2.6*g.dp*kk,tl=3*b.rod.diameter*kk;
-   svg+=rodLine(tp,bp,Math.max(b.rod.diameter,.6/kk),kk,[[0,cl],[Lr*(1-turnAt)-tl,Lr*(1-turnAt)+tl],[Lr-cl,Lr]]);
+   // Rod B, beyond rod A, is hidden where it passes behind it at mid-bay.
+   const behindA=dir<0?[[Lr/2-4,Lr/2+4]] as [number,number][]:[];
+   svg+=rodLine(tp,bp,rodWidth,kk,[[0,cl],[Lr*(1-turnAt)-tl,Lr*(1-turnAt)+tl],[Lr-cl,Lr],...behindA]);
+   for(const [s0,s1] of behindA)for(const w of [-1,1]){const v:XY=[-uu[1],uu[0]],o=w*rodWidth/2*kk;svg+=line([tp[0]+uu[0]*s0+v[0]*o,tp[1]+uu[1]*s0+v[1]*o],[tp[0]+uu[0]*s1+v[0]*o,tp[1]+uu[1]*s1+v[1]*o],'hidden-line');}
    svg+=clevis(tp,uu,g.dp,b.rod.diameter,kk)+clevis(bp,[-uu[0],-uu[1]],g.dp,b.rod.diameter,kk)+turnbuckle(tb,uu,b.rod.diameter,kk);
    // Gussets at both ends, on the side of the web toward the braced span.
    const up=r.outlines.upper.map(([x,z]):XY=>[X(x0+dir*x),Y(h+z)]),lo=r.outlines.lower.map(([x,z]):XY=>[X(W-x0-dir*x),Y(z)]);
@@ -114,9 +121,14 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   for(const [i,x] of [0,W].entries())svg+=bubble(X(x),Y(zMax)-26,grids(L.spans[0])[i],10);
   // Dimensions: bay width below the footings, work point height at the left, rod length along the first rod.
   svg+=dimH(X(0),X(W),Y(ftgBot)+4,Y(ftgBot)+22,dim(W))+dimV(Y(h),Y(0),X(-c.bf/2)-4,X(xMin)-10,`${dim(h)} W.P. TO W.P.`);
-  const mid:XY=[(X(0)+X(W))/2,(Y(h)+Y(0))/2],note='RODS CROSS, NOT CONNECTED',nw=textWidth(note,8);
-  svg+=text(mid[0],Y(h*.78),`ROD W.P. TO W.P. ${dim(L.diagonal)}`,8,'middle');
-  svg+=multiLeader([[mid[0],mid[1]+2]],[mid[0]-nw/2,Y(h*.16)],[note],8);
+  // Where the rods cross: the intersection of their centerlines in the elevation.
+  const cross=(()=>{const [a,c]=rods,d1:XY=[a.to[0]-a.from[0],a.to[1]-a.from[1]],d2:XY=[c.to[0]-c.from[0],c.to[1]-c.from[1]],den=d1[0]*d2[1]-d1[1]*d2[0],t=((c.from[0]-a.from[0])*d2[1]-(c.from[1]-a.from[1])*d2[0])/den;
+   return [a.from[0]+d1[0]*t,a.from[1]+d1[1]*t] as XY;})();
+  const notes=['RODS CROSS, NOT CONNECTED;',`ROD ${gridB}-${gridA} BEYOND, ${dim(cr.offset)} OFF;`,`SEE ${detailRef(rodCrossingTitle)}`],nw=Math.max(...notes.map(v=>textWidth(v,8)));
+  svg+=text(cross[0],Y(h*.78),`ROD W.P. TO W.P. ${dim(L.diagonal)}`,8,'middle');
+  svg+=multiLeader([[cross[0],cross[1]+2]],[cross[0]-nw/2,Y(h*.2)],notes,8);
+  // Section at mid-bay, from above the strut, looking toward the lower-numbered grid.
+  svg+=sectionCut([cross[0],Y(h+half)-6],[cross[0],cross[1]+10],[-1,0],rodCrossingTitle,['b']);
   // Callouts in a column at the right, ordered by height.
   const [ra]=rods,at=(t:number):XY=>[ra.from[0]+(ra.to[0]-ra.from[0])*t,ra.from[1]+(ra.to[1]-ra.from[1])*t];
   const lx=X(xMax)+16,items:{at:XY;labels:string[]}[]=[
@@ -176,7 +188,9 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   const dimY=lower?Y(-base.plate.thickness-base.grout-inch)+16:Y(sg.d/2)-14;
   if(lower)svg+=dimH(X(0),X(pin[0]),Y(-base.plate.thickness-base.grout),dimY,dim(pin[0]),'right');
   else{
-   svg+=dimH(X(0),X(sg.end),Y(sg.d/2),dimY,dim(sg.end),'left')+dimH(X(sg.end),X(sg.bolts[0]),Y(sg.d/2),dimY,dim(sg.edge),'left',X(0))+dimH(X(sg.bolts[0]),X(sg.bolts[1]),Y(sg.d/2),dimY,dim(sg.pitch),'right');
+   // The short edge distance on its own tier, its text beside its segment.
+   svg+=dimH(X(0),X(sg.end),Y(sg.d/2),dimY,dim(sg.end),'left')+dimH(X(sg.bolts[0]),X(sg.bolts[1]),Y(sg.d/2),dimY,dim(sg.pitch),'right');
+   svg+=dimH(X(sg.end),X(sg.bolts[0]),Y(sg.d/2),dimY-14,dim(sg.edge),'right');
    svg+=dimH(X(0),X(pin[0]),Y(pin[1]),Y(zBot)+6,dim(pin[0]),'right');
   }
   const weld=lower?r.outlines.welds.lower:undefined,upper=r.outlines.welds.upper,welds=lower?`${dim(weld!.web)} TO WEB, ${dim(weld!.plate-g.x0)} TO BASE PL`:`${dim(upper.to-upper.from)} TO COLUMN WEB`;
@@ -192,53 +206,117 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   svg+=labelColumn(items,X(xMax)+40,Y(zTop),Y(zBot));
   const wp=lower?'W.P. AT T/BASE PL':'W.P. AT BRG. SEAT',ww=textWidth(wp,8);
   svg+=multiLeader([[X(0)-2,Y(0)+1]],[X(-c.bf/2)-18-ww,Y(lower?zTop*.45:-sg.d/2-2*inch)],[wp],8);
+  // Rod B's end at the other column: the same plates, mirrored and offset toward the girder.
+  // As drawn the lower rod rises toward the next grid: rod B's base, at the lower-numbered column.
+  const other=lower?[`SHOWN AT GRID ${gridA}, ROD ${gridB}-${gridA}: GUSSET ${offsetLabel}.`,`AT GRID ${gridB}, ROD ${gridA}-${gridB}: MIRRORED, GUSSET ON COLUMN C/L.`]:[`SHOWN AT GRID ${gridA}, ROD ${gridA}-${gridB}. AT GRID ${gridB}, ROD ${gridB}-${gridA}: MIRRORED,`,`GUSSET ${offsetLabel}${cr.filler?`; ${size(cr.filler)} FILLER UNDER THE STRUT WEB`:''}.`];
+  other.forEach((v,i)=>{svg+=text(X(xMin),Y(zBot)+(lower?40:30)+i*10,v,7.5);});
   return {svg:svg+'</g>',scale:k.label};
  };
  views.push({title:detailTitles.braceTop,render:connection(false)});
  views.push({title:detailTitles.braceBase,render:connection(true)});
 
- // 4: Plan at the work point: the column, gusset and tab on either side of the web with the strut webs lapped,
- // and the bracket seat welded to the column flange, which brings the girder's longitudinal force into the column.
- views.push({title:detailTitles.strutPlan,render:()=>{
+ // 4: Plans at the work point of both columns of a braced span, over two rows. At the lower-numbered column rod A's
+ // gusset is on the column centerline with the strut web on its girder face; at the higher-numbered column rod B's
+ // gusset is offset toward the girder, the strut web on its other face with the filler between. The strut tab on
+ // the other side of each web, the bracket seat welded to the column flange (the collector), the rods below the cut.
+ views.push({title:detailTitles.strutPlan,rows:2,render:()=>{
   const e=girderOffset(p),proj=br?.seatProjection??0,len=br?.seatLength??0,ext=sg.tabEnd+8*inch;
   const xMin=-ext,xMax=ext,yMin=-c.d/2-4*inch,yMax=Math.max(e+4*inch,c.d/2+proj+2*inch);
-  const k=drawingScale(Math.min(320/(xMax-xMin),270/(yMax-yMin)),u),kk=k.pointsPerMm,X=(x:number)=>100+(x-xMin)*kk,Y=(y:number)=>300-(y-yMin)*kk;
+  const k=drawingScale(Math.min(300/(xMax-xMin),280/(yMax-yMin)),u),kk=k.pointsPerMm,gt=g.t,gx=Math.max(...r.outlines.upper.map(q=>q[0])),web=gt/2;
   let svg='<g data-view="strut-plan">';
-  // Column cut at the work point: flanges along the runway, web across it.
-  const t=c.tf,w=c.tw;
-  svg+=path([[X(-c.bf/2),Y(c.d/2)],[X(c.bf/2),Y(c.d/2)],[X(c.bf/2),Y(c.d/2-t)],[X(w/2),Y(c.d/2-t)],[X(w/2),Y(-c.d/2+t)],[X(c.bf/2),Y(-c.d/2+t)],[X(c.bf/2),Y(-c.d/2)],[X(-c.bf/2),Y(-c.d/2)],[X(-c.bf/2),Y(-c.d/2+t)],[X(-w/2),Y(-c.d/2+t)],[X(-w/2),Y(c.d/2-t)],[X(-c.bf/2),Y(c.d/2-t)]]);
-  svg+=line([X(xMin),Y(0)],[X(xMax),Y(0)],'grid-line')+line([X(0),Y(yMin)],[X(0),Y(yMax)],'grid-line');
-  // Gusset (braced side) and tab (other side) on the column centerline, the strut webs lapped on their far face.
-  const gx=Math.max(...r.outlines.upper.map(q=>q[0])),gt=g.t,lap=gt/2;
-  svg+=rect(X(g.x0),Y(gt/2),(gx-g.x0)*kk,gt*kk,'runway-line')+rect(X(-sg.tabEnd),Y(gt/2),(sg.tabEnd-g.x0)*kk,gt*kk,'runway-line');
-  for(const sign of [1,-1]){
-   const x0=sign*sg.end,x1=sign*xMax,f0=sign*(sg.end+sg.cope);
-   svg+=rect(X(Math.min(x0,x1)),Y(-lap),Math.abs(x1-x0)*kk,sg.tw*kk,'runway-line');
-   // Bottom flange below the cut, beyond the cope.
-   svg+=rect(X(Math.min(f0,x1)),Y(-lap-sg.tw/2+sg.bf/2),Math.abs(x1-f0)*kk,sg.bf*kk,'runway-line');
-   svg+=breakLine([X(x1),Y(-lap-sg.tw/2+sg.bf/2)-4],[X(x1),Y(-lap-sg.tw/2-sg.bf/2)+4]);
-   for(const x of sg.bolts)svg+=line([X(sign*x),Y(gt/2+.3*inch)],[X(sign*x),Y(-lap-sg.tw-.3*inch)],'runway-line');
+  // dir: the side of the braced span (+1 toward the next grid); rod: the plane of this column's rod gusset; the
+  // plan is drawn over [x0, x1] x [y0, y1] (x toward the braced span) at q points per mm, its top edge at `top`.
+  type Range={x0:number;x1:number;y0:number;y1:number};
+  const plan=(dir:1|-1,top:number,rod:number,grid:string,name:string,R:Range,q:number,seat:boolean)=>{
+   const left=100,X=(x:number)=>left+(dir>0?x-R.x0:R.x1-x)*q,Y=(y:number)=>top+(R.y1-y)*q;
+   const box=(x0:number,x1:number,y0:number,y1:number,cls='runway-line')=>rect(Math.min(X(x0),X(x1)),Math.min(Y(y0),Y(y1)),Math.abs(x1-x0)*q,Math.abs(y1-y0)*q,cls);
+   let out=text(left,top-8,`AT GRID ${grid}: ${name} UPPER GUSSET`,8.5,'start',700);
+   const t=c.tf,w=c.tw;
+   out+=path([[X(-c.bf/2),Y(c.d/2)],[X(c.bf/2),Y(c.d/2)],[X(c.bf/2),Y(c.d/2-t)],[X(w/2),Y(c.d/2-t)],[X(w/2),Y(-c.d/2+t)],[X(c.bf/2),Y(-c.d/2+t)],[X(c.bf/2),Y(-c.d/2)],[X(-c.bf/2),Y(-c.d/2)],[X(-c.bf/2),Y(-c.d/2+t)],[X(-w/2),Y(-c.d/2+t)],[X(-w/2),Y(c.d/2-t)],[X(-c.bf/2),Y(c.d/2-t)]]);
+   out+=line([X(R.x0),Y(0)],[X(R.x1),Y(0)],'grid-line')+line([X(0),Y(R.y0)],[X(0),Y(R.y1)],'grid-line');
+   // Rod gusset on the braced side, the strut tab on the column C/L on the other; strut webs on one line.
+   out+=box(g.x0,gx,rod-gt/2,rod+gt/2)+box(-sg.tabEnd,-g.x0,-gt/2,gt/2);
+   const fill=rod-gt/2-(web+sg.tw);
+   if(fill>1e-6)out+=box(sg.end,sg.tabEnd,web+sg.tw,rod-gt/2);
+   for(const side of [1,-1]){
+    const x0=side*sg.end,x1=side>0?R.x1-inch:R.x0+inch,f0=side*(sg.end+sg.cope);
+    out+=box(x0,x1,web,web+sg.tw);
+    // Bottom flange below the cut, beyond the cope.
+    out+=box(f0,x1,web+sg.tw/2-sg.bf/2,web+sg.tw/2+sg.bf/2);
+    out+=breakLine([X(x1),Y(web+sg.tw/2+sg.bf/2)-4],[X(x1),Y(web+sg.tw/2-sg.bf/2)+4]);
+    const plate=side>0?[rod-gt/2,rod+gt/2]:[-gt/2,gt/2],lo=Math.min(plate[0],web),hi=Math.max(plate[1],web+sg.tw);
+    for(const x of sg.bolts)out+=line([X(side*x),Y(lo)+.3*inch*q],[X(side*x),Y(hi)-.3*inch*q],'runway-line');
+   }
+   // Clevis and rod below the cut, in the gusset's plane.
+   out+=box(g.top.pin[0]-.9*g.dp,g.top.pin[0]+1.1*g.dp,rod-gt/2-.4*g.dp,rod+gt/2+.4*g.dp,'hidden-line');
+   for(const side of [-1,1])out+=line([X(g.top.pin[0]+2.6*g.dp),Y(rod+side*b.rod.diameter/2)],[X(R.x1-inch),Y(rod+side*b.rod.diameter/2)],'hidden-line');
+   if(br&&seat){out+=box(-len/2,len/2,c.d/2,c.d/2+proj);out+=line([X(R.x0),Y(e)],[X(R.x1),Y(e)],'grid-line');}
+   out+=workPoint(X(0),Y(0));
+   return {out,X,Y,fill};
+  };
+  // Rod A's column in full, with the bracket seat; rod B's around the web at a larger scale for the offset and filler.
+  const RA={x0:xMin,x1:xMax,y0:yMin,y1:yMax},spanB=sg.tabEnd+3*inch,RB={x0:-spanB,x1:spanB,y0:-c.d/2-1.5*inch,y1:c.d/2+1.5*inch};
+  const scaleB=drawingScale(Math.min(300/(2*spanB),240/(RB.y1-RB.y0)),u),kB=scaleB.pointsPerMm,kBlabel=scaleB.label;
+  const height=(yMax-yMin)*kk,A=plan(1,40,0,gridA,`ROD ${gridA}-${gridB}`,RA,kk,true),B=plan(-1,40+height+64,cr.offset,gridB,`ROD ${gridB}-${gridA}`,RB,kB,false);
+  svg+=A.out+B.out;
+  // Plan A: the girder offset and strut end dimensioned; callouts at the right and the tab at the left.
+  {
+   const {X,Y}=A;
+   svg+=dimV(Y(e),Y(0),X(-len/2),X(xMin)-10,dim(e));
+   svg+=dimH(X(0),X(sg.end),Y(web+sg.tw/2-sg.bf/2)-2,Y(yMin)+2,dim(sg.end),'right');
+   const items:{at:XY;labels:string[];weld?:string}[]=[
+    ...(br?[{at:[X(xMax)-2,Y(e)] as XY,labels:['GIRDER WEB C/L']},{at:[X(c.bf/4),Y(c.d/2)] as XY,labels:[`SEAT PL TO COL. FLANGE, TOP,`,`${dim(seatColumnWeld(p,s.detailResults?.bracket).length)} LONG, SHOP (COLLECTOR)`],weld:size(d.seatWeld)}]:[]),
+    {at:[X(sg.bolts[1]),Y(web+sg.tw)],labels:[`${sg.shape} STRUT, WEB ON THE`,'GIRDER FACE, EACH SIDE']},
+    {at:[X(gx-inch),Y(-gt/2)],labels:[`${gussetName} (ROD ${gridA}-${gridB})`,`ON COLUMN C/L, SEE ${detailRef(detailTitles.braceTop)}`]}
+   ];
+   svg+=labelColumn(items,X(xMax)+30,Y(yMax),Y(yMin));
+   const tab=[`PL ${size(gt)} STRUT TAB, AT OTHER`,'SIDE AND OTHER COLUMNS'],tw2=Math.max(...tab.map(v=>textWidth(v,8.5)));
+   svg+=multiLeader([[X(-sg.tabEnd+inch),Y(-gt/2)]],[X(xMin)-16-tw2,Y(-c.d/2)+8],tab);
   }
-  // Clevis below the cut on the gusset.
-  svg+=rect(X(g.top.pin[0]-.9*g.dp),Y(gt/2+.4*g.dp),2*g.dp*kk,(gt+.8*g.dp)*kk,'hidden-line');
-  // Bracket seat on the girder side with its fillet to the flange, the girder web line beyond.
-  if(br){
-   svg+=rect(X(-len/2),Y(c.d/2+proj),len*kk,proj*kk,'runway-line');
-   svg+=line([X(xMin),Y(e)],[X(xMax),Y(e)],'grid-line');
+  // Plan B: the braced side at the left; the offset gusset and filler called out at the left, the tab at the right.
+  {
+   const {X,Y,fill}=B;
+   const left:{at:XY;labels:string[]}[]=[{at:[X(gx-inch),Y(cr.offset+gt/2)],labels:[`${gussetName} (ROD ${gridB}-${gridA}),`,offsetLabel]},
+    ...(fill>1e-6?[{at:[X(sg.tabEnd-inch/2),Y(cr.offset-gt/2-fill/2)] as XY,labels:[`${size(cr.filler)} FILLER UNDER`,'STRUT WEB']}]:[]),
+    {at:[X(sg.bolts[1]),Y(web)],labels:[`${boltName}`,'THROUGH WEB, FILLER, GUSSET']}];
+   const lw=Math.max(...left.flatMap(v=>v.labels.map(l=>textWidth(l,8.5))));
+   svg+=labelColumn(left,X(RB.x1)-30-lw,Y(RB.y1),Y(RB.y0));
+   const tab=[`PL ${size(gt)} STRUT TAB`,'ON COLUMN C/L'];
+   svg+=multiLeader([[X(-sg.tabEnd+inch),Y(-gt/2)]],[X(RB.x0)+16,Y(RB.y0)+4],tab);
+   svg+=text(100,Y(RB.y0)+30,`PLAN AT GRID ${gridB}: ${kBlabel.replace('SCALE: ','SCALE ')}`,7.5);
   }
-  svg+=workPoint(X(0),Y(0));
-  svg+=dimV(Y(e),Y(0),X(-len/2),X(xMin)-10,dim(e));
-  svg+=dimH(X(0),X(sg.end),Y(-lap-sg.tw/2-sg.bf/2)-2,Y(yMin)+2,dim(sg.end),'right');
-  const items:{at:XY;labels:string[];weld?:string}[]=[
-   ...(br?[{at:[X(xMax)-2,Y(e)] as XY,labels:['GIRDER WEB C/L']},{at:[X(c.bf/4),Y(c.d/2)] as XY,labels:[`SEAT PL TO COL. FLANGE, TOP,`,`${dim(Math.min(len,c.bf)-inch/2)} LONG, SHOP (COLLECTOR)`],weld:size(d.seatWeld)}]:[]),
-   {at:[X(sg.bolts[1]),Y(-lap-sg.tw/2)],labels:[`${sg.shape} STRUT, WEB LAPPED`,'ON FAR FACE, EACH SIDE']},
-   {at:[X(gx-inch),Y(gt/2)],labels:[`${gussetName} (RODS), SEE`,detailRef(detailTitles.braceTop)]}
-  ];
-  svg+=labelColumn(items,X(xMax)+30,Y(yMax),Y(yMin));
-  const tab=[`PL ${size(gt)} STRUT TAB, AT OTHER`,'SIDE AND OTHER COLUMNS'],tw2=Math.max(...tab.map(v=>textWidth(v,8.5)));
-  svg+=multiLeader([[X(-sg.tabEnd+inch),Y(-gt/2)]],[X(xMin)-16-tw2,Y(-c.d/2)+8],tab);
   return {svg:svg+'</g>',scale:k.label};
  }});
+
+ // 5: Section across the column line at mid-bay: rod A on the column C/L, rod B in its plane offset toward the girder,
+ // and the strut cut at the work point above with its web between the two planes.
+ views.push({title:rodCrossingTitle,render:()=>{
+  const theta=Math.atan2(L.height,L.width),rd=b.rod.diameter,sbf=sg.bf,sd=sg.d,stf=sg.tf,stw=sg.tw,web=g.t/2;
+  const k=drawingScale(Math.min(.75,170/sd,170/(sbf+2*inch)),u),kk=k.pointsPerMm,cx=200,Y0=60,X=(y:number)=>cx+y*kk;
+  let svg='<g data-view="rod-crossing">';
+  // Strut, cut at mid-bay: web vertical on its line, flanges across it.
+  const wc=web+stw/2,top=Y0,bot=Y0+sd*kk;
+  svg+=path([[X(wc-sbf/2),top],[X(wc+sbf/2),top],[X(wc+sbf/2),top+stf*kk],[X(wc+stw/2),top+stf*kk],[X(wc+stw/2),bot-stf*kk],[X(wc+sbf/2),bot-stf*kk],[X(wc+sbf/2),bot],[X(wc-sbf/2),bot],[X(wc-sbf/2),bot-stf*kk],[X(wc-stw/2),bot-stf*kk],[X(wc-stw/2),top+stf*kk],[X(wc-sbf/2),top+stf*kk]]);
+  // Break between the strut and the rods; the rods cross at mid-height of the bay.
+  const yb=bot+22,yr=yb+26,ry=rd/Math.cos(theta)/2*kk;
+  svg+=breakLine([X(-sbf/2-inch),yb],[X(sbf/2+2*inch),yb]);
+  const ellipse=(y:number)=>`<polyline class="runway-line" points="${Array.from({length:25},(_,i)=>{const a=i/24*2*Math.PI;return `${n(X(y)+Math.cos(a)*rd/2*kk)},${n(yr+Math.sin(a)*ry)}`;}).join(' ')}"/>`;
+  svg+=ellipse(0)+ellipse(cr.offset);
+  // Planes of the gussets through the rods, up through the strut.
+  for(const y of [0,cr.offset])svg+=line([X(y),top-10],[X(y),yr+ry+8],'grid-line');
+  svg+=dimH(X(0),X(cr.offset),yr+ry+2,yr+ry+18,dim(cr.offset),'left')+dimH(X(rd/2),X(cr.offset-rd/2),yr+ry+2,yr+ry+34,dim(cr.clear)+' CLEAR','left');
+  const items:{at:XY;labels:string[]}[]=[
+   {at:[X(wc+sbf/2),top+stf*kk/2],labels:[`${sg.shape} STRUT, CUT AT MID-BAY:`,'WEB BETWEEN THE GUSSET PLANES']},
+   {at:[X(cr.offset)+rd/2*kk,yr],labels:[`ROD ${gridB}-${gridA}, IN THE PLANE OF ITS`,`GUSSETS, ${dim(cr.offset)} TOWARD GIRDER`,'RODS NOT CONNECTED']}
+  ];
+  svg+=labelColumn(items,X(sbf/2+2*inch)+24,top,yr+ry+30);
+  const rodA=[`ROD ${gridA}-${gridB}, ON`,'COLUMN C/L'],aw=Math.max(...rodA.map(v=>textWidth(v,8.5)));
+  svg+=multiLeader([[X(0)-rd/2*kk,yr-ry*.4]],[X(-sbf/2-inch)-aw,yr-ry-6],rodA);
+  svg+=text(X(-sbf/2-inch),yr+ry+56,`LOOKING TOWARD GRID ${gridA}; GIRDER TO THE RIGHT.`,7.5);
+  return {svg:svg+'</g>',scale:k.label};
+ }});
+ // Drawing order on the sheet: the braced bay and the plans over two rows each, then the connections and the crossing.
+ {const order=[detailTitles.bracedBay,detailTitles.strutPlan,detailTitles.braceTop,detailTitles.braceBase,rodCrossingTitle] as string[];views.sort((x,y)=>order.indexOf(x.title)-order.indexOf(y.title));}
 
  const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${v.utilization.toFixed(2)}`:'-';}).join(' / ');
  const z=r.seismic,sep=r.separation,lb=s.longitudinalBracing!;
@@ -248,6 +326,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   ['ROD STRENGTH = CONNECTION FORCE',`${force(r.develop)}: CLEVIS, ${pinName}, ${gussetName} AND WELDS DEVELOP THE ROD`],
   ['GUSSET WELDS',`${weldLabel} FILLETS BOTH FACES: ${dim(r.outlines.welds.upper.to-r.outlines.welds.upper.from)} TO WEB AT W.P.; ${dim(r.outlines.welds.lower.web)} TO WEB AND ${dim(r.outlines.welds.lower.plate-g.x0)} TO BASE PL`],
   ['STRUT',`${sg.shape}, ${force(r.strutForce.H)} (${r.strutForce.id}); ${boltName} EACH END`],
+  ['ROD CROSSING',`ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}; RODS ${dim(cr.clear)} CLEAR AT MID-BAY`],
   ['COLLECTOR AT EACH COLUMN',`GIRDER LOCATING BOLTS TO SEAT, ${size(d.seatWeld)} SEAT FILLET TO FLANGE: ${force(r.seatForce.F)}`],
   ...(z?[['SEISMIC ALONG RUNWAY',`R ${z.basis.R}, CS ${z.basis.Cs.toFixed(3)}, QE ${force(z.QE)}; DRIFT ${dim(z.drift)}`]]:[]),
   ...(sep?[['SEISMIC SEPARATION',`${dim(specifiedSeparation(sep.required,u))} MIN. CLEAR TO EXISTING BUILDING (ASCE 7 §12.12.3)`]]:[]),
@@ -255,8 +334,8 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  ];
  const notes=[
   `RODS: ASTM F1554 GR. 36 (OR A36) ${rodName}, THREADED FOR A FORGED CLEVIS AT EACH END AND A TURNBUCKLE ${Math.round(turnAt*100)}% OF THE LENGTH FROM THE LOWER END (RIGHT- AND LEFT-HAND THREADS). CLEVIS, PIN AND TURNBUCKLE RATED BY THE MANUFACTURER TO DEVELOP THE ROD, ${force(r.develop)}; CLEVIS GRIP TO SUIT THE ${size(g.t)} GUSSET. SUBMIT CATALOG DATA.`,
-  'TENSION RODS AFTER THE STRUT IS BOLTED AND THE COLUMNS ARE PLUMB: TAKE OUT THE SAG BY HAND, THEN LOCK THE TURNBUCKLES WITH JAM NUTS. DO NOT USE THE RODS TO PLUMB THE COLUMNS. RODS CROSS AT MID-BAY WITHOUT CONNECTION.',
-  `GUSSETS AND STRUT TABS: ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN WEB WITH ${weldLabel} FILLETS BOTH FACES; THE LOWER GUSSET ALSO TO THE BASE PLATE. SNIPE GUSSET CORNERS 3/4" TO CLEAR THE COLUMN-TO-PLATE WELDS. PIN HOLES ${size(g.dh)} DIA., DRILLED.`,
+  `TENSION RODS AFTER THE STRUT IS BOLTED AND THE COLUMNS ARE PLUMB: TAKE OUT THE SAG BY HAND, THEN LOCK THE TURNBUCKLES WITH JAM NUTS. DO NOT USE THE RODS TO PLUMB THE COLUMNS. ROD ${gridB}-${gridA} LIES IN A PLANE ${offsetLabel} SO THE RODS PASS AT MID-BAY ${dim(cr.clear)} CLEAR, NOT CONNECTED (${detailRef(rodCrossingTitle)}); DO NOT BEND A ROD TO CLEAR THE OTHER.`,
+  `GUSSETS AND STRUT TABS: ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN WEB WITH ${weldLabel} FILLETS BOTH FACES; THE LOWER GUSSET ALSO TO THE BASE PLATE. ROD ${gridA}-${gridB} GUSSETS ON THE COLUMN C/L; ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}${cr.filler?`, WITH A ${size(cr.filler)} FILLER UNDER THE STRUT WEB AT GRID ${gridB}`:''}. SNIPE GUSSET CORNERS ${size(.75*inch)} TO CLEAR THE COLUMN-TO-PLATE WELDS. PIN HOLES ${size(g.dh)} DIA., DRILLED.`,
   `CRANE-LEVEL STRUT: ASTM A992 ${sg.shape} ON THE COLUMN CENTERLINE AT THE W.P., EVERY SPAN OF BOTH RUNWAYS, FLANGES COPED ${dim(sg.cope)} EACH END, ${boltName} IN STANDARD HOLES, SNUG-TIGHT, TO THE GUSSET OR TAB AT EACH COLUMN. IT COLLECTS THE GIRDERS' LONGITUDINAL FORCE AT EVERY COLUMN AND BRACES THE COLUMNS ALONG THE RUNWAY.`,
   `AT EVERY COLUMN: SHOP WELD THE BRACKET SEAT PLATE TO THE COLUMN FLANGE WITH A ${size(d.seatWeld)} TOP FILLET ACROSS THE FLANGE. THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO THE SEAT; THE COLUMN TAKES THE TORQUE FROM ITS ${dim(girderOffset(p))} OFFSET (CALCULATION REPORT, NEW COLUMN).`,
   `ERECT THE STRUT AND RODS WITH THE COLUMNS, BEFORE THE GIRDERS ARE SET. THE BRACED COLUMNS AND FOOTINGS ARE DESIGNED FOR THE ROD FORCES, INCLUDING UPLIFT AND SHEAR ALONG THE RUNWAY AT THE BASE.`,
