@@ -33,7 +33,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  ].slice(0,16);
  // Top-flange tie on a direct flange saddle (simple spans): thin bars flex with end rotation and thermal travel,
  // sleeved bolts in vertical slots at the column gusset release support deflection. The column face is a placeholder.
- const simple=p.system==='simple',weld=.3125*inch,webGap=1*inch,rootStart=b.tw/2+webGap,saddle={length:3.5*inch,thickness:up(Math.max(1.5*inch,b.tf),.125*inch)};
+ // The saddle fillets carry the tie force in fatigue across the flange: 3/8 in, as on the demonstration runway.
+ const simple=p.system==='simple',weld=.3125*inch,saddleWeld=.375*inch,webGap=1*inch,rootStart=b.tw/2+webGap,saddle={length:3.5*inch,thickness:up(Math.max(1.5*inch,b.tf),.125*inch)};
  const tieConnection=2.25*inch+2*1.25*inch,tieStart=up(Math.max(rootStart+.5*inch,b.bf/2-tieConnection+.25*inch),.25*inch),tieLength=26*inch;
  const tieSetback=up(saddle.length/2+weld+stiffenerThickness/2+weld+.25*inch,.25*inch),bearingLength=12*inch;
  // Stop bolts clear the runway-end tie saddle and the bearing stiffener with nut clearance.
@@ -44,7 +45,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   simpleSupport:{...defaultSimpleSupport,guideTravel:.5*inch},
   brace:{width:5*inch,thickness:.375*inch,length:tieLength,reach:tieLength,gussetThickness:.75*inch,connectionLength:up(tieStart+tieConnection-rootStart,.25*inch),
    connection:{rows:2,gauge:2.5*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,diameter:.625*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:weld,weldLength:5*inch},
-   ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:weld,columnFace:tieStart+tieLength+tieBarGap(weld)}}:{}),
+   ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:saddleWeld,columnFace:tieStart+tieLength+tieBarGap(saddleWeld)}}:{}),
    release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
   end:{rows:4,gauge:2.875*inch,pitch:3*inch,edge:1.25*inch,thickness:.75*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:.3125*inch,weldLength:11.5*inch},
   bearing:{width:up(b.bf+2*inch,.5*inch),length:bearingLength,thickness:1*inch,stiffenerWidth,stiffenerThickness,cope:up(Math.max(k1-b.tw/2,.75*inch),.125*inch),weldSize:.3125*inch},
