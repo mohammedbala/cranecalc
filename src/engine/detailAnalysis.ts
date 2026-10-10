@@ -211,7 +211,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    // A rotating girder end bears on the span side of its plate: the reaction acts at 0.8 of the bearing
    // length from the girder end, over the inner 0.4 of the plate.
    const Lbr=details.bearing.length;
-   const loads=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({vertical:v.vertical,offset:v.offset+(v.end==='left'?1:-1)*.3*Lbr,length:.4*Lbr})):[{vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,offset:0}];
+   // In strength cases the bay carrying the longitudinal force adds its end couple; bound it at each right end.
+   const loads=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({vertical:v.vertical+(v.end==='right'&&!v.existing?(e.longitudinalCouple??0)/p.spans[v.bay-1]:0),offset:v.offset+(v.end==='left'?1:-1)*.3*Lbr,length:.4*Lbr})):[{vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,offset:0}];
    bracket?.observe(e.kind,e.id,x,loads,bin);
    existingBracket?.observe(e.kind,e.id,x,loads,bin);
   }
@@ -222,8 +223,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     // For a straddling crane, each occupied bay receives the FULL traction in
     // a separate bounding scenario, avoiding an invented drive-wheel split.
     for(const bay of p.system==='simple'?tractionBays(p,e):[-1])for(const longitudinalSign of [-1,1]){
-     const ends=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({...v,longitudinal:v.bay===bay&&v.end==='left'?longitudinalSign*e.axial:0})):undefined;
-     const item:InterfaceAction={id:p.system==='simple'?`${e.id}-T${bay}`:e.id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0),top:r.top,bottom:r.bottom,longitudinal:ends?ends.reduce((a,v)=>a+v.longitudinal,0):(x===0||x===L)?longitudinalSign*e.axial:0,torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
+     // The bay carrying the force also carries its end couple: its left (locating) end lifts and its right end
+     // presses down for a force toward the right, and the reverse for the opposite sign.
+     const couple=(v:{bay:number;end:'left'|'right';existing?:boolean})=>v.bay===bay&&!v.existing?(v.end==='left'?-1:1)*longitudinalSign*(e.longitudinalCouple??0)/p.spans[v.bay-1]:0;
+     const ends=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({...v,vertical:v.vertical+couple(v),longitudinal:v.bay===bay&&v.end==='left'?longitudinalSign*e.axial:0})):undefined;
+     const item:InterfaceAction={id:p.system==='simple'?`${e.id}-T${bay}`:e.id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).reduce((a,v)=>a+couple(v),0):0),top:r.top,bottom:r.bottom,longitudinal:ends?ends.reduce((a,v)=>a+v.longitudinal,0):(x===0||x===L)?longitudinalSign*e.axial:0,torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
       const k=`${e.combination}:${x}:${component}:${dir}`,old=interfaceExtremes.get(k);

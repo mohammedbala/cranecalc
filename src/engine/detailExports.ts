@@ -16,8 +16,8 @@ export function supportReactionsCsv(s:CalculationSnapshot){
  if(!s.eligible||!s.supportReactions)throw Error('A validated design snapshot is required.');
  const quote=(v:unknown)=>`"${String(v??'').replaceAll('"','""')}"`;
  const us=s.input.units==='US',length=(v:number)=>us?toDisplay(v,'length','US'):v,force=(v:number)=>us?toDisplay(v,'force','US'):v;
- const r=s.supportReactions,rows:unknown[][]=[['revision','station_mm','D_N','L_N','Cd_crane_empty_N','Cv_lifted_N','Ci_impact_N','Css_side_thrust_N','least_crane_vertical_N','Cls_runway_longitudinal_N','crane_origins_mm','basis']];
- for(const v of r.supports)rows.push([s.revision,length(v.x),force(v.D),force(v.L),force(v.Cd),force(v.Cv),force(v.Ci),force(v.Css),force(v.craneMinimum),force(r.Cls),v.cranes.map(c=>`${c.index+1}@${length(c.origin)}`).join(';'),'Unfactored. Cd/Cv/Ci from the arrangement maximizing them; Css largest single-crane side thrust taken with it; Cls acts at the locating support or bracing. Governing AIST/ASCE 7 crane minimums.']);
+ const r=s.supportReactions,rows:unknown[][]=[['revision','station_mm','D_N','L_N','Cd_crane_empty_N','Cv_lifted_N','Ci_impact_N','Css_side_thrust_N','Clv_longitudinal_couple_N','least_crane_vertical_N','Cls_runway_longitudinal_N','crane_origins_mm','basis']];
+ for(const v of r.supports)rows.push([s.revision,length(v.x),force(v.D),force(v.L),force(v.Cd),force(v.Cv),force(v.Ci),force(v.Css),force(v.Clv),force(v.craneMinimum),force(r.Cls),v.cranes.map(c=>`${c.index+1}@${length(c.origin)}`).join(';'),'Unfactored. Cd/Cv/Ci from the arrangement maximizing them; Css largest single-crane side thrust taken with it; Cls acts at the locating support or bracing. Governing AIST/ASCE 7 crane minimums.']);
  if(us)rows[0]=rows[0].map(v=>String(v).replaceAll('_mm','_in').replaceAll('_N','_kip'));
  return rows.map(row=>row.map(quote).join(',')).join('\r\n');
 }
