@@ -89,7 +89,12 @@ describe('ARCH D arrangement sheet', () => {
     expect(structuralGeneralNotes(sample).every(note=>note===note.toUpperCase())).toBe(true);
     expect(arrangement).not.toContain('DRAWING BASIS');expect(connections).not.toContain('BASIS:');
     expect(connections.match(/data-view-title="below"/g)).toHaveLength(4);
-    expect(arrangement.match(/data-view-title="below"/g)).toHaveLength(3);
+    expect(arrangement.match(/data-view-title="below"/g)).toHaveLength(4);
+    // Typical section: both grids, the crane span and the project elevations; cut marked on the plan at mid-bay.
+    const section=arrangement.split('<g data-view="typical-section">')[1];
+    expect(section).toContain('CRANE SPAN (RAIL C/L TO C/L)');expect(section).toContain('T.O.R. EL.');expect(section).toContain('BRG. SEAT EL.');
+    expect(section).toContain('EXISTING BUILDING COLUMN (REF.)');expect(section).toContain('data-detail-title="TYPICAL RUNWAY SECTION"');
+    expect(arrangement.match(/data-section-cut="TYPICAL RUNWAY SECTION"/g)).toHaveLength(2);
     expect(arrangement.split('<g data-view="isometric">')[1].split('</g>')[0]).not.toContain('W24X229');
     // The bolted end bearing view replaces the welded cover-plate template.
     // Stiffener, keeper, and the direct flange tie's saddle and column-root field welds.

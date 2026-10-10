@@ -26,9 +26,11 @@ export { connectionSheetSvg } from './connectionSheet';
 
 /**
  * General arrangement at content scale 1: isometric (top left), runway plan (top right), girder
- * elevation (bottom left) and the girder schedule with the sheet notes (bottom right).
+ * elevation over the typical runway section (bottom left) and the girder schedule with the sheet notes
+ * (bottom right).
  */
-const ga=1,gaLayout={iso:{x:70,y:60,w:980,h:600},plan:{x:1800,y:350},split:{x:1120,y:770,bottomX:1700},elevation:{x:830,y:1110},schedule:{x:1724,y:794,width:776,height:520}} as const;
+const ga=1,gaLayout={iso:{x:70,y:60,w:980,h:600},plan:{x:1800,y:350},split:{x:1120,y:770,bottomX:1700},elevation:{x:830,top:800},section:{x:60,w:1420,bottom:1492},schedule:{x:1724,y:794,width:776,height:520}} as const;
+export const typicalSectionTitle='TYPICAL RUNWAY SECTION';
 /** Grid bubble on the general arrangement: 0.3 in circle, 5/32 in text. */
 const gridBubble=(x:number,y:number,label:string)=>bubble(x,y,label,11);
 function fit(segments: Segment[], project: (p: Point) => XY, box: {x:number;y:number;w:number;h:number}, units:CalculationSnapshot['input']['units']) {
@@ -44,6 +46,63 @@ function paths(segments: Segment[], project: (p: Point) => XY, cls: string) {
     if (seen.has(key)) return false; seen.add(key); return true;
   }).map(([a, b]) => `M${n(a[0])},${n(a[1])}L${n(b[0])},${n(b[1])}`).join('');
   return `<path class="${cls}" d="${path}"/>`;
+}
+
+/**
+ * Typical section across the building at mid-bay, looking back at the frame on a grid: both runways
+ * with their girders and rails cut, the columns and brackets beyond. Only the runway band is drawn,
+ * the columns broken above the rail and below the bracket, since the building heights are reference
+ * geometry; the elevations given are those of the project.
+ */
+function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeometry>,top:number,o:{newColumns:boolean;columnName:string}){
+  const p=s.input,d=p.details,dim=(meters:number)=>drawingLength(meters*1000,p.units),elevations=runwayElevations(p),box=gaLayout.section;
+  const railTop=m.railBase+(p.aist?.railDepth??p.railHeight)/1000,seat=-m.d/2-(d?.bearing.thickness??0)/1000;
+  const vTop=railTop+.45,vBottom=-m.d/2-m.bracketDepth-.45;
+  // Looking toward -x, grid A is at the left: u = -z.
+  const clip=(segments:Segment[])=>segments.flatMap(([a,b]):Segment[]=>{
+    let [p0,p1]:XY[]=[[-a[2],a[1]],[-b[2],b[1]]];if(p0[1]>p1[1])[p0,p1]=[p1,p0];
+    if(p1[1]<vBottom||p0[1]>vTop)return [];
+    const at=(v:number):Point=>{const t=(v-p0[1])/(p1[1]-p0[1]);return [p0[0]+(p1[0]-p0[0])*t,v,0];};
+    return [[p0[1]<vBottom?at(vBottom):[p0[0],p0[1],0],p1[1]>vTop?at(vTop):[p1[0],p1[1],0]]];});
+  // The cut girders hide whatever lies behind them on the grid.
+  const half=Math.max(m.bf,p.section.kind==='cap'?p.section.capWidth/1000:0)/2+.002;
+  const hidden=([a,b]:Segment)=>[0,m.width].some(u0=>[a,b].every(([u,v])=>Math.abs(u-u0)<=half&&v>=-m.d/2-.002&&v<=m.railBase+.002));
+  const sec=m.section,beyond={building:clip(sec.beyond.building).filter(v=>!hidden(v)),runway:clip(sec.beyond.runway).filter(v=>!hidden(v))};
+  const cut={building:clip(sec.cut.building),runway:clip(sec.cut.runway),rail:clip(sec.cut.rail)};
+  const all=[...beyond.building,...beyond.runway,...cut.building,...cut.runway,...cut.rail].flat();
+  const uMin=Math.min(...all.map(v=>v[0])),uMax=Math.max(...all.map(v=>v[0]));
+  const height=box.bottom-top-150,scale=drawingScale(Math.min(box.w/(uMax-uMin),height/(vTop-vBottom))/1000,p.units,ga),k=scale.pointsPerMm*1000;
+  const SX=(u:number)=>box.x+box.w/2+(u-(uMin+uMax)/2)*k,SY=(v:number)=>top+40+(vTop-v)*k,project=([u,v]:Point):XY=>[SX(u),SY(v)];
+  let svg=`<g data-view="typical-section">`+paths(beyond.building,project,'reference-line')+paths(beyond.runway,project,'runway-line')
+    +paths(cut.building,project,'reference-line')+paths(cut.runway,project,'runway-line')+paths(cut.rail,project,'rail-line');
+  // Break lines where the columns leave the band.
+  for(const v of [vTop,vBottom]){
+    const us=all.filter(q=>Math.abs(q[1]-v)<1e-6).map(q=>q[0]).sort((a,b)=>a-b),groups:number[][]=[];
+    for(const u of us){const g=groups.at(-1);if(g&&u-g[g.length-1]<.8)g.push(u);else groups.push([u]);}
+    for(const g of groups)svg+=breakLine([SX(g[0])-6,SY(v)],[SX(g[g.length-1])+6,SY(v)]);
+  }
+  const uA=-m.columnOffset,uB=m.width+m.columnOffset,uRA=-m.railZ,uRB=m.width+m.railZ,below=SY(vBottom);
+  for(const [u,label] of [[uA,'A'],[uB,'B']] as const)svg+=line([SX(u),SY(vTop)-34],[SX(u),below+38],'grid-line')+gridBubble(SX(u),below+50,label);
+  // Rail centrelines to the crane span and the column grids above the band.
+  const dimY=SY(vTop)-18,from=SY(railTop)-4;
+  for(const u of [uRA,uRB])svg+=line([SX(u),SY(railTop)+3],[SX(u),from],'grid-line');
+  svg+=dimH(SX(uA),SX(uRA),from,dimY,dim(uRA-uA),'left')+dimH(SX(uRA),SX(uRB),from,dimY,`${dim(uRB-uRA)} CRANE SPAN (RAIL C/L TO C/L)`)+dimH(SX(uRB),SX(uB),from,dimY,dim(uB-uRB),'right');
+  svg+=dimH(SX(uA),SX(uB),below+4,below+24,`${dim(uB-uA)} GRIDS A-B${o.newColumns?'':' (REF.)'}`);
+  // Elevations of the project, stacked so close levels never overlap.
+  const ex=SX(uMax)+14;
+  const target=(y:number,labelY:number,label:string,datum:string)=>`<g data-elevation-datum="${datum}">${line([ex+2,y],[ex+12,y])}<path class="leader-arrow" d="M${n(ex+12)},${n(y)}l-2.4,-2.4h4.8z"/>${line([ex+12,y],[ex+16,labelY])}${line([ex+16,labelY],[ex+20,labelY])}${text(ex+22,labelY+3,label,8.5)}</g>`;
+  const yTor=SY(railTop),yTos=SY(m.d/2),ySeat=SY(seat),el=(v:number|undefined,name:string)=>v===undefined?`${name} EL. NOT ENTERED`:`${name} EL. ${drawingLength(v,p.units)}`;
+  svg+=target(yTor,Math.min(yTor,yTos-11),el(elevations?.tor,'T.O.R.'),'top-of-rail')+target(yTos,Math.max(yTos,yTor+11),el(elevations?.tos,'T.O.S.'),'top-of-steel');
+  svg+=target(ySeat,ySeat,el(elevations?.seat,'BRG. SEAT'),'bearing-seat');
+  // Callouts at runway A, between the runways; runway B is opposite hand.
+  const lx=SX(uRA)+70,headW=(d?.rail.headWidth??65)/1000;
+  svg+=multiLeader([[SX(uRA+headW/2),SY(railTop-.01)]],[lx,SY(railTop)-2],[`CRANE RAIL${d?`, SEE ${detailRef(detailTitles.railKeeper)}`:''}`]);
+  svg+=multiLeader([[SX(m.bf/2),SY(m.d/4)]],[lx,SY(m.d/4)+3],[`${p.section.name} RUNWAY GIRDER`,'SEE GIRDER SCHEDULE']);
+  svg+=multiLeader([[SX(0),SY(seat-Math.min(.05,m.bracketDepth/3))]],[lx,SY(seat)+16],d?[`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`]:['BRACKET BY BUILDING DESIGNER (REF.)']);
+  svg+=multiLeader([[SX(uA+m.column.d/2),SY(vBottom+.2)]],[lx,SY(vBottom+.2)+3],o.newColumns?[`NEW ${o.columnName} COLUMN, SEE ${detailRef(detailTitles.newColumn)}`]:['EXISTING BUILDING COLUMN (REF.), FIELD VERIFY']);
+  svg+=text(SX(uRB)-70,SY(vBottom+.2)+3,'RUNWAY AT GRID B OPPOSITE HAND',8.5,'end');
+  svg+=viewTitle(box.x+box.w/2,below+92,typicalSectionTitle,scale.label,ga)+'</g>';
+  return svg;
 }
 
 export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings = defaultFraming): string {
@@ -104,6 +163,11 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   if(newColumns){const labels=[`NEW ${columnName} COLUMN ON`,`SPREAD FOOTING, TYP. ${2*m.supports.length}`,`SEE ${detailRef('NEW RUNWAY COLUMN / ELEVATION')}`],x0=X(m.supports[1]??m.supports[0]),w=Math.max(...labels.map(v=>textWidth(v,7.5)));svg+=`<g data-new-column="plan">${multiLeader([[x0+m.column.bf/2*k,Y(rows[0]-m.column.d/2)]],[x0+m.column.bf/2*k+16,Y(-m.width/2)-8],labels,7.5,[],w)}</g>`;}
   if(stop){const first=ends[0],labels=[`END STOP, TYP. ${2*ends.length}`,`SEE ${detailRef('END STOP / ELEVATION')}`];svg+=multiLeader([[first==='left'?left+stopGeom!.front/1000*k:right-stopGeom!.front/1000*k,Y(-m.bf/2)]],[inboard(first,['END STOP, TYP. 4','SEE 1/S-07'],16),Y(-m.width/2)+4],labels,7.5);}
   for(const b of adjacent){const labels=['EXISTING RUNWAY CONTINUES',`ADJ. BAY ${dim(b.length/1000)}, FIELD VERIFY`];svg+=`<g data-existing-bay-label="${b.end}">${multiLeader([[b.end==='left'?left-stub/2:right+stub/2,Y(-m.bf/2)]],[inboard(b.end,labels,16),Y(-m.width/2)+26],labels,7.5)}</g>`;}
+  // Section cut at mid-bay, both ends outside the grids, arrows looking back at the frame on the grid.
+  {const xc=X(m.section.at),label=detailRef(typicalSectionTitle);
+   for(const [y0,y1] of [[Y(rows[1])-8,Y(rows[1])-24],[Y(rows[0])+8,Y(rows[0])+24]]){
+    svg+=`<g data-section-cut="${typicalSectionTitle}">${line([xc,y0],[xc,y1],'divider')}${line([xc,y1],[xc-14,y1],'divider')}<path class="leader-arrow" d="M${n(xc-16)},${n(y1)}l5,-2.2v4.4z"/>${text(xc+4,y1+(y1<y0?-3:9),label,8,'start',700)}</g>`;
+   }}
   const planDim=Y(rows[0])+52;
   svg+=dimH(left,right,Y(rows[0])+19,planDim,`${dim(m.length)} OVERALL`);
   svg+=dimV(Y(rows[1]),Y(rows[0]),right+13,right+48,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
@@ -111,7 +175,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   svg+=viewTitle(X(0),planDim+56,'RUNWAY PLAN',planScale.label,ga)+'</g>';
 
   const elevationScale=drawingScale(Math.min(1440/m.length,110/(m.d+(p.aist?.railDepth??p.railHeight)/1000))/1000,p.units,ga),ek=elevationScale.pointsPerMm*1000;
-  const EX=(x:number)=>gaLayout.elevation.x+x*ek,EY=(y:number)=>gaLayout.elevation.y-y*ek;
+  // The elevation hangs from the top of its panel; its highest annotation is 81 above the girder.
+  const elevationY=gaLayout.elevation.top+81+m.d/2*ek;
+  const EX=(x:number)=>gaLayout.elevation.x+x*ek,EY=(y:number)=>elevationY-y*ek;
   const top=EY(m.d/2),bottom=EY(-m.d/2),el=EX(-m.length/2),er=EX(m.length/2);
   svg+=`<g data-view="elevation">`;
   const bubbleY=top-44;
@@ -153,6 +219,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   svg+=dimH(el,er,bottom+62,bottom+82,`${dim(m.length)} OVERALL`);
   svg+=text(el,bottom+108,`DATUM EL. ${drawingLength(datum,p.units)} = ${short(datumLabel.toUpperCase(),60)}. T.O.S. = TOP OF W STEEL${p.section.kind==='cap'?`; CAP ABOVE T.O.S.${capDetailed?` / SEE ${detailRef(detailTitles.capSection)}`:''}`:''}. ELEVATIONS FROM ${elevations?elevations.source.toUpperCase():'PROJECT DATA (NOT ENTERED)'}.`,8.5);
   svg+=viewTitle(gaLayout.elevation.x,bottom+150,'RUNWAY GIRDER ELEVATION - GRID A',elevationScale.label,ga)+'</g>';
+  svg+=typicalSection(s,m,bottom+180,{newColumns,columnName});
 
   svg+=`<g data-view="girder-schedule">`+girderSchedule(s,gaLayout.schedule)+'</g>';
   return svg+titleBlock(s,'S-01','GENERAL ARRANGEMENT')+'</svg>';
@@ -184,7 +251,7 @@ export function drawingSheetSet(s:CalculationSnapshot,f:FramingSettings=defaultF
 /** Sheet numbers and titles of the set without drawing it. */
 export function sheetIndex(s:CalculationSnapshot,f:FramingSettings=defaultFraming){return sheetPlan(s,f).map(({number,name,title})=>({number,name,title}));}
 /** Details of the general arrangement, in drawing order. */
-const arrangementDetails=['ISOMETRIC VIEW','RUNWAY PLAN','RUNWAY GIRDER ELEVATION - GRID A'] as const;
+const arrangementDetails=['ISOMETRIC VIEW','RUNWAY PLAN','RUNWAY GIRDER ELEVATION - GRID A',typicalSectionTitle] as const;
 /**
  * Fill each title block's "N OF M", number the details on each sheet in
  * drawing order, then resolve detail references by title to "n/S-xx".
