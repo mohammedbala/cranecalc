@@ -35,8 +35,8 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  const eb=activeEndBearing(p);
  if(eb){
   // SK-05: bolted end bearing hole patterns on the girder bottom flange.
-  const g=endBearingGeometry(p,eb),bs=d.bearing,k=Math.min(150/bs.length,200/Math.max(p.section.bf,bs.width)),y0=110,dr=new Draft(s,'end-connection-detail','Bolted end bearing / locating and sliding hole patterns','SK-05',500,1/k,'Bottom flange plan at each girder end. Standard holes at the locating end; long slots at the sliding end under plate washers.');
-  for(const [i,role] of (['LOCATING END','SLIDING END'] as const).entries()){
+  const g=endBearingGeometry(p,eb),bs=d.bearing,k=Math.min(150/bs.length,200/Math.max(p.section.bf,bs.width)),y0=110,dr=new Draft(s,'end-connection-detail','Bolted end bearing / locating and sliding hole patterns','SK-05',500,1/k,p.system==='continuous'?'Bottom flange plan at each support. Standard holes at the locating support; long slots at every other support under plate washers.':'Bottom flange plan at each girder end. Standard holes at the locating end; long slots at the sliding end under plate washers.');
+  for(const [i,role] of (p.system==='continuous'?['LOCATING SUPPORT','SLIDING SUPPORTS']:['LOCATING END','SLIDING END']).entries()){
    const x0=110+i*250,W=Math.max(p.section.bf,bs.width);
    dr.rect(x0,y0+(W-p.section.bf)*k/2,bs.length*k,p.section.bf*k);dr.rect(x0,y0,bs.length*k,bs.width*k,'HIDDEN');dr.text(x0,y0-14,role,10);
    for(const r of g.rows)for(const side of [-1,1]){const cx=x0+r*k,cy=y0+W*k/2+side*eb.bolts.gauge*k/2;
@@ -45,7 +45,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
     dr.line(cx-8,cy,cx+8,cy,'CENTER');dr.line(cx,cy-8,cx,cy+8,'CENTER');}
    dr.dimH(x0,x0+g.rows[0]*k,y0+W*k,y0+W*k+22,`${f(g.rows[0])}`);dr.dimH(x0+g.rows[0]*k,x0+g.rows[1]*k,y0+W*k,y0+W*k+22,`${f(g.spacing)}`);
   }
-  const notes=[`4 ${eb.bolts.grade} bolts each end, diameter ${f(eb.bolts.diameter)}; gauge ${f(eb.bolts.gauge)}`,`Locating: ${f(g.hole)} standard holes in all plies; pretensioned, Class B (SC)`,`Sliding: ${f(g.slotWidth)} x ${f(g.slot)} slots in the girder flange`,`Sliding allowance ${f(g.travel)} each way; ${g.sleeve?`bolts pretensioned against ${f(g.sleeve.od)} OD steel sleeves`:'snug-tight bolts with jam nuts'}`,`Plate washers ${f(eb.washerThickness)} x ${f(g.washer.width)} x ${f(g.washer.length)}`,`Bolt rows ${f(eb.bolts.edge)} from each bearing plate end, clear of the stiffeners`];
+  const notes=[`4 ${eb.bolts.grade} bolts each ${p.system==='continuous'?'support':'end'}, diameter ${f(eb.bolts.diameter)}; gauge ${f(eb.bolts.gauge)}`,`Locating: ${f(g.hole)} standard holes in all plies; pretensioned, Class B (SC)`,`Sliding: ${f(g.slotWidth)} x ${f(g.slot)} slots in the girder flange`,`Sliding allowance ${f(g.travel)} each way; ${g.sleeve?`bolts pretensioned against ${f(g.sleeve.od)} OD steel sleeves`:'snug-tight bolts with jam nuts'}`,`Plate washers ${f(eb.washerThickness)} x ${f(g.washer.width)} x ${f(g.washer.length)}`,`Bolt rows ${f(eb.bolts.edge)} from each bearing plate end, clear of the stiffeners`];
   notes.forEach((n,i)=>dr.text(110,330+24*i,n,10));output.push(dr.drawing);
  }
  for(const [key,c,title,number,central] of [...(eb?[]:[['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw]] as const),['tie',d.brace.connection,'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const){

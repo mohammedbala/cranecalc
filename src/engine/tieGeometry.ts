@@ -50,3 +50,22 @@ export function flangeTieGeometry(p:ProjectInput){
   gussetEnd:start+connection,freeLength:t.length-2*connection,
   stations:independentBearings(p).map(e=>({...e,tieX:e.center+(e.end==='left'?-1:1)*a.longitudinalSetback}))};
 }
+
+/** Clear gap from the bearing stiffener to the bars, and from the tied flange to the gusset, mm. */
+const stiffenerTieClearance=6.35;
+/**
+ * Girder end of a paired-bar tie without a flange saddle: a gusset in the plane of the tie-side bearing
+ * stiffener, CJP welded to its outer edge just inside the tied flange, carries the bars' girder-end bolt
+ * group beyond the stiffener. The full-depth stiffener pair takes the tie force into the girder as the
+ * restraint diaphragm. Coordinates across the runway from the web centerline, mm.
+ */
+export function stiffenerTieGeometry(p:ProjectInput){
+ const d=p.details;if(!d||tieArrangement(d)!=='paired-bars'||flangeTieGeometry(p))return undefined;
+ const b=p.section,t=d.brace,c=t.connection,connection=(c.rows-1)*c.pitch+2*c.edge,clear=stiffenerTieClearance;
+ const root=b.tw/2+d.bearing.stiffenerWidth;
+ // A designed bracket fixes the column face; otherwise the bars start clear of the stiffener.
+ const face=d.bracket?.enabled?d.bracket.reach:root+clear+t.length,start=face-t.length,gussetEnd=start+connection;
+ return {root,start,face,connection,gussetEnd,gussetLength:gussetEnd-root,height:t.width,clear,sides:tieSides(p),
+  // Bars and gusset sit the clearance inside each tied flange.
+  topCenter:b.d/2-b.tf-clear-t.width/2,bottomCenter:-b.d/2+b.tf+clear+t.width/2};
+}

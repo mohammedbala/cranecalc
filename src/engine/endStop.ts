@@ -29,7 +29,9 @@ export function endStopGeometry(p:ProjectInput,e:EndStopInput){
  const railDepth=p.aist?.railDepth??p.railHeight;
  // Bumper centerline above the top of the base plate.
  const contact=railDepth+e.bumperHeight-tb;
- return {lip,back,front,faceBack,faceFront,frontRow,backRow,surfaceWidth,contact,railEnd:stopRailEnd(e),stiffenerEnd:faceBack-e.stiffener.length};
+ // Stiffeners stop an inch below the top of the face plate, and back at least the whole bumper contact.
+ const stiffenerHeight=Math.min(e.face.height,Math.max(e.face.height-inch,.5*e.face.height,contact+e.bumperDiameter/2));
+ return {lip,back,front,faceBack,faceFront,frontRow,backRow,surfaceWidth,contact,stiffenerHeight,railEnd:stopRailEnd(e),stiffenerEnd:faceBack-e.stiffener.length};
 }
 /** Nut / socket clearance from bolt center to an obstruction: project criterion after AISC Manual Table 7-15. */
 export const wrenchClearance=(db:number)=>Math.max(1.25*inch,1.6*db);
@@ -65,6 +67,13 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
  const lines=[{L:Wb,u:0,along:false},{L:Wb,u:tp,along:false},...Array.from({length:4},()=>({L:Ls,u:tp+Ls/2,along:true}))];
  const Lw=lines.reduce((a,l)=>a+l.L,0),wc=lines.reduce((a,l)=>a+l.L*l.u,0)/Lw,Iw=lines.reduce((a,l)=>a+(l.along?l.L**3/12:0)+l.L*(l.u-wc)**2,0),cw=Math.max(wc,tp+Ls-wc);
  const weldStress=Math.hypot(P*g.contact*cw/Iw,P/Lw),weldCapacity=available(.6*m.Fexx*e.weldSize/Math.sqrt(2),method,.75,2); // per unit length
+ // Stiffener to face plate, both sides of each stiffener over its height at the face: the shear flow that makes
+ // the face plate and stiffeners act together, with the bumper reaction each stiffener takes from the face plate
+ // over the contact diameter. The bumper is on the rail C/L, offset from the stop center.
+ const Hs=g.stiffenerHeight,ecc=Math.abs(p.railEccentricity),Rs=Math.min(P,P*(.5+ecc/s)),flow=P*Wb*tp*(uc-tp/2)/I/4,push=Rs/(2*Math.min(e.bumperDiameter,Hs));
+ const faceWeld=Math.hypot(flow,push);
+ // Face plate outstand beyond the stiffeners under the bumper contact pressure, as a cantilever strip.
+ const outstand=Math.max(0,e.bumperDiameter/2+ecc-s/2-ts/2),pressure=P/e.bumperDiameter**2;
  const shape=aiscShapeByName(b.catalogueId??''),k1=b.tw/2+(shape?shape.kdes*inch-b.tf:0);
  const bearings=p.system==='simple'?independentBearings(p).filter(v=>v.bay===1&&v.end==='left'):[];
  const stiffenerAt=bearings[0]?.center??d.bearing.length/2,stiffenerClear=Math.min(...[g.frontRow,g.backRow].map(x=>Math.abs(x-stiffenerAt)))-d.bearing.stiffenerThickness/2-d.bearing.weldSize;
@@ -99,10 +108,12 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
   compared('end-stop-flange-prying','Girder top flange · thickness for no prying',tMin(T,flangeB-db/2,flangeP,b.Fu),flangeT,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`Flange cantilevers from the web: b = ${f(flangeB)}, p = ${f(flangeP)}. ${b.kind==='cap'?'The cap web is not credited.':''}`),
   compared('end-stop-flexure','Stop body · flexure at base',P*g.contact/S,available(Fy,method,.9,1.67),'stress','f=\\frac{Pe}{S};\\quad S=I/c_{max}',`Face plate and both stiffeners at the top of the base plate, elastic. ${force}`),
   compared('end-stop-shear','Stop body · shear',P,available(.6*Fy*2*ts*Ls,method,1,1.5),'force','V_n=0.6F_y(2t_sL_s)','Both stiffeners parallel to the bumper force.'),
-  compared('end-stop-face','Face plate · bending between stiffeners',P*s/4/(e.bumperDiameter*tp**2/6),available(m.Fy,method,.9,1.67),'stress','f=\\frac{Ps/4}{d_bt_p^2/6}','Bumper force at midspan between stiffeners on a strip equal to the bumper contact diameter.'),
+  compared('end-stop-face','Face plate · bending between stiffeners',P*s/4/(e.bumperDiameter*tp**2/6),available(m.Fy,method,.9,1.67),'stress','f=\\frac{Ps/4}{d_bt_p^2/6}','The face plate spans between the two stiffeners it is welded to; bumper force at midspan on a strip equal to the bumper contact diameter.'),
+  compared('end-stop-face-outstand','Face plate · outstand beyond the stiffeners',6*pressure*outstand**2/2/tp**2,available(m.Fy,method,.9,1.67),'stress','f=\\frac{6}{t_p^2}\\frac{qa^2}{2};\\quad q=\\frac{P}{d_b^2},\\;a=\\frac{d_b}{2}+e_r-\\frac{s+t_s}{2}',`Contact pressure over the bumper diameter, with the bumper on the rail C/L ${f(ecc)} off the stop center; the face plate cantilevers ${f(outstand)} beyond the outer face of a stiffener.`),
   compared('end-stop-weld','Stop welds · combined throat stress',weldStress/(e.weldSize/Math.sqrt(2)),weldCapacity/(e.weldSize/Math.sqrt(2)),'stress','f_r=\\frac{1}{0.707w}\\sqrt{\\left(\\frac{Pec}{I_w}\\right)^2+\\left(\\frac{P}{L_w}\\right)^2}',`Fillets both faces of the face plate and of each stiffener to the base plate, treated as lines; stress on the effective throat of w = ${f(e.weldSize)}.`),
+  compared('end-stop-stiffener-weld','Stiffener-to-face-plate welds · shear flow with bumper reaction',faceWeld/(e.weldSize/Math.sqrt(2)),weldCapacity/(e.weldSize/Math.sqrt(2)),'stress','f_r=\\frac{1}{0.707w}\\sqrt{\\left(\\frac{PQ}{4I}\\right)^2+\\left(\\frac{R_s}{2d_b}\\right)^2};\\quad R_s=P\\left(\\frac12+\\frac{e_r}{s}\\right)',`Continuous fillets both sides of each stiffener, full height ${f(Hs)} at the face. Four lines share the shear flow P·Q/I of the face plate and stiffeners acting together (Q of the face plate, ${format(Wb*tp*(uc-tp/2),'modulus',u,3)}); each stiffener takes R_s = ${format(Rs,'force',u,3)} from the face plate over the ${f(Math.min(e.bumperDiameter,Hs))} contact. No bearing of the stiffener edge on the face plate is credited.`),
   compared('end-stop-weld-minimum','Stop welds · minimum fillet',minimumFillet(Math.max(tb,tp,ts)),e.weldSize,'length','w\\ge w_{min,J2.4}','Thicker joined part controls.'),
-  compared('end-stop-stiffener','Stiffener · width-thickness',Math.max(e.face.height,Ls)/ts,1.49*Math.sqrt(b.E/m.Fy),'ratio','b/t\\le1.49\\sqrt{E/F_y}','Stiffener welded on two edges (face plate and base plate).',['aisc-b']),
+  compared('end-stop-stiffener','Stiffener · width-thickness',Math.max(e.face.height,Ls)/ts,1.49*Math.sqrt(b.E/m.Fy),'ratio','b/t\\le1.49\\sqrt{E/F_y}','Stiffener welded on two edges, to the face plate and the base plate.',['aisc-b']),
   compared('end-stop-contact','Face · bumper contact height',g.contact+e.bumperDiameter/2,e.face.height,'length','e+d_b/2\\le H','The whole bumper bears on the face plate.'),
   compared('end-stop-width','Face · bumper contact width',e.bumperDiameter,Wb,'length','d_b\\le W','Face plate is as wide as the base plate.'),
   compared('end-stop-fit','Base plate fits the girder top',Wb,g.surfaceWidth,'length','W\\le b_{top}',b.kind==='cap'?'On the cap channel web.':'On the W top flange.'),

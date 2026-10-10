@@ -7,6 +7,7 @@ import {defaultLongitudinalBracing,type LongitudinalBracingInput} from '../engin
 import {aiscAngles} from '../data/aiscAngles';
 import {defaultEndStop,needsGirderStops,type EndStopInput} from '../engine/endStopInputs';
 import {defaultEndBearing,slidingBolts,type EndBearingInput} from '../engine/endBearingInputs';
+import {defaultSimpleSupport} from '../engine/simpleSupports';
 import type {CalculationSnapshot,ProjectInput} from '../engine/types';
 import {format,type Quantity} from '../engine/units';
 
@@ -138,11 +139,14 @@ export function EndBearingInputs({project,update,numeric}:{project:ProjectInput;
  const e=project.details?.endBearing;
  const set=(patch:Partial<EndBearingInput>)=>update(p=>{if(p.details)p.details.endBearing={...(p.details.endBearing??structuredClone(defaultEndBearing)),...patch};});
  const bolts=(patch:Partial<EndBearingInput['bolts']>)=>e&&set({bolts:{...e.bolts,...patch}});
- if(!project.details||project.system!=='simple')return null;
+ if(!project.details)return null;
+ const continuous=project.system==='continuous',move=project.details.simpleSupport??defaultSimpleSupport;
+ const movement=(patch:Partial<typeof move>)=>update(p=>{if(p.details)p.details.simpleSupport={...(p.details.simpleSupport??defaultSimpleSupport),...patch};});
  return <div className="aist-inputs">
-  <div className="form-section-title"><span>05</span>Bolted end bearings</div>
-  <label className="checkbox-field"><input type="checkbox" checked={!!e?.enabled} onChange={ev=>set({enabled:ev.target.checked})}/>Bolt each girder end to its bracket seat</label>
-  <p className="form-note">Four bolts through the bottom flange, bearing plate and seat at each girder end. The left end of each bay locates with standard holes and pretensioned slip-critical bolts; the right end slides in slots sized for the sliding allowance, under plate washers, with bolts pretensioned against steel sleeves so the flange is not clamped (AISC J1.10(c)); snug-tight bolts with jam nuts are allowed only for cranes of 5 tons or less. Replaces the girder-end cover plates. Drawn with the connection details.</p>
+  <div className="form-section-title"><span>05</span>{continuous?'Bolted girder bearings':'Bolted end bearings'}</div>
+  <label className="checkbox-field"><input type="checkbox" checked={!!e?.enabled} onChange={ev=>set({enabled:ev.target.checked})}/>{continuous?'Bolt the girder to each bracket seat':'Bolt each girder end to its bracket seat'}</label>
+  <p className="form-note">{continuous?'Four bolts through the bottom flange, bearing plate and seat at each support. The support nearest mid-length locates with standard holes and pretensioned slip-critical bolts; every other support slides in slots sized for the sliding allowance, which covers the thermal travel from the locating support':'Four bolts through the bottom flange, bearing plate and seat at each girder end. The left end of each bay locates with standard holes and pretensioned slip-critical bolts; the right end slides in slots sized for the sliding allowance'}, under plate washers, with bolts pretensioned against steel sleeves so the flange is not clamped (AISC J1.10(c)); snug-tight bolts with jam nuts are allowed only for cranes of 5 tons or less. Replaces the girder-end cover plates and restrains the bottom flange, so the ties are needed at the top flange only. Drawn with the connection details.</p>
+  {e?.enabled&&continuous&&<div className="field-grid">{numeric('Sliding allowance each way',move.guideTravel,v=>movement({guideTravel:v}))}{numeric('Temperature rise from erection',move.temperatureRise,v=>movement({temperatureRise:v}),'temperatureChange')}{numeric('Temperature fall from erection',move.temperatureFall,v=>movement({temperatureFall:v}),'temperatureChange')}{numeric('Setting tolerance',move.settingTolerance,v=>movement({settingTolerance:v}))}</div>}
   {e?.enabled&&<div className="field-grid">{numeric('Bolt diameter',e.bolts.diameter,v=>bolts({diameter:v}))}<label className="field"><span>Bolt grade</span><select value={e.bolts.grade} onChange={ev=>bolts({grade:ev.target.value as 'A325'|'A490'})}><option>A325</option><option>A490</option></select></label>{numeric('Bolt gauge across runway',e.bolts.gauge,v=>bolts({gauge:v}))}{numeric('Bolt rows from bearing plate ends',e.bolts.edge,v=>bolts({edge:v}))}{numeric('Plate washer thickness',e.washerThickness,v=>set({washerThickness:v}))}<label className="field"><span>Sliding-end bolts</span><select aria-label="Sliding-end bolts" value={slidingBolts(e).mode} onChange={ev=>set({sliding:ev.target.value as 'sleeved'|'snug-tight'})}><option value="sleeved">Pretensioned against steel sleeves</option><option value="snug-tight">Snug-tight with jam nuts (5 tons or less)</option></select></label>{slidingBolts(e).mode==='sleeved'&&<>{numeric('Sleeve wall thickness',slidingBolts(e).wall,v=>set({sleeveWall:v}))}{numeric('Sleeve length beyond flange',slidingBolts(e).clearance,v=>set({sleeveClearance:v}))}</>}</div>}
  </div>;
 }

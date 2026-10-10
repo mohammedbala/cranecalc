@@ -18,7 +18,7 @@ describe('field welds to existing building steel',()=>{
   expect(flags(bracket)).toBe(1);expect(flags(tie)).toBe(2);expect(flags(generic)).toBe(1);
   for(const svg of [bracket,tie,generic])expect(svg).toContain('EXISTING');
   expect(bracket).toContain('SHOP WELD SEAT TO RIBS');expect(bracket).toContain('FIELD WELD TO EXISTING COLUMN');expect(tie).toContain('/ EACH GUSSET');
-  expect(tie).toContain('LOCAL CHECKS: PENDING');expect(tie).not.toMatch(/NaN|Infinity/);
+  expect(tie).toContain('TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT.');expect(tie).not.toMatch(/NaN|Infinity/);
   expect(JSON.stringify(s.input)).toBe(before);
   const drawings=detailedDrawings(s);
   for(const name of ['welded-column-bracket','direct-flange-tie'])expect(drawings.find(d=>d.name===name)?.entities.some(e=>e.type==='text'&&e.text.includes('FIELD WELD')&&e.text.includes('EXISTING COLUMN'))).toBe(true);

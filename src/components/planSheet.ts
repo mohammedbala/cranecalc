@@ -13,7 +13,8 @@ import { planSheetGeometry, type Point, type Segment } from './planSheetGeometry
 import { drawingLength, drawingElevation } from './drawingFormat';
 import { sheetDrawingScale as drawingScale, n, text, rect, line, bubble, dimH, dimV, short, titleBlock, sheetStart, viewTitle, multiLeader, detailRef, detailTitles, sheetRef, breakLine, textWidth, type XY } from './sheetGraphics';
 import { heading, table, numbered, noteStack, type Style } from './noteBlocks';
-import { sheetOrdinalToken, detailNumberToken, sheetNumberToken } from './sheetGraphics';
+import { sheetOrdinalToken, detailNumberToken, sheetNumberToken, bearingBoltsTitle } from './sheetGraphics';
+import { activeEndBearing, continuousBearings } from '../engine/endBearingInputs';
 import { runwayElevations, girderMarks } from '../engine/drawingData';
 import { connectionTopic } from './connectionSheet';
 import { coverSheetSvg } from './coverSheet';
@@ -244,7 +245,7 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
   const p=s.input,u=p.units,len=(mm:number)=>drawingLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
   const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP';
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
-  const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LEFT END LOCATES, RIGHT END SLIDES; SEE ${detailRef(detailTitles.movement)}`;
+  const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LEFT END LOCATES, RIGHT END SLIDES; SEE ${detailRef(detailTitles.movement)}`;
   const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
     return [mark,String(all.length*2),`${p.section.name}${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
   const notes=[

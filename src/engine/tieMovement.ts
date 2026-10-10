@@ -4,6 +4,7 @@ import {boltCapacity,blockShear,transverseFilletFatigue} from './connectionStren
 import {fatigueSpectrumBin} from './detailAnalysis';
 import {flangeTieGeometry,tieRelease,columnGussetHeight} from './tieGeometry';
 import {simpleSupportInput} from './simpleSupports';
+import {activeEndBearing,continuousBearings} from './endBearingInputs';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 
@@ -13,10 +14,12 @@ const compared=(id:string,title:string,demand:number,capacity:number,quantity:Ch
 /** Movements imposed on the paired tie bars between the girder and the column, mm and rad. */
 export function tieMovements(s:CalculationSnapshot){
  const p=s.input,d=p.details!,a=s.designAnalysis!,r=s.detailResults!,t=d.brace,g=flangeTieGeometry(p),release=tieRelease(p);
- const setback=g?.attachment.longitudinalSetback??0,depth=p.section.d,ss=p.system==='simple'?simpleSupportInput(p):undefined;
+ const setback=g?.attachment.longitudinalSetback??0,depth=p.section.d,ss=p.system==='simple'||activeEndBearing(p)?simpleSupportInput(p):undefined;
  const cyclicRotation=a.serviceRotation??0,rotation=a.endRotation;
- // Rotation about the bearing moves each bar along the runway by at most θ·d.
- const thermal=ss?alpha*Math.max(...p.spans)*Math.max(ss.temperatureRise,ss.temperatureFall):0;
+ // Rotation about the bearing moves each bar along the runway by at most θ·d. Sliding ends move by the thermal
+ // strain over the span, or on a bolted continuous girder over the distance from its locating support.
+ const reach=p.system==='simple'?Math.max(...p.spans):Math.max(0,...continuousBearings(p).map(v=>v.distance));
+ const thermal=ss?alpha*reach*Math.max(ss.temperatureRise,ss.temperatureFall):0;
  const support=r.bracket?.service.deflection?.value??r.existingBracket?.service.seatDeflection?.value;
  const supportSource=r.bracket?'designed bracket':r.existingBracket?'new seat on the existing bracket (existing support deformation excluded)':undefined;
  const cranes=p.cranes.length,impact=Math.max(...p.cranes.map(c=>c.impact));
@@ -54,7 +57,7 @@ export function tieMovementChecks(s:CalculationSnapshot,ctx:{force:number;member
  const Mx=rel?0:6*E*Ix*mv.vertical/L**2,Mcx=phiB(m.Fy*t.thickness*t.width**2/6);
  const ratio=P/Pc,moments=My/Mcy+Mx/Mcx,h1=ratio>=.2?ratio+8/9*moments:ratio/2+moments;
  checks.push(compared('tie-move-strength','Tie bars · axial force with imposed movement',h1,1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{ry}}{M_{cy}}+\\frac{M_{rx}}{M_{cx}}\\right)\\le1;\\quad M_r=\\frac{6EI\\Delta}{L^2}',
-  `AISC H1-1 per bar: P_r = ${format(P,'force',u,3)} of compression or tension, P_c = ${format(Pc,'force',u,3)} (compression governs). Out-of-plane movement ${fmt(mv.longitudinal)} = factored end rotation ${mv.rotation.toExponential(3)} rad × d${mv.thermal?` + thermal travel ${fmt(mv.thermal)} at the sliding ends (12 × 10⁻⁶/°C over the longest bay, temperature change from erection)`:''}. Weak-axis M_c = φF_yZ_y.${rel?' Vertical movement is released at the column gusset.':` In-plane movement ${fmt(mv.vertical)}; strong-axis M_c = φF_yS_x.`} Reverse-curvature moments from end movement need no B1 amplification (C_m = 0.2).`,['aisc-h','asce','tieback-practice']));
+  `AISC H1-1 per bar: P_r = ${format(P,'force',u,3)} of compression or tension, P_c = ${format(Pc,'force',u,3)} (compression governs). Out-of-plane movement ${fmt(mv.longitudinal)} = factored end rotation ${mv.rotation.toExponential(3)} rad × d${mv.thermal?` + thermal travel ${fmt(mv.thermal)} at the sliding ends (12 × 10⁻⁶/°C over ${p.system==='simple'?'the longest bay':'the farthest support from the locating support'}, temperature change from erection)`:''}. Weak-axis M_c = φF_yZ_y.${rel?' Vertical movement is released at the column gusset.':` In-plane movement ${fmt(mv.vertical)}; strong-axis M_c = φF_yS_x.`} Reverse-curvature moments from end movement need no B1 amplification (C_m = 0.2).`,['aisc-h','asce','tieback-practice']));
  // Gussets: two bars deliver their end shear and moment about the vertical axis; the plates bend out of plane.
  const V=(delta:number)=>2*12*E*Iy*delta/L**3,M=(delta:number)=>2*6*E*Iy*delta/L**2;
  const girderRoot=g?{b:g.rootLength,arm:g.topDrop-g.attachment.saddleThickness,weld:g.attachment.weldSize,name:'flange saddle gusset'}:{b:c.weldLength,arm:c.projection,weld:c.weldSize,name:'girder gusset'};
