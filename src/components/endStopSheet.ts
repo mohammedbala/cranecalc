@@ -56,8 +56,9 @@ export function endStopSheetSvg(s:CalculationSnapshot){
   svg+=line([X(g.faceFront)-4,bc[1]],[bc[0]+br*kk+34,bc[1]],'grid-line');
   // Baseline dimensions from the girder end, stacked above the stop so every label fits.
   const top=Y(tb+H);
-  // Longest dimension lowest; each label sits past the end of its own dimension line.
-  [[g.front,'BASE PL'],[g.faceFront,'STOP FACE'],[g.frontRow,'FRONT BOLTS'],[g.backRow,'BACK BOLTS']].forEach(([x,label],i)=>{const yd=top-10-12*i;svg+=dimH(X(0),X(x as number),top,yd,'')+text(X(x as number)+4,yd+3,`${dim(x as number)} ${label}`,7.5);});
+  // Longest dimension lowest; each label sits outboard of the girder end on its own dimension line,
+  // clear of the stop and of the callout leaders.
+  [[g.front,'BASE PL'],[g.faceFront,'STOP FACE'],[g.frontRow,'FRONT BOLTS'],[g.backRow,'BACK BOLTS']].forEach(([x,label],i)=>{const yd=top-10-12*i;svg+=dimH(X(0),X(x as number),top,yd,'')+line([X(0)-3,yd],[X(0),yd])+text(X(0)-5,yd+3,`${label} ${dim(x as number)}`,7.5,'end');});
   svg+=dimV(Y(tb+H),Y(tb),X(g.back),X(0)-22,dim(H));
   svg+=dimV(bc[1],railTop,bc[0]+br*kk+28,bc[0]+br*kk+34,dim(e.bumperHeight));
   svg+=dimH(X(0),X(xs),cut,cut+24,`${dim(xs)} TO BEARING STIFFENER C/L`);
@@ -73,7 +74,7 @@ export function endStopSheetSvg(s:CalculationSnapshot){
    {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:['END BEARING STIFFENERS',`SEE ${detailRef('GIRDER BEARING / COLUMN BRACKET')}`]},
    ...(tie&&endTie?[{at:[X(endTie.tieX),wFl+tie.attachment.saddleThickness*kk] as XY,labels:['TOP TIE SADDLE, FAR SIDE (HIDDEN)',`SEE ${detailRef('DIRECT FLANGE TIE / TOP TRANSVERSE SECTION')}`]}]:[])
   ],lx,58,338);
-  svg+=text(X(0)-6,ys-3,'GIRDER END',7.5,'end',700);
+  svg+=text(X(0)-28,ys-3,'GIRDER END',7.5,'end',700);
   svg+=viewTitle(318,360,'END STOP / ELEVATION',k.label)+'</g>';
  }
  // 2: Plan on the girder top.

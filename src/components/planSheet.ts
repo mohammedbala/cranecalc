@@ -122,8 +122,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   if(stop){const sh=(stop.base.thickness+stop.face.height)/1000;for(const end of stopIdx){const face=end?er-(stopGeom!.faceFront/1000)*ek:el+(stopGeom!.faceBack/1000)*ek;svg+=`<g data-end-stop="elevation">${rect(face,EY(m.railBase+sh),stop.face.thickness/1000*ek,(sh-stop.base.thickness/1000)*ek,'runway-line')}${rect(end?er-stopGeom!.front/1000*ek:el+stopGeom!.back/1000*ek,EY(m.railBase+stop.base.thickness/1000),stop.base.length/1000*ek,stop.base.thickness/1000*ek,'runway-line')}</g>`;}
    // A short label inboard of the stop and above the bay marks.
    // The elbow stays clear of the grid bubble; the second line clears the bay mark below it.
-   const first=ends[0]==='left',head=ends.length===2?'END STOP, BOTH ENDS':'END STOP',w=Math.max(textWidth(head,7.5),textWidth('SEE 1/S-07',7.5)),tx=first?el+stopGeom!.back/1000*ek:er-stopGeom!.back/1000*ek;
-   svg+=multiLeader([[tx,EY(m.railBase+sh/2)]],[first?tx+30:tx-30-w,top-36],[head,`SEE ${detailRef('END STOP / ELEVATION')}`],7.5);}
+   // Short lines keep the label inside the first bay, clear of the next grid bubble.
+   const first=ends[0]==='left',labels=['END STOP',...(ends.length===2?['BOTH ENDS']:[]),`SEE ${detailRef('END STOP / ELEVATION')}`],w=Math.max(textWidth('END STOP',7.5),textWidth('BOTH ENDS',7.5),textWidth('SEE 1/S-07',7.5)),tx=first?el+stopGeom!.back/1000*ek:er-stopGeom!.back/1000*ek;
+   svg+=multiLeader([[tx,EY(m.railBase+sh/2)]],[first?tx+30:tx-30-w,top-25-11*(labels.length-1)],labels,7.5);}
   for(const g of marks)svg+=text(EX(mid(g)),top-14,g.mark,9,'middle',700)+text(EX(mid(g)),bottom+17,p.section.name,9,'middle',700);
   const railTop=EY(m.railBase+railDepth);
   // Elevation targets: the T.O.R. label rises and the T.O.S. label drops so close elevations never overlap.

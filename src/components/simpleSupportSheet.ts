@@ -43,7 +43,7 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
   svg+=`<g data-stiffener="full-depth">${rect(bc-st/2,top+b.tf*k,st,(b.d-2*b.tf)*k,'runway-line')}</g>`;
   svg+=rect(bc-l/2,bottom,l,bs.thickness*k,'runway-line');
   svg+=dimH(bc-l/2,bc+l/2,bottom+bs.thickness*k,309,dim(bs.length));
-  svg+=text(cx+side*84,334,b.name,8.5,'middle',700);
+  svg+=text(cx+side*84,327,b.name,8.5,'middle',700);
  }
  if(joint)svg+=dimH(cx-g,cx+g,top,111,dim(c.endGap));
  svg+=line([cx+extent,top],[440,top])+text(445,top+3,'T.O.S. = S-01',8);
