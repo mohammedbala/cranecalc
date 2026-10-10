@@ -10,7 +10,7 @@ import type { ProjectInput } from './types';
 import type { LapConnection,RunwayDetails } from './runwayDetails';
 import {defaultSimpleSupport} from './simpleSupports';
 import {defaultExistingColumn} from './existingColumnInputs';
-import {defaultLongitudinalBracing} from './longitudinalBracingInputs';
+import {defaultBracingDesign,defaultLongitudinalBracing} from './longitudinalBracingInputs';
 import {defaultColumnBase} from './columnBaseInputs';
 import {columnBaseElevation} from './columnBase';
 import {aiscShapeByName} from '../data/aiscSections';
@@ -133,9 +133,12 @@ export function newColumnDemonstrationProject():ProjectInput {
  d.bracket!.receiver={...d.bracket!.receiver,depth:w.d*inch,width:w.bf*inch,flangeThickness:w.tf*inch,webThickness:w.tw*inch,Fy:50*ksi,Fu:65*ksi,unbracedLength:top,axialDemand:0,confirmed:true,source:`New ${shape} column designed here; no other loads`};
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,isNew:true,shape,Fy:50*ksi,Fu:65*ksi,height:top,seatElevation:seat,
   strong:{base:'fixed',top:'free'},weak:{base:'fixed',top:'braced'},Lcx:2.1*top,Lcy:top,Lcz:top,Lb:top,longitudinal:'bracing',driftLimit:240,source:'New column designed here',confirmed:true,
-  seismic:{enabled:true,sdc:'B',SDS:.2,system:'ordinary',Ie:1,rho:1,source:'Fictitious site data: SDS 0.20, SD1 0.08, Site Class D, Risk Category II, SDC B'}};
+  seismic:{enabled:true,sdc:'B',SDS:.2,system:'ordinary',Ie:1,rho:1,source:'Fictitious site data: SDS 0.20, SD1 0.08, Site Class D, Risk Category II, SDC B',
+   building:{drift:1.5*inch,source:'Fictitious original building report: maximum inelastic displacement 1.5 in at the runway level'}}};
  p.columnBase=base;
- p.longitudinalBracing={...p.longitudinalBracing!,height:seat,existing:{W:0,E:0},source:'Fictitious new crane-level rod X-bracing between the new columns at grid lines 2-3; no building wind or seismic on this line',confirmed:true};
- p.notes='Software capability demonstration using realistic fictitious geometry, supplier forces, duty and criteria. Not a site-specific design. Scope: three simply supported 25-ft bays of a 2-ton capped runway on new freestanding W14X120 columns with welded brackets, top-flange ties, base plates, anchor rods and spread footings poured flush with the saw cut slab, and crane-level rod bracing. The existing building carries no crane load. Seismic: ordinary steel cantilever column system across the runway in Seismic Design Category B; crane-level bracing along it.';
+ p.longitudinalBracing={...p.longitudinalBracing!,height:seat,existing:{W:0,E:0},source:'Fictitious new crane-level rod X-bracing between the new columns at grid lines 2-3; no building wind or seismic on this line',confirmed:true,
+  // Clevis rods in the middle span, a W8X24 strut on the column line and the bracket seats welded to the columns.
+  design:{...structuredClone(defaultBracingDesign),spans:[2]}};
+ p.notes='Software capability demonstration using realistic fictitious geometry, supplier forces, duty and criteria. Not a site-specific design. Scope: three simply supported 25-ft bays of a 2-ton capped runway on new freestanding W14X120 columns with welded brackets, top-flange ties, base plates, anchor rods and spread footings poured flush with the saw cut slab, and crane-level rod X-bracing with a W8X24 strut on the column line. The existing building carries no crane load. Seismic: ordinary steel cantilever column system across the runway and rod bracing not specifically detailed for seismic resistance along it, Seismic Design Category B.';
  return p;
 }

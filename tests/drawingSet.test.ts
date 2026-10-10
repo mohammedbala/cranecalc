@@ -29,7 +29,8 @@ describe('issued drawing set',()=>{
   // demonstration, two for the capped and new-column demonstrations.
   expect(demoSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02']);
   expect(cappedSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
-  expect(newColumnSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
+  // The new-column set adds the new-column and bracing details on a third detail sheet.
+  expect(newColumnSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03','S-04']);
   for(const set of [demoSet,cappedSet,newColumnSet])for(const sheet of set.slice(2)){const n=sheet.svg.match(/data-view-title="below"/g)!.length;expect(n,sheet.number).toBeGreaterThanOrEqual(8);expect(n,sheet.number).toBeLessThanOrEqual(12);}
   expect(sheetIndex(capped).map(v=>v.title)).toEqual(cappedSet.map(v=>v.title));
   const index=texts(cappedSet[0].svg).join(' | ');

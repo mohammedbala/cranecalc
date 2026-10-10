@@ -7,17 +7,24 @@ import { shapeMeters, type ReferenceShape } from '../data/aiscReferenceShapes';
 import { horizontalPlateGeometry, referenceBoltDiameter, type HardwareBuilder, type Hole, type PartInfo } from './connectionDetails';
 import { columnProfile, portalDimensions, profileUpper, taperedISection, type FrameStyle } from './metalBuildingGeometry';
 import {columnBaseElevation} from '../engine/columnBaseInputs';
+import {existingColumnSection} from '../engine/existingColumn';
+import {bracingGeometry,bracingLayout,designsBracing} from '../engine/newColumnBracing';
 import type {ProjectInput} from '../engine/types';
 
 /** New freestanding runway columns, in m from the girder mid-depth: column top and base, base plate, anchor rods and footing. */
-export interface NewColumnFraming {top:number;bottom:number;floor:number;plate:{N:number;B:number;t:number};grout:number;anchors:{x:number;z:number;d:number}[];footing:{L:number;B:number;h:number}}
+export interface NewColumnFraming {top:number;bottom:number;floor:number;plate:{N:number;B:number;t:number};grout:number;anchors:{x:number;z:number;d:number}[];footing:{L:number;B:number;h:number};
+ /** Crane-level strut on the column line and rod X-bracing in the braced spans (0-based), in m. */
+ bracing?:{spans:number[];workPoint:number;strut:{d:number;bf:number;tf:number;tw:number;end:number};rod:number;top:[number,number];base:[number,number]}}
 /** Geometry of the new columns from the project, when a new column base is designed. */
 export function newColumnFraming(p:ProjectInput):NewColumnFraming|undefined{
  const c=p.existingColumn,b=p.columnBase;if(!c?.enabled||!c.isNew||!b?.enabled)return undefined;
  const mm=.001,bearing=p.details?.bearing.thickness??0,seatTop=-p.section.d/2-bearing,bottom=(seatTop-c.seatElevation)*mm;
  const a=b.anchors,row=b.plate.N/2-a.edge,xs=Array.from({length:a.perRow},(_,i)=>-a.gauge/2+(a.perRow>1?i*a.gauge/(a.perRow-1):a.gauge/2));
  return {top:bottom+c.height*mm,bottom,floor:bottom-columnBaseElevation(b)*mm,plate:{N:b.plate.N*mm,B:b.plate.B*mm,t:b.plate.thickness*mm},grout:b.grout*mm,
-  anchors:xs.flatMap(x=>[-row,row].map(z=>({x:x*mm,z:z*mm,d:a.diameter*mm}))),footing:{L:b.footing.L*mm,B:b.footing.B*mm,h:b.footing.thickness*mm}};
+  anchors:xs.flatMap(x=>[-row,row].map(z=>({x:x*mm,z:z*mm,d:a.diameter*mm}))),footing:{L:b.footing.L*mm,B:b.footing.B*mm,h:b.footing.thickness*mm},
+  bracing:designsBracing(p)?(()=>{const g=bracingGeometry(p,existingColumnSection(p).section),s=g.strut;
+   return {spans:bracingLayout(p).spans.map(i=>i-1),workPoint:seatTop*mm,strut:{d:s.d*mm,bf:s.bf*mm,tf:s.tf*mm,tw:s.tw*mm,end:s.end*mm},rod:p.longitudinalBracing!.rod.diameter*mm,
+    top:[g.top.pin[0]*mm,g.top.pin[1]*mm] as [number,number],base:[g.bottom.pin[0]*mm,g.bottom.pin[1]*mm] as [number,number]};})():undefined};
 }
 
 interface FramingMaterials { column: THREE.Material; beam: THREE.Material; plate: THREE.Material; foundation: THREE.Material; weld?:THREE.Material; edge: THREE.LineBasicMaterial }
@@ -143,6 +150,22 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
     box(group,`foundation-pad-${code}`,baseX+.2,padH,baseZ+.2,x,floor+padH/2,columnOffset,materials.foundation);
     }
   });
+  // Crane-level strut on the column line in every span, its flanges stopping at the coped ends, and the rods pin
+  // to pin in the braced spans. The gussets and clevises are detailed on the drawings, not modeled.
+  const br=newColumn?.bracing;
+  if(br){
+   const s=br.strut,part=(mesh:THREE.Mesh,family:string,x:number)=>{mesh.userData.part={id:mesh.name,family,description:`${family}; see the bracing details.`,support:{x,z:columnOffset}} satisfies PartInfo;mesh.userData.designedBracket=true;};
+   supports.slice(1).forEach((x1,i)=>{
+    const x0=supports[i],L=x1-x0-2*s.end,cx=(x0+x1)/2;
+    for(const [name,h,w,y] of [['top',s.tf,s.bf,br.workPoint+(s.d-s.tf)/2],['bottom',s.tf,s.bf,br.workPoint-(s.d-s.tf)/2],['web',s.d-2*s.tf,s.tw,br.workPoint]] as const)part(box(group,`strut-${i+1}-${name}`,L,h,w,cx,y,columnOffset,materials.plate),'Crane-level strut',cx);
+    if(!br.spans.includes(i))return;
+    for(const dir of [1,-1]){
+     const a=new THREE.Vector3(dir>0?x0+br.top[0]:x1-br.top[0],br.workPoint+br.top[1],columnOffset),b=new THREE.Vector3(dir>0?x1-br.base[0]:x0+br.base[0],columnBottom+br.base[1],columnOffset);
+     const rod=box(group,`brace-rod-${i+1}-${dir>0?'a':'b'}`,a.distanceTo(b),br.rod,br.rod,(a.x+b.x)/2,(a.y+b.y)/2,columnOffset,materials.plate);
+     rod.rotation.z=Math.atan2(b.y-a.y,b.x-a.x);part(rod,'Brace rod',cx);
+    }
+   });
+  }
   // New columns and their bases are new work: drawn as designed steel, not reference framing.
   if(newColumn)group.traverse(o=>{if(/^(column|base-plate|footing)-S\d/.test(o.name)||o.userData.part?.family==='Headed anchor rod')o.userData.designedBracket=true;});
   if(bracket)group.add(buildWeldedBrackets(bracket,supports,seatTop,materials.plate,materials.edge,continuousBearing,materials.weld,hardware));

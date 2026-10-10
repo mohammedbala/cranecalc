@@ -17,7 +17,8 @@ import { compressionFlangeGap } from './detailAnalysis';
 import { travelLimits } from './continuation';
 import { supportReactions } from './supportReactions';
 import { runwayElevations } from './drawingData';
-import { existingColumnAnalysis,existingColumnChecks,validateExistingColumn } from './existingColumn';
+import { existingColumnAnalysis,existingColumnChecks,existingColumnSection,validateExistingColumn } from './existingColumn';
+import { bracingSystemAnalysis,bracingSystemChecks,designsBracing } from './newColumnBracing';
 import { columnBaseAnalysis,columnBaseChecks,validateColumnBase } from './columnBase';
 import { longitudinalBracingAnalysis,longitudinalBracingChecks,validateLongitudinalBracing } from './longitudinalBracing';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
@@ -96,11 +97,17 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
    snapshot.checks.push(...aistChecks(snapshot),...capInputChecks(p));
    // Unfactored reactions by load type for the building that carries the runway.
    snapshot.supportReactions=supportReactions(p,props);
+   // Bracing between new columns is analysed first: its forces load the braced columns and their bases.
+   const column=p.existingColumn?.enabled?existingColumnSection(p).section:undefined;
+   if(p.longitudinalBracing?.enabled)snapshot.longitudinalBracing=longitudinalBracingAnalysis(p,snapshot.supportReactions,column);
    if(p.existingColumn?.enabled){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn));}
    if(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled){snapshot.columnBase=columnBaseAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...columnBaseChecks(p,snapshot.columnBase,snapshot.existingColumn));}
    // Drawings print elevations from project data only.
    if(p.details&&!runwayElevations(p))snapshot.checks.push({id:'drawing-elevation',group:'Detailing',title:'Runway elevation for drawings',status:'incomplete',equation:'',note:'Enter the top-of-rail elevation above the datum under Project, or check the existing column with its surveyed seat elevation. Drawing elevations are never taken from the 3D reference model.',referenceIds:['criteria']});
-   if(p.longitudinalBracing?.enabled){snapshot.longitudinalBracing=longitudinalBracingAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...longitudinalBracingChecks(p,snapshot.longitudinalBracing));}
+   if(snapshot.longitudinalBracing){
+    snapshot.checks.push(...longitudinalBracingChecks(p,snapshot.longitudinalBracing));
+    if(designsBracing(p)&&column){snapshot.bracingSystem=bracingSystemAnalysis(p,snapshot.supportReactions,snapshot.longitudinalBracing,column,snapshot.existingColumn,snapshot.columnBase);snapshot.checks.push(...bracingSystemChecks(p,snapshot.bracingSystem,column));}
+   }
    if(p.details){
     const detailed=completeRunwayChecks(snapshot);
     if(snapshot.detailResults){

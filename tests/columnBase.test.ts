@@ -122,7 +122,7 @@ describe('New freestanding column package',()=>{
   expect(el.tor).toBeCloseTo(p.drawing!.datumElevation+p.drawing!.railElevation!,3);
   // The issued set adds the new column details and every reference to them resolves.
   const set=drawingSheetSet(s),columns=set.find(v=>v.svg.includes('data-view="new-column-elevation"'))!;
-  expect(columns.title).toContain('NEW COLUMNS & FOOTINGS');
+  expect(columns.title).toContain('NEW COLUMNS, FOOTINGS');
   for(const view of ['base-plate-plan','footing-plan','footing-section','new-column-notes'])expect(columns.svg).toContain(`data-view="${view}"`);
   const all=set.map(v=>texts(v.svg)).join(' ');
   expect(all).not.toContain('NOT IN SET');
