@@ -1,12 +1,13 @@
 import {line,text,wrapToWidth} from './sheetGraphics';
 
 /** Stacked note blocks (headings, paragraphs, numbered notes, tables) measured for flowing on a sheet. */
-export interface Block {height:number;keep?:boolean;render:(x:number,y:number)=>string;}
+/** A note block; a heading carries the heading that restates it where its section continues in another column. */
+export interface Block {height:number;keep?:boolean;continued?:()=>Block;render:(x:number,y:number)=>string;}
 export interface Style {width:number;body:number;leading:number;heading:number;caps:(v:string)=>string;}
 const siUnit=/^\(?(k?N|MPa|GPa|mm|m|kN·m|kN-m|N\/mm|kN\/m)[),.;:]*$/;
 /** Drawing notes are upper case; SI unit symbols keep their case. */
 export const capsFor=(units:'US'|'SI')=>(v:string)=>v.split(/(\s+)/).map(w=>units==='SI'&&siUnit.test(w)?w:w.toUpperCase()).join('');
-export const heading=(t:Style,title:string):Block=>({height:t.heading*1.9,keep:true,render:(x,y)=>text(x,y+t.heading,title,t.heading,'start',700)+line([x,y+t.heading*1.36],[x+t.width,y+t.heading*1.36],'divider')});
+export const heading=(t:Style,title:string):Block=>({height:t.heading*1.9,keep:true,continued:()=>heading(t,`${title} (CONT.)`),render:(x,y)=>text(x,y+t.heading,title,t.heading,'start',700)+line([x,y+t.heading*1.36],[x+t.width,y+t.heading*1.36],'divider')});
 export function paragraph(t:Style,value:string):Block{const rows=wrapToWidth(t.caps(value),t.width,t.body);return {height:rows.length*t.leading+t.body*.45,render:(x,y)=>rows.map((r,i)=>text(x,y+t.body+i*t.leading,r,t.body)).join('')};}
 export function numbered(t:Style,items:string[]):Block[]{const indent=t.body*2.2;return items.map((item,i)=>{const rows=wrapToWidth(t.caps(item),t.width-indent,t.body);return {height:rows.length*t.leading+t.body*.45,render:(x,y)=>text(x,y+t.body,`${i+1}.`,t.body,'start',700)+rows.map((r,j)=>text(x+indent,y+t.body+j*t.leading,r,t.body)).join('')};});}
 /** Table with proportional column widths; long cells wrap within their column. */
