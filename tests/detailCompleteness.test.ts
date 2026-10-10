@@ -23,8 +23,9 @@ const view=(s:CalculationSnapshot,title:string)=>connectionTopic(s).views.find(v
 describe('end stop stiffeners braced to the face plate',()=>{
  it('checks the stiffener-to-face-plate welds for the shear flow and the bumper reaction by hand',()=>{
   const p=demo.input,e=p.details!.endStop!,g=endStopGeometry(p,e),checks=Object.fromEntries(endStopChecks(p).map(c=>[c.id,c]));
-  // Stiffeners reach the top of the 6 in contact, 11 in above the base plate, and stop an inch below the face top.
-  expect(g.stiffenerHeight).toBeCloseTo(14*inch,9);
+  // Stiffeners reach the top of the 6 in contact, centered 11 1/8 in above the base plate (rail on its 1/8 in pad),
+  // within the 15 in face.
+  expect(g.stiffenerHeight).toBeCloseTo(14.125*inch,9);
   // Face 10 x 1 and two 3/4 x 9 stiffeners: centroid 3.37 in back, I = 235.6 in^4, Q of the face 28.7 in^3.
   const uc=(10*.5+13.5*5.5)/23.5,I=10/12+10*(uc-.5)**2+2*.75*9**3/12+13.5*(5.5-uc)**2,Q=10*(uc-.5);
   expect(I).toBeCloseTo(235.58,2);

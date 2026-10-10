@@ -35,7 +35,7 @@ const inch=25.4;
 // front bolts 1 3/4 in behind the face plate keep the heads 1 1/4 in (socket clearance) clear of the 5/16 fillet
 // toes at the 3 in stiffeners and the face plate; the 10 in plates keep 1 1/2 in edge distance.
 export const defaultEndStop:EndStopInput={enabled:false,bumperHeight:6*inch,bumperDiameter:6*inch,setback:.5*inch,railGap:1*inch,
- base:{length:9*inch,width:10*inch,thickness:1*inch},face:{thickness:1*inch,height:14*inch},stiffener:{thickness:.75*inch,length:7*inch,spacing:3*inch},
+ base:{length:9*inch,width:10*inch,thickness:1*inch},face:{thickness:1*inch,height:15*inch},stiffener:{thickness:.75*inch,length:7*inch,spacing:3*inch},
  bolts:{diameter:.75*inch,grade:'A325',gauge:7*inch,frontClear:1.75*inch,edge:1.5*inch},weldSize:5/16*inch,source:''};
 
 

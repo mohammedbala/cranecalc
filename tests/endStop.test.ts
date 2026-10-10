@@ -26,8 +26,8 @@ describe('girder-mounted runway end stops',()=>{
  it('resolves the bumper overturning into front-bolt tension by hand',()=>{
   const p=demo.input,e=p.details!.endStop!,g=endStopGeometry(p,e),checks=Object.fromEntries(demo.checks.filter(c=>c.group==='End stops').map(c=>[c.id,c]));
   expect(stopBumperForce(p)).toBeCloseTo(20*kip,3);
-  // LRFD stop combination factor 1.0; contact 6 in rail + 6 in bumper - 1 in base plate.
-  expect(g.contact).toBeCloseTo(11*inch,9);
+  // LRFD stop combination factor 1.0; contact 6 in rail + 1/8 in pad + 6 in bumper - 1 in base plate.
+  expect(g.contact).toBeCloseTo(11.125*inch,9);
   const lever=g.frontRow-g.back-e.base.thickness,T=20*kip*(g.contact+e.base.thickness)/(2*lever);
   expect(lever).toBeCloseTo((12.5-.5625-1-1.75-.5-1)*inch,9);
   expect(checks['end-stop-bolt-tension'].demand).toBeCloseTo(T,3);

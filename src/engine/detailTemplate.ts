@@ -5,6 +5,7 @@ import {defaultSimpleSupport} from './simpleSupports';
 import {defaultEndBearing} from './endBearingInputs';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {wrenchClearance} from './endStop';
+import {railSeatDefaults} from './railSeat';
 import {columnGussetHeight,tieBarGap} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 import {keeperGeometry} from './railSeat';
@@ -68,7 +69,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   // Bolted bearings: each bay locates at its left end on simple spans; a continuous girder locates at one support.
   endBearing:{...structuredClone(defaultEndBearing),enabled:true},
   // The stop sits inboard of the runway-end tie saddle.
-  ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,setback:stopSetback,base:{...defaultEndStop.base,length:11.5*inch},stiffener:{...defaultEndStop.stiffener,length:8.5*inch},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
+  // The face plate holds the whole bumper above the rail and its pad, with 1/2 in to spare, in whole inches.
+  ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,setback:stopSetback,base:{...defaultEndStop.base,length:11.5*inch},face:{...defaultEndStop.face,height:up((p.aist?.railDepth??p.railHeight)+(p.aist?.railPad?railSeatDefaults.padThickness:0)+defaultEndStop.bumperHeight-defaultEndStop.base.thickness+defaultEndStop.bumperDiameter/2+.5*inch,inch)},stiffener:{...defaultEndStop.stiffener,length:8.5*inch},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
   reviewed:false
  };
  // Root fillets run the full column gusset height, which contains the release slots.
