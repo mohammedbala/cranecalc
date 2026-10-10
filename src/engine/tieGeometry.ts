@@ -16,6 +16,12 @@ export function tieReceiver(p:ProjectInput){
  return undefined;
 }
 
+const inch=25.4;
+/** Practical cutting increment of the column gusset height (1/4 in), and the slot location tolerance kept beyond each slot end (1/16 in). */
+export const gussetIncrement=inch/4,slotTolerance=inch/16;
+const roundUp=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
+/** Clear gap from the bar ends to the column flange: the column root fillet plus 1/8 in, at least 1/2 in, in 1/4 in steps. */
+export const tieBarGap=(rootWeld:number)=>Math.max(inch/2,roundUp(rootWeld+inch/8,inch/4));
 /**
  * Column-end release of the paired bars: each bolt is pretensioned against a
  * steel sleeve passing through a vertical slot in the column gusset, so the
@@ -27,27 +33,43 @@ export function tieRelease(p:ProjectInput){
  const c=t.connection,hole=boltProperties(c.grade,c.diameter).hole,od=hole+2*r.sleeveWall,width=od+1.5875,slot=width+2*r.travel;
  // Same clear material beyond the slot as a standard hole at the AISC J3.4 minimum edge distance.
  const edge=1.5*c.diameter-hole/2+width/2;
- const height=Math.max(t.width,c.gauge+2*r.travel+2*edge);
- return {...r,hole,od,width,slot,edge,height,sleeveLength:t.gussetThickness+r.clearance,sleeveArea:Math.PI/4*(od**2-hole**2)};
+ // The slot pattern with that edge plus a slot location tolerance beyond each end, rounded up to a cutting increment.
+ const height=Math.max(t.width,roundUp(c.gauge+2*r.travel+2*(edge+slotTolerance),gussetIncrement));
+ return {...r,hole,od,width,slot,edge,tolerance:slotTolerance,height,sleeveLength:t.gussetThickness+r.clearance,sleeveArea:Math.PI/4*(od**2-hole**2)};
 }
 
 /** Column gusset height: the bar width, or taller to contain the release slots. */
 export const columnGussetHeight=(p:ProjectInput)=>tieRelease(p)?.height??p.details!.brace.width;
 
-/** Shared fabrication coordinates, mm. The flange saddle bypasses the web. */
+/**
+ * Shared fabrication coordinates, mm, across the runway from the web centerline. The flange saddle bypasses
+ * the web: it sits under the flange from the web gap to the flange tip and is welded to the flange only by two
+ * transverse end fillets across the flange, one at each end of the saddle, each the full saddle width. The bars
+ * stop clear of the column flange; the column gusset spans that gap.
+ */
 export function flangeTieGeometry(p:ProjectInput){
  const d=p.details,a=d?.brace.flangeAttachment;
  if(!d||tieArrangement(d)!=='paired-bars'||!a?.enabled||p.system!=='simple')return undefined;
  const face=d.bracket?.enabled?d.bracket.reach:a.columnFace;if(!face)return undefined;
  const b=p.section,t=d.brace,c=t.connection;
- const start=face-t.length,connection=(c.rows-1)*c.pitch+2*c.edge;
+ const barGap=tieBarGap(c.weldSize),barEnd=face-barGap,start=barEnd-t.length,connection=(c.rows-1)*c.pitch+2*c.edge;
  const rootStart=b.tw/2+a.webGap,rootEnd=b.bf/2,rootLength=rootEnd-rootStart;
- const topClear=Math.max(a.saddleThickness,b.kind==='cap'?b.capDepth-b.capTw-b.tf:0)+a.clearance;
- const bottomClear=a.saddleThickness+a.clearance;
- return {attachment:a,face,start,connection,rootStart,rootEnd,rootLength,receiver:tieReceiver(p),columnGusset:columnGussetHeight(p),sides:tieSides(p),
+ // The bars clear the saddle and, against the gusset, the toe of the gusset-to-saddle fillets.
+ const saddleClear=Math.max(a.clearance,roundUp(a.weldSize+inch/16,inch/8));
+ const capDrop=b.kind==='cap'?b.capDepth-b.capTw-b.tf:0;
+ const topClear=Math.max(a.saddleThickness+saddleClear,capDrop+a.clearance);
+ const bottomClear=a.saddleThickness+saddleClear;
+ const gussetEnd=start+connection;
+ // Cap channel: clear distance from the girder gusset's outer top corner to the turned-down channel flange
+ // (inner face and bottom). Where the gusset rises above the bottom of that flange it is the horizontal gap.
+ const capFlange=b.kind==='cap'?b.capWidth/2-b.capTf:undefined,dx=(capFlange??0)-gussetEnd,dy=a.saddleThickness-capDrop;
+ const capClear=capFlange===undefined?undefined:dy<0?dx:dx>0?Math.hypot(dx,dy):dy;
+ return {attachment:a,face,barGap,barEnd,start,connection,rootStart,rootEnd,rootLength,saddleClear,receiver:tieReceiver(p),columnGusset:columnGussetHeight(p),columnGussetLength:connection+barGap,sides:tieSides(p),
+  // Saddle-to-flange welds: transverse end fillets, each the full saddle width, at the two saddle ends.
+  endWeldLength:rootLength,capFlange,capClear,
   topDrop:topClear+t.width/2,bottomDrop:bottomClear+t.width/2,
   topCenter:b.d/2-b.tf-topClear-t.width/2,bottomCenter:-b.d/2+b.tf+bottomClear+t.width/2,
-  gussetEnd:start+connection,freeLength:t.length-2*connection,
+  gussetEnd,freeLength:t.length-2*connection,
   stations:independentBearings(p).map(e=>({...e,tieX:e.center+(e.end==='left'?-1:1)*a.longitudinalSetback}))};
 }
 

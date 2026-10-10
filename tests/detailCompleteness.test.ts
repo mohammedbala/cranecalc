@@ -85,12 +85,17 @@ describe('continuous girder bearings, ties and end connection',()=>{
 describe('dimensions and weld callouts of the tie, keeper and bearing details',()=>{
  it('chains the girder-end bolts, dimensions the bolt gauge and gussets and draws the release filler',()=>{
   const t=flangeTieTopic(demo)!,section=t.views[0].render().svg,words=texts(section).join(' | ');
-  expect(words).not.toContain('1 1/4" + 2 1/4"');expect(texts(section)).toEqual(expect.arrayContaining(['1 1/4"','2 1/4"','2 1/2"']));
-  expect(words).toMatch(/GIRDER GUSSET \| PL 3\/4" X 5 1\/4" X [\d /]+"; 1\/16" FILLER \(HIDDEN\)/);expect(words).toContain('COLUMN GUSSET PL 3/4" X 5 3/16" X 4 3/4"');
+  // Each bar end's hole chain closes with its edge distance: edge, pitch, edge at the girder and column ends.
+  expect(words).not.toContain('1 1/4" + 2 1/4"');
+  expect(texts(section).filter(v=>v==='1 1/4"')).toHaveLength(4);expect(texts(section).filter(v=>v==='2 1/4"')).toHaveLength(2);expect(texts(section)).toContain('2 1/2"');
+  expect(words).toContain('GIRDER GUSSET PL 3/4" X 5 1/2" X 5 1/4"');expect(words).toContain('1/16" FILLER (HIDDEN)');
+  // The column gusset spans the 1 1/2 in bolt group edges plus the 1/2 in gap to the column flange.
+  expect(words).toContain('COLUMN GUSSET PL 3/4" X 5 1/2" X 5 1/4"');expect(words).toContain('2 FL 3/8" X 5" X 2\'-1 1/2", 1/2" CLR. TO COLUMN;');
   // Tie and girder end located from the stiffener at each girder end of the shared support.
   const plan=texts(t.views[1].render().svg);
   expect(plan.filter(v=>v==='0\'-3 1/2"')).toHaveLength(2);expect(plan.filter(v=>v==='0\'-6 1/4"')).toHaveLength(2);
-  const saddle=t.views[2].render().svg;expect(texts(saddle)).toEqual(expect.arrayContaining(['BOTH EDGES','GUSSET TO SADDLE']));
+  const saddle=t.views[2].render().svg;expect(texts(saddle)).toEqual(expect.arrayContaining(['SADDLE TO FLANGE, END 1','SADDLE TO FLANGE, END 2','GUSSET TO SADDLE','5/8" A325 SC BOLTS (BEYOND)','1/16" FILLER, CLASS B SURFACES']));
+  expect(texts(saddle)).not.toContain('BOTH EDGES');
   const notes=texts(flangeTieSheetSvg(demo)).join(' ');
   expect(notes).toContain('NO HOLES OR CUTS THROUGH THE W FLANGES EXCEPT THOSE DETAILED FOR THE END BEARINGS AND END STOPS.');
   expect(notes).toMatch(/TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT \(MAX\. D\/C \d\.\d\d\)\./);

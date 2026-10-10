@@ -139,14 +139,14 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   dr.rect(X(tie.rootStart),y,tie.rootLength*k,a.saddleThickness*k);
   dr.rect(X(tie.rootStart),Y(a.saddleThickness),(tie.gussetEnd-tie.rootStart)*k,(tie.topDrop+t.width/2-a.saddleThickness)*k);
   dr.rect(X(tie.start),Y(tie.topDrop-t.width/2),t.length*k,t.width*k);
-  dr.rect(X(tie.face-tie.connection),Y(tie.topDrop-t.width/2),tie.connection*k,t.width*k);
+  dr.rect(X(tie.barEnd-tie.connection),Y(tie.topDrop-tie.columnGusset/2),tie.columnGussetLength*k,tie.columnGusset*k);
   dr.line(X(tie.face),Y(-30),X(tie.face),Y(tie.topDrop+t.width/2+30),'HIDDEN');
   for(const offset of [0,t.length-tie.connection])for(let row=0;row<c.rows;row++)for(const sign of [-1,1])dr.circle(X(tie.start+offset+c.edge+row*c.pitch),Y(tie.topDrop+sign*c.gauge/2),boltProperties(c.grade,c.diameter).hole*k/2);
-  dr.dimH(X(tie.start),X(tie.face),Y(tie.topDrop+t.width/2),360,f(t.length));
+  dr.dimH(X(tie.start),X(tie.barEnd),Y(tie.topDrop+t.width/2),360,f(t.length));
   dr.dimV(Y(tie.topDrop-t.width/2),Y(tie.topDrop+t.width/2),X(tie.face),X(tie.face)+30,f(t.width));
-  const notes=[`2 FL ${f(t.thickness)} X ${f(t.width)} / ${f(t.length)} LONG`, `CENTRAL GUSSETS ${f(t.gussetThickness)}`,`SADDLE PL ${f(a.saddleThickness)} X ${f(a.saddleLength)} X ${f(tie.rootLength)}`,`${f(a.weldSize).replaceAll('"','')} FILLETS / SADDLE AND GUSSET / BOTH SIDES`,`${2*c.rows} - ${f(c.diameter)} ${c.grade} EACH END`, `TIE SETBACK ${f(a.longitudinalSetback)} FROM BEARING CENTER`,`CLEAR CAP AND ROOT BY ${f(a.clearance)} MINIMUM`, 'NO HOLES OR CUTS THROUGH CAP / W FLANGES',`BOTTOM TIE AT SAME SADDLE OFFSET / SEE ${sheets('flange-tie')}`];
+  const notes=[`2 FL ${f(t.thickness)} X ${f(t.width)} / ${f(t.length)} LONG`, `CENTRAL GUSSETS ${f(t.gussetThickness)}`,`SADDLE PL ${f(a.saddleThickness)} X ${f(a.saddleLength)} X ${f(tie.rootLength)}`,`SADDLE TO FLANGE: ${f(a.weldSize).replaceAll('"','')} TRANSVERSE END FILLET EACH END X ${f(tie.endWeldLength)}`,`GUSSET TO SADDLE: ${f(a.weldSize).replaceAll('"','')} FILLETS BOTH FACES X ${f(tie.rootLength)}`,`${2*c.rows} - ${f(c.diameter)} ${c.grade} EACH END`, `TIE SETBACK ${f(a.longitudinalSetback)} FROM BEARING CENTER`,`CLEAR CAP AND ROOT BY ${f(a.clearance)} MINIMUM`, 'NO HOLES OR CUTS THROUGH CAP / W FLANGES',`BOTTOM TIE AT SAME SADDLE OFFSET / SEE ${sheets('flange-tie')}`];
   notes.forEach((v,i)=>dr.text(545,95+i*29,v,9));
-  dr.fieldFilletLeader(X(tie.face),Y(tie.topDrop),545,385,f(c.weldSize),[`${supportColumn(p).weld} GUSSET TO ${supportColumn(p).name}`,`TWO CONT. LINES X ${f(t.width)}`],true,supportColumn(p).field);output.push(dr.drawing);
+  dr.fieldFilletLeader(X(tie.face),Y(tie.topDrop),545,385,f(c.weldSize),[`${supportColumn(p).weld} GUSSET TO ${supportColumn(p).name}`,`TWO CONT. LINES X ${f(tie.columnGusset)}`],true,supportColumn(p).field);output.push(dr.drawing);
  }
  return output;
 }

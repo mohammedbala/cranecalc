@@ -60,7 +60,7 @@ describe('existing bracket assessment and new seat',()=>{
  });
  it('shows the existing arrangement in ARCH D and CAD without new rib-root welds',()=>{
   const s=snapshot(),svg=bracketSheetSvg(s),cad=detailedDrawings(s).find(v=>v.name==='existing-column-bracket');
-  expect(svg).toContain('EXISTING BUILT-UP I-BRACKET');expect(svg).toContain('NEW SPREADER');expect(svg).toContain('914.4 X 609.6 MM');expect(svg).not.toContain('FIELD WELD TO EXISTING COLUMN');expect(svg).not.toMatch(/NaN|Infinity|undefined/);expect(cad).toBeDefined();expect(drawingSvg(cad!)).toContain('EXISTING BUILT-UP I-BRACKET');expect(detailedDrawings(s).some(v=>v.name==='welded-column-bracket')).toBe(false);
+  expect(svg).toContain('EXISTING BUILT-UP I-BRACKET');expect(svg).toContain('NEW SPREADER');expect(svg).toContain('914 X 610 MM');expect(svg).not.toContain('FIELD WELD TO EXISTING COLUMN');expect(svg).not.toMatch(/NaN|Infinity|undefined/);expect(cad).toBeDefined();expect(drawingSvg(cad!)).toContain('EXISTING BUILT-UP I-BRACKET');expect(detailedDrawings(s).some(v=>v.name==='welded-column-bracket')).toBe(false);
  });
  it('runs complete girder and tie checks while missing existing assessments block export',()=>{
   const p=withRunwaySpans(project(),[7620]);p.details!.fatigueDetails=p.details!.fatigueDetails.filter(v=>v.x<=7620);
