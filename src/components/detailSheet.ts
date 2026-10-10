@@ -32,14 +32,13 @@ const sheetNotes=(t:Style):Block[]=>[heading(t,'SHEET NOTES'),...numbered(t,[
 const noteBuilders=(topics:DetailTopic[])=>[sheetNotes,...topics.flatMap(t=>t.notes?[t.notes]:[])];
 
 /**
- * Place a topic's details in reading order from the cursor; a topic that would wrap starts a new row.
- * Details that do not fit in the grid are left out and the layout is marked as not fitting.
+ * Place a topic's details in reading order from the cursor, continuing onto the next row so the grid
+ * fills without holes and any spare cells fall at the end of the sheet. Details that do not fit in the
+ * grid are left out and the layout is marked as not fitting.
  */
 function placeTopic(layout:DetailSheetLayout,topic:DetailTopic):DetailSheetLayout{
  const {cols,rows}=detailGrid,used=new Set(layout.placed.flatMap(p=>Array.from({length:p.rows},(_,i)=>`${p.row+i},${p.col}`)));
- const need=topic.views.reduce((a,v)=>a+(v.rows??1),0);
  let {row,col}=layout.cursor,fits=layout.fits;
- if(col>0&&need>cols-col){row++;col=0;}
  const placed=[...layout.placed];
  for(const view of topic.views){
   const h=view.rows??1;let r=row,c=col;
