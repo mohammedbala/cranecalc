@@ -301,6 +301,7 @@ const arrangementDetails=['ISOMETRIC VIEW','RUNWAY PLAN','RUNWAY GIRDER ELEVATIO
 /**
  * Fill each title block's "N OF M", number the details on each sheet in
  * drawing order, then resolve detail references by title to "n/S-xx".
+ * Sheet references by topic key ignore case: drawing notes are upper-cased first.
  */
 export function resolveSheetSet(sheets:DrawingSheet[]):DrawingSheet[]{
   const details=new Map<string,string>(),topics=new Map<string,string>();
@@ -311,7 +312,7 @@ export function resolveSheetSet(sheets:DrawingSheet[]):DrawingSheet[]{
     return {...sheet,svg};
   });
   return numbered.map(sheet=>({...sheet,svg:sheet.svg.replace(/\{\{REF:([^}]*)\}\}/g,(_,token:string)=>{const title=decodeURIComponent(token);return details.get(title)??`${title} (NOT IN SET)`;})
-    .replace(/\{\{SHEET:([^}]*)\}\}/g,(_,token:string)=>{const key=decodeURIComponent(token);return topics.get(key)??`${key.toUpperCase()} (NOT IN SET)`;})}));
+    .replace(/\{\{SHEET:([^}]*)\}\}/g,(_,token:string)=>{const key=decodeURIComponent(token);return topics.get(key)??topics.get(key.toLowerCase())??`${key.toUpperCase()} (NOT IN SET)`;})}));
 }
 /** Detail references of an assembled set by detail title, e.g. "GIRDER BEARING / COLUMN BRACKET" to "1/S-02". */
 export function detailReferences(sheets:DrawingSheet[]){
