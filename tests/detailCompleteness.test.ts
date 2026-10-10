@@ -25,8 +25,10 @@ describe('end stop stiffeners braced to the face plate',()=>{
   const p=demo.input,e=p.details!.endStop!,g=endStopGeometry(p,e),checks=Object.fromEntries(endStopChecks(p).map(c=>[c.id,c]));
   // Stiffeners reach the top of the 6 in contact, 11 in above the base plate, and stop an inch below the face top.
   expect(g.stiffenerHeight).toBeCloseTo(14*inch,9);
-  // Face 9 x 1 and two 3/4 x 9 stiffeners: centroid 3.5 in back, I = 226.875 in^4, Q of the face 27 in^3.
-  const flow=20*kip*27*inch**3/(226.875*inch**4)/4,push=20*kip*(.5+.25/3)/(2*6*inch);
+  // Face 10 x 1 and two 3/4 x 9 stiffeners: centroid 3.37 in back, I = 235.6 in^4, Q of the face 28.7 in^3.
+  const uc=(10*.5+13.5*5.5)/23.5,I=10/12+10*(uc-.5)**2+2*.75*9**3/12+13.5*(5.5-uc)**2,Q=10*(uc-.5);
+  expect(I).toBeCloseTo(235.58,2);
+  const flow=20*kip*Q*inch**3/(I*inch**4)/4,push=20*kip*(.5+.25/3)/(2*6*inch);
   expect(checks['end-stop-stiffener-weld'].demand).toBeCloseTo(Math.hypot(flow,push)/(.3125*inch/Math.SQRT2),6);
   expect(checks['end-stop-stiffener-weld'].capacity).toBeCloseTo(.75*.6*p.details!.material.Fexx,6);
   // Outstand 6/2 + 1/4 - 3/2 - 3/8 = 1 3/8 in under the contact pressure P/d_b^2.
@@ -47,8 +49,9 @@ describe('continuous girder bearings, ties and end connection',()=>{
  it('bolts every bearing to its seat: one locating support, the others slotted',()=>{
   const s=continuous(),v=view(s,'GIRDER BEARINGS / LOCATING AND SLIDING'),t=texts(v.render().svg).join(' | ');
   expect(connectionTopic(s).views.some(v=>v.title==='GIRDER WEB / END CONNECTION')).toBe(false);
-  expect(t).toContain('LOCATING, GRID 2');expect(t).toContain('SLIDING, GRIDS 1, 3, 4');expect(t).toContain('LOCATING: 4 - 3/4" A325 SC,');
-  expect(t).toContain('SLOT IN FLANGE FOR 1/2" EA. WAY');expect(t).toContain('AT RUNWAY ENDS THE BEARING PL STARTS AT THE GIRDER END');
+  expect(t).toContain('LOCATING, GRID 2');expect(t).toContain('SLIDING END, GRID 1');expect(t).toContain('LOCATING: 4 - 3/4" A325 SC,');
+  expect(t).toContain('SLOT IN FLANGE FOR 1/2" EA. WAY');expect(t.replaceAll(' | ',' ')).toContain('SLIDING AT GRIDS 1, 3 AND 4; LOCATING AT GRID 2.');
+  expect(t.replaceAll(' | ',' ')).toContain('THE GIRDER ENDS AT THE GRID AND THE BEARING PL STARTS AT THE GIRDER END');
   expect(structuralGeneralNotes(s).join(' ')).toContain('STANDARD HOLES AT THE LOCATING SUPPORT (GRID 2)');
   // The sliding bearings travel with the thermal strain from the locating support, so the ties do too.
   expect(tieMovements(s).thermal).toBeCloseTo(12e-6*50*foot*30,6);
