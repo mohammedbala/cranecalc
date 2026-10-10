@@ -54,7 +54,7 @@ describe('bolted girder end bearings',()=>{
   expect(checks['end-bearing-seat-fit'].demand).toBeCloseTo(bs.length,9);
  });
  it('draws locating and sliding bearings and references them from the support details and the report',()=>{
-  const set=drawingSheetSet(capped),s02=set.find(v=>v.svg.includes('data-view="end-bearing"'))!,s04=set.find(v=>v.svg.includes('data-view="independent-tie-plan"'))!;
+  const set=drawingSheetSet(capped),s02=set.find(v=>v.svg.includes('data-view="end-bearing"'))!,s04=set.find(v=>v.svg.includes('data-topic="support"'))!;
   expect(s02.svg).toContain('data-view="end-bearing"');expect(s02.svg).not.toContain('data-view="end-connection"');
   const t=texts(s02.svg).join(' ');expect(t).toContain('PRETENSIONED AGAINST STEEL SLEEVES 1 7/16" OD');expect(t).toContain('2 1/2" SLOT IN FLANGE FOR 1/2" EA. WAY');expect(t).toContain('LOCATING: 4 - 3/4" A325 SC,');
   expect(texts(s04.svg).join(' ')).toContain(`UPLIFT (${detailReferences(set).get('GIRDER END BEARINGS / LOCATING AND SLIDING')})`);

@@ -14,6 +14,8 @@ import { planSheetGeometry } from './planSheetGeometry';
 import { drawingLength, plateInches } from './drawingFormat';
 import { sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, type XY } from './sheetGraphics';
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
+import { railLayoutView } from './railLayoutView';
+import { slidingBoltView } from './slidingBoltSection';
 
 /** Girder bearing, end connection, flange tie and rail keeper details on their own sheet. */
 export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defaultFraming,number='S-02'){
@@ -90,7 +92,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  }});
 
  // 2: Bolted bearings replace the girder-end cover plates: girder ends of simple spans, every support of a continuous girder.
- if(activeEndBearing(p))views.push({title:bearingBoltsTitle(p),render:()=>endBearingView(s)});
+ if(activeEndBearing(p)){views.push({title:bearingBoltsTitle(p),render:()=>endBearingView(s)});const bolt=slidingBoltView(s);if(bolt)views.push(bolt);}
  // 2: Cover plates bolted to both sides of the girder web project past the girder end to a column-side end
  // plate; the column beyond and the bracket head show where the connection transfers its loads.
  else views.push({title:p.system==='simple'?'GIRDER-SIDE END TEMPLATE':detailTitles.endTemplate,render:()=>{
@@ -245,5 +247,6 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   svg+=text(jc,632,`2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)}; 4 - ${size(r.jointBoltDiameter)} A325 SNUG-TIGHT`,7.2,'middle')+text(jc,640.5,`SLOTS ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG RAIL; GAP ${size(r.jointGap)}`,7.2,'middle')+'</g>';
   return {svg:svg+'</g>',scale:scale.label};
  }});
+ views.push(railLayoutView(s));
  return topic;
 }

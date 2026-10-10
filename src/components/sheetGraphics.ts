@@ -168,12 +168,31 @@ export const sheetRef=(topic:string)=>`{{SHEET:${encodeURIComponent(topic)}}}`;
 export const detailTitles={
  bearing:'GIRDER BEARING / COLUMN BRACKET',endBearing:'GIRDER END BEARINGS / LOCATING AND SLIDING',supportBearings:'GIRDER BEARINGS / LOCATING AND SLIDING',endTemplate:'GIRDER WEB / END CONNECTION',
  tie:'FLANGE TIE / COLUMN CONNECTION',flangeTie:'DIRECT FLANGE TIE / TOP TRANSVERSE SECTION',tiePlan:'TIE AND STIFFENER LOCATIONS / PLAN',
- railKeeper:'RAIL KEEPER / GIRDER ATTACHMENT',capSection:'CAPPED GIRDER SECTION',capDevelopment:'CAP END DEVELOPMENT',
+ railKeeper:'RAIL KEEPER / GIRDER ATTACHMENT',railLayout:'RAIL JOINT LAYOUT / PLAN',slidingBolt:'SLIDING BEARING BOLT / SECTION',capSection:'CAPPED GIRDER SECTION',capDevelopment:'CAP END DEVELOPMENT',
  supportEnd:(joint:boolean)=>joint?'ADJACENT GIRDER ENDS AT COLUMN':'GIRDER END AT COLUMN',supportTies:'INDEPENDENT FLANGE TIES / PLAN',movement:'BEARING MOVEMENT REQUIREMENTS',
  weldedBracket:'COLUMN BRACKET / TRANSVERSE SECTION',existingBracket:'BRACKET / TRANSVERSE SECTION',
- endStop:'END STOP / ELEVATION',endStopPlan:'END STOP / PLAN',newColumn:'NEW RUNWAY COLUMN / ELEVATION',basePlate:'BASE PLATE / PLAN',footing:'FOOTING / SECTION',
+ endStop:'END STOP / ELEVATION',endStopPlan:'END STOP / PLAN',endStopSection:'END STOP / SECTION AT FACE',saddle:'SADDLE / LONGITUDINAL SECTION',newColumn:'NEW RUNWAY COLUMN / ELEVATION',basePlate:'BASE PLATE / PLAN',footing:'FOOTING / SECTION',
  bracedBay:'BRACED BAY / ELEVATION',braceTop:'BRACE AND STRUT AT WORK POINT',braceBase:'BRACE AT COLUMN BASE',strutPlan:'STRUT AND GUSSETS AT WORK POINT / PLAN'
 } as const;
+/**
+ * Section cut marker keyed to the section it cuts: a heavy cut line beyond each end of the cut, an arrow at
+ * each end in the viewing direction and the section's detail/sheet reference beside the arrow. `a` and
+ * `b` are the ends of the cut across the parent view; `look` is the viewing direction.
+ */
+export function sectionCut(a:XY,b:XY,look:XY,title:string,ends:('a'|'b')[]=['a','b'],label:'tail'|'tip'='tail'){
+ const L=Math.hypot(b[0]-a[0],b[1]-a[1]),t:XY=[(b[0]-a[0])/L,(b[1]-a[1])/L],lv=Math.hypot(look[0],look[1]),v:XY=[look[0]/lv,look[1]/lv],nx=-v[1],ny=v[0];
+ const across=Math.abs(t[1])>Math.abs(t[0]),reach=label==='tip'?8:14;
+ let svg=`<g data-section-cut="${esc(title)}">`;
+ for(const end of ends){
+  const p=end==='a'?a:b,s=end==='a'?-1:1,o:XY=[p[0]+s*t[0]*reach,p[1]+s*t[1]*reach],tip:XY=[o[0]+v[0]*16,o[1]+v[1]*16],base:XY=[o[0]+v[0]*11,o[1]+v[1]*11];
+  svg+=line(p,o,'divider')+line(o,[o[0]+v[0]*12,o[1]+v[1]*12],'divider');
+  svg+=`<path class="leader-arrow" d="M${n(tip[0])},${n(tip[1])}L${n(base[0]+nx*2.2)},${n(base[1]+ny*2.2)}L${n(base[0]-nx*2.2)},${n(base[1]-ny*2.2)}Z"/>`;
+  // The reference reads beyond the arrow tip, or beyond the cut line on the side away from the arrow.
+  if(label==='tip')svg+=text(tip[0]+v[0]*3,tip[1]+v[1]*3+(across?3:v[1]>0?9:-2),detailRef(title),8,across?(v[0]>0?'start':'end'):'middle',700);
+  else{const q:XY=[o[0]+s*t[0]*4-v[0]*4,o[1]+s*t[1]*4-v[1]*4];svg+=text(q[0],q[1]+(across?(s>0?9:0):(s>0?3:-1)),detailRef(title),8,across?(v[0]>0?'end':'start'):'middle',700);}
+ }
+ return svg+'</g>';
+}
 /** Bolted bearing detail: girder ends of simple spans, or every support of a continuous girder. */
 export const bearingBoltsTitle=(p:CalculationSnapshot['input'])=>p.system==='continuous'?detailTitles.supportBearings:detailTitles.endBearing;
 /** The supporting column as labelled on the details, referring to its own details when it is designed here. */

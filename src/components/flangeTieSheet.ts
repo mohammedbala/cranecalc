@@ -5,13 +5,13 @@ import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeEndStop} from '../engine/endStopInputs';
 import {boltProperties} from '../engine/connectionStrength';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,dimV,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference,labelColumn,breakLine,textWidth,n,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,dimV,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference,labelColumn,breakLine,textWidth,n,sectionCut,type XY} from './sheetGraphics';
 import {heading,numbered,paragraph,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type ViewRender} from './detailSheet';
 /** Rounded slot outline along y (vertical on the sheet). */
 function verticalSlot(cx:number,cy:number,length:number,width:number,cls:string){const r=width/2,a=cy-length/2+r,b=cy+length/2-r;return `<path class="${cls}" d="M${n(cx-r)},${n(a)}A${n(r)},${n(r)} 0 0 1 ${n(cx+r)},${n(a)}L${n(cx+r)},${n(b)}A${n(r)},${n(r)} 0 0 1 ${n(cx-r)},${n(b)}Z"/>`;}
 /** Transverse elevation of the top-flange tie, projected along the installed bolt axes. */
-export function flangeTieSection(s:CalculationSnapshot,x:number,y:number):ViewRender{
+export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleCut=false):ViewRender{
  const p=s.input,g=flangeTieGeometry(p)!;const b=p.section,t=p.details!.brace,a=g.attachment,c=t.connection,rel=tieRelease(p);
  // x is the left edge of the view: fit the girder half-width and the tie span ahead of a 215-unit label column.
  const scale=drawingScale(Math.min(.38,(605-215-24-x)/(g.face+b.bf/2+40)),p.units),k=scale.pointsPerMm,xc=x+b.bf/2*k,X=(z:number)=>xc+z*k,Y=(v:number)=>y+v*k;
@@ -57,6 +57,8 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number):ViewRe
   {at:[X(g.face-g.connection*.5),Y(drop+hg/2)],labels:[...(rel?[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} PRETENSIONED`,`AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)};`,`${sz(rel.width)} X ${sz(rel.slot)} VERT. SLOTS IN GUSSET`]:[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC,`,`${sz(hole)} STD HOLES`]),`COLUMN GUSSET PL ${sz(t.gussetThickness)} X ${sz(hg)} X ${sz(g.connection)}`]}
  ];
  svg+=labelColumn(items,nx,top,bottom);
+ // Longitudinal section through the saddle, looking from the column.
+ if(saddleCut){const xs=X(g.rootStart+g.rootLength/2);svg+=sectionCut([xs,Y(-b.tf-(b.kind==='cap'?b.capTw:0))-4],[xs,Y(drop+t.width/2)+4],[-1,0],detailTitles.saddle,['a']);}
  svg+=text(x,bottom+17,rel?`SLOTS GIVE ${sz(rel.travel)} VERTICAL TRAVEL EACH WAY; DO NOT CLAMP THE COLUMN GUSSET`:'COLUMN END BOLTS PRETENSIONED IN STANDARD HOLES',8);
  svg+=text(x,bottom+33,b.kind==='cap'?`TOP BAR CLEAR OF CAP BY ${sz(a.clearance)} MIN. / NO CAP HOLES OR CUTS AT THE TIE`:`TOP BAR CLEAR OF SADDLE BY ${sz(a.clearance)} MIN. / NO FLANGE HOLES OR CUTS AT THE TIE`,8);
  return {svg:svg+'</g>',scale:scale.label};
@@ -95,8 +97,11 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const sc=supportColumn(p);svg+=(sc.field?fieldFilletLeader:filletLeader)([[rootX,cy+g.face*k]],[1027,285],sz(t.connection.weldSize),[sc.isNew?`SHOP WELD TO ${sc.name}`:g.receiver?'FIELD WELD TO EXISTING COLUMN':'FIELD WELD TO COLUMN',`BOTH SIDES X ${dim(g.columnGusset)} / EACH GUSSET`],true);
  // The grid line stops above the column note, which sits below the column flange.
  const noteY=cy+(g.face+rt)*k+14;
+ // Transverse section along the tie of the right girder, looking along the runway, cut below the column
+ // beside the column note.
+ const tx=cx+((pair.at(-1)?.tieX??grid)-grid)*k;svg+=sectionCut([tx,tier],[tx,noteY-10],[1,0],detailTitles.flangeTie,['b'],'tip');
  svg+=line([cx,116],[cx,noteY-10],'grid-line');
- svg+=text(cx-20,noteY,sc.isNew?`${columnReference(p)} / SEPARATE TIES EACH GIRDER`:g.receiver?'EXISTING COLUMN / SEPARATE TIES EACH GIRDER':'COLUMN BY OTHERS (REF.) / SEPARATE TIES EACH GIRDER',8,'middle');
+ svg+=text(tx-8,noteY,sc.isNew?`${columnReference(p)} / SEPARATE TIES EACH GIRDER`:g.receiver?'EXISTING COLUMN / SEPARATE TIES EACH GIRDER':'COLUMN BY OTHERS (REF.) / SEPARATE TIES EACH GIRDER',8,'end');
  return {svg:svg+'</g>',scale:scale.label};};
  const saddle=():ViewRender=>{
  const bs=drawingScale(1.25,p.units),bk=bs.pointsPerMm,bx=200,by=462;
@@ -120,8 +125,8 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `GIRDER END: STANDARD HOLES, PRETENSIONED A325 BOLTS, CLASS B FAYING SURFACES. NO HOLES OR CUTS THROUGH THE ${b.kind==='cap'?'CAP OR ':''}W FLANGES${drilled.length?` EXCEPT THOSE DETAILED FOR THE ${drilled.join(' AND ')}`:''}.` ];
  const checks=s.checks.filter(c=>(c.group==='Flange attachment'||c.group==='Tie movement')&&c.status!=='excluded'),max=Math.max(0,...checks.map(c=>c.utilization??0));
  return {key:'flange-tie',name:'FLANGE TIES',views:[
-  {title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,128)},
+  {title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,128,true)},
   {title:detailTitles.tiePlan,render:plan},
-  {title:'SADDLE / LONGITUDINAL SECTION',render:saddle}
+  {title:detailTitles.saddle,render:saddle}
  ],notes:(st:Style)=>[heading(st,'FLANGE TIE CONNECTION NOTES / LOCAL CHECKS'),...numbered(st,notes),paragraph(st,`TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${max.toFixed(2)})`:''}.`)]};
 }
