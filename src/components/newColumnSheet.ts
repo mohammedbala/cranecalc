@@ -175,7 +175,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   const barText=Math.abs(ft.L-ft.B)<1&&along===across?[`${2*along} ${ft.bar} X ${dim(ft.L-2*ft.cover)} (${along} EACH WAY)`]:[`${along} ${ft.bar} X ${dim(ft.L-2*ft.cover)} ALONG L`,`${across} ${ft.bar} X ${dim(ft.B-2*ft.cover)} ACROSS`];
   const bars=[barText[0],...barText.slice(1),barLabel,`${size(ft.cover)} CLEAR, STRAIGHT`],bx=X(ft.L/2)+44;
   svg+=multiLeader([[X(ft.L/2-ft.cover-ft.spacing*.5),Y(spread(along,ft.B)[0])]],[bx,Y(-ft.B/2)+14],bars,7.5);
-  svg+=multiLeader([[X(-c.d/2),cy-2]],[866,90],['COLUMN C/L ON GRID,','FOOTING CONCENTRIC'],7.5);
+  svg+=multiLeader([[X(-c.d/2),cy-2]],[Math.min(866,X(-ft.L/2)-24),Math.min(90,Y(-ft.B/2)-16)],['COLUMN C/L ON GRID,','FOOTING CONCENTRIC'],7.5);
   return {svg:svg+'</g>',scale:k.label};
  }});
  // 4: Footing section through the column along L.

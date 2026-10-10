@@ -36,10 +36,14 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  let svg='';
  const scale=drawingScale(Math.min(.28,142/b.d,350/(4*bs.length+c.endGap)),p.units),k=scale.pointsPerMm;
  const cx=250,top=125,bottom=top+b.d*k,g=joint?c.endGap*k/2:0,l=bs.length*k,st=bs.stiffenerThickness*k,extent=2*l+g;
+ // Rows below the lowest steel and a label column right of the girders follow the drawn size, so the
+ // detail stays clear at any scale.
+ const lowest=bottom+bs.thickness*k+(wb?wb.seatThickness*k:25.4*k+27),dimY=lowest+31,nameY=dimY+18,lx=cx+extent+85;
+ const stiffY=top+Math.max(59,(bottom-top)*.3),bearingY=Math.max(stiffY+(joint?99:46),bottom+7),noteY=Math.max(nameY+16,bearingY+27);
  svg+='<g data-view="independent-end-elevation">';
  // The column beyond runs between the end gap dimension above and the bearing length dimensions below.
- svg+=rect(cx-m.column.bf*1000*k/2,114,m.column.bf*1000*k,178,'reference-line');
- svg+=line([cx,90],[cx,323],'grid-line')+bubble(cx,86,gridLabel)+text(cx-12,89,gridNote,7.2,'end');
+ svg+=rect(cx-m.column.bf*1000*k/2,top-11,m.column.bf*1000*k,lowest+14-(top-11),'reference-line');
+ svg+=line([cx,90],[cx,nameY-4],'grid-line')+bubble(cx,86,gridLabel)+text(cx-12,89,gridNote,7.2,'end');
  const spread=(2*bs.length+c.endGap+2*c.guideTravel)*k;
  if(wb){svg+=rect(cx-wb.seatLength*k/2,bottom+bs.thickness*k,wb.seatLength*k,wb.seatThickness*k,'runway-line');}else{
  svg+=rect(cx-spread/2,bottom+bs.thickness*k,spread,25.4*k,'reference-line');
@@ -52,15 +56,16 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
   if(b.kind==='cap')svg+=rect(x,top-b.capTw*k,w,b.capTw*k,'runway-line');
   svg+=`<g data-stiffener="full-depth">${rect(bc-st/2,top+b.tf*k,st,(b.d-2*b.tf)*k,'runway-line')}</g>`;
   svg+=rect(bc-l/2,bottom,l,bs.thickness*k,'runway-line');
-  svg+=dimH(bc-l/2,bc+l/2,bottom+bs.thickness*k,309,dim(bs.length));
-  svg+=text(cx+side*84,327,b.name,8.5,'middle',700);
+  svg+=dimH(bc-l/2,bc+l/2,bottom+bs.thickness*k,dimY,dim(bs.length));
+  svg+=text(cx+side*(g+l),nameY,b.name,8.5,'middle',700);
  }
  if(joint)svg+=dimH(cx-g,cx+g,top,111,dim(c.endGap));
- svg+=line([cx+extent,top],[440,top])+text(445,top+3,'T.O.S. = S-01',8);
- svg+=multiLeader([[cx+g+l/2,top+b.d*k*.46]],[445,184],['PAIRED FITTED STIFFENERS',`PL ${size(bs.stiffenerThickness)} X ${size(bs.stiffenerWidth)}`,`EACH GIRDER END / SEE ${detailRef(detailTitles.bearing)}`]);
- svg+=multiLeader([[cx+g+l,bottom+bs.thickness*k/2]],[445,249],[`SEPARATE BEARING PL ${size(bs.thickness)}`,`${dim(bs.width)} W X ${dim(bs.length)} L`]);
- if(joint)svg+=filletLeader([[cx-g-l/2,top+b.d*k*.66]],[47,250],size(bs.weldSize),['STIFFENER WEB FILLETS',`FLANGE ATTACHMENT: ${detailRef(detailTitles.bearing)}`],true);
- svg+=text(44,343,usesExistingBracket(p)?`EXISTING BRACKET / NEW BOLTED SEAT: ${bracketRef}. KEEP GIRDER AND CAP ENDS SEPARATE.`:wb?`WELDED COLUMN BRACKET BELOW / ${bracketRef}. DO NOT BRIDGE GIRDER OR CAP ENDS.${joint?' END GRIDS: ONE GIRDER END, SIMILAR.':''}`:'SHARED COLUMN BRACKET / SPREADER BELOW (REF.). DO NOT BRIDGE GIRDER OR CAP ENDS.',7.8);
+ svg+=line([cx+extent,top],[lx-5,top])+text(lx,top+3,'T.O.S. = S-01',8);
+ svg+=multiLeader([[cx+g+l/2,top+b.d*k*.46]],[lx,stiffY],['PAIRED FITTED STIFFENERS',`PL ${size(bs.stiffenerThickness)} X ${size(bs.stiffenerWidth)}`,`EACH GIRDER END / SEE ${detailRef(detailTitles.bearing)}`]);
+ svg+=multiLeader([[cx+g+l,bottom+bs.thickness*k/2]],[lx,bearingY],[`SEPARATE BEARING PL ${size(bs.thickness)}`,`${dim(bs.width)} W X ${dim(bs.length)} L`]);
+ // Both girder ends are alike, so the stiffener welds are called out on the right one with the others.
+ if(joint)svg+=filletLeader([[cx+g+l/2+st/2,top+b.d*k*.66]],[lx,stiffY+53],size(bs.weldSize),['STIFFENER WEB FILLETS, TYP. BOTH ENDS',`FLANGE ATTACHMENT: ${detailRef(detailTitles.bearing)}`],true);
+ svg+=text(Math.min(44,cx-extent),noteY,usesExistingBracket(p)?`EXISTING BRACKET / NEW BOLTED SEAT: ${bracketRef}. KEEP GIRDER AND CAP ENDS SEPARATE.`:wb?`WELDED COLUMN BRACKET BELOW / ${bracketRef}. DO NOT BRIDGE GIRDER OR CAP ENDS.${joint?' END GRIDS: ONE GIRDER END, SIMILAR.':''}`:'SHARED COLUMN BRACKET / SPREADER BELOW (REF.). DO NOT BRIDGE GIRDER OR CAP ENDS.',7.8);
  return {svg:svg+'</g>',scale:scale.label};
  }});
 
@@ -86,7 +91,7 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  if(joint)svg+=multiLeader([[px-pg-pl/2+(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[643,247],['LEFT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieRef}`],8.5,[[[629,py+d.brace.length*pk*.55]]]);
  svg+=multiLeader([[px+pg+pl/2-(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[1025,247],['RIGHT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieRef}`]);
  svg+=text(918,colY+48,sc.isNew?columnReference(p):'BUILDING COLUMN (REF.)',8,'middle');
- svg+=text(635,335,tieRelease(p)?'COLUMN GUSSETS: SLEEVED BOLTS IN VERTICAL SLOTS. BARS FLEX WITH END ROTATION AND THERMAL TRAVEL.':'COLUMN-SIDE ATTACHMENTS: BARS FLEX WITH END ROTATION, THERMAL TRAVEL AND SUPPORT DEFLECTION.',7.6);
+ svg+=text(635,Math.max(335,colY+62),tieRelease(p)?'COLUMN GUSSETS: SLEEVED BOLTS IN VERTICAL SLOTS. BARS FLEX WITH END ROTATION AND THERMAL TRAVEL.':'COLUMN-SIDE ATTACHMENTS: BARS FLEX WITH END ROTATION, THERMAL TRAVEL AND SUPPORT DEFLECTION.',7.6);
  return {svg:svg+'</g>',scale:ps.label};
  }});
 
