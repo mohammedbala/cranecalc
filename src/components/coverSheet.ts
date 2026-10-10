@@ -1,3 +1,4 @@
+import {codeBasis} from '../engine/drawingData';
 import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
@@ -64,10 +65,11 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
   'LOAD TEST THE CRANE PER ASME B30.2 AND THE MANUFACTURER. THE TEST LOAD SHALL NOT EXCEED 125% OF THE RATED LOAD; COORDINATE ANY TEST LOAD ABOVE THE RATED LOAD WITH THE ENGINEER OF RECORD BEFORE TESTING.'
  ].map(v=>v.toUpperCase())));
  // Column 2: criteria.
+ const code=codeBasis(p);
  blocks.push(H('DESIGN CRITERIA · CODES AND STANDARDS'),T(['STANDARD','EDITION / SCOPE'],[
-  ['BUILDING CODE','AS ADOPTED BY THE AUTHORITY HAVING JURISDICTION'],
-  ['ASCE/SEI 7','2016 (§4.9 UNCHANGED IN 7-22): CRANE LOADS, COMBINATIONS'],
-  ['AISC 360','2016: STEEL DESIGN, '+p.method],
+  ['BUILDING CODE',code.building.toUpperCase()],
+  ['ASCE/SEI 7',code.asce],
+  ['AISC 360',code.aisc+', '+p.method],
   ['AIST TECH. REPORT 13','SUPPLIED 2020 REFERENCE: RUNWAY LOADS AND CRITERIA'],
   ['AISC DESIGN GUIDE 7','3RD ED. (2019) WITH 2023 ERRATA'],
   ['AWS D1.1','STRUCTURAL WELDING CODE - STEEL (CYCLICALLY LOADED)'],
