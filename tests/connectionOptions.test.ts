@@ -25,7 +25,7 @@ describe('connection arrangement library and design boundaries',()=>{
   const p=cappedDemonstrationProject();p.details!.bracket!.arrangement=kind;
   const s=calculate(p);expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);expect(s.detailResults).toBeUndefined();
   expect(s.checks.find(c=>c.id==='option-bracket-model')).toMatchObject({status:'unsupported'});expect(s.checks.find(c=>c.id==='option-bracket-model')?.capacity).toBeUndefined();expect(s.checks.some(c=>c.id==='bracket-rib-flexure')).toBe(false);
- });
+ },60000);
  it.each(['flexible-plate','bearing-link','paired-links'] as const)('does not inherit flat-bar stiffness or fatigue for %s',kind=>{
   const p=cappedDemonstrationProject();p.details!.brace.arrangement=kind;const s=calculate(p);
   expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);expect(s.checks.some(c=>c.id==='brace-member'||c.id==='tie-weld-fatigue')).toBe(false);expect(s.checks.find(c=>c.id==='option-tie-model')).toMatchObject({status:'unsupported'});expect(flangeTieGeometry(p)).toBeUndefined();

@@ -29,6 +29,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  }
  const samples=[...new Set([...v0.x,...t0.x,...b0.x])].sort((a,b)=>a-b);
  const supportNodes=v0.x.flatMap((x,i)=>stations.some(s=>Math.abs(s-x)<1e-6)?[i]:[]);
+ const bayOf=(x:number)=>{const i=stations.findIndex(s=>s>x+1e-6);return i<0?p.spans.length-1:Math.max(0,i-1);},verticalByBay=p.spans.map(()=>0),lateralByBay=p.spans.map(()=>0);
  const atDetail=(r:BeamResult,loads:{x:number;p:number}[])=>momentAt(p.fatigue.location,r.reactions,loads,0);
  const flangeY=(p.section.d-p.section.tf)/2;
  const railLever=(cap?p.section.d+p.section.capTw+p.railHeight-cap.topY:p.railHeight+p.section.tf/2)/props.h0,verticalLever=p.railEccentricity/props.h0;
@@ -59,10 +60,12 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  const deadM=samples.map(x=>momentAt(x,dead.reactions,[],q)),liveM=samples.map(x=>momentAt(x,live.reactions,[],di.liveLoad));
  for(const [craneIndex,group] of responses.entries())for(const s of group){
   result.singleVertical=Math.max(result.singleVertical,abs(s.vs.displacement));
+  // Largest single-crane deflection within each bay, for a limit on that bay's own span.
+  for(let n=0;n<v0.x.length;n++){const bay=bayOf(v0.x[n]);verticalByBay[bay]=Math.max(verticalByBay[bay],Math.abs(s.vs.displacement[n]));}
   // Girder end rotation at the supports under one static crane: the cyclic movement imposed on end ties.
   result.serviceRotation=Math.max(result.serviceRotation??0,abs(supportNodes.map(i=>s.vs.rotation[i])));
   for(const sign of [-1,1]){
-   for(let n=0;n<t0.x.length;n++)result.singleLateral=Math.max(result.singleLateral,Math.abs(verticalLever*(s.td.displacement[n]+s.tl.displacement[n])+(1+railLever)*s.th.displacement[n]*sign));
+   for(let n=0;n<t0.x.length;n++){const v=Math.abs(verticalLever*(s.td.displacement[n]+s.tl.displacement[n])+(1+railLever)*s.th.displacement[n]*sign),bay=bayOf(t0.x[n]);result.singleLateral=Math.max(result.singleLateral,v);lateralByBay[bay]=Math.max(lateralByBay[bay],v);}
    observe?.({kind:'service',id:`S-${craneIndex}-${s.origin}-${sign}`,combination:'Single crane · static',cranes:[{index:craneIndex,origin:s.origin,loaded:true}],horizontalCrane:craneIndex,lateralSign:sign,wheels:s.wheels.map(w=>({x:w.x,p:w.static,h:w.lateral*sign})),q:0,railTorquePerLength:0,axial:0,verticalReactions:s.vs.reactions});
   }
  }
@@ -140,5 +143,5 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
    if(!r.wheels.length)continue;chosen.push({index,response:r});visit(index+1);chosen.pop();
   }
  }
- visit(0);result.combinations=[...records.values()];result.equilibriumError=eq;return result;
+ visit(0);result.combinations=[...records.values()];result.equilibriumError=eq;result.verticalByBay=verticalByBay;result.lateralByBay=lateralByBay;return result;
 }

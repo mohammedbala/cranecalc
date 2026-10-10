@@ -2,7 +2,7 @@ import {cappedStrength} from './cappedStrength';
 import { aiscShapeByName } from '../data/aiscSections';
 import type { ProjectInput, Properties } from './types';
 
-export interface GirderStrength { topMinor?:number; bottomMinor?:number; capDirections?:{rt:number;Lp:number;Lr:number;Rpg:number;Mn:number}[]; k:number; h:number; flangeRatio:number; webRatio:number; flangeLimit:number; webLimit:number; compact:boolean; Lp:number; Lr:number; rts:number; major:number; netMoment:number; netLimitApplies:boolean; Yt:number; minor:number; flangeMinor:number; shear:number; compression:number; elasticAxial:number; axialArea:number; flexureBranch:string; Cv:number; shearPhi:number; shearOmega:number; }
+export interface GirderStrength { /** Singly symmetric members: resistance to negative (hogging) moment, bottom flange in compression. */ majorReverse?:number; topMinor?:number; bottomMinor?:number; capDirections?:{rt:number;Lp:number;Lr:number;Rpg:number;Sc:number;Mn:number}[]; k:number; h:number; flangeRatio:number; webRatio:number; flangeLimit:number; webLimit:number; compact:boolean; Lp:number; Lr:number; rts:number; major:number; netMoment:number; netLimitApplies:boolean; Yt:number; minor:number; flangeMinor:number; shear:number; compression:number; elasticAxial:number; axialArea:number; flexureBranch:string; Cv:number; shearPhi:number; shearOmega:number; }
 export const available=(nominal:number,method:ProjectInput['method'],phi:number,omega:number)=>method==='LRFD'?phi*nominal:nominal/omega;
 // AISC 360-16 B4, E3/E4/E7, F2/F6 and G2. Canonical units N, mm, MPa.
 // Cb=1.0; no tension field action, no rail composite action or stiffener credit.
@@ -55,6 +55,6 @@ export function interaction(axial:number,mx:number,my:number,s:GirderStrength,me
  // Conservative Cm=1, B1>=1, using Euler load and ASD alpha=1.6.
  const alpha=method==='LRFD'?1:1.6,den=1-alpha*axial/s.elasticAxial;
  if(den<=0)return {utilization:1e12,B1:1e12};
- const B1=Math.max(1,1/den),flex=B1*(Math.abs(mx)/s.major+Math.abs(my)/s.flangeMinor);
+ const B1=Math.max(1,1/den),flex=B1*(Math.abs(mx)/(mx<0&&s.majorReverse?s.majorReverse:s.major)+Math.abs(my)/s.flangeMinor);
  return {utilization:ratio>=.2?ratio+8/9*flex:ratio/2+flex,B1};
 }

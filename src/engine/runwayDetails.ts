@@ -56,6 +56,8 @@ export interface RunwayDetailResults {
  bracket?:BracketResults;
  existingBracket?:ExistingBracketResults;
  cap?:{longitudinalFlow:number;fatigueFlows:number[]};
+ /** Major flexure at the equivalent unbraced length from the load-height elastic critical moment. */
+ loadHeight?:{utilization:number;demand:number;capacity:number;length:number;critical:number;id:string;combination:string;x:number};
  normalStress:number;shearStress:number;railDisplacement:number;twist:number;criticalMultiplier:number;
  residual:number;meshChange:number;travelChange:number;cases:number;braceStiffness:number;braceForce:number;
  fatigue:FatigueDetailResult[];interfaces:InterfaceAction[];

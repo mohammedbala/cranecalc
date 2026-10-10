@@ -1,3 +1,4 @@
+import {flexureCurves} from './loadHeightFlexure';
 import {flangeTieGeometry} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
@@ -100,6 +101,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const fatigue:FatigueDetailResult[]=detailInputs.map(f=>({id:f.id,name:f.name,x:f.x,category:f.category,reference:f.reference,bins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,minimum:0,maximum:0,range:0,allowable:0,damage:0})),damage:0,range:0,peak:0}));
  const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,flangeStress:0,plateStress:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
+ const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0};
  const mechanics=cap?{Iy:cap.Iy,topOffset:cap.topOffset,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
  const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>();
  const braceFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
@@ -123,12 +125,33 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     // Apply the full UDL at rail height for the stability test conservatively.
     distributedVertical:strength?e.q:0,distributedHeight:z
    });
+   let ownMultiplier:number|undefined;
    if(strength&&!beam.isStable(result.criticalMultiplier)){
     const critical=beam.criticalMultiplier(result.criticalMultiplier);
-    if(critical.value<result.criticalMultiplier){result.criticalMultiplier=critical.value;result.governing.criticalMultiplier={id:e.id,combination:e.combination,x:start,value:critical.value};}
+    if(critical.value<result.criticalMultiplier){result.criticalMultiplier=critical.value;result.governing.criticalMultiplier={id:e.id,combination:e.combination,x:start,value:critical.value};ownMultiplier=critical.value;}
    }
    const geometry=strength?(p.method==='LRFD'?1:1.6):0;
    const r=beam.solve(geometry);result.residual=Math.max(result.residual,r.residual);
+   if(strength){
+    // Load-height LTB in the inelastic range: the elastic critical moment of this case (wheels at the rail head,
+    // UDL at rail height, axial load, modeled restraints and moment gradient) is Mcr = lambda M / 0.8 because the
+    // eigen model carries 0.8 stiffness. It enters F2/F5 through the length L_e with Mcr(L_e) = Mcr, never
+    // shorter than Lb, so a case is screened out when it is stable at the multiplier that would just reach the
+    // governing utilization so far.
+    let Mx=0,xm=start;for(const st of r.stations){const m=moment(st.x+start);if(Math.abs(m)>Math.abs(Mx)){Mx=m;xm=st.x+start;}}
+    const c=Mx>=0?curves.positive:curves.negative,M=Math.abs(Mx);
+    if(M>0){
+     const record=(u:number,capacity:number,length:number,critical:number)=>{if(u>loadHeight.utilization)Object.assign(loadHeight,{utilization:u,demand:M,capacity,length,critical,id:e.id,combination:e.combination,x:xm});};
+     record(M/c.base,c.base,p.unbracedLength,Infinity);
+     const threshold=.8*c.mcr(c.lengthFor(M/loadHeight.utilization))/M;
+     if(!beam.isStable(threshold)){
+      let lambda=ownMultiplier;
+      if(lambda===undefined){let lo=Math.min(result.criticalMultiplier,threshold),hi=threshold;if(!beam.isStable(lo))lo=0;for(let i=0;i<30;i++){const mid=(lo+hi)/2;if(beam.isStable(mid))lo=mid;else hi=mid;}lambda=lo;}
+      const critical=lambda*M/.8,length=Math.max(p.unbracedLength,c.length(critical)),capacity=c.available(length);
+      record(M/capacity,capacity,length,critical);
+     }
+    }
+   }
    if(p.system==='simple')for(const [endName,x] of [['left',start],['right',end]] as const){
     const lateral=r.restraints.find(re=>Math.abs(re.x-(x-start))<1e-6)!;
     const vertical=e.q*(end-start)/2+wheels.reduce((sum,w)=>sum+w.p*(endName==='left'?(end-w.x):(w.x-start))/(end-start),0);
@@ -169,7 +192,10 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    }
   }
   if(bracket||existingBracket)for(const x of supports){
-   const loads=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({vertical:v.vertical,offset:v.offset})):[{vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,offset:0}];
+   // A rotating girder end bears on the span side of its plate: the reaction acts at 0.8 of the bearing
+   // length from the girder end, over the inner 0.4 of the plate.
+   const Lbr=details.bearing.length;
+   const loads=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({vertical:v.vertical,offset:v.offset+(v.end==='left'?1:-1)*.3*Lbr,length:.4*Lbr})):[{vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,offset:0}];
    bracket?.observe(e.kind,e.id,x,loads,bin);
    existingBracket?.observe(e.kind,e.id,x,loads,bin);
   }

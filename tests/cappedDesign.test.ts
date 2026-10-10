@@ -1,10 +1,11 @@
 import {describe,it,expect} from 'vitest';
 import {openSection} from '../src/engine/openSection';
 import {cappedMechanics} from '../src/engine/cappedMechanics';
+import {cappedElasticProperties} from '../src/engine/capChannel';
 import {LateralTorsionBeam,type LateralTorsionInput} from '../src/engine/lateralTorsion';
 import {loadCappedSection} from '../src/data/aiscChannels';
 import {exampleProject} from '../src/engine/defaults';
-import {girderStrength} from '../src/engine/aiscStrength';
+import {girderStrength,interaction} from '../src/engine/aiscStrength';
 import {sectionProperties} from '../src/engine/section';
 import {emptyCapDesign} from '../src/engine/capDesignInputs';
 import {capInputChecks,capAttachmentChecks} from '../src/engine/capChecks';
@@ -54,14 +55,23 @@ describe('capped runway mechanics and design',()=>{
   expect(m.beta).toBeLessThan(0);expect(m.shearCenter).toBeGreaterThan(m.elastic.cy);
   near(m.J/25.4**4,3.77+1.01); // AISC component J, no overlap credit.
  });
- it('uses F5 Lr and conservative BOTH-sign resistance, not the F4 example table',()=>{
+ it('uses F5 Lr; simple spans rate positive moment, continuous runways also the reverse sign',()=>{
   const p=pcap();p.unbracedLength=360*25.4;p.method='ASD';
   const s=girderStrength(p,sectionProperties(p.section)),top=s.capDirections![0],bottom=s.capDirections![1];
   // Independent substitution of DG7 rounded geometric data, rt=4.50 in.
   near(top.rt/25.4,4.5,.006);near(top.Lp/25.4,119,.008);near(top.Lr/25.4,407,.009);
   expect(top.Lr/25.4).toBeLessThan(457); // Published F4 table Lr, deliberately not mixed with F5.
-  expect(s.major).toBeLessThanOrEqual(bottom.Mn/1.67*(1+1e-10));
+  // Simple spans: cap and W top flange in compression; the bottom-flange direction is kept for reversal.
+  expect(s.major).toBeCloseTo(Math.min(top.Mn/1.67,s.netLimitApplies?s.netMoment:Infinity),6);expect(s.majorReverse).toBeCloseTo(bottom.Mn/1.67,6);
+  expect(s.major).toBeGreaterThan(s.majorReverse!);
+  // The interaction uses the capacity for the sign of the moment.
+  expect(interaction(0,-1e8,0,s,'ASD').utilization).toBeGreaterThan(interaction(0,1e8,0,s,'ASD').utilization);
   expect(s.topMinor!).toBeGreaterThan(s.bottomMinor!);expect(s.compact).toBe(true);
+ });
+ it('measures the F13.2 proportioning ratio of the compression flange',()=>{
+  // W24X68 + C15X50 puts more than 90% of Iy in the cap and top flange; W24X94 + C15X33.9 does not.
+  const ratio=(w:string,c:string)=>{const sec=loadCappedSection(exampleProject.section,w,c);return cappedElasticProperties(sec)!.topI/sectionProperties(sec).Iy;};
+  expect(ratio('W24X68','C15X50')).toBeGreaterThan(.9);expect(ratio('W24X94','C15X33.9')).toBeLessThan(.9);
  });
  it('reproduces the guide cap-weld VQ/(2I) with independent rounded inputs',()=>{
   const cap=cappedMechanics(pcap().section)!,q=77.7*4448.221615*cap.channelQ/(2*cap.elastic.Ix);
