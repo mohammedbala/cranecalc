@@ -1,15 +1,15 @@
 import {cantileverSystems,seismicBasis} from '../engine/runwaySeismic';
 import {codeBasis} from '../engine/drawingData';
 import {adjacentBays} from '../engine/continuation';
-import type {CalculationSnapshot} from '../engine/types';
+import type {CalculationSnapshot,Crane} from '../engine/types';
 import {format} from '../engine/units';
-import {craneDesignMinimum} from '../engine/aistLoads';
+import {craneDesignMinimum,craneCombinations} from '../engine/aistLoads';
 import {runwayElevations,issueStatus,supportColumn} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {drawingLength} from './drawingFormat';
-import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth} from './sheetGraphics';
+import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
 import {tieRelease} from '../engine/tieGeometry';
@@ -44,11 +44,39 @@ function legend(t:Style):Block{
   return `<g data-legend="symbols">${svg}</g>`;
  }};
 }
+/**
+ * Wheel load diagram: the end truck on the rail with each wheel's maximum load without impact, the wheel
+ * spacing, and the traction and bumper forces along the rail. Crane, end truck and wheels are the crane
+ * supplier's and drawn dashed; spacing is to scale across the column.
+ */
+function wheelDiagram(t:Style,c:Crane,o:{force:(v:number)=>string;length:(mm:number)=>string;impact:number;lateral:number;traction:number;bumper?:number}):Block{
+ const size=Math.max(7,t.body*.8),offsets=c.wheels.map(w=>w.offset-c.wheels[0].offset),span=Math.max(1,offsets[offsets.length-1]);
+ const margin=130,k=(t.width-2*margin)/span,load=(v:number)=>o.force(v/(c.includesImpact?1+c.impact:1));
+ const gaps=offsets.slice(1).map((v,i)=>(v-offsets[i])*k),each=!gaps.length||Math.min(...gaps)>Math.max(...c.wheels.map(w=>textWidth(load(w.loaded),size)))+10;
+ const note=wrapToWidth(t.caps(`${each?'Wheel loads':`Wheel loads, max. ${load(Math.max(...c.wheels.map(w=>w.loaded)))} each`}: maximum without impact, per the crane supplier; add ${+(o.impact*100).toFixed(1)}% vertical impact. Side thrust ${o.force(o.lateral)} on this runway and traction act at the rail head. Crane, end trucks and bumpers by the crane supplier.`),t.width,t.body);
+ // Wheels at their spacing, never overlapping where a bogie puts them close together.
+ const r=Math.min(11,...gaps.map(g=>g*.45)),top=size+4,truck=top+44,wheelY=truck+45-r,rail=wheelY+r,dimY=rail+38;
+ return {height:dimY+16+note.length*t.leading,render:(x,y)=>{
+  const X=(v:number)=>x+margin+v*k,arrow=(tip:[number,number],dx:number,dy:number)=>`<path class="leader-arrow" d="M${n(tip[0])},${n(tip[1])}l${n(-dx*6+dy*2.4)},${n(-dy*6-dx*2.4)}l${n(-dy*4.8)},${n(dx*4.8)}z"/>`;
+  let svg=`<g data-wheel-diagram="${c.id}">`;
+  svg+=rect(x+18,y+rail,t.width-36,6,'rail-line')+line([x+18,y+rail+12],[x+t.width-18,y+rail+12],'runway-line');
+  svg+=rect(X(0)-42,y+truck,span*k+84,22,'reference-line');
+  c.wheels.forEach((w,i)=>{const wx=X(offsets[i]);svg+=circle(wx,y+wheelY,r,'reference-line')+line([wx,y+top+4],[wx,y+truck-2])+arrow([wx,y+truck-2],0,1);
+   if(each)svg+=text(wx,y+top,load(w.loaded),size,'middle',700);});
+  for(let i=1;i<offsets.length;i++)svg+=dimH(X(offsets[i-1]),X(offsets[i]),y+rail+16,y+dimY,o.length(offsets[i]-offsets[i-1]));
+  // Traction along the rail at the head, ahead of the truck; the bumper force on the truck end behind it.
+  const ahead=X(span)+56;svg+=line([ahead,y+rail-3],[ahead+52,y+rail-3])+arrow([ahead+52,y+rail-3],1,0)+text(ahead,y+rail-9,`${o.force(o.traction)}`,size,'start');
+  svg+=text(ahead,y+rail-9-size*1.2,'TRACTION',size,'start');
+  if(o.bumper){const back=X(0)-42;svg+=line([back,y+truck+11],[back-60,y+truck+11])+arrow([back-60,y+truck+11],-1,0)+text(back-4,y+truck+5,o.force(o.bumper),size,'end')+text(back-4,y+truck+5-size*1.2,'BUMPER',size,'end');}
+  note.forEach((v,i)=>{svg+=text(x,y+dimY+16+(i+.75)*t.leading,v,t.body);});
+  return svg+'</g>';
+ }};
+}
 /** Greedy column flow; a heading stays with the block after it. Returns undefined when the blocks do not fit. */
 function flow(blocks:Block[],limit:number,overflow=false){
  const placed:{x:number;y:number;b:Block}[]=[];let column=0,y=top;
  for(let i=0;i<blocks.length;i++){
-  const b=blocks[i],need=b.height+(b.keep&&blocks[i+1]?blocks[i+1].height:0),bottom=Math.min(limit,limits[column]);
+  const b=blocks[i],need=b.height+(b.keep&&blocks[i+1]?2.4+blocks[i+1].height:0),bottom=Math.min(limit,limits[column]);
   if(y>top&&y+need>bottom&&column<columns.length-1){column++;y=top;}
   else if(y>top&&y+need>bottom&&!overflow)return undefined;
   if(y+b.height>Math.min(limit,limits[column])&&!overflow)return undefined;
@@ -120,6 +148,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
    ['BUMPER (STOP) FORCE',dd?.bumperForce?`${f(dd.bumperForce)}${dd.bumperBypassesGirder?' TO BUILDING-MOUNTED STOP':''}`:'NOT ENTERED'],
    ['LOAD SOURCE',c.loadSource.toUpperCase()]
   ],[1.4,2.6]));
+  blocks.push(H(`WHEEL LOADS · ${c.name.toUpperCase()}`),wheelDiagram(t,c,{force:v=>f(v),length:len,impact:Math.max(c.impact,m.impact),
+   lateral:Math.max(c.wheels.reduce((a,w)=>a+w.lateral,0),m.runwaySide),traction:Math.max(c.longitudinal,m.traction),bumper:dd?.bumperForce||undefined}));
  }
  const a=p.aist,vertical=s.checks.find(c=>c.id==='vertical'),lateral=s.checks.find(c=>c.id==='lateral'),shortest=Math.min(...p.spans);
  const ratio=(c:typeof vertical)=>c?.capacity?`L/${Math.round(shortest/c.capacity)}`:'-';
@@ -135,6 +165,11 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['ELEVATIONS',elevations?`T.O.R. ${len(elevations.tor)}, T.O.S. ${len(elevations.tos)} (DATUM ${len(elevations.datum)})`:'NOT ENTERED']
  ],[1.4,2.6]));
  const r=s.supportReactions;
+ // The combinations the runway girder is designed for, as the calculation applies them.
+ const combos=craneCombinations(p.method,p.aist?.concurrency==='full'),plain=(v:string)=>v.replace(/C_\{([^}]*)\}/g,'C$1').replace(/C_([a-z]+)/g,'C$1');
+ // The table keeps with its key below it.
+ blocks.push(H(`LOAD COMBINATIONS · RUNWAY GIRDER (${p.method})`),{...T(['NO.','COMBINATION','NO.','COMBINATION'],Array.from({length:Math.ceil(combos.length/2)},(_,i)=>{const a=combos[i],b=combos[i+Math.ceil(combos.length/2)];return [a.id,plain(a.equation),b?.id??'',b?plain(b.equation):''];}),[.45,1.55,.45,1.55]),keep:true},
+  P(`AIST TECHNICAL REPORT 13 WITH ASCE 7 §2.${p.method==='LRFD'?'3':'4'}. Cd CRANE DEAD, Cv VERTICAL, Css SIDE THRUST, Cls LONGITUDINAL, Ci IMPACT, Cbs BUMPER; SUFFIX m MULTIPLE CRANES, s ONE CRANE, min MINIMUM LIFTED LOAD. D DEAD, L LIVE.${p.aist?.concurrency==='full'?' C1: ALL CRANE LOADS CONCURRENT AS L.':''}`));
  if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, PER SUPPORT'),T(['STATION','D','Cd','Cv','Ci','Css','Cls·e/L'],r.supports.map(v=>[len(v.x),f(v.D),f(v.Cd),f(v.Cv),f(v.Ci),f(v.Css),'±'+f(v.Clv)]),[1.25,1,1,1,1,1,1.05]),P(`Cd CRANE EMPTY, Cv LIFTED, Ci IMPACT, Css SIDE THRUST AT RAIL HEAD (ONE CRANE). RUNWAY LONGITUDINAL FORCE Cls = ${f(r.Cls)} AT THE RAIL HEAD; Cls·e/L IS ITS END COUPLE AT THE BEARINGS OF THE BAY THAT CARRIES IT. ALL CRANE COMPONENTS ARE LIVE LOAD L (ASCE 7 §4.9).${adjacentBays(p).map(b=>` AT ${len(b.station)} THE REACTIONS INCLUDE THE EXISTING ADJACENT ${len(b.length)} BAY (SAME GIRDER, RAIL AND DEAD LOAD ASSUMED).`).join('')} FACTORED INTERFACE FORCES: SEE CALCULATION REPORT.`));
  // Column 3: index, materials, inspection.
  blocks.push(H('SHEET INDEX'),T(['SHEET','TITLE'],sheets.map(v=>[v.number,v.title]),[.7,3.3]));
