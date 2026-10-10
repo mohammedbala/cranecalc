@@ -1,3 +1,4 @@
+import {railPadThickness,keeperGeometry} from '../engine/railSeat';
 import {stopEnds,stopLocation} from '../engine/endStopInputs';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
@@ -22,6 +23,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
  const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number)=>{const t=format(v,'force',u,1);return u==='US'?t.toUpperCase():t;};
  const tb=e.base.thickness,tp=e.face.thickness,H=e.face.height,ts=e.stiffener.thickness,Ls=e.stiffener.length,sp=e.stiffener.spacing,Wb=e.base.width,gauge=e.bolts.gauge,db=e.bolts.diameter;
  const capped=b.kind==='cap',capT=capped?b.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,stiffTop=g.stiffenerHeight;
+ // The rail stands on its pad, where there is one, and the first keeper pair is the typical keeper.
+ const pad=railPadThickness(p),kg=keeperGeometry(r,pad);
  const shown=Math.max(g.railEnd+8*inch,d.bearing.length+4*inch),depthShown=capT+b.tf+6*inch;
  const boltLabel=`4 - ${size(db)} ${e.bolts.grade} PRETENSIONED (SC)`,hole=boltProperties(e.bolts.grade,db).hole,hx=heavyHex(db);
  const keeperRef=detailRef(detailTitles.railKeeper),views:DetailView[]=[];
@@ -51,10 +54,11 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    svg+=hexSide(X(x),Y(tb),hx.corners*kk,hx.head*kk,-1)+hexSide(X(x),wFl,hx.corners*kk,hx.nut*kk,1);
   }
   // Rail from its end, with the first keeper pair.
-  const railTop=Y(railDepth);
-  svg+=line([X(g.railEnd),ys],[X(g.railEnd),railTop],'rail-line');
-  for(const z of [0,r.baseThickness,railDepth-r.headThickness,railDepth])svg+=line([X(g.railEnd),Y(z)],[right,Y(z)],'rail-line');
-  const keeper=g.railEnd+r.clipWidth/2+12.7;svg+=rect(X(keeper-r.clipWidth/2),Y(r.baseThickness+r.clipThickness),r.clipWidth*kk,(r.baseThickness+r.clipThickness)*kk,'runway-line');
+  const railTop=Y(pad+railDepth);
+  svg+=line([X(g.railEnd),Y(pad)],[X(g.railEnd),railTop],'rail-line');
+  for(const z of [0,r.baseThickness,railDepth-r.headThickness,railDepth])svg+=line([X(g.railEnd),Y(pad+z)],[right,Y(pad+z)],'rail-line');
+  if(pad>0)svg+=rect(X(g.railEnd),Y(pad),(right-X(g.railEnd)),pad*kk,'runway-line');
+  const keeper=g.railEnd+kg.length/2+12.7;svg+=rect(X(keeper-kg.length/2),Y(kg.height),kg.length*kk,kg.height*kk,'runway-line');
   // Crane bumper, by the crane supplier.
   const br=e.bumperDiameter/2,bc:XY=[X(g.faceFront)+br*kk,Y(tb+g.contact)];
   svg+=circle(bc[0],bc[1],br*kk,'reference-line')+line([bc[0]+br*kk,bc[1]],[bc[0]+br*kk+28,bc[1]],'reference-line');
@@ -96,7 +100,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const rz=p.railEccentricity;
   svg+=line([X(g.railEnd)-6,Z(rz)],[right+10,Z(rz)],'grid-line')+text(right+14,Z(rz)+11,'RAIL C/L',7.5);
   svg+=rect(X(g.railEnd),Z(rz-r.baseWidth/2),(shown-g.railEnd)*kk,r.baseWidth*kk,'rail-line')+rect(X(g.railEnd),Z(rz-r.headWidth/2),(shown-g.railEnd)*kk,r.headWidth*kk,'rail-line');
-  const keeper=g.railEnd+12.7;for(const side of [-1,1]){const z0=rz+side*r.baseWidth/2;svg+=rect(X(keeper),side<0?Z(z0-r.clipProjection-r.clipThickness):Z(z0),r.clipWidth*kk,(r.clipProjection+r.clipThickness)*kk,'runway-line');}
+  // Keepers seen from above: the lip from its tip over the rail base to the body's outer face.
+  const keeper=g.railEnd+12.7;for(const side of [-1,1]){const a=Z(rz+side*kg.tip),b2=Z(rz+side*kg.outer);svg+=rect(X(keeper),Math.min(a,b2),kg.length*kk,Math.abs(b2-a),'runway-line');}
   svg+=rect(X(g.back),Z(-Wb/2),e.base.length*kk,Wb*kk,'runway-line')+rect(X(g.faceBack),Z(-Wb/2),tp*kk,Wb*kk,'runway-line');
   for(const side of [-1,1])svg+=rect(X(g.stiffenerEnd),Z(side*sp/2-ts/2),Ls*kk,ts*kk,'runway-line');
   // Heavy hex heads seen from above, on the bolt centers.
@@ -111,7 +116,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   svg+=below(X(g.faceFront),Z(Wb/2),X(g.railEnd),Z(rz+r.baseWidth/2),zd,dim(e.railGap));
   // Front bolt C/L to the back of the face plate: the head clears the face plate fillet toe by the socket clearance.
   svg+=below(X(g.frontRow),Z(gauge/2)+hx.flats/2*kk,X(g.faceBack),Z(Wb/2),zd,dim(e.bolts.frontClear),'left');
-  svg+=multiLeader([[X(keeper)+r.clipWidth*kk,Z(rz-r.baseWidth/2-r.clipProjection)]],[X(shown)+44,Z(-width/2)-14],['FIRST KEEPER PAIR',`SPACING PER ${keeperRef}`]);
+  svg+=multiLeader([[X(keeper)+kg.length*kk,Z(rz-kg.outer)]],[X(shown)+44,Z(-width/2)-14],['FIRST KEEPER PAIR',`SPACING PER ${keeperRef}`]);
   // Bolt callout above the girder at the back of the stop, clear of the section cut and the keeper callout.
   {const labels=[boltLabel,'HEADS ON BASE PL'],w=Math.max(...labels.map(v=>textWidth(labelCaps(v),8.5))),c:XY=[X(g.backRow),Z(-gauge/2)];
    svg+=multiLeader([[c[0]-hr*.25,c[1]-hx.flats/2*kk]],[c[0]-24-w,Z(-width/2)-26],labels);}
@@ -135,7 +140,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   for(const side of [-1,1])svg+=rect(X(side*sp/2-ts/2),Y(tb+stiffTop),ts*kk,stiffTop*kk,'hidden-line');
   // Heads behind the face plate (hidden) and nuts below the flange.
   for(const side of [-1,1]){const x=X(side*gauge/2);svg+=hexSide(x,yb,hx.corners*kk,hx.head*kk,-1,'hidden-line')+hexSide(x,wFl,hx.corners*kk,hx.nut*kk,1)+line([x,yb-hx.head*kk-3],[x,wFl+hx.nut*kk+3],'grid-line');}
-  const tor=Y(railDepth),bc:XY=[X(p.railEccentricity),Y(tb+g.contact)];
+  const tor=Y(pad+railDepth),bc:XY=[X(p.railEccentricity),Y(tb+g.contact)];
   svg+=line([X(-Wb/2)-6,tor],[X(Wb/2)+30,tor],'grid-line')+text(X(Wb/2)+32,tor+3,'T.O.R.',7.5);
   svg+=circle(bc[0],bc[1],e.bumperDiameter/2*kk,'reference-line');
   // Gauge below the nuts, its text clear of the web break.

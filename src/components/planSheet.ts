@@ -257,7 +257,8 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   for(const g of marks)svg+=text(EX(mid(g)),top-14,g.mark,9,'middle',700)+text(EX(mid(g)),bottom+17,p.section.name,9,'middle',700);
   const railTop=EY(m.railBase+railDepth);
   // Elevation targets: the T.O.R. label rises and the T.O.S. label drops so close elevations never overlap.
-  const ex=er+(adjacent.some(b=>b.end==='right')?stub+4:0);
+  // They start beyond the girder end, any existing-bay stub and the break of the end column above the girder.
+  const ex=Math.max(er+(adjacent.some(b=>b.end==='right')?stub+4:0),EX(Math.max(...m.supports)+m.column.bf/2)+6);
   const target=(y:number,labelY:number,label:string,datum:string)=>`<g data-elevation-datum="${datum}">${line([ex+2,y],[ex+12,y])}<path class="leader-arrow" d="M${n(ex+12)},${n(y)}l-2.4,-2.4h4.8z"/>${line([ex+12,y],[ex+16,labelY])}${line([ex+16,labelY],[ex+20,labelY])}${text(ex+22,labelY+3,label,8.5)}</g>`;
   const torY=Math.min(railTop,top-11),tosY=Math.max(top,torY+11);
   svg+=target(top,tosY,elevations?`T.O.S. EL. ${drawingElevation(elevations.tos,p.units)}`:'T.O.S. EL. NOT ENTERED','top-of-steel');
