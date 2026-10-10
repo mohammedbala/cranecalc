@@ -20,19 +20,24 @@ export function table(t:Style,headers:string[],rows:string[][],widths:number[]):
   row(headers.map(h=>[t.caps(h)]),heights[0],true);cells.forEach((r,i)=>row(r,heights[i+1],false));
   return svg;}};
 }
+type Box={x:number;y:number;width:number;height:number};
+/** Size factors of the 6-unit body text for sheets drawn at content scale 2. */
+export const legacyNoteSizes=[1.15,1.05,1,.92,.85,.8,.74,.68];
+/** Detail-sheet notes at content scale 1: body text 8.4 down to 6.6 points (0.12 to 0.09 in). */
+export const detailNoteSizes=[1.4,1.3,1.2,1.15,1.1];
+const styleAt=(k:number,width:number,units:'US'|'SI'):Style=>({width,body:6*k,leading:7.8*k,heading:8*k,caps:capsFor(units)});
+const stackHeight=(blocks:Block[])=>blocks.reduce((a,b)=>a+b.height+2.4,0)-2.4;
+/** Largest size factor at which the blocks fit the box, or undefined when even the smallest does not. */
+export function noteFit(builders:((t:Style)=>Block[])[],units:'US'|'SI',box:{width:number;height:number},sizes=detailNoteSizes){
+ return sizes.find(k=>stackHeight(builders.flatMap(b=>b(styleAt(k,box.width,units))))<=box.height);
+}
 /**
  * Stack blocks top-down in a box at the largest text size that fits
- * (factors 1.15 down to 0.8 of the 6-unit body text).
+ * (the given factors of the 6-unit body text, largest first).
  */
-export function noteStack(builders:((t:Style)=>Block[])[],units:'US'|'SI',box:{x:number;y:number;width:number;height:number}){
- const sizes=[1.15,1.05,1,.92,.85,.8,.74,.68];
- for(const [i,k] of sizes.entries()){
-  const t:Style={width:box.width,body:6*k,leading:7.8*k,heading:8*k,caps:capsFor(units)},blocks=builders.flatMap(b=>b(t));
-  const fits=blocks.reduce((a,b)=>a+b.height+2.4,0)-2.4<=box.height;
-  if(!fits&&i<sizes.length-1)continue;
-  // Content that still does not fit is marked so set checks report it instead of the sheet failing to draw.
-  let svg=fits?'':'<g data-overflow="notes"/>',y=box.y;for(const b of blocks){svg+=b.render(box.x,y);y+=b.height+2.4;}
-  return svg;
- }
- return '';
+export function noteStack(builders:((t:Style)=>Block[])[],units:'US'|'SI',box:Box,sizes=legacyNoteSizes){
+ const k=noteFit(builders,units,box,sizes),t=styleAt(k??sizes[sizes.length-1],box.width,units),blocks=builders.flatMap(b=>b(t));
+ // Content that still does not fit is marked so set checks report it instead of the sheet failing to draw.
+ let svg=k!==undefined?'':'<g data-overflow="notes"/>',y=box.y;for(const b of blocks){svg+=b.render(box.x,y);y+=b.height+2.4;}
+ return svg;
 }

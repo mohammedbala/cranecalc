@@ -3,7 +3,7 @@ import {calculate,validateProject} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 import {endBearingChecks,endBearingGeometry,activeEndBearing} from '../src/engine/endBearing';
 import {boltCapacity} from '../src/engine/connectionStrength';
-import {drawingSheetSet} from '../src/components/planSheet';
+import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import {detailedDrawings} from '../src/components/detailedDrawings';
 import {compactReport} from '../src/report/compactReport';
 
@@ -40,11 +40,11 @@ describe('bolted girder end bearings',()=>{
   const p=demonstrationProject();p.system='continuous';
   expect(validateProject(p).join(' ')).not.toContain('end bearing');expect(activeEndBearing(p)).toBeUndefined();
  });
- it('draws locating and sliding bearings and references them from S-04 and the report',()=>{
-  const set=drawingSheetSet(capped),s02=set.find(v=>v.number==='S-02')!,s04=set.find(v=>v.number==='S-04')!;
+ it('draws locating and sliding bearings and references them from the support details and the report',()=>{
+  const set=drawingSheetSet(capped),s02=set.find(v=>v.svg.includes('data-view="end-bearing"'))!,s04=set.find(v=>v.svg.includes('data-view="independent-tie-plan"'))!;
   expect(s02.svg).toContain('data-view="end-bearing"');expect(s02.svg).not.toContain('data-view="end-connection"');
   const t=texts(s02.svg).join(' ');expect(t).toContain('PRETENSIONED AGAINST STEEL SLEEVES 1 7/16" OD');expect(t).toContain('2 1/2" SLOT IN FLANGE FOR 1/2" EA. WAY');expect(t).toContain('LOCATING: 4 - 3/4" A325 SC,');
-  expect(texts(s04.svg).join(' ')).toContain('UPLIFT (2/S-02)');
+  expect(texts(s04.svg).join(' ')).toContain(`UPLIFT (${detailReferences(set).get('GIRDER END BEARINGS / LOCATING AND SLIDING')})`);
   for(const sheet of set)expect(sheet.svg).not.toMatch(/NOT IN SET|\{\{/);
   expect(texts(set[0].svg).join(' ')).not.toContain('COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN');
   const sk=detailedDrawings(capped).find(v=>v.name==='end-connection-detail')!;expect(sk.title).toContain('Bolted end bearing');

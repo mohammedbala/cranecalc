@@ -26,7 +26,8 @@ test('runs the demonstration package: checks, drawing set and printable report',
 
  await page.getByRole('button',{name:'Drawings'}).click();
  const tabs=page.locator('.drafting-views button');
- await expect(tabs.filter({hasText:'S-07'})).toHaveCount(1,{timeout:120000});
+ // The rolled demonstration's details fit one detail sheet, the last of the set.
+ await expect(tabs.filter({hasText:'S-02'})).toHaveCount(1,{timeout:120000});
  await tabs.filter({hasText:'S-01'}).first().click();
  await expect(page.locator('.drafting-linework svg')).toHaveAttribute('aria-label',/^S-01/);
 
@@ -50,9 +51,10 @@ test('designs new freestanding columns with base plates and footings',async({pag
  await expect(page.getByRole('button',{name:'Generate output',exact:true})).toBeEnabled({timeout:540000});
  await page.getByRole('button',{name:'Drawings'}).click();
  const tabs=page.locator('.drafting-views button');
- await expect(tabs.filter({hasText:'S-08'})).toHaveCount(1,{timeout:120000});
- await tabs.filter({hasText:'S-08'}).first().click();
- await expect(page.locator('.drafting-linework svg')).toHaveAttribute('aria-label',/^S-08/);
+ // The new column details are on the second detail sheet, the last of the set.
+ await expect(tabs.filter({hasText:'S-03'})).toHaveCount(1,{timeout:120000});
+ await tabs.filter({hasText:'S-03'}).first().click();
+ await expect(page.locator('.drafting-linework svg')).toHaveAttribute('aria-label',/^S-03/);
  await expect(page.locator('.drafting-linework svg')).toContainText('FOOTING / SECTION');
  expect(errors).toEqual([]);
 });

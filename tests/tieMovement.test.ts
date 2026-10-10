@@ -65,7 +65,7 @@ describe('tie movement compatibility',()=>{
  it('states the deflection limit for a bracket by others on the drawings',()=>{
   const support=demo.checks.find(c=>c.id==='tie-move-support')!;
   expect(support.status).toBe('excluded');expect(support.capacity).toBeGreaterThan(0);
-  const set=drawingSheetSet(demo),cover=texts(set[0].svg),s06=texts(set.find(v=>v.number==='S-06')!.svg);
+  const set=drawingSheetSet(demo),cover=texts(set[0].svg),s06=texts(set.find(v=>v.svg.includes('data-view="flange-tie-plan"'))!.svg);
   expect(cover).toContain('WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS');
   expect(s06).toContain('PRETENSION THE BOLTS AGAINST STEEL SLEEVES');expect(s06).toContain('VERT. SLOTS IN GUSSET');
   expect(demo.checks.find(c=>c.id==='flange-tie-column')!.status).toBe('excluded');

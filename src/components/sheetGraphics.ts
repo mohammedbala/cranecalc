@@ -1,13 +1,19 @@
 import type { CalculationSnapshot } from '../engine/types';
 import { drawingScale } from './drawingFormat';
-import { issueStatus } from '../engine/drawingData';
+import { issueStatus, supportColumn } from '../engine/drawingData';
 /** Replaced with the sheet ordinal and count once the whole set is assembled. */
 export const sheetOrdinalToken='{{SHEET_ORDINAL}}';
-export const sheetFormat = { widthIn:36, heightIn:24, width:2592, height:1728, contentScale:2 } as const;
-/** Detail coordinates are enlarged on ARCH D; select and label the actual printed scale. */
-export function sheetDrawingScale(maxLayoutUnitsPerMm:number,units:CalculationSnapshot['input']['units']){
- const scale=drawingScale(maxLayoutUnitsPerMm*sheetFormat.contentScale,units);
- return {...scale,pointsPerMm:scale.pointsPerMm/sheetFormat.contentScale};
+/**
+ * ARCH D in PDF points. Sheet bodies are laid out in layout units inside a content group scaled by the
+ * sheet's content scale; the default of 1 prints layout units at 1/72 in, so 9-unit labels are 1/8 in.
+ */
+export const sheetFormat = { widthIn:36, heightIn:24, width:2592, height:1728, contentScale:1 } as const;
+/** Drawing area of a sheet in layout units at content scale 1: inside the border, above the title band. */
+export const sheetArea={x:0,y:0,width:2520,height:1512,seal:{x:2340,y:1332}} as const;
+/** Select and label the actual printed scale for a sheet drawn at the given content scale. */
+export function sheetDrawingScale(maxLayoutUnitsPerMm:number,units:CalculationSnapshot['input']['units'],contentScale:number=sheetFormat.contentScale){
+ const scale=drawingScale(maxLayoutUnitsPerMm*contentScale,units);
+ return {...scale,pointsPerMm:scale.pointsPerMm/contentScale};
 }
 export type XY = [number, number];
 export const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -23,7 +29,7 @@ export function breakLine(a:XY,b:XY){
  const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy),ux=dx/L,uy=dy/L,px=-uy*4,py=ux*4;
  return `<polyline class="annotation" points="${[a,[mx-ux*3,my-uy*3],[mx-ux*1+px,my-uy*1+py],[mx+ux*1-px,my+uy*1-py],[mx+ux*3,my+uy*3],b].map(p=>`${n(p[0])},${n(p[1])}`).join(' ')}"/>`;
 }
-export function bubble(x: number, y: number, label: string) { return circle(x, y, 8, 'bubble') + text(x, y + 3, label, 9, 'middle', 700); }
+export function bubble(x: number, y: number, label: string, r = 8) { const size = r > 8 ? r : 9; return circle(x, y, r, 'bubble') + text(x, y + size * .36, label, size, 'middle', 700); }
 export function leader(at: XY, end: XY, label: string, size = 9) {
   return line(at, [end[0] - 8, end[1] - 3]) + line([end[0] - 8, end[1] - 3], [end[0] + 6, end[1] - 3])
     + circle(at[0], at[1], 1.4, 'dot') + text(end[0] + 9, end[1], label, size);
@@ -61,7 +67,25 @@ export function wrappedText(x: number, y: number, value: string, maxChars: numbe
   if (row) rows.push(row);
   return { svg: rows.map((r, i) => text(x, y + i * leading, r, size)).join(''), height: rows.length * leading };
 }
-export function sheetStart(s: CalculationSnapshot, number: string, title: string) {
+/**
+ * Printed line weights for content drawn at content scale 1 (layout units = points): object lines
+ * 0.35 mm, rail 0.32 mm, existing and hidden 0.2 mm, leaders and dimensions 0.18 mm, grids 0.16 mm.
+ * The title band keeps the base weights.
+ */
+const detailLineWeights=`
+  .runway-plan-sheet [data-sheet-content] .reference-line{stroke-width:.55;stroke-dasharray:6 3.6}
+  .runway-plan-sheet [data-sheet-content] .runway-line{stroke-width:1;stroke-dasharray:none}
+  .runway-plan-sheet [data-sheet-content] .rail-line{stroke-width:.9;stroke-dasharray:none}
+  .runway-plan-sheet [data-sheet-content] .hidden-line{stroke-width:.55;stroke-dasharray:4 2.4}
+  .runway-plan-sheet [data-sheet-content] .annotation{stroke-width:.5}
+  .runway-plan-sheet [data-sheet-content] .divider{stroke-width:.8}
+  .runway-plan-sheet [data-sheet-content] .grid-line{stroke-width:.45;stroke-dasharray:14 3 2 3}
+  .runway-plan-sheet [data-sheet-content] .bubble{stroke-width:.7}
+  .runway-plan-sheet [data-sheet-content] .dot{stroke-width:.4}
+  .runway-plan-sheet [data-sheet-content] .hatch,.runway-plan-sheet [data-sheet-content] .hatch-dot{stroke-width:.3}`;
+/** Content transform: layout origin at the inner corner of the border, scaled by the content scale. */
+const contentTransform=(k:number)=>k===2?'translate(72 36) scale(2)':`translate(36 36) scale(${k})`;
+export function sheetStart(s: CalculationSnapshot, number: string, title: string, contentScale:number=sheetFormat.contentScale) {
   return `<svg xmlns="http://www.w3.org/2000/svg" class="runway-plan-sheet" width="${s.input.units==='SI'?'914.4mm':'36in'}" height="${s.input.units==='SI'?'609.6mm':'24in'}" viewBox="0 0 2592 1728" role="img" aria-label="${esc(`${number} / ${title} / ${s.input.units==='SI'?'ARCH D 914.4 by 609.6 mm drawing':'ARCH D 36 by 24 inch drawing'}`)}"><style>
   .runway-plan-sheet{background:white;color:#111}
   .runway-plan-sheet text{font-family:Arial,sans-serif;fill:#111;stroke:none;letter-spacing:0}
@@ -77,10 +101,10 @@ export function sheetStart(s: CalculationSnapshot, number: string, title: string
   .runway-plan-sheet .bubble{stroke:#31383e;stroke-width:.6;fill:white}
   .runway-plan-sheet .dot{stroke:#111;fill:#111;stroke-width:.5}
   .runway-plan-sheet .hatch{stroke:#6b7075;stroke-width:.3}
-  .runway-plan-sheet .hatch-dot{stroke:#6b7075;fill:#6b7075;stroke-width:.3}
+  .runway-plan-sheet .hatch-dot{stroke:#6b7075;fill:#6b7075;stroke-width:.3}${contentScale===2?'':detailLineWeights}
   </style><rect x="0" y="0" width="2592" height="1728" style="fill:white;stroke:none"/>
   ${rect(36,36,2520,1656,'divider')}
-  <g data-sheet-content="ARCH-D" transform="translate(72 36) scale(${sheetFormat.contentScale})">`;
+  <g data-sheet-content="ARCH-D" data-content-scale="${contentScale}" transform="${contentTransform(contentScale)}">`;
 }
 export function titleBlock(s: CalculationSnapshot, number: string, title: string) {
   const p=s.input,d=p.drawing,top=1548,bottom=1692,date=/^\d{4}-\d{2}-\d{2}/.exec(s.createdAt)?.[0]??'';
@@ -128,14 +152,30 @@ export const detailNumberToken='{{DETAIL_NO}}',sheetNumberToken='{{SHEET_NO}}';
 /** Reference to a detail elsewhere in the set by its title; resolved to "n/S-xx" once the set is assembled. */
 // URI-encoded so wrapping never splits a reference; measured as its resolved length.
 export const detailRef=(title:string)=>`{{REF:${encodeURIComponent(title)}}}`;
-const resolvedLength=(v:string)=>v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00');
+/** Reference to the sheet that carries a group of details (see detailSheet.ts); resolved to "S-xx". */
+export const sheetRef=(topic:string)=>`{{SHEET:${encodeURIComponent(topic)}}}`;
+/** Detail titles referenced from other details; each is drawn by exactly one detail in the set. */
+export const detailTitles={
+ bearing:'GIRDER BEARING / COLUMN BRACKET',endBearing:'GIRDER END BEARINGS / LOCATING AND SLIDING',endTemplate:'GIRDER WEB / END CONNECTION',
+ tie:'FLANGE TIE / COLUMN CONNECTION',flangeTie:'DIRECT FLANGE TIE / TOP TRANSVERSE SECTION',tiePlan:'TIE AND STIFFENER LOCATIONS / PLAN',
+ railKeeper:'RAIL KEEPER / GIRDER ATTACHMENT',capSection:'CAPPED GIRDER SECTION',capDevelopment:'CAP END DEVELOPMENT',
+ supportEnd:(joint:boolean)=>joint?'ADJACENT GIRDER ENDS AT COLUMN':'GIRDER END AT COLUMN',supportTies:'INDEPENDENT FLANGE TIES / PLAN',movement:'BEARING MOVEMENT REQUIREMENTS',
+ weldedBracket:'COLUMN BRACKET / TRANSVERSE SECTION',existingBracket:'BRACKET / TRANSVERSE SECTION',
+ endStop:'END STOP / ELEVATION',endStopPlan:'END STOP / PLAN',newColumn:'NEW RUNWAY COLUMN / ELEVATION',basePlate:'BASE PLATE / PLAN',footing:'FOOTING / SECTION'
+} as const;
+/** The supporting column as labelled on the details, referring to its own details when it is designed here. */
+export function columnReference(p:CalculationSnapshot['input']){
+ const c=supportColumn(p);return c.detailed?`${c.name} / ${detailRef(detailTitles.newColumn)}`:c.reference;
+}
+const resolvedLength=(v:string)=>v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00').replace(/\{\{SHEET:[^}]*\}\}/g,'S-00');
 /**
  * Detail title: numbered bubble (detail over sheet), underlined title and
  * scale. Numbers are assigned in drawing order when the set is assembled.
+ * Printed sizes: 3/16 in title, 1/8 in scale, 0.42 in bubble at any content scale.
  */
-export function viewTitle(cx:number,y:number,title:string,scale:string){
- const w=textWidth(title,11,true),bx=cx-w/2-16,r=10.5;
- return `<g data-view-title="below" data-detail-title="${esc(title)}">${circle(bx,y-1,r,'divider')}${line([bx-r,y-1],[bx+r,y-1],'annotation')}${text(bx,y-3,detailNumberToken,8.5,'middle',700)}${text(bx,y+6.6,sheetNumberToken,5,'middle')}${text(cx,y-3,title,11,'middle',700)}${line([bx+r,y-1],[cx+w/2+4,y-1],'divider')}${text(cx,y+8.5,scale,8,'middle')}</g>`;
+export function viewTitle(cx:number,y:number,title:string,scale:string,contentScale:number=sheetFormat.contentScale){
+ const k=1/contentScale,size=13.5*k,w=textWidth(title,size,true),r=15*k,bx=cx-w/2-r-7*k;
+ return `<g data-view-title="below" data-detail-title="${esc(title)}">${circle(bx,y,r,'divider')}${line([bx-r,y],[bx+r,y],'annotation')}${text(bx,y-3.6*k,detailNumberToken,11.5*k,'middle',700)}${text(bx,y+9.4*k,sheetNumberToken,7*k,'middle')}${text(cx,y-4*k,title,size,'middle',700)}${line([bx+r,y],[cx+w/2+5*k,y],'divider')}${text(cx,y+12*k,scale,9*k,'middle')}</g>`;
 }
 /** Explicit waypoints keep annotation corridors separate from adjacent callouts.
  * Identical components may use one arrow with a TYP / quantity note. */
@@ -180,8 +220,18 @@ export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:stri
 export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boolean}[],x:number,top:number,bottom:number){
  const sorted=[...items].sort((a,b)=>a.at[1]-b.at[1]),height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*11;
  const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
- let y=top,svg='';
- for(const v of sorted){svg+=v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,true,[],!!v.field):multiLeader([v.at],[x,y],v.labels);y+=height(v)+gap;}
+ const slots=()=>{let y=top;return sorted.map(v=>{const at=y;y+=height(v)+gap;return at;});};
+ // Leader from a target to its label's elbow; labels left of their targets land on the right.
+ const route=(v:typeof items[number],y:number):[XY,XY]=>{const w=v.weld?89:Math.max(0,...v.labels.map(l=>textWidth(l.toUpperCase(),8.5))),ly=(v.weld?y+3:y)-3;return [v.at,v.at[0]>x+w?[x+w+14,ly]:[x-14,ly]];};
+ const crosses=([a,b]:[XY,XY],[c,d]:[XY,XY])=>{const o=(p:XY,q:XY,r:XY)=>Math.sign((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]));return o(a,b,c)*o(a,b,d)<0&&o(c,d,a)*o(c,d,b)<0;};
+ // Ordering by target height alone can cross leaders whose targets differ in depth; swap such neighbours.
+ for(let pass=0;pass<sorted.length;pass++){
+  let swapped=false;const ys=slots();
+  for(let i=0;i+1<sorted.length;i++)if(crosses(route(sorted[i],ys[i]),route(sorted[i+1],ys[i+1]))){[sorted[i],sorted[i+1]]=[sorted[i+1],sorted[i]];swapped=true;break;}
+  if(!swapped)break;
+ }
+ let svg='';const ys=slots();
+ sorted.forEach((v,i)=>{const y=ys[i];svg+=v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,true,[],!!v.field):multiLeader([v.at],[x,y],v.labels);});
  return svg;
 }
 

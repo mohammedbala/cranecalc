@@ -2,6 +2,8 @@ import type {CalculationSnapshot} from '../engine/types';
 import {defaultFraming,type FramingSettings} from './framingSettings';
 import {drawingSheetSet} from './planSheet';
 import {sheetFormat} from './sheetGraphics';
+import {sheetEntities,sheetLayers,type Pt,type Units} from './svgEntities';
+export {sheetEntities,sheetLayers} from './svgEntities';
 
 /**
  * The issued ARCH D sheets as one AutoCAD 2000 (AC1015) DXF: every sheet at
@@ -9,105 +11,6 @@ import {sheetFormat} from './sheetGraphics';
  * linework is the same drawing that is printed. Lengths are paper inches (US)
  * or millimetres (SI); plot at 1:1.
  */
-type Units='US'|'SI';
-type Matrix=[number,number,number,number,number,number];
-type Pt=[number,number];
-interface LayerDef {color:number;weight:number;ltype:'Continuous'|'DASHED'|'CENTER'|'HIDDEN';}
-
-/** Layers by drawing role; lineweights in 1/100 mm. */
-export const sheetLayers:Record<string,LayerDef>={
- 'S-STEEL-NEW':{color:7,weight:50,ltype:'Continuous'},
- 'S-STEEL-HIDDEN':{color:7,weight:18,ltype:'HIDDEN'},
- 'S-RAIL':{color:6,weight:35,ltype:'Continuous'},
- 'S-EXISTING':{color:8,weight:18,ltype:'DASHED'},
- 'S-GRID':{color:1,weight:18,ltype:'CENTER'},
- 'S-ANNO':{color:2,weight:18,ltype:'Continuous'},
- 'S-PATT':{color:8,weight:13,ltype:'Continuous'},
- 'S-ANNO-HEAVY':{color:7,weight:35,ltype:'Continuous'},
- 'S-ANNO-SYMB':{color:3,weight:25,ltype:'Continuous'},
- 'S-ANNO-TEXT':{color:7,weight:25,ltype:'Continuous'},
- 'G-TTLB':{color:7,weight:50,ltype:'Continuous'},
- 'G-TTLB-TEXT':{color:7,weight:25,ltype:'Continuous'}
-};
-const classLayer:Record<string,string>={'runway-line':'S-STEEL-NEW','hidden-line':'S-STEEL-HIDDEN','rail-line':'S-RAIL','reference-line':'S-EXISTING','grid-line':'S-GRID','annotation':'S-ANNO','divider':'S-ANNO-HEAVY','bubble':'S-ANNO-SYMB','leader-arrow':'S-ANNO','dot':'S-ANNO','hatch':'S-PATT','hatch-dot':'S-PATT'};
-
-const identity:Matrix=[1,0,0,1,0,0];
-const multiply=(m:Matrix,n:Matrix):Matrix=>[m[0]*n[0]+m[2]*n[1],m[1]*n[0]+m[3]*n[1],m[0]*n[2]+m[2]*n[3],m[1]*n[2]+m[3]*n[3],m[0]*n[4]+m[2]*n[5]+m[4],m[1]*n[4]+m[3]*n[5]+m[5]];
-const applyTo=(m:Matrix,[x,y]:Pt):Pt=>[m[0]*x+m[2]*y+m[4],m[1]*x+m[3]*y+m[5]];
-function transform(value:string|undefined):Matrix{
- let m=identity;
- for(const [,fn,args] of (value??'').matchAll(/(\w+)\(([^)]*)\)/g)){
-  const v=args.split(/[\s,]+/).filter(Boolean).map(Number);
-  if(fn==='translate')m=multiply(m,[1,0,0,1,v[0],v[1]??0]);
-  else if(fn==='scale')m=multiply(m,[v[0],0,0,v[1]??v[0],0,0]);
-  else if(fn==='rotate'){const a=v[0]*Math.PI/180,c=Math.cos(a),s=Math.sin(a),cx=v[1]??0,cy=v[2]??0;m=multiply(multiply(multiply(m,[1,0,0,1,cx,cy]),[c,s,-s,c,0,0]),[1,0,0,1,-cx,-cy]);}
- }
- return m;
-}
-const attributes=(tag:string)=>Object.fromEntries([...tag.matchAll(/([\w:-]+)="([^"]*)"/g)].map(m=>[m[1],m[2]]));
-const unescape=(v:string)=>v.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&');
-/** Subpaths of an SVG path using the M/L/H/V/Z commands the sheets emit. */
-function pathPoints(d:string){
- const out:{points:Pt[];closed:boolean}[]=[];let current:Pt=[0,0],start:Pt=[0,0],sub:Pt[]|undefined,command='M';
- const tokens=[...d.matchAll(/[MLHVZmlhvz]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g)].map(m=>m[0]);
- for(let i=0;i<tokens.length;){
-  if(/[A-Za-z]/.test(tokens[i]))command=tokens[i++];
-  if(command==='Z'||command==='z'){if(sub){out[out.length-1].closed=true;current=start;sub=undefined;}continue;}
-  const num=()=>Number(tokens[i++]),rel=command===command.toLowerCase();
-  let next:Pt;
-  switch(command.toUpperCase()){
-   case 'M':case 'L':{const x=num(),y=num();next=rel?[current[0]+x,current[1]+y]:[x,y];break;}
-   case 'H':{const x=num();next=[rel?current[0]+x:x,current[1]];break;}
-   case 'V':{const y=num();next=[current[0],rel?current[1]+y:y];break;}
-   default:i++;continue;
-  }
-  if(command.toUpperCase()==='M'){sub=[next];out.push({points:sub,closed:false});start=next;command=rel?'l':'L';}
-  else{if(!sub){sub=[current];out.push({points:sub,closed:false});}sub.push(next);}
-  current=next;
- }
- return out.filter(v=>v.points.length>1);
-}
-
-type Entity=
- {type:'line';layer:string;a:Pt;b:Pt}|
- {type:'poly';layer:string;points:Pt[];closed:boolean}|
- {type:'solid';layer:string;points:Pt[]}|
- {type:'circle';layer:string;center:Pt;radius:number}|
- {type:'text';layer:string;at:Pt;height:number;value:string;angle:number;align:0|1|2;bold:boolean};
-
-/** Convert one generated sheet SVG (viewBox 0 0 2592 1728, 72 units/in) to entities in paper units. */
-export function sheetEntities(svg:string,units:Units,offsetX=0):Entity[]{
- const k=units==='US'?1/72:25.4/72,height=sheetFormat.height,entities:Entity[]=[];
- const paper=(m:Matrix,p:Pt):Pt=>{const [x,y]=applyTo(m,p);return [offsetX+x*k,(height-y)*k];};
- const stack:{m:Matrix;content:boolean}[]=[{m:identity,content:false}];
- const re=/<(\/?)([a-zA-Z]+)((?:[^>"]|"[^"]*")*?)(\/?)>([^<]*)/g;
- for(const [,close,name,raw,selfClose,after] of svg.matchAll(re)){
-  const top=stack[stack.length-1];
-  if(name==='g'){if(close)stack.pop();else if(!selfClose){const a=attributes(raw);stack.push({m:multiply(top.m,transform(a.transform)),content:top.content||a['data-sheet-content']!==undefined});}continue;}
-  if(close)continue;
-  const a=attributes(raw),cls=a.class??'annotation';
-  if(/stroke:\s*none/.test(a.style??'')&&name!=='text')continue;
-  const m=multiply(top.m,transform(a.transform)),scale=Math.sqrt(Math.abs(m[0]*m[3]-m[1]*m[2]));
-  const layer=cls==='divider'&&!top.content?'G-TTLB':classLayer[cls]??'S-ANNO';
-  const filled=cls==='leader-arrow'||cls==='dot'||/fill:\s*#/.test(a.style??'');
-  if(name==='line')entities.push({type:'line',layer,a:paper(m,[+a.x1,+a.y1]),b:paper(m,[+a.x2,+a.y2])});
-  else if(name==='rect'){const x=+a.x,y=+a.y,w=+a.width,h=+a.height;entities.push({type:'poly',layer,closed:true,points:[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(p=>paper(m,p as Pt))});}
-  else if(name==='circle')entities.push({type:'circle',layer,center:paper(m,[+a.cx,+a.cy]),radius:+a.r*scale*k});
-  else if(name==='polyline'){const v=(a.points??'').split(/[\s,]+/).filter(Boolean).map(Number),pts:Pt[]=[];for(let i=0;i+1<v.length;i+=2)pts.push(paper(m,[v[i],v[i+1]]));if(pts.length>1)entities.push({type:'poly',layer,closed:false,points:pts});}
-  else if(name==='path')for(const sub of pathPoints(a.d??'')){
-   const pts=sub.points.map(p=>paper(m,p));
-   if(filled&&sub.closed&&(pts.length===3||pts.length===4))entities.push({type:'solid',layer,points:pts});
-   else entities.push({type:'poly',layer,closed:sub.closed,points:pts});
-  }
-  else if(name==='text'){
-   const value=unescape(after).trim();if(!value)continue;
-   const angle=-Math.atan2(m[1],m[0])*180/Math.PI,anchor=a['text-anchor'];
-   entities.push({type:'text',layer:top.content?'S-ANNO-TEXT':'G-TTLB-TEXT',at:paper(m,[+a.x,+a.y]),height:+(a['font-size']??9)*.716*scale*k,value,angle:Math.abs(angle)<1e-9?0:angle,align:anchor==='middle'?1:anchor==='end'?2:0,bold:+(a['font-weight']??400)>=600});
-  }
- }
- return entities;
-}
-
 const round=(v:number)=>Number(v.toFixed(5));
 // AutoCAD text: drafting symbols as %% codes or plain ASCII, anything else as \U+XXXX;
 // a literal "%%" would read as a control code.

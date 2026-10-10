@@ -10,15 +10,20 @@ import {loadAiscSection,aiscWShapes} from '../src/data/aiscSections';
 import {validateProject} from '../src/engine/calculate';
 import {defaultFraming} from '../src/components/framingSettings';
 import type {CalculationSnapshot} from '../src/engine/types';
+import {detailRef} from '../src/components/sheetGraphics';
 
 type Point=[number,number];
 const cross=(a:Point,b:Point)=>a[0]*b[1]-a[1]*b[0];
 const sub=(a:Point,b:Point):Point=>[a[0]-b[0],a[1]-b[1]];
-// Inspect the geometry actually emitted to the drawing. Shared branches inside
-// a single callout are intentional; intersections between callouts are not.
+// Inspect the geometry actually emitted to the drawing, in sheet coordinates: each detail is drawn
+// in its own coordinates and translated into its grid cell. Shared branches inside a single callout
+// are intentional; intersections between callouts are not.
 export function crossingLeaders(svg:string){
- const routes=[...svg.matchAll(/<g data-multileader="component">(.*?)<\/g>/gs)].flatMap((g,id)=>
-  [...g[1].matchAll(/data-leader-path="true" points="([^"]+)"/g)].map(m=>({id,points:m[1].split(' ').map(p=>p.split(',').map(Number) as Point)})));
+ const cells=[...svg.matchAll(/<g data-detail-cell="[^"]*" transform="translate\(([-\d.e]+) ([-\d.e]+)\)">/g)].map(m=>({at:m.index!,dx:+m[1],dy:+m[2]}));
+ // A detail's content runs from its cell group to its title, drawn after it at sheet level.
+ const offset=(i:number):Point=>{const c=cells.filter(v=>v.at<i).at(-1);return c&&svg.indexOf('<g data-view-title=',c.at)>i?[c.dx,c.dy]:[0,0];};
+ const routes=[...svg.matchAll(/<g data-multileader="component">(.*?)<\/g>/gs)].flatMap((g,id)=>{const [dx,dy]=offset(g.index!);
+  return [...g[1].matchAll(/data-leader-path="true" points="([^"]+)"/g)].map(m=>({id,points:m[1].split(' ').map(p=>{const [x,y]=p.split(',').map(Number);return [x+dx,y+dy] as Point;})}));});
  const hits:string[]=[];
  for(let i=0;i<routes.length;i++)for(let j=i+1;j<routes.length;j++){
   const a=routes[i],b=routes[j];if(a.id===b.id)continue;
@@ -50,7 +55,7 @@ describe('connection-sheet leader routes',()=>{
   for(const name of ['W24X84','W30X99']){
    const input=cappedDemonstrationProject();input.section=loadCappedSection(input.section,name,'C15X33.9');input.aist!.netFlangeArea=input.section.bf*input.section.tf;
    const s:CalculationSnapshot={input,revision:'cap-drawing-test',createdAt:'',errors:[],warnings:[],properties:null,analysis:null,checks:[],eligible:false,referenceVersion:''};
-   const svg=connectionSheetSvg(s);expect(svg).toContain('CAP ATTACHMENT: SEE S-03');
+   const svg=connectionSheetSvg(s);expect(svg).toContain(`CAP ATTACHMENT: SEE ${detailRef('CAPPED GIRDER SECTION')}`);
    expect(crossingLeaders(svg),name+' capped').toEqual([]);
    expect(crossingLeaders(flangeTieSheetSvg(s)),name+' flange ties').toEqual([]);
   }

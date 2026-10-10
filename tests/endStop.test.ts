@@ -4,9 +4,8 @@ import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/dem
 import {endStopChecks,endStopGeometry,stopBumperForce,wrenchClearance} from '../src/engine/endStop';
 import {railKeeperStations} from '../src/engine/simpleSupports';
 import {boltCapacity} from '../src/engine/connectionStrength';
-import {drawingSheetSet} from '../src/components/planSheet';
+import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import {sheetsDxf} from '../src/components/sheetDxf';
-import {capSheetSvg} from '../src/components/capSheet';
 
 const inch=25.4,kip=4448.2216152605;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
@@ -61,21 +60,24 @@ describe('girder-mounted runway end stops',()=>{
   expect(Math.min(...stations)).toBeCloseTo(g.railEnd+half,6);expect(Math.max(...stations)).toBeCloseTo(L-g.railEnd-half,6);
   const off=structuredClone(p);off.cranes[0].design!.bumperBypassesGirder=true;expect(Math.min(...railKeeperStations(off))).toBeCloseTo(half,6);
  });
- it('draws S-07 and references it from S-01, the cover and the cap sheet',()=>{
-  const set=drawingSheetSet(demo),s07=set.find(v=>v.number==='S-07')!;
-  expect(set.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-04','S-06','S-07']);
+ it('draws the end stop details and references them from S-01, the cover and the cap details',()=>{
+  const set=drawingSheetSet(demo),s07=set.find(v=>v.svg.includes('data-view="end-stop-elevation"'))!;
+  // Cover, general arrangement and one sheet of twelve details.
+  expect(set.map(v=>v.number)).toEqual(['S-00','S-01','S-02']);
+  expect(s07.svg.match(/data-view-title="below"/g)).toHaveLength(12);
   expect(s07.svg).not.toMatch(/\{\{|NOT IN SET|NaN|undefined|data-overflow/);
   for(const view of ['end-stop-elevation','end-stop-plan','end-stop-section','end-stop-notes'])expect(s07.svg).toContain(`data-view="${view}"`);
   const t=texts(s07.svg).join(' | ');
   expect(t).toContain('4 - 3/4" A325 PRETENSIONED (SC)');expect(t).toContain('PL 1" X 9" X 1\'-3" FACE');expect(t).toContain('20 KIP');
-  const s01=texts(set[1].svg).join(' ');expect(s01).toContain('SEE 1/S-07');expect(set[1].svg).toContain('data-end-stop="plan"');
+  const s01=texts(set[1].svg).join(' ');expect(s01).toContain(`SEE ${detailReferences(set).get('END STOP / ELEVATION')}`);expect(set[1].svg).toContain('data-end-stop="plan"');
   const cover=texts(set[0].svg).join(' ');expect(cover).toContain('RUNWAY END STOPS');expect(cover).not.toContain('RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE');
   expect(s07.svg).toContain('class="hidden-line"');expect(sheetsDxf([s07],'US')).toContain('S-STEEL-HIDDEN');
  },240000);
  it('permits only the end stop holes in a capped girder, as fatigue points',()=>{
   const s=calculate(cappedDemonstrationProject());
   expect(s.checks.filter(c=>c.group==='End stops').every(c=>c.status==='pass')).toBe(true);
-  expect(texts(capSheetSvg(s)).join(' ')).toContain('EXCEPT THE END STOP BOLT HOLES (S-07)');
+  const plan=detailReferences(drawingSheetSet(s)).get('END STOP / PLAN')!;
+  expect(texts(drawingSheetSet(s).find(v=>v.svg.includes('data-view="cap-section"'))!.svg).join(' ')).toContain(`EXCEPT THE END STOP BOLT HOLES (${plan})`);
   expect(s.checks.filter(c=>c.id.startsWith('detail-full-cycle-SH')).every(c=>c.status==='pass')).toBe(true);
  },240000);
 });

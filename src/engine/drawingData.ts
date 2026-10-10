@@ -58,11 +58,12 @@ export function girderMarks(p:ProjectInput){
 }
 
 /**
- * The column the runway bears on, as the drawings name it: a new column designed here is shop welded and
- * detailed on S-08; otherwise the existing column is field welded and verified in the field.
+ * The column the runway bears on, as the drawings name it: a new column designed here is shop welded and,
+ * when its base is designed, `detailed` on the new-column details; otherwise the existing column is field
+ * welded and verified in the field. The drawings add the detail reference to a detailed column.
  */
 export function supportColumn(p:ProjectInput){
- const c=p.existingColumn,isNew=!!(c?.enabled&&c.isNew),sheet=isNew&&p.columnBase?.enabled&&p.details?' / S-08':'';
+ const c=p.existingColumn,isNew=!!(c?.enabled&&c.isNew),detailed=isNew&&!!p.columnBase?.enabled&&!!p.details;
  const name=isNew?`NEW ${c!.shape||'BUILT-UP'} COLUMN`:'EXISTING COLUMN';
- return {isNew,name,reference:isNew?`${name}${sheet}`:'EXISTING COLUMN (REF.)',weld:isNew?'SHOP WELD':'FIELD WELD',field:!isNew};
+ return {isNew,detailed,name,reference:isNew?name:'EXISTING COLUMN (REF.)',weld:isNew?'SHOP WELD':'FIELD WELD',field:!isNew};
 }

@@ -16,10 +16,13 @@ it('runs the complete three-bay capped example with no unresolved or failed chec
  expect(s.detailResults!.fatigue.some(f=>f.id.startsWith('CW'))).toBe(true);
  expect(s.detailResults!.fatigue.some(f=>f.id.startsWith('CE'))).toBe(true);
 });
-it('shows the cap-specific equations and a scaled third attachment sheet',()=>{
- const sheets=drawingSheetSet(s),html=reportHtml(s);
- expect(sheets).toHaveLength(8);expect(sheets[0].number).toBe('S-00');expect(sheets[6].svg).toContain('DIRECT FLANGE TIES');expect(sheets[3].svg).toContain('CAP END DEVELOPMENT');
- expect(sheets[3].svg).toContain('SCALE:');expect(sheets[3].svg).toContain('5&#39;-0&quot;');
+it('shows the cap-specific equations and scaled cap attachment details',()=>{
+ const sheets=drawingSheetSet(s),html=reportHtml(s),withView=(view:string)=>sheets.find(v=>v.svg.includes(`data-view="${view}"`))!;
+ // Cover, general arrangement and two detail sheets.
+ expect(sheets.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
+ expect(withView('flange-tie-plan').title).toContain('FLANGE TIES');
+ const cap=withView('cap-development').svg;expect(cap).toContain('CAP END DEVELOPMENT');
+ expect(cap).toContain('SCALE:');expect(cap).toContain('5&#39;-0&quot;');
  expect(html).toContain('Capped girder properties');expect(html).toContain('Cap attachment strength');
  expect(html).not.toContain('katex-error');expect(html).not.toContain('remains pending');
 });

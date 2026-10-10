@@ -6,8 +6,9 @@ import {barDiameter} from '../engine/columnBase';
 import {runwayElevations} from '../engine/drawingData';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,sheetStart,titleBlock,text,line,rect,circle,dimH,dimV,viewTitle,multiLeader,filletLeader,detailRef,labelColumn,n,breakLine,textWidth,type XY} from './sheetGraphics';
-import {heading,numbered,table,noteStack,type Style} from './noteBlocks';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,type XY} from './sheetGraphics';
+import {heading,numbered,table,type Style} from './noteBlocks';
+import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 
 const inch=25.4;
 
@@ -42,8 +43,10 @@ function wPlan(cx:number,cy:number,d:number,bf:number,tf:number,tw:number,k:numb
  return `<path class="${cls}" d="M${n(x(-d/2))},${n(y(-bf/2))}H${n(x(-d/2+tf))}V${n(y(-tw/2))}H${n(x(d/2-tf))}V${n(y(-bf/2))}H${n(x(d/2))}V${n(y(bf/2))}H${n(x(d/2-tf))}V${n(y(tw/2))}H${n(x(-d/2+tf))}V${n(y(bf/2))}H${n(x(-d/2))}Z"/>`;
 }
 
-/** S-08: new freestanding runway column, its base plate, anchor rods and spread footing. */
-export function newColumnSheetSvg(s:CalculationSnapshot){
+/** New column details on their own sheet. */
+export function newColumnSheetSvg(s:CalculationSnapshot,number='S-08'){return topicSheetSvg(s,newColumnTopic(s),number,'NEW RUNWAY COLUMNS & FOOTINGS');}
+/** New freestanding runway column, its base plate, anchor rods and spread footing, with design data and notes. */
+export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,u=p.units,col=p.existingColumn!,b=p.columnBase!,d=p.details!,br=d.bracket?.enabled?d.bracket:undefined,g=p.section,r=s.columnBase;
  const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'?0:3);return u==='US'?t.toUpperCase():t;};
  const c=existingColumnSection(p).section,name=col.shape||`BUILT-UP ${size(c.d)} X ${size(c.bf)}`;
@@ -56,18 +59,18 @@ export function newColumnSheetSvg(s:CalculationSnapshot){
  const anchorLabel=`${2*a.perRow} - ${size(a.diameter)} DIA. ASTM F1554 GR. ${a.grade.split('-')[1]}`;
  const barLabel=`${ft.bar} @ ${dim(ft.spacing)} E.W. BOTTOM`;
  const tie=flangeTieGeometry(p);
- let svg=sheetStart(s,'S-08','CRANE RUNWAY / NEW RUNWAY COLUMN, BASE PLATE & FOOTING');
- svg+=line([560,76],[560,680],'divider')+line([850,76],[850,680],'divider')+line([560,379],[1200,379],'divider');
+ const views:DetailView[]=[];
 
  // 1: Elevation across the runway at a support, looking along the runway. A long column is broken between
  // the base and the bracket so both ends draw at a legible scale; dimensions govern.
- {
+ views.push({title:detailTitles.newColumn,rows:2,render:()=>{
+  let svg='';
   const top=Math.max(H,tos+cap+railDepth),bottom=ftgBot-4*inch,upperFrom=seat-(br?br.seatThickness+br.ribDepth:0)-9*inch,lowerTo=Math.max(14*inch,ft.soil+8*inch);
   const broken=upperFrom-lowerTo>18*inch,gap=broken?22:0,shown=broken?(top-upperFrom)+(lowerTo-bottom):top-bottom;
   const zMin=-ft.L/2-ext*.55,zMax=Math.max(ft.L/2+ext*.55,girderZ+Math.max(g.bf,g.kind==='cap'?g.capWidth:0)/2);
-  const k=drawingScale(Math.min((540-gap)/shown,220/(zMax-zMin)),u),kk=k.pointsPerMm,cx=124+(-zMin)*kk,X=(z:number)=>cx+z*kk;
-  // Centered between the sheet top and the view title.
-  const base=640-Math.max(0,(540-gap-shown*kk)/2)*.8;
+  const k=drawingScale(Math.min((600-gap)/shown,280/(zMax-zMin)),u),kk=k.pointsPerMm,cx=124+(-zMin)*kk,X=(z:number)=>cx+z*kk;
+  // Centered between the top of its two-row cell and the view title.
+  const base=640-Math.max(0,(670-gap-shown*kk)/2);
   const Y=(y:number)=>!broken||y<=lowerTo?base-(y-bottom)*kk:base-(lowerTo-bottom)*kk-gap-(Math.max(y,upperFrom)-upperFrom)*kk;
   const brk=(y:number)=>broken&&y>lowerTo&&y<upperFrom;
   svg+='<g data-view="new-column-elevation">';
@@ -79,7 +82,7 @@ export function newColumnSheetSvg(s:CalculationSnapshot){
    for(const [y1,y2] of [[0,lowerTo],[upperFrom,H]] as const)for(const z of [-c.d/2+c.tf,c.d/2-c.tf])svg+=line([X(z),Y(y2)],[X(z),Y(y1)],'runway-line');
    svg+=breakLine([X(-c.d/2)-6,yb],[X(c.d/2)+6,yb])+breakLine([X(-c.d/2)-6,yt],[X(c.d/2)+6,yt]);
   }else svg+=colPart(0,H);
-  svg+=line([X(0),Y(top)-8],[X(0),Y(bottom)+6],'grid-line');
+  svg+=line([X(0),Y(top)-8],[X(0),Y(ftgBot)+6],'grid-line');
   // Bracket seat and ribs on the girder-side flange.
   if(br){svg+=rect(X(c.d/2),Y(seat),br.seatProjection*kk,br.seatThickness*kk,'runway-line')+rect(X(c.d/2),Y(seat-br.seatThickness),br.seatProjection*kk,br.ribDepth*kk,'runway-line');}
   // Bearing plate, girder section with the cap channel, and the rail.
@@ -120,40 +123,46 @@ export function newColumnSheetSvg(s:CalculationSnapshot){
   svg+=dimH(X(-ft.L/2),X(ft.L/2),Y(ftgBot),Y(ftgBot)+20,dim(ft.L));
   if(br)svg+=dimH(X(c.d/2),X(girderZ),Y(top),Y(top)-8,dim(br.reach));
   void brk;
-  const lx=right+14;
-  svg+=labelColumn([
-   ...ties.map(t=>({at:[X((t.z1+t.z2)/2),Y(t.yc-t.w/2)] as XY,labels:[`${t.side>0?'TOP':'BOTTOM'} FLANGE TIE`,`SEE ${detailRef('DIRECT FLANGE TIE / TOP TRANSVERSE SECTION')}`]})),
+  const lx=Math.max(right,X(zMax)+4)+14;
+  const items:{at:XY;labels:string[]}[]=[
+   ...ties.map(t=>({at:[X((t.z1+t.z2)/2),Y(t.yc-t.w/2)] as XY,labels:[`${t.side>0?'TOP':'BOTTOM'} FLANGE TIE`,`SEE ${detailRef(detailTitles.flangeTie)}`]})),
    {at:[X(girderZ+g.bf/2),Y(y0+g.tf/2)],labels:[`${g.name}`,'GIRDER, SEE S-01']},
-   ...(br?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-br.seatThickness-br.ribDepth*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef('COLUMN BRACKET / TRANSVERSE SECTION')}`]}]:[]),
+   ...(br?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-br.seatThickness-br.ribDepth*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef(detailTitles.weldedBracket)}`]}]:[]),
    {at:[X(c.d/2),Y(broken?upperFrom+(seat-upperFrom)*.25:H*.5)],labels:[`NEW ${name}`,'COLUMN, ASTM A992']},
-   {at:[X(row+hw.washer/2),Y(hw.washerThickness/2)],labels:[`PL ${size(tb)} BASE PL`,`SEE ${detailRef('BASE PLATE / PLAN')}`]},
+   {at:[X(row+hw.washer/2),Y(hw.washerThickness/2)],labels:[`PL ${size(tb)} BASE PL`,`SEE ${detailRef(detailTitles.basePlate)}`]},
    {at:[X(b.plate.N/2+inch),Y(-tb-gr/2)],labels:[`${size(gr)} NON-SHRINK GROUT`]},
    ...(ft.slab>0?[{at:[X(ft.L/2+ext*.4),Y(slabTop-ft.slab/2)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,'ISOLATION JOINT']}]:[]),
    {at:[X(row),Y(ftgTop-a.embedment*.6)],labels:[anchorLabel.replace(' ASTM',''),`HEADED, HEF ${dim(a.embedment)}`]},
-   {at:[X(ft.L/2),Y(ftgTop-hf*.75)],labels:[`FTG ${dim(ft.L)} X ${dim(ft.B)} X ${dim(hf)}`,`SEE ${detailRef('FOOTING / SECTION')}`]}
-  ],lx,Y(top)+6,Y(bottom)-6);
-  svg+=viewTitle(292,666,'NEW RUNWAY COLUMN / ELEVATION',k.label)+'</g>';
- }
+   {at:[X(ft.L/2),Y(ftgTop-hf*.75)],labels:[`FTG ${dim(ft.L)} X ${dim(ft.B)} X ${dim(hf)}`,`SEE ${detailRef(detailTitles.footing)}`]}
+  ];
+  svg+=labelColumn(items,lx,Y(top)+6,Y(bottom)-6);
+  return {svg:svg+'</g>',scale:k.label};
+ }});
  // 2: Base plate plan.
- {
-  const k=drawingScale(Math.min(.5,120/b.plate.N,130/b.plate.B),u),kk=k.pointsPerMm,cx=846-46-b.plate.N/2*kk,cy=214,X=(z:number)=>cx+z*kk,Y=(x:number)=>cy+x*kk;
+ views.push({title:detailTitles.basePlate,render:()=>{
+  let svg='';
+  const k=drawingScale(Math.min(.5,200/b.plate.N,200/b.plate.B),u),kk=k.pointsPerMm,cx=846-46-b.plate.N/2*kk,cy=214,X=(z:number)=>cx+z*kk,Y=(x:number)=>cy+x*kk;
   svg+='<g data-view="base-plate-plan">';
   svg+=rect(X(-b.plate.N/2),Y(-b.plate.B/2),b.plate.N*kk,b.plate.B*kk,'runway-line')+wPlan(cx,cy,c.d,c.bf,c.tf,c.tw,kk);
-  svg+=line([X(-b.plate.N/2)-12,cy],[X(b.plate.N/2)+12,cy],'grid-line')+line([cx,Y(-b.plate.B/2)-12],[cx,Y(b.plate.B/2)+12],'grid-line');
+  svg+=line([X(-b.plate.N/2)-12,cy],[X(b.plate.N/2)+5,cy],'grid-line')+line([cx,Y(-b.plate.B/2)-12],[cx,Y(b.plate.B/2)+5],'grid-line');
   for(const z of [-row,row])for(const x of xs){const hc:XY=[X(z),Y(x)];svg+=rect(X(z-hw.washer/2),Y(x-hw.washer/2),hw.washer*kk,hw.washer*kk,'runway-line')+circle(hc[0],hc[1],hw.hole/2*kk,'runway-line')+circle(hc[0],hc[1],a.diameter/2*kk,'annotation');}
   const yb=Y(b.plate.B/2),xr=X(b.plate.N/2);
   svg+=dimH(X(-b.plate.N/2),X(b.plate.N/2),yb,yb+34,dim(b.plate.N))+dimH(X(-row),X(row),Y(Math.max(...xs)),yb+18,dim(2*row));
   svg+=dimH(X(row),X(b.plate.N/2),Y(Math.max(...xs)),yb+18,size(a.edge),'right');
   svg+=dimV(Y(-b.plate.B/2),Y(b.plate.B/2),xr,xr+40,dim(b.plate.B))+dimV(Y(xs[0]),Y(xs.at(-1)!),X(row),xr+20,dim(a.gauge));
-  svg+=multiLeader([[X(-row-hw.washer/2),Y(xs[0]-hw.washer/2)]],[576,96],[anchorLabel,`${size(hw.hole)} DIA. HOLES, PL WASHERS`,`${size(hw.washer)} X ${size(hw.washer)} X ${size(hw.washerThickness)}, TYP.`],8);
-  svg+=filletLeader([[X(-c.d/2+c.tf),Y(c.bf/4)]],[576,cy+14],size(b.plate.weld),['COLUMN TO BASE PL,','BOTH SIDES OF FLANGES','AND WEB'],true);
+  const anchors=[anchorLabel,`${size(hw.hole)} DIA. HOLES, PL WASHERS`,`${size(hw.washer)} X ${size(hw.washer)} X ${size(hw.washerThickness)}, TYP.`];
+  const anchorAt=X(-row-hw.washer/2)-20-Math.max(...anchors.map(v=>textWidth(v,8)));
+  svg+=multiLeader([[X(-row-hw.washer/2),Y(xs[0]-hw.washer/2)]],[anchorAt,Y(-b.plate.B/2)-36],anchors,8);
+  const weldAt=X(-b.plate.N/2)-16-textWidth('BOTH SIDES OF FLANGES',8);
+  svg+=filletLeader([[X(-c.d/2+c.tf),Y(c.bf/4)]],[weldAt,cy+14],size(b.plate.weld),['COLUMN TO BASE PL,','BOTH SIDES OF FLANGES','AND WEB'],true);
   const ay=Y(-b.plate.B/2)-12;svg+=text(X(b.plate.N/2)-40,ay-5,'TO GIRDER',7.5,'start',700)+line([X(b.plate.N/2)-40,ay],[X(b.plate.N/2),ay])+`<path class="leader-arrow" d="M${n(X(b.plate.N/2)+4)},${n(ay)}l-5,-1.6v3.2z"/>`;
   svg+=text(cx,Y(b.plate.B/2)+56,`PL ${size(tb)} X ${dim(b.plate.B)} X ${dim(b.plate.N)}, ASTM A572 GR. 50`,8.5,'middle',700);
-  svg+=viewTitle(705,362,'BASE PLATE / PLAN',k.label)+'</g>';
- }
+  return {svg:svg+'</g>',scale:k.label};
+ }});
  // 3: Footing plan with the bottom bars each way.
- {
-  const k=drawingScale(Math.min(220/ft.L,180/ft.B),u),kk=k.pointsPerMm,cx=1010,cy=226,X=(z:number)=>cx+z*kk,Y=(x:number)=>cy+x*kk;
+ views.push({title:'FOOTING / PLAN',render:()=>{
+  let svg='';
+  const k=drawingScale(Math.min(240/ft.L,240/ft.B),u),kk=k.pointsPerMm,cx=1010,cy=226,X=(z:number)=>cx+z*kk,Y=(x:number)=>cy+x*kk;
   svg+='<g data-view="footing-plan">';
   svg+=rect(X(-ft.L/2),Y(-ft.B/2),ft.L*kk,ft.B*kk,'runway-line');
   const along=r?.footing.strength.along.bars??Math.floor((ft.B-2*ft.cover)/ft.spacing)+1,across=r?.footing.strength.across.bars??Math.floor((ft.L-2*ft.cover)/ft.spacing)+1;
@@ -161,17 +170,20 @@ export function newColumnSheetSvg(s:CalculationSnapshot){
   for(const x of spread(along,ft.B))svg+=line([X(-ft.L/2+ft.cover),Y(x)],[X(ft.L/2-ft.cover),Y(x)],'hidden-line');
   for(const z of spread(across,ft.L))svg+=line([X(z),Y(-ft.B/2+ft.cover)],[X(z),Y(ft.B/2-ft.cover)],'hidden-line');
   svg+=rect(X(-b.plate.N/2),Y(-b.plate.B/2),b.plate.N*kk,b.plate.B*kk,'runway-line')+wPlan(cx,cy,c.d,c.bf,c.tf,c.tw,kk);
-  svg+=line([X(-ft.L/2)-14,cy],[X(ft.L/2)+14,cy],'grid-line')+line([cx,Y(-ft.B/2)-14],[cx,Y(ft.B/2)+14],'grid-line');
+  svg+=line([X(-ft.L/2)-14,cy],[X(ft.L/2)+6,cy],'grid-line')+line([cx,Y(-ft.B/2)-14],[cx,Y(ft.B/2)+6],'grid-line');
   svg+=dimH(X(-ft.L/2),X(ft.L/2),Y(ft.B/2),Y(ft.B/2)+20,dim(ft.L))+dimV(Y(-ft.B/2),Y(ft.B/2),X(ft.L/2),X(ft.L/2)+22,dim(ft.B));
   const barText=Math.abs(ft.L-ft.B)<1&&along===across?[`${2*along} ${ft.bar} X ${dim(ft.L-2*ft.cover)} (${along} EACH WAY)`]:[`${along} ${ft.bar} X ${dim(ft.L-2*ft.cover)} ALONG L`,`${across} ${ft.bar} X ${dim(ft.B-2*ft.cover)} ACROSS`];
-  svg+=multiLeader([[X(ft.L/2-ft.cover-ft.spacing*.5),Y(spread(along,ft.B)[0])]],[cx+12,90],[barText[0],...barText.slice(1),barLabel,`${size(ft.cover)} CLEAR, STRAIGHT`],7.5);
+  const bars=[barText[0],...barText.slice(1),barLabel,`${size(ft.cover)} CLEAR, STRAIGHT`],bx=X(ft.L/2)+44;
+  svg+=multiLeader([[X(ft.L/2-ft.cover-ft.spacing*.5),Y(spread(along,ft.B)[0])]],[bx,Y(-ft.B/2)+14],bars,7.5);
   svg+=multiLeader([[X(-c.d/2),cy-2]],[866,90],['COLUMN C/L ON GRID,','FOOTING CONCENTRIC'],7.5);
-  svg+=viewTitle(1025,360,'FOOTING / PLAN',k.label)+'</g>';
- }
+  return {svg:svg+'</g>',scale:k.label};
+ }});
  // 4: Footing section through the column along L.
- {
+ views.push({title:detailTitles.footing,render:()=>{
+  let svg='';
+  // Dimensions at the left and the callouts at the right of the section, which is drawn up to 380 wide.
   const stub=10*inch,top=Math.max(stub,floor+2*inch),bottom=ftgBot-3*inch,span=ft.L+2*ext*.5;
-  const k=drawingScale(Math.min(215/span,110/(top-bottom)),u),kk=k.pointsPerMm,cx=568+58+ext*.5*kk+ft.L/2*kk,X=(z:number)=>cx+z*kk,Y=(y:number)=>630-(y-bottom)*kk;
+  const k=drawingScale(Math.min(380/span,190/(top-bottom)),u),kk=k.pointsPerMm,x0=470,cx=x0+(ext*.5+ft.L/2)*kk,X=(z:number)=>cx+z*kk,Y=(y:number)=>600-(y-bottom)*kk;
   svg+='<g data-view="footing-section">';
   svg+=rect(X(-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk,'runway-line')+concrete(X(-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk);
   // Lower layer across the section (bars cut), upper layer along it.
@@ -194,21 +206,24 @@ export function newColumnSheetSvg(s:CalculationSnapshot){
    if(ft.slab>0)svg+=rect(x1,Y(slabTop),w,ft.slab*kk,'reference-line')+concrete(x1,Y(slabTop),w,ft.slab*kk)+breakLine([X(zo),Y(slabTop)-4],[X(zo),Y(slabBot)+4])+line([X(zi)+sign*1.5,Y(slabTop)],[X(zi)+sign*1.5,Y(slabBot)],'annotation');
   }
   svg+=earth(X(-ft.L/2-ext*.5),X(ft.L/2+ext*.5),Y(ftgBot))+line([X(-ft.L/2-ext*.5),Y(ftgBot)],[X(-ft.L/2),Y(ftgBot)],'annotation')+line([X(ft.L/2),Y(ftgBot)],[X(ft.L/2+ext*.5),Y(ftgBot)],'annotation');
-  // Dimensions: thickness, embedment and cover on the left; rod spacing above.
-  const lx=X(-ft.L/2);
-  svg+=dimV(Y(ftgTop),Y(ftgBot),lx,lx-16,dim(hf))+dimV(Y(ftgTop),Y(head),X(-row-nut/2),lx-34,`HEF ${dim(a.embedment)}`)+dimV(Y(ftgBot),Y(ftgBot+ft.cover),lx,lx-52,size(ft.cover));
+  // Dimensions: footing thickness and rod embedment left of the section; rod spacing above; cover in the bar callout.
+  const lx=X(-ft.L/2),dx=x0-10;
+  svg+=dimV(Y(ftgTop),Y(head),X(-row-nut/2),dx,dim(a.embedment))+dimV(Y(ftgTop),Y(ftgBot),lx,dx-20,dim(hf));
   svg+=dimH(X(-row),X(row),Y(hw.washerThickness+a.diameter*1.6),Y(stub)-6,dim(2*row));
-  svg+=labelColumn([
+  const rx=X(ft.L/2+ext*.5)+28,slabZ=(ft.soil>0?b.plate.N/2+12*inch+ft.L/2+ext*.5:ft.L+ext*.5)/2;
+  const items:{at:XY;labels:string[]}[]=[
    {at:[X(c.d/2),Y(stub*.8)],labels:[`${name} COLUMN`]},
    {at:[X(row+nut/2),Y(hw.washerThickness+a.diameter/2)],labels:['HVY HEX NUT AND PL','WASHER WELDED TO PL']},
    {at:[X(b.plate.N/2+inch),Y(-tb-gr/2)],labels:[`${size(gr)} NON-SHRINK GROUT`]},
-   ...(ft.slab>0?[{at:[X(-ft.L/2-ext*.3),Y(slabTop)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,'1/2" ISOLATION JT.']}]:[]),
-   {at:[X(row+nut/2),Y(head+a.diameter/2)],labels:['HVY HEX NUT HEAD,','TACK WELDED']},
-   {at:[X(ft.L/2-ft.cover-ft.spacing),Y(upper)],labels:[barLabel.replace(' BOTTOM',''),'BOTTOM']},
-   {at:[X(ft.L/2-ft.cover),Y(lower)],labels:['UNDISTURBED SOIL','OR APPROVED FILL']}
-  ],576,398,Y(top)-12);
-  svg+=viewTitle(705,662,'FOOTING / SECTION',k.label)+'</g>';
- }
+   ...(ft.slab>0?[{at:[X(slabZ),Y(slabTop-ft.slab/2)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,'1/2" ISOLATION JT.']}]:[]),
+   {at:[X(row+nut/2),Y(head+a.diameter/2)],labels:['EMBEDDED HVY HEX NUT,','TACK WELDED TO ROD']},
+   {at:[X(ft.L/2-ft.cover-ft.spacing*.5),Y(upper)],labels:[barLabel,`${size(ft.cover)} CLEAR`]},
+   {at:[X(ft.L/2+ext*.3),Y(ftgBot)+2],labels:['UNDISTURBED SOIL','OR APPROVED FILL']}
+  ];
+  const height=items.reduce((a,v)=>a+v.labels.length*11+9,0),ltop=Math.min(Y(top),Y(bottom)-height+12);
+  svg+=labelColumn(items,rx,ltop,Y(bottom)+6);
+  return {svg:svg+'</g>',scale:k.label};
+ }});
  // 5: Design data and notes.
  {
   const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${v.utilization.toFixed(2)}`:'-';};
@@ -222,6 +237,7 @@ export function newColumnSheetSvg(s:CalculationSnapshot){
    ['ANCHOR TENSION / SHEAR (LRFD)',r&&anchorAct?`${force(r.anchors.T)} / ${force(r.anchors.V)} (${anchorAct.id})`:'-'],
    ['SOIL: ALLOWABLE / MAX. SERVICE',r?`${force(b.soil.allowable,'pressure')} / ${force(r.footing.qMax,'pressure')}`:'-'],
    ['RATIOS: PLATE / RODS / SOIL / OVERTURNING / DRIFT',`${ratio('base-plate')} / ${ratio('base-anchor-interaction')} / ${ratio('base-soil')} / ${ratio('base-overturning')} / ${ratio('base-drift')}`],
+   ...(s.existingColumn?.seismic?[['SEISMIC ACROSS RUNWAY',`SDC ${s.existingColumn.seismic.basis.sdc}, CS ${s.existingColumn.seismic.basis.Cs.toFixed(3)}, QE ${force(s.existingColumn.seismic.QE)} PER COLUMN; BASE FOR ΩO ${s.existingColumn.seismic.basis.Omega0}`]]:[]),
    ['DATA SOURCE',b.source||'NOT ENTERED']
   ];
   const notes=[
@@ -232,9 +248,9 @@ export function newColumnSheetSvg(s:CalculationSnapshot){
    `FOOTING CONCRETE f'c = ${force(b.concrete.fc,'stress')} AT 28 DAYS, NORMALWEIGHT; REINFORCEMENT ASTM A615 GR. ${Math.round(b.footing.fy/6.894757293168)}, ${size(ft.cover)} CLEAR COVER CAST AGAINST EARTH, STRAIGHT BARS EACH WAY.`,
    `${ft.soil>0?`TOP OF FOOTING ${dim(ft.soil)} BELOW THE FLOOR; BACKFILL AND REPLACE THE SLAB OVER IT AFTER THE COLUMN IS ERECTED.`:'SAW CUT AND REMOVE THE EXISTING SLAB TO THE FOOTING OUTLINE, EXCAVATE TO BEARING AND POUR THE FOOTING TO THE TOP OF SLAB WITH A 1/2" PREFORMED ISOLATION JOINT AT THE PERIMETER.'} LOCATE UNDERGROUND UTILITIES BEFORE CUTTING OR EXCAVATING.`,
    `BEAR FOOTINGS ON UNDISTURBED SOIL OR COMPACTED FILL APPROVED BY THE GEOTECHNICAL ENGINEER: ${force(b.soil.allowable,'pressure')} ALLOWABLE. BOTTOM OF FOOTING ${dim(ft.soil+hf)} BELOW THE FLOOR${b.soil.frost>0?`, BELOW THE ${dim(b.soil.frost)} FROST DEPTH`:', INTERIOR FOOTING PROTECTED FROM FROST'}.`,
+   ...(s.existingColumn?.seismic?[`SEISMIC: ${s.existingColumn.seismic.basis.system.toUpperCase()} STEEL CANTILEVER COLUMN SYSTEM ACROSS THE RUNWAY (ASCE 7 TABLE 12.2-1). THE BASE PLATES, ANCHOR RODS AND FOOTINGS ARE DESIGNED FOR THE OVERSTRENGTH SEISMIC LOAD (§12.2.5.2)${s.existingColumn.seismic.basis.sdc>='C'?' AND THE ANCHORS FOR ACI 318 §17.10':''}. THE CRANE-LEVEL BRACING CARRIES SEISMIC FORCE ALONG THE RUNWAY.`]:[]),
    'SPECIAL INSPECTION PER IBC 1705.3 AND THE STATEMENT OF SPECIAL INSPECTIONS: ANCHOR ROD PLACEMENT, REINFORCEMENT, CONCRETE SAMPLING AND PLACEMENT, AND THE COLUMN-TO-PLATE AND BRACKET WELDS.'
   ];
-  svg+='<g data-view="new-column-notes">'+noteStack([(t:Style)=>[heading(t,'NEW COLUMN DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.25,1.75]),heading(t,'NEW COLUMN AND FOUNDATION NOTES'),...numbered(t,notes)]],u,{x:866,y:394,width:322,height:280})+'</g>';
+  return {key:'new-column',name:'NEW COLUMNS & FOOTINGS',views,notes:(t:Style)=>[heading(t,'NEW COLUMN DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.25,1.75]),heading(t,'NEW COLUMN AND FOUNDATION NOTES'),...numbered(t,notes)]};
  }
- return svg+titleBlock(s,'S-08','NEW RUNWAY COLUMNS & FOOTINGS')+'</svg>';
 }

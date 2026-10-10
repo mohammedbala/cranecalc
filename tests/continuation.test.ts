@@ -52,7 +52,7 @@ describe('runway continuing beyond a modeled end',()=>{
   const set=drawingSheetSet(s),sheet=(n:string)=>set.find(v=>v.number===n)!.svg;
   expect(sheet('S-01')).toContain('data-existing-bay="right"');expect(sheet('S-01')).not.toContain('data-existing-bay="left"');
   expect(texts(sheet('S-01'))).toContain('EXISTING RUNWAY CONTINUES');expect(texts(sheet('S-01'))).toContain('END STOP, TYP. 2');
-  expect(texts(sheet('S-07'))).toContain('2: THE LEFT END (GRID 1) OF BOTH RUNWAYS');
+  expect(texts(set.find(v=>v.svg.includes('data-view="end-stop-notes"'))!.svg)).toContain('2: THE LEFT END (GRID 1) OF BOTH RUNWAYS');
   expect(texts(sheet('S-00'))).toContain('THE REACTIONS INCLUDE THE EXISTING ADJACENT');
  },300000);
 });

@@ -68,11 +68,14 @@ describe('ARCH D arrangement sheet', () => {
     expect(us.pointsPerMm*304.8).toBeCloseTo(72,8);
     expect(si.label).toBe('SCALE: 1:20');
     expect(si.pointsPerMm*1000).toBeCloseTo(72/25.4*50,8);
+    // Sheets drawn at content scale 1 print layout units as points; an enlarged sheet labels its true printed scale.
     const archUs=sheetDrawingScale(.24,'US'),archSi=sheetDrawingScale(.24,'SI');
-    expect(archUs.label).toBe(`SCALE: 1 1/2" = 1'-0"`);
-    expect(archUs.pointsPerMm*sheetFormat.contentScale*304.8).toBeCloseTo(108,8);
-    expect(archSi.label).toBe('SCALE: 1:10');
-    expect(archSi.pointsPerMm*sheetFormat.contentScale*1000).toBeCloseTo(72/25.4*100,8);
+    expect(sheetFormat.contentScale).toBe(1);
+    expect(archUs.label).toBe(`SCALE: 1" = 1'-0"`);expect(archUs.pointsPerMm*304.8).toBeCloseTo(72,8);
+    expect(archSi.label).toBe('SCALE: 1:20');
+    const enlarged=sheetDrawingScale(.24,'US',2);
+    expect(enlarged.label).toBe(`SCALE: 1 1/2" = 1'-0"`);expect(enlarged.pointsPerMm*2*304.8).toBeCloseTo(108,8);
+    expect(sheetDrawingScale(.24,'SI',2).label).toBe('SCALE: 1:10');
   });
   it('labels reference attachments, datum, runway member sizes and blank stamp fields on a three-bay example',()=>{
     const p=demonstrationProject();expect(p.spans).toEqual([7620,7620,7620]);expect(p.cranes[0].travelEnd).toBe(22860);
