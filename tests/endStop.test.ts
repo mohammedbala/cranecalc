@@ -48,7 +48,7 @@ describe('girder-mounted runway end stops',()=>{
   const p=demonstrationProject();p.details!.endStop!.enabled=false;
   expect(validateProject(p).join(' ')).toContain('design the girder-mounted runway end stops');
   p.details!.endStop!.enabled=true;p.details!.endStop!.source='';
-  expect(validateProject(p).join(' ')).toContain('source of the bumper force');
+  expect(validateProject(p)).toEqual([]);expect(endStopChecks(p).find(c=>c.id==='end-stop-source')?.status).toBe('incomplete');
   const bypass=demonstrationProject();bypass.cranes[0].design!.bumperBypassesGirder=true;
   expect(validateProject(bypass)).toEqual([]);
   expect(endStopChecks(bypass).map(c=>c.status)).toEqual(['not-applicable']);

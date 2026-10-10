@@ -30,7 +30,6 @@ export function validateRunwayDetails(p:ProjectInput){
  add((p.aist?.torsionalLength??0)+1e-6<gaps.twist,'torsional effective length cannot be shorter than the spacing of stations restraining both flanges against twist.');
  add(d.criteria.temperatureMaximum>150||!d.criteria.corrosionProtected,`Appendix 3 fatigue model requires temperature at most ${p.units==='US'?'302 °F':'150 °C'} and corrosion protection.`);
  add(p.cranes.some(c=>!c.design?.bumperBypassesGirder)&&!d.endStop?.enabled,'a crane stop force reaches the girder: design the girder-mounted runway end stops, or mark the crane stops as building-mounted.');
- add(!!d.endStop?.enabled&&p.cranes.some(c=>!c.design?.bumperBypassesGirder)&&!d.endStop.source.trim(),'enter the source of the bumper force, bumper height and contact diameter for the end stops.');
  add(d.material.Fu<d.material.Fy,'plate Fu must not be less than Fy.');
  if(tieArrangement(d)==='paired-bars')add(b.reach>b.length,'brace reach cannot exceed its length.');
  if(b.flangeAttachment?.enabled&&tieArrangement(d)==='paired-bars'){
