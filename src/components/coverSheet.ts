@@ -191,7 +191,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   // Existing bracing is listed as checked, not as material to furnish.
   ...(p.longitudinalBracing?.enabled?[[p.existingColumn?.isNew?'BRACING':'EXISTING BRACING (CHECKED)',p.longitudinalBracing.system==='rod-x'?`RODS Fy = ${ksi(p.longitudinalBracing.rod.Fy)}, Fu = ${ksi(p.longitudinalBracing.rod.Fu)}`:`${p.longitudinalBracing.angle.shape}, Fy = ${ksi(p.longitudinalBracing.angle.Fy)}`]]:[])
  ],[1.2,2.8]));
- if(d)blocks.push(P(`STEEL: ${d.fabrication.steel}`),P(`BOLTING: ${d.fabrication.bolting}`),P(`WELDING: ${d.fabrication.welding}`));
+ // Numbered under their own heading, so one carried to the next column still reads in context.
+ if(d)blocks.push(H('MATERIAL NOTES'),...N([`STEEL: ${d.fabrication.steel}`,`BOLTING: ${d.fabrication.bolting}`,`WELDING: ${d.fabrication.welding}`]));
  blocks.push(H('SPECIAL INSPECTIONS (IBC 1705.2 / AISC 360 CHAPTER N)'),T(['ITEM','REQUIREMENT'],[
   ['MATERIAL','MILL CERTIFICATES: STEEL, BOLTS, NUTS, WASHERS, WELD FILLER'],
   ['WELDING','OBSERVE / PERFORM PER AISC N5.4; QUALIFIED WPS AND WELDERS'],
