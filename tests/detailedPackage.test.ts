@@ -3,6 +3,8 @@ import {calculate,validateProject,fingerprint} from '../src/engine/calculate';
 import {demonstrationProject} from '../src/engine/demonstration';
 import {createDetailCollector,fatigueSpectrumBin} from '../src/engine/detailAnalysis';
 import {sectionProperties} from '../src/engine/section';
+import {girderStrength} from '../src/engine/aiscStrength';
+import {flexureCurves} from '../src/engine/loadHeightFlexure';
 import {transverseFilletFatigue,minimumFillet} from '../src/engine/connectionStrength';
 import {Beam} from '../src/engine/beam';
 import type {CalculationSnapshot} from '../src/engine/types';
@@ -20,6 +22,14 @@ describe('representative runway package',()=>{
   expect(snapshot.checks.filter(c=>c.status==='excluded').map(c=>c.id)).toEqual(['supporting-structure','end-bearing-seat','flange-tie-column','flange-tie-column-fatigue','tie-move-support']);
   expect(snapshot.detailResults!.fatigue.length).toBeGreaterThan(20);
   expect(snapshot.detailResults!.travelChange).toBeLessThan(.01);expect(snapshot.detailResults!.meshChange).toBeLessThan(.01);
+ });
+ it('reduces F2 flexure for wheels at the rail head through the equivalent unbraced length',()=>{
+  const lh=snapshot.detailResults!.loadHeight!,p=snapshot.input,check=snapshot.checks.find(c=>c.id==='flexure-load-height')!;
+  expect(lh.length).toBeGreaterThan(p.unbracedLength);expect(check.status).toBe('pass');
+  const props=sectionProperties(p.section);
+  expect(lh.capacity).toBeCloseTo(girderStrength({...p,unbracedLength:lh.length},props).major,3);
+  expect(check.utilization!).toBeGreaterThan(lh.demand/girderStrength(p,props).major);
+  expect(flexureCurves(p,props).positive.length(lh.critical)).toBeCloseTo(lh.length,6);
  });
  it('retains true fatigue-cycle and root-weld behavior without an endurance loophole',()=>{
   expect(fatigueSpectrumBin('C',10,1e6).damage).toBeGreaterThan(0);

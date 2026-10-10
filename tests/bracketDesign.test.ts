@@ -47,7 +47,8 @@ describe('welded bracket independent statics and limit states',()=>{
   expect(c.result.strength.vertical.caseId).toBe('larger-total');expect(c.result.strength.ribMoment.caseId).toBe('offset');
   c.observe('service','static',0,[{vertical:10000,offset:0}],-1);
   c.observe('fatigue','bin',0,[{vertical:10000,offset:0}],0);
-  const direct=bracketResponse(p,[{vertical:10000,offset:0}]);expect(c.result.fatigue[0].rib).toBeCloseTo(2*direct.normal,10);expect(c.result.service.deflection.value).toBe(direct.deflection);
+  const direct=bracketResponse(p,[{vertical:10000,offset:0}]);expect(c.result.fatigue[0].rib).toBeCloseTo(direct.normal,10); // from the unloaded state; gravity does not reverse
+  expect(c.result.service.deflection.value).toBe(direct.deflection);
   expect(c.result.strength.vertical.value).toBeGreaterThan(40000); // own weight only in strength
  });
  it('blocks unconfirmed geometry and fails thin seat, uplift and high column axial force',()=>{

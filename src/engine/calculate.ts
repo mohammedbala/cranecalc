@@ -67,13 +67,21 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
  const a=snapshot.analysis,d=a.demand;
  const check=(id:string,group:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,caseId?:string,referenceIds=['mechanics']):CheckResult=>({id,group,title,demand,capacity,utilization:demand/capacity,quantity,equation,note,caseId,referenceIds,status:withinLimit(demand,capacity)?'pass':'fail',substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}} = ${(demand/capacity).toFixed(4)}`});
  // For varying spans use the strictest limit; this is explicitly conservative for the global envelope.
- const shortest=Math.min(...p.spans);
+ const shortest=Math.min(...p.spans),supports=p.spans.reduce((list,v)=>[...list,list.at(-1)!+v],[0]);
+ // Each bay against its own span: the governing envelope point over its bay limit.
+ const byBay=(value:(v:typeof a.envelope[number])=>number,n:number,overall:number)=>{
+  let best={demand:overall,limit:shortest/n,bay:-1,ratio:-1};
+  for(const v of a.envelope){const i=supports.findIndex(x=>x>v.x+1e-6),bay=i<0?p.spans.length-1:Math.max(0,i-1),d=value(v),ratio=d*n/p.spans[bay];if(ratio>best.ratio)best={demand:d,limit:p.spans[bay]/n,bay,ratio};}
+  return best;
+ };
+ const vb=byBay(v=>Math.max(Math.abs(v.deflectionMax),Math.abs(v.deflectionMin)),p.verticalLimit,d.deflection),lb=byBay(v=>Math.max(Math.abs(v.lateralDeflectionMax),Math.abs(v.lateralDeflectionMin)),p.lateralLimit,d.lateralDeflection);
+ const bayNote=(g:{bay:number})=>g.bay<0?'Shortest-span limit used conservatively.':`Governing bay ${g.bay+1}; every bay is checked against its own span.`;
  snapshot.checks=[
  check('equilibrium','Analysis','Force equilibrium',a.equilibriumError,1e-7,'ratio','\\epsilon_R = \\frac{|\\sum R-\\sum P-wL|}{\\max(|\\sum P+wL|,1)}','Residual of every computed crane response and dead-load model.'),
  check('convergence','Analysis','Moving-load refinement',a.convergence,0.01,'ratio','\\epsilon = \\max\\left|\\frac{D_{fine}-D_{coarse}}{\\max(|D_{fine}|,1)}\\right|','Governing envelope demands must change by no more than 1% on travel-grid refinement. Sampled envelopes are not an exact analytical global optimization.'),
  check('mesh','Analysis','Spatial sampling refinement',a.meshConvergence,0.01,'ratio','\\epsilon_{mesh} = \\max\\left|\\frac{D_{2n}-D_n}{\\max(|D_{2n}|,1)}\\right|','Governing demands must change by no more than 1% when doubling spatial sampling. Point-load moments and nodal deflections use exact elastic element solutions.'),
- check('vertical','Serviceability','Vertical crane-load deflection',d.deflection,shortest/p.verticalLimit,'length','\\delta_{v,crane} \\le \\frac{L_{min}}{n_v}',`User criterion: ${p.criteriaSource}. Crane static wheel loads only; impact and dead load excluded. Shortest-span limit used conservatively.`,d.governing.deflection?.id,['mechanics','criteria']),
- check('lateral','Serviceability','Lateral bending deflection',d.lateralDeflection,shortest/p.lateralLimit,'length','\\delta_h \\le \\frac{L_{min}}{n_h}',`User criterion: ${p.criteriaSource}. Lateral braces modeled as rigid translational supports. This is flexural deflection of the section, not rail displacement including twist.`,d.governing.lateralDeflection?.id,['mechanics','criteria'])
+ check('vertical','Serviceability','Vertical crane-load deflection',vb.demand,vb.limit,'length','\\delta_{v,crane} \\le \\frac{L_{bay}}{n_v}',`User criterion: ${p.criteriaSource}. Crane static wheel loads only; impact and dead load excluded. ${bayNote(vb)}`,d.governing.deflection?.id,['mechanics','criteria']),
+ check('lateral','Serviceability','Lateral bending deflection',lb.demand,lb.limit,'length','\\delta_h \\le \\frac{L_{bay}}{n_h}',`User criterion: ${p.criteriaSource}. ${bayNote(lb)} Lateral braces modeled as rigid translational supports. This is flexural deflection of the section, not rail displacement including twist.`,d.governing.lateralDeflection?.id,['mechanics','criteria'])
  ];
  if(p.scope==='design'){
   snapshot.checks=snapshot.checks.filter(c=>c.group!=='Serviceability');
