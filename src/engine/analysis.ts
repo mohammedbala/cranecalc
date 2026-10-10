@@ -1,16 +1,20 @@
 import { beamSystem, momentAt, type BeamResult } from './beam';
+import { adjacentReactions } from './continuation';
 import type { Analysis, Crane, Demand, EnvelopePoint, LoadCase, PointLoad, ProjectInput, Properties } from './types';
 const absMax=(a:number[])=>Math.max(0,...a.map(Math.abs));
 export function movingAnalysis(p:ProjectInput,props:Properties,subdivisions=20):Analysis {
  const length=p.spans.reduce((a,b)=>a+b,0),q=p.deadLoad+p.railWeight+props.weight;
  const vertical=beamSystem(p.spans,p.section.E*props.Ix,p.system,undefined,subdivisions),lateral=beamSystem(p.spans,p.section.E*props.Iy,p.system,p.lateralBraceSpacing,subdivisions);
  const dead=vertical.evaluate([],q),zeroV=vertical.evaluate([]),zeroH=lateral.evaluate([]);
+ const deadAdjacent=adjacentReactions(p,[],q);
  const maxEq={value:dead.equilibriumError};
  function craneResponse(c:Crane,position:number){
-  const points:PointLoad[]=c.wheels.map(w=>({x:position+w.offset,vertical:w.loaded*(c.includesImpact?1:1+c.impact),lateral:w.lateral,crane:c.name})).filter(w=>w.x>=0&&w.x<=length);
+  const all:PointLoad[]=c.wheels.map(w=>({x:position+w.offset,vertical:w.loaded*(c.includesImpact?1:1+c.impact),lateral:w.lateral,crane:c.name})),points=all.filter(w=>w.x>=0&&w.x<=length);
+  // Wheels on an adjacent existing bay load only the shared support.
+  const adjacent=adjacentReactions(p,all.map(w=>({x:w.x,p:w.vertical})));
   const v=vertical.evaluate(points.map(w=>({x:w.x,p:w.vertical}))),service=vertical.evaluate(points.map(w=>({x:w.x,p:w.vertical/(c.includesImpact?1+c.impact:1+c.impact)}))),h=lateral.evaluate(points.map(w=>({x:w.x,p:w.lateral})));
   maxEq.value=Math.max(maxEq.value,v.equilibriumError,h.equilibriumError);
-  return {position,points,v,service,h};
+  return {position,points,v,service,h,adjacent};
  }
  function run(steps:number){
   const envelope:EnvelopePoint[]=zeroV.x.map(x=>({x,momentMax:-Infinity,momentMin:Infinity,lateralMax:-Infinity,lateralMin:Infinity,shearMax:-Infinity,shearMin:Infinity,deflectionMax:-Infinity,deflectionMin:Infinity,lateralDeflectionMax:-Infinity,lateralDeflectionMin:Infinity}));
@@ -31,9 +35,9 @@ export function movingAnalysis(p:ProjectInput,props:Properties,subdivisions=20):
     const signs=selected.map((_,i)=>mask&(1<<i)?-1:1);
     const points=selected.flatMap((s,i)=>s.points.map(w=>({...w,lateral:w.lateral*signs[i]})));
     const lc:LoadCase={id:`C${cases}`,positions:selected.map(s=>s.position),points,lateralSign:signs[0]};
-    const reactions=dead.reactions.map((r,i)=>({x:r.x,r:r.r+selected.reduce((a,s)=>a+s.v.reactions[i].r,0)}));
+    const reactions=dead.reactions.map((r,i)=>({x:r.x,r:r.r+selected.reduce((a,s)=>a+s.v.reactions[i].r,0)})),support=reactions.map((r,i)=>({x:r.x,r:r.r+deadAdjacent[i]+selected.reduce((a,s)=>a+s.adjacent[i],0)}));
     const hReactions=zeroH.reactions.map((r,i)=>({x:r.x,r:selected.reduce((a,s,j)=>a+s.h.reactions[i].r*signs[j],0)}));
-    function govern(key:keyof Demand,value:number){if(typeof demand[key]==='number'&&value>(demand[key] as number)){(demand[key] as number)=value;demand.governing[key]=lc;if(key==='reaction')demand.reactions=reactions.map(r=>r.r);}}
+    function govern(key:keyof Demand,value:number){if(typeof demand[key]==='number'&&value>(demand[key] as number)){(demand[key] as number)=value;demand.governing[key]=lc;if(key==='reaction')demand.reactions=support.map(r=>r.r);}}
     for(let i=0;i<envelope.length;i++){
      const row=envelope[i],M=dead.moment[i]+selected.reduce((s,c)=>s+c.v.moment[i],0),V=dead.shear[i]+selected.reduce((s,c)=>s+c.v.shear[i],0),d=selected.reduce((s,c)=>s+c.service.displacement[i],0);
      const hi=zeroH.x.findIndex(x=>Math.abs(x-row.x)<1e-6);const H=momentAt(row.x,hReactions,points.map(w=>({x:w.x,p:w.lateral})),0);
@@ -43,7 +47,7 @@ export function movingAnalysis(p:ProjectInput,props:Properties,subdivisions=20):
     }
     // Capture shear discontinuities and moments exactly at each wheel position.
     for(const pt of points){const M=momentAt(pt.x,reactions,points.map(w=>({x:w.x,p:w.vertical})),q),H=momentAt(pt.x,hReactions,points.map(w=>({x:w.x,p:w.lateral})),0);govern('moment',Math.abs(M));govern('lateralMoment',Math.abs(H));for(const side of [-1e-5,1e-5]){const x=pt.x+side;if(x<0||x>length)continue;const V=reactions.reduce((s,r)=>s+(r.x<=x?r.r:0),0)-points.reduce((s,w)=>s+(w.x<=x?w.vertical:0),0)-q*x;govern('shear',Math.abs(V));}}
-    govern('reaction',absMax(reactions.map(r=>r.r)));govern('uplift',Math.max(0,...reactions.map(r=>-r.r)));
+    govern('reaction',absMax(support.map(r=>r.r)));govern('uplift',Math.max(0,...support.map(r=>-r.r)));
     govern('lateralDeflection',absMax(zeroH.x.map((_,i)=>selected.reduce((s,c,j)=>s+c.h.displacement[i]*signs[j],0))));
    }
   }

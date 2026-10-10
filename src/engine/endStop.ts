@@ -1,3 +1,4 @@
+import {runwayEnds} from './continuation';
 import type {CheckResult,DesignAnalysis,ProjectInput,Properties} from './types';
 import {interaction,type GirderStrength} from './aiscStrength';
 import {cappedElasticProperties} from './capChannel';
@@ -74,10 +75,10 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
  const heel=lever>0?M/lever:1e12,lb=tb,kd=shape?shape.kdes*inch:b.tf,ratio=Math.min(lb/b.d,.2);
  const webCapacity=Math.min(available(b.Fy*b.tw*((g.back+tb/2>b.d?5:2.5)*kd+lb),method,1,1.5),available((g.back+tb/2>=b.d/2?.8:.4)*b.tw**2*(1+3*ratio*(b.tw/b.tf)**1.5)*Math.sqrt(b.E*b.Fy*b.tf/b.tw),method,.75,2));
  const Fy=Math.min(m.Fy,b.Fy),force=`Factored bumper force ${format(P,'force',u,3)} (AIST stop combinations; ${p.method==='LRFD'?'1.0':'0.67'} C_bs) at ${f(g.contact)} above the base plate.`;
- const n=`${force} Same stop at both ends of both runways. Impact is not cyclic service loading; the holes near the girder end are fatigue points (Category B) in the detail register. Girder axial force and its locating end connection include the bumper force in the AIST stop combinations.`;
+ const ends=runwayEnds(p),n=`${force} Same stop at ${ends.length===2?'both ends':`the ${ends[0]} end`} of both runways${ends.length<2?'; the runway continues beyond the other modeled end':''}. Impact is not cyclic service loading; the holes near the girder end are fatigue points (Category B) in the detail register. Girder axial force and its locating end connection include the bumper force in the AIST stop combinations.`;
  // The bumper acts above the girder centroid: an end couple P*y bends the end span and changes its reactions by P*y/L.
  const cap=cappedElasticProperties(b),yTop=cap?b.d+b.capTw-cap.cy:b.d/2,y=yTop+tb+g.contact,M0=P*y;
- const span=p.system==='simple'?Math.min(p.spans[0],p.spans.at(-1)!):p.spans.reduce((a,v)=>a+v,0);
+ const span=p.system==='simple'?Math.min(...ends.map(end=>end==='left'?p.spans[0]:p.spans.at(-1)!)):p.spans.reduce((a,v)=>a+v,0);
  const girder:CheckResult[]=[];
  if(ctx){
   const stopCombos=new Set(craneCombinations(p.method).filter(c=>c.bumper>0).map(c=>`${p.method} ${c.id}`)),records=ctx.analysis.combinations.filter(c=>stopCombos.has(c.id));

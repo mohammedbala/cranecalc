@@ -9,14 +9,15 @@ import type { CalculationSnapshot } from '../engine/types';
 import { defaultFraming, framingSchema, type FramingSettings } from './framingSettings';
 import { planSheetGeometry, type Point, type Segment } from './planSheetGeometry';
 import { drawingLength } from './drawingFormat';
-import { sheetDrawingScale as drawingScale, n, text, rect, line, bubble, dimH, dimV, leader, short, titleBlock, sheetStart, wrappedText, viewTitle, multiLeader, detailRef, type XY } from './sheetGraphics';
+import { sheetDrawingScale as drawingScale, n, text, rect, line, bubble, dimH, dimV, leader, short, titleBlock, sheetStart, wrappedText, viewTitle, multiLeader, detailRef, breakLine, textWidth, type XY } from './sheetGraphics';
 import { heading, table, numbered, noteStack, type Style } from './noteBlocks';
 import { sheetOrdinalToken, detailNumberToken, sheetNumberToken } from './sheetGraphics';
 import { runwayElevations, girderMarks } from '../engine/drawingData';
 import { connectionSheetSvg } from './connectionSheet';
 import { coverSheetSvg } from './coverSheet';
 import { endStopSheetSvg } from './endStopSheet';
-import { activeEndStop } from '../engine/endStopInputs';
+import { activeEndStop, stopEnds } from '../engine/endStopInputs';
+import { adjacentBays } from '../engine/continuation';
 import { endStopGeometry } from '../engine/endStop';
 export { planSheetGeometry } from './planSheetGeometry';
 export { connectionSheetSvg } from './connectionSheet';
@@ -42,6 +43,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const elevations=runwayElevations(p),datumLabel=p.drawing?.datumLabel??'Reference floor';
   // Rail and stop geometry in mm from each runway end when girder-mounted stops are designed.
   const stop=activeEndStop(p),stopGeom=stop?endStopGeometry(p,stop):undefined,railEnd=stopGeom?.railEnd??0;
+  // Ends with stops stop the rail short; an end continued by an existing bay runs on with dashed existing steel.
+  const ends=stopEnds(p),stopIdx=ends.map(e=>e==='left'?0:1),railInset=(end:'left'|'right')=>ends.includes(end)?railEnd/1000:0;
+  const adjacent=adjacentBays(p),stub=24;
   const gridSegments:Segment[]=[...m.supports.map(x=>[[x,floor,rows[1]-.9],[x,floor,rows[0]+.9]] as Segment),...rows.map(z=>[[-m.length/2-2.4,floor,z],[m.length/2+.9,floor,z]] as Segment)];
   const isoFit=fit([...m.referenceLines,...m.runwayLines,...gridSegments],([x,y,z])=>[(x-z)*Math.sqrt(3)/2,(x+z)/2-y],{x:52,y:110,w:628,h:263},p.units),iso=isoFit.project;
   let svg=sheetStart(s,'S-01','CRANE RUNWAY / GENERAL ARRANGEMENT');
@@ -69,15 +73,22 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   for(const [side,z] of [0,-m.width].entries()){
     for(const member of m.members)svg+=rect(X(member.start/1000-m.length/2),Y(z-m.bf/2),(member.end-member.start)/1000*k,m.bf*k,'runway-line');
     const rz=z+(side?-m.railZ:m.railZ),head=(p.details?.rail.headWidth??65)/1000;
-    svg+=rect(left+railEnd/1000*k,Y(rz-head/2),(m.length-2*railEnd/1000)*k,head*k,'rail-line');
-    // Girder-mounted end stops at both runway ends.
-    if(stop)for(const end of [0,1]){const x0=end?right-stopGeom!.front/1000*k:left+stopGeom!.back/1000*k;svg+=`<g data-end-stop="plan">${rect(x0,Y(z-stop.base.width/2000),stop.base.length/1000*k,stop.base.width/1000*k,'runway-line')}</g>`;}
+    svg+=rect(left+railInset('left')*k,Y(rz-head/2),(m.length-railInset('left')-railInset('right'))*k,head*k,'rail-line');
+    for(const b of adjacent){
+     const x0=b.end==='left'?left-stub:right,x1=b.end==='left'?left:right+stub,far=b.end==='left'?x0:x1;
+     svg+=`<g data-existing-bay="${b.end}">${line([x0,Y(z-m.bf/2)],[x1,Y(z-m.bf/2)],'reference-line')}${line([x0,Y(z+m.bf/2)],[x1,Y(z+m.bf/2)],'reference-line')}${line([x0,Y(rz)],[x1,Y(rz)],'reference-line')}${breakLine([far,Y(z-m.bf/2)-5],[far,Y(z+m.bf/2)+5])}</g>`;
+    }
+    // Girder-mounted end stops at the true runway ends.
+    if(stop)for(const end of stopIdx){const x0=end?right-stopGeom!.front/1000*k:left+stopGeom!.back/1000*k;svg+=`<g data-end-stop="plan">${rect(x0,Y(z-stop.base.width/2000),stop.base.length/1000*k,stop.base.width/1000*k,'runway-line')}</g>`;}
     // Labels sit inboard of each runway, clear of the grid line outboard.
     const [markY,nameY]=side?[Y(z)+15,Y(z)+24]:[Y(z)-19,Y(z)-10];
     for(const g of marks)svg+=`<g data-girder-mark="${g.mark}">${text(X(mid(g)),markY,g.mark,8.5,'middle',700)}${text(X(mid(g)),nameY,p.section.name,7.2,'middle')}</g>`;
 
   }
-  if(stop)svg+=multiLeader([[left+stopGeom!.front/1000*k,Y(-m.bf/2)]],[left+16,Y(-m.width/2)+4],['END STOP, TYP. 4',`SEE ${detailRef('END STOP / ELEVATION')}`],7.5);
+  // Labels sit on the inboard side of their target so a leader never crosses its own text.
+  const inboard=(end:'left'|'right',labels:string[],dx:number)=>{const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),7.5)));return end==='left'?left+dx:right-dx-w;};
+  if(stop){const first=ends[0],labels=[`END STOP, TYP. ${2*ends.length}`,`SEE ${detailRef('END STOP / ELEVATION')}`];svg+=multiLeader([[first==='left'?left+stopGeom!.front/1000*k:right-stopGeom!.front/1000*k,Y(-m.bf/2)]],[inboard(first,['END STOP, TYP. 4','SEE 1/S-07'],16),Y(-m.width/2)+4],labels,7.5);}
+  for(const b of adjacent){const labels=['EXISTING RUNWAY CONTINUES',`ADJ. BAY ${dim(b.length/1000)}, FIELD VERIFY`];svg+=`<g data-existing-bay-label="${b.end}">${multiLeader([[b.end==='left'?left-stub/2:right+stub/2,Y(-m.bf/2)]],[inboard(b.end,labels,16),Y(-m.width/2)+26],labels,7.5)}</g>`;}
   svg+=dimH(left,right,Y(rows[0])+19,363,`${dim(m.length)} OVERALL`);
   svg+=dimV(Y(rows[1]),Y(rows[0]),right+13,1159,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
   svg+=text(939,377,`RAIL C/L SPACING (CRANE SPAN): ${dim(m.width+2*m.railZ)}${p.details?'':' (REF.)'}`,8,'middle');
@@ -102,13 +113,22 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     if(p.section.kind==='cap')svg+=rect(ml,EY(m.railBase),mr-ml,p.section.capTw/1000*ek,'runway-line');
   }
   const railDepth=(p.aist?.railDepth??p.railHeight)/1000;
-  svg+=rect(el+railEnd/1000*ek,EY(m.railBase+railDepth),(m.length-2*railEnd/1000)*ek,railDepth*ek,'rail-line');
-  if(stop){const sh=(stop.base.thickness+stop.face.height)/1000;for(const end of [0,1]){const face=end?er-(stopGeom!.faceFront/1000)*ek:el+(stopGeom!.faceBack/1000)*ek;svg+=`<g data-end-stop="elevation">${rect(face,EY(m.railBase+sh),stop.face.thickness/1000*ek,(sh-stop.base.thickness/1000)*ek,'runway-line')}${rect(end?er-stopGeom!.front/1000*ek:el+stopGeom!.back/1000*ek,EY(m.railBase+stop.base.thickness/1000),stop.base.length/1000*ek,stop.base.thickness/1000*ek,'runway-line')}</g>`;}
-   svg+=multiLeader([[el+stopGeom!.back/1000*ek,EY(m.railBase+sh/2)]],[34,EY(m.railBase)-14],['END STOP, BOTH ENDS',`SEE ${detailRef('END STOP / ELEVATION')}`],7.5);}
+  svg+=rect(el+railInset('left')*ek,EY(m.railBase+railDepth),(m.length-railInset('left')-railInset('right'))*ek,railDepth*ek,'rail-line');
+  for(const b of adjacent){
+   const x0=b.end==='left'?el-stub:er,x1=b.end==='left'?el:er+stub,far=b.end==='left'?x0:x1;
+   const lx=b.end==='left'?x0-3:x1+3,anchor=b.end==='left'?'end':'start';
+   svg+=`<g data-existing-bay="${b.end}">${[top,bottom,EY(m.railBase+railDepth)].map(y=>line([x0,y],[x1,y],'reference-line')).join('')}${breakLine([far,EY(m.railBase+railDepth)-4],[far,bottom+4])}${text(lx,bottom+9,'EXIST.',6.5,anchor)}${text(lx,bottom+16,`${dim(b.length/1000)} BAY`,6.5,anchor)}</g>`;
+  }
+  if(stop){const sh=(stop.base.thickness+stop.face.height)/1000;for(const end of stopIdx){const face=end?er-(stopGeom!.faceFront/1000)*ek:el+(stopGeom!.faceBack/1000)*ek;svg+=`<g data-end-stop="elevation">${rect(face,EY(m.railBase+sh),stop.face.thickness/1000*ek,(sh-stop.base.thickness/1000)*ek,'runway-line')}${rect(end?er-stopGeom!.front/1000*ek:el+stopGeom!.back/1000*ek,EY(m.railBase+stop.base.thickness/1000),stop.base.length/1000*ek,stop.base.thickness/1000*ek,'runway-line')}</g>`;}
+   // A short label inboard of the stop and above the bay marks.
+   // The elbow stays clear of the grid bubble; the second line clears the bay mark below it.
+   const first=ends[0]==='left',head=ends.length===2?'END STOP, BOTH ENDS':'END STOP',w=Math.max(textWidth(head,7.5),textWidth('SEE 1/S-07',7.5)),tx=first?el+stopGeom!.back/1000*ek:er-stopGeom!.back/1000*ek;
+   svg+=multiLeader([[tx,EY(m.railBase+sh/2)]],[first?tx+30:tx-30-w,top-36],[head,`SEE ${detailRef('END STOP / ELEVATION')}`],7.5);}
   for(const g of marks)svg+=text(EX(mid(g)),top-14,g.mark,9,'middle',700)+text(EX(mid(g)),bottom+17,p.section.name,9,'middle',700);
   const railTop=EY(m.railBase+railDepth);
   // Elevation targets: the T.O.R. label rises and the T.O.S. label drops so close elevations never overlap.
-  const target=(y:number,labelY:number,label:string,datum:string)=>`<g data-elevation-datum="${datum}">${line([er+2,y],[er+12,y])}<path class="leader-arrow" d="M${n(er+12)},${n(y)}l-2.4,-2.4h4.8z"/>${line([er+12,y],[er+16,labelY])}${line([er+16,labelY],[er+20,labelY])}${text(er+22,labelY+3,label,8.5)}</g>`;
+  const ex=er+(adjacent.some(b=>b.end==='right')?stub+4:0);
+  const target=(y:number,labelY:number,label:string,datum:string)=>`<g data-elevation-datum="${datum}">${line([ex+2,y],[ex+12,y])}<path class="leader-arrow" d="M${n(ex+12)},${n(y)}l-2.4,-2.4h4.8z"/>${line([ex+12,y],[ex+16,labelY])}${line([ex+16,labelY],[ex+20,labelY])}${text(ex+22,labelY+3,label,8.5)}</g>`;
   const torY=Math.min(railTop,top-9),tosY=Math.max(top,railTop+9);
   svg+=target(top,tosY,elevations?`T.O.S. EL. ${drawingLength(elevations.tos,p.units)}`:'T.O.S. EL. NOT ENTERED','top-of-steel');
   svg+=target(railTop,torY,elevations?`T.O.R. EL. ${drawingLength(elevations.tor,p.units)}`:'T.O.R. EL. NOT ENTERED','top-of-rail');
@@ -132,7 +152,8 @@ function girderSchedule(s:CalculationSnapshot,x:number,y:number,width:number,hei
     'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
     `SET RAIL C/L SPACING (CRANE SPAN) TO ${d?len(d.criteria.railGauge):'THE CRANE MANUFACTURER\'S GAUGE'}; RAIL C/L IS ${len(Math.abs(p.railEccentricity))} FROM THE GIRDER WEB C/L${p.railEccentricity?p.railEccentricity>0?', OUTBOARD TOWARD THE SUPPORTING COLUMNS':', INBOARD TOWARD THE CRANE':''}.`,
-    p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE S-04.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.'
+    p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE S-04.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
+    ...adjacentBays(p).map(b=>`AT GRID ${b.end==='left'?1:p.spans.length+1} THE EXISTING RUNWAY CONTINUES (${short((p.continuation?.source??'').toUpperCase(),70)}). THE EXISTING ${len(b.length)} GIRDER BEARS ON THE SAME SUPPORT AND STAYS IN PLACE; ITS REACTION IS INCLUDED IN THE SUPPORT DESIGN. FIELD VERIFY ITS SPAN, BEARING, TIE AND RAIL JOINT BEFORE FABRICATION.`)
   ];
   return noteStack([(t:Style)=>[heading(t,'RUNWAY GIRDER SCHEDULE'),table(t,['MARK','QTY','SECTION','LENGTH','GRIDS','CAMBER','ENDS'],rows,[.55,.45,1.6,.8,.75,.65,1.9]),heading(t,'SHEET NOTES'),...numbered(t,notes)]],u,{x,y,width,height});
 }

@@ -1,8 +1,9 @@
+import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {craneDesignMinimum} from '../engine/aistLoads';
 import {runwayElevations,issueStatus} from '../engine/drawingData';
-import {activeEndStop} from '../engine/endStopInputs';
+import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {drawingLength} from './drawingFormat';
@@ -59,7 +60,7 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
   `RAIL GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)}. VERIFY WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
   d.fabrication.railAlignment,
   'SURVEY RAIL ALIGNMENT, GAUGE AND ELEVATION AFTER ERECTION AND BEFORE THE LOAD TEST; SUBMIT THE SURVEY.',
-  ...(activeEndStop(p)?['INSTALL THE RUNWAY END STOPS (S-07) AT BOTH ENDS OF BOTH RUNWAYS BEFORE THE CRANE IS OPERATED OR LOAD TESTED.']:[]),
+  ...(activeEndStop(p)?[`INSTALL THE RUNWAY END STOPS (S-07) AT ${stopLocation(p).toUpperCase()} BEFORE THE CRANE IS OPERATED OR LOAD TESTED.`]:[]),
   'LOAD TEST THE CRANE PER ASME B30.2 AND THE MANUFACTURER. THE TEST LOAD SHALL NOT EXCEED 125% OF THE RATED LOAD; COORDINATE ANY TEST LOAD ABOVE THE RATED LOAD WITH THE ENGINEER OF RECORD BEFORE TESTING.'
  ].map(v=>v.toUpperCase())));
  // Column 2: criteria.
@@ -100,7 +101,7 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
   ['ELEVATIONS',elevations?`T.O.R. ${len(elevations.tor)}, T.O.S. ${len(elevations.tos)} (DATUM ${len(elevations.datum)})`:'NOT ENTERED']
  ],[1.4,2.6]));
  const r=s.supportReactions;
- if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, PER SUPPORT'),T(['STATION','D','Cd','Cv','Ci','Css'],r.supports.map(v=>[len(v.x),f(v.D),f(v.Cd),f(v.Cv),f(v.Ci),f(v.Css)]),[1.25,1,1,1,1,1]),P(`Cd CRANE EMPTY, Cv LIFTED, Ci IMPACT, Css SIDE THRUST AT RAIL HEAD (ONE CRANE). RUNWAY LONGITUDINAL FORCE Cls = ${f(r.Cls)}. ALL CRANE COMPONENTS ARE LIVE LOAD L (ASCE 7 §4.9). FACTORED INTERFACE FORCES: SEE CALCULATION REPORT.`));
+ if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, PER SUPPORT'),T(['STATION','D','Cd','Cv','Ci','Css'],r.supports.map(v=>[len(v.x),f(v.D),f(v.Cd),f(v.Cv),f(v.Ci),f(v.Css)]),[1.25,1,1,1,1,1]),P(`Cd CRANE EMPTY, Cv LIFTED, Ci IMPACT, Css SIDE THRUST AT RAIL HEAD (ONE CRANE). RUNWAY LONGITUDINAL FORCE Cls = ${f(r.Cls)}. ALL CRANE COMPONENTS ARE LIVE LOAD L (ASCE 7 §4.9).${adjacentBays(p).map(b=>` AT ${len(b.station)} THE REACTIONS INCLUDE THE EXISTING ADJACENT ${len(b.length)} BAY (SAME GIRDER, RAIL AND DEAD LOAD ASSUMED).`).join('')} FACTORED INTERFACE FORCES: SEE CALCULATION REPORT.`));
  // Column 3: index, materials, inspection.
  blocks.push(H('SHEET INDEX'),T(['SHEET','TITLE'],sheets.map(v=>[v.number,v.title]),[.7,3.3]));
  const bolt=d?.end.grade==='A490'?'ASTM F3125 GRADE A490 (GROUP 150)':'ASTM F3125 GRADE A325 (GROUP 120)';

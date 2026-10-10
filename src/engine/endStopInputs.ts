@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import type {ProjectInput} from './types';
+import {runwayEnds} from './continuation';
 
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
 /**
@@ -35,7 +36,14 @@ export const defaultEndStop:EndStopInput={enabled:false,bumperHeight:6*inch,bump
 /** A crane whose stop force is not taken by a building-mounted stop needs girder-mounted stops. */
 export const needsGirderStops=(p:ProjectInput)=>p.cranes.some(c=>!c.design?.bumperBypassesGirder);
 /** Active girder-mounted stop input, if the project designs one. */
-export const activeEndStop=(p:ProjectInput)=>p.details?.endStop?.enabled&&needsGirderStops(p)?p.details.endStop:undefined;
+export const activeEndStop=(p:ProjectInput)=>p.details?.endStop?.enabled&&needsGirderStops(p)&&runwayEnds(p).length?p.details.endStop:undefined;
+/** Modeled ends that carry a girder-mounted stop: true runway ends, not ends continued by an existing bay. */
+export const stopEnds=(p:ProjectInput)=>activeEndStop(p)?runwayEnds(p):[];
+/** Where the stops go, for notes: both ends, or the one true end with its grid. */
+export function stopLocation(p:ProjectInput){
+ const ends=runwayEnds(p);
+ return ends.length===2?'both ends of both runways':`the ${ends[0]} end (grid ${ends[0]==='left'?1:p.spans.length+1}) of both runways; the runway continues beyond the other end`;
+}
 /** Front fillet room in front of the face plate. */
 export const stopLip=(e:EndStopInput)=>e.weldSize+6.35;
 /** Back and front bolt rows from the girder end: back bolts edge from the base plate back, front bolts frontClear behind the face. */

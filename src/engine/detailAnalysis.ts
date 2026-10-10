@@ -1,3 +1,4 @@
+import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
 import {flangeTieGeometry} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
@@ -12,7 +13,7 @@ import type { ProjectInput,Properties } from './types';
 import type { FatigueDetailResult,InterfaceAction,RunwayDetailResults } from './runwayDetails';
 import { railKeeperResponse } from './railKeeper';
 import {tractionBays,railKeeperStations,girderSegments,independentBearings} from './simpleSupports';
-import {activeEndStop,stopBoltRows} from './endStopInputs';
+import {activeEndStop,stopBoltRows,stopEnds} from './endStopInputs';
 import {activeEndBearing} from './endBearingInputs';
 
 export function braceSystem(p:ProjectInput){
@@ -69,7 +70,7 @@ function automaticFatigueDetails(p:ProjectInput){
  if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} edge ${sign} / ${point}`,x:v.tieX+sign*tie.attachment.saddleLength/2,point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.2, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment; global stress plus local flange strip bending`});
  // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
  const stop=activeEndStop(p);
- if(stop)for(const [end,x0,dir] of [['left',0,1],['right',L,-1]] as const)for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:x0+dir*row,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});
+ if(stop)for(const [end,x0,dir] of ([['left',0,1],['right',L,-1]] as const).filter(([end])=>stopEnds(p).includes(end)))for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:x0+dir*row,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});
  const category=d.rail.clipWidth<50?'C':d.rail.clipWidth<=Math.min(12*d.rail.clipThickness,100)?'D':d.rail.clipThickness<=20?'E':'E1';
  for(const [i,x] of railKeeperStations(p).entries()){
   for(const side of ['left','right'] as const)list.push({id:`RC${i}-${side}`,name:`Rail keeper ${i+1} · ${side}`,x,point:`top-${side}`,category,reference:'AISC Table A-3.1, 7.1 · attachment length/thickness from keeper geometry'});
@@ -95,7 +96,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const eb=activeEndBearing(p),ebBolt=eb?boltProperties(eb.bolts.grade,eb.bolts.diameter):undefined;
  const ebK=eb&&ebBolt?4*G*ebBolt.area/(p.section.tf+details.bearing.thickness+(details.bracket?.enabled?details.bracket.seatThickness:details.bearing.thickness)):0;
  const bottomK=(x:number)=>ebK&&supports.some(v=>Math.abs(v-x)<=1e-6)?ebK:brace.stiffness;
- const bearings=independentBearings(p);
+ const bearings=independentBearings(p),adjacent=adjacentBays(p);
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
  const detailInputs=automaticFatigueDetails(p);
  const fatigue:FatigueDetailResult[]=detailInputs.map(f=>({id:f.id,name:f.name,x:f.x,category:f.category,reference:f.reference,bins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,minimum:0,maximum:0,range:0,allowable:0,damage:0})),damage:0,range:0,peak:0}));
@@ -112,7 +113,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const majorLoads=e.wheels.map(w=>({x:w.x,p:w.p}));
   const moment=(x:number)=>momentAt(x,e.verticalReactions,majorLoads,e.q);
   const reactions=new Map<number,{top:number;bottom:number}>();
-  const endActions:{x:number;bay:number;end:'left'|'right';vertical:number;top:number;bottom:number;longitudinal:number;offset:number}[]=[];
+  const endActions:{x:number;bay:number;end:'left'|'right';vertical:number;top:number;bottom:number;longitudinal:number;offset:number;existing?:boolean}[]=[];
   for(const [bayIndex,[start,end]] of groups.entries()){
    const wheels=e.wheels.filter(w=>w.x>=start-1e-6&&(w.x<end-1e-6||(end===L&&w.x<=end+1e-6)));
    const stations=allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6);
@@ -191,6 +192,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     for(const point of points){const stress=-moment(f.x)*point.y/props.Ix-E*s.curvature*point.x-E*s.warpingCurvature*point.omega;b.minimum=Math.min(b.minimum,stress);b.maximum=Math.max(b.maximum,stress);}
    }
   }
+  // An adjacent existing girder bears on a continued end support, mirrored about the support centerline.
+  for(const b of adjacent){
+   const own=bearings.find(v=>b.end==='left'?v.bay===1&&v.end==='left':v.bay===p.spans.length&&v.end==='right')!;
+   endActions.push({x:b.station,bay:b.end==='left'?0:p.spans.length+1,end:b.end==='left'?'right':'left',vertical:e.adjacentReactions?.find(v=>Math.abs(v.x-b.station)<1e-6)?.r??0,top:0,bottom:0,longitudinal:0,offset:-(own.center-b.station),existing:true});
+  }
   if(bracket||existingBracket)for(const x of supports){
    // A rotating girder end bears on the span side of its plate: the reaction acts at 0.8 of the bearing
    // length from the girder end, over the inner 0.4 of the plate.
@@ -207,7 +213,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     // a separate bounding scenario, avoiding an invented drive-wheel split.
     for(const bay of p.system==='simple'?tractionBays(p,e):[-1])for(const longitudinalSign of [-1,1]){
      const ends=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({...v,longitudinal:v.bay===bay&&v.end==='left'?longitudinalSign*e.axial:0})):undefined;
-     const item:InterfaceAction={id:p.system==='simple'?`${e.id}-T${bay}`:e.id,combination:e.combination,x,vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,top:r.top,bottom:r.bottom,longitudinal:ends?ends.reduce((a,v)=>a+v.longitudinal,0):(x===0||x===L)?longitudinalSign*e.axial:0,torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
+     const item:InterfaceAction={id:p.system==='simple'?`${e.id}-T${bay}`:e.id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0),top:r.top,bottom:r.bottom,longitudinal:ends?ends.reduce((a,v)=>a+v.longitudinal,0):(x===0||x===L)?longitudinalSign*e.axial:0,torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
       const k=`${e.combination}:${x}:${component}:${dir}`,old=interfaceExtremes.get(k);
@@ -217,7 +223,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
      // simultaneous force intact. Combined bracket maxima alone miss these.
      for(const end of ends??[])for(const dir of [-1,1]){
       const k=`${e.combination}:${x}:bay${end.bay}:${dir}`,old=interfaceExtremes.get(k),previous=old?.ends?.find(v=>v.bay===end.bay)?.vertical;
-      if(previous===undefined||dir*end.vertical>dir*previous)interfaceExtremes.set(k,{...item,controls:[`bay ${end.bay} bearing ${dir===1?'max':'min'}`]});
+      if(previous===undefined||dir*end.vertical>dir*previous)interfaceExtremes.set(k,{...item,controls:[`${end.existing?'adjacent existing girder':`bay ${end.bay}`} bearing ${dir===1?'max':'min'}`]});
      }
      if(ends)for(const dir of [-1,1]){const k=`${e.combination}:${x}:seatMoment:${dir}`,old=interfaceExtremes.get(k);if(!old||dir*item.seatMoment!>dir*old.seatMoment!)interfaceExtremes.set(k,{...item,controls:[`seat eccentricity moment ${dir===1?'max':'min'}`]});}
     }
