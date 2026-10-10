@@ -18,7 +18,7 @@ import { sheetOrdinalToken, detailNumberToken, sheetNumberToken, bearingBoltsTit
 import { activeEndBearing, continuousBearings } from '../engine/endBearingInputs';
 import { runwayElevations, girderMarks } from '../engine/drawingData';
 import { connectionTopic } from './connectionSheet';
-import { coverSheetSvg } from './coverSheet';
+import { coverSheetSvg, coverSheetTitle } from './coverSheet';
 import { endStopTopic } from './endStopSheet';
 import { activeEndStop, stopEnds } from '../engine/endStopInputs';
 import { adjacentBays } from '../engine/continuation';
@@ -276,7 +276,7 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
   const p=s.input,u=p.units,len=(mm:number)=>drawingLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
   const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP';
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
-  const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LEFT END LOCATES, RIGHT END SLIDES; SEE ${detailRef(activeEndBearing(p)?bearingBoltsTitle(p):detailTitles.movement)}`;
+  const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LOCATES AT THE LOWER-NUMBERED GRID, SLIDES AT THE OTHER; SEE ${detailRef(activeEndBearing(p)?bearingBoltsTitle(p):detailTitles.movement)}`;
   const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
     return [mark,String(all.length*2),`${p.section.name}${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
   const notes=[
@@ -345,7 +345,7 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
     return {number,name:`runway-${layout.topics.map(t=>t.key).join('-')}-sheet-arch-d`,title,details:layout.placed.map(v=>v.view.title),render:()=>detailSheetSvg(s,number,title,layout)};
   });
   const sheets=[{number:'S-01',name:'runway-plan-sheet-arch-d',title:'GENERAL ARRANGEMENT',details:arrangementDetails,render:()=>planSheetSvg(s,f)},...details];
-  return [{number:'S-00',name:'cover-general-notes-sheet-arch-d',title:'COVER, GENERAL NOTES & DESIGN CRITERIA',render:()=>coverSheetSvg(s,sheets)},...sheets];
+  return [{number:'S-00',name:'cover-general-notes-sheet-arch-d',title:coverSheetTitle,render:()=>coverSheetSvg(s,sheets)},...sheets];
 }
 /**
  * Sheet numbers ("S-xx") of the groups of details in the set by key (see detailTopics), for references
