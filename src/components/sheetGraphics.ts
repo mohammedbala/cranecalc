@@ -37,7 +37,7 @@ const glyphWidths:Record<string,number>={' ':.278,'!':.278,'"':.355,'#':.556,'$'
  A:.667,B:.667,C:.722,D:.722,E:.667,F:.611,G:.778,H:.722,I:.278,J:.5,K:.667,L:.556,M:.833,N:.722,O:.778,P:.667,Q:.778,R:.722,S:.667,T:.611,U:.722,V:.667,W:.944,X:.667,Y:.667,Z:.611,
  a:.556,b:.556,c:.5,d:.556,e:.556,f:.278,g:.556,h:.556,i:.222,j:.222,k:.5,l:.222,m:.833,n:.556,o:.556,p:.556,q:.556,r:.333,s:.5,t:.278,u:.556,v:.5,w:.722,x:.5,y:.5,z:.5};
 /** Estimated rendered width of Arial text; bold is about 6% wider. */
-export function textWidth(value:string,size:number,bold=false){let w=0;for(const c of value)w+=glyphWidths[c]??(/[0-9]/.test(c)?.556:.6);return w*size*(bold?1.06:1);}
+export function textWidth(value:string,size:number,bold=false){let w=0;for(const c of resolvedLength(value))w+=glyphWidths[c]??(/[0-9]/.test(c)?.556:.6);return w*size*(bold?1.06:1);}
 /** Break text into rows that fit the given width. */
 export function wrapToWidth(value:string,width:number,size:number,bold=false){
   const rows:string[]=[];let row='';
@@ -46,7 +46,7 @@ export function wrapToWidth(value:string,width:number,size:number,bold=false){
 }
 export function wrappedText(x: number, y: number, value: string, maxChars: number, size = 9, leading = 12) {
   const rows: string[] = []; let row = '';
-  for (const word of value.split(/\s+/)) { if (row && row.length + word.length + 1 > maxChars) { rows.push(row); row = ''; } row += `${row ? ' ' : ''}${word}`; }
+  for (const word of value.split(/\s+/)) { if (row && resolvedLength(row).length + resolvedLength(word).length + 1 > maxChars) { rows.push(row); row = ''; } row += `${row ? ' ' : ''}${word}`; }
   if (row) rows.push(row);
   return { svg: rows.map((r, i) => text(x, y + i * leading, r, size)).join(''), height: rows.length * leading };
 }
@@ -113,7 +113,9 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
 
 export const detailNumberToken='{{DETAIL_NO}}',sheetNumberToken='{{SHEET_NO}}';
 /** Reference to a detail elsewhere in the set by its title; resolved to "n/S-xx" once the set is assembled. */
-export const detailRef=(title:string)=>`{{REF:${title}}}`;
+// URI-encoded so wrapping never splits a reference; measured as its resolved length.
+export const detailRef=(title:string)=>`{{REF:${encodeURIComponent(title)}}}`;
+const resolvedLength=(v:string)=>v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00');
 /**
  * Detail title: numbered bubble (detail over sheet), underlined title and
  * scale. Numbers are assigned in drawing order when the set is assembled.
@@ -126,7 +128,7 @@ export function viewTitle(cx:number,y:number,title:string,scale:string){
  * Identical components may use one arrow with a TYP / quantity note. */
 export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][]=[],span?:number){
  // Land on the label end nearest the targets so a leader never crosses its own text.
- const w=span??Math.max(0,...labels.map(v=>textWidth(v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00').toUpperCase(),size))),right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+w);
+ const w=span??Math.max(0,...labels.map(v=>textWidth(v.toUpperCase(),size))),right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+w);
  const elbow:XY=right?[at[0]+w+14,at[1]-3]:[at[0]-14,at[1]-3],landing:XY=right?[at[0]+w+3,at[1]-3]:[at[0]-3,at[1]-3];
  let svg=`<g data-multileader="component"${right?' data-landing="right"':''}>`;
  for(const [i,p] of points.entries()){
@@ -157,3 +159,16 @@ export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],
  return `<g data-multileader="weld"${field?' data-weld-location="field"':''}>${svg}${field?fieldWeldFlag(right?[at[0]+117,at[1]]:at):''}</g>`;
 }
 export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[]){return filletLeader(points,at,sizeLabel,labels,bothSides,via,true);}
+
+/**
+ * Leaders to a column of labels, ordered by target height so no two leaders
+ * cross; labels are spaced by their line count within [top, bottom].
+ */
+export function labelColumn(items:{at:XY;labels:string[];weld?:string}[],x:number,top:number,bottom:number){
+ const sorted=[...items].sort((a,b)=>a.at[1]-b.at[1]),height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*11;
+ const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
+ let y=top,svg='';
+ for(const v of sorted){svg+=v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,true):multiLeader([v.at],[x,y],v.labels);y+=height(v)+gap;}
+ return svg;
+}
+

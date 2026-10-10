@@ -3,6 +3,7 @@ import {format} from '../engine/units';
 import {craneDesignMinimum} from '../engine/aistLoads';
 import {runwayElevations,issueStatus} from '../engine/drawingData';
 import {activeEndStop} from '../engine/endStopInputs';
+import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {drawingLength} from './drawingFormat';
 import {line,sheetStart,titleBlock} from './sheetGraphics';
@@ -131,7 +132,7 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
   ...(bypass?['BUILDING-MOUNTED CRANE END STOPS AND THEIR SUPPORT FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!d?.bracket?.enabled?['COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE SUPPORT REACTIONS LISTED.']:[]),
-  ...(p.system==='simple'&&d?['COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (S-04) FOR THE INTERFACE FORCES IN THE CALCULATION REPORT.']:[]),
+  ...(p.system==='simple'&&d&&!activeEndBearing(p)?['COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (S-04) FOR THE INTERFACE FORCES IN THE CALCULATION REPORT.']:[]),
   ...s.checks.filter(c=>c.status==='excluded'&&c.id!=='bracket-load-path').map(c=>`${c.title}: BY OTHERS FOR THE REPORTED FORCES.`)
  ];
  blocks.push(H('DEFERRED SUBMITTALS / BY OTHERS'),P('SUBMIT THE FOLLOWING TO THE ENGINEER OF RECORD FOR REVIEW AND TO THE BUILDING OFFICIAL FOR APPROVAL BEFORE INSTALLATION:'),...N(deferred));
