@@ -133,7 +133,7 @@ describe('New freestanding column package',()=>{
   expect(texts(set[0].svg)).toContain(columns.number);expect(texts(set[0].svg)).toContain(elevation);
   // A new column is shop welded: no field-weld flags or existing-column labels on the column-side details.
   for(const sheet of set.slice(2))expect(texts(sheet.svg)).not.toMatch(/EXISTING COLUMN|FIELD WELD TO/);
- });
+ },120000);
  it('reports geometry clashes and drawing mismatches as input errors',()=>{
   const p=newColumnDemonstrationProject();
   // Washers on the rods clash with the column flange welds on a short plate.

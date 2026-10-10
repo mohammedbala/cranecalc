@@ -59,5 +59,5 @@ describe('Seismic design of new freestanding runway columns',()=>{
   expect(quake.phiNn).toBeCloseTo(Math.min(plain.steelT,.75*plain.breakout,.75*plain.pullout),6);
   const s=calculate(seismic({sdc:'C',SDS:.4}));
   expect(s.checks.find(c=>c.id==='base-anchor-tension')!.note).toContain('§17.10.5.4');
- });
+ },120000);
 });

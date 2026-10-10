@@ -277,7 +277,7 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
  }
  if(r.separation){
   const s=r.separation,src=p.existingColumn?.seismic?.building?.source.trim();
-  checks.push({id:'brace-separation',group:'Longitudinal bracing',title:'Seismic separation from the existing building',status:'pass',equation:'\\delta_{MT}=\\sqrt{\\delta_{M1}^2+\\delta_{M2}^2}',referenceIds:['asce-12'],demand:s.required,quantity:'length',
+  checks.push({id:'brace-separation',group:'Longitudinal bracing',title:'Seismic separation from the existing building',status:'pass',equation:'\\delta_{MT}=\\sqrt{\\delta_{M1}^2+\\delta_{M2}^2}',referenceIds:['asce-12'],
    note:`ASCE 7 §12.12.3: keep the new columns, girders and rails at least δMT = ${f(s.required,'length')} clear of the existing building, as noted on S-01. Runway δM1: ${f(s.across,'length')} across the runway at the rail (cantilever columns with footing rotation, Cd/Ie) and ${f(s.along,'length')} along it at the crane level (bracing). Building δM2 = ${f(s.building,'length')}${s.buildingEntered?` from ${src||'the entered building records'}`:', taken as the Table 12.12-1 allowable drift 0.025h at the rail; replace it with the value from the building\'s records'}.`});
  }
  return checks;

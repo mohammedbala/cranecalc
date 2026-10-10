@@ -8,7 +8,8 @@ import { horizontalPlateGeometry, referenceBoltDiameter, type HardwareBuilder, t
 import { columnProfile, portalDimensions, profileUpper, taperedISection, type FrameStyle } from './metalBuildingGeometry';
 import {columnBaseElevation} from '../engine/columnBaseInputs';
 import {existingColumnSection} from '../engine/existingColumn';
-import {bracingGeometry,bracingLayout,designsBracing} from '../engine/newColumnBracing';
+import {bracingDesign,bracingGeometry,bracingLayout,designsBracing} from '../engine/newColumnBracing';
+import {aiscShapeByName} from '../data/aiscSections';
 import type {ProjectInput} from '../engine/types';
 
 /** New freestanding runway columns, in m from the girder mid-depth: column top and base, base plate, anchor rods and footing. */
@@ -22,7 +23,8 @@ export function newColumnFraming(p:ProjectInput):NewColumnFraming|undefined{
  const a=b.anchors,row=b.plate.N/2-a.edge,xs=Array.from({length:a.perRow},(_,i)=>-a.gauge/2+(a.perRow>1?i*a.gauge/(a.perRow-1):a.gauge/2));
  return {top:bottom+c.height*mm,bottom,floor:bottom-columnBaseElevation(b)*mm,plate:{N:b.plate.N*mm,B:b.plate.B*mm,t:b.plate.thickness*mm},grout:b.grout*mm,
   anchors:xs.flatMap(x=>[-row,row].map(z=>({x:x*mm,z:z*mm,d:a.diameter*mm}))),footing:{L:b.footing.L*mm,B:b.footing.B*mm,h:b.footing.thickness*mm},
-  bracing:designsBracing(p)?(()=>{const g=bracingGeometry(p,existingColumnSection(p).section),s=g.strut;
+  // Drawn only for inputs it can be built from: the viewer shows a project before it validates.
+  bracing:designsBracing(p)&&bracingLayout(p).spans.length&&aiscShapeByName(bracingDesign(p).strut.shape)?(()=>{const g=bracingGeometry(p,existingColumnSection(p).section),s=g.strut;
    return {spans:bracingLayout(p).spans.map(i=>i-1),workPoint:seatTop*mm,strut:{d:s.d*mm,bf:s.bf*mm,tf:s.tf*mm,tw:s.tw*mm,end:s.end*mm},rod:p.longitudinalBracing!.rod.diameter*mm,
     top:[g.top.pin[0]*mm,g.top.pin[1]*mm] as [number,number],base:[g.bottom.pin[0]*mm,g.bottom.pin[1]*mm] as [number,number]};})():undefined};
 }
