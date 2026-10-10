@@ -36,7 +36,8 @@ export function demonstrationDetails():RunwayDetails{return {
   {id:'F3',name:'Bearing stiffener weld toe, left support',x:0,point:'top-left',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'},
   {id:'F4',name:'Bearing stiffener weld toe, right support',x:25*foot,point:'top-right',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'}
  ],
- spectrum:[{name:'Rated lifts',liftFraction:1,cycles:200000},{name:'Routine half-load lifts',liftFraction:.5,cycles:600000},{name:'Light lifts',liftFraction:.25,cycles:200000}],
+ // Rated-lift cycles: the owner's 75,000 full-load repetitions, two wheel-induced stress cycles each.
+ spectrum:[{name:'Rated lifts',liftFraction:1,cycles:150000},{name:'Routine half-load lifts',liftFraction:.5,cycles:650000},{name:'Light lifts',liftFraction:.25,cycles:200000}],
  fabrication:{steel:'Girder ASTM A992; connection plates ASTM A572 Grade 50. Rail grade and geometry per fictional R-6 schedule.',bolting:'ASTM F3125 Grade A325. Bearing and stop bolts 3/4-in, 28-kip minimum pretension; tie bolts 5/8-in, 19-kip. Standard holes and Class B unpainted faying surfaces unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joints: 7/8-in A325, snug-tight sliding slots.',welding:'E70XX low-hydrogen welds. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts/stops and remove temporary welded attachments by grinding.',inspection:'Visual inspection of all welds and bolt installations; verify pretension and faying-surface preparation. MT at attachment terminations and repaired welds. Record baseline rail and connection condition before commissioning.',erection:'Provide temporary lateral/torsional restraint until both flange ties are complete. Set bearing plates level, fit bearing stiffeners, and verify end rotation clearance. Do not operate the crane before alignment and supplier commissioning checks.',railAlignment:'Survey both rails unloaded and during commissioning. Record gauge, elevation and straightness at supports and midspan; use the stated demonstration tolerances, subject to the actual crane supplier requirements.'}
 };}
 export function demonstrationProject():ProjectInput {
@@ -57,6 +58,11 @@ export function demonstrationProject():ProjectInput {
  // Girder-mounted end stops inboard of the runway-end tie saddle: both bolt rows clear the saddle and the bearing stiffeners.
  p.details.endStop={...structuredClone(defaultEndStop),enabled:true,bumperHeight:6*inch,bumperDiameter:6*inch,setback:7*inch,railGap:1*inch,base:{length:12*inch,width:9*inch,thickness:1*inch},face:{thickness:1*inch,height:15*inch},stiffener:{thickness:.75*inch,length:9*inch,spacing:3*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.25*inch,edge:1.5*inch},weldSize:.3125*inch,source:'Fictitious supplier data DEMO-CS-01: 20-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'};
  p.drawing={originator:'CraneCalc demonstration',checker:'',datumElevation:100*foot,datumLabel:'Reference finished floor',railElevation:20*foot};
+ // Fictitious code basis, site and existing-structure evaluation, so the demonstration cover reads as a
+ // complete package. The engineer of record and seal stay blank: they are the user's to enter.
+ p.drawing.address='Fictitious site: 100 Demonstration Way';
+ p.drawing.code={building:'2021 IBC as adopted by the fictitious demonstration jurisdiction',editions:'2016',reviewed:false};
+ p.drawing.existingEvaluation='Fictitious existing structure evaluation DEMO-ER-01: frame, bracing, connections and foundations for the added crane loads';
  p.details.fatigueDetails[3].name='Bearing stiffener weld toe, support 2';
  for(let bay=1;bay<3;bay++){
   p.details.fatigueDetails.push({id:`FB${bay+1}`,name:`Rolled bottom flange, bay ${bay+1} midspan`,x:(bay*25+12.5)*foot,point:'bottom-left',category:'A',reference:'AISC Table A-3.1, 1.1 · plain rolled base metal'});
@@ -83,6 +89,8 @@ export function cappedDemonstrationProject():ProjectInput {
  c.wheels=c.wheels.map(w=>({...w,loaded:w.loaded*.2,unloaded:w.unloaded*.2,lateral:w.lateral*.2}));c.longitudinal*=.2;
  c.design={...c.design!,ratedLoad:c.design!.ratedLoad*.2,trolleyWeight:c.design!.trolleyWeight*.2,bridgeWeight:c.design!.bridgeWeight*.2,drivenWheelLoad:c.design!.drivenWheelLoad*.2,bumperForce:c.design!.bumperForce*.2};
  c.loadSource='Fictitious capped demonstration schedule CAP-CS-02; 2-ton crane, not the rolled 10-ton example';
+ // A light pendant-operated crane: AIST TR-13 maintenance type, the closest to light general service.
+ c.design.type='maintenance';c.design.control='pendant';
  p.aist!.netFlangeArea=p.section.bf*p.section.tf;
  // Fictitious surveyed column and existing building effects (unfactored) for the existing-column check.
  const none={P:0,Mx:0,My:0,V:0};
@@ -122,6 +130,8 @@ export function cappedDemonstrationProject():ProjectInput {
 export function newColumnDemonstrationProject():ProjectInput {
  const p=cappedDemonstrationProject();
  p.title='Cedar Works · New freestanding 2-ton runway columns';p.number='DEMO-NC-002';
+ // The existing building carries no crane load, so there is no existing structure evaluation to reference.
+ delete p.drawing!.existingEvaluation;
  const shape='W14X120',w=aiscShapeByName(shape)!,d=p.details!,cap=p.section.kind==='cap'?p.section.capTw:0;
  const base={...structuredClone(defaultColumnBase),enabled:true,
   plate:{...defaultColumnBase.plate,N:23*inch,B:18*inch,thickness:1.25*inch},anchors:{...defaultColumnBase.anchors,diameter:inch,embedment:15*inch},
