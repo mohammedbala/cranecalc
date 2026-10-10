@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
+      - name: Calculation, drawing and report tests
+        run: npm test -- --maxWorkers=2 --testTimeout=120000 --hookTimeout=120000
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke test of the Pages build
+        run: npm run test:e2e
+        env:
+          CI: 'true'
