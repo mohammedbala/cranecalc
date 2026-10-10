@@ -13,7 +13,7 @@ export interface LayerDef {color:number;weight:number;ltype:'Continuous'|'DASHED
 /** Layers by drawing role; lineweights in 1/100 mm. */
 export const sheetLayers:Record<string,LayerDef>={
  'S-STEEL-NEW':{color:7,weight:50,ltype:'Continuous'},
- 'S-STEEL-HIDDEN':{color:7,weight:18,ltype:'HIDDEN'},
+ 'S-STEEL-HIDDEN':{color:7,weight:25,ltype:'HIDDEN'},
  'S-RAIL':{color:6,weight:35,ltype:'Continuous'},
  'S-EXISTING':{color:8,weight:18,ltype:'DASHED'},
  'S-GRID':{color:1,weight:18,ltype:'CENTER'},

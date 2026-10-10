@@ -103,7 +103,7 @@ describe('drawings agree with the calculation',()=>{
  },120000);
  it('tabulates the calculated support reactions and crane data on the cover',()=>{
   const p=capped.input,cover=texts(cappedSet[0].svg).join(' | '),r=capped.supportReactions!;
-  for(const v of r.supports)for(const value of [v.D,v.Cd,v.Cv,v.Ci,v.Css])expect(cover).toContain(format(value,'force',p.units,3).toUpperCase());
+  for(const v of r.supports)for(const value of [v.D,v.Cd,v.Cv,v.Ci,v.Css])expect(cover).toContain(format(value,'force',p.units,2).toUpperCase());
   expect(cover).toContain(drawingLength(p.details!.criteria.railGauge,p.units));
   for(const c of p.cranes)expect(cover).toContain(`CRANE DATA · ${c.name.toUpperCase()}`);
   expect(cover).toContain('DEMONSTRATION - NOT FOR CONSTRUCTION');
@@ -153,12 +153,15 @@ describe('issue status',()=>{
  it('only issues validated, sealed-ready packages',()=>{
   expect(issueStatus(capped).label).toBe('DEMONSTRATION - NOT FOR CONSTRUCTION');
   const preliminary=issued(()=>{});expect(preliminary.issued).toBe(false);expect(preliminary.reasons).toContain('Enter the engineer of record, firm and license');expect(preliminary.reasons).toContain('Select an issue purpose');
-  const ready=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};});
+  // Structure the calculation leaves unchecked needs the engineer's evaluation referenced before issue.
+  const unreferenced=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};});
+  expect(unreferenced.reasons).toEqual(['Reference the engineer of record\'s evaluation of the structure not checked by this calculation']);
+  const ready=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};s.input.drawing!.existingEvaluation='Existing structure evaluation, report 24-117';});
   expect(ready).toEqual({issued:true,label:'ISSUED FOR PERMIT',reasons:[]});
   // A jurisdiction on the 2022 editions needs the engineer's review of this 360-16 / 7-16 calculation.
-  const newer=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2024 IBC',editions:'2022',reviewed:false};});
+  const newer=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2024 IBC',editions:'2022',reviewed:false};s.input.drawing!.existingEvaluation='Report 24-117';});
   expect(newer.reasons).toEqual(['Confirm the engineer of record has reviewed this design against AISC 360-22 and ASCE 7-22']);
-  const reviewed=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2024 IBC',editions:'2022',reviewed:true};});
+  const reviewed=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2024 IBC',editions:'2022',reviewed:true};s.input.drawing!.existingEvaluation='Report 24-117';});
   expect(reviewed.issued).toBe(true);
   const failed=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='construction';s.checks=[...s.checks,{...s.checks[0],id:'x',status:'fail'}];});
   expect(failed.issued).toBe(false);expect(failed.reasons).toContain('Resolve 1 failed check');

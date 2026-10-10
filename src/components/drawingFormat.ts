@@ -9,8 +9,13 @@ export function feetInches(mm: number): string {
   const fraction = numerator ? ` ${numerator}/${denominator}` : '';
   return `${mm < 0 && ticks ? '-' : ''}${feet}'-${inches}${fraction}"`;
 }
+/** SI lengths of a metre or more read to the millimetre, shorter ones to 0.1 mm. */
 export function drawingLength(mm: number, units: ProjectInput['units']) {
-  return units === 'US' ? feetInches(mm) : `${Number(mm.toFixed(1)).toLocaleString('en-US')} mm`;
+  return units === 'US' ? feetInches(mm) : `${Number(mm.toFixed(Math.abs(mm) >= 1000 ? 0 : 1)).toLocaleString('en-US')} mm`;
+}
+/** Elevations: feet and inches, or metres to three decimals in SI. */
+export function drawingElevation(mm: number, units: ProjectInput['units']) {
+  return units === 'US' ? feetInches(mm) : `${(mm / 1000).toFixed(3)} m`;
 }
 export function plateInches(mm: number, units: ProjectInput['units']) {
   if (units === 'SI') return drawingLength(mm, units);

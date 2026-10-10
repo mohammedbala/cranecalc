@@ -77,16 +77,17 @@ export function wrappedText(x: number, y: number, value: string, maxChars: numbe
 }
 /**
  * Printed line weights for content drawn at content scale 1 (layout units = points): object lines
- * 0.35 mm, rail 0.32 mm, existing and hidden 0.2 mm, leaders and dimensions 0.18 mm, grids 0.16 mm.
- * The title band keeps the base weights.
+ * 0.46 mm, rail 0.35 mm, hidden 0.25 mm in short black dashes, existing 0.2 mm screened in long dashes,
+ * panel rules 0.25 mm, leaders and dimensions 0.18 mm, grids 0.16 mm. The title band keeps the base
+ * weights.
  */
 const detailLineWeights=`
-  .runway-plan-sheet [data-sheet-content] .reference-line{stroke-width:.55;stroke-dasharray:6 3.6}
-  .runway-plan-sheet [data-sheet-content] .runway-line{stroke-width:1;stroke-dasharray:none}
-  .runway-plan-sheet [data-sheet-content] .rail-line{stroke-width:.9;stroke-dasharray:none}
-  .runway-plan-sheet [data-sheet-content] .hidden-line{stroke-width:.55;stroke-dasharray:4 2.4}
+  .runway-plan-sheet [data-sheet-content] .reference-line{stroke-width:.55;stroke-dasharray:10 3.6}
+  .runway-plan-sheet [data-sheet-content] .runway-line{stroke-width:1.3;stroke-dasharray:none}
+  .runway-plan-sheet [data-sheet-content] .rail-line{stroke-width:1;stroke-dasharray:none}
+  .runway-plan-sheet [data-sheet-content] .hidden-line{stroke-width:.7;stroke-dasharray:3 2}
   .runway-plan-sheet [data-sheet-content] .annotation{stroke-width:.5}
-  .runway-plan-sheet [data-sheet-content] .divider{stroke-width:.8}
+  .runway-plan-sheet [data-sheet-content] .divider{stroke-width:.7}
   .runway-plan-sheet [data-sheet-content] .grid-line{stroke-width:.45;stroke-dasharray:14 3 2 3}
   .runway-plan-sheet [data-sheet-content] .bubble{stroke-width:.7}
   .runway-plan-sheet [data-sheet-content] .dot{stroke-width:.4}
@@ -126,7 +127,8 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   for(const [x,label] of [[66,'REV'],[361,'REVISION DESCRIPTION'],[676,'BY'],[801,'DATE']] as const)svg+=text(x,1564,label,10,'middle',700);
   const revisions=(d?.revisions??[]).filter(r=>r.description.trim()).slice(-4);
   if(revisions.length)revisions.forEach((r,i)=>{const y=1591+i*30;svg+=text(66,y,short(r.rev||'-',4),11,'middle',700)+text(110,y,short(r.description.toUpperCase(),62),11)+text(676,y,short(r.by.toUpperCase(),8),11,'middle')+text(740,y,short(r.date,12),11);});
-  else svg+=text(110,1591,'CURRENT OUTPUT / ENGINEERING REVIEW',11)+text(740,1591,date,11);
+  // Output not yet issued under an entered revision is the first preliminary.
+  else svg+=text(66,1591,'P1',11,'middle',700)+text(110,1591,'CURRENT OUTPUT / ENGINEERING REVIEW',11)+text(740,1591,date,11);
   svg+='</g><g data-title-panel="originator">';
   svg+=text(1056,1598,'CRANECALC',28,'middle',700)+text(1056,1620,'STRUCTURAL DESIGN WORKSHEET',10,'middle');
   svg+=line([876,1640],[1236,1640])+text(1056,1660,'DIMENSIONS GOVERN / DO NOT SCALE',10,'middle');
@@ -141,7 +143,7 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+=text(1858,1566,title,16,'middle',700)+line([1560,1578],[2156,1578]);
   const project=wrappedText(1574,1602,p.title.toUpperCase(),58,15,19);svg+=project.svg;
   svg+=line([1560,1644],[2156,1644])+text(1574,1663,`PROJECT: ${short(p.number||'UNTITLED',60)}`,12,'start',700);
-  svg+=text(1574,1681,p.units==='US'?'LENGTHS: FEET & INCHES':'LENGTHS: MILLIMETERS',10);
+  svg+=text(1574,1681,`${d?.address?.trim()?`SITE: ${short(d.address.trim().toUpperCase(),70)} · `:''}${p.units==='US'?'LENGTHS: FEET & INCHES':'LENGTHS: MILLIMETERS'}`,10);
   svg+='</g><g data-title-panel="sheet">';
   svg+=text(2170,1566,'DRAWING / SHEET NUMBER',10,'start',700)+text(2170,1611,`SHEET ${number}`,29,'start',700)+text(2546,1611,sheetOrdinalToken,12,'end',700);
   svg+=line([2156,1624],[2556,1624])+text(2170,1644,p.units==='SI'?'PAGE SIZE: ARCH D / 914.4 X 609.6 MM':'PAGE SIZE: ARCH D / 36 X 24 IN',12,'start',700);
@@ -186,11 +188,14 @@ export function viewTitle(cx:number,y:number,title:string,scale:string,contentSc
  const k=1/contentScale,size=13.5*k,w=textWidth(title,size,true),r=15*k,bx=cx-w/2-r-7*k;
  return `<g data-view-title="below" data-detail-title="${esc(title)}">${circle(bx,y,r,'divider')}${line([bx-r,y],[bx+r,y],'annotation')}${text(bx,y-3.6*k,detailNumberToken,11.5*k,'middle',700)}${text(bx,y+9.4*k,sheetNumberToken,7*k,'middle')}${text(cx,y-4*k,title,size,'middle',700)}${line([bx+r,y],[cx+w/2+5*k,y],'divider')}${text(cx,y+12*k,scale,9*k,'middle')}</g>`;
 }
+// Drawing labels are upper case; SI unit symbols (mm, kN, MPa) keep their case.
+const siSymbol=/^\(?(k?N|MPa|GPa|mm|m|kN·m|kN-m|N\/mm|kN\/m)[),.;:]*$/;
+export const labelCaps=(v:string)=>v.split(/(\s+)/).map(w=>siSymbol.test(w)?w:w.toUpperCase()).join('');
 /** Explicit waypoints keep annotation corridors separate from adjacent callouts.
  * Identical components may use one arrow with a TYP / quantity note. */
 export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][]=[],span?:number){
  // Land on the label end nearest the targets so a leader never crosses its own text.
- const w=span??Math.max(0,...labels.map(v=>textWidth(v.toUpperCase(),size))),right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+w);
+ const w=span??Math.max(0,...labels.map(v=>textWidth(labelCaps(v),size))),right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+w);
  const elbow:XY=right?[at[0]+w+14,at[1]-3]:[at[0]-14,at[1]-3],landing:XY=right?[at[0]+w+3,at[1]-3]:[at[0]-3,at[1]-3];
  let svg=`<g data-multileader="component"${right?' data-landing="right"':''}>`;
  for(const [i,p] of points.entries()){
@@ -199,7 +204,7 @@ export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][
   const next=route[1],angle=Math.atan2(next[1]-p[1],next[0]-p[0]),c=Math.cos(angle),s=Math.sin(angle);
   svg+=`<path class="leader-arrow" d="M${n(p[0])},${n(p[1])}L${n(p[0]+5*c-1.5*s)},${n(p[1]+5*s+1.5*c)}L${n(p[0]+5*c+1.5*s)},${n(p[1]+5*s-1.5*c)}Z"/>`;
  }
- return svg+labels.map((v,i)=>text(at[0],at[1]+i*11,v.toUpperCase(),size)).join('')+'</g>';
+ return svg+labels.map((v,i)=>text(at[0],at[1]+i*11,labelCaps(v),size)).join('')+'</g>';
 }
 export function fieldWeldFlag(at:XY){
  // AWS A2.4 supplementary flag at the arrow/reference-line junction.
@@ -215,8 +220,9 @@ export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],
  for(const sign of bothSides?[-1,1]:[1])svg+=`<path class="annotation" d="M${x},${y}l0,${sign*7}l8,${-sign*7}Z"/>`;
  // Weld sizes sit immediately left of the symbol, on its vertical centerline.
  // Inch marks are omitted by drafting convention; SI values retain MM.
- svg+=text(x-6,y+7,sizeLabel.replaceAll('"','').toUpperCase(),8,'end');
- svg+=labels.map((v,i)=>text(at[0],at[1]+17+i*11,v.toUpperCase(),8)).join('');
+ // Both-sides fillets carry the size on each side of the reference line (AWS A2.4).
+ svg+=text(x-6,y+7,labelCaps(sizeLabel.replaceAll('"','')),8,'end')+(bothSides?text(x-6,y-2,labelCaps(sizeLabel.replaceAll('"','')),8,'end'):'');
+ svg+=labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('');
  const right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+89);
  return `<g data-multileader="weld"${field?' data-weld-location="field"':''}>${svg}${field?fieldWeldFlag(right?[at[0]+117,at[1]]:at):''}</g>`;
 }
@@ -231,7 +237,7 @@ export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boo
  const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
  const slots=()=>{let y=top;return sorted.map(v=>{const at=y;y+=height(v)+gap;return at;});};
  // Leader from a target to its label's elbow; labels left of their targets land on the right.
- const route=(v:typeof items[number],y:number):[XY,XY]=>{const w=v.weld?89:Math.max(0,...v.labels.map(l=>textWidth(l.toUpperCase(),8.5))),ly=(v.weld?y+3:y)-3;return [v.at,v.at[0]>x+w?[x+w+14,ly]:[x-14,ly]];};
+ const route=(v:typeof items[number],y:number):[XY,XY]=>{const w=v.weld?89:Math.max(0,...v.labels.map(l=>textWidth(labelCaps(l),8.5))),ly=(v.weld?y+3:y)-3;return [v.at,v.at[0]>x+w?[x+w+14,ly]:[x-14,ly]];};
  const crosses=([a,b]:[XY,XY],[c,d]:[XY,XY])=>{const o=(p:XY,q:XY,r:XY)=>Math.sign((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]));return o(a,b,c)*o(a,b,d)<0&&o(c,d,a)*o(c,d,b)<0;};
  // Ordering by target height alone can cross leaders whose targets differ in depth; swap such neighbours.
  for(let pass=0;pass<sorted.length;pass++){

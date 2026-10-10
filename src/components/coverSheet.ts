@@ -4,11 +4,11 @@ import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot,Crane} from '../engine/types';
 import {format} from '../engine/units';
 import {craneDesignMinimum,craneCombinations} from '../engine/aistLoads';
-import {runwayElevations,issueStatus,supportColumn} from '../engine/drawingData';
+import {runwayElevations,issueStatus,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
-import {drawingLength} from './drawingFormat';
+import {drawingLength,drawingElevation} from './drawingFormat';
 import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
@@ -29,7 +29,7 @@ function legend(t:Style):Block{
   [(x,y)=>line([x,y],[x+sample-20,y],'grid-line'),'GRID LINES AND CENTERLINES'],
   [(x,y)=>rect(x,y-3,sample-20,6,'rail-line'),'CRANE RAIL'],
   [(x,y)=>bubble(x+12,y,'A',10),'GRID DESIGNATION'],
-  [(x,y)=>`${circle(x+14,y,13,'divider')}${line([x+1,y],[x+27,y],'annotation')}${text(x+14,y-3,'1',10,'middle',700)}${text(x+14,y+8.5,'S-02',6.6,'middle')}`,'DETAIL NUMBER OVER THE SHEET WHERE IT IS DRAWN; REFERENCES READ 1/S-02'],
+  [(x,y)=>`${circle(x+14,y,13,'divider')}${line([x+1,y],[x+27,y],'annotation')}${text(x+14,y-3,'1',10,'middle',700)}${text(x+14,y+8.5,'S-02',7,'middle')}`,'DETAIL NUMBER OVER THE SHEET WHERE IT IS DRAWN; REFERENCES READ 1/S-02'],
   [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],false),'FILLET WELD, ARROW SIDE; SIZE LEFT OF THE SYMBOL'],
   [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],true),'FILLET WELD, BOTH SIDES'],
   [(x,y)=>fieldFilletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],true),'FIELD WELD (FLAG); SHOP WELD U.N.O.'],
@@ -51,7 +51,7 @@ function legend(t:Style):Block{
  */
 function wheelDiagram(t:Style,c:Crane,o:{force:(v:number)=>string;length:(mm:number)=>string;impact:number;lateral:number;traction:number;bumper?:number}):Block{
  const size=Math.max(7,t.body*.8),offsets=c.wheels.map(w=>w.offset-c.wheels[0].offset),span=Math.max(1,offsets[offsets.length-1]);
- const margin=130,k=(t.width-2*margin)/span,load=(v:number)=>o.force(v/(c.includesImpact?1+c.impact:1));
+ const margin=130,k=(t.width-2*margin)/span,load=(v:number)=>t.caps(o.force(v/(c.includesImpact?1+c.impact:1)));
  const gaps=offsets.slice(1).map((v,i)=>(v-offsets[i])*k),each=!gaps.length||Math.min(...gaps)>Math.max(...c.wheels.map(w=>textWidth(load(w.loaded),size)))+10;
  const note=wrapToWidth(t.caps(`${each?'Wheel loads':`Wheel loads, max. ${load(Math.max(...c.wheels.map(w=>w.loaded)))} each`}: maximum without impact, per the crane supplier; add ${+(o.impact*100).toFixed(1)}% vertical impact. Side thrust ${o.force(o.lateral)} on this runway and traction act at the rail head. Crane, end trucks and bumpers by the crane supplier.`),t.width,t.body);
  // Wheels at their spacing, never overlapping where a bogie puts them close together.
@@ -65,9 +65,9 @@ function wheelDiagram(t:Style,c:Crane,o:{force:(v:number)=>string;length:(mm:num
    if(each)svg+=text(wx,y+top,load(w.loaded),size,'middle',700);});
   for(let i=1;i<offsets.length;i++)svg+=dimH(X(offsets[i-1]),X(offsets[i]),y+rail+16,y+dimY,o.length(offsets[i]-offsets[i-1]));
   // Traction along the rail at the head, ahead of the truck; the bumper force on the truck end behind it.
-  const ahead=X(span)+56;svg+=line([ahead,y+rail-3],[ahead+52,y+rail-3])+arrow([ahead+52,y+rail-3],1,0)+text(ahead,y+rail-9,`${o.force(o.traction)}`,size,'start');
+  const ahead=X(span)+56;svg+=line([ahead,y+rail-3],[ahead+52,y+rail-3])+arrow([ahead+52,y+rail-3],1,0)+text(ahead,y+rail-9,t.caps(o.force(o.traction)),size,'start');
   svg+=text(ahead,y+rail-9-size*1.2,'TRACTION',size,'start');
-  if(o.bumper){const back=X(0)-42;svg+=line([back,y+truck+11],[back-60,y+truck+11])+arrow([back-60,y+truck+11],-1,0)+text(back-4,y+truck+5,o.force(o.bumper),size,'end')+text(back-4,y+truck+5-size*1.2,'BUMPER',size,'end');}
+  if(o.bumper){const back=X(0)-42;svg+=line([back,y+truck+11],[back-60,y+truck+11])+arrow([back-60,y+truck+11],-1,0)+text(back-4,y+truck+5,t.caps(o.force(o.bumper)),size,'end')+text(back-4,y+truck+5-size*1.2,'BUMPER',size,'end');}
   note.forEach((v,i)=>{svg+=text(x,y+dimY+16+(i+.75)*t.leading,v,t.body);});
   return svg+'</g>';
  }};
@@ -86,7 +86,7 @@ function flow(blocks:Block[],limit:number,overflow=false){
 }
 
 export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
- const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,3),len=(mm:number)=>drawingLength(mm,u);
+ const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>drawingLength(mm,u);
  const ksi=(v:number)=>format(v,'stress',u,3),status=issueStatus(s),elevations=runwayElevations(p);
  const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} t (${f(N)})`;
  const length=p.spans.reduce((a,b)=>a+b,0),cranes=p.cranes.map(c=>c.design?`${capacity(c.design.ratedLoad)} ${c.design.type} crane`:c.name).join(' and ');
@@ -100,7 +100,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  blocks.push(H('GENERAL NOTES'),...N([
   ...structuralGeneralNotes(s),
   'THESE DRAWINGS AND THE CALCULATION REPORT OF THE SAME REVISION FORM ONE PACKAGE. WHERE THEY DIFFER, THE MORE STRINGENT REQUIREMENT GOVERNS UNTIL CLARIFIED BY THE ENGINEER OF RECORD.',
-  'ALL WORK SHALL CONFORM TO THE BUILDING CODE ADOPTED BY THE AUTHORITY HAVING JURISDICTION AND THE STANDARDS LISTED UNDER DESIGN CRITERIA.'
+  'ALL WORK SHALL CONFORM TO THE BUILDING CODE ADOPTED BY THE AUTHORITY HAVING JURISDICTION AND THE STANDARDS LISTED UNDER DESIGN CRITERIA.',
+  // Millimetre values of imperial products are conversions, not metric product sizes.
+  ...(u==='SI'?['DIMENSIONS ARE IN MILLIMETRES AND ELEVATIONS IN METRES. BOLT, PLATE, WELD AND SECTION SIZES ARE THOSE OF THE DESIGN; WHERE A SIZE IS AN IMPERIAL PRODUCT SHOWN IN MILLIMETRES (FOR EXAMPLE A 3/4 IN BOLT SHOWN AS 19 MM), FURNISH THAT PRODUCT. SUBSTITUTE METRIC PRODUCTS ONLY AFTER THE ENGINEER OF RECORD RECALCULATES WITH THEIR SIZES.']:[])
  ]));
  const existing=p.existingColumn?.enabled||p.longitudinalBracing?.enabled||d?.bracket?.enabled||p.aist?.supportType==='bracket';
  if(existing)blocks.push(H('EXISTING BUILDING NOTES'),...N([
@@ -114,8 +116,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   'ITEMS MARKED BY OTHERS IN THE CALCULATION REPORT (FRAME, CONNECTIONS TO EXISTING MEMBERS, ANCHORS AND FOUNDATIONS NOT CHECKED HERE) SHALL BE VERIFIED BY THE ENGINEER OF RECORD FOR THE REPORTED FORCES.'
  ].map(v=>v.toUpperCase())));
  if(d)blocks.push(H('CRANE RUNWAY INSTALLATION'),...N([
-  `RAIL: ${d.rail.name}. SET RAIL WITHIN ${len(d.criteria.alignmentTolerance)} OF THE THEORETICAL LINE AND ${len(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION; DESIGN RAIL-TO-WEB ECCENTRICITY ${len(Math.abs(p.railEccentricity))}.`,
-  `RAIL GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)}. VERIFY WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
+  `RAIL: ${d.rail.name}. SET THE RAIL C/L ON THE GIRDER WEB C/L WITHIN ${len(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${len(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${len(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION.`,
+  `RAIL GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${len(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS, UNLESS THE CRANE MANUFACTURER REQUIRES LESS. VERIFY WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
   d.fabrication.railAlignment,
   'SURVEY RAIL ALIGNMENT, GAUGE AND ELEVATION AFTER ERECTION AND BEFORE THE LOAD TEST; SUBMIT THE SURVEY.',
   ...(activeEndStop(p)?[`INSTALL THE RUNWAY END STOPS (${detailRef(detailTitles.endStop)}) AT ${stopLocation(p).toUpperCase()} BEFORE THE CRANE IS OPERATED OR LOAD TESTED.`]:[]),
@@ -125,20 +127,23 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  const code=codeBasis(p);
  blocks.push(H('DESIGN CRITERIA · CODES AND STANDARDS'),T(['STANDARD','EDITION / SCOPE'],[
   ['BUILDING CODE',code.building.toUpperCase()],
+  // Work on an existing building is an alteration under the existing building code adopted with it.
+  ['EXISTING BUILDING CODE',`${code.entered?'IEBC OF THE SAME EDITION AS THE BUILDING CODE':'NOT ENTERED: IEBC EDITION ADOPTED WITH THE BUILDING CODE'}: ALTERATION; ${p.existingColumn?.isNew?'THE EXISTING STRUCTURE CARRIES NO CRANE LOAD':'EXISTING STRUCTURE EVALUATED FOR THE ADDED CRANE LOADS, SEE EXISTING STRUCTURE EVALUATION'}`],
   ['ASCE/SEI 7',code.asce],
   ['AISC 360',code.aisc+', '+p.method],
   ['AIST TECH. REPORT 13','SUPPLIED 2020 REFERENCE: RUNWAY LOADS AND CRITERIA'],
   ['AISC DESIGN GUIDE 7','3RD ED. (2019) WITH 2023 ERRATA'],
-  ['AWS D1.1','STRUCTURAL WELDING CODE - STEEL (CYCLICALLY LOADED)'],
+  ['AWS D1.1/D1.1M','2020: STRUCTURAL WELDING CODE - STEEL (CYCLICALLY LOADED)'],
   ['RCSC','2020 SPECIFICATION FOR STRUCTURAL JOINTS'],
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['ACI 318','2019: FOOTINGS (CH. 13) AND ANCHORING TO CONCRETE (CH. 17)'],['AISC DESIGN GUIDE 1','2ND ED. (2006): BASE PLATES AND ANCHOR RODS']]:[]),
-  ['ASME B30.2','CRANE INSPECTION, TESTING AND OPERATION']
+  ['ASME B30.2','2022: OVERHEAD AND GANTRY CRANES; INSPECTION, TESTING AND OPERATION']
  ],[1.2,2.8]));
  for(const c of p.cranes){
   const m=craneDesignMinimum(c),dd=c.design,max=Math.max(...c.wheels.map(w=>w.loaded/(c.includesImpact?1+c.impact:1)));
   blocks.push(H(`CRANE DATA · ${c.name.toUpperCase()}`),T(['ITEM','VALUE'],[
    ['RATED CAPACITY',dd?capacity(dd.ratedLoad):'NOT ENTERED'],
-   ['TYPE / CONTROL',dd?`${dd.type.toUpperCase()} / ${dd.control.toUpperCase()}`:'NOT ENTERED'],
+   // AIST TR-13 crane type sets the side-thrust factors; it is not the CMAA service class.
+   ['AIST CRANE TYPE / CONTROL',dd?`${dd.type.toUpperCase()} / ${dd.control.toUpperCase()}`:'NOT ENTERED'],
    ['SERVICE',c.operatingClass.toUpperCase()],
    ['WHEELS ON RUNWAY',`${c.wheels.length} AT ${c.wheels.slice(1).map((w,i)=>len(w.offset-c.wheels[i].offset)).join(', ')}`],
    ['MAX STATIC WHEEL LOAD',f(max)],
@@ -157,12 +162,12 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['RUNWAY GIRDER',`${p.section.name}${p.section.kind==='cap'?' (CAPPED)':''}, Fy = ${ksi(p.section.Fy)}`],
   ['SPANS',`${p.spans.map(len).join(' + ')} ${p.system==='continuous'?'CONTINUOUS':'SIMPLE SPANS'}`],
   ['DESIGN METHOD',`${p.method}; RUNWAY: AIST TR-13 §3.10; BUILDING CHECKS: ASCE 7 §2.3/§2.4`],
-  ['BUILDING CLASS / CYCLES',a?`AIST CLASS ${a.buildingClass}, ${a.buildingCycles.toLocaleString()} REPETITIONS`:'-'],
+  ['AIST BUILDING CLASS',a?`CLASS ${a.buildingClass} FOR ${a.buildingCycles.toLocaleString()} OWNER FULL-LOAD REPETITIONS`:'-'],
   ['VERTICAL / LATERAL DEFLECTION',`${ratio(vertical)} / ${ratio(lateral)} (ONE CRANE, NO IMPACT)`],
-  ['FATIGUE',d?`${d.spectrum.reduce((sum,b)=>sum+b.cycles,0).toLocaleString()} CYCLES IN ${d.spectrum.length} DUTY BINS`:`${p.fatigue.cycles.toLocaleString()} CYCLES, CATEGORY ${p.fatigue.category}`],
+  ['FATIGUE SPECTRUM',d?`${d.spectrum.reduce((sum,b)=>sum+b.cycles,0).toLocaleString()} STRESS CYCLES AT EACH DETAIL IN ${d.spectrum.length} DUTY BINS (${d.spectrum.filter(b=>b.liftFraction>=1).reduce((sum,b)=>sum+b.cycles,0).toLocaleString()} AT RATED LIFT)`:`${p.fatigue.cycles.toLocaleString()} CYCLES, CATEGORY ${p.fatigue.category}`],
   ...(()=>{const z=seismicBasis(p);return z?[['SEISMIC (NEW COLUMNS)',`ASCE 7 EQUIVALENT LATERAL FORCE ACROSS THE RUNWAY: ${cantileverSystems[z.system].label.toUpperCase()}, R ${z.R}, ΩO ${z.Omega0}, CD ${z.Cd}; SDC ${z.sdc}, SDS ${z.SDS}, IE ${z.Ie}, ρ ${z.rho}; CS ${z.Cs.toFixed(3)}${z.integrityOnly?' (SDC A, §1.4.2)':''}. BASE, ANCHORS AND FOOTINGS FOR OVERSTRENGTH; CRANE-LEVEL BRACING ALONG THE RUNWAY`]]:[];})(),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS',`SPREAD FOOTINGS; ${format(p.columnBase.soil.allowable,'pressure',u,3).toUpperCase()} ALLOWABLE BEARING, BASE FRICTION ${p.columnBase.soil.friction}; OVERTURNING AND SLIDING FS 1.5 (DEAD LOAD ONLY)`]]:[]),
-  ['ELEVATIONS',elevations?`T.O.R. ${len(elevations.tor)}, T.O.S. ${len(elevations.tos)} (DATUM ${len(elevations.datum)})`:'NOT ENTERED']
+  ['ELEVATIONS',elevations?`T.O.R. ${drawingElevation(elevations.tor,u)}, T.O.S. ${drawingElevation(elevations.tos,u)} (DATUM ${drawingElevation(elevations.datum,u)})`:'NOT ENTERED']
  ],[1.4,2.6]));
  const r=s.supportReactions;
  // The combinations the runway girder is designed for, as the calculation applies them.
@@ -180,12 +185,14 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  blocks.push(H('MATERIALS'),T(['ITEM','SPECIFICATION'],[
   ['RUNWAY GIRDER',p.section.kind==='welded'?`PLATE, Fy = ${ksi(p.section.Fy)}`:`ASTM A992, Fy = ${ksi(p.section.Fy)}`],
   ...(p.capDesign&&p.section.kind==='cap'?[['CAP CHANNEL',`Fy = ${ksi(p.capDesign.Fy)}; ${p.capDesign.materialSource}`]]:[]),
-  ...(d?[['PLATES, BARS, TIES',`Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['WELD METAL',`E${Math.round(d.material.Fexx/6.894757293)}XX, AWS D1.1`],['CRANE RAIL',`${d.rail.name}; Fy = ${ksi(d.rail.Fy)}`]]:[]),
+  ...(d?[['PLATES, BARS, TIES',`Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES','ASTM A513 OR A500 GR. C STEEL TUBE, Fy 50 KSI MIN.'],['WELD METAL',`E${Math.round(d.material.Fexx/6.894757293)}XX, AWS D1.1`],['CRANE RAIL',`${d.rail.name}; Fy = ${ksi(d.rail.Fy)}`]]:[]),
   ...(p.existingColumn?.enabled&&p.existingColumn.isNew?[['NEW COLUMNS',`ASTM A992${p.existingColumn.shape?` ${p.existingColumn.shape}`:''}, Fy = ${ksi(p.existingColumn.Fy)}`]]:[]),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['BASE PLATES',`ASTM A572 GR. 50, Fy = ${ksi(p.columnBase.plate.Fy)}`],['ANCHOR RODS',`ASTM F1554 GR. ${p.columnBase.anchors.grade.split('-')[1]}, A563 HEAVY HEX NUTS; DG1 HOLES AND PLATE WASHERS`],['CONCRETE / REBAR',`f'c = ${ksi(p.columnBase.concrete.fc)}; ASTM A615 Fy = ${ksi(p.columnBase.footing.fy)}; NON-SHRINK GROUT ASTM C1107`]]:[]),
-  ...(p.longitudinalBracing?.enabled?[['BRACING',p.longitudinalBracing.system==='rod-x'?`RODS Fy = ${ksi(p.longitudinalBracing.rod.Fy)}, Fu = ${ksi(p.longitudinalBracing.rod.Fu)}`:`${p.longitudinalBracing.angle.shape}, Fy = ${ksi(p.longitudinalBracing.angle.Fy)}`]]:[])
+  // Existing bracing is listed as checked, not as material to furnish.
+  ...(p.longitudinalBracing?.enabled?[[p.existingColumn?.isNew?'BRACING':'EXISTING BRACING (CHECKED)',p.longitudinalBracing.system==='rod-x'?`RODS Fy = ${ksi(p.longitudinalBracing.rod.Fy)}, Fu = ${ksi(p.longitudinalBracing.rod.Fu)}`:`${p.longitudinalBracing.angle.shape}, Fy = ${ksi(p.longitudinalBracing.angle.Fy)}`]]:[])
  ],[1.2,2.8]));
- if(d)blocks.push(P(`STEEL: ${d.fabrication.steel}`),P(`BOLTING: ${d.fabrication.bolting}`),P(`WELDING: ${d.fabrication.welding}`));
+ // Numbered under their own heading, so one carried to the next column still reads in context.
+ if(d)blocks.push(H('MATERIAL NOTES'),...N([`STEEL: ${d.fabrication.steel}`,`BOLTING: ${d.fabrication.bolting}`,`WELDING: ${d.fabrication.welding}`]));
  blocks.push(H('SPECIAL INSPECTIONS (IBC 1705.2 / AISC 360 CHAPTER N)'),T(['ITEM','REQUIREMENT'],[
   ['MATERIAL','MILL CERTIFICATES: STEEL, BOLTS, NUTS, WASHERS, WELD FILLER'],
   ['WELDING','OBSERVE / PERFORM PER AISC N5.4; QUALIFIED WPS AND WELDERS'],
@@ -210,9 +217,17 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!d?.bracket?.enabled?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE SUPPORT REACTIONS LISTED${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${len(support.capacity)} MAX.`:'.'}`]:[]),
   ...(p.system==='simple'&&d&&!activeEndBearing(p)?[`COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (${detailRef(detailTitles.movement)}) FOR THE INTERFACE FORCES IN THE CALCULATION REPORT.`]:[]),
-  ...s.checks.filter(c=>c.status==='excluded'&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY OTHERS FOR THE REPORTED FORCES.`)
+  ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`)
  ];
  blocks.push(H('DEFERRED SUBMITTALS / BY OTHERS'),P('SUBMIT THE FOLLOWING TO THE ENGINEER OF RECORD FOR REVIEW AND TO THE BUILDING OFFICIAL FOR APPROVAL BEFORE INSTALLATION:'),...N(deferred));
+ // Structure the calculation does not check is evaluated for the permit; it is not a deferred submittal.
+ const unchecked=unevaluatedStructure(s),isNew=!!p.existingColumn?.isNew,reference=p.drawing?.existingEvaluation?.trim();
+ if(unchecked.length){
+  const checked=[...(p.existingColumn?.enabled?[isNew?'THE NEW RUNWAY COLUMNS':'THE EXISTING RUNWAY COLUMN']:[]),...(p.longitudinalBracing?.enabled?['THE LONGITUDINAL BRACING RODS']:[]),...(usesExistingBracket(p)?['THE REUSED EXISTING BRACKETS']:[])];
+  blocks.push(H(isNew?'STRUCTURE NOT CHECKED HERE · WITH THE PERMIT SUBMITTAL':'EXISTING STRUCTURE EVALUATION · WITH THE PERMIT SUBMITTAL'),
+   P(`${checked.length?`THE CALCULATION REPORT CHECKS ${checked.join(', ').replace(/, ([^,]*)$/,' AND $1')} FOR THE ADDED CRANE LOADS. `:''}THE ENGINEER OF RECORD SHALL EVALUATE THE FOLLOWING FOR THE FORCES IN THE CALCULATION REPORT AND INCLUDE THE EVALUATION IN THE PERMIT SUBMITTAL; THEY ARE NOT DEFERRED SUBMITTALS. EVALUATION: ${reference?reference.toUpperCase():'NOT REFERENCED; THE SET IS NOT ISSUED UNTIL IT IS'}.`),
+   ...N(unchecked.map(c=>c.title.toUpperCase()+'.')));
+ }
  blocks.push(legend(t));
  blocks.push(H('ABBREVIATIONS'),P('(E) EXISTING · (N) NEW · C/L CENTERLINE · EL. ELEVATION · T.O.S. TOP OF STEEL · T.O.R. TOP OF RAIL · TYP. TYPICAL · U.N.O. UNLESS NOTED OTHERWISE · SC SLIP-CRITICAL · STD STANDARD HOLE · SSL / LSL SHORT / LONG SLOT · CJP COMPLETE JOINT PENETRATION · FW FIELD WELD · REF. REFERENCE (EXISTING OR BY OTHERS)'));
  blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} CALCULATION REVISION ${s.revision}.`));

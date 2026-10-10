@@ -5,7 +5,7 @@ import {anchorHardware,columnBaseElevation} from '../engine/columnBaseInputs';
 import {barDiameter} from '../engine/columnBase';
 import {runwayElevations} from '../engine/drawingData';
 import {flangeTieGeometry} from '../engine/tieGeometry';
-import {drawingLength,plateInches} from './drawingFormat';
+import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
@@ -48,14 +48,14 @@ export function newColumnSheetSvg(s:CalculationSnapshot,number='S-08'){return to
 /** New freestanding runway column, its base plate, anchor rods and spread footing, with design data and notes. */
 export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,u=p.units,col=p.existingColumn!,b=p.columnBase!,d=p.details!,br=d.bracket?.enabled?d.bracket:undefined,g=p.section,r=s.columnBase;
- const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'?0:3);return u==='US'?t.toUpperCase():t;};
+ const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'?0:2);return u==='US'?t.toUpperCase():t;};
  const c=existingColumnSection(p).section,name=col.shape||`BUILT-UP ${size(c.d)} X ${size(c.bf)}`;
  const tb=b.plate.thickness,gr=b.grout,ft=b.footing,hf=ft.thickness,a=b.anchors,hw=anchorHardware(a.diameter),row=b.plate.N/2-a.edge;
  const bt=d.bearing.thickness,seat=col.seatElevation,H=col.height,cap=g.kind==='cap'?g.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,rl=d.rail;
  const girderZ=br?c.d/2+br.reach:col.eccentricity,y0=seat+bt,tos=y0+g.d,railZ=girderZ-p.railEccentricity;
  const xs=Array.from({length:a.perRow},(_,i)=>a.perRow>1?-a.gauge/2+i*a.gauge/(a.perRow-1):0);
  const db=barDiameter[ft.bar],ftgTop=-(tb+gr),ftgBot=ftgTop-hf,floor=ftgTop+ft.soil,ext=Math.max(12*inch,ft.L*.12);
- const el=runwayElevations(p),datum=p.drawing?.datumElevation??0,elev=(y:number)=>`EL. ${dim(datum+columnBaseElevation(b)+y)}`;
+ const el=runwayElevations(p),datum=p.drawing?.datumElevation??0,elev=(y:number)=>`EL. ${drawingElevation(datum+columnBaseElevation(b)+y,u)}`;
  const anchorLabel=`${2*a.perRow} - ${size(a.diameter)} DIA. ASTM F1554 GR. ${a.grade.split('-')[1]}`;
  const barLabel=`${ft.bar} @ ${dim(ft.spacing)} E.W. BOTTOM`;
  const tie=flangeTieGeometry(p);
@@ -113,7 +113,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   const girderRight=X(girderZ+(g.kind==='cap'?g.capWidth:g.bf)/2),right=Math.max(girderRight,X(c.d/2+(br?.seatProjection??0)))+8,left=X(zMin)-6;
   // Runway elevations beside the column on the left, clear of the component leaders on the right.
   svg+=elevationMarks([
-   {y:Y(rb+railDepth),label:`T.O.R. ${el?`EL. ${dim(el.tor)}`:''}`},{y:Y(tos),label:`T.O.S. ${el?`EL. ${dim(el.tos)}`:''}`},{y:Y(seat),label:`BRG. SEAT ${el?`EL. ${dim(el.seat)}`:''}`}
+   {y:Y(rb+railDepth),label:`T.O.R. ${el?`EL. ${drawingElevation(el.tor,u)}`:''}`},{y:Y(tos),label:`T.O.S. ${el?`EL. ${drawingElevation(el.tos,u)}`:''}`},{y:Y(seat),label:`BRG. SEAT ${el?`EL. ${drawingElevation(el.seat,u)}`:''}`}
   ],X(-c.d/2)-48,'left',yy=>yy===Y(rb+railDepth)?X(railZ-rl.headWidth/2)-2:X(-c.d/2)-2);
   svg+=elevationMarks([
    {y:Y(0),label:`T/BASE PL ${elev(0)}`},{y:Y(ftgTop),label:`T/FTG ${ft.soil>0?'':'= T/SLAB '}${elev(ftgTop)}`},{y:Y(ftgBot),label:`B/FTG ${elev(ftgBot)}`}
@@ -237,6 +237,8 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ['ANCHOR TENSION / SHEAR (LRFD)',r&&anchorAct?`${force(r.anchors.T)} / ${force(r.anchors.V)} (${anchorAct.id})`:'-'],
    ['SOIL: ALLOWABLE / MAX. SERVICE',r?`${force(b.soil.allowable,'pressure')} / ${force(r.footing.qMax,'pressure')}`:'-'],
    ['RATIOS: PLATE / RODS / SOIL / OVERTURNING / DRIFT',`${ratio('base-plate')} / ${ratio('base-anchor-interaction')} / ${ratio('base-soil')} / ${ratio('base-overturning')} / ${ratio('base-drift')}`],
+   // The drift limit is stated with the drift, as it governs the crane's rail alignment.
+   ...(()=>{const c=s.checks.find(v=>v.id==='base-drift');return c?.demand!==undefined&&c.capacity!==undefined?[['RUNWAY DRIFT AT RAIL / LIMIT',`${dim(c.demand)} / ${dim(c.capacity)} (COLUMN PLUS FOOTING ROTATION, SERVICE CRANE LOADS)`]]:[];})(),
    ...(s.existingColumn?.seismic?[['SEISMIC ACROSS RUNWAY',`SDC ${s.existingColumn.seismic.basis.sdc}, CS ${s.existingColumn.seismic.basis.Cs.toFixed(3)}, QE ${force(s.existingColumn.seismic.QE)} PER COLUMN; BASE FOR ΩO ${s.existingColumn.seismic.basis.Omega0}`]]:[]),
    ['DATA SOURCE',b.source||'NOT ENTERED']
   ];
