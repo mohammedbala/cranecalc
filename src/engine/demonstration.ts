@@ -54,8 +54,9 @@ export function demonstrationProject():ProjectInput {
  // Bolted end bearings: standard holes at each bay's locating left end, long slots at its sliding right end.
  // A 1/2-in sliding allowance keeps the 3/4-in bolt slots within the AISC J3.2 long-slot limit.
  p.details.endBearing={...structuredClone(defaultEndBearing),enabled:true};p.details.simpleSupport={...p.details.simpleSupport!,guideTravel:.5*inch};
- // Girder-mounted end stops inboard of the runway-end tie saddle: both bolt rows clear the saddle and the bearing stiffeners.
- p.details.endStop={...structuredClone(defaultEndStop),enabled:true,bumperHeight:6*inch,bumperDiameter:6*inch,setback:7*inch,railGap:1*inch,base:{length:12*inch,width:9*inch,thickness:1*inch},face:{thickness:1*inch,height:15*inch},stiffener:{thickness:.75*inch,length:9*inch,spacing:3*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.25*inch,edge:1.5*inch},weldSize:.3125*inch,source:'Fictitious supplier data DEMO-CS-01: 20-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'};
+ // Girder-mounted end stops inboard of the runway-end tie saddle: both bolt rows clear the saddle and the bearing
+ // stiffeners, and the bolt heads clear the stop weld toes by the socket clearance.
+ p.details.endStop={...structuredClone(defaultEndStop),enabled:true,bumperHeight:6*inch,bumperDiameter:6*inch,setback:7*inch,railGap:1*inch,base:{length:12*inch,width:10*inch,thickness:1*inch},face:{thickness:1*inch,height:15*inch},stiffener:{thickness:.75*inch,length:9*inch,spacing:3*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:7*inch,frontClear:1.75*inch,edge:1.5*inch},weldSize:.3125*inch,source:'Fictitious supplier data DEMO-CS-01: bumper force, bumper centerline height and contact diameter'};
  p.drawing={originator:'CraneCalc demonstration',checker:'',datumElevation:100*foot,datumLabel:'Reference finished floor',railElevation:20*foot};
  p.details.fatigueDetails[3].name='Bearing stiffener weld toe, support 2';
  for(let bay=1;bay<3;bay++){
@@ -104,7 +105,9 @@ export function cappedDemonstrationProject():ProjectInput {
  // shared and runway-end grids, and both root welds stay on the 14-in receiving flange.
  p.details!.bracket!.ribSpacing=10.5*inch;
  // Lighter stop for the 2-ton crane, inboard of the runway-end tie saddle.
- Object.assign(p.details!.endStop!,{setback:6.75*inch,base:{length:11.5*inch,width:9*inch,thickness:.75*inch},face:{thickness:.75*inch,height:15*inch},stiffener:{thickness:.5*inch,length:8.5*inch,spacing:3*inch},source:'Fictitious supplier data CAP-CS-02: 4-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'});
+ // The 6 1/2 in gauge keeps the bolts on the 9.07 in W flange; 2 3/4 in stiffener centers and the face plate 1 3/4 in
+ // ahead of the front bolts (on a 12 in base plate, so both bolt rows stay put) keep the heads clear of the welds.
+ Object.assign(p.details!.endStop!,{setback:6.75*inch,base:{length:12*inch,width:9*inch,thickness:.75*inch},face:{thickness:.75*inch,height:15*inch},stiffener:{thickness:.5*inch,length:8.5*inch,spacing:2.75*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.75*inch,edge:1.5*inch},source:'Fictitious supplier data CAP-CS-02: bumper force, bumper centerline height and contact diameter'});
  p.details!.end.weldSize=.3125*inch;p.details!.end.gauge=2.5*inch;p.details!.bearing.weldSize=.3125*inch;
  p.details!.rail.clipWidth=6*inch;p.details!.rail.clipThickness=.5*inch;p.details!.rail.clipProjection=.75*inch;p.details!.rail.clipWeld=.3125*inch;
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';

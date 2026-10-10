@@ -2,6 +2,8 @@ import {describe,expect,it} from 'vitest';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 import {endStopChecks,endStopGeometry,stopBumperForce,wrenchClearance} from '../src/engine/endStop';
+import {defaultEndStop} from '../src/engine/endStopInputs';
+import {endStopTopic,endStopSheetSvg} from '../src/components/endStopSheet';
 import {railKeeperStations} from '../src/engine/simpleSupports';
 import {boltCapacity} from '../src/engine/connectionStrength';
 import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
@@ -10,6 +12,15 @@ import {sheetsDxf} from '../src/components/sheetDxf';
 const inch=25.4,kip=4448.2216152605;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
 const demo=calculate(demonstrationProject());
+type Seg=[[number,number],[number,number]];
+const segments=(points:string):Seg[]=>{const p=points.split(' ').map(v=>v.split(',').map(Number) as [number,number]);return p.slice(1).map((q,i)=>[p[i],q]);};
+// Least distance between two segments: zero when they cross or touch.
+function segmentGap([a,b]:Seg,[c,d]:Seg){
+ const o=(p:number[],q:number[],r:number[])=>Math.sign((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]));
+ if(o(a,b,c)*o(a,b,d)<0&&o(c,d,a)*o(c,d,b)<0)return 0;
+ const toSeg=(p:number[],[s,e]:Seg)=>{const dx=e[0]-s[0],dy=e[1]-s[1],L=dx*dx+dy*dy,t=L?Math.max(0,Math.min(1,((p[0]-s[0])*dx+(p[1]-s[1])*dy)/L)):0;return Math.hypot(p[0]-s[0]-t*dx,p[1]-s[1]-t*dy);};
+ return Math.min(toSeg(a,[c,d]),toSeg(b,[c,d]),toSeg(c,[a,b]),toSeg(d,[a,b]));
+}
 
 describe('girder-mounted runway end stops',()=>{
  it('resolves the bumper overturning into front-bolt tension by hand',()=>{
@@ -18,7 +29,7 @@ describe('girder-mounted runway end stops',()=>{
   // LRFD stop combination factor 1.0; contact 6 in rail + 6 in bumper - 1 in base plate.
   expect(g.contact).toBeCloseTo(11*inch,9);
   const lever=g.frontRow-g.back-e.base.thickness,T=20*kip*(g.contact+e.base.thickness)/(2*lever);
-  expect(lever).toBeCloseTo((12.5-.5625-1-1.25-.5-1)*inch,9);
+  expect(lever).toBeCloseTo((12.5-.5625-1-1.75-.5-1)*inch,9);
   expect(checks['end-stop-bolt-tension'].demand).toBeCloseTo(T,3);
   expect(checks['end-stop-bolt-shear'].demand).toBeCloseTo(5*kip,3);
   const bolt=boltCapacity({grade:'A325',diameter:.75*inch,planes:1,surface:'B',shear:5*kip,tension:T,method:'LRFD'});
@@ -43,8 +54,51 @@ describe('girder-mounted runway end stops',()=>{
   e.bolts.frontClear=.75*inch;expect(endStopChecks(p).find(c=>c.id==='end-stop-wrench-face')!.status).toBe('fail');
   expect(wrenchClearance(.75*inch)).toBeCloseTo(1.25*inch,9);expect(wrenchClearance(1*inch)).toBeCloseTo(1.6*inch,9);
   // A stop over the runway-end tie saddle puts its back nuts on the saddle.
-  e.bolts.frontClear=1.25*inch;e.setback=.5*inch;expect(endStopChecks(p).find(c=>c.id==='end-stop-wrench-saddle')!.status).toBe('fail');
+  e.bolts.frontClear=1.75*inch;e.setback=.5*inch;expect(endStopChecks(p).find(c=>c.id==='end-stop-wrench-saddle')!.status).toBe('fail');
   expect(endStopChecks(p).some(c=>c.id==='end-stop-zone')).toBe(false);
+ });
+ it('keeps the bolt heads a socket clearance clear of the stop weld toes',()=>{
+  const p=structuredClone(demo.input),e=p.details!.endStop!,g=endStopGeometry(p,e),w=e.weldSize,C=wrenchClearance(e.bolts.diameter);
+  const ids=['end-stop-wrench-face','end-stop-wrench-stiffener'],check=(id:string)=>endStopChecks(p).find(c=>c.id===id)!;
+  // Clearance runs to the toes of the face plate and stiffener fillets, not to the plate faces.
+  expect(g.toe.face).toBeCloseTo(e.bolts.frontClear-w,9);expect(g.toe.stiffener).toBeCloseTo((e.bolts.gauge-e.stiffener.spacing-e.stiffener.thickness)/2-w,9);
+  for(const id of ids){const c=demo.checks.find(v=>v.id===id)!;expect(c.status,id).toBe('pass');expect(c.demand).toBeCloseTo(C,9);}
+  expect(demo.checks.find(c=>c.id==='end-stop-wrench-face')!.capacity).toBeCloseTo(g.toe.face,9);
+  // 1 3/4 in behind the face plate, 7 in gauge about 3 in stiffener centers: 1 7/16 and 1 5/16 in to the toes.
+  expect(g.toe.face/inch).toBeCloseTo(1.4375,9);expect(g.toe.stiffener/inch).toBeCloseTo(1.3125,9);
+  // The layout the plan check found crowded: 1 1/4 in to the face plate and a 6 1/2 in gauge leave the heads
+  // 15/16 in and 1 1/16 in from the weld toes.
+  e.bolts.frontClear=1.25*inch;e.bolts.gauge=6.5*inch;
+  for(const id of ids)expect(check(id).status,id).toBe('fail');
+  expect(check('end-stop-wrench-face').capacity!/inch).toBeCloseTo(.9375,9);
+  // The default stop and the capped stop pass on their own girders.
+  const capped=cappedDemonstrationProject();for(const id of ids)expect(endStopChecks(capped).find(c=>c.id===id)!.status,id).toBe('pass');
+  const d=structuredClone(demo.input);d.details!.endStop={...defaultEndStop,enabled:true,setback:7*inch,source:'x'};for(const id of ids)expect(endStopChecks(d).find(c=>c.id===id)!.status,id).toBe('pass');
+ });
+ it('draws the heavy hex heads, the face plate clearance and an uncrossed bolt callout on the stop plan',()=>{
+  const t=endStopTopic(demo),[elevation,plan,section]=t.views.map(v=>v.render().svg);
+  // Heads seen from above as hexagons, one per bolt; across corners in elevation and section.
+  expect(plan.match(/<path class="runway-line" d="M[^"]*L[^"]*L[^"]*L[^"]*L[^"]*L[^"]*Z"\/>/g)).toHaveLength(4);
+  expect(texts(plan)).toContain('0\'-1 3/4"');expect(texts(plan).join(' ')).toContain('HEADS ON BASE PL');
+  expect(texts(elevation).join(' ')).toContain('HEADS UP, NUTS BELOW TOP FLANGE');expect(section).toContain('class="hidden-line"');
+  // No callout leader crosses another, and none comes within 3 pt of the section cut marker.
+  const leaders=[...plan.matchAll(/<g data-multileader="component"[^>]*>(.*?)<\/g>/gs)].map(m=>[...m[1].matchAll(/data-leader-path="true" points="([^"]+)"/g)].flatMap(r=>segments(r[1])));
+  const cut=[...(plan.match(/<g data-section-cut="[^"]*">(.*?)<\/g>/s)?.[1]??'').matchAll(/<line[^>]*x1="([^"]+)" y1="([^"]+)" x2="([^"]+)" y2="([^"]+)"/g)].map(m=>[[+m[1],+m[2]],[+m[3],+m[4]]] as Seg);
+  // Bolt, keeper and stiffener weld callouts.
+  expect(leaders.length).toBe(3);expect(cut.length).toBeGreaterThan(0);
+  for(let i=0;i<leaders.length;i++){
+   for(let j=i+1;j<leaders.length;j++)for(const a of leaders[i])for(const b of leaders[j])expect(segmentGap(a,b),`leaders ${i}/${j}`).toBeGreaterThan(3);
+   for(const a of leaders[i])for(const b of cut)expect(segmentGap(a,b),`leader ${i} / cut`).toBeGreaterThan(3);
+  }
+  // The section's gauge dimension text clears the web break below the girder cut.
+  const breaks=[...section.matchAll(/<polyline class="annotation" points="([^"]+)"/g)].map(m=>m[1].split(' ').map(v=>+v.split(',')[1])),gauge=[...section.matchAll(/<text x="[^"]+" y="([^"]+)"[^>]*>0&#39;-7&quot;<\/text>/g)].map(m=>+m[1]);
+  expect(gauge).toHaveLength(1);expect(gauge[0]-6.5-Math.max(...breaks.at(-1)!)).toBeGreaterThan(6);
+ });
+ it('states the stop data without imperial units or false precision on SI sheets',()=>{
+  const si={...demo,input:{...demo.input,units:'SI' as const}},t=endStopTopic(si);
+  const all=[...t.views.map(v=>texts(v.render().svg).join(' | ')),texts(endStopSheetSvg(si)).join(' | ')].join(' | ');
+  expect(all).not.toMatch(/KIP|KSI|\d[ -]IN\b|"|\d+\.\d{2,} kN/);
+  expect(all).toContain('89 kN');expect(texts(endStopSheetSvg(demo)).join(' ')).toContain('1 7/16" / 1 5/16", 1 1/4" MIN.');
  });
  it('requires a stop design whenever a stop force reaches the girder',()=>{
   const p=demonstrationProject();p.details!.endStop!.enabled=false;
@@ -68,7 +122,7 @@ describe('girder-mounted runway end stops',()=>{
   expect(s07.svg).not.toMatch(/\{\{|NOT IN SET|NaN|undefined|data-overflow/);
   for(const view of ['end-stop-elevation','end-stop-plan','end-stop-section','end-stop-notes'])expect(s07.svg).toContain(`data-view="${view}"`);
   const t=texts(s07.svg).join(' | ');
-  expect(t).toContain('4 - 3/4" A325 PRETENSIONED (SC)');expect(t).toContain('PL 1" X 9" X 1\'-3" FACE');expect(t).toContain('20 KIP');
+  expect(t).toContain('4 - 3/4" A325 PRETENSIONED (SC)');expect(t).toContain('PL 1" X 10" X 1\'-3" FACE');expect(t).toContain('20 KIP');
   const s01=texts(set[1].svg).join(' ');expect(s01).toContain(`SEE ${detailReferences(set).get('END STOP / ELEVATION')}`);expect(set[1].svg).toContain('data-end-stop="plan"');
   const cover=texts(set[0].svg).join(' ');expect(cover).toContain('RUNWAY END STOPS');expect(cover).not.toContain('RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE');
   expect(s07.svg).toContain('class="hidden-line"');expect(sheetsDxf([s07],'US')).toContain('S-STEEL-HIDDEN');
