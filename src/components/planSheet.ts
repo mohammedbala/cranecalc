@@ -52,18 +52,25 @@ function paths(segments: Segment[], project: (p: Point) => XY, cls: string) {
  * Typical section across the building at mid-bay, looking back at the frame on a grid: both runways
  * with their girders and rails cut, the columns and brackets beyond. Only the runway band is drawn,
  * the columns broken above the rail and below the bracket, since the building heights are reference
- * geometry; the elevations given are those of the project.
+ * geometry; the elevations given are those of the project. A wide crane span is shortened by a break.
  */
 function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeometry>,top:number,o:{newColumns:boolean;columnName:string}){
   const p=s.input,d=p.details,dim=(meters:number)=>drawingLength(meters*1000,p.units),elevations=runwayElevations(p),box=gaLayout.section;
   const railTop=m.railBase+(p.aist?.railDepth??p.railHeight)/1000,seat=-m.d/2-(d?.bearing.thickness??0)/1000;
-  const vTop=railTop+.45,vBottom=-m.d/2-m.bracketDepth-.45;
+  const vTop=railTop+.3,vBottom=-m.d/2-m.bracketDepth-.3;
+  const uA=-m.columnOffset,uB=m.width+m.columnOffset,uRA=-m.railZ,uRB=m.width+m.railZ;
+  // The crane span is shortened by a break between the runways, so the runways draw at a larger scale;
+  // its dimensions keep their true values.
+  const keep=2.8,gap=.9,span=uRB-uRA-2*keep>1.5?{from:uRA+keep,to:uRB-keep}:undefined,shift=span?span.to-span.from-gap:0;
   // Looking toward -x, grid A is at the left: u = -z.
   const clip=(segments:Segment[])=>segments.flatMap(([a,b]):Segment[]=>{
     let [p0,p1]:XY[]=[[-a[2],a[1]],[-b[2],b[1]]];if(p0[1]>p1[1])[p0,p1]=[p1,p0];
     if(p1[1]<vBottom||p0[1]>vTop)return [];
     const at=(v:number):Point=>{const t=(v-p0[1])/(p1[1]-p0[1]);return [p0[0]+(p1[0]-p0[0])*t,v,0];};
-    return [[p0[1]<vBottom?at(vBottom):[p0[0],p0[1],0],p1[1]>vTop?at(vTop):[p1[0],p1[1],0]]];});
+    const band:Segment=[p0[1]<vBottom?at(vBottom):[p0[0],p0[1],0],p1[1]>vTop?at(vTop):[p1[0],p1[1],0]];
+    if(!span)return [band];
+    const [l,r]=band[0][0]<=band[1][0]?band:[band[1],band[0]],across=(u:number):Point=>{const t=(u-l[0])/(r[0]-l[0]);return [u,l[1]+(r[1]-l[1])*t,0];};
+    return [...(l[0]<span.from?[[l,r[0]>span.from?across(span.from):r] as Segment]:[]),...(r[0]>span.to?[[l[0]<span.to?across(span.to):l,r] as Segment]:[])];});
   // The cut girders hide whatever lies behind them on the grid.
   const half=Math.max(m.bf,p.section.kind==='cap'?p.section.capWidth/1000:0)/2+.002;
   const hidden=([a,b]:Segment)=>[0,m.width].some(u0=>[a,b].every(([u,v])=>Math.abs(u-u0)<=half&&v>=-m.d/2-.002&&v<=m.railBase+.002));
@@ -71,23 +78,30 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   const cut={building:clip(sec.cut.building),runway:clip(sec.cut.runway),rail:clip(sec.cut.rail)};
   const all=[...beyond.building,...beyond.runway,...cut.building,...cut.runway,...cut.rail].flat();
   const uMin=Math.min(...all.map(v=>v[0])),uMax=Math.max(...all.map(v=>v[0]));
-  const height=box.bottom-top-150,scale=drawingScale(Math.min(box.w/(uMax-uMin),height/(vTop-vBottom))/1000,p.units,ga),k=scale.pointsPerMm*1000;
-  const SX=(u:number)=>box.x+box.w/2+(u-(uMin+uMax)/2)*k,SY=(v:number)=>top+40+(vTop-v)*k,project=([u,v]:Point):XY=>[SX(u),SY(v)];
+  const height=box.bottom-top-150,scale=drawingScale(Math.min(box.w/(uMax-uMin-shift),height/(vTop-vBottom))/1000,p.units,ga),k=scale.pointsPerMm*1000;
+  const U=(u:number)=>span&&u>=span.to-1e-9?u-shift:u;
+  const SX=(u:number)=>box.x+box.w/2+(U(u)-(uMin+uMax-shift)/2)*k,SY=(v:number)=>top+40+(vTop-v)*k,project=([u,v]:Point):XY=>[SX(u),SY(v)];
+  // Across the break a dimension line carries a break symbol and its label sits over the break.
+  const xb=span?(SX(span.from)+SX(span.to))/2:0;
+  const spanDim=(x1:number,x2:number,fromY:number,y:number,label:string)=>!span?dimH(x1,x2,fromY,y,label):
+    line([x1,fromY],[x1,y+5])+line([x2,fromY],[x2,y+5])+line([x1,y],[xb-5,y])+breakLine([xb-5,y],[xb+5,y])+line([xb+5,y],[x2,y])
+    +[x1,x2].map(x=>line([x-2.5,y+3],[x+2.5,y-3])).join('')+text(xb,y-9,label,9,'middle');
   let svg=`<g data-view="typical-section">`+paths(beyond.building,project,'reference-line')+paths(beyond.runway,project,'runway-line')
     +paths(cut.building,project,'reference-line')+paths(cut.runway,project,'runway-line')+paths(cut.rail,project,'rail-line');
-  // Break lines where the columns leave the band.
+  // Paired break lines where the crane span is shortened, and where the columns leave the band.
+  if(span)for(const dx of [-3,3])svg+=breakLine([xb+dx,SY(vTop)],[xb+dx,SY(vBottom)]);
   for(const v of [vTop,vBottom]){
     const us=all.filter(q=>Math.abs(q[1]-v)<1e-6).map(q=>q[0]).sort((a,b)=>a-b),groups:number[][]=[];
     for(const u of us){const g=groups.at(-1);if(g&&u-g[g.length-1]<.8)g.push(u);else groups.push([u]);}
     for(const g of groups)svg+=breakLine([SX(g[0])-6,SY(v)],[SX(g[g.length-1])+6,SY(v)]);
   }
-  const uA=-m.columnOffset,uB=m.width+m.columnOffset,uRA=-m.railZ,uRB=m.width+m.railZ,below=SY(vBottom);
+  const below=SY(vBottom);
   for(const [u,label] of [[uA,'A'],[uB,'B']] as const)svg+=line([SX(u),SY(vTop)-34],[SX(u),below+38],'grid-line')+gridBubble(SX(u),below+50,label);
   // Rail centrelines to the crane span and the column grids above the band.
   const dimY=SY(vTop)-18,from=SY(railTop)-4;
   for(const u of [uRA,uRB])svg+=line([SX(u),SY(railTop)+3],[SX(u),from],'grid-line');
-  svg+=dimH(SX(uA),SX(uRA),from,dimY,dim(uRA-uA),'left')+dimH(SX(uRA),SX(uRB),from,dimY,`${dim(uRB-uRA)} CRANE SPAN (RAIL C/L TO C/L)`)+dimH(SX(uRB),SX(uB),from,dimY,dim(uB-uRB),'right');
-  svg+=dimH(SX(uA),SX(uB),below+4,below+24,`${dim(uB-uA)} GRIDS A-B${o.newColumns?'':' (REF.)'}`);
+  svg+=dimH(SX(uA),SX(uRA),from,dimY,dim(uRA-uA),'left')+spanDim(SX(uRA),SX(uRB),from,dimY,`${dim(uRB-uRA)} CRANE SPAN (RAIL C/L TO C/L)`)+dimH(SX(uRB),SX(uB),from,dimY,dim(uB-uRB),'right');
+  svg+=spanDim(SX(uA),SX(uB),below+4,below+24,`${dim(uB-uA)} GRIDS A-B${o.newColumns?'':' (REF.)'}`);
   // Elevations of the project, stacked so close levels never overlap.
   const ex=SX(uMax)+14;
   const target=(y:number,labelY:number,label:string,datum:string)=>`<g data-elevation-datum="${datum}">${line([ex+2,y],[ex+12,y])}<path class="leader-arrow" d="M${n(ex+12)},${n(y)}l-2.4,-2.4h4.8z"/>${line([ex+12,y],[ex+16,labelY])}${line([ex+16,labelY],[ex+20,labelY])}${text(ex+22,labelY+3,label,8.5)}</g>`;

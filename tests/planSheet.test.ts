@@ -95,6 +95,8 @@ describe('ARCH D arrangement sheet', () => {
     expect(section).toContain('CRANE SPAN (RAIL C/L TO C/L)');expect(section).toContain('T.O.R. EL.');expect(section).toContain('BRG. SEAT EL.');
     expect(section).toContain('EXISTING BUILDING COLUMN (REF.)');expect(section).toContain('data-detail-title="TYPICAL RUNWAY SECTION"');
     expect(arrangement.match(/data-section-cut="TYPICAL RUNWAY SECTION"/g)).toHaveLength(2);
+    // The crane span is shortened by a break, so the runways draw at 1/2" = 1'-0".
+    expect(section).toContain('40&#39;-0 1/2&quot; CRANE SPAN');expect(section).toContain('SCALE: 1/2&quot; = 1&#39;-0&quot;');
     expect(arrangement.split('<g data-view="isometric">')[1].split('</g>')[0]).not.toContain('W24X229');
     // The bolted end bearing view replaces the welded cover-plate template.
     // Stiffener, keeper, and the direct flange tie's saddle and column-root field welds.
