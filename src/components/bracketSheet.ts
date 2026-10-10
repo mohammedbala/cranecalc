@@ -1,3 +1,4 @@
+import {heading,numbered,table,noteStack,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,plateInches} from './drawingFormat';
 import {sheetDrawingScale,sheetStart,titleBlock,line,rect,text,dimH,dimV,viewTitle,multiLeader,filletLeader,fieldFilletLeader,wrappedText} from './sheetGraphics';
@@ -56,19 +57,18 @@ export function bracketSheetSvg(s:CalculationSnapshot){
   svg+=viewTitle(318,655,'BRACKET ELEVATION / LOOKING AT COLUMN',scale.label)+'</g>';
  }
  {
-  svg+=text(906,408,'BRACKET FABRICATION & DESIGN NOTES',11,'middle',700);
   const notes=[
    'TWO RECTANGULAR RIBS AND SEAT PLATE. GRAVITY BEARINGS ONLY. NO CREDIT FOR BOLTS, KNEE PLATES OR COMPOSITE RIB/SEAT ACTION.',
-   `PLATES: ${format(d.material.Fy,'stress',p.units).toUpperCase()} MIN. YIELD. WELDS: ${format(d.material.Fexx,'stress',p.units).toUpperCase()} ELECTRODE. CONTINUOUS FILLETS AS SHOWN.`,
+   `PLATES: ${format(d.material.Fy,'stress',p.units)} MIN. YIELD. WELDS: ${format(d.material.Fexx,'stress',p.units)} ELECTRODE. CONTINUOUS FILLETS AS SHOWN.`,
    'SHOP WELD SEAT TO RIBS. FIELD WELD RIB ROOTS TO EXISTING COLUMN AS FLAGGED. PROVIDE ACCESS TO BOTH ROOT WELDS BEFORE PLACING THE RUNWAY; INSPECT STARTS, STOPS AND TOES.',
    'KEEP GIRDER ENDS AND BEARINGS INDEPENDENT. DO NOT WELD THE SLIDING BEARING TO THE GIRDER. LATERAL TIES, LOCATING GUIDES AND HOLD-DOWNS HAVE SEPARATE COLUMN LOAD PATHS.',
-   'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. LOCAL COLUMN CHECKS DO NOT VERIFY THE COMPLETE FRAME, COLUMN AXIAL/BENDING INTERACTION OR FOUNDATIONS.',
+   p.existingColumn?.enabled?'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. THE EXISTING COLUMN IS CHECKED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT; FRAME, ANCHORS AND FOUNDATIONS ARE BY OTHERS.':'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. LOCAL COLUMN CHECKS DO NOT VERIFY THE COMPLETE FRAME, COLUMN AXIAL/BENDING INTERACTION OR FOUNDATIONS.',
    'REACTIONS BELOW ARE CONCURRENT AT THE CASE OF MAXIMUM RIB FORCE AT EACH GRID. DO NOT ADD ALTERNATIVE CASES. RIB FORCE MAY REVERSE UNDER AN OFFSET BEARING.'
-  ];let y=428;
-  for(const [i,n] of notes.entries()){const w=wrappedText(635,y,`${i+1}. ${n}`,111,7.5,10);svg+=w.svg;y+=w.height+6;}
-  const rows=s.detailResults?.bracket?.stations??[];
-  svg+=line([637,y],[1181,y])+text(645,y+14,'GRID / V / LEFT RIB / RIGHT RIB',8,'start',700);y+=28;
-  rows.slice(0,7).forEach((r,i)=>{svg+=text(645,y+i*12,`${i+1}     ${[r.vertical,r.leftRib,r.rightRib].map(v=>format(v,'force',p.units,2)).join('     ')}`,8);});
+  ];
+  const rows=(s.detailResults?.bracket?.stations??[]).map((r,i)=>[String(i+1),...[r.vertical,r.leftRib,r.rightRib].map(v=>format(v,'force',p.units,3))]);
+  svg+='<g data-view="bracket-notes">'+noteStack([
+   (t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,notes),heading(t,'BRACKET REACTIONS / FACTORED, CONCURRENT'),table(t,['GRID','V','LEFT RIB','RIGHT RIB'],rows,[.6,1,1,1])]
+  ],p.units,{x:635,y:396,width:546,height:262})+'</g>';
  }
  return svg+titleBlock(s,'S-05','WELDED COLUMN BRACKETS')+'</svg>';
 }

@@ -18,8 +18,8 @@ it('runs the complete three-bay capped example with no unresolved or failed chec
 });
 it('shows the cap-specific equations and a scaled third attachment sheet',()=>{
  const sheets=drawingSheetSet(s),html=reportHtml(s);
- expect(sheets).toHaveLength(6);expect(sheets[5].svg).toContain('DIRECT FLANGE TIES');expect(sheets[2].svg).toContain('CAP END DEVELOPMENT');
- expect(sheets[2].svg).toContain('SCALE:');expect(sheets[2].svg).toContain('5&#39;-0&quot;');
+ expect(sheets).toHaveLength(7);expect(sheets[0].number).toBe('S-00');expect(sheets[6].svg).toContain('DIRECT FLANGE TIES');expect(sheets[3].svg).toContain('CAP END DEVELOPMENT');
+ expect(sheets[3].svg).toContain('SCALE:');expect(sheets[3].svg).toContain('5&#39;-0&quot;');
  expect(html).toContain('Capped girder properties');expect(html).toContain('Cap attachment strength');
  expect(html).not.toContain('katex-error');expect(html).not.toContain('remains pending');
 });

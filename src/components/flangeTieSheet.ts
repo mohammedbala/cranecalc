@@ -2,7 +2,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {boltProperties} from '../engine/connectionStrength';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetStart,titleBlock,sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,viewTitle,wrappedText} from './sheetGraphics';
+import {sheetStart,titleBlock,sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,viewTitle,wrappedText,detailRef} from './sheetGraphics';
 /** Transverse elevation, projected along the installed bolt axes. */
 export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,compact=false){
  const p=s.input,g=flangeTieGeometry(p)!;if(!g)return '';const b=p.section,t=p.details!.brace,a=g.attachment,c=t.connection;
@@ -28,7 +28,7 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,compact
  const nx=compact?x+190:x+245;
  svg+=multiLeader([[X(g.rootStart+g.rootLength*.4),Y(a.saddleThickness/2)]],[nx,y-35],[`SADDLE PL ${sz(a.saddleThickness)}`,`${dim(a.saddleLength)} LONG X ${dim(g.rootLength)} W`],8);
  svg+=filletLeader([[X(g.rootStart+g.rootLength*.5),Y(a.saddleThickness)]],[nx,y+28],sz(a.weldSize),['GUSSET / SADDLE AND','SADDLE / FLANGE: BOTH SIDES'],true);
- svg+=multiLeader([[X(g.start+t.length*.5),Y(drop+t.width/2)]],[nx,y+88],[`2 FL ${sz(t.thickness)} X ${sz(t.width)}`,`PL ${sz(t.gussetThickness)} CENTRAL GUSSETS`,'COLUMN ROOT FIELD WELDS: S-06'],8);
+ svg+=multiLeader([[X(g.start+t.length*.5),Y(drop+t.width/2)]],[nx,y+88],[`2 FL ${sz(t.thickness)} X ${sz(t.width)}`,`PL ${sz(t.gussetThickness)} CENTRAL GUSSETS`,`COLUMN ROOT FIELD WELDS: ${detailRef('TIE AND STIFFENER LOCATIONS / PLAN')}`],8);
  svg+=text(x-30,y+175,`4 - ${sz(c.diameter)} ${c.grade} EACH END / ${sz(boltProperties(c.grade,c.diameter).hole)} HOLES`,8);
  svg+=text(x-30,y+191,`TOP BAR CLEAR OF CAP BY ${sz(a.clearance)} MIN. / NO CAP HOLES OR CUTS`,8);
  svg+=viewTitle(compact?318:318,y+215,'DIRECT FLANGE TIE / TOP TRANSVERSE SECTION',scale.label)+'</g>';
@@ -57,7 +57,7 @@ export function flangeTieSheetSvg(s:CalculationSnapshot){
  svg+=fieldFilletLeader([[rootX,cy+g.face*k]],[1027,285],sz(t.connection.weldSize),['FIELD WELD TO EXISTING COLUMN','BOTH SIDES / EACH GUSSET'],true);
  svg+=text(cx-20,325,'EXISTING COLUMN / SEPARATE TIES EACH GIRDER',8,'middle');
  svg+=viewTitle(906,351,'TIE AND STIFFENER LOCATIONS / PLAN',scale.label)+'</g>';
- const bs=drawingScale(1.25,p.units),bk=bs.pointsPerMm,bx=200,by=440;
+ const bs=drawingScale(1.25,p.units),bk=bs.pointsPerMm,bx=200,by=462;
  svg+='<g data-view="saddle-longitudinal-section">';
  svg+=rect(bx-a.saddleLength*bk/2-25,by-b.tf*bk,a.saddleLength*bk+50,b.tf*bk,'runway-line');
  svg+=rect(bx-a.saddleLength*bk/2,by,a.saddleLength*bk,a.saddleThickness*bk,'runway-line');

@@ -28,8 +28,8 @@ export function existingColumnEccentricity(p:ProjectInput){
 }
 /** Column flange unbraced length: the bracket's receiving-column value when a bracket is enabled. */
 export function existingColumnUnbracedLength(p:ProjectInput){const b=p.details?.bracket;return b?.enabled?b.receiver.unbracedLength:p.existingColumn!.Lb;}
-/** Rail head elevation above the column base: seat plus girder depth plus rail. */
-export function existingColumnRailElevation(p:ProjectInput){return p.existingColumn!.seatElevation+p.section.d+(p.section.kind==='cap'?p.section.capTw:0)+p.railHeight;}
+/** Rail head elevation above the column base: seat, bearing plate, girder (and cap) and rail; matches runwayElevations. */
+export function existingColumnRailElevation(p:ProjectInput){return p.existingColumn!.seatElevation+(p.details?.bearing.thickness??0)+p.section.d+(p.section.kind==='cap'?p.section.capTw:0)+p.railHeight;}
 
 export function validateExistingColumn(p:ProjectInput):string[]{
  const c=p.existingColumn;if(!c?.enabled)return [];

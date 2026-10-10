@@ -10,8 +10,11 @@ import { defaultFraming, framingSchema, type FramingSettings } from './framingSe
 import { planSheetGeometry, type Point, type Segment } from './planSheetGeometry';
 import { drawingLength } from './drawingFormat';
 import { sheetDrawingScale as drawingScale, n, text, rect, line, bubble, dimH, dimV, leader, short, titleBlock, sheetStart, wrappedText, viewTitle, type XY } from './sheetGraphics';
-import { structuralGeneralNotes } from './structuralNotes';
+import { heading, table, numbered, noteStack, type Style } from './noteBlocks';
+import { sheetOrdinalToken, detailNumberToken, sheetNumberToken } from './sheetGraphics';
+import { runwayElevations, girderMarks } from '../engine/drawingData';
 import { connectionSheetSvg } from './connectionSheet';
+import { coverSheetSvg } from './coverSheet';
 export { planSheetGeometry } from './planSheetGeometry';
 export { connectionSheetSvg } from './connectionSheet';
 
@@ -33,7 +36,7 @@ function paths(segments: Segment[], project: (p: Point) => XY, cls: string) {
 export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings = defaultFraming): string {
   const p=s.input,f=framingSchema.parse(settings),m=planSheetGeometry(p,f),dim=(meters:number)=>drawingLength(meters*1000,p.units);
   const rows=[m.columnOffset,-m.width-m.columnOffset],floor=m.floor,datum=p.drawing?.datumElevation??0;
-  const tos=datum+(m.d/2-floor)*1000,datumLabel=p.drawing?.datumLabel??'Reference floor';
+  const elevations=runwayElevations(p),datumLabel=p.drawing?.datumLabel??'Reference floor';
   const gridSegments:Segment[]=[...m.supports.map(x=>[[x,floor,rows[1]-.9],[x,floor,rows[0]+.9]] as Segment),...rows.map(z=>[[-m.length/2-2.4,floor,z],[m.length/2+.9,floor,z]] as Segment)];
   const isoFit=fit([...m.referenceLines,...m.runwayLines,...gridSegments],([x,y,z])=>[(x-z)*Math.sqrt(3)/2,(x+z)/2-y],{x:52,y:110,w:628,h:263},p.units),iso=isoFit.project;
   let svg=sheetStart(s,'S-01','CRANE RUNWAY / GENERAL ARRANGEMENT');
@@ -42,8 +45,8 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   svg+=paths(gridSegments,iso,'grid-line')+paths(m.referenceLines,iso,'reference-line')+paths(m.runwayLines,iso,'runway-line');
   m.supports.forEach((x,i)=>{const a=iso([x,floor,rows[0]+.9]);svg+=bubble(a[0],a[1],String(i+1));});
   rows.forEach((z,i)=>{const a=iso([-m.length/2-2.4,floor,z]);svg+=bubble(a[0],a[1],i?'B':'A');});
-  const memberSpans=p.system==='continuous'?[m.length]:p.spans.map(v=>v/1000);
-  svg+=viewTitle(371,391,'ISOMETRIC VIEW',isoFit.label)+'</g>';
+  const marks=girderMarks(p),mid=(g:typeof marks[number])=>(g.start+g.end)/2000-m.length/2;
+  svg+=viewTitle(371,391,'ISOMETRIC VIEW','NOT TO SCALE')+'</g>';
 
   const planScale=drawingScale(Math.min(343/(m.length+m.column.bf),230/(m.width+2*m.columnOffset+m.column.d))/1000,p.units),k=planScale.pointsPerMm*1000;
   const X=(x:number)=>939+x*k,Y=(z:number)=>230+(z+m.width/2)*k;
@@ -62,14 +65,14 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     for(const member of m.members)svg+=rect(X(member.start/1000-m.length/2),Y(z-m.bf/2),(member.end-member.start)/1000*k,m.bf*k,'runway-line');
     const rz=z+(side?-m.railZ:m.railZ),head=(p.details?.rail.headWidth??65)/1000;
     svg+=rect(left,Y(rz-head/2),m.length*k,head*k,'rail-line');
-    let x=-m.length/2;
-    memberSpans.forEach((l)=>{if(!side)svg+=text(X(x+l/2),Y(z)-10,p.section.name,7.6,'middle',700);x+=l;});
-    if(side)svg+=text(X(0),Y(z)-12,'RUNWAY (REF.)',8,'middle',700);
+    // Labels sit inboard of each runway, clear of the grid line outboard.
+    const [markY,nameY]=side?[Y(z)+15,Y(z)+24]:[Y(z)-19,Y(z)-10];
+    for(const g of marks)svg+=`<g data-girder-mark="${g.mark}">${text(X(mid(g)),markY,g.mark,8.5,'middle',700)}${text(X(mid(g)),nameY,p.section.name,7.2,'middle')}</g>`;
 
   }
   svg+=dimH(left,right,Y(rows[0])+19,363,`${dim(m.length)} OVERALL`);
   svg+=dimV(Y(rows[1]),Y(rows[0]),right+13,1159,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
-  svg+=text(939,377,`RAIL C/L SPACING: ${dim(m.width+2*m.railZ)} (REF.)`,8,'middle');
+  svg+=text(939,377,`RAIL C/L SPACING (CRANE SPAN): ${dim(m.width+2*m.railZ)}${p.details?'':' (REF.)'}`,8,'middle');
   svg+=viewTitle(959,393,'RUNWAY PLAN',planScale.label)+'</g>';
 
   const elevationScale=drawingScale(Math.min(440/m.length,55/(m.d+(p.aist?.railDepth??p.railHeight)/1000))/1000,p.units),ek=elevationScale.pointsPerMm*1000;
@@ -92,26 +95,71 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   }
   const railDepth=(p.aist?.railDepth??p.railHeight)/1000;
   svg+=rect(el,EY(m.railBase+railDepth),m.length*ek,railDepth*ek,'rail-line');
-  let x=-m.length/2;
-  memberSpans.forEach((l,i)=>{svg+=text(EX(x+l/2),bottom+17,p.section.name,9,'middle',700);x+=l;});
-  svg+=`<g data-elevation-datum="top-of-steel">${line([er,top],[er+13,top])}${text(er+17,top+3,`T.O.S. EL. ${drawingLength(tos,p.units)}`,8.5)}</g>`;
+  for(const g of marks)svg+=text(EX(mid(g)),top-14,g.mark,9,'middle',700)+text(EX(mid(g)),bottom+17,p.section.name,9,'middle',700);
+  const railTop=EY(m.railBase+railDepth);
+  // Elevation targets: the T.O.R. label rises and the T.O.S. label drops so close elevations never overlap.
+  const target=(y:number,labelY:number,label:string,datum:string)=>`<g data-elevation-datum="${datum}">${line([er+2,y],[er+12,y])}<path class="leader-arrow" d="M${n(er+12)},${n(y)}l-2.4,-2.4h4.8z"/>${line([er+12,y],[er+16,labelY])}${line([er+16,labelY],[er+20,labelY])}${text(er+22,labelY+3,label,8.5)}</g>`;
+  const torY=Math.min(railTop,top-9),tosY=Math.max(top,railTop+9);
+  svg+=target(top,tosY,elevations?`T.O.S. EL. ${drawingLength(elevations.tos,p.units)}`:'T.O.S. EL. NOT ENTERED','top-of-steel');
+  svg+=target(railTop,torY,elevations?`T.O.R. EL. ${drawingLength(elevations.tor,p.units)}`:'T.O.R. EL. NOT ENTERED','top-of-rail');
   svg+=dimH(el,er,612,629,`${dim(m.length)} OVERALL`);
-  svg+=text(40,640,`DATUM EL. ${drawingLength(datum,p.units)} = ${short(datumLabel,70)}. T.O.S. = top of W steel${p.section.kind==='cap'?'; CAP ABOVE T.O.S. / SEE S-03':''}.`,8.5);
+  svg+=text(40,640,`DATUM EL. ${drawingLength(datum,p.units)} = ${short(datumLabel.toUpperCase(),60)}. T.O.S. = TOP OF W STEEL${p.section.kind==='cap'?'; CAP ABOVE T.O.S. / SEE S-03':''}. ELEVATIONS FROM ${elevations?elevations.source.toUpperCase():'PROJECT DATA (NOT ENTERED)'}.`,8.5);
   svg+=viewTitle(371,654,'RUNWAY GIRDER ELEVATION - GRID A',elevationScale.label)+'</g>';
 
-  svg+=`<g data-view="structural-general-notes">${text(959,442,'STRUCTURAL GENERAL NOTES',12,'middle',700)}`;
-  let ny=460;
-  structuralGeneralNotes(s).forEach((note,i)=>{
-    const wrapped=wrappedText(735,ny,`${i+1}. ${note}`,102,7.5,9.4);
-    svg+=wrapped.svg;ny+=wrapped.height+4;
-  });
-  svg+='</g>';
+  svg+=`<g data-view="girder-schedule">`+girderSchedule(s,735,432,455,232)+'</g>';
   return svg+titleBlock(s,'S-01','GENERAL ARRANGEMENT')+'</svg>';
 }
 
-export function drawingSheetSet(s:CalculationSnapshot,f:FramingSettings=defaultFraming){
-  if(connectionOptionChecks(s.input).length)return [{number:'S-02',name:'reference-connection-arrangements-arch-d',svg:connectionConceptSheetSvg(s)}];
-  return [{number:'S-01',name:'runway-plan-sheet-arch-d',svg:planSheetSvg(s,f)},{number:'S-02',name:'runway-connections-sheet-arch-d',svg:connectionSheetSvg(s,f)},...(s.input.section.kind==='cap'&&s.input.capDesign&&s.input.details?[{number:'S-03',name:'runway-cap-attachment-sheet-arch-d',svg:capSheetSvg(s)}]:[]),...(s.input.system==='simple'&&s.input.details?[{number:'S-04',name:'runway-independent-supports-sheet-arch-d',svg:simpleSupportSheetSvg(s,f)}]:[]),...(s.input.details?.bracket?.enabled?[{number:'S-05',name:usesExistingBracket(s.input)?'runway-existing-brackets-sheet-arch-d':'runway-welded-brackets-sheet-arch-d',svg:bracketSheetSvg(s)}]:[]),...(s.input.details?.brace.flangeAttachment?.enabled?[{number:'S-06',name:'runway-flange-ties-sheet-arch-d',svg:flangeTieSheetSvg(s)}]:[])];
+/** Girder schedule and sheet notes; the general notes are on S-00. */
+function girderSchedule(s:CalculationSnapshot,x:number,y:number,width:number,height:number){
+  const p=s.input,u=p.units,len=(mm:number)=>drawingLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
+  const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
+  const ends=!d?'SEE S-02':p.system==='continuous'?'BEARS ON EACH SUPPORT; SEE S-02':'LEFT END LOCATES, RIGHT END SLIDES; SEE S-04';
+  const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
+    return [mark,String(all.length*2),`${p.section.name}${p.section.kind==='cap'?' (CAP: SEE S-03)':''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE',ends];});
+  const notes=[
+    'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
+    'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
+    'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
+    `SET RAIL C/L SPACING (CRANE SPAN) TO ${d?len(d.criteria.railGauge):'THE CRANE MANUFACTURER\'S GAUGE'}; RAIL C/L IS ${len(Math.abs(p.railEccentricity))} FROM THE GIRDER WEB C/L${p.railEccentricity?p.railEccentricity>0?', OUTBOARD TOWARD THE SUPPORTING COLUMNS':', INBOARD TOWARD THE CRANE':''}.`,
+    p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE S-04.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.'
+  ];
+  return noteStack([(t:Style)=>[heading(t,'RUNWAY GIRDER SCHEDULE'),table(t,['MARK','QTY','SECTION','LENGTH','GRIDS','CAMBER','ENDS'],rows,[.55,.45,1.6,.8,.75,.65,1.9]),heading(t,'SHEET NOTES'),...numbered(t,notes)]],u,{x,y,width,height});
+}
+
+export interface DrawingSheet {number:string;name:string;title:string;svg:string;}
+export function drawingSheetSet(s:CalculationSnapshot,f:FramingSettings=defaultFraming):DrawingSheet[]{
+  return resolveSheetSet(sheetPlan(s,f).map(sheet=>({number:sheet.number,name:sheet.name,title:sheet.title,svg:sheet.render()})));
+}
+/** Sheet numbers and titles of the set without drawing it. */
+export function sheetIndex(s:CalculationSnapshot,f:FramingSettings=defaultFraming){return sheetPlan(s,f).map(({number,name,title})=>({number,name,title}));}
+/**
+ * Fill each title block's "N OF M", number the details on each sheet in
+ * drawing order, then resolve detail references by title to "n/S-xx".
+ */
+export function resolveSheetSet(sheets:DrawingSheet[]):DrawingSheet[]{
+  const details=new Map<string,string>();
+  const numbered=sheets.map((sheet,i)=>{
+    let k=0,svg=sheet.svg.replace(sheetOrdinalToken,`${i+1} OF ${sheets.length}`);
+    svg=svg.replace(/<g data-view-title="below" data-detail-title="([^"]*)">([\s\S]*?)<\/g>/g,(all,title:string)=>{k++;const key=unescape(title);if(!details.has(key))details.set(key,`${k}/${sheet.number}`);return all.replace(detailNumberToken,String(k)).replace(sheetNumberToken,sheet.number);});
+    return {...sheet,svg};
+  });
+  return numbered.map(sheet=>({...sheet,svg:sheet.svg.replace(/\{\{REF:([^}]*)\}\}/g,(_,title:string)=>details.get(unescape(title))??`${title} (NOT IN SET)`)}));
+}
+const unescape=(v:string)=>v.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+/** The issued set: cover S-00 with general notes, criteria and sheet index, then the details that apply. */
+function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
+  const p=s.input,d=p.details;
+  // A reference-only arrangement is not an issued package, so it has no cover sheet.
+  if(connectionOptionChecks(p).length)return [{number:'S-02',name:'reference-connection-arrangements-arch-d',title:'CONNECTION ARRANGEMENTS / REFERENCE ONLY',render:()=>connectionConceptSheetSvg(s)}];
+  const sheets=[
+    {number:'S-01',name:'runway-plan-sheet-arch-d',title:'GENERAL ARRANGEMENT',render:()=>planSheetSvg(s,f)},
+    {number:'S-02',name:'runway-connections-sheet-arch-d',title:'BRACKETS & CONNECTIONS',render:()=>connectionSheetSvg(s,f)},
+    ...(p.section.kind==='cap'&&p.capDesign&&d?[{number:'S-03',name:'runway-cap-attachment-sheet-arch-d',title:'CAP CHANNEL & WELD DEVELOPMENT',render:()=>capSheetSvg(s)}]:[]),
+    ...(p.system==='simple'&&d?[{number:'S-04',name:'runway-independent-supports-sheet-arch-d',title:'INDEPENDENT GIRDER SUPPORTS',render:()=>simpleSupportSheetSvg(s,f)}]:[]),
+    ...(d?.bracket?.enabled?[{number:'S-05',name:usesExistingBracket(p)?'runway-existing-brackets-sheet-arch-d':'runway-welded-brackets-sheet-arch-d',title:usesExistingBracket(p)?'EXISTING BRACKETS / NEW BOLTED SEATS':'WELDED COLUMN BRACKETS',render:()=>bracketSheetSvg(s)}]:[]),
+    ...(d?.brace.flangeAttachment?.enabled?[{number:'S-06',name:'runway-flange-ties-sheet-arch-d',title:'DIRECT FLANGE TIES',render:()=>flangeTieSheetSvg(s)}]:[])];
+  return [{number:'S-00',name:'cover-general-notes-sheet-arch-d',title:'COVER, GENERAL NOTES & DESIGN CRITERIA',render:()=>coverSheetSvg(s,sheets)},...sheets];
 }
 export function appendPlanSheet(html:string,s:CalculationSnapshot,f:FramingSettings=defaultFraming){
   const css='<style>@page runwayArrangement{size:36in 24in;margin:0}.runway-plan-sheet-page{page:runwayArrangement;break-before:page;break-after:auto;width:36in;height:24in;margin:0;padding:0;line-height:0}.runway-plan-sheet-page svg{display:block;width:36in;height:24in}</style>';

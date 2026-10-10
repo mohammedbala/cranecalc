@@ -1,15 +1,13 @@
-import {flangeTieSheetSvg} from './flangeTieSheet';
 import {connectionOptionChecks} from '../engine/connectionOptions';
 import {connectionConceptSheetSvg} from './connectionConceptSheet';
-import {bracketSheetSvg} from './bracketSheet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize, Minus, Plus } from 'lucide-react';
 import type { CalculationSnapshot } from '../engine/types';
 import { drawingSvg, engineeringSketches } from './drafting';
-import { planSheetSvg, connectionSheetSvg } from './planSheet';
-import {simpleSupportSheetSvg} from './simpleSupportSheet';
-import { capSheetSvg } from './capSheet';
+import { drawingSheetSet, sheetIndex } from './planSheet';
 import { defaultFraming, type FramingSettings } from './framingSettings';
+
+const sheetLabel=(title:string)=>title.split(/[,/&]/)[0].trim().toLowerCase().replace(/^./,c=>c.toUpperCase());
 
 export default function DraftingViewer({ snapshot, framing=defaultFraming }: { snapshot: CalculationSnapshot; framing?:FramingSettings }) {
   const referenceOnly=connectionOptionChecks(snapshot.input).length>0;
@@ -17,11 +15,10 @@ export default function DraftingViewer({ snapshot, framing=defaultFraming }: { s
   const [name, setName] = useState('runway-elevation'), [mode, setMode] = useState<'CAD'|'Paper'>('CAD');
   const [zoom, setZoom] = useState(1), [pan, setPan] = useState({ x: 0, y: 0 });
   const drag = useRef<{ x: number; y: number; px: number; py: number }|null>(null);
-  const hasCap=!!(snapshot.input.section.kind==='cap'&&snapshot.input.capDesign&&snapshot.input.details);
-  const hasSimple=snapshot.input.system==='simple'&&!!snapshot.input.details;
-  const hasFlangeTies=!!snapshot.input.details?.brace.flangeAttachment?.enabled;
-  const sheet=(name==='flange-ties-sheet'&&hasFlangeTies)||(name==='bracket-sheet'&&!!snapshot.input.details?.bracket?.enabled)||(name==='supports-sheet'&&hasSimple)||name==='arrangement-sheet'||name==='connections-sheet'||(name==='cap-sheet'&&hasCap);
-  const sheetSvg=useMemo(()=>!referenceOnly&&drawings.length&&sheet?(name==='flange-ties-sheet'?flangeTieSheetSvg(snapshot):name==='bracket-sheet'?bracketSheetSvg(snapshot):name==='supports-sheet'?simpleSupportSheetSvg(snapshot,framing):name==='cap-sheet'?capSheetSvg(snapshot):name==='connections-sheet'?connectionSheetSvg(snapshot,framing):planSheetSvg(snapshot,framing)):'', [snapshot,framing,sheet,name,drawings.length,referenceOnly]);
+  // Sheets come from the assembled set so detail numbers, references and "N OF M" match the issued package.
+  const sheets=useMemo(()=>referenceOnly?[]:sheetIndex(snapshot,framing),[snapshot,framing,referenceOnly]);
+  const sheet=sheets.some(v=>v.number===name);
+  const sheetSvg=useMemo(()=>sheet&&drawings.length?drawingSheetSet(snapshot,framing).find(v=>v.number===name)?.svg??'':'',[snapshot,framing,sheet,name,drawings.length]);
   const referenceSvg=useMemo(()=>referenceOnly?connectionConceptSheetSvg(snapshot):'',[snapshot,referenceOnly]);
   const drawing = drawings.find(d => d.name === name) ?? drawings[0];
   const reset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
@@ -30,7 +27,7 @@ export default function DraftingViewer({ snapshot, framing=defaultFraming }: { s
   return <section className="drafting-viewer" aria-label="2D engineering sketch viewer">
     <div className="drafting-toolbar">
       <div className="drafting-views">{drawings.map(d=>[d.name,d.number]).map(([key,label]) =>
-        <button key={key} aria-pressed={name === key} className={name === key ? 'selected' : ''} onClick={() => setName(key)}>{label}</button>)}<button aria-pressed={name==='arrangement-sheet'} className={name==='arrangement-sheet'?'selected':''} onClick={()=>{setName('arrangement-sheet');setMode('Paper');}}>S-01 · ARCH D</button><button aria-pressed={name==='connections-sheet'} className={name==='connections-sheet'?'selected':''} onClick={()=>{setName('connections-sheet');setMode('Paper');}}>S-02 · Connections</button>{hasCap&&<button aria-pressed={name==='cap-sheet'} className={name==='cap-sheet'?'selected':''} onClick={()=>{setName('cap-sheet');setMode('Paper');}}>S-03 · Cap attachment</button>}{hasSimple&&<button aria-pressed={name==='supports-sheet'} className={name==='supports-sheet'?'selected':''} onClick={()=>{setName('supports-sheet');setMode('Paper');}}>S-04 · Independent supports</button>}{snapshot.input.details?.bracket?.enabled&&<button aria-pressed={name==='bracket-sheet'} onClick={()=>{setName('bracket-sheet');setMode('Paper');}}>S-05 · Bracket supports</button>}{hasFlangeTies&&<button aria-pressed={name==='flange-ties-sheet'} onClick={()=>{setName('flange-ties-sheet');setMode('Paper');}}>S-06 · Flange ties</button>}</div>
+        <button key={key} aria-pressed={name === key} className={name === key ? 'selected' : ''} onClick={() => setName(key)}>{label}</button>)}{sheets.map(v=><button key={v.number} aria-pressed={name===v.number} className={name===v.number?'selected':''} title={v.title} onClick={()=>{setName(v.number);setMode('Paper');}}>{v.number} · {sheetLabel(v.title)}</button>)}</div>
       <div className="drafting-modes">{(['CAD','Paper'] as const).map(value => <button key={value} aria-label={`${value} drawing view`} aria-pressed={mode === value} className={mode === value ? 'selected' : ''} onClick={() => setMode(value)}>{value}</button>)}</div>
       <div className="drafting-actions"><button aria-label="Zoom out sketch" disabled={zoom <= 1} onClick={() => { if (zoom <= 1.25) reset(); else setZoom(zoom / 1.25); }}><Minus size={14}/></button><span>{Math.round(zoom * 100)}%</span><button aria-label="Zoom in sketch" disabled={zoom >= 4} onClick={() => setZoom(Math.min(4, zoom * 1.25))}><Plus size={14}/></button><button aria-label="Fit sketch" onClick={reset}><Maximize size={14}/></button></div>
     </div>

@@ -54,7 +54,7 @@ export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defau
    weldPts.push([cx+sign*b.tw/2000*k,y+h*.76]);
   }
   svg+=rect(cx-pw/2,bottom,pw,pt,'runway-line');
-  svg+=multiLeader([[cx-m.bf*k/2+8,top]],[43,112],[b.name+' RUNWAY GIRDER']);
+  svg+=multiLeader([[cx-m.bf*k/2+8,top]],[43,86],[b.name+' RUNWAY GIRDER']);
   svg+=dimV(top,bottom,cx-m.bf*k/2,87,dim(b.d));
   svg+=multiLeader([[inner+C(110),110]],[355,100],[colName+' (REF.)']);
   svg+=multiLeader(stiffPts,[355,165],[`2 PL ${size(d.bearing.stiffenerThickness)} X ${size(d.bearing.stiffenerWidth)}`,`FULL-DEPTH FITTED BEARING STIFFENERS`,`${size(d.bearing.cope)} WEB-SIDE CORNER COPES`],8,stiffPts.map(()=>[[215,160]]));
@@ -154,16 +154,26 @@ export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defau
   svg+=multiLeader([[x+b.bf*k/2,wTop+b.tf*k]],[957,601],[b.name+' RUNWAY GIRDER',capped?'CAP ATTACHMENT: SEE S-03':'PARTIAL SECTION SHOWN']);
   // Longitudinal inset dimensions the out-of-plane keeper spacing at its own
   // stated physical scale, rather than putting a spacing note on a section.
-  const spacing=p.aist!.clipSpacing,ss=drawingScale(Math.min(.36,230/(spacing+r.clipWidth)),p.units),sk=ss.pointsPerMm;
-  const a=774-spacing*sk/2,z=774+spacing*sk/2,sy=594;
+  const spacing=p.aist!.clipSpacing,ss=drawingScale(Math.min(.36,150/(spacing+r.clipWidth)),p.units),sk=ss.pointsPerMm;
+  const a=705-spacing*sk/2,z=705+spacing*sk/2,sy=594;
   svg+=line([a-r.clipWidth*sk/2-6,sy],[z+r.clipWidth*sk/2+6,sy],'runway-line');
   for(const center of [a,z]){
    svg+=rect(center-r.clipWidth*sk/2,sy-r.clipThickness*sk,r.clipWidth*sk,r.clipThickness*sk,'runway-line');
    svg+=line([center,sy-17],[center,sy+3],'grid-line');
   }
   svg+=dimH(a,z,sy-r.clipThickness*sk,sy-28,`${dim(spacing)} MAX.`);
-  svg+=text(774,615,'KEEPER SPACING / LONGITUDINAL VIEW',8,'middle',700)+text(774,627,ss.label,7.5,'middle');
-  svg+=text(958,629,'RAIL JOINT: SEE SK-07.',8);
+  svg+=text(705,612,'KEEPER SPACING / LONGITUDINAL VIEW',7.5,'middle',700)+text(705,622,ss.label,7,'middle');
+  // Bolted rail joint: joint bars each side of the web, slots along the rail for thermal movement.
+  const bar=2*(2*r.jointEdge+r.jointPitch)+r.jointGap,js=drawingScale(Math.min(.36,140/bar,34/depth),p.units),jk=js.pointsPerMm,hole=boltProperties('A325',r.jointBoltDiameter).hole;
+  const jc=858,top=600-depth*jk,jl=jc-bar*jk/2,web=top+(r.headThickness+(depth-r.headThickness-r.baseThickness-r.jointPlateHeight)/2)*jk;
+  svg+='<g data-view="rail-joint">';
+  for(const side of [-1,1]){const end=jc+side*r.jointGap*jk/2,far=jc+side*(bar/2*jk+10);
+   svg+=line([end,top],[end,600],'rail-line')+line([end,top],[far,top],'rail-line')+line([end,top+r.headThickness*jk],[far,top+r.headThickness*jk],'rail-line')+line([end,600-r.baseThickness*jk],[far,600-r.baseThickness*jk],'rail-line')+line([end,600],[far,600],'rail-line');}
+  svg+=rect(jl,web,bar*jk,r.jointPlateHeight*jk,'runway-line');
+  for(const at of [r.jointEdge,r.jointEdge+r.jointPitch,bar-r.jointEdge-r.jointPitch,bar-r.jointEdge])svg+=rect(jl+(at-.75*r.jointBoltDiameter)*jk,web+(r.jointPlateHeight-hole)*jk/2,1.5*r.jointBoltDiameter*jk,hole*jk,'reference-line')+circle(jl+at*jk,web+r.jointPlateHeight*jk/2,r.jointBoltDiameter*jk/2,'runway-line');
+  svg+=dimH(jl,jl+bar*jk,web,top-8,dim(bar));
+  svg+=text(jc,612,'RAIL JOINT / ELEVATION',7.5,'middle',700)+text(jc,622,js.label,7,'middle');
+  svg+=text(jc,632,`2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)}; 4 - ${size(r.jointBoltDiameter)} A325 SNUG-TIGHT`,6.2,'middle')+text(jc,640,`SLOTS ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG RAIL; GAP ${size(r.jointGap)}`,6.2,'middle')+'</g>';
   svg+=viewTitle(906,658,'RAIL KEEPER / GIRDER ATTACHMENT',scale.label)+'</g>';
  }
  return svg+titleBlock(s,'S-02','BRACKETS & CONNECTIONS')+'</svg>';
