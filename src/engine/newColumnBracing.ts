@@ -111,6 +111,11 @@ export const strutProperties=(p:ProjectInput)=>sectionProperties(strutSection(p)
  * through a gusset proportioned by AISC D5.2: width 2beff + dh, extension 1.33beff beyond the hole. The pin clears
  * the column flange tips and the strut (and the base plate) by a clevis envelope of 1.5 pin diameters. The strut
  * stops 1/2 in outside the flange tips, its flanges coped back so its web laps the gusset with two bolts in line.
+ *
+ * Rod crossing: in each braced span rod A (upper end at the lower-numbered column) is on the column centerline and
+ * rod B (upper end at the higher-numbered column) in a parallel plane offset toward the girder, so the rods pass
+ * at mid-bay at least 1/4 in clear. The strut web lies between the two upper gussets: on the girder face of rod A's
+ * and the other face of rod B's, with a filler where the web alone does not give the offset.
  */
 export function bracingGeometry(p:ProjectInput,column:Section){
  const b=p.longitudinalBracing!,d=bracingDesign(p),L=bracingLayout(p),{cos,sin}=L,base=p.columnBase!;
@@ -120,7 +125,9 @@ export function bracingGeometry(p:ProjectInput,column:Section){
  const bolts=[strutEnd+edge,strutEnd+edge+pitch],tabEnd=bolts[1]+edge,cope=tabEnd-strutEnd+inch/2,half=Math.max(edge,Math.floor((sd/2-sk)/(inch/4))*inch/4);
  const top=up(Math.max((column.bf/2+clevis)/cos,(sd/2+inch/4+clevis)/sin)),bottom=up(Math.max((column.bf/2+clevis)/cos,(clevis+inch/2)/sin));
  const x0=column.tw/2,plateEdge=base.plate.B/2-inch/2;
+ const need=b.rod.diameter+inch/4-(t+stw),filler=need>1e-9?up(need,inch/16):0,offset=t+stw+filler;
  return {t,dp,dh,beff,width,end,a:end-dh/2,clevis,rod:b.rod.diameter,cos,sin,
+  cross:{offset,filler,clear:offset-b.rod.diameter},
   strut:{shape:d.strut.shape,d:sd,bf:sbf,tf:stf,tw:stw,kdes:sk,end:strutEnd,cope,bolts,tabEnd,half,edge,pitch,bolt,lap:(t+stw)/2},
   top:{s:top,pin:[top*cos,-top*sin] as [number,number]},bottom:{s:bottom,pin:[bottom*cos,bottom*sin] as [number,number]},x0,plateEdge};
 }
@@ -153,6 +160,11 @@ export function gussetOutlines(g:ReturnType<typeof bracingGeometry>,topWeld:numb
  return {upper,lower,tab,welds:{upper:{from:webLow,to:webTop},lower:{web:Math.max(...lower.filter(onWeb).map(q=>q[1])),plate:Math.max(...lower.filter(q=>Math.abs(q[1])<1e-6).map(q=>q[0]))}}};
 }
 
+/**
+ * Columns where the offset rod B ends, as station indexes from 0: its top at the higher-numbered column of each
+ * braced span, its base at the lower-numbered one. Its force there acts `offset` from the column centerline.
+ */
+export function offsetRodEnds(p:ProjectInput){const spans=bracingLayout(p).spans;return {top:(j:number)=>spans.includes(j),base:(j:number)=>spans.includes(j+1)};}
 /** Elastic in-plane weld group of straight lines (both faces of the gusset): peak resultant per unit length of all lines at their ends. */
 function weldGroup(lines:[Pt,Pt][],force:Pt,at:Pt){
  const length=(l:[Pt,Pt])=>Math.hypot(l[1][0]-l[0][0],l[1][1]-l[0][1]),total=lines.reduce((a,l)=>a+length(l),0);
@@ -172,6 +184,8 @@ export interface BracingSystemResult {
  welds:{top:number;base:number};
  seismic?:AlongSeismic&{drift:number;driftLimit:number;elastic:number};
  separation?:{across:number;along:number;building:number;buildingEntered:boolean;required:number};
+ /** Torque from the offset rod at the top of the column where it ends, and the column torsion ratio with it added to the governing case. */
+ rodTorsion?:{T:number;U:number;base:number};
 }
 /** Connections, strut, seat weld, seismic drift and separation of the designed bracing. */
 export function bracingSystemAnalysis(p:ProjectInput,reactions:SupportReactionSet,brace:LongitudinalBracingResult,column:Section,columnResult?:ExistingColumnResult,base?:ColumnBaseResult):BracingSystemResult{
@@ -193,7 +207,14 @@ export function bracingSystemAnalysis(p:ProjectInput,reactions:SupportReactionSe
   seismic={...along,elastic,drift,driftLimit:(along.basis.Ie>=1.5?.015:along.basis.Ie>=1.25?.02:.025)*layout.height};
   if(columnResult?.seismic&&base)separation=seismicSeparation(p,column,columnResult,drift);
  }
- return {geometry:g,outlines,layout,develop,strutForce:{H:strutCase.H,id:strutCase.id},seatForce:{F:seatCase.Hbay,id:seatCase.id},collector:Math.max(0,...cases.filter(c=>c.seismic).map(c=>c.Hbay)),welds:{top,base:bottom},seismic,separation};
+ // The offset rod's horizontal component, the line force over the braced spans, twists the column at its top.
+ let rodTorsion:BracingSystemResult['rodTorsion'];
+ const t=columnResult?.torsion;
+ if(t){
+  const T=strutCase.H/layout.spans.length*g.cross.offset,w=baseWarping(column,T,layout.height).stress,k=t.case,ratio=k.P>=0?k.P/columnResult!.capacity.Pc:-k.P/columnResult!.capacity.Pt;
+  rodTorsion={T,U:t.U+(ratio>=.2?8/9:1)*w/available(column.Fy,p.method,.9,1.67),base:t.U};
+ }
+ return {geometry:g,outlines,layout,develop,strutForce:{H:strutCase.H,id:strutCase.id},seatForce:{F:seatCase.Hbay,id:seatCase.id},collector:Math.max(0,...cases.filter(c=>c.seismic).map(c=>c.Hbay)),welds:{top,base:bottom},seismic,separation,rodTorsion};
 }
 /** Weld (both faces of the gusset) per unit length of the line, limited by the gusset and column web base metal (J2.4, J4.2). */
 function connectionCapacities(p:ProjectInput,g:ReturnType<typeof bracingGeometry>,column:Section){
@@ -251,13 +272,22 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
  const hole=sg.bolt.hole,web=2*sg.half,An=(web-hole)*sg.tw;
  add('brace-strut-tension','Crane-level strut','Strut · tension at the coped end',H,Math.min(available(S.Fy*sp.A,method,.9,1.67),available(S.Fu*An,method,.75,2)),'force','\\min(F_yA_g,\\;F_uA_e),\\;A_e=(h_w-d_h)t_w',`${strut} The flanges are coped back ${f(sg.cope,'length')} so the web alone (${f(web,'length')} deep) laps the gusset: net area with one hole, U = 1.`,['aisc-e']);
  const bc=boltCapacity({grade:d.strut.grade,diameter:d.strut.boltDiameter,planes:1,surface:'B',shear:H/2,tension:0,method});
- add('brace-strut-bolts','Crane-level strut','Strut bolts · shear',H,2*bc.shear,'force','2\\phi F_{nv}A_b',`Two ${f(d.strut.boltDiameter,'length')} ${d.strut.grade} bolts in line, single shear, threads included, snug-tight in standard holes; pitch ${f(sg.pitch,'length')}, edge ${f(sg.edge,'length')}.`,['aisc-connections']);
+ // AISC J5.2(b): a filler over 1/4 in under the strut web at the offset gusset reduces the bolt shear strength.
+ const fill=g.cross.filler,fillFactor=fill>inch/4+1e-9?1-.4*(fill-inch/4)/inch:1;
+ add('brace-strut-bolts','Crane-level strut','Strut bolts · shear',H,2*bc.shear*fillFactor,'force',fillFactor<1?'2\\phi F_{nv}A_b[1-0.4(t_f-0.25)]':'2\\phi F_{nv}A_b',`Two ${f(d.strut.boltDiameter,'length')} ${d.strut.grade} bolts in line, single shear, threads included, snug-tight in standard holes; pitch ${f(sg.pitch,'length')}, edge ${f(sg.edge,'length')}.${fill?` At rod B's offset gusset a ${f(fill,'length')} filler lies under the strut web${fillFactor<1?` (J5.2(b) factor ${fillFactor.toFixed(3)})`:' (1/4 in or less: no reduction, J5.2(b))'}.`:''}`,['aisc-connections']);
  const bear=Math.min(plateBearing(d.strut.boltDiameter,hole,sg.tw,S.Fu,sg.edge,sg.pitch,method).capacity,plateBearing(d.strut.boltDiameter,hole,t,Fu,sg.edge,sg.pitch,method).capacity);
  add('brace-strut-bearing','Crane-level strut','Strut bolts · bearing and tearout',H,2*bear,'force','R_n=\\min(1.2l_ctF_u,\\;2.4dtF_u)',`Strut web ${f(sg.tw,'length')} and gusset ${f(t,'length')}, the thinner governing at each bolt; the force reverses.`,['aisc-connections']);
  const blk=(th:number,Fyp:number,Fup:number)=>blockShear((sg.edge+sg.pitch)*th,(sg.edge+sg.pitch-1.5*hole)*th,(sg.half-hole/2)*th,Fyp,Fup,method);
  add('brace-strut-block','Crane-level strut','Strut web and gusset · block shear',H,Math.min(blk(sg.tw,S.Fy,S.Fu),blk(t,Fy,Fu)),'force','R_n=0.6F_uA_{nv}+U_{bs}F_uA_{nt}\\le0.6F_yA_{gv}+U_{bs}F_uA_{nt}',`Shear along the bolt line from the end and tension to the cope edge or gusset edge ${f(sg.half,'length')} from the bolt line; Ubs = 0.5.`,['aisc-connections']);
  const tab=weldGroup([[[g.x0,-sg.half],[g.x0,sg.half]]],[H,0],[0,0]);
  add('brace-strut-tab','Crane-level strut','Strut tab at other columns · welds and column web',Math.max(tab.peak/2/cap.weld,H/webYieldLine(column,2*sg.half,method)),1,'ratio','\\max\\left(\\frac{f}{\\phi R_w},\\;\\frac{H}{\\phi R_{web}}\\right)\\le1',`At columns without a rod, the strut tab ${f(2*sg.half,'length')} tall carries H with ${f(d.weld,'length')} fillets both faces to the web; the web takes it out of its plane (yield line as at the gusset).`,['aisc-connections']);
+ // Rod crossing: rod B's plane offset from rod A's by the strut web and filler; the strut at rod B's upper gusset
+ // laps it that far off its plane, which bends the gusset about its weak axis and its web fillets as a couple.
+ const cr=g.cross,crossing=`Rod B (upper end at the higher-numbered column of the braced span) in a plane ${f(cr.offset,'length')} from rod A's on the column centerline, toward the girder: the strut web (${f(sg.tw,'length')})${cr.filler?` and a ${f(cr.filler,'length')} filler`:''} between the ${f(t,'length')} upper gussets.`;
+ add('brace-rod-crossing','Brace connections','Rods · clear gap where they cross',p.longitudinalBracing!.rod.diameter+inch/4,cr.offset,'length','s\\ge d_{rod}+1/4\\,in',`${crossing} The rods pass at mid-bay ${f(cr.clear,'length')} clear, not connected.`,['aisc-brace-member']);
+ const eLap=cr.offset-sg.lap,Lw=top.to-top.from,Mlap=H*eLap,plateRatio=Mlap/available(Fy*Lw*t**2/4,method,.9,1.67),weldRatio=(wt.peak/2+Mlap/(t*Lw))/cap.weld;
+ add('brace-offset-gusset','Brace connections','Offset gusset · strut lap eccentricity',Math.max(plateRatio,weldRatio),1,'ratio','\\max\\left(\\frac{He}{\\phi F_yL_wt^2/4},\\;\\frac{f_w+He/(tL_w)}{\\phi R_w}\\right)\\le1',`${crossing} At that gusset the strut force H = ${f(H)} acts e = ${f(eLap,'length')} off the gusset plane: the gusset bends about its weak axis over the ${f(Lw,'length')} weld to the web, and its two fillets take He as a couple added to their in-plane peak.`,['aisc-connections'],r.strutForce.id);
+ if(r.rodTorsion)add('brace-rod-torsion','Brace connections','Column · torsion with the offset rod',r.rodTorsion.U,1,'ratio','U_t+\\frac89\\frac{f_w(H s/n)}{\\phi F_y}\\le1',`The column torsion check (${r.rodTorsion.base.toFixed(3)}) with the warping stress of the offset rod's torque added at its top: the line force ${f(H)} over ${r.layout.spans.length} braced span${r.layout.spans.length>1?'s':''} at ${f(cr.offset,'length')} from the centerline, T = ${f(r.rodTorsion.T,'moment')}. At the base the same torque is in the anchor shear.`,['aisc-h'],r.strutForce.id);
  // Collector entry: the girder's longitudinal force passes from its locating bearing to the bracket seat and the column flange.
  const br=p.details!.bracket,F=r.seatForce.F;
  if(br?.enabled){
