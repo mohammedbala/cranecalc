@@ -1,3 +1,4 @@
+import {cantileverSystems,seismicBasis} from '../engine/runwaySeismic';
 import {codeBasis} from '../engine/drawingData';
 import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot} from '../engine/types';
@@ -8,7 +9,7 @@ import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {drawingLength} from './drawingFormat';
-import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,n,sheetStart,titleBlock,detailRef,detailTitles} from './sheetGraphics';
+import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
 import {tieRelease} from '../engine/tieGeometry';
@@ -35,9 +36,11 @@ function legend(t:Style):Block{
   [(x,y)=>`${line([x,y],[x+40,y])}<path class="leader-arrow" d="M${n(x+40)},${n(y)}l-2.4,-3.2h4.8z"/>${line([x+40,y],[x+50,y-6])}${line([x+50,y-6],[x+56,y-6])}${text(x+60,y-3,'EL.',7.5)}`,'ELEVATION DATUM']
  ];
  const head=heading(t,'SYMBOLS AND LINE TYPES');
- return {height:head.height+items.length*row,keep:true,render:(x,y)=>{
+ // Labels wrap within the column so no line runs past it at the larger note sizes.
+ const lines=items.map(([,label])=>wrapToWidth(t.caps(label),t.width-sample-10,t.body)),rows=lines.map(l=>Math.max(row,(l.length-1)*t.leading+row));
+ return {height:head.height+rows.reduce((a,b)=>a+b,0),keep:true,render:(x,y)=>{
   let svg=head.render(x,y),yy=y+head.height+row*.55;
-  for(const [draw,label] of items){svg+=draw(x+4,yy)+text(x+sample+10,yy+t.body*.36,t.caps(label),t.body);yy+=row;}
+  items.forEach(([draw],i)=>{svg+=draw(x+4,yy)+lines[i].map((v,j)=>text(x+sample+10,yy+t.body*.36+j*t.leading,v,t.body)).join('');yy+=rows[i];});
   return `<g data-legend="symbols">${svg}</g>`;
  }};
 }
@@ -127,6 +130,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['BUILDING CLASS / CYCLES',a?`AIST CLASS ${a.buildingClass}, ${a.buildingCycles.toLocaleString()} REPETITIONS`:'-'],
   ['VERTICAL / LATERAL DEFLECTION',`${ratio(vertical)} / ${ratio(lateral)} (ONE CRANE, NO IMPACT)`],
   ['FATIGUE',d?`${d.spectrum.reduce((sum,b)=>sum+b.cycles,0).toLocaleString()} CYCLES IN ${d.spectrum.length} DUTY BINS`:`${p.fatigue.cycles.toLocaleString()} CYCLES, CATEGORY ${p.fatigue.category}`],
+  ...(()=>{const z=seismicBasis(p);return z?[['SEISMIC (NEW COLUMNS)',`ASCE 7 EQUIVALENT LATERAL FORCE ACROSS THE RUNWAY: ${cantileverSystems[z.system].label.toUpperCase()}, R ${z.R}, ΩO ${z.Omega0}, CD ${z.Cd}; SDC ${z.sdc}, SDS ${z.SDS}, IE ${z.Ie}, ρ ${z.rho}; CS ${z.Cs.toFixed(3)}${z.integrityOnly?' (SDC A, §1.4.2)':''}. BASE, ANCHORS AND FOOTINGS FOR OVERSTRENGTH; CRANE-LEVEL BRACING ALONG THE RUNWAY`]]:[];})(),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS',`SPREAD FOOTINGS; ${format(p.columnBase.soil.allowable,'pressure',u,3).toUpperCase()} ALLOWABLE BEARING, BASE FRICTION ${p.columnBase.soil.friction}; OVERTURNING AND SLIDING FS 1.5 (DEAD LOAD ONLY)`]]:[]),
   ['ELEVATIONS',elevations?`T.O.R. ${len(elevations.tor)}, T.O.S. ${len(elevations.tos)} (DATUM ${len(elevations.datum)})`:'NOT ENTERED']
  ],[1.4,2.6]));
@@ -178,11 +182,11 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  blocks.push(H('ABBREVIATIONS'),P('(E) EXISTING · (N) NEW · C/L CENTERLINE · EL. ELEVATION · T.O.S. TOP OF STEEL · T.O.R. TOP OF RAIL · TYP. TYPICAL · U.N.O. UNLESS NOTED OTHERWISE · SC SLIP-CRITICAL · STD STANDARD HOLE · SSL / LSL SHORT / LONG SLOT · CJP COMPLETE JOINT PENETRATION · FW FIELD WELD · REF. REFERENCE (EXISTING OR BY OTHERS)'));
  blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} CALCULATION REVISION ${s.revision}.`));
  return blocks;};
- // Largest legible text that fits (body 1/8 in down to 0.09 in), with the columns balanced to the
+ // Largest legible text that fits (body 5/32 in down to 0.09 in), with the columns balanced to the
  // shortest height that still fits.
  let placed:ReturnType<typeof flow>;
  const style=(body:number):Style=>({width:columnWidth,body,leading:body*1.31,heading:body*1.3,caps:capsFor(u)});
- for(const body of [9,8.6,8.2,7.8,7.4,7,6.6]){
+ for(const body of [11.25,10.5,9.75,9,8.6,8.2,7.8,7.4,7,6.6]){
   const blocks=build(style(body));
   for(let h=Math.max(...blocks.map(b=>b.height))+top;h<=limits[0]+.01&&!placed;h+=4)placed=flow(blocks,h);
   if(placed)break;

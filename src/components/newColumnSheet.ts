@@ -237,6 +237,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ['ANCHOR TENSION / SHEAR (LRFD)',r&&anchorAct?`${force(r.anchors.T)} / ${force(r.anchors.V)} (${anchorAct.id})`:'-'],
    ['SOIL: ALLOWABLE / MAX. SERVICE',r?`${force(b.soil.allowable,'pressure')} / ${force(r.footing.qMax,'pressure')}`:'-'],
    ['RATIOS: PLATE / RODS / SOIL / OVERTURNING / DRIFT',`${ratio('base-plate')} / ${ratio('base-anchor-interaction')} / ${ratio('base-soil')} / ${ratio('base-overturning')} / ${ratio('base-drift')}`],
+   ...(s.existingColumn?.seismic?[['SEISMIC ACROSS RUNWAY',`SDC ${s.existingColumn.seismic.basis.sdc}, CS ${s.existingColumn.seismic.basis.Cs.toFixed(3)}, QE ${force(s.existingColumn.seismic.QE)} PER COLUMN; BASE FOR ΩO ${s.existingColumn.seismic.basis.Omega0}`]]:[]),
    ['DATA SOURCE',b.source||'NOT ENTERED']
   ];
   const notes=[
@@ -247,6 +248,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    `FOOTING CONCRETE f'c = ${force(b.concrete.fc,'stress')} AT 28 DAYS, NORMALWEIGHT; REINFORCEMENT ASTM A615 GR. ${Math.round(b.footing.fy/6.894757293168)}, ${size(ft.cover)} CLEAR COVER CAST AGAINST EARTH, STRAIGHT BARS EACH WAY.`,
    `${ft.soil>0?`TOP OF FOOTING ${dim(ft.soil)} BELOW THE FLOOR; BACKFILL AND REPLACE THE SLAB OVER IT AFTER THE COLUMN IS ERECTED.`:'SAW CUT AND REMOVE THE EXISTING SLAB TO THE FOOTING OUTLINE, EXCAVATE TO BEARING AND POUR THE FOOTING TO THE TOP OF SLAB WITH A 1/2" PREFORMED ISOLATION JOINT AT THE PERIMETER.'} LOCATE UNDERGROUND UTILITIES BEFORE CUTTING OR EXCAVATING.`,
    `BEAR FOOTINGS ON UNDISTURBED SOIL OR COMPACTED FILL APPROVED BY THE GEOTECHNICAL ENGINEER: ${force(b.soil.allowable,'pressure')} ALLOWABLE. BOTTOM OF FOOTING ${dim(ft.soil+hf)} BELOW THE FLOOR${b.soil.frost>0?`, BELOW THE ${dim(b.soil.frost)} FROST DEPTH`:', INTERIOR FOOTING PROTECTED FROM FROST'}.`,
+   ...(s.existingColumn?.seismic?[`SEISMIC: ${s.existingColumn.seismic.basis.system.toUpperCase()} STEEL CANTILEVER COLUMN SYSTEM ACROSS THE RUNWAY (ASCE 7 TABLE 12.2-1). THE BASE PLATES, ANCHOR RODS AND FOOTINGS ARE DESIGNED FOR THE OVERSTRENGTH SEISMIC LOAD (§12.2.5.2)${s.existingColumn.seismic.basis.sdc>='C'?' AND THE ANCHORS FOR ACI 318 §17.10':''}. THE CRANE-LEVEL BRACING CARRIES SEISMIC FORCE ALONG THE RUNWAY.`]:[]),
    'SPECIAL INSPECTION PER IBC 1705.3 AND THE STATEMENT OF SPECIAL INSPECTIONS: ANCHOR ROD PLACEMENT, REINFORCEMENT, CONCRETE SAMPLING AND PLACEMENT, AND THE COLUMN-TO-PLATE AND BRACKET WELDS.'
   ];
   return {key:'new-column',name:'NEW COLUMNS & FOOTINGS',views,notes:(t:Style)=>[heading(t,'NEW COLUMN DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.25,1.75]),heading(t,'NEW COLUMN AND FOUNDATION NOTES'),...numbered(t,notes)]};
