@@ -1,3 +1,4 @@
+import { cranePositions, pairs } from './cranePositions';
 import { beamSystem, momentAt, type BeamResult } from './beam';
 import { adjacentReactions } from './continuation';
 import type { Analysis, Crane, Demand, EnvelopePoint, LoadCase, PointLoad, ProjectInput, Properties } from './types';
@@ -19,16 +20,13 @@ export function movingAnalysis(p:ProjectInput,props:Properties,subdivisions=20):
  function run(steps:number){
   const envelope:EnvelopePoint[]=zeroV.x.map(x=>({x,momentMax:-Infinity,momentMin:Infinity,lateralMax:-Infinity,lateralMin:Infinity,shearMax:-Infinity,shearMin:Infinity,deflectionMax:-Infinity,deflectionMin:Infinity,lateralDeflectionMax:-Infinity,lateralDeflectionMin:Infinity}));
   const demand:Demand={moment:0,lateralMoment:0,shear:0,reaction:0,uplift:0,deflection:0,lateralDeflection:0,stressRange:0,longitudinal:p.cranes.reduce((s,c)=>s+c.longitudinal,0),governing:{},reactions:[]};
-  const responses=p.cranes.map(c=>{
-   const a=c.travelStart,b=c.travelEnd;
-   const positions=new Set<number>();for(let i=0;i<=steps;i++)positions.add(a+(b-a)*i/steps);
-   // Include axle crossings of every physical support, not only uniform travel samples.
-   let support=0;for(const span of [0,...p.spans]){support+=span;for(const wheel of c.wheels){const x=support-wheel.offset;if(x>=a&&x<=b)positions.add(x);}}
-   return [...positions].sort((a,b)=>a-b).map(x=>craneResponse(c,x));
-  });
-  let cases=0;const selected:ReturnType<typeof craneResponse>[]=[];
+  // Uniform travel samples, axle crossings of every support, maximum-moment positions and neighbouring
+  // cranes at closest approach.
+  const supports=[0];for(const span of p.spans)supports.push(supports.at(-1)!+span);
+  const responses=cranePositions(p,steps,supports).map((list,k)=>list.map(slot=>({...craneResponse(p.cranes[k],slot.origin),slot})));
+  let cases=0;const selected:(typeof responses)[number]=[];
   function visit(index:number){
-   if(index<responses.length){for(const response of responses[index]){const prev=selected.at(-1);if(prev){const prevEnd=prev.position+Math.max(...p.cranes[index-1].wheels.map(w=>w.offset));if(response.position-prevEnd<Math.max(p.cranes[index-1].minSeparation,p.cranes[index].minSeparation)-1e-6)continue;}selected.push(response);visit(index+1);selected.pop();}return;}
+   if(index<responses.length){for(const response of responses[index]){const prev=selected.at(-1);if(!pairs(p,index,response.slot,prev&&{index:index-1,position:prev.slot}))continue;selected.push(response);visit(index+1);selected.pop();}return;}
    // Signs for each crane are independent; retain coincident actions in the governing case.
    for(let mask=0;mask<2**selected.length;mask++){
     if(++cases>160000)throw Error('Moving-load search exceeds the validated case budget. Reduce cranes or travel ranges.');

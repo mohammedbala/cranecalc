@@ -104,7 +104,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
  const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0};
  const mechanics=cap?{Iy:cap.Iy,topOffset:cap.topOffset,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
- const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>();
+ const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>();
  const braceFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
  function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
  const evaluate=(e:RunwayCaseEvent,bin=-1)=>{
@@ -117,7 +117,13 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   for(const [bayIndex,[start,end]] of groups.entries()){
    const wheels=e.wheels.filter(w=>w.x>=start-1e-6&&(w.x<end-1e-6||(end===L&&w.x<=end+1e-6)));
    const stations=allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6);
-   const strength=e.kind==='strength',stiffnessFactor=strength?.8:1;
+   const strength=e.kind==='strength',stiffnessFactor=strength?.8:1,totalH=e.wheels.reduce((a,w)=>a+Math.abs(w.h),0);
+   // A bay's lateral/torsional response depends only on its own loads. When the same bay state recurs
+   // (other cranes elsewhere, a repeated combination), every peak it can set is already recorded, so only
+   // its restraint forces are needed again for the shared supports and interfaces.
+   const bayKey=JSON.stringify([e.kind,bin,bayIndex,wheels.map(w=>[w.x,w.p,w.h]),e.q,e.railTorquePerLength,strength?e.axial:0,strength?totalH:0]);
+   let restraintForces=bayStates.get(bayKey),r:ReturnType<LateralTorsionBeam['solve']>|undefined;
+   if(!restraintForces){
    const beam=new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
     loads:wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),
     restraints:stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?brace.stiffness*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?bottomK(x)*stiffnessFactor:0})),
@@ -132,7 +138,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     if(critical.value<result.criticalMultiplier){result.criticalMultiplier=critical.value;result.governing.criticalMultiplier={id:e.id,combination:e.combination,x:start,value:critical.value};ownMultiplier=critical.value;}
    }
    const geometry=strength?(p.method==='LRFD'?1:1.6):0;
-   const r=beam.solve(geometry);result.residual=Math.max(result.residual,r.residual);
+   r=beam.solve(geometry);result.residual=Math.max(result.residual,r.residual);
    if(strength){
     // Load-height LTB in the inelastic range: the elastic critical moment of this case (wheels at the rail head,
     // UDL at rail height, axial load, modeled restraints and moment gradient) is Mcr = lambda M / 0.8 because the
@@ -144,8 +150,10 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     if(M>0){
      const record=(u:number,capacity:number,length:number,critical:number)=>{if(u>loadHeight.utilization)Object.assign(loadHeight,{utilization:u,demand:M,capacity,length,critical,id:e.id,combination:e.combination,x:xm});};
      record(M/c.base,c.base,p.unbracedLength,Infinity);
+     // This case's multiplier is at least the least one found so far, which bounds its equivalent length.
+     const bound=M/c.lowerBound(Math.max(p.unbracedLength,c.length(result.criticalMultiplier*M/.8)));
      const threshold=.8*c.mcr(c.lengthFor(M/loadHeight.utilization))/M;
-     if(!beam.isStable(threshold)){
+     if(bound>loadHeight.utilization&&!beam.isStable(threshold)){
       let lambda=ownMultiplier;
       if(lambda===undefined){let lo=Math.min(result.criticalMultiplier,threshold),hi=threshold;if(!beam.isStable(lo))lo=0;for(let i=0;i<30;i++){const mid=(lo+hi)/2;if(beam.isStable(mid))lo=mid;else hi=mid;}lambda=lo;}
       const critical=lambda*M/.8,length=Math.max(p.unbracedLength,c.length(critical)),capacity=c.available(length);
@@ -153,13 +161,16 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
      }
     }
    }
+   restraintForces=r.restraints.map(v=>({x:v.x,top:v.top,bottom:v.bottom}));bayStates.set(bayKey,restraintForces);
+   }
    if(p.system==='simple')for(const [endName,x] of [['left',start],['right',end]] as const){
-    const lateral=r.restraints.find(re=>Math.abs(re.x-(x-start))<1e-6)!;
+    const lateral=restraintForces.find(re=>Math.abs(re.x-(x-start))<1e-6)!;
     const vertical=e.q*(end-start)/2+wheels.reduce((sum,w)=>sum+w.p*(endName==='left'?(end-w.x):(w.x-start))/(end-start),0);
     const bearing=bearings.find(v=>v.bay===bayIndex+1&&v.end===endName)!;
     endActions.push({x,bay:bayIndex+1,end:endName,vertical,top:lateral?.top??0,bottom:lateral?.bottom??0,longitudinal:0,offset:bearing.center-x});
    }
-   for(const re of r.restraints){const x=re.x+start,old=reactions.get(x)??{top:0,bottom:0};reactions.set(x,{top:old.top+re.top,bottom:old.bottom+re.bottom});}
+   for(const re of restraintForces){const x=re.x+start,old=reactions.get(x)??{top:0,bottom:0};reactions.set(x,{top:old.top+re.top,bottom:old.bottom+re.bottom});}
+   if(!r)continue;
    for(const s of r.stations){
     const x=s.x+start,M=moment(x),warping=E*Math.abs(s.warpingCurvature)*props.h0*p.section.bf/4;
     if(strength){
@@ -171,7 +182,6 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
      const V=e.verticalReactions.reduce((a,v)=>a+(v.x<=x+1e-7?v.r:0),0)-e.wheels.reduce((a,w)=>a+(w.x<=x+1e-7?w.p:0),0)-e.q*x;
      const h=p.section.d-2*p.section.tf;
      const tauWeb=1.5*Math.abs(V)/(h*p.section.tw)+G*p.section.tw*Math.abs(s.twistRate);
-     const totalH=e.wheels.reduce((a,w)=>a+Math.abs(w.h),0);
      const tauFlange=1.5*totalH/(cap?Math.min(2*p.section.bf*p.section.tf,p.section.capWidth*p.section.capTw):2*p.section.bf*p.section.tf)+G*(cap?.maxThickness??p.section.tf)*Math.abs(s.twistRate)+E*Math.abs(s.warpingThird)*(cap?.shearCoefficient??props.h0*p.section.bf**2/16);
      peak('shearStress',Math.max(tauWeb,tauFlange),e,x);
     }

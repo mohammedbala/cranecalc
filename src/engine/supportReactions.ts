@@ -1,3 +1,4 @@
+import { cranePositions, pairs } from './cranePositions';
 import { beamSystem, type BeamResult } from './beam';
 import { craneDesignMinimum, emptyAistInputs } from './aistLoads';
 import type { ProjectInput, Properties } from './types';
@@ -34,18 +35,17 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
  // An adjacent existing simple-span girder bearing on a modeled end support adds its own reaction there.
  const plus=(a:number[],b:number[])=>a.map((v,j)=>v+b[j]);
  const D=plus(at(vertical.evaluate([],p.deadLoad+p.railWeight+props.weight)),adjacentReactions(p,[],p.deadLoad+p.railWeight+props.weight)),Live=plus(at(vertical.evaluate([],di.liveLoad)),adjacentReactions(p,[],di.liveLoad));
- const responses=p.cranes.map(c=>{
+ const positions=cranePositions(p,steps,stations);
+ const responses=p.cranes.map((c,k)=>{
   const m=craneDesignMinimum(c),impact=Math.max(c.impact,m.impact);
   const side=c.wheels.reduce((s,w)=>s+w.lateral,0),sideFactor=side>0?Math.max(1,m.runwaySide/side):1;
-  const origins=new Set<number>();
-  for(let i=0;i<=steps;i++)origins.add(c.travelStart+(c.travelEnd-c.travelStart)*i/steps);
-  // Each wheel directly over each support gives the exact reaction maxima for point loads.
-  for(const x of stations)for(const w of c.wheels){const o=x-w.offset;if(o>=c.travelStart-1e-9&&o<=c.travelEnd+1e-9)origins.add(o);}
-  return [...origins].sort((a,b)=>a-b).flatMap(origin=>{
+  // Each wheel directly over each support gives the exact reaction maxima for point loads; neighbouring
+  // cranes are also placed at closest approach.
+  return positions[k].flatMap(position=>{const origin=position.origin;
    const all=c.wheels.map(w=>({x:origin+w.offset,unloaded:w.unloaded,static:w.loaded/(c.includesImpact?1+c.impact:1),lateral:w.lateral*sideFactor})),wheels=all.filter(w=>w.x>=0&&w.x<=L);
    const beyond=(key:(w:typeof all[number])=>number)=>adjacentReactions(p,all.map(w=>({x:w.x,p:key(w)})));
    if(!wheels.length&&beyond(w=>w.static).every(v=>v===0))return [];
-   return [{origin,last:origin+c.wheels.at(-1)!.offset,
+   return [{origin,position,last:origin+c.wheels.at(-1)!.offset,
     Cd:plus(at(vertical.evaluate(wheels.map(w=>({x:w.x,p:w.unloaded})))),beyond(w=>w.unloaded)),
     Cv:plus(at(vertical.evaluate(wheels.map(w=>({x:w.x,p:w.static-w.unloaded})))),beyond(w=>w.static-w.unloaded)),
     Ci:plus(at(vertical.evaluate(wheels.map(w=>({x:w.x,p:impact*w.static})))),beyond(w=>impact*w.static)),
@@ -69,7 +69,7 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
   visit(index+1);
   for(const r of responses[index]){
    const previous=chosen.at(-1);
-   if(previous&&r.origin-previous.r.last<Math.max(p.cranes[index].minSeparation,p.cranes[previous.index].minSeparation)-1e-6)continue;
+   if(!pairs(p,index,r.position,previous&&{index:previous.index,position:previous.r.position}))continue;
    chosen.push({index,r});visit(index+1);chosen.pop();
   }
  }

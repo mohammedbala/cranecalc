@@ -36,24 +36,27 @@ const bw=7;
 class BandMatrix {
  readonly a:Float64Array;
  constructor(readonly n:number){this.a=new Float64Array(n*(bw+1));}
- get(i:number,j:number){if(i<j)[i,j]=[j,i];return i-j>bw?0:this.a[i*(bw+1)+i-j];}
- add(i:number,j:number,value:number){if(i<j)[i,j]=[j,i];if(i-j>bw){if(Math.abs(value)>1e-15)throw Error('Nonlocal stiffness outside element bandwidth.');return;}this.a[i*(bw+1)+i-j]+=value;}
- set(i:number,j:number,value:number){if(i<j)[i,j]=[j,i];if(i-j<=bw)this.a[i*(bw+1)+i-j]=value;}
+ // Swaps use scalars: these run in the innermost assembly and factorization loops.
+ get(i:number,j:number){if(i<j){const k=i;i=j;j=k;}return i-j>bw?0:this.a[i*(bw+1)+i-j];}
+ add(i:number,j:number,value:number){if(i<j){const k=i;i=j;j=k;}if(i-j>bw){if(Math.abs(value)>1e-15)throw Error('Nonlocal stiffness outside element bandwidth.');return;}this.a[i*(bw+1)+i-j]+=value;}
+ set(i:number,j:number,value:number){if(i<j){const k=i;i=j;j=k;}if(i-j<=bw)this.a[i*(bw+1)+i-j]=value;}
  multiply(x:Float64Array){const out=new Float64Array(this.n);for(let i=0;i<this.n;i++)for(let j=Math.max(0,i-bw);j<=Math.min(this.n-1,i+bw);j++)out[i]+=this.get(i,j)*x[j];return out;}
 }
+// Lower-band entry (i,j), i >= j, is stored at i*(bw+1)+i-j. Same operation order as get/set.
+const at=(i:number,j:number)=>i*(bw+1)+i-j;
 function factor(a:BandMatrix){
- const n=a.n,L=new BandMatrix(n),scale=new Float64Array(n);
- for(let i=0;i<n;i++){if(!(a.get(i,i)>0))return null;scale[i]=Math.sqrt(a.get(i,i));}
+ const n=a.n,L=new BandMatrix(n),scale=new Float64Array(n),A=a.a,l=L.a;
+ for(let i=0;i<n;i++){const d=A[at(i,i)];if(!(d>0))return null;scale[i]=Math.sqrt(d);}
  for(let i=0;i<n;i++)for(let j=Math.max(0,i-bw);j<=i;j++){
-  let s=a.get(i,j)/(scale[i]*scale[j]);
-  for(let k=Math.max(0,i-bw,j-bw);k<j;k++)s-=L.get(i,k)*L.get(j,k);
-  if(i===j){if(!Number.isFinite(s)||s<1e-12)return null;L.set(i,i,Math.sqrt(s));}
-  else L.set(i,j,s/L.get(j,j));
+  let s=A[at(i,j)]/(scale[i]*scale[j]);
+  for(let k=Math.max(0,i-bw,j-bw);k<j;k++)s-=l[at(i,k)]*l[at(j,k)];
+  if(i===j){if(!Number.isFinite(s)||s<1e-12)return null;l[at(i,i)]=Math.sqrt(s);}
+  else l[at(i,j)]=s/l[at(j,j)];
  }
  return {solve(f:Float64Array){
   const x=new Float64Array(n),y=new Float64Array(n);
-  for(let i=0;i<n;i++){let s=f[i]/scale[i];for(let j=Math.max(0,i-bw);j<i;j++)s-=L.get(i,j)*y[j];y[i]=s/L.get(i,i);}
-  for(let i=n-1;i>=0;i--){let s=y[i];for(let j=i+1;j<=Math.min(n-1,i+bw);j++)s-=L.get(j,i)*x[j];x[i]=s/L.get(i,i);}
+  for(let i=0;i<n;i++){let s=f[i]/scale[i];for(let j=Math.max(0,i-bw);j<i;j++)s-=l[at(i,j)]*y[j];y[i]=s/l[at(i,i)];}
+  for(let i=n-1;i>=0;i--){let s=y[i];for(let j=i+1;j<=Math.min(n-1,i+bw);j++)s-=l[at(j,i)]*x[j];x[i]=s/l[at(i,i)];}
   for(let i=0;i<n;i++)x[i]/=scale[i];return x;
  }};
 }
@@ -64,6 +67,15 @@ export function hermite(t:number,L:number){
   dd:[(-6+12*t)/L**2,(-4+6*t)/L,(6-12*t)/L**2,(-2+6*t)/L],
   ddd:[12/L**3,6/L**2,-12/L**3,6/L**2]
  };
+}
+// Allocation-free Hermite values for the assembly loop; same expressions as hermite().
+const scratch={n:new Float64Array(4),d:new Float64Array(4),dd:new Float64Array(4),ddd:new Float64Array(4)};
+function hermiteInto(t:number,L:number){
+ const h=scratch;
+ h.n[0]=1-3*t*t+2*t*t*t;h.n[1]=L*(t-2*t*t+t*t*t);h.n[2]=3*t*t-2*t*t*t;h.n[3]=L*(-t*t+t*t*t);
+ h.d[0]=(-6*t+6*t*t)/L;h.d[1]=1-4*t+3*t*t;h.d[2]=(6*t-6*t*t)/L;h.d[3]=-2*t+3*t*t;
+ h.dd[0]=(-6+12*t)/L**2;h.dd[1]=(-4+6*t)/L;h.dd[2]=(6-12*t)/L**2;h.dd[3]=(-2+6*t)/L;
+ return h;
 }
 const gaussX=[-.906179845938664,-.538469310105683,0,.538469310105683,.906179845938664];
 const gaussW=[.236926885056189,.478628670499366,.568888888888889,.478628670499366,.236926885056189];
@@ -92,7 +104,7 @@ export class LateralTorsionBeam {
    const x0=this.nodes[e],L=this.nodes[e+1]-x0;
    const v=[4*e,4*e+1,4*e+4,4*e+5],t=v.map(i=>i+2);
    for(let g=0;g<gaussX.length;g++){
-    const xi=(gaussX[g]+1)/2,w=gaussW[g]*L/2,h=hermite(xi,L),x=x0+xi*L,M=p.moment?.(x)??0,N=p.axial??0;
+    const xi=(gaussX[g]+1)/2,w=gaussW[g]*L/2,h=hermiteInto(xi,L),x=x0+xi*L,M=p.moment?.(x)??0,N=p.axial??0;
     if(!Number.isFinite(M))throw Error('Nonfinite major-axis moment in lateral/torsion analysis.');
     for(let i=0;i<4;i++){
      this.force[v[i]]+=w*h.n[i]*(p.distributedLateral??0);
@@ -140,11 +152,15 @@ export class LateralTorsionBeam {
    if(x<0||x>p.length)throw Error('Recovery station outside lateral/torsion member.');
    let e=this.nodes.findIndex((v,i)=>i<this.nodes.length-1&&x>=v-1e-8&&(x<this.nodes[i+1]-1e-8||(side==='left'&&x<=this.nodes[i+1]+1e-8)));
    if(e<0)e=this.nodes.length-2;
+   return inElement(e,x);
+  };
+  const inElement=(e:number,x:number):LateralTorsionStation=>{
    const h=hermite((x-this.nodes[e])/(this.nodes[e+1]-this.nodes[e]),this.nodes[e+1]-this.nodes[e]);
    const v=[u[4*e],u[4*e+1],u[4*e+4],u[4*e+5]],t=[u[4*e+2],u[4*e+3],u[4*e+6],u[4*e+7]];
    return {x,v:dot(h.n,v),slope:dot(h.d,v),twist:dot(h.n,t),twistRate:dot(h.d,t),curvature:dot(h.dd,v),warpingCurvature:dot(h.dd,t),warpingThird:dot(h.ddd,t),lateralThird:dot(h.ddd,v)};
   };
-  const stations=this.nodes.flatMap((x,i)=>i===0?[at(x)]:[at((this.nodes[i-1]+x)/2),at(x,'left'),...(i===this.nodes.length-1?[]:[at(x,'right')])]);
+  // Element midpoints and both sides of each node, by element index: the elements at() would find.
+  const stations=this.nodes.flatMap((x,i)=>i===0?[inElement(0,x)]:[inElement(i-1,(this.nodes[i-1]+x)/2),inElement(i-1,x),...(i===this.nodes.length-1?[]:[inElement(i,x)])]);
   const restraints=p.restraints.map(r=>{const s=at(r.x),yt=p.topOffset??p.h0/2,yb=p.bottomOffset??-p.h0/2,top=r.top*(s.v+yt*s.twist),bottom=r.bottom*(s.v+yb*s.twist);return {x:r.x,top,bottom,lateral:top+bottom,torque:top*yt+bottom*yb};});
   const residualVector=this.matrix(geometricMultiplier,false).multiply(u);
   let numerator=0,denominator=1;

@@ -23,6 +23,7 @@ describe('load-height lateral-torsional buckling',()=>{
   const far=2*top.Lr;expect(capped.available(far)).toBeCloseTo(.9*Math.min(top.Rpg*capped.mcr(far),girderStrength({...q,unbracedLength:far},qs).major/.9),3);
   // The table never reports a length whose strength falls below the target.
   for(const f of [1,.8,.5,.2]){const target=f*rolled.base;expect(rolled.available(rolled.lengthFor(target))).toBeGreaterThanOrEqual(target*(1-1e-12));}
+  for(const x of [.5*L,L,1.7*L,5*L,60*L])expect(rolled.lowerBound(x)).toBeLessThanOrEqual(rolled.available(x)*(1+1e-12));
  });
  it('recovers Lb from the eigenvalue of a uniformly bent fork-supported beam',()=>{
   const M=1e8,lambda=new LateralTorsionBeam({...fork,moment:()=>M}).criticalMultiplier().value;
