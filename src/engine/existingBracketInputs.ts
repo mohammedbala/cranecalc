@@ -13,7 +13,7 @@ export const existingBracketSchema=z.object({
 export type ExistingBracketInput=z.infer<typeof existingBracketSchema>;
 export const defaultExistingBracket:ExistingBracketInput={
  depth:450,width:360,projection:800,flangeThickness:25,webThickness:16,continuityThickness:20,continuityAbove:250,tipStiffenerThickness:16,
- Fy:345,Fu:450,geometrySource:'',surveyConfirmed:false,conditionConfirmed:false,
+ Fy:50*6.894757293168,Fu:65*6.894757293168,geometrySource:'',surveyConfirmed:false,conditionConfirmed:false,
  bolts:{diameter:19.05,grade:'A325',pitch:220,gauge:400,edge:40},
  rating:{method:'LRFD',vertical:0,rootMoment:0,seatMoment:0,fatigueRange:0,fatigueRootMoment:0,fatigueSeatMoment:0,cycles:0,source:'',confirmed:false,contactConfirmed:false,serviceConfirmed:false,attachmentConfirmed:false}
 };
