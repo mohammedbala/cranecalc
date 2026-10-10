@@ -4,6 +4,7 @@ import {cappedDemonstrationProject} from '../src/engine/demonstration';
 import {girderSegments,independentBearings,railKeeperStations,simpleSupportChecks} from '../src/engine/simpleSupports';
 import {validateProject,fingerprint} from '../src/engine/calculate';
 import {createDetailCollector} from '../src/engine/detailAnalysis';
+import {createSupportForceEnvelope,sideReactions} from '../src/engine/bracketForces';
 import {sectionProperties} from '../src/engine/section';
 import {buildIndependentSupports} from '../src/components/independentSupportGeometry';
 import {createHardwareBuilder} from '../src/components/connectionDetails';
@@ -46,6 +47,28 @@ describe('independent girder ends',()=>{
   expect(r.interfaces.filter(v=>v.x===0).some(v=>v.id==='statics-T1'&&v.longitudinal===1000)).toBe(true);
   for(const row of r.interfaces)expect(Math.abs(row.longitudinal)).toBeLessThanOrEqual(1000);
  });
+ it('envelopes the bracket forces of a wheel over a shared grid on either girder end, mirror-symmetric',()=>{
+  const p=cappedDemonstrationProject();p.spans=[4000,4000];p.cranes[0].wheels[1].offset=2000;
+  const collector=createDetailCollector(p,sectionProperties(p.section),20);
+  const event=(id:string,origin:number,axial:number)=>({kind:'strength' as const,id,combination:'LRFD 2c',cranes:[{index:0,origin,loaded:true}],horizontalCrane:0,lateralSign:1,wheels:[{x:origin,p:10000,h:0},{x:origin+2000,p:10000,h:0}],q:2,railTorquePerLength:0,axial,longitudinalCouple:0,verticalReactions:[]});
+  // Mirror images about the shared grid: one wheel over it, the other in the right or left bay.
+  collector.observe(event('right',4000,1000));collector.observe(event('left',2000,0));
+  const [, grid,]=collector.finish().bracketForces!,e=25.4/2+.8*304.8,v=grid.maxVertical;
+  expect(v.vertical).toBeCloseTo(23000,6);expect(grid.reversible.vertical).toBe(true);expect(grid.reversible.moment).toBe(true);
+  // All of one girder's end reaction at 0.8 of the bearing length from its end; the positive sign is reported.
+  expect(sideReactions(v)).toEqual({left:expect.closeTo(4000,6),right:expect.closeTo(19000,6)});expect(v.moment).toBeCloseTo(15000*e,3);
+  expect(grid.maxMoment.moment).toBeCloseTo(15000*e,3);expect(Math.min(...grid.minBearing.ends.map(v=>v.vertical))).toBeCloseTo(4000,6);
+  // Traction reaches only a locating (left) bearing: bay 2 at the shared grid.
+  expect(Math.abs(grid.longitudinal.longitudinal)).toBe(1000);expect(grid.longitudinal.ends.find(v=>v.end==='left')).toBeDefined();
+ });
+ it('reports a seat moment of both signs only when they tie',()=>{
+  const env=createSupportForceEnvelope([0]),set=(vertical:number,moment:number)=>({id:`${vertical}/${moment}`,combination:'LRFD 2c',vertical,moment,longitudinal:0,top:0,bottom:0,ends:[]});
+  env.add(0,set(100,-50));env.add(0,set(100,40));
+  let [r]=env.result();expect(r.maxVertical.moment).toBe(-50);expect(r.reversible.vertical).toBe(false);
+  env.add(0,set(100,50));[r]=env.result();expect(r.maxVertical.moment).toBe(50);expect(r.reversible.vertical).toBe(true);
+  // A larger reaction replaces both, with its own moment.
+  env.add(0,set(101,10));[r]=env.result();expect(r.maxVertical.id).toBe('101/10');expect(r.reversible.vertical).toBe(false);expect(r.maxMoment.moment).toBe(50);expect(r.reversible.moment).toBe(true);
+ });
  it('models separate bearings, paired ties and inspectable threaded fasteners at every girder end',()=>{
   const p=cappedDemonstrationProject(),mat=new THREE.MeshBasicMaterial(),edge=new THREE.LineBasicMaterial(),hardware=createHardwareBuilder(mat);
   const group=buildIndependentSupports(p,.65,mat,edge,hardware);
@@ -79,6 +102,8 @@ describe('independent girder ends',()=>{
  it('keeps the scaled sheet readable for six unequal bays and escapes project text',()=>{
   const input=cappedDemonstrationProject();input.spans=[7620,8000,8500,9000,9500,10000];input.aist!.axialLength=10000;input.title='<script>bad</script>';
   const s:CalculationSnapshot={input,revision:'review',createdAt:'',checks:[],errors:[],warnings:[],properties:null,analysis:null,eligible:false,referenceVersion:''};
-  for(const units of ['US','SI'] as const){input.units=units;const svg=simpleSupportSheetSvg(s);expect(svg).not.toMatch(/NaN|Infinity|<script>/);expect(svg).toContain('SHEET S-04');expect(svg.match(/data-view-title="below"/g)).toHaveLength(3);expect(svg).toContain('PENDING');}
+  for(const units of ['US','SI'] as const){input.units=units;const svg=simpleSupportSheetSvg(s);expect(svg).not.toMatch(/NaN|Infinity|<script>/);expect(svg).toContain('SHEET S-04');expect(svg.match(/data-view-title="below"/g)).toHaveLength(3);expect(svg).toContain('FORCES ON {{SHEET:BRACKET}}');}
+  // With the bracket by others the support details carry the bracket design forces.
+  input.details!.bracket!.enabled=false;expect(simpleSupportSheetSvg(s)).toContain('PENDING CALCULATION');
  });
 });

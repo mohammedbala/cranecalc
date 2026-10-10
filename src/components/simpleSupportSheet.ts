@@ -7,18 +7,11 @@ import {referenceColumns,shapeMeters} from '../data/aiscReferenceShapes';
 import {defaultFraming,type FramingSettings} from './framingSettings';
 import {drawingLength,plateInches} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,line,rect,text,dimH,multiLeader,filletLeader,bubble,wrappedText,detailRef,detailTitles,columnReference} from './sheetGraphics';
-import {heading,numbered,paragraph,table,type Style} from './noteBlocks';
+import {heading,numbered,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
-import {format} from '../engine/units';
 import {usesExistingBracket} from '../engine/existingBracket';
+import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
 
-export function sharedSupportRows(s:CalculationSnapshot){
- let x=0;return [0,...s.input.spans].map((length,i)=>{
-  x+=length;const at=x,rows=s.detailResults?.interfaces.filter(r=>Math.abs(r.x-at)<1e-6)??[];
-  const row=rows.reduce<typeof rows[number]|undefined>((a,b)=>!a||b.vertical>a.vertical?b:a,undefined);
-  return {grid:i+1,x:at,row};
- });
-}
 /** Independent girder support details on their own sheet. */
 export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=defaultFraming,number='S-04'){
  const topic=simpleSupportTopic(s,f);return topic?topicSheetSvg(s,topic,number,'INDEPENDENT GIRDER SUPPORTS'):'';
@@ -116,24 +109,20 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  return {svg:svg+'</g>',scale:ms.label};
  }});
 
- const reactions=sharedSupportRows(s).map(({grid,row})=>{
-  const vf=(end:'left'|'right')=>row?.ends?format(row.ends.filter(v=>v.end===end).reduce((a,v)=>a+v.vertical,0),'force',p.units):'—';
-  return [String(grid),vf('right'),vf('left'),row?format(row.vertical,'force',p.units):'PENDING',row?.seatMoment!==undefined?format(row.seatMoment,'moment',p.units):'—'];
- });
+ const forces=bracketForcesAt(s,'support','ABOVE');
  const bearingRef=activeEndBearing(p)?detailRef(detailTitles.endBearing):'';
  const notes=bearingRef?[
-  `${usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}`:'BRACKET BY OTHERS'}. BOLTED END BEARINGS TRANSFER LONGITUDINAL FORCE AND UPLIFT (${bearingRef}); FLANGE TIES TRANSFER LATERAL FORCE. INTERFACE FORCES: SEE CALCULATION REPORT.`,
+  `${usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}`:'BRACKET BY OTHERS'}. BOLTED END BEARINGS TRANSFER LONGITUDINAL FORCE AND UPLIFT (${bearingRef}); FLANGE TIES TRANSFER LATERAL FORCE. FACTORED FORCES: ${forces}.`,
   'LEFT END OF EACH BAY LOCATES LONGITUDINALLY. FULL CRANE TRACTION IS ASSIGNED TO EACH OCCUPIED BAY IN SEPARATE BOUNDING CASES; DO NOT ADD THESE CASES.',
   `GIRDER ANALYSIS SPANS ARE GRID-TO-GRID; BEARINGS ARE INSET AS SHOWN. LOCATING ENDS: STANDARD HOLES, PRETENSIONED. SLIDING ENDS: SLOTS, ${slidingPhrase(activeEndBearing(p)!)} (${bearingRef}).`,
   'REFERENCE AIST TECHNICAL REPORT 13 §5.8.1. GIRDER AND CAP ENDS REMAIN SEPARATE. RAIL JOINTS ARE DETAILED INDEPENDENTLY.'
  ]:[
-  usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}. SEPARATE TIES AND LOCATING ATTACHMENTS TRANSFER HORIZONTAL FORCES.`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}. SEPARATE HORIZONTAL CONNECTIONS TRANSFER LATERAL AND LONGITUDINAL FORCES. INTERFACE FORCES: SEE CALCULATION REPORT.`:'DESIGN EACH BRACKET FOR THE SIMULTANEOUS GIRDER REACTIONS, LATERAL FORCES AND ECCENTRICITY TO THE COLUMN. INTERFACE FORCES: SEE CALCULATION REPORT.',
+  usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}. SEPARATE TIES AND LOCATING ATTACHMENTS TRANSFER HORIZONTAL FORCES. FACTORED FORCES: ${forces}.`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}. SEPARATE HORIZONTAL CONNECTIONS TRANSFER LATERAL AND LONGITUDINAL FORCES. FACTORED FORCES: ${forces}.`:`DESIGN EACH BRACKET AND ITS COLUMN ATTACHMENT FOR THE ${forces} WITH THE ECCENTRICITY TO THE COLUMN.`,
   'LEFT END OF EACH BAY LOCATES LONGITUDINALLY. FULL CRANE TRACTION IS ASSIGNED TO EACH OCCUPIED BAY IN SEPARATE BOUNDING CASES; DO NOT ADD THESE CASES.',
   usesExistingBracket(p)?'GIRDER SPANS ARE GRID-TO-GRID. BEARINGS ARE INSET; EXISTING SUPPORT ASSESSMENT AND MOVEMENT COMPATIBILITY ARE REQUIRED.':wb?`GIRDER ANALYSIS SPANS ARE GRID-TO-GRID; BEARINGS ARE INSET AS SHOWN. WELDED BRACKET ${bracketRef}; COLUMN-SIDE MOVEMENT ATTACHMENTS REQUIRE PROJECT DESIGN.`:'GIRDER SPANS IN ANALYSIS ARE GRID-TO-GRID. BEARINGS ARE INSET AS SHOWN; BRACKET SPREADER AND COLUMN-SIDE CONNECTIONS REQUIRE PROJECT DESIGN.',
   'REFERENCE AIST TECHNICAL REPORT 13 §5.8.1. GIRDER AND CAP ENDS REMAIN SEPARATE. RAIL JOINTS ARE DETAILED INDEPENDENTLY.'
  ];
  return {key:'support',name:'SUPPORTS',views,notes:(t:Style)=>[
-  heading(t,'SHARED BRACKET / CONCURRENT VERTICAL REACTIONS'),table(t,['GRID','LEFT V','RIGHT V','COMBINED V','SEAT M'],reactions,[.55,1,1,1.1,1.1]),
-  paragraph(t,'AT MAXIMUM COMBINED DOWNWARD REACTION AT EACH GRID. SEAT M = SUM V X OFFSET FROM GRID; POSITIVE TOWARD THE NEXT GRID.'),
+  ...(bracketForceTopic(s)==='support'?bracketForceBlocks(s,t):[]),
   heading(t,'INDEPENDENT SUPPORT NOTES'),...numbered(t,notes)]};
 }
