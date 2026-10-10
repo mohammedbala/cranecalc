@@ -24,9 +24,9 @@ export const existingColumnSchema=z.object({
  source:z.string().max(500),confirmed:z.boolean()
 });
 export type ExistingColumnInput=z.infer<typeof existingColumnSchema>;
-const zero={P:0,Mx:0,My:0,V:0},inch=25.4,foot=304.8;
+const zero={P:0,Mx:0,My:0,V:0},inch=25.4,foot=304.8,ksi=6.894757293;
 // W14X90 in A992: an illustrative starting point only; zero existing loads are missing data until entered.
-export const defaultExistingColumn:ExistingColumnInput={enabled:false,shape:'W14X90',d:14*inch,bf:14.5*inch,tf:.71*inch,tw:.44*inch,Fy:345,Fu:450,
+export const defaultExistingColumn:ExistingColumnInput={enabled:false,shape:'W14X90',d:14*inch,bf:14.5*inch,tf:.71*inch,tw:.44*inch,Fy:50*ksi,Fu:65*ksi,
  height:24*foot,seatElevation:16*foot,eccentricity:18*inch,strong:{base:'pinned',top:'braced'},weak:{base:'pinned',top:'braced'},
  Lcx:24*foot,Lcy:8*foot,Lcz:8*foot,Lb:8*foot,longitudinal:'bracing',driftLimit:240,
  existing:{D:{...zero},L:{...zero},Lr:{...zero},S:{...zero},R:{...zero},W:{...zero},E:{...zero}},source:'',confirmed:false};

@@ -55,7 +55,7 @@ describe('connection-sheet leader routes',()=>{
    expect(crossingLeaders(flangeTieSheetSvg(s)),name+' flange ties').toEqual([]);
   }
   expect(checked).toBeGreaterThan(20);
- },30000);
+ },120000); // Sweeps every catalogue W shape; about 30 s on a 4-core runner.
  it.each(['W24X131','W24X250','W36X150'])('keeps independent callouts apart for %s, both unit systems and reference frame styles',name=>{
   const original:CalculationSnapshot={input:demonstrationProject(),revision:'drawing-test',createdAt:'',errors:[],warnings:[],properties:null,analysis:null,checks:[],eligible:false,referenceVersion:''};
   for(const units of ['US','SI'] as const)for(const frameStyle of ['tapered','rolled'] as const){
