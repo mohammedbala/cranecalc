@@ -1,3 +1,4 @@
+import {cranePositions,pairs} from './cranePositions';
 import { beamSystem, momentAt, type BeamResult } from './beam';
 import { craneCombinations, emptyAistInputs, craneDesignMinimum } from './aistLoads';
 import { interaction, type GirderStrength } from './aiscStrength';
@@ -37,11 +38,10 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  const flangeY=(p.section.d-p.section.tf)/2;
  const railLever=(cap?p.section.d+p.section.capTw+p.railHeight-cap.topY:p.railHeight+p.section.tf/2)/props.h0,verticalLever=p.railEccentricity/props.h0;
  let eq=Math.max(dead.equilibriumError,live.equilibriumError);
- const responses=p.cranes.map(c=>{
+ const positions=cranePositions(p,steps,criticalStations);
+ const responses=p.cranes.map((c,craneIndex)=>{
   const minimum=craneDesignMinimum(c),impact=Math.max(c.impact,minimum.impact),totalSide=c.wheels.reduce((sum,w)=>sum+w.lateral,0),sideFactor=totalSide>0?Math.max(1,minimum.runwaySide/totalSide):1;
-  const origins=new Set<number>(Array.from({length:steps+1},(_,i)=>c.travelStart+(c.travelEnd-c.travelStart)*i/steps));
-  for(const x of criticalStations)for(const w of c.wheels){const origin=x-w.offset;if(origin>=c.travelStart&&origin<=c.travelEnd)origins.add(origin);}
-  return [...origins].sort((a,b)=>a-b).map(origin=>{
+  return positions[craneIndex].map(position=>{const origin=position.origin;
    const all=c.wheels.map(w=>({...w,lateral:w.lateral*sideFactor,x:origin+w.offset,static:w.loaded/(c.includesImpact?1+c.impact:1)})),wheels=all.filter(w=>w.x>=0&&w.x<=L);
    // Wheels on an adjacent existing bay load only the shared support, by load type.
    const adjacent={vd:adjacentReactions(p,all.map(w=>({x:w.x,p:w.unloaded}))),vl:adjacentReactions(p,all.map(w=>({x:w.x,p:w.static-w.unloaded}))),vi:adjacentReactions(p,all.map(w=>({x:w.x,p:w.static*impact})))},beyond=adjacent.vd.some(v=>v>0)||adjacent.vl.some(v=>v>0);
@@ -53,7 +53,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
    for(const r of [vd,vl,vi,vs,td,tl,ti,th,bd,bl,bi,bh])eq=Math.max(eq,r.equilibriumError);
    // Reactions are an exact influence basis for moments at arbitrary wheel/detail stations.
    const basis=(r:BeamResult,ls:{x:number;p:number}[])=>samples.map(x=>momentAt(x,r.reactions,ls,0));
-   return {origin,wheels,impact,adjacent,beyond,vd,vl,vi,vs,td,tl,ti,th,bd,bl,bi,bh,
+   return {origin,position,wheels,impact,adjacent,beyond,vd,vl,vi,vs,td,tl,ti,th,bd,bl,bi,bh,
     moments:{vd:basis(vd,cd),vl:basis(vl,cv),vi:basis(vi,ci),td:basis(td,cd),tl:basis(tl,cv),ti:basis(ti,ci),th:basis(th,h),bd:basis(bd,cd),bl:basis(bl,cv),bi:basis(bi,ci),bh:basis(bh,h)},
     fatigueV:[atDetail(vd,cd),atDetail(vl,cv)],fatigueT:[atDetail(td,cd),atDetail(tl,cv),atDetail(th,h)],fatigueB:[atDetail(bd,cd),atDetail(bl,cv),atDetail(bh,h)]};
   });
@@ -148,7 +148,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
   if(index===responses.length){evaluate();return;}
   visit(index+1); // A crane absent from the modeled runway is a real load state.
   for(const r of responses[index]){
-   const previous=chosen.at(-1);if(previous&&r.origin-previous.response.origin-p.cranes[previous.index].wheels.at(-1)!.offset<Math.max(p.cranes[index].minSeparation,p.cranes[previous.index].minSeparation)-1e-6)continue;
+   const previous=chosen.at(-1);if(!pairs(p,index,r.position,previous&&{index:previous.index,position:previous.response.position}))continue;
    if(!r.wheels.length&&!r.beyond)continue;chosen.push({index,response:r});visit(index+1);chosen.pop();
   }
  }

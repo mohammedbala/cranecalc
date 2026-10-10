@@ -11,6 +11,8 @@ export interface FlexureCurve {
  available(length:number):number;
  /** A length no longer than the longest one whose available strength is at least the target. */
  lengthFor(target:number):number;
+ /** An available strength no greater than the strength at this length. */
+ lowerBound(length:number):number;
 }
 
 // AISC F2-4 (rolled I, c = 1, J omitted for welded plate girders) or F5-4 with the compression-flange
@@ -33,12 +35,13 @@ export function flexureCurves(p:ProjectInput,s:Properties):{positive:FlexureCurv
    length=M=>{const F=M/s.Sx;return rts*Math.sqrt((a+Math.sqrt(a*a+4*F*F*b))/(2*F*F));};
   }
   let table:{L:number;A:number}[]|undefined;
+  const nodes=()=>table??=Array.from({length:121},(_,k)=>{const L=Lb*1.03**k;return {L,A:available(L)};});
   const lengthFor=(target:number)=>{
-   table??=Array.from({length:121},(_,k)=>{const L=Lb*1.03**k;return {L,A:available(L)};});
-   let found=table[0].L;for(const t of table){if(t.A>=target)found=t.L;else break;}
+   let found=nodes()[0].L;for(const t of nodes()){if(t.A>=target)found=t.L;else break;}
    return found;
   };
-  return {base:pick(base),mcr,length,available,lengthFor};
+  const lowerBound=(L:number)=>{const t=nodes(),k=Math.ceil(Math.log(Math.max(L,Lb)/Lb)/Math.log(1.03)-1e-9);return k<t.length?t[Math.max(0,k)].A:available(L);};
+  return {base:pick(base),mcr,length,available,lengthFor,lowerBound};
  };
  return {positive:curve(1),negative:curve(-1)};
 }

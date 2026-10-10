@@ -1,3 +1,7 @@
 import { defineConfig } from '@playwright/test';
 import { chromiumChannel } from './server/browserRuntime';
-export default defineConfig({testDir:'tests/e2e',timeout:60000,expect:{timeout:15000},use:{channel:chromiumChannel,baseURL:'http://127.0.0.1:5173',viewport:{width:1440,height:1000}},webServer:{command:'npm run dev',url:'http://127.0.0.1:5173',reuseExistingServer:true,timeout:30000},reporter:'list'});
+// Smoke tests run against the static GitHub Pages build: calculations, drawings and the printable report
+// all run in the browser there, exactly as deployed.
+export default defineConfig({testDir:'tests/e2e',timeout:600000,expect:{timeout:30000},workers:1,
+ use:{channel:chromiumChannel,launchOptions:process.env.CRANECALC_CHROMIUM_PATH?{executablePath:process.env.CRANECALC_CHROMIUM_PATH}:{},baseURL:'http://127.0.0.1:4175',viewport:{width:1440,height:1000},acceptDownloads:true},
+ webServer:{command:'npm run build:pages && npm run preview:pages -- --strictPort',url:'http://127.0.0.1:4175',reuseExistingServer:!process.env.CI,timeout:300000},reporter:'list'});
