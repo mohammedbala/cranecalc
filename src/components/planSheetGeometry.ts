@@ -33,6 +33,26 @@ function edges(group: THREE.Group): Segment[] {
   return result;
 }
 
+// Outline of every mesh cut by the plane x = at: the intersection of the plane with each triangle.
+function cutLines(group: THREE.Object3D, at: number, keep: (mesh: THREE.Mesh) => boolean): Segment[] {
+  group.updateMatrixWorld(true);
+  const result: Segment[] = [], v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  group.traverse(object => {
+    if (!(object instanceof THREE.Mesh) || !keep(object)) return;
+    const positions = object.geometry.getAttribute('position'), index = object.geometry.getIndex(), count = index ? index.count : positions.count;
+    for (let i = 0; i + 2 < count; i += 3) {
+      for (let j = 0; j < 3; j++) v[j].fromBufferAttribute(positions, index ? index.getX(i + j) : i + j).applyMatrix4(object.matrixWorld);
+      const cut: Point[] = [];
+      for (let j = 0; j < 3; j++) {
+        const a = v[j], b = v[(j + 1) % 3], da = a.x - at, db = b.x - at;
+        if ((da < 0) !== (db < 0)) { const t = da / (da - db); cut.push([at, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t]); }
+      }
+      if (cut.length === 2) result.push([cut[0], cut[1]]);
+    }
+  });
+  return result;
+}
+
 export function planSheetGeometry(input: ProjectInput, settings: FramingSettings = defaultFraming) {
   if (validateProject(input).length) throw Error('Correct project inputs before drawing the plan sheet.');
   const f = framingSchema.parse(settings), s = input.section;
@@ -85,9 +105,17 @@ export function planSheetGeometry(input: ProjectInput, settings: FramingSettings
   building.updateMatrixWorld(true);
   for(const o of designed)runway.attach(o);
   const referenceLines = edges(building), runwayLines = edges(runway);
+  // Typical transverse section: cut at mid-bay looking back (toward -x) at the frame on the grid, so
+  // only that frame and what is attached to it is seen beyond the cut girders and rails.
+  const sectionBay = supports.length > 2 ? 1 : 0, sectionGrid = supports[sectionBay], sectionAt = (supports[sectionBay] + supports[sectionBay + 1]) / 2 + 1e-4;
+  const atGrid = (segment: Segment) => segment.every(([x]) => Math.abs(x - sectionGrid) <= .9);
+  const isRail = (mesh: THREE.Mesh) => mesh.name.startsWith('rail-');
+  const section = { grid: sectionGrid, at: sectionAt,
+    cut: { building: cutLines(building, sectionAt, () => true), runway: cutLines(runway, sectionAt, mesh => !isRail(mesh)), rail: cutLines(runway, sectionAt, isRail) },
+    beyond: { building: referenceLines.filter(atGrid), runway: runwayLines.filter(atGrid) } };
   const geometries = new Set<THREE.BufferGeometry>();
   for (const group of [building, runway]) group.traverse(o => { const geometry = (o as THREE.Mesh).geometry; if (geometry) geometries.add(geometry); });
   geometries.forEach(g => g.dispose()); material.dispose(); edge.dispose();
   return { referenceLines, runwayLines, length, supports, width, d, bf, tf, railZ, railBase, columnOffset: reference.columnOffset,
-    column: input.details?.bracket?.enabled?{d:input.details.bracket.receiver.depth/1000,bf:input.details.bracket.receiver.width/1000,tf:input.details.bracket.receiver.flangeThickness/1000,tw:input.details.bracket.receiver.webThickness/1000}:shapeMeters(column), columnDepthAt: (y:number) => reference.columnOuter(y)-reference.columnFace, bracketDepth: input.details?.bracket?.enabled?bracketModelDepth(input.details.bracket)/1000:shapeMeters(crosshead).d, floor: reference.floor, membersPerRunway: members.length, members };
+    column: input.details?.bracket?.enabled?{d:input.details.bracket.receiver.depth/1000,bf:input.details.bracket.receiver.width/1000,tf:input.details.bracket.receiver.flangeThickness/1000,tw:input.details.bracket.receiver.webThickness/1000}:shapeMeters(column), columnDepthAt: (y:number) => reference.columnOuter(y)-reference.columnFace, bracketDepth: input.details?.bracket?.enabled?bracketModelDepth(input.details.bracket)/1000:shapeMeters(crosshead).d, floor: reference.floor, membersPerRunway: members.length, members, section };
 }
