@@ -1,3 +1,4 @@
+import {newColumnSheetSvg} from './newColumnSheet';
 import {flangeTieSheetSvg} from './flangeTieSheet';
 import {connectionOptionChecks} from '../engine/connectionOptions';
 import {connectionConceptSheetSvg} from './connectionConceptSheet';
@@ -41,6 +42,8 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const p=s.input,f=framingSchema.parse(settings),m=planSheetGeometry(p,f),dim=(meters:number)=>drawingLength(meters*1000,p.units);
   const rows=[m.columnOffset,-m.width-m.columnOffset],floor=m.floor,datum=p.drawing?.datumElevation??0;
   const elevations=runwayElevations(p),datumLabel=p.drawing?.datumLabel??'Reference floor';
+  // New freestanding columns designed here are new work, drawn solid and detailed on S-08.
+  const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP';
   // Rail and stop geometry in mm from each runway end when girder-mounted stops are designed.
   const stop=activeEndStop(p),stopGeom=stop?endStopGeometry(p,stop):undefined,railEnd=stopGeom?.railEnd??0;
   // Ends with stops stop the rail short; an end continued by an existing bay runs on with dashed existing steel.
@@ -64,7 +67,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   m.supports.forEach((x,i)=>{
     svg+=line([X(x),Y(rows[1])-20],[X(x),Y(rows[0])+17],'grid-line')+bubble(X(x),Y(rows[1])-29,String(i+1));
     for(const [side,z] of rows.entries()){
-      svg+=rect(X(x-m.column.bf/2),Y(z-m.column.d/2),m.column.bf*k,m.column.d*k,'reference-line');
+      svg+=rect(X(x-m.column.bf/2),Y(z-m.column.d/2),m.column.bf*k,m.column.d*k,newColumns?'runway-line':'reference-line');
       const rail=side?-m.width:0,wb=p.details?.bracket;
       if(wb?.enabled){const face=rail+(side?-1:1)*wb.reach/1000,tip=face+(side?1:-1)*wb.seatProjection/1000;svg+=rect(X(x-wb.seatLength/2000),Y(Math.min(face,tip)),wb.seatLength/1000*k,wb.seatProjection/1000*k,'runway-line');}else svg+=rect(X(x-.15),Y(Math.min(z,rail)),.3*k,Math.abs(z-rail)*k,'reference-line');
     }
@@ -87,6 +90,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   }
   // Labels sit on the inboard side of their target so a leader never crosses its own text.
   const inboard=(end:'left'|'right',labels:string[],dx:number)=>{const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),7.5)));return end==='left'?left+dx:right-dx-w;};
+  if(newColumns){const labels=[`NEW ${columnName} COLUMN ON`,`SPREAD FOOTING, TYP. ${2*m.supports.length}`,`SEE ${detailRef('NEW RUNWAY COLUMN / ELEVATION')}`],x0=X(m.supports[1]??m.supports[0]),w=Math.max(...labels.map(v=>textWidth(v,7.5)));svg+=`<g data-new-column="plan">${multiLeader([[x0+m.column.bf/2*k,Y(rows[0]-m.column.d/2)]],[x0+m.column.bf/2*k+16,Y(-m.width/2)-8],labels,7.5,[],w)}</g>`;}
   if(stop){const first=ends[0],labels=[`END STOP, TYP. ${2*ends.length}`,`SEE ${detailRef('END STOP / ELEVATION')}`];svg+=multiLeader([[first==='left'?left+stopGeom!.front/1000*k:right-stopGeom!.front/1000*k,Y(-m.bf/2)]],[inboard(first,['END STOP, TYP. 4','SEE 1/S-07'],16),Y(-m.width/2)+4],labels,7.5);}
   for(const b of adjacent){const labels=['EXISTING RUNWAY CONTINUES',`ADJ. BAY ${dim(b.length/1000)}, FIELD VERIFY`];svg+=`<g data-existing-bay-label="${b.end}">${multiLeader([[b.end==='left'?left-stub/2:right+stub/2,Y(-m.bf/2)]],[inboard(b.end,labels,16),Y(-m.width/2)+26],labels,7.5)}</g>`;}
   svg+=dimH(left,right,Y(rows[0])+19,363,`${dim(m.length)} OVERALL`);
@@ -100,7 +104,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   svg+=`<g data-view="elevation">`;
   svg+=text(40,441,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: S-02${p.system==='simple'&&p.details?' / SHARED SUPPORT: S-04':''}`,9);
   m.supports.forEach((x,i)=>{
-    svg+=rect(EX(x-m.column.bf/2),top-10,m.column.bf*ek,bottom-top+39,'reference-line');
+    svg+=rect(EX(x-m.column.bf/2),top-10,m.column.bf*ek,bottom-top+39,newColumns?'runway-line':'reference-line');
     const wb=p.details?.bracket;
     if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1])svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');}else svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
     svg+=line([EX(x),478],[EX(x),bottom+33],'grid-line')+bubble(EX(x),476,String(i+1));
@@ -144,13 +148,14 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
 /** Girder schedule and sheet notes; the general notes are on S-00. */
 function girderSchedule(s:CalculationSnapshot,x:number,y:number,width:number,height:number){
   const p=s.input,u=p.units,len=(mm:number)=>drawingLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
+  const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP';
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
   const ends=!d?'SEE S-02':p.system==='continuous'?'BEARS ON EACH SUPPORT; SEE S-02':'LEFT END LOCATES, RIGHT END SLIDES; SEE S-04';
   const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
     return [mark,String(all.length*2),`${p.section.name}${p.section.kind==='cap'?' (CAP: SEE S-03)':''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE',ends];});
   const notes=[
     'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
-    'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
+    newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE S-08. THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
     `SET RAIL C/L SPACING (CRANE SPAN) TO ${d?len(d.criteria.railGauge):'THE CRANE MANUFACTURER\'S GAUGE'}; RAIL C/L IS ${len(Math.abs(p.railEccentricity))} FROM THE GIRDER WEB C/L${p.railEccentricity?p.railEccentricity>0?', OUTBOARD TOWARD THE SUPPORTING COLUMNS':', INBOARD TOWARD THE CRANE':''}.`,
     p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE S-04.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
@@ -191,7 +196,8 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
     ...(p.system==='simple'&&d?[{number:'S-04',name:'runway-independent-supports-sheet-arch-d',title:'INDEPENDENT GIRDER SUPPORTS',render:()=>simpleSupportSheetSvg(s,f)}]:[]),
     ...(d?.bracket?.enabled?[{number:'S-05',name:usesExistingBracket(p)?'runway-existing-brackets-sheet-arch-d':'runway-welded-brackets-sheet-arch-d',title:usesExistingBracket(p)?'EXISTING BRACKETS / NEW BOLTED SEATS':'WELDED COLUMN BRACKETS',render:()=>bracketSheetSvg(s)}]:[]),
     ...(d?.brace.flangeAttachment?.enabled?[{number:'S-06',name:'runway-flange-ties-sheet-arch-d',title:'DIRECT FLANGE TIES',render:()=>flangeTieSheetSvg(s)}]:[]),
-    ...(d&&activeEndStop(p)?[{number:'S-07',name:'runway-end-stops-sheet-arch-d',title:'RUNWAY END STOPS',render:()=>endStopSheetSvg(s)}]:[])];
+    ...(d&&activeEndStop(p)?[{number:'S-07',name:'runway-end-stops-sheet-arch-d',title:'RUNWAY END STOPS',render:()=>endStopSheetSvg(s)}]:[]),
+    ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[{number:'S-08',name:'runway-new-columns-sheet-arch-d',title:'NEW RUNWAY COLUMNS & FOOTINGS',render:()=>newColumnSheetSvg(s)}]:[])];
   return [{number:'S-00',name:'cover-general-notes-sheet-arch-d',title:'COVER, GENERAL NOTES & DESIGN CRITERIA',render:()=>coverSheetSvg(s,sheets)},...sheets];
 }
 export function appendPlanSheet(html:string,s:CalculationSnapshot,f:FramingSettings=defaultFraming){

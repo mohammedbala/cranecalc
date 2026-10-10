@@ -5,7 +5,7 @@ import {independentBearingSettings,buildIndependentSupports} from './independent
 import type { ProjectInput } from '../engine/types';
 import { validateProject } from '../engine/calculate';
 import { referenceColumns, referenceCrossheads, shapeMeters } from '../data/aiscReferenceShapes';
-import { buildReferenceFraming } from './referenceFraming';
+import { buildReferenceFraming,newColumnFraming } from './referenceFraming';
 import { buildReferenceStructure, cloneOppositeRunway } from './referenceStructure';
 import { defaultFraming, framingSchema, type FramingSettings } from './framingSettings';
 import {flangeTieGeometry} from '../engine/tieGeometry';
@@ -46,13 +46,15 @@ export function planSheetGeometry(input: ProjectInput, settings: FramingSettings
   const railBase = d / 2 + (s.kind === 'cap' ? s.capTw / 1000 : 0), railH = Math.max(.025, input.railHeight / 1000);
   // Runway centres follow the project rail gauge when detailed inputs exist; otherwise the reference building width.
   const railZ = input.railEccentricity / 1000, width = input.details ? (input.details.criteria.railGauge - 2 * input.railEccentricity) / 1000 : f.width / 1000;
-  const reference = buildReferenceFraming({columnFace:input.details?.bracket?.enabled?undefined:tieFaceMeters(input), bracket:input.details?.bracket,continuousBearing:input.system==='continuous'&&input.details?.bracket?.enabled?{width:input.details.bearing.width/1000,length:input.details.bearing.length/1000,thickness:input.details.bearing.thickness/1000}:undefined,independentBearing:independentBearingSettings(input), supports, girderDepth: d, girderWidth: bf, girderFlangeT: tf, columnHeight: f.height / 1000,
+  const newColumn = newColumnFraming(input);
+  const reference = buildReferenceFraming({newColumn,columnFace:input.details?.bracket?.enabled?undefined:tieFaceMeters(input), bracket:input.details?.bracket,continuousBearing:input.system==='continuous'&&input.details?.bracket?.enabled?{width:input.details.bearing.width/1000,length:input.details.bearing.length/1000,thickness:input.details.bearing.thickness/1000}:undefined,independentBearing:independentBearingSettings(input), supports, girderDepth: d, girderWidth: bf, girderFlangeT: tf, columnHeight: f.height / 1000,
     roofBottom: railBase + railH + .0125 + f.roofClearance / 1000, column, crosshead, materials, frameStyle: f.frameStyle });
   const frame = buildReferenceStructure({ supports, bayWidth: width, columnBottom: reference.columnBottom, floor: reference.floor,
     railTop: railBase + railH + .0125, roofClearance: f.roofClearance / 1000, columnOffset: reference.columnOffset, column,
     materials, cranes: [], wheelRadius: .1, railZ, frameStyle: f.frameStyle, roofSlope: f.roofSlope, bracketTop: reference.beamTop });
   const building = new THREE.Group();
-  building.add(reference.group, cloneOppositeRunway(reference.group, width, supports, railZ), frame.group);
+  // New freestanding runway columns stand clear of the building frames, which are not drawn with them.
+  building.add(reference.group, cloneOppositeRunway(reference.group, width, supports, railZ), ...(newColumn?[]:[frame.group]));
   const runway = new THREE.Group();
   const box = (name: string, l: number, h: number, w: number, x: number, y: number, z: number) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(l, h, w), material); mesh.name = name; mesh.position.set(x, y, z); runway.add(mesh);

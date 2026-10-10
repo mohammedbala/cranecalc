@@ -6,6 +6,19 @@ import * as THREE from 'three';
 import { shapeMeters, type ReferenceShape } from '../data/aiscReferenceShapes';
 import { horizontalPlateGeometry, referenceBoltDiameter, type HardwareBuilder, type Hole, type PartInfo } from './connectionDetails';
 import { columnProfile, portalDimensions, profileUpper, taperedISection, type FrameStyle } from './metalBuildingGeometry';
+import {columnBaseElevation} from '../engine/columnBaseInputs';
+import type {ProjectInput} from '../engine/types';
+
+/** New freestanding runway columns, in m from the girder mid-depth: column top and base, base plate, anchor rods and footing. */
+export interface NewColumnFraming {top:number;bottom:number;floor:number;plate:{N:number;B:number;t:number};grout:number;anchors:{x:number;z:number;d:number}[];footing:{L:number;B:number;h:number}}
+/** Geometry of the new columns from the project, when a new column base is designed. */
+export function newColumnFraming(p:ProjectInput):NewColumnFraming|undefined{
+ const c=p.existingColumn,b=p.columnBase;if(!c?.enabled||!c.isNew||!b?.enabled)return undefined;
+ const mm=.001,bearing=p.details?.bearing.thickness??0,seatTop=-p.section.d/2-bearing,bottom=(seatTop-c.seatElevation)*mm;
+ const a=b.anchors,row=b.plate.N/2-a.edge,xs=Array.from({length:a.perRow},(_,i)=>-a.gauge/2+(a.perRow>1?i*a.gauge/(a.perRow-1):a.gauge/2));
+ return {top:bottom+c.height*mm,bottom,floor:bottom-columnBaseElevation(b)*mm,plate:{N:b.plate.N*mm,B:b.plate.B*mm,t:b.plate.thickness*mm},grout:b.grout*mm,
+  anchors:xs.flatMap(x=>[-row,row].map(z=>({x:x*mm,z:z*mm,d:a.diameter*mm}))),footing:{L:b.footing.L*mm,B:b.footing.B*mm,h:b.footing.thickness*mm}};
+}
 
 interface FramingMaterials { column: THREE.Material; beam: THREE.Material; plate: THREE.Material; foundation: THREE.Material; weld?:THREE.Material; edge: THREE.LineBasicMaterial }
 interface FramingOptions {
@@ -18,18 +31,21 @@ interface FramingOptions {
   independentBearing?: {thickness:number;seatLength:number};
   /** Column face from the girder centerline, m, set by a flange tie where the bracket is by others. */
   columnFace?:number;
+  /** New runway columns designed here replace the building columns at the supports. */
+  newColumn?:NewColumnFraming;
 }
 
 // One continuous building column per station, with an inward-facing runway
 // bracket. The opposite row is mirrored, so both brackets face into the bay.
 // These are illustrative connections, not a stiffness or connection design.
-export function buildReferenceFraming({ supports, girderDepth, girderWidth, girderFlangeT = .01905, columnHeight, roofBottom = girderDepth / 2 + 2.5, column, crosshead, materials, hardware, frameStyle='rolled',independentBearing,bracket,continuousBearing,columnConnectionHoles=[],columnFace:tieFace }: FramingOptions) {
+export function buildReferenceFraming({ supports, girderDepth, girderWidth, girderFlangeT = .01905, columnHeight, roofBottom = girderDepth / 2 + 2.5, column, crosshead, materials, hardware, frameStyle='rolled',independentBearing,bracket,continuousBearing,columnConnectionHoles=[],columnFace:tieFace,newColumn }: FramingOptions) {
   bracket=bracket?.enabled?bracket:undefined;
   if(bracket){const r=bracket.receiver;column={name:'Entered receiver I-section',row:0,d:r.depth/25.4,bf:r.width/25.4,tf:r.flangeThickness/25.4,tw:r.webThickness/25.4};}
   const group = new THREE.Group(); group.name = 'reference-support-framing';
   const c = shapeMeters(column), b = shapeMeters(crosshead), plateT = .0254, padH = .2;
   const seatTop = -girderDepth / 2-(independentBearing?.thickness??continuousBearing?.thickness??0), beamTop = seatTop - (bracket?bracket.seatThickness/1000:plateT), beamBottom = beamTop - (bracket?bracketModelDepth(bracket)/1000:b.d);
-  const columnBottom = beamBottom - plateT - columnHeight, columnTop = frameStyle==='tapered'?roofBottom+portalDimensions.kneeDepth:roofBottom-plateT, floor = columnBottom - plateT - padH;
+  if(newColumn)frameStyle='rolled';
+  const columnBottom = newColumn?newColumn.bottom:beamBottom - plateT - columnHeight, columnTop = newColumn?newColumn.top:frameStyle==='tapered'?roofBottom+portalDimensions.kneeDepth:roofBottom-plateT, floor = newColumn?newColumn.floor:columnBottom - plateT - padH;
   const columnMid=(columnBottom+columnTop)/2,profile=columnProfile(columnTop-columnBottom,beamTop-columnMid,c.d);
   if(bracket){const a=beamBottom-columnMid-.05,z=beamTop-columnMid+.05+(isExistingBracketType(bracket.arrangement)?existingBracketProfile(bracket).continuityAbove/1000:0);profile.splice(1,1,{s:a,lower:-c.d/2,upper:c.d/2},{s:z,lower:-c.d/2,upper:c.d/2});}
   const columnOffset = (bracket?bracket.reach/1000+c.d/2:tieFace!==undefined?tieFace+c.d/2:Math.max(.9, girderWidth / 2 + c.d / 2 + .35)), columnFace = columnOffset - c.d / 2;
@@ -89,7 +105,7 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
       if(frameStyle==='tapered'){
         for(const sx of [-1,1])for(const drop of [.12,.30,.50,.68])columnHoles.push({x:columnTop-drop-columnMid,z:sx*.09,diameter:holeD});
       }
-      for(const sx of [-1,1])for(const sz of [-1,1]){
+      if(!newColumn)for(const sx of [-1,1])for(const sz of [-1,1]){
         const ax=sx*(c.bf/2+.06),az=sz*(c.d/2+.06),number=(sx<0?1:3)+(sz<0?0:1),anchorD=.0254;
         baseHoles.push({x:ax,z:az,diameter:anchorD+.006});
         hardware.bolt(group,{id:`${code}-AR-${number}`,family:'Base anchor rod',description:'Building-column base plate to illustrative foundation pad',diameter:anchorD,grip:plateT,support:{x,z:columnOffset}},new THREE.Vector3(x+ax,columnBottom-plateT,columnOffset+az),new THREE.Vector3(0,1,0),true);
@@ -102,7 +118,7 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
       const member=taperedISection(`column-${code}`,profile,c.bf,c.tf,c.tw,{steel:materials.column,edge:materials.edge},columnHoles,upperHoles);
       member.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0,1,0),new THREE.Vector3(0,0,1),new THREE.Vector3(1,0,0)));member.position.set(x,columnMid,columnOffset);group.add(member);
       for(const mesh of member.children)mesh.userData.part={id:`column-${code}-${mesh.name}`,family:'Tapered building column',description:'Illustrative fabricated I-column, deepening toward the moment-frame knee.',support:{x,z:columnOffset}} satisfies PartInfo;
-    }else wMember(`column-${code}`,column,columnTop-columnBottom,new THREE.Vector3(x,columnMid,columnOffset),true,materials.column,upperHoles,columnHoles);
+    }else wMember(`column-${code}`,column,columnTop-columnBottom,new THREE.Vector3(x,columnMid,columnOffset),true,newColumn?materials.plate:materials.column,upperHoles,columnHoles);
     if(!bracket){
     wMember(`bracket-${code}`,crosshead,capLength,new THREE.Vector3(x,(beamTop+beamBottom)/2,bracketMid),false,materials.beam,topHoles);
     plate(`bearing-seat-${code}`,Math.max(b.bf+.12,.7,independentBearing?.seatLength??0),plateT,seatWidth,x,seatTop-plateT/2,0,seatHoles,independentBearing?'Shared bracket spreader (reference)':'Bearing seat plate');
@@ -115,9 +131,20 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
       const knee=outlined(new THREE.Mesh(geometry,materials.plate),`bracket-knee-${code}-${sign}`,'Bracket knee plate',{x,z:0});knee.position.x=x+sign*(b.tw/2+.035);group.add(knee);
     }
     }
+    if(newColumn){
+      // New column base: plate on grout on the footing, headed anchor rods in two rows across the column depth.
+      const n=newColumn,pt=n.plate.t,top=columnBottom-pt-n.grout;
+      const holes=n.anchors.map(a=>({x:a.x,z:a.z,diameter:a.d+.0016*(a.d<.0254?5:8)}));
+      plate(`base-plate-${code}`,n.plate.B,pt,n.plate.N,x,columnBottom-pt/2,columnOffset,holes,'New column base plate');
+      if(hardware)n.anchors.forEach((a,j)=>hardware.bolt(group,{id:`${code}-AR-${j+1}`,family:'Headed anchor rod',description:'New column base plate to footing; see S-08',diameter:a.d,grip:pt+n.grout,support:{x,z:columnOffset}},new THREE.Vector3(x+a.x,columnBottom-pt,columnOffset+a.z)));
+      box(group,`footing-${code}`,n.footing.B,n.footing.h,n.footing.L,x,top-n.footing.h/2,columnOffset,materials.foundation);
+    }else{
     plate(`base-plate-${code}`,baseX,plateT,baseZ,x,columnBottom-plateT/2,columnOffset,baseHoles,'Column base plate');
     box(group,`foundation-pad-${code}`,baseX+.2,padH,baseZ+.2,x,floor+padH/2,columnOffset,materials.foundation);
+    }
   });
+  // New columns and their bases are new work: drawn as designed steel, not reference framing.
+  if(newColumn)group.traverse(o=>{if(/^(column|base-plate|footing)-S\d/.test(o.name)||o.userData.part?.family==='Headed anchor rod')o.userData.designedBracket=true;});
   if(bracket)group.add(buildWeldedBrackets(bracket,supports,seatTop,materials.plate,materials.edge,continuousBearing,materials.weld,hardware));
   return {group,floor,columnBottom,columnTop,columnOffset,columnFace,beamTop,beamBottom,capLength,bracketStart,bracketEnd,seatTop,girderBoltHoles,profile,columnOuter:(y:number)=>columnOffset+profileUpper(profile,y-columnMid)};
 }

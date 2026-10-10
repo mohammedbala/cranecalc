@@ -11,6 +11,9 @@ import type { LapConnection,RunwayDetails } from './runwayDetails';
 import {defaultSimpleSupport} from './simpleSupports';
 import {defaultExistingColumn} from './existingColumnInputs';
 import {defaultLongitudinalBracing} from './longitudinalBracingInputs';
+import {defaultColumnBase} from './columnBaseInputs';
+import {columnBaseElevation} from './columnBase';
+import {aiscShapeByName} from '../data/aiscSections';
 const inch=25.4,foot=304.8,kip=4448.221615,ksi=6.894757293;
 const lap=():LapConnection=>({rows:2,gauge:3*inch,pitch:3*inch,edge:1.5*inch,thickness:.5*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:2*inch,weldSize:.25*inch,weldLength:6*inch});
 export function demonstrationDetails():RunwayDetails{return {
@@ -107,5 +110,31 @@ export function cappedDemonstrationProject():ProjectInput {
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';
  p.details!.fabrication.welding+=' Cap: 5/16 continuous fillet each W top-flange edge; 5-ft minimum development each end. Full cap bearing contact required. Bearing stiffeners CJP to W top flange, bottom fitted.';
  p.notes+=' Separate capped example: 2-ton crane on W24X94 + C15X33.9, centered rail, continuous cap welds and full contact. This is not a substitute section for the 10-ton demonstration.';
+ return p;
+}
+
+/**
+ * Fictitious new freestanding runway columns for the 2-ton capped runway: a W14X120 cantilever on a spread
+ * footing at each support, carrying the girder on its welded bracket and the top-flange tie at its face.
+ * The columns stop at the top of the girder; crane-level rod bracing between two of them takes the
+ * longitudinal forces. No existing building element carries crane load.
+ */
+export function newColumnDemonstrationProject():ProjectInput {
+ const p=cappedDemonstrationProject();
+ p.title='Cedar Works · New freestanding 2-ton runway columns';p.number='DEMO-NC-002';
+ const shape='W14X120',w=aiscShapeByName(shape)!,d=p.details!,cap=p.section.kind==='cap'?p.section.capTw:0;
+ const base={...structuredClone(defaultColumnBase),enabled:true,
+  plate:{...defaultColumnBase.plate,N:23*inch,B:18*inch,thickness:1.25*inch},anchors:{...defaultColumnBase.anchors,diameter:inch,embedment:15*inch},
+  footing:{...defaultColumnBase.footing,L:6.5*foot,B:6.5*foot,thickness:24*inch,bar:'#6' as const,spacing:10*inch},
+  source:'Fictitious geotechnical report GEO-02: 3,000 psf allowable (net), base friction 0.35, 120 pcf; interior heated building, frost not applicable. Concrete 4,000 psi; ASTM A615 Grade 60 bars; ASTM F1554 Grade 36 rods',confirmed:true};
+ // Rail top 20 ft above the floor: the seat sits below it by the rail, girder (with cap) and bearing plate,
+ // measured from the column base on the grout and plate. The column stops at the top of the girder.
+ const seat=20*foot-columnBaseElevation(base)-p.railHeight-cap-p.section.d-d.bearing.thickness,top=seat+d.bearing.thickness+p.section.d+cap;
+ d.bracket!.receiver={...d.bracket!.receiver,depth:w.d*inch,width:w.bf*inch,flangeThickness:w.tf*inch,webThickness:w.tw*inch,Fy:50*ksi,Fu:65*ksi,unbracedLength:top,axialDemand:0,confirmed:true,source:`New ${shape} column designed here (S-08); no other loads`};
+ p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,isNew:true,shape,Fy:50*ksi,Fu:65*ksi,height:top,seatElevation:seat,
+  strong:{base:'fixed',top:'free'},weak:{base:'fixed',top:'braced'},Lcx:2.1*top,Lcy:top,Lcz:top,Lb:top,longitudinal:'bracing',driftLimit:240,source:'New column designed here',confirmed:true};
+ p.columnBase=base;
+ p.longitudinalBracing={...p.longitudinalBracing!,height:seat,existing:{W:0,E:0},source:'Fictitious new crane-level rod X-bracing between the new columns at grid lines 2-3; no building wind or seismic on this line',confirmed:true};
+ p.notes='Software capability demonstration using realistic fictitious geometry, supplier forces, duty and criteria. Not a site-specific design. Scope: three simply supported 25-ft bays of a 2-ton capped runway on new freestanding W14X120 columns with welded brackets, top-flange ties, base plates, anchor rods and spread footings poured flush with the saw cut slab, and crane-level rod bracing. The existing building carries no crane load. Seismic design of the freestanding runway structure is by the engineer of record.';
  return p;
 }

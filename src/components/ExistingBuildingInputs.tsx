@@ -1,6 +1,7 @@
 import type {ReactNode} from 'react';
 import {aiscWShapes,aiscShapeByName} from '../data/aiscSections';
 import {defaultExistingColumn,existingLoadKeys,type ExistingColumnInput} from '../engine/existingColumnInputs';
+import {anchorGrades,barSizes,defaultColumnBase,type ColumnBaseInput} from '../engine/columnBaseInputs';
 import {defaultLongitudinalBracing,type LongitudinalBracingInput} from '../engine/longitudinalBracingInputs';
 import {aiscAngles} from '../data/aiscAngles';
 import {defaultEndStop,needsGirderStops,type EndStopInput} from '../engine/endStopInputs';
@@ -13,7 +14,9 @@ const loadNames:Record<typeof existingLoadKeys[number],string>={D:'Dead D',L:'Li
 
 export function ExistingBuildingInputs({project,update,numeric}:{project:ProjectInput;update:(fn:(p:ProjectInput)=>void)=>void;numeric:NumericField}){
  const c=project.existingColumn,bracket=project.details?.bracket?.enabled;
- const set=(patch:Partial<ExistingColumnInput>)=>update(p=>{p.existingColumn={...(p.existingColumn??structuredClone(defaultExistingColumn)),...patch};});
+ // A new column's bracket is welded to it, so the bracket's receiving column follows the selected shape.
+ const set=(patch:Partial<ExistingColumnInput>)=>update(p=>{p.existingColumn={...(p.existingColumn??structuredClone(defaultExistingColumn)),...patch};const n=p.existingColumn,b=p.details?.bracket,shape=aiscShapeByName(n.shape??'');
+  if(n.isNew&&b?.enabled&&shape)b.receiver={...b.receiver,depth:shape.d*25.4,width:shape.bf*25.4,flangeThickness:shape.tf*25.4,webThickness:shape.tw*25.4,Fy:n.Fy,Fu:n.Fu,axialDemand:0,confirmed:true,source:b.receiver.source||`New ${n.shape} column designed here`};});
  const support=(axis:'strong'|'weak',label:string)=>c&&<div className="field-grid">
   <label className="field"><span>{label} · base</span><select value={c[axis].base} onChange={e=>set({[axis]:{...c[axis],base:e.target.value as 'pinned'|'fixed'}})}><option value="pinned">Pinned</option><option value="fixed">Fixed</option></select></label>
   <label className="field"><span>{label} · top</span><select value={c[axis].top} onChange={e=>set({[axis]:{...c[axis],top:e.target.value as 'braced'|'free'}})}><option value="braced">Braced</option><option value="free">Sways</option></select></label></div>;
@@ -22,21 +25,45 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
   <label className="checkbox-field"><input type="checkbox" checked={!!c?.enabled} onChange={e=>set({enabled:e.target.checked})}/>Check the existing column that receives the runway</label>
   <p className="form-note">The column under the most heavily loaded support is checked for the crane reactions plus the loads it already carries, under ASCE 7 combinations. Frame action, connections to the column, bracing, anchors and foundations remain separate.</p>
   {c?.enabled&&<>
-   {bracket?<div className="inline-note">Column section, material, eccentricity and flange unbraced length come from the bracket's receiving column under Connections.</div>:<div className="field-grid">
+   <label className="checkbox-field"><input type="checkbox" checked={!!c.isNew} onChange={e=>set(e.target.checked?{isNew:true,strong:{base:'fixed',top:'free'},Lcx:2.1*c.height,existing:structuredClone(defaultExistingColumn.existing),source:'New column designed here',confirmed:true}:{isNew:false,confirmed:false,source:''})}/>New freestanding runway column designed here: fixed base, girder on its bracket, no existing building loads</label>
+   {bracket&&!c.isNew?<div className="inline-note">Column section, material, eccentricity and flange unbraced length come from the bracket's receiving column under Connections.</div>:<div className="field-grid">
     <label className="field"><span>Column section</span><select value={aiscShapeByName(c.shape)?c.shape:''} onChange={e=>set({shape:e.target.value})}><option value="">Custom plates (no fillet credit)</option>{aiscWShapes.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}</select></label>
     {!aiscShapeByName(c.shape)&&<>{numeric('Depth d',c.d,v=>set({d:v}))}{numeric('Flange width bf',c.bf,v=>set({bf:v}))}{numeric('Flange thickness tf',c.tf,v=>set({tf:v}))}{numeric('Web thickness tw',c.tw,v=>set({tw:v}))}</>}
     {numeric('Yield strength Fy',c.Fy,v=>set({Fy:v}),'stress')}{numeric('Tensile strength Fu',c.Fu,v=>set({Fu:v}),'stress')}</div>}
-   <div className="field-grid">{numeric('Base to top lateral support',c.height,v=>set({height:v}))}{numeric('Base to bracket seat',c.seatElevation,v=>set({seatElevation:v}))}{!bracket&&numeric('Column centerline to girder bearing',c.eccentricity,v=>set({eccentricity:v}))}</div>
+   <div className="field-grid">{numeric(c.isNew?'Base to column top':'Base to top lateral support',c.height,v=>set({height:v}))}{numeric('Base to bracket seat',c.seatElevation,v=>set({seatElevation:v}))}{!bracket&&numeric('Column centerline to girder bearing',c.eccentricity,v=>set({eccentricity:v}))}</div>
    {support('strong','Strong axis (across runway)')}{support('weak','Weak axis (along runway)')}
    <div className="field-grid">{numeric('Strong-axis effective length Lcx',c.Lcx,v=>set({Lcx:v}),'length','Use K for the actual end conditions; at least 1.0H pinned-braced, 0.8H fixed-braced, 2.1H fixed-free.')}{numeric('Weak-axis effective length Lcy',c.Lcy,v=>set({Lcy:v}))}{numeric('Torsional effective length Lcz',c.Lcz,v=>set({Lcz:v}))}{!bracket&&numeric('Flange unbraced length Lb',c.Lb,v=>set({Lb:v}))}</div>
    <div className="field-grid"><label className="field"><span>Crane longitudinal force</span><select value={c.longitudinal} onChange={e=>set({longitudinal:e.target.value as ExistingColumnInput['longitudinal']})}><option value="bracing">Bracing</option><option value="column">This column</option></select></label>{numeric('Runway drift limit h / n',c.driftLimit,v=>set({driftLimit:v}),'ratio')}</div>
+   {c.isNew?<ColumnBaseInputs project={project} update={update} numeric={numeric}/>:<>
    <div className="form-section-title"><span>02</span>Existing load effects at the governing section</div>
    <p className="form-note">Unfactored effects from the building's own analysis, per load type. Compression positive. Moments are added to the crane peaks without sign credit; W and E are applied in both directions.</p>
    {existingLoadKeys.map(k=><div className="field-grid" key={k}>{(['P','Mx','My','V'] as const).map(key=>numeric(`${loadNames[k]} · ${{P:'axial P',Mx:'strong Mx',My:'weak My',V:'shear V'}[key]}`,c.existing[k][key],v=>set({existing:{...c.existing,[k]:{...c.existing[k],[key]:v}}}),key==='Mx'||key==='My'?'moment':'force',undefined,-1e15))}</div>)}
    <label className="field"><span>Source of survey and existing loads</span><input value={c.source} placeholder="Original calculations, drawings or new analysis reference" onChange={e=>set({source:e.target.value})}/></label>
    <label className="checkbox-field"><input type="checkbox" checked={c.confirmed} onChange={e=>set({confirmed:e.target.checked})}/>Column dimensions, material and existing load effects are confirmed from the stated source</label>
+   </>}
   </>}
  </div>;
+}
+
+/** Base plate, anchor rods and spread footing of a new column. */
+function ColumnBaseInputs({project,update,numeric}:{project:ProjectInput;update:(fn:(p:ProjectInput)=>void)=>void;numeric:NumericField}){
+ const b=project.columnBase??defaultColumnBase;
+ const set=(patch:Partial<ColumnBaseInput>)=>update(p=>{p.columnBase={...(p.columnBase??structuredClone(defaultColumnBase)),...patch};});
+ const part=<K extends 'plate'|'anchors'|'concrete'|'footing'|'soil'>(key:K,patch:Partial<ColumnBaseInput[K]>)=>set({[key]:{...b[key],...patch}} as Partial<ColumnBaseInput>);
+ return <>
+  <div className="form-section-title"><span>02</span>Base plate, anchor rods and footing</div>
+  <label className="checkbox-field"><input type="checkbox" checked={b.enabled} onChange={e=>set({enabled:e.target.checked})}/>Design the base plate, anchor rods and spread footing of the new column</label>
+  <p className="form-note">AISC Design Guide 1 base plate, ACI 318-19 Chapter 17 headed cast-in rods in two rows across the column depth, and a concentric spread footing for soil bearing, overturning, sliding, shear and flexure. N runs along the column depth. The plate sits on grout on the footing; when a top-of-rail elevation is entered, the seat must put the rail there from the column base.</p>
+  {b.enabled&&<>
+   <div className="field-grid">{numeric('Plate length N (along depth)',b.plate.N,v=>part('plate',{N:v}))}{numeric('Plate width B',b.plate.B,v=>part('plate',{B:v}))}{numeric('Plate thickness',b.plate.thickness,v=>part('plate',{thickness:v}))}{numeric('Plate Fy',b.plate.Fy,v=>part('plate',{Fy:v}),'stress')}{numeric('Column-to-plate fillet weld',b.plate.weld,v=>part('plate',{weld:v}))}{numeric('Grout thickness',b.grout,v=>set({grout:v}))}</div>
+   <div className="field-grid"><label className="field"><span>Anchor rod grade</span><select value={b.anchors.grade} onChange={e=>part('anchors',{grade:e.target.value as ColumnBaseInput['anchors']['grade']})}>{anchorGrades.map(g=><option key={g} value={g}>ASTM {g.replace('-',' Grade ')}</option>)}</select></label>{numeric('Rod diameter',b.anchors.diameter,v=>part('anchors',{diameter:v}))}<label className="field"><span>Rods per row</span><select value={b.anchors.perRow} onChange={e=>part('anchors',{perRow:Number(e.target.value)})}>{[2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label>{numeric('Rod to plate edge (N)',b.anchors.edge,v=>part('anchors',{edge:v}))}{numeric('Outer rod spacing across B',b.anchors.gauge,v=>part('anchors',{gauge:v}))}{numeric('Embedment hef',b.anchors.embedment,v=>part('anchors',{embedment:v}))}</div>
+   <div className="field-grid">{numeric("Concrete f'c",b.concrete.fc,v=>part('concrete',{fc:v}),'stress')}{numeric('Footing length L (along N)',b.footing.L,v=>part('footing',{L:v}))}{numeric('Footing width',b.footing.B,v=>part('footing',{B:v}))}{numeric('Footing thickness',b.footing.thickness,v=>part('footing',{thickness:v}))}{numeric('Bottom cover',b.footing.cover,v=>part('footing',{cover:v}))}{numeric('Top of footing below floor',b.footing.soil,v=>part('footing',{soil:v}),'length','Zero pours the footing flush with the saw cut slab; deeper footings carry soil or slab over them.',0)}{numeric('Existing slab thickness',b.footing.slab,v=>part('footing',{slab:v}),'length',undefined,0)}
+    <label className="field"><span>Bottom bars, each way</span><select value={b.footing.bar} onChange={e=>part('footing',{bar:e.target.value as ColumnBaseInput['footing']['bar']})}>{barSizes.map(v=><option key={v} value={v}>{v}</option>)}</select></label>{numeric('Bar spacing',b.footing.spacing,v=>part('footing',{spacing:v}))}{numeric('Bar fy',b.footing.fy,v=>part('footing',{fy:v}),'stress')}</div>
+   <div className="field-grid">{numeric('Allowable soil bearing (service)',b.soil.allowable,v=>part('soil',{allowable:v}),'pressure')}{numeric('Base friction coefficient',b.soil.friction,v=>part('soil',{friction:v}),'ratio')}{numeric('Soil unit weight',b.soil.unitWeight,v=>part('soil',{unitWeight:v}),'unitWeight')}{numeric('Frost depth below floor',b.soil.frost,v=>part('soil',{frost:v}),'length','Zero only for a footing protected from frost inside a heated building.',0)}</div>
+   <label className="field"><span>Geotechnical report and specifications</span><input value={b.source} placeholder="Report number, date and recommended values" onChange={e=>set({source:e.target.value})}/></label>
+   <label className="checkbox-field"><input type="checkbox" checked={b.confirmed} onChange={e=>set({confirmed:e.target.checked})}/>Soil values, concrete, reinforcement and anchor rod specifications are confirmed from the stated source</label>
+  </>}
+ </>;
 }
 
 export function SupportReactionTable({snapshot}:{snapshot:CalculationSnapshot}){

@@ -1,3 +1,4 @@
+import {supportColumn} from '../engine/drawingData';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {endBearingView} from './endBearingDetail';
@@ -18,9 +19,9 @@ export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defau
  const wb=d?.bracket?.enabled?d.bracket:undefined;
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const nominal=(v:number)=>p.units==='US'?`${Number((v/25.4).toFixed(3))}"`:`${Number(v.toFixed(2))} MM`;
- const colName=f.frameStyle==='tapered'?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN';
+ const sc=supportColumn(p),colName=sc.isNew?sc.name:f.frameStyle==='tapered'?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN',colRef=sc.isNew?sc.reference:`${colName} (REF.)`;
  const bracket=referenceCrossheads.find(v=>v.name===f.crosshead)!;
- const colAt=(y:number)=>f.frameStyle==='tapered'?m.columnDepthAt(y):m.column.d;
+ const colAt=(y:number)=>f.frameStyle==='tapered'&&!sc.isNew?m.columnDepthAt(y):m.column.d,colLine=sc.isNew?'runway-line':'reference-line';
 
  const hole=(x:number,y:number,r:number)=>circle(x,y,r,'runway-line')+line([x-r-3,y],[x+r+3,y],'grid-line')+line([x,y-r-3],[x,y+r+3],'grid-line');
  const wSection=(x:number,y:number,bf:number,depth:number,tf:number,tw:number,cls='runway-line')=>rect(x-bf/2,y,bf,tf,cls)+rect(x-tw/2,y+tf,tw,depth-2*tf,cls)+rect(x-bf/2,y+depth-tf,bf,tf,cls);
@@ -38,8 +39,8 @@ export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defau
   svg+='<g data-view="bracket-connection">';
   const scale=drawingScale(Math.min(.14,150/(b.d+d.bearing.thickness+m.bracketDepth*1000)),p.units),k=scale.pointsPerMm*1000,cx=166,top=137,bottom=top+m.d*k,cy=(top+bottom)/2,inner=wb?cx+wb.reach/1000*k:266;
   const C=(y:number)=>colAt((cy-y)/k)*k;
-  svg+=line([inner,98],[inner,326],'reference-line')+line([inner+C(98),98],[inner+C(326),326],'reference-line');
-  svg+=line([inner+m.column.tf*k,98],[inner+m.column.tf*k,326],'reference-line')+line([inner+C(98)-m.column.tf*k,98],[inner+C(326)-m.column.tf*k,326],'reference-line');
+  svg+=line([inner,98],[inner,326],colLine)+line([inner+C(98),98],[inner+C(326),326],colLine);
+  svg+=line([inner+m.column.tf*k,98],[inner+m.column.tf*k,326],colLine)+line([inner+C(98)-m.column.tf*k,98],[inner+C(326)-m.column.tf*k,326],colLine);
   const pw=d.bearing.width/1000*k,pt=d.bearing.thickness/1000*k,bt=bottom+pt,bb=bt+m.bracketDepth*k;
   if(wb){const wx=inner-wb.seatProjection/1000*k;svg+=rect(wx,bt,wb.seatProjection/1000*k,wb.seatThickness/1000*k,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),ex=inner-e.projection/1000*k,y=bt+wb.seatThickness/1000*k;svg+=rect(ex,y,e.projection/1000*k,e.depth/1000*k,'reference-line');for(const off of [e.flangeThickness,e.depth-e.flangeThickness])svg+=line([ex,y+off/1000*k],[inner,y+off/1000*k],'reference-line');}else svg+=rect(wx,bt+wb.seatThickness/1000*k,wb.seatProjection/1000*k,wb.ribDepth/1000*k,'runway-line');}else{
   svg+=rect(cx-pw/2-8,bt,inner-(cx-pw/2-8),bb-bt,'reference-line');
@@ -59,7 +60,7 @@ export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defau
   svg+=rect(cx-pw/2,bottom,pw,pt,'runway-line');
   svg+=multiLeader([[cx-m.bf*k/2+8,top]],[40,96],[b.name,'RUNWAY GIRDER']);
   svg+=dimV(top,bottom,cx-m.bf*k/2,87,dim(b.d));
-  svg+=multiLeader([[inner+C(110),110]],[355,100],[colName+' (REF.)']);
+  svg+=multiLeader([[inner+C(110),110]],[355,100],[colRef]);
   svg+=multiLeader(stiffPts,[355,165],[`2 PL ${size(d.bearing.stiffenerThickness)} X ${size(d.bearing.stiffenerWidth)}`,`FULL-DEPTH FITTED BEARING STIFFENERS`,`${size(d.bearing.cope)} WEB-SIDE CORNER COPES`],8,stiffPts.map(()=>[[215,160]]));
   svg+=filletLeader([weldPts[1]],[355,218],size(d.bearing.weldSize),['TYP. BOTH STIFFENERS',b.kind==='cap'?'WEB FILLETS / TOP CJP':'CONT. WEB & FLANGE FILLETS','FIT / MILL STIFFENER ENDS'],true);
   svg+=multiLeader([[230,(bt+bb)/2]],[355,287],usesExistingBracket(p)?[`EXISTING ${existingBracketLabel(d.bracket)}`,'NEW BOLTED SEAT: S-05']:wb?['WELDED COLUMN BRACKET','SEAT / RIBS / WELDS: S-05']:['COLUMN BRACKET (REF.)','COLUMN ATTACHMENT BY','BUILDING DESIGNER']);
@@ -130,8 +131,8 @@ export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defau
   svg+=multiLeader([[252,top]],[351,420],[b.name+' RUNWAY GIRDER',`PLAN; TIE AT ${tieSides(p).length>1?'BOTH FLANGES':'TOP FLANGE'}`]);
   svg+=multiLeader([[cx+tg/2+tb,y+l/2]],[351,526],[`2 FL ${size(d.brace.thickness)} X ${size(d.brace.width)} (VERTICAL)`,`${dim(d.brace.length)} LONG`,'SYMMETRIC BARS; ONE EACH SIDE OF GUSSET']);
   svg+=multiLeader([pts[c.rows-1]],[351,463],[`EACH END: ${2*c.rows} - ${size(c.diameter)} ${c.grade}, ${c.rows} ROWS`,`X 2 AT ${size(c.gauge)} VERT. GAUGE; CLASS ${c.surface}`,`GUSSET PL ${size(d.brace.gussetThickness)}`]);
-  svg+=fieldFilletLeader([[cx+tg/2,colY]],[351,573],size(c.weldSize),[`2 ROOT FILLETS X ${dim(c.weldLength)}`,'FIELD WELD COLUMN-SIDE GUSSET'],true);
-  svg+=multiLeader([[cx,colY+colD*.75]],[351,615],[colName+' (REF.)'],7.8);
+  svg+=(sc.field?fieldFilletLeader:filletLeader)([[cx+tg/2,colY]],[351,573],size(c.weldSize),[`2 ROOT FILLETS X ${dim(c.weldLength)}`,`${sc.weld} COLUMN-SIDE GUSSET`],true);
+  svg+=multiLeader([[cx,colY+colD*.75]],[351,615],[colRef],7.8);
   svg+=viewTitle(318,655,'FLANGE TIE / COLUMN CONNECTION',scale.label)+'</g>';}
  }
 

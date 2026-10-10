@@ -72,11 +72,11 @@ export class Draft {
     this.poly([[x, y], [tx - 15, ty - 4], [tx - 3, ty - 4]], false, 'DIMENSION');
     this.arrow(x, y, Math.atan2(ty - 4 - y, tx - 15 - x)); this.text(tx, ty, label, 10);
   }
-  fieldFilletLeader(x:number,y:number,tx:number,ty:number,sizeLabel:string,labels:string[],bothSides=false){
+  fieldFilletLeader(x:number,y:number,tx:number,ty:number,sizeLabel:string,labels:string[],bothSides=false,field=true){
     const jx=tx-15,jy=ty-4,sx=tx+41;
     this.poly([[x,y],[jx,jy],[tx+92,jy]],false,'DIMENSION');
     this.arrow(x,y,Math.atan2(jy-y,jx-x));
-    this.line(jx,jy,jx,jy-15,'DIMENSION');this.poly([[jx,jy-15],[jx+10,jy-12],[jx,jy-9]],true,'DIMENSION');
+    if(field){this.line(jx,jy,jx,jy-15,'DIMENSION');this.poly([[jx,jy-15],[jx+10,jy-12],[jx,jy-9]],true,'DIMENSION');}
     for(const sign of bothSides?[-1,1]:[1])this.poly([[sx,jy],[sx,jy+sign*7],[sx+8,jy]],true,'DIMENSION');
     this.text(sx-6,jy+7,sizeLabel.replaceAll('"',''),8,'end');
     labels.forEach((label,i)=>this.text(tx,ty+17+i*13,label.toUpperCase(),9));

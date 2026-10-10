@@ -12,6 +12,7 @@ export interface ColumnResponse {
  /** Internal moment and shear just above and just below every node, bottom to top. */
  samples:{x:number;moment:number;shear:number}[];
  displacement:(x:number)=>number;
+ rotation:(x:number)=>number;
  reactions:{base:number;baseMoment:number;top:number};
 }
 
@@ -46,6 +47,7 @@ export function columnResponse(height:number,EI:number,boundary:ColumnBoundary,l
   samples.push({x:nodes[e],moment:-f[1],shear:f[0]},{x:nodes[e+1],moment:f[3],shear:f[0]});
  }
  return {samples,displacement:x=>{const i=node(x);if(i<0)throw Error('Displacement is reported at load points and ends only.');return u[2*i];},
+  rotation:x=>{const i=node(x);if(i<0)throw Error('Rotation is reported at load points and ends only.');return u[2*i+1];},
   reactions:{base:reaction(0),baseMoment:boundary.base==='fixed'?reaction(1):0,top:boundary.top==='braced'?reaction(2*(n-1)):0}};
 }
 /** Largest |a·m1(x) + b·m2(x)| with independent signs, i.e. max |a·m1| + |b·m2| at a common section. */

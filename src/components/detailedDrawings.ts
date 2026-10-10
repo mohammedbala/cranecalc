@@ -1,3 +1,4 @@
+import {supportColumn} from '../engine/drawingData';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {simpleSupportInput} from '../engine/simpleSupports';
@@ -51,7 +52,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  dr.dimH(x,x+w*k,y+h*k,360,`PLATE WIDTH ${f(w)}`);dr.dimV(y,y+h*k,x,85,`HEIGHT ${f(h)}`);dr.dimH(x+c.edge*k,x+(c.edge+c.gauge)*k,y,62,`GAUGE ${f(c.gauge)}`);
  const notes=[`${2*c.rows} ${c.grade} bolts, diameter ${f(c.diameter)}; hole ${f(hole)}`,`Two cover plates, each ${f(c.thickness)}; central ply ${f(central)}`,`Rows at ${f(c.pitch)}; all plate-edge distances ${f(c.edge)}`,`Class ${c.surface} faying surfaces; two slip/shear planes`,`Load-line to weld eccentricity: ${f(c.projection)}`,`Two effective root fillets: ${f(c.weldSize)} x ${f(c.weldLength)}`,key==='tie'?`Two tie bars per flange: ${f(d.brace.width)} x ${f(d.brace.thickness)}`:'Full reaction plus longitudinal force checked conservatively',key==='tie'?`Bar length ${f(d.brace.length)}; lateral reach ${f(d.brace.reach)}`:'Bearing carries gravity; end covers also provide uplift restraint',key==='tie'?`Unbraced central gusset length ${f(d.brace.connectionLength)}`:`Provide ${f(d.criteria.rotationClearance)} clearance for simple-end rotation`];
  notes.forEach((n,i)=>dr.text(465,85+28*i,n,10));
- if(key==='tie')dr.text(465,345,'COLUMN-SIDE ROOT: FIELD WELD TO EXISTING STEEL / S-02, S-06',9);
+ if(key==='tie')dr.text(465,345,supportColumn(p).isNew?`COLUMN-SIDE ROOT: SHOP WELD TO ${supportColumn(p).name} / S-02, S-06`:'COLUMN-SIDE ROOT: FIELD WELD TO EXISTING STEEL / S-02, S-06',9);
  // Actual ply thicknesses in a separated orthographic section.
  let px=125;for(const t of [c.thickness,central,c.thickness]){dr.rect(px,395,90,t*k);px+=110;}dr.text(125,387,'SEPARATED PLY SECTION / THICKNESSES TO SCALE',9);output.push(dr.drawing);
  }
@@ -117,7 +118,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   dr.dimH(tip,face,bot,bot+36,f(b.seatProjection));dr.dimV(root,bot,tip,tip-28,f(b.ribDepth));
   dr.dimH(face-b.reach*k,face,top,60,f(b.reach));
   [`SEAT PL ${f(b.seatThickness)} X ${f(b.seatLength)} X ${f(b.seatProjection)}`,`2 RECTANGULAR RIBS ${f(b.ribThickness)} X ${f(b.ribDepth)}`,`RIB CENTERS ${f(b.ribSpacing)}`,`SEAT FILLETS ${f(b.seatWeld).replaceAll('"','')} / BOTH SIDES / FULL PROJECTION`,'HORIZONTAL LOADS: SEPARATE COLUMN ATTACHMENTS','KEEP SLIDING GIRDER BEARINGS FREE','GLOBAL COLUMN / FRAME / FOUNDATIONS: SEPARATE'].forEach((v,i)=>dr.text(485,100+i*29,v,10));
-  dr.fieldFilletLeader(face,root+b.ribDepth*k*.55,485,337,f(b.rootWeld),['FIELD WELD RIBS TO EXISTING COLUMN','CONT. FULL DEPTH / BOTH SIDES'],true);
+  dr.fieldFilletLeader(face,root+b.ribDepth*k*.55,485,337,f(b.rootWeld),[`${supportColumn(p).weld} RIBS TO ${supportColumn(p).name}`,'CONT. FULL DEPTH / BOTH SIDES'],true,supportColumn(p).field);
   output.push(dr.drawing);
  }
  const tie=flangeTieGeometry(p);
@@ -141,7 +142,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   dr.dimV(Y(tie.topDrop-t.width/2),Y(tie.topDrop+t.width/2),X(tie.face),X(tie.face)+30,f(t.width));
   const notes=[`2 FL ${f(t.thickness)} X ${f(t.width)} / ${f(t.length)} LONG`, `CENTRAL GUSSETS ${f(t.gussetThickness)}`,`SADDLE PL ${f(a.saddleThickness)} X ${f(a.saddleLength)} X ${f(tie.rootLength)}`,`${f(a.weldSize).replaceAll('"','')} FILLETS / SADDLE AND GUSSET / BOTH SIDES`,`${2*c.rows} - ${f(c.diameter)} ${c.grade} EACH END`, `TIE SETBACK ${f(a.longitudinalSetback)} FROM BEARING CENTER`,`CLEAR CAP AND ROOT BY ${f(a.clearance)} MINIMUM`, 'NO HOLES OR CUTS THROUGH CAP / W FLANGES','BOTTOM TIE AT SAME SADDLE OFFSET / SEE S-06'];
   notes.forEach((v,i)=>dr.text(545,95+i*29,v,9));
-  dr.fieldFilletLeader(X(tie.face),Y(tie.topDrop),545,385,f(c.weldSize),['FIELD WELD GUSSET TO EXISTING COLUMN',`TWO CONT. LINES X ${f(t.width)}`],true);output.push(dr.drawing);
+  dr.fieldFilletLeader(X(tie.face),Y(tie.topDrop),545,385,f(c.weldSize),[`${supportColumn(p).weld} GUSSET TO ${supportColumn(p).name}`,`TWO CONT. LINES X ${f(t.width)}`],true,supportColumn(p).field);output.push(dr.drawing);
  }
  return output;
 }

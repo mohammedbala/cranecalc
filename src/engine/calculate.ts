@@ -18,6 +18,7 @@ import { travelLimits } from './continuation';
 import { supportReactions } from './supportReactions';
 import { runwayElevations } from './drawingData';
 import { existingColumnAnalysis,existingColumnChecks,validateExistingColumn } from './existingColumn';
+import { columnBaseAnalysis,columnBaseChecks,validateColumnBase } from './columnBase';
 import { longitudinalBracingAnalysis,longitudinalBracingChecks,validateLongitudinalBracing } from './longitudinalBracing';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 export function validateProject(input:unknown):string[]{
@@ -56,7 +57,7 @@ export function validateProject(input:unknown):string[]{
   if(!p.continuation.source.trim())errors.push('continuation.source: identify the existing adjacent girders and how their spans were verified.');
  }
  p.cranes.forEach((c,i)=>{if(c.wheels[0].offset!==0)errors.push(`cranes.${i}.wheels: first wheel offset must be zero.`);for(let j=0;j<c.wheels.length;j++){const w=c.wheels[j];if(j&&w.offset<=c.wheels[j-1].offset)errors.push(`cranes.${i}.wheels.${j}: offsets must increase.`);const loaded=c.includesImpact?w.loaded/(1+c.impact):w.loaded;if(w.unloaded>loaded)errors.push(`cranes.${i}.wheels.${j}: unloaded load exceeds the loaded static load.`);}if(c.travelStart>=c.travelEnd||c.travelStart<travel.start-c.wheels.at(-1)!.offset||c.travelEnd>travel.end)errors.push(`cranes.${i}.travel: origin range must intersect the runway and end no later than ${travel.end>L?'the far end of the adjacent bay':'its length'}.`);if(!c.loadSource.trim())errors.push(`cranes.${i}.loadSource: identify the manufacturer load schedule.`);});
- return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateLongitudinalBracing(p)];
+ return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateColumnBase(p),...validateLongitudinalBracing(p)];
 }
 export function calculate(input:ProjectInput):CalculationSnapshot {
  const p=structuredClone(input),errors=validateProject(p);const snapshot:CalculationSnapshot={revision:fingerprint(p),createdAt:new Date().toISOString(),input:p,errors,warnings:[],properties:null,analysis:null,checks:[],eligible:false,referenceVersion};
@@ -96,6 +97,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
    // Unfactored reactions by load type for the building that carries the runway.
    snapshot.supportReactions=supportReactions(p,props);
    if(p.existingColumn?.enabled){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn));}
+   if(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled){snapshot.columnBase=columnBaseAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...columnBaseChecks(p,snapshot.columnBase));}
    // Drawings print elevations from project data only.
    if(p.details&&!runwayElevations(p))snapshot.checks.push({id:'drawing-elevation',group:'Detailing',title:'Runway elevation for drawings',status:'incomplete',equation:'',note:'Enter the top-of-rail elevation above the datum under Project, or check the existing column with its surveyed seat elevation. Drawing elevations are never taken from the 3D reference model.',referenceIds:['criteria']});
    if(p.longitudinalBracing?.enabled){snapshot.longitudinalBracing=longitudinalBracingAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...longitudinalBracingChecks(p,snapshot.longitudinalBracing));}

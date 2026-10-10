@@ -1,14 +1,19 @@
 import type {CalculationSnapshot,ProjectInput} from './types';
 import {girderSegments} from './simpleSupports';
+import {columnBaseElevation} from './columnBaseInputs';
 
 /**
  * Runway elevations above the floor datum, from project data only: the
- * surveyed column seat when the existing column is checked, otherwise the
- * entered top-of-rail elevation. The 3D reference building is never used.
+ * surveyed column seat when the existing column is checked, the seat above
+ * the new column's base plate on its footing, otherwise the entered
+ * top-of-rail elevation. The 3D reference building is never used.
  */
 export function runwayElevations(p:ProjectInput){
- const datum=p.drawing?.datumElevation??0,cap=p.section.kind==='cap'?p.section.capTw:0,bearing=p.details?.bearing.thickness??0;
- if(p.existingColumn?.enabled){const seat=datum+p.existingColumn.seatElevation,tos=seat+bearing+p.section.d;return {source:'surveyed column seat' as const,datum,seat,tos,tor:tos+cap+p.railHeight};}
+ const datum=p.drawing?.datumElevation??0,cap=p.section.kind==='cap'?p.section.capTw:0,bearing=p.details?.bearing.thickness??0,c=p.existingColumn;
+ if(c?.enabled){
+  const designedBase=c.isNew&&p.columnBase?.enabled,seat=datum+(designedBase?columnBaseElevation(p.columnBase!):0)+c.seatElevation,tos=seat+bearing+p.section.d;
+  return {source:designedBase?'new column base' as const:'surveyed column seat' as const,datum,seat,tos,tor:tos+cap+p.railHeight};
+ }
  if(p.drawing?.railElevation){const tor=datum+p.drawing.railElevation,tos=tor-p.railHeight-cap;return {source:'entered top of rail' as const,datum,seat:tos-p.section.d-bearing,tos,tor};}
  return undefined;
 }
@@ -50,4 +55,14 @@ export function girderMarks(p:ProjectInput){
   if(!m){m={mark:`RG${marks.length+1}`,length,key};marks.push(m);}
   return {...g,mark:m.mark,length,ends};
  });
+}
+
+/**
+ * The column the runway bears on, as the drawings name it: a new column designed here is shop welded and
+ * detailed on S-08; otherwise the existing column is field welded and verified in the field.
+ */
+export function supportColumn(p:ProjectInput){
+ const c=p.existingColumn,isNew=!!(c?.enabled&&c.isNew),sheet=isNew&&p.columnBase?.enabled&&p.details?' / S-08':'';
+ const name=isNew?`NEW ${c!.shape||'BUILT-UP'} COLUMN`:'EXISTING COLUMN';
+ return {isNew,name,reference:isNew?`${name}${sheet}`:'EXISTING COLUMN (REF.)',weld:isNew?'SHOP WELD':'FIELD WELD',field:!isNew};
 }
