@@ -61,7 +61,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    erection:'Set and level the bearings, install the end bearings and flange ties, then set the rails. Provide temporary restraint until the permanent ties are complete.',
    railAlignment:'Set the rails to the specified gauge, alignment and level tolerances and survey them after erection, before the load test.'
   },
-  ...(p.system==='simple'?{endBearing:{...structuredClone(defaultEndBearing),enabled:true}}:{}),
+  // Bolted bearings: each bay locates at its left end on simple spans; a continuous girder locates at one support.
+  endBearing:{...structuredClone(defaultEndBearing),enabled:true},
   // The stop sits inboard of the runway-end tie saddle.
   ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,setback:stopSetback,base:{...defaultEndStop.base,length:11.5*inch},stiffener:{...defaultEndStop.stiffener,length:8.5*inch},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
   reviewed:false

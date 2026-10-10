@@ -166,7 +166,7 @@ export const detailRef=(title:string)=>`{{REF:${encodeURIComponent(title)}}}`;
 export const sheetRef=(topic:string)=>`{{SHEET:${encodeURIComponent(topic)}}}`;
 /** Detail titles referenced from other details; each is drawn by exactly one detail in the set. */
 export const detailTitles={
- bearing:'GIRDER BEARING / COLUMN BRACKET',endBearing:'GIRDER END BEARINGS / LOCATING AND SLIDING',endTemplate:'GIRDER WEB / END CONNECTION',
+ bearing:'GIRDER BEARING / COLUMN BRACKET',endBearing:'GIRDER END BEARINGS / LOCATING AND SLIDING',supportBearings:'GIRDER BEARINGS / LOCATING AND SLIDING',endTemplate:'GIRDER WEB / END CONNECTION',
  tie:'FLANGE TIE / COLUMN CONNECTION',flangeTie:'DIRECT FLANGE TIE / TOP TRANSVERSE SECTION',tiePlan:'TIE AND STIFFENER LOCATIONS / PLAN',
  railKeeper:'RAIL KEEPER / GIRDER ATTACHMENT',capSection:'CAPPED GIRDER SECTION',capDevelopment:'CAP END DEVELOPMENT',
  supportEnd:(joint:boolean)=>joint?'ADJACENT GIRDER ENDS AT COLUMN':'GIRDER END AT COLUMN',supportTies:'INDEPENDENT FLANGE TIES / PLAN',movement:'BEARING MOVEMENT REQUIREMENTS',
@@ -174,6 +174,8 @@ export const detailTitles={
  endStop:'END STOP / ELEVATION',endStopPlan:'END STOP / PLAN',newColumn:'NEW RUNWAY COLUMN / ELEVATION',basePlate:'BASE PLATE / PLAN',footing:'FOOTING / SECTION',
  bracedBay:'BRACED BAY / ELEVATION',braceTop:'BRACE AND STRUT AT WORK POINT',braceBase:'BRACE AT COLUMN BASE',strutPlan:'STRUT AND GUSSETS AT WORK POINT / PLAN'
 } as const;
+/** Bolted bearing detail: girder ends of simple spans, or every support of a continuous girder. */
+export const bearingBoltsTitle=(p:CalculationSnapshot['input'])=>p.system==='continuous'?detailTitles.supportBearings:detailTitles.endBearing;
 /** The supporting column as labelled on the details, referring to its own details when it is designed here. */
 export function columnReference(p:CalculationSnapshot['input']){
  const c=supportColumn(p);return c.detailed?`${c.name} / ${detailRef(detailTitles.newColumn)}`:c.reference;
