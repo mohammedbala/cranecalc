@@ -39,7 +39,7 @@ The app now includes an **AIST runway girder design worksheet** referenced to **
 - One to six simple/continuous bays, one to three ordered crane trains, manufacturer wheel schedules, refined moving-load analysis, US/SI conversion and AISC W-shape catalogue.
 - AIST LRFD/ASD runway combinations, separate crane dead/lift/impact components, absent/empty/loaded crane states, single-crane horizontal actions, minimum impact/side-thrust/traction rules and manufacturer bumpers.
 - Compactness, compact symmetric I-girder F2 LTB/flexure, rail-head flange force couple, longitudinal compression and concurrent H1 interaction, F13 actual net-flange rupture, G2 web shear without tension field action.
-- Local wheel/support yielding, crippling, sidesway/compression buckling; actual bearing inputs; one selected girder fatigue material point and resistance; single-crane AIST deflections; minimum thickness, clip/pad spacing, hook-bolt and bracket suitability.
+- Local wheel/support yielding, crippling, sidesway/compression buckling; actual bearing inputs; one selected girder fatigue material point and resistance; single-crane AIST deflections, each bay against its own span, at the most restrictive of the owner limit, the AIST building class and the crane's CMAA service class (DG7: L/600 for A to C, L/800 for D, L/1000 for E and F); minimum thickness, clip/pad spacing, hook-bolt and bracket suitability.
 - Brace strength/stiffness requirements and connection bolt-pitch/weld direct-shear screening, with full system/connection models explicitly distinguished.
 - Server-revalidated PDF/SVG/DXF exports from an immutable revision. Supplied-load analysis reports remain available.
 
