@@ -58,6 +58,10 @@ const differences=(a:RunwayDetailResults,b:RunwayDetailResults)=>Math.max(
  ...(b.existingBracket&&a.existingBracket?b.existingBracket.fatigue.flatMap((f,i)=>(['seatStress','vertical','rootMoment','seatMoment'] as const).map(k=>Math.abs(f[k]-a.existingBracket!.fatigue[i][k])/Math.max(f[k],1))):[]),
  ...(['normalStress','shearStress','railDisplacement','twist','criticalMultiplier','braceForce'] as const).map(k=>Math.abs(a[k]-b[k])/Math.max(Math.abs(b[k]),k==='twist'?1e-5:1)),
  ...(a.loadHeight&&b.loadHeight?[Math.abs(a.loadHeight.utilization-b.loadHeight.utilization)/Math.max(b.loadHeight.utilization,1e-3)]:[]),
+ // Support force envelope extremes, the least bearing reaction relative to the largest.
+ ...(b.bracketForces??[]).flatMap(v=>{const o=a.bracketForces?.find(w=>w.grid===v.grid);if(!o)return [];const scale=Math.max(Math.abs(v.maxVertical.vertical),1),least=(f:typeof v.minBearing)=>f.ends.length?Math.min(...f.ends.map(e=>e.vertical)):f.vertical;
+  return [Math.abs(v.maxVertical.vertical-o.maxVertical.vertical)/scale,Math.abs(Math.abs(v.maxMoment.moment)-Math.abs(o.maxMoment.moment))/Math.max(Math.abs(v.maxMoment.moment),1),Math.abs(least(v.minBearing)-least(o.minBearing))/scale,
+   ...(['longitudinal','top','bottom'] as const).map(k=>Math.abs(Math.abs(v[k][k])-Math.abs(o[k][k]))/Math.max(Math.abs(v[k][k]),1))];}),
  ...(b.bracket&&a.bracket?Object.entries(b.bracket.strength).map(([key,v])=>Math.abs(v.value-(a.bracket!.strength[key]?.value??0))/Math.max(v.value,1)):[]),
  ...(b.bracket&&a.bracket?Object.entries(b.bracket.service).map(([key,v])=>Math.abs(v.value-(a.bracket!.service[key]?.value??0))/Math.max(v.value,key==='rotation'?1e-6:key==='deflection'?1e-3:1)):[]),
  ...(b.bracket&&a.bracket?b.bracket.fatigue.flatMap((f,i)=>(['rib','seat','rootWeld','seatWeld','column'] as const).map(k=>Math.abs(f[k]-a.bracket!.fatigue[i][k])/Math.max(f[k],1))):[]),

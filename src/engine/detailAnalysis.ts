@@ -4,6 +4,7 @@ import {flangeTieGeometry} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
 import {createBracketCollector} from './bracketDesign';
+import {createSupportForceEnvelope,seatOffset} from './bracketForces';
 import {createExistingBracketCollector} from './existingBracket';
 import { LateralTorsionBeam } from './lateralTorsion';
 import { beamSystem,momentAt } from './beam';
@@ -106,7 +107,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
  const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0};
  const mechanics=cap?{Iy:cap.Iy,topOffset:cap.topOffset,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
- const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>();
+ const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
+ const snap=(x:number)=>supports.find(v=>Math.abs(v-x)<1e-6)??x;
  const braceFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
  function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
  const evaluate=(e:RunwayCaseEvent,bin=-1)=>{
@@ -115,7 +117,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const majorLoads=e.wheels.map(w=>({x:w.x,p:w.p}));
   const moment=(x:number)=>momentAt(x,e.verticalReactions,majorLoads,e.q);
   const reactions=new Map<number,{top:number;bottom:number}>();
-  const endActions:{x:number;bay:number;end:'left'|'right';vertical:number;top:number;bottom:number;longitudinal:number;offset:number;existing?:boolean}[]=[];
+  const endActions:{x:number;bay:number;end:'left'|'right';vertical:number;top:number;bottom:number;longitudinal:number;offset:number;existing?:boolean}[]=[],joints:{bay:number;p:number}[]=[];
   for(const [bayIndex,[start,end]] of groups.entries()){
    const wheels=e.wheels.filter(w=>w.x>=start-1e-6&&(w.x<end-1e-6||(end===L&&w.x<=end+1e-6)));
    const stations=allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6);
@@ -177,7 +179,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     const bearing=bearings.find(v=>v.bay===bayIndex+1&&v.end===endName)!;
     endActions.push({x,bay:bayIndex+1,end:endName,vertical,top:lateral?.top??0,bottom:lateral?.bottom??0,longitudinal:0,offset:bearing.center-x});
    }
-   for(const re of restraintForces){const x=re.x+start,old=reactions.get(x)??{top:0,bottom:0};reactions.set(x,{top:old.top+re.top,bottom:old.bottom+re.bottom});}
+   if(p.system==='simple'&&bayIndex)joints.push({bay:bayIndex+1,p:wheels.filter(w=>Math.abs(w.x-start)<=1e-6).reduce((a,w)=>a+w.p,0)});
+   for(const re of restraintForces){const x=snap(re.x+start),old=reactions.get(x)??{top:0,bottom:0};reactions.set(x,{top:old.top+re.top,bottom:old.bottom+re.bottom});}
    if(!r)continue;
    for(const s of r.stations){
     const x=s.x+start,M=moment(x),warping=E*Math.abs(s.warpingCurvature)*props.h0*p.section.bf/4;
@@ -215,28 +218,41 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const own=bearings.find(v=>b.end==='left'?v.bay===1&&v.end==='left':v.bay===p.spans.length&&v.end==='right')!;
    endActions.push({x:b.station,bay:b.end==='left'?0:p.spans.length+1,end:b.end==='left'?'right':'left',vertical:e.adjacentReactions?.find(v=>Math.abs(v.x-b.station)<1e-6)?.r??0,top:0,bottom:0,longitudinal:0,offset:-(own.center-b.station),existing:true});
   }
-  if(bracket||existingBracket)for(const x of supports){
-   // A rotating girder end bears on the span side of its plate: the reaction acts at 0.8 of the bearing
-   // length from the girder end, over the inner 0.4 of the plate.
-   const Lbr=details.bearing.length;
-   // In strength cases the bay carrying the longitudinal force adds its end couple; bound it at each right end.
-   const loads=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({vertical:v.vertical+(v.end==='right'&&!v.existing?(e.longitudinalCouple??0)/p.spans[v.bay-1]:0),offset:v.offset+(v.end==='left'?1:-1)*.3*Lbr,length:.4*Lbr})):[{vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,offset:0}];
-   bracket?.observe(e.kind,e.id,x,loads,bin);
-   existingBracket?.observe(e.kind,e.id,x,loads,bin);
-  }
+  // A wheel over a shared grid bears on the girder end on either side of the joint: both are bounded.
+  const moved=joints.filter(v=>v.p>0),simple=p.system==='simple',Lbr=details.bearing.length;
+  const splits=[{tag:'',ends:endActions},...(moved.length?[{tag:'-J',ends:endActions.map(v=>{const m=v.existing?undefined:moved.find(g=>g.bay===(v.end==='left'?v.bay:v.bay+1));return m?{...v,vertical:v.vertical+(v.end==='left'?-m.p:m.p)}:v;})}]:[])];
+  // Concurrent girder end forces at a station. Independent bays deliver traction at their own locating (left) end;
+  // for a straddling crane each occupied bay receives the FULL traction in a separate bounding scenario, avoiding
+  // an invented drive-wheel split. The bay carrying the force also carries its end couple: its left end lifts and
+  // its right end presses down for a force toward the right, and the reverse for the opposite sign.
+  const concurrent=(x:number)=>{
+   const here=splits.map(s=>({tag:s.tag,ends:s.ends.filter(v=>Math.abs(v.x-x)<1e-6)})),out:{id:string;sign:number;couple:number;ends?:typeof endActions}[]=[];
+   for(const [i,s] of here.entries()){
+    if(i&&s.ends.every((v,j)=>v.vertical===here[0].ends[j].vertical))continue;
+    for(const bay of e.kind==='strength'&&simple?tractionBays(p,e):[-1])for(const sign of e.kind==='strength'&&e.axial?[-1,1]:[1]){
+     const couple=(v:{bay:number;end:'left'|'right';existing?:boolean})=>v.bay===bay&&!v.existing?(v.end==='left'?-1:1)*sign*(e.longitudinalCouple??0)/p.spans[v.bay-1]:0;
+     out.push({id:simple?`${e.id}-T${bay}${s.tag}`:e.id,sign,couple:s.ends.reduce((a,v)=>a+couple(v),0),ends:simple?s.ends.map(v=>({...v,vertical:v.vertical+couple(v),longitudinal:v.bay===bay&&v.end==='left'?sign*e.axial:0})):undefined});
+    }
+   }
+   return out;
+  };
+  // The bracket takes the same concurrent sets as the support force envelope, each girder reaction over the
+  // inner 0.4 of its bearing plate.
+  // A bay carrying the force away from this support leaves its reactions unchanged: each distinct set once.
+  if(bracket||existingBracket)for(const x of supports){const distinct=new Set<string>();for(const c of concurrent(x)){
+   const loads=c.ends?c.ends.map(v=>({vertical:v.vertical,offset:seatOffset(v,Lbr),length:.4*Lbr})):[{vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,offset:0}];
+   const key=loads.map(v=>v.vertical).join();if(distinct.has(key))continue;distinct.add(key);
+   bracket?.observe(e.kind,c.id,x,loads,bin);
+   existingBracket?.observe(e.kind,c.id,x,loads,bin);
+  }}
   if(e.kind==='strength'){
    for(const [x,r] of reactions){
     result.demands.brace=Math.max(result.demands.brace,Math.abs(r.top),Math.abs(r.bottom));
-    // Independent bays deliver traction at their own locating (left) end.
-    // For a straddling crane, each occupied bay receives the FULL traction in
-    // a separate bounding scenario, avoiding an invented drive-wheel split.
-    for(const bay of p.system==='simple'?tractionBays(p,e):[-1])for(const longitudinalSign of [-1,1]){
-     // The bay carrying the force also carries its end couple: its left (locating) end lifts and its right end
-     // presses down for a force toward the right, and the reverse for the opposite sign.
-     const couple=(v:{bay:number;end:'left'|'right';existing?:boolean})=>v.bay===bay&&!v.existing?(v.end==='left'?-1:1)*longitudinalSign*(e.longitudinalCouple??0)/p.spans[v.bay-1]:0;
-     const ends=p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).map(v=>({...v,vertical:v.vertical+couple(v),longitudinal:v.bay===bay&&v.end==='left'?longitudinalSign*e.axial:0})):undefined;
-     const item:InterfaceAction={id:p.system==='simple'?`${e.id}-T${bay}`:e.id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(p.system==='simple'?endActions.filter(v=>Math.abs(v.x-x)<1e-6).reduce((a,v)=>a+couple(v),0):0),top:r.top,bottom:r.bottom,longitudinal:ends?ends.reduce((a,v)=>a+v.longitudinal,0):(x===0||x===L)?longitudinalSign*e.axial:0,torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
+    const support=supports.indexOf(x);
+    for(const {id,sign,couple,ends} of concurrent(x)){
+     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple,top:r.top,bottom:r.bottom,longitudinal:ends?ends.reduce((a,v)=>a+v.longitudinal,0):(x===0||x===L)?sign*e.axial:0,torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);
+     if(support>=0)forces.add(support,{id,combination:e.combination,vertical:ends?ends.reduce((sum,v)=>sum+v.vertical,0):item.vertical,moment:ends?ends.reduce((sum,v)=>sum+v.vertical*seatOffset(v,Lbr),0):0,longitudinal:item.longitudinal,top:r.top,bottom:r.bottom,ends:(ends??[]).map(v=>({bay:v.bay,end:v.end,vertical:v.vertical,offset:seatOffset(v,Lbr),...(v.existing?{existing:true}:{})}))});
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
       const k=`${e.combination}:${x}:${component}:${dir}`,old=interfaceExtremes.get(k);
       if(!old||dir*item[component]>dir*old[component])interfaceExtremes.set(k,{...item,controls:[`${component} ${dir===1?'max':'min'}`]});
@@ -308,6 +324,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const grouped=new Map<string,InterfaceAction>();
   for(const v of interfaceExtremes.values()){const key=`${v.x}:${v.id}:${v.longitudinal}`;const old=grouped.get(key);if(old)old.controls.push(...v.controls);else grouped.set(key,{...v,controls:[...v.controls]});}
   result.interfaces=[...grouped.values()].sort((a,b)=>a.x-b.x||a.combination.localeCompare(b.combination));
+  result.bracketForces=forces.result();
   if(bracket)result.bracket=bracket.result;
   if(existingBracket)result.existingBracket=existingBracket.result;
   return result;

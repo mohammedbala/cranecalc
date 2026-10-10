@@ -1,4 +1,5 @@
 import {supportColumn} from '../engine/drawingData';
+import {bracketForceTopic} from './bracketForceTable';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {simpleSupportInput} from '../engine/simpleSupports';
@@ -102,7 +103,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   }
   dr.dimH(cx-g,cx+g,y,74,`GAP ${f(c.endGap)}`);
   dr.line(cx,60,cx,430,'CENTER');dr.text(cx,452,b.name,12,'middle');
-  [`SEPARATE BEARING PL ${f(bs.thickness)} X ${f(bs.width)} X ${f(bs.length)}`,'PAIRED BEARING STIFFENERS AT EACH END / SK-04','LEFT END OF EACH BAY: LONGITUDINAL LOCATING','RIGHT END OF EACH BAY: SLIDING',`MOVEMENT ALLOWANCE ${f(c.guideTravel)} EACH DIRECTION`,'INDIVIDUAL TOP / BOTTOM TIES TO COLUMN / SK-06','DO NOT SPLICE GIRDER FLANGES OR CAP ACROSS GAP',usesExistingBracket(p)?`EXISTING BRACKET / NEW SEAT: SK-10 / ${sheets('bracket')}`:d.bracket?.enabled?`WELDED BRACKET / SPREADER: SK-10 / ${sheets('bracket')}`:'COLUMN BRACKET / SPREADER: REFERENCE ONLY','MOVEMENT-COMPATIBLE ATTACHMENTS REQUIRE DESIGN',`SEE ${sheets('support')} FOR SHARED BRACKET REACTION SCHEDULE`].forEach((note,i)=>dr.text(520,110+i*30,note,9));
+  [`SEPARATE BEARING PL ${f(bs.thickness)} X ${f(bs.width)} X ${f(bs.length)}`,'PAIRED BEARING STIFFENERS AT EACH END / SK-04','LEFT END OF EACH BAY: LONGITUDINAL LOCATING','RIGHT END OF EACH BAY: SLIDING',`MOVEMENT ALLOWANCE ${f(c.guideTravel)} EACH DIRECTION`,'INDIVIDUAL TOP / BOTTOM TIES TO COLUMN / SK-06','DO NOT SPLICE GIRDER FLANGES OR CAP ACROSS GAP',usesExistingBracket(p)?`EXISTING BRACKET / NEW SEAT: SK-10 / ${sheets('bracket')}`:d.bracket?.enabled?`WELDED BRACKET / SPREADER: SK-10 / ${sheets('bracket')}`:'COLUMN BRACKET / SPREADER: REFERENCE ONLY','MOVEMENT-COMPATIBLE ATTACHMENTS REQUIRE DESIGN',`BRACKET DESIGN FORCES: SEE ${sheets(bracketForceTopic(s)??'support')}`].forEach((note,i)=>dr.text(520,110+i*30,note,9));
   output.push(dr.drawing);
  }
  if(usesExistingBracket(p)){

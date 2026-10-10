@@ -1,5 +1,5 @@
 import {supportColumn} from '../engine/drawingData';
-import {heading,numbered,table,type Style} from './noteBlocks';
+import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,plateInches} from './drawingFormat';
 import {sheetDrawingScale,line,rect,text,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference} from './sheetGraphics';
@@ -7,6 +7,7 @@ import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {existingBracketTopic} from './existingBracketSheet';
+import {bracketForceBlocks} from './bracketForceTable';
 /** Column bracket details on their own sheet. */
 export function bracketSheetSvg(s:CalculationSnapshot,number='S-05'){
  const topic=bracketTopic(s);return topic?topicSheetSvg(s,topic,number,usesExistingBracket(s.input)?'EXISTING BRACKETS / NEW BOLTED SEATS':'WELDED COLUMN BRACKETS'):'';
@@ -74,9 +75,8 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    supportColumn(p).isNew?`SHOP WELD SEAT TO RIBS AND RIB ROOTS TO THE ${supportColumn(p).name} BEFORE ERECTION; INSPECT STARTS, STOPS AND TOES.`:'SHOP WELD SEAT TO RIBS. FIELD WELD RIB ROOTS TO EXISTING COLUMN AS FLAGGED. PROVIDE ACCESS TO BOTH ROOT WELDS BEFORE PLACING THE RUNWAY; INSPECT STARTS, STOPS AND TOES.',
    'KEEP GIRDER ENDS AND BEARINGS INDEPENDENT. DO NOT WELD THE SLIDING BEARING TO THE GIRDER. LATERAL TIES, LOCATING GUIDES AND HOLD-DOWNS HAVE SEPARATE COLUMN LOAD PATHS.',
    supportColumn(p).isNew?`THE ${supportColumn(p).name} IS DESIGNED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT${p.columnBase?.enabled?`; BASE PLATE, ANCHOR RODS AND FOOTING: ${detailRef(detailTitles.newColumn)}`:'; ITS BASE AND FOUNDATION ARE BY OTHERS'}.`:p.existingColumn?.enabled?'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. THE EXISTING COLUMN IS CHECKED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT; FRAME, ANCHORS AND FOUNDATIONS ARE BY OTHERS.':'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. LOCAL COLUMN CHECKS DO NOT VERIFY THE COMPLETE FRAME, COLUMN AXIAL/BENDING INTERACTION OR FOUNDATIONS.',
-   'REACTIONS BELOW ARE CONCURRENT AT THE CASE OF MAXIMUM RIB FORCE AT EACH GRID. DO NOT ADD ALTERNATIVE CASES. RIB FORCE MAY REVERSE UNDER AN OFFSET BEARING.'
+   'THE BRACKET IS DESIGNED FOR EVERY CONCURRENT CASE OF THE BRACKET DESIGN FORCES BELOW, WITH ITS SELF-WEIGHT. RIB FORCE MAY REVERSE UNDER AN OFFSET BEARING.'
   ];
-  const rows=(s.detailResults?.bracket?.stations??[]).map((r,i)=>[String(i+1),...[r.vertical,r.leftRib,r.rightRib].map(v=>format(v,'force',p.units,3))]);
-   return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,notes),heading(t,'BRACKET REACTIONS / FACTORED, CONCURRENT'),table(t,['GRID','V','LEFT RIB','RIGHT RIB'],rows,[.6,1,1,1])]};
+  return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,notes),...bracketForceBlocks(s,t)]};
  }
 }
