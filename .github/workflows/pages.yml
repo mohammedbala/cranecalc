@@ -10,7 +10,8 @@ permissions:
 
 concurrency:
   group: github-pages
-  cancel-in-progress: true
+  # A started Pages deployment is never cancelled midway.
+  cancel-in-progress: false
 
 jobs:
   build:

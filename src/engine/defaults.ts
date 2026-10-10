@@ -2,7 +2,7 @@ import { loadAiscSection, defaultAiscShape, sectionPropertyKeys } from '../data/
 import type { ProjectInput } from './types';
 export const exampleProject:ProjectInput = {
  schemaVersion:1,title:'North bay · Crane runway',number:'CR-001',engineer:'',units:'US',method:'LRFD',scope:'design',system:'simple',spans:[7620],
- section:loadAiscSection({kind:'welded',name:'Welded I · 24 × 10',d:609.6,bf:254,tf:19.05,tw:12.7,capWidth:300,capDepth:100,capTf:12,capTw:12,Fy:345,Fu:450,E:200000,density:7850,Ix:0.0001,Iy:0.0001,A:0.0001,Sx:0.0001,Sy:0.0001,Zx:0.0001,Zy:0.0001,J:0.0001,Cw:0.0001,propertySource:''},defaultAiscShape),
+ section:loadAiscSection({kind:'welded',name:'Welded I · 24 × 10',d:609.6,bf:254,tf:19.05,tw:12.7,capWidth:300,capDepth:100,capTf:12,capTw:12,Fy:50*6.894757293168,Fu:65*6.894757293168,E:29000*6.894757293168,density:7850,Ix:0.0001,Iy:0.0001,A:0.0001,Sx:0.0001,Sy:0.0001,Zx:0.0001,Zy:0.0001,J:0.0001,Cw:0.0001,propertySource:''},defaultAiscShape),
  cranes:[{id:'crane-1',name:'Bridge crane 01',wheels:[{offset:0,loaded:110000,unloaded:42000,lateral:8000},{offset:3657.6,loaded:110000,unloaded:42000,lateral:8000}],impact:0.25,includesImpact:false,longitudinal:22000,minSeparation:1500,travelStart:0,travelEnd:7620,operatingClass:'Owner to confirm',loadSource:'Illustrative manufacturer schedule; replace before design'}],
  deadLoad:0,railWeight:0.3,railEccentricity:0,railHeight:75,unbracedLength:7620,lateralBraceSpacing:7620,verticalLimit:600,lateralLimit:400,criteriaSource:'User-defined serviceability criteria; confirm with crane supplier',
  fatigue:{category:'C',cycles:2000000,detail:'Select and document actual welded detail',location:3810},

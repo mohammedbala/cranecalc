@@ -62,7 +62,7 @@ export function fatigueSpectrumBin(category:keyof typeof constants,range:number,
  const damage=range===0?0:cycles/(cf*(6900/range)**3);
  return {allowable,damage};
 }
-function automaticFatigueDetails(p:ProjectInput){
+export function automaticFatigueDetails(p:ProjectInput){
  const d=p.details!,L=p.spans.reduce((s,v)=>s+v,0),list=[...d.fatigueDetails];
  const tie=flangeTieGeometry(p);
  // Saddle welded across the flange: AISC Table A-3.1 item 7.2 by its length a along the stress and thickness b.
@@ -81,7 +81,9 @@ function automaticFatigueDetails(p:ProjectInput){
   const positions=list.filter(f=>f.id.startsWith('RC')&&f.id.endsWith('left')).map(f=>f.x);
   for(const [i,x] of positions.entries())for(const side of ['left','right'] as const)list.push({id:`CW${i}-${side}`,name:`Cap weld base metal ${i+1} · ${side}`,x,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 3.1; continuous longitudinal weld'});
   const ends=p.system==='continuous'?[0,L]:girderSegments(p).flatMap(m=>[m.start,m.end]);
-  for(const [i,x] of ends.entries())for(const side of ['left','right'] as const)list.push({id:`CE${i}-${side}`,name:`Cap end termination ${i+1} · ${side}`,x,point:`top-${side}`,category:'E',reference:'AISC Table A-3.1, conservative Category E termination bound'});
+  // The cap ends like a cover plate wider than the flange, with longitudinal welds only: Table A-3.1 item 3.7, E'.
+  const capEnd='E1';
+  for(const [i,x] of ends.entries())for(const side of ['left','right'] as const)list.push({id:`CE${i}-${side}`,name:`Cap end termination ${i+1} · ${side}`,x,point:`top-${side}`,category:capEnd,reference:'AISC Table A-3.1 item 3.7: end of a welded cover plate wider than the flange, no weld across the end, Category E′'});
  }
  return list;
 }

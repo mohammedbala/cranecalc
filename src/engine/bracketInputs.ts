@@ -15,4 +15,4 @@ export const bracketSchema=z.object({
 });
 export type BracketInput=z.infer<typeof bracketSchema>;
 export const defaultBracket:BracketInput={enabled:false,reach:508,seatLength:660.4,seatProjection:711.2,seatThickness:50.8,ribDepth:609.6,ribThickness:38.1,ribSpacing:203.2,rootWeld:12.7,seatWeld:9.525,deflectionLimit:1.5875,rotationLimit:.002,
- receiver:{depth:609.6,width:355.6,flangeThickness:25.4,webThickness:19.05,Fy:345,Fu:450,unbracedLength:3048,axialDemand:0,confirmed:false,source:''},loadPathConfirmed:false};
+ receiver:{depth:609.6,width:355.6,flangeThickness:25.4,webThickness:19.05,Fy:50*6.894757293168,Fu:65*6.894757293168,unbracedLength:3048,axialDemand:0,confirmed:false,source:''},loadPathConfirmed:false};

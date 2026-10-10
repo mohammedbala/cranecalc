@@ -28,7 +28,8 @@ export function girderStrength(p:ProjectInput,s:Properties):GirderStrength {
  // DG7 §14.1: lateral bending resistance is that of the flange itself.
  const flangePlastic=Fy*tf*bf**2/4,flangeElastic=tf*bf**2/6;
  const flangeMn=flangeRatio<=flangeLimit?flangePlastic:flangeRatio<=lr?flangePlastic-(flangePlastic-.7*Fy*flangeElastic)*(flangeRatio-flangeLimit)/(lr-flangeLimit):.69*E/flangeRatio**2*flangeElastic;
- const rolledStocky=p.section.kind==='rolled'&&webRatio<=2.24*root,Cv=rolledStocky?1:Math.min(1,1.10*Math.sqrt(5.34*E/Fy)/webRatio);
+ // A capped girder's web is the rolled W web, so G2.1(a) applies to it too.
+ const rolledStocky=(p.section.kind==='rolled'||p.section.kind==='cap')&&webRatio<=2.24*root,Cv=rolledStocky?1:Math.min(1,1.10*Math.sqrt(5.34*E/Fy)/webRatio);
  const shearPhi=rolledStocky?1:.9,shearOmega=rolledStocky?1.5:1.67;
  const di=p.aist,Lu=di?.axialLength||p.spans.reduce((a,b)=>a+b,0),Ly=Math.max(p.unbracedLength,di?.bottomBraceSpacing||Lu),Lz=di?.torsionalLength||Lu;
  const Fex=Math.PI**2*E*s.Ix/(s.A*Lu**2),Fey=Math.PI**2*E*s.Iy/(s.A*Ly**2),Fez=(Math.PI**2*E*s.Cw/Lz**2+E/(2*1.3)*strengthJ)/(s.Ix+s.Iy),Fe=Math.min(Fex,Fey,Fez);
