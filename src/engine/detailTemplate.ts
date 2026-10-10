@@ -7,6 +7,7 @@ import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {wrenchClearance} from './endStop';
 import {columnGussetHeight,tieBarGap} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
+import {keeperGeometry} from './railSeat';
 
 const inch=25.4,ksi=6.894757293;
 /** Marker for inputs the template cannot know; any string starting with it blocks eligibility. */
@@ -32,7 +33,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  ].slice(0,16);
  // Top-flange tie on a direct flange saddle (simple spans): thin bars flex with end rotation and thermal travel,
  // sleeved bolts in vertical slots at the column gusset release support deflection. The column face is a placeholder.
- const simple=p.system==='simple',weld=.3125*inch,webGap=1*inch,rootStart=b.tw/2+webGap,saddle={length:3.5*inch,thickness:up(Math.max(1.5*inch,b.tf),.125*inch)};
+ // The saddle fillets carry the tie force in fatigue across the flange: 3/8 in, as on the demonstration runway.
+ const simple=p.system==='simple',weld=.3125*inch,saddleWeld=.375*inch,webGap=1*inch,rootStart=b.tw/2+webGap,saddle={length:3.5*inch,thickness:up(Math.max(1.5*inch,b.tf),.125*inch)};
  const tieConnection=2.25*inch+2*1.25*inch,tieStart=up(Math.max(rootStart+.5*inch,b.bf/2-tieConnection+.25*inch),.25*inch),tieLength=26*inch;
  const tieSetback=up(saddle.length/2+weld+stiffenerThickness/2+weld+.25*inch,.25*inch),bearingLength=12*inch;
  // Stop bolts clear the runway-end tie saddle and the bearing stiffener with nut clearance.
@@ -43,13 +45,15 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   simpleSupport:{...defaultSimpleSupport,guideTravel:.5*inch},
   brace:{width:5*inch,thickness:.375*inch,length:tieLength,reach:tieLength,gussetThickness:.75*inch,connectionLength:up(tieStart+tieConnection-rootStart,.25*inch),
    connection:{rows:2,gauge:2.5*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,diameter:.625*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:weld,weldLength:5*inch},
-   ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:weld,columnFace:tieStart+tieLength+tieBarGap(weld)}}:{}),
+   ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:saddleWeld,columnFace:tieStart+tieLength+tieBarGap(saddleWeld)}}:{}),
    release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
   end:{rows:4,gauge:2.875*inch,pitch:3*inch,edge:1.25*inch,thickness:.75*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:.3125*inch,weldLength:11.5*inch},
   bearing:{width:up(b.bf+2*inch,.5*inch),length:bearingLength,thickness:1*inch,stiffenerWidth,stiffenerThickness,cope:up(Math.max(k1-b.tw/2,.75*inch),.125*inch),weldSize:.3125*inch},
   // Proportions of a typical crane rail of the entered depth; replace with the supplier's section.
   rail:{name:`${toBeEntered} rail designation and supplier`,headWidth:up(.55*h,1.5875),headThickness:up(.3*h,1.5875),baseWidth:up(h,1.5875),baseThickness:up(.17*h,1.5875),webThickness:up(.12*h,1.5875),Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:`${toBeEntered} rail pad rating source`,
-   clipWidth:4*inch,clipThickness:.75*inch,clipProjection:1.5*inch,clipWeld:.3125*inch,jointGap:.25*inch,jointPlateThickness:1*inch,jointPlateHeight:up(.55*h,1.5875),jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+   padThickness:.25*inch,padWidth:up(h,1.5875),
+   // Keeper under 4 in long (AISC Table A-3.1 Category D at the flange), 1/16 in clear of the rail-base toe, lip overlapping 1/2 in.
+   clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.3125*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1*inch,jointPlateHeight:up(.55*h,1.5875),jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
   criteria:{twistLimit:.005,railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],
@@ -79,8 +83,8 @@ export function startDetailedDesign(p:ProjectInput):ProjectInput{
  q.aist??={...emptyAistInputs,railDepth:q.railHeight,bottomBraceSpacing:longest,axialLength:longest,torsionalLength:longest,clipSpacing:24*inch};
  if(!q.aist.railDepth)q.aist.railDepth=q.railHeight;
  q.details=neutralDetails(q);
- // Design for at least the rail setting allowance the drawings permit.
- q.railEccentricity=Math.sign(q.railEccentricity||1)*Math.max(Math.abs(q.railEccentricity),q.details.criteria.alignmentTolerance);
+ // Design for at least the rail setting allowance the drawings permit plus the float the keepers allow.
+ q.railEccentricity=Math.sign(q.railEccentricity||1)*Math.max(Math.abs(q.railEccentricity),q.details.criteria.alignmentTolerance+keeperGeometry(q.details.rail).clearance);
  q.aist.bearingLength||=q.details.bearing.length;q.aist.netFlangeArea||=q.section.bf*q.section.tf;
  q.drawing??={originator:'',checker:'',datumElevation:0,datumLabel:'Finished floor'};
  return q;

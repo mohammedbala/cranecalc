@@ -33,8 +33,15 @@ export const runwayDetailsSchema=z.object({
   release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
  end:lapConnectionSchema,
  bearing:z.object({width:pos,length:pos,thickness:pos,stiffenerWidth:pos,stiffenerThickness:pos,cope:nn,weldSize:pos}),
+ // Keeper: a lip clipThickness thick projecting clipProjection past a body clipBodyWidth wide (default the lip
+ // thickness), clipClearance clear of the rail-base toe, clipWidth long along the rail, fillet welded clipWeld on
+ // its outer face and both ends. The pad (when aist.railPad) lies under the rail; anchorNotch is the depth of the
+ // rail-base notch that the anchor keepers engage at mid-length of each rail piece. Later fields are optional so
+ // earlier project files load with the defaults in railSeat.ts.
  rail:z.object({name:z.string().min(1).max(100),headWidth:pos,headThickness:pos,baseWidth:pos,baseThickness:pos,webThickness:pos,Fy:pos,Fu:pos,padAllowable:pos,padSource:z.string().min(1).max(300),
-  clipWidth:pos,clipThickness:pos,clipProjection:pos,clipWeld:pos,jointGap:nn,jointPlateThickness:pos,jointPlateHeight:pos,jointBoltDiameter:pos,jointPitch:pos,jointEdge:pos,temperatureRange:nn}),
+  padThickness:pos.optional(),padWidth:pos.optional(),
+  clipWidth:pos,clipThickness:pos,clipProjection:pos,clipWeld:pos,clipBodyWidth:pos.optional(),clipClearance:pos.optional(),anchorNotch:pos.optional(),
+  jointGap:nn,jointPlateThickness:pos,jointPlateHeight:pos,jointBoltDiameter:pos,jointPitch:pos,jointEdge:pos,temperatureRange:nn}),
  criteria:z.object({twistLimit:pos,railLateralLimit:pos,railGauge:pos,alignmentTolerance:pos,levelTolerance:pos,rotationClearance:pos,temperatureMaximum:z.number().finite(),corrosionProtected:z.boolean()}),
  fatigueDetails:z.array(z.object({id:z.string().min(1).max(40),name:z.string().min(1).max(120),x:nn,point:z.enum(['top-left','top-right','bottom-left','bottom-right']),category:z.enum(['A','B','B1','C','D','E','E1']),reference:z.string().min(1).max(300)})).min(1).max(16),
  spectrum:z.array(z.object({name:z.string().min(1).max(80),liftFraction:nn.max(1),cycles:pos})).min(1).max(8),

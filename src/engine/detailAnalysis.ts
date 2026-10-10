@@ -13,6 +13,7 @@ import type { RunwayCaseEvent,RunwayCaseObserver } from './designAnalysis';
 import type { ProjectInput,Properties } from './types';
 import type { FatigueDetailResult,InterfaceAction,RunwayDetailResults } from './runwayDetails';
 import { railKeeperResponse } from './railKeeper';
+import { railTopAboveSteel } from './railSeat';
 import {tractionBays,railKeeperStations,girderSegments,independentBearings} from './simpleSupports';
 import {activeEndStop,stopBoltRows,stopEnds} from './endStopInputs';
 import {activeEndBearing,locatingSupport} from './endBearingInputs';
@@ -76,7 +77,8 @@ export function automaticFatigueDetails(p:ProjectInput){
  // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
  const stop=activeEndStop(p);
  if(stop)for(const [end,x0,dir] of ([['left',0,1],['right',L,-1]] as const).filter(([end])=>stopEnds(p).includes(end)))for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:x0+dir*row,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});
- const category=d.rail.clipWidth<50?'C':d.rail.clipWidth<=Math.min(12*d.rail.clipThickness,100)?'D':d.rail.clipThickness<=20?'E':'E1';
+ // Keeper length along the stress and body width across it (AISC Table A-3.1, 7.2).
+ const keeperWidth=d.rail.clipBodyWidth??d.rail.clipThickness,category=d.rail.clipWidth<50?'C':d.rail.clipWidth<=Math.min(12*keeperWidth,100)?'D':keeperWidth<=20?'E':'E1';
  for(const [i,x] of railKeeperStations(p).entries()){
   for(const side of ['left','right'] as const)list.push({id:`RC${i}-${side}`,name:`Rail keeper ${i+1} · ${side}`,x,point:`top-${side}`,category,reference:'AISC Table A-3.1, 7.1 · attachment length/thickness from keeper geometry'});
  }
@@ -119,7 +121,7 @@ export function longitudinalPaths(p:ProjectInput,supports:number[]){
 export function createDetailCollector(p:ProjectInput,props:Properties,subdivisions:number){
  const bracket=createBracketCollector(p);
  const existingBracket=createExistingBracketCollector(p);
- const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+p.railHeight-cap.shearCenter:p.railHeight+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
+ const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+railTopAboveSteel(p)-cap.shearCenter:railTopAboveSteel(p)+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
  const longitudinal=longitudinalPaths(p,supports);
@@ -345,7 +347,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   // Full local reversal and independent global/local superposition remain
   // conservative; no position coincidence, load sharing or endurance credit.
   for(const bound of result.railFatigueBins){
-   const local=railKeeperResponse(details.rail,p.aist!.railDepth,p.railEccentricity,cap?p.section.capTw:p.section.tf,bound.vertical,bound.lateral);
+   const local=railKeeperResponse(p,bound.vertical,bound.lateral);
    bound.flangeStress=local.flangeStress;bound.plateStress=local.plateStress;bound.weldStress=local.weldStress;
   }
   for(const f of fatigue)if(f.id.startsWith('RC'))for(const [i,bin] of f.bins.entries()){

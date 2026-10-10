@@ -1,7 +1,9 @@
 import type {CalculationSnapshot} from '../engine/types';
-import {railLayout,railLayoutCriteria} from '../engine/railLayout';
-import {drawingLength} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,line,rect,text,dimH,bubble,wrappedText,textWidth,detailRef,detailTitles} from './sheetGraphics';
+import {railLayout,railLayoutCriteria,railMovements} from '../engine/railLayout';
+import {railAnchorForce} from '../engine/railKeeper';
+import {format} from '../engine/units';
+import {drawingLength,plateInches} from './drawingFormat';
+import {sheetDrawingScale as drawingScale,line,rect,text,dimH,bubble,wrappedText,textWidth,detailRef,detailTitles,labelCaps,n} from './sheetGraphics';
 import type {DetailView} from './detailSheet';
 
 /**
@@ -9,9 +11,11 @@ import type {DetailView} from './detailSheet';
  * and each joint located from its nearest grid. Lengths along the runway are to scale; the runways are
  * drawn closer together than the crane span.
  */
+/** A factored force to 0.1 kip or 0.1 kN. */
+const labelForce=(N:number,u:'US'|'SI')=>labelCaps(format(N,'force',u,1));
 export function railLayoutView(s:CalculationSnapshot):DetailView{
  return {title:detailTitles.railLayout,render:()=>{
-  const p=s.input,r=railLayout(p),{stock,clear}=railLayoutCriteria,dim=(v:number)=>drawingLength(v,p.units);
+  const p=s.input,r=railLayout(p),{stock,clear}=railLayoutCriteria,dim=(v:number)=>drawingLength(v,p.units),moves=p.details?railMovements(p,r):undefined;
   let x=0;const grids=[0,...p.spans.map(v=>x+=v)];
   const lo=Math.min(0,...r.rails.map(v=>v.start)),hi=Math.max(grids.at(-1)!,...r.rails.map(v=>v.end));
   const scale=drawingScale(Math.min(.06,520/(hi-lo)),p.units),k=scale.pointsPerMm,x0=80,X=(v:number)=>x0+(v-lo)*k;
@@ -36,6 +40,9 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
    if(r.existing.right)svg+=rect(X(L)+1,y-4,X(hi)-X(L)+5,8,'reference-line');
    for(let i=1;i<stations.length;i++)svg+=line([X(stations[i-1])+(i>1?1.2:0),y],[X(stations[i])-(i<stations.length-1?1.2:0),y],'rail-line');
    for(const j of rail.joints)svg+=rect(X(j)-4,y-2.2,8,4.4,'runway-line');
+   // Rail anchors: a solid triangle on the inner side of the rail at each anchor keeper pair.
+   const anchors=moves?.anchors.find(v=>v.side===rail.side)?.anchors??[];
+   for(const a of anchors){const ax=X(a.station),tip=up?y+3.5:y-3.5,base=up?y+10:y-10;svg+=`<path class="annotation" data-rail-anchor="${rail.side}" style="fill:#111" d="M${n(ax)},${n(tip)}L${n(ax-3.5)},${n(base)}L${n(ax+3.5)},${n(base)}Z"/>`;}
    // Pieces on the outer side, joints from the nearest grid on the inner side.
    const outer=up?y-30:y+32,inner=up?y+26:y-24,fromOuter=up?y-6:y+6,fromInner=up?y+6:y-6;
    const chain=[0,...stations,grids.at(-1)!].filter((v,i,a)=>i===0||Math.abs(v-a[i-1])>1);
@@ -56,6 +63,8 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
   const notes=[
    `RAIL PIECES ${dim(stock)} MAX. (MILL LENGTH); FIELD CUT THE SHORTER PIECES SHOWN. KEEP RAIL JOINTS ${dim(clear)} MIN. FROM GIRDER JOINTS AND FROM THE OPPOSITE RAIL JOINTS, AND OPPOSITE JOINTS ${dim(clear)} MIN. FROM ANY CRANE WHEEL SPACING${steps?` (${steps})`:''}.`,
    `BOLTED RAIL JOINTS AND KEEPERS EACH SIDE OF EVERY JOINT: ${detailRef(detailTitles.railKeeper)}. RUNWAYS ARE DRAWN CLOSER THAN THE CRANE SPAN.`,
+   ...(moves?[(()=>{const F=railAnchorForce(p),jm=Math.max(0,...moves.joints.map(v=>v.movement)),u=p.units;
+    return `RAIL ANCHORS, SOLID TRIANGLES: AT MID-LENGTH OF EACH RAIL PIECE THE KEEPER PAIR IS SET IN RAIL-BASE NOTCHES (${detailRef(detailTitles.railKeeper)}) AND TAKES THE CRANE LONGITUDINAL FORCE (TRACTION AND BRAKING, ${labelForce(F.force,u)} FACTORED) AND RAIL CREEP INTO THE GIRDER. ALL OTHER KEEPERS LET THE RAIL SLIDE; EACH PIECE MOVES THERMALLY FROM ITS ANCHOR, UP TO ${u==='SI'?`${Math.max(1,Math.round(jm))} mm`:plateInches(jm,u)} AT A JOINT. AT EACH PERIODIC CRANE INSPECTION CHECK THE JOINT GAPS AND THE RAIL ENDS AT THE STOPS FOR CREEP.`;})()]:[]),
    ...(['left','right'] as const).filter(e=>r.existing[e]).map(e=>`AT GRID ${e==='left'?1:grids.length} JOIN THE EXISTING RAIL: CUT IT BACK TO ${dim(clear)} BEYOND THE GRID. FIELD VERIFY ITS SECTION AND JOINTS.`)
   ];
   let y=rows.A+58;

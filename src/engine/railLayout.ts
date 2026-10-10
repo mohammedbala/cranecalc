@@ -61,3 +61,42 @@ export function railLayout(p:ProjectInput):RailLayout{
  const b=place('B',stock/2,[...girderJoints,...opposite]);
  return {girderJoints,wheelSteps,rails:[a,b],existing,conflicts};
 }
+
+/** Steel coefficient of thermal expansion, per degree C. */
+export const railExpansion=12e-6;
+/**
+ * Rail anchors: the anchor keeper pair at mid-length of each new rail piece holds the rail along the
+ * runway (keepers set in rail-base notches); every other keeper lets it slide. Each piece then moves
+ * thermally from its own anchor, so creep cannot accumulate at one joint or at a stop. An anchor that
+ * would fall within a keeper length and 3 in of a girder end moves clear of it onto the girder.
+ */
+export function railAnchors(p:ProjectInput,layout:RailLayout=railLayout(p)){
+ const L=p.spans.reduce((s,v)=>s+v,0),half=(p.details?.rail.clipWidth??0)/2+76.2;
+ let x=0;const ends=p.system==='simple'?[0,...p.spans.map(v=>x+=v)]:[0,L];
+ const girders=ends.slice(1).map((e,i)=>[ends[i]+half,e-half] as const).filter(([a,b])=>b>a);
+ return layout.rails.map(rail=>{
+  const stations=[rail.start,...rail.joints,rail.end];
+  return {side:rail.side,anchors:rail.pieces.map((_,i)=>{
+   const lo=Math.max(stations[i],0),hi=Math.min(stations[i+1],L),mid=(lo+hi)/2;
+   const on=girders.map(([a,b])=>Math.min(Math.max(mid,a),b)).filter(v=>v>=lo&&v<=hi);
+   const at=on.length?on.reduce((best,v)=>Math.abs(v-mid)<Math.abs(best-mid)?v:best):mid;
+   return {station:at,shifted:Math.abs(at-(stations[i]+stations[i+1])/2)>1};
+  })};
+ });
+}
+/**
+ * Thermal movement of the anchored rail over the rail temperature swing: at each joint the two pieces
+ * close by the expansion of their lengths from their anchors; at a rail end the end piece moves toward
+ * the stop. A new piece joined to an existing rail is assumed to meet a rail free over half a mill length.
+ */
+export function railMovements(p:ProjectInput,layout:RailLayout=railLayout(p)){
+ const dT=p.details?.rail.temperatureRange??0,grow=(length:number)=>railExpansion*dT*Math.abs(length),anchors=railAnchors(p,layout);
+ const joints:{side:'A'|'B';station:number;movement:number}[]=[],ends:{side:'A'|'B';end:'left'|'right';station:number;movement:number;existing:boolean}[]=[];
+ layout.rails.forEach((rail,r)=>{
+  const at=anchors[r].anchors.map(a=>a.station),last=at.length-1;
+  rail.joints.forEach((j,i)=>joints.push({side:rail.side,station:j,movement:grow(j-at[i])+grow(at[i+1]-j)}));
+  ends.push({side:rail.side,end:'left',station:rail.start,movement:grow(at[0]-rail.start)+(layout.existing.left?grow(railLayoutCriteria.stock/2):0),existing:layout.existing.left});
+  ends.push({side:rail.side,end:'right',station:rail.end,movement:grow(rail.end-at[last])+(layout.existing.right?grow(railLayoutCriteria.stock/2):0),existing:layout.existing.right});
+ });
+ return {joints,ends,anchors};
+}

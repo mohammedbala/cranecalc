@@ -99,8 +99,8 @@ describe('ARCH D arrangement sheet', () => {
     expect(section).toContain('40&#39;-0 1/2&quot; CRANE SPAN');expect(section).toContain('SCALE: 1/2&quot; = 1&#39;-0&quot;');
     expect(arrangement.split('<g data-view="isometric">')[1].split('</g>')[0]).not.toContain('W24X229');
     // The bolted end bearing view replaces the welded cover-plate template.
-    // Stiffener, keeper, and the direct flange tie's saddle-to-flange, gusset-to-saddle and column-root field welds.
-    expect(connections.match(/data-multileader="weld"/g)).toHaveLength(5);expect(connections).toContain('data-view="end-bearing"');
+    // Stiffener, keeper outer face and ends, and the direct flange tie's saddle-to-flange, gusset-to-saddle and column-root field welds.
+    expect(connections.match(/data-multileader="weld"/g)).toHaveLength(6);expect(connections).toContain('data-view="end-bearing"');
     expect(connections).toContain('FITTED BEARING STIFFENERS');
     for(const sheet of [arrangement,connections]){
       const titles=[...sheet.matchAll(/<g data-view-title="below" data-detail-title="[^"]*">(.*?)<\/g>/g)];
@@ -116,7 +116,7 @@ describe('ARCH D arrangement sheet', () => {
     expect(connections).not.toContain('EDGE DISTANCE');expect(connections).not.toContain('GAGE / PITCH');
     const leaders=[...connections.matchAll(/<g data-multileader="component">(.*?)<\/g>/gs)];
     expect(leaders.every(l=>!l[1].includes('ROWS @')&&!l[1].includes('PAIRS @'))).toBe(true);
-    expect(connections).toContain('KEEPER SPACING / LONGITUDINAL VIEW');
+    expect(connections).toContain('KEEPERS AND RAIL ANCHOR / PLAN');
     for(const sheet of [arrangement,connections]){
       expect(sheet).toContain('data-stamp="blank"');expect(sheet).toContain('CHECKER');expect(sheet).toContain('Checker name');
       expect(sheet).toContain('&lt;script&gt;ORIGINATOR&lt;/script&gt;');expect(sheet).not.toContain('<script>');

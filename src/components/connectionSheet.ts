@@ -15,6 +15,7 @@ import { drawingLength, plateInches } from './drawingFormat';
 import { sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, type XY } from './sheetGraphics';
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
+import { railKeeperView } from './railKeeperView';
 import { slidingBoltView } from './slidingBoltSection';
 
 /** Girder bearing, end connection, flange tie and rail keeper details on their own sheet. */
@@ -197,56 +198,8 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   return {svg:svg+'</g>',scale:scale.label};
  }});
 
- // 4: The receiving surface is the cap web or the bare W top flange.
- views.push({title:detailTitles.railKeeper,render:()=>{
-  let svg='<g data-view="rail-connection">';
-  const r=d.rail,depth=p.aist!.railDepth,capped=b.kind==='cap',receivingWidth=capped?b.capWidth:b.bf,capT=capped?b.capTw:0;
-  const scale=drawingScale(Math.min(.36,250/receivingWidth,95/(depth+(capped?b.capDepth:b.tf))),p.units),k=scale.pointsPerMm,x=774,y=420,base=y+depth*k,wTop=base+capT*k;
-  svg+=rect(x-r.headWidth*k/2,y,r.headWidth*k,r.headThickness*k,'rail-line')+rect(x-r.webThickness*k/2,y+r.headThickness*k,r.webThickness*k,(depth-r.headThickness-r.baseThickness)*k,'rail-line')+rect(x-r.baseWidth*k/2,y+(depth-r.baseThickness)*k,r.baseWidth*k,r.baseThickness*k,'rail-line');
-  svg+=rect(x-b.bf*k/2,wTop,b.bf*k,b.tf*k,'runway-line')+rect(x-b.tw*k/2,wTop+b.tf*k,b.tw*k,34,'runway-line');
-  if(capped){svg+=rect(x-b.capWidth*k/2,base,b.capWidth*k,b.capTw*k,'runway-line');for(const sign of [-1,1])svg+=rect(x+sign*b.capWidth*k/2-(sign>0?b.capTf*k:0),wTop,b.capTf*k,(b.capDepth-b.capTw)*k,'runway-line');}
-  svg+=line([x-b.tw*k/2-5,wTop+b.tf*k+28],[x+b.tw*k/2+5,wTop+b.tf*k+37]);
-  const keepers:XY[]=[],welds:XY[]=[];
-  for(const sign of [-1,1]){
-   const edge=x+sign*r.baseWidth*k/2,root=edge+sign*r.clipProjection*k/2;
-   svg+=rect(sign<0?root-r.clipThickness*k:root,y+(depth-r.baseThickness-r.clipThickness)*k,r.clipThickness*k,(r.baseThickness+r.clipThickness)*k,'runway-line');
-   svg+=rect(sign<0?root:root-r.clipProjection*k,y+(depth-r.baseThickness-r.clipThickness)*k,r.clipProjection*k,r.clipThickness*k,'runway-line');
-   keepers.push([root+sign*r.clipThickness*k/2,base-r.clipThickness*k/2]);welds.push([root+sign*r.clipThickness*k,base]);
-  }
-  // Left keeper, clear of the callout leaders: lip over the rail base and clear gap to the rail base edge,
-  // stacked above the toe with the text outboard.
-  {const xe=x-r.baseWidth*k/2,xi=xe-r.clipProjection*k/2,xt=xi+r.clipProjection*k,xo=xi-r.clipThickness*k,toe=y+(depth-r.baseThickness-r.clipThickness)*k;
-   svg+=dimH(xe,xt,toe,toe-9,`${size(r.clipProjection/2)} LIP`,'left',xo)+dimH(xi,xe,toe,toe-21,`${size(r.clipProjection/2)} CLEAR`,'left',xo);}
-  svg+=multiLeader([[x,y+8]],[957,412],[`${size(depth)} RAIL`, `HEAD ${size(r.headWidth)} X ${size(r.headThickness)}`,`BASE ${size(r.baseWidth)} X ${size(r.baseThickness)}`]);
-  svg+=multiLeader([keepers[1]],[957,467],[`KEEPER PL ${size(r.clipThickness)} THICK`,`X ${size(r.clipWidth)} ALONG RAIL`,`PROJECTION ${size(r.clipProjection)}`]);
-  svg+=filletLeader([welds[1]],[957,539],size(r.clipWeld),['TYP. BOTH KEEPERS','2 CONT. ROOT FILLETS','KEEP RAIL FREE TO SLIDE'],false,[[[x+receivingWidth*k/2+12,base]]]);
-  // Use the bottom flange corner so this leader stays below the keeper-weld
-  // route even for very wide or thin catalogue flanges.
-  svg+=multiLeader([[x+b.bf*k/2,wTop+b.tf*k]],[957,601],[b.name+' RUNWAY GIRDER',capped?p.capDesign?`CAP ATTACHMENT: SEE ${detailRef(detailTitles.capSection)}`:'CAP ATTACHMENT BY OTHERS':'PARTIAL SECTION SHOWN']);
-  // Longitudinal inset dimensions the out-of-plane keeper spacing at its own
-  // stated physical scale, rather than putting a spacing note on a section.
-  const spacing=p.aist!.clipSpacing,ss=drawingScale(Math.min(.36,150/(spacing+r.clipWidth)),p.units),sk=ss.pointsPerMm;
-  const a=705-spacing*sk/2,z=705+spacing*sk/2,sy=594;
-  svg+=line([a-r.clipWidth*sk/2-6,sy],[z+r.clipWidth*sk/2+6,sy],'runway-line');
-  for(const center of [a,z]){
-   svg+=rect(center-r.clipWidth*sk/2,sy-r.clipThickness*sk,r.clipWidth*sk,r.clipThickness*sk,'runway-line');
-   svg+=line([center,sy-17],[center,sy+3],'grid-line');
-  }
-  svg+=dimH(a,z,sy-r.clipThickness*sk,sy-28,`${dim(spacing)} MAX.`)+dimH(a-r.clipWidth*sk/2,a+r.clipWidth*sk/2,sy-r.clipThickness*sk,sy-14,`${size(r.clipWidth)} KEEPER`,'left');
-  svg+=text(705,612,'KEEPER SPACING / LONGITUDINAL VIEW',7.5,'middle',700)+text(705,622,ss.label,7,'middle');
-  // Bolted rail joint: joint bars each side of the web, slots along the rail for thermal movement.
-  const bar=2*(2*r.jointEdge+r.jointPitch)+r.jointGap,js=drawingScale(Math.min(.36,140/bar,34/depth),p.units),jk=js.pointsPerMm,hole=boltProperties('A325',r.jointBoltDiameter).hole;
-  const jc=858,top=600-depth*jk,jl=jc-bar*jk/2,web=top+(r.headThickness+(depth-r.headThickness-r.baseThickness-r.jointPlateHeight)/2)*jk;
-  svg+='<g data-view="rail-joint">';
-  for(const side of [-1,1]){const end=jc+side*r.jointGap*jk/2,far=jc+side*(bar/2*jk+10);
-   svg+=line([end,top],[end,600],'rail-line')+line([end,top],[far,top],'rail-line')+line([end,top+r.headThickness*jk],[far,top+r.headThickness*jk],'rail-line')+line([end,600-r.baseThickness*jk],[far,600-r.baseThickness*jk],'rail-line')+line([end,600],[far,600],'rail-line');}
-  svg+=rect(jl,web,bar*jk,r.jointPlateHeight*jk,'runway-line');
-  for(const at of [r.jointEdge,r.jointEdge+r.jointPitch,bar-r.jointEdge-r.jointPitch,bar-r.jointEdge])svg+=rect(jl+(at-.75*r.jointBoltDiameter)*jk,web+(r.jointPlateHeight-hole)*jk/2,1.5*r.jointBoltDiameter*jk,hole*jk,'reference-line')+circle(jl+at*jk,web+r.jointPlateHeight*jk/2,r.jointBoltDiameter*jk/2,'runway-line');
-  svg+=dimH(jl,jl+bar*jk,web,top-8,dim(bar),'left');
-  svg+=text(jc,612,'RAIL JOINT / ELEVATION',7.5,'middle',700)+text(jc,622,js.label,7,'middle');
-  svg+=text(jc,632,`2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)}; 4 - ${size(r.jointBoltDiameter)} A325 SNUG-TIGHT`,7.2,'middle')+text(jc,640.5,`SLOTS ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG RAIL; GAP ${size(r.jointGap)}`,7.2,'middle')+'</g>';
-  return {svg:svg+'</g>',scale:scale.label};
- }});
+ // 4: Rail keepers, pad and anchor on the cap web or the bare W top flange; the bolted rail joint.
+ views.push(railKeeperView(s));
  views.push(railLayoutView(s));
  return topic;
 }
