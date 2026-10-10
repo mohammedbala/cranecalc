@@ -12,7 +12,7 @@ import { boltProperties } from '../engine/connectionStrength';
 import { defaultFraming, type FramingSettings } from './framingSettings';
 import { planSheetGeometry } from './planSheetGeometry';
 import { drawingLength, plateInches } from './drawingFormat';
-import { sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, columnReference, type XY } from './sheetGraphics';
+import { sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, columnReference, breakLine, type XY } from './sheetGraphics';
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 
 /** Girder bearing, end connection, flange tie and rail keeper details on their own sheet. */
@@ -88,14 +88,20 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  // transverse bracket section show where the connection transfers its loads.
  else views.push({title:p.system==='simple'?'GIRDER-SIDE END TEMPLATE':detailTitles.endTemplate,render:()=>{
   let svg='<g data-view="end-connection">';
-  const c=d.end,scale=drawingScale(Math.min(.24,240/(b.d+d.bearing.thickness+m().bracketDepth*1000)),p.units),k=scale.pointsPerMm,left=646,right=877,top=90,bottom=top+b.d*k;
-  const colB=m().column.bf*1000*k,colX=853,brB=bracket.bf*25.4*k,brD=m().bracketDepth*1000*k;
-  svg+=rect(colX-colB/2,94,colB,226,'reference-line');
-  svg+=line([colX-colB/2+5,94],[colX-colB/2+5,320],'reference-line')+line([colX+colB/2-5,94],[colX+colB/2-5,320],'reference-line');
-  if(wb){const y=bottom+d.bearing.thickness*k;svg+=rect(colX-wb.seatLength*k/2,y,wb.seatLength*k,wb.seatThickness*k,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p);svg+=wSection(colX,y+wb.seatThickness*k,e.width*k,e.depth*k,e.flangeThickness*k,e.webThickness*k,'reference-line');}else for(const side of [-1,1])svg+=rect(colX+(side*wb.ribSpacing-wb.ribThickness)*k/2,y+wb.seatThickness*k,wb.ribThickness*k,wb.ribDepth*k,'runway-line');}else svg+=wSection(colX,bottom+d.bearing.thickness*k,brB,brD,bracket.tf*25.4*k,bracket.tw*25.4*k,'reference-line');
-  svg+=rect(left,top,right-left,b.d*k,'runway-line')+line([left,top+b.tf*k],[right,top+b.tf*k],'runway-line')+line([left,bottom-b.tf*k],[right,bottom-b.tf*k],'runway-line');
-  // A break at the left indicates the girder continues beyond this detail.
-  svg+=line([left-4,top-5],[left+4,top+7])+line([left+4,top+7],[left-4,top+19]);
+  // The girder depth sets the scale; only the head of the bracket is drawn, broken off below, since the
+  // bracket has its own detail.
+  const c=d.end,stub=40,scale=drawingScale(Math.min(.3,200/(b.d+d.bearing.thickness)),p.units),k=scale.pointsPerMm,left=646,right=877,top=90,bottom=top+b.d*k;
+  const colB=m().column.bf*1000*k,colX=853,brB=bracket.bf*25.4*k,yb=bottom+d.bearing.thickness*k,existing=wb&&usesExistingBracket(p)?existingBracket(p):undefined;
+  const brD=wb?wb.seatThickness*k+(existing?existing.depth*k:wb.ribDepth*k):m().bracketDepth*1000*k,cut=yb+Math.min(brD+8,stub);
+  const clipRect=(x:number,y:number,w:number,h:number,cls:string)=>y+h<=cut?rect(x,y,w,h,cls):line([x,y],[x+w,y],cls)+line([x,y],[x,cut],cls)+line([x+w,y],[x+w,cut],cls);
+  const clipW=(x:number,y:number,bf:number,depth:number,tf:number,tw:number)=>y+depth<=cut?wSection(x,y,bf,depth,tf,tw,'reference-line'):rect(x-bf/2,y,bf,tf,'reference-line')+clipRect(x-tw/2,y+tf,tw,depth,'reference-line');
+  svg+=line([colX-colB/2,top+4],[colX+colB/2,top+4],'reference-line')+[-colB/2,5-colB/2,colB/2-5,colB/2].map(dx=>line([colX+dx,top+4],[colX+dx,cut],'reference-line')).join('');
+  if(wb){svg+=rect(colX-wb.seatLength*k/2,yb,wb.seatLength*k,wb.seatThickness*k,'runway-line');const y=yb+wb.seatThickness*k;if(existing)svg+=clipW(colX,y,existing.width*k,existing.depth*k,existing.flangeThickness*k,existing.webThickness*k);else for(const side of [-1,1])svg+=clipRect(colX+(side*wb.ribSpacing-wb.ribThickness)*k/2,y,wb.ribThickness*k,wb.ribDepth*k,'runway-line');}else svg+=clipW(colX,yb,brB,brD,bracket.tf*25.4*k,bracket.tw*25.4*k);
+  const half=Math.max(colB,brB,wb?wb.seatLength*k:0)/2+6;
+  svg+=breakLine([colX-half,cut],[colX+half,cut]);
+  // The girder end is drawn solid at the right; a full-depth break at the left shows it continues.
+  svg+=[top,top+b.tf*k,bottom-b.tf*k,bottom].map(yy=>line([left,yy],[right,yy],'runway-line')).join('')+line([right,top],[right,bottom],'runway-line');
+  svg+=breakLine([left,top-6],[left,bottom+6]);
   const w=c.gauge+2*c.edge,h=(c.rows-1)*c.pitch+2*c.edge,x=right-w*k-11,y=(top+bottom-h*k)/2;
   svg+=rect(x,y,w*k,h*k,'runway-line');
   const pts:XY[]=[];
@@ -103,18 +109,19 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
    const at:XY=[x+(c.edge+col*c.gauge)*k,y+(c.edge+row*c.pitch)*k];pts.push(at);svg+=hole(...at,boltProperties(c.grade,c.diameter).hole*k/2);
   }
   svg+=text(709,(top+bottom)/2,b.name,10,'middle',700);
-  svg+=dimH(x,x+w*k,y+h*k,y+h*k+24,dim(w));
-  // Separate dimension strings keep tight edge distances legible.
-  svg+=dimH(x,pts[0][0],y,y-29,size(c.edge));
-  svg+=dimH(pts[0][0],pts[1][0],y,y-13,size(c.gauge));
-  svg+=dimV(y,pts[0][1],x,x-16,size(c.edge));
-  svg+=dimV(pts[0][1],pts.at(-1)![1],x,x-42,`${c.rows-1} @ ${size(c.pitch)} = ${dim((c.rows-1)*c.pitch)}`);
-  svg+=dimV(pts.at(-1)![1],y+h*k,x,x-16,size(c.edge));
-  svg+=multiLeader([pts[1]],[958,100],[`${2*c.rows} - ${size(c.diameter)} ${c.grade} BOLTS`,`${size(boltProperties(c.grade,c.diameter).hole)} STD. HOLES`]);
-  svg+=multiLeader([[x+w*k,y+h*k*.5]],[958,163],[`2 COVER PL ${size(c.thickness)}`,`${dim(w)} W X ${dim(h)} H`,`CENTRAL WEB ${nominal(b.tw)}`,`CLASS ${c.surface} FAYING SURFACES`]);
-  svg+=filletLeader([[x+w*k,y+h*k-6]],[958,222],size(c.weldSize),[`TYP. 2 FILLET LINES X ${dim(c.weldLength)}`,`ROOT OFFSET ${size(c.projection)}`]);
-  svg+=multiLeader([[colX,bottom+brD*.6]],[958,284],[usesExistingBracket(p)?`EXISTING BRACKET / ${bracketRef}`:wb?`WELDED BRACKET / ${bracketRef}`:'COLUMN BRACKET (REF.)',`ROTATION CLEARANCE ${size(d.criteria.rotationClearance)}`]);
-  svg+=text(638,332,p.system==='simple'?`SEPARATE COLUMN-SIDE MOVEMENT ATTACHMENT REQUIRED; SEE ${detailRef(detailTitles.movement)}.`:`${colName} BEYOND (REF.); ROOT ATTACHMENT BY BUILDING DESIGNER.`,7.8);
+  // Bolt pattern dimensioned in clear space: across the plate above the girder, down the plate to the
+  // left of the column beyond, so no dimension text sits on the flanges or the hidden column lines.
+  // The edge distance, equal both ways, is called out with the bolts.
+  svg+=dimH(pts[0][0],pts[1][0],y,top-14,size(c.gauge),'left',x);
+  svg+=dimH(x,x+w*k,y,top-32,size(w),'left');
+  const xd=Math.min(x,colX-colB/2)-12;
+  svg+=dimV(pts[0][1],pts.at(-1)![1],x-2,xd,`${c.rows-1} @ ${size(c.pitch)}`);
+  svg+=dimV(y,y+h*k,x-2,xd-18,size(h));
+  svg+=multiLeader([pts[1]],[958,100],[`${2*c.rows} - ${size(c.diameter)} ${c.grade} BOLTS`,`${size(boltProperties(c.grade,c.diameter).hole)} STD. HOLES`,`${size(c.edge)} EDGE DIST. TYP.`]);
+  svg+=multiLeader([[x+w*k,y+h*k*.5]],[958,163],[`2 COVER PL ${size(c.thickness)} X ${size(w)} X ${size(h)}`,`CENTRAL WEB ${nominal(b.tw)}`,`CLASS ${c.surface} FAYING SURFACES`]);
+  svg+=filletLeader([[x+w*k,y+h*k-6]],[958,222],size(c.weldSize),[`TYP. 2 FILLET LINES X ${size(c.weldLength)}`,`ROOT OFFSET ${size(c.projection)}`]);
+  svg+=multiLeader([[colX,wb&&!existing?yb+wb.seatThickness*k/2:yb+Math.min(brD,stub)*.6]],[958,284],[usesExistingBracket(p)?`EXISTING BRACKET / ${bracketRef}`:wb?`WELDED BRACKET / ${bracketRef}`:'COLUMN BRACKET (REF.)',`ROTATION CLEARANCE ${size(d.criteria.rotationClearance)}`]);
+  svg+=text(638,Math.max(cut+16,322),p.system==='simple'?`SEPARATE COLUMN-SIDE MOVEMENT ATTACHMENT REQUIRED; SEE ${detailRef(detailTitles.movement)}.`:`${colName} BEYOND (REF.); ROOT ATTACHMENT BY BUILDING DESIGNER.`,7.8);
   return {svg:svg+'</g>',scale:scale.label};
  }});
 
