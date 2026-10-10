@@ -14,6 +14,7 @@ import { latexNumber,withinLimit } from './math';
 import { validateRunwayDetails } from './detailValidation';
 import { completeRunwayChecks } from './detailChecks';
 import { compressionFlangeGap } from './detailAnalysis';
+import { travelLimits } from './continuation';
 import { supportReactions } from './supportReactions';
 import { runwayElevations } from './drawingData';
 import { existingColumnAnalysis,existingColumnChecks,validateExistingColumn } from './existingColumn';
@@ -49,7 +50,12 @@ export function validateProject(input:unknown):string[]{
  if(p.aist){for(const key of ['bottomBraceSpacing','axialLength','torsionalLength'] as const)if(p.aist[key]>L)errors.push(`aist.${key}: cannot exceed the modeled runway length.`);if(p.aist.bottomBraceSpacing>0&&p.aist.bottomBraceSpacing<L/100)errors.push('aist.bottomBraceSpacing: model supports at most 100 brace intervals.');}
  if((p.aist?.netFlangeArea??0)>s.bf*s.tf*(1+1e-9))errors.push('aist.netFlangeArea: cannot exceed the gross area bf × tf of one flange.');
  if(p.fatigue.location>L)errors.push('fatigue.location: detail location must be on the runway.');
- p.cranes.forEach((c,i)=>{if(c.wheels[0].offset!==0)errors.push(`cranes.${i}.wheels: first wheel offset must be zero.`);for(let j=0;j<c.wheels.length;j++){const w=c.wheels[j];if(j&&w.offset<=c.wheels[j-1].offset)errors.push(`cranes.${i}.wheels.${j}: offsets must increase.`);const loaded=c.includesImpact?w.loaded/(1+c.impact):w.loaded;if(w.unloaded>loaded)errors.push(`cranes.${i}.wheels.${j}: unloaded load exceeds the loaded static load.`);}if(c.travelStart>=c.travelEnd||c.travelStart< -c.wheels.at(-1)!.offset||c.travelEnd>L)errors.push(`cranes.${i}.travel: origin range must intersect the runway and end no later than its length.`);if(!c.loadSource.trim())errors.push(`cranes.${i}.loadSource: identify the manufacturer load schedule.`);});
+ const travel=travelLimits(p);
+ if(p.continuation&&(p.continuation.left>0||p.continuation.right>0)){
+  if(p.system!=='simple')errors.push('continuation: model a continuous girder to its true runway ends; adjacent existing bays apply to simple spans only.');
+  if(!p.continuation.source.trim())errors.push('continuation.source: identify the existing adjacent girders and how their spans were verified.');
+ }
+ p.cranes.forEach((c,i)=>{if(c.wheels[0].offset!==0)errors.push(`cranes.${i}.wheels: first wheel offset must be zero.`);for(let j=0;j<c.wheels.length;j++){const w=c.wheels[j];if(j&&w.offset<=c.wheels[j-1].offset)errors.push(`cranes.${i}.wheels.${j}: offsets must increase.`);const loaded=c.includesImpact?w.loaded/(1+c.impact):w.loaded;if(w.unloaded>loaded)errors.push(`cranes.${i}.wheels.${j}: unloaded load exceeds the loaded static load.`);}if(c.travelStart>=c.travelEnd||c.travelStart<travel.start-c.wheels.at(-1)!.offset||c.travelEnd>travel.end)errors.push(`cranes.${i}.travel: origin range must intersect the runway and end no later than ${travel.end>L?'the far end of the adjacent bay':'its length'}.`);if(!c.loadSource.trim())errors.push(`cranes.${i}.loadSource: identify the manufacturer load schedule.`);});
  return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateLongitudinalBracing(p)];
 }
 export function calculate(input:ProjectInput):CalculationSnapshot {

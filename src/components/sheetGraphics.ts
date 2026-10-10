@@ -18,6 +18,11 @@ export const text = (x: number, y: number, value: string, size = 9, anchor = 'st
   `<text x="${n(x)}" y="${n(y)}" font-size="${size}" text-anchor="${anchor}" font-weight="${weight}"${angle ? ` transform="rotate(${n(angle)} ${n(x)} ${n(y)})"` : ''}>${esc(value)}</text>`;
 export const rect = (x: number, y: number, w: number, h: number, cls = 'annotation') => `<rect class="${cls}" x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}"/>`;
 export const circle = (x: number, y: number, r: number, cls = 'annotation') => `<circle class="${cls}" cx="${n(x)}" cy="${n(y)}" r="${n(r)}"/>`;
+/** Zig-zag break line between two points. */
+export function breakLine(a:XY,b:XY){
+ const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy),ux=dx/L,uy=dy/L,px=-uy*4,py=ux*4;
+ return `<polyline class="annotation" points="${[a,[mx-ux*3,my-uy*3],[mx-ux*1+px,my-uy*1+py],[mx+ux*1-px,my+uy*1-py],[mx+ux*3,my+uy*3],b].map(p=>`${n(p[0])},${n(p[1])}`).join(' ')}"/>`;
+}
 export function bubble(x: number, y: number, label: string) { return circle(x, y, 8, 'bubble') + text(x, y + 3, label, 9, 'middle', 700); }
 export function leader(at: XY, end: XY, label: string, size = 9) {
   return line(at, [end[0] - 8, end[1] - 3]) + line([end[0] - 8, end[1] - 3], [end[0] + 6, end[1] - 3])

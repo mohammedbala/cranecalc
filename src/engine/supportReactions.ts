@@ -1,6 +1,7 @@
 import { beamSystem, type BeamResult } from './beam';
 import { craneDesignMinimum, emptyAistInputs } from './aistLoads';
 import type { ProjectInput, Properties } from './types';
+import { adjacentReactions } from './continuation';
 
 /**
  * Unfactored support reactions by load type, for checking the building that
@@ -30,7 +31,9 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
  // Net side thrust at the rail head is distributed by the top-flange lateral system (rigid braces).
  const lateral=beamSystem(p.spans,p.section.E*p.section.tf*p.section.bf**3/12,p.system,p.lateralBraceSpacing);
  const at=(r:BeamResult)=>stations.map(x=>r.reactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0);
- const D=at(vertical.evaluate([],p.deadLoad+p.railWeight+props.weight)),Live=at(vertical.evaluate([],di.liveLoad));
+ // An adjacent existing simple-span girder bearing on a modeled end support adds its own reaction there.
+ const plus=(a:number[],b:number[])=>a.map((v,j)=>v+b[j]);
+ const D=plus(at(vertical.evaluate([],p.deadLoad+p.railWeight+props.weight)),adjacentReactions(p,[],p.deadLoad+p.railWeight+props.weight)),Live=plus(at(vertical.evaluate([],di.liveLoad)),adjacentReactions(p,[],di.liveLoad));
  const responses=p.cranes.map(c=>{
   const m=craneDesignMinimum(c),impact=Math.max(c.impact,m.impact);
   const side=c.wheels.reduce((s,w)=>s+w.lateral,0),sideFactor=side>0?Math.max(1,m.runwaySide/side):1;
@@ -39,13 +42,15 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
   // Each wheel directly over each support gives the exact reaction maxima for point loads.
   for(const x of stations)for(const w of c.wheels){const o=x-w.offset;if(o>=c.travelStart-1e-9&&o<=c.travelEnd+1e-9)origins.add(o);}
   return [...origins].sort((a,b)=>a-b).flatMap(origin=>{
-   const wheels=c.wheels.map(w=>({x:origin+w.offset,unloaded:w.unloaded,static:w.loaded/(c.includesImpact?1+c.impact:1),lateral:w.lateral*sideFactor})).filter(w=>w.x>=0&&w.x<=L);
-   if(!wheels.length)return [];
+   const all=c.wheels.map(w=>({x:origin+w.offset,unloaded:w.unloaded,static:w.loaded/(c.includesImpact?1+c.impact:1),lateral:w.lateral*sideFactor})),wheels=all.filter(w=>w.x>=0&&w.x<=L);
+   const beyond=(key:(w:typeof all[number])=>number)=>adjacentReactions(p,all.map(w=>({x:w.x,p:key(w)})));
+   if(!wheels.length&&beyond(w=>w.static).every(v=>v===0))return [];
    return [{origin,last:origin+c.wheels.at(-1)!.offset,
-    Cd:at(vertical.evaluate(wheels.map(w=>({x:w.x,p:w.unloaded})))),
-    Cv:at(vertical.evaluate(wheels.map(w=>({x:w.x,p:w.static-w.unloaded})))),
-    Ci:at(vertical.evaluate(wheels.map(w=>({x:w.x,p:impact*w.static})))),
-    Css:at(lateral.evaluate(wheels.map(w=>({x:w.x,p:w.lateral})))).map(Math.abs)}];
+    Cd:plus(at(vertical.evaluate(wheels.map(w=>({x:w.x,p:w.unloaded})))),beyond(w=>w.unloaded)),
+    Cv:plus(at(vertical.evaluate(wheels.map(w=>({x:w.x,p:w.static-w.unloaded})))),beyond(w=>w.static-w.unloaded)),
+    Ci:plus(at(vertical.evaluate(wheels.map(w=>({x:w.x,p:impact*w.static})))),beyond(w=>impact*w.static)),
+    // The adjacent girder's side-thrust reaction goes to the same column through its own ties.
+    Css:plus(at(lateral.evaluate(wheels.map(w=>({x:w.x,p:w.lateral})))).map(Math.abs),beyond(w=>w.lateral))}];
   });
  });
  const supports:SupportReaction[]=stations.map((x,j)=>({x,D:D[j],L:Live[j],Cd:0,Cv:0,Ci:0,Css:Math.max(0,...responses.flat().map(r=>r.Css[j])),craneMinimum:0,cranes:[]}));
