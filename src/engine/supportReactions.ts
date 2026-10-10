@@ -18,6 +18,8 @@ import { adjacentReactions } from './continuation';
  */
 export interface SupportReaction {
  x:number; D:number; L:number; Cd:number; Cv:number; Ci:number; Css:number;
+ /** Vertical reaction from Cls at the rail head about the bearing, Cls*e/L, of either sign. */
+ Clv:number;
  /** Least crane vertical reaction (negative is uplift), crane loads only. */
  craneMinimum:number;
  cranes:{index:number;origin:number}[];
@@ -53,7 +55,7 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
     Css:plus(at(lateral.evaluate(wheels.map(w=>({x:w.x,p:w.lateral})))).map(Math.abs),beyond(w=>w.lateral))}];
   });
  });
- const supports:SupportReaction[]=stations.map((x,j)=>({x,D:D[j],L:Live[j],Cd:0,Cv:0,Ci:0,Css:Math.max(0,...responses.flat().map(r=>r.Css[j])),craneMinimum:0,cranes:[]}));
+ const supports:SupportReaction[]=stations.map((x,j)=>({x,D:D[j],L:Live[j],Cd:0,Cv:0,Ci:0,Clv:0,Css:Math.max(0,...responses.flat().map(r=>r.Css[j])),craneMinimum:0,cranes:[]}));
  const best=stations.map(()=>-Infinity);
  const chosen:{index:number;r:typeof responses[number][number]}[]=[];
  function record(){
@@ -75,5 +77,7 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
  }
  visit(0);
  const Cls=Math.max(0,...p.cranes.map(c=>Math.max(c.longitudinal,craneDesignMinimum(c).traction)));
+ const railTop=(p.section.kind==='cap'?p.section.d+p.section.capTw:p.section.d)+(di.railDepth||p.railHeight);
+ supports.forEach((s,j)=>{s.Clv=Cls*railTop/Math.min(...[p.spans[j-1],p.spans[j]].filter(v=>v>0));});
  return {supports,Cls};
 }

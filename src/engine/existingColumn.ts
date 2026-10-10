@@ -74,7 +74,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const alpha=p.method==='LRFD'?1:1.6,Pex=Math.PI**2*E*props.Ix/c.Lcx**2,Pey=Math.PI**2*E*props.Iy/c.Lcy**2;
  // Every support uses the same column; the support giving the largest H1 ratio governs.
  const evaluate=(support:SupportReactionSet['supports'][number])=>{
- const dead=support.D,live=support.Cd+support.Cv+support.Ci+support.L,liveStatic=support.Cd+support.Cv,lateral=support.Css;
+ const dead=support.D,live=support.Cd+support.Cv+support.Ci+support.L+support.Clv,liveStatic=support.Cd+support.Cv,lateral=support.Css;
  const combinations=asceCombinations(p.method).map(k=>{
   const f=k.factors,existing=(key:'P'|'Mx'|'My'|'V',abs:boolean)=>existingLoadKeys.reduce((sum,t)=>sum+(abs?Math.abs(f[t]*c.existing[t][key]):f[t]*c.existing[t][key]),0);
   const runway=f.D*dead+f.L*live;

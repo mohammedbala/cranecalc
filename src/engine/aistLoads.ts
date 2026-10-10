@@ -33,7 +33,22 @@ export interface CraneCombination {id:string;equation:string;d:number;cd:number;
 // TR13 February 24, 2020 ballot draft §§3.10.2.1/2.2. These are the
 // runway-only projections: roof, wind, seismic, fluid, soil and thermal loads
 // require a separate building/load-path design. L is the entered runway UDL.
-export function craneCombinations(method:ProjectInput['method']):CraneCombination[]{
+/**
+ * AIST TR-13 crane combinations. With `concurrent`, the plain ASCE 7 reading is added: every crane load is
+ * live load, so impact acts with side thrust and with every crane present (no single-crane restriction).
+ */
+export function craneCombinations(method:ProjectInput['method'],concurrent=false):CraneCombination[]{
+ const all=tr13Combinations(method);
+ if(!concurrent)return all;
+ return [...all,...(method==='LRFD'?[
+  // ASCE 7 2.3.1 combination 2, with all crane loads as L.
+  {id:'C1',equation:'1.2(D+C_d)+1.6(C_v+C_i+C_{ss}+C_{ls}+L)',d:1.2,cd:1.2,cv:1.6,h:1.6,l:1.6,i:1.6,live:1.6,bumper:0}
+ ]:[
+  // ASCE 7 2.4.1 combination 2, with all crane loads as L.
+  {id:'C1',equation:'D+C_d+C_v+C_i+C_{ss}+C_{ls}+L',d:1,cd:1,cv:1,h:1,l:1,i:1,live:1,bumper:0}
+ ])];
+}
+function tr13Combinations(method:ProjectInput['method']):CraneCombination[]{
  if(method==='LRFD')return [
   {id:'1',equation:'1.4D',d:1.4,cd:0,cv:0,h:0,l:0,i:0,live:0,bumper:0},
   {id:'1a',equation:'1.4D+1.4C_{dm}',d:1.4,cd:1.4,cv:0,h:0,l:0,i:0,live:0,bumper:0},

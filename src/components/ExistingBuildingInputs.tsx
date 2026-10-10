@@ -42,9 +42,9 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
 export function SupportReactionTable({snapshot}:{snapshot:CalculationSnapshot}){
  const r=snapshot.supportReactions;if(!r)return null;const u=snapshot.input.units,f=(v:number)=>format(v,'force',u,3);
  return <details className="design-combinations" open><summary>Support reactions by load type · unfactored</summary>
-  <p>Downward positive, per support, for checking the building. Cd, Cv and Ci come from the crane arrangement that maximizes them; Css is the largest single-crane side thrust at the support, taken with it. Runway longitudinal force Cls = {f(r.Cls)} goes to the support or bracing that locates the girder.</p>
-  <div className="combination-scroll"><table><thead><tr><th>Station</th><th>D</th><th>L</th><th>Crane empty Cd</th><th>Lifted Cv</th><th>Impact Ci</th><th>Side thrust Css</th><th>Least crane</th></tr></thead>
-  <tbody>{r.supports.map(s=><tr key={s.x}><td>{format(s.x,'length',u,3)}</td><td>{f(s.D)}</td><td>{f(s.L)}</td><td>{f(s.Cd)}</td><td>{f(s.Cv)}</td><td>{f(s.Ci)}</td><td>{f(s.Css)}</td><td>{f(s.craneMinimum)}</td></tr>)}</tbody></table></div></details>;
+  <p>Downward positive, per support, for checking the building. Cd, Cv and Ci come from the crane arrangement that maximizes them; Css is the largest single-crane side thrust at the support, taken with it. Runway longitudinal force Cls = {f(r.Cls)} goes to the support or bracing that locates the girder; acting at the rail head, it also adds ± Cls·e/L at the bearings of the bay that carries it.</p>
+  <div className="combination-scroll"><table><thead><tr><th>Station</th><th>D</th><th>L</th><th>Crane empty Cd</th><th>Lifted Cv</th><th>Impact Ci</th><th>Side thrust Css</th><th>Cls couple ±</th><th>Least crane</th></tr></thead>
+  <tbody>{r.supports.map(s=><tr key={s.x}><td>{format(s.x,'length',u,3)}</td><td>{f(s.D)}</td><td>{f(s.L)}</td><td>{f(s.Cd)}</td><td>{f(s.Cv)}</td><td>{f(s.Ci)}</td><td>{f(s.Css)}</td><td>{f(s.Clv)}</td><td>{f(s.craneMinimum)}</td></tr>)}</tbody></table></div></details>;
 }
 
 export function LongitudinalBracingInputs({project,update,numeric}:{project:ProjectInput;update:(fn:(p:ProjectInput)=>void)=>void;numeric:NumericField}){
