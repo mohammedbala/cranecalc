@@ -19,7 +19,7 @@ describe('issued drawing set',()=>{
    expect(set[0].number).toBe('S-00');
    set.forEach((sheet,i)=>{expect(sheet.svg).toContain(`${i+1} OF ${set.length}`);expect(sheet.svg).toContain(`SHEET ${sheet.number}`);});
   }
-  expect(cappedSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03','S-04','S-05','S-06']);
+  expect(cappedSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03','S-04','S-05','S-06','S-07']);
   expect(sheetIndex(capped).map(v=>v.title)).toEqual(cappedSet.map(v=>v.title));
   const index=texts(cappedSet[0].svg).join(' | ');
   for(const sheet of cappedSet.slice(1))expect(index).toContain(`${sheet.number} | ${sheet.title}`);

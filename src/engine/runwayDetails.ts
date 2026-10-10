@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {bracketSchema} from './bracketInputs';
 import {angleTieSchema} from './angleTie';
+import {endStopSchema} from './endStopInputs';
 import type {BracketResults} from './bracketDesign';
 import type {ExistingBracketResults} from './existingBracket';
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
@@ -15,6 +16,7 @@ export const runwayDetailsSchema=z.object({
  bracket:bracketSchema.optional(),
  material,
  simpleSupport:simpleSupportSchema.optional(),
+ endStop:endStopSchema.optional(),
  // Two identical flat bars, one each side of the gusset, at EACH flange.
  brace:z.object({arrangement:z.enum(['paired-bars','flexible-plate','bearing-link','paired-links','single-angle','double-angle']).optional(),
   singleAngle:angleTieSchema.optional(),doubleAngle:angleTieSchema.optional(),

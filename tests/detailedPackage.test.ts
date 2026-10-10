@@ -45,7 +45,7 @@ describe('representative runway package',()=>{
   const s=calculate(p);expect(s.eligible).toBe(false);expect(s.checks.some(c=>c.note.includes('manufacturer')&&c.status==='incomplete')).toBe(true);
   const p2=demonstrationProject();p2.unbracedLength=1000;expect(validateProject(p2).join()).toContain('top (compression) flange restraint spacing');
   p2.unbracedLength=p2.spans[0];const spacing=p2.aist!.clipSpacing;p2.aist!.clipSpacing=.1;expect(validateProject(p2).join()).toContain('200 rail-keeper');p2.aist!.clipSpacing=spacing;p2.details!.spectrum[0].cycles++;expect(validateProject(p2).join()).toContain('sum');
-  p2.details!.spectrum[0].cycles--;p2.cranes[0].design!.bumperBypassesGirder=false;expect(validateProject(p2).join()).toContain('building-mounted end stop');
+  p2.details!.spectrum[0].cycles--;p2.cranes[0].design!.bumperBypassesGirder=false;p2.details!.endStop!.enabled=false;expect(validateProject(p2).join()).toContain('design the girder-mounted runway end stops');
  });
  it('derives all detail sheets and export records from the current snapshot',()=>{
   const sheets=engineeringSketches(snapshot);expect(sheets).toHaveLength(8);
