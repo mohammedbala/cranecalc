@@ -28,14 +28,20 @@ export function leader(at: XY, end: XY, label: string, size = 9) {
   return line(at, [end[0] - 8, end[1] - 3]) + line([end[0] - 8, end[1] - 3], [end[0] + 6, end[1] - 3])
     + circle(at[0], at[1], 1.4, 'dot') + text(end[0] + 9, end[1], label, size);
 }
-export function dimH(x1: number, x2: number, fromY: number, y: number, label: string) {
-  return line([x1, fromY], [x1, y + 5]) + line([x2, fromY], [x2, y + 5]) + line([x1, y], [x2, y])
-    + [x1, x2].map(x => line([x - 2.5, y + 3], [x + 2.5, y - 3])).join('') + text((x1 + x2) / 2, y - 5, label, 9, 'middle');
+// A dimension too short for its text carries the text beyond the far extension line on an extended
+// dimension line, as drafted by hand, instead of writing it across the extension lines.
+export function dimH(x1: number, x2: number, fromY: number, y: number, label: string, outside: 'left' | 'right' = 'right') {
+  const w = textWidth(label, 9), fits = w + 6 <= Math.abs(x2 - x1), lo = Math.min(x1, x2), hi = Math.max(x1, x2);
+  const [a, b] = fits ? [lo, hi] : outside === 'right' ? [lo, hi + w + 6] : [lo - w - 6, hi];
+  return line([x1, fromY], [x1, y + 5]) + line([x2, fromY], [x2, y + 5]) + line([a, y], [b, y])
+    + [x1, x2].map(x => line([x - 2.5, y + 3], [x + 2.5, y - 3])).join('')
+    + (fits ? text((x1 + x2) / 2, y - 5, label, 9, 'middle') : outside === 'right' ? text(hi + 4, y - 5, label, 9, 'start') : text(lo - 4, y - 5, label, 9, 'end'));
 }
 export function dimV(y1: number, y2: number, fromX: number, x: number, label: string) {
-  return line([fromX, y1], [x + 5, y1]) + line([fromX, y2], [x + 5, y2]) + line([x, y1], [x, y2])
+  const w = textWidth(label, 9), fits = w + 6 <= Math.abs(y2 - y1), far = Math.max(y1, y2);
+  return line([fromX, y1], [x + 5, y1]) + line([fromX, y2], [x + 5, y2]) + line([x, Math.min(y1, y2)], [x, fits ? far : far + w + 6])
     + [y1, y2].map(y => line([x - 3, y + 2.5], [x + 3, y - 2.5])).join('')
-    + text(x - 6, (y1 + y2) / 2, label, 9, 'middle', 400, -90);
+    + text(x - 6, fits ? (y1 + y2) / 2 : far + 4 + w / 2, label, 9, 'middle', 400, -90);
 }
 // Arial advance widths per em, for laying out text without a browser.
 const glyphWidths:Record<string,number>={' ':.278,'!':.278,'"':.355,'#':.556,'$':.556,'%':.889,'&':.667,"'":.191,'(':.333,')':.333,'*':.389,'+':.584,',':.278,'-':.333,'.':.278,'/':.278,':':.278,';':.278,'<':.584,'=':.584,'>':.584,'?':.556,'@':1.015,'[':.278,']':.278,'_':.556,'·':.278,'§':.556,'×':.584,'°':.4,

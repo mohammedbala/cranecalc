@@ -10,7 +10,7 @@ function verticalSlot(cx:number,cy:number,length:number,width:number,cls:string)
 export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,compact=false){
  const p=s.input,g=flangeTieGeometry(p)!;if(!g)return '';const b=p.section,t=p.details!.brace,a=g.attachment,c=t.connection,rel=tieRelease(p);
  // x is the left edge of the view: fit the girder half-width and the tie span ahead of a 215-unit label column.
- const scale=drawingScale(Math.min(compact?.3:.38,(605-215-24-x)/(g.face+b.bf/2+40)),p.units),k=scale.pointsPerMm,xc=x+b.bf/2*k,X=(z:number)=>xc+z*k,Y=(v:number)=>y+v*k;
+ const scale=drawingScale(Math.min(.38,(605-215-24-x)/(g.face+b.bf/2+40)),p.units),k=scale.pointsPerMm,xc=x+b.bf/2*k,X=(z:number)=>xc+z*k,Y=(v:number)=>y+v*k;
  const drop=g.topDrop,dim=(v:number)=>drawingLength(v,p.units),sz=(v:number)=>plateInches(v,p.units),hole=boltProperties(c.grade,c.diameter).hole;
  let svg=`<g data-view="flange-saddle-section">`;
  svg+=rect(X(-b.bf/2),Y(-b.tf),b.bf*k,b.tf*k,'runway-line');
@@ -33,16 +33,18 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,compact
  }
  // Edge and pitch chained under the bars at the girder end; overall length below them.
  const under=Y(drop+Math.max(t.width,hg)/2);
- svg+=dimH(X(g.start),X(g.start+c.edge),Y(drop+t.width/2),under+12,sz(c.edge))+dimH(X(g.start+c.edge),X(g.start+c.edge+c.pitch),Y(drop+t.width/2),under+26,sz(c.pitch));
+ // Edge and pitch of the girder-end holes as one string under the bars.
+ svg+=dimH(X(g.start),X(g.start+c.edge+c.pitch),Y(drop+t.width/2),under+16,`${sz(c.edge)} + ${sz(c.pitch)}`)+line([X(g.start+c.edge),Y(drop+t.width/2)],[X(g.start+c.edge),under+21])+line([X(g.start+c.edge)-2.5,under+19],[X(g.start+c.edge)+2.5,under+13]);
  svg+=dimH(X(g.start),X(g.face),under,under+42,dim(t.length));
- svg+=dimV(Y(drop-t.width/2),Y(drop+t.width/2),X(g.face-g.connection),X(g.face-g.connection)-14,dim(t.width));
- if(hg>t.width+1e-6)svg+=dimV(Y(drop-hg/2),Y(drop+hg/2),X(g.face),X(g.face)+14,dim(hg));
- const nx=Math.max(X(g.face)+(hg>t.width+1e-6?48:28),605-215),top=y-44,bottom=y+158;
+ // The column gusset (weld length) is dimensioned beyond the column face, clear of the bars; the bar
+ // width is in the bar callout.
+ svg+=dimV(Y(drop-hg/2),Y(drop+hg/2),X(g.face),X(g.face)+16,dim(hg));
+ const nx=Math.max(X(g.face)+44,605-215),top=y-44,bottom=y+158;
  const items:{at:XY;labels:string[];weld?:string;field?:boolean}[]=[
   {at:[X(g.rootStart+g.rootLength*.4),Y(a.saddleThickness/2)],labels:[`SADDLE PL ${sz(a.saddleThickness)}`,`${dim(a.saddleLength)} LONG X ${dim(g.rootLength)} W`]},
   {at:[X(g.rootStart+g.rootLength*.5),Y(a.saddleThickness)],labels:['GUSSET / SADDLE AND','SADDLE / FLANGE: BOTH SIDES'],weld:sz(a.weldSize)},
   {at:[X(g.start+t.length/2),Y(drop-t.width/2)],labels:[`2 FL ${sz(t.thickness)} X ${sz(t.width)}`,`GIRDER END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC,`,`${sz(hole)} STD HOLES; PL ${sz(t.gussetThickness)} GUSSETS`]},
-  {at:[X(g.face),Y(drop)],labels:[`${g.receiver?'EXISTING ':''}COLUMN GUSSET ROOT, BOTH SIDES`,`X ${dim(hg)}; ${detailRef('TIE AND STIFFENER LOCATIONS / PLAN')}`],weld:sz(c.weldSize),field:true},
+  {at:[X(g.face),Y(drop+hg/2-3)],labels:[`${g.receiver?'EXISTING ':''}COLUMN GUSSET ROOT, BOTH SIDES`,`X ${dim(hg)}; ${detailRef('TIE AND STIFFENER LOCATIONS / PLAN')}`],weld:sz(c.weldSize),field:true},
   {at:[X(g.face-g.connection*.5),Y(drop+hg/2)],labels:rel?[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} PRETENSIONED`,`AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)};`,`${sz(rel.width)} X ${sz(rel.slot)} VERT. SLOTS IN GUSSET`]:[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC,`,`${sz(hole)} STD HOLES`]}
  ];
  svg+=labelColumn(items,nx,top,bottom);
