@@ -5,10 +5,11 @@ import {endStopGeometry,stopBumperForce,activeEndStop} from '../engine/endStop';
 import {craneCombinations} from '../engine/aistLoads';
 import {boltProperties} from '../engine/connectionStrength';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {flangeTieGeometry} from '../engine/tieGeometry';
+import {activeEndBearing,continuousBearings} from '../engine/endBearingInputs';
 
 const inch=25.4;
 
@@ -19,7 +20,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,d=p.details!,e=activeEndStop(p)!,b=p.section,g=endStopGeometry(p,e),r=d.rail,u=p.units;
  const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number)=>{const t=format(v,'force',u,3);return u==='US'?t.toUpperCase():t;};
  const tb=e.base.thickness,tp=e.face.thickness,H=e.face.height,ts=e.stiffener.thickness,Ls=e.stiffener.length,sp=e.stiffener.spacing,Wb=e.base.width,gauge=e.bolts.gauge,db=e.bolts.diameter;
- const capped=b.kind==='cap',capT=capped?b.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,stiffTop=Math.max(H-inch,.5*H);
+ const capped=b.kind==='cap',capT=capped?b.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,stiffTop=g.stiffenerHeight;
  const shown=Math.max(g.railEnd+8*inch,d.bearing.length+4*inch),depthShown=capT+b.tf+6*inch;
  const boltLabel=`4 - ${size(db)} ${e.bolts.grade} PRETENSIONED (SC)`,hole=boltProperties(e.bolts.grade,db).hole;
  const keeperRef=detailRef(detailTitles.railKeeper),views:DetailView[]=[];
@@ -64,18 +65,21 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   [[g.front,'BASE PL'],[g.faceFront,'STOP FACE'],[g.frontRow,'FRONT BOLTS'],[g.backRow,'BACK BOLTS']].forEach(([x,label],i)=>{const yd=top-10-12*i;svg+=dimH(X(0),X(x as number),top,yd,'')+line([X(0)-3,yd],[X(0),yd])+text(X(0)-5,yd+3,`${label} ${dim(x as number)}`,7.5,'end');});
   svg+=dimV(Y(tb+H),Y(tb),X(g.back),X(0)-22,dim(H));
   svg+=dimH(X(0),X(xs),cut,cut+24,`${dim(xs)} TO BEARING STIFFENER C/L`,'left');
+  // Labels right of the rail, from above the face plate to below the girder cut, so they follow the drawn size.
   const lx=Math.max(X(shown)+48,bc[0]+br*kk+70);
   svg+=labelColumn([
-   {at:[X(g.faceFront),Y(tb+H*.85)],labels:[`PL ${size(tp)} X ${size(Wb)} X ${dim(H)} FACE`,'STRUCK BY CRANE BUMPER']},
+   {at:[X(g.faceFront),Y(tb+H*.85)],labels:[`PL ${size(tp)} X ${size(Wb)} X ${dim(H)} FACE`]},
    {at:[bc[0]+br*kk*.7,bc[1]-br*kk*.7],labels:['CRANE BUMPER (REF.), BY CRANE SUPPLIER',`C/L ${dim(e.bumperHeight)} ABOVE T.O.R.`]},
    {at:[X(g.faceBack-Ls*.35),Y(tb+inch+(stiffTop-inch)*.65)],labels:[`2 PL ${size(ts)} STIFFENERS AT ${dim(sp)} CTRS`,`${dim(Ls)} AT BASE, ${dim(stiffTop)} HIGH AT FACE`]},
-   {at:[X(g.railEnd),Y(railDepth*.6)],labels:[`RAIL ENDS ${dim(e.railGap)} CLEAR OF FACE`,`FIRST KEEPER PAIR PER ${keeperRef}`]},
+   // Stiffeners brace the face plate: welded to it over their full height.
+   {at:[X(g.faceBack),Y(tb+stiffTop*.3)],labels:['STIFFENERS TO FACE PL,','BOTH SIDES, FULL HEIGHT'],weld:size(e.weldSize)},
+   {at:[X(g.railEnd),Y(railDepth*.6)],labels:[`RAIL ENDS ${dim(e.railGap)} CLEAR OF FACE`]},
    {at:[X(g.faceFront)+1,yb],labels:['FACE PL AND STIFFENERS TO','BASE PL, BOTH SIDES'],weld:size(e.weldSize)},
    {at:[X(g.front),yb+tb*kk/2],labels:[`PL ${size(tb)} X ${size(Wb)} X ${dim(e.base.length)} BASE`]},
    {at:[X(g.frontRow)+.8*db*kk,wFl+.45*db*kk],labels:[boltLabel,`${size(hole)} STD HOLES THRU ${capped?'CAP AND ':''}FLANGE`,'NUTS BELOW TOP FLANGE']},
-   {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:['END BEARING STIFFENERS',`SEE ${detailRef(detailTitles.bearing)}`]},
+   {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:[`END BEARING STIFFENERS, SEE ${detailRef(detailTitles.bearing)}`]},
    ...(tie&&endTie?[{at:[X(endTie.tieX),wFl+tie.attachment.saddleThickness*kk] as XY,labels:['TOP TIE SADDLE, FAR SIDE (HIDDEN)',`SEE ${detailRef(detailTitles.flangeTie)}`]}]:[])
-  ],lx,58,338);
+  ],lx,Y(tb+H)-54,cut+30);
   svg+=text(X(0)-28,ys-3,'GIRDER END',7.5,'end',700);
   return {svg:svg+'</g>',scale:k.label};
  }});
@@ -100,6 +104,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   svg+=dimH(X(g.faceFront),X(g.railEnd),Z(width/2),Z(width/2)+16,dim(e.railGap));
   svg+=multiLeader([[X(keeper)+r.clipWidth*kk,Z(rz-r.baseWidth/2-r.clipProjection)]],[X(shown)+44,Z(-width/2)-14],['FIRST KEEPER PAIR',`SPACING PER ${keeperRef}`]);
   svg+=multiLeader([[X(g.frontRow),Z(-gauge/2)-db/2*kk]],[X(shown)+44,Z(-width/2)+18],[boltLabel],8.5,[[[X(g.frontRow)+24,Z(-width/2)-6]]]);
+  // Both stiffeners to the face plate, each side of each stiffener.
+  svg+=filletLeader([[X(g.faceBack)-1,Z(sp/2+ts/2)+1]],[X(shown)+44,Math.max(Z(width/2)-4,Z(-width/2)+50)],size(e.weldSize),['TYP. BOTH STIFFENERS TO FACE PL','FULL HEIGHT'],true,[[[X(g.faceFront)+6,Z(width/2)-6]]]);
   svg+=text(X(0)-4,Z(width/2)+46,'GIRDER END',8,'start',700);
   return {svg:svg+'</g>',scale:k.label};
  }});
@@ -123,7 +129,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const lx=Math.min(X(Math.max(Wb,g.surfaceWidth)/2)+60,420);
   svg+=labelColumn([
    {at:[bc[0]+e.bumperDiameter/2*kk*.7,bc[1]-e.bumperDiameter/2*kk*.7],labels:['CRANE BUMPER (REF.)',`${size(e.bumperDiameter)} CONTACT, ON RAIL C/L`,`C/L ${dim(g.contact)} ABOVE BASE PL`]},
-   {at:[X(sp/2+ts/2),Y(tb+stiffTop*.5)],labels:['STIFFENERS BEYOND (HIDDEN)']},
+   {at:[X(sp/2+ts/2),Y(tb+stiffTop*.5)],labels:['STIFFENERS BEYOND (HIDDEN),','WELDED TO FACE PL FULL HEIGHT']},
    {at:[X(gauge/2)+.8*db*kk,wFl+.45*db*kk],labels:[boltLabel,'NUTS BELOW TOP FLANGE','CLEAR OF WEB FILLET']},
    {at:[X(b.tw/2),cut-6],labels:[`${b.name} RUNWAY GIRDER`]}
   ],lx,410,620);
@@ -134,6 +140,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const P=Math.max(...craneCombinations(p.method).map(c=>c.bumper))*stopBumperForce(p),check=(id:string)=>s.checks.find(c=>c.id===id);
   const stops=s.checks.filter(c=>c.group==='End stops'&&c.utilization!==undefined&&(c.quantity!=='length'||c.id.endsWith('prying'))),worst=[...stops].sort((a,b)=>(b.utilization??0)-(a.utilization??0))[0];
   const T=check('end-stop-bolt-tension')?.demand,V=check('end-stop-bolt-shear')?.demand;
+  // Where the bumper force leaves the girder: the one locating support of a continuous girder, else the end bay's locating end.
+  const fixed=continuousBearings(p).find(v=>v.role==='LOCATING'),locating=fixed&&activeEndBearing(p)?`THE LOCATING BEARING AT GRID ${fixed.grid}`:p.system==='simple'?'THE LOCATING END OF EACH END BAY':'THE LOCATING END CONNECTION';
   const rows=[
    ['BUMPER FORCE, PER CRANE SUPPLIER',force(stopBumperForce(p))],
    [`FACTORED (${p.method}, AIST STOP COMBINATIONS)`,force(P)],
@@ -147,10 +155,10 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    stopEnds(p).length===2?'PROVIDE ONE STOP AT EACH END OF EACH RUNWAY, CENTERED ON THE GIRDER. THE STOP AT THE OPPOSITE END IS THE MIRROR IMAGE.':`PROVIDE ONE STOP AT ${stopLocation(p).split(';')[0].toUpperCase()}, CENTERED ON THE GIRDER. THE RUNWAY CONTINUES BEYOND THE OTHER MODELED END; NO STOP THERE.`,
    `DRILL ${size(hole)} STANDARD HOLES THROUGH ${capped?'THE CAP CHANNEL WEB AND ':''}THE TOP FLANGE ONLY AT THE LOCATIONS SHOWN, ${dim(g.backRow)} AND ${dim(g.frontRow)} FROM THE GIRDER END. NO OTHER HOLES IN THE TOP FLANGE.`,
    `BOLTS: ASTM F3125 GRADE ${e.bolts.grade}, PRETENSIONED, CLASS B FAYING SURFACES (SLIP-CRITICAL). HARDENED WASHERS UNDER TURNED ELEMENTS. VERIFY NUT CLEARANCE BELOW THE FLANGE AT THE BEARING STIFFENERS${flangeTieGeometry(p)?' AND THE TOP TIE SADDLE':''} BEFORE DRILLING.`,
-   'SHOP WELD THE FACE PLATE AND STIFFENERS TO THE BASE PLATE WITH CONTINUOUS FILLETS BOTH SIDES. GRIND THE FACE SMOOTH AT THE BUMPER CONTACT.',
+   `SHOP WELD THE FACE PLATE AND THE STIFFENERS TO THE BASE PLATE, AND EACH STIFFENER TO THE FACE PLATE OVER ITS FULL HEIGHT, WITH CONTINUOUS ${size(e.weldSize).replaceAll('"','')} FILLETS BOTH SIDES. GRIND THE FACE SMOOTH AT THE BUMPER CONTACT.`,
    `TERMINATE THE RAIL ${dim(e.railGap)} CLEAR OF THE STOP FACE. THE FIRST KEEPER PAIR IS AT THE RAIL END; KEEPER SPACING PER ${keeperRef}.`,
    'CONFIRM THE BUMPER FORCE, BUMPER HEIGHT AND CONTACT DIAMETER WITH THE CRANE SUPPLIER BEFORE FABRICATION. STOPS SHALL BE INSTALLED BEFORE THE CRANE IS OPERATED.',
-   'THE GIRDER AXIAL FORCE AND THE LOCATING END CONNECTION INCLUDE THE BUMPER FORCE; THE END COUPLE IS INCLUDED IN THE GIRDER STOP COMBINATIONS (CALCULATION 05A).'
+   `THE GIRDER AXIAL FORCE AND ${locating} INCLUDE THE BUMPER FORCE; THE END COUPLE IS INCLUDED IN THE GIRDER STOP COMBINATIONS (CALCULATION 05A).`
   ];
   return {key:'end-stop',name:'END STOPS',views,notes:(t:Style)=>[heading(t,'END STOP DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.6,1.4]),heading(t,'END STOP NOTES'),...numbered(t,notes)]};
  }

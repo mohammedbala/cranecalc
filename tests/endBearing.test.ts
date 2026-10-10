@@ -1,13 +1,13 @@
 import {describe,expect,it} from 'vitest';
 import {calculate,validateProject} from '../src/engine/calculate';
-import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
-import {endBearingChecks,endBearingGeometry,activeEndBearing} from '../src/engine/endBearing';
+import {cappedDemonstrationProject} from '../src/engine/demonstration';
+import {endBearingChecks,endBearingGeometry,activeEndBearing,continuousBearings,locatingSupport} from '../src/engine/endBearing';
 import {boltCapacity} from '../src/engine/connectionStrength';
 import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import {detailedDrawings} from '../src/components/detailedDrawings';
 import {compactReport} from '../src/report/compactReport';
 
-const inch=25.4;
+const inch=25.4,foot=304.8;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
 const capped=calculate(cappedDemonstrationProject());
 
@@ -36,9 +36,22 @@ describe('bolted girder end bearings',()=>{
   e.bolts.edge=4.5*inch;expect(status('end-bearing-wrench-stiffener')).toBe('fail');e.bolts.edge=2*inch;
   e.bolts.gauge=2.5*inch;expect(status('end-bearing-wrench-web')).toBe('fail');
  });
- it('applies only to independent simple spans; continuous runways keep the girder-end connection',()=>{
-  const p=demonstrationProject();p.system='continuous';
-  expect(validateProject(p).join(' ')).not.toContain('end bearing');expect(activeEndBearing(p)).toBeUndefined();
+ it('locates a continuous girder at the support nearest mid-length and slots the others for its thermal travel',()=>{
+  const p=structuredClone(capped.input);p.system='continuous';p.details!.brace.flangeAttachment!.enabled=false;
+  expect(validateProject(p)).toEqual([]);expect(activeEndBearing(p)).toBeDefined();
+  const supports=continuousBearings(p),bs=p.details!.bearing;
+  expect(supports.map(v=>v.role)).toEqual(['SLIDING','LOCATING','SLIDING','SLIDING']);expect(locatingSupport(p)).toBe(1);
+  // Bearing plates start at the girder ends at the runway ends and are centered on the interior grids.
+  expect(supports.map(v=>v.start)).toEqual([0,25*foot-bs.length/2,50*foot-bs.length/2,75*foot-bs.length]);
+  expect(supports.map(v=>v.distance)).toEqual([25*foot,0,25*foot,50*foot]);
+  // Twin bracket ribs under the plate: runway-end grid, then both ribs about an interior grid.
+  const wb=p.details!.bracket!;expect(endBearingGeometry(p,p.details!.endBearing!).ribs).toEqual([wb.ribSpacing/2,bs.length/2-wb.ribSpacing/2,bs.length/2+wb.ribSpacing/2]);
+  const checks=Object.fromEntries(endBearingChecks(p,p.details!.endBearing!,{analysis:capped.designAnalysis!,lateral:capped.detailResults!.demands.brace}).map(c=>[c.id,c]));
+  expect(checks['end-bearing-locating-slip'].title).toBe('Locating support (grid 2) · slip-critical bolts');
+  const ss=p.details!.simpleSupport!,travel=checks['end-bearing-travel'];
+  expect(travel.demand).toBeCloseTo(12e-6*50*foot*Math.max(ss.temperatureRise,ss.temperatureFall)+p.section.d*capped.designAnalysis!.endRotation+ss.settingTolerance,6);
+  expect(travel.capacity).toBeCloseTo(ss.guideTravel,9);expect(travel.status).toBe('pass');
+  expect(checks['end-bearing-seat-fit'].demand).toBeCloseTo(bs.length,9);
  });
  it('draws locating and sliding bearings and references them from the support details and the report',()=>{
   const set=drawingSheetSet(capped),s02=set.find(v=>v.svg.includes('data-view="end-bearing"'))!,s04=set.find(v=>v.svg.includes('data-view="independent-tie-plan"'))!;
