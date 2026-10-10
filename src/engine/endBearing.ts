@@ -7,8 +7,8 @@ import {wrenchClearance} from './endStop';
 import {aiscShapeByName} from '../data/aiscSections';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
-import type {EndBearingInput} from './endBearingInputs';
-export {endBearingSchema,defaultEndBearing,activeEndBearing,type EndBearingInput} from './endBearingInputs';
+import {slidingBolts,type EndBearingInput} from './endBearingInputs';
+export {endBearingSchema,defaultEndBearing,activeEndBearing,slidingBolts,type EndBearingInput} from './endBearingInputs';
 
 const inch=25.4;
 /**
@@ -18,11 +18,15 @@ const inch=25.4;
  */
 export function endBearingGeometry(p:ProjectInput,e:EndBearingInput){
  const d=p.details!,bs=d.bearing,travel=simpleSupportInput(p).guideTravel,gap=simpleSupportInput(p).endGap,db=e.bolts.diameter,hole=boltProperties(e.bolts.grade,db).hole;
- const rows=[e.bolts.edge,bs.length-e.bolts.edge],stiffener=bs.length/2,slot=hole+2*travel;
+ const sl=slidingBolts(e),sleeved=sl.mode==='sleeved';
+ // Sleeved bolts: the slot clears a steel sleeve one bore plus two walls in diameter, which the bolt is pretensioned against.
+ const sleeve=sleeved?{od:hole+2*sl.wall,length:p.section.tf+sl.clearance,area:Math.PI/4*((hole+2*sl.wall)**2-hole**2)}:undefined;
+ const slotWidth=sleeve?sleeve.od+1.5875:hole;
+ const rows=[e.bolts.edge,bs.length-e.bolts.edge],stiffener=bs.length/2,slot=slotWidth+2*travel;
  // A plate washer centered on the bolt covers the slot at either extreme of travel.
- const washer={length:hole+4*travel+12.7,width:Math.max(2.5*db,hole+25.4),thickness:e.washerThickness};
+ const washer={length:slotWidth+4*travel+12.7,width:Math.max(2.5*db,slotWidth+25.4),thickness:e.washerThickness};
  const b=d.bracket?.enabled?d.bracket:undefined,ribs=b&&bracketArrangement(b)==='twin-rib'?[b.ribSpacing/2,b.ribSpacing/2-gap/2]:[];
- return {rows,stiffener,slot,hole,washer,travel,ribs,spacing:rows[1]-rows[0]};
+ return {rows,stiffener,slot,slotWidth,sleeve,sleeved,hole,washer,travel,ribs,spacing:rows[1]-rows[0]};
 }
 
 const compared=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds=['aisc-connections','tr13-girder']):CheckResult=>({id,group:'End bearings',title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds});
@@ -31,7 +35,10 @@ const byOthers=(id:string,title:string,note:string):CheckResult=>({id,group:'End
 /**
  * Locating end: pretensioned slip-critical bolts in standard holes take the
  * longitudinal force with the bottom-flange tie force and uplift. Sliding end:
- * snug-tight bolts in long slots take uplift and transverse force in bearing.
+ * bolts pretensioned against steel sleeves (AISC J1.10(c)) leave the flange
+ * free to slide; the sleeves carry the transverse force in bearing on the slot
+ * sides and plate washers hold the flange down. Snug-tight bolts with jam nuts
+ * are an alternative for cranes of 5 tons or less.
  */
 export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:DesignAnalysis;lateral:number}):CheckResult[]{
  const d=p.details!,b=p.section,bs=d.bearing,m=d.material,method=p.method,u=p.units,f=(v:number)=>format(v,'length',u,3);
@@ -51,13 +58,21 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   compared('end-bearing-locating-tension','Locating end · bolt tension with shear',T,locating.tension,'force','T=R_{up}/4\\le\\phi F^\\prime_{nt}A_b',force),
   compared('end-bearing-flange-bearing','Girder flange · bolt bearing / tearout',V,plateBearing(db,g.hole,b.tf,b.Fu,g.rows[0],g.spacing,method).capacity,'force','R_n=\\min(1.2l_ctF_u,2.4dtF_u)',`Clear distance to the girder end controls; the force reverses with traction.`),
   compared('end-bearing-plate-bearing','Bearing plate · bolt bearing / tearout',V,plateBearing(db,g.hole,bs.thickness,m.Fu,e.bolts.edge,g.spacing,method).capacity,'force','R_n=\\min(1.2l_ctF_u,2.4dtF_u)','Bearing plate ends control.'),
-  compared('end-bearing-sliding','Sliding end · bolts in bearing',Math.hypot(Vs/Math.max(sliding.shear,1e-9),T/Math.max(sliding.tension,1e-9)),1,'ratio','\\sqrt{(V/\\phi R_{nv})^2+(T/\\phi R_{nt})^2}\\le1',`Snug-tight bolts with double nuts in long slots carry the transverse tie force in bearing and the uplift in tension; no longitudinal force. ${force}`),
+  compared('end-bearing-sliding','Sliding end · bolts in bearing',Math.hypot(Vs/Math.max(sliding.shear,1e-9),T/Math.max(sliding.tension,1e-9)),1,'ratio','\\sqrt{(V/\\phi R_{nv})^2+(T/\\phi R_{nt})^2}\\le1',`${g.sleeved?'Bolts pretensioned against steel sleeves; the sleeves bear on the slot sides for the transverse tie force and the plate washers take the uplift into the bolts':'Snug-tight bolts with double nuts in long slots carry the transverse tie force in bearing and the uplift in tension'}; no longitudinal force. ${force}`),
   compared('end-bearing-flange-prying','Girder bottom flange · thickness for no prying',tMin(T,flangeB-db/2,flangeP,b.Fu),b.tf,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`Flange cantilevers from the web: b = ${f(flangeB)}, p = ${f(flangeP)}.`),
-  compared('end-bearing-slot','Sliding end · slot length for travel',g.slot,2.5*db,'length','L_{slot}=d_h+2u\\le2.5d_b',`Long-slotted holes in the girder flange per AISC Table J3.3 for the sliding allowance ${f(g.travel)} each way. The movement demand is checked against that allowance separately.`),
+  ...(g.sleeve?[
+   compared('end-bearing-sleeve','Sliding end · sleeves under bolt pretension',1.5*sliding.pretension,m.Fy*g.sleeve.area,'force','1.5T_b\\le F_yA_{sleeve}',`Steel sleeve ${f(g.sleeve.od)} OD × ${f(g.hole)} bore × ${f(g.sleeve.length)} long, F_y as the plate material. 1.5 × minimum pretension bounds turn-of-nut overshoot (RCSC commentary). AISC J1.10(c): crane supports in buildings with cranes over 5 tons need pretensioned bolts; the sleeve takes the clamp so the flange still slides.`),
+   compared('end-bearing-sleeve-length','Sliding end · sleeve projects above the flange',inch/32,g.sleeve.length-b.tf,'length','l_{sleeve}-t_f\\ge1/32\\,in','Cut each sleeve to the measured flange thickness plus the clearance, so the plate washer clears the flange.'),
+   compared('end-bearing-sleeve-bearing','Sliding end · flange bearing on sleeves',Vs,available(Math.min(1.0*((b.bf-gauge)/2-g.slotWidth/2)*b.tf*b.Fu,2.0*g.sleeve.od*b.tf*b.Fu),method,.75,2),'force','R_n=\\min(1.0l_ctF_u,\\,2.0d_st_fF_u)','AISC J3.10 for long slots perpendicular to the force, with the sleeve diameter; clear distance to the flange tip.'),
+   compared('end-bearing-washer-bending','Sliding end · plate washer under uplift',6*(T/2)*Math.max(0,g.slotWidth/2-.8*db)/(g.washer.length*e.washerThickness**2),available(m.Fy,method,.9,1.67),'stress','f=\\frac{6(T/2)a}{l_wt_w^2};\\quad a=w_{slot}/2-0.8d_b','The flange bears up on the washer at both slot edges; the washer cantilevers from the bolt head.')
+  ]:[
+   compared('end-bearing-slot','Sliding end · slot length for travel',g.slot,2.5*db,'length','L_{slot}=d_h+2u\\le2.5d_b',`Long-slotted holes in the girder flange per AISC Table J3.3 for the sliding allowance ${f(g.travel)} each way. The movement demand is checked against that allowance separately.`),
+   compared('end-bearing-j110','Sliding end · snug-tight bolts permitted',Math.max(0,...p.cranes.map(c=>c.design?.ratedLoad??Infinity)),5*8896.443,'force','W_{rated}\\le5\\,tons','AISC J1.10(c): in buildings with cranes over 5 tons, crane supports need pretensioned bolts or welds. Use sleeved sliding bolts for heavier cranes.')
+  ]),
   compared('end-bearing-washer','Sliding end · plate washer thickness',5/16*inch,e.washerThickness,'length','t_w\\ge5/16\\,in','AISC J3.2: plate washers cover the long slots in the outer ply.'),
-  compared('end-bearing-flange-edge','Girder flange · bolt edge distance',1.5*db,(b.bf-gauge)/2,'length','(b_f-g)/2\\ge1.5d_b','Rolled flange edge.'),
+  compared('end-bearing-flange-edge','Girder flange · bolt edge distance',1.5*db-g.hole/2+g.slotWidth/2,(b.bf-gauge)/2,'length','(b_f-g)/2\\ge1.5d_b-d_h/2+w_{slot}/2','Rolled flange edge; the sliding-end slot keeps the clear material of a standard hole at the J3.4 minimum.'),
   compared('end-bearing-plate-edge','Bearing plate · bolt edge distance',1.5*db,Math.min((bs.width-gauge)/2,e.bolts.edge),'length','e\\ge1.5d_b','Standard holes in the bearing plate.'),
-  compared('end-bearing-end-edge','Girder end · bolt edge distance',1.5*db+(g.slot-g.hole)/2,e.bolts.edge,'length','e\\ge1.5d_b+(L_{slot}-d_h)/2','The slot extends toward the girder end at the sliding end.'),
+  compared('end-bearing-end-edge','Girder end · bolt edge distance',1.5*db-g.hole/2+g.slot/2,e.bolts.edge,'length','e\\ge1.5d_b-d_h/2+L_{slot}/2','The slot extends toward the girder end at the sliding end.'),
   compared('end-bearing-spacing','Bolt spacing',8/3*db,Math.min(gauge,g.spacing),'length','s\\ge(8/3)d_b','Between rows and across the gauge.'),
   compared('end-bearing-wrench-web','Nut clearance above flange · web fillet',C,gauge/2-k1,'length','g/2-k_1\\ge c_{wrench}',shape?'k₁ from the catalogue fillet.':'No fillet credited for a custom section.'),
   compared('end-bearing-wrench-stiffener','Nut clearance above flange · bearing stiffener',C,stiffClear,'length','|x_{bolt}-x_{st}|-t_{st}/2-w\\ge c_{wrench}','Bolt rows at the bearing plate ends clear the stiffeners at mid-bearing.'),

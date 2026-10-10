@@ -164,11 +164,11 @@ export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:stri
  * Leaders to a column of labels, ordered by target height so no two leaders
  * cross; labels are spaced by their line count within [top, bottom].
  */
-export function labelColumn(items:{at:XY;labels:string[];weld?:string}[],x:number,top:number,bottom:number){
+export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boolean}[],x:number,top:number,bottom:number){
  const sorted=[...items].sort((a,b)=>a.at[1]-b.at[1]),height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*11;
  const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
  let y=top,svg='';
- for(const v of sorted){svg+=v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,true):multiLeader([v.at],[x,y],v.labels);y+=height(v)+gap;}
+ for(const v of sorted){svg+=v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,true,[],!!v.field):multiLeader([v.at],[x,y],v.labels);y+=height(v)+gap;}
  return svg;
 }
 

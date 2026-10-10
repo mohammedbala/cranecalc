@@ -1,5 +1,5 @@
-import {activeEndBearing} from '../engine/endBearingInputs';
-import {flangeTieGeometry} from '../engine/tieGeometry';
+import {activeEndBearing,slidingPhrase} from '../engine/endBearingInputs';
+import {flangeTieGeometry,tieRelease,tieSides} from '../engine/tieGeometry';
 import type {CalculationSnapshot} from '../engine/types';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {referenceColumns,shapeMeters} from '../data/aiscReferenceShapes';
@@ -55,8 +55,9 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
 
  // True-scale plan: each end has its OWN transverse tie to the same column.
  svg+='<g data-view="independent-tie-plan">';
- const ps=drawingScale(Math.min(.24,175/(b.bf/2+d.brace.length+150),335/(4*bs.length+c.endGap)),p.units),pk=ps.pointsPerMm,px=895,py=155,pg=joint?c.endGap*pk/2:0,pl=bs.length*pk,span=2*pl+pg;
- const tieLayout=flangeTieGeometry(p),tieStart=tieLayout?.start??0,tieReach=tieLayout?.face??d.brace.length;
+ const tieLayout=flangeTieGeometry(p),tieStart=tieLayout?.start??0,tieReach=tieLayout?.face??d.brace.length,flanges=tieSides(p).length>1?'TOP & BOTTOM':'TOP FLANGE';
+ // The column outline and its label stay above the view note at y = 335.
+ const ps=drawingScale(Math.min(.24,175/(b.bf/2+d.brace.length+150),335/(4*bs.length+c.endGap),118/tieReach),p.units),pk=ps.pointsPerMm,px=895,py=155,pg=joint?c.endGap*pk/2:0,pl=bs.length*pk,span=2*pl+pg;
  const colY=py+tieReach*pk,bar=d.brace.thickness*pk,gus=d.brace.gussetThickness*pk;
  svg+=rect(px-m.column.bf*1000*pk/2,colY,m.column.bf*1000*pk,37,'reference-line');
  svg+=line([px,93],[px,colY+45],'grid-line')+bubble(px,86,gridLabel)+text(px-12,89,gridNote,7.2,'end');
@@ -69,10 +70,10 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
   svg+=rect(at-gus/2,py+(tieLayout?.rootStart??0)*pk,gus,(tieLayout?tieLayout.gussetEnd-tieLayout.rootStart:d.brace.connectionLength)*pk,'runway-line')+rect(at-gus/2,colY-(tieLayout?.connection??d.brace.connectionLength)*pk,gus,(tieLayout?.connection??d.brace.connectionLength)*pk,'reference-line');
  }
  if(joint)svg+=dimH(px-pg,px+pg,py-b.bf*pk/2,111,dim(c.endGap));
- if(joint)svg+=multiLeader([[px-pg-pl/2+(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[643,247],['LEFT GIRDER: SEPARATE TIE',tieLayout?'TOP & BOTTOM / SEE S-06':'TOP & BOTTOM / SEE S-02'],8.5,[[[629,py+d.brace.length*pk*.55]]]);
- svg+=multiLeader([[px+pg+pl/2-(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[1025,247],['RIGHT GIRDER: SEPARATE TIE',tieLayout?'TOP & BOTTOM / SEE S-06':'TOP & BOTTOM / SEE S-02']);
+ if(joint)svg+=multiLeader([[px-pg-pl/2+(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[643,247],['LEFT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieLayout?'S-06':'S-02'}`],8.5,[[[629,py+d.brace.length*pk*.55]]]);
+ svg+=multiLeader([[px+pg+pl/2-(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[1025,247],['RIGHT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieLayout?'S-06':'S-02'}`]);
  svg+=text(918,colY+48,'BUILDING COLUMN (REF.)',8,'middle');
- svg+=text(635,335,'COLUMN-SIDE ATTACHMENTS: ACCOMMODATE LONGITUDINAL MOVEMENT AND END ROTATION.',7.6);
+ svg+=text(635,335,tieRelease(p)?'COLUMN GUSSETS: SLEEVED BOLTS IN VERTICAL SLOTS. BARS FLEX WITH END ROTATION AND THERMAL TRAVEL.':'COLUMN-SIDE ATTACHMENTS: BARS FLEX WITH END ROTATION, THERMAL TRAVEL AND SUPPORT DEFLECTION.',7.6);
  svg+=viewTitle(906,364,'INDEPENDENT FLANGE TIES / PLAN',ps.label)+'</g>';
 
  svg+='<g data-view="bearing-movement">';
@@ -90,7 +91,7 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
   svg+=text(at,557,'PERMIT END ROTATION',8,'middle');
  }
  const moveRef=activeEndBearing(p)?detailRef('GIRDER END BEARINGS / LOCATING AND SLIDING'):'';
- const note=wrappedText(44,588,moveRef?`BOLT EACH BEARING PER ${moveRef}: STANDARD HOLES AND PRETENSIONED BOLTS AT THE LOCATING END; LONG SLOTS IN THE GIRDER FLANGE, PLATE WASHERS AND SNUG-TIGHT BOLTS WITH JAM NUTS AT THE SLIDING END. DO NOT CLAMP THE SLIDING END. MAINTAIN FULL BEARING THROUGHOUT THE TRAVEL.`:'LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS SHALL BE DESIGNED AT THE BUILDING INTERFACE. DO NOT CLAMP THE SLIDING END AGAINST MOVEMENT OR DRILL UNDETAILED FLANGE HOLES. MAINTAIN FULL BEARING THROUGHOUT THE REQUIRED TRAVEL.',102,8.2,12);svg+=note.svg;
+ const note=wrappedText(44,588,moveRef?`BOLT EACH BEARING PER ${moveRef}: STANDARD HOLES AND PRETENSIONED BOLTS AT THE LOCATING END; SLOTS IN THE GIRDER FLANGE, PLATE WASHERS AND ${slidingPhrase(activeEndBearing(p)!)} AT THE SLIDING END. DO NOT CLAMP THE GIRDER FLANGE AT THE SLIDING END. MAINTAIN FULL BEARING THROUGHOUT THE TRAVEL.`:'LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS SHALL BE DESIGNED AT THE BUILDING INTERFACE. DO NOT CLAMP THE SLIDING END AGAINST MOVEMENT OR DRILL UNDETAILED FLANGE HOLES. MAINTAIN FULL BEARING THROUGHOUT THE REQUIRED TRAVEL.',102,8.2,12);svg+=note.svg;
  if(!moveRef)svg+=text(44,640,'SYMBOLS DEFINE RESTRAINT / MOVEMENT; THEY DO NOT SIZE THE RECEIVING ATTACHMENTS.',7.6);
  svg+=viewTitle(318,656,'BEARING MOVEMENT REQUIREMENTS',ms.label)+'</g>';
 
@@ -109,7 +110,7 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
  const notes=bearingRef?[
   `${usesExistingBracket(p)?'EXISTING BRACKET AND NEW BOLTED SEAT: S-05':wb?'WELDED GRAVITY BRACKET: S-05':'BRACKET BY OTHERS'}. BOLTED END BEARINGS TRANSFER LONGITUDINAL FORCE AND UPLIFT (${bearingRef}); FLANGE TIES TRANSFER LATERAL FORCE. INTERFACE FORCES: SEE CALCULATION REPORT.`,
   'LEFT END OF EACH BAY LOCATES LONGITUDINALLY. FULL CRANE TRACTION IS ASSIGNED TO EACH OCCUPIED BAY IN SEPARATE BOUNDING CASES; DO NOT ADD THESE CASES.',
-  `GIRDER ANALYSIS SPANS ARE GRID-TO-GRID; BEARINGS ARE INSET AS SHOWN. LOCATING ENDS: STANDARD HOLES, PRETENSIONED. SLIDING ENDS: LONG SLOTS, SNUG-TIGHT WITH JAM NUTS (${bearingRef}).`,
+  `GIRDER ANALYSIS SPANS ARE GRID-TO-GRID; BEARINGS ARE INSET AS SHOWN. LOCATING ENDS: STANDARD HOLES, PRETENSIONED. SLIDING ENDS: SLOTS, ${slidingPhrase(activeEndBearing(p)!)} (${bearingRef}).`,
   'REFERENCE AIST TECHNICAL REPORT 13 §5.8.1. GIRDER AND CAP ENDS REMAIN SEPARATE. RAIL JOINTS ARE DETAILED INDEPENDENTLY.'
  ]:[
   usesExistingBracket(p)?'EXISTING BRACKET AND NEW BOLTED SEAT: S-05. SEPARATE TIES AND LOCATING ATTACHMENTS TRANSFER HORIZONTAL FORCES.':wb?'WELDED GRAVITY BRACKET: S-05. SEPARATE HORIZONTAL CONNECTIONS TRANSFER LATERAL AND LONGITUDINAL FORCES. INTERFACE FORCES: SEE CALCULATION REPORT.':'DESIGN EACH BRACKET FOR THE SIMULTANEOUS GIRDER REACTIONS, LATERAL FORCES AND ECCENTRICITY TO THE COLUMN. INTERFACE FORCES: SEE CALCULATION REPORT.',

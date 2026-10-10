@@ -1,5 +1,6 @@
 import {format} from './units';
 import {flangeTieChecks} from './flangeTieDesign';
+import {tieMovementChecks} from './tieMovement';
 import {connectionOptionChecks} from './connectionOptions';
 import {capReady,capAttachmentChecks} from './capChecks';
 import type { CalculationSnapshot,CheckResult,ProjectInput } from './types';
@@ -44,7 +45,8 @@ function lapChecks(p:ProjectInput,c:LapConnection,id:string,title:string,fx:numb
   compared(`${id}-plate`,'Connections',`${title} · elastic plate bending`,Math.abs(fx)/(2*c.thickness*height)+Math.abs(M)/S,available(m.Fy,method,.9,1.67),'stress','f=|N|/A+|M|/S','Symmetric cover plates; elastic first yield. Projection is the distance from the bolt group/load transfer line to the supporting weld line.'),
   compared(`${id}-weld`,'Connections',`${title} · eccentric weld group`,weld.demand,weld.capacity,'stress','f_w=\\sqrt{(V_x/A_w-M_zy/J_w)^2+(V_y/A_w+M_zx/J_w)^2+(N/A_w+M_xy/I_x-M_yx/I_y)^2}','Two continuous parallel fillets; all four endpoint stresses evaluated. No directional increase; long-weld reduction is included.'),
   compared(`${id}-weld-base`,'Connections',`${title} · connected metal at weld`,weld.demand*weld.A/(2*c.weldLength*t),available(.6*Fy,method,1,1.5),'stress','f_{base}=f_w A_w/A_{base}','Conservative local connected-metal shear yielding using the same resultant stress distribution.'),
-  compared(`${id}-weld-size`,'Connections',`${title} · fillet edge limit`,c.weldSize,Math.min(c.thickness,centralThickness)-1.5875,'length','w\\le t_{min}-1/16\\,in','Weld along a plate edge; full-throat edge buildup is not credited.'),
+  // Tie bars are bolted only; the root fillets run along the central gusset edge.
+  compared(`${id}-weld-size`,'Connections',`${title} · fillet edge limit`,c.weldSize,(id==='tie'?centralThickness:Math.min(c.thickness,centralThickness))-1.5875,'length','w\\le t_{min}-1/16\\,in',id==='tie'?'Root fillets along the central gusset edge; full-throat edge buildup is not credited.':'Weld along a plate edge; full-throat edge buildup is not credited.'),
   compared(`${id}-weld-minimum`,'Connections',`${title} · minimum fillet`,minimumFillet(Math.max(c.thickness,centralThickness)),c.weldSize,'length','w\\ge w_{min,J2.4}','Thicker joined part controls minimum fillet leg size.'),
   compared(`${id}-plate-compression`,'Connections',`${title} · plate compression`,Math.abs(fx),compressionResistance(2*c.thickness*height,c.thickness/Math.sqrt(12),Math.max(2*c.projection,c.thickness),p.section.E,Fy,method).capacity,'force','P_n=F_{cr}A;\\quad L_c=2e','Cover plate projection treated as an unbraced cantilever; no postbuckling strength is credited.'),
   resolved(`${id}-prying`,`${title} · bolt tension / prying`,'Defined symmetric double-lap forces lie in the connected plate plane. Bolt tension and prying do not arise in this template. Out-of-plane connection actions require a different model.')
@@ -91,7 +93,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  add('rail-head','Serviceability','Rail-head lateral movement including twist',r.railDisplacement,Math.min(...p.spans)/Math.max(400,p.lateralLimit,d.criteria.railLateralLimit),'length','u_{rail}=v+(y_{rail}-y_s)\\theta','Single static crane; finite girder-side tie/connection flexibility. Building interfaces are assumed fixed and their framing/foundations are excluded.',['tr13-girder','criteria','vlasov']);
  add('rail-twist','Serviceability','Rail rotation',r.twist,d.criteria.twistLimit,'ratio','|\\theta_{rail}|\\le\\theta_{owner}','Entered owner/supplier twist criterion in radians. This is distinct from girder lateral bending deflection.',['criteria','vlasov']);
  const brace=braceSystem(p),Cd=p.system==='continuous'?2:1,spacing=Math.min(p.lateralBraceSpacing,p.aist.bottomBraceSpacing),imperfection=.02*a.moment*Cd/props.h0+.01*a.axial,requiredK=(p.method==='LRFD'?1/.75:2)*(10*a.moment*Cd/props.h0+8*a.axial)/spacing;
- add('brace-member','Bracing','Both-flange tie strength',r.demands.brace+imperfection,brace.capacity,'force','P_{br}=|H_{flange}|+0.02M_rC_d/h_0+0.01P_r','Two symmetric flat bars at each flange. Checks member compression buckling and net-section tension; full concurrent horizontal reaction plus conservative flexural/axial imperfection demands.',['aisc-brace','aisc-e']);
+ add('brace-member','Bracing',activeEndBearing(p)?'Top-flange tie strength':'Both-flange tie strength',r.demands.brace+imperfection,brace.capacity,'force','P_{br}=|H_{flange}|+0.02M_rC_d/h_0+0.01P_r',`Two symmetric flat bars at ${activeEndBearing(p)?'the top flange; the bottom flange is restrained by the end bearing bolts':'each flange'}. Out-of-plane buckling over 0.8 × the length between the innermost bolt rows, and net-section tension; full concurrent horizontal reaction plus conservative flexural/axial imperfection demands.`,['aisc-brace','aisc-e']);
  add('brace-stiffness','Bracing','Brace and connection stiffness in series',requiredK,brace.stiffness,'stiffness','k_{eff}=c^2\\left[L/(2EA)+2/k_{connection}+c_{local}\\right]^{-1}','Gusset axial strain and bolt shear deformation are included at both ends. Direct flange saddles additionally include local flange, saddle, gusset and receiving-flange flexibility. Building deformation is excluded at the stated interface. Top-flange load amplification is included in Appendix 6 requirements.',['aisc-brace']);
  checks.push(...lapChecks(p,d.brace.connection,'tie','Flange tie connection',(r.demands.brace+imperfection)/brace.cos,0,d.brace.gussetThickness,d.material.Fy,d.material.Fu));
  const bearingBolts=activeEndBearing(p);
@@ -136,6 +138,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const gusset=d.brace.gussetThickness,gwidth=d.brace.connection.gauge+2*d.brace.connection.edge;
  add('tie-gusset-compression','Bracing','Tie gusset compression buckling',(r.demands.brace+imperfection)/brace.cos,compressionResistance(gwidth*gusset,gusset/Math.sqrt(12),2*d.brace.connectionLength,p.section.E,m.Fy,p.method).capacity,'force','P_n=F_{cr}A;\\quad L_c=2L_g','Unsupported gusset treated as a cantilever; full central-plate force, no beneficial load spreading.',['aisc-e']);
  checks.push(...flangeTieChecks(s,(r.demands.brace+imperfection)/brace.cos));
+ checks.push(...tieMovementChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,member:brace.member}));
  checks.push(...railChecks(s),...capAttachmentChecks(s),...simpleSupportChecks(p,a.endRotation),...endStopChecks(p,{analysis:a,strength,props,holdDown:checks.find(c=>c.id==='hold-down-model')?.capacity??0}));
 
  return checks;

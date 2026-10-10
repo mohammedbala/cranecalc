@@ -37,4 +37,4 @@ it('completes the ASD continuous capped branch with signed support moments',()=>
  expect(r.analysis!.envelope.some(v=>v.momentMin<0)).toBe(true);
  expect(r.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status))).toBe(false);
  expect(r.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass')).toBe(true);
-},120000);
+},300000); // The softer movement-tolerant ties need a further load-position refinement pass; about 130 s alone.

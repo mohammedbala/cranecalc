@@ -37,12 +37,15 @@ describe('girder-mounted runway end stops',()=>{
  });
  it('flags bolts that clash with the bearing stiffeners or the face plate',()=>{
   const p=structuredClone(demo.input),e=p.details!.endStop!;
-  e.bolts.frontClear=3.5*inch;
+  // Back bolts moved over the bearing stiffener.
+  e.setback=5*inch;
   const checks=endStopChecks(p),bearing=checks.find(c=>c.id==='end-stop-wrench-bearing')!;
-  expect(bearing.status).toBe('fail');
+  expect(bearing.status).toBe('fail');e.setback=7*inch;
   e.bolts.frontClear=.75*inch;expect(endStopChecks(p).find(c=>c.id==='end-stop-wrench-face')!.status).toBe('fail');
   expect(wrenchClearance(.75*inch)).toBeCloseTo(1.25*inch,9);expect(wrenchClearance(1*inch)).toBeCloseTo(1.6*inch,9);
-  e.bolts.frontClear=1.25*inch;e.base.length=14*inch;expect(endStopChecks(p).find(c=>c.id==='end-stop-zone')!.status).toBe('fail');
+  // A stop over the runway-end tie saddle puts its back nuts on the saddle.
+  e.bolts.frontClear=1.25*inch;e.setback=.5*inch;expect(endStopChecks(p).find(c=>c.id==='end-stop-wrench-saddle')!.status).toBe('fail');
+  expect(endStopChecks(p).some(c=>c.id==='end-stop-zone')).toBe(false);
  });
  it('requires a stop design whenever a stop force reaches the girder',()=>{
   const p=demonstrationProject();p.details!.endStop!.enabled=false;
@@ -60,7 +63,7 @@ describe('girder-mounted runway end stops',()=>{
  });
  it('draws S-07 and references it from S-01, the cover and the cap sheet',()=>{
   const set=drawingSheetSet(demo),s07=set.find(v=>v.number==='S-07')!;
-  expect(set.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-04','S-07']);
+  expect(set.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-04','S-06','S-07']);
   expect(s07.svg).not.toMatch(/\{\{|NOT IN SET|NaN|undefined|data-overflow/);
   for(const view of ['end-stop-elevation','end-stop-plan','end-stop-section','end-stop-notes'])expect(s07.svg).toContain(`data-view="${view}"`);
   const t=texts(s07.svg).join(' | ');
@@ -69,9 +72,10 @@ describe('girder-mounted runway end stops',()=>{
   const cover=texts(set[0].svg).join(' ');expect(cover).toContain('RUNWAY END STOPS');expect(cover).not.toContain('RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE');
   expect(s07.svg).toContain('class="hidden-line"');expect(sheetsDxf([s07],'US')).toContain('S-STEEL-HIDDEN');
  },240000);
- it('permits end stop holes in a capped girder only over the end bearings',()=>{
+ it('permits only the end stop holes in a capped girder, as fatigue points',()=>{
   const s=calculate(cappedDemonstrationProject());
   expect(s.checks.filter(c=>c.group==='End stops').every(c=>c.status==='pass')).toBe(true);
-  expect(texts(capSheetSvg(s)).join(' ')).toContain('EXCEPT THE END STOP BOLT HOLES OVER THE END BEARINGS (S-07)');
+  expect(texts(capSheetSvg(s)).join(' ')).toContain('EXCEPT THE END STOP BOLT HOLES (S-07)');
+  expect(s.checks.filter(c=>c.id.startsWith('detail-full-cycle-SH')).every(c=>c.status==='pass')).toBe(true);
  },240000);
 });

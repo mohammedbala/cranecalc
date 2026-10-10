@@ -4,6 +4,8 @@ import {emptyAistInputs} from './aistLoads';
 import {defaultSimpleSupport} from './simpleSupports';
 import {defaultEndBearing} from './endBearingInputs';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
+import {wrenchClearance} from './endStop';
+import {columnGussetHeight} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 
 const inch=25.4,ksi=6.894757293;
@@ -28,13 +30,23 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   ...grids.map((g,i)=>({id:`FS${i+1}`,name:`Bearing stiffener weld toe, grid ${i+1}`,x:Math.min(g,L),point:'top-right' as const,category:'C' as const,reference:'AISC 360 Table A-3.1, 5.7 · transverse stiffener weld toe'})),
   {id:'FT1',name:'Top flange at longest-bay midspan, category D',x:mids[p.spans.indexOf(longest)],point:'top-right' as const,category:'D' as const,reference:'AISC 360 Table A-3.1 · conservative top-flange comparison point; keeper stations are checked automatically'}
  ].slice(0,16);
- return {
+ // Top-flange tie on a direct flange saddle (simple spans): thin bars flex with end rotation and thermal travel,
+ // sleeved bolts in vertical slots at the column gusset release support deflection. The column face is a placeholder.
+ const simple=p.system==='simple',weld=.3125*inch,webGap=1*inch,rootStart=b.tw/2+webGap,saddle={length:3.5*inch,thickness:up(Math.max(1.5*inch,b.tf),.125*inch)};
+ const tieConnection=2.25*inch+2*1.25*inch,tieStart=up(Math.max(rootStart+.5*inch,b.bf/2-tieConnection+.25*inch),.25*inch),tieLength=26*inch;
+ const tieSetback=up(saddle.length/2+weld+stiffenerThickness/2+weld+.25*inch,.25*inch),bearingLength=12*inch;
+ // Stop bolts clear the runway-end tie saddle and the bearing stiffener with nut clearance.
+ const stopEdge=defaultEndStop.bolts.edge,C=wrenchClearance(defaultEndStop.bolts.diameter);
+ const stopSetback=up(Math.max(bearingLength/2-tieSetback+saddle.length/2+weld,bearingLength/2+stiffenerThickness/2+weld)+C-stopEdge,.25*inch);
+ const details:RunwayDetails={
   material:{Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi},
   simpleSupport:{...defaultSimpleSupport,guideTravel:.5*inch},
-  brace:{width:6*inch,thickness:.625*inch,length:24*inch,reach:24*inch,gussetThickness:.75*inch,connectionLength:6*inch,
-   connection:{rows:2,gauge:3*inch,pitch:3*inch,edge:1.5*inch,thickness:.625*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:.3125*inch,weldLength:6*inch}},
+  brace:{width:5*inch,thickness:.375*inch,length:tieLength,reach:tieLength,gussetThickness:.75*inch,connectionLength:up(tieStart+tieConnection-rootStart,.25*inch),
+   connection:{rows:2,gauge:2.5*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,diameter:.625*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:weld,weldLength:5*inch},
+   ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:weld,columnFace:tieStart+tieLength}}:{}),
+   release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
   end:{rows:4,gauge:2.875*inch,pitch:3*inch,edge:1.25*inch,thickness:.75*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:.3125*inch,weldLength:11.5*inch},
-  bearing:{width:up(b.bf+2*inch,.5*inch),length:12*inch,thickness:1*inch,stiffenerWidth,stiffenerThickness,cope:up(Math.max(k1-b.tw/2,.75*inch),.125*inch),weldSize:.3125*inch},
+  bearing:{width:up(b.bf+2*inch,.5*inch),length:bearingLength,thickness:1*inch,stiffenerWidth,stiffenerThickness,cope:up(Math.max(k1-b.tw/2,.75*inch),.125*inch),weldSize:.3125*inch},
   // Proportions of a typical crane rail of the entered depth; replace with the supplier's section.
   rail:{name:`${toBeEntered} rail designation and supplier`,headWidth:up(.55*h,1.5875),headThickness:up(.3*h,1.5875),baseWidth:up(h,1.5875),baseThickness:up(.17*h,1.5875),webThickness:up(.12*h,1.5875),Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:`${toBeEntered} rail pad rating source`,
    clipWidth:4*inch,clipThickness:.75*inch,clipProjection:1.5*inch,clipWeld:.3125*inch,jointGap:.25*inch,jointPlateThickness:1*inch,jointPlateHeight:up(.55*h,1.5875),jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
@@ -43,17 +55,20 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],
   fabrication:{
    steel:'Runway girder per the section shown; plates, bars and stiffeners ASTM A572 Grade 50 unless noted.',
-   bolting:'ASTM F3125 Grade A325, pretensioned, Class B faying surfaces, standard holes unless slots are detailed. Sliding-end bearing bolts and rail-joint bolts snug-tight.',
+   bolting:'ASTM F3125 Grade A325, pretensioned, Class B faying surfaces, standard holes unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts pretensioned against steel sleeves. Rail-joint bolts snug-tight.',
    welding:'E70XX low-hydrogen electrodes per AWS D1.1, cyclically loaded provisions. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts and stops.',
    inspection:'Visual inspection of all welds; magnetic particle testing of fillets at fatigue-sensitive attachments; ultrasonic testing of CJP welds; bolt pretension verification per RCSC.',
    erection:'Set and level the bearings, install the end bearings and flange ties, then set the rails. Provide temporary restraint until the permanent ties are complete.',
    railAlignment:'Set the rails to the specified gauge, alignment and level tolerances and survey them after erection, before the load test.'
   },
   ...(p.system==='simple'?{endBearing:{...structuredClone(defaultEndBearing),enabled:true}}:{}),
-  // The stop base plate stays within the 12 in end bearing, behind its girder-end setback.
-  ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,base:{...defaultEndStop.base,length:11.5*inch},stiffener:{...defaultEndStop.stiffener,length:8.5*inch},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
+  // The stop sits inboard of the runway-end tie saddle.
+  ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,setback:stopSetback,base:{...defaultEndStop.base,length:11.5*inch},stiffener:{...defaultEndStop.stiffener,length:8.5*inch},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
   reviewed:false
  };
+ // Root fillets run the full column gusset height, which contains the release slots.
+ details.brace.connection.weldLength=columnGussetHeight({...p,details});
+ return details;
 }
 
 /** The project with neutral detailed inputs added; the crane, girder and loads are kept. */

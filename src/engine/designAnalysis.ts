@@ -28,6 +28,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
   criticalStations.push(...railKeeperStations(p),...girderSegments(p).flatMap(m=>[m.start,m.end]));
  }
  const samples=[...new Set([...v0.x,...t0.x,...b0.x])].sort((a,b)=>a-b);
+ const supportNodes=v0.x.flatMap((x,i)=>stations.some(s=>Math.abs(s-x)<1e-6)?[i]:[]);
  const atDetail=(r:BeamResult,loads:{x:number;p:number}[])=>momentAt(p.fatigue.location,r.reactions,loads,0);
  const flangeY=(p.section.d-p.section.tf)/2;
  const railLever=(cap?p.section.d+p.section.capTw+p.railHeight-cap.topY:p.railHeight+p.section.tf/2)/props.h0,verticalLever=p.railEccentricity/props.h0;
@@ -53,11 +54,13 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  });
  const combinations=craneCombinations(p.method),records=new Map<string,DesignCaseSummary>();
  for(const c of combinations)records.set(c.id,{id:`${p.method} ${c.id}`,equation:c.equation,moment:0,lateralMoment:0,shear:0,reaction:0,axial:0,interaction:0,positions:[],location:0});
- const result:DesignAnalysis={combinations:[],cases:0,convergence:0,meshConvergence:0,equilibriumError:0,singleVertical:0,singleLateral:0,endRotation:0,serviceReaction:0,fatigueMin:0,fatigueMax:0,wheelLoad:0,wheelNearEndLoad:0,torsion:0,moment:0,shear:0,reaction:0,uplift:0,axial:0,lateralMoment:0,topLateralMoment:0,bottomLateralMoment:0,interaction:0,governing:{}};
+ const result:DesignAnalysis={combinations:[],cases:0,convergence:0,meshConvergence:0,equilibriumError:0,singleVertical:0,serviceRotation:0,deadRotation:abs(supportNodes.map(i=>dead.rotation[i])),singleLateral:0,endRotation:0,serviceReaction:0,fatigueMin:0,fatigueMax:0,wheelLoad:0,wheelNearEndLoad:0,torsion:0,moment:0,shear:0,reaction:0,uplift:0,axial:0,lateralMoment:0,topLateralMoment:0,bottomLateralMoment:0,interaction:0,governing:{}};
  const railTM=samples.map(x=>momentAt(x,railT.reactions,[],p.railWeight*verticalLever)),railBM=samples.map(x=>momentAt(x,railB.reactions,[],-p.railWeight*verticalLever));
  const deadM=samples.map(x=>momentAt(x,dead.reactions,[],q)),liveM=samples.map(x=>momentAt(x,live.reactions,[],di.liveLoad));
  for(const [craneIndex,group] of responses.entries())for(const s of group){
   result.singleVertical=Math.max(result.singleVertical,abs(s.vs.displacement));
+  // Girder end rotation at the supports under one static crane: the cyclic movement imposed on end ties.
+  result.serviceRotation=Math.max(result.serviceRotation??0,abs(supportNodes.map(i=>s.vs.rotation[i])));
   for(const sign of [-1,1]){
    for(let n=0;n<t0.x.length;n++)result.singleLateral=Math.max(result.singleLateral,Math.abs(verticalLever*(s.td.displacement[n]+s.tl.displacement[n])+(1+railLever)*s.th.displacement[n]*sign));
    observe?.({kind:'service',id:`S-${craneIndex}-${s.origin}-${sign}`,combination:'Single crane · static',cranes:[{index:craneIndex,origin:s.origin,loaded:true}],horizontalCrane:craneIndex,lateralSign:sign,wheels:s.wheels.map(w=>({x:w.x,p:w.static,h:w.lateral*sign})),q:0,railTorquePerLength:0,axial:0,verticalReactions:s.vs.reactions});

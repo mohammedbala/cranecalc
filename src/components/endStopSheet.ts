@@ -6,6 +6,7 @@ import {boltProperties} from '../engine/connectionStrength';
 import {drawingLength,plateInches} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,sheetStart,titleBlock,text,line,rect,circle,dimH,dimV,viewTitle,multiLeader,filletLeader,detailRef,labelColumn,n,type XY} from './sheetGraphics';
 import {heading,numbered,table,noteStack,type Style} from './noteBlocks';
+import {flangeTieGeometry} from '../engine/tieGeometry';
 
 const inch=25.4;
 /** Zig-zag break line between two points. */
@@ -36,6 +37,9 @@ export function endStopSheetSvg(s:CalculationSnapshot){
   svg+=breakLine([X(0)-6,cut],[right+6,cut])+breakLine([right,ys-4],[right,cut]);
   // End bearing stiffener (near side) under the top flange.
   const xs=d.bearing.length/2;svg+=rect(X(xs-d.bearing.stiffenerThickness/2),wFl,d.bearing.stiffenerThickness*kk,cut-wFl,'runway-line');
+  // Top tie saddle under the flange on the column side, between the girder end and the stop bolts.
+  const tie=flangeTieGeometry(p),endTie=tie?.sides.includes(1)?tie.stations.find(v=>v.bay===1&&v.end==='left'):undefined;
+  if(tie&&endTie)svg+=rect(X(endTie.tieX-tie.attachment.saddleLength/2),wFl,tie.attachment.saddleLength*kk,tie.attachment.saddleThickness*kk,'hidden-line');
   // Stop: base plate, face plate and stiffener profile.
   const yb=Y(tb);
   svg+=rect(X(g.back),yb,e.base.length*kk,tb*kk,'runway-line')+rect(X(g.faceBack),Y(tb+H),tp*kk,H*kk,'runway-line');
@@ -70,7 +74,8 @@ export function endStopSheetSvg(s:CalculationSnapshot){
    {at:[X(g.faceFront)+1,yb],labels:['FACE PL AND STIFFENERS TO','BASE PL, BOTH SIDES'],weld:size(e.weldSize)},
    {at:[X(g.front),yb+tb*kk/2],labels:[`PL ${size(tb)} X ${size(Wb)} X ${dim(e.base.length)} BASE`]},
    {at:[X(g.frontRow)+.8*db*kk,wFl+.45*db*kk],labels:[boltLabel,`${size(hole)} STD HOLES THRU ${capped?'CAP AND ':''}FLANGE`,'NUTS BELOW TOP FLANGE']},
-   {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:['END BEARING STIFFENERS',`SEE ${detailRef('GIRDER BEARING / COLUMN BRACKET')}`]}
+   {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:['END BEARING STIFFENERS',`SEE ${detailRef('GIRDER BEARING / COLUMN BRACKET')}`]},
+   ...(tie&&endTie?[{at:[X(endTie.tieX),wFl+tie.attachment.saddleThickness*kk] as XY,labels:['TOP TIE SADDLE, FAR SIDE (HIDDEN)',`SEE ${detailRef('DIRECT FLANGE TIE / TOP TRANSVERSE SECTION')}`]}]:[])
   ],lx,58,338);
   svg+=text(X(0)-6,ys-3,'GIRDER END',7.5,'end',700);
   svg+=viewTitle(318,360,'END STOP / ELEVATION',k.label)+'</g>';
@@ -139,8 +144,8 @@ export function endStopSheetSvg(s:CalculationSnapshot){
   ];
   const notes=[
    'PROVIDE ONE STOP AT EACH END OF EACH RUNWAY, CENTERED ON THE GIRDER. THE STOP AT THE OPPOSITE END IS THE MIRROR IMAGE.',
-   `DRILL ${size(hole)} STANDARD HOLES THROUGH ${capped?'THE CAP CHANNEL WEB AND ':''}THE TOP FLANGE ONLY WITHIN THE END BEARING LENGTH (${dim(d.bearing.length)} FROM THE GIRDER END). NO OTHER HOLES IN THE TOP FLANGE.`,
-   `BOLTS: ASTM F3125 GRADE ${e.bolts.grade}, PRETENSIONED, CLASS B FAYING SURFACES (SLIP-CRITICAL). HARDENED WASHERS UNDER TURNED ELEMENTS. VERIFY NUT CLEARANCE BELOW THE FLANGE AT THE BEARING STIFFENERS BEFORE DRILLING.`,
+   `DRILL ${size(hole)} STANDARD HOLES THROUGH ${capped?'THE CAP CHANNEL WEB AND ':''}THE TOP FLANGE ONLY AT THE LOCATIONS SHOWN, ${dim(g.backRow)} AND ${dim(g.frontRow)} FROM THE GIRDER END. NO OTHER HOLES IN THE TOP FLANGE.`,
+   `BOLTS: ASTM F3125 GRADE ${e.bolts.grade}, PRETENSIONED, CLASS B FAYING SURFACES (SLIP-CRITICAL). HARDENED WASHERS UNDER TURNED ELEMENTS. VERIFY NUT CLEARANCE BELOW THE FLANGE AT THE BEARING STIFFENERS${flangeTieGeometry(p)?' AND THE TOP TIE SADDLE':''} BEFORE DRILLING.`,
    'SHOP WELD THE FACE PLATE AND STIFFENERS TO THE BASE PLATE WITH CONTINUOUS FILLETS BOTH SIDES. GRIND THE FACE SMOOTH AT THE BUMPER CONTACT.',
    `TERMINATE THE RAIL ${dim(e.railGap)} CLEAR OF THE STOP FACE. THE FIRST KEEPER PAIR IS AT THE RAIL END; KEEPER SPACING PER S-02.`,
    'CONFIRM THE BUMPER FORCE, BUMPER HEIGHT AND CONTACT DIAMETER WITH THE CRANE SUPPLIER BEFORE FABRICATION. STOPS SHALL BE INSTALLED BEFORE THE CRANE IS OPERATED.',

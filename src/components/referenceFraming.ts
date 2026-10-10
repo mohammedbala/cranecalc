@@ -16,12 +16,14 @@ interface FramingOptions {
   columnConnectionHoles?:{station:number;x:number;y:number;diameter:number}[];
   continuousBearing?:{width:number;length:number;thickness:number};
   independentBearing?: {thickness:number;seatLength:number};
+  /** Column face from the girder centerline, m, set by a flange tie where the bracket is by others. */
+  columnFace?:number;
 }
 
 // One continuous building column per station, with an inward-facing runway
 // bracket. The opposite row is mirrored, so both brackets face into the bay.
 // These are illustrative connections, not a stiffness or connection design.
-export function buildReferenceFraming({ supports, girderDepth, girderWidth, girderFlangeT = .01905, columnHeight, roofBottom = girderDepth / 2 + 2.5, column, crosshead, materials, hardware, frameStyle='rolled',independentBearing,bracket,continuousBearing,columnConnectionHoles=[] }: FramingOptions) {
+export function buildReferenceFraming({ supports, girderDepth, girderWidth, girderFlangeT = .01905, columnHeight, roofBottom = girderDepth / 2 + 2.5, column, crosshead, materials, hardware, frameStyle='rolled',independentBearing,bracket,continuousBearing,columnConnectionHoles=[],columnFace:tieFace }: FramingOptions) {
   bracket=bracket?.enabled?bracket:undefined;
   if(bracket){const r=bracket.receiver;column={name:'Entered receiver I-section',row:0,d:r.depth/25.4,bf:r.width/25.4,tf:r.flangeThickness/25.4,tw:r.webThickness/25.4};}
   const group = new THREE.Group(); group.name = 'reference-support-framing';
@@ -30,7 +32,7 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
   const columnBottom = beamBottom - plateT - columnHeight, columnTop = frameStyle==='tapered'?roofBottom+portalDimensions.kneeDepth:roofBottom-plateT, floor = columnBottom - plateT - padH;
   const columnMid=(columnBottom+columnTop)/2,profile=columnProfile(columnTop-columnBottom,beamTop-columnMid,c.d);
   if(bracket){const a=beamBottom-columnMid-.05,z=beamTop-columnMid+.05+(isExistingBracketType(bracket.arrangement)?existingBracketProfile(bracket).continuityAbove/1000:0);profile.splice(1,1,{s:a,lower:-c.d/2,upper:c.d/2},{s:z,lower:-c.d/2,upper:c.d/2});}
-  const columnOffset = (bracket?bracket.reach/1000+c.d/2:Math.max(.9, girderWidth / 2 + c.d / 2 + .35)), columnFace = columnOffset - c.d / 2;
+  const columnOffset = (bracket?bracket.reach/1000+c.d/2:tieFace!==undefined?tieFace+c.d/2:Math.max(.9, girderWidth / 2 + c.d / 2 + .35)), columnFace = columnOffset - c.d / 2;
   const seatWidth = Math.max(girderWidth + .24, .42), bracketStart = bracket?columnFace-bracket.seatProjection/1000:-seatWidth / 2 - .07, bracketEnd = columnFace - (bracket?0:plateT);
   const capLength = bracketEnd - bracketStart, bracketMid = (bracketStart + bracketEnd) / 2;
   const baseX = c.bf + .24, baseZ = c.d + .24, endPlateWidth = Math.max(b.bf + .12, .24);

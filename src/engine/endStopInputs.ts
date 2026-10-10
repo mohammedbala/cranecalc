@@ -4,7 +4,7 @@ import type {ProjectInput} from './types';
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
 /**
  * Bolted runway end stop on the girder top surface at each end of each
- * runway: a base plate over the end bearing, a face plate struck by the crane
+ * runway: a base plate near the girder end, a face plate struck by the crane
  * bumper and two back stiffeners. Four bolts in two rows straddle the
  * stiffeners. Canonical units mm, N, MPa.
  */
@@ -38,5 +38,7 @@ export const needsGirderStops=(p:ProjectInput)=>p.cranes.some(c=>!c.design?.bump
 export const activeEndStop=(p:ProjectInput)=>p.details?.endStop?.enabled&&needsGirderStops(p)?p.details.endStop:undefined;
 /** Front fillet room in front of the face plate. */
 export const stopLip=(e:EndStopInput)=>e.weldSize+6.35;
+/** Back and front bolt rows from the girder end: back bolts edge from the base plate back, front bolts frontClear behind the face. */
+export const stopBoltRows=(e:EndStopInput)=>[e.setback+e.bolts.edge,e.setback+e.base.length-stopLip(e)-e.face.thickness-e.bolts.frontClear] as const;
 /** Rail end distance from the runway end: the rail stops railGap short of the stop face. */
 export const stopRailEnd=(e:EndStopInput)=>e.setback+e.base.length-stopLip(e)+e.railGap;

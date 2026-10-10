@@ -8,6 +8,8 @@ import { referenceColumns, referenceCrossheads, shapeMeters } from '../data/aisc
 import { buildReferenceFraming } from './referenceFraming';
 import { buildReferenceStructure, cloneOppositeRunway } from './referenceStructure';
 import { defaultFraming, framingSchema, type FramingSettings } from './framingSettings';
+import {flangeTieGeometry} from '../engine/tieGeometry';
+const tieFaceMeters=(p:Parameters<typeof flangeTieGeometry>[0])=>{const f=flangeTieGeometry(p)?.face;return f===undefined?undefined:f/1000;};
 
 export type Point = [number, number, number];
 export type Segment = [Point, Point];
@@ -44,7 +46,7 @@ export function planSheetGeometry(input: ProjectInput, settings: FramingSettings
   const railBase = d / 2 + (s.kind === 'cap' ? s.capTw / 1000 : 0), railH = Math.max(.025, input.railHeight / 1000);
   // Runway centres follow the project rail gauge when detailed inputs exist; otherwise the reference building width.
   const railZ = input.railEccentricity / 1000, width = input.details ? (input.details.criteria.railGauge - 2 * input.railEccentricity) / 1000 : f.width / 1000;
-  const reference = buildReferenceFraming({ bracket:input.details?.bracket,continuousBearing:input.system==='continuous'&&input.details?.bracket?.enabled?{width:input.details.bearing.width/1000,length:input.details.bearing.length/1000,thickness:input.details.bearing.thickness/1000}:undefined,independentBearing:independentBearingSettings(input), supports, girderDepth: d, girderWidth: bf, girderFlangeT: tf, columnHeight: f.height / 1000,
+  const reference = buildReferenceFraming({columnFace:input.details?.bracket?.enabled?undefined:tieFaceMeters(input), bracket:input.details?.bracket,continuousBearing:input.system==='continuous'&&input.details?.bracket?.enabled?{width:input.details.bearing.width/1000,length:input.details.bearing.length/1000,thickness:input.details.bearing.thickness/1000}:undefined,independentBearing:independentBearingSettings(input), supports, girderDepth: d, girderWidth: bf, girderFlangeT: tf, columnHeight: f.height / 1000,
     roofBottom: railBase + railH + .0125 + f.roofClearance / 1000, column, crosshead, materials, frameStyle: f.frameStyle });
   const frame = buildReferenceStructure({ supports, bayWidth: width, columnBottom: reference.columnBottom, floor: reference.floor,
     railTop: railBase + railH + .0125, roofClearance: f.roofClearance / 1000, columnOffset: reference.columnOffset, column,

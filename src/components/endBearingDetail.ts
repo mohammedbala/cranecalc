@@ -38,9 +38,11 @@ export function endBearingView(s:CalculationSnapshot){
   const xs=near+side*g.stiffener;svg+=rect(X(xs)-bs.stiffenerThickness*kk/2,yTop,bs.stiffenerThickness*kk,Y(b.tf)-yTop,'runway-line');
   // Bolts: heads above the flange, nuts below the seat; plate washers at the sliding end.
   for(const r of g.rows){
-   const x=X(near+side*r),hw=.8*db*kk;
-   if(side<0)svg+=rect(x-g.washer.length*kk/2,Y(b.tf)-e.washerThickness*kk,g.washer.length*kk,e.washerThickness*kk,'runway-line');
-   const top=Y(b.tf)-(side<0?e.washerThickness*kk:0);
+   const x=X(near+side*r),hw=.8*db*kk,lift=side<0&&g.sleeve?(g.sleeve.length-b.tf)*kk:0;
+   // Sleeved sliding bolts: the sleeve passes through the flange slot and holds the washer just clear of the flange.
+   if(side<0&&g.sleeve)svg+=rect(x-g.sleeve.od*kk/2,yB-g.sleeve.length*kk,g.sleeve.od*kk,g.sleeve.length*kk,'hidden-line');
+   if(side<0)svg+=rect(x-g.washer.length*kk/2,Y(b.tf)-lift-e.washerThickness*kk,g.washer.length*kk,e.washerThickness*kk,'runway-line');
+   const top=Y(b.tf)-(side<0?e.washerThickness*kk+lift:0);
    svg+=rect(x-hw,top-.65*db*kk,2*hw,.65*db*kk,'runway-line')+rect(x-hw,ySeat,2*hw,.9*db*kk,'runway-line')+line([x,top-.65*db*kk-3],[x,ySeat+.9*db*kk+3],'grid-line');
   }
  }
@@ -59,7 +61,7 @@ export function endBearingView(s:CalculationSnapshot){
   svg+=rect(Math.min(X(near),X(near+side*bs.length)),Z(-bs.width/2),bs.length*kk,bs.width*kk,'hidden-line');
   for(const r of g.rows)for(const zs of [-1,1]){
    const c:XY=[X(near+side*r),Z(zs*gauge/2)];
-   if(side<0)svg+=rect(c[0]-g.washer.length*kk/2,c[1]-g.washer.width*kk/2,g.washer.length*kk,g.washer.width*kk,'runway-line')+slot(c[0],c[1],g.slot*kk,g.hole*kk,'hidden-line');
+   if(side<0)svg+=rect(c[0]-g.washer.length*kk/2,c[1]-g.washer.width*kk/2,g.washer.length*kk,g.washer.width*kk,'runway-line')+slot(c[0],c[1],g.slot*kk,g.slotWidth*kk,'hidden-line')+(g.sleeve?circle(c[0],c[1],g.sleeve.od*kk/2,'hidden-line'):'');
    else svg+=circle(c[0],c[1],g.hole*kk/2,'runway-line');
    svg+=line([c[0]-db*kk*.7,c[1]],[c[0]+db*kk*.7,c[1]])+line([c[0],c[1]-db*kk*.7],[c[0],c[1]+db*kk*.7]);
   }
@@ -81,7 +83,7 @@ export function endBearingView(s:CalculationSnapshot){
   {at:[X(seatL/2)-4,yBearing+seatT*kk/2],labels:wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?'BRACKET / TRANSVERSE SECTION':'COLUMN BRACKET / TRANSVERSE SECTION')}`]:['BRACKET SEAT BY OTHERS:','MATCH HOLES, NUT CLEARANCE']}
  ],lx,92,200);
  svg+=labelColumn([
-  {at:[X(-gap/2-g.rows[0])+g.washer.length*kk/2,Z(-gauge/2)],labels:[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} SNUG-TIGHT`,`+ JAM NUTS, DO NOT PRETENSION; ${size(g.hole)} X`,`${size(g.slot)} LSL IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]}
+  {at:[X(-gap/2-g.rows[0])+g.washer.length*kk/2,Z(-gauge/2)],labels:g.sleeve?[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} PRETENSIONED AGAINST`,`STEEL SLEEVES ${size(g.sleeve.od)} OD X ${size(g.sleeve.length)}; ${size(g.slotWidth)} X`,`${size(g.slot)} SLOT IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]:[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} SNUG-TIGHT`,`+ JAM NUTS, DO NOT PRETENSION; ${size(g.hole)} X`,`${size(g.slot)} LSL IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]}
  ],lx,252,252);
  return svg+viewTitle(906,362,'GIRDER END BEARINGS / LOCATING AND SLIDING',k.label)+'</g>';
 }

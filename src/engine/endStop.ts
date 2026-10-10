@@ -8,7 +8,8 @@ import {independentBearings} from './simpleSupports';
 import {aiscShapeByName} from '../data/aiscSections';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
-import {needsGirderStops,stopLip,stopRailEnd,type EndStopInput} from './endStopInputs';
+import {needsGirderStops,stopLip,stopRailEnd,stopBoltRows,type EndStopInput} from './endStopInputs';
+import {flangeTieGeometry} from './tieGeometry';
 export {endStopSchema,defaultEndStop,needsGirderStops,activeEndStop,stopRailEnd,type EndStopInput} from './endStopInputs';
 const inch=25.4;
 
@@ -22,7 +23,7 @@ export function stopBumperForce(p:ProjectInput){
 export function endStopGeometry(p:ProjectInput,e:EndStopInput){
  const lip=stopLip(e),tb=e.base.thickness,tp=e.face.thickness;
  const back=e.setback,front=back+e.base.length,faceBack=front-lip-tp,faceFront=front-lip;
- const frontRow=faceBack-e.bolts.frontClear,backRow=back+e.bolts.edge;
+ const [backRow,frontRow]=stopBoltRows(e);
  const surfaceWidth=p.section.kind==='cap'?p.section.capWidth:p.section.bf;
  const railDepth=p.aist?.railDepth??p.railHeight;
  // Bumper centerline above the top of the base plate.
@@ -66,8 +67,14 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
  const shape=aiscShapeByName(b.catalogueId??''),k1=b.tw/2+(shape?shape.kdes*inch-b.tf:0);
  const bearings=p.system==='simple'?independentBearings(p).filter(v=>v.bay===1&&v.end==='left'):[];
  const stiffenerAt=bearings[0]?.center??d.bearing.length/2,stiffenerClear=Math.min(...[g.frontRow,g.backRow].map(x=>Math.abs(x-stiffenerAt)))-d.bearing.stiffenerThickness/2-d.bearing.weldSize;
+ // Nuts under the top flange also clear the top tie saddle at the runway-end support.
+ const tie=flangeTieGeometry(p),endTie=tie?.sides.includes(1)?tie.stations.find(v=>v.bay===1&&v.end==='left'):undefined;
+ const saddleClear=tie&&endTie?Math.min(...[g.backRow,g.frontRow].map(x=>{const a=tie.attachment,x0=endTie.tieX-a.saddleLength/2-a.weldSize,x1=endTie.tieX+a.saddleLength/2+a.weldSize,z=gauge/2;return Math.hypot(Math.max(x0-x,0,x-x1),Math.max(tie.rootStart-a.weldSize-z,0,z-tie.rootEnd));})):undefined;
+ // Heel compression of the overturning couple on the top flange, carried by the web without stiffener credit.
+ const heel=lever>0?M/lever:1e12,lb=tb,kd=shape?shape.kdes*inch:b.tf,ratio=Math.min(lb/b.d,.2);
+ const webCapacity=Math.min(available(b.Fy*b.tw*((g.back+tb/2>b.d?5:2.5)*kd+lb),method,1,1.5),available((g.back+tb/2>=b.d/2?.8:.4)*b.tw**2*(1+3*ratio*(b.tw/b.tf)**1.5)*Math.sqrt(b.E*b.Fy*b.tf/b.tw),method,.75,2));
  const Fy=Math.min(m.Fy,b.Fy),force=`Factored bumper force ${format(P,'force',u,3)} (AIST stop combinations; ${p.method==='LRFD'?'1.0':'0.67'} C_bs) at ${f(g.contact)} above the base plate.`;
- const n=`${force} Same stop at both ends of both runways. Impact is not cyclic service loading; holes lie over the end bearing, where girder bending is negligible. Girder axial force and its locating end connection include the bumper force in the AIST stop combinations.`;
+ const n=`${force} Same stop at both ends of both runways. Impact is not cyclic service loading; the holes near the girder end are fatigue points (Category B) in the detail register. Girder axial force and its locating end connection include the bumper force in the AIST stop combinations.`;
  // The bumper acts above the girder centroid: an end couple P*y bends the end span and changes its reactions by P*y/L.
  const cap=cappedElasticProperties(b),yTop=cap?b.d+b.capTw-cap.cy:b.d/2,y=yTop+tb+g.contact,M0=P*y;
  const span=p.system==='simple'?Math.min(p.spans[0],p.spans.at(-1)!):p.spans.reduce((a,v)=>a+v,0);
@@ -97,13 +104,14 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
   compared('end-stop-width','Face · bumper contact width',e.bumperDiameter,Wb,'length','d_b\\le W','Face plate is as wide as the base plate.'),
   compared('end-stop-fit','Base plate fits the girder top',Wb,g.surfaceWidth,'length','W\\le b_{top}',b.kind==='cap'?'On the cap channel web.':'On the W top flange.'),
   compared('end-stop-stiffener-fit','Stiffeners fit on the base plate',Ls,e.base.length-g.lip-tp,'length','L_s\\le L_b-lip-t_p','Lip in front of the face plate leaves room for its front fillet.'),
-  compared('end-stop-zone','Holes over the end bearing',g.front,d.bearing.length,'length','x_{front}\\le L_{bearing}','The base plate, and its holes through the top flange, stay within the end bearing length.'),
+  compared('end-stop-web','Girder web · local yielding and crippling at the heel',heel,webCapacity,'force','R_n=\\min[F_yt_w(c\\,k+l_b),\\;c_c t_w^2(1+3\\tfrac{l_b}{d}(\\tfrac{t_w}{t_f})^{1.5})\\sqrt{EF_yt_f/t_w}]','AISC J10.2 and J10.3 under the heel compression of the overturning couple, bearing length taken as the base plate thickness; no stiffener credit.',['aisc-j']),
   compared('end-stop-flange-edge','Girder flange · bolt edge distance',1.5*db,(b.bf-gauge)/2,'length','(b_f-g)/2\\ge1.5d_b','W flange edge controls; holes pass through the flange.'),
   compared('end-stop-base-edge','Base plate · bolt edge distance',1.5*db,Math.min((Wb-gauge)/2,e.bolts.edge),'length','e\\ge1.5d_b','Conservative standard-hole edge distance.'),
   compared('end-stop-spacing','Bolt spacing',8/3*db,Math.min(gauge,g.frontRow-g.backRow),'length','s\\ge(8/3)d_b','Between rows and across the gauge.'),
   compared('end-stop-wrench-stiffener','Nut clearance · stop stiffeners',C,(gauge-s)/2-ts/2,'length','c\\ge c_{wrench}','Clear distance from bolt center to the stiffener face.'),
   compared('end-stop-wrench-face','Nut clearance · face plate',C,e.bolts.frontClear,'length','c\\ge c_{wrench}','Front bolts behind the face plate.'),
   compared('end-stop-wrench-web','Nut clearance under flange · web fillet',C,gauge/2-k1,'length','g/2-k_1\\ge c_{wrench}',shape?'k₁ from the catalogue fillet.':'No fillet credited for a custom section.'),
-  compared('end-stop-wrench-bearing','Nut clearance under flange · bearing stiffener',C,stiffenerClear,'length','|x_{bolt}-x_{st}|-t_{st}/2-w\\ge c_{wrench}','Nuts under the top flange clear the end bearing stiffeners and their fillets.')
+  compared('end-stop-wrench-bearing','Nut clearance under flange · bearing stiffener',C,stiffenerClear,'length','|x_{bolt}-x_{st}|-t_{st}/2-w\\ge c_{wrench}','Nuts under the top flange clear the end bearing stiffeners and their fillets.'),
+  ...(saddleClear===undefined?[]:[compared('end-stop-wrench-saddle','Nut clearance under flange · top tie saddle',C,saddleClear,'length','\\min|\\mathbf{x}_{bolt}-\\text{saddle}|\\ge c_{wrench}','Plan distance from each bolt to the top tie saddle and its fillets at the runway-end support.')])
  ];
 }

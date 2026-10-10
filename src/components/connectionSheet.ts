@@ -3,6 +3,7 @@ import {activeEndBearing} from '../engine/endBearingInputs';
 import {endBearingView} from './endBearingDetail';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {flangeTieSection} from './flangeTieSheet';
+import {tieSides} from '../engine/tieGeometry';
 import type { CalculationSnapshot } from '../engine/types';
 import { referenceCrossheads } from '../data/aiscReferenceShapes';
 import { bearingStiffenerProfile } from './bearingStiffenerGeometry';
@@ -105,31 +106,31 @@ export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defau
  // 3: Plan of an actual flange-to-column tie. The symmetric pair of bars is
  // represented by front/back outlines; arrows identify both end bolt groups.
  {
-  if(d.brace.flangeAttachment?.enabled){svg+=flangeTieSection(s,105,436,true);}else{
+  if(d.brace.flangeAttachment?.enabled){svg+=flangeTieSection(s,48,436,true);}else{
   svg+='<g data-view="tie-connection">';
   const c=d.brace.connection,scale=drawingScale(Math.min(.17,205/(b.bf+d.brace.length+colAt(0)*1000)),p.units),k=scale.pointsPerMm,cx=181,top=430,bottom=top+b.bf*k;
   svg+=rect(60,top,241,b.bf*k,'runway-line');
   svg+=line([60,top+b.bf*k/2],[301,top+b.bf*k/2],'grid-line');
-  const y=bottom-8,l=d.brace.length*k,w=d.brace.width*k,x=cx-w/2;
+  // Vertical bars seen edge-on: two bars each side of the central gusset; bolts run along the runway.
+  const y=bottom-8,l=d.brace.length*k,tb=d.brace.thickness*k,tg=d.brace.gussetThickness*k,x=cx-tg/2-tb;
   const colY=y+l-13,colD=colAt(0)*1000*k,colW=m.column.bf*1000*k;
   svg+=wSection(cx,colY,colW,colD,m.column.tf*1000*k,m.column.tw*1000*k,'reference-line');
-  const gussetY=y+l-26;
-  svg+=rect(x-6,y-6,w+12,32,'runway-line')+rect(x-6,gussetY,w+12,32,'runway-line');
-  svg+=rect(x+3,y+3,w,l,'reference-line')+rect(x,y,w,l,'runway-line');
-  const end=(c.rows-1)*c.pitch+2*c.edge,pts:XY[]=[];
-  for(const offset of [0,d.brace.length-end])for(let row=0;row<c.rows;row++)for(let col=0;col<2;col++){
-   const at:XY=[x+(c.edge+col*c.gauge)*k,y+(offset+c.edge+row*c.pitch)*k];pts.push(at);svg+=hole(...at,boltProperties(c.grade,c.diameter).hole*k/2);
+  const end=(c.rows-1)*c.pitch+2*c.edge;
+  for(const offset of [0,d.brace.length-end])svg+=rect(cx-tg/2,y+offset*k,tg,end*k,'runway-line');
+  for(const side of [-1,1])svg+=rect(side<0?x:cx+tg/2,y,tb,l,'runway-line');
+  const pts:XY[]=[],head=boltProperties(c.grade,c.diameter).hole*k*.9;
+  for(const offset of [0,d.brace.length-end])for(let row=0;row<c.rows;row++){
+   const yy=y+(offset+c.edge+row*c.pitch)*k;pts.push([cx+tg/2+tb,yy]);
+   svg+=line([x-3,yy],[cx+tg/2+tb+3,yy],'runway-line')+rect(x-5,yy-head/2,2,head,'runway-line')+rect(cx+tg/2+tb+3,yy-head/2,2,head,'runway-line');
   }
   svg+=dimV(y,y+l,x,77,dim(d.brace.length));
   svg+=dimV(y,pts[0][1],x,144,size(c.edge));
-  svg+=dimV(pts[0][1],pts[(c.rows-1)*2][1],x,119,`${c.rows-1} @ ${size(c.pitch)}`);
+  if(c.rows>1)svg+=dimV(pts[0][1],pts[c.rows-1][1],x,119,`${c.rows-1} @ ${size(c.pitch)}`);
   svg+=dimV(pts.at(-1)![1],y+l,x,144,size(c.edge));
-  svg+=dimH(pts[0][0],pts[1][0],y,y-14,size(c.gauge));
-  svg+=dimH(x,pts[0][0],y,y-31,size(c.edge));
-  svg+=multiLeader([[252,top]],[351,420],[b.name+' RUNWAY GIRDER','PLAN AT FLANGE; TIE AT BOTH FLANGES']);
-  svg+=multiLeader([[x+w,y+l/2]],[351,526],[`2 FL ${size(d.brace.thickness)} X ${size(d.brace.width)}`,`${dim(d.brace.length)} LONG / EACH FLANGE`,'SYMMETRIC BARS; ONE EACH SIDE OF GUSSET']);
-  svg+=multiLeader([pts[3]],[351,463],[`EACH END: ${2*c.rows} - ${size(c.diameter)} ${c.grade}`,`${size(boltProperties(c.grade,c.diameter).hole)} HOLES; CLASS ${c.surface}`,`GUSSET PL ${size(d.brace.gussetThickness)}`]);
-  svg+=fieldFilletLeader([[x+w+6,colY]],[351,573],size(c.weldSize),[`2 ROOT FILLETS X ${dim(c.weldLength)}`,'FIELD WELD COLUMN-SIDE GUSSET'],true);
+  svg+=multiLeader([[252,top]],[351,420],[b.name+' RUNWAY GIRDER',`PLAN; TIE AT ${tieSides(p).length>1?'BOTH FLANGES':'TOP FLANGE'}`]);
+  svg+=multiLeader([[cx+tg/2+tb,y+l/2]],[351,526],[`2 FL ${size(d.brace.thickness)} X ${size(d.brace.width)} (VERTICAL)`,`${dim(d.brace.length)} LONG`,'SYMMETRIC BARS; ONE EACH SIDE OF GUSSET']);
+  svg+=multiLeader([pts[c.rows-1]],[351,463],[`EACH END: ${2*c.rows} - ${size(c.diameter)} ${c.grade}, ${c.rows} ROWS`,`X 2 AT ${size(c.gauge)} VERT. GAUGE; CLASS ${c.surface}`,`GUSSET PL ${size(d.brace.gussetThickness)}`]);
+  svg+=fieldFilletLeader([[cx+tg/2,colY]],[351,573],size(c.weldSize),[`2 ROOT FILLETS X ${dim(c.weldLength)}`,'FIELD WELD COLUMN-SIDE GUSSET'],true);
   svg+=multiLeader([[cx,colY+colD*.75]],[351,615],[colName+' (REF.)'],7.8);
   svg+=viewTitle(318,655,'FLANGE TIE / COLUMN CONNECTION',scale.label)+'</g>';}
  }

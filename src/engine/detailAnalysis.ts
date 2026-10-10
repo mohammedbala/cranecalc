@@ -5,16 +5,22 @@ import {createBracketCollector} from './bracketDesign';
 import {createExistingBracketCollector} from './existingBracket';
 import { LateralTorsionBeam } from './lateralTorsion';
 import { beamSystem,momentAt } from './beam';
-import { boltProperties,plateMember } from './connectionStrength';
+import { boltProperties,plateMember,compressionResistance } from './connectionStrength';
 import type { RunwayCaseEvent,RunwayCaseObserver } from './designAnalysis';
 import type { ProjectInput,Properties } from './types';
 import type { FatigueDetailResult,InterfaceAction,RunwayDetailResults } from './runwayDetails';
 import { railKeeperResponse } from './railKeeper';
 import {tractionBays,railKeeperStations,girderSegments,independentBearings} from './simpleSupports';
+import {activeEndStop,stopBoltRows} from './endStopInputs';
+import {activeEndBearing} from './endBearingInputs';
 
 export function braceSystem(p:ProjectInput){
  const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875);
- const member=plateMember(b.width,b.thickness,b.length,p.section.E,m.Fy,m.Fu,b.width-holes,p.method),cos=b.reach/b.length;
+ const plate=plateMember(b.width,b.thickness,b.length,p.section.E,m.Fy,m.Fu,b.width-holes,p.method),cos=b.reach/b.length;
+ // Each bar buckles out of plane between the innermost bolt rows, fixed in the girder bolt group and
+ // pinned at the column end: K = 0.8 (AISC Commentary Table C-A-7.1 recommended value).
+ const between=b.length-2*(b.connection.edge+(b.connection.rows-1)*b.connection.pitch),bucklingLength=.8*Math.max(between,b.thickness);
+ const member={...plate,bucklingLength,compression:compressionResistance(plate.A,plate.r,bucklingLength,p.section.E,m.Fy,p.method)};
  // Two flat bars in parallel, two end connections in series. The connection
  // model includes gusset axial strain and conservative bolt shear deformation;
  // no stiffness from the excluded supporting building is inferred.
@@ -57,7 +63,12 @@ export function fatigueSpectrumBin(category:keyof typeof constants,range:number,
 function automaticFatigueDetails(p:ProjectInput){
  const d=p.details!,L=p.spans.reduce((s,v)=>s+v,0),list=[...d.fatigueDetails];
  const tie=flangeTieGeometry(p);
- if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of ['top-right','bottom-right'] as const)list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} edge ${sign} / ${point}`,x:v.tieX+sign*tie.attachment.saddleLength/2,point,category:'E1',reference:'AISC Table A-3.1 attachment, conservative E-prime; global stress plus local flange strip bending'});
+ // Saddle welded across the flange: AISC Table A-3.1 item 7.2 by its length a along the stress and thickness b.
+ const sa=tie?.attachment,inch=25.4,saddleCategory=!sa?'E1':sa.saddleLength<2*inch?'C':sa.saddleLength<=Math.min(12*sa.saddleThickness,4*inch)?'D':sa.saddleThickness<=.8*inch?'E':'E1';
+ if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} edge ${sign} / ${point}`,x:v.tieX+sign*tie.attachment.saddleLength/2,point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.2, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment; global stress plus local flange strip bending`});
+ // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
+ const stop=activeEndStop(p);
+ if(stop)for(const [end,x0,dir] of [['left',0,1],['right',L,-1]] as const)for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:x0+dir*row,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});
  const category=d.rail.clipWidth<50?'C':d.rail.clipWidth<=Math.min(12*d.rail.clipThickness,100)?'D':d.rail.clipThickness<=20?'E':'E1';
  for(const [i,x] of railKeeperStations(p).entries()){
   for(const side of ['left','right'] as const)list.push({id:`RC${i}-${side}`,name:`Rail keeper ${i+1} · ${side}`,x,point:`top-${side}`,category,reference:'AISC Table A-3.1, 7.1 · attachment length/thickness from keeper geometry'});
@@ -78,6 +89,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+p.railHeight-cap.shearCenter:p.railHeight+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
+ // Bolted end bearings restrain the bottom flange at each support through four bolts into the seat: bolt shear
+ // deformation over the flange, bearing plate and seat grip. Otherwise the bottom flange tie is the brace pair.
+ const eb=activeEndBearing(p),ebBolt=eb?boltProperties(eb.bolts.grade,eb.bolts.diameter):undefined;
+ const ebK=eb&&ebBolt?4*G*ebBolt.area/(p.section.tf+details.bearing.thickness+(details.bracket?.enabled?details.bracket.seatThickness:details.bearing.thickness)):0;
+ const bottomK=(x:number)=>ebK&&supports.some(v=>Math.abs(v-x)<=1e-6)?ebK:brace.stiffness;
  const bearings=independentBearings(p);
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
  const detailInputs=automaticFatigueDetails(p);
@@ -101,7 +117,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const strength=e.kind==='strength',stiffnessFactor=strength?.8:1;
    const beam=new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
     loads:wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),
-    restraints:stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?brace.stiffness*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?brace.stiffness*stiffnessFactor:0})),
+    restraints:stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?brace.stiffness*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?bottomK(x)*stiffnessFactor:0})),
     axial:strength?e.axial:0,moment:strength?x=>moment(x+start):undefined,
     distributedTorque:e.railTorquePerLength,
     // Apply the full UDL at rail height for the stability test conservatively.
@@ -212,7 +228,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const deadBounds=detailInputs.map(f=>Math.abs(momentAt(f.x,dead.reactions,[],q))/props.Sx);
   for(const [start,end] of groups){
    const beam=new LateralTorsionBeam({length:end-start,E,G,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
-    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:restrains(flanges.top,x)?brace.stiffness:0,bottom:restrains(flanges.bottom,x)?brace.stiffness:0})),
+    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:restrains(flanges.top,x)?brace.stiffness:0,bottom:restrains(flanges.bottom,x)?bottomK(x):0})),
     loads:[],distributedTorque:p.railWeight*p.railEccentricity});
    const deadT=beam.solve();
    detailInputs.forEach((f,i)=>{if(f.x>=start&&f.x<=end){const v=deadT.at(f.x-start);deadBounds[i]+=E*Math.abs(v.curvature)*(cap?p.section.capWidth:p.section.bf)/2+E*Math.abs(v.warpingCurvature)*(cap?.omegaMax??props.h0*p.section.bf/4);}});

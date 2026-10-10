@@ -50,8 +50,9 @@ describe('independent girder ends',()=>{
   const p=cappedDemonstrationProject(),mat=new THREE.MeshBasicMaterial(),edge=new THREE.LineBasicMaterial(),hardware=createHardwareBuilder(mat);
   const group=buildIndependentSupports(p,.65,mat,edge,hardware);
   expect(group.children.filter(o=>o.name.endsWith('-bearing'))).toHaveLength(6);
-  expect(group.children.filter(o=>o.userData.part?.family==='Independent flange tie')).toHaveLength(24);
-  expect(hardware.count).toBe(96);
+  // Top-flange ties only: the bolted end bearings restrain the bottom flange.
+  expect(group.children.filter(o=>o.userData.part?.family==='Independent flange tie')).toHaveLength(12);
+  expect(hardware.count).toBe(48);
   expect(group.children.filter(o=>o.userData.part?.diameter).every(o=>o.userData.part.components.includes('helical threads'))).toBe(true);
   group.updateMatrixWorld(true);
   const bolt=group.children.find(o=>o.userData.part?.family==='Independent tie bolt')!;
