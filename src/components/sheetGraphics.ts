@@ -35,13 +35,15 @@ export function leader(at: XY, end: XY, label: string, size = 9) {
     + circle(at[0], at[1], 1.4, 'dot') + text(end[0] + 9, end[1], label, size);
 }
 // A dimension too short for its text carries the text beyond the far extension line on an extended
-// dimension line, as drafted by hand, instead of writing it across the extension lines.
-export function dimH(x1: number, x2: number, fromY: number, y: number, label: string, outside: 'left' | 'right' = 'right') {
+// dimension line, as drafted by hand, instead of writing it across the extension lines. `clear` is a
+// neighbouring extension line the carried text is also kept beyond.
+export function dimH(x1: number, x2: number, fromY: number, y: number, label: string, outside: 'left' | 'right' = 'right', clear?: number) {
   const w = textWidth(label, 9), fits = w + 6 <= Math.abs(x2 - x1), lo = Math.min(x1, x2), hi = Math.max(x1, x2);
-  const [a, b] = fits ? [lo, hi] : outside === 'right' ? [lo, hi + w + 6] : [lo - w - 6, hi];
+  const l = Math.min(lo, clear ?? lo), r = Math.max(hi, clear ?? hi);
+  const [a, b] = fits ? [lo, hi] : outside === 'right' ? [lo, r + w + 6] : [l - w - 6, hi];
   return line([x1, fromY], [x1, y + 5]) + line([x2, fromY], [x2, y + 5]) + line([a, y], [b, y])
     + [x1, x2].map(x => line([x - 2.5, y + 3], [x + 2.5, y - 3])).join('')
-    + (fits ? text((x1 + x2) / 2, y - 5, label, 9, 'middle') : outside === 'right' ? text(hi + 4, y - 5, label, 9, 'start') : text(lo - 4, y - 5, label, 9, 'end'));
+    + (fits ? text((x1 + x2) / 2, y - 5, label, 9, 'middle') : outside === 'right' ? text(r + 4, y - 5, label, 9, 'start') : text(l - 4, y - 5, label, 9, 'end'));
 }
 export function dimV(y1: number, y2: number, fromX: number, x: number, label: string) {
   const w = textWidth(label, 9), fits = w + 6 <= Math.abs(y2 - y1), far = Math.max(y1, y2);
