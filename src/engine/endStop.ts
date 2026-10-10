@@ -31,9 +31,15 @@ export function endStopGeometry(p:ProjectInput,e:EndStopInput){
  const contact=railDepth+e.bumperHeight-tb;
  // Stiffeners stop an inch below the top of the face plate, and back at least the whole bumper contact.
  const stiffenerHeight=Math.min(e.face.height,Math.max(e.face.height-inch,.5*e.face.height,contact+e.bumperDiameter/2));
- return {lip,back,front,faceBack,faceFront,frontRow,backRow,surfaceWidth,contact,stiffenerHeight,railEnd:stopRailEnd(e),stiffenerEnd:faceBack-e.stiffener.length};
+ // Bolt C/L to the toes of the stop fillets: heads on the base plate sit beside the face plate and stiffener welds.
+ const toe={face:e.bolts.frontClear-e.weldSize,stiffener:(e.bolts.gauge-e.stiffener.spacing)/2-e.stiffener.thickness/2-e.weldSize};
+ return {lip,back,front,faceBack,faceFront,frontRow,backRow,surfaceWidth,contact,stiffenerHeight,railEnd:stopRailEnd(e),stiffenerEnd:faceBack-e.stiffener.length,toe};
 }
-/** Nut / socket clearance from bolt center to an obstruction: project criterion after AISC Manual Table 7-15. */
+/**
+ * Socket tightening clearance C1 from the bolt center to an obstruction (AISC Manual Table 7-15): 1 1/4 in for
+ * 3/4 in bolts, about 1.6d for larger ones. Measured to the toe of any fillet on the obstruction, so the heavy
+ * hex head or nut corners and the socket wall clear the weld.
+ */
 export const wrenchClearance=(db:number)=>Math.max(1.25*inch,1.6*db);
 
 const u2=(p:ProjectInput)=>p.units;
@@ -122,8 +128,9 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
   compared('end-stop-flange-edge','Girder flange · bolt edge distance',1.5*db,(b.bf-gauge)/2,'length','(b_f-g)/2\\ge1.5d_b','W flange edge controls; holes pass through the flange.'),
   compared('end-stop-base-edge','Base plate · bolt edge distance',1.5*db,Math.min((Wb-gauge)/2,e.bolts.edge),'length','e\\ge1.5d_b','Conservative standard-hole edge distance.'),
   compared('end-stop-spacing','Bolt spacing',8/3*db,Math.min(gauge,g.frontRow-g.backRow),'length','s\\ge(8/3)d_b','Between rows and across the gauge.'),
-  compared('end-stop-wrench-stiffener','Nut clearance · stop stiffeners',C,(gauge-s)/2-ts/2,'length','c\\ge c_{wrench}','Clear distance from bolt center to the stiffener face.'),
-  compared('end-stop-wrench-face','Nut clearance · face plate',C,e.bolts.frontClear,'length','c\\ge c_{wrench}','Front bolts behind the face plate.'),
+  // Heads on the base plate are held (or turned) by a socket beside the stop welds: clearance to the weld toes.
+  compared('end-stop-wrench-stiffener','Head clearance · stiffener weld toes',C,g.toe.stiffener,'length','\\frac{g-s-t_s}{2}-w\\ge C_1',`Both bolt rows: bolt C/L to the toe of the ${f(e.weldSize)} stiffener-to-base fillet, ${f((gauge-s)/2-ts/2)} to the stiffener face less the weld leg. AISC Manual Table 7-15 tightening clearance C₁ = ${f(C)} for the socket on the heavy hex head or nut.`),
+  compared('end-stop-wrench-face','Head clearance · face plate weld toe',C,g.toe.face,'length','c_f-w\\ge C_1',`Front bolts: C/L ${f(e.bolts.frontClear)} behind the face plate, less the ${f(e.weldSize)} face-plate-to-base fillet behind it.`),
   compared('end-stop-wrench-web','Nut clearance under flange · web fillet',C,gauge/2-k1,'length','g/2-k_1\\ge c_{wrench}',shape?'k₁ from the catalogue fillet.':'No fillet credited for a custom section.'),
   compared('end-stop-wrench-bearing','Nut clearance under flange · bearing stiffener',C,stiffenerClear,'length','|x_{bolt}-x_{st}|-t_{st}/2-w\\ge c_{wrench}','Nuts under the top flange clear the end bearing stiffeners and their fillets.'),
   ...(saddleClear===undefined?[]:[compared('end-stop-wrench-saddle','Nut clearance under flange · top tie saddle',C,saddleClear,'length','\\min|\\mathbf{x}_{bolt}-\\text{saddle}|\\ge c_{wrench}','Plan distance from each bolt to the top tie saddle and its fillets at the runway-end support.')])

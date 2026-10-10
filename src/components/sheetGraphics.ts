@@ -146,7 +146,7 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+=text(1574,1681,`${d?.address?.trim()?`SITE: ${short(d.address.trim().toUpperCase(),70)} · `:''}${p.units==='US'?'LENGTHS: FEET & INCHES':'LENGTHS: MILLIMETERS'}`,10);
   svg+='</g><g data-title-panel="sheet">';
   svg+=text(2170,1566,'DRAWING / SHEET NUMBER',10,'start',700)+text(2170,1611,`SHEET ${number}`,29,'start',700)+text(2546,1611,sheetOrdinalToken,12,'end',700);
-  svg+=line([2156,1624],[2556,1624])+text(2170,1644,p.units==='SI'?'PAGE SIZE: ARCH D / 914.4 X 609.6 MM':'PAGE SIZE: ARCH D / 36 X 24 IN',12,'start',700);
+  svg+=line([2156,1624],[2556,1624])+text(2170,1644,p.units==='SI'?'PAGE SIZE: ARCH D / 914 X 610 MM':'PAGE SIZE: ARCH D / 36 X 24 IN',12,'start',700);
   svg+=text(2170,1662,`CALC REVISION: ${s.revision}`,11)+text(2170,1681,`DATE: ${date}    SCALE: AS SHOWN`,10);
   svg+='</g></g>';
   const status=issueStatus(s);

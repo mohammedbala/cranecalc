@@ -225,7 +225,7 @@ describe('issue status',()=>{
   expect(issueStatus(capped).label).toBe('DEMONSTRATION - NOT FOR CONSTRUCTION');
   const preliminary=issued(()=>{});expect(preliminary.issued).toBe(false);expect(preliminary.reasons).toContain('Enter the engineer of record, firm and license');expect(preliminary.reasons).toContain('Select an issue purpose');
   // Structure the calculation leaves unchecked needs the engineer's evaluation referenced before issue.
-  const unreferenced=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};});
+  const unreferenced=issued(s=>{delete s.input.drawing!.existingEvaluation;s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};});
   expect(unreferenced.reasons).toEqual(['Reference the engineer of record\'s evaluation of the structure not checked by this calculation']);
   const ready=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};s.input.drawing!.existingEvaluation='Existing structure evaluation, report 24-117';});
   expect(ready).toEqual({issued:true,label:'ISSUED FOR PERMIT',reasons:[]});

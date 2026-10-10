@@ -68,9 +68,11 @@ export function fatigueSpectrumBin(category:keyof typeof constants,range:number,
 export function automaticFatigueDetails(p:ProjectInput){
  const d=p.details!,L=p.spans.reduce((s,v)=>s+v,0),list=[...d.fatigueDetails];
  const tie=flangeTieGeometry(p);
- // Saddle welded across the flange: AISC Table A-3.1 item 7.2 by its length a along the stress and thickness b.
+ // Saddle welded to the flange by transverse end fillets across it: a short attachment, AISC Table A-3.1 item 7.1
+ // (welds transverse to the stress) by its length a along the stress and thickness b. The crack starts at the
+ // toe of each end fillet on the flange, one weld leg beyond the saddle end.
  const sa=tie?.attachment,inch=25.4,saddleCategory=!sa?'E1':sa.saddleLength<2*inch?'C':sa.saddleLength<=Math.min(12*sa.saddleThickness,4*inch)?'D':sa.saddleThickness<=.8*inch?'E':'E1';
- if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} edge ${sign} / ${point}`,x:v.tieX+sign*tie.attachment.saddleLength/2,point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.2, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment; global stress plus local flange strip bending`});
+ if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} · end fillet toe ${sign<0?1:2} / ${point}`,x:v.tieX+sign*(tie.attachment.saddleLength/2+tie.attachment.weldSize),point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.1, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment: toe of the transverse end fillet on the flange; global stress plus local flange strip bending`});
  // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
  const stop=activeEndStop(p);
  if(stop)for(const [end,x0,dir] of ([['left',0,1],['right',L,-1]] as const).filter(([end])=>stopEnds(p).includes(end)))for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:x0+dir*row,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});

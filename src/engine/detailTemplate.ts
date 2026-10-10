@@ -5,7 +5,7 @@ import {defaultSimpleSupport} from './simpleSupports';
 import {defaultEndBearing} from './endBearingInputs';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {wrenchClearance} from './endStop';
-import {columnGussetHeight} from './tieGeometry';
+import {columnGussetHeight,tieBarGap} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 
 const inch=25.4,ksi=6.894757293;
@@ -43,7 +43,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   simpleSupport:{...defaultSimpleSupport,guideTravel:.5*inch},
   brace:{width:5*inch,thickness:.375*inch,length:tieLength,reach:tieLength,gussetThickness:.75*inch,connectionLength:up(tieStart+tieConnection-rootStart,.25*inch),
    connection:{rows:2,gauge:2.5*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,diameter:.625*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:weld,weldLength:5*inch},
-   ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:weld,columnFace:tieStart+tieLength}}:{}),
+   ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:weld,columnFace:tieStart+tieLength+tieBarGap(weld)}}:{}),
    release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
   end:{rows:4,gauge:2.875*inch,pitch:3*inch,edge:1.25*inch,thickness:.75*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:.3125*inch,weldLength:11.5*inch},
   bearing:{width:up(b.bf+2*inch,.5*inch),length:bearingLength,thickness:1*inch,stiffenerWidth,stiffenerThickness,cope:up(Math.max(k1-b.tw/2,.75*inch),.125*inch),weldSize:.3125*inch},

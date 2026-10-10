@@ -18,7 +18,7 @@ describe('field welds to existing building steel',()=>{
   // root in the transverse section and in the plan.
   expect(flags(bracket)).toBe(2);expect(flags(tie)).toBe(2);expect(flags(generic)).toBe(1);
   for(const svg of [bracket,tie,generic])expect(svg).toContain('EXISTING');
-  expect(bracket).toContain('SHOP WELD THE SEAT TO THE RIBS');expect(bracket).toContain('FIELD WELD TO EXISTING COLUMN');expect(tie).toContain('/ EACH GUSSET');
+  expect(bracket).toContain('SHOP WELD THE SEAT TO THE RIBS');expect(bracket).toContain('FIELD WELD TO EXISTING COLUMN');expect(tie).toContain('EXISTING COLUMN, EACH GUSSET');
   expect(tie).toContain('TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT.');expect(tie).not.toMatch(/NaN|Infinity/);
   expect(JSON.stringify(s.input)).toBe(before);
   const drawings=detailedDrawings(s);
