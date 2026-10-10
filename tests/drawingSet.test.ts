@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {calculate} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
-import {drawingSheetSet,resolveSheetSet,sheetIndex,detailReferences} from '../src/components/planSheet';
+import {drawingSheetSet,resolveSheetSet,sheetIndex,detailReferences,detailTopics} from '../src/components/planSheet';
 import {sheetsDxf,sheetEntities,drawingSetDxf,sheetLayers} from '../src/components/sheetDxf';
 import {runwayElevations,issueStatus,girderMarks} from '../src/engine/drawingData';
 import {drawingLength} from '../src/components/drawingFormat';
@@ -176,6 +176,15 @@ describe('sheet text layout',()=>{
   expect(sheetDrawingScale(.24,'US').label).toBe(`SCALE: 1" = 1'-0"`);
   expect(sheetDrawingScale(.22,'SI').label).toBe('SCALE: 1:20');expect(withDetailRoom(4/3,()=>sheetDrawingScale(.22,'SI').label)).toBe('SCALE: 1:10');
  });
+ it('draws every demonstration detail as clear at the larger scale of a taller cell',()=>{
+  for(const snapshot of [capped,demo,newColumn])for(const units of ['US','SI'] as const){
+   const s=structuredClone(snapshot);s.input.units=units;
+   for(const t of detailTopics(s))for(const view of t.views){
+    const standard=view.render(),roomy=withDetailRoom(4/3,()=>view.render());
+    expect(annotationClashes(roomy.svg),`${s.input.number} ${units} ${view.title} at ${roomy.scale}`).toBeLessThanOrEqual(annotationClashes(standard.svg));
+   }
+  }
+ },120000);
  it('counts linework through text and overlapping text as annotation clashes',()=>{
   expect(annotationClashes(text(0,0,'LABEL')+line([-5,8],[40,8]))).toBe(0);
   expect(annotationClashes(text(0,0,'LABEL')+line([-5,-3],[40,-3]))).toBe(1);

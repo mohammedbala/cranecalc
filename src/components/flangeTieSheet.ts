@@ -71,7 +71,7 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
   for(const sign of [-1,1])svg+=rect(tx+(sign*(t.gussetThickness+t.thickness)/2-t.thickness/2)*k,cy+g.start*k,t.thickness*k,t.length*k,'runway-line');
   svg+=rect(tx-t.gussetThickness*k/2,cy+g.rootStart*k,t.gussetThickness*k,(g.gussetEnd-g.rootStart)*k,'runway-line');
   svg+=rect(tx-t.gussetThickness*k/2,cy+(g.face-g.connection)*k,t.gussetThickness*k,g.connection*k,'runway-line');
-  svg+=dimH(Math.min(tx,sx),Math.max(tx,sx),cy-b.bf*k/2,105,dim(a.longitudinalSetback));
+  svg+=dimH(Math.min(tx,sx),Math.max(tx,sx),cy-b.bf*k/2,Math.min(105,cy-b.bf*k/2-14),dim(a.longitudinalSetback));
  }
  const rw=g.receiver?.width??14*25.4,rt=g.receiver?.flangeThickness??25.4;
  svg+=rect(cx-rw*k/2,cy+g.face*k,rw*k,rt*k,supportColumn(p).isNew?'runway-line':'reference-line');
@@ -88,7 +88,7 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  svg+=rect(bx-a.saddleLength*bk/2-25,by-b.tf*bk,a.saddleLength*bk+50,b.tf*bk,'runway-line');
  svg+=rect(bx-a.saddleLength*bk/2,by,a.saddleLength*bk,a.saddleThickness*bk,'runway-line');
  svg+=rect(bx-t.gussetThickness*bk/2,by+a.saddleThickness*bk,t.gussetThickness*bk,90,'runway-line');
- svg+=dimH(bx-a.saddleLength*bk/2,bx+a.saddleLength*bk/2,by,by-52,dim(a.saddleLength));
+ svg+=dimH(bx-a.saddleLength*bk/2,bx+a.saddleLength*bk/2,by,Math.min(by-52,by-b.tf*bk-16),dim(a.saddleLength));
  svg+=filletLeader([[bx+a.saddleLength*bk/2,by]],[420,465],sz(a.weldSize),['SADDLE TO FLANGE','TWO CONTINUOUS LINES']);
  svg+=filletLeader([[bx+t.gussetThickness*bk/2,by+a.saddleThickness*bk]],[420,548],sz(a.weldSize),['GUSSET TO SADDLE','TWO CONTINUOUS LINES']);
  svg+=text(42,620,'SADDLE STOPS CLEAR OF ROLLED ROOT AND BEARING STIFFENER WELDS.',8);

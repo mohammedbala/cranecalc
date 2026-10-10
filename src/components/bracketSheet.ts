@@ -61,10 +61,10 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=rect(cx-b.receiver.width*k/2,409,b.receiver.width*k,bot-397,supportColumn(p).isNew?'runway-line':'reference-line');
   svg+=rect(cx-b.seatLength*k/2,top,b.seatLength*k,b.seatThickness*k,'runway-line');
   for(const side of [-1,1])svg+=rect(cx+(side*b.ribSpacing-b.ribThickness)*k/2,top+b.seatThickness*k,b.ribThickness*k,b.ribDepth*k,'runway-line');
-  svg+=dimH(cx-b.ribSpacing*k/2,cx+b.ribSpacing*k/2,bot,bot+23,dim(b.ribSpacing));
+  svg+=dimH(cx-b.ribSpacing*k/2,cx+b.ribSpacing*k/2,bot,bot+30,dim(b.ribSpacing));
   svg+=dimV(top+b.seatThickness*k,bot,cx-b.ribSpacing*k/2,106,dim(b.ribDepth));
   svg+=multiLeader([[-1,1].map(sign=>cx+sign*b.ribSpacing*k/2).map(x=>[x,top+b.seatThickness*k+b.ribDepth*k*.5] as [number,number])].flat(),[396,472],[`2 RIB PL ${size(b.ribThickness)}`,`${dim(b.ribDepth)} DEEP`,`X ${dim(b.seatProjection)} PROJ.`]);
-  svg+=text(42,633,'RECTANGULAR RIBS: DO NOT TAPER OR COPE WITHOUT REANALYSIS.',7.5);
+  svg+=text(42,Math.max(633,bot+52),'RECTANGULAR RIBS: DO NOT TAPER OR COPE WITHOUT REANALYSIS.',7.5);
   return {svg:svg+'</g>',scale:scale.label};
  }});
  {
