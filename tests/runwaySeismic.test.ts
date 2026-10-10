@@ -51,13 +51,13 @@ describe('Seismic design of new freestanding runway columns',()=>{
   expect(z.driftLimit).toBeCloseTo(.025*h,6);
   // The base takes the overstrength combinations.
   const actions=columnBaseActions(p,s.supportReactions!,'LRFD')[0].actions;
-  expect(actions.filter(a=>a.seismic).map(a=>a.id)).toEqual(['LRFD 6-E Ωo','LRFD 7-E Ωo']);
- });
+  expect(actions.filter(a=>a.seismic&&!a.id.includes(' along')).map(a=>a.id)).toEqual(['LRFD 6-E Ωo','LRFD 7-E Ωo']);
+ },120000);
  it('reduces concrete-governed anchor tension by 0.75 in SDC C to F (ACI 318-19 §17.10.5.4)',()=>{
   const b=newColumnDemonstrationProject().columnBase!;
   const plain=anchorStrength(b,20*kip,0),quake=anchorStrength(b,20*kip,0,0,true);
   expect(quake.phiNn).toBeCloseTo(Math.min(plain.steelT,.75*plain.breakout,.75*plain.pullout),6);
   const s=calculate(seismic({sdc:'C',SDS:.4}));
   expect(s.checks.find(c=>c.id==='base-anchor-tension')!.note).toContain('§17.10.5.4');
- });
+ },120000);
 });

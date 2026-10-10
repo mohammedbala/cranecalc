@@ -51,10 +51,11 @@ test('designs new freestanding columns with base plates and footings',async({pag
  await expect(page.getByRole('button',{name:'Generate output',exact:true})).toBeEnabled({timeout:540000});
  await page.getByRole('button',{name:'Drawings'}).click();
  const tabs=page.locator('.drafting-views button');
- // The new column details are on the second detail sheet, the last of the set.
- await expect(tabs.filter({hasText:'S-03'})).toHaveCount(1,{timeout:120000});
- await tabs.filter({hasText:'S-03'}).first().click();
- await expect(page.locator('.drafting-linework svg')).toHaveAttribute('aria-label',/^S-03/);
+ // The new column and bracing details are on the third detail sheet, the last of the set.
+ await expect(tabs.filter({hasText:'S-04'})).toHaveCount(1,{timeout:120000});
+ await tabs.filter({hasText:'S-04'}).first().click();
+ await expect(page.locator('.drafting-linework svg')).toHaveAttribute('aria-label',/^S-04/);
  await expect(page.locator('.drafting-linework svg')).toContainText('FOOTING / SECTION');
+ await expect(page.locator('.drafting-linework svg')).toContainText('BRACED BAY / ELEVATION');
  expect(errors).toEqual([]);
 });

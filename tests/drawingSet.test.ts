@@ -29,7 +29,8 @@ describe('issued drawing set',()=>{
   // demonstration, two for the capped and new-column demonstrations.
   expect(demoSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02']);
   expect(cappedSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
-  expect(newColumnSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
+  // The new-column set adds the new-column and bracing details on a third detail sheet.
+  expect(newColumnSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03','S-04']);
   for(const set of [demoSet,cappedSet,newColumnSet])for(const sheet of set.slice(2)){const n=sheet.svg.match(/data-view-title="below"/g)!.length;expect(n,sheet.number).toBeGreaterThanOrEqual(8);expect(n,sheet.number).toBeLessThanOrEqual(12);}
   expect(sheetIndex(capped).map(v=>v.title)).toEqual(cappedSet.map(v=>v.title));
   const index=texts(cappedSet[0].svg).join(' | ');
@@ -143,7 +144,8 @@ describe('drawings agree with the calculation',()=>{
  },300000);
  it('tabulates one factored bracket force envelope per set, mirror-symmetric for the symmetric runways',()=>{
   const title='BRACKET DESIGN FORCES / FACTORED LRFD ENVELOPE';
-  for(const [s,set,at] of [[demo,demoSet,'S-02'],[capped,cappedSet,'S-03'],[newColumn,newColumnSet,'S-02']] as const){
+  // The new-column set carries the bracket details on S-03, ahead of the new-column and bracing sheet.
+  for(const [s,set,at] of [[demo,demoSet,'S-02'],[capped,cappedSet,'S-03'],[newColumn,newColumnSet,'S-03']] as const){
    const holding=set.filter(v=>texts(v.svg).includes(title));
    expect(holding.map(v=>v.number)).toEqual([at]);
    const cells=texts(holding[0].svg),f=s.detailResults!.bracketForces!,kip=(v:number)=>format(v,'force','US',2).toUpperCase();

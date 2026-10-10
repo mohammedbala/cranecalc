@@ -23,7 +23,9 @@ export const existingColumnSchema=z.object({
  longitudinal:z.enum(['bracing','column']),
  driftLimit:pos,
  /** New freestanding columns: seismic design as a cantilever column system (ASCE 7 §12.2.5.2). */
- seismic:z.object({enabled:z.boolean(),sdc:z.enum(['A','B','C','D','E','F']),SDS:z.number().finite().nonnegative(),system:z.enum(['ordinary','special']),Ie:pos,rho:pos,source:z.string().max(300)}).optional(),
+ seismic:z.object({enabled:z.boolean(),sdc:z.enum(['A','B','C','D','E','F']),SDS:z.number().finite().nonnegative(),system:z.enum(['ordinary','special']),Ie:pos,rho:pos,source:z.string().max(300),
+  /** Maximum inelastic displacement δM of the existing building at the runway, for the §12.12.3 separation; zero when not known. */
+  building:z.object({drift:z.number().finite().nonnegative(),source:z.string().max(300)}).optional()}).optional(),
  existing:z.object({D:effect,L:effect,Lr:effect,S:effect,R:effect,W:effect,E:effect}),
  source:z.string().max(500),confirmed:z.boolean()
 });

@@ -10,6 +10,7 @@ import type {CheckResult,ProjectInput,Properties,Section} from './types';
 import {format} from './units';
 import {latexNumber} from './math';
 import {cantileverHeightLimit,cantileverSystems,sdcFromSDS,seismicBasis,seismicCombinations,type SeismicBasis} from './runwaySeismic';
+import {alongSeismic,baseWarping,braceCases,braceShare,designsBracing,girderOffset} from './newColumnBracing';
 
 /** Recommended design K for the ideal end conditions (AISC 360-16 Commentary Table C-A-7.1). */
 const minimumK={braced:{pinned:1,fixed:.8},free:{pinned:Infinity,fixed:2.1}} as const;
@@ -79,7 +80,9 @@ export function validateExistingColumn(p:ProjectInput):string[]{
  return errors;
 }
 
-export interface ExistingColumnCombination {id:string;equation:string;P:number;Mx:number;My:number;V:number;B1x:number;B1y:number;U:number;}
+export interface ExistingColumnCombination {id:string;equation:string;P:number;Mx:number;My:number;V:number;B1x:number;B1y:number;U:number;
+ /** Braced new columns: warping normal stress at the base from the girder's longitudinal force, and H1 with it. */
+ warping?:number;Ut?:number;torque?:number;}
 export interface ExistingColumnResult {
  source:string;station:number;eccentricity:number;railElevation:number;
  crane:{dead:number;live:number;liveStatic:number;lateral:number;longitudinal:number};
@@ -88,6 +91,8 @@ export interface ExistingColumnResult {
  /** Governing H1 ratio at every support; the result above is for the worst. */
  bySupport:{x:number;U:number}[];
  drift:{value:number;limit:number};
+ /** Braced new columns: the largest H1 ratio with the warping stress from the eccentric longitudinal force, and the flange shear. */
+ torsion?:{U:number;shear:number;shearCapacity:number;T:number;stress:number;a:number;offset:number;station:number;case:ExistingColumnCombination};
  /** New freestanding columns with seismic design: base shear, design drift, stability and the 15% axial limit. */
  seismic?:{basis:SeismicBasis;weight:number;QE:number;height:number;drift:number;driftLimit:number;theta:number;thetaMax:number;axial:number;axialLimit:number;axialCase:string};
 }
@@ -111,22 +116,37 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const basis=seismicBasis(p),hg=seismicHeight(p),sideE=basis?columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,hg)],[hs]):undefined,columnWeight=props.weight*c.height;
  // The eccentric reaction sampled at the same stations as the seismic force.
  const eccentricE=basis?columnResponse(c.height,E*props.Ix,c.strong,[{x:hs,moment:1}],[Math.min(hg,c.height)]):undefined;
+ // Braced new columns: brace overturning compresses the columns of a braced span, and a girder's longitudinal force
+ // reaches its locating column at the bracket, offset from the centerline where the strut and rods hold it: a torque.
+ const designed=designsBracing(p)?{cases:braceCases(p,reactions,p.method,alongSeismic(p,reactions,section)),offset:girderOffset(p)}:undefined;
+ const warp=(T:number)=>baseWarping(section,T,hs),fy=available(section.Fy,p.method,.9,1.67);
+ const torsional=(k:ExistingColumnCombination,T:number)=>{const w=T?warp(T).stress:0,ratio=k.P>=0?k.P/capacity.Pc:-k.P/capacity.Pt;return {...k,warping:w,Ut:k.U+(ratio>=.2?8/9:1)*w/fy,torque:T};};
  // Every support uses the same column; the support giving the largest H1 ratio governs.
- const evaluate=(support:SupportReactionSet['supports'][number])=>{
+ const evaluate=(support:SupportReactionSet['supports'][number],j:number)=>{
+ const share=designed?braceShare(p,j):undefined,brace=(id:string)=>designed?.cases.find(v=>v.id===id);
  const dead=support.D,live=support.Cd+support.Cv+support.Ci+support.L+support.Clv,liveStatic=support.Cd+support.Cv,lateral=support.Css;
- const combinations=asceCombinations(p.method).map(k=>{
+ const combinations:ExistingColumnCombination[]=asceCombinations(p.method).map(k=>{
   const f=k.factors,existing=(key:'P'|'Mx'|'My'|'V',abs:boolean)=>existingLoadKeys.reduce((sum,t)=>sum+(abs?Math.abs(f[t]*c.existing[t][key]):f[t]*c.existing[t][key]),0);
-  const runway=f.D*dead+f.L*live;
+  const runway=f.D*dead+f.L*live,bc=brace(`${p.method} ${k.id}`);
   // Existing moments are added to the crane peak at its governing section: conservative superposition of maxima.
-  const P=existing('P',false)+runway;
+  const P=existing('P',false)+runway+(bc&&share?bc.H*share.vertical:0);
   const Mx=combinedPeak(eccentric.samples,side.samples,'moment',runway*e,f.L*lateral)+existing('Mx',true);
   const V=combinedPeak(eccentric.samples,side.samples,'shear',runway*e,f.L*lateral)+existing('V',true);
   const My=f.L*longitudinal*alongMoment+existing('My',true);
   const amplify=(Pe:number)=>P<=0?1:alpha*P>=Pe?Infinity:1/(1-alpha*P/Pe),B1x=amplify(Pex),B1y=amplify(Pey);
   const ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
-  return {id:`${p.method} ${k.id}`,equation:k.equation,P,Mx:B1x*Mx,My:B1y*My,V,B1x,B1y,U};
+  const row={id:`${p.method} ${k.id}`,equation:k.equation,P,Mx:B1x*Mx,My:B1y*My,V,B1x,B1y,U};
+  return bc&&share?torsional(row,share.locating?bc.Hbay*designed!.offset:0):row;
  });
+ // AIST crane stop and seismic along the runway on a braced new column, with the static crane vertical.
+ if(designed&&share)for(const k of designed.cases.filter(v=>v.kind!=='asce'&&!v.overstrength)){
+  const runway=k.D*dead+k.live*live+k.Cd*support.Cd+k.Cv*support.Cv,P=runway+k.H*share.vertical;
+  const Mx=combinedPeak(eccentric.samples,side.samples,'moment',runway*e,k.side*lateral),V=combinedPeak(eccentric.samples,side.samples,'shear',runway*e,k.side*lateral);
+  const B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx;
+  const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
+  combinations.push(torsional({id:k.id,equation:k.equation,P,Mx:B1x*Mx,My:0,V,B1x,B1y:1,U},share.locating?k.Hbay*designed.offset:0));
+ }
  // ASCE 7 seismic combinations (§12.4.2.3) with the static crane vertical; the side thrust does not act with E.
  const QE=basis?basis.Cs*(dead+support.Cd+columnWeight):0;
  const seismicCases=basis&&sideE?seismicCombinations(p.method,basis).filter(k=>!k.overstrength).map(k=>{
@@ -151,7 +171,18 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  return {station:support.x,crane:{dead,live,liveStatic,lateral,longitudinal},combinations,governing:{P:max('P'),Mx:max('Mx'),My:max('My'),V:max('V'),U:max('U')},drift:{value:drift,limit:ht/c.driftLimit},seismic};
  };
  const all=reactions.supports.map(evaluate),worst=all.reduce((a,b)=>b.governing.U.U>a.governing.U.U||(b.governing.U.U===a.governing.U.U&&b.drift.value>a.drift.value)?b:a);
- return {source,eccentricity:e,railElevation:ht,capacity,...worst,bySupport:all.map(v=>({x:v.station,U:v.governing.U.U}))};
+ // Torsion governs where H1 with the warping stress is largest; the flange shear takes the whole torque in
+ // Saint-Venant shear near the seat and in warping shear near the base, each bounded by T.
+ let torsion:ExistingColumnResult['torsion'];
+ if(designed){
+  const rows=all.flatMap(v=>v.combinations.filter(x=>x.Ut!==undefined).map(k=>({station:v.station,k})));
+  if(rows.length){
+   const g=rows.reduce((a,b)=>b.k.Ut!>a.k.Ut!?b:a),T=Math.max(...rows.map(v=>v.k.torque??0)),a=warp(1).a;
+   const shear=T*section.tf/props.J*(1-1/Math.cosh(hs/a))+1.5*T/(props.h0*section.bf*section.tf);
+   torsion={U:g.k.Ut!,shear,shearCapacity:available(.6*section.Fy,p.method,.9,1.67),T:g.k.torque??0,stress:g.k.warping??0,a,offset:designed.offset,station:g.station,case:g.k};
+  }
+ }
+ return {source,eccentricity:e,railElevation:ht,capacity,...worst,bySupport:all.map(v=>({x:v.station,U:v.governing.U.U})),torsion};
 }
 
 export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):CheckResult[]{
@@ -174,6 +205,11 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):Chec
   add('seismic-axial',`${label} · cantilever column axial limit`,z.axial,z.axialLimit,'force','P_r\\le0.15\\,P_c',`ASCE 7 §12.2.5.2: axial load in the seismic combinations (${z.axialCase}) at most 15% of the available axial strength, including slenderness.`,z.axialCase);
   add('seismic-drift',`${label} · seismic design drift`,z.drift,z.driftLimit,'length','\\delta_x=\\frac{C_d\\,\\delta_{xe}}{I_e}\\le\\Delta_a',`ASCE 7 §12.8.6 and Table 12.12-1 (all other structures): ${b.Ie>=1.5?'0.015':b.Ie>=1.25?'0.020':'0.025'}h at the girder mid-depth; column alone, fixed base.`);
   add('seismic-stability',`${label} · seismic stability coefficient`,z.theta,z.thetaMax,'ratio','\\theta=\\frac{P_x\\Delta I_e}{V_xh_{sx}C_d}\\le\\frac{0.5}{\\beta C_d}\\le0.25',`ASCE 7 §12.8.7 with β = 1.0. ${z.theta<=.1?'θ ≤ 0.10: P-delta effects need not be added.':'θ > 0.10: the column check includes P-delta through B1.'}`);
+ }
+ if(r.torsion){
+  const t=r.torsion,fm=(v:number)=>format(v,'moment',u,3),fs=(v:number)=>format(v,'stress',u,3);
+  add('torsion',`${label} · H1 with torsion from the longitudinal force`,Math.max(t.U,t.shear/t.shearCapacity),1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{f_w}{\\phi F_y}\\right)\\le1;\\quad f_w=\\frac{B\\,W_{no}}{C_w},\\;B=Ta\\tanh\\frac{z}{a}',
+   `Each girder's longitudinal force reaches its locating column at the bracket seat, ${format(t.offset,'length',u,3)} from the column centerline at the girder web, while the strut and rods hold the column at its centerline: torque T = ${fm(t.T)} at the seat (${t.case.id}, support x=${format(t.station,'length',u,3)}). Fixed base restrained against warping, free top (AISC Design Guide 9), a = ${format(t.a,'length',u,3)}: warping stress ${fs(t.stress)} at the base flange tips, added to H1 at first yield as flange lateral bending. Flange shear from the largest torque, Saint-Venant and warping parts bounded separately: ${fs(t.shear)} against ${fs(t.shearCapacity)} (H3.3).`,t.case.id);
  }
  for(const v of checks)if(v.id.startsWith('column-seismic-'))v.referenceIds=['asce-12','aisc-e'];
  if(c.longitudinal==='bracing'&&!p.longitudinalBracing?.enabled)checks.push({id:'column-longitudinal',group:label,title:'Crane longitudinal force · bracing path',status:'excluded',equation:'',note:'The runway longitudinal force is assigned to building bracing, not to this column. Design the crane-level strut, bracing bay and its foundation for the reported longitudinal force.',referenceIds:refs});

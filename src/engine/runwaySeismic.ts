@@ -34,7 +34,7 @@ export function seismicBasis(p:ProjectInput):SeismicBasis|undefined{
  * combinations already reduce the dead load and amplify the seismic effect.
  */
 export interface SeismicCombination {id:string;equation:string;D:number;L:number;E:number;overstrength:boolean;fs:number;}
-export function seismicCombinations(method:ProjectInput['method'],b:SeismicBasis):SeismicCombination[]{
+export function seismicCombinations(method:ProjectInput['method'],b:Pick<SeismicBasis,'SDS'|'rho'|'Omega0'|'integrityOnly'>):SeismicCombination[]{
  const S=b.integrityOnly?0:b.SDS,r=b.rho,o=b.Omega0,fix=(v:number)=>Number(v.toFixed(3));
  const basic:SeismicCombination[]=method==='LRFD'?[
   {id:'6-E',equation:`(1.2 + 0.2SDS)D + ρQE + L`,D:1.2+.2*S,L:1,E:r,overstrength:false,fs:1},

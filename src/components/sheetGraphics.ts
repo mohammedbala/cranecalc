@@ -171,7 +171,8 @@ export const detailTitles={
  railKeeper:'RAIL KEEPER / GIRDER ATTACHMENT',capSection:'CAPPED GIRDER SECTION',capDevelopment:'CAP END DEVELOPMENT',
  supportEnd:(joint:boolean)=>joint?'ADJACENT GIRDER ENDS AT COLUMN':'GIRDER END AT COLUMN',supportTies:'INDEPENDENT FLANGE TIES / PLAN',movement:'BEARING MOVEMENT REQUIREMENTS',
  weldedBracket:'COLUMN BRACKET / TRANSVERSE SECTION',existingBracket:'BRACKET / TRANSVERSE SECTION',
- endStop:'END STOP / ELEVATION',endStopPlan:'END STOP / PLAN',newColumn:'NEW RUNWAY COLUMN / ELEVATION',basePlate:'BASE PLATE / PLAN',footing:'FOOTING / SECTION'
+ endStop:'END STOP / ELEVATION',endStopPlan:'END STOP / PLAN',newColumn:'NEW RUNWAY COLUMN / ELEVATION',basePlate:'BASE PLATE / PLAN',footing:'FOOTING / SECTION',
+ bracedBay:'BRACED BAY / ELEVATION',braceTop:'BRACE AND STRUT AT WORK POINT',braceBase:'BRACE AT COLUMN BASE',strutPlan:'STRUT AND GUSSETS AT WORK POINT / PLAN'
 } as const;
 /** Bolted bearing detail: girder ends of simple spans, or every support of a continuous girder. */
 export const bearingBoltsTitle=(p:CalculationSnapshot['input'])=>p.system==='continuous'?detailTitles.supportBearings:detailTitles.endBearing;

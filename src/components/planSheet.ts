@@ -1,4 +1,5 @@
 import {newColumnTopic} from './newColumnSheet';
+import {bracingOnElevation,bracingTopic,specifiedSeparation} from './bracingSheet';
 import {flangeTieTopic} from './flangeTieSheet';
 import {connectionOptionChecks} from '../engine/connectionOptions';
 import {connectionConceptSheetSvg} from './connectionConceptSheet';
@@ -183,27 +184,57 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    for(const [y0,y1] of [[Y(rows[1])-8,Y(rows[1])-24],[Y(rows[0])+8,Y(rows[0])+24]]){
     svg+=`<g data-section-cut="${typicalSectionTitle}">${line([xc,y0],[xc,y1],'divider')}${line([xc,y1],[xc-14,y1],'divider')}<path class="leader-arrow" d="M${n(xc-16)},${n(y1)}l5,-2.2v4.4z"/>${text(xc+4,y1+(y1<y0?-3:9),label,8,'start',700)}</g>`;
    }}
+  // Strut on each column line and the braced spans marked X; the separation from the existing building.
+  if(newColumns&&s.bracingSystem){
+   const r=s.bracingSystem,half=m.column.bf/2,cross=7;
+   svg+='<g data-bracing="plan">';
+   for(const z of rows)for(let i=1;i<m.supports.length;i++){
+    svg+=line([X(m.supports[i-1]+half),Y(z)],[X(m.supports[i]-half),Y(z)],'runway-line');
+    // The X sits at a quarter of the span, clear of the girder marks at mid-span.
+    if(r.layout.spans.includes(i)){const cx=X(m.supports[i-1]*.75+m.supports[i]*.25),cy=Y(z);svg+=line([cx-cross,cy-cross],[cx+cross,cy+cross],'runway-line')+line([cx-cross,cy+cross],[cx+cross,cy-cross],'runway-line');}
+   }
+   const i=r.layout.spans[0],x0=X(m.supports[i-1]),cx=X(m.supports[i-1]*.75+m.supports[i]*.25),labels=[`${r.geometry.strut.shape} STRUT ON COLUMN LINE, ALL SPANS`,`ROD X-BRACING AT ${r.layout.spans.map(v=>`GRIDS ${v}-${v+1}`).join(', ')} (X)`,`SEE ${detailRef(detailTitles.bracedBay)}`];
+   // The leader runs along the column line and up beside grid line, clear of the labels.
+   svg+=multiLeader([[cx-cross,Y(rows[0])-cross]],[x0+8,Y(rows[0])-62],labels,7.5,[[[x0-6,Y(rows[0])-cross]]])+'</g>';
+  }
   const planDim=Y(rows[0])+52;
   svg+=dimH(left,right,Y(rows[0])+19,planDim,`${dim(m.length)} OVERALL`);
   svg+=dimV(Y(rows[1]),Y(rows[0]),right+13,right+48,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
   svg+=text(X(0),planDim+20,`RAIL C/L SPACING (CRANE SPAN): ${dim(m.width+2*m.railZ)}${p.details?'':' (REF.)'}`,9,'middle');
+  const sep=newColumns?s.bracingSystem?.separation:undefined;
+  if(sep)svg+=text(X(0),planDim+33,`SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL ${drawingLength(specifiedSeparation(sep.required,p.units),p.units)} MIN. CLEAR OF THE EXISTING BUILDING (ASCE 7 §12.12.3)`,8,'middle');
   svg+=viewTitle(X(0),planDim+56,'RUNWAY PLAN',planScale.label,ga)+'</g>';
 
   const elevationScale=drawingScale(Math.min(1440/m.length,110/(m.d+(p.aist?.railDepth??p.railHeight)/1000))/1000,p.units,ga),ek=elevationScale.pointsPerMm*1000;
-  // The elevation hangs from the top of its panel; its highest annotation is 81 above the girder.
-  const elevationY=gaLayout.elevation.top+81+m.d/2*ek;
+  // The elevation hangs from the top of its panel; its highest annotation is 81 above the girder. With braced new
+  // columns the longer column stubs carry the bracing callout, so it rises into the panel's top margin.
+  const braced=newColumns&&!!s.bracingSystem,elevationY=gaLayout.elevation.top-(braced?15:0)+81+m.d/2*ek;
   const EX=(x:number)=>gaLayout.elevation.x+x*ek,EY=(y:number)=>elevationY-y*ek;
   const top=EY(m.d/2),bottom=EY(-m.d/2),el=EX(-m.length/2),er=EX(m.length/2);
+  // Below the columns: the grid lines, dimensions, datum note and title, below longer stubs where the bracing is called out.
+  const stubLength=braced?45:29,below=bottom+stubLength-29;
+  const bracing=braced?bracingOnElevation(s,{EX:x=>EX(x-m.length/2),EY,ek,supports:m.supports.map(x=>x+m.length/2),columnWidth:m.column.bf,girderBottom:bottom,stub:stubLength}):undefined;
   svg+=`<g data-view="elevation">`;
   const bubbleY=top-44;
   svg+=text(el,bubbleY-30,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: ${sheetRef('connection')}${p.system==='simple'&&p.details?` / SHARED SUPPORT: ${detailRef(detailTitles.supportEnd(p.spans.length>1))}`:''}`,9);
   m.supports.forEach((x,i)=>{
-    svg+=rect(EX(x-m.column.bf/2),top-10,m.column.bf*ek,bottom-top+39,newColumns?'runway-line':'reference-line');
+    // The column is beyond the girder: hidden behind it, ending in breaks where it continues. An existing building
+    // column continues up to the roof; a new column ends at its top, at or below the top of the girder.
+    const c0=EX(x-m.column.bf/2),c1=EX(x+m.column.bf/2),front=EY(m.railBase),stubEnd=bottom+stubLength;
+    // Past a runway end the column is in view.
+    const behind=(x:number)=>x>el+.5&&x<er-.5,edges=[c0,...[el,er].filter(v=>v>c0&&v<c1),c1];
+    if(newColumns){
+     const ct=EY(-m.d/2-(p.details?.bearing.thickness??0)/1000+(p.existingColumn!.height-p.existingColumn!.seatElevation)/1000);
+     for(let j=1;j<edges.length;j++)svg+=line([edges[j-1],ct],[edges[j],ct],ct>=front&&behind((edges[j-1]+edges[j])/2)?'hidden-line':'runway-line');
+     for(const cx of [c0,c1]){if(ct<front)svg+=line([cx,ct],[cx,front],'runway-line');svg+=line([cx,Math.max(ct,front)],[cx,bottom],behind(cx)?'hidden-line':'runway-line');}
+    }else{for(const cx of [c0,c1])svg+=line([cx,top-10],[cx,behind(cx)?front:bottom],'reference-line');svg+=breakLine([c0-5,top-10],[c1+5,top-10]);}
+    if(!bracing)svg+=line([c0,bottom],[c0,stubEnd],newColumns?'runway-line':'reference-line')+line([c1,bottom],[c1,stubEnd],newColumns?'runway-line':'reference-line')+breakLine([c0-5,stubEnd],[c1+5,stubEnd]);
     const wb=p.details?.bracket;
     if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1])svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');}else svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
-    svg+=line([EX(x),bubbleY+12],[EX(x),bottom+33],'grid-line')+gridBubble(EX(x),bubbleY,String(i+1));
-    if(i)svg+=dimH(EX(m.supports[i-1]),EX(x),bottom+34,bottom+54,dim(p.spans[i-1]/1000));
+    svg+=line([EX(x),bubbleY+12],[EX(x),below+33],'grid-line')+gridBubble(EX(x),bubbleY,String(i+1));
+    if(i)svg+=dimH(EX(m.supports[i-1]),EX(x),below+34,below+54,dim(p.spans[i-1]/1000));
   });
+  if(bracing)svg+=bracing;
   for(const member of m.members){
     const ml=EX(member.start/1000-m.length/2),mr=EX(member.end/1000-m.length/2);
     svg+=rect(ml,top,mr-ml,m.d*ek,'runway-line');
@@ -228,13 +259,13 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   // Elevation targets: the T.O.R. label rises and the T.O.S. label drops so close elevations never overlap.
   const ex=er+(adjacent.some(b=>b.end==='right')?stub+4:0);
   const target=(y:number,labelY:number,label:string,datum:string)=>`<g data-elevation-datum="${datum}">${line([ex+2,y],[ex+12,y])}<path class="leader-arrow" d="M${n(ex+12)},${n(y)}l-2.4,-2.4h4.8z"/>${line([ex+12,y],[ex+16,labelY])}${line([ex+16,labelY],[ex+20,labelY])}${text(ex+22,labelY+3,label,8.5)}</g>`;
-  const torY=Math.min(railTop,top-9),tosY=Math.max(top,railTop+9);
+  const torY=Math.min(railTop,top-11),tosY=Math.max(top,torY+11);
   svg+=target(top,tosY,elevations?`T.O.S. EL. ${drawingElevation(elevations.tos,p.units)}`:'T.O.S. EL. NOT ENTERED','top-of-steel');
   svg+=target(railTop,torY,elevations?`T.O.R. EL. ${drawingElevation(elevations.tor,p.units)}`:'T.O.R. EL. NOT ENTERED','top-of-rail');
-  svg+=dimH(el,er,bottom+62,bottom+82,`${dim(m.length)} OVERALL`);
-  svg+=text(el,bottom+108,`DATUM EL. ${drawingElevation(datum,p.units)} = ${short(datumLabel.toUpperCase(),60)}. T.O.S. = TOP OF W STEEL${p.section.kind==='cap'?`; CAP ABOVE T.O.S.${capDetailed?` / SEE ${detailRef(detailTitles.capSection)}`:''}`:''}. ELEVATIONS FROM ${elevations?{'new column base':'THE NEW COLUMN BASE','surveyed column seat':'THE SURVEYED COLUMN SEAT','entered top of rail':'THE SPECIFIED TOP OF RAIL'}[elevations.source]:'PROJECT DATA (NOT ENTERED)'}.`,8.5);
-  svg+=viewTitle(gaLayout.elevation.x,bottom+150,'RUNWAY GIRDER ELEVATION - GRID A',elevationScale.label,ga)+'</g>';
-  svg+=typicalSection(s,m,bottom+180,{newColumns,columnName});
+  svg+=dimH(el,er,below+62,below+82,`${dim(m.length)} OVERALL`);
+  svg+=text(el,below+108,`DATUM EL. ${drawingElevation(datum,p.units)} = ${short(datumLabel.toUpperCase(),60)}. T.O.S. = TOP OF W STEEL${p.section.kind==='cap'?`; CAP ABOVE T.O.S.${capDetailed?` / SEE ${detailRef(detailTitles.capSection)}`:''}`:''}. ELEVATIONS FROM ${elevations?{'new column base':'THE NEW COLUMN BASE','surveyed column seat':'THE SURVEYED COLUMN SEAT','entered top of rail':'THE SPECIFIED TOP OF RAIL'}[elevations.source]:'PROJECT DATA (NOT ENTERED)'}.`,8.5);
+  svg+=viewTitle(gaLayout.elevation.x,below+150,'RUNWAY GIRDER ELEVATION - GRID A',elevationScale.label,ga)+'</g>';
+  svg+=typicalSection(s,m,below+180,{newColumns,columnName});
 
   svg+=`<g data-view="girder-schedule">`+girderSchedule(s,gaLayout.schedule)+'</g>';
   return svg+titleBlock(s,'S-01','GENERAL ARRANGEMENT')+'</svg>';
@@ -301,7 +332,8 @@ export function detailTopics(s:CalculationSnapshot,f:FramingSettings=defaultFram
     ...(p.section.kind==='cap'&&p.capDesign&&d?[capTopic(s)]:[]),
     ...(supports?[supports]:[]),...(bracket?[bracket]:[]),...(ties?[ties]:[]),
     ...(d&&activeEndStop(p)?[endStopTopic(s)]:[]),
-    ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[newColumnTopic(s)]:[])];
+    ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[newColumnTopic(s)]:[]),
+    ...(s.bracingSystem?[bracingTopic(s)]:[])];
 }
 /** The issued set: cover S-00 with general notes, criteria and sheet index, S-01, then detail sheets from S-02. */
 function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
