@@ -1,6 +1,7 @@
 import type {ReactNode} from 'react';
 import {aiscWShapes,aiscShapeByName} from '../data/aiscSections';
-import {defaultExistingColumn,existingLoadKeys,type ExistingColumnInput} from '../engine/existingColumnInputs';
+import {defaultExistingColumn,defaultRunwaySeismic,existingLoadKeys,type ExistingColumnInput} from '../engine/existingColumnInputs';
+import {cantileverSystems} from '../engine/runwaySeismic';
 import {anchorGrades,barSizes,defaultColumnBase,type ColumnBaseInput} from '../engine/columnBaseInputs';
 import {defaultLongitudinalBracing,type LongitudinalBracingInput} from '../engine/longitudinalBracingInputs';
 import {aiscAngles} from '../data/aiscAngles';
@@ -34,6 +35,7 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
    {support('strong','Strong axis (across runway)')}{support('weak','Weak axis (along runway)')}
    <div className="field-grid">{numeric('Strong-axis effective length Lcx',c.Lcx,v=>set({Lcx:v}),'length','Use K for the actual end conditions; at least 1.0H pinned-braced, 0.8H fixed-braced, 2.1H fixed-free.')}{numeric('Weak-axis effective length Lcy',c.Lcy,v=>set({Lcy:v}))}{numeric('Torsional effective length Lcz',c.Lcz,v=>set({Lcz:v}))}{!bracket&&numeric('Flange unbraced length Lb',c.Lb,v=>set({Lb:v}))}</div>
    <div className="field-grid"><label className="field"><span>Crane longitudinal force</span><select value={c.longitudinal} onChange={e=>set({longitudinal:e.target.value as ExistingColumnInput['longitudinal']})}><option value="bracing">Bracing</option><option value="column">This column</option></select></label>{numeric('Runway drift limit h / n',c.driftLimit,v=>set({driftLimit:v}),'ratio')}</div>
+   {c.isNew&&<SeismicInputs column={c} set={set} numeric={numeric}/>}
    {c.isNew?<ColumnBaseInputs project={project} update={update} numeric={numeric}/>:<>
    <div className="form-section-title"><span>02</span>Existing load effects at the governing section</div>
    <p className="form-note">Unfactored effects from the building's own analysis, per load type. Compression positive. Moments are added to the crane peaks without sign credit; W and E are applied in both directions.</p>
@@ -45,13 +47,29 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
  </div>;
 }
 
+/** Seismic design of new freestanding columns as a cantilever column system. */
+function SeismicInputs({column,set,numeric}:{column:ExistingColumnInput;set:(patch:Partial<ExistingColumnInput>)=>void;numeric:NumericField}){
+ const z=column.seismic??defaultRunwaySeismic,put=(patch:Partial<typeof z>)=>set({seismic:{...z,...patch}});
+ return <>
+  <div className="form-section-title"><span>02</span>Seismic across the runway</div>
+  <label className="checkbox-field"><input type="checkbox" checked={z.enabled} onChange={e=>put({enabled:e.target.checked})}/>Design the new columns, base plates, anchors and footings for seismic forces (ASCE 7 equivalent lateral force, cantilever column system)</label>
+  <p className="form-note">The runway dead weight, the empty crane and the column act at the girder. The base, anchors and footing take the overstrength Ωo (ASCE 7 §12.2.5.2), and anchors in SDC C to F take the ACI 318 §17.10 reduction. Along the runway the crane-level bracing carries the seismic force.</p>
+  {z.enabled&&<><div className="field-grid">
+   <label className="field"><span>Seismic design category</span><select value={z.sdc} onChange={e=>put({sdc:e.target.value as typeof z.sdc})}>{(['A','B','C','D','E','F'] as const).map(v=><option key={v} value={v}>{v}</option>)}</select></label>
+   {numeric('Design spectral acceleration SDS',z.SDS,v=>put({SDS:v}),'ratio',undefined,0)}
+   <label className="field"><span>Seismic force-resisting system</span><select value={z.system} onChange={e=>put({system:e.target.value as typeof z.system})}>{(Object.keys(cantileverSystems) as (keyof typeof cantileverSystems)[]).map(k=><option key={k} value={k}>{cantileverSystems[k].label}: R {cantileverSystems[k].R}, Ωo {cantileverSystems[k].Omega0}, Cd {cantileverSystems[k].Cd}</option>)}</select></label>
+   {numeric('Importance factor Ie',z.Ie,v=>put({Ie:v}),'ratio')}{numeric('Redundancy factor ρ',z.rho,v=>put({rho:v}),'ratio')}</div>
+   <label className="field"><span>Source of the seismic design parameters</span><input value={z.source} placeholder="Site seismic data, risk category and SDC" onChange={e=>put({source:e.target.value})}/></label></>}
+ </>;
+}
+
 /** Base plate, anchor rods and spread footing of a new column. */
 function ColumnBaseInputs({project,update,numeric}:{project:ProjectInput;update:(fn:(p:ProjectInput)=>void)=>void;numeric:NumericField}){
  const b=project.columnBase??defaultColumnBase;
  const set=(patch:Partial<ColumnBaseInput>)=>update(p=>{p.columnBase={...(p.columnBase??structuredClone(defaultColumnBase)),...patch};});
  const part=<K extends 'plate'|'anchors'|'concrete'|'footing'|'soil'>(key:K,patch:Partial<ColumnBaseInput[K]>)=>set({[key]:{...b[key],...patch}} as Partial<ColumnBaseInput>);
  return <>
-  <div className="form-section-title"><span>02</span>Base plate, anchor rods and footing</div>
+  <div className="form-section-title"><span>03</span>Base plate, anchor rods and footing</div>
   <label className="checkbox-field"><input type="checkbox" checked={b.enabled} onChange={e=>set({enabled:e.target.checked})}/>Design the base plate, anchor rods and spread footing of the new column</label>
   <p className="form-note">AISC Design Guide 1 base plate, ACI 318-19 Chapter 17 headed cast-in rods in two rows across the column depth, and a concentric spread footing for soil bearing, overturning, sliding, shear and flexure. N runs along the column depth. The plate sits on grout on the footing; when a top-of-rail elevation is entered, the seat must put the rail there from the column base.</p>
   {b.enabled&&<>
