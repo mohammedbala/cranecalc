@@ -33,17 +33,21 @@ export function validateRunwayDetails(p:ProjectInput){
  add(d.material.Fu<d.material.Fy,'plate Fu must not be less than Fy.');
  if(tieArrangement(d)==='paired-bars')add(b.reach>b.length,'brace reach cannot exceed its length.');
  if(b.flangeAttachment?.enabled&&tieArrangement(d)==='paired-bars'){
-  const g=flangeTieGeometry(p);add(!g,'direct flange ties require independent simple spans and an enabled designed column bracket.');
+  const g=flangeTieGeometry(p);add(!g,p.system==='simple'?'direct flange ties need the column face: enable the designed column bracket, or enter the column face distance for a bracket by others.':'direct flange ties require independent simple spans.');
   if(g){
    add(g.rootLength<=4*g.attachment.weldSize,'flange saddle must leave at least four weld legs of effective length.');
    add(g.start<=g.rootStart||g.gussetEnd<=g.rootEnd,'girder gusset must extend from the flange saddle through the complete bolt group.');
    add(g.freeLength<=0,'tie bars require clear length between the two bolt groups.');
    add(Math.abs(b.length-b.reach)>1e-6,'direct transverse tie model requires reach equal to bar length.');
-   add(Math.abs(b.connection.weldLength-b.width)>1e-6,'column root weld length must equal the actual gusset height.');
+   add(Math.abs(b.connection.weldLength-g.columnGusset)>1e-6,`column root weld length must equal the column gusset height (${(g.columnGusset/25.4).toFixed(3)} in).`);
    add(b.connectionLength<g.gussetEnd-g.rootStart,'unbraced gusset length must include its full flange-to-end extension.');
    add(g.stations.some(v=>v.tieX-g.attachment.saddleLength/2<v.start-1e-6||v.tieX+g.attachment.saddleLength/2>v.finish+1e-6),'saddle must remain within its own girder end bearing region.');
-   add(g.stations.some(v=>Math.abs(v.tieX-v.station)+b.gussetThickness/2+b.connection.weldSize>d.bracket!.receiver.width/2),'column tie root welds must fit on the receiver flange.');
-   add(g.topCenter-g.bottomCenter<=b.width+g.attachment.clearance,'top and bottom tie assemblies overlap.');
+   if(g.receiver)add(g.stations.some(v=>Math.abs(v.tieX-v.station)+b.gussetThickness/2+b.connection.weldSize>g.receiver!.width/2),'column tie root welds must fit on the receiver flange.');
+   if(g.sides.includes(-1)){
+    add(g.topCenter-g.bottomCenter<=Math.max(b.width,g.columnGusset)+g.attachment.clearance,'top and bottom tie assemblies overlap.');
+    // The lower column gusset stays above the bearing plate and seat at the column face.
+    add(g.bottomCenter-g.columnGusset/2<-p.section.d/2+g.attachment.clearance,'lower column gusset must clear the girder bearing and bracket seat.');
+   }
    add(d.bearing.stiffenerWidth>(p.section.bf-p.section.tw)/2,'fitted stiffener outstand must fit inside the flange.');
   }
  }

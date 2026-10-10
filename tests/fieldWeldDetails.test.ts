@@ -14,9 +14,10 @@ const flags=(svg:string)=>(svg.match(/data-field-weld="true"/g)??[]).length;
 describe('field welds to existing building steel',()=>{
  it('flags column attachments and preserves unflagged new-part weld symbols',()=>{
   const s=snapshot(),before=JSON.stringify(s.input),bracket=bracketSheetSvg(s),tie=flangeTieSheetSvg(s),generic=connectionSheetSvg(snapshot(demonstrationProject()));
-  expect(flags(bracket)).toBe(1);expect(flags(tie)).toBe(1);expect(flags(generic)).toBe(1);
+  // The tie sheet flags the column root in the transverse section and in the plan.
+  expect(flags(bracket)).toBe(1);expect(flags(tie)).toBe(2);expect(flags(generic)).toBe(1);
   for(const svg of [bracket,tie,generic])expect(svg).toContain('EXISTING');
-  expect(bracket).toContain('SHOP WELD SEAT TO RIBS');expect(bracket).toContain('FIELD WELD TO EXISTING COLUMN');expect(tie).toContain('BOTH SIDES / EACH GUSSET');
+  expect(bracket).toContain('SHOP WELD SEAT TO RIBS');expect(bracket).toContain('FIELD WELD TO EXISTING COLUMN');expect(tie).toContain('/ EACH GUSSET');
   expect(tie).toContain('LOCAL CHECKS: PENDING');expect(tie).not.toMatch(/NaN|Infinity/);
   expect(JSON.stringify(s.input)).toBe(before);
   const drawings=detailedDrawings(s);
@@ -37,7 +38,8 @@ describe('field welds to existing building steel',()=>{
   }
   b.arrangement='twin-rib';const group=buildIndependentSupports(p,b.reach/1000,steel,edge),field:any[]=[];
   group.traverse(o=>{if(o.userData.part?.weld?.location==='field')field.push(o.userData.part);});
-  expect(field).toHaveLength(24);
+  // Top-flange ties only (bolted end bearings restrain the bottom flange): two root fillets at each of six girder ends.
+  expect(field).toHaveLength(12);
   expect(field.every(v=>v.weld.size===p.details!.brace.connection.weldSize/1000&&v.weld.existingSteel)).toBe(true);
  });
 });

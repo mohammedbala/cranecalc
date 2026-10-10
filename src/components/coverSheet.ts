@@ -9,6 +9,7 @@ import {drawingLength} from './drawingFormat';
 import {line,sheetStart,titleBlock} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
+import {tieRelease} from '../engine/tieGeometry';
 
 export interface SheetEntry {number:string;title:string;}
 // Content coordinates inside the ARCH D drawing region (scaled by sheetFormat.contentScale).
@@ -114,7 +115,7 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
   ['MATERIAL','MILL CERTIFICATES: STEEL, BOLTS, NUTS, WASHERS, WELD FILLER'],
   ['WELDING','OBSERVE / PERFORM PER AISC N5.4; QUALIFIED WPS AND WELDERS'],
   ['NDT','UT ALL CJP GROOVE WELDS; MT FILLETS ON CYCLIC DETAILS AS NOTED'],
-  ['BOLTING','PRETENSION VERIFICATION PER RCSC; FAYING SURFACE CLASS'],
+  ['BOLTING',`PRETENSION VERIFICATION PER RCSC; FAYING SURFACE CLASS${d&&(tieRelease(p)||activeEndBearing(p))?'; SLEEVE LENGTHS AND SLOT TRAVEL AT SLEEVED BOLTS':''}`],
   ['EXISTING STEEL','FIELD-VERIFY SIZES AND WELDABILITY BEFORE WORK'],
   ['RAIL / RUNWAY','ALIGNMENT, GAUGE AND LEVEL SURVEY AFTER ERECTION']
  ],[1.2,2.8]));
@@ -126,14 +127,14 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
   'RAIL SURVEY AND CRANE LOAD-TEST REPORT.'
  ]));
  // Items this package does not design are listed for the building official as deferred or by others.
- const bypass=p.cranes.some(c=>c.design?.bumperBypassesGirder);
+ const bypass=p.cranes.some(c=>c.design?.bumperBypassesGirder),support=s.checks.find(c=>c.id==='tie-move-support');
  const deferred=[
   'CRANE, END TRUCKS, CRANE-MOUNTED BUMPERS, CONDUCTOR BARS AND ELECTRIFICATION: CRANE SUPPLIER.',
   ...(bypass?['BUILDING-MOUNTED CRANE END STOPS AND THEIR SUPPORT FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
-  ...(!d?.bracket?.enabled?['COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE SUPPORT REACTIONS LISTED.']:[]),
+  ...(!d?.bracket?.enabled?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE SUPPORT REACTIONS LISTED${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${len(support.capacity)} MAX.`:'.'}`]:[]),
   ...(p.system==='simple'&&d&&!activeEndBearing(p)?['COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (S-04) FOR THE INTERFACE FORCES IN THE CALCULATION REPORT.']:[]),
-  ...s.checks.filter(c=>c.status==='excluded'&&c.id!=='bracket-load-path').map(c=>`${c.title}: BY OTHERS FOR THE REPORTED FORCES.`)
+  ...s.checks.filter(c=>c.status==='excluded'&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY OTHERS FOR THE REPORTED FORCES.`)
  ];
  blocks.push(H('DEFERRED SUBMITTALS / BY OTHERS'),P('SUBMIT THE FOLLOWING TO THE ENGINEER OF RECORD FOR REVIEW AND TO THE BUILDING OFFICIAL FOR APPROVAL BEFORE INSTALLATION:'),...N(deferred));
  blocks.push(H('ABBREVIATIONS'),P('(E) EXISTING · (N) NEW · C/L CENTERLINE · EL. ELEVATION · T.O.S. TOP OF STEEL · T.O.R. TOP OF RAIL · TYP. TYPICAL · U.N.O. UNLESS NOTED OTHERWISE · SC SLIP-CRITICAL · STD STANDARD HOLE · SSL / LSL SHORT / LONG SLOT · CJP COMPLETE JOINT PENETRATION · FW FIELD WELD · REF. REFERENCE (EXISTING OR BY OTHERS)'));

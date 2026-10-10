@@ -15,8 +15,9 @@ describe('representative runway package',()=>{
  it('recomputes an exportable design with passing model and engineering gates',()=>{
   expect(snapshot.errors).toEqual([]);expect(snapshot.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status))).toEqual([]);expect(snapshot.eligible).toBe(true);
   // Building adequacy is stated as outside the calculation, never as a pass.
-  // The demonstration bracket is by others, so the bolted bearing seat is listed with it.
-  expect(snapshot.checks.filter(c=>c.status==='excluded').map(c=>c.id)).toEqual(['supporting-structure','end-bearing-seat']);
+  // The demonstration bracket and column are by others, so the bearing seat, the column flange at the
+  // tie roots and the bracket deflection limit for the tie slots are listed with them.
+  expect(snapshot.checks.filter(c=>c.status==='excluded').map(c=>c.id)).toEqual(['supporting-structure','end-bearing-seat','flange-tie-column','flange-tie-column-fatigue','tie-move-support']);
   expect(snapshot.detailResults!.fatigue.length).toBeGreaterThan(20);
   expect(snapshot.detailResults!.travelChange).toBeLessThan(.01);expect(snapshot.detailResults!.meshChange).toBeLessThan(.01);
  });
@@ -49,7 +50,7 @@ describe('representative runway package',()=>{
   p2.details!.spectrum[0].cycles--;p2.cranes[0].design!.bumperBypassesGirder=false;p2.details!.endStop!.enabled=false;expect(validateProject(p2).join()).toContain('design the girder-mounted runway end stops');
  });
  it('derives all detail sheets and export records from the current snapshot',()=>{
-  const sheets=engineeringSketches(snapshot);expect(sheets).toHaveLength(8);
+  const sheets=engineeringSketches(snapshot);expect(sheets).toHaveLength(9);
   // SK-05 shows the bolted end bearing: four standard holes at the locating end, four slots at the sliding end.
   expect(sheets.find(s=>s.number==='SK-05')!.entities.filter(e=>e.type==='circle')).toHaveLength(4);
   const dxf=lineworkDxf(snapshot);expect(dxf.includes('4 A325 bolts, diameter 7/8"')).toBe(true);expect(dxf).toContain(snapshot.revision);

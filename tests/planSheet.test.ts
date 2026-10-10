@@ -89,7 +89,8 @@ describe('ARCH D arrangement sheet', () => {
     expect(arrangement.match(/data-view-title="below"/g)).toHaveLength(3);
     expect(arrangement.split('<g data-view="isometric">')[1].split('</g>')[0]).not.toContain('W24X229');
     // The bolted end bearing view replaces the welded cover-plate template.
-    expect(connections.match(/data-multileader="weld"/g)).toHaveLength(3);expect(connections).toContain('data-view="end-bearing"');
+    // Stiffener, keeper, and the direct flange tie's saddle and column-root field welds.
+    expect(connections.match(/data-multileader="weld"/g)).toHaveLength(4);expect(connections).toContain('data-view="end-bearing"');
     expect(connections).toContain('FITTED BEARING STIFFENERS');
     for(const sheet of [arrangement,connections]){
       const titles=[...sheet.matchAll(/<g data-view-title="below" data-detail-title="[^"]*">(.*?)<\/g>/g)];

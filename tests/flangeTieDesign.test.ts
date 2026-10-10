@@ -17,22 +17,23 @@ describe('direct flange attachment',()=>{
   }
   const capBottom=b.d/2+b.capTw-b.capDepth;
   expect(capBottom-(g.topCenter+t.width/2)).toBeCloseTo(.25*inch);
-  expect(g.freeLength).toBeCloseTo(10*inch);
+  expect(g.freeLength).toBeCloseTo(9*inch);
   expect(t.connection.gauge).toBeGreaterThan(8*t.connection.diameter/3);
  });
  it('matches independent section-modulus and virtual-work strip bounds',()=>{
   const p=cappedDemonstrationProject(),g=flangeTieGeometry(p)!,t=p.details!.brace,F=10000,r=flangeTieResponse(p,F);
-  const B=4.25*inch,ts=1.25*inch,L=g.rootLength,h=r.h,H=h-ts;
+  const B=4*inch,ts=1.375*inch,L=g.rootLength,h=r.h,H=h-ts;
   const flangeZ=B*p.section.tf**2/6;
   expect(r.flange).toBeCloseTo(F*h/flangeZ+1.5*F/(B*p.section.tf),8);
   // q=6FH/L²; center-loaded simple strip: m=qB/4; f=6m/ts².
   expect(r.saddle).toBeCloseTo(6*(6*F*H/L**2*B/4)/ts**2+1.5*F/(L*ts),8);
-  expect(r.compliance).toBeGreaterThan(h*h*(g.rootEnd-p.section.tw/2)/(p.section.E*(B*p.section.tf**3/12)));
+  // Flange strip loaded by the gusset couple along the saddle root: [g_web + (13/35)L]/(EI), plus the other parts.
+  expect(r.compliance).toBeGreaterThan(h*h*(g.rootStart-p.section.tw/2+13/35*L)/(p.section.E*(B*p.section.tf**3/12)));
   const twice=flangeTieResponse(p,2*F);
   for(const key of ['gusset','saddle','flange','column','rootWeld'] as const)expect(twice[key]).toBeCloseTo(2*r[key],8);
   expect(twice.compliance).toBe(r.compliance);
   expect(r.gussetWeld.demand).toBeGreaterThan(F/(2*L*g.attachment.weldSize/Math.sqrt(2)));
-  expect(t.width).toBeCloseTo(3.75*inch);
+  expect(t.width).toBeCloseTo(5*inch);
  });
  it('fails insufficient spacing and local plate resistance rather than suppressing the checks',()=>{
   const p=cappedDemonstrationProject(),snapshot={input:p,detailResults:{demands:{braceFatigue:4000}}} as CalculationSnapshot;

@@ -22,15 +22,18 @@ describe('bolted girder end bearings',()=>{
   expect(capped.checks.some(c=>c.id==='end-bolt')).toBe(false);
   const hold=capped.checks.find(c=>c.id==='hold-down-model')!;expect(hold.capacity).toBeCloseTo(4*checks['end-bearing-locating-tension'].capacity!,3);
   expect(capped.eligible).toBe(true);
-  // Slot: 13/16 in hole plus twice the 1/2 in sliding allowance.
-  expect(endBearingGeometry(p,e).slot).toBeCloseTo((13/16+1)*inch,9);
+  // Sleeved sliding bolts: the slot clears a 13/16 in bore plus two 5/16 in walls, plus 1/16 in, and twice the 1/2 in allowance.
+  expect(endBearingGeometry(p,e).slot).toBeCloseTo((13/16+5/8+1/16+1)*inch,9);
+  // Snug-tight bolts slot the standard hole itself.
+  expect(endBearingGeometry(p,{...e,sliding:'snug-tight'}).slot).toBeCloseTo((13/16+1)*inch,9);
  },240000);
  it('rejects slots, ribs and stiffeners that cannot be built',()=>{
   const p=structuredClone(capped.input),e=p.details!.endBearing!,ctx={analysis:capped.designAnalysis!,lateral:capped.detailResults!.demands.brace};
   const status=(id:string)=>endBearingChecks(p,e,ctx).find(c=>c.id===id)!.status;
-  p.details!.simpleSupport!.guideTravel=1*inch;expect(status('end-bearing-slot')).toBe('fail');p.details!.simpleSupport!.guideTravel=.5*inch;
+  // The J3.2 long-slot limit applies to snug-tight bolts in slotted bolt holes.
+  e.sliding='snug-tight';p.details!.simpleSupport!.guideTravel=1*inch;expect(status('end-bearing-slot')).toBe('fail');p.details!.simpleSupport!.guideTravel=.5*inch;e.sliding='sleeved';
   p.details!.bracket!.ribSpacing=8*inch;expect(status('end-bearing-wrench-rib')).toBe('fail');p.details!.bracket!.ribSpacing=10.5*inch;
-  e.bolts.edge=4.5*inch;expect(status('end-bearing-wrench-stiffener')).toBe('fail');e.bolts.edge=1.75*inch;
+  e.bolts.edge=4.5*inch;expect(status('end-bearing-wrench-stiffener')).toBe('fail');e.bolts.edge=2*inch;
   e.bolts.gauge=2.5*inch;expect(status('end-bearing-wrench-web')).toBe('fail');
  });
  it('applies only to independent simple spans; continuous runways keep the girder-end connection',()=>{
@@ -40,7 +43,7 @@ describe('bolted girder end bearings',()=>{
  it('draws locating and sliding bearings and references them from S-04 and the report',()=>{
   const set=drawingSheetSet(capped),s02=set.find(v=>v.number==='S-02')!,s04=set.find(v=>v.number==='S-04')!;
   expect(s02.svg).toContain('data-view="end-bearing"');expect(s02.svg).not.toContain('data-view="end-connection"');
-  const t=texts(s02.svg).join(' ');expect(t).toContain('13/16" X 1 13/16" LSL IN FLANGE');expect(t).toContain('LOCATING: 4 - 3/4" A325 SC,');
+  const t=texts(s02.svg).join(' ');expect(t).toContain('PRETENSIONED AGAINST STEEL SLEEVES 1 7/16" OD');expect(t).toContain('2 1/2" SLOT IN FLANGE FOR 1/2" EA. WAY');expect(t).toContain('LOCATING: 4 - 3/4" A325 SC,');
   expect(texts(s04.svg).join(' ')).toContain('UPLIFT (2/S-02)');
   for(const sheet of set)expect(sheet.svg).not.toMatch(/NOT IN SET|\{\{/);
   expect(texts(set[0].svg).join(' ')).not.toContain('COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN');

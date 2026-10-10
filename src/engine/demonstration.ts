@@ -16,7 +16,12 @@ const lap=():LapConnection=>({rows:2,gauge:3*inch,pitch:3*inch,edge:1.5*inch,thi
 export function demonstrationDetails():RunwayDetails{return {
  material:{Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi},
  simpleSupport:{...defaultSimpleSupport},
- brace:{width:6*inch,thickness:.625*inch,length:24*inch,reach:24*inch,gussetThickness:.75*inch,connectionLength:6*inch,connection:{...lap(),thickness:.625*inch,weldSize:.3125*inch}},
+ // Top-flange tie on a direct flange saddle; the bottom flange is bolted to the seat. Thin bars flex with end
+ // rotation and thermal travel; sleeved bolts in vertical slots at the column gusset release support deflection.
+ brace:{width:5*inch,thickness:.375*inch,length:26*inch,reach:26*inch,gussetThickness:.75*inch,connectionLength:5.5*inch,
+  connection:{...lap(),diameter:.625*inch,gauge:2.5*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,weldSize:.3125*inch,weldLength:5.1875*inch},
+  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.75*inch,webGap:1*inch,clearance:.25*inch,weldSize:.3125*inch,columnFace:28*inch},
+  release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
  // Cover plates (gauge + two edges) clear the bearing stiffener and its welds at half the bearing length.
  end:{...lap(),rows:4,gauge:2.875*inch,edge:1.25*inch,thickness:.75*inch,weldSize:.4375*inch,weldLength:11.5*inch,projection:1.5*inch},
  bearing:{width:12*inch,length:12.5*inch,thickness:1*inch,stiffenerWidth:5*inch,stiffenerThickness:1*inch,cope:1*inch,weldSize:.3125*inch},
@@ -29,7 +34,7 @@ export function demonstrationDetails():RunwayDetails{return {
   {id:'F4',name:'Bearing stiffener weld toe, right support',x:25*foot,point:'top-right',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'}
  ],
  spectrum:[{name:'Rated lifts',liftFraction:1,cycles:200000},{name:'Routine half-load lifts',liftFraction:.5,cycles:600000},{name:'Light lifts',liftFraction:.25,cycles:200000}],
- fabrication:{steel:'Girder ASTM A992; connection plates ASTM A572 Grade 50. Rail grade and geometry per fictional R-6 schedule.',bolting:'ASTM F3125 Grade A325, 3/4-in diameter; standard holes unless rail-joint slots are detailed. Girder connections: pretension 28 kip minimum, Class B unpainted faying surfaces. Rail joints: 7/8-in A325, snug-tight sliding slots.',welding:'E70XX low-hydrogen welds. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts/stops and remove temporary welded attachments by grinding.',inspection:'Visual inspection of all welds and bolt installations; verify pretension and faying-surface preparation. MT at attachment terminations and repaired welds. Record baseline rail and connection condition before commissioning.',erection:'Provide temporary lateral/torsional restraint until both flange ties are complete. Set bearing plates level, fit bearing stiffeners, and verify end rotation clearance. Do not operate the crane before alignment and supplier commissioning checks.',railAlignment:'Survey both rails unloaded and during commissioning. Record gauge, elevation and straightness at supports and midspan; use the stated demonstration tolerances, subject to the actual crane supplier requirements.'}
+ fabrication:{steel:'Girder ASTM A992; connection plates ASTM A572 Grade 50. Rail grade and geometry per fictional R-6 schedule.',bolting:'ASTM F3125 Grade A325. Bearing and stop bolts 3/4-in, 28-kip minimum pretension; tie bolts 5/8-in, 19-kip. Standard holes and Class B unpainted faying surfaces unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joints: 7/8-in A325, snug-tight sliding slots.',welding:'E70XX low-hydrogen welds. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts/stops and remove temporary welded attachments by grinding.',inspection:'Visual inspection of all welds and bolt installations; verify pretension and faying-surface preparation. MT at attachment terminations and repaired welds. Record baseline rail and connection condition before commissioning.',erection:'Provide temporary lateral/torsional restraint until both flange ties are complete. Set bearing plates level, fit bearing stiffeners, and verify end rotation clearance. Do not operate the crane before alignment and supplier commissioning checks.',railAlignment:'Survey both rails unloaded and during commissioning. Record gauge, elevation and straightness at supports and midspan; use the stated demonstration tolerances, subject to the actual crane supplier requirements.'}
 };}
 export function demonstrationProject():ProjectInput {
  const p=structuredClone(exampleProject);
@@ -46,8 +51,8 @@ export function demonstrationProject():ProjectInput {
  // Bolted end bearings: standard holes at each bay's locating left end, long slots at its sliding right end.
  // A 1/2-in sliding allowance keeps the 3/4-in bolt slots within the AISC J3.2 long-slot limit.
  p.details.endBearing={...structuredClone(defaultEndBearing),enabled:true};p.details.simpleSupport={...p.details.simpleSupport!,guideTravel:.5*inch};
- // Girder-mounted end stops over the end bearings: front bolts behind the face, back bolts near the girder end, both clear of the bearing stiffeners.
- p.details.endStop={...structuredClone(defaultEndStop),enabled:true,bumperHeight:6*inch,bumperDiameter:6*inch,setback:.5*inch,railGap:1*inch,base:{length:12*inch,width:9*inch,thickness:1*inch},face:{thickness:1*inch,height:15*inch},stiffener:{thickness:.75*inch,length:9*inch,spacing:3*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.25*inch,edge:1.5*inch},weldSize:.3125*inch,source:'Fictitious supplier data DEMO-CS-01: 20-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'};
+ // Girder-mounted end stops inboard of the runway-end tie saddle: both bolt rows clear the saddle and the bearing stiffeners.
+ p.details.endStop={...structuredClone(defaultEndStop),enabled:true,bumperHeight:6*inch,bumperDiameter:6*inch,setback:7*inch,railGap:1*inch,base:{length:12*inch,width:9*inch,thickness:1*inch},face:{thickness:1*inch,height:15*inch},stiffener:{thickness:.75*inch,length:9*inch,spacing:3*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.25*inch,edge:1.5*inch},weldSize:.3125*inch,source:'Fictitious supplier data DEMO-CS-01: 20-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'};
  p.drawing={originator:'CraneCalc demonstration',checker:'',datumElevation:100*foot,datumLabel:'Reference finished floor',railElevation:20*foot};
  p.details.fatigueDetails[3].name='Bearing stiffener weld toe, support 2';
  for(let bay=1;bay<3;bay++){
@@ -86,17 +91,17 @@ export function cappedDemonstrationProject():ProjectInput {
   source:'Fictitious demonstration: sidewall rod bracing at grid lines 2-3 and the original wind/seismic report',confirmed:true};
  // Revised independent ties: shorter, shifted clear of bearing stiffeners,
  // directly attached to flange saddles. No holes or cuts in the cap channel.
- Object.assign(p.details!.brace,{length:18*inch,reach:18*inch,width:3.75*inch,connectionLength:6*inch,
-  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4.25*inch,saddleThickness:1.25*inch,webGap:1*inch,clearance:.25*inch,weldSize:.3125*inch}});
- Object.assign(p.details!.brace.connection,{diameter:.625*inch,gauge:1.75*inch,pitch:2*inch,edge:1*inch,weldLength:3.75*inch});
+ Object.assign(p.details!.brace,{length:18*inch,reach:18*inch,width:5*inch,thickness:.3125*inch,gussetThickness:.875*inch,connectionLength:6*inch,
+  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.375*inch,webGap:1*inch,clearance:.25*inch,weldSize:.3125*inch}});
+ Object.assign(p.details!.brace.connection,{diameter:.625*inch,gauge:2.5*inch,pitch:2*inch,edge:1.25*inch,thickness:.3125*inch,weldLength:5.1875*inch});
  p.details!.bracket!.seatWeld=.625*inch;
- p.details!.fabrication.bolting='Tie bolts: ASTM F3125 Grade A325, 5/8-in diameter, 19-kip minimum pretension. Other girder bolts: 3/4-in A325, 28-kip minimum pretension. Standard holes and Class B faying surfaces. Rail joints: 7/8-in A325, snug-tight sliding slots.';
+ p.details!.fabrication.bolting='Tie bolts: ASTM F3125 Grade A325, 5/8-in diameter, 19-kip minimum pretension. Other girder bolts: 3/4-in A325, 28-kip minimum pretension. Standard holes and Class B faying surfaces. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joints: 7/8-in A325, snug-tight sliding slots.';
  p.details!.bearing.length=12*inch;p.details!.bearing.stiffenerWidth=4*inch;
  // Ribs between the inner bearing bolt rows and the column flange edges: nuts below the seat clear the ribs at
  // shared and runway-end grids, and both root welds stay on the 14-in receiving flange.
  p.details!.bracket!.ribSpacing=10.5*inch;
- // Lighter stop for the 2-ton crane; base plate within the 12-in bearing.
- Object.assign(p.details!.endStop!,{base:{length:11.5*inch,width:9*inch,thickness:.75*inch},face:{thickness:.75*inch,height:15*inch},stiffener:{thickness:.5*inch,length:8.5*inch,spacing:3*inch},source:'Fictitious supplier data CAP-CS-02: 4-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'});
+ // Lighter stop for the 2-ton crane, inboard of the runway-end tie saddle.
+ Object.assign(p.details!.endStop!,{setback:6.75*inch,base:{length:11.5*inch,width:9*inch,thickness:.75*inch},face:{thickness:.75*inch,height:15*inch},stiffener:{thickness:.5*inch,length:8.5*inch,spacing:3*inch},source:'Fictitious supplier data CAP-CS-02: 4-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'});
  p.details!.end.weldSize=.3125*inch;p.details!.end.gauge=2.5*inch;p.details!.bearing.weldSize=.3125*inch;
  p.details!.rail.clipWidth=6*inch;p.details!.rail.clipThickness=.5*inch;p.details!.rail.clipProjection=.75*inch;p.details!.rail.clipWeld=.3125*inch;
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';

@@ -25,7 +25,11 @@ export const runwayDetailsSchema=z.object({
  brace:z.object({arrangement:z.enum(['paired-bars','flexible-plate','bearing-link','paired-links','single-angle','double-angle']).optional(),
   singleAngle:angleTieSchema.optional(),doubleAngle:angleTieSchema.optional(),
   referenceDetail:z.object({plateWidth:pos,plateThickness:pos,pinDiameter:pos,eyeDiameter:pos,eyeThickness:pos,linkDiameter:pos,forkThickness:pos,pinSetback:pos,linkSpacing:pos}).optional(),
-  flangeAttachment:z.object({enabled:z.boolean(),longitudinalSetback:pos,saddleLength:pos,saddleThickness:pos,webGap:pos,clearance:pos,weldSize:pos}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
+  flangeAttachment:z.object({enabled:z.boolean(),longitudinalSetback:pos,saddleLength:pos,saddleThickness:pos,webGap:pos,clearance:pos,weldSize:pos,
+   /** Girder web centerline to the column face where the bracket is by others; a designed bracket sets it from its reach. */
+   columnFace:pos.optional()}).optional(),
+  /** Column-end movement release: bolts pretensioned against steel sleeves in vertical slots of the column gusset. */
+  release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
  end:lapConnectionSchema,
  bearing:z.object({width:pos,length:pos,thickness:pos,stiffenerWidth:pos,stiffenerThickness:pos,cope:nn,weldSize:pos}),
  rail:z.object({name:z.string().min(1).max(100),headWidth:pos,headThickness:pos,baseWidth:pos,baseThickness:pos,webThickness:pos,Fy:pos,Fu:pos,padAllowable:pos,padSource:z.string().min(1).max(300),

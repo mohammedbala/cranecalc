@@ -134,6 +134,8 @@ export class LateralTorsionBeam {
   const matrix=this.matrix(geometricMultiplier),f=this.force.slice();for(const i of this.fixed)f[i]=0;
   const solver=factor(matrix);if(!solver)throw Error('Lateral/torsional instability at the applied load.');
   const u=solver.solve(f),p=this.input;
+  // One step of iterative refinement removes round-off left by the scaled band factorization.
+  {const Ku=matrix.multiply(u),r=new Float64Array(u.length);for(let i=0;i<u.length;i++)r[i]=f[i]-Ku[i];const du=solver.solve(r);for(let i=0;i<u.length;i++)u[i]+=du[i];}
   const at=(x:number,side:'left'|'right'='right'):LateralTorsionStation=>{
    if(x<0||x>p.length)throw Error('Recovery station outside lateral/torsion member.');
    let e=this.nodes.findIndex((v,i)=>i<this.nodes.length-1&&x>=v-1e-8&&(x<this.nodes[i+1]-1e-8||(side==='left'&&x<=this.nodes[i+1]+1e-8)));
