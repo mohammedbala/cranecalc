@@ -1,3 +1,4 @@
+import {defaultEndStop} from './endStopInputs';
 import {defaultBracket} from './bracketInputs';
 import {emptyCapDesign} from './capDesignInputs';
 import {loadCappedSection} from '../data/aiscChannels';
@@ -37,10 +38,12 @@ export function demonstrationProject():ProjectInput {
  p.deadLoad=0;p.railWeight=.07*kip/foot;p.railEccentricity=.25*inch;p.railHeight=6*inch;
  p.unbracedLength=25*foot;p.lateralBraceSpacing=25*foot;p.verticalLimit=600;p.lateralLimit=400;
  p.criteriaSource='Fictitious owner criteria: AIST Class C, vertical L/600, rail-head lateral L/400; twist 0.005 rad.';
- p.cranes=[{...p.cranes[0],name:'Demo crane CR-1 · 10 US tons',wheels:[{offset:0,loaded:20*kip,unloaded:8*kip,lateral:2*kip},{offset:10*foot,loaded:20*kip,unloaded:8*kip,lateral:2*kip}],impact:.25,includesImpact:false,longitudinal:4*kip,travelStart:-10*foot,travelEnd:75*foot,minSeparation:5*foot,operatingClass:'Fictitious general-service crane; owner AIST Class C',loadSource:'Fictitious supplier schedule DEMO-CS-01; used solely to demonstrate calculation capabilities',design:{...emptyCraneDesign,control:'cab',type:'mill',ratedLoad:20*kip,trolleyWeight:5*kip,bridgeWeight:20*kip,drivenWheelLoad:20*kip,sideShare:.5,distributionSource:'Fictitious supplier distribution: one-half of crane side thrust assigned to this runway',splitConfirmed:true,bumperForce:20*kip,bumperBypassesGirder:true}}];
+ p.cranes=[{...p.cranes[0],name:'Demo crane CR-1 · 10 US tons',wheels:[{offset:0,loaded:20*kip,unloaded:8*kip,lateral:2*kip},{offset:10*foot,loaded:20*kip,unloaded:8*kip,lateral:2*kip}],impact:.25,includesImpact:false,longitudinal:4*kip,travelStart:-10*foot,travelEnd:75*foot,minSeparation:5*foot,operatingClass:'Fictitious general-service crane; owner AIST Class C',loadSource:'Fictitious supplier schedule DEMO-CS-01; used solely to demonstrate calculation capabilities',design:{...emptyCraneDesign,control:'cab',type:'mill',ratedLoad:20*kip,trolleyWeight:5*kip,bridgeWeight:20*kip,drivenWheelLoad:20*kip,sideShare:.5,distributionSource:'Fictitious supplier distribution: one-half of crane side thrust assigned to this runway',splitConfirmed:true,bumperForce:20*kip,bumperBypassesGirder:false}}];
  p.aist={...emptyAistInputs,buildingClass:'C',classConfirmed:true,buildingCycles:75000,railDepth:6*inch,bearingLength:10*inch,netFlangeArea:p.section.bf*p.section.tf,bottomBraceSpacing:25*foot,axialLength:25*foot,torsionalLength:25*foot,runwayOnly:true,supportType:'bracket',clipSpacing:24*inch,railPad:true,camber:.25*inch,fatiguePoint:'bottom-left',fatigueReference:'AISC Table A-3.1, 1.1; full detail register in package',cycleSource:'Fictitious 1,000,000 wheel-induced stress fluctuations; three duty bins; includes loaded and empty return cycles.'};
  p.fatigue={category:'A',cycles:1000000,detail:'Plain rolled bottom flange; welded attachments checked separately in the detail register.',location:12.5*foot};
  p.details=demonstrationDetails();p.connections.enabled=true;
+ // Girder-mounted end stops over the end bearings: front bolts behind the face, back bolts near the girder end, both clear of the bearing stiffeners.
+ p.details.endStop={...structuredClone(defaultEndStop),enabled:true,bumperHeight:6*inch,bumperDiameter:6*inch,setback:.5*inch,railGap:1*inch,base:{length:12*inch,width:9*inch,thickness:1*inch},face:{thickness:1*inch,height:15*inch},stiffener:{thickness:.75*inch,length:9*inch,spacing:3*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.25*inch,edge:1.5*inch},weldSize:.3125*inch,source:'Fictitious supplier data DEMO-CS-01: 20-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'};
  p.drawing={originator:'CraneCalc demonstration',checker:'',datumElevation:100*foot,datumLabel:'Reference finished floor',railElevation:20*foot};
  p.details.fatigueDetails[3].name='Bearing stiffener weld toe, support 2';
  for(let bay=1;bay<3;bay++){
@@ -49,7 +52,7 @@ export function demonstrationProject():ProjectInput {
   p.details.fatigueDetails.push({id:`FS${bay+2}`,name:`Stiffener weld toe, support ${bay+2}`,x:(bay+1)*25*foot,point:'top-right',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'});
  }
  const r=p.details.rail; p.railWeight=(r.headWidth*r.headThickness+r.baseWidth*r.baseThickness+(p.aist.railDepth-r.headThickness-r.baseThickness)*r.webThickness)*7850*9.80665/1e9;
- p.notes='Software capability demonstration using realistic fictitious geometry, supplier forces, duty and criteria. Not a site-specific design. Scope: three simply supported 25-ft bays on one runway line, its rail and girder-side connections. Existing building frames, column brackets, anchors and foundations are excluded. End stops connect directly to the building; full-speed bumper demand is reported at that interface and bypasses this girder. No fictitious manufacturer approval is claimed.';
+ p.notes='Software capability demonstration using realistic fictitious geometry, supplier forces, duty and criteria. Not a site-specific design. Scope: three simply supported 25-ft bays on one runway line, its rail and girder-side connections. Existing building frames, column brackets, anchors and foundations are excluded. Bolted end stops on the girders at both ends of each runway take the full-speed bumper force into the girders and their locating supports. No fictitious manufacturer approval is claimed.';
  return p;
 }
 
@@ -85,6 +88,8 @@ export function cappedDemonstrationProject():ProjectInput {
  p.details!.bracket!.seatWeld=.625*inch;
  p.details!.fabrication.bolting='Tie bolts: ASTM F3125 Grade A325, 5/8-in diameter, 19-kip minimum pretension. Other girder bolts: 3/4-in A325, 28-kip minimum pretension. Standard holes and Class B faying surfaces. Rail joints: 7/8-in A325, snug-tight sliding slots.';
  p.details!.bearing.length=12*inch;p.details!.bearing.stiffenerWidth=4*inch;
+ // Lighter stop for the 2-ton crane; base plate within the 12-in bearing.
+ Object.assign(p.details!.endStop!,{base:{length:11.5*inch,width:9*inch,thickness:.75*inch},face:{thickness:.75*inch,height:15*inch},stiffener:{thickness:.5*inch,length:8.5*inch,spacing:3*inch},source:'Fictitious supplier data CAP-CS-02: 4-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'});
  p.details!.end.weldSize=.3125*inch;p.details!.end.gauge=2.5*inch;p.details!.bearing.weldSize=.3125*inch;
  p.details!.rail.clipWidth=6*inch;p.details!.rail.clipThickness=.5*inch;p.details!.rail.clipProjection=.75*inch;p.details!.rail.clipWeld=.3125*inch;
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';

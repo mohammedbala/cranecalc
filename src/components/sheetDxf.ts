@@ -12,11 +12,12 @@ import {sheetFormat} from './sheetGraphics';
 type Units='US'|'SI';
 type Matrix=[number,number,number,number,number,number];
 type Pt=[number,number];
-interface LayerDef {color:number;weight:number;ltype:'Continuous'|'DASHED'|'CENTER';}
+interface LayerDef {color:number;weight:number;ltype:'Continuous'|'DASHED'|'CENTER'|'HIDDEN';}
 
 /** Layers by drawing role; lineweights in 1/100 mm. */
 export const sheetLayers:Record<string,LayerDef>={
  'S-STEEL-NEW':{color:7,weight:50,ltype:'Continuous'},
+ 'S-STEEL-HIDDEN':{color:7,weight:18,ltype:'HIDDEN'},
  'S-RAIL':{color:6,weight:35,ltype:'Continuous'},
  'S-EXISTING':{color:8,weight:18,ltype:'DASHED'},
  'S-GRID':{color:1,weight:18,ltype:'CENTER'},
@@ -27,7 +28,7 @@ export const sheetLayers:Record<string,LayerDef>={
  'G-TTLB':{color:7,weight:50,ltype:'Continuous'},
  'G-TTLB-TEXT':{color:7,weight:25,ltype:'Continuous'}
 };
-const classLayer:Record<string,string>={'runway-line':'S-STEEL-NEW','rail-line':'S-RAIL','reference-line':'S-EXISTING','grid-line':'S-GRID','annotation':'S-ANNO','divider':'S-ANNO-HEAVY','bubble':'S-ANNO-SYMB','leader-arrow':'S-ANNO','dot':'S-ANNO'};
+const classLayer:Record<string,string>={'runway-line':'S-STEEL-NEW','hidden-line':'S-STEEL-HIDDEN','rail-line':'S-RAIL','reference-line':'S-EXISTING','grid-line':'S-GRID','annotation':'S-ANNO','divider':'S-ANNO-HEAVY','bubble':'S-ANNO-SYMB','leader-arrow':'S-ANNO','dot':'S-ANNO'};
 
 const identity:Matrix=[1,0,0,1,0,0];
 const multiply=(m:Matrix,n:Matrix):Matrix=>[m[0]*n[0]+m[2]*n[1],m[1]*n[0]+m[3]*n[1],m[0]*n[2]+m[2]*n[3],m[1]*n[2]+m[3]*n[3],m[0]*n[4]+m[2]*n[5]+m[4],m[1]*n[4]+m[3]*n[5]+m[5]];
@@ -127,10 +128,10 @@ export function sheetsDxf(sheets:{svg:string}[],units:Units){
  table('VPORT',H.vportTable,1);
  record('VPORT',H.vportTable,'AcDbViewportTableRecord',2,'*Active',70,0,10,0,20,0,11,1,21,1,12,round(centre[0]),22,round(centre[1]),13,0,23,0,14,.5,24,.5,15,.5,25,.5,16,0,26,0,36,1,17,0,27,0,37,0,40,round(sheetH*1.1),41,round(Math.max(1.5,(sheets.length*(sheetW+gap))/(sheetH*1.1))),42,50,43,0,44,0,50,0,51,0,71,0,72,1000,73,1,74,3,75,0,76,0,77,0,78,0,281,0,65,0,146,0);
  put(0,'ENDTAB');
- const dash=units==='US'?{DASHED:[.125,-.0625],CENTER:[.25,-.0625,.0625,-.0625]}:{DASHED:[3,-1.5],CENTER:[6,-1.5,1.5,-1.5]};
- table('LTYPE',H.ltypeTable,5);
+ const dash=units==='US'?{DASHED:[.125,-.0625],HIDDEN:[.0625,-.03125],CENTER:[.25,-.0625,.0625,-.0625]}:{DASHED:[3,-1.5],HIDDEN:[1.5,-.75],CENTER:[6,-1.5,1.5,-1.5]};
+ table('LTYPE',H.ltypeTable,6);
  for(const name of ['ByBlock','ByLayer','Continuous'])record('LTYPE',H.ltypeTable,'AcDbLinetypeTableRecord',2,name,70,0,3,name==='Continuous'?'Solid line':'',72,65,73,0,40,0);
- for(const [name,segments] of Object.entries(dash)){record('LTYPE',H.ltypeTable,'AcDbLinetypeTableRecord',2,name,70,0,3,name==='DASHED'?'Dashed __ __ __':'Center ____ _ ____',72,65,73,segments.length,40,round(segments.reduce((a,v)=>a+Math.abs(v),0)));for(const seg of segments)put(49,round(seg),74,0);}
+ for(const [name,segments] of Object.entries(dash)){record('LTYPE',H.ltypeTable,'AcDbLinetypeTableRecord',2,name,70,0,3,name==='DASHED'?'Dashed __ __ __':name==='HIDDEN'?'Hidden _ _ _ _':'Center ____ _ ____',72,65,73,segments.length,40,round(segments.reduce((a,v)=>a+Math.abs(v),0)));for(const seg of segments)put(49,round(seg),74,0);}
  put(0,'ENDTAB');
  const layers=Object.entries(sheetLayers);
  table('LAYER',H.layerTable,layers.length+1);

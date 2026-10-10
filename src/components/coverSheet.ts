@@ -2,6 +2,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {craneDesignMinimum} from '../engine/aistLoads';
 import {runwayElevations,issueStatus} from '../engine/drawingData';
+import {activeEndStop} from '../engine/endStopInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {drawingLength} from './drawingFormat';
 import {line,sheetStart,titleBlock} from './sheetGraphics';
@@ -56,6 +57,7 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
   `RAIL GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)}. VERIFY WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
   d.fabrication.railAlignment,
   'SURVEY RAIL ALIGNMENT, GAUGE AND ELEVATION AFTER ERECTION AND BEFORE THE LOAD TEST; SUBMIT THE SURVEY.',
+  ...(activeEndStop(p)?['INSTALL THE RUNWAY END STOPS (S-07) AT BOTH ENDS OF BOTH RUNWAYS BEFORE THE CRANE IS OPERATED OR LOAD TESTED.']:[]),
   'LOAD TEST THE CRANE PER ASME B30.2 AND THE MANUFACTURER. THE TEST LOAD SHALL NOT EXCEED 125% OF THE RATED LOAD; COORDINATE ANY TEST LOAD ABOVE THE RATED LOAD WITH THE ENGINEER OF RECORD BEFORE TESTING.'
  ].map(v=>v.toUpperCase())));
  // Column 2: criteria.
@@ -126,7 +128,8 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
  const bypass=p.cranes.some(c=>c.design?.bumperBypassesGirder);
  const deferred=[
   'CRANE, END TRUCKS, CRANE-MOUNTED BUMPERS, CONDUCTOR BARS AND ELECTRIFICATION: CRANE SUPPLIER.',
-  bypass?'BUILDING-MOUNTED CRANE END STOPS AND THEIR SUPPORT FOR THE BUMPER FORCE IN THE CRANE DATA.':'RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA, BEARING AT THE RAIL HEAD.',
+  ...(bypass?['BUILDING-MOUNTED CRANE END STOPS AND THEIR SUPPORT FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
+  ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!d?.bracket?.enabled?['COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE SUPPORT REACTIONS LISTED.']:[]),
   ...(p.system==='simple'&&d?['COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (S-04) FOR THE INTERFACE FORCES IN THE CALCULATION REPORT.']:[]),
   ...s.checks.filter(c=>c.status==='excluded'&&c.id!=='bracket-load-path').map(c=>`${c.title}: BY OTHERS FOR THE REPORTED FORCES.`)

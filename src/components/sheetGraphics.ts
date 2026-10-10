@@ -58,6 +58,7 @@ export function sheetStart(s: CalculationSnapshot, number: string, title: string
   .runway-plan-sheet .reference-line{stroke:#7b8186;stroke-width:.48;stroke-dasharray:3.6 2.4}
   .runway-plan-sheet .runway-line{stroke:#111;stroke-width:.8;stroke-dasharray:none}
   .runway-plan-sheet .rail-line{stroke:#111;stroke-width:.65;stroke-dasharray:none}
+  .runway-plan-sheet .hidden-line{stroke:#111;stroke-width:.45;stroke-dasharray:2.4 1.6}
   .runway-plan-sheet .annotation{stroke:#51565b;stroke-width:.45}
   .runway-plan-sheet .leader-arrow{stroke:#333;fill:#333;stroke-width:.25}
   .runway-plan-sheet .divider{stroke:#262b30;stroke-width:.65}
@@ -125,7 +126,7 @@ export function viewTitle(cx:number,y:number,title:string,scale:string){
  * Identical components may use one arrow with a TYP / quantity note. */
 export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][]=[],span?:number){
  // Land on the label end nearest the targets so a leader never crosses its own text.
- const w=span??Math.max(0,...labels.map(v=>textWidth(v.toUpperCase(),size))),right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+w);
+ const w=span??Math.max(0,...labels.map(v=>textWidth(v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00').toUpperCase(),size))),right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+w);
  const elbow:XY=right?[at[0]+w+14,at[1]-3]:[at[0]-14,at[1]-3],landing:XY=right?[at[0]+w+3,at[1]-3]:[at[0]-3,at[1]-3];
  let svg=`<g data-multileader="component"${right?' data-landing="right"':''}>`;
  for(const [i,p] of points.entries()){

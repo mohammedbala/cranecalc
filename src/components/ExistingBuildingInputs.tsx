@@ -3,6 +3,7 @@ import {aiscWShapes,aiscShapeByName} from '../data/aiscSections';
 import {defaultExistingColumn,existingLoadKeys,type ExistingColumnInput} from '../engine/existingColumnInputs';
 import {defaultLongitudinalBracing,type LongitudinalBracingInput} from '../engine/longitudinalBracingInputs';
 import {aiscAngles} from '../data/aiscAngles';
+import {defaultEndStop,needsGirderStops,type EndStopInput} from '../engine/endStopInputs';
 import type {CalculationSnapshot,ProjectInput} from '../engine/types';
 import {format,type Quantity} from '../engine/units';
 
@@ -60,9 +61,29 @@ export function LongitudinalBracingInputs({project,update,numeric}:{project:Proj
    :<div className="field-grid"><label className="field"><span>Angle</span><select value={b.angle.shape} onChange={e=>set({angle:{...b.angle,shape:e.target.value}})}>{aiscAngles.map(a=><option key={a.name} value={a.name}>{a.name}</option>)}</select></label>
     {numeric('Angle Fy',b.angle.Fy,v=>set({angle:{...b.angle,Fy:v}}),'stress')}{numeric('Angle Fu',b.angle.Fu,v=>set({angle:{...b.angle,Fu:v}}),'stress')}{numeric('Bolts in line (3 or more)',b.angle.bolts,v=>set({angle:{...b.angle,bolts:Math.min(12,Math.max(3,Math.round(v)))}}),'ratio')}{numeric('Bolt diameter',b.angle.boltDiameter,v=>set({angle:{...b.angle,boltDiameter:v}}))}</div>}
    <div className="field-grid">{numeric('Existing wind W on this line',b.existing.W,v=>set({existing:{...b.existing,W:v}}),'force')}{numeric('Existing seismic E on this line',b.existing.E,v=>set({existing:{...b.existing,E:v}}),'force')}{numeric('Crane-level drift limit h / n',b.driftLimit,v=>set({driftLimit:v}),'ratio')}</div>
-   <label className="checkbox-field"><input type="checkbox" checked={b.bumperToBracing} onChange={e=>set({bumperToBracing:e.target.checked})}/>Building-mounted crane stops on this line deliver the bumper force to the bracing</label>
+   <label className="checkbox-field"><input type="checkbox" checked={b.bumperToBracing} onChange={e=>set({bumperToBracing:e.target.checked})}/>The crane stop force on this line reaches this bracing (building-mounted stops, or girder stops through the locating supports)</label>
    <label className="field"><span>Source of bracing survey and existing forces</span><input value={b.source} placeholder="Drawings, survey or wind/seismic analysis reference" onChange={e=>set({source:e.target.value})}/></label>
    <label className="checkbox-field"><input type="checkbox" checked={b.confirmed} onChange={e=>set({confirmed:e.target.checked})}/>Bracing members, geometry and existing forces are confirmed from the stated source</label>
   </>}
+ </div>;
+}
+
+export function EndStopInputs({project,update,numeric}:{project:ProjectInput;update:(fn:(p:ProjectInput)=>void)=>void;numeric:NumericField}){
+ const e=project.details?.endStop,needed=needsGirderStops(project);
+ const set=(patch:Partial<EndStopInput>)=>update(p=>{if(p.details)p.details.endStop={...(p.details.endStop??structuredClone(defaultEndStop)),...patch};});
+ const part=<K extends 'base'|'face'|'stiffener'|'bolts'>(key:K,patch:Partial<EndStopInput[K]>)=>e&&set({[key]:{...e[key],...patch}} as Partial<EndStopInput>);
+ if(!project.details)return null;
+ return <div className="aist-inputs">
+  <div className="form-section-title"><span>04</span>Runway end stops</div>
+  {!needed?<p className="form-note">Every crane stop force is taken by building-mounted stops (Crane step), so girder-mounted stops are not required. Those stops and their support are listed on S-00 as by others.</p>:<>
+  <label className="checkbox-field"><input type="checkbox" checked={!!e?.enabled} onChange={ev=>set({enabled:ev.target.checked})}/>Design bolted end stops at both ends of each runway</label>
+  <p className="form-note">A base plate over the end bearing, a face plate struck by the crane bumper and two back stiffeners, with four bolts through the top flange. Checked for the factored bumper force at the bumper height, including the couple on the girder end span. Drawn on S-07.</p>
+  {e?.enabled&&<>
+   <div className="field-grid">{numeric('Bumper centerline above top of rail',e.bumperHeight,v=>set({bumperHeight:v}))}{numeric('Bumper contact diameter',e.bumperDiameter,v=>set({bumperDiameter:v}))}{numeric('Girder end to back of base plate',e.setback,v=>set({setback:v}))}{numeric('Rail end to stop face',e.railGap,v=>set({railGap:v}))}</div>
+   <div className="field-grid">{numeric('Base plate length along runway',e.base.length,v=>part('base',{length:v}))}{numeric('Base plate width',e.base.width,v=>part('base',{width:v}))}{numeric('Base plate thickness',e.base.thickness,v=>part('base',{thickness:v}))}</div>
+   <div className="field-grid">{numeric('Face plate thickness',e.face.thickness,v=>part('face',{thickness:v}))}{numeric('Face plate height above base',e.face.height,v=>part('face',{height:v}))}{numeric('Stiffener thickness',e.stiffener.thickness,v=>part('stiffener',{thickness:v}))}{numeric('Stiffener length along base',e.stiffener.length,v=>part('stiffener',{length:v}))}{numeric('Stiffener spacing, center to center',e.stiffener.spacing,v=>part('stiffener',{spacing:v}))}</div>
+   <div className="field-grid">{numeric('Bolt diameter',e.bolts.diameter,v=>part('bolts',{diameter:v}))}<label className="field"><span>Bolt grade</span><select value={e.bolts.grade} onChange={ev=>part('bolts',{grade:ev.target.value as 'A325'|'A490'})}><option>A325</option><option>A490</option></select></label>{numeric('Bolt gauge across runway',e.bolts.gauge,v=>part('bolts',{gauge:v}))}{numeric('Front bolts behind face plate',e.bolts.frontClear,v=>part('bolts',{frontClear:v}))}{numeric('Back bolts from base plate edge',e.bolts.edge,v=>part('bolts',{edge:v}))}{numeric('Fillet weld size',e.weldSize,v=>set({weldSize:v}))}</div>
+   <label className="field"><span>Source of bumper force, height and contact diameter</span><input value={e.source} placeholder="Crane supplier data reference" onChange={ev=>set({source:ev.target.value})}/></label>
+  </>}</>}
  </div>;
 }
