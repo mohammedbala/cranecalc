@@ -8,6 +8,7 @@ import {format} from '../engine/units';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {existingBracketTopic} from './existingBracketSheet';
 import {bracketForceBlocks} from './bracketForceTable';
+import {designsBracing,bracingDesign} from '../engine/newColumnBracing';
 /** Column bracket details on their own sheet. */
 export function bracketSheetSvg(s:CalculationSnapshot,number='S-05'){
  const topic=bracketTopic(s);return topic?topicSheetSvg(s,topic,number,usesExistingBracket(s.input)?'EXISTING BRACKETS / NEW BOLTED SEATS':'WELDED COLUMN BRACKETS'):'';
@@ -36,6 +37,8 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const sc=supportColumn(p);
   svg+=multiLeader([[face+3,116]],[398,116],[columnReference(p),sc.isNew?'CHECKED UNDER NEW COLUMN':'LOCAL CHECKS PER ENTERED DATA']);
   svg+=multiLeader([[tip+20,seatY+b.seatThickness*k/2]],[398,163],[`SEAT PL ${size(b.seatThickness)}`]);
+  // With crane-level bracing the seat collects the girder's longitudinal force into the column flange.
+  if(designsBracing(p))svg+=filletLeader([[face,seatY]],[398,196],size(bracingDesign(p).seatWeld),['SEAT PL TO COL. FLANGE, TOP, SHOP',`COLLECTOR; SEE ${detailRef(detailTitles.strutPlan)}`]);
   svg+=(sc.field?fieldFilletLeader:filletLeader)([[face,rootY+b.ribDepth*k*.56]],[398,238],size(b.rootWeld),[`${sc.weld} TO ${sc.name}`,'BOTH SIDES OF EACH RIB','CONT. FULL RIB DEPTH'],true);
   return {svg:svg+'</g>',scale:scale.label};
  }});
@@ -70,7 +73,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
  }});
  {
   const notes=[
-   'TWO RECTANGULAR RIBS AND SEAT PLATE. GRAVITY BEARINGS ONLY. NO CREDIT FOR BOLTS, KNEE PLATES OR COMPOSITE RIB/SEAT ACTION.',
+   designsBracing(p)?`TWO RECTANGULAR RIBS AND SEAT PLATE. THE RIBS CARRY GRAVITY; THE SEAT IS ALSO SHOP WELDED TO THE COLUMN FLANGE WITH A ${size(bracingDesign(p).seatWeld)} TOP FILLET THAT COLLECTS THE GIRDER'S LONGITUDINAL FORCE (${detailRef(detailTitles.strutPlan)}). NO CREDIT FOR BOLTS, KNEE PLATES OR COMPOSITE RIB/SEAT ACTION.`:'TWO RECTANGULAR RIBS AND SEAT PLATE. GRAVITY BEARINGS ONLY. NO CREDIT FOR BOLTS, KNEE PLATES OR COMPOSITE RIB/SEAT ACTION.',
    `PLATES: ${format(d.material.Fy,'stress',p.units)} MIN. YIELD. WELDS: ${format(d.material.Fexx,'stress',p.units)} ELECTRODE. CONTINUOUS FILLETS AS SHOWN.`,
    supportColumn(p).isNew?`SHOP WELD SEAT TO RIBS AND RIB ROOTS TO THE ${supportColumn(p).name} BEFORE ERECTION; INSPECT STARTS, STOPS AND TOES.`:'SHOP WELD SEAT TO RIBS. FIELD WELD RIB ROOTS TO EXISTING COLUMN AS FLAGGED. PROVIDE ACCESS TO BOTH ROOT WELDS BEFORE PLACING THE RUNWAY; INSPECT STARTS, STOPS AND TOES.',
    'KEEP GIRDER ENDS AND BEARINGS INDEPENDENT. DO NOT WELD THE SLIDING BEARING TO THE GIRDER. LATERAL TIES, LOCATING GUIDES AND HOLD-DOWNS HAVE SEPARATE COLUMN LOAD PATHS.',
