@@ -1,5 +1,8 @@
 import type { CalculationSnapshot } from '../engine/types';
 import { drawingScale } from './drawingFormat';
+import { issueStatus } from '../engine/drawingData';
+/** Replaced with the sheet ordinal and count once the whole set is assembled. */
+export const sheetOrdinalToken='{{SHEET_ORDINAL}}';
 export const sheetFormat = { widthIn:36, heightIn:24, width:2592, height:1728, contentScale:2 } as const;
 /** Detail coordinates are enlarged on ARCH D; select and label the actual printed scale. */
 export function sheetDrawingScale(maxLayoutUnitsPerMm:number,units:CalculationSnapshot['input']['units']){
@@ -28,6 +31,18 @@ export function dimV(y1: number, y2: number, fromX: number, x: number, label: st
   return line([fromX, y1], [x + 5, y1]) + line([fromX, y2], [x + 5, y2]) + line([x, y1], [x, y2])
     + [y1, y2].map(y => line([x - 3, y + 2.5], [x + 3, y - 2.5])).join('')
     + text(x - 6, (y1 + y2) / 2, label, 9, 'middle', 400, -90);
+}
+// Arial advance widths per em, for laying out text without a browser.
+const glyphWidths:Record<string,number>={' ':.278,'!':.278,'"':.355,'#':.556,'$':.556,'%':.889,'&':.667,"'":.191,'(':.333,')':.333,'*':.389,'+':.584,',':.278,'-':.333,'.':.278,'/':.278,':':.278,';':.278,'<':.584,'=':.584,'>':.584,'?':.556,'@':1.015,'[':.278,']':.278,'_':.556,'·':.278,'§':.556,'×':.584,'°':.4,
+ A:.667,B:.667,C:.722,D:.722,E:.667,F:.611,G:.778,H:.722,I:.278,J:.5,K:.667,L:.556,M:.833,N:.722,O:.778,P:.667,Q:.778,R:.722,S:.667,T:.611,U:.722,V:.667,W:.944,X:.667,Y:.667,Z:.611,
+ a:.556,b:.556,c:.5,d:.556,e:.556,f:.278,g:.556,h:.556,i:.222,j:.222,k:.5,l:.222,m:.833,n:.556,o:.556,p:.556,q:.556,r:.333,s:.5,t:.278,u:.556,v:.5,w:.722,x:.5,y:.5,z:.5};
+/** Estimated rendered width of Arial text; bold is about 6% wider. */
+export function textWidth(value:string,size:number,bold=false){let w=0;for(const c of value)w+=glyphWidths[c]??(/[0-9]/.test(c)?.556:.6);return w*size*(bold?1.06:1);}
+/** Break text into rows that fit the given width. */
+export function wrapToWidth(value:string,width:number,size:number,bold=false){
+  const rows:string[]=[];let row='';
+  for(const word of value.split(/\s+/).filter(Boolean)){const next=row?`${row} ${word}`:word;if(row&&textWidth(next,size,bold)>width){rows.push(row);row=word;}else row=next;}
+  if(row)rows.push(row);return rows.length?rows:[''];
 }
 export function wrappedText(x: number, y: number, value: string, maxChars: number, size = 9, leading = 12) {
   const rows: string[] = []; let row = '';
@@ -63,14 +78,17 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   for(const x of [96,626,726])svg+=line([x,top],[x,bottom]);
   for(const y of [1572,1602,1632,1662])svg+=line([36,y],[876,y]);
   for(const [x,label] of [[66,'REV'],[361,'REVISION DESCRIPTION'],[676,'BY'],[801,'DATE']] as const)svg+=text(x,1564,label,10,'middle',700);
-  svg+=text(110,1591,'CURRENT OUTPUT / ENGINEERING REVIEW',11)+text(740,1591,date,11);
+  const revisions=(d?.revisions??[]).filter(r=>r.description.trim()).slice(-4);
+  if(revisions.length)revisions.forEach((r,i)=>{const y=1591+i*30;svg+=text(66,y,short(r.rev||'-',4),11,'middle',700)+text(110,y,short(r.description.toUpperCase(),62),11)+text(676,y,short(r.by.toUpperCase(),8),11,'middle')+text(740,y,short(r.date,12),11);});
+  else svg+=text(110,1591,'CURRENT OUTPUT / ENGINEERING REVIEW',11)+text(740,1591,date,11);
   svg+='</g><g data-title-panel="originator">';
   svg+=text(1056,1598,'CRANECALC',28,'middle',700)+text(1056,1620,'STRUCTURAL DESIGN WORKSHEET',10,'middle');
   svg+=line([876,1640],[1236,1640])+text(1056,1660,'DIMENSIONS GOVERN / DO NOT SCALE',10,'middle');
   svg+=text(1056,1678,p.reportPurpose==='demonstration'?'FICTITIOUS DEMONSTRATION':'ENGINEERING REVIEW',10,'middle');
   svg+='</g><g data-title-panel="approvals">';
   svg+=text(1398,1564,'DRAWING RESPONSIBILITY',10,'middle',700)+line([1236,1572],[1560,1572]);
-  for(const [i,label,value] of [[0,'ORIGINATOR',originator],[1,'CHECKER',checker],[2,'APPROVED','']] as const){
+  const eor=d?.eor,engineer=eor?.name.trim()?`${eor.name}${eor.license.trim()?` · ${eor.jurisdiction.trim()?`${eor.jurisdiction} `:''}LIC. ${eor.license}`:''}`:'';
+  for(const [i,label,value] of [[0,'ORIGINATOR',originator],[1,'CHECKER',checker],[2,'ENGINEER OF RECORD',engineer]] as const){
     const y=1572+i*40;svg+=line([1236,y+40],[1560,y+40])+text(1247,y+14,label,9,'start',700)+text(1247,y+31,short(value,48),12);
   }
   svg+='</g><g data-title-panel="project">';
@@ -79,28 +97,39 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+=line([1560,1644],[2156,1644])+text(1574,1663,`PROJECT: ${short(p.number||'UNTITLED',60)}`,12,'start',700);
   svg+=text(1574,1681,p.units==='US'?'LENGTHS: FEET & INCHES':'LENGTHS: MILLIMETERS',10);
   svg+='</g><g data-title-panel="sheet">';
-  svg+=text(2170,1566,'DRAWING / SHEET NUMBER',10,'start',700)+text(2170,1611,`SHEET ${number}`,29,'start',700);
+  svg+=text(2170,1566,'DRAWING / SHEET NUMBER',10,'start',700)+text(2170,1611,`SHEET ${number}`,29,'start',700)+text(2546,1611,sheetOrdinalToken,12,'end',700);
   svg+=line([2156,1624],[2556,1624])+text(2170,1644,p.units==='SI'?'PAGE SIZE: ARCH D / 914.4 X 609.6 MM':'PAGE SIZE: ARCH D / 36 X 24 IN',12,'start',700);
   svg+=text(2170,1662,`CALC REVISION: ${s.revision}`,11)+text(2170,1681,`DATE: ${date}    SCALE: AS SHOWN`,10);
   svg+='</g></g>';
-  svg+=`<g data-stamp="blank">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${text(2466,1534,'RESERVED / UNSEALED',9,'middle')}</g>`;
-  svg+=text(2360,1494,'NOT FOR FABRICATION',11,'end',700)+text(2360,1513,'REFERENCE FRAMING SHOWN DASHED',10,'end');
+  const status=issueStatus(s);
+  svg+=`<g data-stamp="${status.issued?'seal':'blank'}">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${eor?.firm.trim()?text(2466,1520,short(eor.firm.toUpperCase(),30),8,'middle'):''}${text(2466,1534,status.issued?'SEAL AND SIGNATURE REQUIRED':'NOT SEALED',9,'middle')}</g>`;
+  svg+=`<g data-issue-status="${status.issued?'issued':'preliminary'}">${text(2360,1494,status.label,11,'end',700)}</g>`+text(2360,1513,'REFERENCE FRAMING SHOWN DASHED',10,'end');
   // A detail on a sheet must never be read as acceptable while any calculation check fails.
   const failed=s.checks.filter(c=>c.status==='fail').length;
   if(failed)svg+=`<g data-flag="failed-checks">${text(2360,1532,`${failed} FAILED CHECK${failed>1?'S':''} - SEE CALCULATION`,11,'end',700)}</g>`;
   return svg;
 }
 
+export const detailNumberToken='{{DETAIL_NO}}',sheetNumberToken='{{SHEET_NO}}';
+/** Reference to a detail elsewhere in the set by its title; resolved to "n/S-xx" once the set is assembled. */
+export const detailRef=(title:string)=>`{{REF:${title}}}`;
+/**
+ * Detail title: numbered bubble (detail over sheet), underlined title and
+ * scale. Numbers are assigned in drawing order when the set is assembled.
+ */
 export function viewTitle(cx:number,y:number,title:string,scale:string){
- return `<g data-view-title="below">${text(cx,y,title,11,'middle',700)}${text(cx,y+12,scale,8,'middle')}</g>`;
+ const w=textWidth(title,11,true),bx=cx-w/2-16,r=10.5;
+ return `<g data-view-title="below" data-detail-title="${esc(title)}">${circle(bx,y-1,r,'divider')}${line([bx-r,y-1],[bx+r,y-1],'annotation')}${text(bx,y-3,detailNumberToken,8.5,'middle',700)}${text(bx,y+6.6,sheetNumberToken,5,'middle')}${text(cx,y-3,title,11,'middle',700)}${line([bx+r,y-1],[cx+w/2+4,y-1],'divider')}${text(cx,y+8.5,scale,8,'middle')}</g>`;
 }
 /** Explicit waypoints keep annotation corridors separate from adjacent callouts.
  * Identical components may use one arrow with a TYP / quantity note. */
-export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][]=[]){
- const elbow:XY=[at[0]-14,at[1]-3];
- let svg=`<g data-multileader="component">`;
+export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][]=[],span?:number){
+ // Land on the label end nearest the targets so a leader never crosses its own text.
+ const w=span??Math.max(0,...labels.map(v=>textWidth(v.toUpperCase(),size))),right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+w);
+ const elbow:XY=right?[at[0]+w+14,at[1]-3]:[at[0]-14,at[1]-3],landing:XY=right?[at[0]+w+3,at[1]-3]:[at[0]-3,at[1]-3];
+ let svg=`<g data-multileader="component"${right?' data-landing="right"':''}>`;
  for(const [i,p] of points.entries()){
-  const route=[p,...(via[i]??[]),elbow,[at[0]-3,elbow[1]] as XY];
+  const route=[p,...(via[i]??[]),elbow,landing];
   svg+=`<polyline class="annotation" data-leader-path="true" points="${route.map(v=>v.map(n).join(',')).join(' ')}"/>`;
   const next=route[1],angle=Math.atan2(next[1]-p[1],next[0]-p[0]),c=Math.cos(angle),s=Math.sin(angle);
   svg+=`<path class="leader-arrow" d="M${n(p[0])},${n(p[1])}L${n(p[0]+5*c-1.5*s)},${n(p[1]+5*s+1.5*c)}L${n(p[0]+5*c+1.5*s)},${n(p[1]+5*s-1.5*c)}Z"/>`;
@@ -115,7 +144,7 @@ export function fieldWeldFlag(at:XY){
 export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[],field=false){
  // AWS-style reference line with the fillet triangle on the arrow side (below).
  // A second triangle denotes both sides only when the template requires it.
- let svg=multiLeader(points,at,[],8,via);
+ let svg=multiLeader(points,at,[],8,via,89);
  const y=at[1]-3,x=at[0]+41;
  svg+=line([at[0]-3,y],[at[0]+92,y]);
  for(const sign of bothSides?[-1,1]:[1])svg+=`<path class="annotation" d="M${x},${y}l0,${sign*7}l8,${-sign*7}Z"/>`;
@@ -123,6 +152,7 @@ export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],
  // Inch marks are omitted by drafting convention; SI values retain MM.
  svg+=text(x-6,y+7,sizeLabel.replaceAll('"','').toUpperCase(),8,'end');
  svg+=labels.map((v,i)=>text(at[0],at[1]+17+i*11,v.toUpperCase(),8)).join('');
- return `<g data-multileader="weld"${field?' data-weld-location="field"':''}>${svg}${field?fieldWeldFlag(at):''}</g>`;
+ const right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+89);
+ return `<g data-multileader="weld"${field?' data-weld-location="field"':''}>${svg}${field?fieldWeldFlag(right?[at[0]+117,at[1]]:at):''}</g>`;
 }
 export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[]){return filletLeader(points,at,sizeLabel,labels,bothSides,via,true);}

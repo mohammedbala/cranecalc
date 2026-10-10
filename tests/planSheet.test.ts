@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { calculate } from '../src/engine/calculate';
 import { exampleProject } from '../src/engine/defaults';
 import type { CalculationSnapshot } from '../src/engine/types';
-import { appendPlanSheet, planSheetGeometry, planSheetSvg, connectionSheetSvg } from '../src/components/planSheet';
+import { appendPlanSheet, planSheetGeometry, planSheetSvg, connectionSheetSvg, drawingSheetSet } from '../src/components/planSheet';
 import { defaultFraming, framingSchema } from '../src/components/framingSettings';
 import { reportHtml } from '../server/report';
 import {feetInches,plateInches,drawingScale} from '../src/components/drawingFormat';
@@ -33,7 +33,9 @@ describe('ARCH D arrangement sheet', () => {
     expect(svg).toMatch(/\.runway-line\{[^}]+stroke-dasharray:none/);
     expect(svg).not.toMatch(/NaN|Infinity|<image|<script/);
     expect(svg).toContain(snapshot.revision);
-    expect(svg).toContain('OPPOSITE RUNWAY SHOWN FOR CONTEXT;');
+    expect(svg).toContain('GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O.');
+    const cover=[...drawingSheetSet(snapshot)[0].svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1]).join(' ');
+    expect(cover).toContain('OPPOSITE RUNWAY SHOWN FOR CONTEXT;');
   });
   it('uses selected viewer dimensions and validates reference settings without changing calculations', () => {
     const framing = { ...defaultFraming, width: 12192, height: 4572, roofSlope: 4 };
@@ -47,7 +49,8 @@ describe('ARCH D arrangement sheet', () => {
   });
   it('appends two named landscape pages after every report section, including the appendix', () => {
     const html = reportHtml(snapshot), sheetIndex = html.indexOf('<section class="runway-plan-sheet-page">');
-    expect(html.match(/<section class="runway-plan-sheet-page">/g)).toHaveLength(2);
+    expect(html.match(/<section class="runway-plan-sheet-page">/g)).toHaveLength(drawingSheetSet(snapshot).length);
+    expect(html.slice(sheetIndex)).toContain('SHEET S-00');
     expect(sheetIndex).toBeGreaterThan(html.indexOf('Appendix · Reproducible project inputs'));
     expect(html).toContain('@page runwayArrangement{size:36in 24in;margin:0}');
     expect(() => reportHtml({ ...snapshot, eligible: false })).toThrow('eligible');
@@ -76,10 +79,10 @@ describe('ARCH D arrangement sheet', () => {
     p.drawing!.originator='<script>ORIGINATOR</script>';p.drawing!.checker='Checker name';
     const sample={...snapshot,input:p,eligible:false};
     const arrangement=planSheetSvg(sample),connections=connectionSheetSvg(sample);
-    expect(arrangement).toContain('T.O.S. EL.');expect(arrangement).not.toMatch(/RG[- ]?[123]/);expect(arrangement).toContain('W24X229');
-    expect(arrangement).toContain(`75&#39;-0&quot; OVERALL`);expect(arrangement).toContain('Reference finished floor');
+    expect(arrangement).toContain('T.O.S. EL.');for(const mark of ['RG1','RG2','RG3'])expect(arrangement).toContain(`data-girder-mark="${mark}"`);expect(arrangement).toContain('RUNWAY GIRDER SCHEDULE');expect(arrangement).toContain('W24X229');
+    expect(arrangement).toContain(`75&#39;-0&quot; OVERALL`);expect(arrangement).toContain('REFERENCE FINISHED FLOOR');
     expect(connections).toContain('COLUMN BRACKET (REF.)');expect(connections).toContain('EXISTING TAPERED COLUMN (REF.)');
-    expect(arrangement).toContain('STRUCTURAL GENERAL NOTES');expect(connections).not.toContain('TF 0.71&quot;');expect(connections).not.toContain('W12X40');
+    expect(arrangement).toContain('SEE S-00 FOR GENERAL NOTES');expect(connections).not.toContain('TF 0.71&quot;');expect(connections).not.toContain('W12X40');
     expect(structuralGeneralNotes(sample).every(note=>note===note.toUpperCase())).toBe(true);
     expect(arrangement).not.toContain('DRAWING BASIS');expect(connections).not.toContain('BASIS:');
     expect(connections.match(/data-view-title="below"/g)).toHaveLength(4);
@@ -88,8 +91,9 @@ describe('ARCH D arrangement sheet', () => {
     expect(connections.match(/data-multileader="weld"/g)).toHaveLength(4);
     expect(connections).toContain('FITTED BEARING STIFFENERS');
     for(const sheet of [arrangement,connections]){
-      const titles=[...sheet.matchAll(/<g data-view-title="below">(.*?)<\/g>/g)];
-      expect(titles.every(t=>t[1].includes('SCALE:')&&!t[1].includes('<circle'))).toBe(true);
+      const titles=[...sheet.matchAll(/<g data-view-title="below" data-detail-title="[^"]*">(.*?)<\/g>/g)];
+      expect(titles.length).toBeGreaterThan(2);
+      expect(titles.every(t=>/SCALE:|NOT TO SCALE/.test(t[1])&&t[1].includes('<circle'))).toBe(true);
       const header=sheet.split('<g data-view=')[0];
       expect(header).not.toContain('11 x 17 IN / LANDSCAPE');
       expect(sheet).toContain('PAGE SIZE: ARCH D / 36 X 24 IN');

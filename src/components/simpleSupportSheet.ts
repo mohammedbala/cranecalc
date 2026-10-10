@@ -20,13 +20,15 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
  const c=simpleSupportInput(p),b=p.section,m={column:shapeMeters(referenceColumns.find(v=>v.name===f.column)!)},bs=d.bearing,dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const wb=d.bracket?.enabled?d.bracket:undefined;
  const joint=p.spans.length>1,sides=joint?[-1,1]:[1];
+ // The detail is typical: interior grids for adjacent ends, both grids of a single span.
+ const gridLabel=joint?'2':'1',gridNote=joint?(p.spans.length>2?`TYP. GRIDS 2 TO ${p.spans.length}`:'GRID 2'):'TYP. GRIDS 1 AND 2';
  let svg=sheetStart(s,'S-04','CRANE RUNWAY / INDEPENDENT GIRDER SUPPORTS');
  svg+=line([612,76],[612,680],'divider')+line([24,379],[1200,379],'divider');
  const scale=drawingScale(Math.min(.28,142/b.d,350/(4*bs.length+c.endGap)),p.units),k=scale.pointsPerMm;
  const cx=250,top=125,bottom=top+b.d*k,g=joint?c.endGap*k/2:0,l=bs.length*k,st=bs.stiffenerThickness*k,extent=2*l+g;
  svg+='<g data-view="independent-end-elevation">';
  svg+=rect(cx-m.column.bf*1000*k/2,99,m.column.bf*1000*k,223,'reference-line');
- svg+=line([cx,90],[cx,323],'grid-line')+bubble(cx,86,'N');
+ svg+=line([cx,90],[cx,323],'grid-line')+bubble(cx,86,gridLabel)+text(cx-12,89,gridNote,7.2,'end');
  const spread=(2*bs.length+c.endGap+2*c.guideTravel)*k;
  if(wb){svg+=rect(cx-wb.seatLength*k/2,bottom+bs.thickness*k,wb.seatLength*k,wb.seatThickness*k,'runway-line');}else{
  svg+=rect(cx-spread/2,bottom+bs.thickness*k,spread,25.4*k,'reference-line');
@@ -47,8 +49,8 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
  svg+=multiLeader([[cx+g+l/2,top+b.d*k*.46]],[445,184],['PAIRED FITTED STIFFENERS',`PL ${size(bs.stiffenerThickness)} X ${size(bs.stiffenerWidth)}`,'EACH GIRDER END / SEE S-02']);
  svg+=multiLeader([[cx+g+l,bottom+bs.thickness*k/2]],[445,249],[`SEPARATE BEARING PL ${size(bs.thickness)}`,`${dim(bs.width)} W X ${dim(bs.length)} L`]);
  if(joint)svg+=filletLeader([[cx-g-l/2,top+b.d*k*.66]],[47,250],size(bs.weldSize),['STIFFENER WEB FILLETS','FLANGE ATTACHMENT: S-02'],true);
- svg+=text(44,348,usesExistingBracket(p)?'EXISTING BRACKET / NEW BOLTED SEAT: S-05. KEEP GIRDER AND CAP ENDS SEPARATE.':wb?'WELDED COLUMN BRACKET BELOW / S-05. DO NOT BRIDGE GIRDER OR CAP ENDS.':'SHARED COLUMN BRACKET / SPREADER BELOW (REF.). DO NOT BRIDGE GIRDER OR CAP ENDS.',7.8);
- svg+=viewTitle(318,360,joint?'ADJACENT GIRDER ENDS AT COLUMN':'GIRDER END AT COLUMN',scale.label)+'</g>';
+ svg+=text(44,343,usesExistingBracket(p)?'EXISTING BRACKET / NEW BOLTED SEAT: S-05. KEEP GIRDER AND CAP ENDS SEPARATE.':wb?`WELDED COLUMN BRACKET BELOW / S-05. DO NOT BRIDGE GIRDER OR CAP ENDS.${joint?' END GRIDS: ONE GIRDER END, SIMILAR.':''}`:'SHARED COLUMN BRACKET / SPREADER BELOW (REF.). DO NOT BRIDGE GIRDER OR CAP ENDS.',7.8);
+ svg+=viewTitle(318,364,joint?'ADJACENT GIRDER ENDS AT COLUMN':'GIRDER END AT COLUMN',scale.label)+'</g>';
 
  // True-scale plan: each end has its OWN transverse tie to the same column.
  svg+='<g data-view="independent-tie-plan">';
@@ -56,7 +58,7 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
  const tieLayout=flangeTieGeometry(p),tieStart=tieLayout?.start??0,tieReach=tieLayout?.face??d.brace.length;
  const colY=py+tieReach*pk,bar=d.brace.thickness*pk,gus=d.brace.gussetThickness*pk;
  svg+=rect(px-m.column.bf*1000*pk/2,colY,m.column.bf*1000*pk,37,'reference-line');
- svg+=line([px,93],[px,colY+45],'grid-line')+bubble(px,86,'N');
+ svg+=line([px,93],[px,colY+45],'grid-line')+bubble(px,86,gridLabel)+text(px-12,89,gridNote,7.2,'end');
  for(const side of sides){
   const x=side<0?px-span:px+pg,at=px+side*(pg+pl/2-(tieLayout?.attachment.longitudinalSetback??0)*pk);
   svg+=rect(x,py-b.bf*pk/2,span-pg,b.bf*pk,'runway-line');
@@ -70,7 +72,7 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
  svg+=multiLeader([[px+pg+pl/2-(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[1025,247],['RIGHT GIRDER: SEPARATE TIE',tieLayout?'TOP & BOTTOM / SEE S-06':'TOP & BOTTOM / SEE S-02']);
  svg+=text(918,colY+48,'BUILDING COLUMN (REF.)',8,'middle');
  svg+=text(635,335,'COLUMN-SIDE ATTACHMENTS: ACCOMMODATE LONGITUDINAL MOVEMENT AND END ROTATION.',7.6);
- svg+=viewTitle(906,360,'INDEPENDENT FLANGE TIES / PLAN',ps.label)+'</g>';
+ svg+=viewTitle(906,364,'INDEPENDENT FLANGE TIES / PLAN',ps.label)+'</g>';
 
  svg+='<g data-view="bearing-movement">';
  const ms=drawingScale(Math.min(.30,190/(bs.length+2*c.guideTravel)),p.units),mk=ms.pointsPerMm;
@@ -82,7 +84,7 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
   svg+=line([at,y-50],[at,y+45],'grid-line');
   svg+=text(at,400,i?'RIGHT END / SLIDING':'LEFT END / LOCATING',9,'middle',700);
   svg+=dimH(at-bl/2,at+bl/2,y+bt,514,dim(bs.length));
-  if(i){svg+=dimH(at+bl/2,at+bl/2+travel,y+bt,493,`${size(c.guideTravel)} EA. WAY`);}
+  if(i){svg+=dimH(at+bl/2,at+bl/2+travel,y+bt,493,'')+text(at+bl/2+travel+5,496,`${size(c.guideTravel)} TRAVEL EA. WAY`,8);}
   svg+=text(at,543,i?'ALLOW LONGITUDINAL TRAVEL':'TRANSFER LONGITUDINAL FORCE',8,'middle');
   svg+=text(at,557,'PERMIT END ROTATION',8,'middle');
  }
@@ -95,13 +97,14 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
  const columns=[641,691,809,927,1060];['GRID','LEFT V','RIGHT V','COMBINED V','SEAT M'].forEach((v,i)=>svg+=text(columns[i],422,v,8,'start',700));
  let y=435;
  for(const {grid,row} of sharedSupportRows(s)){
-  const vf=(end:'left'|'right')=>row?.ends?format(row.ends.filter(v=>v.end===end).reduce((a,v)=>a+v.vertical,0),'force',p.units):'—';
-  [String(grid),vf('right'),vf('left'),row?format(row.vertical,'force',p.units):'PENDING',row?.seatMoment!==undefined?format(row.seatMoment,'moment',p.units):'—'].forEach((v,i)=>svg+=text(columns[i],y,v,8.5));y+=14;
+  const up=(v:string)=>p.units==='US'?v.toUpperCase():v;
+  const vf=(end:'left'|'right')=>row?.ends?up(format(row.ends.filter(v=>v.end===end).reduce((a,v)=>a+v.vertical,0),'force',p.units)):'—';
+  [String(grid),vf('right'),vf('left'),row?up(format(row.vertical,'force',p.units)):'PENDING',row?.seatMoment!==undefined?up(format(row.seatMoment,'moment',p.units)):'—'].forEach((v,i)=>svg+=text(columns[i],y,v,8.5));y+=14;
  }
  svg+=text(638,y+2,'AT MAXIMUM COMBINED DOWNWARD REACTION / EACH GRID.',7.5);
  svg+=text(638,y+13,'SEAT M = SUM V X OFFSET FROM GRID; POSITIVE TOWARD NEXT GRID.',7.5);
  const notes=[
-  usesExistingBracket(p)?'EXISTING BRACKET AND NEW BOLTED SEAT: S-05. SEPARATE TIES AND LOCATING ATTACHMENTS TRANSFER HORIZONTAL FORCES.':wb?'WELDED GRAVITY BRACKET: S-05. SEPARATE HORIZONTAL CONNECTIONS TRANSFER LATERAL AND LONGITUDINAL FORCES. SEE SIGNED INTERFACE CSV.':'DESIGN EACH BRACKET FOR THE SIMULTANEOUS GIRDER REACTIONS, LATERAL FORCES AND ECCENTRICITY TO THE COLUMN. SEE SIGNED INTERFACE CSV.',
+  usesExistingBracket(p)?'EXISTING BRACKET AND NEW BOLTED SEAT: S-05. SEPARATE TIES AND LOCATING ATTACHMENTS TRANSFER HORIZONTAL FORCES.':wb?'WELDED GRAVITY BRACKET: S-05. SEPARATE HORIZONTAL CONNECTIONS TRANSFER LATERAL AND LONGITUDINAL FORCES. INTERFACE FORCES: SEE CALCULATION REPORT.':'DESIGN EACH BRACKET FOR THE SIMULTANEOUS GIRDER REACTIONS, LATERAL FORCES AND ECCENTRICITY TO THE COLUMN. INTERFACE FORCES: SEE CALCULATION REPORT.',
   'LEFT END OF EACH BAY LOCATES LONGITUDINALLY. FULL CRANE TRACTION IS ASSIGNED TO EACH OCCUPIED BAY IN SEPARATE BOUNDING CASES; DO NOT ADD THESE CASES.',
   usesExistingBracket(p)?'GIRDER SPANS ARE GRID-TO-GRID. BEARINGS ARE INSET; EXISTING SUPPORT ASSESSMENT AND MOVEMENT COMPATIBILITY ARE REQUIRED.':wb?'GIRDER ANALYSIS SPANS ARE GRID-TO-GRID; BEARINGS ARE INSET AS SHOWN. WELDED BRACKET S-05; COLUMN-SIDE MOVEMENT ATTACHMENTS REQUIRE PROJECT DESIGN.':'GIRDER SPANS IN ANALYSIS ARE GRID-TO-GRID. BEARINGS ARE INSET AS SHOWN; BRACKET SPREADER AND COLUMN-SIDE CONNECTIONS REQUIRE PROJECT DESIGN.',
   'REFERENCE AIST TECHNICAL REPORT 13 §5.8.1. GIRDER AND CAP ENDS REMAIN SEPARATE. RAIL JOINTS ARE DETAILED INDEPENDENTLY.'

@@ -21,7 +21,8 @@ export function capSheetSvg(s:CalculationSnapshot){
  svg+=dimV(y,y+b.d*k,left,72,dim(b.d));
  // Each callout uses its own corridor; one arrow + EACH SIDE avoids crossings.
  svg+=multiLeader([[rx+r.headWidth*k/2,ry+r.headThickness*k/2]],[365,124],['RAIL / KEEPERS PER S-02']);
- svg+=multiLeader([[cx+b.capWidth*k/2,y-b.capTw*k/2]],[365,168],[`${b.capCatalogueId} CAP CHANNEL`,`ASTM GRADE PER CALCULATIONS`]);
+ const stress=(v:number)=>{const t=format(v,'stress',p.units);return p.units==='US'?t.toUpperCase():t;};
+ svg+=multiLeader([[cx+b.capWidth*k/2,y-b.capTw*k/2]],[365,168],[`${b.capCatalogueId??b.name} CAP CHANNEL`,`FY = ${stress(p.capDesign!.Fy)}, FU = ${stress(p.capDesign!.Fu)}; SEE S-00`]);
  svg+=filletLeader([[right,y]],[365,225],size(c.weldSize),['CONTINUOUS / EACH SIDE','FULL MEMBER LENGTH'],false,[[[right+20,y+17],[338,210]]]);
  svg+=multiLeader([[cx+b.tw*k/2,y+b.d*k*.60]],[365,322],[`${b.catalogueId} RUNWAY GIRDER`]);
  svg+=text(306,443,'CHANNEL WEB TO BEAR FULLY ON W TOP FLANGE',9,'middle',700);
@@ -32,7 +33,7 @@ export function capSheetSvg(s:CalculationSnapshot){
  svg+=rect(ex,ey,length*ek,b.d*ek,'runway-line')+line([ex,ey+b.tf*ek],[end,ey+b.tf*ek],'runway-line')+line([ex,ey+(b.d-b.tf)*ek],[end,ey+(b.d-b.tf)*ek],'runway-line');
  svg+=rect(ex,ey-b.capTw*ek,length*ek,b.capTw*ek,'runway-line');
  svg+=line([ex,ey+(b.capDepth-b.capTw)*ek],[end,ey+(b.capDepth-b.capTw)*ek],'runway-line');
- svg+=dimH(ex,end,ey+b.d*ek,345,dim(length));
+ svg+=dimH(ex,end,ey+b.d*ek,345,`${dim(length)} SHORTEST GIRDER; OTHERS PER SCHEDULE S-01`);
  svg+=dimH(ex,ex+c.developmentLength*ek,ey-8,185,dim(c.developmentLength));
  svg+=dimH(end-c.developmentLength*ek,end,ey-8,185,dim(c.developmentLength));
  svg+=text((ex+end)/2,157,'MINIMUM CAP FORCE DEVELOPMENT / EACH END',9,'middle',700);

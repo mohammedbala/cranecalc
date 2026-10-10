@@ -1,3 +1,4 @@
+import { issueStatus } from '../engine/drawingData';
 import {girderSegments} from '../engine/simpleSupports';
 import { detailedDrawings } from './detailedDrawings';
 import type { CalculationSnapshot } from '../engine/types';
@@ -45,7 +46,8 @@ export class Draft {
     this.text(604, height - 22, 'DIMENSIONS GOVERN / DO NOT SCALE PRINT', 8, 'start', 'BORDER');
     const failed=s.checks.filter(c=>c.status==='fail').length;
     this.text(824, height - 37, failed?`${failed} FAILED CHECK${failed>1?'S':''} - SEE CALC`:s.input.reportPurpose==='demonstration'?'DEMONSTRATION':s.input.scope==='design'?'DESIGN MODEL':'ANALYSIS ONLY', 9);
-    this.text(824, height - 22, 'NOT FOR FABRICATION', 8, 'start', 'BORDER');
+    const status=issueStatus(s);
+    this.text(824, height - 22, status.issued?status.label:'NOT FOR CONSTRUCTION', 8, 'start', 'BORDER');
   }
   line(x1: number, y1: number, x2: number, y2: number, layer: Layer = 'OUTLINE') { this.drawing.entities.push({ type: 'line', layer, a: [x1, y1], b: [x2, y2] }); }
   poly(points: Point[], closed = false, layer: Layer = 'OUTLINE') { this.drawing.entities.push({ type: 'polyline', layer, points, closed }); }
