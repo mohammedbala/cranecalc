@@ -22,6 +22,8 @@ export const existingColumnSchema=z.object({
  Lcx:pos,Lcy:pos,Lcz:pos,Lb:pos,
  longitudinal:z.enum(['bracing','column']),
  driftLimit:pos,
+ /** New freestanding columns: seismic design as a cantilever column system (ASCE 7 §12.2.5.2). */
+ seismic:z.object({enabled:z.boolean(),sdc:z.enum(['A','B','C','D','E','F']),SDS:z.number().finite().nonnegative(),system:z.enum(['ordinary','special']),Ie:pos,rho:pos,source:z.string().max(300)}).optional(),
  existing:z.object({D:effect,L:effect,Lr:effect,S:effect,R:effect,W:effect,E:effect}),
  source:z.string().max(500),confirmed:z.boolean()
 });
@@ -32,3 +34,4 @@ export const defaultExistingColumn:ExistingColumnInput={enabled:false,shape:'W14
  height:24*foot,seatElevation:16*foot,eccentricity:18*inch,strong:{base:'pinned',top:'braced'},weak:{base:'pinned',top:'braced'},
  Lcx:24*foot,Lcy:8*foot,Lcz:8*foot,Lb:8*foot,longitudinal:'bracing',driftLimit:240,
  existing:{D:{...zero},L:{...zero},Lr:{...zero},S:{...zero},R:{...zero},W:{...zero},E:{...zero}},source:'',confirmed:false};
+export const defaultRunwaySeismic:NonNullable<ExistingColumnInput['seismic']>={enabled:false,sdc:'B',SDS:.25,system:'ordinary',Ie:1,rho:1,source:''};
