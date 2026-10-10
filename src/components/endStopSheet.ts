@@ -4,7 +4,7 @@ import {endStopGeometry,stopBumperForce,activeEndStop} from '../engine/endStop';
 import {craneCombinations} from '../engine/aistLoads';
 import {boltProperties} from '../engine/connectionStrength';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,sheetStart,titleBlock,text,line,rect,circle,dimH,dimV,viewTitle,multiLeader,filletLeader,detailRef,n,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,sheetStart,titleBlock,text,line,rect,circle,dimH,dimV,viewTitle,multiLeader,filletLeader,detailRef,labelColumn,n,type XY} from './sheetGraphics';
 import {heading,numbered,table,noteStack,type Style} from './noteBlocks';
 
 const inch=25.4;
@@ -12,18 +12,6 @@ const inch=25.4;
 function breakLine(a:XY,b:XY){
  const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy),ux=dx/L,uy=dy/L,px=-uy*4,py=ux*4;
  return `<polyline class="annotation" points="${[a,[mx-ux*3,my-uy*3],[mx-ux*1+px,my-uy*1+py],[mx+ux*1-px,my+uy*1-py],[mx+ux*3,my+uy*3],b].map(p=>`${n(p[0])},${n(p[1])}`).join(' ')}"/>`;
-}
-
-/**
- * Leaders to a column of labels, ordered by target height so no two leaders
- * cross; labels are spaced by their line count within [top, bottom].
- */
-function labelColumn(items:{at:XY;labels:string[];weld?:string}[],x:number,top:number,bottom:number){
- const sorted=[...items].sort((a,b)=>a.at[1]-b.at[1]),height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*11;
- const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
- let y=top,svg='';
- for(const v of sorted){svg+=v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,true):multiLeader([v.at],[x,y],v.labels);y+=height(v)+gap;}
- return svg;
 }
 
 /** S-07: bolted runway end stop, elevation, plan and section looking at the face, with design data. */

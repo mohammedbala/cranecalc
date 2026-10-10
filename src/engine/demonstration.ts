@@ -1,4 +1,5 @@
 import {defaultEndStop} from './endStopInputs';
+import {defaultEndBearing} from './endBearingInputs';
 import {defaultBracket} from './bracketInputs';
 import {emptyCapDesign} from './capDesignInputs';
 import {loadCappedSection} from '../data/aiscChannels';
@@ -42,6 +43,9 @@ export function demonstrationProject():ProjectInput {
  p.aist={...emptyAistInputs,buildingClass:'C',classConfirmed:true,buildingCycles:75000,railDepth:6*inch,bearingLength:10*inch,netFlangeArea:p.section.bf*p.section.tf,bottomBraceSpacing:25*foot,axialLength:25*foot,torsionalLength:25*foot,runwayOnly:true,supportType:'bracket',clipSpacing:24*inch,railPad:true,camber:.25*inch,fatiguePoint:'bottom-left',fatigueReference:'AISC Table A-3.1, 1.1; full detail register in package',cycleSource:'Fictitious 1,000,000 wheel-induced stress fluctuations; three duty bins; includes loaded and empty return cycles.'};
  p.fatigue={category:'A',cycles:1000000,detail:'Plain rolled bottom flange; welded attachments checked separately in the detail register.',location:12.5*foot};
  p.details=demonstrationDetails();p.connections.enabled=true;
+ // Bolted end bearings: standard holes at each bay's locating left end, long slots at its sliding right end.
+ // A 1/2-in sliding allowance keeps the 3/4-in bolt slots within the AISC J3.2 long-slot limit.
+ p.details.endBearing={...structuredClone(defaultEndBearing),enabled:true};p.details.simpleSupport={...p.details.simpleSupport!,guideTravel:.5*inch};
  // Girder-mounted end stops over the end bearings: front bolts behind the face, back bolts near the girder end, both clear of the bearing stiffeners.
  p.details.endStop={...structuredClone(defaultEndStop),enabled:true,bumperHeight:6*inch,bumperDiameter:6*inch,setback:.5*inch,railGap:1*inch,base:{length:12*inch,width:9*inch,thickness:1*inch},face:{thickness:1*inch,height:15*inch},stiffener:{thickness:.75*inch,length:9*inch,spacing:3*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.25*inch,edge:1.5*inch},weldSize:.3125*inch,source:'Fictitious supplier data DEMO-CS-01: 20-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'};
  p.drawing={originator:'CraneCalc demonstration',checker:'',datumElevation:100*foot,datumLabel:'Reference finished floor',railElevation:20*foot};
@@ -88,6 +92,9 @@ export function cappedDemonstrationProject():ProjectInput {
  p.details!.bracket!.seatWeld=.625*inch;
  p.details!.fabrication.bolting='Tie bolts: ASTM F3125 Grade A325, 5/8-in diameter, 19-kip minimum pretension. Other girder bolts: 3/4-in A325, 28-kip minimum pretension. Standard holes and Class B faying surfaces. Rail joints: 7/8-in A325, snug-tight sliding slots.';
  p.details!.bearing.length=12*inch;p.details!.bearing.stiffenerWidth=4*inch;
+ // Ribs between the inner bearing bolt rows and the column flange edges: nuts below the seat clear the ribs at
+ // shared and runway-end grids, and both root welds stay on the 14-in receiving flange.
+ p.details!.bracket!.ribSpacing=10.5*inch;
  // Lighter stop for the 2-ton crane; base plate within the 12-in bearing.
  Object.assign(p.details!.endStop!,{base:{length:11.5*inch,width:9*inch,thickness:.75*inch},face:{thickness:.75*inch,height:15*inch},stiffener:{thickness:.5*inch,length:8.5*inch,spacing:3*inch},source:'Fictitious supplier data CAP-CS-02: 4-kip bumper force, bumper centerline 6 in above top of rail, 6-in contact diameter'});
  p.details!.end.weldSize=.3125*inch;p.details!.end.gauge=2.5*inch;p.details!.bearing.weldSize=.3125*inch;

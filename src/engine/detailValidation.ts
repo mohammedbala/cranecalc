@@ -1,3 +1,4 @@
+import {activeEndBearing} from './endBearingInputs';
 import {flangeTieGeometry} from './tieGeometry';
 import {tieArrangement,validateConnectionOptions} from './connectionOptions';
 import type { ProjectInput } from './types';
@@ -19,7 +20,10 @@ export function validateRunwayDetails(p:ProjectInput){
  // Each keeper is fillet welded on both faces; the inner fillet lies in the gap between the keeper and the rail foot, half the toe projection.
  add(r.clipWeld+1.5875>r.clipProjection/2+1e-6,'rail keeper inner fillet plus 1/16 in fit-up clearance must fit between the keeper and the rail foot (half the keeper projection).');
  // Girder-end cover plates sit between the girder end and the bearing stiffener pair at the bearing centre.
- if(p.system==='simple')add(d.end.gauge+2*d.end.edge>d.bearing.length/2-d.bearing.stiffenerThickness/2-d.bearing.weldSize+1e-6,'girder-end cover plates (bolt gauge plus two edge distances) must fit between the girder end and the bearing stiffeners and their welds.');
+ // A bolted end bearing replaces the girder-end cover plates on independent simple spans.
+ const bearingBolts=activeEndBearing(p),webEnd=!bearingBolts;
+ if(bearingBolts)try{boltProperties(bearingBolts.bolts.grade,bearingBolts.bolts.diameter);}catch(e){errors.push(`details: ${e instanceof Error?e.message:String(e)}`);}
+ if(p.system==='simple'&&webEnd)add(d.end.gauge+2*d.end.edge>d.bearing.length/2-d.bearing.stiffenerThickness/2-d.bearing.weldSize+1e-6,'girder-end cover plates (bolt gauge plus two edge distances) must fit between the girder end and the bearing stiffeners and their welds.');
  // The unbraced length is validated against the compression-flange stations in validateProject.
  const gaps=flangeRestraintGaps(p);
  add((p.aist?.axialLength??0)+1e-6<Math.max(...p.spans),'axial effective length must cover a complete span in this template.');
@@ -55,13 +59,13 @@ export function validateRunwayDetails(p:ProjectInput){
   add(Math.abs(b.connection.thickness-b.thickness)>1e-6,'tie cover-plate thickness must equal the paired tie-bar thickness in this template.');
   add(b.width<b.connection.gauge+2*b.connection.edge,'brace bar width must contain the two bolt lines and edge distances.');
  }
- add((d.end.rows-1)*d.end.pitch+2*d.end.edge>p.section.d-2*p.section.tf,'end bolt pattern must fit within the clear girder web.');
+ if(webEnd)add((d.end.rows-1)*d.end.pitch+2*d.end.edge>p.section.d-2*p.section.tf,'end bolt pattern must fit within the clear girder web.');
  add(d.bearing.cope*2>=p.section.d-2*p.section.tf,'stiffener copes must leave a positive effective web-weld length.');
- add(d.end.weldLength>2*d.end.edge+(d.end.rows-1)*d.end.pitch+1e-6,'end-plate effective weld length exceeds plate height.');
+ if(webEnd)add(d.end.weldLength>2*d.end.edge+(d.end.rows-1)*d.end.pitch+1e-6,'end-plate effective weld length exceeds plate height.');
  add(d.fatigueDetails.some(v=>v.x>L),'fatigue stations must lie on the modeled girder.');
  add(Math.abs(d.spectrum.reduce((a,v)=>a+v.cycles,0)-p.fatigue.cycles)>.5,'duty-bin cycles must sum to the project fatigue cycles.');
  add(new Set(d.fatigueDetails.map(f=>f.id)).size!==d.fatigueDetails.length,'fatigue detail IDs must be unique.');
- for(const c of tieArrangement(d)==='paired-bars'?[d.end,b.connection]:[d.end])try{
+ for(const c of [...(webEnd?[d.end]:[]),...(tieArrangement(d)==='paired-bars'?[b.connection]:[])])try{
   const bolt=boltProperties(c.grade,c.diameter);add(c.weldLength<4*c.weldSize,'fillet weld effective length must be at least four times its leg.');add(c.edge<=bolt.hole/2||Math.min(c.gauge,c.pitch)<=bolt.hole,'bolt holes overlap or cross the plate edge.');
  }catch(e){errors.push(`details: ${e instanceof Error?e.message:String(e)}`);}
  try{const bolt=boltProperties('A325',r.jointBoltDiameter);add(r.jointPlateHeight<=bolt.hole+1.5875||r.jointPitch<=1.5*r.jointBoltDiameter+1.5875||r.jointEdge<=.75*r.jointBoltDiameter+1.5875,'rail-joint slots leave insufficient net material.');}catch(e){errors.push(`details: ${e instanceof Error?e.message:String(e)}`);}

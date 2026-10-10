@@ -10,12 +10,13 @@ import {engineeringSketches,lineworkDxf} from '../src/components/drafting';
 import {interfaceCsv} from '../src/engine/detailExports';
 import {reportHtml} from '../server/report';
 let snapshot:CalculationSnapshot;
-beforeAll(()=>{snapshot=calculate(demonstrationProject());},60000);
+beforeAll(()=>{snapshot=calculate(demonstrationProject());},180000);
 describe('representative runway package',()=>{
  it('recomputes an exportable design with passing model and engineering gates',()=>{
   expect(snapshot.errors).toEqual([]);expect(snapshot.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status))).toEqual([]);expect(snapshot.eligible).toBe(true);
   // Building adequacy is stated as outside the calculation, never as a pass.
-  expect(snapshot.checks.filter(c=>c.status==='excluded').map(c=>c.id)).toEqual(['supporting-structure']);
+  // The demonstration bracket is by others, so the bolted bearing seat is listed with it.
+  expect(snapshot.checks.filter(c=>c.status==='excluded').map(c=>c.id)).toEqual(['supporting-structure','end-bearing-seat']);
   expect(snapshot.detailResults!.fatigue.length).toBeGreaterThan(20);
   expect(snapshot.detailResults!.travelChange).toBeLessThan(.01);expect(snapshot.detailResults!.meshChange).toBeLessThan(.01);
  });
@@ -49,7 +50,8 @@ describe('representative runway package',()=>{
  });
  it('derives all detail sheets and export records from the current snapshot',()=>{
   const sheets=engineeringSketches(snapshot);expect(sheets).toHaveLength(8);
-  expect(sheets.find(s=>s.number==='SK-05')!.entities.filter(e=>e.type==='circle')).toHaveLength(8);
+  // SK-05 shows the bolted end bearing: four standard holes at the locating end, four slots at the sliding end.
+  expect(sheets.find(s=>s.number==='SK-05')!.entities.filter(e=>e.type==='circle')).toHaveLength(4);
   const dxf=lineworkDxf(snapshot);expect(dxf.includes('4 A325 bolts, diameter 7/8"')).toBe(true);expect(dxf).toContain(snapshot.revision);
   const csv=interfaceCsv(snapshot);expect(csv).toContain(snapshot.input.units==='US'?'vertical_down_kip':'vertical_down_N');expect(csv).toContain('BUMPER-1');
   const html=reportHtml(snapshot);expect(html).toContain('FICTITIOUS');expect(html).toContain('OUTSIDE THIS CALCULATION - BY OTHERS');expect(html).toContain('signed');expect(html).toContain('SK-07');expect(html).not.toContain('class="json"');

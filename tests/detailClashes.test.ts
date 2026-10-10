@@ -13,8 +13,10 @@ describe('detail clash validation',()=>{
  });
  it('rejects end cover plates that overlap the bearing stiffeners',()=>{
   // Former 10-ton bearing: stiffener and weld leave 4.19 in for a 6 in cover plate.
-  const p=demonstrationProject();p.details!.bearing.length=10*inch;Object.assign(p.details!.end,{gauge:3*inch,edge:1.5*inch,weldLength:12*inch});
+  const p=demonstrationProject();p.details!.endBearing!.enabled=false;p.details!.bearing.length=10*inch;Object.assign(p.details!.end,{gauge:3*inch,edge:1.5*inch,weldLength:12*inch});
   expect(errors(p)).toContain(endError);
+  // With bolted end bearings the cover plates are not used, so their footprint is not a constraint.
+  p.details!.endBearing!.enabled=true;expect(errors(p)).not.toContain(endError);
  });
  it('keeps both examples buildable under these rules',()=>{
   for(const p of [demonstrationProject(),cappedDemonstrationProject()]){

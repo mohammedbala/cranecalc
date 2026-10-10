@@ -4,6 +4,7 @@ import {defaultExistingColumn,existingLoadKeys,type ExistingColumnInput} from '.
 import {defaultLongitudinalBracing,type LongitudinalBracingInput} from '../engine/longitudinalBracingInputs';
 import {aiscAngles} from '../data/aiscAngles';
 import {defaultEndStop,needsGirderStops,type EndStopInput} from '../engine/endStopInputs';
+import {defaultEndBearing,type EndBearingInput} from '../engine/endBearingInputs';
 import type {CalculationSnapshot,ProjectInput} from '../engine/types';
 import {format,type Quantity} from '../engine/units';
 
@@ -85,5 +86,18 @@ export function EndStopInputs({project,update,numeric}:{project:ProjectInput;upd
    <div className="field-grid">{numeric('Bolt diameter',e.bolts.diameter,v=>part('bolts',{diameter:v}))}<label className="field"><span>Bolt grade</span><select value={e.bolts.grade} onChange={ev=>part('bolts',{grade:ev.target.value as 'A325'|'A490'})}><option>A325</option><option>A490</option></select></label>{numeric('Bolt gauge across runway',e.bolts.gauge,v=>part('bolts',{gauge:v}))}{numeric('Front bolts behind face plate',e.bolts.frontClear,v=>part('bolts',{frontClear:v}))}{numeric('Back bolts from base plate edge',e.bolts.edge,v=>part('bolts',{edge:v}))}{numeric('Fillet weld size',e.weldSize,v=>set({weldSize:v}))}</div>
    <label className="field"><span>Source of bumper force, height and contact diameter</span><input value={e.source} placeholder="Crane supplier data reference" onChange={ev=>set({source:ev.target.value})}/></label>
   </>}</>}
+ </div>;
+}
+
+export function EndBearingInputs({project,update,numeric}:{project:ProjectInput;update:(fn:(p:ProjectInput)=>void)=>void;numeric:NumericField}){
+ const e=project.details?.endBearing;
+ const set=(patch:Partial<EndBearingInput>)=>update(p=>{if(p.details)p.details.endBearing={...(p.details.endBearing??structuredClone(defaultEndBearing)),...patch};});
+ const bolts=(patch:Partial<EndBearingInput['bolts']>)=>e&&set({bolts:{...e.bolts,...patch}});
+ if(!project.details||project.system!=='simple')return null;
+ return <div className="aist-inputs">
+  <div className="form-section-title"><span>05</span>Bolted end bearings</div>
+  <label className="checkbox-field"><input type="checkbox" checked={!!e?.enabled} onChange={ev=>set({enabled:ev.target.checked})}/>Bolt each girder end to its bracket seat</label>
+  <p className="form-note">Four bolts through the bottom flange, bearing plate and seat at each girder end. The left end of each bay locates with standard holes and pretensioned slip-critical bolts; the right end slides in long slots sized for the sliding allowance, with plate washers and snug-tight bolts. Replaces the girder-end cover plates. Drawn on S-02.</p>
+  {e?.enabled&&<div className="field-grid">{numeric('Bolt diameter',e.bolts.diameter,v=>bolts({diameter:v}))}<label className="field"><span>Bolt grade</span><select value={e.bolts.grade} onChange={ev=>bolts({grade:ev.target.value as 'A325'|'A490'})}><option>A325</option><option>A490</option></select></label>{numeric('Bolt gauge across runway',e.bolts.gauge,v=>bolts({gauge:v}))}{numeric('Bolt rows from bearing plate ends',e.bolts.edge,v=>bolts({edge:v}))}{numeric('Plate washer thickness',e.washerThickness,v=>set({washerThickness:v}))}</div>}
  </div>;
 }

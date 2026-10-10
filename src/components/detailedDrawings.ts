@@ -6,6 +6,7 @@ import {flangeTieGeometry} from '../engine/tieGeometry';
 import {bearingStiffenerProfile} from './bearingStiffenerGeometry';
 import { Draft, type CadDrawing } from './drafting';
 import { boltProperties } from '../engine/connectionStrength';
+import { activeEndBearing, endBearingGeometry } from '../engine/endBearing';
 import { flangeRestraintStations } from '../engine/detailAnalysis';
 import type { CalculationSnapshot } from '../engine/types';
 import { format } from '../engine/units';
@@ -27,7 +28,23 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  const notes=[`Bearing plate: ${f(bs.width)} wide x ${f(bs.length)} along girder x ${f(bs.thickness)}`,`Pair fitted stiffeners: outstand ${f(bs.stiffenerWidth)} x ${f(bs.stiffenerThickness)}`,`Web-side corner cope: ${f(bs.cope)}; web fillets: ${f(bs.weldSize)}, four lines`,b.kind==='cap'?`Fit/mill ends; top flange CJP; continuous web fillets`:`Fit/mill ends; continuous web AND flange fillets`,`Top-flange ties at x: ${flangeRestraintStations(p).top.map(f).join(', ')}`,`Bottom-flange ties at x: ${flangeRestraintStations(p).bottom.map(f).join(', ')}`,`Tie stiffness at EACH flange: ${format(s.detailResults?.braceStiffness??0,'stiffness',p.units)}`,`Bearing reaction envelope: ${force(s.designAnalysis?.reaction??0)}`,`End rotation clearance: ${f(d.criteria.rotationClearance)}`];
  notes.forEach((n,i)=>dr.text(500,85+29*i,n,10));dr.text(80,55,'SECTION AT SUPPORT; STIFFENERS ALSO AT EACH RESTRAINT',10);output.push(dr.drawing);
  }
- for(const [key,c,title,number,central] of [['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw],['tie',d.brace.connection,'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const){
+ const eb=activeEndBearing(p);
+ if(eb){
+  // SK-05: bolted end bearing hole patterns on the girder bottom flange.
+  const g=endBearingGeometry(p,eb),bs=d.bearing,k=Math.min(150/bs.length,200/Math.max(p.section.bf,bs.width)),y0=110,dr=new Draft(s,'end-connection-detail','Bolted end bearing / locating and sliding hole patterns','SK-05',500,1/k,'Bottom flange plan at each girder end. Standard holes at the locating end; long slots at the sliding end under plate washers.');
+  for(const [i,role] of (['LOCATING END','SLIDING END'] as const).entries()){
+   const x0=110+i*250,W=Math.max(p.section.bf,bs.width);
+   dr.rect(x0,y0+(W-p.section.bf)*k/2,bs.length*k,p.section.bf*k);dr.rect(x0,y0,bs.length*k,bs.width*k,'HIDDEN');dr.text(x0,y0-14,role,10);
+   for(const r of g.rows)for(const side of [-1,1]){const cx=x0+r*k,cy=y0+W*k/2+side*eb.bolts.gauge*k/2;
+    if(i===0)dr.circle(cx,cy,g.hole*k/2);
+    else{const hl=g.slot*k/2,hr=g.hole*k/2,pts:[number,number][]=[];for(let a=0;a<=12;a++){const t=-Math.PI/2+Math.PI*a/12;pts.push([cx+hl-hr+hr*Math.cos(t),cy+hr*Math.sin(t)]);}for(let a=0;a<=12;a++){const t=Math.PI/2+Math.PI*a/12;pts.push([cx-hl+hr+hr*Math.cos(t),cy+hr*Math.sin(t)]);}dr.poly(pts,true);dr.rect(cx-g.washer.length*k/2,cy-g.washer.width*k/2,g.washer.length*k,g.washer.width*k,'HIDDEN');}
+    dr.line(cx-8,cy,cx+8,cy,'CENTER');dr.line(cx,cy-8,cx,cy+8,'CENTER');}
+   dr.dimH(x0,x0+g.rows[0]*k,y0+W*k,y0+W*k+22,`${f(g.rows[0])}`);dr.dimH(x0+g.rows[0]*k,x0+g.rows[1]*k,y0+W*k,y0+W*k+22,`${f(g.spacing)}`);
+  }
+  const notes=[`4 ${eb.bolts.grade} bolts each end, diameter ${f(eb.bolts.diameter)}; gauge ${f(eb.bolts.gauge)}`,`Locating: ${f(g.hole)} standard holes in all plies; pretensioned, Class B (SC)`,`Sliding: ${f(g.hole)} x ${f(g.slot)} long slots in the girder flange`,`Sliding allowance ${f(g.travel)} each way; snug-tight bolts with jam nuts`,`Plate washers ${f(eb.washerThickness)} x ${f(g.washer.width)} x ${f(g.washer.length)}`,`Bolt rows ${f(eb.bolts.edge)} from each bearing plate end, clear of the stiffeners`];
+  notes.forEach((n,i)=>dr.text(110,330+24*i,n,10));output.push(dr.drawing);
+ }
+ for(const [key,c,title,number,central] of [...(eb?[]:[['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw]] as const),['tie',d.brace.connection,'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const){
  const w=c.gauge+2*c.edge,h=(c.rows-1)*c.pitch+2*c.edge,k=Math.min(240/w,230/h),x=125,y=90,dr=new Draft(s,`${key}-connection-detail`,title,number,500,1/k,'In-plane force template. Two cover plates; standard holes. Out-of-plane forces/prying require another model.');
  dr.rect(x,y,w*k,h*k);const hole=boltProperties(c.grade,c.diameter).hole;
  for(let row=0;row<c.rows;row++)for(let col=0;col<2;col++){const bx=x+(c.edge+col*c.gauge)*k,by=y+(c.edge+row*c.pitch)*k;dr.circle(bx,by,hole*k/2);dr.line(bx-8,by,bx+8,by,'CENTER');dr.line(bx,by-8,bx,by+8,'CENTER');}

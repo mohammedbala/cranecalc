@@ -154,7 +154,7 @@ export function resolveSheetSet(sheets:DrawingSheet[]):DrawingSheet[]{
     svg=svg.replace(/<g data-view-title="below" data-detail-title="([^"]*)">([\s\S]*?)<\/g>/g,(all,title:string)=>{k++;const key=unescape(title);if(!details.has(key))details.set(key,`${k}/${sheet.number}`);return all.replace(detailNumberToken,String(k)).replace(sheetNumberToken,sheet.number);});
     return {...sheet,svg};
   });
-  return numbered.map(sheet=>({...sheet,svg:sheet.svg.replace(/\{\{REF:([^}]*)\}\}/g,(_,title:string)=>details.get(unescape(title))??`${title} (NOT IN SET)`)}));
+  return numbered.map(sheet=>({...sheet,svg:sheet.svg.replace(/\{\{REF:([^}]*)\}\}/g,(_,token:string)=>{const title=decodeURIComponent(token);return details.get(title)??`${title} (NOT IN SET)`;})}));
 }
 const unescape=(v:string)=>v.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
 /** The issued set: cover S-00 with general notes, criteria and sheet index, then the details that apply. */

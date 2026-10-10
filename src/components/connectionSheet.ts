@@ -1,4 +1,6 @@
 import {existingBracketLabel} from '../engine/bracketProfiles';
+import {activeEndBearing} from '../engine/endBearingInputs';
+import {endBearingView} from './endBearingDetail';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {flangeTieSection} from './flangeTieSheet';
 import type { CalculationSnapshot } from '../engine/types';
@@ -54,7 +56,7 @@ export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defau
    weldPts.push([cx+sign*b.tw/2000*k,y+h*.76]);
   }
   svg+=rect(cx-pw/2,bottom,pw,pt,'runway-line');
-  svg+=multiLeader([[cx-m.bf*k/2+8,top]],[43,86],[b.name+' RUNWAY GIRDER']);
+  svg+=multiLeader([[cx-m.bf*k/2+8,top]],[40,96],[b.name,'RUNWAY GIRDER']);
   svg+=dimV(top,bottom,cx-m.bf*k/2,87,dim(b.d));
   svg+=multiLeader([[inner+C(110),110]],[355,100],[colName+' (REF.)']);
   svg+=multiLeader(stiffPts,[355,165],[`2 PL ${size(d.bearing.stiffenerThickness)} X ${size(d.bearing.stiffenerWidth)}`,`FULL-DEPTH FITTED BEARING STIFFENERS`,`${size(d.bearing.cope)} WEB-SIDE CORNER COPES`],8,stiffPts.map(()=>[[215,160]]));
@@ -64,9 +66,11 @@ export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defau
   svg+=viewTitle(318,352,'GIRDER BEARING / COLUMN BRACKET',scale.label)+'</g>';
  }
 
+ // 2: Bolted end bearings replace the girder-end cover plates on independent spans.
+ if(activeEndBearing(p))svg+=endBearingView(s);
  // 2: Cover plates are placed on the actual girder web; column beyond and
  // transverse bracket section show where the connection transfers its loads.
- {
+ else {
   svg+='<g data-view="end-connection">';
   const c=d.end,scale=drawingScale(Math.min(.24,240/(b.d+d.bearing.thickness+m.bracketDepth*1000)),p.units),k=scale.pointsPerMm,left=646,right=877,top=90,bottom=top+b.d*k;
   const colB=m.column.bf*1000*k,colX=853,brB=bracket.bf*25.4*k,brD=m.bracketDepth*1000*k;
