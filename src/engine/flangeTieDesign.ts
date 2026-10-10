@@ -10,7 +10,10 @@ export function flangeTieResponse(p:ProjectInput,F:number){
  const g=flangeTieGeometry(p)!;const d=p.details!,t=d.brace,a=g.attachment,E=p.section.E;
  const h=g.sides.includes(-1)?Math.max(g.topDrop,g.bottomDrop):g.topDrop,H=h-a.saddleThickness,L=g.rootLength,B=a.saddleLength,w=a.weldSize;
  const M=F*H,flangeM=F*h;
- const weld=(gauge:number,moment:number)=>parallelWeldGroup({length:L,gauge,size:w,Fexx:d.material.Fexx,method:p.method,vx:0,vy:F,normal:0,mx:moment,my:0,mz:0});
+ // Two fillet lines along the tie, length L: the gusset-to-saddle fillets on each gusset face (gauge t_g), and the
+ // saddle-to-flange transverse end fillets across the flange at the two saddle ends (gauge B). The tie force runs
+ // along each line; its moment about the runway axis is throat normal stress varying along the line.
+ const weld=(gauge:number,moment:number,length=L)=>parallelWeldGroup({length,gauge,size:w,Fexx:d.material.Fexx,method:p.method,vx:0,vy:F,normal:0,mx:moment,my:0,mz:0});
  const gusset=6*M/(t.gussetThickness*L**2)+1.5*F/(t.gussetThickness*L);
  // Vertical line load at the gusset is bounded by 6M/L^2. Simply supported
  // saddle strips span B, with center load q: m=qB/4. Add direct shear.
@@ -27,8 +30,10 @@ export function flangeTieResponse(p:ProjectInput,F:number){
  // its weld group): the strip moment is F·h across the web gap, then (1-ξ)²(1+2ξ) along the root, giving
  // rotational compliance [g_web + (13/35)L]/(EI_strip). No composite saddle or bearing stiffener credit.
  const compliance=h*h*((g.rootStart-p.section.tw/2)+13/35*L)/(E*flangeI)+3*H*H*B**3/(E*a.saddleThickness**3*L**3)+4*H**3/(E*t.gussetThickness*L**3)+e**3/(3*E*columnI);
- return {gusset,saddle,flange,column,rootWeld,gussetWeld:weld(t.gussetThickness,M),saddleWeld:weld(B,flangeM),compliance,h,H,L,B};
+ return {gusset,saddle,flange,column,rootWeld,gussetWeld:weld(t.gussetThickness,M),saddleWeld:weld(B,flangeM,g.endWeldLength),compliance,h,H,L,B};
 }
+/** Minimum clear distance of the girder gusset to a cap channel flange, mm (1/2 in). */
+export const capClearance=12.7;
 export function flangeTieChecks(s:CalculationSnapshot,force:number):CheckResult[]{
  const p=s.input,g=flangeTieGeometry(p),d=p.details;if(!g||!d||!s.detailResults)return [];
  const a=g.attachment,t=d.brace,c=t.connection,m=d.material,r=flangeTieResponse(p,force),cyc=p.fatigue.cycles;
@@ -41,14 +46,16 @@ export function flangeTieChecks(s:CalculationSnapshot,force:number):CheckResult[
  add('flange','Girder flange · local elastic stress',r.flange,available(p.section.Fy,p.method,.9,1.67),'f_f=6Fh/(Bt_f^2)+1.5F/(Bt_f)',note+' Strip width is only the actual saddle length along the runway.');
  if(g.receiver)add('column','Column flange at tie · local elastic stress',r.column,available(g.receiver.Fy,p.method,.9,1.67),'f_c=6Fe/(h_gt_c^2)+1.5F/(h_gt_c)',note+` Receiving flange: ${g.receiver.source}. Outstand e includes half the gusset thickness; no global axial/lateral interaction approval.`);
  else byOthers('column','Column flange at tie · local elastic stress');
- for(const [id,title,weld] of [['gusset-weld','Gusset-to-saddle weld',r.gussetWeld],['saddle-weld','Saddle-to-flange weld',r.saddleWeld]] as const)add(id,title,weld.demand,weld.capacity,'f_w=\\max\\sqrt{(F/A_w)^2+(My/I_w)^2}',note+' Four weld endpoints; no directional strength increase.');
+ const len=(v:number)=>format(v,'length',p.units,3);
+ add('gusset-weld','Gusset-to-saddle fillets, both gusset faces',r.gussetWeld.demand,r.gussetWeld.capacity,'f_w=\\max\\sqrt{(F/A_w)^2+(My/I_w)^2}',note+` Two fillets ${len(a.weldSize)} × ${len(r.L)}, one each face of the gusset along the saddle; tie force along the welds, moment F·H as normal stress along them. Four weld endpoints; no directional strength increase.`);
+ add('saddle-weld','Saddle-to-flange transverse end fillets',r.saddleWeld.demand,r.saddleWeld.capacity,'f_w=\\max\\sqrt{(F/A_w)^2+(My/I_w)^2}',note+` The only welds of the saddle to the flange: two transverse end fillets ${len(a.weldSize)} × ${len(g.endWeldLength)} across the flange, one at each saddle end, ${len(r.B)} apart. The saddle edges along the runway are not welded (flush with the flange tip; near the rolled root). Tie force along each weld (no directional increase); moment F·h about the runway axis as throat normal stress varying along each weld. Four weld endpoints.`);
  add('column-weld','Column tie root weld',r.rootWeld,available(.6*m.Fexx,p.method,.75,2),'f_w=F/(2h_gw/\\sqrt2)',note+' Weld length is the full column gusset height.');
  const E1=6900*(.39/cyc)**(1/3),C=6900*(4.4/cyc)**(1/3),weldF=Math.max(55,690*(1.5/cyc)**.167);
  add('saddle-fatigue','Saddle plate · all-cycle fatigue bound',f.saddle,E1,'\\Delta f_s\\le6900(0.39/N)^{1/3}','Conservative Category E-prime for welded attachment; full tie range at all cycles, no endurance credit.');
  add('gusset-fatigue','Flange gusset · weld-root fatigue',f.gusset,transverseFilletFatigue(t.gussetThickness,a.weldSize,cyc).capacity,'\\Delta f_g\\le F_{SR,C^{\\prime\\prime}}','Transverse fillet root at the saddle; includes eccentric bending and direct shear by addition.');
  if(g.receiver)add('column-fatigue','Column flange at tie · local fatigue',f.column,E1,'\\Delta f_c\\le6900(0.39/N)^{1/3}','Conservative Category E-prime local tie action only. Cyclic building-frame stresses require separate combination.');
  else byOthers('column-fatigue','Column flange at tie · local fatigue');
- add('weld-fatigue','Flange attachment welds · all-cycle fatigue',Math.max(f.gussetWeld.demand,f.saddleWeld.demand,f.rootWeld),weldF,'\\Delta f_w\\le F_{SR,F}','Largest elastic weld range from the full brace-force range, applied to every cycle.');
+ add('weld-fatigue','Flange attachment welds · all-cycle fatigue',Math.max(f.gussetWeld.demand,f.saddleWeld.demand,f.rootWeld),weldF,'\\Delta f_w\\le F_{SR,F}','Largest elastic weld throat range (gusset-to-saddle fillets, saddle transverse end fillets, column root fillets) from the full brace-force range, applied to every cycle. The base metal at the toe of the transverse end fillets on the girder flange is in the fatigue register (AISC Table A-3.1 item 7.1).');
  add('column-root-fatigue','Column gusset root · normal fatigue',s.detailResults.demands.braceFatigue/(t.gussetThickness*g.columnGusset),Math.min(C,transverseFilletFatigue(t.gussetThickness,c.weldSize,cyc).capacity),'\\Delta f_p=\\Delta F/(t_gb_g)','Column-side paired fillet root; no threshold credit for RFIL below one.');
  const required=minimumFillet(Math.max(a.saddleThickness,t.gussetThickness,p.section.tf));
  add('weld-minimum','Flange attachment · minimum weld',required,a.weldSize,'w\\ge w_{min,J2.4}','Thickest joined plate.', 'length');
@@ -56,6 +63,9 @@ export function flangeTieChecks(s:CalculationSnapshot,force:number):CheckResult[
  const shape=aiscShapeByName(p.section.catalogueId??''),fillet=(shape?shape.kdes*25.4-p.section.tf:0)+a.clearance;
  add('root-clearance','Saddle · rolled-root clearance',fillet,a.webGap,'g_{web}\\ge(k_{des}-t_f)+c','Nominal design fillet bound plus entered clearance; verify actual rolling tolerances.','length');
  add('stiffener-clearance','Saddle weld · bearing-stiffener clearance',a.saddleLength/2+a.weldSize+d.bearing.stiffenerThickness/2+d.bearing.weldSize+a.clearance,a.longitudinalSetback,'s_x\\ge B/2+w_s+t_{st}/2+w_{st}+c','Conservative orthogonal material/weld envelope.','length');
+ // Capped girder: the girder gusset stays clear of the turned-down cap channel flange (out-of-square and fillet tolerance).
+ if(g.capClear!==undefined)add('cap-clearance','Girder gusset · clear of the cap channel flange',capClearance,g.capClear,'c_{cap}\\ge1/2\\,in',`Clear distance from the outer top corner of the girder gusset to the turned-down channel flange (inner face ${len(g.capFlange!)} from the web centerline). Covers channel out-of-square and the cap fillet at the flange tip.`,'length');
+ add('bar-saddle-clearance','Tie bars · clear of the saddle and gusset fillets',a.weldSize+1.5875,Math.min(...g.sides.map(v=>(v>0?g.topDrop:g.bottomDrop)-t.width/2-a.saddleThickness)),'c_{bar}\\ge w+1/16\\,in','The bars lie against the gusset faces below the saddle; they stop below the toe of the gusset-to-saddle fillets.','length');
  const need=2*t.thickness+t.gussetThickness+2*c.diameter,clear=2*Math.min(...g.stations.filter(v=>v.station>0&&v.station<p.spans.reduce((a,b)=>a+b,0)).map(v=>Math.abs(v.tieX-v.station)));
  if(Number.isFinite(clear))add('adjacent-hardware','Adjacent ties · exposed hardware separation',need+a.clearance,clear,'s_{ties}\\ge2t_b+t_g+2d_b+c','Both independent end bolt assemblies, including projected heads/nuts/washers.','length');
  return out;

@@ -39,7 +39,7 @@ export function buildIndependentSupports(p:ProjectInput,columnFace:number,materi
   const tie=p.details.brace,c=tie.connection,th=tie.thickness/1000,gw=tie.gussetThickness/1000,width=tie.width/1000,length=tie.length/1000,release=tieRelease(p),hg=columnGussetHeight(p)/1000;
   // Paired vertical flat bars can bend out of their plane with end rotation.
   // Place their column end at the actual reference column face.
-  const z0=columnFace-length,tx=x+(layout?(end.end==='left'?-1:1)*layout.attachment.longitudinalSetback/1000:0);
+  const gap=layout?layout.barGap/1000:0,z0=columnFace-gap-length,tx=x+(layout?(end.end==='left'?-1:1)*layout.attachment.longitudinalSetback/1000:0);
   for(const side of tieSides(p)){
    const y=layout?(side>0?layout.topCenter:layout.bottomCenter)/1000:side*(d/2-tf-width/2),conn=((c.rows-1)*c.pitch+2*c.edge)/1000;
    if(layout){
@@ -53,8 +53,9 @@ export function buildIndependentSupports(p:ProjectInput,columnFace:number,materi
      filletWeld(group,`${id}-column-tie-weld-${side}-${sign}`,new THREE.Vector3(gx,y-hg/2,columnFace),new THREE.Vector3(gx,y+hg/2,columnFace),new THREE.Vector3(sign,0,0),new THREE.Vector3(0,0,-1),c.weldSize/1000,weldMaterial,'Field weld gusset to existing column; local column flange and weld checks. Global frame movement remains separate.',{x:end.station/1000-L/2,z:columnFace},{location:'field',existingSteel:true});
     }
    }
-   for(const [rootIndex,at] of [z0+conn/2,columnFace-conn/2].entries()){
-    const rootStart=layout&&rootIndex===0?layout.rootStart/1000:at-conn/2,rootEnd=at+conn/2;
+   for(const [rootIndex,at] of [z0+conn/2,columnFace-gap-conn/2].entries()){
+    // The column gusset reaches the column flange across the gap at the bar ends.
+    const rootStart=layout&&rootIndex===0?layout.rootStart/1000:at-conn/2,rootEnd=rootIndex===1?columnFace:at+conn/2;
     // The column gusset is as tall as the bars, or taller to contain the vertical release slots.
     const half=rootIndex===1?hg/2:width/2,rootTop=layout&&rootIndex===0?side*(d/2-tf-layout.attachment.saddleThickness/1000):y+side*half;
     const rootBottom=y-side*half,rootY=(rootTop+rootBottom)/2,rootHeight=Math.abs(rootTop-rootBottom);

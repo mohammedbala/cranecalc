@@ -23,6 +23,13 @@ it('shows the cap-specific equations and scaled cap attachment details',()=>{
  expect(withView('flange-tie-plan').title).toContain('FLANGE TIES');
  const cap=withView('cap-development').svg;expect(cap).toContain('CAP END DEVELOPMENT');
  expect(cap).toContain('SCALE:');expect(cap).toContain('5&#39;-0&quot;');
+ // The capped girder section is keyed on the development elevation, which the section's weld callout references.
+ const development=cap.split('data-view="cap-development"')[1].split('data-view-title')[0];
+ expect(development).toContain('data-section-cut="CAPPED GIRDER SECTION"');
+ expect(withView('cap-section').svg).toMatch(/FULL MEMBER LENGTH; \d+\/S-0\d/);
+ // The tie details coordinate with the cap: the girder gusset clears the channel flange by at least 1/2 in.
+ expect(s.checks.find(c=>c.id==='flange-tie-cap-clearance')).toMatchObject({status:'pass'});
+ expect(s.checks.find(c=>c.id==='flange-tie-cap-clearance')!.capacity).toBeGreaterThanOrEqual(12.7);
  expect(html).toContain('Capped girder properties');expect(html).toContain('Cap attachment strength');
  expect(html).not.toContain('katex-error');expect(html).not.toContain('remains pending');
 });
