@@ -7,6 +7,7 @@ import {runwayElevations,issueStatus,girderMarks} from '../src/engine/drawingDat
 import {drawingLength} from '../src/components/drawingFormat';
 import {multiLeader,textWidth,wrapToWidth,viewTitle,detailRef,sheetDrawingScale,withDetailRoom,text,line} from '../src/components/sheetGraphics';
 import {annotationClashes} from '../src/components/detailSheet';
+import {coverSheetSvg} from '../src/components/coverSheet';
 import {format} from '../src/engine/units';
 import type {CalculationSnapshot} from '../src/engine/types';
 
@@ -105,7 +106,16 @@ describe('drawings agree with the calculation',()=>{
   expect(cover).toContain(drawingLength(p.details!.criteria.railGauge,p.units));
   for(const c of p.cranes)expect(cover).toContain(`CRANE DATA · ${c.name.toUpperCase()}`);
   expect(cover).toContain('DEMONSTRATION - NOT FOR CONSTRUCTION');
+  // Wheel load diagram per crane, and the runway combinations the calculation applies.
+  for(const c of p.cranes){expect(cappedSet[0].svg).toContain(`data-wheel-diagram="${c.id}"`);expect(cover).toContain(`WHEEL LOADS · ${c.name.toUpperCase()}`);}
+  expect(cover).toContain(`LOAD COMBINATIONS · RUNWAY GIRDER (${p.method})`);expect(cover).toContain('1.2(D+CDM)+1.6(CVM+CSS+CLS)+L');
  },120000);
+ it('labels each wheel load in the diagram only when the wheels are far enough apart (one label for bogies)',()=>{
+  const close=structuredClone(capped);close.input.cranes[0].wheels=[0,150,3000,3150].map(offset=>({...capped.input.cranes[0].wheels[0],offset}));
+  const cover=texts(coverSheetSvg(close,[])).join(' | ');
+  expect(cover).toContain('WHEEL LOADS, MAX.');
+  expect(texts(cappedSet[0].svg).join(' | ')).not.toContain('WHEEL LOADS, MAX.');
+ });
  it('keeps text clear of other text and of leader and dimension lines',()=>{
   // Text boxes from Arial advance widths, cap height to descender, in sheet points; slightly shrunk so
   // touching descenders and title underlines are tolerated.
