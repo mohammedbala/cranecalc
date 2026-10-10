@@ -86,8 +86,13 @@ describe('issue status',()=>{
  it('only issues validated, sealed-ready packages',()=>{
   expect(issueStatus(capped).label).toBe('DEMONSTRATION - NOT FOR CONSTRUCTION');
   const preliminary=issued(()=>{});expect(preliminary.issued).toBe(false);expect(preliminary.reasons).toContain('Enter the engineer of record, firm and license');expect(preliminary.reasons).toContain('Select an issue purpose');
-  const ready=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';});
+  const ready=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2021 IBC',editions:'2016',reviewed:false};});
   expect(ready).toEqual({issued:true,label:'ISSUED FOR PERMIT',reasons:[]});
+  // A jurisdiction on the 2022 editions needs the engineer's review of this 360-16 / 7-16 calculation.
+  const newer=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2024 IBC',editions:'2022',reviewed:false};});
+  expect(newer.reasons).toEqual(['Confirm the engineer of record has reviewed this design against AISC 360-22 and ASCE 7-22']);
+  const reviewed=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';s.input.drawing!.code={building:'2024 IBC',editions:'2022',reviewed:true};});
+  expect(reviewed.issued).toBe(true);
   const failed=issued(s=>{s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='construction';s.checks=[...s.checks,{...s.checks[0],id:'x',status:'fail'}];});
   expect(failed.issued).toBe(false);expect(failed.reasons).toContain('Resolve 1 failed check');
  });

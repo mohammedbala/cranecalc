@@ -41,6 +41,8 @@ describe('starting a detailed design from a project',()=>{
   expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);expect(s.checks.filter(c=>c.status==='fail').map(c=>c.id)).toEqual([]);
   expect(issueStatus(s).label).toBe('PRELIMINARY - NOT FOR CONSTRUCTION');
   s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';
+  expect(issueStatus(s).reasons).toEqual(['Enter the building code adopted by the jurisdiction']);
+  s.input.drawing!.code={building:'2022 California Building Code',editions:'2016',reviewed:false};
   expect(issueStatus(s).label).toBe('ISSUED FOR PERMIT');
   for(const sheet of drawingSheetSet(s))expect(sheet.svg).not.toMatch(/FICTITIOUS|DEMONSTRATION|\{\{|NOT IN SET/);
  },480000);
