@@ -21,9 +21,9 @@ export function demonstrationDetails():RunwayDetails{return {
  simpleSupport:{...defaultSimpleSupport},
  // Top-flange tie on a direct flange saddle; the bottom flange is bolted to the seat. Thin bars flex with end
  // rotation and thermal travel; sleeved bolts in vertical slots at the column gusset release support deflection.
- brace:{width:5*inch,thickness:.375*inch,length:26*inch,reach:26*inch,gussetThickness:.75*inch,connectionLength:5.5*inch,
-  connection:{...lap(),diameter:.625*inch,gauge:2.5*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,weldSize:.3125*inch,weldLength:5.1875*inch},
-  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.75*inch,webGap:1*inch,clearance:.25*inch,weldSize:.3125*inch,columnFace:28*inch},
+ brace:{width:5*inch,thickness:.375*inch,length:25.5*inch,reach:25.5*inch,gussetThickness:.75*inch,connectionLength:5.5*inch,
+  connection:{...lap(),diameter:.625*inch,gauge:2.5*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,weldSize:.3125*inch,weldLength:5.5*inch},
+  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.75*inch,webGap:1*inch,clearance:.25*inch,weldSize:.375*inch,columnFace:28*inch},
   release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
  // Cover plates (gauge + two edges) clear the bearing stiffener and its welds at half the bearing length.
  end:{...lap(),rows:4,gauge:2.875*inch,edge:1.25*inch,thickness:.75*inch,weldSize:.4375*inch,weldLength:11.5*inch,projection:1.5*inch},
@@ -104,7 +104,7 @@ export function cappedDemonstrationProject():ProjectInput {
  // directly attached to flange saddles. No holes or cuts in the cap channel.
  Object.assign(p.details!.brace,{length:18*inch,reach:18*inch,width:5*inch,thickness:.3125*inch,gussetThickness:.875*inch,connectionLength:6*inch,
   flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.375*inch,webGap:1*inch,clearance:.25*inch,weldSize:.3125*inch}});
- Object.assign(p.details!.brace.connection,{diameter:.625*inch,gauge:2.5*inch,pitch:2*inch,edge:1.25*inch,thickness:.3125*inch,weldLength:5.1875*inch});
+ Object.assign(p.details!.brace.connection,{diameter:.625*inch,gauge:2.5*inch,pitch:2*inch,edge:1.25*inch,thickness:.3125*inch,weldLength:5.5*inch});
  p.details!.bracket!.seatWeld=.625*inch;
  p.details!.fabrication.bolting='Tie bolts: ASTM F3125 Grade A325, 5/8-in diameter, 19-kip minimum pretension. Other girder bolts: 3/4-in A325, 28-kip minimum pretension. Standard holes and Class B faying surfaces. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joints: 7/8-in A325, snug-tight sliding slots.';
  p.details!.bearing.length=12*inch;p.details!.bearing.stiffenerWidth=4*inch;

@@ -31,7 +31,7 @@ describe('tie movement compatibility',()=>{
   expect(mv.cyclicLongitudinal).toBeCloseTo(a.serviceRotation!*p.section.d,9);
   expect(mv.thermal).toBeCloseTo(12e-6*25*304.8*30,9);
   expect(mv.longitudinal).toBeCloseTo(a.endRotation*p.section.d+mv.thermal,9);
-  expect(mv.freeLength).toBeCloseTo((26-2*4.75)*inch,9);
+  expect(mv.freeLength).toBeCloseTo((25.5-2*4.75)*inch,9);
   // Cyclic out-of-plane bar stress 3EtΔ/L² is part of the Category B range.
   const fatigue=byId(movement(demo),'tie-move-fatigue'),t=p.details!.brace.thickness;
   expect(fatigue.demand!).toBeGreaterThan(3*p.section.E*t*mv.cyclicLongitudinal/mv.freeLength**2);
@@ -48,7 +48,12 @@ describe('tie movement compatibility',()=>{
   const p=capped.input,r=tieRelease(p)!;
   // 5/8 in bolt: 11/16 in bore, 1/4 in wall, 1/16 in clearance; 1/8 in travel each way.
   expect(r.od).toBeCloseTo(1.1875*inch,9);expect(r.width).toBeCloseTo(1.25*inch,9);expect(r.slot).toBeCloseTo(1.5*inch,9);
-  expect(columnGussetHeight(p)).toBeCloseTo(5.1875*inch,9);expect(p.details!.brace.connection.weldLength).toBeCloseTo(columnGussetHeight(p),9);
+  // Slots at the 2 1/2 in gauge plus 1/8 in travel each way, a 1 7/32 in edge and a 1/16 in slot location
+  // tolerance beyond each slot end (5 5/16 in), rounded up to the 1/4 in cutting increment: 5 1/2 in.
+  expect(r.edge).toBeCloseTo(1.21875*inch,9);expect(r.tolerance).toBeCloseTo(inch/16,9);
+  expect(columnGussetHeight(p)).toBeCloseTo(5.5*inch,9);expect(p.details!.brace.connection.weldLength).toBeCloseTo(columnGussetHeight(p),9);
+  const edge=byId(movement(capped),'tie-release-edge');
+  expect(edge.demand).toBeCloseTo(r.edge+inch/16,9);expect(edge.capacity).toBeCloseTo((5.5-2.5)/2*inch-r.travel,9);expect(edge.utilization).toBeLessThan(.95);
   const bolt=boltCapacity({grade:'A325',diameter:.625*inch,planes:2,surface:'B',shear:0,tension:0,method:'LRFD'});
   expect(byId(movement(capped),'tie-release-sleeve').demand).toBeCloseTo(1.5*bolt.pretension,6);
   // A designed bracket's service deflection, times cranes and impact, plus rotation and the positioning allowance.
