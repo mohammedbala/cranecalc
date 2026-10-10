@@ -5,6 +5,7 @@ import {endStopSchema} from './endStopInputs';
 import {endBearingSchema} from './endBearingInputs';
 import type {BracketResults} from './bracketDesign';
 import type {ExistingBracketResults} from './existingBracket';
+import type {SupportForceEnvelope} from './bracketForces';
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
 const material=z.object({Fy:pos,Fu:pos,Fexx:pos});
 export const simpleSupportSchema=z.object({endGap:pos,guideTravel:pos,temperatureRise:nn,temperatureFall:nn,settingTolerance:nn});
@@ -56,6 +57,8 @@ export interface FatigueDetailResult {
 export interface RunwayDetailResults {
  bracket?:BracketResults;
  existingBracket?:ExistingBracketResults;
+ /** Factored strength envelope of the girder end forces at each support, for the bracket and its attachments. */
+ bracketForces?:SupportForceEnvelope[];
  cap?:{longitudinalFlow:number;fatigueFlows:number[]};
  /** Major flexure at the equivalent unbraced length from the load-height elastic critical moment. */
  loadHeight?:{utilization:number;demand:number;capacity:number;length:number;critical:number;id:string;combination:string;x:number};

@@ -8,6 +8,7 @@ import {projection,dispose} from './connectionConceptSheet';
 import {drawingLength,plateInches} from './drawingFormat';
 import {line,multiLeader,dimH,dimV,circle,detailRef,detailTitles} from './sheetGraphics';
 import {numbered,heading,paragraph,type Style} from './noteBlocks';
+import {bracketForceBlocks} from './bracketForceTable';
 import type {DetailTopic,ViewRender} from './detailSheet';
 import {format} from '../engine/units';
 
@@ -81,5 +82,5 @@ export function existingBracketTopic(s:CalculationSnapshot):DetailTopic|undefine
   {title:detailTitles.existingBracket,render:()=>draw().side},
   {title:'SUPPORT / LOOKING AT COLUMN',render:()=>draw().front},
   {title:'BOLTED SPREADER / PLAN',render:()=>draw().plan}
- ],notes:(t:Style)=>[heading(t,'EXISTING SUPPORT / INSTALLATION NOTES'),...numbered(t,notes),paragraph(t,review)]};
+ ],notes:(t:Style)=>[heading(t,'EXISTING SUPPORT / INSTALLATION NOTES'),...numbered(t,notes),paragraph(t,review),...bracketForceBlocks(s,t)]};
 }

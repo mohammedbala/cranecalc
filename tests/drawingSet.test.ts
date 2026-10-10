@@ -141,9 +141,28 @@ describe('drawings agree with the calculation',()=>{
    }
   }
  },300000);
- it('lists bracket reactions for every grid',()=>{
-  const s05=texts(cappedSet.find(v=>v.svg.includes('data-view="bracket-notes"'))!.svg),stations=capped.detailResults!.bracket!.stations;
-  stations.forEach((r,i)=>{const at=s05.indexOf(String(i+1),s05.indexOf('RIGHT RIB'));expect(at).toBeGreaterThan(-1);expect(s05[at+1]).toBe(format(r.vertical,'force',capped.input.units,3).toUpperCase());});
+ it('tabulates one factored bracket force envelope per set, mirror-symmetric for the symmetric runways',()=>{
+  const title='BRACKET DESIGN FORCES / FACTORED LRFD ENVELOPE';
+  for(const [s,set,at] of [[demo,demoSet,'S-02'],[capped,cappedSet,'S-03'],[newColumn,newColumnSet,'S-02']] as const){
+   const holding=set.filter(v=>texts(v.svg).includes(title));
+   expect(holding.map(v=>v.number)).toEqual([at]);
+   const cells=texts(holding[0].svg),f=s.detailResults!.bracketForces!,kip=(v:number)=>format(v,'force','US',2).toUpperCase();
+   expect(cells.filter(v=>v===title)).toHaveLength(1);expect(f).toHaveLength(4);
+   // Mirror images: equal reactions, opposite end moments, and both signs at the interior grids.
+   const V=f.map(v=>v.maxVertical.vertical),M=f.map(v=>v.maxMoment.moment);
+   expect(V[3]).toBeCloseTo(V[0],6);expect(V[2]).toBeCloseTo(V[1],6);expect(M[3]).toBeCloseTo(-M[0],3);expect(M[0]).toBeGreaterThan(0);
+   expect(f[1].reversible.vertical&&f[2].reversible.vertical&&f[1].reversible.moment).toBe(true);expect(Math.abs(M[2])).toBeCloseTo(Math.abs(M[1]),3);
+   for(const v of f)expect(cells).toContain(kip(v.maxVertical.vertical));
+   expect(cells).toContain(`±${format(Math.abs(f[1].maxVertical.moment),'moment','US',2).toUpperCase()}`);
+   // Longitudinal force at the three locating bearings, none at the sliding end; the bumper governs.
+   expect(f.map(v=>Math.abs(v.longitudinal.longitudinal)>0)).toEqual([true,true,true,false]);
+   expect(cells).toContain(`±${kip(Math.abs(f[0].longitudinal.longitudinal))} (8)`);expect(cells).toContain(`±${kip(Math.abs(f[0].top.top))} (${f[0].top.combination.split(' ')[1].toUpperCase()})`);
+  }
+  // The bracket is checked for the same concurrent sets, so its governing rows mirror too.
+  const st=capped.detailResults!.bracket!.stations;expect(st[3].vertical).toBeCloseTo(st[0].vertical,6);expect(st[3].leftRib).toBeCloseTo(st[0].rightRib,6);
+  // The supports and the cover refer to the table instead of repeating it.
+  expect(texts(cappedSet[2].svg).join(' ')).toContain('FACTORED FORCES: BRACKET DESIGN FORCES ON S-03.');
+  expect(texts(demoSet[0].svg).join(' ')).toContain('BRACKET DESIGN FORCES ON S-02');
  },120000);
 });
 
