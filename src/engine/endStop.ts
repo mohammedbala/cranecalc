@@ -43,6 +43,7 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
  if(!needsGirderStops(p))return e?.enabled?[{id:'end-stop',group:'End stops',title:'Girder-mounted runway end stops',status:'not-applicable',equation:'',referenceIds:['tr13-girder'],note:'Every crane stop force is taken by building-mounted stops; girder-mounted stops are not required.'}]:[];
  // Validation requires the stop design whenever a crane stop force reaches the girder.
  if(!e?.enabled)return [];
+ const sourced:CheckResult[]=e.source.trim()?[]:[{id:'end-stop-source',group:'End stops',title:'Bumper data source',status:'incomplete',equation:'',referenceIds:['tr13-load'],note:'Enter the crane supplier source of the bumper force, bumper height and contact diameter.'}];
  const P=Math.max(...craneCombinations(p.method).map(c=>c.bumper))*stopBumperForce(p);
  const g=endStopGeometry(p,e),m=d.material,b=p.section,method=p.method,u=p.units,f=(v:number)=>format(v,'length',u,3);
  const db=e.bolts.diameter,bolt=boltProperties(e.bolts.grade,db),C=wrenchClearance(db);
@@ -78,7 +79,7 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
   girder.push(compared('end-stop-girder','Girder · stop combinations with bumper couple',u,1,'ratio','\frac{P_r}{P_c}+\frac{8}{9}\left(\frac{M_{rx}+Py}{M_{cx}}+\frac{M_{ry}}{M_{cy}}\right)\le1',`Peak moments of the stop combinations plus the full couple P·y = ${format(M0,'moment',u2(p),3)} (y = ${f(y)} above the girder centroid), added without regard to location. Axial force includes the bumper force.`,['aisc-h','tr13-load']));
   girder.push(compared('end-stop-uplift','Far support · uplift from bumper couple',uplift,ctx.holdDown,'force','R_{up}=\frac{Py}{L}-\gamma_D\frac{qL}{2}',`Shortest end span ${f(span)}; ${p.method==='LRFD'?'0.9':'0.6'} × girder, rail and added dead load only, no crane dead load. Resisted by the girder end connection (hold-down).`));
  }
- return [...girder,
+ return [...sourced,...girder,
   compared('end-stop-bolt-tension','Front bolts · tension with shear',T,front.tension,'force','T=\\frac{P(e+t_b)}{2d};\\quad F^\\prime_{nt}=1.3F_{nt}-\\frac{F_{nt}}{\\phi F_{nv}}f_{rv}',`${n} Overturning about the heel of the base plate; lever ${f(lever)} from the front bolts. Bolt grip ${f(grip)}.`),
   compared('end-stop-bolt-shear','Bolts · shear',V,front.shear,'force','V=P/4\\le\\phi F_{nv}A_b',`${n} Four bolts share the bumper force; threads included.`),
   compared('end-stop-slip','Bolts · slip with tension',V,front.slip,'force','R_{n}=\\mu D_uT_bk_{sc};\\quad k_{sc}=1-\\frac{T_u}{D_uT_bn_b}',`${n} Pretensioned, Class B faying surfaces; front-bolt tension reduces slip resistance (k_sc = ${front.slipReduction.toFixed(3)}).`),

@@ -1,3 +1,4 @@
+import {packageContentChecks} from './detailTemplate';
 import {connectionCoordination} from './connectionCoordination';
 import {presentCheck} from './checkPresentation';
 import {connectionOptionChecks} from './connectionOptions';
@@ -106,6 +107,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
  snapshot.warnings.push(...connectionCoordination(p));
  snapshot.warnings.push(snapshot.detailResults?'The detailed rail-head check includes lateral bending, Saint-Venant/warping torsion and girder-side tie flexibility. Supplied-load diagram envelopes remain a separate first-order display.':'Supplied-load diagram lateral results represent weak-axis section bending under supplied forces. Rail displacement from twist and top-flange force distribution is not established.');
  snapshot.warnings.push(snapshot.detailResults?'Vertical bending uses Euler-Bernoulli theory. Detailed lateral/torsion response includes geometric stiffness and girder-side connection flexibility; material nonlinearity, section distortion, shear deformation and building-interface flexibility are excluded.':'Euler-Bernoulli small-deflection analysis; shear deformation, nonlinear behavior and support flexibility are excluded.');
+ snapshot.checks.push(...packageContentChecks(p));
  const optionChecks=connectionOptionChecks(p);
  snapshot.checks.push(...optionChecks);
  if(optionChecks.length)snapshot.warnings.push('Selected bracket / tieback alternatives are arrangement previews. Connection resistance, stiffness, movement and fatigue need a project-specific model or supplier package. Existing detailed connection results are not reused; generation is blocked in either report scope.');

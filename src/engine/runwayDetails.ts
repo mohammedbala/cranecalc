@@ -19,6 +19,8 @@ export const runwayDetailsSchema=z.object({
  simpleSupport:simpleSupportSchema.optional(),
  endStop:endStopSchema.optional(),
  endBearing:endBearingSchema.optional(),
+ /** False while template-generated inputs await the engineer's review. */
+ reviewed:z.boolean().optional(),
  // Two identical flat bars, one each side of the gusset, at EACH flange.
  brace:z.object({arrangement:z.enum(['paired-bars','flexible-plate','bearing-link','paired-links','single-angle','double-angle']).optional(),
   singleAngle:angleTieSchema.optional(),doubleAngle:angleTieSchema.optional(),
