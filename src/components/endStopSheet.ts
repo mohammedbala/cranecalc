@@ -5,7 +5,7 @@ import {endStopGeometry,stopBumperForce,activeEndStop} from '../engine/endStop';
 import {craneCombinations} from '../engine/aistLoads';
 import {boltProperties} from '../engine/connectionStrength';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,sectionCut,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {flangeTieGeometry} from '../engine/tieGeometry';
@@ -107,10 +107,12 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // Both stiffeners to the face plate, each side of each stiffener.
   svg+=filletLeader([[X(g.faceBack)-1,Z(sp/2+ts/2)+1]],[X(shown)+44,Math.max(Z(width/2)-4,Z(-width/2)+50)],size(e.weldSize),['TYP. BOTH STIFFENERS TO FACE PL','FULL HEIGHT'],true,[[[X(g.faceFront)+6,Z(width/2)-6]]]);
   svg+=text(X(0)-4,Z(width/2)+46,'GIRDER END',8,'start',700);
+  // Section between the stop face and the rail end, looking at the face.
+  {const xs=X((g.faceFront+g.railEnd)/2);svg+=sectionCut([xs,Z(-width/2)-4],[xs,Z(width/2)+4],[-1,0],detailTitles.endStopSection,['a']);}
   return {svg:svg+'</g>',scale:k.label};
  }});
  // 3: Section between the rail end and the stop, looking at the face.
- views.push({title:'END STOP / SECTION AT FACE',render:()=>{
+ views.push({title:detailTitles.endStopSection,render:()=>{
   let svg='';
   const cutDepth=capT+b.tf+3*inch,k=drawingScale(Math.min(.36,260/Math.max(Wb,g.surfaceWidth),215/(H+tb+cutDepth+2*inch)),u),kk=k.pointsPerMm,cx=250,ys=412+(tb+H)*kk,X=(z:number)=>cx+z*kk,Y=(h:number)=>ys-h*kk;
   const wTop=ys+capT*kk,wFl=wTop+b.tf*kk,cut=ys+cutDepth*kk,yb=Y(tb);

@@ -88,7 +88,7 @@ describe('ARCH D arrangement sheet', () => {
     expect(arrangement).toContain('SEE S-00 FOR GENERAL NOTES');expect(connections).not.toContain('TF 0.71&quot;');expect(connections).not.toContain('W12X40');
     expect(structuralGeneralNotes(sample).every(note=>note===note.toUpperCase())).toBe(true);
     expect(arrangement).not.toContain('DRAWING BASIS');expect(connections).not.toContain('BASIS:');
-    expect(connections.match(/data-view-title="below"/g)).toHaveLength(4);
+    expect(connections.match(/data-view-title="below"/g)).toHaveLength(6);
     expect(arrangement.match(/data-view-title="below"/g)).toHaveLength(4);
     // Typical section: both grids, the crane span and the project elevations; cut marked on the plan at mid-bay.
     const section=arrangement.split('<g data-view="typical-section">')[1];

@@ -19,8 +19,9 @@ const sub=(a:Point,b:Point):Point=>[a[0]-b[0],a[1]-b[1]];
 // in its own coordinates and translated into its grid cell. Shared branches inside a single callout
 // are intentional; intersections between callouts are not.
 export function crossingLeaders(svg:string){
- const cells=[...svg.matchAll(/<g data-detail-cell="[^"]*" transform="translate\(([-\d.e]+) ([-\d.e]+)\)">/g)].map(m=>({at:m.index!,dx:+m[1],dy:+m[2]}));
+ const cells=[...svg.matchAll(/<g data-detail-cell="[^"]*"(?: data-cell-height="[^"]*")? transform="translate\(([-\d.e]+) ([-\d.e]+)\)">/g)].map(m=>({at:m.index!,dx:+m[1],dy:+m[2]}));
  // A detail's content runs from its cell group to its title, drawn after it at sheet level.
+ if(svg.includes('data-detail-cell')&&!cells.length)throw new Error('detail cells not found');
  const offset=(i:number):Point=>{const c=cells.filter(v=>v.at<i).at(-1);return c&&svg.indexOf('<g data-view-title=',c.at)>i?[c.dx,c.dy]:[0,0];};
  const routes=[...svg.matchAll(/<g data-multileader="component">(.*?)<\/g>/gs)].flatMap((g,id)=>{const [dx,dy]=offset(g.index!);
   return [...g[1].matchAll(/data-leader-path="true" points="([^"]+)"/g)].map(m=>({id,points:m[1].split(' ').map(p=>{const [x,y]=p.split(',').map(Number);return [x+dx,y+dy] as Point;})}));});

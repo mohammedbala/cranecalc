@@ -102,7 +102,12 @@ describe('independent girder ends',()=>{
  it('keeps the scaled sheet readable for six unequal bays and escapes project text',()=>{
   const input=cappedDemonstrationProject();input.spans=[7620,8000,8500,9000,9500,10000];input.aist!.axialLength=10000;input.title='<script>bad</script>';
   const s:CalculationSnapshot={input,revision:'review',createdAt:'',checks:[],errors:[],warnings:[],properties:null,analysis:null,eligible:false,referenceVersion:''};
-  for(const units of ['US','SI'] as const){input.units=units;const svg=simpleSupportSheetSvg(s);expect(svg).not.toMatch(/NaN|Infinity|<script>/);expect(svg).toContain('SHEET S-04');expect(svg.match(/data-view-title="below"/g)).toHaveLength(3);expect(svg).toContain('FORCES ON {{SHEET:BRACKET}}');}
+  for(const units of ['US','SI'] as const){input.units=units;const svg=simpleSupportSheetSvg(s);expect(svg).not.toMatch(/NaN|Infinity|<script>/);expect(svg).toContain('SHEET S-04');expect(svg.match(/data-view-title="below"/g)).toHaveLength(1);expect(svg).toContain('FORCES ON {{SHEET:BRACKET}}');}
+  // The tie plan and bearing movement views are drawn only where no direct flange tie plan or bolted end
+  // bearing detail draws them larger.
+  input.details!.brace.flangeAttachment!.enabled=false;input.details!.endBearing!.enabled=false;
+  for(const units of ['US','SI'] as const){input.units=units;const svg=simpleSupportSheetSvg(s);expect(svg).not.toMatch(/NaN|Infinity/);expect(svg.match(/data-view-title="below"/g)).toHaveLength(3);}
+  input.details!.brace.flangeAttachment!.enabled=true;input.details!.endBearing!.enabled=true;
   // With the bracket by others the support details carry the bracket design forces.
   input.details!.bracket!.enabled=false;expect(simpleSupportSheetSvg(s)).toContain('PENDING CALCULATION');
  });

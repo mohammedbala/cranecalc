@@ -63,7 +63,8 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  }});
 
  // True-scale plan: each end has its OWN transverse tie to the same column.
- views.push({title:detailTitles.supportTies,render:()=>{
+ // The direct flange tie plan and the bolted end bearing detail draw these at a larger scale when present.
+ if(!(d.brace.flangeAttachment?.enabled&&flangeTieGeometry(p)))views.push({title:detailTitles.supportTies,render:()=>{
  let svg='<g data-view="independent-tie-plan">';
  const tieLayout=flangeTieGeometry(p),tieRef=detailRef(tieLayout?detailTitles.flangeTie:detailTitles.tie),tieStart=tieLayout?.start??0,tieReach=tieLayout?.face??d.brace.length,flanges=tieSides(p).length>1?'TOP & BOTTOM':'TOP FLANGE';
  // The column outline and its label stay above the view note at y = 335.
@@ -88,7 +89,7 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  return {svg:svg+'</g>',scale:ps.label};
  }});
 
- views.push({title:detailTitles.movement,render:()=>{
+ if(!activeEndBearing(p))views.push({title:detailTitles.movement,render:()=>{
  let svg='<g data-view="bearing-movement">';
  const ms=drawingScale(Math.min(.30,190/(bs.length+2*c.guideTravel)),p.units),mk=ms.pointsPerMm;
  for(const [i,at] of [170,460].entries()){
