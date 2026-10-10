@@ -6,11 +6,13 @@ import {barDiameter} from '../engine/columnBase';
 import {runwayElevations} from '../engine/drawingData';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 
 const inch=25.4;
+/** ASTM A615 bar grade in the drawing's units: the inch-pound grade, or the A615M grade in MPa. */
+const rebarGrade=(fy:number,u:'US'|'SI')=>{const ksi=Math.round(fy/6.894757293168),si:Record<number,number>={40:280,60:420,75:520,80:550};return u==='US'?`ASTM A615 GR. ${ksi}`:`ASTM A615M GR. ${si[ksi]??Math.round(fy)}`;};
 
 /** Concrete in section: a fixed stipple of dots and small aggregate triangles inside the outline. */
 function concrete(x:number,y:number,w:number,h:number,density=1){
@@ -48,7 +50,7 @@ export function newColumnSheetSvg(s:CalculationSnapshot,number='S-08'){return to
 /** New freestanding runway column, its base plate, anchor rods and spread footing, with design data and notes. */
 export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,u=p.units,col=p.existingColumn!,b=p.columnBase!,d=p.details!,br=d.bracket?.enabled?d.bracket:undefined,g=p.section,r=s.columnBase;
- const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'?0:2);return u==='US'?t.toUpperCase():t;};
+ const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'?0:u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
  const c=existingColumnSection(p).section,name=col.shape||`BUILT-UP ${size(c.d)} X ${size(c.bf)}`;
  const tb=b.plate.thickness,gr=b.grout,ft=b.footing,hf=ft.thickness,a=b.anchors,hw=anchorHardware(a.diameter),row=b.plate.N/2-a.edge;
  const bt=d.bearing.thickness,seat=col.seatElevation,H=col.height,cap=g.kind==='cap'?g.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,rl=d.rail;
@@ -57,7 +59,9 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  const db=barDiameter[ft.bar],ftgTop=-(tb+gr),ftgBot=ftgTop-hf,floor=ftgTop+ft.soil,ext=Math.max(12*inch,ft.L*.12);
  const el=runwayElevations(p),datum=p.drawing?.datumElevation??0,elev=(y:number)=>`EL. ${drawingElevation(datum+columnBaseElevation(b)+y,u)}`;
  const anchorLabel=`${2*a.perRow} - ${size(a.diameter)} DIA. ASTM F1554 GR. ${a.grade.split('-')[1]}`;
- const barLabel=`${ft.bar} @ ${dim(ft.spacing)} E.W. BOTTOM`;
+ // Bar sizes in the units of the sheet: inch-pound #6, or the soft-metric ASTM A615M #19.
+ const metricBar:Record<string,number>={'#3':10,'#4':13,'#5':16,'#6':19,'#7':22,'#8':25,'#9':29,'#10':32,'#11':36},barName=u==='SI'?`#${metricBar[ft.bar]??ft.bar.slice(1)}`:ft.bar;
+ const barLabel=`${barName} @ ${dim(ft.spacing)} E.W. BOTTOM`;
  const tie=flangeTieGeometry(p);
  const views:DetailView[]=[];
 
@@ -91,6 +95,19 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   if(g.kind==='cap'){const w=g.capWidth/2,leg=g.capDepth-g.capTw;svg+=`<path class="runway-line" d="M${n(X(girderZ-w))},${n(Y(tos+cap))}H${n(X(girderZ+w))}V${n(Y(tos-leg))}H${n(X(girderZ+w-g.capTf))}V${n(Y(tos))}H${n(X(girderZ-w+g.capTf))}V${n(Y(tos-leg))}H${n(X(girderZ-w))}Z"/>`;}
   const rb=tos+cap;svg+=`<path class="rail-line" d="M${n(X(railZ-rl.baseWidth/2))},${n(Y(rb))}H${n(X(railZ+rl.baseWidth/2))}V${n(Y(rb+rl.baseThickness))}H${n(X(railZ+rl.webThickness/2))}V${n(Y(rb+railDepth-rl.headThickness))}H${n(X(railZ+rl.headWidth/2))}V${n(Y(rb+railDepth))}H${n(X(railZ-rl.headWidth/2))}V${n(Y(rb+railDepth-rl.headThickness))}H${n(X(railZ-rl.webThickness/2))}V${n(Y(rb+rl.baseThickness))}H${n(X(railZ-rl.baseWidth/2))}Z"/>`;
   svg+=line([X(girderZ),Y(top)-8],[X(girderZ),Y(y0)+8],'grid-line');
+  // Braced columns: the crane-level strut seen end-on at the work point, its web on the girder face of the rod
+  // gusset, and the rod gussets edge-on below it and on the base plate.
+  const bs=s.bracingSystem,strutItems:{at:XY;labels:string[]}[]=[];
+  if(bs){
+   const g2=bs.geometry,sg=g2.strut,t=g2.t,wc=t/2+sg.tw/2,ys=seat;
+   const strut=(z:number,y:number):XY=>[X(z),Y(y)];
+   svg+=`<path class="runway-line" d="M${[[wc-sg.bf/2,ys+sg.d/2],[wc+sg.bf/2,ys+sg.d/2],[wc+sg.bf/2,ys+sg.d/2-sg.tf],[wc+sg.tw/2,ys+sg.d/2-sg.tf],[wc+sg.tw/2,ys-sg.d/2+sg.tf],[wc+sg.bf/2,ys-sg.d/2+sg.tf],[wc+sg.bf/2,ys-sg.d/2],[wc-sg.bf/2,ys-sg.d/2],[wc-sg.bf/2,ys-sg.d/2+sg.tf],[wc-sg.tw/2,ys-sg.d/2+sg.tf],[wc-sg.tw/2,ys+sg.d/2-sg.tf],[wc-sg.bf/2,ys+sg.d/2-sg.tf]].map(([z,y])=>strut(z,y).map(n).join(',')).join('L')}Z"/>`;
+   const upperLow=ys+Math.min(...bs.outlines.upper.map(q=>q[1])),upperTop=ys-sg.d/2,lowerTop=Math.max(...bs.outlines.lower.map(q=>q[1]));
+   const strip=(y1:number,y2:number)=>y2>y1?rect(X(-t/2),Y(y2),t*kk,Y(y1)-Y(y2),'runway-line'):'',low=broken?Math.max(upperLow,upperFrom):upperLow;
+   svg+=strip(low,upperTop)+strip(0,broken?Math.min(lowerTop,lowerTo):lowerTop);
+   strutItems.push({at:[X(wc+sg.bf/2),Y(ys)],labels:[`${sg.shape} STRUT AT W.P.,`,`SEE ${detailRef(detailTitles.strutPlan)}`]});
+   strutItems.push({at:[X(t/2),Y((low+upperTop)/2)],labels:['ROD GUSSETS, BRACED COLUMNS;',`SEE ${detailRef(detailTitles.braceTop)} AND ${detailRef(detailTitles.braceBase)}`]});
+  }
   // Ties from the girder flange saddles to the column face.
   const ties=(tie?.sides??[]).map(side=>{const yc=y0+g.d/2+(side>0?tie!.topCenter:tie!.bottomCenter),w=d.brace.width;return {side,yc,z1:c.d/2,z2:girderZ-tie!.start,w};});
   for(const t of ties)svg+=rect(X(t.z1),Y(t.yc+t.w/2),(t.z2-t.z1)*kk,t.w*kk,'runway-line');
@@ -128,6 +145,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ...ties.map(t=>({at:[X((t.z1+t.z2)/2),Y(t.yc-t.w/2)] as XY,labels:[`${t.side>0?'TOP':'BOTTOM'} FLANGE TIE`,`SEE ${detailRef(detailTitles.flangeTie)}`]})),
    {at:[X(girderZ+g.bf/2),Y(y0+g.tf/2)],labels:[`${g.name}`,'GIRDER, SEE S-01']},
    ...(br?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-br.seatThickness-br.ribDepth*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef(detailTitles.weldedBracket)}`]}]:[]),
+   ...strutItems,
    {at:[X(c.d/2),Y(broken?upperFrom+(seat-upperFrom)*.25:H*.5)],labels:[`NEW ${name}`,'COLUMN, ASTM A992']},
    {at:[X(row+hw.washer/2),Y(hw.washerThickness/2)],labels:[`PL ${size(tb)} BASE PL`,`SEE ${detailRef(detailTitles.basePlate)}`]},
    {at:[X(b.plate.N/2+inch),Y(-tb-gr/2)],labels:[`${size(gr)} NON-SHRINK GROUT`]},
@@ -172,10 +190,11 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   svg+=rect(X(-b.plate.N/2),Y(-b.plate.B/2),b.plate.N*kk,b.plate.B*kk,'runway-line')+wPlan(cx,cy,c.d,c.bf,c.tf,c.tw,kk);
   svg+=line([X(-ft.L/2)-14,cy],[X(ft.L/2)+6,cy],'grid-line')+line([cx,Y(-ft.B/2)-14],[cx,Y(ft.B/2)+6],'grid-line');
   svg+=dimH(X(-ft.L/2),X(ft.L/2),Y(ft.B/2),Y(ft.B/2)+20,dim(ft.L))+dimV(Y(-ft.B/2),Y(ft.B/2),X(ft.L/2),X(ft.L/2)+22,dim(ft.B));
-  const barText=Math.abs(ft.L-ft.B)<1&&along===across?[`${2*along} ${ft.bar} X ${dim(ft.L-2*ft.cover)} (${along} EACH WAY)`]:[`${along} ${ft.bar} X ${dim(ft.L-2*ft.cover)} ALONG L`,`${across} ${ft.bar} X ${dim(ft.B-2*ft.cover)} ACROSS`];
+  const barText=Math.abs(ft.L-ft.B)<1&&along===across?[`${2*along} ${barName} X ${dim(ft.L-2*ft.cover)} (${along} EACH WAY)`]:[`${along} ${barName} X ${dim(ft.L-2*ft.cover)} ALONG L`,`${across} ${barName} X ${dim(ft.B-2*ft.cover)} ACROSS`];
   const bars=[barText[0],...barText.slice(1),barLabel,`${size(ft.cover)} CLEAR, STRAIGHT`],bx=X(ft.L/2)+44;
   svg+=multiLeader([[X(ft.L/2-ft.cover-ft.spacing*.5),Y(spread(along,ft.B)[0])]],[bx,Y(-ft.B/2)+14],bars,7.5);
   svg+=multiLeader([[X(-c.d/2),cy-2]],[Math.min(866,X(-ft.L/2)-24),Math.min(90,Y(-ft.B/2)-16)],['COLUMN C/L ON GRID,','FOOTING CONCENTRIC'],7.5);
+  svg+=sectionCut([X(-ft.L/2)-4,cy],[X(ft.L/2)+4,cy],[0,1],detailTitles.footing,['a'],'tip');
   return {svg:svg+'</g>',scale:k.label};
  }});
  // 4: Footing section through the column along L.
@@ -215,7 +234,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(c.d/2),Y(stub*.8)],labels:[`${name} COLUMN`]},
    {at:[X(row+nut/2),Y(hw.washerThickness+a.diameter/2)],labels:['HVY HEX NUT AND PL','WASHER WELDED TO PL']},
    {at:[X(b.plate.N/2+inch),Y(-tb-gr/2)],labels:[`${size(gr)} NON-SHRINK GROUT`]},
-   ...(ft.slab>0?[{at:[X(slabZ),Y(slabTop-ft.slab/2)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,'1/2" ISOLATION JT.']}]:[]),
+   ...(ft.slab>0?[{at:[X(slabZ),Y(slabTop-ft.slab/2)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,`${size(inch/2)} ISOLATION JT.`]}]:[]),
    {at:[X(row+nut/2),Y(head+a.diameter/2)],labels:['EMBEDDED HVY HEX NUT,','TACK WELDED TO ROD']},
    {at:[X(ft.L/2-ft.cover-ft.spacing*.5),Y(upper)],labels:[barLabel,`${size(ft.cover)} CLEAR`]},
    {at:[X(ft.L/2+ext*.3),Y(ftgBot)+2],labels:['UNDISTURBED SOIL','OR APPROVED FILL']}
@@ -234,21 +253,21 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ['ANCHOR RODS',`${anchorLabel}, HEF ${dim(a.embedment)}`],
    ['FOOTING',`${dim(ft.L)} X ${dim(ft.B)} X ${dim(hf)}, ${barLabel}`],
    [`GOVERNING BASE ACTION (${p.method})`,act?`${act.id}: P ${force(act.P)}, M ${force(act.Mx,'moment')}, V ${force(act.Vx)}`:'-'],
-   ['ANCHOR TENSION / SHEAR (LRFD)',r&&anchorAct?`${force(r.anchors.T)} / ${force(r.anchors.V)} (${anchorAct.id})`:'-'],
+   [`ANCHOR GROUP (${p.method}): TENSION ON THE ${a.perRow}-ROD ROW / SHEAR ON ALL ${2*a.perRow} RODS`,r&&anchorAct?`${force(r.anchors.T)} (${force(r.anchors.T/a.perRow)} PER ROD) / ${force(r.anchors.V)} (${force(r.anchors.V/(2*a.perRow))} PER ROD), ${anchorAct.id}`:'-'],
    ['SOIL: ALLOWABLE / MAX. SERVICE',r?`${force(b.soil.allowable,'pressure')} / ${force(r.footing.qMax,'pressure')}`:'-'],
    ['RATIOS: PLATE / RODS / SOIL / OVERTURNING / DRIFT',`${ratio('base-plate')} / ${ratio('base-anchor-interaction')} / ${ratio('base-soil')} / ${ratio('base-overturning')} / ${ratio('base-drift')}`],
    // The drift limit is stated with the drift, as it governs the crane's rail alignment.
    ...(()=>{const c=s.checks.find(v=>v.id==='base-drift');return c?.demand!==undefined&&c.capacity!==undefined?[['RUNWAY DRIFT AT RAIL / LIMIT',`${dim(c.demand)} / ${dim(c.capacity)} (COLUMN PLUS FOOTING ROTATION, SERVICE CRANE LOADS)`]]:[];})(),
    ...(s.existingColumn?.seismic?[['SEISMIC ACROSS RUNWAY',`SDC ${s.existingColumn.seismic.basis.sdc}, CS ${s.existingColumn.seismic.basis.Cs.toFixed(3)}, QE ${force(s.existingColumn.seismic.QE)} PER COLUMN; BASE FOR ΩO ${s.existingColumn.seismic.basis.Omega0}`]]:[]),
-   ['DATA SOURCE',b.source||'NOT ENTERED']
+   ['DATA SOURCE',!b.source?'NOT ENTERED':u==='US'?b.source:`${b.source.split(':')[0]} (VALUES CONVERTED ABOVE AND IN THE NOTES)`]
   ];
   const notes=[
    `NEW COLUMNS: ASTM A992 ${name}, ONE AT EACH SUPPORT OF BOTH RUNWAYS. FIXED BASE, FREE TOP ACROSS THE RUNWAY; ALONG THE RUNWAY BY THE CRANE-LEVEL BRACING. COLUMN TOP AT OR BELOW THE TOP OF THE GIRDER, CLEAR OF THE CRANE END TRUCKS; VERIFY CLEARANCE WITH THE CRANE SUPPLIER.`,
    `BASE PLATE ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN, ${size(b.plate.weld)} FILLETS BOTH SIDES OF FLANGES AND WEB. HOLES ${size(hw.hole)} DIA. (AISC DG1 TABLE 2.3) WITH ${size(hw.washer)} X ${size(hw.washer)} X ${size(hw.washerThickness)} PLATE WASHERS; WELD WASHERS TO THE PLATE AFTER THE NUTS ARE SNUG SO ALL RODS SHARE THE SHEAR.`,
    `ANCHOR RODS ASTM F1554 GR. ${a.grade.split('-')[1]} WITH ASTM A563 HEAVY HEX NUTS; EMBEDDED HEAVY HEX NUT TACK WELDED TO THE ROD. SET WITH A TEMPLATE TO AISC CODE OF STANDARD PRACTICE §7.5 TOLERANCES. DO NOT FIELD BEND OR HEAT RODS.`,
-   `SET THE PLATE ON SHIM STACKS OR LEVELING NUTS AND FILL ${size(gr)} OF NON-SHRINK, NON-METALLIC GROUT (ASTM C1107, 5,000 PSI MINIMUM) TO FULL BEARING BEFORE THE GIRDER IS SET.`,
-   `FOOTING CONCRETE f'c = ${force(b.concrete.fc,'stress')} AT 28 DAYS, NORMALWEIGHT; REINFORCEMENT ASTM A615 GR. ${Math.round(b.footing.fy/6.894757293168)}, ${size(ft.cover)} CLEAR COVER CAST AGAINST EARTH, STRAIGHT BARS EACH WAY.`,
-   `${ft.soil>0?`TOP OF FOOTING ${dim(ft.soil)} BELOW THE FLOOR; BACKFILL AND REPLACE THE SLAB OVER IT AFTER THE COLUMN IS ERECTED.`:'SAW CUT AND REMOVE THE EXISTING SLAB TO THE FOOTING OUTLINE, EXCAVATE TO BEARING AND POUR THE FOOTING TO THE TOP OF SLAB WITH A 1/2" PREFORMED ISOLATION JOINT AT THE PERIMETER.'} LOCATE UNDERGROUND UTILITIES BEFORE CUTTING OR EXCAVATING.`,
+   `SET THE PLATE ON SHIM STACKS OR LEVELING NUTS AND FILL ${size(gr)} OF NON-SHRINK, NON-METALLIC GROUT (ASTM C1107, ${u==='US'?'5,000 PSI':'35 MPa'} MINIMUM) TO FULL BEARING BEFORE THE GIRDER IS SET.`,
+   `FOOTING CONCRETE f'c = ${force(b.concrete.fc,'stress')} AT 28 DAYS, NORMALWEIGHT; REINFORCEMENT ${rebarGrade(b.footing.fy,u)}, ${size(ft.cover)} CLEAR COVER CAST AGAINST EARTH, STRAIGHT BARS EACH WAY.`,
+   `${ft.soil>0?`TOP OF FOOTING ${dim(ft.soil)} BELOW THE FLOOR; BACKFILL AND REPLACE THE SLAB OVER IT AFTER THE COLUMN IS ERECTED.`:`SAW CUT AND REMOVE THE EXISTING SLAB TO THE FOOTING OUTLINE, EXCAVATE TO BEARING AND POUR THE FOOTING TO THE TOP OF SLAB WITH A ${size(inch/2)} PREFORMED ISOLATION JOINT AT THE PERIMETER.`} LOCATE UNDERGROUND UTILITIES BEFORE CUTTING OR EXCAVATING.`,
    `BEAR FOOTINGS ON UNDISTURBED SOIL OR COMPACTED FILL APPROVED BY THE GEOTECHNICAL ENGINEER: ${force(b.soil.allowable,'pressure')} ALLOWABLE. BOTTOM OF FOOTING ${dim(ft.soil+hf)} BELOW THE FLOOR${b.soil.frost>0?`, BELOW THE ${dim(b.soil.frost)} FROST DEPTH`:', INTERIOR FOOTING PROTECTED FROM FROST'}.`,
    ...(s.existingColumn?.seismic?[`SEISMIC: ${s.existingColumn.seismic.basis.system.toUpperCase()} STEEL CANTILEVER COLUMN SYSTEM ACROSS THE RUNWAY (ASCE 7 TABLE 12.2-1). THE BASE PLATES, ANCHOR RODS AND FOOTINGS ARE DESIGNED FOR THE OVERSTRENGTH SEISMIC LOAD (§12.2.5.2)${s.existingColumn.seismic.basis.sdc>='C'?' AND THE ANCHORS FOR ACI 318 §17.10':''}. THE CRANE-LEVEL BRACING CARRIES SEISMIC FORCE ALONG THE RUNWAY.`]:[]),
    'SPECIAL INSPECTION PER IBC 1705.3 AND THE STATEMENT OF SPECIAL INSPECTIONS: ANCHOR ROD PLACEMENT, REINFORCEMENT, CONCRETE SAMPLING AND PLACEMENT, AND THE COLUMN-TO-PLATE AND BRACKET WELDS.'
