@@ -1,3 +1,4 @@
+import {finiteLife,filletRootReduction,fatigueThresholdKsi,KSI} from './fatigueConstants';
 /** AISC 360-16 J2/J3/J4/J7/J10 primitives. Canonical N, mm, MPa.
  * These functions compute capacities for their explicit geometry, not the 3D
  * illustration. Connection load paths/applicability are checked by the caller.
@@ -52,9 +53,9 @@ export function plateMember(width:number,thickness:number,length:number,E:number
 /** AISC A-3-5M/A-3-6M, stress on the tension-loaded plate, not weld throat. */
 export function transverseFilletFatigue(thickness:number,weld:number,cycles:number){
  positive({thickness,weld,cycles});
- const reduction=Math.min(1,(.103+1.24*weld/thickness)/thickness**.167);
- const finite=6900*reduction*(4.4/cycles)**.333;
- return {reduction,capacity:reduction===1?Math.max(69,finite):finite};
+ const reduction=filletRootReduction(thickness,weld);
+ const finite=finiteLife(4.4,cycles,reduction);
+ return {reduction,capacity:reduction===1?Math.max(fatigueThresholdKsi.C*KSI,finite):finite};
 }
 /** Table J2.4: use the thicker joined part; inches converted to mm. */
 export function minimumFillet(thickerPart:number){return (thickerPart<=6.35?1/8:thickerPart<=12.7?3/16:thickerPart<=19.05?1/4:5/16)*25.4;}

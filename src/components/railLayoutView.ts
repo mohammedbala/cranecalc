@@ -1,5 +1,5 @@
 import type {CalculationSnapshot} from '../engine/types';
-import {railLayout,railLayoutCriteria,railMovements,railJointMovement} from '../engine/railLayout';
+import {railLayout,railLayoutCriteria,railMovements,railJointMovement,railJointType,railJointGap} from '../engine/railLayout';
 import {railAnchorForce} from '../engine/railKeeper';
 import {format} from '../engine/units';
 import {drawingLength,plateInches} from './drawingFormat';
@@ -77,8 +77,10 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
   const notes=[
    `RAIL PIECES ${dim(stock)} MAX. (MILL LENGTH); SAW-CUT THE SHORTER PIECES SHOWN, NO FLAME CUTTING. KEEP RAIL JOINTS ${dim(clear)} MIN. FROM GIRDER JOINTS AND FROM THE OPPOSITE RAIL JOINTS, AND OPPOSITE JOINTS ${dim(clear)} MIN. FROM ANY CRANE WHEEL SPACING${steps?` (${steps})`:''}.`,
    `BOLTED RAIL JOINTS AND KEEPERS EACH SIDE OF EVERY JOINT: ${detailRef(detailTitles.railKeeper)}. RUNWAYS ARE DRAWN CLOSER THAN THE CRANE SPAN.`,
-   ...(moves?[(()=>{const F=railAnchorForce(p),u=p.units,gap=p.details!.rail.jointGap;
-    return `RAIL ANCHORS, SOLID TRIANGLES: AT MID-LENGTH OF EACH RAIL PIECE THE KEEPER PAIR IS SET IN RAIL-BASE NOTCHES (${detailRef(detailTitles.railKeeper)}) AND TAKES THE CRANE LONGITUDINAL FORCE (TRACTION AND BRAKING, ${labelForce(F.force,u)} FACTORED) AND RAIL CREEP INTO THE GIRDER. ALL OTHER KEEPERS LET THE RAIL SLIDE; EACH PIECE MOVES THERMALLY FROM ITS ANCHOR, UP TO ${movementUpTo(railJointMovement(moves),u)} AT A JOINT (${u==='SI'?`${Math.round(gap*2)/2} mm`:plateInches(gap,u)} GAP). AT EACH PERIODIC CRANE INSPECTION CHECK THE JOINT GAPS AND THE RAIL ENDS AT THE STOPS FOR CREEP.`;})()]:[]),
+   ...(moves?[(()=>{const F=railAnchorForce(p),u=p.units,gap=railJointGap(p),endMove=Math.max(0,...moves.ends.filter(v=>!v.existing).map(v=>v.movement));
+    return railJointType(p)==='tight'
+     ?`RAIL ANCHORS, SOLID TRIANGLES: ONE PER RAIL NEAR MID-RUNWAY, THE KEEPER PAIR SET IN RAIL-BASE NOTCHES (${detailRef(detailTitles.railKeeper)}), TAKES THE CRANE LONGITUDINAL FORCE (TRACTION AND BRAKING, ${labelForce(F.force,u)} FACTORED) AND RAIL CREEP INTO THE GIRDER. TIGHT RAIL JOINTS, GAP 1/16 IN. MAX., STAGGERED AS SHOWN (AIST TR-13 §5.16.1); RE-TIGHTEN THE JOINT BOLTS AFTER 30 AND 90 DAYS OF OPERATION. ALL OTHER KEEPERS LET THE RAIL SLIDE; THE RAIL STRING MOVES THERMALLY FROM ITS ANCHOR, UP TO ${movementUpTo(endMove,u)} AT A RAIL END, INTO THE CLEARANCE GAP AT THE END STOP. AT EACH PERIODIC CRANE INSPECTION CHECK THE RAIL ENDS AT THE STOPS FOR CREEP.`
+     :`RAIL ANCHORS, SOLID TRIANGLES: AT MID-LENGTH OF EACH RAIL PIECE THE KEEPER PAIR IS SET IN RAIL-BASE NOTCHES (${detailRef(detailTitles.railKeeper)}) AND TAKES THE CRANE LONGITUDINAL FORCE (TRACTION AND BRAKING, ${labelForce(F.force,u)} FACTORED) AND RAIL CREEP INTO THE GIRDER. ALL OTHER KEEPERS LET THE RAIL SLIDE; EACH PIECE MOVES THERMALLY FROM ITS ANCHOR, UP TO ${movementUpTo(railJointMovement(moves),u)} AT A JOINT (OPEN JOINTS, ${u==='SI'?`${Math.round(gap*2)/2} mm`:plateInches(gap,u)} GAP). RE-TIGHTEN THE JOINT BOLTS AFTER 30 AND 90 DAYS OF OPERATION. AT EACH PERIODIC CRANE INSPECTION CHECK THE JOINT GAPS AND THE RAIL ENDS AT THE STOPS FOR CREEP.`;})()]:[]),
    ...(['left','right'] as const).filter(e=>r.existing[e]).map(e=>`AT GRID ${e==='left'?1:grids.length} JOIN THE EXISTING RAIL: CUT IT BACK TO ${dim(clear)} BEYOND THE GRID. FIELD VERIFY ITS SECTION AND JOINTS.`)
   ];
   let y=rows.A+58;

@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {gunzipSync} from 'node:zlib';
 import {projectSchema,type ProjectInput} from '../../src/engine/types';
 
 /**
@@ -12,3 +13,10 @@ export function demoFocus005():ProjectInput{
 }
 export type BaselineCheck={id:string;group:string;title:string;status:string;demand?:number;capacity?:number;utilization?:number;quantity?:string;refs:string[]};
 export const demoFocus005Before=():{revision:string;checks:BaselineCheck[]}=>JSON.parse(readFileSync(new URL('./demoFocus005.before.json',import.meta.url),'utf8'));
+/**
+ * The full calculation snapshot of demoFocus005() at the review baseline (every check with its note, the detail
+ * results and the fatigue register), stored so report and taxonomy tests need no 5-minute calculate().
+ */
+export function demoFocus005Snapshot():import('../../src/engine/types').CalculationSnapshot{
+ return JSON.parse(gunzipSync(readFileSync(new URL('./demoFocus005.snapshot.json.gz',import.meta.url))).toString('utf8'));
+}

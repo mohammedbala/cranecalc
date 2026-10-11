@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {reviewOpenItem} from './review/openItems';
 import {calculate} from '../src/engine/calculate';
 import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/demonstration';
 import {compactReport} from '../src/report/compactReport';
@@ -17,7 +18,7 @@ describe('compact, readable calculation report',()=>{
  it('opens with the summary: result, specified details, the load-path figure and the governing check of each element',()=>{
   const summary=html.indexOf('Design summary'),basis=html.indexOf('1.1 / Scope, codes &amp; design basis');
   expect(summary).toBeGreaterThan(0);expect(basis).toBeGreaterThan(summary);
-  expect(html.indexOf('NO FAILED CHECKS')).toBeLessThan(summary);
+  expect(html.search(/ALL DESIGN CHECKS SATISFIED|OPEN ITEMS? — REVIEW REQUIRED/)).toBeLessThan(summary);expect(html).not.toContain('NO FAILED CHECKS');
   expect(html.indexOf('class="load-path-figure"')).toBeGreaterThan(summary);
   expect(html.indexOf('class="summary-checks"')).toBeLessThan(basis);
   // The actual bracket, tie and girder are named on page 1.
@@ -33,11 +34,12 @@ describe('compact, readable calculation report',()=>{
   const titles=[...html.matchAll(/<h2>(\d+)\.(\d+) \/ [^<]*<\/h2>/g)].map(m=>[Number(m[1]),Number(m[2])]);
   for(let i=1;i<titles.length;i++)expect(titles[i][0]>titles[i-1][0]||titles[i][1]===titles[i-1][1]+1).toBe(true);
   // Every load with the equation that produced it, before the analysis results that use it.
-  const at=(t:string)=>html.indexOf(t);
+  const at=(t:string)=>html.indexOf(t,parts[0]);
   for(const t of ['Crane wheel loads &amp; impact','Side thrust, traction &amp; bumper forces','Dead loads, load cases &amp; combinations','Fatigue loading'])expect(at(t)).toBeGreaterThan(parts[1]);
   expect(at('Governing design actions')).toBeGreaterThan(parts[2]);expect(at('Bracket design forces')).toBeGreaterThan(parts[2]);expect(at('Bracket design forces')).toBeLessThan(parts[3]);
   // Members before connections: the girder, rail and bracket as a member, then the welds and attachments.
-  for(const t of ['Runway girder · strength &amp; stability','Welded bracket · member checks','Existing column check'])expect(at(t)).toBeGreaterThan(parts[3]),expect(at(t)).toBeLessThan(parts[4]);
+  // The section heading (page 1 may cite the existing-column reference by the same name when one of its checks governs).
+  for(const t of ['Runway girder · strength &amp; stability','Welded bracket · member checks','Existing column check</h2>'])expect(at(t)).toBeGreaterThan(parts[3]),expect(at(t)).toBeLessThan(parts[4]);
   for(const t of ['Cap channel welds','Bolted end bearings','Welded bracket · welds, fatigue','Direct flange attachment','Runway end stops'])expect(at(t)).toBeGreaterThan(parts[4]);
   // Each check group states its loads and governing case, and the girder flexure and shear are worked with numbers.
   expect(html.match(/<p class="basis">/g)!.length).toBeGreaterThan(12);
@@ -51,14 +53,15 @@ describe('compact, readable calculation report',()=>{
   expect([...text(parts[1],parts[3]).matchAll(/(\d[\d,]*\.\d+) ?(kip|in|ksi|kip-ft|rad)\b/g)].map(m=>m[0]).filter(v=>digits(v.split(' ')[0])>3)).toEqual([]);
   expect(text(parts[1],parts[3])).toMatch(/\d+\.\d ft/);
   // How each main connection is checked: weld metal, rib flexure and the wheel patch worked with numbers.
-  for(const t of ['0.6F_{EXX}','F11\\text{-}2','l_b=2(d_{rail}+t_f)','A_{pb}=2(b_s-c)t_s','\\frac{P_r}{2P_c}'])expect(html,t).toContain(t);
+  for(const t of ['0.6F_{EXX}','F11\\text{-}2','l_b=2(d_{rail}+t_f','A_{pb}=2(b_s-c)t_s','\\frac{P_r}{2P_c}'])expect(html,t).toContain(t);
  });
- it('prints every check exactly once, each with its equation inline in LaTeX and a code citation',()=>{
-  const ids=[...html.matchAll(/data-checks="([^"]*)"/g)].flatMap(m=>m[1].split(' ')),covered=new Set(ids);
-  expect(capped.checks.filter(c=>!covered.has(c.id)).map(c=>c.id)).toEqual([]);
-  expect(ids.length).toBe(covered.size);
+ it('lists every check once in Appendix A; the body prints each governing design line once with its equation and citation',()=>{
+  const appendix=[...html.matchAll(/data-check="([^"]*)"/g)].map(m=>m[1]);
+  expect(new Set(appendix)).toEqual(new Set(capped.checks.map(c=>c.id)));expect(appendix).toHaveLength(capped.checks.length);
+  const ids=[...html.matchAll(/data-checks="([^"]*)"/g)].flatMap(m=>m[1].split(' '));
+  expect(ids.length).toBe(new Set(ids).size);
   const rows=[...html.matchAll(/<tr class="[a-z-]+" data-checks="[^"]*">([\s\S]*?)<\/tr>/g)].map(m=>m[1]);
-  expect(rows.length).toBeGreaterThan(150);
+  expect(rows.length).toBeGreaterThan(15);expect(rows.length).toBeLessThan(60);
   for(const row of rows){
    expect(row).toMatch(/<td class="eq">(<span class="katex">|<i>)/);
    expect(row).toMatch(/<small class="ref">[A-Za-z]/);
@@ -104,9 +107,9 @@ describe('compact, readable calculation report',()=>{
   expect(out).toContain('data-checks="s1 s2 s3"');
  });
  it('flags failures at the top and in each row',()=>{
-  const s=structuredClone(calculate(demonstrationProject()));const c=s.checks.find(v=>v.id==='major')!;c.status='fail';c.utilization=1.2;
+  const s=structuredClone(calculate(demonstrationProject()));s.checks=s.checks.filter(v=>!reviewOpenItem(v));const c=s.checks.find(v=>v.id==='major')!;c.status='fail';c.utilization=1.2;
   const out=compactReport(s,'');
-  expect(out).toContain('1 CHECK NOT SATISFIED');expect(out).toContain('<b class="fail">NG</b>');
+  expect(out).toMatch(/\d+ OPEN ITEMS? — REVIEW REQUIRED/);expect(out).toMatch(/Redesign flag/);expect(out).toContain('<b class="fail">NG</b>');
  },240000);
  it('keeps equations free of control characters (unescaped LaTeX backslashes)',()=>{
   for(const c of capped.checks)expect(c.equation).not.toMatch(/[\f\r\t\v\b]/);

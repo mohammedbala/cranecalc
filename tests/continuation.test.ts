@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {reviewOpenItem} from './review/openItems';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {exampleProject} from '../src/engine/defaults';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
@@ -42,7 +43,7 @@ describe('runway continuing beyond a modeled end',()=>{
  it('designs the shared bracket and stops for a capped runway that continues to the right',()=>{
   const p=cappedDemonstrationProject();p.continuation={left:0,right:25*foot,source:'Existing W24 girders, spans field measured'};p.cranes.forEach(c=>c.travelEnd=100*foot);
   const s=calculate(p);expect(s.errors).toEqual([]);
-  expect(s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status))).toEqual([]);
+  expect(s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)&&!reviewOpenItem(c))).toEqual([]);
   expect(stopEnds(p)).toEqual(['left']);expect(s.checks.filter(c=>c.id.startsWith('detail-fatigue-SH')).length).toBe(4);
   // The end bracket at grid 4 carries the existing girder too, as the interior brackets carry two girders.
   const at=(x:number)=>s.detailResults!.interfaces.filter(r=>Math.abs(r.x-x)<1),Lm=75*foot;

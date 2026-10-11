@@ -37,7 +37,7 @@ export function demonstrationDetails():RunwayDetails{return {
   // outer face and both ends. The end fillets (2 in, anchor 1 7/8 in) are over four weld sizes long (AISC 360-16 J2.2b),
   // and the keeper and its outer fillet fit a 12 in flange. 1/2 in anchor notch: the anchor keeper bears on 1/4 in of
   // flat notch end beyond the 1/4 in radius corner holes.
-  clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2.375*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.375*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1.25*inch,jointPlateHeight:3.875*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+  clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2.375*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.375*inch,anchorNotch:.5*inch,jointGap:inch/16,jointPlateThickness:1.25*inch,jointPlateHeight:3.875*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
  criteria:{twistLimit:.005,railLateralLimit:400,railGauge:40*foot+.5*inch,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
  fatigueDetails:[
   {id:'F1',name:'Rolled bottom flange at midspan',x:12.5*foot,point:'bottom-left',category:'A',reference:'AISC Table A-3.1, 1.1 · plain rolled base metal'},
@@ -47,7 +47,7 @@ export function demonstrationDetails():RunwayDetails{return {
  ],
  // Rated-lift cycles: the owner's 75,000 full-load repetitions, two wheel-induced stress cycles each.
  spectrum:[{name:'Rated lifts',liftFraction:1,cycles:150000},{name:'Routine half-load lifts',liftFraction:.5,cycles:650000},{name:'Light lifts',liftFraction:.25,cycles:200000}],
- fabrication:{steel:'Girder ASTM A992; connection plates ASTM A572 Grade 50. Rail grade and geometry per fictional R-6 schedule.',bolting:'ASTM F3125 Grade A325, sizes as detailed, pretensioned to the RCSC Table 8.1 minimum pretension. Standard holes and Class B unpainted faying surfaces unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joint bolts snug-tight in sliding slots.',welding:'E70XX low-hydrogen welds. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts/stops and remove temporary welded attachments by grinding.',inspection:'Visual inspection of all welds and bolt installations; verify pretension and faying-surface preparation. MT at attachment terminations and repaired welds. Record baseline rail and connection condition before commissioning.',erection:'Provide temporary lateral/torsional restraint until both flange ties are complete. Set bearing plates level, fit bearing stiffeners, and verify end rotation clearance. Do not operate the crane before alignment and supplier commissioning checks.',railAlignment:'Survey both rails unloaded and during commissioning. Record gauge, elevation and straightness at supports and midspan; use the stated demonstration tolerances, subject to the actual crane supplier requirements.'}
+ fabrication:{steel:'Girder ASTM A992; connection plates ASTM A572 Grade 50. Rail grade and geometry per fictional R-6 schedule.',bolting:'ASTM F3125 Grade A325, sizes as detailed, pretensioned to the RCSC Table 8.1 minimum pretension. Standard holes and Class B unpainted faying surfaces unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.',welding:'E70XX low-hydrogen welds. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts/stops and remove temporary welded attachments by grinding.',inspection:'Visual inspection of all welds and bolt installations; verify pretension and faying-surface preparation. AWS D1.1:2020 cyclically loaded acceptance criteria; 100% UT of CJP welds; MT at attachment terminations and repaired welds. Record baseline rail and connection condition before commissioning.',erection:'Provide temporary lateral/torsional restraint until both flange ties are complete. Set bearing plates level, fit bearing stiffeners, and verify end rotation clearance. Do not operate the crane before alignment and supplier commissioning checks.',railAlignment:'Survey both rails unloaded and during commissioning. Record gauge, elevation and straightness at supports and midspan; use the AIST TR-13 §5.18 tolerances, or the crane supplier tolerances where tighter.'}
 };}
 export function demonstrationProject():ProjectInput {
  const p=structuredClone(exampleProject);
@@ -108,19 +108,27 @@ export function cappedDemonstrationProject():ProjectInput {
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,height:26*foot,seatElevation:18*foot,Lcx:26*foot,Lcy:8*foot,Lcz:8*foot,
   existing:{D:{P:25*kip,Mx:15*kip*foot,My:0,V:1*kip},L:{...none},Lr:{P:12*kip,Mx:6*kip*foot,My:0,V:.5*kip},S:{P:20*kip,Mx:10*kip*foot,My:0,V:.8*kip},R:{...none},W:{P:-8*kip,Mx:40*kip*foot,My:0,V:4*kip},E:{P:0,Mx:20*kip*foot,My:0,V:2*kip}},
   welding:{basis:'mill-certificates',grade:'ASTM A572 Grade 50',carbonEquivalent:.42,preheat:(150-32)*5/9,deadLoadOnly:true,source:'Fictitious demonstration: mill certificates with the original building records, heat 4471'},
-  source:'Fictitious demonstration: original building calculation sheets 14-17, column line B',confirmed:true};
+  source:'Fictitious demonstration: original building calculation sheets 14-17, column line B',confirmed:true,
+  // Structural review records for the existing column line: the sidewall rod bracing's crane-level strut connects at
+  // the column centerline (so the girder offset still twists the column), a braced frame, the frame's 10-year wind
+  // drift and gravity spread at the runway, the site seismic data and the alteration evaluation.
+  longitudinalExit:'column-strut',
+  frame:{type:'braced',source:'Fictitious demonstration: column line B braced by the roof diaphragm and the sidewall rod bracing (building report DEMO-ER-02)'},
+  service:{wind10:.3*inch,spreadD:.05*inch,spreadS:.15*inch,roofSnow:25*4.788025898e-5,source:'Fictitious demonstration: building frame report DEMO-ER-02, 10-year wind and dead/snow runs at the crane girder'},
+  siteSeismic:{enabled:true,SDS:.25,sdc:'B',Ie:1,R:3,liftedLoadSecured:false,friction:.6,source:'Fictitious demonstration: site data from the original building report (Site Class D, SDS 0.25, SDC B; steel system not specifically detailed for seismic, R = 3)',
+   alteration:{dcrIncrease:.06,source:'Fictitious demonstration: evaluation DEMO-ER-02 of the existing bracing and frames with the runway and crane mass added (largest D/C increase 6%)'}}};
  // The surveyed seat sets the rail elevation the drawings show; no separate top of rail is entered.
  delete p.drawing!.railElevation;
  // Fictitious sidewall rod bracing up to the crane-level strut, with the building's own longitudinal wind and seismic forces.
  p.longitudinalBracing={...structuredClone(defaultLongitudinalBracing),enabled:true,bayWidth:25*foot,height:18*foot,existing:{W:6*kip,E:3*kip},
-  source:'Fictitious demonstration: sidewall rod bracing at grid lines 2-3 and the original wind/seismic report',confirmed:true};
+  wind10:3.5*kip,source:'Fictitious demonstration: sidewall rod bracing at grid lines 2-3 and the original wind/seismic report (10-year wind 3.5 kip on this line)',confirmed:true};
  // Revised independent ties: shorter, shifted clear of bearing stiffeners,
  // directly attached to flange saddles. No holes or cuts in the cap channel.
  Object.assign(p.details!.brace,{length:18*inch,reach:18*inch,width:5.25*inch,thickness:.3125*inch,gussetThickness:.875*inch,connectionLength:6*inch,
   flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.375*inch,webGap:1*inch,clearance:.25*inch,weldSize:.3125*inch}});
  Object.assign(p.details!.brace.connection,{diameter:.625*inch,gauge:2.75*inch,pitch:2*inch,edge:1.25*inch,thickness:.3125*inch,weldLength:5.75*inch});
  p.details!.bracket!.seatWeld=.625*inch;
- p.details!.fabrication.bolting='ASTM F3125 Grade A325, sizes as detailed (tie bolts smaller than the other girder bolts), pretensioned to the RCSC Table 8.1 minimum pretension. Standard holes and Class B faying surfaces. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joint bolts snug-tight in sliding slots.';
+ p.details!.fabrication.bolting='ASTM F3125 Grade A325, sizes as detailed (tie bolts smaller than the other girder bolts), pretensioned to the RCSC Table 8.1 minimum pretension. Standard holes and Class B faying surfaces. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.';
  p.details!.bearing.length=12*inch;p.details!.bearing.stiffenerWidth=4*inch;
  // Ribs between the inner bearing bolt rows and the column flange edges: nuts below the seat clear the ribs at
  // shared and runway-end grids, and both root welds stay on the 14-in receiving flange.

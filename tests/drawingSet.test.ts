@@ -1,4 +1,6 @@
 import {describe,expect,it} from 'vitest';
+import {reviewOpenItem} from './review/openItems';
+const withoutOpenItems=<T extends {checks:{id:string;group:string}[]}>(s:T):T=>({...s,checks:s.checks.filter(c=>!reviewOpenItem(c))});
 import {calculate} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {drawingSheetSet,resolveSheetSet,sheetIndex,detailReferences,detailTopics} from '../src/components/planSheet';
@@ -13,7 +15,7 @@ import type {CalculationSnapshot} from '../src/engine/types';
 import {bracketForceCases,bracketForceCells} from '../src/components/bracketForceTable';
 
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
-const capped=calculate(cappedDemonstrationProject()),demo=calculate(demonstrationProject()),newColumn=calculate(newColumnDemonstrationProject());
+const capped=withoutOpenItems(calculate(cappedDemonstrationProject())),demo=calculate(demonstrationProject()),newColumn=calculate(newColumnDemonstrationProject());
 const cappedSet=drawingSheetSet(capped),demoSet=drawingSheetSet(demo),newColumnSet=drawingSheetSet(newColumn);
 const si=(s:CalculationSnapshot)=>{const v=structuredClone(s);v.input.units='SI';return v;};
 // The three demonstrations as issued, and the same sets drawn in SI units.

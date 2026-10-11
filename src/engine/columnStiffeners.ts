@@ -1,3 +1,4 @@
+import {categoryF,finiteLife} from './fatigueConstants';
 /**
  * Column stiffeners (continuity plates) in the receiving column at a welded column bracket: a pair of plates, one each
  * side of the column web, at each concentrated force level of the bracket. The welded twin-rib and haunched brackets
@@ -224,7 +225,7 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
   `Corner clip ${f(g.clip)} against the rolled fillet k - tf = ${f(g.fillet??0)} plus 1/8 in (k = ${f(g.K?.k??0)}, ${g.K?.source??'not identified'}); plates ${f(g.tw/2+g.width)} from the web centerline within the ${f(g.c.width/2)} half flange; ${f(g.length)} long between the flanges (clear depth ${f(g.h)}). ${survey}`);
  // Fatigue, Appendix 3: the duty-bin ranges of the force on one plate (unfactored, without impact), conservatively
  // taken as the whole concentrated force on the stiffeners at every level.
- const total=p.fatigue.cycles,weldF=Math.max(55,690*(1.5/total)**.167),te2=(w:number)=>2*te(w);
+ const total=p.fatigue.cycles,weldF=categoryF(total),te2=(w:number)=>2*te(w);
  const plateRange=x.fatigue.map(v=>Math.max(v.upper,v.lower));
  const plate=x.fatigue.reduce((s,v,i)=>s+(plateRange[i]/(g.contact*g.t)/transverseFilletFatigue(g.t,g.s.flangeWeld,v.cycles).capacity)**3,0);
  const R=transverseFilletFatigue(g.t,g.s.flangeWeld,total).reduction;
@@ -233,7 +234,7 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
  const throat=Math.max(0,...plateRange.map(v=>Math.max(v/(te2(g.s.flangeWeld)*g.contact),v/(te2(g.s.webWeld)*g.webLength))));
  add('fatigue-weld','Column stiffener fillets · throat fatigue (A-3.1 item 8.2)',throat,weldF,'stress','\\Delta f_w=\\frac{\\Delta P}{2(0.707w)l}\\le\\max[55,690(1.5/n)^{0.167}]',
   `Table A-3.1 item 8.2, Category F, shear on the throat of the flange and web fillets of one plate; the largest unfactored range over the duty bins assigned to all ${total.toLocaleString('en-US')} project cycles.`,undefined,fatRefs);
- const toe=x.fatigue.reduce((s,v)=>s+(v.column/(6900*(4.4/v.cycles)**(1/3)))**3,0);
+ const toe=x.fatigue.reduce((s,v)=>s+(v.column/(finiteLife(4.4,v.cycles)))**3,0);
  add('fatigue-toe','Column flange at the stiffener weld toes · fatigue (A-3.1 item 5.7)',toe,1,'ratio','D=\\sum_i(\\Delta f_i/F_{SR,C})^3\\le1',
   `Table A-3.1 item 5.7, Category C: column flange (and web) base metal at the toe of the transverse fillets of the stiffeners, which are ${f(g.t)} thick along the column (item 7.1 would also give C, a < 2 in). ${x.columnStressNote}`,undefined,fatRefs);
  return checks;

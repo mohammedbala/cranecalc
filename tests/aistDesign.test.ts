@@ -91,7 +91,8 @@ describe('Concurrent design, fatigue and export safety',()=>{
   expect(s.eligible).toBe(false);expect(s.checks.find(c=>c.id==='torsion')?.status).toBe('unsupported');
  });
  it('uses AISC fatigue constants and thresholds; excludes impact from the same material-point history',()=>{
-  const f=fatigueResistance('C',2000000);expect(f.FSR).toBeCloseTo(89.7408098327,8);expect(fatigueResistance('C',1e15).FSR).toBe(69);expect(fatigueResistance('B1',1e15).FSR).toBe(83);
+  // AISC 360-16 US form (review item D26): 1000 (Cf/n)^0.333 ksi and the US thresholds, exact in MPa.
+  const ksi=6.894757293168361,f=fatigueResistance('C',2000000);expect(f.FSR/ksi).toBeCloseTo(1000*(4.4/2e6)**(1/3),10);expect(fatigueResistance('C',1e15).FSR/ksi).toBeCloseTo(10,12);expect(fatigueResistance('B1',1e15).FSR/ksi).toBeCloseTo(12,12);
   const p=designProject(),s=calculate(p);p.cranes[0].impact=.5;const b=calculate(p);expect(b.designAnalysis!.fatigueMin).toBeCloseTo(s.designAnalysis!.fatigueMin,6);expect(b.designAnalysis!.fatigueMax).toBeCloseTo(s.designAnalysis!.fatigueMax,6);expect(b.designAnalysis!.moment).toBeGreaterThan(s.designAnalysis!.moment);
   expect(s.checks.find(c=>c.id==='fatigue')?.status).toBe('fail');
  });

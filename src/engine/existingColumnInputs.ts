@@ -45,6 +45,8 @@ export const existingWeldingSchema=z.object({
  basis:z.enum(['mill-certificates','chemical-analysis','original-documents','not-established']),
  grade:z.string().max(80),
  carbonEquivalent:z.number().finite().nonnegative().max(2).optional(),
+ /** Mill or laboratory chemistry, percent by weight: the carbon equivalent is then computed by the AWS D1.1 Annex B formula (with Si). */
+ chemistry:z.object({C:z.number().finite().nonnegative().max(2),Mn:z.number().finite().nonnegative().max(5),Si:z.number().finite().nonnegative().max(5),Cr:z.number().finite().nonnegative().max(5).optional(),Mo:z.number().finite().nonnegative().max(5).optional(),V:z.number().finite().nonnegative().max(5).optional(),Ni:z.number().finite().nonnegative().max(5).optional(),Cu:z.number().finite().nonnegative().max(5).optional()}).optional(),
  preheat:z.number().finite().min(-40).max(400),
  deadLoadOnly:z.boolean(),
  source:z.string().max(300)
@@ -72,6 +74,35 @@ export const existingColumnSchema=z.object({
  /** New freestanding columns: the surveyed existing building beside the runway, drawn and checked for clearance. */
  adjacent:adjacentBuildingSchema.optional(),
  existing:z.object({D:effect,L:effect,Lr:effect,S:effect,R:effect,W:effect,E:effect}),
+ /**
+  * Where the crane longitudinal force leaves the column (review B7/B8): a crane-level strut on the girder line (no
+  * column bending or torsion from it), a crane-level strut at the column centerline (no weak-axis bending, torsion
+  * from the girder offset), or the eave strut / roof at the column top (weak-axis bending from the seat to the top,
+  * and torsion). Not entered: the eave-strut path is assumed and the column check is flagged.
+  */
+ longitudinalExit:z.enum(['girder-strut','column-strut','eave-strut']).optional(),
+ /**
+  * Frame type of the building at this column line across the runway (review B9). A sway (portal) frame needs the
+  * frame's sway amplification B2 (AISC Appendix 8) from its analysis; without it the column check is provisional.
+  */
+ frame:z.object({type:z.enum(['braced','sway']),B2:z.number().finite().min(1).optional(),source:z.string().max(300)}).optional(),
+ /**
+  * Serviceability data from the building frame analysis at this column line (review B10, TR-13 §5.3): the
+  * displacement at the top of the crane girder under the 10-year wind, and the outward rail displacement under
+  * the frame's dead load and its full roof snow load, with the roof snow pressure for the TR-13 gauge reduction.
+  */
+ service:z.object({wind10:z.number().finite().nonnegative().optional(),spreadD:z.number().finite().optional(),spreadS:z.number().finite().optional(),roofSnow:z.number().finite().nonnegative().optional(),source:z.string().max(300)}).optional(),
+ /**
+  * Site seismic data for a runway added to an existing building (review B11): SDS, SDC, Ie and the existing
+  * lateral system's R give Cs = SDS·Ie/R for the runway and crane masses; TR-13 combinations 5a and 7a are then
+  * added to the runway checks. The lifted load is a seismic mass only when it is rigidly secured; the crane's
+  * inertia along the runway is capped by wheel friction μ. `alteration` records the evaluation of the existing
+  * lateral system under the building code's alteration provisions: the largest increase of an element's
+  * demand-capacity ratio from the added mass, as a fraction (0.10 = 10%).
+  */
+ siteSeismic:z.object({enabled:z.boolean(),SDS:z.number().finite().nonnegative(),sdc:z.enum(['A','B','C','D','E','F']),Ie:pos,R:pos,
+  liftedLoadSecured:z.boolean(),friction:z.number().finite().positive().max(1),source:z.string().max(300),
+  alteration:z.object({dcrIncrease:z.number().finite().nonnegative(),source:z.string().max(300)}).optional()}).optional(),
  /** Welding new brackets, gussets or plates to this existing column. */
  welding:existingWeldingSchema.optional(),
  source:z.string().max(500),confirmed:z.boolean()

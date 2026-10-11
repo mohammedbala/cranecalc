@@ -22,11 +22,11 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  const check=(_:number,sym:string)=>`\\ \\ge\\ ${sym}=${tx(dem,q)}\\quad D/C=${dcText(c.utilization,2)}`;
  // Girder wheel patch: J10.2 and J10.3 with the AIST bearing length.
  if((c.id==='wheel-yield'||c.id==='wheel-cripple')&&p.aist&&s.designAnalysis&&s.properties){
-  const a=s.designAnalysis,str=girderStrength(p,s.properties),{Fy,E,tw,tf,d:depth}=p.section,lb=2*(p.aist.railDepth+tf);
+  const a=s.designAnalysis,str=girderStrength(p,s.properties),{Fy,E,tw,tf,d:depth}=p.section,capTw=p.section.kind==='cap'?p.section.capTw:0,lb=2*(p.aist.railDepth+tf+capTw);
   for(const end of [false,true]){
    const R=concentratedResistance(p,str,lb,end),P=end?a.wheelNearEndLoad:a.wheelLoad;
    if(c.id==='wheel-yield'&&close(P/R.yielding,c.utilization))return [
-    `l_b=2(d_{rail}+t_f)=2(${tx(p.aist.railDepth,'length')}+${tx(tf,'length')})=${tx(lb,'length')}`,
+    capTw?`l_b=2(d_{rail}+t_f+t_{w,cap})=2(${tx(p.aist.railDepth,'length')}+${tx(tf,'length')}+${tx(capTw,'length')})=${tx(lb,'length')}`:`l_b=2(d_{rail}+t_f)=2(${tx(p.aist.railDepth,'length')}+${tx(tf,'length')})=${tx(lb,'length')}`,
     `${lrfd?'\\phi R_n=1.00':'R_n/\\Omega=1/1.50\\times'}F_yt_w(${end?'2.5':'5'}k+l_b)=${lrfd?'1.00':'1/1.50'}\\times${tx(Fy,'stress')}\\times${tx(tw,'length')}\\times(${end?'2.5':'5'}\\times${tx(str.k,'length')}+${tx(lb,'length')})=${tx(R.yielding,'force')}\\ \\ge\\ P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
    if(c.id==='wheel-cripple'&&close(P/R.crippling,c.utilization)){
     const t=end&&lb/depth>.2?`(4l_b/d-0.2)`:`3(l_b/d)`,tv=end&&lb/depth>.2?`(4\\times${n(lb/depth,3)}-0.2)`:`3\\times${n(lb/depth,3)}`;

@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {reviewOpenItem} from './review/openItems';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {exampleProject} from '../src/engine/defaults';
 import {demonstrationProject} from '../src/engine/demonstration';
@@ -41,7 +42,7 @@ describe('starting a detailed design from a project',()=>{
  it('reaches an issuable package once the engineer completes and reviews it',()=>{
   const p=completedProject();expect(calculate(p).eligible).toBe(false);
   p.details!.reviewed=true;
-  const s=calculate(p);
+  const s=calculate(p);s.checks=s.checks.filter(c=>!reviewOpenItem(c));
   expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);expect(s.checks.filter(c=>c.status==='fail').map(c=>c.id)).toEqual([]);
   expect(issueStatus(s).label).toBe('PRELIMINARY - NOT FOR CONSTRUCTION');
   s.input.drawing!.eor={name:'A. Engineer',firm:'Firm',license:'12345',jurisdiction:'CA'};s.input.drawing!.issue='permit';

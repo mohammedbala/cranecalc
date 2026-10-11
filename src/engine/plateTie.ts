@@ -1,3 +1,4 @@
+import {finiteLife} from './fatigueConstants';
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import {available} from './aiscStrength';
 import {boltCapacity,boltProperties,elasticBoltGroup,plateBearing,blockShear,parallelWeldGroup,minimumFillet} from './connectionStrength';
@@ -100,8 +101,8 @@ export function plateTieChecks(s:CalculationSnapshot,ctx:{force:number;cos:numbe
  // Fatigue of the pretensioned bolts in tension (AISC A-3.4): 20% of the service tension range including prying, on the
  // tensile stress area, against the bolt-tension curve (C_f = 3.9 × 10^8 ksi³) without threshold credit.
  const cycles=d.spectrum.reduce((a,v)=>a+v.cycles,0),fatigueEnds=ends.map(v=>({...v,...lapBolts(p,range,mv.cyclicLongitudinal,rel?0:mv.cyclicVertical,v.arm)})),fb=worst(fatigueEnds,v=>v.tension);
- const At=.75*bolt.area,boltRange=.2*2*fb.tension/At,boltAllowable=6900*(.39/cycles)**(1/3);
- add('plate-tie-bolt-fatigue','Fatigue','Flexible plate lap bolts · tension fatigue',boltRange,boltAllowable,'stress','\\Delta f_b=0.2\\,(2\\Delta T)/A_t\\le(C_f/n)^{1/3}',`AISC Appendix 3.4: pretensioned bolts with steel in the grip take 20% of the applied tension range including prying (doubled). Governing ${fb.name}: tension range ${force(2*fb.tension)} from the tie force range ${force(range)} (lap couple) and the single-crane rotation movement, on A_t ≈ 0.75A_b; ${cycles.toExponential(2)} cycles, no threshold credit.`,['aisc-fatigue','flexible-plate-basis']);
+ const At=.75*bolt.area,boltRange=.2*2*fb.tension/At,boltAllowable=finiteLife(.39,cycles);
+ add('plate-tie-bolt-fatigue','Fatigue','Flexible plate lap bolts · tension fatigue',boltRange,boltAllowable,'stress','\\Delta f_b=0.2\\,(2\\Delta T)/A_t\\le(C_f/n)^{0.333}',`AISC Appendix 3.4: pretensioned bolts with steel in the grip take 20% of the applied tension range including prying (doubled). Governing ${fb.name}: tension range ${force(2*fb.tension)} from the tie force range ${force(range)} (lap couple) and the single-crane rotation movement, on A_t ≈ 0.75A_b; ${cycles.toExponential(2)} cycles, no threshold credit.`,['aisc-fatigue','flexible-plate-basis']);
  checks.push(keeperInteraction(s,F));
  return checks;
 }
