@@ -3,7 +3,7 @@ import {calculate,validateProject} from '../src/engine/calculate';
 import {demonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {defaultExistingColumn} from '../src/engine/existingColumnInputs';
 import {anchorHardware,columnBaseElevation,defaultColumnBase,type ColumnBaseInput} from '../src/engine/columnBaseInputs';
-import {anchorArea,anchorStrength,baseDrift,basePlate,footingStrength,nutBearingArea,soilPressure,type BaseAction} from '../src/engine/columnBase';
+import {anchorArea,anchorStrength,baseDrift,basePlate,footingStrength,nutBearingArea,plateWasherWeld,soilPressure,type BaseAction} from '../src/engine/columnBase';
 import {runwayElevations} from '../src/engine/drawingData';
 import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import type {ProjectInput} from '../src/engine/types';
@@ -133,6 +133,14 @@ describe('New freestanding column package',()=>{
   expect(texts(set[0].svg)).toContain(columns.number);expect(texts(set[0].svg)).toContain(elevation);
   // A new column is shop welded: no field-weld flags or existing-column labels on the column-side details.
   for(const sheet of set.slice(2))expect(texts(sheet.svg)).not.toMatch(/EXISTING COLUMN|FIELD WELD TO/);
+  // The plate washer weld: an all-around fillet on 4/S-04, sized in the note and checked for one rod's shear.
+  const w=plateWasherWeld(p.columnBase!),check=s.checks.find(c=>c.id==='base-washer-weld')!;
+  expect(w.size/inch).toBeCloseTo(5/16,9);expect(w.length/inch).toBeCloseTo(12,9);if(!s.columnBase)throw new Error('no base');
+  expect(w.phiRn/kip).toBeCloseTo(.75*.6*70*Math.SQRT1_2*5/16*12,1);
+  expect(check.status).toBe('pass');expect(check.capacity).toBeCloseTo(w.phiRn,6);
+  expect((s.columnBase.supports??[]).some(v=>Math.abs(v.anchors.V/4-check.demand!)<1e-6)).toBe(true);
+  expect(columns.svg).toContain('data-weld-all-around="true"');
+  expect(texts(columns.svg)).toContain('5/16" FILLET ALL AROUND');
  },120000);
  it('reports geometry clashes and drawing mismatches as input errors',()=>{
   const p=newColumnDemonstrationProject();

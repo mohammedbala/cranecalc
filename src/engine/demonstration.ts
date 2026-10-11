@@ -132,7 +132,7 @@ export function cappedDemonstrationProject():ProjectInput {
  p.aist!.railPad=false;
  Object.assign(p.details!.rail,{clipWidth:3.875*inch,clipThickness:.5*inch,clipBodyWidth:1.625*inch,clipClearance:inch/16,clipProjection:.4375*inch,clipWeld:.25*inch,anchorNotch:.5*inch});
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';
- p.details!.fabrication.welding+=' Cap: 5/16 continuous fillet each W top-flange edge; 5-ft minimum development each end. Full cap bearing contact required. Bearing stiffeners CJP to W top flange, bottom fitted.';
+ p.details!.fabrication.welding+=' Cap: continuous fillet each W top-flange edge, size and end development per the cap section and development details. Full cap bearing contact required. Bearing stiffeners CJP to W top flange, bottom fitted.';
  p.notes+=' Separate capped example: 2-ton crane on W24X94 + C15X33.9, centered rail, continuous cap welds and full contact. This is not a substitute section for the 10-ton demonstration.';
  return p;
 }
@@ -160,6 +160,7 @@ export function newColumnDemonstrationProject():ProjectInput {
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,isNew:true,shape,Fy:50*ksi,Fu:65*ksi,height:top,seatElevation:seat,
   strong:{base:'fixed',top:'free'},weak:{base:'fixed',top:'braced'},Lcx:2.1*top,Lcy:top,Lcz:top,Lb:top,longitudinal:'bracing',driftLimit:240,source:'New column designed here',confirmed:true,
   seismic:{enabled:true,sdc:'B',SDS:.2,system:'ordinary',Ie:1,rho:1,source:'Fictitious site data: SDS 0.20, SD1 0.08, Site Class D, Risk Category II, SDC B',
+   riskCategory:'II',Ss:.19,S1:.05,siteClass:'D',SD1:.08,
    building:{drift:1.5*inch,source:'Fictitious original building report: maximum inelastic displacement 1.5 in at the runway level'}},
   // The existing building's W12X40 frame columns stand 6 ft outboard of each runway grid line, on the same grids.
   adjacent:{enabled:true,A:{...defaultExistingLine,offset:6*foot,footing:{L:4*foot,B:4*foot}},B:{...defaultExistingLine,offset:6*foot,footing:{L:4*foot,B:4*foot}},footingClear:6*inch,

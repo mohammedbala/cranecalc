@@ -48,5 +48,10 @@ export function seismicCombinations(method:ProjectInput['method'],b:Pick<Seismic
  const amplified=basic.map(k=>b.integrityOnly?{...k,id:`${k.id} (§1.4.2)`,overstrength:true}:{...k,id:`${k.id} Ωo`,equation:k.equation.replace('ρQE','ΩoQE'),E:k.E/r*o,overstrength:true});
  return [...basic,...amplified].map(k=>({...k,D:fix(k.D),E:fix(k.E)}));
 }
-/** Seismic design category from SDS alone (Table 11.6-1, Risk Category I-III); the entered SDC governs. */
-export const sdcFromSDS=(SDS:number)=>SDS<.167?'A':SDS<.33?'B':SDS<.5?'C':'D';
+export type RiskCategory='I'|'II'|'III'|'IV';
+/** Seismic design category from SDS (Table 11.6-1); Risk Category I-III unless given. The entered SDC governs. */
+export const sdcFromSDS=(SDS:number,rc:RiskCategory='II')=>SDS<.167?'A':SDS<.33?(rc==='IV'?'C':'B'):SDS<.5?(rc==='IV'?'D':'C'):'D';
+/** Seismic design category from SD1 (Table 11.6-2), and E or F where S1 is 0.75 or more (§11.6). */
+export const sdcFromSD1=(SD1:number,rc:RiskCategory='II',S1=0)=>S1>=.75?(rc==='IV'?'F':'E'):SD1<.067?'A':SD1<.133?(rc==='IV'?'C':'B'):SD1<.2?(rc==='IV'?'D':'C'):'D';
+/** Seismic importance factor Ie for a risk category (ASCE 7 Table 1.5-2). */
+export const seismicImportance=(rc:RiskCategory)=>rc==='IV'?1.5:rc==='III'?1.25:1;

@@ -96,7 +96,7 @@ function flow(blocks:Block[],limit:number,overflow=false){
 export const coverSheetTitle='COVER, GENERAL NOTES & DESIGN CRITERIA';
 export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
  const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>drawingLength(mm,u);
- const ksi=(v:number)=>format(v,'stress',u,3),status=issueStatus(s),elevations=runwayElevations(p);
+ const ksi=(v:number)=>format(v,'stress',u,u==='SI'?0:3),status=issueStatus(s),elevations=runwayElevations(p);
  const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} TONNES (${f(N)})`;
  const length=p.spans.reduce((a,b)=>a+b,0),cranes=p.cranes.map(c=>c.design?`${capacity(c.design.ratedLoad)} ${c.design.type} crane`:c.name).join(' and ');
 const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
@@ -181,8 +181,13 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['FATIGUE SPECTRUM',d?(()=>{const rated=d.spectrum.filter(b=>b.liftFraction>=1).reduce((sum,b)=>sum+b.cycles,0),perPass=a&&a.buildingCycles>0?rated/a.buildingCycles:0;
    // The rated-lift bin relates to the owner's full-load repetitions by the stress cycles per crane pass.
    return `${d.spectrum.reduce((sum,b)=>sum+b.cycles,0).toLocaleString()} STRESS CYCLES AT EACH DETAIL IN ${d.spectrum.length} DUTY BINS (${rated.toLocaleString()} AT RATED LIFT${perPass>0?`: ${Number(perPass.toFixed(2))} STRESS CYCLE${perPass===1?'':'S'} PER FULL-LOAD REPETITION`:''})`;})():`${p.fatigue.cycles.toLocaleString()} CYCLES, CATEGORY ${p.fatigue.category}`],
-  ...(()=>{const z=seismicBasis(p);return z?[['SEISMIC (NEW COLUMNS)',`ASCE 7 EQUIVALENT LATERAL FORCE ACROSS THE RUNWAY: ${cantileverSystems[z.system].label.toUpperCase()}, R ${z.R}, ΩO ${z.Omega0}, CD ${z.Cd}; SDC ${z.sdc}, SDS ${z.SDS}, IE ${z.Ie}, ρ ${z.rho}; CS ${z.Cs.toFixed(3)}${z.integrityOnly?' (SDC A, §1.4.2)':''}. BASE, ANCHORS AND FOOTINGS FOR OVERSTRENGTH; CRANE-LEVEL BRACING ALONG THE RUNWAY${designsBracing(p)?`: ${bracedSeismicSystem.label.toUpperCase()}, R ${bracedSeismicSystem.R}, ΩO ${bracedSeismicSystem.Omega0}, CD ${bracedSeismicSystem.Cd}`:''}`]]:[];})(),
-  ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS',`SPREAD FOOTINGS; ${format(p.columnBase.soil.allowable,'pressure',u,3).toUpperCase()} ALLOWABLE BEARING, BASE FRICTION ${p.columnBase.soil.friction}; OVERTURNING AND SLIDING FS 1.5 (DEAD LOAD ONLY)`]]:[]),
+  // IBC 1603.1.5: the seismic data for the new structure, and the design base shear each way.
+  ...(()=>{const z=seismicBasis(p),e=p.existingColumn?.seismic;if(!z||!e)return [];
+   const v=(x:number|undefined)=>x===undefined?'NOT ENTERED':String(x),across=s.existingColumn?.seismic?.QE,along=s.bracingSystem?.seismic?.QE;
+   return [['SEISMIC DATA (NEW COLUMNS)',`RISK CATEGORY ${e.riskCategory??'NOT ENTERED'}, IE ${z.Ie}; SS ${v(e.Ss)}, S1 ${v(e.S1)}; SITE CLASS ${e.siteClass==='default'?'D (DEFAULT, §11.4.3)':e.siteClass??'NOT ENTERED'}; SDS ${z.SDS}, SD1 ${v(e.SD1)}; SEISMIC DESIGN CATEGORY ${z.sdc}`],
+    ['SEISMIC (NEW COLUMNS)',`ASCE 7 EQUIVALENT LATERAL FORCE PROCEDURE. ACROSS THE RUNWAY: ${cantileverSystems[z.system].label.toUpperCase()}, R ${z.R}, ΩO ${z.Omega0}, CD ${z.Cd}, REDUNDANCY ${z.rho}; CS ${z.Cs.toFixed(3)}${z.integrityOnly?' (SDC A, §1.4.2)':''}${across!==undefined?`, V = ${f(across)} PER COLUMN`:''}. ALONG THE RUNWAY: CRANE-LEVEL BRACING${designsBracing(p)?`, ${bracedSeismicSystem.label.toUpperCase()}, R ${bracedSeismicSystem.R}, ΩO ${bracedSeismicSystem.Omega0}, CD ${bracedSeismicSystem.Cd}`:''}${along!==undefined?`, V = ${f(along)} PER RUNWAY LINE`:''}. BASE, ANCHORS AND FOOTINGS FOR OVERSTRENGTH`],
+    ['WIND (NEW COLUMNS)','NONE: THE RUNWAY STRUCTURE IS INSIDE THE ENCLOSED EXISTING BUILDING']];})(),
+  ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS',`SPREAD FOOTINGS; ${format(p.columnBase.soil.allowable,'pressure',u,u==='SI'?0:3).toUpperCase()} ALLOWABLE BEARING, BASE FRICTION ${p.columnBase.soil.friction}; OVERTURNING AND SLIDING FS 1.5 (DEAD LOAD ONLY)`]]:[]),
   ['ELEVATIONS',elevations?`T.O.R. ${drawingElevation(elevations.tor,u)}, T.O.S. ${drawingElevation(elevations.tos,u)} (DATUM ${drawingElevation(elevations.datum,u)})`:'NOT ENTERED']
  ],[1.4,2.6]));
  const r=s.supportReactions;

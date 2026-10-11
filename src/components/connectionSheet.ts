@@ -39,10 +39,13 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
 
  const hole=(x:number,y:number,r:number)=>circle(x,y,r,'runway-line')+line([x-r-3,y],[x+r+3,y],'grid-line')+line([x,y-r-3],[x,y+r+3],'grid-line');
  const wSection=(x:number,y:number,bf:number,depth:number,tf:number,tw:number,cls='runway-line')=>rect(x-bf/2,y,bf,tf,cls)+rect(x-tw/2,y+tf,tw,depth-2*tf,cls)+rect(x-bf/2,y+depth-tf,bf,tf,cls);
- // AWS A2.4 single-bevel groove on the arrow side, CJP in the tail; laid out like the fillet callouts.
+ // AWS A2.4 single-bevel groove on the arrow side, CJP in the tail; laid out like the fillet callouts. The
+ // perpendicular leg and the 45 degree leg both start at the root on the reference line and open away from it (a
+ // closed triangle would be the fillet symbol). The joints are T-joints, so the abutting stiffener or gusset is
+ // the beveled member and the arrow needs no break.
  const grooveLeader=(point:XY,at:XY,labels:string[],via:XY[]=[])=>{
   const y=at[1]-3,x=at[0]+41,right=point[0]>at[0]+89,tail=right?at[0]-3:at[0]+92,dir=right?-1:1;
-  return `<g data-multileader="weld" data-weld="cjp">${multiLeader([point],at,[],8,via.length?[via]:[],89)}${line([at[0]-3,y],[at[0]+92,y])}${line([x,y],[x,y+8])}${line([x,y+8],[x+8,y])}${line([tail,y],[tail+dir*6,y-5])}${line([tail,y],[tail+dir*6,y+5])}${text(tail+dir*8,y+3,'CJP',8,right?'end':'start')}${labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('')}</g>`;
+  return `<g data-multileader="weld" data-weld="cjp">${multiLeader([point],at,[],8,via.length?[via]:[],89)}${line([at[0]-3,y],[at[0]+92,y])}${line([x,y],[x,y+8])}${line([x,y],[x+8,y+8])}${line([tail,y],[tail+dir*6,y-5])}${line([tail,y],[tail+dir*6,y+5])}${text(tail+dir*8,y+3,'CJP',8,right?'end':'start')}${labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('')}</g>`;
  };
  const topic:DetailTopic={key:'connection',name:'CONNECTIONS',views:[]};
  if(!d)return {...topic,message:['GIRDER-SIDE CONNECTION GEOMETRY HAS NOT BEEN ENTERED.',`REFERENCE COLUMN BRACKET / ${colName}.`]};

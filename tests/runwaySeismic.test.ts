@@ -1,7 +1,8 @@
 import {describe,expect,it} from 'vitest';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {newColumnDemonstrationProject} from '../src/engine/demonstration';
-import {seismicBasis,seismicCombinations} from '../src/engine/runwaySeismic';
+import {sdcFromSD1,sdcFromSDS,seismicBasis,seismicCombinations} from '../src/engine/runwaySeismic';
+import {coverSheetSvg} from '../src/components/coverSheet';
 import {anchorStrength,columnBaseActions} from '../src/engine/columnBase';
 import {existingColumnSection,seismicHeight} from '../src/engine/existingColumn';
 import {supportReactions} from '../src/engine/supportReactions';
@@ -37,6 +38,30 @@ describe('Seismic design of new freestanding runway columns',()=>{
   const tall=seismic();tall.existingColumn!.height=36*foot;
   expect(errs(tall).some(e=>e.startsWith('existingColumn.height: cantilever column systems are limited'))).toBe(true);
  });
+ it('checks the entered SDC and Ie against the site data (ASCE 7 Tables 11.6-1, 11.6-2, 1.5-2; §11.6)',()=>{
+  expect([sdcFromSDS(.2),sdcFromSDS(.2,'IV'),sdcFromSDS(.4,'IV'),sdcFromSDS(.1,'IV')]).toEqual(['B','C','D','A']);
+  expect([sdcFromSD1(.05),sdcFromSD1(.08),sdcFromSD1(.08,'IV'),sdcFromSD1(.15),sdcFromSD1(.25),sdcFromSD1(.3,'II',.8),sdcFromSD1(.3,'IV',.8)]).toEqual(['A','B','C','C','D','E','F']);
+  const errs=(p:ProjectInput)=>validateProject(p);
+  // The demonstration site data agree with SDC B and Ie 1.
+  expect(errs(seismic())).toEqual([]);
+  expect(errs(seismic({SD1:.15})).some(e=>e.startsWith('existingColumn.seismic.sdc:')&&e.includes('Table 11.6-2'))).toBe(true);
+  expect(errs(seismic({riskCategory:'IV',Ie:1.5})).some(e=>e.startsWith('existingColumn.seismic.sdc:')&&e.includes('Table 11.6-1'))).toBe(true);
+  expect(errs(seismic({riskCategory:'III'})).some(e=>e.startsWith('existingColumn.seismic.Ie:'))).toBe(true);
+  expect(errs(seismic({sdc:'D',SDS:.6,system:'special',rho:1.3,S1:.8,SD1:.6})).some(e=>e.startsWith('existingColumn.seismic.sdc:')&&e.includes('§11.6'))).toBe(true);
+  // Site data are optional: an older project without them still validates.
+  const old=seismic();for(const k of ['riskCategory','Ss','S1','siteClass','SD1'] as const)delete old.existingColumn!.seismic![k];
+  expect(errs(old)).toEqual([]);
+ });
+ it('states the IBC 1603.1.5 seismic data, the base shear each way and the wind basis on S-00',()=>{
+  const s=calculate(newColumnDemonstrationProject()),svg=coverSheetSvg(s,[]),t=[...svg.matchAll(/>([^<]+)</g)].map(m=>m[1]).join(' ');
+  expect(t).toContain('RISK CATEGORY II, IE 1; SS 0.19, S1 0.05; SITE CLASS D; SDS 0.2, SD1 0.08;');
+  expect(t).toContain('SEISMIC DESIGN CATEGORY B');
+  expect(t).toContain('EQUIVALENT LATERAL FORCE PROCEDURE');
+  expect(t).toMatch(/V = 1\.45 KIP PER\s+COLUMN/);expect(t).toMatch(/V = 1\.78 KIP PER\s+RUNWAY LINE/);
+  expect(t).toContain('WIND (NEW COLUMNS)');expect(t).toContain('REDUNDANCY 1;');
+  // The Greek rho is not upper-cased into a P-like capital.
+  expect(t).not.toContain('Ρ');
+ },120000);
  it('designs the demonstration columns for SDC B with hand-checked base shear and drift',()=>{
   const p=newColumnDemonstrationProject(),s=calculate(p);
   expect(s.errors).toEqual([]);

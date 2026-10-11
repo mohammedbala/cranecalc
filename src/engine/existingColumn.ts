@@ -9,7 +9,7 @@ import type {SupportReactionSet} from './supportReactions';
 import type {CheckResult,ProjectInput,Properties,Section} from './types';
 import {format} from './units';
 import {latexNumber} from './math';
-import {cantileverHeightLimit,cantileverSystems,sdcFromSDS,seismicBasis,seismicCombinations,type SeismicBasis} from './runwaySeismic';
+import {cantileverHeightLimit,cantileverSystems,sdcFromSD1,sdcFromSDS,seismicBasis,seismicCombinations,seismicImportance,type SeismicBasis} from './runwaySeismic';
 import {alongSeismic,baseWarping,braceCases,braceShare,designsBracing,girderOffset} from './newColumnBracing';
 import {railTopAboveSteel} from './railSeat';
 
@@ -70,7 +70,10 @@ export function validateExistingColumn(p:ProjectInput):string[]{
    const sys=cantileverSystems[sz.system];
    add(!(sys.allowed as readonly string[]).includes(sz.sdc),`seismic.system: the ${sys.label.toLowerCase()} is not permitted in Seismic Design Category ${sz.sdc} (ASCE 7 Table 12.2-1); use the special system.`);
    add(sz.sdc!=='A'&&c.height>cantileverHeightLimit+1e-6,`height: cantilever column systems are limited to ${format(cantileverHeightLimit,'length',p.units,3)} (ASCE 7 Table 12.2-1).`);
-   add(sz.sdc<sdcFromSDS(sz.SDS),`seismic.sdc: SDS = ${sz.SDS} gives at least Seismic Design Category ${sdcFromSDS(sz.SDS)} (ASCE 7 Table 11.6-1).`);
+   const rc=sz.riskCategory??'II';
+   add(sz.sdc<sdcFromSDS(sz.SDS,rc),`seismic.sdc: SDS = ${sz.SDS} gives at least Seismic Design Category ${sdcFromSDS(sz.SDS,rc)} (ASCE 7 Table 11.6-1).`);
+   if(sz.SD1!==undefined)add(sz.sdc<sdcFromSD1(sz.SD1,rc,sz.S1),`seismic.sdc: ${sz.S1!==undefined&&sz.S1>=.75?`S1 = ${sz.S1}`:`SD1 = ${sz.SD1}`} gives at least Seismic Design Category ${sdcFromSD1(sz.SD1,rc,sz.S1)} (ASCE 7 ${sz.S1!==undefined&&sz.S1>=.75?'§11.6':'Table 11.6-2'}).`);
+   if(sz.riskCategory)add(Math.abs(sz.Ie-seismicImportance(sz.riskCategory))>1e-9,`seismic.Ie: Risk Category ${sz.riskCategory} takes Ie = ${seismicImportance(sz.riskCategory)} (ASCE 7 Table 1.5-2).`);
    add(Math.abs(sz.rho-1)>1e-9&&Math.abs(sz.rho-1.3)>1e-9,'seismic.rho: the redundancy factor is 1.0 or 1.3 (ASCE 7 §12.3.4).');
    add(sz.sdc>='D'&&Math.abs(sz.rho-1.3)>1e-9,'seismic.rho: use 1.3 in Seismic Design Category D to F unless §12.3.4.2 permits 1.0; cantilever columns with no redundancy do not qualify.');
   }
