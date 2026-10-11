@@ -35,34 +35,59 @@ export interface StiffenerLevel {
  plate:{width:number;thickness:number;name:string};
  name:string;
 }
+/** The force levels of a bracket at the column face, and how the drawings name the bracket beside the column. */
+export interface BracketForceLevels {levels:Omit<StiffenerLevel,'z'>[];bracket:string}
+/**
+ * The two force levels of any I-shaped bracket at the column face, its flanges: `top` is the top of its top flange
+ * from the seat top (up positive), `depth` its depth at the column face. Each pair centers on its flange by default
+ * and must stay within the flange thickness; the flange width and thickness set the J10.8 proportions.
+ */
+export function flangeForceLevels(o:{top:number;depth:number;tf:number;bf:number;label:string;section:string}):Omit<StiffenerLevel,'z'>[]{
+ return [{key:'upper',base:o.top-o.tf/2,band:[o.top-o.tf,o.top],plate:{width:o.bf,thickness:o.tf,name:`${o.section} top flange`},name:`${o.label} top flange`},
+  {key:'lower',base:o.top-o.depth+o.tf/2,band:[o.top-o.depth,o.top-o.depth+o.tf],plate:{width:o.bf,thickness:o.tf,name:`${o.section} bottom flange`},name:`${o.label} bottom flange`}];
+}
+/**
+ * Force levels of the brackets designed here: a W stub at its flanges (flangeForceLevels); a welded twin-rib or
+ * haunched bracket at the seat and the rib (haunch root) bottom. A bracket type without them gets no stiffeners;
+ * another I-shaped bracket adds its case through flangeForceLevels, and its checks pass its flange forces
+ * (flangeStiffenerForces) and unstiffened J10 strengths to columnStiffenerChecks.
+ */
+export function bracketForceLevels(b:BracketInput,t:number):BracketForceLevels|undefined{
+ if(isRolledBracket(b)){const st=rolledStub(b);return st?{bracket:`${st.name} STUB`,levels:flangeForceLevels({top:-(st.seat?.t??0),depth:st.d,tf:st.tf,bf:st.bf,label:'stub',section:st.name})}:undefined;}
+ if(!weldedRibBracket(b))return undefined;
+ // The rib (haunch root) bottom at the column face: the pair sits on it, within the bottom sixth of the root depth
+ // where the compression resultant of the root's elastic stress block lies.
+ const zb=-b.seatThickness-b.ribDepth,c=b.receiver;
+ return {bracket:'SEAT PL AND RIBS',levels:[{key:'upper',base:-b.seatThickness/2,band:[-b.seatThickness,0],plate:{width:Math.min(b.seatLength,c.width),thickness:b.seatThickness,name:'seat plate'},name:'seat'},
+  {key:'lower',base:zb+t/2,band:[zb,zb+b.ribDepth/6],plate:{width:Math.min(c.width,b.ribSpacing+b.ribThickness),thickness:b.ribThickness,name:'ribs'},name:haunchedBracket(b)?'haunch root bottom':'rib bottom'}]};
+}
+/**
+ * Pair forces at the two flange levels of an I-shaped bracket from each flange's resultant P (tension positive) and
+ * in-plane moment M_f: twice the more loaded half-flange resultant, P + 3|M_f|/b_f in tension and -P + 3|M_f|/b_f in
+ * compression; and the signed force on each plate (one half flange) for fatigue ranges.
+ */
+export function flangeStiffenerForces(P:[number,number],M:[number,number],bf:number){
+ const bend=M.map(v=>3*Math.abs(v)/bf);
+ return {upperT:Math.max(0,P[0]+bend[0]),upperC:Math.max(0,-P[0]+bend[0]),lowerT:Math.max(0,P[1]+bend[1]),lowerC:Math.max(0,-P[1]+bend[1]),
+  plates:{upper:[-1,1].map(s=>P[0]/2+s*1.5*M[0]/bf),lower:[-1,1].map(s=>P[1]/2+s*1.5*M[1]/bf)}};
+}
 /** Geometry of the project's column stiffeners, or undefined when none are enabled. */
 export const columnStiffenerGeometry=(p:ProjectInput)=>bracketStiffenerGeometry(p.details?.bracket,p.existingColumn);
 /** Geometry of a bracket's column stiffeners on its receiving column (new when the column is a new column designed here). */
 export function bracketStiffenerGeometry(b:BracketInput|undefined,column?:{enabled:boolean;isNew?:boolean;shape:string}){
  const s=activeColumnStiffeners(b);if(!b||!s)return undefined;
  const c=b.receiver,tf=c.flangeThickness,tw=c.webThickness,h=c.depth-2*tf,K=receiverK(b,column);
- const st=isRolledBracket(b)?rolledStub(b):undefined,full=s.length==='full';
+ const full=s.length==='full';
  // Plate length across the column depth from the loaded flange inner face: to the far flange, or to the column
  // centerline so that it reaches one-half the member depth from the loaded face (J10.8(3)).
- const length=full?h:c.depth/2-tf,t=s.thickness,width=s.width,clip=s.clip;
- let levels:Omit<StiffenerLevel,'z'>[];
- if(st){
-  const top=-(st.seat?.t??0);
-  levels=[{key:'upper',base:top-st.tf/2,band:[top-st.tf,top],plate:{width:st.bf,thickness:st.tf,name:`${st.name} top flange`},name:'stub top flange'},
-   {key:'lower',base:top-st.d+st.tf/2,band:[top-st.d,top-st.d+st.tf],plate:{width:st.bf,thickness:st.tf,name:`${st.name} bottom flange`},name:'stub bottom flange'}];
- }else{
-  // The rib (haunch root) bottom at the column face: the pair sits on it, within the bottom sixth of the root depth
-  // where the compression resultant of the root's elastic stress block lies.
-  const zb=-b.seatThickness-b.ribDepth,root=haunchedBracket(b)?'haunch root bottom':'rib bottom';
-  levels=[{key:'upper',base:-b.seatThickness/2,band:[-b.seatThickness,0],plate:{width:Math.min(b.seatLength,c.width),thickness:b.seatThickness,name:'seat plate'},name:'seat'},
-   {key:'lower',base:zb+t/2,band:[zb,zb+b.ribDepth/6],plate:{width:Math.min(c.width,b.ribSpacing+b.ribThickness),thickness:b.ribThickness,name:'ribs'},name:root}];
- }
+ const length=full?h:c.depth/2-tf,t=s.thickness,width=s.width,clip=s.clip,forces=bracketForceLevels(b,t);
+ if(!forces)return undefined;
  const offset={upper:s.upperOffset??0,lower:s.lowerOffset??0};
  const fillet=K?Math.max(0,K.k-tf):undefined;
  return {s,c,tf,tw,h,full,length,t,width,clip,K,fillet,requiredClip:fillet===undefined?undefined:fillet+clipMargin,
   /** Flange contact and fillet length beyond the clip, and the web fillet length. */
-  contact:width-clip,webLength:length-(full?2:1)*clip,field:!(column?.enabled&&column.isNew),rolled:!!st,
-  levels:levels.map(l=>({...l,z:l.base+offset[l.key]})) as StiffenerLevel[]};
+  contact:width-clip,webLength:length-(full?2:1)*clip,field:!(column?.enabled&&column.isNew),rolled:isRolledBracket(b),bracket:forces.bracket,
+  levels:forces.levels.map(l=>({...l,z:l.base+offset[l.key]})) as StiffenerLevel[]};
 }
 export type ColumnStiffenerGeometry=NonNullable<ReturnType<typeof columnStiffenerGeometry>>;
 
@@ -82,8 +107,8 @@ export function bracingGussetBand(p:ProjectInput){
 export function columnStiffenerErrors(p:ProjectInput):string[]{
  const b=p.details?.bracket;if(!activeColumnStiffeners(b))return [];
  const errors:string[]=[],add=(bad:boolean,m:string)=>{if(bad)errors.push('details.bracket.columnStiffeners: '+m);};
- if(!weldedRibBracket(b)&&!isRolledBracket(b)){add(true,'column stiffeners are designed for the welded twin-rib, haunched and W-stub brackets.');return errors;}
  if(isRolledBracket(b)&&!rolledStub(b!))return errors;
+ if(!bracketForceLevels(b!,b!.columnStiffeners!.thickness)){add(true,'column stiffeners are designed for the welded twin-rib, haunched and W-stub brackets, which define the levels where they deliver force to the column.');return errors;}
  const g=columnStiffenerGeometry(p)!,f=(v:number)=>format(v,'length',p.units,3);
  add(!g.K,'enter the receiving column k (k_des) from the survey: no AISC shape identifies the column (set the existing column shape to the surveyed W-section, or enter k).');
  add(g.width+g.tw/2>g.c.width/2+1e-6,`plates ${f(g.width)} wide do not fit within the column flange: at most (bf - tw)/2 = ${f((g.c.width-g.tw)/2)}.`);

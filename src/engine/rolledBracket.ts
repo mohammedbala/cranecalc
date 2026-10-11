@@ -19,7 +19,7 @@ import {simpleSupportInput} from './simpleSupports';
 import {activeEndBearing} from './endBearingInputs';
 import {aiscShapeByName} from '../data/aiscSections';
 import {activeColumnStiffeners} from './columnStiffenerInputs';
-import {columnStiffenerChecks,stiffenedColumnChecks,panelStiffenerNote} from './columnStiffeners';
+import {columnStiffenerChecks,stiffenedColumnChecks,panelStiffenerNote,flangeStiffenerForces} from './columnStiffeners';
 
 const inch=25.4,kip=4448.2216152605;
 type Peak={value:number;caseId:string;x:number};
@@ -236,11 +236,7 @@ export function columnFlangeForces(st:RolledStub,f:StubActions){
  * M/(d-tf) +- N/2 with its in-plane bending M_f as twice the more loaded half-flange resultant, P + 3|M_f|/b_f, in
  * tension and in compression; and the force on each plate (one half flange), signed, for fatigue ranges.
  */
-export function stubStiffenerForces(st:RolledStub,f:StubActions){
- const P=[f.Mx/st.h0+f.N/2,-f.Mx/st.h0+f.N/2],M=[Math.abs(f.Mtop),Math.abs(f.Mbot)],bend=M.map(v=>3*v/st.bf);
- return {upperT:Math.max(0,P[0]+bend[0]),upperC:Math.max(0,-P[0]+bend[0]),lowerT:Math.max(0,P[1]+bend[1]),lowerC:Math.max(0,-P[1]+bend[1]),
-  plates:{upper:[-1,1].map(s=>P[0]/2+s*1.5*f.Mtop/st.bf),lower:[-1,1].map(s=>P[1]/2+s*1.5*f.Mbot/st.bf)}};
-}
+export const stubStiffenerForces=(st:RolledStub,f:StubActions)=>flangeStiffenerForces([f.Mx/st.h0+f.N/2,-f.Mx/st.h0+f.N/2],[f.Mtop,f.Mbot],st.bf);
 /** Self-weight of the stub, its stiffeners and the spreader seat, N. */
 export function rolledSelfWeight(p:ProjectInput,st:RolledStub){
  const g=p.section.density*9.80665/1e9,s=st.stiffener,seat=st.seat;

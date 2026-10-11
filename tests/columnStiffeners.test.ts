@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {cappedDemonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {selectBracketArrangement} from '../src/engine/connectionOptions';
 import {createBracketCollector,bracketChecks,validateBracket,columnWeldGroup,columnWeldLevels,stiffenerLevelForces,seatFatigueCategory,bracketResponse,seatStrip,seatColumnWeldSizes} from '../src/engine/bracketDesign';
-import {columnStiffenerGeometry,stiffenerPairStrength,requiredStiffenerForce} from '../src/engine/columnStiffeners';
+import {columnStiffenerGeometry,stiffenerPairStrength,requiredStiffenerForce,flangeForceLevels,flangeStiffenerForces,bracketForceLevels} from '../src/engine/columnStiffeners';
 import {createRolledBracketCollector,rolledBracketChecks,stubStiffenerForces,stubActions,projectStub,stubBearing} from '../src/engine/rolledBracket';
 import {receiverK,initialColumnStiffeners} from '../src/engine/columnStiffenerInputs';
 import {bracketTopic} from '../src/components/bracketSheet';
@@ -67,6 +67,18 @@ describe('column stiffener geometry and strength, hand-checked',()=>{
   // Gravity pulls at the seat and pushes at the rib bottom; the rib couple bounds them from below.
   const r=bracketResponse(p,[{vertical:100000,offset:0}]),v=stiffenerLevelForces(b,[g],r.ribs,r.e,{V:r.V,Mseat:r.Mx,F:0,H:0,xH:0});
   expect(v.upperT).toBeGreaterThanOrEqual(2*1.5*r.R*r.e/b.ribDepth-1e-6);expect(v.lowerC).toBeGreaterThanOrEqual(v.upperT*.5);expect(v.upperC).toBeCloseTo(0,6);
+ });
+ it('defines the force levels of any I-shaped bracket at its flanges, for brackets added later',()=>{
+  // A 20 in deep bracket, 3/4 x 10 in flanges, its top flange 1 1/2 in below the seat top.
+  const [up,low]=flangeForceLevels({top:-1.5*inch,depth:20*inch,tf:.75*inch,bf:10*inch,label:'haunch',section:'BUILT-UP'});
+  expect(up.base).toBeCloseTo(-1.875*inch,9);expect(up.band[0]).toBeCloseTo(-2.25*inch,9);expect(up.band[1]).toBeCloseTo(-1.5*inch,9);expect(low.base).toBeCloseTo(-21.125*inch,9);
+  expect(low.plate).toEqual({width:10*inch,thickness:.75*inch,name:'BUILT-UP bottom flange'});expect(up.name).toBe('haunch top flange');
+  // Flange resultants 100 kN (tension) and -80 kN with 2 kN·m in-plane moment on the top flange of a 250 mm flange.
+  const f=flangeStiffenerForces([100e3,-80e3],[2e6,0],250);
+  expect(f.upperT).toBeCloseTo(100e3+3*2e6/250,6);expect(f.upperC).toBeCloseTo(0,6);expect(f.lowerC).toBeCloseTo(80e3,6);
+  expect(f.plates.upper).toEqual([50e3-12e3,50e3+12e3]);
+  // A bracket type without levels gets no stiffener geometry.
+  const existing=w14();existing.details=selectBracketArrangement(existing.details!,'existing-corbel');expect(bracketForceLevels(existing.details.bracket!,inch)).toBeUndefined();
  });
  it('gives the W stub flange forces with the in-plane flange bending as twice the more loaded half flange',()=>{
   const p=selectBracketArrangement(w14().details!,'rolled-corbel'),q=w14();q.details=p;const st=projectStub(q),{a,e}=stubBearing(q);

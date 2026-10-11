@@ -9,7 +9,6 @@ import {supportColumn} from '../engine/drawingData';
 import {drawingLength,plateInches} from './drawingFormat';
 import {sheetDrawingScale,line,rect,text,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,n,type XY} from './sheetGraphics';
 import type {DetailView} from './detailSheet';
-import {isRolledBracket,rolledStub} from '../engine/rolledBracketInputs';
 
 export const columnStiffenerTitle='COLUMN STIFFENERS / PLAN AT BRACKET';
 type Input=CalculationSnapshot['input'];
@@ -88,7 +87,7 @@ export function stiffenerFaceHidden(g:ColumnStiffenerGeometry,o:{cx:number;k:num
  */
 export function columnStiffenerView(s:CalculationSnapshot):DetailView|undefined{
  const p=s.input,v=stiffenerDrawing(p);if(!v)return undefined;
- const {g,dim,size,sc}=v,c=g.c,b=p.details!.bracket!;
+ const {g,dim,size,sc}=v,c=g.c;
  return {title:columnStiffenerTitle,render:()=>{
   const scale=sheetDrawingScale(Math.min(.6,200/(c.depth+80),260/c.width),p.units),k=scale.pointsPerMm;
   // x along the runway from the web plane; the loaded flange (bracket side) at the bottom, its outer face at y = face.
@@ -97,7 +96,7 @@ export function columnStiffenerView(s:CalculationSnapshot):DetailView|undefined{
   svg+=rect(X(-c.width/2),top,c.width*k,g.tf*k,cls)+rect(X(-c.width/2),yIn,c.width*k,g.tf*k,cls);
   for(const s2 of [-1,1])svg+=line([X(s2*g.tw/2),top+g.tf*k],[X(s2*g.tw/2),yIn],cls);
   svg+=plateOutlines(g,{cx,yIn,k,dir:-1});
-  const yEnd=yIn-g.length*k,xEdge=X(g.tw/2+g.width),bracket=isRolledBracket(b)?`${rolledStub(b)?.name??'W'} STUB`:'SEAT PL AND RIBS';
+  const yEnd=yIn-g.length*k,xEdge=X(g.tw/2+g.width),bracket=g.bracket;
   // Plate width below the column, clear of the plates; plate length beside the flange tip.
   svg+=dimH(X(g.tw/2),xEdge,face+2,face+28,dim(g.width),'right');
   svg+=dimV(yIn,yEnd,xEdge+2,X(c.width/2)+20,dim(g.length));
