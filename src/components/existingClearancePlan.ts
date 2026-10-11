@@ -56,7 +56,8 @@ export function existingClearancePlan(s:CalculationSnapshot,r:ExistingLayout,box
  const shape=aiscShapeByName(l.input.shape),ex=(e.column.x0+e.column.x1)/2;
  svg+=shape?wAcross(X(ex),Y(ul),l.input.d,l.input.bf,shape.tf*25.4,shape.tw*25.4,k,'reference-line'):outline(e.column,'reference-line');
  if(e.footing)svg+=outline(e.footing,'reference-line');
- // Dimensions across the runway, from the plan out: footing clear, existing column line from the grid, steel clear.
+ // Dimensions across the runway, from the plan out: footing clear, steel clear, existing column line from the grid.
+ // Each string is shorter than the one beyond it, so no extension line crosses a dimension line.
  const vdim=(a:{u:number;from:number},bb:{u:number;from:number},x:number,label:string)=>{
   const y1=Y(a.u),y2=Y(bb.u),w=textWidth(label,9),fits=w+6<=Math.abs(y2-y1),lo=Math.min(y1,y2),hi=Math.max(y1,y2);
   // A string too short for its text reads horizontally beside its dimension line, clear of the extension lines.
@@ -68,8 +69,8 @@ export function existingClearancePlan(s:CalculationSnapshot,r:ExistingLayout,box
  const faceNew=g.part==='footing'?col:g.from,steelClear=planClear(faceNew,e.column),footClear=e.footing?planClear(ftg,e.footing):undefined;
  const d1=right+14,d2=d1+gap1,d3=d2+26,fs=facing(faceNew,e.column),ff=e.footing&&facing(ftg,e.footing);
  if(ff)svg+=vdim({u:ff[0],from:X(ftg.x1)+2},{u:ff[1],from:X(e.footing!.x1)+2},d1,`${dim(footClear!)} CLR.`);
- svg+=vdim({u:0,from:d1+8},{u:ul,from:d1+8},d2,dim(Math.abs(ul)));
- if(fs)svg+=vdim({u:fs[0],from:X(faceNew.x1)+2},{u:fs[1],from:X(e.column.x1)+2},d3,`${dim(steelClear)} CLR.`);
+ if(fs)svg+=vdim({u:fs[0],from:X(faceNew.x1)+2},{u:fs[1],from:X(e.column.x1)+2},d2,`${dim(steelClear)} CLR.`);
+ svg+=vdim({u:0,from:d1+8},{u:ul,from:d1+8},d3,dim(Math.abs(ul)));
  // Along the runway: the existing column from the runway grid where the survey puts it off the grid.
  if(along)svg+=dimH(X(xg),X(ex),outboardY+sg*4,outboardY+sg*22,dim(Math.abs(ex-xg)));
  // Callouts on the left, top to bottom in the order of their targets.
