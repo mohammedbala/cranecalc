@@ -1,5 +1,5 @@
 import {beforeAll,it,expect} from 'vitest';
-import {cappedDemonstrationProject} from '../src/engine/demonstration';
+import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/demonstration';
 import {calculate,fingerprint} from '../src/engine/calculate';
 import {capAttachmentChecks} from '../src/engine/capChecks';
 import {drawingSheetSet} from '../src/components/planSheet';
@@ -48,3 +48,13 @@ it('completes the ASD continuous capped branch with signed support moments',()=>
  expect(r.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status))).toBe(false);
  expect(r.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass')).toBe(true);
 },300000); // The softer movement-tolerant ties need a further load-position refinement pass; about 130 s alone.
+it('calls for UT only where the set has CJP welds and names the surveyed column on the connection',()=>{
+ const capped=drawingSheetSet(s),cover=capped.find(v=>v.number==='S-00')!.svg;
+ expect(cover).toContain('UT ALL CJP GROOVE WELDS');
+ const plain=structuredClone(s);plain.input=demonstrationProject();
+ const plainCover=drawingSheetSet(plain).find(v=>v.number==='S-00')!.svg;
+ expect(plainCover).not.toContain('UT ALL CJP');expect(plainCover).toContain('MT FILLETS ON CYCLIC DETAILS AS NOTED');
+ // The capped example surveys a W14X90 column: the connection labels it, not the viewer's tapered frame.
+ const connection=capped.find(v=>v.svg.includes('data-view="bracket-connection"'))!.svg;
+ expect(connection).toContain(`EXISTING ${s.input.existingColumn!.shape} COLUMN (REF.)`);expect(connection).not.toContain('TAPERED COLUMN');
+});

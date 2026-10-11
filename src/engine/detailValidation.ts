@@ -53,7 +53,7 @@ export function validateRunwayDetails(p:ProjectInput){
    add(g.freeLength<=0,'tie bars require clear length between the two bolt groups.');
    add(Math.abs(b.length-b.reach)>1e-6,'direct transverse tie model requires reach equal to bar length.');
    add(Math.abs(b.connection.weldLength-g.columnGusset)>1e-6,`column root weld length must equal the column gusset height (${(g.columnGusset/25.4).toFixed(3)} in).`);
-   add(b.connectionLength<g.gussetEnd-g.rootStart,'unbraced gusset length must include its full flange-to-end extension.');
+   add(b.connectionLength<g.gussetEnd-g.rootStart-1e-6,'unbraced gusset length must include its full flange-to-end extension.');
    add(g.stations.some(v=>v.tieX-g.attachment.saddleLength/2<v.start-1e-6||v.tieX+g.attachment.saddleLength/2>v.finish+1e-6),'saddle must remain within its own girder end bearing region.');
    if(g.receiver)add(g.stations.some(v=>Math.abs(v.tieX-v.station)+b.gussetThickness/2+b.connection.weldSize>g.receiver!.width/2),'column tie root welds must fit on the receiver flange.');
    if(g.sides.includes(-1)){

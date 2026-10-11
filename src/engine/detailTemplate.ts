@@ -64,7 +64,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    steel:'Runway girder per the section shown; plates, bars and stiffeners ASTM A572 Grade 50 unless noted.',
    bolting:'ASTM F3125 Grade A325, pretensioned, Class B faying surfaces, standard holes unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts pretensioned against steel sleeves. Rail-joint bolts snug-tight.',
    welding:'E70XX low-hydrogen electrodes per AWS D1.1, cyclically loaded provisions. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts and stops.',
-   inspection:'Visual inspection of all welds; magnetic particle testing of fillets at fatigue-sensitive attachments; ultrasonic testing of CJP welds; bolt pretension verification per RCSC.',
+   inspection:'Visual inspection of all welds; magnetic particle testing of fillets at fatigue-sensitive attachments; ultrasonic testing of CJP welds where shown; bolt pretension verification per RCSC.',
    erection:'Set and level the bearings, install the end bearings and flange ties, then set the rails. Provide temporary restraint until the permanent ties are complete.',
    railAlignment:'Set the rails to the specified gauge, alignment and level tolerances and survey them after erection, before the load test.'
   },
