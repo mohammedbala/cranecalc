@@ -1,3 +1,4 @@
+import {seatSettingTolerance} from './fitTolerances';
 import {z} from 'zod';
 import {minimumFillet} from './connectionStrength';
 
@@ -139,14 +140,14 @@ export function haunchWeight(g:HaunchGeometry,density:number){
 
 /**
  * First selection of the tapered haunch: start the plates from the bracket geometry with the seat width that holds
- * the girder bearings and the end gap (simple spans) or the runway-end bearing on one side of the web (continuous),
+ * the girder bearings with their 1/8 in setting tolerance each side and the end gap (simple spans) or the runway-end bearing on one side of the web (continuous),
  * size the web-to-column fillet (the bracket's rootWeld) for the thicker of the web and the column flange, and make
  * the haunch reach 1 in past the bearing plate. Entered haunch inputs are kept.
  */
 export function selectTaperedHaunch<B extends {haunch?:TaperedHaunchInput;seatProjection:number;reach:number;rootWeld:number;receiver:{width:number;flangeThickness:number}}>(
  d:{bearing:{width:number;length:number};simpleSupport?:{endGap:number}},b:B,system:'simple'|'continuous'='simple'):B{
  if(b.haunch)return b;
- const W=d.bearing.width,L=Math.max(b.seatProjection,ceilTo(b.reach+W/2+inch,inch)),seat=system==='simple'?(d.simpleSupport?.endGap??inch)+2*d.bearing.length:2*d.bearing.length;
+ const W=d.bearing.width,L=Math.max(b.seatProjection,ceilTo(b.reach+W/2+inch,inch)),seat=(system==='simple'?(d.simpleSupport?.endGap??inch)+2*d.bearing.length:2*d.bearing.length)+2*seatSettingTolerance;
  const haunch=defaultTaperedHaunch({...b,seatProjection:L},seat);
  return {...b,seatProjection:L,haunch,rootWeld:minimumFillet(Math.max(haunch.webThickness,b.receiver.flangeThickness))};
 }

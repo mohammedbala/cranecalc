@@ -45,6 +45,8 @@ export const existingWeldingSchema=z.object({
  basis:z.enum(['mill-certificates','chemical-analysis','original-documents','not-established']),
  grade:z.string().max(80),
  carbonEquivalent:z.number().finite().nonnegative().max(2).optional(),
+ /** Mill or laboratory chemistry, percent by weight: the carbon equivalent is then computed by the AWS D1.1 Annex B formula (with Si). */
+ chemistry:z.object({C:z.number().finite().nonnegative().max(2),Mn:z.number().finite().nonnegative().max(5),Si:z.number().finite().nonnegative().max(5),Cr:z.number().finite().nonnegative().max(5).optional(),Mo:z.number().finite().nonnegative().max(5).optional(),V:z.number().finite().nonnegative().max(5).optional(),Ni:z.number().finite().nonnegative().max(5).optional(),Cu:z.number().finite().nonnegative().max(5).optional()}).optional(),
  preheat:z.number().finite().min(-40).max(400),
  deadLoadOnly:z.boolean(),
  source:z.string().max(300)

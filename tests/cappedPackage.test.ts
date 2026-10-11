@@ -51,10 +51,10 @@ it('completes the ASD continuous capped branch with signed support moments',()=>
 },300000); // The softer movement-tolerant ties need a further load-position refinement pass; about 130 s alone.
 it('calls for UT only where the set has CJP welds and names the surveyed column on the connection',()=>{
  const capped=drawingSheetSet(s),cover=capped.find(v=>v.number==='S-00')!.svg;
- expect(cover).toContain('UT ALL CJP GROOVE WELDS');
+ expect(cover).toContain('UT 100% OF CJP GROOVE WELDS');
  const plain=structuredClone(s);plain.input=demonstrationProject();
  const plainCover=drawingSheetSet(plain).find(v=>v.number==='S-00')!.svg;
- expect(plainCover).not.toContain('UT ALL CJP');expect(plainCover).toContain('MT FILLETS ON CYCLIC DETAILS AS NOTED');
+ expect(plainCover).not.toContain('UT 100% OF CJP');expect(plainCover).toContain('MT AT FILLET TERMINATIONS ON CYCLIC DETAILS');
  // The capped example surveys a W14X90 column: the connection labels it, not the viewer's tapered frame.
  const connection=capped.find(v=>v.svg.includes('data-view="bracket-connection"'))!.svg;
  expect(connection).toContain(`EXISTING ${s.input.existingColumn!.shape} COLUMN (REF.)`);expect(connection).not.toContain('TAPERED COLUMN');

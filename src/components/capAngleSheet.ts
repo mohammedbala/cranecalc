@@ -24,6 +24,7 @@ const columnHeight=(items:Callout[])=>items.reduce((a,v)=>a+calloutHeight(v),0)+
 const poly=(pts:XY[],cls='runway-line')=>`<path class="${cls}" d="M${pts.map(p=>`${n(p[0])},${n(p[1])}`).join('L')}Z"/>`;
 /** Whether the cap bolt nuts need a beveled washer: the RCSC Specification calls for one where a bolted face slopes more than 1:20 (C shape flanges slope 1:6). */
 export const beveledCapWasher=(b:Parameters<typeof capChannelProfile>[0])=>capChannelProfile(b,1).slope>1/20+1e-9;
+// The engine's capBoltSeat (src/engine/capAngle.ts) uses the same 1:20 rule for the washer in the checks and hardware envelopes.
 /** The column the end plates bolt to, as drawn and named. */
 function tieColumn(s:CalculationSnapshot,g:CapAngleGeometry){
  const col=g.column.receiver,sc=supportColumn(s.input);
@@ -56,7 +57,7 @@ export function capAngleSection(s:CalculationSnapshot):ViewRender{
  // Cap bolt: plate washer and head outside (the sleeve and slot hidden); F436 washer and nut inside the channel. On a
  // flange sloped steeper than 1:20 the washer is an F436 beveled washer (1:6, 5/16 in mean thickness) seated on the slope.
  const cb=g.cap,ch=boltHardware(cb.diameter),zc=cb.z,outer=g.y0+g.ta+(cb.sleeve?c.sleeveClearance:0),headEnd=outer+cb.washer.thickness+ch.head;
- const face=(z:number)=>channelFace(z+b.capTw),inner=face(zc),wt=beveledCapWasher(b)?5/16*25.4:ch.washer.t,wr=ch.washer.od/2;
+ const face=(z:number)=>channelFace(z+b.capTw),inner=face(zc),wt=g.cap.seat.washer.t,wr=g.cap.seat.washer.width/2;
  svg+=rect(X(outer),Z(zc+cb.washer.height/2),cb.washer.thickness*k,cb.washer.height*k,'runway-line');
  svg+=rect(X(outer+cb.washer.thickness),Z(zc+ch.corners/2),ch.head*k,ch.corners*k,'runway-line');
  svg+=poly([[X(face(zc+wr)),Z(zc+wr)],[X(inner-wt),Z(zc+wr)],[X(inner-wt),Z(zc-wr)],[X(face(zc-wr)),Z(zc-wr)]])+rect(X(inner-wt-ch.nut),Z(zc+ch.corners/2),ch.nut*k,ch.corners*k,'runway-line');
@@ -196,7 +197,7 @@ export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const notes=[
   `CAP TIEBACK ANGLES (AISC DG7, TOP FLANGE CONNECTED DIRECTLY TO THE COLUMN): ONE AT EACH GIRDER END, ${dim(c.setback)} FROM THE GIRDER END TO ITS CENTERLINE, ON THE COLUMN-SIDE CHANNEL FLANGE. THE BOTTOM FLANGE IS RESTRAINED BY THE BOLTED END BEARINGS.`,
   cb.sleeved?`CAP BOLTS: PRETENSION AGAINST STEEL SLEEVES ${sz(cb.sleeve!.od)} OD X ${sz(cb.sleeve!.length)} LONG THROUGH ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} X ${sz(cb.washer.height)} X ${sz(cb.washer.length)} PLATE WASHERS. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE ANGLE IS NOT CLAMPED: THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`
-   :`CAP BOLTS: SNUG-TIGHT WITH JAM NUTS IN ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} PLATE WASHERS (AISC J1.10, CRANES OF 5 TONS OR LESS). THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`,
+   :`CAP BOLTS: SNUG-TIGHT WITH JAM NUTS IN ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} PLATE WASHERS (NOT PERMITTED: PRETENSIONED BOLTS REQUIRED, AIST TR-13 §5.14; SEE CALCULATION). THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`,
   `DRILL STANDARD HOLES IN THE CAP CHANNEL FLANGE ONLY AT THE TIE; NO OTHER HOLES, CUTS OR WELDS IN THE CAP OR GIRDER.${beveledCapWasher(p.section)?' F436 1:6 BEVELED WASHERS UNDER THE CAP BOLT NUTS ON THE SLOPED INSIDE FACE OF THE CHANNEL FLANGE.':''} INSTALL AND TENSION THE CAP BOLTS BEFORE THE TIE PLATE AND LAP BOLTS.`,
   `LAP BOLTS: PRETENSIONED, SLIP-CRITICAL, CLASS ${g.lap.surface} FAYING SURFACES, IN SHORT SLOTS ACROSS THE RUNWAY IN THE TIE PLATE FOR FIT-UP; F436 WASHERS OVER THE SLOTS.`,
   `END PLATE: SHOP WELD TO THE TIE PLATE. FIELD-DRILL ${sz(g.column.hole)} HOLES IN THE ${tc.isNew?'COLUMN':'EXISTING COLUMN'} FLANGE TO MATCH; NO FIELD WELDING TO THE COLUMN FOR THE TIE. FINGER SHIMS 0 TO ${sz(c.shimMax)} TAKE UP THE FIT-UP; PRETENSION THE COLUMN BOLTS.`,

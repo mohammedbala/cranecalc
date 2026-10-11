@@ -7,6 +7,7 @@ import {boltProperties,type BoltGrade} from './connectionStrength';
 import {independentBearings} from './simpleSupports';
 import {defaultCapAngle,type CapAngleInput} from './capAngleInputs';
 import {initialColumnStiffeners,clipMargin} from './columnStiffenerInputs';
+import {capChannelProfile} from './channelProfile';
 export {capAngleSchema,defaultCapAngle,type CapAngleInput} from './capAngleInputs';
 
 const inch=25.4;
@@ -37,6 +38,29 @@ export function slotEdgeIncrement(db:number,kind:'short'|'long'){
 export function boltHardware(db:number){
  const flats=1.5*db+inch/8;
  return {flats,corners:flats*2/Math.sqrt(3),head:.625*db,nut:db-inch/64,washer:{t:inch*5/32,od:2*db+inch/8},stick:.4*db};
+}
+/**
+ * ASTM F436 beveled washer for the sloped flange of an American Standard channel or beam: square, 1-3/4 in on a side,
+ * 5/16 in mean thickness, slope 1:6 (F436 dimensions for 1/2 to 1 in bolts; larger bolts are taken with the same
+ * thickness and a side of 2 d_b). The RCSC Specification requires one where an outer face slopes more than 1:20.
+ */
+export function beveledWasher(db:number){
+ const side=db<=inch+1e-6?1.75*inch:2*db,t=inch*5/16,slope=1/6;
+ return {side,t,slope,thick:t+side/2*slope,thin:Math.max(0,t-side/2*slope)};
+}
+/**
+ * Where the cap bolt nut seats on the column-side channel flange, mm: the flange thickness at the bolt line from the
+ * true AISC channel profile (the inner face slopes 2:12 on C shapes, src/engine/channelProfile.ts), the washer under the
+ * nut (an F436 1:6 beveled washer where the inner face slopes more than 1:20, else a flat F436 washer), and the bearing
+ * face of the nut along the bolt axis, measured from the outer face of the channel flange.
+ */
+export function capBoltSeat(s:ProjectInput['section'],db:number,gauge:number){
+ const prof=capChannelProfile(s,1),y=s.capTw-gauge;
+ // Thickness across the flange at the bolt line (y measured up from the underside of the channel web).
+ const thickness=Math.max(prof.toeThickness,Math.min(prof.rootThickness,s.capWidth/2-prof.innerFace(y)));
+ const beveled=prof.slope>1/20+1e-9,hw=boltHardware(db),b=beveledWasher(db);
+ const washer=beveled?{kind:'beveled' as const,t:b.t,thick:b.thick,width:b.side,slope:b.slope}:{kind:'flat' as const,t:hw.washer.t,thick:hw.washer.t,width:hw.washer.od,slope:0};
+ return {thickness,slope:prof.slope,washer,nutFace:thickness+washer.t};
 }
 /** Tensile stress area of a UNC bolt, A_t = π/4 (d − 0.9743/n)², mm². */
 export function tensileArea(db:number){
@@ -93,7 +117,9 @@ export function capAngleGeometry(p:ProjectInput){
   return {bay:e.bay,end:e.end,station:e.station,girderEnd,x,offset:x-e.station,bearingCenter:e.center,start:e.start,finish:e.finish};
  });
  return {input:c,shape:L,ta,dv,bh,ka,kc,face,y0,toe:y0+bh,
-  cap:{...cb,hole:capBolt.hole,z:-cb.gauge,slotWidth,slotLength,sleeve,washer,sleeved,travel:c.travel},
+  cap:{...cb,hole:capBolt.hole,z:-cb.gauge,slotWidth,slotLength,sleeve,washer,sleeved,travel:c.travel,
+   // The nut side on the sloped channel flange: true flange thickness at the bolt line and the washer under the nut.
+   seat:capBoltSeat(s,cb.diameter,cb.gauge)},
   lap:{...lb,hole:lapBolt.hole,y:yLap,slot:lapSlot},
   plate:{thickness:tp,width:c.plateWidth,start:plateStart,end:endPlateBack,length:endPlateBack-plateStart,z0:0,z1:tp,zc:zTie,
    // Clear span from the lap bolt line to the end plate; and from the angle toe to the end plate.
@@ -130,7 +156,7 @@ export function capAngleTieParts(p:ProjectInput,opts:{station?:number;stiffener?
   {name:'tie plate',kind:'tie-plate',min:[-pw,g.plate.start,g.plate.z0],max:[pw,g.plate.end,g.plate.z1]},
   {name:'end plate',kind:'end-plate',min:[-ew,g.endPlate.y0,g.endPlate.z0],max:[ew,g.endPlate.y1,g.endPlate.z1]},
   {name:'shim pack (nominal)',kind:'shim',min:[-ew,g.shim.y0,g.endPlate.z0],max:[ew,g.shim.y1,g.endPlate.z1]},
-  {name:'cap channel flange (context)',kind:'channel-flange',min:[-w-50,g.y0-s.capTf,-s.capDepth],max:[w+50,g.y0,0]}
+  {name:'cap channel flange (context)',kind:'channel-flange',min:[-w-50,g.y0-g.cap.seat.thickness,-s.capDepth],max:[w+50,g.y0,0]}
  ];
  const col=g.column.receiver;
  if(col)boxes.push({name:'column flange (context)',kind:'column-flange',min:[-offset-col.width/2,g.face,g.endPlate.z0-50],max:[-offset+col.width/2,g.face+col.tf,g.endPlate.z1+50]});
@@ -139,7 +165,7 @@ export function capAngleTieParts(p:ProjectInput,opts:{station?:number;stiffener?
   const outer=g.y0+g.ta+(g.cap.sleeve?g.input.sleeveClearance:0)+g.cap.washer.thickness;
   boxes.push({name:'plate washer',kind:'plate-washer',min:[x-g.cap.washer.length/2,outer-g.cap.washer.thickness,g.cap.z-g.cap.washer.height/2],max:[x+g.cap.washer.length/2,outer,g.cap.z+g.cap.washer.height/2]});
   if(g.cap.sleeve)boxes.push({name:'steel sleeve',kind:'sleeve',min:[x-g.cap.sleeve.od/2,g.y0,g.cap.z-g.cap.sleeve.od/2],max:[x+g.cap.sleeve.od/2,g.y0+g.cap.sleeve.length,g.cap.z+g.cap.sleeve.od/2]});
-  bolts.push({name:'cap bolt',group:'cap',axis:'y',head:[x,outer,g.cap.z],nut:[x,g.y0-s.capTf-hw.washer.t,g.cap.z],diameter:g.cap.diameter,grade:g.cap.grade,
+  bolts.push({name:'cap bolt',group:'cap',axis:'y',head:[x,outer,g.cap.z],nut:[x,g.y0-g.cap.seat.nutFace,g.cap.z],diameter:g.cap.diameter,grade:g.cap.grade,
    holes:[{ply:'angle short leg',kind:'long-slot',width:g.cap.slotWidth,length:g.cap.slotLength,along:'x'},{ply:'cap channel flange',kind:'standard',width:g.cap.hole,length:g.cap.hole,along:'x'}]});
  }
  for(const x of [-g.lap.pitch/2,g.lap.pitch/2])bolts.push({name:'lap bolt',group:'lap',axis:'z',head:[x,g.lap.y,g.plate.z1],nut:[x,g.lap.y,-g.ta],diameter:g.lap.diameter,grade:g.lap.grade,
@@ -156,6 +182,19 @@ export function capAngleTieParts(p:ProjectInput,opts:{station?:number;stiffener?
   station:at?{bay:at.bay,end:at.end,x:at.x,offsetFromColumn:offset}:undefined,
   stations:g.stations.map(v=>({bay:v.bay,end:v.end,x:v.x,offsetFromColumn:v.offset})),columnFace:g.face,
   stiffener:st?{thickness:st.thickness,width:st.width,length:st.length,clip:st.clip,flangeWeld:st.flangeWeld,webWeld:st.webWeld,provided:st.provided}:undefined};
+}
+/**
+ * The nut side of each cap bolt inside the channel, mm, in the tie coordinates of capAngleTieParts: the washer under
+ * the nut (a beveled washer at its thick edge), the heavy hex nut across corners and the bolt stick-through. These are
+ * the hardware solids that share the inside of the girder with the bearing stiffeners and the W top flange.
+ */
+export function capBoltNutEnvelope(g:CapAngleGeometry){
+ const hw=boltHardware(g.cap.diameter),seat=g.cap.seat,inner=g.y0-seat.thickness,face=g.y0-seat.nutFace,z=g.cap.z;
+ return [-g.cap.pitch/2,g.cap.pitch/2].map(x=>{
+  const box=(name:string,half:number,y0:number,y1:number):CapAngleBox=>({name,kind:'plate-washer',min:[x-half,y0,z-half],max:[x+half,y1,z+half]});
+  return {x,parts:[box(seat.washer.kind==='beveled'?'F436 1:6 beveled washer':'F436 washer',seat.washer.width/2,inner-seat.washer.thick,inner),
+   box('heavy hex nut',hw.corners/2,face-hw.nut,face),box('bolt stick-through',g.cap.diameter/2,face-hw.nut-hw.stick,face-hw.nut)]};
+ });
 }
 /**
  * The column stiffener at the tie level, on the tie's side of the column web: a horizontal plate from the web face,

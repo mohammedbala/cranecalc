@@ -23,7 +23,7 @@ export const capAngleSchema=z.object({
  capBolts:z.object({diameter:pos,grade,gauge:pos,pitch:pos}),
  /** Travel each way along the runway in the horizontal long slots of the angle. */
  travel:pos,
- /** Cap bolts pretensioned against steel sleeves through the slots (the angle is not clamped), or snug-tight (cranes of 5 tons or less, AISC J1.10). */
+ /** Cap bolts pretensioned against steel sleeves through the slots (the angle is not clamped), or snug-tight, which is kept for old projects only and reported as not permitted (AIST TR-13 §5.14). */
  mode:z.enum(['sleeved','snug-tight']),
  sleeveWall:pos,sleeveClearance:pos,
  /** Plate washers over the angle slots, under the bolt heads. */

@@ -64,6 +64,17 @@ export function railLayout(p:ProjectInput):RailLayout{
  return {girderJoints,wheelSteps,rails:[a,b],existing,conflicts};
 }
 
+/**
+ * Bolted rail joints. AIST TR-13 §5.16.1 (the default): tight joints, the rail ends butted with a gap of 1/16 in or
+ * less, joints staggered across the runway, joint bolts pretensioned and re-tightened after 30 and 90 days of
+ * operation; the rail string moves thermally in keepers that let it slide, from one anchor near mid-runway, and the
+ * clearance gap at the end stops takes that movement. 'open' joints keep an expansion gap (jointGap) at every joint
+ * with each piece anchored at mid-length (a project choice that must be stated).
+ */
+export const tightJointGap=25.4/16;
+export const railJointType=(p:ProjectInput):'tight'|'open'=>p.details?.rail.jointType??'tight';
+/** Design gap at a rail joint: the entered gap for open joints, at most 1/16 in for tight joints. */
+export const railJointGap=(p:ProjectInput)=>{const g=p.details?.rail.jointGap??0;return railJointType(p)==='tight'?Math.min(g,tightJointGap):g;};
 /** Steel coefficient of thermal expansion, per degree C. */
 export const railExpansion=12e-6;
 /**
@@ -76,6 +87,13 @@ export function railAnchors(p:ProjectInput,layout:RailLayout=railLayout(p)){
  const L=p.spans.reduce((s,v)=>s+v,0),half=(p.details?.rail.clipWidth??0)/2+76.2;
  let x=0;const ends=p.system==='simple'?[0,...p.spans.map(v=>x+=v)]:[0,L];
  const girders=ends.slice(1).map((e,i)=>[ends[i]+half,e-half] as const).filter(([a,b])=>b>a);
+ // Tight joints: the rail string is continuous through its joints and is anchored once, at the girder location
+ // nearest mid-runway, so it grows toward both end stops.
+ if(railJointType(p)==='tight')return layout.rails.map(rail=>{
+  const mid=(Math.max(rail.start,0)+Math.min(rail.end,L))/2,on=girders.map(([a,b])=>Math.min(Math.max(mid,a),b));
+  const at=on.length?on.reduce((best,v)=>Math.abs(v-mid)<Math.abs(best-mid)?v:best):mid;
+  return {side:rail.side,anchors:[{station:at,shifted:Math.abs(at-mid)>1}]};
+ });
  return layout.rails.map(rail=>{
   const stations=[rail.start,...rail.joints,rail.end];
   return {side:rail.side,anchors:rail.pieces.map((_,i)=>{
@@ -94,6 +112,16 @@ export function railAnchors(p:ProjectInput,layout:RailLayout=railLayout(p)){
 export function railMovements(p:ProjectInput,layout:RailLayout=railLayout(p)){
  const dT=p.details?.rail.temperatureRange??0,grow=(length:number)=>railExpansion*dT*Math.abs(length),anchors=railAnchors(p,layout);
  const joints:{side:'A'|'B';station:number;movement:number}[]=[],ends:{side:'A'|'B';end:'left'|'right';station:number;movement:number;existing:boolean}[]=[];
+ if(railJointType(p)==='tight'){
+  // Tight joints do not open or close; the whole string grows from its single anchor toward each rail end.
+  layout.rails.forEach((rail,r)=>{
+   const a=anchors[r].anchors[0].station;
+   rail.joints.forEach(j=>joints.push({side:rail.side,station:j,movement:0}));
+   ends.push({side:rail.side,end:'left',station:rail.start,movement:grow(a-rail.start)+(layout.existing.left?grow(railLayoutCriteria.stock/2):0),existing:layout.existing.left});
+   ends.push({side:rail.side,end:'right',station:rail.end,movement:grow(rail.end-a)+(layout.existing.right?grow(railLayoutCriteria.stock/2):0),existing:layout.existing.right});
+  });
+  return {joints,ends,anchors};
+ }
  layout.rails.forEach((rail,r)=>{
   const at=anchors[r].anchors.map(a=>a.station),last=at.length-1;
   rail.joints.forEach((j,i)=>joints.push({side:rail.side,station:j,movement:grow(j-at[i])+grow(at[i+1]-j)}));

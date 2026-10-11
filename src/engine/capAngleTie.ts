@@ -6,6 +6,8 @@ import {capAngleGeometry,capAngleInput,isCapAngleTie,minimumEdge,slotEdgeIncreme
 import {activeEndBearing} from './endBearingInputs';
 import {simpleSupportInput} from './simpleSupports';
 import {wrenchClearance} from './endStop';
+import {snugTightNotPermitted} from './boltingBasis';
+import {oversizedEdgeIncrement} from './fitTolerances';
 import {columnStiffenerGeometry} from './columnStiffeners';
 import {railTopAboveSteel} from './railSeat';
 import {aiscAngleByName} from '../data/aiscAngles';
@@ -70,7 +72,7 @@ export function capAngleDesign(p:ProjectInput,g:CapAngleGeometry,f:CapAngleLoads
  const cb=g.cap,nCap=2,T=F/nCap,contact=Math.min(g.dv,s.capDepth)-cb.gauge;
  const pa=c.length/nCap,pc=Math.min(3.5*(cb.gauge-s.capTw),cb.pitch/2+1.75*(cb.gauge-s.capTw));
  const leg=(T0:number)=>tStubPrying({T:T0,t:g.ta,b:cb.gauge-g.ta,a:contact,p:pa,db:cb.diameter,dPrime:cb.slotLength,Fu:m.Fu,method});
- const channel=(T0:number)=>tStubPrying({T:T0,t:s.capTf,b:cb.gauge-s.capTw,a:contact,p:pc,db:cb.diameter,dPrime:cb.hole,Fu:capFu,method});
+ const channel=(T0:number)=>tStubPrying({T:T0,t:cb.seat.thickness,b:cb.gauge-s.capTw,a:contact,p:pc,db:cb.diameter,dPrime:cb.hole,Fu:capFu,method});
  const angleP=leg(T),channelP=channel(T),Q=Math.max(angleP.q,channelP.q);
  const capShear=Vv/nCap,capBolt=boltCapacity({grade:cb.grade,diameter:cb.diameter,planes:1,surface:'B',shear:capShear,tension:T+Q,method});
  // ---- Lap: the tie plate on the long leg, two slip-critical bolts in short slots parallel to the force (J3.8, φ = 0.85).
@@ -133,8 +135,8 @@ export function capAngleDesign(p:ProjectInput,g:CapAngleGeometry,f:CapAngleLoads
   // Short leg as a cantilever from the clamped bolt line to the long leg's mid-thickness.
   angleLeg:(cb.gauge-g.ta/2)**3/(3*E*(c.length*g.ta**3/12)),
   // Channel flange as a cantilever from the web over the bolt depth, both bolts' tributary length.
-  channelFlange:(cb.gauge-s.capTw)**3/(3*E*(nCap*pc*s.capTf**3/12)),
-  capBolts:(g.ta+s.capTf+hw.washer.t+c.washerThickness)/(nCap*E*capBoltArea),
+  channelFlange:(cb.gauge-s.capTw)**3/(3*E*(nCap*pc*cb.seat.thickness**3/12)),
+  capBolts:(g.ta+cb.seat.thickness+cb.seat.washer.t+c.washerThickness)/(nCap*E*capBoltArea),
   // End plate between the two bolts, simply supported under the tie plate line load.
   endPlate:(2*cl.gauge)**3/(48*E*(ep.width*ep.thickness**3/12)),
   columnBolts:(ep.thickness+g.shim.nominal+(col?.tf??0))/(nCol*E*colBoltArea),
@@ -206,7 +208,7 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  const cyc=d.spectrum.reduce((a,v)=>a+v.cycles,0);
  // ---------------- At the cap
  add('cap-angle-cap-bolt',G,'Cap bolts · tension with prying',x.T+x.Q,x.capBolt.tension,'force','T_u+q\\le\\phi F^{\\prime}_{nt}A_b;\\quad T_u=F/2;\\;q=T\\rho\\delta\\alpha/(1+\\delta\\alpha)',
-  `${pull} Two ${len(cb.diameter)} ${cb.grade} bolts through the angle's short leg and the channel flange share the pull: T = ${force(x.T)} each. One prying contact below the bolts, between the angle toe and the channel flange tip, takes the larger of the two prying forces q = ${force(x.Q)} (AISC Manual Part 9). ${pryNote(x.angleP,'Angle leg',g.ta)} ${pryNote(x.channelP,'Channel flange',sec.capTf)} AISC J3.6 and J3.7: F′nt reduced for the concurrent vertical shear ${force(x.capShear)} per bolt from the tie plate's support-movement shear.`,['cap-angle-basis','aisc-manual-prying','aisc-connections']);
+  `${pull} Two ${len(cb.diameter)} ${cb.grade} bolts through the angle's short leg and the channel flange share the pull: T = ${force(x.T)} each. One prying contact below the bolts, between the angle toe and the channel flange tip, takes the larger of the two prying forces q = ${force(x.Q)} (AISC Manual Part 9). ${pryNote(x.angleP,'Angle leg',g.ta)} ${pryNote(x.channelP,'Channel flange',cb.seat.thickness)} AISC J3.6 and J3.7: F′nt reduced for the concurrent vertical shear ${force(x.capShear)} per bolt from the tie plate's support-movement shear.`,['cap-angle-basis','aisc-manual-prying','aisc-connections']);
  add('cap-angle-leg-prying',G,'Angle short leg · bending with prying (fitting strength)',x.T,x.angleP.fitting,'force','T\\le\\frac{\\phi pF_ut^2(1+\\delta)}{4b^{\\prime}};\\quad t_{min}=\\sqrt{\\frac{4Tb^{\\prime}}{\\phi pF_u}}',
   `${pull} AISC Manual Part 9 (Eq. 9-20a, 9-23 to 9-28 with α′ = 1): the short leg of ${angle} bends between the long leg (load) and the bolt line, with prying at the toe. The horizontal long slots reduce δ: d′ is the slot length ${len(cb.slotLength)} along p. ${pryNote(x.angleP,'Leg',g.ta)}`,['cap-angle-basis','aisc-manual-prying']);
  add('cap-angle-channel-flange',G,'Cap channel flange · bending under the bolt pull',x.T,x.channelP.fitting,'force','T\\le\\frac{\\phi pF_ut_f^2(1+\\delta)}{4b^{\\prime}};\\quad b=g_v-t_{w,c}',
@@ -220,10 +222,13 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  add('cap-angle-slot-toe',G,'Angle slots · edge to the angle toe',eCap-cb.hole/2+cb.slotWidth/2,g.dv-cb.gauge,'length','d_a-g_v\\ge e_{min}-d_h/2+w_{slot}/2',`AISC J3.4: clear material below the slot equal to that of a standard hole at the minimum edge distance. Short leg ${len(g.dv)}.`);
  add('cap-angle-washer-fit',G,'Plate washers · flat on the short leg below the angle fillet',g.ka+cb.washer.height/2,cb.gauge,'length','g_v\\ge k_a+h_w/2',`Plate washer ${len(cb.washer.thickness)} × ${len(cb.washer.height)} × ${len(cb.washer.length)} (covers the slot at either end of travel, AISC J3.2) bears flat on the leg below the angle's k_des = ${len(g.ka)} (AISC Manual Table 1-7).`,['cap-angle-basis','aisc-connections']);
  add('cap-angle-washer-bottom',G,'Plate washers · within the short leg',cb.gauge+cb.washer.height/2,g.dv,'length','g_v+h_w/2\\le d_a','AISC J3.2: the plate washer covers the long slot and stays on the short leg (leg d from AISC Manual Table 1-7).',['cap-angle-basis','aisc-connections']);
- add('cap-angle-nut-seat',G,'Cap bolt nuts · seat inside the channel below its fillet',g.kc+hw.washer.od/2,cb.gauge,'length','g_v\\ge k_c+d_{washer}/2',`The F436 washer and nut on the inner face of the channel flange sit below the channel's k_des = ${len(g.kc)} (AISC Manual Table 1-5), on the flat of the flange (RCSC Specification 6.1: hardened washer under the turned element).`,['cap-angle-basis','aisc-connections']);
+ // The washer under the nut sits on the sloped inner face: an F436 1:6 beveled washer (1-3/4 in square), clipped on the
+ // web side where it would reach the channel fillet, never closer than 7/8 d_b to the bolt center (ASTM F436).
+ const sw=cb.seat.washer,fullHalf=sw.width/2,clip=7/8*cb.diameter,clipped=g.kc+fullHalf>cb.gauge+1e-9,seatHalf=Math.max(clipped?clip:fullHalf,hw.corners/2);
+ add('cap-angle-nut-seat',G,'Cap bolt nuts · seat inside the channel below its fillet',g.kc+seatHalf,cb.gauge,'length','g_v\\ge k_c+\\max(b_{w}/2,\\,c_{nut}/2)',`The ${sw.kind==='beveled'?`F436 1:6 beveled washer (${len(sw.width)} square, ${len(sw.t)} mean thickness)`:'F436 washer'} and nut on the inner face of the channel flange sit below the channel's k_des = ${len(g.kc)} (AISC Manual Table 1-5), on the ${sw.kind==='beveled'?'2:12 sloped inner face':'flat of the flange'} (RCSC Specification §6: hardened washer under the turned element; beveled washer where the face slopes more than 1:20).${clipped?` The washer is clipped on the web side to ${len(Math.max(clip,cb.gauge-g.kc))} from the bolt center (ASTM F436 clipped washer, not closer than 7/8 d_b = ${len(clip)}); the nut, ${len(hw.corners)} across corners, governs.`:''} Flange ${len(cb.seat.thickness)} thick at the bolt line (true channel profile).`,['cap-angle-basis','aisc-connections']);
  add('cap-angle-wrench-nut',G,'Cap bolt nuts · wrench clearance inside the channel',C1,cb.gauge-sec.capTw,'length','g_v-t_{w,c}\\ge C_1',`AISC Manual Table 7-15 clearance C1 = ${len(C1)}, from the bolt axis to the underside of the channel web (the top of the W flange), as for the bolted end bearings. The nut is held while the head is turned, or turned with a box wrench.`);
- const stack=hw.washer.t+hw.nut+hw.stick,nutTop=cb.gauge-hw.corners/2,besideFlange=nutTop<sec.capTw+sec.tf;
- const room=besideFlange?sec.capWidth/2-sec.capTf-sec.bf/2:sec.capWidth/2-sec.capTf-sec.tw/2;
+ const stack=cb.seat.washer.t+hw.nut+hw.stick,nutTop=cb.gauge-hw.corners/2,besideFlange=nutTop<sec.capTw+sec.tf;
+ const room=besideFlange?sec.capWidth/2-cb.seat.thickness-sec.bf/2:sec.capWidth/2-cb.seat.thickness-sec.tw/2;
  add('cap-angle-nut-fit',G,'Cap bolt nuts · fit beside the W flange tip',stack,room,'length','t_{washer}+h_{nut}+0.4d_b\\le b_{clear}',(besideFlange?`The nut is level with the W top flange: the washer, nut and bolt end (${len(stack)}) fit between the channel flange and the W flange tip (${len(room)}).`:`The nut is below the W top flange: the washer, nut and bolt end (${len(stack)}) fit between the channel flange and the W web (${len(room)}).`)+' Heavy hex nut height and bolt stick-through as AISC Manual Part 7 (Table 7-15 entering clearances; ASTM A563 nut).',['cap-angle-basis','aisc-connections']);
  add('cap-angle-wrench-head',G,'Cap bolt heads · socket clearance below the long leg',C1,cb.gauge-g.ta,'length','g_v-t_a\\ge C_1',`AISC Manual Table 7-15 C1 = ${len(C1)} from the bolt axis to the underside of the long leg. Install and tension the cap bolts before the tie plate and lap bolts.`);
  // ---------------- Angle and tie plate
@@ -248,7 +253,7 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  const colName=col?`${col.shape?`${col.shape} `:''}column flange (${col.source}, t_f = ${len(col.tf)})`:'column flange';
  add('cap-angle-col-bolt',G,'Column bolts · tension with prying',x.Tc+x.Qc,x.colBolt.tension,'force','T_u+q_{ep}+q_c\\le\\phi F^{\\prime}_{nt}A_b;\\quad T_u=\\frac F2+\\frac{M_v}{2g}',`${pull} One ${len(cl.diameter)} ${cl.grade} bolt above and one below the tie plate, through the end plate, shims and the ${colName}. T = ${force(x.Tc)} includes the movement moment ${moment(x.Mv)} as a couple over the bolts. Prying of the end plate (${force(x.endP.q)}) and of the column flange are added (AISC Manual Part 9). J3.7 with the vertical shear ${force(x.colShear)} per bolt${x.filler<1?`, the bolt shear strength reduced by the J5.2 filler factor ${x.filler.toFixed(3)}`:''}.`,['cap-angle-basis','aisc-manual-prying','aisc-connections']);
  add('cap-angle-endplate-prying',G,'End plate · bending with prying (fitting strength)',x.Tc,x.endP.fitting,'force','T\\le\\frac{\\phi pF_ut^2(1+\\delta)}{4b^{\\prime}};\\quad b=g-t_p/2',`${pull} AISC Manual Part 9: the end plate PL ${len(ep.thickness)} × ${len(ep.width)} × ${len(ep.height)} is a T-stub flange with the tie plate as its stem. ${pryNote(x.endP,'End plate',ep.thickness)}`,['cap-angle-basis','aisc-manual-prying']);
- add('cap-angle-endplate-edge',G,'Column bolts · end plate edge distance',minimumEdge(cl.diameter),ep.height/2-cl.gauge,'length','h/2-g\\ge e_{min}','AISC J3.4, standard holes.');
+ add('cap-angle-endplate-edge',G,'Column bolts · end plate edge distance',minimumEdge(cl.diameter)+oversizedEdgeIncrement(cl.diameter),ep.height/2-cl.gauge,'length','h/2-g\\ge e_{min}+C_2',`AISC J3.4 minimum ${len(minimumEdge(cl.diameter))} for a standard hole, plus C₂ = ${len(oversizedEdgeIncrement(cl.diameter))} (Table J3.5, oversized hole): the column holes are field-drilled to match, and an end-plate hole that does not line up is reamed to an oversized hole (Table J3.3) at fit-up.`);
  const C1c=wrenchClearance(cl.diameter);
  add('cap-angle-endplate-wrench',G,'Column bolt heads · socket clearance to the tie plate',C1c,cl.gauge-g.plate.thickness/2-g.weld,'length','g-t_p/2-w\\ge C_1',`AISC Manual Table 7-15 C1 = ${len(C1c)} from the bolt axis to the tie plate and its fillets.`);
  const filletMin=minimumFillet(Math.max(ep.thickness,g.plate.thickness));
@@ -308,19 +313,19 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
   `AISC H1-1 for ${plateName}: P_r = ${force(x.F)} against P_c = ${force(x.Pc)} (compression governs). Lap moment F·t_p/2 at the faying surface amplified by B1 = ${x.B1.toFixed(3)} (C_m = 1) gives ${moment(x.lapMoment)}. Vertical movement of the girder at the tie ${len(loads.vertical)} (support deflection × cranes × (1 + impact) plus rotation over the tie's distance from the bearing) bends the plate about its weak axis, both ends fixed: ${moment(x.Mv)}. The slots release movement along the runway only.`,['cap-angle-basis','aisc-h']);
  if(cb.sleeve){
   const bolt=boltCapacity({grade:cb.grade,diameter:cb.diameter,planes:1,surface:'B',shear:0,tension:0,method});
-  add('cap-angle-sleeve',MG,'Steel sleeves · bolt installation load',1.5*bolt.pretension,m.Fy*cb.sleeve.area,'force','1.5T_b\\le F_yA_{sleeve}',`Sleeve ${len(cb.sleeve.od)} OD × ${len(cb.sleeve.bore)} bore × ${len(cb.sleeve.length)} long, F_y as the plate material. 1.5 × the minimum pretension bounds turn-of-nut overshoot (RCSC commentary). The bolt clamps the sleeve to the channel flange; the angle is not clamped (AISC J1.10).`,['cap-angle-basis','aisc-connections']);
-  add('cap-angle-sleeve-length',MG,'Steel sleeves · angle free to slide',inch/32,cb.sleeve.length-g.ta,'length','l_{sleeve}-t_a\\ge1/32\\,in','AISC J1.10 and DG7 §11.2 sleeved slotted connection: the sleeve projects beyond the angle leg so the pretensioned bolt clamps the sleeve, not the angle, which slides.',['cap-angle-basis','dg7']);
+  add('cap-angle-sleeve',MG,'Steel sleeves · bolt installation load',1.5*bolt.pretension,m.Fy*cb.sleeve.area,'force','1.5T_b\\le F_yA_{sleeve}',`Sleeve ${len(cb.sleeve.od)} OD × ${len(cb.sleeve.bore)} bore × ${len(cb.sleeve.length)} long, F_y as the plate material. 1.5 × the minimum pretension bounds turn-of-nut overshoot (RCSC commentary). The bolt clamps the sleeve to the channel flange; the angle is not clamped (pretensioned per AIST TR-13 §5.14).`,['cap-angle-basis','aisc-connections']);
+  add('cap-angle-sleeve-length',MG,'Steel sleeves · angle free to slide',inch/32,cb.sleeve.length-g.ta,'length','l_{sleeve}-t_a\\ge1/32\\,in','DG7 §11.2 sleeved slotted connection (pretensioned per AIST TR-13 §5.14): the sleeve projects beyond the angle leg so the pretensioned bolt clamps the sleeve, not the angle, which slides.',['cap-angle-basis','dg7']);
   const lc=Math.min(g.dv-cb.gauge,cb.gauge-g.ta)-cb.slotWidth/2;
   add('cap-angle-sleeve-bearing',MG,'Angle slots · bearing of the sleeves (vertical)',x.capShear,available(Math.min(1.0*lc*g.ta*m.Fu,2.0*cb.sleeve.od*g.ta*m.Fu),method,.75,2),'force','R_n=\\min(1.0l_ctF_u,\\;2.0d_st F_u)',`AISC J3.10(a) for long slots perpendicular to the force, with the sleeve diameter: the tie plate's vertical shear ${force(x.Vv)} shared by the two sleeves; l_c = ${len(lc)}.`);
  }else{
-  add('cap-angle-j110',MG,'Snug-tight cap bolts · crane capacity',Math.max(0,...p.cranes.map(cr=>cr.design?.ratedLoad??Infinity)),5*8896.443,'force','W_{rated}\\le5\\,tons','AISC J1.10(c): in buildings with cranes over 5 tons the crane supports need pretensioned bolts; use the sleeved slots.',['aisc-connections']);
+  checks.push(snugTightNotPermitted('cap-angle-j110','Snug-tight cap bolts · not permitted',MG,'cap bolts in the angle slots'));
   add('cap-angle-slot-length',MG,'Angle slots · long-slot length',cb.slotLength,2.5*cb.diameter,'length','l_{slot}\\le2.5d_b','AISC Table J3.3 long-slot maximum.',['aisc-connections']);
  }
  add('cap-angle-washer',MG,'Plate washers · thickness',5/16*inch,cb.washer.thickness,'length','t_w\\ge5/16\\,in','AISC J3.2: plate washers cover long slots in an outer ply.');
  add('cap-angle-washer-bending',MG,'Plate washers · bending under the bolt pull',6*((x.T+x.Q)/2)*Math.max(0,cb.slotWidth/2-.8*cb.diameter)/(cb.washer.length*cb.washer.thickness**2),available(m.Fy,method,.9,1.67),'stress','f=\\frac{6(T/2)a}{l_wt_w^2};\\quad a=w_{slot}/2-0.8d_b','AISC F11.1 (rectangular bar, elastic section): in pull the angle leg bears on the washer at both slot edges; the washer cantilevers from the bolt head.',['cap-angle-basis','aisc-connections']);
  // ---------------- Fatigue (service range ΔF, all cycles, AISC Appendix 3)
  const range=loads.range,Tr=range/2,At=tensileArea(cb.diameter);
- const angleF=tStubPrying({T:Tr,t:g.ta,b:cb.gauge-g.ta,a:x.contact,p:x.pa,db:cb.diameter,dPrime:cb.slotLength,Fu:m.Fu,method}),chanF=tStubPrying({T:Tr,t:sec.capTf,b:cb.gauge-sec.capTw,a:x.contact,p:x.pc,db:cb.diameter,dPrime:cb.hole,Fu:p.capDesign?.Fu??m.Fu,method});
+ const angleF=tStubPrying({T:Tr,t:g.ta,b:cb.gauge-g.ta,a:x.contact,p:x.pa,db:cb.diameter,dPrime:cb.slotLength,Fu:m.Fu,method}),chanF=tStubPrying({T:Tr,t:cb.seat.thickness,b:cb.gauge-sec.capTw,a:x.contact,p:x.pc,db:cb.diameter,dPrime:cb.hole,Fu:p.capDesign?.Fu??m.Fu,method});
  const boltAllow=(n:number)=>Math.max(7*ksi,finiteLife(.39,n));
  const capRange=(Tr+Math.max(angleF.q,chanF.q))/At;
  add('cap-angle-cap-bolt-fatigue',G,'Cap bolts · axial tension fatigue',capRange,boltAllow(cyc),'stress','\\Delta f=(\\Delta T+\\Delta q)/A_t\\le\\max[(C_f/n)^{0.333},F_{TH}]',`AISC Appendix 3.4 / Table A-3.1 item 8.5: C_f = 3.9 × 10⁸, F_TH = 7 ksi, on the tensile stress area A_t = ${format(At,'area',u,3)} with prying. The angle is not clamped by the sleeved bolts, so the whole applied range ΔT = ΔF/2 = ${force(Tr)} reaches them (no 20% credit). ${cyc.toExponential(2)} cycles.`,['cap-angle-basis','aisc-fatigue']);
@@ -336,7 +341,7 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  add('cap-angle-weld-root-fatigue',G,'Tie plate at the end plate fillets · root',toeRange,root.capacity,'stress','F_{SR}=6900R_{FIL}(4.4/n)^{0.333};\\;R_{FIL}=\\frac{0.103+1.24w/t_p}{t_p^{0.167}}\\le1',`AISC Table A-3.1 item 5.5, crack from the root (Eq. A-3-5), R_FIL = ${root.reduction.toFixed(3)}.`,['cap-angle-basis','aisc-fatigue']);
  // Local plate bending at the rolled roots: the angle heel, the channel flange at its web and the column flange at its web.
  const localA=finiteLife(25,cyc);
- const locals=[{name:'angle heel',f:6*Tr*Math.max(angleF.bPrime,0)/(1+angleF.delta*Math.min(angleF.alpha,1))/(x.pa*g.ta**2)},{name:'channel flange root',f:6*Tr*Math.max(chanF.bPrime,0)/(1+chanF.delta*Math.min(chanF.alpha,1))/(x.pc*sec.capTf**2)},
+ const locals=[{name:'angle heel',f:6*Tr*Math.max(angleF.bPrime,0)/(1+angleF.delta*Math.min(angleF.alpha,1))/(x.pa*g.ta**2)},{name:'channel flange root',f:6*Tr*Math.max(chanF.bPrime,0)/(1+chanF.delta*Math.min(chanF.alpha,1))/(x.pc*cb.seat.thickness**2)},
   ...(col&&colF?[{name:'column flange root',f:6*Tcr*Math.max(colF.bPrime,0)/(1+colF.delta*Math.min(colF.alpha,1))/(colF.p*col.tf**2)}]:[])];
  const lw=locals.reduce((a,v)=>v.f>a.f?v:a,locals[0]);
  add('cap-angle-local-fatigue',G,'Angle heel, channel and column flange roots · local bending fatigue',lw.f,localA,'stress','\\Delta f=\\frac{6\\Delta T b^{\\prime}}{(1+\\delta\\alpha)pt^2}\\le F_{SR,A}',`AISC Table A-3.1 item 1.1, Category A (rolled base metal at the root fillets); the transverse plate bending range at the root of each T-stub. Governing ${lw.name}. The holes are on the bolt lines, where the transverse bending is the small prying moment; the channel flange holes are in the fatigue register under the girder's longitudinal stress range.`,['cap-angle-basis','aisc-fatigue']);
@@ -416,7 +421,8 @@ export function capAngleProportions(p:ProjectInput,size:{shape:string;diameter:n
  const lapPitch=roundUp(Math.max(8/3*db,3*db,2.5*inch),inch/4),plateWidth=roundUp(lapPitch+2*eMin,inch/4);
  const lapGauge=roundUp(Math.max(ta+hw.corners/2+(base.mode==='sleeved'?base.sleeveClearance:0)+base.washerThickness+hw.head+hw.corners/2,bh-eMin-inch/4),step);
  const colGauge=roundUp(Math.max(size.plate/2+base.weldSize+wrenchOf(db),size.plate/2+base.weldSize+hw.washer.od/2+inch/16),step);
- const epHeight=roundUp(2*(colGauge+eMin),inch/4);
+ // End plate edge: the J3.4 minimum plus C2 for a hole reamed oversized at fit-up to the field-drilled column holes.
+ const epHeight=roundUp(2*(colGauge+eMin+oversizedEdgeIncrement(db)),inch/4);
  return {...base,shape:size.shape,length,setback:Math.max(base.setback,roundUp(length/2+inch/4,inch/4)),
   capBolts:{...base.capBolts,diameter:db,gauge,pitch},plateThickness:size.plate,plateWidth,
   lapBolts:{...base.lapBolts,diameter:db,gauge:Math.min(lapGauge,bh-eMin),pitch:lapPitch,edge:roundUp(eMin+slotEdgeIncrement(db,'short'),step)},

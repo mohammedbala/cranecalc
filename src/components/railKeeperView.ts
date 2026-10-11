@@ -1,6 +1,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {railSeat,anchorEndClearance} from '../engine/railSeat';
 import {boltProperties} from '../engine/connectionStrength';
+import {railJointType,railJointGap} from '../engine/railLayout';
 import {format} from '../engine/units';
 import {drawingLength,plateInches} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,capChannelSection,type XY} from './sheetGraphics';
@@ -158,18 +159,18 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   const plan=place(pv,0,0),pb=contentBounds(pv),PX=(x:number)=>x-pb.x0,PY=(y:number)=>y-pb.y0;
 
   // ---- 4. Bolted rail joint, elevation; edge distances and pitch on the left half, symmetric about the joint.
-  const hole=boltProperties('A325',r.jointBoltDiameter).hole,bar=2*(2*r.jointEdge+r.jointPitch)+r.jointGap;
+  const hole=boltProperties('A325',r.jointBoltDiameter).hole,tight=railJointType(p)==='tight',gap=railJointGap(p),bar=2*(2*r.jointEdge+r.jointPitch)+gap;
   // The bar length closes the symmetric string of edge distances, pitches and the gap as they read.
-  const barLabel=u==='SI'?siMm(2*(2*siValue(r.jointEdge)+siValue(r.jointPitch))+siValue(r.jointGap)):dim(bar);
+  const barLabel=u==='SI'?siMm(2*(2*siValue(r.jointEdge)+siValue(r.jointPitch))+siValue(gap)):dim(bar);
   const js=drawingScale(Math.min(.36,150/bar,60/depth),u),jk=js.pointsPerMm,J=(mm:number)=>mm*jk;
   const jc=J(bar/2)+12,jb=J(depth),jl=jc-J(bar/2),web=J(r.headThickness+(depth-r.headThickness-r.baseThickness-r.jointPlateHeight)/2);
   let jv='<g data-view="rail-joint">';
-  for(const side of [-1,1]){const end=jc+side*J(r.jointGap)/2,far=jc+side*(J(bar/2)+12);
+  for(const side of [-1,1]){const end=jc+side*J(gap)/2,far=jc+side*(J(bar/2)+12);
    jv+=line([end,0],[end,jb],'rail-line')+[0,J(r.headThickness),jb-J(r.baseThickness),jb].map(y=>line([end,y],[far,y],'rail-line')).join('');}
   jv+=rect(jl,web,J(bar),J(r.jointPlateHeight),'runway-line');
   const bolts=[r.jointEdge,r.jointEdge+r.jointPitch,bar-r.jointEdge-r.jointPitch,bar-r.jointEdge].map(v=>jl+J(v)),by=web+J(r.jointPlateHeight)/2;
-  for(const x of bolts)jv+=rect(x-J(.75*r.jointBoltDiameter),by-J(hole)/2,J(1.5*r.jointBoltDiameter),J(hole),'reference-line')+circle(x,by,J(r.jointBoltDiameter)/2,'runway-line');
-  const yd=jb+12,railEnd=jc-J(r.jointGap)/2,pitchFits=textWidth(size(r.jointPitch),9)+6<=J(r.jointPitch);
+  for(const x of bolts)jv+=(tight?circle(x,by,J(hole)/2,'reference-line'):rect(x-J(.75*r.jointBoltDiameter),by-J(hole)/2,J(1.5*r.jointBoltDiameter),J(hole),'reference-line'))+circle(x,by,J(r.jointBoltDiameter)/2,'runway-line');
+  const yd=jb+12,railEnd=jc-J(gap)/2,pitchFits=textWidth(size(r.jointPitch),9)+6<=J(r.jointPitch);
   jv+=dimChain('h',[jl,bolts[0],bolts[1],railEnd],[jb,jb,jb,jb],yd,[size(r.jointEdge),size(r.jointPitch),size(r.jointEdge)]);
   // The overall string stands clear of the chain's extension lines, which run 5 pt past the chain.
   jv+=dimH(jl,jl+J(bar),jb+2,yd+(pitchFits?22:30),barLabel);
@@ -183,14 +184,14 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   // Notes wrapped to a width in capitals, an SI value kept on one line with its unit.
   const wrap=(v:string,width:number,size:number)=>wrapToWidth(labelCaps(v).replace(/(\d) mm\b/g,'$1\u0001mm'),width,size).map(row=>row.replaceAll('\u0001',' '));
   // The bars carry the slots (their net section and block shear are checked with them); the rail web is drilled.
-  const jointNotes=wrap(`2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}, SLOTTED ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG THE RAIL; 4 - ${size(r.jointBoltDiameter)} A325 SNUG-TIGHT IN ${size(hole)} DRILLED HOLES IN THE RAIL WEB. GAP ${size(r.jointGap)}. SYMMETRIC`,noteW,7.2);
+  const jointNotes=wrap(tight?`TIGHT JOINT (AIST TR-13 §5.16.1): 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}; 4 - ${size(r.jointBoltDiameter)} A325 PRETENSIONED IN ${size(hole)} STANDARD HOLES IN THE BARS AND THE RAIL WEB. RAIL ENDS BUTTED, GAP 1/16 IN. MAX.; RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS OF OPERATION. SYMMETRIC`:`OPEN JOINT: 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}, SLOTTED ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG THE RAIL; 4 - ${size(r.jointBoltDiameter)} A325 IN ${size(hole)} DRILLED HOLES IN THE RAIL WEB. GAP ${size(gap)}. RE-TIGHTEN AFTER 30 AND 90 DAYS. SYMMETRIC`,noteW,7.2);
   const rowY=Math.max(section.h,joint.h+31+jointNotes.length*9)+14,mx=piece.w+24;
   let svg='<g data-view="rail-connection">'+section.svg;
   svg+=`<g transform="translate(${n(jx)} 0)">${joint.svg}${subTitle(joint.w/2,joint.h+12,'RAIL JOINT / ELEVATION',js.label)}${jointNotes.map((v,i)=>text(joint.w/2,joint.h+31+i*9,v,7.2,'middle')).join('')}</g>`;
   svg+=`<g transform="translate(0 ${n(rowY+8)})">${pieceSvg}</g>`;
   const planX0=mx+24,calloutW=Math.max(150,660-planX0-24-plan.w),planX=planX0+calloutW+24,planY=rowY;
   // The anchor: where it is, the notch with its corner holes, the anchor keeper welds and what it holds.
-  const anchorLines=wrap(`RAIL ANCHOR AT MID-LENGTH OF EACH RAIL PIECE (${detailRef(detailTitles.railLayout)}): K1 IN NOTCHES ${size(A.notch)} X ${size(A.notchLength)} IN BOTH RAIL-BASE TOES${pad?' AND THE PAD':''}, ${size(2*A.cornerRadius)} DRILLED HOLES CENTERED ON THE NOTCH CORNERS; K1 WELDS, END FILLETS ${size(A.endWeld)}. HOLDS TRACTION, BRAKING, CREEP`,calloutW,8.5);
+  const anchorLines=wrap(`RAIL ANCHOR ${tight?'NEAR MID-RUNWAY, ONE PER RAIL':'AT MID-LENGTH OF EACH RAIL PIECE'} (${detailRef(detailTitles.railLayout)}): K1 IN NOTCHES ${size(A.notch)} X ${size(A.notchLength)} IN BOTH RAIL-BASE TOES${pad?' AND THE PAD':''}, ${size(2*A.cornerRadius)} DRILLED HOLES CENTERED ON THE NOTCH CORNERS; K1 WELDS, END FILLETS ${size(A.endWeld)}. HOLDS TRACTION, BRAKING, CREEP`,calloutW,8.5);
   // Crane rail is high-carbon steel: heat from flame cutting hardens and cracks it.
   const fabrication=wrap('RAIL STEEL: DRILL HOLES, THEN SAW-CUT OR MILL ENDS AND NOTCHES; NO FLAME CUTTING OR PUNCHING. GRIND SMOOTH; MT NOTCH CORNERS. CONFIRM NOTCHING WITH THE RAIL SUPPLIER.',calloutW,7.2);
   svg+=`<g transform="translate(${n(planX)} ${n(planY)})">${plan.svg}${subTitle(plan.w/2,plan.h+12,'KEEPERS AND RAIL ANCHOR / PLAN',ls.label)}</g>`;

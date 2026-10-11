@@ -15,7 +15,7 @@ export const endBearingSchema=z.object({
  /** Gauge across the runway, centered on the web; edge is from each bearing plate end along the runway. */
  bolts:z.object({diameter:pos,grade:z.enum(['A325','A490']),gauge:pos,edge:pos}),
  washerThickness:pos,
- /** Sliding-end bolts: pretensioned against steel sleeves that leave the flange unclamped (default), or snug-tight with jam nuts (AISC J1.10(c): cranes of 5 tons or less). */
+ /** Sliding-end bolts: pretensioned against steel sleeves that leave the flange unclamped (default), or snug-tight with jam nuts, kept for old projects only and reported as not permitted (AIST TR-13 §5.14). */
  sliding:z.enum(['sleeved','snug-tight']).optional(),
  /** Sleeve wall around the standard-hole bore, and its length beyond the flange thickness. */
  sleeveWall:pos.optional(),sleeveClearance:pos.optional()
