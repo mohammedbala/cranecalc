@@ -21,7 +21,7 @@ import {cappedTwinRibW14X90,cappedStubW14X90,newW14X90Columns} from './fixtures/
 const inch=25.4,ksi=6.894757293168,kip=4448.2216152605;
 /** The capped demonstration on a surveyed W14X90 receiving column (d 14.0, bf 14.5, tf 0.71, tw 0.44 in, kdes 1.31 in). */
 function w14(p:ProjectInput=cappedDemonstrationProject()){
- const b=p.details!.bracket!;b.receiver={...b.receiver,depth:14*inch,width:14.5*inch,flangeThickness:.71*inch,webThickness:.44*inch};p.existingColumn!.shape='W14X90';return p;
+ const b=p.details!.bracket!;b.receiver={...b.receiver,depth:14*inch,width:14.5*inch,flangeThickness:.71*inch,webThickness:.44*inch,axialDemand:0};p.existingColumn!.shape='W14X90';delete b.columnStiffeners;return p;
 }
 const plates={enabled:true,thickness:1*inch,width:6.75*inch,length:'half' as const,clip:.75*inch,flangeWeld:5/16*inch,webWeld:5/16*inch};
 const stiffened=(p=w14())=>{p.details!.bracket!.columnStiffeners={...plates};return p;};
@@ -122,8 +122,9 @@ describe('column stiffener checks on the bracket',()=>{
  });
  it('rejects stiffeners that do not fit or clash, and an unknown column fillet',()=>{
   const err=(p:ProjectInput)=>validateBracket(p).join(' ');
-  // The demonstration's 24 in built-up receiver has no catalogue shape: k must come from the survey.
-  const built=cappedDemonstrationProject();built.details!.bracket!.columnStiffeners={...plates};expect(err(built)).toContain('enter the receiving column k');
+  // A 24 in built-up receiver has no catalogue shape: k must come from the survey.
+  const built=cappedDemonstrationProject(),br=built.details!.bracket!;br.receiver={...br.receiver,depth:24*inch,width:14*inch,flangeThickness:inch,webThickness:.75*inch};
+  br.columnStiffeners={...plates};expect(err(built)).toContain('enter the receiving column k');
   built.details!.bracket!.columnStiffeners!.columnK=1.5*inch;expect(err(built)).not.toContain('receiving column k');
   const tight=stiffened();tight.details!.bracket!.columnStiffeners!.clip=.5*inch;expect(err(tight)).toContain('does not clear the column\'s rolled fillet');
   const wide=stiffened();wide.details!.bracket!.columnStiffeners!.width=7.5*inch;expect(err(wide)).toContain('do not fit within the column flange');
@@ -150,7 +151,9 @@ describe('uplift held down by the bolted end bearings',()=>{
  it('passes with the hold-down and checks the reversed set through the bolt rows',()=>{
   const p=cappedDemonstrationProject(),c=lift(p),checks=bracketChecks(p,c.result),eb=p.details!.endBearing!,L=p.details!.bearing.length;
   const up=byId(checks,'bracket-uplift');expect(up.status).toBe('pass');expect(up.demand).toBeCloseTo(20000,6);expect(up.note).toContain('bolted end-bearing bolts');
-  for(const id of ['rib-flexure','rib-shear','seat-flexure','seat-weld','root-weld','column-flange'])expect(byId(checks,'bracket-uplift-'+id)?.status,id).toBe('pass');
+  for(const id of ['rib-flexure','rib-shear','seat-flexure','seat-weld','root-weld'])expect(byId(checks,'bracket-uplift-'+id)?.status,id).toBe('pass');
+  // The demonstration's column stiffeners take the reversed flange forces (checked with the stiffeners' reversed set).
+  expect(byId(checks,'bracket-uplift-column-flange')?.status).toBe('not-applicable');
   // The lifting end pulls the seat up at its two bolt rows, half at each, about its bearing center 0.3L inboard of the patch.
   const center=300-.3*L,row=L/2-eb.bolts.edge,b=p.details!.bracket!;
   const q=bracketResponse(p,[{vertical:-10000,offset:center-row,length:2*eb.bolts.diameter},{vertical:-10000,offset:center+row,length:2*eb.bolts.diameter},{vertical:50000,offset:-300,length:120}]);

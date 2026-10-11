@@ -28,10 +28,13 @@ export function plateDemonstration(){
  p.railEccentricity=3/16*inch;
  return p;
 }
-/** The 2-ton capped demonstration with one 1/4 in flexible plate. */
+/**
+ * The 2-ton capped demonstration with one 1/4 in flexible plate, 6 in wide on a 6 in column gusset: on the 0.71 in
+ * W14X90 flange the lap couple's local fatigue needs the taller root (5 1/4 in plate on 5 3/4 in: 1.02).
+ */
 export function cappedPlateDemonstration(){
  const p=cappedDemonstrationProject();p.details=selectTieArrangement(p.details!,'flexible-plate');
- Object.assign(p.details.brace,{thickness:.25*inch});Object.assign(p.details.brace.connection,{thickness:.25*inch,pitch:1.75*inch});
+ Object.assign(p.details.brace,{thickness:.25*inch,width:6*inch});Object.assign(p.details.brace.connection,{thickness:.25*inch,pitch:1.75*inch,weldLength:6*inch});
  return p;
 }
 const check=(s:CalculationSnapshot,id:string)=>s.checks.find(c=>c.id===id)!;

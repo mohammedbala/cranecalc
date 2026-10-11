@@ -14,10 +14,10 @@ const flags=(svg:string)=>(svg.match(/data-field-weld="true"/g)??[]).length;
 describe('field welds to existing building steel',()=>{
  it('flags column attachments and preserves unflagged new-part weld symbols',()=>{
   const s=snapshot(),before=JSON.stringify(s.input),bracket=bracketSheetSvg(s),tie=flangeTieSheetSvg(s),generic=connectionSheetSvg(snapshot(demonstrationProject()));
-  // The bracket section flags the seat and rib root welds to the existing column; the tie sheet flags the column
-  // root in the transverse section and in the plan. The connection sheet flags its column attachment and the rail
-  // keeper and anchor fillets, welded with the rail set in place.
-  expect(flags(bracket)).toBe(2);expect(flags(tie)).toBe(2);expect(flags(generic)).toBe(3);
+  // The bracket section flags the seat and rib root welds to the existing column, and the column stiffeners' flange
+  // and web fillets inside it; the tie sheet flags the column root in the transverse section and in the plan. The
+  // connection sheet flags its column attachment and the rail keeper and anchor fillets, welded with the rail set in place.
+  expect(flags(bracket)).toBe(4);expect(flags(tie)).toBe(2);expect(flags(generic)).toBe(3);
   const keeper=generic.slice(generic.indexOf('data-view="rail-section"'));
   expect((keeper.match(/data-weld-location="field"/g)??[]).length).toBeGreaterThanOrEqual(2);
   for(const svg of [bracket,tie,generic])expect(svg).toContain('EXISTING');
@@ -37,6 +37,8 @@ describe('field welds to existing building steel',()=>{
  });
  it('identifies field and shop welds in 3D without changing their entered sizes',()=>{
   const p=cappedDemonstrationProject(),b=p.details!.bracket!,steel=new THREE.MeshBasicMaterial(),edge=new THREE.LineBasicMaterial();
+  // The bracket's own welds (the column stiffeners are built and tested with columnStiffeners.test.ts).
+  delete b.columnStiffeners;
   for(const kind of ['twin-rib','haunched-seat'] as const){
    b.arrangement=kind;const group=buildWeldedBrackets(b,[0],0,steel,edge),welds:any[]=[];
    group.traverse(o=>{if(o.userData.part?.weld)welds.push(o.userData.part.weld);});

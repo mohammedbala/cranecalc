@@ -33,6 +33,10 @@ export type TieArrangement=typeof tieOptions[number]['id'];
 /** Keep each existing profile separate; initialize fit only on first selection. */
 export function selectBracketArrangement(d:RunwayDetails,kind:BracketArrangement):RunwayDetails{
  const b={...(d.bracket??defaultBracket),enabled:true,arrangement:kind};
+ // Column stiffeners are sized for the bracket's force levels: the welded rib brackets share them (the seat and the
+ // rib or haunch root bottom); another kind of bracket starts without them.
+ const levels=(k:BracketArrangement)=>k==='twin-rib'||k==='haunched-seat'?'rib':k;
+ if(levels(bracketArrangement(d.bracket))!==levels(kind))delete b.columnStiffeners;
  if(kind==='haunched-seat')b.tipDepth??=b.ribDepth/4;
  if(kind==='rolled-corbel'){b.corbelShape??=defaultRolledShape;b.rolled??={...defaultRolledBracket};}
  if(isExistingBracketType(kind)){

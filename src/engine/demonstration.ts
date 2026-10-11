@@ -1,6 +1,7 @@
 import {defaultEndStop} from './endStopInputs';
 import {defaultEndBearing} from './endBearingInputs';
 import {defaultBracket} from './bracketInputs';
+import {initialColumnStiffeners,receiverK} from './columnStiffenerInputs';
 import {emptyCapDesign} from './capDesignInputs';
 import {loadCappedSection} from '../data/aiscChannels';
 import { exampleProject } from './defaults';
@@ -87,7 +88,7 @@ export function demonstrationProject():ProjectInput {
  * rolled-girder example or claim that its smaller assembly serves that crane. */
 export function cappedDemonstrationProject():ProjectInput {
  const p=demonstrationProject();
- p.details!.bracket={...structuredClone(defaultBracket),enabled:true,loadPathConfirmed:true,receiver:{...defaultBracket.receiver,confirmed:true,source:'Fictitious built-up receiver: 24 in depth, 14 in flange, 1 in flange thickness, 3/4 in web; 10 ft unbraced; zero other axial loads for local-component demonstration.'}};
+ p.details!.bracket={...structuredClone(defaultBracket),enabled:true,loadPathConfirmed:true,receiver:{...defaultBracket.receiver,axialDemand:62*kip,confirmed:true,source:'Fictitious survey: existing W14X90 column, ASTM A572 Grade 50 per mill certificates; 10 ft flange unbraced length; 62 kip factored existing gravity axial (1.2D + 1.6S from the building records) for the panel zone.'}};
  p.notes=p.notes.replace('column brackets, ','');
  p.title='Cedar Works · Three-bay 2-ton capped runway';p.number='DEMO-CAP-002';
  p.section=loadCappedSection(p.section,'W24X94','C15X33.9');
@@ -124,6 +125,9 @@ export function cappedDemonstrationProject():ProjectInput {
  // Ribs between the inner bearing bolt rows and the column flange edges: nuts below the seat clear the ribs at
  // shared and runway-end grids, and both root welds stay on the 14-in receiving flange.
  p.details!.bracket!.ribSpacing=10.5*inch;
+ // The 0.71 in W14X90 flange cannot take the rib forces in local bending (J10.1): continuity plates at the seat and
+ // rib bottom, each side of the web, sized to the J10.8 minimums for the 2 in seat plate.
+ {const b=p.details!.bracket!;b.columnStiffeners=initialColumnStiffeners(b.receiver,receiverK(b,p.existingColumn)?.k,Math.max(b.seatThickness,b.ribThickness));}
  // Lighter stop for the 2-ton crane, inboard of the runway-end tie saddle.
  // The 6 1/2 in gauge keeps the bolts on the 9.07 in W flange; 2 3/4 in stiffener centers and the face plate 1 3/4 in
  // ahead of the front bolts (on a 12 in base plate, so both bolt rows stay put) keep the heads clear of the welds.
@@ -162,6 +166,8 @@ export function newColumnDemonstrationProject():ProjectInput {
  // measured from the column base on the grout and plate. The column stops at the top of the girder.
  const seat=20*foot-columnBaseElevation(base)-railTopAboveSteel(p)-cap-p.section.d-d.bearing.thickness,top=seat+d.bearing.thickness+p.section.d+cap;
  d.bracket!.receiver={...d.bracket!.receiver,depth:w.d*inch,width:w.bf*inch,flangeThickness:w.tf*inch,webThickness:w.tw*inch,Fy:50*ksi,Fu:65*ksi,unbracedLength:top,axialDemand:0,confirmed:true,source:`New ${shape} column designed here; no other loads`};
+ // The 0.94 in W14X120 flange takes the rib forces unstiffened, clear of the crane-level bracing gussets.
+ delete d.bracket!.columnStiffeners;
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,isNew:true,shape,Fy:50*ksi,Fu:65*ksi,height:top,seatElevation:seat,
   strong:{base:'fixed',top:'free'},weak:{base:'fixed',top:'braced'},Lcx:2.1*top,Lcy:top,Lcz:top,Lb:top,longitudinal:'bracing',driftLimit:240,source:'New column designed here',confirmed:true,
   seismic:{enabled:true,sdc:'B',SDS:.2,system:'ordinary',Ie:1,rho:1,source:'Fictitious site data: SDS 0.20, SD1 0.08, Site Class D, Risk Category II, SDC B',

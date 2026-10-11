@@ -12,8 +12,8 @@ describe('field welding to the existing column',()=>{
   expect([.5,.75,1,1.5,2,2.5,3].map(t=>categoryBPreheat(t*inch))).toEqual([0,0,10,10,65,65,110]);
   expect([.75,1,2,3].map(t=>Math.round(categoryBPreheat(t*inch,'US')*9/5+32))).toEqual([32,50,150,225]);
   const p=cappedDemonstrationProject(),d=existingWeldingDemand(p,existingColumnSection(p).section.tf);
-  // Built-up receiver flange 1 in; twin-rib ribs 1 1/2 in, seat 2 in, tie gusset 7/8 in: the seat governs.
-  expect(weldedAttachments(p).map(v=>v.name)).toEqual(['bracket rib','bracket seat plate','tie gusset']);
+  // W14X90 receiver flange 0.71 in; twin-rib ribs 1 1/2 in, seat 2 in, column stiffeners 1 in, tie gusset 7/8 in: the seat governs.
+  expect(weldedAttachments(p).map(v=>v.name).sort()).toEqual(['bracket rib','bracket seat plate','column stiffener','tie gusset']);
   expect(d.t).toBeCloseTo(2*inch,6);expect(d.thickest.name).toBe('bracket seat plate');
   expect(Math.round(d.need*9/5+32)).toBe(150);
  });

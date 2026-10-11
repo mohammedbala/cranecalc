@@ -8,7 +8,9 @@ const W14X90={depth:14*inch,width:14.5*inch,flangeThickness:.71*inch,webThicknes
 /** The bracket's receiving column set to the W14X90 plates; the demonstrations' existing column is already a W14X90. */
 export function onW14X90(p:ProjectInput){
  const b=p.details!.bracket!;
- b.receiver={...b.receiver,...W14X90,source:'Fictitious survey: existing W14X90 column (d 14.0 in, bf 14.5 in, tf 0.71 in, tw 0.44 in), ASTM A992; 10 ft unbraced; zero other axial loads for local-component demonstration.'};
+ b.receiver={...b.receiver,...W14X90,axialDemand:0,source:'Fictitious survey: existing W14X90 column (d 14.0 in, bf 14.5 in, tf 0.71 in, tw 0.44 in), ASTM A992; 10 ft unbraced; zero other axial loads for local-component demonstration.'};
+ // Unstiffened unless a case adds its plates (the capped demonstration carries its own).
+ delete b.columnStiffeners;
  p.existingColumn!.shape='W14X90';
  return p;
 }
