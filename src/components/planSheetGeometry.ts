@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { capChannelGeometry } from './capChannelGeometry';
 import {bracketModelDepth} from '../engine/connectionOptions';
 import {girderSegments} from '../engine/simpleSupports';
 import {independentBearingSettings,buildIndependentSupports} from './independentSupportGeometry';
@@ -89,9 +90,8 @@ export function planSheetGeometry(input: ProjectInput, settings: FramingSettings
       box(`${id}-web`, span, d - 2 * tf, tw, x, 0, z);
       box(`${id}-lower-flange`, span, tf, bf, x, -(d - tf) / 2, z);
       if (s.kind === 'cap') {
-        box(`${id}-cap`, span, s.capTw / 1000, s.capWidth / 1000, x, d / 2 + s.capTw / 2000, z);
-        for (const sign of [-1, 1]) box(`${id}-cap-leg`, span, (s.capDepth - s.capTw) / 1000, s.capTf / 1000, x,
-          d / 2 - (s.capDepth - s.capTw) / 2000, z + sign * (s.capWidth - s.capTf) / 2000);
+        // The cap channel in true section (sloped flanges, root fillets).
+        const cap = new THREE.Mesh(capChannelGeometry(s, span), material); cap.name = `${id}-cap`; cap.position.set(x, d / 2, z); runway.add(cap);
       }
 
     }

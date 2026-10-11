@@ -1,4 +1,5 @@
 import {isExistingBracketType,existingBracketProfile} from '../engine/bracketProfiles';
+import {capChannelGeometry} from './capChannelGeometry';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import * as THREE from 'three';
 import type {CalculationSnapshot} from '../engine/types';
@@ -59,7 +60,7 @@ export function connectionConceptSheetSvg(s:CalculationSnapshot){
   const L=p.spans.reduce((a,b)=>a+b,0)/1000,beam=p.section;
   const box=(x:number,y:number,z:number,l:number,h:number,w:number,existing=false)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(l,h,w),material);mesh.position.set(x,y,z);mesh.userData.existingSteel=existing;context.add(mesh);};
   const ends=p.system==='simple'?independentBearings(p).filter(e=>Math.abs(e.station/1000-L/2-station)<.0001).map(e=>({start:e.start/1000-L/2,finish:e.finish/1000-L/2})):[{start:station-.3,finish:station+.3}];
-  for(const end of ends){const x=(end.start+end.finish)/2,l=end.finish-end.start;for(const sign of [-1,1])box(x,sign*(beam.d-beam.tf)/2000,0,l,beam.tf/1000,beam.bf/1000);box(x,0,0,l,(beam.d-2*beam.tf)/1000,beam.tw/1000);if(beam.kind==='cap'){box(x,(beam.d+beam.capTw)/2000,0,l,beam.capTw/1000,beam.capWidth/1000);for(const sign of [-1,1])box(x,beam.d/2000-(beam.capDepth-beam.capTw)/2000,sign*(beam.capWidth-beam.capTf)/2000,l,(beam.capDepth-beam.capTw)/1000,beam.capTf/1000);}}
+  for(const end of ends){const x=(end.start+end.finish)/2,l=end.finish-end.start;for(const sign of [-1,1])box(x,sign*(beam.d-beam.tf)/2000,0,l,beam.tf/1000,beam.bf/1000);box(x,0,0,l,(beam.d-2*beam.tf)/1000,beam.tw/1000);if(beam.kind==='cap'){const cap=new THREE.Mesh(capChannelGeometry(beam,l),material);cap.position.set(x,beam.d/2000,0);cap.userData.existingSteel=false;context.add(cap);}}
   box(station,topAngle.top/1000,b.reach/1000+b.receiver.flangeThickness/2000,b.receiver.width/1000,.44,b.receiver.flangeThickness/1000,true);
   // Context solids participate in both projections so true scales include the girder.
   selected.add(context);

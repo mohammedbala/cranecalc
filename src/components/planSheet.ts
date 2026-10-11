@@ -344,7 +344,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     const ml=EX(member.start/1000-m.length/2),mr=EX(member.end/1000-m.length/2);
     svg+=rect(ml,top,mr-ml,m.d*ek,'runway-line');
     svg+=line([ml,top+m.tf*ek],[mr,top+m.tf*ek],'runway-line')+line([ml,bottom-m.tf*ek],[mr,bottom-m.tf*ek],'runway-line');
-    if(p.section.kind==='cap')svg+=rect(ml,EY(m.railBase),mr-ml,p.section.capTw/1000*ek,'runway-line');
+    if(p.section.kind==='cap'){const toe=top+(p.section.capDepth-p.section.capTw)/1000*ek;svg+=rect(ml,EY(m.railBase),mr-ml,p.section.capTw/1000*ek,'runway-line')+line([ml,toe],[mr,toe],'runway-line');}
   }
   const railDepth=(p.aist?.railDepth??p.railHeight)/1000;
   svg+=rect(el+railInset('left')*ek,EY(m.railBase+railDepth),(m.length-railInset('left')-railInset('right'))*ek,railDepth*ek,'rail-line');

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {capLegGeometry} from './capChannelGeometry';
 import type {ProjectInput} from '../engine/types';
 import {girderSegments} from '../engine/simpleSupports';
 import {horizontalPlateGeometry,type Hole,type PartInfo} from './connectionDetails';
@@ -14,7 +15,8 @@ export function buildRunwaySteel(p:ProjectInput,materials:{steel:THREE.Material;
   if(s.kind==='cap'){
    flange(`${id}-cap-web`,s.capTw/1000,s.capWidth/1000,d/2+s.capTw/2000,materials.cap,railHoles);
    for(const side of [-1,1]){
-    add(`${id}-cap-flange-${side}`,'Cap channel flange',new THREE.BoxGeometry(l,(s.capDepth-s.capTw)/1000,s.capTf/1000),x,d/2-(s.capDepth-s.capTw)/2000,side*(s.capWidth-s.capTf)/2000,materials.cap);
+    // True flange profile: 2:12 sloped inner face and root fillet under the (perforated) cap web plate.
+    add(`${id}-cap-flange-${side}`,'Cap channel flange',capLegGeometry(s,l,side as -1|1),x,d/2,0,materials.cap);
     if(p.capDesign)filletWeld(group,`${id}-cap-weld-${side}`,new THREE.Vector3(x-l/2,d/2,side*bf/2),new THREE.Vector3(x+l/2,d/2,side*bf/2),new THREE.Vector3(0,-1,0),new THREE.Vector3(0,0,side),p.capDesign.weldSize/1000,materials.weld,'Continuous cap-to-W top-flange edge fillet. Stops at the independent girder end; entered weld leg.');
    }
   }

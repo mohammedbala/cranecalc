@@ -1,3 +1,4 @@
+import {capChannelProfile} from '../engine/channelProfile';
 import {supportColumn} from '../engine/drawingData';
 import {bracketForceTopic} from './bracketForceTable';
 import {existingBracketLabel} from '../engine/bracketProfiles';
@@ -22,7 +23,7 @@ import {railSeat} from '../engine/railSeat';
 export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  const p=s.input,d=p.details;if(!d)return [];
  if(connectionOptionChecks(p).length)return [];
- const f=(v:number)=>plateInches(v,p.units),force=(v:number)=>format(v,'force',p.units,4);
+ const f=(v:number)=>plateInches(v,p.units),force=(v:number)=>format(v,'force',p.units,2);
  // Drawing sheets that carry the matching details, e.g. "S-02" or "S-02, S-03".
  const sheetOf=detailSheetNumbers(s),sheets=(...keys:string[])=>[...new Set(keys.map(sheetOf))].join(', ');
  const output:CadDrawing[]=[];
@@ -34,7 +35,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  dr.rect(cx-bs.width*k/2,y+b.d*k,bs.width*k,bs.thickness*k);dr.hatch(cx-bs.width*k/2,y+b.d*k,bs.width*k,bs.thickness*k);
  dr.dimH(cx-bs.width*k/2,cx+bs.width*k/2,y+b.d*k+bs.thickness*k,400,`SEAT WIDTH ${f(bs.width)}`);
  dr.dimV(y,y+b.d*k,right,430,`${b.name} / d ${f(b.d)}`);
- if(b.kind==='cap'){dr.rect(cx-b.capWidth*k/2,y-b.capTw*k,b.capWidth*k,b.capTw*k);for(const sign of [-1,1])dr.rect(cx+sign*b.capWidth*k/2-(sign>0?b.capTf*k:0),y,b.capTf*k,(b.capDepth-b.capTw)*k);}
+ if(b.kind==='cap')dr.poly(capChannelProfile(b).outline.map(([x,z])=>[cx+x*k,y-z*k]),true);
  const notes=[`Bearing plate: ${f(bs.width)} wide x ${f(bs.length)} along girder x ${f(bs.thickness)}`,`Pair fitted stiffeners: outstand ${f(bs.stiffenerWidth)} x ${f(bs.stiffenerThickness)}`,`Web-side corner cope: ${f(bs.cope)}; web fillets: ${f(bs.weldSize)}, four lines`,b.kind==='cap'?`Fit/mill ends; top flange CJP; continuous web fillets`:`Fit/mill ends; continuous web AND flange fillets`,`Top-flange ties at x: ${flangeRestraintStations(p).top.map(f).join(', ')}`,`Bottom-flange ties at x: ${flangeRestraintStations(p).bottom.map(f).join(', ')}`,`Tie stiffness at EACH flange: ${format(s.detailResults?.braceStiffness??0,'stiffness',p.units)}`,`Bearing reaction envelope: ${force(s.designAnalysis?.reaction??0)}`,`End rotation clearance: ${f(d.criteria.rotationClearance)}`];
  notes.forEach((n,i)=>dr.text(500,85+29*i,n,10));dr.text(80,55,'SECTION AT SUPPORT; STIFFENERS ALSO AT EACH RESTRAINT',10);output.push(dr.drawing);
  }
@@ -87,8 +88,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   const b=p.section,c=p.capDesign,k=230/b.d,dr=new Draft(s,'cap-attachment-detail','Continuous cap-channel attachment','SK-08',500,1/k,`Full-bearing cap; continuous longitudinal fillets; no holes in channel / W top flange. See ${sheets('cap')} for printed scales.`);
   const cx=220,y=105,left=cx-b.bf*k/2,right=cx+b.bf*k/2;
   dr.rect(left,y,b.bf*k,b.tf*k);dr.rect(cx-b.tw*k/2,y+b.tf*k,b.tw*k,(b.d-2*b.tf)*k);dr.rect(left,y+(b.d-b.tf)*k,b.bf*k,b.tf*k);
-  dr.rect(cx-b.capWidth*k/2,y-b.capTw*k,b.capWidth*k,b.capTw*k);
-  for(const sign of [-1,1])dr.rect(cx+sign*b.capWidth*k/2-(sign>0?b.capTf*k:0),y,b.capTf*k,(b.capDepth-b.capTw)*k);
+  dr.poly(capChannelProfile(b).outline.map(([x,z])=>[cx+x*k,y-z*k]),true);
   dr.dimH(cx-b.capWidth*k/2,cx+b.capWidth*k/2,y-b.capTw*k,68,f(b.capWidth));
   dr.leader(right,y,485,112,`${f(c.weldSize).replaceAll('"','')} CONT. FILLET / EACH W FLANGE EDGE`);
   dr.leader(cx+b.tw*k/2,y+b.d*k*.65,485,265,b.catalogueId!);
@@ -175,8 +175,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   dr.rect(X(-b.bf/2),Y(-b.tf),b.bf*k,b.tf*k);
   dr.rect(X(-b.tw/2),y,b.tw*k,(tie.topDrop+t.width/2+25.4)*k);
   if(b.kind==='cap'){
-   dr.rect(X(-b.capWidth/2),Y(-b.tf-b.capTw),b.capWidth*k,b.capTw*k);
-   for(const side of [-1,1])dr.rect(X(side*b.capWidth/2-(side>0?b.capTf:0)),Y(-b.tf),b.capTf*k,(b.capDepth-b.capTw)*k);
+   dr.poly(capChannelProfile(b).outline.map(([x,z])=>[X(x),Y(-b.tf-z)]),true);
   }
   dr.rect(X(tie.rootStart),y,tie.rootLength*k,a.saddleThickness*k);
   dr.rect(X(tie.rootStart),Y(a.saddleThickness),(tie.gussetEnd-tie.rootStart)*k,(tie.topDrop+t.width/2-a.saddleThickness)*k);

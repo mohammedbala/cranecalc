@@ -16,7 +16,7 @@ import { boltProperties } from '../engine/connectionStrength';
 import { defaultFraming, type FramingSettings } from './framingSettings';
 import { planSheetGeometry } from './planSheetGeometry';
 import { drawingLength, plateInches } from './drawingFormat';
-import { sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, type XY } from './sheetGraphics';
+import { sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
 import { railKeeperView } from './railKeeperView';
@@ -91,7 +91,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   svg+=line([cx-10,bb],[inner,bb+26],'reference-line');
   }
   svg+=wSection(cx,top,m().bf*k,m().d*k,m().tf*k,b.tw/1000*k);
-  if(b.kind==='cap'){svg+=rect(cx-b.capWidth/2000*k,top-b.capTw/1000*k,b.capWidth/1000*k,b.capTw/1000*k,'runway-line');for(const sign of [-1,1])svg+=rect(cx+sign*b.capWidth/2000*k-(sign>0?b.capTf/1000*k:0),top,b.capTf/1000*k,(b.capDepth-b.capTw)/1000*k,'runway-line');}
+  if(b.kind==='cap')svg+=capChannelSection(b,(x,z)=>[cx+x/1000*k,top-z/1000*k]);
   const stiffPts:XY[]=[],weldPts:XY[]=[];
   for(const sign of [-1,1]){
    const y=top+b.tf/1000*k,h=(b.d-2*b.tf)/1000*k;

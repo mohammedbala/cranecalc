@@ -50,7 +50,8 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  for(const side of sides){
   const x=side<0?cx-extent:cx+g,w=extent-g,bc=cx+side*(g+l/2);
   svg+=rect(x,top,w,b.d*k,'runway-line')+line([x,top+b.tf*k],[x+w,top+b.tf*k],'runway-line')+line([x,bottom-b.tf*k],[x+w,bottom-b.tf*k],'runway-line');
-  if(b.kind==='cap')svg+=rect(x,top-b.capTw*k,w,b.capTw*k,'runway-line');
+  // Cap channel: its web above the W and the toe of its near flange below the W top.
+  if(b.kind==='cap')svg+=rect(x,top-b.capTw*k,w,b.capTw*k,'runway-line')+line([x,top+(b.capDepth-b.capTw)*k],[x+w,top+(b.capDepth-b.capTw)*k],'runway-line');
   svg+=`<g data-stiffener="full-depth">${rect(bc-st/2,top+b.tf*k,st,(b.d-2*b.tf)*k,'runway-line')}</g>`;
   svg+=rect(bc-l/2,bottom,l,bs.thickness*k,'runway-line');
   svg+=dimH(bc-l/2,bc+l/2,bottom+bs.thickness*k,dimY,dim(bs.length));

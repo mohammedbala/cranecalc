@@ -3,7 +3,7 @@ import {girderBearingTitle} from './columnCapSheet';
 import {activeEndStop} from '../engine/endStopInputs';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
-import {sheetDrawingScale as drawingScale,rect,line,text,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,sectionCut} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,rect,line,text,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,capChannelSection} from './sheetGraphics';
 import {tieDim,tieSize} from './flangeTieSheet';
 import {heading,numbered,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type ViewRender} from './detailSheet';
@@ -21,8 +21,7 @@ export function capTopic(s:CalculationSnapshot):DetailTopic{
  const left=cx-b.bf*k/2,right=cx+b.bf*k/2;
  let svg='<g data-view="cap-section">';
  svg+=rect(left,y,b.bf*k,b.tf*k,'runway-line')+rect(cx-b.tw*k/2,y+b.tf*k,b.tw*k,(b.d-2*b.tf)*k,'runway-line')+rect(left,y+(b.d-b.tf)*k,b.bf*k,b.tf*k,'runway-line');
- svg+=rect(cx-b.capWidth*k/2,y-b.capTw*k,b.capWidth*k,b.capTw*k,'runway-line');
- for(const sign of [-1,1])svg+=rect(cx+sign*b.capWidth*k/2-(sign>0?b.capTf*k:0),y,b.capTf*k,(b.capDepth-b.capTw)*k,'runway-line');
+ svg+=capChannelSection(b,(x,z)=>[cx+x*k,y-z*k]);
  const ry=y-b.capTw*k-p.aist!.railDepth*k,rx=cx+p.railEccentricity*k;
  svg+=rect(rx-r.headWidth*k/2,ry,r.headWidth*k,r.headThickness*k,'rail-line')+rect(rx-r.webThickness*k/2,ry+r.headThickness*k,r.webThickness*k,(p.aist!.railDepth-r.headThickness-r.baseThickness)*k,'rail-line')+rect(rx-r.baseWidth*k/2,y-(b.capTw+r.baseThickness)*k,r.baseWidth*k,r.baseThickness*k,'rail-line');
  for(const sign of [-1,1]){const wx=cx+sign*b.bf*k/2,w=c.weldSize*k;svg+=`<path class="runway-line" d="M${wx},${y}l${sign*w},0l${-sign*w},${w}Z"/>`;}
