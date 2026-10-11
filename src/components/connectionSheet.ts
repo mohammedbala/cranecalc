@@ -33,9 +33,11 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  let framing:ReturnType<typeof planSheetGeometry>|undefined;const m=()=>framing??=planSheetGeometry(p,f);
  const wb=d?.bracket?.enabled?d.bracket:undefined;
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
- const sc=supportColumn(p),colName=sc.isNew?sc.name:f.frameStyle==='tapered'?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN',colRef=sc.isNew?columnReference(p):`${colName} (REF.)`;
+ // A surveyed existing column is named and drawn as surveyed; only an unsurveyed one takes the reference framing style.
+ const sc=supportColumn(p),surveyed=!sc.isNew&&!!p.existingColumn?.enabled,tapered=f.frameStyle==='tapered'&&!surveyed;
+ const colName=sc.isNew?sc.name:surveyed?`EXISTING ${p.existingColumn!.shape||'BUILT-UP'} COLUMN`:tapered?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN',colRef=sc.isNew?columnReference(p):`${colName} (REF.)`;
  const bracket=referenceCrossheads.find(v=>v.name===f.crosshead)!;
- const colAt=(y:number)=>f.frameStyle==='tapered'&&!sc.isNew?m().columnDepthAt(y):m().column.d,colLine=sc.isNew?'runway-line':'reference-line';
+ const colAt=(y:number)=>tapered?m().columnDepthAt(y):m().column.d,colLine=sc.isNew?'runway-line':'reference-line';
  const bracketRef=detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket);
 
  const hole=(x:number,y:number,r:number)=>circle(x,y,r,'runway-line')+line([x-r-3,y],[x+r+3,y],'grid-line')+line([x,y-r-3],[x,y+r+3],'grid-line');

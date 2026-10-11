@@ -123,6 +123,15 @@ describe('ARCH D arrangement sheet', () => {
       expect(sheet).not.toMatch(/NaN|Infinity/);
     }
   });
+  it('keeps a continuous girder mark off the grid lines over an even number of spans',()=>{
+    const p=demonstrationProject();p.system='continuous';p.details!.brace.flangeAttachment!.enabled=false;p.spans=[...p.spans,p.spans[0]];
+    const plan=planSheetSvg({...snapshot,input:p}).split('<g data-view="plan">')[1].split('data-view="elevation"')[0];
+    const grids=[...plan.matchAll(/<line class="grid-line" x1="([\d.]+)" y1="[\d.]+" x2="([\d.]+)"/g)].filter(m=>m[1]===m[2]).map(m=>Number(m[1]));
+    const marks=[...plan.matchAll(/<g data-girder-mark="RG1"><text x="([\d.]+)"/g)].map(m=>Number(m[1]));
+    expect(grids).toHaveLength(5);expect(marks.length).toBeGreaterThan(0);
+    // Grid 3 is the girder's mid-length: the mark moves to mid-span of the bay before it.
+    for(const x of marks)expect(x).toBeCloseTo((grids[1]+grids[2])/2,6);
+  });
   it('breaks the existing columns on the girder elevation clear above the top of rail, off the T.O.R. target',()=>{
     for(const p of [demonstrationProject(),cappedDemonstrationProject()]){
       const svg=planSheetSvg({...snapshot,input:p}),elevation=svg.split('<g data-view="elevation">')[1].split('<g data-view="typical-section">')[0];

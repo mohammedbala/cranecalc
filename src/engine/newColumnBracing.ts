@@ -243,7 +243,9 @@ export function seismicSeparation(p:ProjectInput,column:Section,r:ExistingColumn
  const unit=columnResponse(c.height,E*props.Ix,c.strong,[z.height<=c.height?{x:z.height,force:1}:{x:c.height,force:1,moment:z.height-c.height}]);
  const atRail=rail<=c.height?unit.displacement(rail):unit.displacement(c.height)+unit.rotation(c.height)*(rail-c.height);
  const arm=b.footing.thickness+b.grout+b.plate.thickness,theta=z.QE*(unit.reactions.baseMoment+unit.reactions.base*arm)/(b.soil.subgrade*b.footing.B*b.footing.L**3/12);
- const across=z.basis.Cd*(z.QE*atRail+theta*(rail+arm))/z.basis.Ie,entered=c.seismic?.building?.drift??0,building=entered>0?entered:.025*(rail+arm-b.footing.soil);
+ // The column's own sway and the footing rotation move the rail the same way: add their magnitudes (the unit
+ // response returns the base reaction with the opposite sign to the displacement).
+ const across=z.basis.Cd*(z.QE*Math.abs(atRail)+Math.abs(theta)*(rail+arm))/z.basis.Ie,entered=c.seismic?.building?.drift??0,building=entered>0?entered:.025*(rail+arm-b.footing.soil);
  return {across:Math.abs(across),along,building,buildingEntered:entered>0,required:Math.hypot(Math.max(Math.abs(across),along),building)};
 }
 

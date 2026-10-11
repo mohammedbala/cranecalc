@@ -121,7 +121,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const capacity={Pc:s.compression,Pt:available(section.Fy*props.A,p.method,.9,1.67),Mcx,Mcy:s.minor,Vc:s.shear,flexure:`${s.flexureBranch}${s.flangeRatio>s.flangeLimit?' with F3 flange local buckling':''}; Cb = 1.0`,webCompact};
  const alpha=p.method==='LRFD'?1:1.6,Pex=Math.PI**2*E*props.Ix/c.Lcx**2,Pey=Math.PI**2*E*props.Iy/c.Lcy**2;
  // Seismic force across the runway at the girder's mid-depth (new freestanding columns only).
- const basis=seismicBasis(p),hg=seismicHeight(p),sideE=basis?columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,hg)],[hs]):undefined,columnWeight=props.weight*c.height;
+ const basis=seismicBasis(p),hg=seismicHeight(p),sideE=basis?columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,hg)],[hs]):undefined,columnWeight=props.weight*c.height,ownWeight=c.isNew?columnWeight:0;
  // The eccentric reaction sampled at the same stations as the seismic force.
  const eccentricE=basis?columnResponse(c.height,E*props.Ix,c.strong,[{x:hs,moment:1}],[Math.min(hg,c.height)]):undefined;
  // Braced new columns: brace overturning compresses the columns of a braced span, and a girder's longitudinal force
@@ -139,7 +139,8 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
   const f=k.factors,existing=(key:'P'|'Mx'|'My'|'V',abs:boolean)=>existingLoadKeys.reduce((sum,t)=>sum+(abs?Math.abs(f[t]*c.existing[t][key]):f[t]*c.existing[t][key]),0);
   const runway=f.D*dead+f.L*live,bc=brace(`${p.method} ${k.id}`);
   // Existing moments are added to the crane peak at its governing section: conservative superposition of maxima.
-  const P=existing('P',false)+runway+(bc&&share?bc.H*share.vertical:0);
+  // A new column carries its own weight to the base (an existing column's is in its entered dead load).
+  const P=existing('P',false)+runway+f.D*ownWeight+(bc&&share?bc.H*share.vertical:0);
   const Mx=combinedPeak(eccentric.samples,side.samples,'moment',runway*e,f.L*lateral)+existing('Mx',true);
   const V=combinedPeak(eccentric.samples,side.samples,'shear',runway*e,f.L*lateral)+existing('V',true);
   const My=f.L*longitudinal*alongMoment+existing('My',true)+Math.abs(runway)*ex;
@@ -151,7 +152,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  });
  // AIST crane stop and seismic along the runway on a braced new column, with the static crane vertical.
  if(designed&&share)for(const k of designed.cases.filter(v=>v.kind!=='asce'&&!v.overstrength)){
-  const runway=k.D*dead+k.live*live+k.Cd*support.Cd+k.Cv*support.Cv,P=runway+k.H*share.vertical;
+  const runway=k.D*dead+k.live*live+k.Cd*support.Cd+k.Cv*support.Cv,P=runway+k.D*ownWeight+k.H*share.vertical;
   const Mx=combinedPeak(eccentric.samples,side.samples,'moment',runway*e,k.side*lateral),V=combinedPeak(eccentric.samples,side.samples,'shear',runway*e,k.side*lateral);
   const My=Math.abs(runway)*ex,B1y=amplifyY(P),B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
@@ -162,7 +163,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  // for the overstrength combinations as well. SDC A (§1.4.2) has no overstrength cases.
  const QE=basis?basis.Cs*(dead+support.Cd+columnWeight):0;
  const seismicCases=basis&&sideE?seismicCombinations(p.method,basis).filter(k=>!k.overstrength||!basis.integrityOnly).map(k=>{
-  const runway=k.D*dead+k.L*liveStatic,P=runway;
+  const runway=k.D*dead+k.L*liveStatic,P=runway+k.D*ownWeight;
   const Mx=combinedPeak(eccentricE!.samples,sideE.samples,'moment',runway*e,k.E*QE),V=combinedPeak(eccentricE!.samples,sideE.samples,'shear',runway*e,k.E*QE);
   const My=Math.abs(runway)*ex,B1y=amplifyY(P),B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
@@ -178,7 +179,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
   const elastic=QE*atRail(sideE,c.height,hg),design=basis.Cd*elastic/basis.Ie,Px=dead+liveStatic+columnWeight;
   // The axial limit applies in the overstrength combinations under AISC 341 (§E5.4a), else in the seismic ones.
   const limitCases=seismicCases.some(k=>k.overstrength)?seismicCases.filter(k=>k.overstrength):seismicCases,axialCase=limitCases.reduce((a,b)=>b.P>a.P?b:a);
-  seismic={basis,weight:dead+support.Cd+columnWeight,QE,height:hg,drift:Math.abs(design),driftLimit:(basis.Ie>=1.5?.015:basis.Ie>=1.25?.02:.025)*hg,
+  seismic={basis,weight:dead+support.Cd+columnWeight,QE,height:hg,drift:Math.abs(design),driftLimit:(basis.Ie>=1.5?.01:basis.Ie>=1.25?.015:.02)*hg,
    theta:QE>0?Px*Math.abs(design)*basis.Ie/(QE*hg*basis.Cd):0,thetaMax:Math.min(.25,.5/basis.Cd),axial:Math.max(0,axialCase.P),axialLimit:.15*capacity.Pc,axialCase:axialCase.id};
  }
  return {station:support.x,crane:{dead,live,liveStatic,lateral,longitudinal},combinations,governing:{P:max('P'),Mx:max('Mx'),My:max('My'),V:max('V'),U:max('U')},drift:{value:drift,limit:ht/c.driftLimit},seismic};
@@ -216,7 +217,7 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):Chec
   checks.push({id:'column-seismic-basis',group:label,title:`${label} · seismic basis (cantilever column system)`,status:src?'pass':'unverified',equation:'C_s=\\frac{S_{DS}I_e}{R}\\ge0.044S_{DS}I_e\\ge0.01',referenceIds:['asce-12'],
    note:`${cantileverSystems[b.system].label}: R = ${b.R}, Ωo = ${b.Omega0}, Cd = ${b.Cd}; SDC ${b.sdc}, SDS = ${b.SDS}, Ie = ${b.Ie}, ρ = ${b.rho}; Cs = ${b.Cs.toFixed(4)} on the short-period plateau (no period reduction). Seismic weight ${f(z.weight)} (runway dead, empty crane and column) at the girder mid-depth, ${f(z.height,'length')} above the base: QE = ${f(z.QE)} across the runway. ${b.integrityOnly?'The base, anchors and footing take the §1.4.2 force (SDC A);':`The columns (AISC 341 §${b.system==='special'?'E6':'E5'}.4a) and the base, anchors and footing (§12.2.5.2) also take the overstrength Ωo;`} along the runway the crane-level bracing carries the seismic force. ${src?`Source: ${src}.`:'Enter the source of SDS and the seismic design category.'}`});
   add('seismic-axial',`${label} · cantilever column axial limit`,z.axial,z.axialLimit,'force','P_r\\le0.15\\,P_c',`${b.integrityOnly?'ASCE 7 §12.2.5.2: axial load in the seismic combinations':`ASCE 7 §12.2.5.2 and AISC 341 §${b.system==='special'?'E6':'E5'}.4a: axial load in the overstrength seismic combinations`} (${z.axialCase}) at most 15% of the available axial strength, including slenderness.`,z.axialCase);
-  add('seismic-drift',`${label} · seismic design drift`,z.drift,z.driftLimit,'length','\\delta_x=\\frac{C_d\\,\\delta_{xe}}{I_e}\\le\\Delta_a',`ASCE 7 §12.8.6 and Table 12.12-1 (all other structures): ${b.Ie>=1.5?'0.015':b.Ie>=1.25?'0.020':'0.025'}h at the girder mid-depth; column alone, fixed base.`);
+  add('seismic-drift',`${label} · seismic design drift`,z.drift,z.driftLimit,'length','\\delta_x=\\frac{C_d\\,\\delta_{xe}}{I_e}\\le\\Delta_a',`ASCE 7 §12.8.6 and Table 12.12-1 (all other structures): ${b.Ie>=1.5?'0.010':b.Ie>=1.25?'0.015':'0.020'}h at the girder mid-depth; column alone, fixed base.`);
   // AISC 341 §E6 adds member ductility, protected zones and demand-critical welds for special cantilever columns.
   if(!b.integrityOnly&&b.system==='special')checks.push({id:'column-seismic-e6',group:label,title:`${label} · AISC 341 §E6 special cantilever column detailing`,status:'unsupported',equation:'',note:'AISC 341 §E6.5 highly ductile members (Table D1.1), protected zones at the column base and demand-critical column-to-base welds are not checked here; verify them, or use the ordinary system (§E5) where ASCE 7 Table 12.2-1 permits it.',referenceIds:refs});
   add('seismic-stability',`${label} · seismic stability coefficient`,z.theta,z.thetaMax,'ratio','\\theta=\\frac{P_x\\Delta I_e}{V_xh_{sx}C_d}\\le\\frac{0.5}{\\beta C_d}\\le0.25',`ASCE 7 §12.8.7 with β = 1.0. ${z.theta<=.1?'θ ≤ 0.10: P-delta effects need not be added.':'θ > 0.10: the column check includes P-delta through B1.'}`);

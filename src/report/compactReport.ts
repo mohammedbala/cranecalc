@@ -1,3 +1,4 @@
+import {dcText} from '../engine/checkPresentation';
 import {adjacentBays} from '../engine/continuation';
 import {stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing,continuousBearings} from '../engine/endBearingInputs';
@@ -27,7 +28,7 @@ export function compactReport(s:CalculationSnapshot,fonts:string,detailed=false)
  const f=(v:number|undefined,q:Quantity='length')=>e(format(v,q,p.units,4));
  const math=(tex:string)=>katex.renderToString(tex,{throwOnError:false,displayMode:true});
  const table=(headers:string[],rows:(string|number)[][],cls='')=>`<table class="${cls}"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(v=>`<td>${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
- const numeric=(checks:CheckResult[])=>checks.length?table(['Check','Demand','Limit','D/C','Result'],checks.map(c=>[e(c.title),f(c.demand,c.quantity??'ratio'),f(c.capacity,c.quantity??'ratio'),c.utilization?.toFixed(3)??'-',`<b class="${c.status}">${e(statusText(c.status))}</b>`]),'checks'):'';
+ const numeric=(checks:CheckResult[])=>checks.length?table(['Check','Demand','Limit','D/C','Result'],checks.map(c=>[e(c.title),f(c.demand,c.quantity??'ratio'),f(c.capacity,c.quantity??'ratio'),dcText(c.utilization,3),`<b class="${c.status}">${e(statusText(c.status))}</b>`]),'checks'):'';
  const selected=(groups:string[])=>s.checks.filter(c=>groups.includes(c.group));
 const statusText=(status:CheckResult['status'])=>status==='excluded'?'BY OTHERS':status;
  const eq=(id:string)=>{const c=s.checks.find(c=>c.id===id);return c?`<div class="equation"><b>${e(c.title)}</b>${math(c.equation)}<p>${e(c.note)}</p><small>${c.referenceIds.map(id=>{const ref=references.find(v=>v.id===id);return e(`${ref?.title} ${ref?.clause}`);}).join('; ')}</small></div>`:'';};

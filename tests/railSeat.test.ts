@@ -84,7 +84,9 @@ describe('rail seat: pad, keepers and anchors',()=>{
   const us=texts(railKeeperView(snapshot(demonstrationProject())).render().svg);
   // K1: 9/16 in projection and 2 3/8 in body (2 15/16 in), 3/4 in lip and 7/8 in under it (1 5/8 in); 3/8 in fillets,
   // 3 7/8 in on the outer face and 2 in on each end.
-  for(const t of ['RAIL PAD 1/8" X 6", CONT.:','FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD','ALLOWABLE COMPRESSION 1.45 KSI','6 1/8"','T.O.R.','T.O.S.','OUTER FACE, EACH KEEPER','BOTH ENDS OF EACH KEEPER, STOPPED','KEEPER K1 / SECTION','KEEPERS AND RAIL ANCHOR / PLAN','2 3/8"','9/16"','2 15/16"','3/4"','7/8"','1 5/8"','3/8','2','3 7/8'])expect(us).toContain(t);
+  for(const t of ['RAIL PAD 1/8" X 6", CONT.:','ALLOWABLE COMPRESSION 1.45 KSI','6 1/8"','T.O.R.','T.O.S.','OUTER FACE, EACH KEEPER','BOTH ENDS OF EACH KEEPER, STOPPED','KEEPER K1 / SECTION','KEEPERS AND RAIL ANCHOR / PLAN','2 3/8"','9/16"','2 15/16"','3/4"','7/8"','1 5/8"','3/8','2','3 7/8'])expect(us).toContain(t);
+  // The pad product name wraps to the callout column's width.
+  expect(us.join(' ')).toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');expect(us).not.toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');
   expect(us.join(' ')).toContain('1/16" CLEAR OF RAIL-BASE TOE');expect(us.join(' ')).not.toContain('ROOT FILLETS');
   // Rail joint: bolt pitch, edge distances to the bar end and the rail end, bar length.
   expect(us.filter(t=>t==='1 1/2"')).toHaveLength(2);expect(us).toContain('3"');expect(us).toContain('1\'-0 3/8"');

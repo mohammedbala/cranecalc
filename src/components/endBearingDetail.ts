@@ -77,7 +77,9 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
  const zb=Z(Math.max(b.bf,bs.width)/2);
  // Baseline dimensions from the locating girder end; each label sits past the end of its own line. The bolt
  // extension lines start just clear of the holes.
- [[g.rows[0],'BOLTS'],[g.rows[1],'BOLTS']].forEach(([x,label],i)=>{const y=zb+9+9*i,xb=X(gap/2+(x as number));svg+=line([xb,Z(gauge/2)+g.hole*kk/2+2],[xb,zb])+dimH(X(gap/2),xb,zb,y,'')+text(xb+4,y+3,`${dim(x as number)} ${label}`,7.2);});
+ // The inner label drops its noun when the full text would reach the outer row's extension line.
+ g.rows.slice(0,2).forEach((x,i)=>{const y=zb+9+9*i,xb=X(gap/2+x),next=i?Infinity:X(gap/2+g.rows[1])-3,full=`${dim(x)} BOLTS`;
+  svg+=line([xb,Z(gauge/2)+g.hole*kk/2+2],[xb,zb])+dimH(X(gap/2),xb,zb,y,'')+text(xb+4,y+3,xb+4+textWidth(full,7.2)<next?full:dim(x),7.2);});
  const zt=Z(-Math.max(b.bf,bs.width)/2);svg+=dimH(X(-gap/2),X(gap/2),zt,zt-7,'')+text(X(gap/2)+4,zt-4,`${dim(gap)} GAP`,7.2);
  // Gauge beyond the locating end, so the sliding end carries the cut for the sliding bolt section. Its value reads
  // left of its line (about 7 pt of glyph height) and, when too long for the gauge, below it beside the BOLTS labels.

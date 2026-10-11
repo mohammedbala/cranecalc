@@ -283,9 +283,13 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   // One whole concurrent set at a support: the girder end reactions (each at 0.8 of its bearing length from its
   // girder end), their seat moment, the locating bearing's longitudinal force and the flange lateral forces of all
   // girder ends at the grid. The bracket design force envelope tabulates these sets and the bracket checks take them.
+  // A continuous girder bears centered on its interior grids. At a runway-end grid its girder end is on the grid and
+  // its bearing runs inboard, the reaction at 0.8 of the bearing length from that end as at a simple-span end.
+  const endBearingOffset=(x:number)=>simple?0:Math.abs(x-supports[0])<1e-6?seatOffset({end:'left',offset:Lbr/2},Lbr):Math.abs(x-supports.at(-1)!)<1e-6?seatOffset({end:'right',offset:-Lbr/2},Lbr):0;
   const supportSet=(x:number,c:ReturnType<typeof concurrent>[number]):SupportForceSet=>{
    const r=reactions.get(x)??{top:0,bottom:0},ends=c.ends??[],at=(v?:{x:number;r:number}[])=>v?.find(w=>Math.abs(w.x-x)<1e-6)?.r??0;
-   return {id:c.id,combination:e.combination,vertical:c.ends?ends.reduce((a,v)=>a+v.vertical,0):at(e.verticalReactions)+at(e.adjacentReactions)+c.couple,moment:ends.reduce((a,v)=>a+v.vertical*seatOffset(v,Lbr),0),
+   const vertical=c.ends?ends.reduce((a,v)=>a+v.vertical,0):at(e.verticalReactions)+at(e.adjacentReactions)+c.couple;
+   return {id:c.id,combination:e.combination,vertical,moment:c.ends?ends.reduce((a,v)=>a+v.vertical*seatOffset(v,Lbr),0):vertical*endBearingOffset(x),
     longitudinal:delivered(x,c),top:r.top,bottom:r.bottom,ends:ends.map(v=>({bay:v.bay,end:v.end,vertical:v.vertical,offset:seatOffset(v,Lbr),...(v.existing?{existing:true}:{})}))};
   };
   // The bracket takes the same concurrent sets, each girder reaction over the inner 0.4 of its bearing plate.
@@ -293,8 +297,9 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   // The seat also takes the locating bearing's longitudinal force and, through the bearing bolts, the bottom-flange
   // lateral force of the girder ends at the grid, at their bearings' mean offset along the runway.
   if(bracket||existingBracket||capCollector)for(const x of supports){const distinct=new Set<string>();for(const c of concurrent(x)){
-   const f=supportSet(x,c),loads=f.ends.length?f.ends.map(v=>({vertical:v.vertical,offset:v.offset,length:.4*Lbr})):[{vertical:f.vertical,offset:0}];
-   const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:f.longitudinal,bottom:f.bottom,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:0};
+   const edge=endBearingOffset(x),f=supportSet(x,c),loads=f.ends.length?f.ends.map(v=>({vertical:v.vertical,offset:v.offset,length:.4*Lbr})):[edge?{vertical:f.vertical,offset:edge,length:.4*Lbr}:{vertical:f.vertical,offset:0}];
+   // The bottom-flange force passes through the bearing bolts: at a continuous runway end, at the bearing's center.
+   const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:f.longitudinal,bottom:f.bottom,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:Math.sign(edge)*Lbr/2};
    const key=[...loads.map(v=>v.vertical),horizontal.longitudinal].join();if(distinct.has(key))continue;distinct.add(key);
    bracket?.observe(e.kind,f.id,x,loads,bin,horizontal);
    existingBracket?.observe(e.kind,f.id,x,loads,bin);
@@ -307,7 +312,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     for(const c of concurrent(x)){
      const {id,sign,couple,ends}=c;
      const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple,top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
-     if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);
+     if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);else if(endBearingOffset(x))item.seatMoment=item.vertical*Math.sign(endBearingOffset(x))*Lbr/2;
      if(support>=0)forces.add(support,supportSet(x,c));
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
       const k=`${e.combination}:${x}:${component}:${dir}`,old=interfaceExtremes.get(k);
