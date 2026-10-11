@@ -191,7 +191,9 @@ export function sectionCut(a:XY,b:XY,look:XY,title:string,ends:('a'|'b')[]=['a',
   svg+=line(p,o,'divider')+line(o,[o[0]+v[0]*12,o[1]+v[1]*12],'divider');
   svg+=`<path class="leader-arrow" d="M${n(tip[0])},${n(tip[1])}L${n(base[0]+nx*2.2)},${n(base[1]+ny*2.2)}L${n(base[0]-nx*2.2)},${n(base[1]-ny*2.2)}Z"/>`;
   // The reference reads beyond the arrow tip, or beyond the cut line on the side away from the arrow.
-  if(label==='tip')svg+=text(tip[0]+v[0]*3,tip[1]+v[1]*3+(across?3:v[1]>0?9:-2),detailRef(title),8,across?(v[0]>0?'start':'end'):'middle',700);
+  // Beyond the tip; on a cut across the view the reference reads outward from the cut end, clear of the part it cuts.
+  if(label==='tip')svg+=across?text(tip[0]+v[0]*3,tip[1]+v[1]*3+3,detailRef(title),8,v[0]>0?'start':'end',700)
+   :text(tip[0]-s*4,tip[1]+v[1]*3+(v[1]>0?9:-2),detailRef(title),8,s<0?'end':'start',700);
   else{const q:XY=[o[0]+s*t[0]*4-v[0]*4,o[1]+s*t[1]*4-v[1]*4];svg+=text(q[0],q[1]+(across?(s>0?9:0):(s>0?3:-1)),detailRef(title),8,across?(v[0]>0?'end':'start'):'middle',700);}
  }
  return svg+'</g>';
