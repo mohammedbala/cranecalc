@@ -68,9 +68,11 @@ export function validateExistingColumn(p:ProjectInput):string[]{
   const d=p.details,b=d.bracket!,tie=c.seatElevation+d.bearing.thickness+p.section.d-p.section.tf,rail=existingColumnRailElevation(p);
   add(c.height+1e-6<tie,`height: the new column must reach the top-flange tie, ${format(tie,'length',p.units,3)} above its base.`);
   add(c.height>rail-railTopAboveSteel(p)+1e-6,`height: stop the new column at or below the top of the girder, ${format(rail-railTopAboveSteel(p),'length',p.units,3)} above its base, clear of the crane end trucks; a column above the rail needs the crane supplier's clearance and is not drawn here.`);
-  const shape=aiscShapeByName(c.shape??''),r=b.receiver;
-  if(shape)add([[r.depth,shape.d],[r.width,shape.bf],[r.flangeThickness,shape.tf],[r.webThickness,shape.tw]].some(([v,x])=>Math.abs(v-x*25.4)>.5)||Math.abs(r.Fy-c.Fy)>.01||Math.abs(r.Fu-c.Fu)>.01,`shape: the bracket's receiving column must be the new ${c.shape} (plates and material); set it under Connections.`);
  }
+ // The bracket's receiving column is this column: the J10 checks, the welds and the drawings all use one section.
+ const receiverOf=p.details?.bracket?.enabled?p.details.bracket.receiver:undefined,named=aiscShapeByName(c.shape??'');
+ if(receiverOf&&named){const r=receiverOf;add([[r.depth,named.d],[r.width,named.bf],[r.flangeThickness,named.tf],[r.webThickness,named.tw]].some(([v,x])=>Math.abs(v-x*25.4)>.5)||Math.abs(r.Fy-c.Fy)>.01||Math.abs(r.Fu-c.Fu)>.01,
+  c.isNew?`shape: the bracket's receiving column must be the new ${c.shape} (plates and material); set it under Connections.`:`shape: the bracket's receiving column must be the surveyed existing ${c.shape} (plates and material): select the shape here to set it, or clear the shape to use the surveyed plates entered under Connections.`);}
  const sz=c.seismic;
  if(sz?.enabled){
   add(!c.isNew,'seismic: seismic design here is for new freestanding columns; enter the building\'s seismic effects as E for an existing column.');
