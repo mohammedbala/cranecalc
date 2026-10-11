@@ -82,7 +82,9 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const run=(travel:number,mesh:number)=>{const c=createDetailCollector(p,props,mesh);runwayDesignAnalysis(p,props,strength,travel,20,c.observe);return c.finish();};
  let coarse=run(steps,20),fine=run(steps*2,20),travel=steps*2;
  let travelChange=differences(coarse,fine);
- while(travelChange>.01&&travel<steps*(p.cranes.length===1?16:4)){coarse=fine;travel*=2;fine=run(travel,20);travelChange=differences(coarse,fine);}
+ // The search converges first-order where a fatigue range peaks between stations (continuous girders): one crane
+ // refines to 32 times the base steps before the gate reports non-convergence.
+ while(travelChange>.01&&travel<steps*(p.cranes.length===1?32:4)){coarse=fine;travel*=2;fine=run(travel,20);travelChange=differences(coarse,fine);}
  let spatial=run(travel,40),meshChange=differences(fine,spatial);
  // Refine the lateral/warping mesh until it converges, up to 160 elements per member, before the gate.
  for(const mesh of [80,160]){if(meshChange<=.01)break;fine=spatial;spatial=run(travel,mesh);meshChange=differences(fine,spatial);}
