@@ -9,6 +9,7 @@ import {runwayElevations,issueStatus,supportColumn,delegatedChecks,unevaluatedSt
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
+import {activeColumnCap} from '../engine/columnCapInputs';
 import {drawingLength,drawingElevation,electrodeClass,plateInches} from './drawingFormat';
 import {railPad} from '../engine/railSeat';
 import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth} from './sheetGraphics';
@@ -106,7 +107,7 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
  const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} TONNES (${f(N)})`;
  const length=p.spans.reduce((a,b)=>a+b,0),cranes=p.cranes.map(c=>c.design?`${capacity(c.design.ratedLoad)} ${c.design.type} crane`:c.name).join(' and ');
 const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
- const supports=isNew?`new freestanding ${p.existingColumn!.shape||'built-up'} runway columns${d?.bracket?.enabled?' with welded brackets':''}${p.columnBase?.enabled?', base plates, anchor rods and spread footings':''}`:d?.bracket?.enabled?(usesExistingBracket(p)?'existing column brackets with new bolted seats':'new brackets welded to the existing building columns'):p.aist?.supportType==='column'?'independent runway columns':'the building columns';
+ const supports=isNew?`new freestanding ${p.existingColumn!.shape||'built-up'} runway columns${d?.bracket?.enabled?' with welded brackets':activeColumnCap(p)?' with column caps, the girders bearing directly on the columns':''}${p.columnBase?.enabled?', base plates, anchor rods and spread footings':''}`:d?.bracket?.enabled?(usesExistingBracket(p)?'existing column brackets with new bolted seats':'new brackets welded to the existing building columns'):p.aist?.supportType==='column'?'independent runway columns':'the building columns';
  const scope=`Furnish and install one crane runway line, ${len(length)} long in ${p.spans.length} ${p.system==='continuous'?'continuous':'simple'} span${p.spans.length>1?'s':''}, for ${cranes}: ${p.section.name}${p.section.kind==='cap'?' capped':''} runway girders, rail, rail attachments, end stops and connections, supported on ${supports}.${isNew?' The new columns carry only the crane and runway; the existing building carries no crane load.':p.existingColumn?.enabled?' The existing column receiving the runway is checked for the added crane reactions.':''}${p.longitudinalBracing?.enabled?(designsBracing(p)?' The new crane-level rod X-bracing, its strut, gussets, pins and the braced columns and footings are designed for crane traction, stop and seismic forces along the runway.':` The ${isNew?'new':'existing'} crane-level longitudinal bracing is checked for crane traction and stop forces.`):''} The opposite runway is identical unless noted.`;
  const build=(t:Style)=>{
  const H=(v:string)=>heading(t,v),N=(v:string[])=>numbered(t,v),P=(v:string)=>paragraph(t,v),T=(h:string[],r:string[][],w:number[])=>table(t,h,r,w);
@@ -264,7 +265,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   'CRANE, END TRUCKS, CRANE-MOUNTED BUMPERS, CONDUCTOR BARS AND ELECTRIFICATION: CRANE SUPPLIER.',
   ...(bypass?['BUILDING-MOUNTED CRANE END STOPS AND THEIR SUPPORT FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
-  ...(!d?.bracket?.enabled?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${len(support.capacity)} MAX.`:'.'}`]:[]),
+  ...(!d?.bracket?.enabled&&!activeColumnCap(p)?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${len(support.capacity)} MAX.`:'.'}`]:[]),
   ...(p.system==='simple'&&d&&!activeEndBearing(p)?[`COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (${detailRef(detailTitles.movement)}) FOR THE LONGITUDINAL, LATERAL AND UPLIFT FORCES IN THE ${bracketForcesAt(s,'cover','ON THIS SHEET')}.`]:[]),
   ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`)
  ];

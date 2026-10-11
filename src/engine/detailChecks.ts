@@ -18,6 +18,8 @@ import {bracketChecks} from './bracketDesign';
 import {existingBracketChecks} from './existingBracket';
 import {endStopChecks} from './endStop';
 import {endBearingChecks,activeEndBearing} from './endBearing';
+import {activeColumnCap} from './columnCapInputs';
+import {columnCapChecks} from './columnCap';
 
 const compared=(id:string,group:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds=['aisc-connections']):CheckResult=>({id,group,title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds});
 const resolved=(id:string,title:string,note:string,referenceIds=['aisc-connections']):CheckResult=>({id,group:'Connections',title,status:'not-applicable',equation:'',note,referenceIds});
@@ -107,12 +109,20 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  add('rail-twist','Serviceability','Rail rotation',r.twist,d.criteria.twistLimit,'ratio','|\\theta_{rail}|\\le\\theta_{owner}','Entered owner/supplier twist criterion in radians. This is distinct from girder lateral bending deflection.',['criteria','vlasov']);
  const brace=braceSystem(p),Cd=p.system==='continuous'?2:1,spacing=Math.min(p.lateralBraceSpacing,p.aist.bottomBraceSpacing),imperfection=.02*a.moment*Cd/props.h0+.01*a.axial,requiredK=(p.method==='LRFD'?1/.75:2)*(10*a.moment*Cd/props.h0+8*a.axial)/spacing;
  const plate=isPlateTie(p);
+ const cap=activeColumnCap(p),capR=r.columnCap;
+ if(cap&&capR){
+  // A column cap: the girder end is a fork on the cap; no flange tie. Its restraint stiffness, strength, bolts and welds.
+  checks.push(...columnCapChecks(p,capR,{imperfection,required:requiredK}));
+ }else{
  add('brace-member','Bracing',activeEndBearing(p)?'Top-flange tie strength':'Both-flange tie strength',r.demands.brace+imperfection,brace.capacity,'force','P_{br}=|H_{flange}|+0.02M_rC_d/h_0+0.01P_r',`${plate?'One flexible plate (AISC DG7 §11.2) at':'Two symmetric flat bars at'} ${activeEndBearing(p)?'the top flange; the bottom flange is restrained by the end bearing bolts':'each flange'}. Out-of-plane buckling over 0.8 × the length between the innermost bolt rows, and net-section tension; full concurrent horizontal reaction plus conservative flexural/axial imperfection demands.`,['aisc-brace','aisc-e']);
  add('brace-stiffness','Bracing','Brace and connection stiffness in series',requiredK,brace.stiffness,'stiffness',plate?'k_{eff}=c^2\\left[L/(EA)+2/k_{connection}+c_{local}\\right]^{-1}':'k_{eff}=c^2\\left[L/(2EA)+2/k_{connection}+c_{local}\\right]^{-1}',(plate?'One flexible plate; single-plane bolt shear deformation, and the lap couple rotating both gussets (e²/k_gusset), are included. ':'')+'Gusset axial strain and bolt shear deformation are included at both ends. Direct flange saddles additionally include local flange, saddle, gusset and receiving-flange flexibility. Building deformation is excluded at the stated interface. Top-flange load amplification is included in Appendix 6 requirements.',['aisc-brace']);
  // The single flexible plate's single-shear laps are checked with the plate (plateTieChecks).
  if(!plate)checks.push(...lapChecks(p,d.brace.connection,'tie','Flange tie connection',(r.demands.brace+imperfection)/brace.cos,0,d.brace.gussetThickness,d.material.Fy,d.material.Fu));
+ }
  const bearingBolts=activeEndBearing(p);
- if(bearingBolts)checks.push(...endBearingChecks(p,bearingBolts,{analysis:a,lateral:r.demands.brace+imperfection}));
+ // The fork brings both flange forces to the bearing bolts.
+ const boltLateral=cap&&capR?Math.max(...capR.grids.map(v=>v.lateral.value))+imperfection:r.demands.brace+imperfection;
+ if(bearingBolts)checks.push(...endBearingChecks(p,bearingBolts,{analysis:a,lateral:boltLateral}));
  else checks.push(...lapChecks(p,d.end,'end','Girder end / longitudinal connection',a.axial,Math.max(a.reaction,a.uplift),p.section.tw,p.section.Fy,p.section.Fu));
  const bs=d.bearing,m=d.material,stiffener=bearingStiffener({width:bs.stiffenerWidth,thickness:bs.stiffenerThickness,cope:bs.cope,webThickness:p.section.tw,webDepth:strength.h,flangeThickness:p.section.tf,loadedWidth:p.section.bf,E:p.section.E,Fy:Math.min(m.Fy,p.section.Fy),method:p.method});
  add('stiffener-column','Local forces','Paired full-depth bearing stiffeners',a.reaction,stiffener.compression.capacity,'force','L_c=0.75h;\\quad A=2b_st_s+12t_w^2;\\quad P_n=F_{cr}A','Uses the smaller end effective web strip at every support. Fitted stiffeners, full-depth web welds; no reliance on the bare web strength.',['aisc-connections','aisc-e']);
@@ -139,7 +149,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const tieArea=2*d.brace.connection.weldLength*d.brace.connection.weldSize/Math.sqrt(2),endArea=2*d.end.weldLength*d.end.weldSize/Math.sqrt(2);
  // A single flexible plate's lap couple adds a force pair across the column gusset thickness on the root fillets.
  const lapFactor=plate?1+2*tieEccentricity(p)/d.brace.gussetThickness:1;
- add('tie-weld-fatigue','Fatigue','Flange-tie weld throat fatigue',r.demands.braceFatigue*lapFactor/(brace.cos*tieArea),weldRange,'stress',plate?'\\Delta f_w=\\frac{\\Delta F}{A_w}\\left(1+\\frac{2e}{t_g}\\right)\\le F_{SR,F}':'F_{SR}=\\max[55,690(1.5/n_{SR})^{0.167}]','Category F, AISC Table A-3.1 item 8.2. Full envelope range applied to every duty cycle conservatively; no fractional-duty reduction.'+(plate?' Includes the flexible plate lap couple ΔF·e as a force pair across the column gusset.':''),['aisc-fatigue']);
+ if(!cap)add('tie-weld-fatigue','Fatigue','Flange-tie weld throat fatigue',r.demands.braceFatigue*lapFactor/(brace.cos*tieArea),weldRange,'stress',plate?'\\Delta f_w=\\frac{\\Delta F}{A_w}\\left(1+\\frac{2e}{t_g}\\right)\\le F_{SR,F}':'F_{SR}=\\max[55,690(1.5/n_{SR})^{0.167}]','Category F, AISC Table A-3.1 item 8.2. Full envelope range applied to every duty cycle conservatively; no fractional-duty reduction.'+(plate?' Includes the flexible plate lap couple ΔF·e as a force pair across the column gusset.':''),['aisc-fatigue']);
  const root=(id:string,title:string,range:number,t:number,w:number)=>{const cap=transverseFilletFatigue(t,w,totalCycles);add(id,'Fatigue',title,range,cap.capacity,'stress','R_{FIL}=\\min[1,(0.103+1.24w/t_p)/t_p^{0.167}];\\quad F_{SR}=6900R_{FIL}(4.4/n)^{0.333}',`Plate stress at the paired transverse fillet root; RFIL=${cap.reduction.toFixed(4)}. No threshold for RFIL<1. Category C toe also bounds the root model.`,['aisc-fatigue']);};
  if(!bearingBolts){
  add('end-weld-fatigue','Fatigue','End weld-group fatigue',r.demands.verticalFatigue/endArea*(1+6*d.end.projection/d.end.weldLength),weldRange,'stress','\\Delta f_w\\le F_{SR,F}','Conservative direct-plus-eccentric full reaction range applied to every duty cycle. Longitudinal force is separately checked for full reversal below.',['aisc-fatigue']);
@@ -147,16 +157,18 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const endPlateRange=(2*Math.max(...p.cranes.map(c=>c.longitudinal)))/(2*d.end.thickness*d.end.weldLength)+6*r.demands.verticalFatigue*d.end.projection/(2*d.end.thickness*d.end.weldLength**2);
  root('end-root-fatigue','End plates · weld-root normal fatigue',endPlateRange,d.end.thickness,d.end.weldSize);
  }
- root('tie-root-fatigue','Tie gusset · weld-root normal fatigue',r.demands.braceFatigue/(brace.cos*d.brace.gussetThickness*d.brace.connection.weldLength)*(plate?1+6*tieEccentricity(p)/d.brace.gussetThickness:1),d.brace.gussetThickness,d.brace.connection.weldSize);
+ if(!cap)root('tie-root-fatigue','Tie gusset · weld-root normal fatigue',r.demands.braceFatigue/(brace.cos*d.brace.gussetThickness*d.brace.connection.weldLength)*(plate?1+6*tieEccentricity(p)/d.brace.gussetThickness:1),d.brace.gussetThickness,d.brace.connection.weldSize);
  add('stiffener-fatigue','Fatigue','Bearing stiffeners · plate fatigue',r.demands.verticalFatigue/(2*(bs.stiffenerWidth-bs.cope)*bs.stiffenerThickness)+r.demands.braceFatigue*strength.h/(2*bs.stiffenerThickness*bs.stiffenerWidth**2/6),fatigueSpectrumBin('C',1,totalCycles).allowable,'stress','\\Delta f=\\Delta R/A_{st};\\quad F_{SR,C}=6900(4.4/n)^{1/3}','Sum of full reaction axial range and full lateral-brace bending range through the stiffener pair, applied to every cycle.',['aisc-fatigue']);
  add('stiffener-weld-fatigue','Fatigue','Bearing stiffeners · weld throat fatigue',(r.demands.verticalFatigue+8*r.demands.braceFatigue)/(4*(strength.h-2*bs.cope)*bs.weldSize/Math.sqrt(2)),weldRange,'stress','\\Delta f_w=\\Delta R/A_w','Effective weld length excludes both end copes; full reaction range for all cycles.',['aisc-fatigue']);
  add('stiffener-weld-minimum','Detailing','Bearing stiffener minimum fillet',minimumFillet(Math.max(bs.stiffenerThickness,p.section.tw)),bs.weldSize,'length','w\\ge w_{min,J2.4}','Continuous welds both sides of both plates.');
  add('stiffener-weld-maximum','Detailing','Bearing stiffener fillet edge limit',bs.weldSize,Math.min(bs.stiffenerThickness,p.section.tw)-1.5875,'length','w\\le t_{min}-1/16\\,in','Full-throat edge buildup not credited.');
+ if(!cap){
  const gusset=d.brace.gussetThickness,gwidth=d.brace.connection.gauge+2*d.brace.connection.edge;
  add('tie-gusset-compression','Bracing','Tie gusset compression buckling',(r.demands.brace+imperfection)/brace.cos,compressionResistance(gwidth*gusset,gusset/Math.sqrt(12),2*d.brace.connectionLength,p.section.E,m.Fy,p.method).capacity,'force','P_n=F_{cr}A;\\quad L_c=2L_g','Unsupported gusset treated as a cantilever; full central-plate force, no beneficial load spreading.',['aisc-e']);
  checks.push(...flangeTieChecks(s,(r.demands.brace+imperfection)/brace.cos),...stiffenerTieChecks(s,(r.demands.brace+imperfection)/brace.cos));
  checks.push(...tieMovementChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,member:brace.member}));
  if(plate)checks.push(...plateTieChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,cos:brace.cos,member:brace.member}));
+ }
  checks.push(...railChecks(s),...capAttachmentChecks(s),...simpleSupportChecks(p,a.endRotation),...endStopChecks(p,{analysis:a,strength,props,holdDown:checks.find(c=>c.id==='hold-down-model')?.capacity??0}));
 
  return checks;
