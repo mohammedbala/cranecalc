@@ -5,6 +5,7 @@ import {capAngleGeometry,capAngleInput,isCapAngleTie,minimumEdge,slotEdgeIncreme
 import {activeEndBearing} from './endBearingInputs';
 import {simpleSupportInput} from './simpleSupports';
 import {wrenchClearance} from './endStop';
+import {columnStiffenerGeometry} from './columnStiffeners';
 import {railTopAboveSteel} from './railSeat';
 import {aiscAngleByName} from '../data/aiscAngles';
 import {aiscChannelByName as channelData} from '../data/aiscChannels';
@@ -282,6 +283,15 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  }else{
   const by=(id:string,title:string)=>checks.push({id,group:G,title,status:'excluded',equation:'',note:`The receiving column is by others: its flange takes the two-bolt pull ${force(x.Tc)} per bolt (strength) at ${len(2*cl.gauge)} spacing, ${len(x.ez)} from the column centerline; provide a stiffener at the tie level where needed.`,referenceIds:['cap-angle-basis']});
   by('cap-angle-column-flange','Column flange · bending under the two-bolt pull');
+ }
+ // The bracket's column stiffener pairs (J10.8, at the seat and the rib bottom) are below the tie: the lower column bolt,
+ // its nut inside the column flange, keeps the tightening clearance above the upper pair, and the end plate clears it.
+ const bs=col?columnStiffenerGeometry(p):undefined;
+ if(bs){
+  const seatToCap=d.bearing.thickness+sec.d+sec.capTw,upper=bs.levels.reduce((a,v)=>v.z>a.z?v:a,bs.levels[0]),stTop=upper.z+bs.t/2;
+  const bolt=seatToCap+Math.min(...cl.zs),plateBottom=seatToCap+ep.z0;
+  add('cap-angle-bracket-stiffener-clear',G,'Column bolts · clear of the bracket column stiffeners',C1c,bolt-stTop,'length','z_b-z_{st}\\ge C_1',
+   `AISC Manual Table 7-15 C1 = ${len(C1c)}: the lower column bolt, ${len(bolt)} above the top of the bracket seat, and its nut inside the column flange stay clear of the bracket's column stiffener pair at the ${upper.name} (top ${len(stTop)} above the seat, AISC J10.8); the end plate bottom is ${len(plateBottom-stTop)} above it.`,['cap-angle-basis','aisc-connections']);
  }
  // ---------------- Clearances
  const top=Math.max(g.endPlate.z1,g.plate.z1+lapHw.head+lapHw.washer.t);
