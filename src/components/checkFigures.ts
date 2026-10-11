@@ -1,7 +1,11 @@
 import type {ProjectInput} from '../engine/types';
+import {componentDetail,type Component} from './figureDetails';
+import {activeEndBearing} from '../engine/endBearingInputs';
 
 /** Shared explanatory linework for the live worksheet and server-rendered PDF.
- * Geometry is intentionally schematic: results and applicability stay in the checks.
+ * Black and white: the components a figure is about are drawn heavy with a light gray fill, everything else is
+ * thin context, and numbered markers follow the load path in the order the caption lists it. The caption names
+ * the actual detail from the project inputs. Geometry is schematic: results and applicability stay in the checks.
  * No SVG ids, external assets or calculated resistances are introduced here. */
 export const checkGroupPurpose:Record<string,string>={
  Strength:'Resist the governing bending, shear and combined actions without yielding or instability.',
@@ -25,109 +29,165 @@ export const checkGroupPurpose:Record<string,string>={
  'Longitudinal bracing':'Carry crane traction and stop forces, with the building\'s own wind and seismic forces, to the foundation.',
  'Brace connections':'Develop each rod through its clevis, pin and gusset into the column web and base plate.',
  'Crane-level strut':'Collect the girders\' longitudinal force at every column and carry it to the braced span.',
- 'Column cap':'Carry the girder reactions, the girder end fork restraint and the longitudinal force through the cap plate, its stiffeners, bolts and welds into the column.'
+ 'Column cap':'Carry the girder reactions, the girder end fork restraint and the longitudinal force through the cap plate, its stiffeners, bolts and welds into the column.',
+ 'End bearings':'Seat the girder ends and transfer longitudinal force and uplift through the bearing bolts.',
+ 'End stops':'Stop the crane: carry the bumper force through the stop and its bolts into the girder and the locating support.',
+ 'Tie movement':'Let the girder ends rotate and slide without overstressing the ties or their connections.'
 };
 export const worksheetFigureTopics:Record<string,string>={Geometry:'Geometry','Crane loads':'Loading',Criteria:'Criteria',Connections:'Connections',Validation:'Analysis','Existing building':'Interfaces',Project:'Project'};
 const escape=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-const ink='#34454a',accent='#146b78',muted='#65767b';
-const path=(d:string,focus=false,dashed=false)=>`<path d="${d}" fill="none" stroke="${focus?accent:ink}" stroke-width="${focus?2.2:1.3}"${dashed?' stroke-dasharray="4 3"':''} stroke-linejoin="round" stroke-linecap="round"/>`;
-const rect=(x:number,y:number,w:number,h:number,focus=false,dashed=false)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${focus?'#e1eff1':'white'}" stroke="${focus?accent:ink}" stroke-width="${focus?1.8:1.2}"${dashed?' stroke-dasharray="4 3"':''}/>`;
-const label=(x:number,y:number,text:string,anchor='middle',focus=false)=>`<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial, sans-serif" font-size="10" fill="${focus?accent:ink}">${escape(text)}</text>`;
-const circle=(x:number,y:number,r=3,focus=false)=>`<circle cx="${x}" cy="${y}" r="${r}" fill="white" stroke="${focus?accent:ink}" stroke-width="1.5"/>`;
-function arrow(x:number,y:number,tx:number,ty:number){
- const a=Math.atan2(ty-y,tx-x),size=5;
- return path(`M${x} ${y}L${tx} ${ty}`,true)+`<path d="M${tx} ${ty}L${tx-size*Math.cos(a-.48)} ${ty-size*Math.sin(a-.48)}L${tx-size*Math.cos(a+.48)} ${ty-size*Math.sin(a+.48)}Z" fill="${accent}"/>`;
+const ink='#000',fillFocus='#d4d4d4',muted='#444';
+const path=(d:string,focus=false,dashed=false)=>`<path d="${d}" fill="none" stroke="${ink}" stroke-width="${focus?2:.9}"${dashed?' stroke-dasharray="4 3"':''} stroke-linejoin="round" stroke-linecap="round"/>`;
+const rect=(x:number,y:number,w:number,h:number,focus=false,dashed=false)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${focus?fillFocus:'white'}" stroke="${ink}" stroke-width="${focus?1.6:.9}"${dashed?' stroke-dasharray="4 3"':''}/>`;
+const poly=(d:string,focus=false)=>`<path d="${d}" fill="${focus?fillFocus:'white'}" stroke="${ink}" stroke-width="${focus?1.6:.9}" stroke-linejoin="round"/>`;
+const label=(x:number,y:number,text:string,anchor='middle',bold=false)=>`<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial, sans-serif" font-size="9"${bold?' font-weight="700"':''} fill="${ink}">${escape(text)}</text>`;
+const circle=(x:number,y:number,r=3,focus=false)=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${focus?fillFocus:'white'}" stroke="${ink}" stroke-width="${focus?1.4:.9}"/>`;
+/** Load-path step marker: a circled number matching the caption. */
+const mark=(n:number,x:number,y:number)=>`<circle cx="${x}" cy="${y}" r="6.2" fill="white" stroke="${ink}" stroke-width="1.1"/><text x="${x}" y="${y+3.1}" text-anchor="middle" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="${ink}">${n}</text>`;
+/** A force: heavy shaft with a solid head. */
+function arrow(x:number,y:number,tx:number,ty:number,dashed=false){
+ const a=Math.atan2(ty-y,tx-x),size=6;
+ return `<path d="M${x} ${y}L${tx-3*Math.cos(a)} ${ty-3*Math.sin(a)}" fill="none" stroke="${ink}" stroke-width="1.7"${dashed?' stroke-dasharray="4 3"':''}/>`+`<path d="M${tx} ${ty}L${tx-size*Math.cos(a-.42)} ${ty-size*Math.sin(a-.42)}L${tx-size*Math.cos(a+.42)} ${ty-size*Math.sin(a+.42)}Z" fill="${ink}"/>`;
 }
-const dimension=(x:number,to:number,y:number,text:string,above=false)=>path(`M${x} ${y-4}V${y+4}M${to} ${y-4}V${y+4}M${x} ${y}H${to}`)+label((x+to)/2,above?y-7:y+13,text);
+const dimension=(x:number,to:number,y:number,text:string,above=false)=>path(`M${x} ${y-4}V${y+4}M${to} ${y-4}V${y+4}M${x} ${y}H${to}`)+label((x+to)/2,above?y-6:y+11,text);
 const support=(x:number,y:number)=>path(`M${x} ${y}l-6 9h12ZM${x-10} ${y+12}h20`);
-const beam=(y=55)=>rect(25,y,190,7)+support(30,y+7)+support(210,y+7);
-const column=()=>path('M194 13V94M207 13V94',false,true);
+const beam=(y=55,focus=false)=>rect(25,y,190,7,focus)+support(30,y+7)+support(210,y+7);
+const column=(x=194)=>path(`M${x} 6V112M${x+13} 6V112`,false,true);
+const hatch=(x0:number,x1:number,y:number)=>path(Array.from({length:Math.floor((x1-x0)/8)},(_,i)=>`M${x0+i*8} ${y+6}L${x0+i*8+6} ${y}`).join(''));
 function section(p:ProjectInput|undefined,x=72,y=31,focus=false,capped=p?.section.kind==='cap'){
  return rect(x,y,60,6,focus)+rect(x+27,y+6,6,45,focus)+rect(x,y+51,60,6,focus)+(capped?path(`M${x-5} ${y+14}V${y-6}H${x+65}V${y+14}`,true):'');
 }
+/** Rail on a top flange whose upper face is at y, centred at x. */
+const railOn=(x:number,y:number,focus=false)=>poly(`M${x-14} ${y}V${y-3}H${x-3}V${y-13}H${x-8}V${y-18}H${x+8}V${y-13}H${x+3}V${y-3}H${x+14}V${y}Z`,focus);
 function geometry(p?:ProjectInput){
- const n=Math.max(1,Math.min(6,p?.spans.length??3)),step=192/n;
- return Array.from({length:n},(_,i)=>rect(24+i*step+(p?.system==='simple'?2:0),45,step-(p?.system==='simple'?4:0),7)).join('')+
+ const n=Math.max(1,Math.min(6,p?.spans.length??3)),step=192/n,gap=p?.system==='simple'?2:0;
+ return Array.from({length:n},(_,i)=>rect(24+i*step+gap,45,step-2*gap,7,true)).join('')+
   Array.from({length:n+1},(_,i)=>support(24+i*step,52)).join('')+
-  Array.from({length:n},(_,i)=>label(24+(i+.5)*step,85,`L${i+1}`)).join('')+
-  label(120,21,p?.system==='continuous'?'CONTINUOUS GIRDER':'INDEPENDENT SPANS');
+  Array.from({length:n},(_,i)=>label(24+(i+.5)*step,88,`L${i+1}`)).join('')+
+  arrow(24+step*.35,22,24+step*.35,43)+arrow(24+step*.35+16,22,24+step*.35+16,43)+label(24+step*.35+8,18,'P')+
+  arrow(24+step,104,24+step,68)+label(24+step+6,100,'R','start')+
+  label(150,14,p?.system==='continuous'?'CONTINUOUS GIRDER':'INDEPENDENT SPANS')+
+  mark(1,24+step*.35-12,30)+mark(2,24+step*.5+(n>1?0:20),62)+mark(3,24+step-12,96);
 }
-function tie(p?:ProjectInput,attachment=false):{linework:string;title:string;note:string}{
- const kind=p?.details?.brace.arrangement??'paired-bars';
+type Drawing={linework:string;title:string;note:string;path:string[];detail:Component[]};
+function tie(p?:ProjectInput,attachment=false):Drawing{
+ const kind=p?.details?.brace.arrangement??'paired-bars',topOnly=!!(p&&activeEndBearing(p));
  const a=kind==='double-angle'?p?.details?.brace.doubleAngle:p?.details?.brace.singleAngle;
  const angle=kind==='single-angle'||kind==='double-angle',top=angle&&a?.connectionStyle==='top-flange-angle';
- let drawing=section(p,31,35)+column();
- let title='Flange ties and their attachments',note='Follow lateral force from the girder flange through the tie and into the column.';
+ let drawing=section(p,31,35)+column()+railOn(61,p?.section.kind==='cap'?29:35)+arrow(22,23,46,23)+label(16,26,'H','end',true);
+ let title='Flange ties and their attachments',note='Side thrust and torsion reach the top flange; the ties carry the flange forces to the column.';
+ let steps=['Side thrust H at the rail head loads the top flange','Tie carries the flange force in tension or compression','Bolts and gusset deliver it to the column'];
  if(top){
   drawing+=rect(81,26,108,5,true)+path('M162 31H190V69H184V37H162',true)+rect(191,33,3,36)+path('M180 49H213M180 61H213')+rect(176,46,7,6)+rect(176,58,7,6)+path('M171 21V43');
   if(kind==='double-angle')drawing+=path('M162 26H184V12H190V26',true);
-  drawing+=label(121,15,'TOP TIE', 'middle',true)+label(148,94,'SLOTS / SHIMS')+path('M149 83L178 65');
+  drawing+=label(121,15,'TOP TIE')+label(148,100,'SLOTS / SHIMS')+path('M149 90L178 65');
   title=kind==='double-angle'?'Top-flange tie with paired clip angles':'Top-flange tie with slotted clip angle';
   note='Review top plate, slotted angles, bolts, shims and receiving column. No lower-flange tie is provided; this option still requires its design model.';
+  steps=['Side thrust H at the rail head loads the top flange','Top plate and slotted clip angle','Bolts and shims to the column'];
  }else if(angle){
-  drawing+=path('M83 44H190V51H83ZM83 74H190V81H83',true)+path('M89 39V58M89 70V89M185 39V58M185 70V89');
+  drawing+=poly('M83 44H190V51H83Z',true)+poly('M83 74H190V81H83Z',true)+path('M89 39V58M89 70V89M185 39V58M185 70V89');
   if(kind==='double-angle')drawing+=path('M83 54H190M83 84H190',true);
   drawing+=label(139,21,'ANGLE / GUSSETS');title=kind==='double-angle'?'Paired gusseted angle ties':'Gusseted angle ties';
   note='Review the selected angle, gussets, welds and eccentric load path. This option requires its own stiffness, movement and strength model.';
  }else if(kind==='flexible-plate'){
-  drawing+=rect(87,43,105,31,true)+path('M114 83Q140 94 168 83',true,true)+label(138,21,'FLEXIBLE PLATE');
+  drawing+=rect(87,33,105,12,true)+(topOnly?'':rect(87,76,105,12,true))+path('M114 52Q140 60 168 52',false,true)+label(138,22,'FLEXIBLE PLATE');
   title='Flexible plate tieback';note='One plate in single shear on the saddle and column gussets: axial force, lap couple, weak-axis movement and fatigue.';
+  steps=['Side thrust H at the rail head loads the top flange','Flexible plate in single shear (axial force and lap couple)','Bolts and column gusset to the column'];
  }else if(kind==='bearing-link'||kind==='paired-links'){
   for(const y of kind==='paired-links'?[44,76]:[58])drawing+=path(`M99 ${y}H180`,true)+circle(96,y,7,true)+circle(183,y,7,true);
   drawing+=label(140,21,'PINS / LINKS');title=kind==='paired-links'?'Paired articulated links':'Articulated bearing link';
   note='Review link force, pin and clevis transfer, articulation and supplier ratings. This option requires its connection design model.';
+  steps=['Side thrust H at the rail head loads the top flange','Link and pins carry the force','Clevis to the column'];
  }else{
-  for(const y of [42,75])drawing+=rect(83,y,111,7,true)+[96,180].map(x=>circle(x,y+3.5,2)).join('');
-  drawing+=label(140,20,attachment?'FLANGE / SADDLE':'TOP + BOTTOM TIES');
-  if(attachment)drawing+=path('M82 37V56H98M82 68V89H98',true);
+  for(const y of topOnly?[38]:[38,80])drawing+=rect(83,y,111,6,true)+[96,180].map(x=>circle(x,y+3,2)).join('');
+  drawing+=label(140,22,attachment?'FLANGE / SADDLE':topOnly?'TOP TIE BARS':'TOP + BOTTOM TIES');
+  if(attachment)drawing+=path(topOnly?'M82 33V49H98':'M82 33V49H98M82 75V91H98',true);
  }
- drawing+=arrow(117,60,168,60)+label(140,55,'H', 'middle',true);
- return {linework:drawing,title:attachment&&!angle?'Local flange, saddle and weld transfer':title,note:attachment&&!angle?'Trace tie force through the saddle welds into the flange; check local bending, flexibility and cyclic stress.':note};
+ drawing+=arrow(120,62,170,62)+label(145,57,'H')+mark(1,30,12)+mark(2,108,52)+mark(3,222,52);
+ if(attachment&&!angle)return {linework:drawing,title:'Local flange, saddle and weld transfer',note:'Trace tie force through the saddle welds into the flange; check local bending, flexibility and cyclic stress.',path:['Tie force at the girder gusset','Saddle and its fillet welds','Local flange strip bending, column gusset root'],detail:['tie']};
+ return {linework:drawing,title,note,path:steps,detail:['tie']};
 }
-function bracket(p?:ProjectInput){
+function bracket(p?:ProjectInput):Drawing{
  const enabled=p?.details?.bracket?.enabled!==false,kind=p?.details?.bracket?.arrangement??'twin-rib',existing=kind.startsWith('existing-');
- let drawing=column()+rect(57,44,137,6,true)+path('M74 41H113M91 21V41M74 21H113');
- if(!enabled)return {linework:section(p,88,15)+support(118,72),title:'Girder bearing and support reaction',note:'Review the bearing reaction and the assumed support. Bracket component design is not enabled.'};
- if(kind==='haunched-seat')drawing+=path('M62 50H193V85L62 60Z',true);
- else if(kind==='twin-rib')drawing+=rect(62,50,131,32,true);
- else drawing+=rect(62,51,131,5,!existing,existing)+rect(62,82,131,5,!existing,existing)+path('M62 69H193',!existing,existing);
- if(existing)drawing+=path('M71 39V58M165 39V58')+label(128,78,'EXISTING');
- drawing+=arrow(91,4,91,20)+label(104,13,'R', 'start',true)+dimension(91,194,93,'e')+path('M189 51V82',true);
- return {linework:drawing,title:existing?'New seat on existing I-bracket':kind==='haunched-seat'?'Haunched seat load path':kind==='rolled-corbel'?'Wide-flange bracket load path':'Seat, ribs and column root',note:existing?'Check the new seat and eccentric reaction against the documented assessment of the existing bracket and receiving steel.':kind==='twin-rib'?'Trace reaction R through the seat and ribs. Eccentricity e produces root moment; check welds and local column effects.':kind==='haunched-seat'?'Trace reaction R through the seat into the tapered ribs. R(e − x) peaks against the shrinking section at the critical section of the taper; check the sloping free edge, root welds and local column effects.':kind==='rolled-corbel'?'Trace reaction R through the W stub to its welds on the column. Eccentricity e bends the stub; the bearing offsets along the runway twist it. Check the web under the bearing, the stiffeners, the weld group and local column effects.':'Trace reaction and eccentricity through the selected bracket. This alternative still requires its own strength and connection design model.'};
+ const girderEnd=rect(66,14,50,5)+rect(88,19,6,22)+rect(66,41,50,5)+rect(70,46,42,4,true);
+ if(!enabled)return {linework:section(p,88,15)+rect(92,72,52,5,true)+support(118,77)+arrow(160,4,160,30)+label(166,14,'R','start')+mark(1,176,30)+mark(2,152,74)+mark(3,140,98)+label(120,112,'SEAT BY OTHERS'),title:'Girder bearing and support reaction',note:'Review the bearing reaction and the assumed support. Bracket component design is not enabled.',path:['Girder reaction R','Bearing plate on the support','Support by others, designed for the reported forces'],detail:['bearing','support']};
+ let drawing=column()+girderEnd+rect(57,50,137,6,true);
+ if(kind==='haunched-seat')drawing+=poly('M62 56H193V100L62 68Z',true);
+ else if(kind==='twin-rib')drawing+=rect(62,56,131,36,true);
+ else drawing+=rect(62,57,131,5,!existing,existing)+rect(62,90,131,5,!existing,existing)+path('M62 76H193',!existing,existing)+(kind==='rolled-corbel'?rect(124,62,5,28,true):'');
+ if(existing)drawing+=label(128,84,'EXISTING');
+ drawing+=arrow(91,0,91,12)+label(99,9,'R','start',true)+dimension(91,194,108,'e')+path('M189 57V92',true)+
+  mark(1,77,6)+mark(2,140,42)+mark(3,128,74)+mark(4,180,100)+mark(5,222,60);
+ const steps=existing?['Girder reaction R at the bearing','New bolted seat plate','Existing bracket (documented assessment)','Existing root welds','Column flange']:
+  kind==='rolled-corbel'?['Girder reaction R at the bearing','Spreader seat / stub top flange','W stub: bending R·e and torsion','Flange and web welds to the column','Column flange and web (J10)']:
+  ['Girder reaction R at the bearing','Seat plate spans between the ribs',kind==='haunched-seat'?'Tapered ribs: R·(e − x) at the critical section':'Ribs: root moment R·e and shear','Root fillet welds','Column flange and web (J10)'];
+ return {linework:drawing,title:existing?'New seat on existing bracket':kind==='haunched-seat'?'Haunched seat bracket':kind==='rolled-corbel'?'Wide-flange stub bracket':'Twin-rib bracket',
+  note:existing?'Check the new seat and eccentric reaction against the documented assessment of the existing bracket and receiving steel.':kind==='twin-rib'?'Trace reaction R through the seat and ribs. Eccentricity e produces root moment; check welds and local column effects.':kind==='haunched-seat'?'Trace reaction R through the seat into the tapered ribs. R(e − x) peaks against the shrinking section at the critical section of the taper; check the sloping free edge, root welds and local column effects.':kind==='rolled-corbel'?'Trace reaction R through the W stub to its welds on the column. Eccentricity e bends the stub; the bearing offsets along the runway twist it. Check the web under the bearing, the stiffeners, the weld group and local column effects.':'Trace reaction and eccentricity through the selected bracket. This alternative still requires its own strength and connection design model.',
+  path:steps,detail:['support']};
 }
-
-export function checkFigure(topic:string,p?:ProjectInput):{title:string;note:string;svg:string}{
- let title=topic,note=checkGroupPurpose[topic]??'Review the stated inputs, calculation basis and acceptance limits.',drawing='';
+export interface CheckFigure{title:string;note:string;svg:string;path:string[];detail:string}
+export function checkFigure(topic:string,p?:ProjectInput):CheckFigure{
+ let title=topic,note=checkGroupPurpose[topic]??'Review the stated inputs, calculation basis and acceptance limits.',drawing='',steps:string[]=[],detail:Component[]=[];
  switch(topic){
-  case 'Geometry':title='Spans, supports and member';note=`${p?.spans.length??3} ${p?.system==='continuous'?'continuous':'independent'} bay(s). Section properties and restraint lengths establish the member model.`;drawing=geometry(p);break;
-  case 'Section':title=p?.section.kind==='cap'?'Capped section properties':'Girder section properties';note='Section geometry establishes bending stiffness, resistance, torsional stiffness and warping properties.';drawing=section(p,83,34)+dimension(83,143,17,'bf',true)+path('M160 34V91M156 34H164M156 91H164')+label(169,66,'d','start')+path('M56 62H149M113 29V96',false,true)+label(114,113,'Ix / Iy · J / Cw');break;
-  case 'Strength':title='Bending, shear and combined actions';drawing=beam()+arrow(85,13,85,50)+arrow(151,13,151,50)+label(119,15,'P')+path('M30 84Q120 117 210 84',true)+label(120,87,'M / V / N', 'middle',true);break;
-  case 'Loading':title='Wheel loads and reversible thrust';drawing=beam()+[74,153].map(x=>circle(x,45,7)+arrow(x,15,x,34)+label(x-12,25,'P')).join('')+arrow(94,33,136,33)+arrow(136,33,94,33)+label(115,22,'H', 'middle',true)+dimension(74,153,83,'wheel spacing');break;
-  case 'Criteria':title='Operating limits and duty';drawing=path('M32 21V82H102M41 71L57 55L73 65L92 34',true)+label(68,100,'DUTY / CYCLES')+path('M137 45H219',false,true)+path('M137 45Q178 73 219 45',true)+arrow(177,45,177,59)+label(179,25,'MOVEMENT LIMIT');break;
-  case 'Serviceability':title='Deflection and rail movement';drawing=path('M25 35H215',false,true)+path('M25 35Q120 91 215 35',true)+support(25,35)+support(215,35)+arrow(120,36,120,62)+label(131,48,'δ', 'start',true)+dimension(25,215,85,'L · compare δ with limit');break;
-  case 'Cap channel':title=p?.section.kind==='cap'?'Cap welds and load transfer':'Cap channel applicability';drawing=section(p,77,38,false,true)+path('M72 52l6 -7M142 52l-6 -7',true)+arrow(107,4,107,23)+path('M160 27L142 47')+label(166,22,'WELDS')+label(108,105,'BEAM + CAP');if(p?.section.kind!=='cap')note='No cap channel is selected. Cap attachment and composite-section checks are not applicable.';break;
-  case 'Local forces':title='Wheel patch and bearing zone';drawing=path('M32 36H208V43H32ZM32 79H208V86H32ZM32 61H208')+rect(167,43,6,36,true)+rect(158,87,31,5,true)+arrow(73,8,73,35)+arrow(173,111,173,94)+path('M65 43l-18 34M80 43l18 34',true,true)+label(108,17,'P')+label(195,105,'R')+label(96,103,'WEB / STIFFENER');break;
-  case 'Bracing':title='Restraint and unbraced length';drawing=rect(25,44,190,10)+path('M30 49Q93 27 155 49',true,true)+[30,155,210].map(x=>path(`M${x} 43V27`,true)+path(`M${x-6} 24l6 9 6 -9Z`,true)).join('')+dimension(30,155,75,'Lb')+label(122,15,'LATERAL RESTRAINT');break;
-  case 'Fatigue':title='Stress range at a cyclic detail';drawing=path('M34 18V83H206')+path('M40 54Q50 7 63 54T87 54T111 54T135 54T159 54T183 54',true)+path('M39 31H203M39 77H203',false,true)+arrow(199,31,199,77)+arrow(199,77,199,31)+label(216,57,'Δσ', 'middle',true)+label(119,101,'REPEATED CYCLES');break;
-  case 'Detailing':title='Bolt layout and movement allowance';drawing=rect(33,30,174,46)+[65,168].map(x=>`<rect x="${x-13}" y="47" width="26" height="12" rx="6" fill="none" stroke="${accent}" stroke-width="2"/>`+circle(x,53,4)).join('')+dimension(33,65,20,'edge',true)+dimension(65,168,88,'pitch / travel')+path('M117 44H185',false,true);break;
-  case 'Connections':case 'Flange attachment':({title,note,linework:drawing}=tie(p,topic==='Flange attachment'));break;
-  case 'Column bracket':({title,note,linework:drawing}=bracket(p));break;
-  case 'Rail details':title='Rail, keeper and local flange';drawing=rect(48,84,151,6)+path('M101 78V47H94V39H143V47H136V78H155V84H82V78Z')+rect(68,77,21,7,true)+rect(149,77,21,7,true)+circle(119,24,12)+arrow(119,2,119,10)+arrow(169,55,139,55)+label(181,58,'H', 'start',true)+path('M37 53L68 77')+label(42,46,'KEEPER');break;
-  case 'Analysis':title='Equilibrium and refinement';drawing=beam(48)+[82,155].map(x=>arrow(x,12,x,43)).join('')+arrow(30,105,30,78)+arrow(210,105,210,78)+[55,82,109,136,163,190].map(x=>circle(x,52,2,true)).join('')+label(120,92,'ΣR = ΣP', 'middle',true)+label(120,112,'refine travel + stations');break;
-  case 'Longitudinal bracing':title='Crane-level longitudinal bracing';drawing=path('M40 100H200')+path('M60 100V22M180 100V22M60 22H180')+path('M60 100L180 22M60 22L180 100',true)+arrow(18,22,56,22)+label(30,15,'H')+label(120,113,'BRACED BAY · TIERS · DIAGONALS');note='Traction or stop force and building wind/seismic forces resolve into the braced-bay diagonals; columns and foundation take the overturning.';break;
-  case 'Brace connections':title='Rod end, clevis and gusset';drawing=path('M70 12V104M90 12V104')+path('M90 30H150L170 58L150 74H90Z',true)+circle(150,52,6,true)+path('M156 56L222 100',true)+path('M222 94L226 104',false,true)+arrow(206,90,178,72)+label(196,112,'T = ROD STRENGTH')+label(120,24,'GUSSET');note='The clevis pin bears on the gusset, which tears out beyond the pin, ruptures across it or yields on its Whitmore section; its fillets carry the force into the column web, which bends out of its plane.';break;
-  case 'Crane-level strut':title='Strut collecting the longitudinal force';drawing=path('M40 104V20M120 104V20M200 104V20')+rect(40,34,160,7,true)+rect(14,22,20,6)+arrow(10,25,36,25)+path('M120 41L200 104',false,true)+label(24,16,'F','middle',true)+label(120,62,'STRUT')+label(160,112,'BRACED SPAN');note='Each girder brings its longitudinal force to its locating column at the bracket; the strut carries it in compression or tension to the braced span, with its own weight, end bolts and the seat weld at the column.';break;
-  case 'Column cap':title='Girder bearing on a column cap';drawing=path('M98 104V58M142 104V58')+rect(78,52,84,6,true)+rect(92,46,56,6)+rect(84,40,72,6)+path('M120 40V8')+path('M104 40V14M136 40V14',true)+arrow(120,0,120,30)+label(132,8,'R','start')+arrow(196,24,160,24)+label(204,28,'H','start')+path('M112 46V66M128 46V66',false,true)+label(58,58,'CAP PL','middle',true)+label(120,114,'COLUMN, WEB UNDER GIRDER','middle');note='The girder sits centered on the column: its bearing stiffeners and bolted bottom flange form a fork that restrains the girder end, and the cap plate, cap stiffeners and all-around welds carry the reaction, lateral and longitudinal forces into the column.';break;
-  case 'New column':title='New freestanding runway column';drawing=path('M96 104V12M112 104V12')+rect(112,30,40,6)+rect(137,22,14,8,true)+arrow(160,8,160,24)+arrow(176,14,150,14)+label(166,6,'V')+label(186,17,'H','start')+path('M84 104H124')+label(60,60,'FIXED','middle')+label(60,70,'BASE','middle')+label(160,90,'CANTILEVER','middle');note='The new column carries the girder on its bracket as a fixed-base cantilever across the runway: axial load, eccentric and side-thrust moments, shear, H1 interaction and drift at the rail.';break;
-  case 'New column base':title='Base plate, anchor rods and footing';drawing=path('M104 12V58M116 12V58')+rect(84,58,52,5)+rect(82,63,56,3,true)+rect(52,66,116,30)+path('M92 58V88M128 58V88',true)+arrow(110,2,110,12)+label(124,8,'P, M, V','start')+path('M52 104L60 96M64 104L72 96M76 104L84 96M88 104L96 96M100 104L108 96M112 104L120 96M124 104L132 96M136 104L144 96M148 104L156 96M160 104L168 96',false,true)+label(110,112,'SOIL BEARING / OVERTURNING','middle');note='Base reactions pass through the base plate (Design Guide 1), the anchor rods (ACI 318 Chapter 17) and the spread footing to the soil: bearing, overturning, sliding, shear, flexure and development.';break;
-  case 'Existing column':case 'Supporting structure':case 'Interfaces':title=topic==='Existing column'?'Existing column: crane plus building loads':'Forces transferred to the building';drawing=column()+rect(49,47,145,8)+arrow(107,17,107,42)+arrow(129,33,184,33)+arrow(210,69,210,93)+label(103,13,'V')+label(151,25,'H / N')+label(116,89,'CONCURRENT ACTIONS');note='Retain simultaneous signed reactions when transferring forces to the separately designed building.';break;
-  default:title='Inputs, checks and report record';drawing=[26,100,174].map((x,i)=>rect(x,29,43,45)+path(`M${x+9} 42h25M${x+9} 51h25M${x+9} 60h17`)+label(x+21,93,['INPUT','CHECK','REPORT'][i])).join('')+arrow(75,51,94,51)+arrow(149,51,168,51);note='Record project inputs, calculation revision and references. Export is controlled by the actual validation results.';
+  case 'Geometry':title='Spans, supports and member';note=`${p?.spans.length??3} ${p?.system==='continuous'?'continuous':'independent'} bay(s). Section properties and restraint lengths establish the member model.`;drawing=geometry(p);steps=['Wheel loads P on the girder','Girder spans grid to grid','Reactions R at the supports'];detail=['girder'];break;
+  case 'Section':title=p?.section.kind==='cap'?'Capped section properties':'Girder section properties';note='Section geometry establishes bending stiffness, resistance, torsional stiffness and warping properties.';
+   drawing=section(p,83,34,true)+railOn(113,p?.section.kind==='cap'?28:34)+arrow(113,0,113,9)+arrow(72,13,96,13)+label(66,16,'H','end')+dimension(83,143,103,'bf')+path('M160 34V91M156 34H164M156 91H164')+label(166,66,'d','start')+path('M60 62H150',false,true)+circle(113,66,2.5)+label(176,32,'Ix / Iy · J / Cw','start')+mark(1,127,6)+mark(2,100,74)+mark(3,186,56);
+   steps=['Wheel load and side thrust at the rail head','Eccentric to the shear center: torsion and warping','Section resists Mx, My, T'];detail=['girder'];break;
+  case 'Strength':title='Bending, shear and combined actions';drawing=beam(55,true)+arrow(85,13,85,52)+arrow(151,13,151,52)+label(118,15,'P')+path('M30 84Q120 117 210 84',false,true)+label(120,90,'M / V')+mark(1,72,24)+mark(2,120,106)+mark(3,222,70);
+   steps=['Wheel loads P and side thrust H','Girder bending Mx, flange bending and shear (H1, H3 with torsion)','Reactions to the supports'];detail=['girder'];break;
+  case 'Loading':title='Wheel loads and reversible thrust';drawing=beam()+[74,153].map(x=>circle(x,45,7,true)+arrow(x,10,x,35)+label(x-10,22,'P','end')).join('')+arrow(98,30,134,30)+arrow(134,30,98,30)+label(116,22,'H')+arrow(168,46,204,46)+label(208,49,'F','start')+dimension(74,153,86,'wheel spacing')+mark(1,90,10)+mark(2,116,44)+mark(3,186,36);
+   steps=['Wheel loads P with impact','Side thrust H, either direction','Traction F along the runway'];detail=['crane'];break;
+  case 'Criteria':title='Operating limits and duty';drawing=path('M32 21V82H102M41 71L57 55L73 65L92 34',true)+label(68,98,'DUTY / CYCLES')+path('M137 45H219',false,true)+path('M137 45Q178 73 219 45',true)+arrow(177,45,177,59)+label(179,25,'MOVEMENT LIMIT')+mark(1,22,12)+mark(2,196,70);
+   steps=['Building class and load cycles','Deflection and movement limits'];detail=['criteria'];break;
+  case 'Serviceability':title='Deflection and rail movement';drawing=path('M25 35H215',false,true)+path('M25 35Q120 91 215 35',true)+support(25,35)+support(215,35)+arrow(96,6,96,46)+label(88,14,'P','end')+arrow(120,36,120,62)+label(126,52,'δ','start')+dimension(25,215,94,'L · δ ≤ L / n')+mark(1,108,14)+mark(2,146,58);
+   steps=['One crane, static wheel loads (no impact)','Vertical and rail-head lateral deflection δ ≤ L / n'];detail=['criteria'];break;
+  case 'Cap channel':title=p?.section.kind==='cap'?'Cap welds and load transfer':'Cap channel applicability';drawing=section(p,77,38,false,true)+railOn(107,32)+path('M72 52l6 -7M142 52l-6 -7',true)+arrow(107,0,107,13)+path('M160 27L142 47')+label(166,22,'WELDS','start')+label(108,110,'BEAM + CAP')+mark(1,118,6)+mark(2,152,58)+mark(3,62,78);
+   steps=['Wheel load into the cap channel','Cap-to-flange fillets carry the shear flow VQ/I','Composite section; welds developed at the cap ends'];detail=['girder'];if(p?.section.kind!=='cap')note='No cap channel is selected. Cap attachment and composite-section checks are not applicable.';break;
+  case 'Local forces':title='Wheel patch and bearing zone';drawing=path('M32 36H208V43H32ZM32 79H208V86H32Z')+path('M32 61H208',false,true)+rect(167,43,6,36,true)+rect(158,86,31,5,true)+railOn(73,36)+arrow(73,0,73,17)+arrow(173,114,173,93)+path('M65 43l-18 34M80 43l18 34',true,true)+label(80,9,'P','start')+label(181,110,'R','start')+mark(1,58,10)+mark(2,73,64)+mark(3,190,60)+mark(4,148,104);
+   steps=['Wheel P through the rail onto the flange','Web local yielding and crippling over the patch','Reaction R into the bearing stiffeners','Stiffeners and bearing plate on the seat'];detail=['bearing'];break;
+  case 'Bracing':title='Restraint and unbraced length';drawing=rect(25,44,190,10,true)+path('M30 49Q93 27 155 49',false,true)+[30,155,210].map(x=>path(`M${x} 43V30`)+path(`M${x-6} 27l6 9 6 -9Z`)).join('')+arrow(92,8,92,40)+label(98,16,'H','start')+dimension(30,155,76,'Lb')+label(185,16,'TIES')+mark(1,80,14)+mark(2,170,30)+mark(3,60,92);
+   steps=['Lateral force H on the top flange','Ties restrain the flange at the supports (finite stiffness)','Flange buckles between ties: Lb'];detail=['tie'];break;
+  case 'Fatigue':title='Stress range at a cyclic detail';drawing=path('M34 18V83H206')+path('M40 54Q50 7 63 54T87 54T111 54T135 54T159 54T183 54',true)+path('M39 31H203M39 77H203',false,true)+arrow(199,31,199,77)+arrow(199,77,199,31)+label(216,57,'Δσ')+label(119,101,'REPEATED CYCLES n')+mark(1,52,12)+mark(2,222,40)+mark(3,62,101);
+   steps=['Each wheel passage gives a stress range Δσ at the detail','Detail category: AISC 360 Appendix 3','Cycles n in each duty bin; Miner sum'];detail=['criteria'];break;
+  case 'Detailing':title='Bolt layout and movement allowance';drawing=rect(33,30,174,46,true)+[65,168].map(x=>`<rect x="${x-13}" y="47" width="26" height="12" rx="6" fill="white" stroke="${ink}" stroke-width="1.4"/>`+circle(x,53,4)).join('')+dimension(33,65,20,'edge',true)+dimension(65,168,90,'pitch / travel')+path('M117 44H185',false,true)+mark(1,20,40)+mark(2,200,96);
+   steps=['Edge distance and pitch of each bolt','Slot length for the movement'];detail=['tie'];break;
+  case 'Connections':case 'Flange attachment':({title,note,linework:drawing,path:steps,detail}=tie(p,topic==='Flange attachment'));break;
+  case 'Column bracket':({title,note,linework:drawing,path:steps,detail}=bracket(p));break;
+  case 'Rail details':title='Rail, keeper and local flange';drawing=rect(40,86,160,7,true)+rect(72,82,96,4)+poly('M82 82V76H113V52H104V40H136V52H127V76H158V82Z')+rect(66,74,15,8,true)+rect(159,74,15,8,true)+circle(120,22,13)+arrow(120,0,120,9)+arrow(176,46,140,46)+label(180,49,'H','start')+path('M196 76L176 79')+label(198,74,'KEEPER','start')+mark(1,104,14)+mark(2,30,82)+mark(3,190,36)+mark(4,52,70);
+   steps=['Wheel P on the rail head','Rail base bears on the pad and flange','Side thrust H on the rail head','Keepers and their welds to the flange'];detail=['rail'];break;
+  case 'Analysis':title='Equilibrium and refinement';drawing=beam(48,true)+[82,155].map(x=>arrow(x,12,x,45)).join('')+arrow(30,108,30,74)+arrow(210,108,210,74)+[55,82,109,136,163,190].map(x=>circle(x,52,2)).join('')+label(120,92,'ΣR = ΣP')+label(120,110,'refine travel + stations')+mark(1,70,20)+mark(2,44,100)+mark(3,166,72);
+   steps=['Wheel loads ΣP','Reactions ΣR: equilibrium','Refine crane travel and mesh until converged'];detail=['girder'];break;
+  case 'Longitudinal bracing':title='Crane-level longitudinal bracing';drawing=path('M40 100H200')+path('M60 100V22M180 100V22M60 22H180')+path('M60 100L180 22M60 22L180 100',true)+arrow(14,22,56,22)+label(26,15,'F')+label(120,113,'BRACED BAY · TIERS · DIAGONALS')+mark(1,40,34)+mark(2,148,52)+mark(3,196,92);note='Traction or stop force and building wind/seismic forces resolve into the braced-bay diagonals; columns and foundation take the overturning.';
+   steps=['Longitudinal force F at crane level','Diagonal in tension','Columns and foundation take the overturning'];detail=['bracing'];break;
+  case 'Brace connections':title='Rod end, clevis and gusset';drawing=path('M70 12V104M90 12V104')+poly('M90 30H150L170 58L150 74H90Z',true)+circle(150,52,6)+path('M156 56L222 100',true)+arrow(206,90,178,72)+label(196,113,'T = ROD STRENGTH')+label(120,24,'GUSSET')+mark(1,222,84)+mark(2,150,36)+mark(3,120,64)+mark(4,80,92);note='The clevis pin bears on the gusset, which tears out beyond the pin, ruptures across it or yields on its Whitmore section; its fillets carry the force into the column web, which bends out of its plane.';
+   steps=['Rod force T (rod strength)','Clevis pin bears on the gusset','Gusset: tear-out, rupture, Whitmore yield','Fillets to the column web'];detail=['bracing'];break;
+  case 'Crane-level strut':title='Strut collecting the longitudinal force';drawing=path('M40 104V20M120 104V20M200 104V20')+rect(40,34,160,7,true)+rect(14,22,20,6)+arrow(4,25,36,25)+path('M120 41L200 104',false,true)+label(14,16,'F')+label(80,58,'STRUT')+label(160,113,'BRACED SPAN')+mark(1,26,40)+mark(2,100,26)+mark(3,176,72);note='Each girder brings its longitudinal force to its locating column at the bracket; the strut carries it in compression or tension to the braced span, with its own weight, end bolts and the seat weld at the column.';
+   steps=['Girder longitudinal force F at each locating column','Strut in compression or tension','Braced span'];detail=['bracing'];break;
+  case 'Column cap':title='Girder bearing on a column cap';drawing=path('M98 112V58M142 112V58')+rect(78,52,84,6,true)+rect(92,46,56,6,true)+rect(84,40,72,6)+path('M120 40V14')+path('M104 40V14M136 40V14',true)+arrow(120,0,120,30)+label(126,8,'R','start')+arrow(200,24,162,24)+label(204,27,'H','start')+path('M112 58V78M128 58V78',true,true)+label(44,59,'CAP PL')+label(120,118,'COLUMN')+mark(1,108,8)+mark(2,150,32)+mark(3,72,44)+mark(4,156,74);note='The girder sits centered on the column: its bearing stiffeners and bolted bottom flange form a fork that restrains the girder end, and the cap plate, cap stiffeners and all-around welds carry the reaction, lateral and longitudinal forces into the column.';
+   steps=['Girder reaction R and side force H','Bearing stiffeners and bolted bottom flange (fork)','Cap plate','Cap stiffeners and welds into the column'];detail=['support'];break;
+  case 'New column':title='New freestanding runway column';drawing=rect(96,12,16,92,true)+rect(112,30,40,6)+rect(137,22,14,8)+arrow(160,4,160,24)+arrow(184,14,154,14)+label(166,8,'V','start')+label(188,17,'H','start')+path('M84 104H124')+hatch(84,124,104)+label(58,60,'FIXED')+label(58,70,'BASE')+label(170,92,'CANTILEVER')+mark(1,176,30)+mark(2,128,50)+mark(3,84,40)+mark(4,140,108);note='The new column carries the girder on its bracket as a fixed-base cantilever across the runway: axial load, eccentric and side-thrust moments, shear, H1 interaction and drift at the rail.';
+   steps=['Bracket reaction V at eccentricity e, side thrust H','Bracket to the column flange','Column: P, M, V and drift (H1)','Fixed base'];detail=['column'];break;
+  case 'New column base':title='Base plate, anchor rods and footing';drawing=path('M104 6V58M116 6V58')+rect(84,58,52,5,true)+rect(82,63,56,3)+rect(52,66,116,30)+path('M92 56V88M128 56V88',true)+arrow(110,0,110,10)+label(120,8,'P, M, V','start')+hatch(52,168,98)+label(110,116,'SOIL BEARING / OVERTURNING')+mark(1,96,12)+mark(2,148,56)+mark(3,72,80)+mark(4,184,88);note='Base reactions pass through the base plate (Design Guide 1), the anchor rods (ACI 318 Chapter 17) and the spread footing to the soil: bearing, overturning, sliding, shear, flexure and development.';
+   steps=['Column P, M and V at the base','Base plate bearing on grout','Anchor rods in tension and shear','Footing to the soil'];detail=['base'];break;
+  case 'End bearings':title='Bolted end bearing';drawing=rect(30,30,90,6)+rect(72,36,6,40)+rect(30,76,90,6,true)+rect(30,82,90,6,true)+rect(20,88,120,8)+[46,104].map(x=>path(`M${x} 70V102`,true)+rect(x-6,68,12,3)).join('')+rect(150,76,70,6)+rect(150,82,70,6)+rect(140,88,90,8)+`<rect x="172" y="76" width="20" height="6" rx="3" fill="white" stroke="${ink}" stroke-width="1.2"/>`+path('M182 70V102',true)+arrow(75,0,75,26)+arrow(4,60,26,60)+label(81,10,'R','start')+label(8,54,'F')+label(70,116,'LOCATING')+label(185,116,'SLIDING (SLOT)')+mark(1,62,12)+mark(2,30,50)+mark(3,124,64);note='Bearing plate under the girder; the locating end bolts carry the longitudinal force and uplift by slip resistance and tension, the sliding end bolts pass through slots so the girder moves.';
+   steps=['Girder reaction R on the bearing plate','Longitudinal force F by slip-critical bolts at the locating end','Uplift and lateral force through the bolts into the seat'];detail=['bearing'];break;
+  case 'End stops':title='Crane end stop on the girder';drawing=rect(20,70,200,6,true)+poly('M40 70V64H160V70Z')+rect(172,64,40,6,true)+rect(172,24,6,40,true)+poly('M178 34L206 64H178Z',true)+circle(150,40,10)+arrow(138,40,170,40)+label(126,36,'F','end')+[188,204].map(x=>path(`M${x} 58V82`,true)).join('')+path('M226 40V64M222 40H230M222 64H230')+label(232,55,'h','start')+mark(1,138,22)+mark(2,196,22)+mark(3,196,96)+mark(4,60,92);note='Bumper force F at height h on the face plate; stiffeners and base plate carry the overturning into the front bolts in tension and the heel in bearing; the girder carries the force to its locating bearing.';
+   steps=['Bumper force F at height h above the rail','Face plate and stiffeners','Base bolts: tension and shear into the top flange','Girder to its locating bearing'];detail=['end-stop'];break;
+  case 'Tie movement':title='Tie movement compatibility';drawing=path('M20 40H150M20 88H150M60 40V88',false)+path('M20 40L150 46M20 88L150 82',true,true)+rect(150,36,60,6,true)+rect(206,26,8,30)+`<rect x="207" y="32" width="6" height="14" rx="3" fill="white" stroke="${ink}" stroke-width="1"/>`+arrow(150,22,170,22)+label(160,16,'θ·d')+path('M28 70A16 16 0 0 1 40 56',true)+label(14,66,'θ','end')+mark(1,40,104)+mark(2,180,52)+mark(3,226,40);note='Girder end rotation and thermal travel move the tie along the runway; the thin tie flexes about its weak axis and the sleeved slots release the support deflection.';
+   steps=['End rotation θ and thermal travel move the flange by θ·d','Tie flexes about its weak axis','Sleeved slots release support deflection'];detail=['tie'];break;
+  case 'Existing column':case 'Supporting structure':case 'Interfaces':title=topic==='Existing column'?'Existing column: crane plus building loads':'Forces transferred to the building';drawing=column()+rect(49,47,145,8,true)+arrow(107,17,107,44)+arrow(129,33,184,33)+arrow(214,62,214,96)+label(100,13,'V')+label(151,25,'H / N')+label(116,89,'CONCURRENT ACTIONS')+mark(1,90,30)+mark(2,156,46)+mark(3,226,78);note='Retain simultaneous signed reactions when transferring forces to the separately designed building.';
+   steps=['Girder reaction V at the support','Concurrent lateral H and longitudinal N','Column and building carry them together'];detail=['column'];break;
+  default:title='Inputs, checks and report record';drawing=[26,100,174].map((x,i)=>rect(x,29,43,45,i===1)+path(`M${x+9} 42h25M${x+9} 51h25M${x+9} 60h17`)+label(x+21,90,['INPUT','CHECK','REPORT'][i])).join('')+arrow(71,51,96,51)+arrow(145,51,170,51)+mark(1,47,104)+mark(2,121,104)+mark(3,195,104);note='Record project inputs, calculation revision and references. Export is controlled by the actual validation results.';
+   steps=['Project inputs','Every check evaluated','Report and drawings'];detail=[];
  }
- return {title,note,svg:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="${escape(title)}" data-check-figure="${escape(topic)}"><title>${escape(title)}</title><desc>${escape(note)} Schematic, not to scale. Highlighted lines identify the reviewed action or component; dashed lines show context or an idealized response.</desc>${drawing}</svg>`};
+ const text=p?detail.map(k=>componentDetail(k,p)).join('; '):'';
+ return {title,note,path:steps,detail:text,svg:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="${escape(title)}" data-check-figure="${escape(topic)}"><title>${escape(title)}</title><desc>${escape(note)} Load path: ${escape(steps.map((s,i)=>`${i+1} ${s}`).join('; '))}. Schematic, not to scale. Heavy gray-filled parts are the reviewed components; numbered markers follow the load path.</desc>${drawing}</svg>`};
 }
+/** A load-path step number styled like the figure markers. */
+export const stepBadge=(n:number|string)=>`<span class="step">${escape(n)}</span>`;
 export function checkFigureHtml(topic:string,p?:ProjectInput){
  const f=checkFigure(topic,p);
- return `<figure class="calculation-figure">${f.svg}<figcaption><strong>${escape(f.title)}</strong><p>${escape(f.note)}</p><small>SCHEMATIC · NOT TO SCALE</small></figcaption></figure>`;
+ return `<figure class="calculation-figure">${f.svg}<figcaption><strong>${escape(f.title)}</strong>${f.detail?`<p class="figure-detail"><b>Detail:</b> ${escape(f.detail)}</p>`:''}<p class="figure-path"><b>Load path:</b> ${f.path.map((s,i)=>`${stepBadge(i+1)} ${escape(s)}`).join(' → ')}</p><small>SCHEMATIC · NOT TO SCALE</small></figcaption></figure>`;
 }
-/** Scoped so ARCH D drawing SVGs and existing equation styles are untouched. */
-export const checkFigureCss=`.calculation-figure{display:flex;align-items:center;gap:12px;margin:7px 0 10px;padding:5px 8px;background:#fafcfc;border:1px solid #dce5e6;border-radius:3px;break-inside:avoid;page-break-inside:avoid;break-after:avoid}.calculation-figure>svg{display:block;width:192px;height:96px;flex:0 0 192px}.calculation-figure figcaption{min-width:0;color:#40545a;font:11px/1.4 Arial,sans-serif}.calculation-figure figcaption strong{display:block;font-size:11px;color:#23474e}.calculation-figure figcaption p{margin:3px 0}.calculation-figure figcaption small{display:block;font-size:8px;color:${muted};letter-spacing:.4px}.report-figure-strip{display:flex;gap:8px;break-inside:avoid;break-after:avoid}.report-figure-strip>.calculation-figure{flex:1;min-width:0;display:block;text-align:center}.report-figure-strip>.calculation-figure>svg{width:170px;height:85px;max-width:100%;margin:0 auto}.report-figure-strip>.calculation-figure figcaption p{font-size:9px}.report-figure-strip>.calculation-figure figcaption strong{font-size:10px}`;
+/** Scoped so ARCH D drawing SVGs and existing equation styles are untouched. Black and white throughout. */
+export const checkFigureCss=`.calculation-figure{display:flex;align-items:center;gap:12px;margin:6px 0 8px;padding:5px 8px;background:#fff;border:1px solid #000;break-inside:avoid;page-break-inside:avoid;break-after:avoid}.calculation-figure>svg{display:block;width:240px;height:120px;flex:0 0 240px}.calculation-figure figcaption{min-width:0;color:#000;font:10px/1.4 Arial,sans-serif}.calculation-figure figcaption strong{display:block;font-size:11px;color:#000}.calculation-figure figcaption p{margin:3px 0}.calculation-figure figcaption small{display:block;font-size:7.5px;color:${muted};letter-spacing:.4px}.calculation-figure .step,.step{display:inline-block;min-width:13px;height:13px;line-height:11px;border:1px solid #000;border-radius:7px;text-align:center;font-size:8px;font-weight:700;color:#000;background:#fff;vertical-align:1px}.report-figure-strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;break-inside:avoid;break-after:avoid}.report-figure-strip>.calculation-figure{display:block;margin:0}.report-figure-strip>.calculation-figure>svg{width:240px;height:120px;max-width:100%;margin:0 auto}.report-figure-strip>.calculation-figure figcaption{font-size:9px}.report-figure-strip>.calculation-figure:only-child{grid-column:1/-1;display:flex}`;

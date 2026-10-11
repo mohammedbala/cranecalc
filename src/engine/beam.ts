@@ -44,7 +44,8 @@ export class Beam {
 export function momentAt(x:number,reactions:{x:number;r:number}[],loads:AppliedLoad[],q:number,start=0){return reactions.reduce((s,r)=>s+(r.x<x?r.r*(x-r.x):0),0)-loads.reduce((s,p)=>s+(p.x<x?p.p*(x-p.x):0),0)-q*(x-start)**2/2;}
 export function beamSystem(spans:number[],EI:number,system:'simple'|'continuous',braceSpacing?:number,subdivisions=20){
  const supports=[0];for(const span of spans)supports.push(supports.at(-1)!+span);
- if(braceSpacing){for(let x=braceSpacing;x<supports.at(-1)!;x+=braceSpacing)supports.push(x);supports.sort((a,b)=>a-b);}
+ // Every brace station along the runway: the loop bound is the runway end, fixed before the stations are added.
+ if(braceSpacing){const L=supports.at(-1)!;for(let x=braceSpacing;x<L-1e-6;x+=braceSpacing)supports.push(x);supports.sort((a,b)=>a-b);}
  const groups=system==='continuous'?[[0,spans.reduce((a,b)=>a+b,0)]]:spans.map((s,i)=>[spans.slice(0,i).reduce((a,b)=>a+b,0),spans.slice(0,i+1).reduce((a,b)=>a+b,0)]);
  const beams=groups.map(([a,b])=>new Beam(a,b,EI,supports.filter(x=>x>=a&&x<=b),subdivisions*Math.max(1,system==='continuous'?spans.length:1)));
  return {evaluate(loads:AppliedLoad[],q=0):BeamResult {
