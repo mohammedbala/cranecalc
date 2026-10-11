@@ -4,6 +4,7 @@ import {existingBracketLabel} from '../engine/bracketProfiles';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {connectionOptionChecks} from '../engine/connectionOptions';
+import {ribGeometry} from '../engine/bracketRib';
 import {flangeTieGeometry,tiePlies} from '../engine/tieGeometry';
 import {bearingStiffenerProfile} from './bearingStiffenerGeometry';
 import { Draft, type CadDrawing } from './drafting';
@@ -122,13 +123,15 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   output.push(dr.drawing);
  }
  if(d.bracket?.enabled&&!usesExistingBracket(p)){
-  const b=d.bracket,k=Math.min(270/b.seatProjection,250/b.ribDepth),dr=new Draft(s,'welded-column-bracket','Welded gravity bracket / two rectangular ribs','SK-10',560,1/k,`AISC F11, J2, J4, J10 and Appendix 3 / Reference AIST Technical Report 13 5.9.2 / see ${sheets('bracket')}.`);
+  const b=d.bracket,rg=ribGeometry(b),k=Math.min(270/b.seatProjection,250/b.ribDepth),dr=new Draft(s,'welded-column-bracket',rg.tapered?'Welded gravity bracket / two haunched ribs':'Welded gravity bracket / two rectangular ribs','SK-10',560,1/k,`AISC F11, J2, J4, J10 and Appendix 3 / Reference AIST Technical Report 13 5.9.2 / see ${sheets('bracket')}.`);
   const face=365,top=100,tip=face-b.seatProjection*k,root=top+b.seatThickness*k,bot=root+b.ribDepth*k;
-  dr.rect(face,75,b.receiver.flangeThickness*k,bot-50,'HIDDEN');dr.rect(tip,top,b.seatProjection*k,b.seatThickness*k);dr.rect(tip,root,b.seatProjection*k,b.ribDepth*k);
-  dr.dimH(tip,face,bot,bot+36,f(b.seatProjection));dr.dimV(root,bot,tip,tip-28,f(b.ribDepth));
+  dr.rect(face,75,b.receiver.flangeThickness*k,bot-50,'HIDDEN');dr.rect(tip,top,b.seatProjection*k,b.seatThickness*k);
+  if(rg.tapered){dr.poly([[tip,root],[face,root],[face,bot],[tip,root+rg.tip*k]],true);dr.dimH(tip,face,bot,bot+36,f(b.seatProjection));dr.dimV(root,root+rg.tip*k,tip,tip-28,f(rg.tip));dr.dimV(root,bot,tip,tip-56,f(b.ribDepth));dr.line(face-2,bot,tip,bot,'DIMENSION');}
+  else{dr.rect(tip,root,b.seatProjection*k,b.ribDepth*k);
+  dr.dimH(tip,face,bot,bot+36,f(b.seatProjection));dr.dimV(root,bot,tip,tip-28,f(b.ribDepth));}
   dr.dimH(face-b.reach*k,face,top,60,f(b.reach));
-  [`SEAT PL ${f(b.seatThickness)} X ${f(b.seatLength)} X ${f(b.seatProjection)}`,`2 RECTANGULAR RIBS ${f(b.ribThickness)} X ${f(b.ribDepth)}`,`RIB CENTERS ${f(b.ribSpacing)}`,`SEAT FILLETS ${f(b.seatWeld).replaceAll('"','')} / BOTH SIDES / FULL PROJECTION`,'HORIZONTAL LOADS: SEPARATE COLUMN ATTACHMENTS','KEEP SLIDING GIRDER BEARINGS FREE','GLOBAL COLUMN / FRAME / FOUNDATIONS: SEPARATE'].forEach((v,i)=>dr.text(485,100+i*29,v,10));
-  dr.fieldFilletLeader(face,root+b.ribDepth*k*.55,485,337,f(b.rootWeld),[`${supportColumn(p).weld} RIBS TO ${supportColumn(p).name}`,'CONT. FULL DEPTH / BOTH SIDES'],true,supportColumn(p).field);
+  [`SEAT PL ${f(b.seatThickness)} X ${f(b.seatLength)} X ${f(b.seatProjection)}`,rg.tapered?`2 HAUNCHED RIBS ${f(b.ribThickness)}, ${f(rg.root)} ROOT TO ${f(rg.tip)} TIP`:`2 RECTANGULAR RIBS ${f(b.ribThickness)} X ${f(b.ribDepth)}`,`RIB CENTERS ${f(b.ribSpacing)}`,`SEAT FILLETS ${f(b.seatWeld).replaceAll('"','')} / BOTH SIDES / FULL PROJECTION`,'HORIZONTAL LOADS: SEPARATE COLUMN ATTACHMENTS','KEEP SLIDING GIRDER BEARINGS FREE','GLOBAL COLUMN / FRAME / FOUNDATIONS: SEPARATE'].forEach((v,i)=>dr.text(485,100+i*29,v,10));
+  dr.fieldFilletLeader(face,root+b.ribDepth*k*.55,485,337,f(b.rootWeld),[`${supportColumn(p).weld} RIBS TO ${supportColumn(p).name}`,rg.tapered?'CONT. FULL ROOT DEPTH / BOTH SIDES':'CONT. FULL DEPTH / BOTH SIDES'],true,supportColumn(p).field);
   output.push(dr.drawing);
  }
  const tie=flangeTieGeometry(p);

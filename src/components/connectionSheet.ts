@@ -16,6 +16,8 @@ import { sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
 import { railKeeperView } from './railKeeperView';
+import {ribGeometry} from '../engine/bracketRib';
+import {haunchedRibOutline} from './haunchedBracketDrawing';
 import { slidingBoltView } from './slidingBoltSection';
 
 /** Girder bearing, end connection, flange tie and rail keeper details on their own sheet. */
@@ -67,7 +69,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   const lx=Math.max(355,inner+Math.max(C(98),C(colBot))+24);
   svg+=line([inner,98],[inner,colBot],colLine)+line([inner+C(98),98],[inner+C(colBot),colBot],colLine);
   svg+=line([inner+m().column.tf*k,98],[inner+m().column.tf*k,colBot],colLine)+line([inner+C(98)-m().column.tf*k,98],[inner+C(colBot)-m().column.tf*k,colBot],colLine);
-  if(wb){const wx=inner-wb.seatProjection/1000*k;svg+=rect(wx,bt,wb.seatProjection/1000*k,wb.seatThickness/1000*k,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),ex=inner-e.projection/1000*k,y=bt+wb.seatThickness/1000*k;svg+=rect(ex,y,e.projection/1000*k,e.depth/1000*k,'reference-line');for(const off of [e.flangeThickness,e.depth-e.flangeThickness])svg+=line([ex,y+off/1000*k],[inner,y+off/1000*k],'reference-line');}else svg+=rect(wx,bt+wb.seatThickness/1000*k,wb.seatProjection/1000*k,wb.ribDepth/1000*k,'runway-line');}else{
+  if(wb){const wx=inner-wb.seatProjection/1000*k;svg+=rect(wx,bt,wb.seatProjection/1000*k,wb.seatThickness/1000*k,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),ex=inner-e.projection/1000*k,y=bt+wb.seatThickness/1000*k;svg+=rect(ex,y,e.projection/1000*k,e.depth/1000*k,'reference-line');for(const off of [e.flangeThickness,e.depth-e.flangeThickness])svg+=line([ex,y+off/1000*k],[inner,y+off/1000*k],'reference-line');}else svg+=ribGeometry(wb).tapered?haunchedRibOutline(ribGeometry(wb),wx,inner,bt+wb.seatThickness/1000*k,k/1000):rect(wx,bt+wb.seatThickness/1000*k,wb.seatProjection/1000*k,wb.ribDepth/1000*k,'runway-line');}else{
   svg+=rect(cx-pw/2-8,bt,inner-(cx-pw/2-8),bb-bt,'reference-line');
   svg+=line([cx-pw/2-8,bt+bracket.tf*25.4/1000*k],[inner,bt+bracket.tf*25.4/1000*k],'reference-line')+line([cx-pw/2-8,bb-bracket.tf*25.4/1000*k],[inner,bb-bracket.tf*25.4/1000*k],'reference-line');
   svg+=line([cx-10,bb],[inner,bb+26],'reference-line');

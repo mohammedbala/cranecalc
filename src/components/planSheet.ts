@@ -1,5 +1,6 @@
 import {newColumnTopic} from './newColumnSheet';
 import {bracingOnElevation,bracingTopic,specifiedSeparation} from './bracingSheet';
+import {ribGeometry} from '../engine/bracketRib';
 import {flangeTieTopic} from './flangeTieSheet';
 import {connectionOptionChecks} from '../engine/connectionOptions';
 import {connectionConceptSheetSvg} from './connectionConceptSheet';
@@ -164,7 +165,13 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const beyond=(end:Point,from:Point,label:string)=>{const a=iso(end),b=iso(from),L=Math.hypot(a[0]-b[0],a[1]-b[1])||1;return gridBubble(a[0]+(a[0]-b[0])/L*16,a[1]+(a[1]-b[1])/L*16,label);};
   m.supports.forEach((x,i)=>{svg+=beyond([x,floor,rows[0]+.9],[x,floor,rows[0]],String(i+1));});
   rows.forEach((z,i)=>{svg+=beyond([-m.length/2-2.4,floor,z],[0,floor,z],i?'B':'A');});
-  const marks=girderMarks(p),mid=(g:typeof marks[number])=>(g.start+g.end)/2000-m.length/2;
+  // Each girder mark at its girder's mid-length, or mid-span of the bay before when that is at or near a grid (a continuous
+  // girder over an even number of spans), so the mark never sits on a grid line, bracket or bearing.
+  const stations=p.spans.reduce((a,v)=>[...a,a.at(-1)!+v],[0]);
+  const marks=girderMarks(p),mid=(g:typeof marks[number])=>{
+   const c=(g.start+g.end)/2,i=stations.findIndex(x=>x>g.start+1&&x<g.end-1&&Math.abs(x-c)<.15*Math.min(...p.spans));
+   return (i>0?(stations[i-1]+stations[i])/2:c)/1000-m.length/2;
+  };
   svg+=viewTitle(gaLayout.iso.x+gaLayout.iso.w/2,gaLayout.iso.y+gaLayout.iso.h+44,'ISOMETRIC VIEW','NOT TO SCALE',ga)+'</g>';
 
   // The surveyed existing building beside new columns: its column lines outboard of the runway grids, with the new
@@ -295,7 +302,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     }else{for(const cx of [c0,c1])svg+=line([cx,columnBreak],[cx,behind(cx)?front:bottom],'reference-line');svg+=breakLine([c0-5,columnBreak],[c1+5,columnBreak]);}
     if(!bracing)svg+=line([c0,bottom],[c0,stubEnd],newColumns?'runway-line':'reference-line')+line([c1,bottom],[c1,stubEnd],newColumns?'runway-line':'reference-line')+breakLine([c0-5,stubEnd],[c1+5,stubEnd]);
     const wb=p.details?.bracket;
-    if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1])svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');}else svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
+    if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1]){svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');const rg=ribGeometry(wb);if(rg.tapered)svg+=line([EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],[EX(x+(side*wb.ribSpacing+wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],'runway-line');}}else svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
     svg+=line([EX(x),bubbleY+12],[EX(x),below+33],'grid-line')+gridBubble(EX(x),bubbleY,String(i+1));
     if(i)svg+=dimH(EX(m.supports[i-1]),EX(x),below+34,below+54,dim(p.spans[i-1]/1000));
   });

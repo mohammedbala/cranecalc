@@ -1,7 +1,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {activeEndBearing,endBearingGeometry,continuousBearings} from '../engine/endBearing';
 import {simpleSupportInput} from '../engine/simpleSupports';
-import {bracketArrangement} from '../engine/connectionOptions';
+import {weldedRibBracket} from '../engine/bracketRib';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {drawingLength,plateInches} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,bubble,detailRef,detailTitles,labelColumn,sectionCut,wrapToWidth,textWidth,n,type XY} from './sheetGraphics';
@@ -23,7 +23,7 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
  if(s.input.system==='continuous')return continuousBearingView(s);
  const p=s.input,d=p.details!,e=activeEndBearing(p)!,b=p.section,bs=d.bearing,g=endBearingGeometry(p,e),ss=simpleSupportInput(p);
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,gap=ss.endGap,hx=heavyHex(db);
- const wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&bracketArrangement(wb)==='twin-rib',seatT=wb?.seatThickness??bs.thickness,seatL=wb?.seatLength??(2*bs.length+gap+2*inch);
+ const wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=wb?.seatThickness??bs.thickness,seatL=wb?.seatLength??(2*bs.length+gap+2*inch);
  const extent=gap/2+bs.length+2.5*inch,k=drawingScale(Math.min(.36,290/(2*extent),80/(b.tf+2.5*inch+bs.thickness+seatT+1.5*inch),125/Math.max(b.bf,bs.width)),p.units),kk=k.pointsPerMm;
  const X0=770,X=(x:number)=>X0+x*kk,yB=118+(b.tf+2.5*inch)*kk,Y=(h:number)=>yB-h*kk;
  const yTop=Y(b.tf+2.5*inch),yBearing=yB+bs.thickness*kk,ySeat=yBearing+seatT*kk;
@@ -109,7 +109,7 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
 function continuousBearingView(s:CalculationSnapshot):ViewRender{
  const p=s.input,d=p.details!,e=activeEndBearing(p)!,b=p.section,bs=d.bearing,g=endBearingGeometry(p,e),all=continuousBearings(p);
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,hx=heavyHex(db);
- const wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&bracketArrangement(wb)==='twin-rib',seatT=wb?.seatThickness??bs.thickness,seatL=wb?.seatLength??(bs.length+2*inch);
+ const wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=wb?.seatThickness??bs.thickness,seatL=wb?.seatLength??(bs.length+2*inch);
  const locating=all.find(v=>v.role==='LOCATING')!,sliding=all.filter(v=>v.role==='SLIDING'),last=all.length,isEnd=(grid:number)=>grid===1||grid===last;
  const ends=sliding.filter(v=>isEnd(v.grid)),interior=sliding.filter(v=>!isEnd(v.grid)),shown=ends[0]??sliding[0];
  // Girder direction from the drawn sliding grid: +1 runs on from a left runway end, -1 from a right one, 0 runs through.

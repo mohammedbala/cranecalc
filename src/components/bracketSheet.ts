@@ -14,6 +14,8 @@ import {activeEndBearing} from '../engine/endBearingInputs';
 import {endBearingGeometry} from '../engine/endBearing';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {flangeTieGeometry} from '../engine/tieGeometry';
+import {ribGeometry} from '../engine/bracketRib';
+import {haunchedRibView,haunchedFaceRibs,haunchedRibCallout,haunchedRibNotes} from './haunchedBracketDrawing';
 /** Column bracket details on their own sheet. */
 export function bracketSheetSvg(s:CalculationSnapshot,number='S-05'){
  const topic=bracketTopic(s);return topic?topicSheetSvg(s,topic,number,usesExistingBracket(s.input)?'EXISTING BRACKETS / NEW BOLTED SEATS':'WELDED COLUMN BRACKETS'):'';
@@ -28,20 +30,21 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const sc=supportColumn(p),cw=seatColumnWeld(p,s.detailResults?.bracket),collector=designsBracing(p);
  const eb=activeEndBearing(p),g=eb?endBearingGeometry(p,eb):undefined,gap=p.system==='simple'?simpleSupportInput(p).endGap:0;
- const views:DetailView[]=[];
- // Transverse section: true input projection, receiver face, full rectangular rib.
+ const views:DetailView[]=[],rg=ribGeometry(b);
+ // Transverse section: true input projection, receiver face, full rib (rectangular, or tapered to the tip depth).
  views.push({title:detailTitles.weldedBracket,render:()=>{
   let svg='';
   const scale=sheetDrawingScale(Math.min(.25,180/(b.ribDepth+b.seatThickness+d.bearing.thickness)),p.units),k=scale.pointsPerMm;
   const face=319,tip=face-b.seatProjection*k,seatY=144,rootY=seatY+b.seatThickness*k,bot=rootY+b.ribDepth*k,center=face-b.reach*k;
   svg+='<g data-view="welded-bracket-side">';
   svg+=rect(face,111,b.receiver.flangeThickness*k,bot-85,sc.isNew?'runway-line':'reference-line');
-  svg+=rect(tip,seatY,b.seatProjection*k,b.seatThickness*k,'runway-line')+rect(tip,rootY,b.seatProjection*k,b.ribDepth*k,'runway-line');
+  svg+=rect(tip,seatY,b.seatProjection*k,b.seatThickness*k,'runway-line')+(rg.tapered?'':rect(tip,rootY,b.seatProjection*k,b.ribDepth*k,'runway-line'));
   svg+=rect(center-d.bearing.width*k/2,seatY-d.bearing.thickness*k,d.bearing.width*k,d.bearing.thickness*k,'runway-line');
   svg+=line([center,101],[center,bot+9],'grid-line');
   svg+=dimH(center,face,seatY,103,dim(b.reach));
-  svg+=dimH(tip,face,bot,bot+22,dim(b.seatProjection));
-  svg+=dimV(rootY,bot,tip,tip-22,dim(b.ribDepth));
+  if(rg.tapered)svg+=haunchedRibView(rg,{tip,face,rootY,bot,k},dim);
+  else{svg+=dimH(tip,face,bot,bot+22,dim(b.seatProjection));
+  svg+=dimV(rootY,bot,tip,tip-22,dim(b.ribDepth));}
   svg+=multiLeader([[center,seatY-d.bearing.thickness*k]],[48,87],[`RUNWAY BEARING PLATE / ${detailRef(detailTitles.bearing)}`]);
   svg+=multiLeader([[face+3,116]],[398,116],[columnReference(p),sc.isNew?'CHECKED UNDER NEW COLUMN':'LOCAL CHECKS PER ENTERED DATA']);
   svg+=multiLeader([[tip+20,seatY+b.seatThickness*k/2]],[398,202],[`SEAT PL ${size(b.seatThickness)}`]);
@@ -49,7 +52,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   // flange (and, with crane-level bracing, to the strut); the weld length reads right of the symbol.
   svg+=(sc.field?fieldFilletLeader:filletLeader)([[face,seatY]],[398,150],size(cw.size),[`SEAT PL TO COL. FLANGE, TOP, ${sc.field?'FIELD':'SHOP'}`,collector?`COLLECTOR; SEE ${detailRef(detailTitles.strutPlan)}`:'LONG. AND LATERAL FORCE']);
   svg+=text(398+53,150-3+7,dim(cw.length),8);
-  svg+=(sc.field?fieldFilletLeader:filletLeader)([[face,rootY+b.ribDepth*k*.56]],[398,242],size(b.rootWeld),[`${sc.weld} TO ${sc.name}`,'BOTH SIDES OF EACH RIB','CONT. FULL RIB DEPTH'],true);
+  svg+=(sc.field?fieldFilletLeader:filletLeader)([[face,rootY+b.ribDepth*k*.56]],[398,242],size(b.rootWeld),[`${sc.weld} TO ${sc.name}`,'BOTH SIDES OF EACH RIB',rg.tapered?'CONT. FULL ROOT DEPTH':'CONT. FULL RIB DEPTH'],true);
   return {svg:svg+'</g>',scale:scale.label};
  }});
  // Plan: the bearing plates and their bolt holes on the seat at an interior grid, the ribs under it hidden.
@@ -84,7 +87,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   if(g&&eb){
    for(const x of [0,...holesX].sort((a,c)=>a-c))svg+=line([X(x),tip+3],[X(x),tip+12])+text(X(x)+3,tip+14,x?dim(Math.abs(x)):'0',7.5,'end',400,-90);
    svg+=text(left,tip+76,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,7.5);
-   if(p.system==='simple')svg+=text(left,tip+86,`AT A RUNWAY-END GRID: ONE BEARING, ITS GIRDER END ON THE GRID; HOLES ${dim(g.rows[0])} AND ${dim(g.rows[1])} FROM IT.`,7.5);
+   svg+=text(left,tip+86,`AT A RUNWAY-END GRID: ${p.system==='simple'?'ONE BEARING, ITS GIRDER END ON THE GRID':'THE GIRDER END ON THE GRID, ITS BEARING INBOARD'}; HOLES ${dim(g.rows[0])} AND ${dim(g.rows[1])} FROM IT.`,7.5);
   }
   // Keys: the transverse section between the rib and the outer hole column, the elevation from the runway side.
   const cut=X(g?(b.ribSpacing/2+b.ribThickness/2+g.rows[1]+gap/2)/2:(b.ribSpacing/2+half)/2);
@@ -107,16 +110,18 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=rect(cx-b.seatLength*k/2,top,b.seatLength*k,b.seatThickness*k,'runway-line');
   for(const side of [-1,1])svg+=rect(cx+(side*b.ribSpacing-b.ribThickness)*k/2,top+b.seatThickness*k,b.ribThickness*k,b.ribDepth*k,'runway-line');
   svg+=dimH(cx-b.ribSpacing*k/2,cx+b.ribSpacing*k/2,bot,bot+30,dim(b.ribSpacing));
-  svg+=dimV(top+b.seatThickness*k,bot,cx-b.ribSpacing*k/2,106,dim(b.ribDepth));
-  svg+=multiLeader([[-1,1].map(sign=>cx+sign*b.ribSpacing*k/2).map(x=>[x,top+b.seatThickness*k+b.ribDepth*k*.5] as [number,number])].flat(),[396,472],[`2 RIB PL ${size(b.ribThickness)}`,`${dim(b.ribDepth)} DEEP`,`X ${dim(b.seatProjection)} PROJ.`]);
-  svg+=text(42,Math.max(633,bot+52),'RECTANGULAR RIBS: DO NOT TAPER OR COPE WITHOUT REANALYSIS.',7.5);
+  if(rg.tapered)svg+=haunchedFaceRibs(rg,b.ribSpacing,{cx,ribTop:top+b.seatThickness*k,bot,k},dim);
+  else svg+=dimV(top+b.seatThickness*k,bot,cx-b.ribSpacing*k/2,106,dim(b.ribDepth));
+  svg+=multiLeader([[-1,1].map(sign=>cx+sign*b.ribSpacing*k/2).map(x=>[x,top+b.seatThickness*k+b.ribDepth*k*.5] as [number,number])].flat(),[396,472],rg.tapered?haunchedRibCallout(rg,size(b.ribThickness),dim):[`2 RIB PL ${size(b.ribThickness)}`,`${dim(b.ribDepth)} DEEP`,`X ${dim(b.seatProjection)} PROJ.`]);
+  svg+=text(42,Math.max(633,bot+52),rg.tapered?'HAUNCHED RIBS: STRAIGHT SLOPING FREE EDGE; DO NOT NOTCH, COPE OR WELD TO IT.':'RECTANGULAR RIBS: DO NOT TAPER OR COPE WITHOUT REANALYSIS.',7.5);
   return {svg:svg+'</g>',scale:scale.label};
  }});
  {
   const tie=flangeTieGeometry(p),ties=tie?`${tie.sides.length===1&&tie.sides[0]>0?'THE TOP FLANGE TIES':'THE FLANGE TIES'} (${detailRef(detailTitles.flangeTie)})`:'THE FLANGE TIES';
   const notes=[
-   `TWO RECTANGULAR RIBS AND A SEAT PLATE. THE RIBS CARRY THE GRAVITY BEARINGS; NO CREDIT FOR BOLTS, KNEE PLATES OR COMPOSITE RIB/SEAT ACTION. ${sc.field?'FIELD':'SHOP'} WELD THE SEAT TO THE COLUMN FLANGE WITH A ${size(cw.size)} TOP FILLET ${dim(cw.length)} LONG: ${eb?'THE BEARING BOLTS BRING THE GIRDER\'S LONGITUDINAL FORCE (LOCATING END) AND H BOTTOM INTO THE SEAT, AND THE FILLET DELIVERS THEM TO THE COLUMN':'IT DELIVERS THE GIRDER\'S LONGITUDINAL FORCE AND H BOTTOM FROM THE BEARING TO THE COLUMN'}${collector?` AND THE STRUT (${detailRef(detailTitles.strutPlan)})`:''}.`,
+   `${rg.tapered?`TWO HAUNCHED RIB PLATES, ${dim(rg.root)} DEEP AT THE COLUMN TAPERING STRAIGHT TO ${dim(rg.tip)} AT THE SEAT EDGE, AND A SEAT PLATE`:'TWO RECTANGULAR RIBS AND A SEAT PLATE'}. THE RIBS CARRY THE GRAVITY BEARINGS; NO CREDIT FOR BOLTS, KNEE PLATES OR COMPOSITE RIB/SEAT ACTION. ${sc.field?'FIELD':'SHOP'} WELD THE SEAT TO THE COLUMN FLANGE WITH A ${size(cw.size)} TOP FILLET ${dim(cw.length)} LONG: ${eb?'THE BEARING BOLTS BRING THE GIRDER\'S LONGITUDINAL FORCE (LOCATING END) AND H BOTTOM INTO THE SEAT, AND THE FILLET DELIVERS THEM TO THE COLUMN':'IT DELIVERS THE GIRDER\'S LONGITUDINAL FORCE AND H BOTTOM FROM THE BEARING TO THE COLUMN'}${collector?` AND THE STRUT (${detailRef(detailTitles.strutPlan)})`:''}.`,
    `PLATES: ${format(d.material.Fy,'stress',p.units,p.units==='SI'?0:3)} MIN. YIELD. WELDS: ${electrodeClass(d.material.Fexx,p.units)} ELECTRODE. CONTINUOUS FILLETS AS SHOWN.`,
+   ...(rg.tapered?haunchedRibNotes(p.units):[]),
    sc.isNew?`SHOP WELD THE SEAT TO THE RIBS, AND THE RIB ROOTS AND SEAT TO THE ${sc.name}, BEFORE ERECTION; INSPECT STARTS, STOPS AND TOES.`:'SHOP WELD THE SEAT TO THE RIBS. FIELD WELD THE RIB ROOTS AND SEAT TO THE EXISTING COLUMN AS FLAGGED. PROVIDE ACCESS TO BOTH ROOT WELDS BEFORE PLACING THE RUNWAY; INSPECT STARTS, STOPS AND TOES.',
    `KEEP GIRDER ENDS AND BEARINGS INDEPENDENT. DO NOT WELD THE SLIDING BEARING TO THE GIRDER. ${eb?`THE BEARING BOLTS LOCATE, GUIDE AND HOLD DOWN THE GIRDER ON THIS SEAT (${detailRef(bearingBoltsTitle(p))}); DRILL THE SEAT TO MATCH (${detailRef(bracketPlanTitle)}). `:''}ONLY ${ties} CONNECT TO THE COLUMN SEPARATELY; H TOP DOES NOT ENTER THE BRACKET.`,
    sc.isNew?`THE ${sc.name} IS DESIGNED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT${p.columnBase?.enabled?`; BASE PLATE, ANCHOR RODS AND FOOTING: ${detailRef(detailTitles.newColumn)}`:'; ITS BASE AND FOUNDATION ARE BY OTHERS'}.`:p.existingColumn?.enabled?'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. THE EXISTING COLUMN IS CHECKED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT; FRAME, ANCHORS AND FOUNDATIONS ARE BY OTHERS.':'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. LOCAL COLUMN CHECKS DO NOT VERIFY THE COMPLETE FRAME, COLUMN AXIAL/BENDING INTERACTION OR FOUNDATIONS.',
