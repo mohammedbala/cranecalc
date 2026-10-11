@@ -1,6 +1,7 @@
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import type {FatigueDetailResult} from './runwayDetails';
 import {columnStiffenerGeometry} from './columnStiffeners';
+import {connectionCoordination} from './connectionCoordination';
 
 /**
  * Check taxonomy: what each computed result is, whether it applies, which results repeat or say the same thing, and
@@ -354,14 +355,17 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
   if(c.demand===undefined||c.capacity===undefined||!Number.isFinite(c.capacity))continue;
   const margin=Math.abs(c.capacity-c.demand),limit=Math.abs(c.capacity),u=dcOf(c);
   if(c.quantity==='length'){
-   if(fitRule(c)&&margin<inch/8-1e-6){flagged.push({entry:t,reason:`${margin<1e-6?'Met exactly':'Margin '+(margin/inch).toFixed(3)+' in'}; less than the 1/8 in setting / fit-up tolerance`});continue;}
-   if(margin<Math.min(inch/8,.1*limit)-1e-6)flagged.push({entry:t,reason:margin<1e-6?'Met exactly at the limit':`Margin ${(margin/inch).toFixed(3)} in`});
+   if(fitRule(c)&&margin<inch/8-1e-6){flagged.push({entry:t,reason:`${margin<1e-6?'Met exactly':'Margin'} less than the 1/8 in setting / fit-up tolerance`});continue;}
+   if(margin<Math.min(inch/8,.1*limit)-1e-6)flagged.push({entry:t,reason:margin<1e-6?'Met exactly at the limit':'Margin less than 1/8 in or 10%'});
   }else if(u>.9)flagged.push({entry:t,reason:u>=1-1e-6?'Met exactly at the limit':`Margin ${((1-u)*100).toFixed(0)}%`});
  }
  // Open items: clashes, redesign flags, missing or inconsistent input, failed detailing; then by others.
  const order={clash:0,redesign:1,input:2,detailing:3};
  const openItems:OpenItem[]=[...entries.values()].filter(t=>openStatuses.includes(t.check.status)).map(t=>({check:t.check,
   kind:(t.check.group==='Coordination'||(t.type==='detailing'&&fitRule(t.check))?'clash':t.type==='design'&&t.check.status==='fail'?'redesign':t.type==='detailing'?'detailing':'input') as OpenItem['kind']})).sort((a,b)=>order[a.kind]-order[b.kind]);
+ // Layout conflicts the engine reports as notices rather than checks (connection coordination): open items too,
+ // unless the snapshot already carries them as Coordination checks.
+ if(!s.checks.some(c=>c.group==='Coordination'))connectionCoordination(s.input).forEach((note,i)=>openItems.unshift({kind:'clash',check:{id:`coordination-notice-${i+1}`,group:'Coordination',title:'Connection layout requires redesign',status:'fail',equation:'',note,referenceIds:[]}}));
  const byType=Object.fromEntries((['design','detailing','classification','verification','input','load-basis','by-others'] as CheckType[]).map(k=>[k,[...entries.values()].filter(t=>t.type===k).length])) as Record<CheckType,number>;
  const designAll=[...entries.values()].filter(t=>t.type==='design');
  // Governing D/C: DESIGN only — body lines and the fatigue rows (by the project's fatigue method).
