@@ -6,6 +6,7 @@ import {activeColumnCap} from '../../engine/columnCapInputs';
 import {defaultEndStop,stopBoltRows,stopLip,stopRailEnd} from '../../engine/endStopInputs';
 import {defaultColumnBase} from '../../engine/columnBaseInputs';
 import {defaultLongitudinalBracing} from '../../engine/longitudinalBracingInputs';
+import {capAngleFigure} from './capAngleParts';
 
 /**
  * The report's per-topic figures as Hairline isometric line drawings, to the project's sizes. Each returns the
@@ -308,7 +309,8 @@ export function isoTopicFigure(topic:string,p:ProjectInput,o:{topOnly:boolean}={
   case 'Local forces':return localForces(p,g);
   case 'Bracing':return bracing(p,g);
   case 'Column bracket':return activeColumnCap(p)?undefined:bracketFigure(p,g);
-  case 'Connections':case 'Flange attachment':return barTie&&g.support!=='column-cap'?tieFigure(p,g,topic==='Flange attachment',o.topOnly):undefined;
+  case 'Connections':case 'Flange attachment':if(kind==='cap-angle')return g.support!=='column-cap'?capAngleFigure(p,g):undefined;return barTie&&g.support!=='column-cap'?tieFigure(p,g,topic==='Flange attachment',o.topOnly):undefined;
+  case 'Cap tieback':case 'Cap tieback movement':return g.support==='column-cap'?undefined:kind==='cap-angle'?capAngleFigure(p,g):barTie?tieFigure(p,g,false,o.topOnly):undefined;
   case 'Rail details':return railDetails(p,g);
   case 'End bearings':return endBearings(p,g);
   case 'End stops':return endStops(p,g);

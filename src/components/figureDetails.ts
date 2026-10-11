@@ -6,6 +6,7 @@ import {rolledStub} from '../engine/rolledBracketInputs';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {capAngleGeometry} from '../engine/capAngle';
 import {activeEndStop} from '../engine/endStopInputs';
 
 /**
@@ -40,6 +41,8 @@ function tie(p:ProjectInput){
  const release=t.release?.enabled?'; column end sleeved in vertical slots':'';
  const flanges=activeEndBearing(p)?'top flange':'each flange';
  if(kind==='flexible-plate')return `Flexible ${plate(p,t.thickness,t.width,t.length)} at the ${flanges}, single shear; gusset PL ${plateInches(t.gussetThickness,p.units)}${saddle}${release}`;
+ if(kind==='cap-angle'){const g=capAngleGeometry(p);if(!g)return 'Cap tieback angle at the top flange';
+  return `${g.input.shape} × ${plateInches(g.input.length,p.units)} cap angle with 2-${bolt(p,g.cap.diameter,g.cap.grade)} bolts in ${g.cap.sleeved?'sleeved ':''}horizontal slots; tie ${plate(p,g.plate.thickness,g.plate.width,g.plate.length)} with 2-${bolt(p,g.lap.diameter,g.lap.grade)} slip-critical bolts; end ${plate(p,g.endPlate.thickness,g.endPlate.width,g.endPlate.height)}, ${fillet(p,g.weld)} both faces; 2-${bolt(p,g.column.diameter,g.column.grade)} bolts through shims to the column flange (field-drilled)`;}
  if(kind==='single-angle'||kind==='double-angle'){const a=kind==='single-angle'?t.singleAngle:t.doubleAngle;return `${kind==='double-angle'?'2-':''}${a?.shape??'L'} tie${a?.connectionStyle==='top-flange-angle'?' at the top flange':''}`;}
  if(kind==='bearing-link'||kind==='paired-links')return `${kind==='paired-links'?'Paired articulated links':'Articulated bearing link'} (supplier design)`;
  return `2-${plate(p,t.thickness,t.width,t.length)} bars at the ${flanges}, gusset PL ${plateInches(t.gussetThickness,p.units)}, ${bolts}${saddle}${release}`;

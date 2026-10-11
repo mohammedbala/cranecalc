@@ -26,6 +26,7 @@ import {checkTable,checkTableCss,inlineMath,monochrome,sig3,statusLabel} from '.
 import {loadPathFigure,summaryTable,summaryCss,elementChecks} from './designSummary';
 import {componentDetail} from '../components/figureDetails';
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {capAngleReportPages} from './capAngleReport';
 const e=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 /** A CSS string literal for paged-media margin boxes; markup characters are also escaped for the style element. */
 const cssText=(v:string)=>`"${v.replace(/[\\"]/g,c=>`\\${c}`).replace(/[\n\r]/g,' ').replace(/</g,'\\3c ').replace(/>/g,'\\3e ')}"`;
@@ -54,6 +55,7 @@ const statusText=statusLabel;
   if(title.includes('Fatigue register'))return ['Fatigue'];
   if(title.includes('Bolted end bearings'))return ['End bearings'];
   if(key==='04B')return ['Column bracket'];
+  if(title.includes('Cap tieback'))return ['Cap tieback'];
   if(key==='06B')return [p.existingColumn?.isNew?'New column':'Existing column'];
   if(key==='06C')return [title.includes('base plate')?'New column base':'Longitudinal bracing'];
   return pageFigureTopics[key]??[];
@@ -141,6 +143,8 @@ const statusText=statusLabel;
   pages.push(page('04E / Direct flange attachment',`<p>${one?`One flexible plate per tied flange (AISC DG7 §11.2) laps the gusset face toward its girder end and is bolted in single shear at both ends; its lap couple F·e (e = ${f(g.eccentricity)}) is carried by the gussets, welds and bolts, with the plate's stiffness share η = ${g.lapShare.toFixed(3)}. The plate clears the bearing stiffeners and, on a capped girder, the cap legs.`:'Tie bars are shifted away from bearing stiffeners; top bars clear the cap legs.'} Girder gussets connect through saddle plates directly to the W flanges. No holes or cuts are made in the cap or flanges. See ARCH D ${sheet('flange-tie')}.</p>${table(['Input','Value','Input','Value'],[[one?'Plate length / depth':'Tie length / width',f(t.length)+' / '+f(t.width),one?'Plate / gusset thickness':'Bar / gusset thickness',f(t.thickness)+' / '+f(t.gussetThickness)],['Setback toward girder end',f(at.longitudinalSetback),'Saddle length / thickness',f(at.saddleLength)+' / '+f(at.saddleThickness)],['Effective flange weld length',f(g.rootLength),'Saddle / gusset fillet',f(at.weldSize)],['Top / bottom force offset',f(g.topDrop)+' / '+f(g.bottomDrop),one?'Unrestrained plate length':'Unrestrained bar length',f(g.freeLength)]])}${numeric(selected(['Flange attachment']).filter(c=>!c.id.includes('fatigue')))}<p>Elastic strip and weld-group bounds; no plastic redistribution or composite saddle/flange credit. Local attachment compliance is added to the brace flexibility. Analysis retains conservative full grid-to-grid spans and idealized end-zone restraint stations. Physical end offsets appear on the drawings.</p>`));
   pages.push(page('04F / Flange attachment fatigue & scope',numeric(selected(['Flange attachment']).filter(c=>c.id.includes('fatigue')))+eq('flange-tie-saddle')+eq('flange-tie-flange')+`<p>The toe of each saddle transverse end fillet on each tied flange is in the fatigue register, in the AISC Table A-3.1 item 7.1 short-attachment category for the saddle length. Their global stress ranges are combined with the full local flange-strip range, assigned conservatively to every duty bin, without endurance credit.</p><div class="notice"><b>GLOBAL BUILDING INTERFACE REMAINS SEPARATE</b><p>These checks establish local resistance and static fit; imposed movement is checked on the next page. Global column forces, frame deformation and supplier rail hardware require project-specific design before fabrication.</p></div>`));
  }
+ // The cap tieback angle: its detail, strength, fatigue, stiffness and movement pages.
+ pages.push(...capAngleReportPages(s,{page,numeric,selected,table,f,e,sheet}));
  const moves=selected(['Tie movement']);
  if(moves.length){
   const mv=tieMovements(s),rel=mv.release,one=flangeTieGeometry(p)?.plies===1;
