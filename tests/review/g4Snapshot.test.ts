@@ -2,13 +2,15 @@ import {beforeAll,describe,expect,it} from 'vitest';
 import {calculate} from '../../src/engine/calculate';
 import {reportHtml} from '../../src/report/reportHtml';
 import {demoFocus005,demoFocus005Before} from '../fixtures/demoFocus005';
+import {withColumnReviewData} from '../fixtures/columnReviewData';
 import type {CalculationSnapshot} from '../../src/engine/types';
 
 // One full calculation of DEMO-FOCUS-005 for the whole file (about 5–8 minutes).
 let s:CalculationSnapshot,html:string;
 const inch=25.4,before=new Map(demoFocus005Before().checks.map(c=>[c.id,c]));
 const check=(id:string)=>{const c=s.checks.find(v=>v.id===id);if(!c)throw Error(`missing ${id}`);return c;};
-beforeAll(()=>{s=calculate(demoFocus005());html=reportHtml(s);},900000);
+// Column review records (G2) keep the package eligible so the issued report renders.
+beforeAll(()=>{s=calculate(withColumnReviewData(demoFocus005()));html=reportHtml(s);},900000);
 
 describe('G4 on the full DEMO-FOCUS-005 calculation',()=>{
  it('A1: coordination checks in their own group; no spurious redesign flag',()=>{

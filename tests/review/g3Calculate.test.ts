@@ -18,7 +18,8 @@ describe('DEMO-FOCUS-005 girder after the G3 review fixes',()=>{
  });
  it('C18: rail rotation is checked against the owner criterion entered in the fixture, citing the criteria only',()=>{
   const c=check('rail-twist');
-  expect(c.title).toBe('Rail rotation · owner criterion');expect(c.capacity).toBe(.005);expect(c.utilization!).toBeCloseTo(.9805,4);
+  expect(c.title).toBe('Rail rotation · owner criterion');expect(c.capacity).toBe(.005);// 0.9805 before; 0.9807 after G4's beveled-washer grip lowers the cap-angle restraint stiffness.
+  expect(c.utilization!).toBeCloseTo(.9807,4);
   expect(c.referenceIds).toEqual(['criteria']);expect(before('rail-twist').refs).toContain('vlasov');
  });
  it('C23: case 16 web compactness for positive moment and F4 flexure',()=>{

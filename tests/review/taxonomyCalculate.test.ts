@@ -1,6 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {calculate,validateProject} from '../../src/engine/calculate';
 import {demoFocus005,demoFocus005Snapshot} from '../fixtures/demoFocus005';
+import {withColumnReviewData} from '../fixtures/columnReviewData';
 import {buildTaxonomy,classifyCheck,gateCheck} from '../../src/engine/checkTaxonomy';
 import {summaryElements} from '../../src/report/designSummary';
 
@@ -10,7 +11,8 @@ import {summaryElements} from '../../src/report/designSummary';
  * re-enter the fatigue table. One full calculate() for this file. Also: every check of a fresh calculation is
  * classified by the explicit table (new checks from other branches included), none by the default rule.
  */
-const scale=1.25,p=demoFocus005();
+// The column review records (frame, drift, seismic) keep the snapshot eligible; they do not affect the haunch.
+const scale=1.25,p=withColumnReviewData(demoFocus005());
 for(const c of p.cranes)c.wheels=c.wheels.map(w=>({...w,loaded:w.loaded*scale,unloaded:w.unloaded*scale,lateral:w.lateral*scale}));
 const s=calculate(p);
 

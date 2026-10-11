@@ -152,10 +152,9 @@ describe('body and page 1 (items 3-5; A1, C16)',()=>{
   expect(tax.entries.get('detail-fatigue-RC10-left')!.typicalOf).toBe(272);
  });
  it('puts open items first on page 1 and never says "no failed checks" while one exists (A1)',()=>{
-  // The fixture's tie-hardware / bearing-stiffener conflict (a coordination notice) is an open item: no pass banner.
-  expect(tax.openItems.map(o=>o.kind)).toEqual(['clash']);
-  expect(text(page1)).toMatch(/1 OPEN ITEM — REVIEW REQUIRED/);expect(text(page1)).not.toMatch(/NO FAILED CHECKS|ALL DESIGN CHECKS SATISFIED/);
-  expect(text(page1).indexOf('Connection layout requires redesign')).toBeLessThan(text(page1).indexOf('Design summary'));
+  // The baseline's tie-hardware / bearing-stiffener notice came from the unused gusseted-tie template; coordination is
+  // now derived from the Coordination checks (G4, A1), which the stored baseline snapshot does not hold: no open item.
+  expect(tax.openItems).toEqual([]);expect(text(page1)).not.toMatch(/Connection layout requires redesign/);
   const s=clone();
   s.checks.push({id:'cap-tie-stiffener-clash',group:'Coordination',title:'Cap tie nuts clear of the girder bearing stiffeners',status:'fail',demand:3.2,capacity:-5,utilization:1e12,quantity:'length',equation:'c\\ge c_{min}',note:'OPEN ITEM: CONNECTION LAYOUT REQUIRES REDESIGN; do not fabricate this arrangement.',referenceIds:[]},
    {id:'crane-1-data',group:'Crane input',title:'Crane supplier data',status:'unverified',equation:'',note:'Bridge speed and minimum wheel loads are missing.',referenceIds:[]});
@@ -236,7 +235,7 @@ describe('review draft export with missing-data open items (unverified)',()=>{
   s.eligible=false;
   expect(()=>reportHtml(s,undefined,'')).toThrow(/not eligible/);
   const h=reportHtml(s,undefined,'',{reviewDraft:true}),p1=text(h.slice(0,h.indexOf('</section>')));
-  expect(p1).toMatch(/REVIEW DRAFT — NOT FOR ISSUE/);expect(p1).toMatch(/2 OPEN ITEMS/);
+  expect(p1).toMatch(/REVIEW DRAFT — NOT FOR ISSUE/);expect(p1).toMatch(/1 OPEN ITEM —/);
   expect(p1.indexOf('frame type and sway amplification')).toBeLessThan(p1.indexOf('Design summary'));
   // Unsupported results or failed analysis verification are never exported, draft or not.
   const u=structuredClone(s);u.checks.push({...u.checks.at(-1)!,id:'x-unsupported',status:'unsupported'});
