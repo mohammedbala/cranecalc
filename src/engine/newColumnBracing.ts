@@ -5,6 +5,8 @@ import {asceCombinations} from './asceCombinations';
 import {boltCapacity,boltProperties,blockShear,plateBearing} from './connectionStrength';
 import {columnResponse} from './columnAnalysis';
 import {activeEndBearing} from './endBearingInputs';
+import {activeColumnCap} from './columnCapInputs';
+import {capWorkPointDrop} from './columnCap';
 import {seismicBasis,seismicCombinations} from './runwaySeismic';
 import {sectionProperties} from './section';
 import {supportStations,type SupportReactionSet} from './supportReactions';
@@ -37,12 +39,13 @@ export function bracingDesign(p:ProjectInput):BracingDesignInput{return p.longit
  */
 export function bracingLayout(p:ProjectInput){
  const stations=supportStations(p),spans=[...new Set(bracingDesign(p).spans)].filter(i=>i>=1&&i<=p.spans.length).sort((a,b)=>a-b);
- const width=Math.min(...spans.map(i=>p.spans[i-1])),height=p.existingColumn!.seatElevation,diagonal=Math.hypot(width,height);
+ // On a column cap the strut passes below the cap, its stiffeners and the bearing nuts.
+ const width=Math.min(...spans.map(i=>p.spans[i-1])),height=p.existingColumn!.seatElevation-capWorkPointDrop(p),diagonal=Math.hypot(width,height);
  return {stations,spans,width,height,diagonal,cos:width/diagonal,sin:height/diagonal,
   braced:stations.map((_,j)=>spans.filter(i=>i===j||i===j+1).length),locating:stations.map((_,j)=>p.system!=='simple'||j<stations.length-1)};
 }
 /** Distance across the runway from the column centerline to the girder web, where the longitudinal force enters. */
-export const girderOffset=(p:ProjectInput)=>{const b=p.details?.bracket;return b?.enabled?b.receiver.depth/2+b.reach:p.existingColumn!.eccentricity;};
+export const girderOffset=(p:ProjectInput)=>{const b=p.details?.bracket;return activeColumnCap(p)?0:b?.enabled?b.receiver.depth/2+b.reach:p.existingColumn!.eccentricity;};
 
 /** ASCE 7-16 Table 12.2-1 H: steel systems not specifically detailed for seismic resistance (AISC 360 only), SDC A to C. */
 export const bracedSeismicSystem={label:'Steel system not specifically detailed for seismic resistance (Table 12.2-1 H)',R:3,Omega0:3,Cd:3,allowed:['A','B','C']} as const;

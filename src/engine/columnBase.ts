@@ -8,6 +8,8 @@ import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 import {seismicBasis,seismicCombinations} from './runwaySeismic';
 import {alongSeismic,braceCases,braceShare,bracingGeometry,bracingLayout,designsBracing,girderOffset,offsetRodEnds} from './newColumnBracing';
+import {activeColumnCap} from './columnCapInputs';
+import {capAlongEccentricity} from './columnCap';
 import type {SupportReactionSet} from './supportReactions';
 import type {CheckResult,ProjectInput} from './types';
 import type {ExistingColumnResult} from './existingColumn';
@@ -77,13 +79,16 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
  const longitudinal=c.longitudinal==='column'?reactions.Cls:0,along=longitudinal?columnResponse(c.height,E*props.Iy,c.weak,[railForce(c.height,ht)]):undefined;
  const basis=seismicBasis(p),sideE=basis?columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,seismicHeight(p))],[hs]):undefined;
  const designed=designsBracing(p)?{cases:braceCases(p,reactions,method,alongSeismic(p,reactions,section)),offset:girderOffset(p)}:undefined;
+ // A column cap: the girder end reactions off the column centerline along the runway, a weak-axis moment at the top.
+ const capTop=activeColumnCap(p)?columnResponse(c.height,E*props.Iy,c.weak,[{x:c.height,moment:1}]):undefined;
  return reactions.supports.map((sp,j)=>{
+  const ex=capTop?capAlongEccentricity(p,j):0,capMy=(runway:number)=>capTop?Math.abs(runway*ex*capTop.reactions.baseMoment):0,capVy=(runway:number)=>capTop?Math.abs(runway*ex*capTop.reactions.base):0;
   const dead=sp.D+column,live=sp.Cd+sp.Cv+sp.Ci+sp.L+sp.Clv,lift=Math.min(0,sp.craneMinimum);
   const act=(k:{id:string;equation:string;factors:{D:number;L:number}},vertical:number,tag:string):BaseAction=>{
    const runway=k.factors.D*sp.D+k.factors.L*vertical,Mh=Math.abs(k.factors.L*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.factors.L*sp.Css*side.reactions.base);
    return {id:`${method} ${k.id}${tag}`,equation:k.equation,P:k.factors.D*dead+k.factors.L*vertical,
     Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,
-    My:along?Math.abs(k.factors.L*longitudinal*along.reactions.baseMoment):0,Vy:along?Math.abs(k.factors.L*longitudinal*along.reactions.base):0,
+    My:(along?Math.abs(k.factors.L*longitudinal*along.reactions.baseMoment):0)+capMy(runway),Vy:(along?Math.abs(k.factors.L*longitudinal*along.reactions.base):0)+capVy(runway),
     Pd:k.factors.D*dead,Md:Math.abs(k.factors.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.factors.D*sp.D*e*eccentric.reactions.base),Mh,Vh};
   };
   const actions=asceCombinations(method).filter(k=>!k.factors.W&&!k.factors.E).flatMap(k=>[act(k,live,''),...(k.factors.L?[act(k,lift,' · least crane vertical')]:[])]);
@@ -96,7 +101,7 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
     const torque=share.locating?k.Hbay*designed.offset:0,V=k.H*share.vertical;
     const at=(crane:number,tag:string,brace:number,Vy:number,rod=0):BaseAction=>{
      const runway=k.D*sp.D+crane,Mh=Math.abs(k.side*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.side*sp.Css*side.reactions.base);
-     return {id:`${k.id}${tag}`,equation:k.equation,P:k.D*dead+crane+brace,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:0,Vy,
+     return {id:`${k.id}${tag}`,equation:k.equation,P:k.D*dead+crane+brace,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway),Vy:Vy+capVy(runway),
       Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:k.seismic||undefined,uplift:Math.max(0,-brace),torque:torque+rod};
     };
     actions.push(at(k.live*live+k.Cd*sp.Cd+k.Cv*sp.Cv,' · brace',V,0));
@@ -108,7 +113,7 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
    const QE=basis.Cs*(sp.D+sp.Cd+column),liveStatic=sp.Cd+sp.Cv;
    for(const k of seismicCombinations(method,basis).filter(v=>v.overstrength)){
     const runway=k.D*sp.D+k.L*liveStatic,Mh=Math.abs(k.E*QE*sideE.reactions.baseMoment),Vh=Math.abs(k.E*QE*sideE.reactions.base);
-    actions.push({id:`${method} ${k.id}`,equation:k.equation,P:k.D*dead+k.L*liveStatic,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:0,Vy:0,
+    actions.push({id:`${method} ${k.id}`,equation:k.equation,P:k.D*dead+k.L*liveStatic,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway),Vy:capVy(runway),
      Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:true});
    }
   }

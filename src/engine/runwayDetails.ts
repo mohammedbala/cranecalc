@@ -6,6 +6,7 @@ import {endBearingSchema} from './endBearingInputs';
 import type {BracketResults} from './bracketDesign';
 import type {ExistingBracketResults} from './existingBracket';
 import type {SupportForceEnvelope} from './bracketForces';
+import type {ColumnCapResults} from './columnCap';
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
 const material=z.object({Fy:pos,Fu:pos,Fexx:pos});
 export const simpleSupportSchema=z.object({endGap:pos,guideTravel:pos,temperatureRise:nn,temperatureFall:nn,settingTolerance:nn});
@@ -66,6 +67,8 @@ export interface RunwayDetailResults {
  existingBracket?:ExistingBracketResults;
  /** Factored strength envelope of the girder end forces at each support, for the bracket and its attachments. */
  bracketForces?:SupportForceEnvelope[];
+ /** Column cap on new freestanding columns: per-grid cap, stiffener, bolt and weld demands, and the fork restraint. */
+ columnCap?:ColumnCapResults;
  cap?:{longitudinalFlow:number;fatigueFlows:number[]};
  /** Major flexure at the equivalent unbraced length from the load-height elastic critical moment. */
  loadHeight?:{utilization:number;demand:number;capacity:number;length:number;critical:number;id:string;combination:string;x:number};

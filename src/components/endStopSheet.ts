@@ -1,4 +1,5 @@
 import {railPadThickness,keeperGeometry} from '../engine/railSeat';
+import {girderBearingTitle} from './columnCapSheet';
 import {stopEnds,stopLocation} from '../engine/endStopInputs';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
@@ -99,7 +100,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(g.faceFront)+1,yb],labels:['FACE PL AND STIFFENERS TO','BASE PL, BOTH SIDES'],weld:size(e.weldSize)},
    {at:[X(g.front),yb+tb*kk/2],labels:[`PL ${size(tb)} X ${size(Wb)} X ${dim(e.base.length)} BASE`]},
    {at:[X(g.frontRow)+hx.corners/2*kk,wFl+hx.nut/2*kk],labels:[boltLabel,`${size(hole)} STD HOLES THRU ${capped?'CAP AND ':''}FLANGE`,'HEADS UP, NUTS BELOW TOP FLANGE']},
-   {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:[`END BEARING STIFFENERS, SEE ${detailRef(detailTitles.bearing)}`]},
+   {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:[`END BEARING STIFFENERS, SEE ${detailRef(girderBearingTitle(p))}`]},
    ...(tie&&endTie?[{at:[X(endTie.tieX),wFl+tie.attachment.saddleThickness*kk] as XY,labels:['TOP TIE SADDLE, FAR SIDE (HIDDEN)',`SEE ${detailRef(detailTitles.flangeTie)}`]}]:[])
   ],lx,Y(tb+H)-54,cut+30);
   // The girder end, led to its end line below the flange.

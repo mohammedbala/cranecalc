@@ -9,6 +9,7 @@ import {boltProperties} from '../engine/connectionStrength';
 import {horizontalPlateGeometry,type HardwareBuilder,type PartInfo} from './connectionDetails';
 import {bearingStiffenerGeometry} from './bearingStiffenerGeometry';
 import {activeEndBearing} from '../engine/endBearingInputs';
+import {activeColumnCap} from '../engine/columnCapInputs';
 
 export function independentBearingSettings(p:ProjectInput){
  if(p.system!=='simple')return undefined;
@@ -35,7 +36,8 @@ export function buildIndependentSupports(p:ProjectInput,columnFace:number,materi
    group.add(mesh);
   }
   stiffenerWelds(group,id,x,d,tf,tw,bs.stiffenerWidth/1000,bs.stiffenerThickness/1000,bs.cope/1000,bs.weldSize/1000,p.section.kind==='cap'&&!!p.capDesign?.topStiffenerCjp,weldMaterial,{x:end.station/1000-L/2,z:0});
-  if(!p.details||!includeTies||tieArrangement(p.details)!=='paired-bars')continue;
+  // A column cap restrains the girder end as a fork: no ties.
+  if(!p.details||!includeTies||activeColumnCap(p)||tieArrangement(p.details)!=='paired-bars')continue;
   const tie=p.details.brace,c=tie.connection,th=tie.thickness/1000,gw=tie.gussetThickness/1000,width=tie.width/1000,length=tie.length/1000,release=tieRelease(p),hg=columnGussetHeight(p)/1000;
   // Paired vertical flat bars can bend out of their plane with end rotation.
   // Place their column end at the actual reference column face.
@@ -75,6 +77,6 @@ export function buildIndependentSupports(p:ProjectInput,columnFace:number,materi
    if(hardware)for(const [rootIndex,offset] of [0,length-conn].entries())for(let row=0;row<c.rows;row++)for(const line of [-1,1])hardware.bolt(group,{id:`${id}-tie-bolt-${side>0?'top':'bottom'}-${rootIndex+1}-${row+1}-${line>0?2:1}`,family:'Independent tie bolt',description:'Two cover bars and central gusset; separate bolt group for each girder end.',diameter:c.diameter/1000,grip:2*th+gw+(release?release.clearance/1000:0),support:{x:end.station/1000-L/2,z:0}},new THREE.Vector3(tx-th-gw/2,y+line*c.gauge/2000,z0+offset+c.edge/1000+row*c.pitch/1000),new THREE.Vector3(1,0,0));
   }
  }
- if(includeTies&&tieArrangement(p.details)!=='paired-bars')group.add(buildAlternativeTies(p,columnFace,material,edge,weldMaterial,hardware));
+ if(includeTies&&!activeColumnCap(p)&&tieArrangement(p.details)!=='paired-bars')group.add(buildAlternativeTies(p,columnFace,material,edge,weldMaterial,hardware));
  return group;
 }
