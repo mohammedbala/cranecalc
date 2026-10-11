@@ -25,8 +25,11 @@ export function weldedAttachments(p:ProjectInput):{name:string;t:number}[]{
  }
  // Continuity plates are fillet welded to the existing column's flanges and web.
  const cs=activeColumnStiffeners(b);if(cs)out.push({name:'column stiffener',t:cs.thickness});
- // Every tie arrangement reaches the column through a gusset welded to its flange.
- out.push({name:'tie gusset',t:d.brace.gussetThickness});
+ // Every gusseted tie reaches the column through a gusset welded to its flange; the cap tieback angle is bolted to the
+ // column (field-drilled holes) and welds only its column stiffener at the tie level, when one is provided.
+ const capStiffener=d.brace.arrangement==='cap-angle'&&d.brace.capAngle?.stiffener?.enabled?d.brace.capAngle.stiffener:undefined;
+ if(capStiffener)out.push({name:'column stiffener at the cap angle tie',t:capStiffener.thickness});
+ if(d.brace.arrangement!=='cap-angle')out.push({name:'tie gusset',t:d.brace.gussetThickness});
  return out;
 }
 /** True where this calculation specifies welds to an existing (not new) column. */

@@ -33,7 +33,9 @@ export const checkGroupPurpose:Record<string,string>={
  'Column cap':'Carry the girder reactions, the girder end fork restraint and the longitudinal force through the cap plate, its stiffeners, bolts and welds into the column.',
  'End bearings':'Seat the girder ends and transfer longitudinal force and uplift through the bearing bolts.',
  'End stops':'Stop the crane: carry the bumper force through the stop and its bolts into the girder and the locating support.',
- 'Tie movement':'Let the girder ends rotate and slide without overstressing the ties or their connections.'
+ 'Tie movement':'Let the girder ends rotate and slide without overstressing the ties or their connections.',
+ 'Cap tieback':'Carry the top flange force from the cap channel through the cap angle, tie plate and end plate into the column flange.',
+ 'Cap tieback movement':'Let the girder end rotate, slide and deflect at the cap angle without overstressing the tie.'
 };
 export const worksheetFigureTopics:Record<string,string>={Geometry:'Geometry','Crane loads':'Loading',Criteria:'Criteria',Connections:'Connections',Validation:'Analysis','Existing building':'Interfaces',Project:'Project'};
 const escape=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
@@ -71,7 +73,24 @@ function geometry(p?:ProjectInput){
   mark(1,24+step*.35-12,30)+mark(2,24+step*.5+(n>1?0:20),62)+mark(3,24+step-12,96);
 }
 type Drawing={linework:string;title:string;note:string;path:string[];detail:Component[]};
+/**
+ * The cap tieback angle in section looking along the runway: the cap angle on the column-side channel flange, the
+ * lapped tie plate, the end plate with its bolts above and below and shims on the column flange, and the column
+ * stiffener at the tie level when needed. Six markers follow the force from the rail head to the column.
+ */
+function capAngleTie(p?:ProjectInput):Drawing{
+ let drawing=section(p,31,35,false,true)+column()+railOn(61,29)+arrow(22,23,46,23)+label(16,26,'H','end',true);
+ // Angle: short leg on the channel flange (outer face x 96), long leg level with the top of the cap (y 29).
+ drawing+=poly('M96 29H120V32H99V52H96Z',true)+path('M90 45H106',true)+rect(103,42,3,6)+rect(86,42,3,6);
+ // Tie plate lapped on the long leg with a vertical lap bolt; end plate, shims and column bolts above and below.
+ drawing+=rect(108,26,78,3,true)+path('M113 21V37',true)+rect(110,19,6,2)+rect(186,15,4,25,true)+rect(190,15,4,25)+path('M181 19H200M181 36H200',true);
+ drawing+=path('M194 27.5H207',false,true)+label(150,15,'TIE PL')+label(110,64,'SLOTS')+label(150,104,'SHIMS / STIFFENER WHEN NEEDED');
+ drawing+=mark(1,30,12)+mark(2,44,58)+mark(3,94,62)+mark(4,148,40)+mark(5,178,52)+mark(6,222,40);
+ return {linework:drawing,title:'Cap tieback angle bolted to the channel cap',note:'The top flange force passes through the cap channel flange and its slotted bolts into the angle, the lapped tie plate, the end plate and shims to the column flange. Pull loads the bolts with prying; push bears. The bolted end bearings restrain the bottom flange.',
+  path:['Side thrust H at the rail head loads the top flange','Top flange and cap carry it to the column-side channel flange','Cap angle bolts in horizontal slots (pull with prying; the girder slides along the runway)','Angle and tie plate, lapped with slip-critical bolts','End plate, bolts above and below the tie, and shims','Column flange, or the stiffener at the tie level when needed'],detail:['tie']};
+}
 function tie(p?:ProjectInput,attachment=false):Drawing{
+ if(p?.details?.brace.arrangement==='cap-angle')return capAngleTie(p);
  const kind=p?.details?.brace.arrangement??'paired-bars',topOnly=!!(p&&activeEndBearing(p));
  const a=kind==='double-angle'?p?.details?.brace.doubleAngle:p?.details?.brace.singleAngle;
  const angle=kind==='single-angle'||kind==='double-angle',top=angle&&a?.connectionStyle==='top-flange-angle';
@@ -155,7 +174,7 @@ export function checkFigure(topic:string,p?:ProjectInput):CheckFigure{
    steps=['Each wheel passage gives a stress range Δσ at the detail','Detail category: AISC 360 Appendix 3','Cycles n in each duty bin; Miner sum'];detail=['criteria'];break;
   case 'Detailing':title='Bolt layout and movement allowance';drawing=rect(33,30,174,46,true)+[65,168].map(x=>`<rect x="${x-13}" y="47" width="26" height="12" rx="6" fill="white" stroke="${ink}" stroke-width="1.4"/>`+circle(x,53,4)).join('')+dimension(33,65,20,'edge',true)+dimension(65,168,90,'pitch / travel')+path('M117 44H185',false,true)+mark(1,20,40)+mark(2,200,96);
    steps=['Edge distance and pitch of each bolt','Slot length for the movement'];detail=['tie'];break;
-  case 'Connections':case 'Flange attachment':({title,note,linework:drawing,path:steps,detail}=tie(p,topic==='Flange attachment'));break;
+  case 'Connections':case 'Flange attachment':case 'Cap tieback':case 'Cap tieback movement':({title,note,linework:drawing,path:steps,detail}=tie(p,topic==='Flange attachment'));break;
   case 'Column bracket':({title,note,linework:drawing,path:steps,detail}=bracket(p));break;
   case 'Rail details':title='Rail, keeper and local flange';drawing=rect(40,86,160,7,true)+rect(72,82,96,4)+poly('M82 82V76H113V52H104V40H136V52H127V76H158V82Z')+rect(66,74,15,8,true)+rect(159,74,15,8,true)+circle(120,22,13)+arrow(120,0,120,9)+arrow(176,46,140,46)+label(180,49,'H','start')+path('M196 76L176 79')+label(198,74,'KEEPER','start')+mark(1,104,14)+mark(2,30,82)+mark(3,190,36)+mark(4,52,70);
    steps=['Wheel P on the rail head','Rail base bears on the pad and flange','Side thrust H on the rail head','Keepers and their welds to the flange'];detail=['rail'];break;

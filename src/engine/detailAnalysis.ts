@@ -24,8 +24,11 @@ import {craneCombinations} from './aistLoads';
 import {runwayEnds} from './continuation';
 import {activeColumnCap} from './columnCapInputs';
 import {capForkStiffness,createColumnCapCollector} from './columnCap';
+import {capAngleBraceSystem,capAngleFatigueDetails} from './capAngleTie';
 
 export function braceSystem(p:ProjectInput){
+ // The cap tieback angle: its tie plate member and the series stiffness of its plate, legs, bolts, shims and column flange.
+ const capAngle=capAngleBraceSystem(p);if(capAngle)return capAngle;
  const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875),plies=tiePlies(p);
  const plate=plateMember(b.width,b.thickness,b.length,p.section.E,m.Fy,m.Fu,b.width-holes,p.method),cos=b.reach/b.length;
  // Each bar buckles out of plane between the innermost bolt rows, fixed in the girder bolt group and
@@ -79,6 +82,8 @@ export function automaticFatigueDetails(p:ProjectInput){
  // toe of each end fillet on the flange, one weld leg beyond the saddle end.
  const sa=tie?.attachment,inch=25.4,saddleCategory=!sa?'E1':sa.saddleLength<2*inch?'C':sa.saddleLength<=Math.min(12*sa.saddleThickness,4*inch)?'D':sa.saddleThickness<=.8*inch?'E':'E1';
  if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} · end fillet toe ${sign<0?1:2} / ${point}`,x:v.tieX+sign*(tie.attachment.saddleLength/2+tie.attachment.weldSize),point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.1, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment: toe of the transverse end fillet on the flange; global stress plus local flange strip bending`});
+ // Cap tieback angle: bolt holes in the column-side channel flange near each girder end.
+ list.push(...capAngleFatigueDetails(p));
  // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
  const stop=activeEndStop(p);
  if(stop)for(const [end,x0,dir] of ([['left',0,1],['right',L,-1]] as const).filter(([end])=>stopEnds(p).includes(end)))for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:x0+dir*row,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});

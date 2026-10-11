@@ -9,6 +9,7 @@ import {activeEndBearing} from '../../engine/endBearingInputs';
 import {simpleSupportInput} from '../../engine/simpleSupports';
 import {railTopAboveSteel} from '../../engine/railSeat';
 import {columnStiffenerGeometry} from '../../engine/columnStiffeners';
+import {capAngleTies} from './capAngleParts';
 import {haunchGeometry,isTaperedHaunch} from '../../engine/taperedHaunchInputs';
 
 /**
@@ -134,6 +135,7 @@ export function wheel(S:Scene,g:SupportGeometry,x:number,R=110,y=g.reach,zh=g.ra
 export function ties(S:Scene,p:ProjectInput,g:SupportGeometry,role:Role,both=false){
  const d=p.details;if(!d||g.support==='column-cap')return S;
  const t=d.brace,G=g.girder,z=G.z0+G.d-G.tf-t.width/2-6,tg=t.gussetThickness,kind=t.arrangement??'paired-bars';
+ if(kind==='cap-angle')return capAngleTies(S,p,g,role,{both});
  const set=t.flangeAttachment?.longitudinalSetback??3*inch,xs=g.simple?[-g.gap/2-set-tg/2,...(both?[g.gap/2+set+tg/2]:[])]:[0];
  const girderSide=g.reach-G.bf/2+2*inch,colGusset=Math.max(4*inch,t.connection.edge*2+t.connection.pitch);
  for(const x of xs){

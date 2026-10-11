@@ -55,11 +55,15 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
    const chain=[0,...stations,grids.at(-1)!].filter((v,i,a)=>i===0||Math.abs(v-a[i-1])>1);
    for(let i=1;i<chain.length;i++)svg+=dimension(X(chain[i-1]),X(chain[i]),fromOuter,outer,dim(Math.abs(chain[i]-chain[i-1])),i===1?'left':'right');
    for(const j of rail.joints){
-    const g=grids.reduce((a,b)=>Math.abs(b-j)<Math.abs(a-j)?b:a);
-    // One level further in where the text would overlap a joint dimension already placed.
-    const label=dim(Math.abs(j-g)),w=textWidth(label,9),a=Math.min(X(g),X(j)),b=Math.max(X(g),X(j)),left=w+6<=b-a?(a+b)/2-w/2:j<g?a-4-w:b+4;
-    const level=boxes.some(q=>q[2]===inner-12&&left-2<q[1]&&left+w+2>q[0])?(up?inner+14:inner-14):inner;
-    svg+=dimension(X(g),X(j),fromInner,level,label,j<g?'left':'right');
+    const g=grids.reduce((a,b)=>Math.abs(b-j)<Math.abs(a-j)?b:a),label=dim(Math.abs(j-g)),side:'left'|'right'=j<g?'left':'right';
+    // A joint value whose text would overlap one already placed (many bays) reads beyond its other end, or one tier
+    // further from its rail where its extension lines pass clear of the values already placed.
+    const box=(y:number,outside:'left'|'right')=>{const w=textWidth(label,9),a=Math.min(X(g),X(j)),b=Math.max(X(g),X(j)),left=w+6<=b-a?(a+b)/2-w/2:outside==='right'?b+4:a-4-w;return [left-2,left+w+2,y-12,y-2];};
+    const clear=(y:number,outside:'left'|'right')=>{const [x1,x2,y1,y2]=box(y,outside),lo=Math.min(fromInner,y),hi=Math.max(fromInner,y);
+     return !boxes.some(b=>b[0]<x2&&x1<b[1]&&b[2]<y2&&y1<b[3])&&!boxes.some(b=>[X(g),X(j)].some(x=>x>b[0]&&x<b[1])&&b[2]<hi&&lo<b[3]);};
+    const flip=side==='left'?'right':'left',tiers=[0,1,2].flatMap(t=>[[inner+(up?12:-12)*t,side],[inner+(up?12:-12)*t,flip]] as [number,'left'|'right'][]);
+    const [y,outside]=tiers.find(([y,o])=>clear(y,o))??[inner,side];
+    svg+=dimension(X(g),X(j),fromInner,y,label,outside);
    }
   }
   // Grid lines through both runways, broken where dimension text crosses them.

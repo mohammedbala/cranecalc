@@ -24,6 +24,8 @@ import {existingLayout} from '../engine/existingLayout';
 import {tieRelease,stiffenerTieGeometry,flangeTieGeometry} from '../engine/tieGeometry';
 import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newColumnBracing';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
+import {capAngleGeometry} from '../engine/capAngle';
+import {capAngleTitles} from './capAngleSheet';
 
 /** A sheet of the set as the cover indexes it, with the titles of its details in drawing order. */
 export interface SheetEntry {number:string;title:string;details?:readonly string[];}
@@ -159,6 +161,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(activeEndStop(p)?[`INSTALL THE RUNWAY END STOPS (${detailRef(detailTitles.endStop)}) AT ${stopLocation(p).toUpperCase()} BEFORE THE CRANE IS OPERATED OR LOAD TESTED.`]:[]),
   // The flexible plate tie works only while it can flex: no forced fit, no welds or stiffeners on its clear length.
   ...(flangeTieGeometry(p)?.plies===1?[`FLEXIBLE PLATE TIES (${detailRef(detailTitles.flangeTie)}): BOLT THE PLATE WITHOUT JACKING, HEATING OR SHIMMING TO FORCE FIT; DO NOT WELD, DRILL OR STIFFEN IT BETWEEN ITS BOLT GROUPS. INSPECT THE PLATE AND ITS BOLTS AT THE CRANE INSPECTION INTERVALS.`]:[]),
+  // The cap tieback angle is bolted at both ends: the column holes are drilled in the field, nothing is welded at the tie.
+  ...(capAngleGeometry(p)?[`CAP TIEBACK ANGLES (${detailRef(capAngleTitles.section)}): FIELD-DRILL THE HOLES IN THE ${supportColumn(p).isNew?'':'EXISTING '}COLUMN FLANGES TO MATCH THE END PLATES; DO NOT WELD THE TIES TO THE COLUMNS, CAPS OR GIRDERS. INSTALL AND TENSION THE CAP BOLTS IN THE ANGLE SLOTS, CENTERED, BEFORE THE TIE PLATES; SHIM THE END PLATES TO THE COLUMN FLANGE AND PRETENSION THE COLUMN BOLTS.`]:[]),
   'LOAD TEST THE CRANE PER ASME B30.2 AND THE MANUFACTURER. THE TEST LOAD SHALL NOT EXCEED 125% OF THE RATED LOAD; COORDINATE ANY TEST LOAD ABOVE THE RATED LOAD WITH THE ENGINEER OF RECORD BEFORE TESTING.'
  ].map(v=>v.toUpperCase())));
  // Column 2: criteria.
