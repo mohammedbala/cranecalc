@@ -12,14 +12,14 @@ import {dcText} from '../engine/checkPresentation';
  */
 export type Tx=(v:number,q:Quantity)=>string;
 const close=(a:number,b:number|undefined)=>b!==undefined&&Number.isFinite(b)&&Math.abs(a-b)<=5e-3*Math.max(Math.abs(b),1e-9);
-const n=(v:number,d=2)=>v.toFixed(d);
+const n=(v:number,_d=2)=>v.toFixed(Math.min(2,_d));
 
 export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|undefined{
  if(c.capacity===undefined||!Number.isFinite(c.capacity)||c.status==='not-applicable'||c.status==='excluded')return undefined;
  const p=s.input,d=p.details,lrfd=p.method==='LRFD',cap=c.capacity,dem=c.demand??0,q=c.quantity??'ratio';
  const factor=(phi:number,omega:number)=>lrfd?phi:1/omega,fl=(phi:number,omega:number)=>lrfd?`${n(phi)}`:`1/${n(omega)}`;
  const lhs=lrfd?'\\phi ':'1/\\Omega\\,';
- const check=(_:number,sym:string)=>`\\ \\ge\\ ${sym}=${tx(dem,q)}\\quad D/C=${dcText(c.utilization,3)}`;
+ const check=(_:number,sym:string)=>`\\ \\ge\\ ${sym}=${tx(dem,q)}\\quad D/C=${dcText(c.utilization,2)}`;
  // Girder wheel patch: J10.2 and J10.3 with the AIST bearing length.
  if((c.id==='wheel-yield'||c.id==='wheel-cripple')&&p.aist&&s.designAnalysis&&s.properties){
   const a=s.designAnalysis,str=girderStrength(p,s.properties),{Fy,E,tw,tf,d:depth}=p.section,lb=2*(p.aist.railDepth+tf);
@@ -27,11 +27,11 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
    const R=concentratedResistance(p,str,lb,end),P=end?a.wheelNearEndLoad:a.wheelLoad;
    if(c.id==='wheel-yield'&&close(P/R.yielding,c.utilization))return [
     `l_b=2(d_{rail}+t_f)=2(${tx(p.aist.railDepth,'length')}+${tx(tf,'length')})=${tx(lb,'length')}`,
-    `${lrfd?'\\phi R_n=1.00':'R_n/\\Omega=1/1.50\\times'}F_yt_w(${end?'2.5':'5'}k+l_b)=${lrfd?'1.00':'1/1.50'}\\times${tx(Fy,'stress')}\\times${tx(tw,'length')}\\times(${end?'2.5':'5'}\\times${tx(str.k,'length')}+${tx(lb,'length')})=${tx(R.yielding,'force')}\\ \\ge\\ P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,3)}`];
+    `${lrfd?'\\phi R_n=1.00':'R_n/\\Omega=1/1.50\\times'}F_yt_w(${end?'2.5':'5'}k+l_b)=${lrfd?'1.00':'1/1.50'}\\times${tx(Fy,'stress')}\\times${tx(tw,'length')}\\times(${end?'2.5':'5'}\\times${tx(str.k,'length')}+${tx(lb,'length')})=${tx(R.yielding,'force')}\\ \\ge\\ P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
    if(c.id==='wheel-cripple'&&close(P/R.crippling,c.utilization)){
     const t=end&&lb/depth>.2?`(4l_b/d-0.2)`:`3(l_b/d)`,tv=end&&lb/depth>.2?`(4\\times${n(lb/depth,3)}-0.2)`:`3\\times${n(lb/depth,3)}`;
     return [`${lrfd?'\\phi R_n=0.75':'R_n/\\Omega=1/2.00\\times'}\\,${end?'0.40':'0.80'}t_w^2\\left[1+${t}(t_w/t_f)^{1.5}\\right]\\sqrt{EF_yt_f/t_w}=${lrfd?'0.75':'1/2.00'}\\times${end?'0.40':'0.80'}\\times${tx(tw,'length')}^2\\left[1+${tv}\\times${n((tw/tf)**1.5,3)}\\right]\\sqrt{${tx(E,'stress')}\\times${tx(Fy,'stress')}\\times${n(tf/tw,3)}}=${tx(R.crippling,'force')}`,
-     `P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,3)}`];
+     `P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
    }
   }
  }
@@ -70,7 +70,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   const res=capAngleResult(s),bolt=c.id==='cap-angle-cap-bolt'?res?.g.input.capBolts:res?.g.input.columnBolts;
   if(res&&bolt){const Ab=Math.PI*bolt.diameter**2/4,F=res.design.F,T=c.id==='cap-angle-cap-bolt'?F/2:undefined;
    for(const Fnt of bolt.grade==='A490'?[780,113*6.894757293]:[620,90*6.894757293]){const R=factor(.75,2)*Fnt*Ab;if(close(R,cap))return [`${lhs}R_n=${fl(.75,2)}F_{nt}A_b=${fl(.75,2)}\\times${tx(Fnt,'stress')}\\times${tx(Ab,'area')}=${tx(R,'force')}\\quad(${bolt.grade},\\ d_b=${tx(bolt.diameter,'length')})`,
-    T!==undefined?`T_u+q=F/2+q=${tx(F,'force')}/2+${tx(dem-T,'force')}=${tx(dem,'force')}\\le${tx(R,'force')}\\quad D/C=${dcText(c.utilization,3)}`:`T_u+q_{ep}+q_c=${tx(dem,'force')}\\le${tx(R,'force')}\\quad(F=${tx(F,'force')})\\quad D/C=${dcText(c.utilization,3)}`];}}
+    T!==undefined?`T_u+q=F/2+q=${tx(F,'force')}/2+${tx(dem-T,'force')}=${tx(dem,'force')}\\le${tx(R,'force')}\\quad D/C=${dcText(c.utilization,2)}`:`T_u+q_{ep}+q_c=${tx(dem,'force')}\\le${tx(R,'force')}\\quad(F=${tx(F,'force')})\\quad D/C=${dcText(c.utilization,2)}`];}}
  }
  // J10.1 flange local bending under a tension flange force.
  if(/(column-flange|seat-flange)$/.test(c.id)&&d?.bracket&&q==='force'){

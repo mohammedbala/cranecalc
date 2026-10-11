@@ -6,6 +6,7 @@ import {checkTable,monochrome,shortReference,sig3} from '../src/report/reportPar
 import {elementChecks,loadPathFigure} from '../src/report/designSummary';
 import {checkFigure,checkGroupPurpose} from '../src/components/checkFigures';
 import type {CheckResult} from '../src/engine/types';
+import {overPrecise} from './fixtures/reportText';
 
 const capped=calculate(cappedDemonstrationProject());
 const html=compactReport(capped,'');
@@ -65,6 +66,9 @@ describe('compact, readable calculation report',()=>{
   expect(html).not.toContain('katex-error');expect(html).not.toMatch(/NaN|undefined/);
   // Separate display-equation boxes are not repeated in the compact report.
   expect(html).not.toContain('<div class="equation">');
+ });
+ it('prints every number with at most two decimal places',()=>{
+  expect(overPrecise(html)).toEqual([]);
  });
  it('is black and white: page styles, figures and embedded sketches carry no colour',()=>{
   expect(coloured(html)).toEqual([]);
