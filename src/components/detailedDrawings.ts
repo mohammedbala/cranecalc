@@ -75,7 +75,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  const dh=boltProperties('A325',r.jointBoltDiameter).hole;
  for(const at of [r.jointEdge,r.jointEdge+r.jointPitch,barLength-r.jointEdge-r.jointPitch,barLength-r.jointEdge]){dr.rect(jx+(at-.75*r.jointBoltDiameter)*k,jy+(r.jointPlateHeight-dh)*k/2,1.5*r.jointBoltDiameter*k,dh*k,'HIDDEN');dr.circle(jx+at*k,jy+r.jointPlateHeight*k/2,r.jointBoltDiameter*k/2);}
  dr.dimH(jx,jx+barLength*k,jy+r.jointPlateHeight*k,520,`JOINT BARS ${f(barLength)} LONG x ${f(r.jointPlateHeight)} HIGH x ${f(r.jointPlateThickness)} EACH`);
- dr.text(620,370,`4 A325 bolts, diameter ${f(r.jointBoltDiameter)}`,10);dr.text(620,395,`2 bolts each side; pitch ${f(r.jointPitch)}`,10);dr.text(620,420,`Edge ${f(r.jointEdge)}; two shear planes`,10);dr.text(620,445,`Slots ${f(1.5*r.jointBoltDiameter)} x ${f(dh)}`,10);dr.text(620,470,'Snug-tight; slot length along rail',10);dr.text(620,495,'Keeper pair on each cut rail end',10);output.push(dr.drawing);
+ dr.text(620,370,`4 A325 bolts, diameter ${f(r.jointBoltDiameter)}`,10);dr.text(620,395,`2 bolts each side; pitch ${f(r.jointPitch)}`,10);dr.text(620,420,`Edge ${f(r.jointEdge)}; two shear planes`,10);dr.text(620,445,`Joint bars slotted ${f(1.5*r.jointBoltDiameter)} x ${f(dh)} along rail`,10);dr.text(620,470,`Rail web: ${f(dh)} drilled holes; snug-tight`,10);dr.text(620,495,'Keeper pair on each cut rail end',10);output.push(dr.drawing);
  }
  if(p.section.kind==='cap'&&p.capDesign){
   const b=p.section,c=p.capDesign,k=230/b.d,dr=new Draft(s,'cap-attachment-detail','Continuous cap-channel attachment','SK-08',500,1/k,`Full-bearing cap; continuous longitudinal fillets; no holes in channel / W top flange. See ${sheets('cap')} for printed scales.`);
