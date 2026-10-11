@@ -89,13 +89,13 @@ describe('compact, readable calculation report',()=>{
   for(const n of [1,2,3,4,5,7,8])expect(svg).toContain(`>${n}</text>`);
   expect(svg).toContain('TWIN-RIB BRACKET');expect(svg).toContain('TOP TIE');
  });
- it('cites the specific clause of a connection limit state and three significant figures',()=>{
+ it('cites the specific clause of a connection limit state, three significant figures and two decimals at most',()=>{
   const c=(id:string)=>capped.checks.find(v=>v.id===id)!;
   expect(shortReference(c('tie-slip'))).toBe('AISC 360-16 J3.8');
   expect(shortReference(c('tie-block'))).toBe('AISC 360-16 J4.3');
   expect(shortReference(c('bracket-column-yield'))).toContain('AISC 360-16 J10.2');
   expect(shortReference(c('crane-1-impact'))).toContain('ASCE 7-16 §4.9.3');
-  expect(sig3(25.4*0.0329961,'length','US')).toBe('0.0330 in');expect(sig3(914.68*1355817.948,'moment','US')).toBe('915 kip-ft');
+  expect(sig3(25.4*0.0329961,'length','US')).toBe('3.30 × 10⁻² in');expect(sig3(25.4*0.25,'length','US')).toBe('0.25 in');expect(sig3(25.4*21.0865,'length','US')).toBe('21.1 in');expect(sig3(914.68*1355817.948,'moment','US')).toBe('915 kip-ft');
  });
  it('collapses checks repeated over stations to their governing member, keeping the count',()=>{
   const rows:CheckResult[]=[1,2,3].map(i=>({id:`s${i}`,group:'Fatigue',title:`Station ${i}`,status:'pass',equation:'\\Delta f\\le F_{SR}',note:'',referenceIds:['aisc-fatigue'],demand:i,capacity:10,utilization:i/10,quantity:'ratio'}));
