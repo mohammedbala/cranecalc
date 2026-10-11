@@ -2,6 +2,7 @@ import {supportColumn} from '../engine/drawingData';
 import {bracketForceTopic} from './bracketForceTable';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
+import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {connectionOptionChecks} from '../engine/connectionOptions';
 import {ribGeometry} from '../engine/bracketRib';
@@ -122,7 +123,21 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   [`NEW SEAT PL ${f(b.seatThickness)} X ${f(b.seatLength)} X ${f(b.seatProjection)}`,`4 - ${f(e.bolts.diameter)} DIA. ${e.bolts.grade} RETAINING BOLTS`,`EXISTING ${existingBracketLabel(b)}`,'ORIGINAL ROOT WELDS / CONTINUITY PLATES','SURVEY GEOMETRY AND VERIFY CAPACITY ASSESSMENT','SEAT BOLTS ARE NOT A GIRDER HOLD-DOWN','SLIDING END AND TIES: SEPARATE MOVEMENT DESIGN','ORIGINAL BRACKET WELDS ARE NOT NEW FIELD WELDS'].forEach((v,i)=>dr.text(485,100+i*29,v,9));
   output.push(dr.drawing);
  }
- if(d.bracket?.enabled&&!usesExistingBracket(p)){
+ if(d.bracket?.enabled&&usesRolledBracket(p)){
+  // Rolled wide-flange bracket: the stub in side view, its seat, bearing stiffener and the welds to the column.
+  const b=d.bracket,st=projectStub(p),r=st.input,seat=st.seat,k=Math.min(270/st.L,230/(st.d+(seat?.t??0))),sc=supportColumn(p);
+  const dr=new Draft(s,'welded-column-bracket',`Welded ${st.name} column bracket`,'SK-10',560,1/k,`AISC F2/F3, G2, H3.3, J2, J10 and Appendix 3 / Reference AIST Technical Report 13 5.9.2 / see ${sheets('bracket')}.`);
+  const face=365,top=100,ft=top+(seat?.t??0)*k,bot=ft+st.d*k,tip=face-st.L*k,center=face-b.reach*k;
+  dr.rect(face,75,b.receiver.flangeThickness*k,bot-50,'HIDDEN');
+  if(seat)dr.rect(face-seat.y1*k,top,(seat.y1-seat.y0)*k,seat.t*k);
+  dr.rect(tip,ft,st.L*k,st.d*k);dr.line(tip,ft+st.tf*k,face,ft+st.tf*k);dr.line(tip,bot-st.tf*k,face,bot-st.tf*k);
+  if(st.stiffener)dr.rect(center-st.stiffener.t*k/2,ft+st.tf*k,st.stiffener.t*k,(st.d-2*st.tf)*k);
+  dr.dimH(tip,face,bot,bot+36,f(st.L));dr.dimV(ft,bot,tip,tip-28,f(st.d));dr.dimH(center,face,top,60,f(b.reach));
+  [`${st.name} X ${f(st.L)} STUB, ASTM A992`,...(seat?[`SEAT PL ${f(seat.t)} X ${f(seat.length)}, ${f(seat.weld).replaceAll('"','')} FILLETS AT FLANGE TIPS`]:['BEARINGS ON THE STUB TOP FLANGE']),...(st.stiffener?[`2 STIFF. PL ${f(st.stiffener.t)} AT GIRDER C/L, ${f(st.stiffener.weld).replaceAll('"','')} FILLETS`]:[]),r.flangeJoint==='cjp'?'FLANGES: CJP GROOVE WELDS TO COLUMN':`FLANGES: ${f(r.flangeWeld).replaceAll('"','')} FILLETS BOTH FACES`,'TORSION FROM OFFSET BEARINGS: SEE CALCULATION','KEEP SLIDING GIRDER BEARINGS FREE','GLOBAL COLUMN / FRAME / FOUNDATIONS: SEPARATE'].forEach((v,i)=>dr.text(485,100+i*29,v,10));
+  dr.fieldFilletLeader(face,(ft+bot)/2,485,337,f(r.webWeld),[`${sc.weld} WEB TO ${sc.name}`,'BOTH SIDES, BETWEEN FILLETS'],true,sc.field);
+  output.push(dr.drawing);
+ }
+ if(d.bracket?.enabled&&!usesExistingBracket(p)&&!usesRolledBracket(p)){
   const b=d.bracket,rg=ribGeometry(b),k=Math.min(270/b.seatProjection,250/b.ribDepth),dr=new Draft(s,'welded-column-bracket',rg.tapered?'Welded gravity bracket / two haunched ribs':'Welded gravity bracket / two rectangular ribs','SK-10',560,1/k,`AISC F11, J2, J4, J10 and Appendix 3 / Reference AIST Technical Report 13 5.9.2 / see ${sheets('bracket')}.`);
   const face=365,top=100,tip=face-b.seatProjection*k,root=top+b.seatThickness*k,bot=root+b.ribDepth*k;
   dr.rect(face,75,b.receiver.flangeThickness*k,bot-50,'HIDDEN');dr.rect(tip,top,b.seatProjection*k,b.seatThickness*k);

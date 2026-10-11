@@ -1,4 +1,5 @@
 import {supportColumn} from '../engine/drawingData';
+import {bracketSeat} from '../engine/rolledBracketInputs';
 import {activeEndBearing,slidingPhrase} from '../engine/endBearingInputs';
 import {flangeTieGeometry,tieRelease,tieSides} from '../engine/tieGeometry';
 import type {CalculationSnapshot} from '../engine/types';
@@ -33,14 +34,14 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  const cx=250,top=125,bottom=top+b.d*k,g=joint?c.endGap*k/2:0,l=bs.length*k,st=bs.stiffenerThickness*k,extent=2*l+g;
  // Rows below the lowest steel and a label column right of the girders follow the drawn size, so the
  // detail stays clear at any scale.
- const lowest=bottom+bs.thickness*k+(wb?wb.seatThickness*k:25.4*k+27),dimY=lowest+31,nameY=dimY+18,lx=cx+extent+85;
+ const seat=wb?bracketSeat(wb):undefined,lowest=bottom+bs.thickness*k+(seat?seat.thickness*k:25.4*k+27),dimY=lowest+31,nameY=dimY+18,lx=cx+extent+85;
  const stiffY=top+Math.max(59,(bottom-top)*.3),bearingY=Math.max(stiffY+(joint?99:46),bottom+7),noteY=Math.max(nameY+16,bearingY+27);
  svg+='<g data-view="independent-end-elevation">';
  // The column beyond runs between the end gap dimension above and the bearing length dimensions below.
  svg+=rect(cx-m.column.bf*1000*k/2,top-11,m.column.bf*1000*k,lowest+14-(top-11),'reference-line');
  svg+=line([cx,90],[cx,nameY-4],'grid-line')+bubble(cx,86,gridLabel)+text(cx-12,89,gridNote,7.2,'end');
  const spread=(2*bs.length+c.endGap+2*c.guideTravel)*k;
- if(wb){svg+=rect(cx-wb.seatLength*k/2,bottom+bs.thickness*k,wb.seatLength*k,wb.seatThickness*k,'runway-line');}else{
+ if(seat){svg+=rect(cx-seat.length*k/2,bottom+bs.thickness*k,seat.length*k,seat.thickness*k,'runway-line');}else{
  svg+=rect(cx-spread/2,bottom+bs.thickness*k,spread,25.4*k,'reference-line');
  svg+=rect(cx-spread/2,bottom+(bs.thickness+25.4)*k,spread,25,'reference-line');
  svg+=line([cx-spread/2,bottom+(bs.thickness+25.4)*k+20],[cx+spread/2,bottom+(bs.thickness+25.4)*k+27],'reference-line');

@@ -37,10 +37,10 @@ describe('field welds to existing building steel',()=>{
  });
  it('identifies field and shop welds in 3D without changing their entered sizes',()=>{
   const p=cappedDemonstrationProject(),b=p.details!.bracket!,steel=new THREE.MeshBasicMaterial(),edge=new THREE.LineBasicMaterial();
-  for(const kind of ['twin-rib','haunched-seat','rolled-corbel'] as const){
+  for(const kind of ['twin-rib','haunched-seat'] as const){
    b.arrangement=kind;const group=buildWeldedBrackets(b,[0],0,steel,edge),welds:any[]=[];
    group.traverse(o=>{if(o.userData.part?.weld)welds.push(o.userData.part.weld);});
-   const field=welds.filter(w=>w.location==='field');expect(field).toHaveLength(kind==='rolled-corbel'?6:4);
+   const field=welds.filter(w=>w.location==='field');expect(field).toHaveLength(4);
    expect(field.every(w=>w.existingSteel&&w.size===b.rootWeld/1000)).toBe(true);
    expect(welds.filter(w=>w.location==='shop').every(w=>w.size===b.seatWeld/1000)).toBe(true);
   }

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
 import {calculate,validateProject,fingerprint} from '../src/engine/calculate';
 import {projectSchema} from '../src/engine/types';
-import {connectionOptionChecks,validateConnectionOptions,defaultReferenceTie,bracketModelDepth} from '../src/engine/connectionOptions';
+import {connectionOptionChecks,validateConnectionOptions,defaultReferenceTie,bracketModelDepth,selectBracketArrangement} from '../src/engine/connectionOptions';
 import {buildWeldedBrackets} from '../src/components/weldedBracketGeometry';
 import {buildAlternativeTies} from '../src/components/alternativeTieGeometry';
 import {aiscShapeByName} from '../src/data/aiscSections';
@@ -21,11 +21,12 @@ describe('connection arrangement library and design boundaries',()=>{
   const p=cappedDemonstrationProject(),previous=fingerprint(p);p.details!.bracket!.arrangement='haunched-seat';p.details!.bracket!.tipDepth=127;p.details!.brace.arrangement='bearing-link';p.details!.brace.referenceDetail={...defaultReferenceTie,pinDiameter:31.75};
   const restored=projectSchema.parse(JSON.parse(JSON.stringify(p)));expect(restored.details!.bracket!.tipDepth).toBe(127);expect(restored.details!.brace.referenceDetail!.pinDiameter).toBe(31.75);expect(fingerprint(p)).not.toBe(previous);expect(validateProject(restored)).toEqual([]);
  });
- it.each(['rolled-corbel'] as const)('does not assign twin-rib resistance to %s',kind=>{
-  const p=cappedDemonstrationProject();p.details!.bracket!.arrangement=kind;
-  const s=calculate(p);expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);expect(s.detailResults).toBeUndefined();
-  expect(s.checks.find(c=>c.id==='option-bracket-model')).toMatchObject({status:'unsupported'});expect(s.checks.find(c=>c.id==='option-bracket-model')?.capacity).toBeUndefined();expect(s.checks.some(c=>c.id==='bracket-rib-flexure')).toBe(false);
- },60000);
+ // Every bracket in the library now has its own design model: none takes the twin-rib resistance or a preview-only block.
+ it.each(['haunched-seat','rolled-corbel'] as const)('designs %s with its own model, not the twin-rib preview block',kind=>{
+  const p=cappedDemonstrationProject();p.details=selectBracketArrangement(p.details!,kind);
+  // Fit on the receiving column is the bracket's own validation (rolledBracket / haunchedSeat tests).
+  expect(validateConnectionOptions(p)).toEqual([]);expect(connectionOptionChecks(p).find(c=>c.id==='option-bracket-model')).toBeUndefined();
+ });
  it.each(['bearing-link','paired-links'] as const)('does not inherit flat-bar stiffness or fatigue for %s',kind=>{
   const p=cappedDemonstrationProject();p.details!.brace.arrangement=kind;const s=calculate(p);
   expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);expect(s.checks.some(c=>c.id==='brace-member'||c.id==='tie-weld-fatigue')).toBe(false);expect(s.checks.find(c=>c.id==='option-tie-model')).toMatchObject({status:'unsupported'});expect(flangeTieGeometry(p)).toBeUndefined();
@@ -33,7 +34,7 @@ describe('connection arrangement library and design boundaries',()=>{
  });
  it('rejects unknown selections, nonexistent shapes and incompatible double links',()=>{
   const p=cappedDemonstrationProject();expect(projectSchema.safeParse({...p,details:{...p.details,brace:{...p.details!.brace,arrangement:'rated-link'}}}).success).toBe(false);
-  p.details!.bracket!.arrangement='rolled-corbel';p.details!.bracket!.corbelShape='W999X999';expect(validateConnectionOptions(p).join(' ')).toContain('valid AISC');
+  p.details!.bracket!.arrangement='rolled-corbel';p.details!.bracket!.corbelShape='W999X999';expect(validateProject(p).join(' ')).toContain('valid AISC');
   p.details!.bracket!.arrangement='twin-rib';p.details!.brace.arrangement='paired-links';p.system='continuous';expect(validateConnectionOptions(p).join(' ')).toContain('separate simple-span');
  });
  it('rejects tapered ribs deeper at the tip and eyes without pin material',()=>{

@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {existingBracketSchema} from './existingBracketInputs';
+import {rolledBracketSchema} from './rolledBracketInputs';
 const pos=z.number().finite().positive();
 /** Dimensions are calculation inputs in mm, never reference-view preferences. */
 export const bracketSchema=z.object({
@@ -7,6 +8,8 @@ export const bracketSchema=z.object({
  existing:existingBracketSchema.optional(),
  wideFlange:existingBracketSchema.extend({shape:z.string().min(1).max(30)}).optional(),
  tipDepth:pos.optional(),corbelShape:z.string().min(1).max(30).optional(),
+ /** New rolled wide-flange bracket ('rolled-corbel'): stub steel, welds and bearing stiffeners. */
+ rolled:rolledBracketSchema.optional(),
  enabled:z.boolean(),reach:pos,seatLength:pos,seatProjection:pos,seatThickness:pos,
  ribDepth:pos,ribThickness:pos,ribSpacing:pos,rootWeld:pos,seatWeld:pos,
  deflectionLimit:pos,rotationLimit:pos,

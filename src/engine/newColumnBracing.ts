@@ -1,4 +1,5 @@
 import {available,girderStrength} from './aiscStrength';
+import {usesRolledBracket,rolledCollectorWeld} from './rolledBracket';
 import {aiscShapeByName,loadAiscSection} from '../data/aiscSections';
 import {emptyAistInputs} from './aistLoads';
 import {asceCombinations} from './asceCombinations';
@@ -295,7 +296,10 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
  if(r.rodTorsion)add('brace-rod-torsion','Brace connections','Column · torsion with the offset rod',r.rodTorsion.U,1,'ratio','U_t+\\frac89\\frac{f_w(H s/n)}{\\phi F_y}\\le1',`The column torsion check (${r.rodTorsion.base.toFixed(3)}) with the warping stress of the offset rod's torque added at its top: the line force ${f(H)} over ${r.layout.spans.length} braced span${r.layout.spans.length>1?'s':''} at ${f(cr.offset,'length')} from the centerline, T = ${f(r.rodTorsion.T,'moment')}. At the base the same torque is in the anchor shear.`,['aisc-h'],r.strutForce.id);
  // Collector entry: the girder's longitudinal force passes from its locating bearing to the bracket seat and the column flange.
  const br=p.details!.bracket,F=r.seatForce.F;
- if(br?.enabled){
+ if(br?.enabled&&usesRolledBracket(p)){
+  const w=rolledCollectorWeld(p,F);
+  add('brace-seat-weld','Crane-level strut',`${w.st.name} bracket to column flange · collector welds`,w.stress,w.capacity,'stress',w.cjp?'f_v=1.5Q/(b_ft_f),\\;Q=F/2+Fd/(2h_0)':'f=\\sqrt{n^2+t_x^2+t_y^2}',`At every column the girder's locating bearing bolts deliver its longitudinal force F = ${f(F)} (${r.seatForce.id}) to the ${w.st.name} top flange, ${f(w.a,'length')} from the column face; ${w.cjp?'the flanges carry it by lateral shear through their CJP welds':'the stub-to-column fillet group carries it in weak-axis bending and torsion, elastic, no directional increase'}.`,['aisc-connections','w-bracket-basis'],r.seatForce.id);
+ }else if(br?.enabled){
   const Lw=Math.min(br.seatLength,column.bf)-inch/2,reach=girderOffset(p)-column.d/2,M=F*reach,fw=Math.hypot(F/Lw,6*M/Lw**2);
   add('brace-seat-weld','Crane-level strut','Bracket seat to column flange · collector fillet',fw,available(.6*m.Fexx*d.seatWeld/Math.SQRT2,method,.75,2),'stress','f=\\sqrt{\\left(\\frac{F}{L}\\right)^2+\\left(\\frac{6Fe}{L^2}\\right)^2}',`At every column the girder's locating bearing bolts deliver its longitudinal force F = ${f(F)} (${r.seatForce.id}) to the bracket seat, which a ${f(d.seatWeld,'length')} top fillet ${f(Lw,'length')} long welds to the column flange. The seat carries the couple F·e, e = ${f(reach,'length')} from the flange to the girder web, in its plane. Ribs not credited.`,['aisc-connections'],r.seatForce.id);
  }

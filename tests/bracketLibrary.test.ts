@@ -73,7 +73,8 @@ describe('selectable bracket library',()=>{
   const p=withRunwaySpans(project(),[7620]);p.details!.fatigueDetails=p.details!.fatigueDetails.filter(v=>v.x<=7620);
   const s=calculate(p);expect(s.errors).toEqual([]);expect(s.detailResults?.existingBracket).toBeDefined();expect(s.detailResults?.bracket).toBeUndefined();expect(s.checks.find(v=>v.id==='existing-assessment')?.status).toBe('unverified');expect(s.checks.find(v=>v.id==='existing-seat-flexure')?.capacity).toBeGreaterThan(0);expect(s.eligible).toBe(false);
   expect(compactReport(s,'')).toContain('W12X65 WIDE-FLANGE BRACKET');
-  p.details=selectBracketArrangement(p.details!,'rolled-corbel');expect(connectionOptionChecks(p).find(v=>v.id==='option-bracket-model')?.status).toBe('unsupported');
   p.details=selectBracketArrangement(p.details!,'haunched-seat');expect(connectionOptionChecks(p).find(v=>v.id==='option-bracket-model')).toBeUndefined();
+  // The rolled wide-flange bracket is a designed option.
+  p.details=selectBracketArrangement(p.details!,'rolled-corbel');expect(connectionOptionChecks(p)).toEqual([]);
  },120000);
 });

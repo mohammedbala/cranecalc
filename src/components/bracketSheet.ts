@@ -7,6 +7,8 @@ import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {existingBracketTopic} from './existingBracketSheet';
+import {rolledBracketTopic} from './rolledBracketSheet';
+import {usesRolledBracket} from '../engine/rolledBracket';
 import {bracketForceBlocks} from './bracketForceTable';
 import {designsBracing} from '../engine/newColumnBracing';
 import {seatColumnWeld} from '../engine/bracketDesign';
@@ -26,6 +28,7 @@ const bracketPlanTitle='WELDED BRACKET / PLAN';
 /** Welded column bracket section, plan and elevation with the bracket notes and reactions, or the existing bracket details. */
 export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
  if(usesExistingBracket(s.input))return existingBracketTopic(s);
+ if(usesRolledBracket(s.input))return rolledBracketTopic(s);
  const p=s.input,d=p.details,b=d?.bracket;if(!d||!b?.enabled)return undefined;
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const sc=supportColumn(p),cw=seatColumnWeld(p,s.detailResults?.bracket),collector=designsBracing(p);

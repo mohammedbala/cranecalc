@@ -1,4 +1,6 @@
 import {supportColumn} from '../engine/drawingData';
+import {bracketSeat} from '../engine/rolledBracketInputs';
+import {rolledUnderSeat} from './rolledBracketSheet';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeColumnCap} from '../engine/columnCapInputs';
@@ -64,7 +66,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   let svg='<g data-view="bracket-connection">';
   // Depth drawn below the bearing: the bracket designed here, or the reference bracket. The section is
   // drawn up to 240 deep, its callouts placed against the girder and bracket.
-  const below=wb?wb.seatThickness+(usesExistingBracket(p)?existingBracket(p).depth:wb.ribDepth):m().bracketDepth*1000;
+  const ws=wb?rolledUnderSeat(p):undefined,seat=wb?bracketSeat(wb):undefined,below=seat?seat.thickness+seat.depth:m().bracketDepth*1000;
   const scale=drawingScale(Math.min(.18,240/(b.d+d.bearing.thickness+below)),p.units),k=scale.pointsPerMm*1000,cx=166,top=120,bottom=top+m().d*k,cy=(top+bottom)/2,inner=wb?cx+wb.reach/1000*k:266;
   const pw=d.bearing.width/1000*k,pt=d.bearing.thickness/1000*k,bt=bottom+pt,bb=bt+below/1000*k,colBot=bb+18;
   const C=(y:number)=>colAt((cy-y)/k)*k;
@@ -72,7 +74,9 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   const lx=Math.max(355,inner+Math.max(C(98),C(colBot))+24);
   svg+=line([inner,98],[inner,colBot],colLine)+line([inner+C(98),98],[inner+C(colBot),colBot],colLine);
   svg+=line([inner+m().column.tf*k,98],[inner+m().column.tf*k,colBot],colLine)+line([inner+C(98)-m().column.tf*k,98],[inner+C(colBot)-m().column.tf*k,colBot],colLine);
-  if(wb){const wx=inner-wb.seatProjection/1000*k;svg+=rect(wx,bt,wb.seatProjection/1000*k,wb.seatThickness/1000*k,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),ex=inner-e.projection/1000*k,y=bt+wb.seatThickness/1000*k;svg+=rect(ex,y,e.projection/1000*k,e.depth/1000*k,'reference-line');for(const off of [e.flangeThickness,e.depth-e.flangeThickness])svg+=line([ex,y+off/1000*k],[inner,y+off/1000*k],'reference-line');}else svg+=ribGeometry(wb).tapered?haunchedRibOutline(ribGeometry(wb),wx,inner,bt+wb.seatThickness/1000*k,k/1000):rect(wx,bt+wb.seatThickness/1000*k,wb.seatProjection/1000*k,wb.ribDepth/1000*k,'runway-line');}else{
+  if(ws){const wx=inner-ws.L/1000*k,sy=bt+(ws.hasSeat?ws.seat!.t/1000*k:0);if(ws.seat)svg+=rect(inner-ws.seat.y1/1000*k,bt,(ws.seat.y1-ws.seat.y0)/1000*k,ws.seat.t/1000*k,'runway-line');
+   svg+=rect(wx,sy,ws.L/1000*k,ws.d/1000*k,'runway-line')+line([wx,sy+ws.tf/1000*k],[inner,sy+ws.tf/1000*k],'runway-line')+line([wx,sy+(ws.d-ws.tf)/1000*k],[inner,sy+(ws.d-ws.tf)/1000*k],'runway-line');}
+  else if(wb){const wx=inner-wb.seatProjection/1000*k;svg+=rect(wx,bt,wb.seatProjection/1000*k,wb.seatThickness/1000*k,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),ex=inner-e.projection/1000*k,y=bt+wb.seatThickness/1000*k;svg+=rect(ex,y,e.projection/1000*k,e.depth/1000*k,'reference-line');for(const off of [e.flangeThickness,e.depth-e.flangeThickness])svg+=line([ex,y+off/1000*k],[inner,y+off/1000*k],'reference-line');}else svg+=ribGeometry(wb).tapered?haunchedRibOutline(ribGeometry(wb),wx,inner,bt+wb.seatThickness/1000*k,k/1000):rect(wx,bt+wb.seatThickness/1000*k,wb.seatProjection/1000*k,wb.ribDepth/1000*k,'runway-line');}else{
   svg+=rect(cx-pw/2-8,bt,inner-(cx-pw/2-8),bb-bt,'reference-line');
   svg+=line([cx-pw/2-8,bt+bracket.tf*25.4/1000*k],[inner,bt+bracket.tf*25.4/1000*k],'reference-line')+line([cx-pw/2-8,bb-bracket.tf*25.4/1000*k],[inner,bb-bracket.tf*25.4/1000*k],'reference-line');
   svg+=line([cx-10,bb],[inner,bb+26],'reference-line');
@@ -96,7 +100,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   if(cjp)svg+=grooveLeader([cx+(b.tw/2+d.bearing.stiffenerWidth*.6)/1000*k,top+b.tf/1000*k+1],[lx,128],['CJP TO W TOP FLANGE','BOTH STIFFENERS'],[[215,150]]);
   svg+=multiLeader(stiffPts,[lx,stiffY],[`2 PL ${size(d.bearing.stiffenerThickness)} X ${size(d.bearing.stiffenerWidth)}`,`FULL-DEPTH FITTED BEARING STIFFENERS`,`${size(d.bearing.cope)} WEB-SIDE CORNER COPES`],8,stiffPts.map(()=>[[215,stiffY-5]]));
   svg+=filletLeader([weldPts[1]],[lx,218],size(d.bearing.weldSize),['TYP. BOTH STIFFENERS',cjp?'CONT. WEB FILLETS':'CONT. WEB & FLANGE FILLETS',cjp?'FIT BOTTOM END':'FIT / MILL STIFFENER ENDS'],true);
-  svg+=multiLeader([[230,(bt+bb)/2]],[lx,287],usesExistingBracket(p)?[`EXISTING ${existingBracketLabel(d.bracket)}`,`NEW BOLTED SEAT: ${bracketRef}`]:wb?['WELDED COLUMN BRACKET',`SEAT / RIBS / WELDS: ${bracketRef}`]:['COLUMN BRACKET (REF.)','COLUMN ATTACHMENT BY','BUILDING DESIGNER']);
+  svg+=multiLeader([[230,(bt+bb)/2]],[lx,287],usesExistingBracket(p)?[`EXISTING ${existingBracketLabel(d.bracket)}`,`NEW BOLTED SEAT: ${bracketRef}`]:ws?[`WELDED ${ws.name} COLUMN BRACKET`,`${ws.seat?'SEAT / ':''}STIFFENERS / WELDS: ${bracketRef}`]:wb?['WELDED COLUMN BRACKET',`SEAT / RIBS / WELDS: ${bracketRef}`]:['COLUMN BRACKET (REF.)','COLUMN ATTACHMENT BY','BUILDING DESIGNER']);
   // Below the bracket and the broken column, clear of the reference bracket's sloped soffit.
   svg+=multiLeader([[cx,bottom+pt]],[111,bb+(wb?32:40)],[`BEARING PL ${size(d.bearing.thickness)} X ${size(d.bearing.width)} X ${size(d.bearing.length)}`]);
   return {svg:svg+'</g>',scale:scale.label};
@@ -112,12 +116,13 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   // bracket has its own detail.
   const c=d.end,stub=40,scale=drawingScale(Math.min(.3,200/(b.d+d.bearing.thickness)),p.units),k=scale.pointsPerMm,left=646,right=877,top=90,bottom=top+b.d*k;
   const colB=m().column.bf*1000*k,colX=853,brB=bracket.bf*25.4*k,yb=bottom+d.bearing.thickness*k,existing=wb&&usesExistingBracket(p)?existingBracket(p):undefined;
-  const brD=wb?wb.seatThickness*k+(existing?existing.depth*k:wb.ribDepth*k):m().bracketDepth*1000*k,cut=yb+Math.min(brD+8,stub);
+  const seatEnd=wb?bracketSeat(wb):undefined,ws=wb?rolledUnderSeat(p):undefined,brD=seatEnd?(seatEnd.thickness+seatEnd.depth)*k:m().bracketDepth*1000*k,cut=yb+Math.min(brD+8,stub);
   const clipRect=(x:number,y:number,w:number,h:number,cls:string)=>y+h<=cut?rect(x,y,w,h,cls):line([x,y],[x+w,y],cls)+line([x,y],[x,cut],cls)+line([x+w,y],[x+w,cut],cls);
   const clipW=(x:number,y:number,bf:number,depth:number,tf:number,tw:number)=>y+depth<=cut?wSection(x,y,bf,depth,tf,tw,'reference-line'):rect(x-bf/2,y,bf,tf,'reference-line')+clipRect(x-tw/2,y+tf,tw,depth,'reference-line');
   svg+=line([colX-colB/2,top+4],[colX+colB/2,top+4],'reference-line')+[-colB/2,5-colB/2,colB/2-5,colB/2].map(dx=>line([colX+dx,top+4],[colX+dx,cut],'reference-line')).join('');
-  if(wb){svg+=rect(colX-wb.seatLength*k/2,yb,wb.seatLength*k,wb.seatThickness*k,'runway-line');const y=yb+wb.seatThickness*k;if(existing)svg+=clipW(colX,y,existing.width*k,existing.depth*k,existing.flangeThickness*k,existing.webThickness*k);else for(const side of [-1,1])svg+=clipRect(colX+(side*wb.ribSpacing-wb.ribThickness)*k/2,y,wb.ribThickness*k,wb.ribDepth*k,'runway-line');}else svg+=clipW(colX,yb,brB,brD,bracket.tf*25.4*k,bracket.tw*25.4*k);
-  const half=Math.max(colB,brB,wb?wb.seatLength*k:0)/2+6;
+  if(ws){const y=yb+(ws.seat?ws.seat.t*k:0);if(ws.seat)svg+=rect(colX-ws.seat.length*k/2,yb,ws.seat.length*k,ws.seat.t*k,'runway-line');svg+=rect(colX-ws.bf*k/2,y,ws.bf*k,ws.tf*k,'runway-line')+clipRect(colX-ws.tw*k/2,y+ws.tf*k,ws.tw*k,(ws.d-ws.tf)*k,'runway-line');}
+  else if(wb){svg+=rect(colX-wb.seatLength*k/2,yb,wb.seatLength*k,wb.seatThickness*k,'runway-line');const y=yb+wb.seatThickness*k;if(existing)svg+=clipW(colX,y,existing.width*k,existing.depth*k,existing.flangeThickness*k,existing.webThickness*k);else for(const side of [-1,1])svg+=clipRect(colX+(side*wb.ribSpacing-wb.ribThickness)*k/2,y,wb.ribThickness*k,wb.ribDepth*k,'runway-line');}else svg+=clipW(colX,yb,brB,brD,bracket.tf*25.4*k,bracket.tw*25.4*k);
+  const half=Math.max(colB,brB,seatEnd?seatEnd.length*k:0)/2+6;
   svg+=breakLine([colX-half,cut],[colX+half,cut]);
   // The girder end is drawn solid at the right; a full-depth break at the left shows it continues.
   // The root weld line is the end plate face, the rotation clearance beyond the girder end; the outer bolts
@@ -145,7 +150,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   svg+=multiLeader([[x+w*k*.3,y+h*k*.15]],[lx,148],[`2 COVER PL ${size(c.thickness)} X ${size(w)} X ${size(h)}`,'ONE EACH SIDE OF GIRDER WEB']);
   svg+=filletLeader([[xr,y+h*k-6]],[lx,192],size(c.weldSize),['EACH COVER PL TO END PL, OUTER FACE',`${size(c.weldLength)} LONG, ${size(c.projection)} FROM BOLTS`]);
   svg+=multiLeader([[xr+ep,y-6]],[lx,239],['COLUMN-SIDE END PL (REF.); END PL AND','ITS ATTACHMENT TO THE COLUMN BY THE','BUILDING DESIGNER']);
-  svg+=multiLeader([[colX,wb&&!existing?yb+wb.seatThickness*k/2:yb+Math.min(brD,stub)*.6]],[lx,284],[usesExistingBracket(p)?`EXISTING BRACKET / ${bracketRef}`:wb?`WELDED BRACKET / ${bracketRef}`:'COLUMN BRACKET (REF.)',`ROTATION CLEARANCE ${size(gap)}`]);
+  svg+=multiLeader([[colX,wb&&!existing?yb+(ws?.seat?.t??seatEnd?.thickness??0)*k/2:yb+Math.min(brD,stub)*.6]],[lx,284],[usesExistingBracket(p)?`EXISTING BRACKET / ${bracketRef}`:wb?`WELDED BRACKET / ${bracketRef}`:'COLUMN BRACKET (REF.)',`ROTATION CLEARANCE ${size(gap)}`]);
   svg+=text(638,Math.max(cut+16,322),p.system==='simple'?`THE END PL IS THE COLUMN-SIDE MOVEMENT ATTACHMENT; SEE ${detailRef(detailTitles.movement)}.`:`${colName} BEYOND (REF.). END PL ATTACHMENT, WITH A THERMAL RELEASE AT ONE RUNWAY END, BY BUILDING DESIGNER.`,7.8);
   return {svg:svg+'</g>',scale:scale.label};
  }});

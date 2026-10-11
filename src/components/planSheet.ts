@@ -1,4 +1,6 @@
 import {newColumnTopic} from './newColumnSheet';
+import {bracketSeat} from '../engine/rolledBracketInputs';
+import {rolledUnderSeat} from './rolledBracketSheet';
 import {bracingOnElevation,bracingTopic,specifiedSeparation} from './bracingSheet';
 import {ribGeometry} from '../engine/bracketRib';
 import {flangeTieTopic} from './flangeTieSheet';
@@ -201,7 +203,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
       svg+=rect(X(x-m.column.bf/2),Y(z-m.column.d/2),m.column.bf*k,m.column.d*k,newColumns?'runway-line':'reference-line');
       const rail=side?-m.width:0,wb=p.details?.bracket;
       if(capGeo)svg+=`<g data-column-cap="plan">${rect(X(x-capGeo.cap.plate.length/2000),Y(z-capGeo.cap.plate.width/2000),capGeo.cap.plate.length/1000*k,capGeo.cap.plate.width/1000*k,'runway-line')}</g>`;
-      else if(wb?.enabled){const face=rail+(side?-1:1)*wb.reach/1000,tip=face+(side?1:-1)*wb.seatProjection/1000;svg+=rect(X(x-wb.seatLength/2000),Y(Math.min(face,tip)),wb.seatLength/1000*k,wb.seatProjection/1000*k,'runway-line');}else svg+=rect(X(x-.15),Y(Math.min(z,rail)),.3*k,Math.abs(z-rail)*k,'reference-line');
+      else if(wb?.enabled){const face=rail+(side?-1:1)*wb.reach/1000,tip=face+(side?1:-1)*wb.seatProjection/1000,len=bracketSeat(wb).length;svg+=rect(X(x-len/2000),Y(Math.min(face,tip)),len/1000*k,wb.seatProjection/1000*k,'runway-line');}else svg+=rect(X(x-.15),Y(Math.min(z,rail)),.3*k,Math.abs(z-rail)*k,'reference-line');
     }
   });
   // Grid lines A and B run past the new footings, with their bubbles beyond.
@@ -318,7 +320,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     }else{for(const cx of [c0,c1])svg+=line([cx,columnBreak],[cx,behind(cx)?front:bottom],'reference-line');svg+=breakLine([c0-5,columnBreak],[c1+5,columnBreak]);}
     if(!bracing)svg+=line([c0,capBottom],[c0,stubEnd],newColumns?'runway-line':'reference-line')+line([c1,capBottom],[c1,stubEnd],newColumns?'runway-line':'reference-line')+breakLine([c0-5,stubEnd],[c1+5,stubEnd]);
     const wb=p.details?.bracket;
-    if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1]){svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');const rg=ribGeometry(wb);if(rg.tapered)svg+=line([EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],[EX(x+(side*wb.ribSpacing+wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],'runway-line');}}else if(!capGeo)svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
+    const ws=wb?.enabled?rolledUnderSeat(p):undefined;
+    if(ws){const sy=bottom+(p.details!.bearing.thickness/1000)*ek,t=(ws.seat?.t??0)/1000*ek;if(ws.seat)svg+=rect(EX(x-ws.seat.length/2000),sy,ws.seat.length/1000*ek,t,'runway-line');for(const off of [0,ws.d-ws.tf])svg+=rect(EX(x-ws.bf/2000),sy+t+off/1000*ek,ws.bf/1000*ek,ws.tf/1000*ek,'runway-line');svg+=rect(EX(x-ws.tw/2000),sy+t+ws.tf/1000*ek,ws.tw/1000*ek,(ws.d-2*ws.tf)/1000*ek,'runway-line');}
+    else if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1]){svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');const rg=ribGeometry(wb);if(rg.tapered)svg+=line([EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],[EX(x+(side*wb.ribSpacing+wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],'runway-line');}}else if(!capGeo)svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
     svg+=line([EX(x),bubbleY+12],[EX(x),below+33],'grid-line')+gridBubble(EX(x),bubbleY,String(i+1));
     if(i)svg+=dimH(EX(m.supports[i-1]),EX(x),below+34,below+54,dim(p.spans[i-1]/1000));
   });
