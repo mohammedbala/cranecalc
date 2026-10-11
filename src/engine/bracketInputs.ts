@@ -23,5 +23,7 @@ export const bracketSchema=z.object({
  loadPathConfirmed:z.boolean()
 });
 export type BracketInput=z.infer<typeof bracketSchema>;
+// The receiving column defaults to a W14X90, the default existing column: d 14.0 in, bf 14.5 in, tf 0.710 in,
+// tw 0.440 in, ASTM A992 / A572 Grade 50.
 export const defaultBracket:BracketInput={enabled:false,reach:508,seatLength:660.4,seatProjection:711.2,seatThickness:50.8,ribDepth:609.6,ribThickness:38.1,ribSpacing:203.2,rootWeld:12.7,seatWeld:9.525,deflectionLimit:1.5875,rotationLimit:.002,
- receiver:{depth:609.6,width:355.6,flangeThickness:25.4,webThickness:19.05,Fy:50*6.894757293168,Fu:65*6.894757293168,unbracedLength:3048,axialDemand:0,confirmed:false,source:''},loadPathConfirmed:false};
+ receiver:{depth:14*25.4,width:14.5*25.4,flangeThickness:.71*25.4,webThickness:.44*25.4,Fy:50*6.894757293168,Fu:65*6.894757293168,unbracedLength:3048,axialDemand:0,confirmed:false,source:''},loadPathConfirmed:false};

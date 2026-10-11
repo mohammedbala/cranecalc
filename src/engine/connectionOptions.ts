@@ -34,6 +34,10 @@ export type TieArrangement=typeof tieOptions[number]['id'];
 /** system: the runway's girder system, for fitting a tapered haunch's top flange to the bearings (simple spans by default). */
 export function selectBracketArrangement(d:RunwayDetails,kind:BracketArrangement,system:'simple'|'continuous'='simple'):RunwayDetails{
  const b={...(d.bracket??defaultBracket),enabled:true,arrangement:kind};
+ // Column stiffeners are sized for the bracket's force levels: the welded rib brackets share them (the seat and the
+ // rib or haunch root bottom); another kind of bracket starts without them.
+ const levels=(k:BracketArrangement)=>k==='twin-rib'||k==='haunched-seat'?'rib':k;
+ if(levels(bracketArrangement(d.bracket))!==levels(kind))delete b.columnStiffeners;
  if(kind==='haunched-seat')b.tipDepth??=b.ribDepth/4;
  if(kind==='rolled-corbel'){b.corbelShape??=defaultRolledShape;b.rolled??={...defaultRolledBracket};}
  if(kind==='tapered-haunch')return {...d,bracket:selectTaperedHaunch(d,b,system)};
