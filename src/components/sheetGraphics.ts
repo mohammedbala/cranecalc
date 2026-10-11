@@ -1,6 +1,7 @@
 import type { CalculationSnapshot } from '../engine/types';
 import { drawingScale } from './drawingFormat';
 import { issueStatus, supportColumn } from '../engine/drawingData';
+import { capChannelProfile } from '../engine/channelProfile';
 /** Replaced with the sheet ordinal and count once the whole set is assembled. */
 export const sheetOrdinalToken='{{SHEET_ORDINAL}}';
 /**
@@ -29,6 +30,16 @@ export const line = (a: XY, b: XY, cls = 'annotation') => `<line class="${cls}" 
 export const text = (x: number, y: number, value: string, size = 9, anchor = 'start', weight = 400, angle = 0) =>
   `<text x="${n(x)}" y="${n(y)}" font-size="${size}" text-anchor="${anchor}" font-weight="${weight}"${angle ? ` transform="rotate(${n(angle)} ${n(x)} ${n(y)})"` : ''}>${esc(value)}</text>`;
 export const rect = (x: number, y: number, w: number, h: number, cls = 'annotation') => `<rect class="${cls}" x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}"/>`;
+/** A closed outline path through the given sheet points. */
+export const outlinePath = (pts: XY[], cls = 'runway-line') => `<path class="${cls}" d="M${pts.map(p => `${n(p[0])},${n(p[1])}`).join('L')}Z"/>`;
+/**
+ * A capped girder's channel drawn in true section (2:12 sloped flanges, root fillets): `map` takes the channel's
+ * local mm coordinates (x across from the channel centreline, y up from the underside of the web, i.e. the W top
+ * flange) to sheet points.
+ */
+export function capChannelSection(s: Parameters<typeof capChannelProfile>[0], map: (x: number, y: number) => XY, cls = 'runway-line') {
+  return outlinePath(capChannelProfile(s).outline.map(([x, y]) => map(x, y)), cls);
+}
 export const circle = (x: number, y: number, r: number, cls = 'annotation') => `<circle class="${cls}" cx="${n(x)}" cy="${n(y)}" r="${n(r)}"/>`;
 /** Zig-zag break line between two points. */
 export function breakLine(a:XY,b:XY){

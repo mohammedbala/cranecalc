@@ -12,7 +12,7 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapGeometry} from '../engine/columnCap';
 import {columnCapTitles} from './columnCapSheet';
 import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {ribGeometry,ribDepthAt} from '../engine/bracketRib';
 import {haunchedRibOutline} from './haunchedBracketDrawing';
@@ -112,7 +112,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   // Bearing plate, girder section with the cap channel, and the rail.
   svg+=rect(X(girderZ-d.bearing.width/2),Y(y0),d.bearing.width*kk,bt*kk,'runway-line');
   svg+=`<path class="runway-line" d="M${n(X(girderZ-g.bf/2))},${n(Y(y0))}H${n(X(girderZ+g.bf/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ+g.tw/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ+g.bf/2))}V${n(Y(tos))}H${n(X(girderZ-g.bf/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ-g.tw/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ-g.bf/2))}Z"/>`;
-  if(g.kind==='cap'){const w=g.capWidth/2,leg=g.capDepth-g.capTw;svg+=`<path class="runway-line" d="M${n(X(girderZ-w))},${n(Y(tos+cap))}H${n(X(girderZ+w))}V${n(Y(tos-leg))}H${n(X(girderZ+w-g.capTf))}V${n(Y(tos))}H${n(X(girderZ-w+g.capTf))}V${n(Y(tos-leg))}H${n(X(girderZ-w))}Z"/>`;}
+  if(g.kind==='cap')svg+=capChannelSection(g,(x,z)=>[X(girderZ+x),Y(tos+z)]);
   const rb=tos+cap;svg+=`<path class="rail-line" d="M${n(X(railZ-rl.baseWidth/2))},${n(Y(rb))}H${n(X(railZ+rl.baseWidth/2))}V${n(Y(rb+rl.baseThickness))}H${n(X(railZ+rl.webThickness/2))}V${n(Y(rb+railDepth-rl.headThickness))}H${n(X(railZ+rl.headWidth/2))}V${n(Y(rb+railDepth))}H${n(X(railZ-rl.headWidth/2))}V${n(Y(rb+railDepth-rl.headThickness))}H${n(X(railZ-rl.webThickness/2))}V${n(Y(rb+rl.baseThickness))}H${n(X(railZ-rl.baseWidth/2))}Z"/>`;
   if(!capG)svg+=line([X(girderZ),Y(top)-8],[X(girderZ),Y(y0)+8],'grid-line');
   // Braced columns: the crane-level strut seen end-on at the work point, its web on the girder face of the rod
