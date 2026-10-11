@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {aiscShapeByName} from '../data/aiscSections';
 import {existingBracketProfile} from './bracketProfiles';
+import {isTaperedHaunch,haunchInput,type TaperedHaunchInput} from './taperedHaunchInputs';
 
 const pos=z.number().finite().positive(),inch=25.4,ksi=6.894757293168;
 /**
@@ -27,7 +28,7 @@ export const rolledBracketSchema=z.object({
 export type RolledBracketInput=z.infer<typeof rolledBracketSchema>;
 export const defaultRolledShape='W14X90';
 export const defaultRolledBracket:RolledBracketInput={Fy:50*ksi,Fu:65*ksi,flangeJoint:'fillet',flangeWeld:3/8*inch,webWeld:5/16*inch,stiffeners:true,stiffenerThickness:inch/2,stiffenerWeld:inch/4,seatPlate:true};
-type Bracket={arrangement?:string;corbelShape?:string;rolled?:Partial<RolledBracketInput>;seatThickness:number;seatLength:number;seatProjection:number;ribDepth:number;seatWeld:number};
+type Bracket={arrangement?:string;corbelShape?:string;rolled?:Partial<RolledBracketInput>;haunch?:TaperedHaunchInput;seatThickness:number;seatLength:number;seatProjection:number;ribDepth:number;seatWeld:number;receiver?:{width:number;flangeThickness:number}};
 export const isRolledBracket=(b?:{arrangement?:string;enabled?:boolean})=>b?.arrangement==='rolled-corbel';
 export const rolledInput=(b:Bracket):RolledBracketInput=>({...defaultRolledBracket,...b.rolled});
 const floorTo=(v:number,step:number)=>Math.floor(v/step+1e-9)*step,ceilTo=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
@@ -55,6 +56,8 @@ export type RolledStub=NonNullable<ReturnType<typeof rolledStub>>;
  */
 export function bracketSeat(b:Bracket){
  if(isRolledBracket(b)){const s=rolledStub(b);if(s)return s.seat?{thickness:s.seat.t,length:s.seat.length,projection:b.seatProjection,depth:s.d,rolled:true}:{thickness:s.tf,length:s.bf,projection:b.seatProjection,depth:s.d-s.tf,rolled:true};}
+ // A tapered I haunch: its top flange is the seat; the depth below it is the root's.
+ if(isTaperedHaunch(b)&&b.receiver){const h=haunchInput({...b,receiver:b.receiver});return {thickness:h.topThickness,length:h.topWidth,projection:b.seatProjection,depth:h.rootDepth-h.topThickness,rolled:false};}
  const existing=b.arrangement==='existing-corbel'||b.arrangement==='existing-w-corbel';
  return {thickness:b.seatThickness,length:b.seatLength,projection:b.seatProjection,depth:existing?existingBracketProfile(b as never).depth:b.ribDepth,rolled:false};
 }

@@ -18,6 +18,7 @@ import { railChecks } from './railChecks';
 import {simpleSupportChecks} from './simpleSupports';
 import {bracketChecks} from './bracketDesign';
 import {rolledBracketChecks} from './rolledBracket';
+import {taperedHaunchChecks} from './taperedHaunch';
 import {existingBracketChecks} from './existingBracket';
 import {endStopChecks} from './endStop';
 import {endBearingChecks,activeEndBearing} from './endBearing';
@@ -74,6 +75,9 @@ const differences=(a:RunwayDetailResults,b:RunwayDetailResults)=>Math.max(
  ...(b.rolledBracket&&a.rolledBracket?[...Object.entries(b.rolledBracket.strength).map(([key,v])=>Math.abs(v.value-(a.rolledBracket!.strength[key]?.value??0))/Math.max(v.value,key==='interaction'||key==='stiffener'||key==='cjp'?1e-3:1)),
   ...Object.entries(b.rolledBracket.service).map(([key,v])=>Math.abs(v.value-(a.rolledBracket!.service[key]?.value??0))/Math.max(v.value,key==='rotation'||key==='twist'?1e-6:key==='deflection'?1e-3:1)),
   ...b.rolledBracket.fatigue.flatMap((f,i)=>(['flange','web','webWeld','column','stiffenerWeld','stiffenerToe'] as const).map(k=>Math.abs(f[k]-a.rolledBracket!.fatigue[i][k])/Math.max(f[k],1)))]:[]),
+ ...(b.taperedHaunch&&a.taperedHaunch?[...Object.entries(b.taperedHaunch.strength).map(([key,v])=>Math.abs(v.value-(a.taperedHaunch!.strength[key]?.value??0))/Math.max(v.value,['flexure','shear','interaction','stiffener','cjpTop','cjpBottom'].includes(key)?1e-3:1)),
+  ...Object.entries(b.taperedHaunch.service).map(([key,v])=>Math.abs(v.value-(a.taperedHaunch!.service[key]?.value??0))/Math.max(v.value,key==='rotation'||key==='twist'?1e-6:key==='deflection'?1e-3:1)),
+  ...b.taperedHaunch.fatigue.flatMap((f,i)=>(['topFlange','bottomFlange','flangeWeb','stiffenerToe','column','webWeld','flangeWeld','flangeWebWeld','stiffenerWeld','flare'] as const).map(k=>Math.abs(f[k]-a.taperedHaunch!.fatigue[i][k])/Math.max(f[k],1)))]:[]),
  ...(b.bracket&&a.bracket?b.bracket.fatigue.flatMap((f,i)=>(['rib','seat','rootWeld','seatWeld','column'] as const).map(k=>Math.abs(f[k]-a.bracket!.fatigue[i][k])/Math.max(f[k],1))):[]),
  ...b.fatigue.map((f,i)=>Math.abs(a.fatigue[i].range-f.range)/Math.max(f.range,1)),
  ...(b.cap&&a.cap?[Math.abs(a.cap.longitudinalFlow-b.cap.longitudinalFlow)/Math.max(b.cap.longitudinalFlow,1),...b.cap.fatigueFlows.map((q,i)=>Math.abs(a.cap!.fatigueFlows[i]-q)/Math.max(q,1))]:[])
@@ -102,6 +106,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  if(r.bracket)checks.push(...bracketChecks(p,r.bracket,a.serviceReaction));
  if(r.existingBracket)checks.push(...existingBracketChecks(p,r.existingBracket));
  if(r.rolledBracket)checks.push(...rolledBracketChecks(p,r.rolledBracket,a.serviceReaction));
+ if(r.taperedHaunch)checks.push(...taperedHaunchChecks(p,r.taperedHaunch,a.serviceReaction));
  const add=(...args:Parameters<typeof compared>)=>checks.push(compared(...args));
  add('detail-equilibrium','Analysis','Lateral / torsional equation residual',r.residual,1e-6,'ratio','\\epsilon_K=\\|Ku-f\\|_{scaled}','Banded finite-element solution; all sampled strength, single-crane service and fatigue-bin states. Double-precision round-off in Ku grows with the conditioning of a softly supported girder near its critical load (1e-8 to 3e-7 for stable models); an unbalanced or mis-assembled model gives residuals of order one, so 1e-6 still exposes it.',['vlasov']);
  add('detail-travel','Analysis','Detailed load-position refinement',travelChange,.01,'ratio','\\epsilon_{travel}\\le0.01','Includes combined normal/shear stresses, rail movement, twist, elastic critical factor, load-height flexure, brace force and all fatigue details.',['mechanics','vlasov']);

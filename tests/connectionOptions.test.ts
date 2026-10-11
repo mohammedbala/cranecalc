@@ -22,7 +22,7 @@ describe('connection arrangement library and design boundaries',()=>{
   const restored=projectSchema.parse(JSON.parse(JSON.stringify(p)));expect(restored.details!.bracket!.tipDepth).toBe(127);expect(restored.details!.brace.referenceDetail!.pinDiameter).toBe(31.75);expect(fingerprint(p)).not.toBe(previous);expect(validateProject(restored)).toEqual([]);
  });
  // Every bracket in the library now has its own design model: none takes the twin-rib resistance or a preview-only block.
- it.each(['haunched-seat','rolled-corbel'] as const)('designs %s with its own model, not the twin-rib preview block',kind=>{
+ it.each(['haunched-seat','rolled-corbel','tapered-haunch'] as const)('designs %s with its own model, not the twin-rib preview block',kind=>{
   const p=cappedDemonstrationProject();p.details=selectBracketArrangement(p.details!,kind);
   // Fit on the receiving column is the bracket's own validation (rolledBracket / haunchedSeat tests).
   expect(validateConnectionOptions(p)).toEqual([]);expect(connectionOptionChecks(p).find(c=>c.id==='option-bracket-model')).toBeUndefined();

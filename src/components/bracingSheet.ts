@@ -1,6 +1,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
+import {haunchUnderSeat} from './taperedHaunchSheet';
 import {format} from '../engine/units';
 import {existingColumnSection} from '../engine/existingColumn';
 import {anchorHardware,columnBaseElevation} from '../engine/columnBaseInputs';
@@ -71,7 +72,7 @@ export const rodCrossingTitle='ROD CROSSING / SECTION AT MID-BAY';
 /** Rod X-bracing between the new columns: braced bay elevation, the connections at the work points and the plan at the strut. */
 export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,u=p.units,r=s.bracingSystem!,g=r.geometry,L=r.layout,b=p.longitudinalBracing!,d=bracingDesign(p),col=p.existingColumn!,base=p.columnBase!;
- const c=existingColumnSection(p).section,colName=col.shape||'BUILT-UP',sg=g.strut,dt=p.details!,br=dt.bracket?.enabled?dt.bracket:undefined,rolled=br?rolledUnderSeat(p):undefined;
+ const c=existingColumnSection(p).section,colName=col.shape||'BUILT-UP',sg=g.strut,dt=p.details!,br=dt.bracket?.enabled?dt.bracket:undefined,rolled=br?rolledUnderSeat(p)??haunchUnderSeat(p):undefined;
  const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
  const cr=g.cross,rodName=`${size(b.rod.diameter)} DIA. ROD`,pinName=`${size(g.dp)} DIA. PIN`,gussetName=`PL ${size(g.t)} GUSSET`,boltName=`2 - ${size(d.strut.boltDiameter)} ${d.strut.grade} BOLTS`;
  const grids=(i:number)=>[i,i+1].map(String),spanGrids=L.spans.map(i=>grids(i).join('-')).join(', '),[gridA,gridB]=grids(L.spans[0]);
@@ -229,7 +230,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  // gusset is offset toward the girder, the strut web on its other face with the filler between. The strut tab on
  // the other side of each web, the bracket seat welded to the column flange (the collector), the rods below the cut.
  views.push({title:detailTitles.strutPlan,rows:2,render:()=>{
-  const ws=br?rolledUnderSeat(p):undefined,e=girderOffset(p),proj=br?.seatProjection??0,len=br?bracketSeat(br).length:0,y0=ws?.seat?.y0??0,ext=sg.tabEnd+8*inch;
+  const ws=br?rolledUnderSeat(p)??haunchUnderSeat(p):undefined,e=girderOffset(p),proj=br?.seatProjection??0,len=br?bracketSeat(br).length:0,y0=ws?.seat?.y0??0,ext=sg.tabEnd+8*inch;
   const xMin=-ext,xMax=ext,yMin=-c.d/2-4*inch,yMax=Math.max(e+4*inch,c.d/2+proj+2*inch);
   const k=drawingScale(Math.min(300/(xMax-xMin),280/(yMax-yMin)),u),kk=k.pointsPerMm,gt=g.t,gx=Math.max(...r.outlines.upper.map(q=>q[0])),web=gt/2;
   let svg='<g data-view="strut-plan">';

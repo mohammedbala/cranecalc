@@ -3,6 +3,8 @@ import {bracketForceTopic} from './bracketForceTable';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
+import {usesTaperedHaunch} from '../engine/taperedHaunch';
+import {taperedHaunchParts} from '../engine/taperedHaunchParts';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {connectionOptionChecks} from '../engine/connectionOptions';
 import {ribGeometry} from '../engine/bracketRib';
@@ -137,7 +139,23 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   dr.fieldFilletLeader(face,(ft+bot)/2,485,337,f(r.webWeld),[`${sc.weld} WEB TO ${sc.name}`,'BOTH SIDES, BETWEEN FILLETS'],true,sc.field);
   output.push(dr.drawing);
  }
- if(d.bracket?.enabled&&!usesExistingBracket(p)&&!usesRolledBracket(p)){
+ if(d.bracket?.enabled&&usesTaperedHaunch(p)){
+  // Built-up tapered I haunch: its profile looking along the runway, the stiffener at the girder web line, welds to the column.
+  const parts=taperedHaunchParts(p),g=parts.geometry,b=d.bracket,sc=supportColumn(p),k=Math.min(270/g.L,230/g.hr);
+  const dr=new Draft(s,'welded-column-bracket','Built-up tapered I haunch column bracket','SK-10',560,1/k,`AISC F4/F5, G2, H1, H3.3, J2, J10 and Appendix 3; AISC DG25 / Reference AIST Technical Report 13 5.9.2 / see ${sheets('bracket')}.`);
+  const face=365,top=100,X=(y:number)=>face-y*k,Y=(z:number)=>top-z*k,inner=(y:number)=>-g.depth(y)+g.tbv;
+  dr.rect(face,75,b.receiver.flangeThickness*k,g.hr*k+50,'HIDDEN');
+  dr.rect(X(g.L),top,g.L*k,g.tt*k);
+  dr.poly([[X(0),Y(-g.hr)],[X(g.L),Y(-g.ht)],[X(g.L),Y(inner(g.L))],[X(0),Y(inner(0))]],true);
+  dr.line(X(g.L),Y(-g.tt),X(g.L),Y(inner(g.L)));
+  const st=g.stiffener;dr.rect(X(g.a+st.t/2),Y(-g.tt),st.t*k,st.height*k);
+  dr.dimH(X(g.L),face,Y(-g.hr),Y(-g.hr)+36,f(g.L));dr.dimV(top,Y(-g.ht),X(g.L),X(g.L)-28,f(g.ht));dr.dimV(top,Y(-g.hr),X(g.L),X(g.L)-56,f(g.hr));dr.dimH(X(g.a),face,top,60,f(g.a));
+  [`WEB PL ${f(g.tw)}; TOP FL. PL ${f(g.tt)} X ${f(g.bt)}${g.flare?` (${f(g.btr)} AT COLUMN)`:''}`,`BOTTOM FL. PL ${f(g.tb)} X ${f(g.bb)}, SLOPE ${g.degrees.toFixed(1)} DEG`,`2 STIFF. PL ${f(st.t)} X ${f(st.width)} AT GIRDER C/L`,g.joint==='cjp'?'FLANGES: CJP GROOVE WELDS TO COLUMN':`FLANGES: ${f(g.flangeWeld).replaceAll('"','')} FILLETS BOTH FACES`,`FLANGES TO WEB: ${f(g.flangeWebWeld).replaceAll('"','')} FILLETS BOTH SIDES, SHOP`,'TORSION FROM OFFSET BEARINGS: SEE CALCULATION','GLOBAL COLUMN / FRAME / FOUNDATIONS: SEPARATE'].forEach((v,i)=>dr.text(485,100+i*29,v,10));
+  dr.fieldFilletLeader(face,Y((-g.tt+inner(0))/2),485,337,f(g.webWeld),[`${sc.weld} WEB TO ${sc.name}`,'BOTH SIDES'],true,sc.field);
+  void parts;
+  output.push(dr.drawing);
+ }
+ if(d.bracket?.enabled&&!usesExistingBracket(p)&&!usesRolledBracket(p)&&!usesTaperedHaunch(p)){
   const b=d.bracket,rg=ribGeometry(b),k=Math.min(270/b.seatProjection,250/b.ribDepth),dr=new Draft(s,'welded-column-bracket',rg.tapered?'Welded gravity bracket / two haunched ribs':'Welded gravity bracket / two rectangular ribs','SK-10',560,1/k,`AISC F11, J2, J4, J10 and Appendix 3 / Reference AIST Technical Report 13 5.9.2 / see ${sheets('bracket')}.`);
   const face=365,top=100,tip=face-b.seatProjection*k,root=top+b.seatThickness*k,bot=root+b.ribDepth*k;
   dr.rect(face,75,b.receiver.flangeThickness*k,bot-50,'HIDDEN');dr.rect(tip,top,b.seatProjection*k,b.seatThickness*k);
