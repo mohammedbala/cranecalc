@@ -1,0 +1,683 @@
+{
+ "schemaVersion": 1,
+ "title": "Cedar Works · New 5-ton runway in the existing 5-bay building",
+ "number": "DEMO-FOCUS-005",
+ "engineer": "CraneCalc capability demonstration",
+ "units": "US",
+ "method": "LRFD",
+ "scope": "design",
+ "system": "simple",
+ "spans": [
+  7620,
+  7620,
+  7620,
+  7620,
+  7620
+ ],
+ "section": {
+  "kind": "cap",
+  "name": "W24X104 + C15X50",
+  "d": 612.14,
+  "bf": 325.12,
+  "tf": 19.049999999999997,
+  "tw": 12.7,
+  "capWidth": 381,
+  "capDepth": 94.488,
+  "capTf": 16.509999999999998,
+  "capTw": 18.1864,
+  "Fy": 344.73786465,
+  "Fu": 448.159224045,
+  "E": 199947.96149699998,
+  "density": 7850,
+  "Ix": 1290317419.3599997,
+  "Iy": 107803939.23039998,
+  "A": 19806.412,
+  "Sx": 4227862.511999999,
+  "Sy": 666953.5048,
+  "Zx": 4735861.495999999,
+  "Zy": 1022552.7935999999,
+  "J": 1964612.3288319993,
+  "Cw": 9452462502211.377,
+  "propertySource": "AISC Shapes Database v16.0 · Database v16.0 row 120 · US nominal values · https://www.aisc.org/aisc/publications/steel-construction-manual/aisc-shapes-database-v160/",
+  "catalogueId": "W24X104",
+  "capCatalogueId": "C15X50"
+ },
+ "cranes": [
+  {
+   "id": "crane-1",
+   "name": "Demo crane CR-5 · 5 US tons",
+   "wheels": [
+    {
+     "offset": 0,
+     "loaded": 44482.21615000001,
+     "unloaded": 17792.88646,
+     "lateral": 4448.221615
+    },
+    {
+     "offset": 3048,
+     "loaded": 44482.21615000001,
+     "unloaded": 17792.88646,
+     "lateral": 4448.221615
+    }
+   ],
+   "impact": 0.25,
+   "includesImpact": false,
+   "longitudinal": 8896.44323,
+   "minSeparation": 1524,
+   "travelStart": -3048,
+   "travelEnd": 38100,
+   "operatingClass": "Fictitious CMAA C crane; AIST Class C building",
+   "loadSource": "Fictitious supplier schedule DEMO-CS-05; 5-ton crane",
+   "design": {
+    "control": "pendant",
+    "type": "maintenance",
+    "ratedLoad": 44482.216152605,
+    "trolleyWeight": 11120.55403815125,
+    "bridgeWeight": 44482.216152605,
+    "rigidArmWeight": 0,
+    "drivenWheelLoad": 44482.216152605,
+    "sideShare": 0.5,
+    "distributionSource": "Fictitious supplier distribution: one-half of crane side thrust assigned to this runway",
+    "splitConfirmed": true,
+    "bumperForce": 44482.216152605,
+    "bumperBypassesGirder": false,
+    "guideRollers": false,
+    "cmaaClass": "C"
+   }
+  }
+ ],
+ "deadLoad": 0,
+ "railWeight": 0.5587406748551248,
+ "railEccentricity": 6.35,
+ "railHeight": 152.39999999999998,
+ "unbracedLength": 7620,
+ "lateralBraceSpacing": 7620,
+ "verticalLimit": 600,
+ "lateralLimit": 400,
+ "criteriaSource": "Fictitious owner criteria: AIST Class C, vertical L/600, rail-head lateral L/400; twist 0.005 rad.",
+ "fatigue": {
+  "category": "A",
+  "cycles": 400000,
+  "detail": "Plain rolled bottom flange; welded attachments checked separately in the detail register.",
+  "location": 3810
+ },
+ "connections": {
+  "enabled": true,
+  "bolts": 4,
+  "boltDiameter": 19.05,
+  "plateThickness": 12.7,
+  "edgeDistance": 38.1,
+  "boltPitch": 76.2,
+  "weldSize": 6,
+  "weldLength": 150,
+  "stiffenerThickness": 12,
+  "stiffenerWidth": 100,
+  "braceArea": 600,
+  "braceLength": 3000,
+  "braceRadius": 20,
+  "Fexx": 490
+ },
+ "notes": "Software capability demonstration using realistic fictitious geometry, supplier forces, duty and criteria. Not a site-specific design. Scope: five simply supported 25-ft bays of a 5-ton capped runway (W24X104 + C15X50) in an existing building with W14X90 columns, new built-up tapered I haunches field welded to the columns, bolted end bearings, girder-mounted end stops and cap tieback angles bolted to the channel cap.",
+ "reportPurpose": "demonstration",
+ "reportFormat": "compact",
+ "aist": {
+  "buildingClass": "C",
+  "classConfirmed": true,
+  "buildingCycles": 30000,
+  "environment": "interior",
+  "railDepth": 152.39999999999998,
+  "bearingLength": 254,
+  "netFlangeArea": 6193.535999999999,
+  "bottomBraceSpacing": 7620,
+  "axialLength": 7620,
+  "torsionalLength": 7620,
+  "liveLoad": 0,
+  "runwayOnly": true,
+  "supportType": "bracket",
+  "clipSpacing": 609.5999999999999,
+  "railPad": false,
+  "fastener": "clips",
+  "camber": 0,
+  "fatiguePoint": "bottom-left",
+  "fatigueReference": "AISC Table A-3.1, 1.1; full detail register in package",
+  "cycleSource": "Fictitious 400,000 wheel-induced stress fluctuations; three duty bins; includes loaded and empty return cycles."
+ },
+ "details": {
+  "material": {
+   "Fy": 344.73786465,
+   "Fu": 448.159224045,
+   "Fexx": 482.63301050999996
+  },
+  "simpleSupport": {
+   "endGap": 25.4,
+   "guideTravel": 12.7,
+   "temperatureRise": 30,
+   "temperatureFall": 30,
+   "settingTolerance": 3.175
+  },
+  "brace": {
+   "width": 133.35,
+   "thickness": 7.9375,
+   "length": 457.2,
+   "reach": 457.2,
+   "gussetThickness": 22.224999999999998,
+   "connectionLength": 152.39999999999998,
+   "connection": {
+    "rows": 2,
+    "gauge": 69.85,
+    "pitch": 50.8,
+    "edge": 31.75,
+    "thickness": 7.9375,
+    "diameter": 15.875,
+    "grade": "A325",
+    "surface": "B",
+    "projection": 50.8,
+    "weldSize": 7.9375,
+    "weldLength": 146.04999999999998
+   },
+   "flangeAttachment": {
+    "enabled": true,
+    "longitudinalSetback": 88.89999999999999,
+    "saddleLength": 101.6,
+    "saddleThickness": 34.925,
+    "webGap": 25.4,
+    "clearance": 6.35,
+    "weldSize": 7.9375
+   },
+   "release": {
+    "enabled": true,
+    "travel": 3.175,
+    "sleeveWall": 6.35,
+    "clearance": 1.5875
+   },
+   "arrangement": "cap-angle",
+   "capAngle": {
+    "shape": "L4X4X1/2",
+    "length": 165.1,
+    "setback": 88.89999999999999,
+    "capBolts": {
+     "diameter": 15.875,
+     "grade": "A325",
+     "gauge": 57.15,
+     "pitch": 82.55
+    },
+    "travel": 9.524999999999999,
+    "mode": "sleeved",
+    "sleeveWall": 6.35,
+    "sleeveClearance": 1.5875,
+    "washerThickness": 7.9375,
+    "plateThickness": 9.524999999999999,
+    "plateWidth": 107.94999999999999,
+    "lapBolts": {
+     "diameter": 15.875,
+     "grade": "A325",
+     "gauge": 73.02499999999999,
+     "pitch": 63.5,
+     "edge": 25.4,
+     "surface": "B"
+    },
+    "endPlate": {
+     "thickness": 15.875,
+     "height": 133.35,
+     "width": 107.94999999999999
+    },
+    "columnBolts": {
+     "diameter": 15.875,
+     "grade": "A325",
+     "gauge": 44.449999999999996
+    },
+    "shimMax": 6.35,
+    "weldSize": 7.9375
+   }
+  },
+  "end": {
+   "rows": 4,
+   "gauge": 63.5,
+   "pitch": 76.19999999999999,
+   "edge": 31.75,
+   "thickness": 19.049999999999997,
+   "diameter": 19.049999999999997,
+   "grade": "A325",
+   "surface": "B",
+   "projection": 38.099999999999994,
+   "weldSize": 7.9375,
+   "weldLength": 292.09999999999997
+  },
+  "bearing": {
+   "width": 304.79999999999995,
+   "length": 304.79999999999995,
+   "thickness": 25.4,
+   "stiffenerWidth": 114.3,
+   "stiffenerThickness": 25.4,
+   "cope": 25.4,
+   "weldSize": 7.9375
+  },
+  "rail": {
+   "name": "Demo R-6 crane rail · idealized plate geometry",
+   "headWidth": 76.19999999999999,
+   "headThickness": 31.75,
+   "baseWidth": 152.39999999999998,
+   "baseThickness": 19.049999999999997,
+   "webThickness": 19.049999999999997,
+   "Fy": 413.68543758,
+   "Fu": 620.5281563699999,
+   "padAllowable": 10,
+   "padSource": "Fictitious RP-01 polyurethane crane-rail pad; allowable compression per fictitious supplier rating sheet RP-01",
+   "padThickness": 3.175,
+   "padWidth": 152.39999999999998,
+   "clipWidth": 98.425,
+   "clipThickness": 12.7,
+   "clipBodyWidth": 50.8,
+   "clipClearance": 1.5875,
+   "clipProjection": 11.112499999999999,
+   "clipWeld": 7.9375,
+   "anchorNotch": 12.7,
+   "jointGap": 9.524999999999999,
+   "jointPlateThickness": 31.75,
+   "jointPlateHeight": 98.425,
+   "jointBoltDiameter": 22.224999999999998,
+   "jointPitch": 76.19999999999999,
+   "jointEdge": 38.099999999999994,
+   "temperatureRange": 30
+  },
+  "criteria": {
+   "twistLimit": 0.005,
+   "railLateralLimit": 400,
+   "railGauge": 12204.7,
+   "alignmentTolerance": 3.175,
+   "levelTolerance": 3.175,
+   "rotationClearance": 12.7,
+   "temperatureMaximum": 50,
+   "corrosionProtected": true
+  },
+  "fatigueDetails": [
+   {
+    "id": "F1",
+    "name": "Rolled bottom flange at midspan",
+    "x": 3810,
+    "point": "bottom-left",
+    "category": "A",
+    "reference": "AISC Table A-3.1, 1.1 · plain rolled base metal"
+   },
+   {
+    "id": "F2",
+    "name": "Top flange at midspan, conservative category D",
+    "x": 3810,
+    "point": "top-right",
+    "category": "D",
+    "reference": "AISC Table A-3.1, 7.1 · category D used conservatively at this comparison point; actual keeper stations checked automatically"
+   },
+   {
+    "id": "F3",
+    "name": "Bearing stiffener weld toe, left support",
+    "x": 0,
+    "point": "top-left",
+    "category": "C",
+    "reference": "AISC Table A-3.1, 5.8 · transverse stiffener weld toe"
+   },
+   {
+    "id": "F4",
+    "name": "Bearing stiffener weld toe, support 2",
+    "x": 7620,
+    "point": "top-right",
+    "category": "C",
+    "reference": "AISC Table A-3.1, 5.8 · transverse stiffener weld toe"
+   },
+   {
+    "id": "FB2",
+    "name": "Rolled bottom flange, bay 2 midspan",
+    "x": 11430,
+    "point": "bottom-left",
+    "category": "A",
+    "reference": "AISC Table A-3.1, 1.1 · plain rolled base metal"
+   },
+   {
+    "id": "FT2",
+    "name": "Top flange, bay 2 midspan, conservative category D",
+    "x": 11430,
+    "point": "top-right",
+    "category": "D",
+    "reference": "AISC Table A-3.1, 7.1 · conservative comparison point; keeper stations automatic"
+   },
+   {
+    "id": "FS3",
+    "name": "Stiffener weld toe, support 3",
+    "x": 15240,
+    "point": "top-right",
+    "category": "C",
+    "reference": "AISC Table A-3.1, 5.8 · transverse stiffener weld toe"
+   },
+   {
+    "id": "FB3",
+    "name": "Rolled bottom flange, bay 3 midspan",
+    "x": 19050,
+    "point": "bottom-left",
+    "category": "A",
+    "reference": "AISC Table A-3.1, 1.1 · plain rolled base metal"
+   },
+   {
+    "id": "FT3",
+    "name": "Top flange, bay 3 midspan, conservative category D",
+    "x": 19050,
+    "point": "top-right",
+    "category": "D",
+    "reference": "AISC Table A-3.1, 7.1 · conservative comparison point; keeper stations automatic"
+   },
+   {
+    "id": "FS4",
+    "name": "Stiffener weld toe, support 4",
+    "x": 22860,
+    "point": "top-right",
+    "category": "C",
+    "reference": "AISC Table A-3.1, 5.8 · transverse stiffener weld toe"
+   },
+   {
+    "id": "FB4",
+    "name": "Rolled bottom flange, bay 4 midspan",
+    "x": 26670,
+    "point": "bottom-left",
+    "category": "A",
+    "reference": "AISC Table A-3.1, 1.1 · plain rolled base metal"
+   },
+   {
+    "id": "FT4",
+    "name": "Top flange, bay 4 midspan, conservative category D",
+    "x": 26670,
+    "point": "top-right",
+    "category": "D",
+    "reference": "AISC Table A-3.1, 7.1 · conservative comparison point; keeper stations automatic"
+   },
+   {
+    "id": "FS5",
+    "name": "Stiffener weld toe, support 5",
+    "x": 30480,
+    "point": "top-right",
+    "category": "C",
+    "reference": "AISC Table A-3.1, 5.8 · transverse stiffener weld toe"
+   },
+   {
+    "id": "FB5",
+    "name": "Rolled bottom flange, bay 5 midspan",
+    "x": 34290,
+    "point": "bottom-left",
+    "category": "A",
+    "reference": "AISC Table A-3.1, 1.1 · plain rolled base metal"
+   },
+   {
+    "id": "FT5",
+    "name": "Top flange, bay 5 midspan, conservative category D",
+    "x": 34290,
+    "point": "top-right",
+    "category": "D",
+    "reference": "AISC Table A-3.1, 7.1 · conservative comparison point; keeper stations automatic"
+   },
+   {
+    "id": "FS6",
+    "name": "Stiffener weld toe, support 6",
+    "x": 38100,
+    "point": "top-right",
+    "category": "C",
+    "reference": "AISC Table A-3.1, 5.8 · transverse stiffener weld toe"
+   }
+  ],
+  "spectrum": [
+   {
+    "name": "Rated lifts",
+    "liftFraction": 1,
+    "cycles": 60000
+   },
+   {
+    "name": "Routine half-load lifts",
+    "liftFraction": 0.5,
+    "cycles": 260000
+   },
+   {
+    "name": "Light lifts",
+    "liftFraction": 0.25,
+    "cycles": 80000
+   }
+  ],
+  "fabrication": {
+   "steel": "W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.",
+   "bolting": "ASTM F3125 Grade A325, sizes as detailed (tie bolts smaller than the other girder bolts), pretensioned to the RCSC Table 8.1 minimum pretension. Standard holes and Class B faying surfaces. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joint bolts snug-tight in sliding slots.",
+   "welding": "E70XX low-hydrogen welds. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts/stops and remove temporary welded attachments by grinding. Cap: continuous fillet each W top-flange edge, size and end development per the cap section and development details. Full cap bearing contact required. Bearing stiffeners CJP to W top flange, bottom fitted.",
+   "inspection": "Visual inspection of all welds and bolt installations; verify pretension and faying-surface preparation. MT at attachment terminations and repaired welds. Record baseline rail and connection condition before commissioning.",
+   "erection": "Provide temporary lateral/torsional restraint until both flange ties are complete. Set bearing plates level, fit bearing stiffeners, and verify end rotation clearance. Do not operate the crane before alignment and supplier commissioning checks.",
+   "railAlignment": "Survey both rails unloaded and during commissioning. Record gauge, elevation and straightness at supports and midspan; use the stated demonstration tolerances, subject to the actual crane supplier requirements."
+  },
+  "endBearing": {
+   "enabled": true,
+   "bolts": {
+    "diameter": 19.049999999999997,
+    "grade": "A325",
+    "gauge": 139.7,
+    "edge": 50.8
+   },
+   "washerThickness": 7.9375
+  },
+  "endStop": {
+   "enabled": true,
+   "bumperHeight": 152.39999999999998,
+   "bumperDiameter": 152.39999999999998,
+   "setback": 171.45,
+   "railGap": 25.4,
+   "base": {
+    "length": 304.79999999999995,
+    "width": 228.6,
+    "thickness": 19.049999999999997
+   },
+   "face": {
+    "thickness": 19.049999999999997,
+    "height": 381
+   },
+   "stiffener": {
+    "thickness": 12.7,
+    "length": 215.89999999999998,
+    "spacing": 69.85
+   },
+   "bolts": {
+    "diameter": 19.049999999999997,
+    "grade": "A325",
+    "gauge": 165.1,
+    "frontClear": 44.449999999999996,
+    "edge": 38.099999999999994
+   },
+   "weldSize": 7.9375,
+   "source": "Fictitious supplier data CAP-CS-02: bumper force, bumper centerline height and contact diameter"
+  },
+  "bracket": {
+   "enabled": true,
+   "reach": 508,
+   "seatLength": 660.4,
+   "seatProjection": 711.2,
+   "seatThickness": 50.8,
+   "ribDepth": 914.4,
+   "ribThickness": 38.1,
+   "ribSpacing": 266.7,
+   "rootWeld": 6.35,
+   "seatWeld": 15.875,
+   "deflectionLimit": 1.5875,
+   "rotationLimit": 0.002,
+   "receiver": {
+    "depth": 355.59999999999997,
+    "width": 368.29999999999995,
+    "flangeThickness": 18.034,
+    "webThickness": 11.176,
+    "Fy": 344.73786465840004,
+    "Fu": 448.15922405592005,
+    "unbracedLength": 3048,
+    "axialDemand": 275789.74013000005,
+    "confirmed": true,
+    "source": "Fictitious survey: existing W14X90 column, ASTM A572 Grade 50 per mill certificates; 10 ft flange unbraced length; 62 kip factored existing gravity axial (1.2D + 1.6S from the building records) for the panel zone."
+   },
+   "loadPathConfirmed": true,
+   "arrangement": "tapered-haunch",
+   "haunch": {
+    "rootDepth": 431.79999999999995,
+    "tipDepth": 228.6,
+    "webThickness": 9.524999999999999,
+    "topWidth": 635,
+    "rootWidth": 355.59999999999997,
+    "topThickness": 25.4,
+    "bottomWidth": 355.59999999999997,
+    "bottomThickness": 25.4,
+    "stiffener": {
+     "thickness": 12.7,
+     "width": 165.1,
+     "weld": 7.9375
+    },
+    "flangeJoint": "cjp",
+    "flangeWeld": 7.9375,
+    "flangeWebWeld": 7.9375,
+    "endPlate": true
+   },
+   "columnStiffeners": {
+    "enabled": true,
+    "thickness": 19.05,
+    "width": 171.45,
+    "length": "full",
+    "clip": 19.049999999999997,
+    "flangeWeld": 15.875000000000002,
+    "webWeld": 15.875000000000002
+   }
+  }
+ },
+ "drawing": {
+  "originator": "CraneCalc demonstration",
+  "checker": "",
+  "datumElevation": 30480,
+  "datumLabel": "Reference finished floor",
+  "address": "Fictitious site: 100 Demonstration Way",
+  "code": {
+   "building": "2021 IBC as adopted by the fictitious demonstration jurisdiction",
+   "editions": "2016",
+   "reviewed": false
+  },
+  "existingEvaluation": "Fictitious existing structure evaluation DEMO-ER-02: column line B frame, bracing, connections and foundations for the added crane loads"
+ },
+ "capDesign": {
+  "Fy": 344.73786465,
+  "Fu": 448.159224045,
+  "Fexx": 482.63301050999996,
+  "weldSize": 7.9375,
+  "developmentLength": 1524,
+  "cmaaClass": "C",
+  "fullLength": true,
+  "continuousWelds": true,
+  "contactConfirmed": true,
+  "unperforated": true,
+  "topStiffenerCjp": true,
+  "materialSource": "Fictitious ASTM A572 Grade 50 channel; E70XX welds",
+  "dutySource": "Fictitious supplier confirms CMAA C, 5-US-ton crane; 1,000,000 wheel stress fluctuations",
+  "fitupNote": "Fictitious full-bearing fit-up: straighten and fit cap before continuous welding; inspect contact along full length; no gaps accepted."
+ },
+ "existingColumn": {
+  "enabled": true,
+  "shape": "W14X90",
+  "d": 355.59999999999997,
+  "bf": 368.29999999999995,
+  "tf": 18.034,
+  "tw": 11.176,
+  "Fy": 344.73786465,
+  "Fu": 448.159224045,
+  "height": 7924.8,
+  "seatElevation": 5486.400000000001,
+  "eccentricity": 457.2,
+  "strong": {
+   "base": "pinned",
+   "top": "braced"
+  },
+  "weak": {
+   "base": "pinned",
+   "top": "braced"
+  },
+  "Lcx": 7924.8,
+  "Lcy": 2438.4,
+  "Lcz": 2438.4,
+  "Lb": 2438.4,
+  "longitudinal": "bracing",
+  "driftLimit": 240,
+  "existing": {
+   "D": {
+    "P": 111205.54037500001,
+    "Mx": 20337269.223780002,
+    "My": 0,
+    "V": 4448.221615
+   },
+   "L": {
+    "P": 0,
+    "Mx": 0,
+    "My": 0,
+    "V": 0
+   },
+   "Lr": {
+    "P": 53378.659380000005,
+    "Mx": 8134907.689512001,
+    "My": 0,
+    "V": 2224.1108075
+   },
+   "S": {
+    "P": 88964.43230000001,
+    "Mx": 13558179.482520003,
+    "My": 0,
+    "V": 3558.5772920000004
+   },
+   "R": {
+    "P": 0,
+    "Mx": 0,
+    "My": 0,
+    "V": 0
+   },
+   "W": {
+    "P": -35585.77292,
+    "Mx": 54232717.93008001,
+    "My": 0,
+    "V": 17792.88646
+   },
+   "E": {
+    "P": 0,
+    "Mx": 27116358.965040006,
+    "My": 0,
+    "V": 8896.44323
+   }
+  },
+  "source": "Fictitious demonstration: original building calculation sheets 14-17, column line B",
+  "confirmed": true,
+  "welding": {
+   "basis": "mill-certificates",
+   "grade": "ASTM A572 Grade 50",
+   "carbonEquivalent": 0.42,
+   "preheat": 65.55555555555556,
+   "deadLoadOnly": true,
+   "source": "Fictitious demonstration: mill certificates with the original building records, heat 4471"
+  }
+ },
+ "longitudinalBracing": {
+  "enabled": true,
+  "system": "rod-x",
+  "bays": 1,
+  "bayWidth": 7620,
+  "height": 5486.400000000001,
+  "tiers": 1,
+  "rod": {
+   "diameter": 19.049999999999997,
+   "Fy": 248.21126254799998,
+   "Fu": 399.895922994
+  },
+  "angle": {
+   "shape": "L3X3X1/4",
+   "Fy": 248.21126254799998,
+   "Fu": 399.895922994,
+   "bolts": 3,
+   "boltDiameter": 19.049999999999997
+  },
+  "existing": {
+   "W": 26689.329690000002,
+   "E": 13344.664845000001
+  },
+  "bumperToBracing": true,
+  "driftLimit": 240,
+  "source": "Fictitious demonstration: sidewall rod bracing at grid lines 2-3 and the original wind/seismic report",
+  "confirmed": true
+ }
+}
