@@ -96,7 +96,7 @@ export const coverSheetTitle='COVER, GENERAL NOTES & DESIGN CRITERIA';
 export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
  const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>drawingLength(mm,u);
  const ksi=(v:number)=>format(v,'stress',u,3),status=issueStatus(s),elevations=runwayElevations(p);
- const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} t (${f(N)})`;
+ const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} TONNES (${f(N)})`;
  const length=p.spans.reduce((a,b)=>a+b,0),cranes=p.cranes.map(c=>c.design?`${capacity(c.design.ratedLoad)} ${c.design.type} crane`:c.name).join(' and ');
 const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  const supports=isNew?`new freestanding ${p.existingColumn!.shape||'built-up'} runway columns${d?.bracket?.enabled?' with welded brackets':''}${p.columnBase?.enabled?', base plates, anchor rods and spread footings':''}`:d?.bracket?.enabled?(usesExistingBracket(p)?'existing column brackets with new bolted seats':'new brackets welded to the existing building columns'):p.aist?.supportType==='column'?'independent runway columns':'the building columns';
@@ -142,7 +142,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['EXISTING BUILDING CODE',`${code.entered?'IEBC OF THE SAME EDITION AS THE BUILDING CODE':'NOT ENTERED: IEBC EDITION ADOPTED WITH THE BUILDING CODE'}: ALTERATION; ${p.existingColumn?.isNew?'THE EXISTING STRUCTURE CARRIES NO CRANE LOAD':'EXISTING STRUCTURE EVALUATED FOR THE ADDED CRANE LOADS, SEE EXISTING STRUCTURE EVALUATION'}`],
   ['ASCE/SEI 7',code.asce],
   ['AISC 360',code.aisc+', '+p.method],
-  ['AIST TECH. REPORT 13','SUPPLIED 2020 REFERENCE: RUNWAY LOADS AND CRITERIA'],
+  ['AIST TECH. REPORT 13','GUIDE FOR THE DESIGN AND CONSTRUCTION OF MILL BUILDINGS, COPY DATED FEBRUARY 24, 2020: RUNWAY LOADS AND CRITERIA'],
   ['AISC DESIGN GUIDE 7','3RD ED. (2019) WITH 2023 ERRATA'],
   // Welding and bolting standards are the editions the cited AISC 360 references.
   ['AWS D1.1/D1.1M',`${code.adopted2022?'2020':'2015'}: STRUCTURAL WELDING CODE - STEEL (CYCLICALLY LOADED), AS REFERENCED BY AISC 360-${code.adopted2022?'22':'16'}`],
@@ -201,7 +201,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  blocks.push(H('MATERIALS'),T(['ITEM','SPECIFICATION'],[
   ['RUNWAY GIRDER',p.section.kind==='welded'?`PLATE, Fy = ${ksi(p.section.Fy)}`:`ASTM A992, Fy = ${ksi(p.section.Fy)}`],
   ...(p.capDesign&&p.section.kind==='cap'?[['CAP CHANNEL',`Fy = ${ksi(p.capDesign.Fy)}; ${p.capDesign.materialSource}`]]:[]),
-  ...(d?[['PLATES, BARS, TIES',`Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES','ASTM A513 OR A500 GR. C STEEL TUBE, Fy 50 KSI MIN.'],['WELD METAL',`E${Math.round(d.material.Fexx/6.894757293)}XX, AWS D1.1`],['CRANE RAIL',`${d.rail.name}; Fy = ${ksi(d.rail.Fy)}`],...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
+  ...(d?[['PLATES, BARS, TIES',`Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`ASTM A513 OR A500 GR. C STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`E${Math.round(d.material.Fexx/6.894757293)}XX, AWS D1.1`],['CRANE RAIL',`${d.rail.name}; Fy = ${ksi(d.rail.Fy)}`],...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
   ...(p.existingColumn?.enabled&&p.existingColumn.isNew?[['NEW COLUMNS',`ASTM A992${p.existingColumn.shape?` ${p.existingColumn.shape}`:''}, Fy = ${ksi(p.existingColumn.Fy)}`]]:[]),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['BASE PLATES',`ASTM A572 GR. 50, Fy = ${ksi(p.columnBase.plate.Fy)}`],['ANCHOR RODS',`ASTM F1554 GR. ${p.columnBase.anchors.grade.split('-')[1]}, A563 HEAVY HEX NUTS; DG1 HOLES AND PLATE WASHERS`],['CONCRETE / REBAR',`f'c = ${ksi(p.columnBase.concrete.fc)}; ASTM A615 Fy = ${ksi(p.columnBase.footing.fy)}; NON-SHRINK GROUT ASTM C1107`]]:[]),
   // Only new bracing is furnished; existing bracing is checked and described in the existing building notes.
