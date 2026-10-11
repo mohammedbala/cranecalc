@@ -107,6 +107,8 @@ export function cappedDemonstrationProject():ProjectInput {
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,height:26*foot,seatElevation:18*foot,Lcx:26*foot,Lcy:8*foot,Lcz:8*foot,
   existing:{D:{P:25*kip,Mx:15*kip*foot,My:0,V:1*kip},L:{...none},Lr:{P:12*kip,Mx:6*kip*foot,My:0,V:.5*kip},S:{P:20*kip,Mx:10*kip*foot,My:0,V:.8*kip},R:{...none},W:{P:-8*kip,Mx:40*kip*foot,My:0,V:4*kip},E:{P:0,Mx:20*kip*foot,My:0,V:2*kip}},
   source:'Fictitious demonstration: original building calculation sheets 14-17, column line B',confirmed:true};
+ // The surveyed seat sets the rail elevation the drawings show; no separate top of rail is entered.
+ delete p.drawing!.railElevation;
  // Fictitious sidewall rod bracing up to the crane-level strut, with the building's own longitudinal wind and seismic forces.
  p.longitudinalBracing={...structuredClone(defaultLongitudinalBracing),enabled:true,bayWidth:25*foot,height:18*foot,existing:{W:6*kip,E:3*kip},
   source:'Fictitious demonstration: sidewall rod bracing at grid lines 2-3 and the original wind/seismic report',confirmed:true};
@@ -146,6 +148,8 @@ export function cappedDemonstrationProject():ProjectInput {
 export function newColumnDemonstrationProject():ProjectInput {
  const p=cappedDemonstrationProject();
  p.title='Cedar Works · New freestanding 2-ton runway columns';p.number='DEMO-NC-002';
+ // New columns on new footings: the entered top of rail sets the column geometry, which validation reconciles.
+ p.drawing!.railElevation=20*foot;
  // The existing building carries no crane load, so there is no existing structure evaluation to reference.
  delete p.drawing!.existingEvaluation;
  const shape='W14X120',w=aiscShapeByName(shape)!,d=p.details!,cap=p.section.kind==='cap'?p.section.capTw:0;
