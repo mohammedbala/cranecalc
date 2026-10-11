@@ -1,9 +1,9 @@
 import type {CalculationSnapshot} from '../engine/types';
-import {railLayout,railLayoutCriteria,railMovements} from '../engine/railLayout';
+import {railLayout,railLayoutCriteria,railMovements,railJointMovement} from '../engine/railLayout';
 import {railAnchorForce} from '../engine/railKeeper';
 import {format} from '../engine/units';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,line,rect,text,dimH,bubble,wrappedText,textWidth,detailRef,detailTitles,labelCaps,n} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,line,rect,text,dimH,bubble,wrapToWidth,textWidth,detailRef,detailTitles,labelCaps,n} from './sheetGraphics';
 import type {DetailView} from './detailSheet';
 
 /**
@@ -13,6 +13,13 @@ import type {DetailView} from './detailSheet';
  */
 /** A factored force to 0.1 kip or 0.1 kN. */
 const labelForce=(N:number,u:'US'|'SI')=>labelCaps(format(N,'force',u,1));
+/** A movement stated as a limit, rounded up: to the next 1/32 in, or the next millimetre. */
+export function movementUpTo(mm:number,u:'US'|'SI'){
+ if(u==='SI')return `${Math.max(1,Math.ceil(mm-1e-6))} mm`;
+ let num=Math.max(1,Math.ceil(mm/25.4*32-1e-6)),den=32;const whole=Math.floor(num/den);num%=den;
+ while(num&&num%2===0){num/=2;den/=2;}
+ return `${whole?whole:''}${whole&&num?' ':''}${num?`${num}/${den}`:''}"`;
+}
 export function railLayoutView(s:CalculationSnapshot):DetailView{
  return {title:detailTitles.railLayout,render:()=>{
   const p=s.input,r=railLayout(p),{stock,clear}=railLayoutCriteria,dim=(v:number)=>drawingLength(v,p.units),moves=p.details?railMovements(p,r):undefined;
@@ -61,14 +68,15 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
   }
   const steps=r.wheelSteps.filter(v=>v>0).map(dim).join(', ');
   const notes=[
-   `RAIL PIECES ${dim(stock)} MAX. (MILL LENGTH); FIELD CUT THE SHORTER PIECES SHOWN. KEEP RAIL JOINTS ${dim(clear)} MIN. FROM GIRDER JOINTS AND FROM THE OPPOSITE RAIL JOINTS, AND OPPOSITE JOINTS ${dim(clear)} MIN. FROM ANY CRANE WHEEL SPACING${steps?` (${steps})`:''}.`,
+   `RAIL PIECES ${dim(stock)} MAX. (MILL LENGTH); SAW-CUT THE SHORTER PIECES SHOWN, NO FLAME CUTTING. KEEP RAIL JOINTS ${dim(clear)} MIN. FROM GIRDER JOINTS AND FROM THE OPPOSITE RAIL JOINTS, AND OPPOSITE JOINTS ${dim(clear)} MIN. FROM ANY CRANE WHEEL SPACING${steps?` (${steps})`:''}.`,
    `BOLTED RAIL JOINTS AND KEEPERS EACH SIDE OF EVERY JOINT: ${detailRef(detailTitles.railKeeper)}. RUNWAYS ARE DRAWN CLOSER THAN THE CRANE SPAN.`,
-   ...(moves?[(()=>{const F=railAnchorForce(p),jm=Math.max(0,...moves.joints.map(v=>v.movement)),u=p.units;
-    return `RAIL ANCHORS, SOLID TRIANGLES: AT MID-LENGTH OF EACH RAIL PIECE THE KEEPER PAIR IS SET IN RAIL-BASE NOTCHES (${detailRef(detailTitles.railKeeper)}) AND TAKES THE CRANE LONGITUDINAL FORCE (TRACTION AND BRAKING, ${labelForce(F.force,u)} FACTORED) AND RAIL CREEP INTO THE GIRDER. ALL OTHER KEEPERS LET THE RAIL SLIDE; EACH PIECE MOVES THERMALLY FROM ITS ANCHOR, UP TO ${u==='SI'?`${Math.max(1,Math.round(jm))} mm`:plateInches(jm,u)} AT A JOINT. AT EACH PERIODIC CRANE INSPECTION CHECK THE JOINT GAPS AND THE RAIL ENDS AT THE STOPS FOR CREEP.`;})()]:[]),
+   ...(moves?[(()=>{const F=railAnchorForce(p),u=p.units,gap=p.details!.rail.jointGap;
+    return `RAIL ANCHORS, SOLID TRIANGLES: AT MID-LENGTH OF EACH RAIL PIECE THE KEEPER PAIR IS SET IN RAIL-BASE NOTCHES (${detailRef(detailTitles.railKeeper)}) AND TAKES THE CRANE LONGITUDINAL FORCE (TRACTION AND BRAKING, ${labelForce(F.force,u)} FACTORED) AND RAIL CREEP INTO THE GIRDER. ALL OTHER KEEPERS LET THE RAIL SLIDE; EACH PIECE MOVES THERMALLY FROM ITS ANCHOR, UP TO ${movementUpTo(railJointMovement(moves),u)} AT A JOINT (${u==='SI'?`${Math.round(gap*2)/2} mm`:plateInches(gap,u)} GAP). AT EACH PERIODIC CRANE INSPECTION CHECK THE JOINT GAPS AND THE RAIL ENDS AT THE STOPS FOR CREEP.`;})()]:[]),
    ...(['left','right'] as const).filter(e=>r.existing[e]).map(e=>`AT GRID ${e==='left'?1:grids.length} JOIN THE EXISTING RAIL: CUT IT BACK TO ${dim(clear)} BEYOND THE GRID. FIELD VERIFY ITS SECTION AND JOINTS.`)
   ];
   let y=rows.A+58;
-  for(const n of notes){const w=wrappedText(x0-60,y,n,120,8,11);svg+=w.svg;y+=w.height+3;}
+  // Notes wrapped to the measured width of the plan, a value kept on one line with its unit.
+  for(const v of notes){const rows=wrapToWidth(labelCaps(v).replace(/(\d) mm\b/g,'$1\u0001mm'),600,8);svg+=rows.map((row,i)=>text(x0-60,y+i*11,row.replaceAll('\u0001',' '),8)).join('');y+=rows.length*11+3;}
   return {svg:svg+'</g>',scale:`${scale.label} ALONG RUNWAY`};
  }};
 }
