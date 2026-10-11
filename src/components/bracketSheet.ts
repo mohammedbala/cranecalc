@@ -1,7 +1,7 @@
 import {supportColumn} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
-import {drawingLength,plateInches} from './drawingFormat';
+import {drawingLength,electrodeClass,plateInches} from './drawingFormat';
 import {sheetDrawingScale,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,labelColumn,type XY} from './sheetGraphics';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {format} from '../engine/units';
@@ -114,7 +114,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const tie=flangeTieGeometry(p),ties=tie?`${tie.sides.length===1&&tie.sides[0]>0?'THE TOP FLANGE TIES':'THE FLANGE TIES'} (${detailRef(detailTitles.flangeTie)})`:'THE FLANGE TIES';
   const notes=[
    `TWO RECTANGULAR RIBS AND A SEAT PLATE. THE RIBS CARRY THE GRAVITY BEARINGS; NO CREDIT FOR BOLTS, KNEE PLATES OR COMPOSITE RIB/SEAT ACTION. ${sc.field?'FIELD':'SHOP'} WELD THE SEAT TO THE COLUMN FLANGE WITH A ${size(cw.size)} TOP FILLET ${dim(cw.length)} LONG: ${eb?'THE BEARING BOLTS BRING THE GIRDER\'S LONGITUDINAL FORCE (LOCATING END) AND H BOTTOM INTO THE SEAT, AND THE FILLET DELIVERS THEM TO THE COLUMN':'IT DELIVERS THE GIRDER\'S LONGITUDINAL FORCE AND H BOTTOM FROM THE BEARING TO THE COLUMN'}${collector?` AND THE STRUT (${detailRef(detailTitles.strutPlan)})`:''}.`,
-   `PLATES: ${format(d.material.Fy,'stress',p.units)} MIN. YIELD. WELDS: ${format(d.material.Fexx,'stress',p.units)} ELECTRODE. CONTINUOUS FILLETS AS SHOWN.`,
+   `PLATES: ${format(d.material.Fy,'stress',p.units,p.units==='SI'?0:3)} MIN. YIELD. WELDS: ${electrodeClass(d.material.Fexx,p.units)} ELECTRODE. CONTINUOUS FILLETS AS SHOWN.`,
    sc.isNew?`SHOP WELD THE SEAT TO THE RIBS, AND THE RIB ROOTS AND SEAT TO THE ${sc.name}, BEFORE ERECTION; INSPECT STARTS, STOPS AND TOES.`:'SHOP WELD THE SEAT TO THE RIBS. FIELD WELD THE RIB ROOTS AND SEAT TO THE EXISTING COLUMN AS FLAGGED. PROVIDE ACCESS TO BOTH ROOT WELDS BEFORE PLACING THE RUNWAY; INSPECT STARTS, STOPS AND TOES.',
    `KEEP GIRDER ENDS AND BEARINGS INDEPENDENT. DO NOT WELD THE SLIDING BEARING TO THE GIRDER. ${eb?`THE BEARING BOLTS LOCATE, GUIDE AND HOLD DOWN THE GIRDER ON THIS SEAT (${detailRef(bearingBoltsTitle(p))}); DRILL THE SEAT TO MATCH (${detailRef(bracketPlanTitle)}). `:''}ONLY ${ties} CONNECT TO THE COLUMN SEPARATELY; H TOP DOES NOT ENTER THE BRACKET.`,
    sc.isNew?`THE ${sc.name} IS DESIGNED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT${p.columnBase?.enabled?`; BASE PLATE, ANCHOR RODS AND FOOTING: ${detailRef(detailTitles.newColumn)}`:'; ITS BASE AND FOUNDATION ARE BY OTHERS'}.`:p.existingColumn?.enabled?'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. THE EXISTING COLUMN IS CHECKED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT; FRAME, ANCHORS AND FOUNDATIONS ARE BY OTHERS.':'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. LOCAL COLUMN CHECKS DO NOT VERIFY THE COMPLETE FRAME, COLUMN AXIAL/BENDING INTERACTION OR FOUNDATIONS.',

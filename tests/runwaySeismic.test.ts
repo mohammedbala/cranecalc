@@ -52,6 +52,19 @@ describe('Seismic design of new freestanding runway columns',()=>{
   const old=seismic();for(const k of ['riskCategory','Ss','S1','siteClass','SD1'] as const)delete old.existingColumn!.seismic![k];
   expect(errs(old)).toEqual([]);
  });
+ it('designs the cantilever columns to AISC 341 §E5 in SDC B: overstrength cases, code basis, welds and inspection',()=>{
+  const s=calculate(newColumnDemonstrationProject()),c=s.existingColumn!;
+  // ASCE 7 §14.1.2.2.1: the columns take the overstrength combinations too (§E5.4a), with the 15% axial limit in them.
+  expect(c.combinations.map(k=>k.id)).toEqual(expect.arrayContaining(['LRFD 6-E Ωo','LRFD 7-E Ωo']));
+  const axial=s.checks.find(k=>k.id==='column-seismic-axial')!;
+  expect(axial.caseId).toContain('Ωo');expect(axial.note).toContain('AISC 341 §E5.4a');expect(axial.referenceIds).toContain('aisc-341');
+  const t=[...coverSheetSvg(s,[]).matchAll(/>([^<]+)</g)].map(m=>m[1]).join(' ');
+  for(const v of ['AISC 341','§E5 ORDINARY CANTILEVER COLUMN SYSTEM','AWS D1.8/D1.8M','AWS D1.8 CLAUSE 6.3','SEISMIC (IBC 1705.12.1.1, 1705.13.1.1)','CRANE-LEVEL ROD BRACING EXEMPT'])expect(t).toContain(v);
+  // SDC A takes only the §1.4.2 integrity force: no AISC 341 and no overstrength column cases.
+  const a=calculate(seismic({sdc:'A',SDS:.1,SD1:.05}));
+  expect(a.existingColumn!.combinations.some(k=>k.id.includes('Ωo')||k.id.includes('§1.4.2'))).toBe(false);
+  expect([...coverSheetSvg(a,[]).matchAll(/>([^<]+)</g)].map(m=>m[1]).join(' ')).not.toContain('AISC 341');
+ },240000);
  it('states the IBC 1603.1.5 seismic data, the base shear each way and the wind basis on S-00',()=>{
   const s=calculate(newColumnDemonstrationProject()),svg=coverSheetSvg(s,[]),t=[...svg.matchAll(/>([^<]+)</g)].map(m=>m[1]).join(' ');
   expect(t).toContain('RISK CATEGORY II, IE 1; SS 0.19, S1 0.05; SITE CLASS D; SDS 0.2, SD1 0.08;');

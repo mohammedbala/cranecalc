@@ -34,7 +34,7 @@ describe('imperial presentation',()=>{
   const input=withImperialUnits(cappedDemonstrationProject()),b=input.details!.bracket!;b.arrangement='existing-corbel';b.existing=structuredClone(defaultExistingBracket);
   const s:CalculationSnapshot={input,checks:[],analysis:null,properties:null,errors:[],warnings:[],eligible:false,revision:'unit-test',createdAt:'2026-10-09',referenceVersion:'test'};
   const svg=bracketSheetSvg(s);expect(svg).toContain('width="36in" height="24in"');expect(svg).toContain('36 X 24 IN');expect(svg).toContain('FEET &amp; INCHES');expect(svg).not.toContain(' MM');expect(svg).not.toContain('SCALE: 1:');
-  expect(structuralGeneralNotes(s).join(' ')).toContain('KSI WELD METAL');
+  expect(structuralGeneralNotes(s).join(' ')).toContain('E70XX WELD METAL');
  });
  it('exports imperial interface forces and converts nested end actions as well as headers',()=>{
   const input=withImperialUnits(cappedDemonstrationProject());input.cranes[0].design!.bumperForce=4448.221615;

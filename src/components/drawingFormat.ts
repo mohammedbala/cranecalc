@@ -33,3 +33,11 @@ export function drawingScale(maxPointsPerMm:number,units:ProjectInput['units']){
  const denominator=[1,2,5,10,20,25,50,100,200,250,500,1000,2000].find(v=>72/(25.4*v)<=maxPointsPerMm+1e-10)??2000;
  return {pointsPerMm:72/(25.4*denominator),label:`SCALE: 1:${denominator}`};
 }
+/**
+ * Weld filler by its AWS classification from the entered electrode strength: E70XX in US units, and in SI
+ * also the metric classification of the same filler (AWS A5.1M / A5.5M), e.g. E70XX (E49XX).
+ */
+export function electrodeClass(Fexx:number,units:ProjectInput['units']){
+ const ksi=Math.round(Fexx/6.894757293/10)*10,metric:Record<number,string>={60:'E43XX',70:'E49XX',80:'E55XX',90:'E62XX',100:'E69XX',110:'E76XX'};
+ return units==='SI'&&metric[ksi]?`E${ksi}XX (${metric[ksi]})`:`E${ksi}XX`;
+}

@@ -251,7 +251,8 @@ export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],
  svg+=labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('');
  const right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+89);
  // Weld-all-around: a circle where the arrow meets the reference line (AWS A2.4).
- if(allAround)svg+=circle(right?at[0]+92:at[0]-3,y,3);
+ // The leader meets the reference line at its elbow, 14 pt beyond the line's end, where a field flag also stands.
+ if(allAround)svg+=circle(right?at[0]+103:at[0]-14,y,3);
  return `<g data-multileader="weld"${field?' data-weld-location="field"':''}${allAround?' data-weld-all-around="true"':''}>${svg}${field?fieldWeldFlag(right?[at[0]+117,at[1]]:at):''}</g>`;
 }
 export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[]){return filletLeader(points,at,sizeLabel,labels,bothSides,via,true);}

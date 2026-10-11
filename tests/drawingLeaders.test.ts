@@ -10,6 +10,7 @@ import {loadAiscSection,aiscWShapes} from '../src/data/aiscSections';
 import {validateProject} from '../src/engine/calculate';
 import {defaultFraming} from '../src/components/framingSettings';
 import {dimH,dimV} from '../src/components/sheetGraphics';
+import {electrodeClass} from '../src/components/drawingFormat';
 import type {CalculationSnapshot} from '../src/engine/types';
 import {detailRef} from '../src/components/sheetGraphics';
 
@@ -107,5 +108,12 @@ describe('dimension extension lines',()=>{
    expect(ext).toHaveLength(2);
    for(const [x1,,x2] of ext){expect(x1).toBe(100);expect(x<100?x2<x:x2>x).toBe(true);}
   }
+ });
+});
+
+describe('weld filler classification',()=>{
+ it('names the electrode by its AWS classification, with the metric classification in SI',()=>{
+  expect(electrodeClass(70*6.894757293,'US')).toBe('E70XX');expect(electrodeClass(482.63,'SI')).toBe('E70XX (E49XX)');
+  expect(electrodeClass(80*6.894757293,'SI')).toBe('E80XX (E55XX)');
  });
 });

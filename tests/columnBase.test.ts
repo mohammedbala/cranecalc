@@ -140,6 +140,8 @@ describe('New freestanding column package',()=>{
   expect(check.status).toBe('pass');expect(check.capacity).toBeCloseTo(w.phiRn,6);
   expect((s.columnBase.supports??[]).some(v=>Math.abs(v.anchors.V/4-check.demand!)<1e-6)).toBe(true);
   expect(columns.svg).toContain('data-weld-all-around="true"');
+  // Welded after the nuts are snug, so in the field: the flag stands with the all-around circle at the arrow.
+  expect(columns.svg).toMatch(/data-weld-location="field" data-weld-all-around="true"/);
   expect(texts(columns.svg)).toContain('5/16" FILLET ALL AROUND');
  },120000);
  it('reports geometry clashes and drawing mismatches as input errors',()=>{
