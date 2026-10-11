@@ -57,6 +57,9 @@ export function validateExistingColumn(p:ProjectInput):string[]{
  const freestanding=c.strong.top==='free';
  add(c.seatElevation>c.height+1e-6||(!freestanding&&c.seatElevation>=c.height),'seatElevation: the bracket seat must be below the column top support.');
  add(!freestanding&&existingColumnRailElevation(p)>=c.height,'height: the rail head must be below the column top support.');
+ // The drawings take an existing column's rail elevation from its surveyed seat, so an entered top of rail must agree.
+ const tor=p.drawing?.railElevation;
+ if(!c.isNew&&tor){const rail=existingColumnRailElevation(p);add(Math.abs(rail-tor)>1.6,`seatElevation: the surveyed bracket seat puts the top of rail ${format(rail,'length',p.units,3)} above the datum, not the entered top of rail ${format(tor,'length',p.units,3)}; correct the survey or the entered elevation, or clear the entered elevation to draw from the survey.`);}
  for(const [axis,b] of [['strong',c.strong],['weak',c.weak]] as const)add(b.base==='pinned'&&b.top==='free',`${axis}: a pinned base with a free top is unstable; brace the top or fix the base.`);
  // A new column with runway details carries the girder on its bracket and the top-flange tie at its face: it
  // must reach the tie and stop below the top of rail, clear of the crane end trucks.
