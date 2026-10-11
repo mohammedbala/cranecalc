@@ -4,6 +4,7 @@ import {buildTaxonomy,classifyCheck,gateCheck,type Taxonomy} from '../../src/eng
 import {summaryElements} from '../../src/report/designSummary';
 import {compactReport} from '../../src/report/compactReport';
 import {checksCsv} from '../../src/report/taxonomyReport';
+import {reportHtml} from '../../src/report/reportHtml';
 import {shortReference} from '../../src/report/reportParts';
 import {references,tr13Clause} from '../../src/engine/references';
 import type {CalculationSnapshot,CheckResult} from '../../src/engine/types';
@@ -225,5 +226,20 @@ describe('TR-13 basis and clause citations (A5)',()=>{
   for(const id of ['rail-keeper-flexure','rail-keeper-weld','rail-joint-bolts','rail-clips','rail-flexure'])expect(cite(id)).not.toMatch(/§5\.(9|13)\b/);
   expect(cite('end-bearing-spacing')).not.toMatch(/TR-13/);
   expect(tr13Clause('haunch-seat-strip')).toBe('§5.9.2');
+ });
+});
+
+describe('review draft export with missing-data open items (unverified)',()=>{
+ it('exports a REVIEW DRAFT listing the unverified items first; an issued report still requires eligibility',()=>{
+  const s=clone();
+  s.checks.push({id:'column-frame',group:'Existing column',title:'Existing column · frame type and sway amplification',status:'unverified',equation:'',note:'Frame type not entered: the column check is provisional.',referenceIds:[]});
+  s.eligible=false;
+  expect(()=>reportHtml(s,undefined,'')).toThrow(/not eligible/);
+  const h=reportHtml(s,undefined,'',{reviewDraft:true}),p1=text(h.slice(0,h.indexOf('</section>')));
+  expect(p1).toMatch(/REVIEW DRAFT — NOT FOR ISSUE/);expect(p1).toMatch(/2 OPEN ITEMS/);
+  expect(p1.indexOf('frame type and sway amplification')).toBeLessThan(p1.indexOf('Design summary'));
+  // Unsupported results or failed analysis verification are never exported, draft or not.
+  const u=structuredClone(s);u.checks.push({...u.checks.at(-1)!,id:'x-unsupported',status:'unsupported'});
+  expect(()=>reportHtml(u,undefined,'',{reviewDraft:true})).toThrow();
  });
 });

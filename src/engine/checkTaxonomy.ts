@@ -22,6 +22,16 @@ import {connectionCoordination} from './connectionCoordination';
  * New checks from the engine flow through by id/group pattern; one that matches no rule falls to a default chosen
  * from its group and quantity and is marked rule 'default' (a test fails if any fixture check lands there).
  */
+/**
+ * A review draft may be exported while open items are only missing data ('unverified' / 'incomplete' checks, which make
+ * a snapshot ineligible): the analysis ran and verified, nothing is unsupported and there are no input errors. The
+ * report then says REVIEW DRAFT and lists the open items on page 1. Issued reports still require eligibility.
+ */
+export function reviewDraftExportable(s:CalculationSnapshot){
+ if(s.eligible)return true;
+ return !s.errors.length&&!!s.analysis&&!!s.properties&&!!s.detailResults&&s.input.scope==='design'
+  &&s.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass')&&!s.checks.some(c=>c.status==='unsupported');
+}
 export type CheckType='design'|'detailing'|'classification'|'verification'|'input'|'load-basis'|'by-others';
 export type Effect='axial'|'flexure'|'shear'|'local'|'movement'|'connection'|'fatigue'|'stability'|'other';
 export const checkTypeLabel:Record<CheckType,string>={design:'Design',detailing:'Detailing',classification:'Classification',verification:'Verification',input:'Input',

@@ -42,9 +42,10 @@ export function openItemsBlock(tax:Taxonomy,s:CalculationSnapshot){
  return `<h2>Open items</h2>${items.length?list:'<p>No open coordination, redesign or input items.</p>'}${byOthersBlock(tax,s,true)}`;
 }
 /** The pass banner: never "no failed checks" while an open item exists. */
-export function banner(tax:Taxonomy){
+export function banner(tax:Taxonomy,draft=false){
  const n=tax.openItems.length,g=tax.governing;
- if(n){const kinds=[...new Set(tax.openItems.map(o=>kindLabel[o.kind].toLowerCase()))];return `<div class="banner fail"><b>${n} OPEN ITEM${n>1?'S':''} — REVIEW REQUIRED, DO NOT ISSUE FOR CONSTRUCTION</b><br/>${esc(kinds.join('; '))}: listed below.${g?` Governing design D/C ${dcText(g.dc,2)}: ${esc(g.title)} (${esc(g.element)}).`:''}</div>`;}
+ const head=draft?'<b>REVIEW DRAFT — NOT FOR ISSUE.</b> Open items include missing input (unverified); the calculation cannot be issued until they are resolved.<br/>':'';
+ if(n){const kinds=[...new Set(tax.openItems.map(o=>kindLabel[o.kind].toLowerCase()))];return `<div class="banner fail">${head}<b>${n} OPEN ITEM${n>1?'S':''} — REVIEW REQUIRED, DO NOT ISSUE FOR CONSTRUCTION</b><br/>${esc(kinds.join('; '))}: listed below.${g?` Governing design D/C ${dcText(g.dc,2)}: ${esc(g.title)} (${esc(g.element)}).`:''}</div>`;}
  return `<div class="banner"><b>ALL DESIGN CHECKS SATISFIED</b> — no open items.${g?` Governing design D/C ${dcText(g.dc,2)}: ${esc(g.title)} (${esc(g.element)}).`:''}</div>`;
 }
 /** Counts: design checks evaluated E (shown S), screened R, detailing rules D (F flagged). */
@@ -67,7 +68,8 @@ export function byOthersItems(tax:Taxonomy,s:CalculationSnapshot){
   if(id==='supporting-structure')return {title:'Existing frame, connections and foundations',remains:'Building frame, roof and wall framing, the column-to-foundation connections, anchors and foundations for the crane reactions combined with the building loads (ASCE 7 combinations); the checked column member is not included here.',
    forces:`Per support, factored AIST envelope: vertical ${f(env('vertical'))}, lateral top ${f(env('top'))} / bottom ${f(env('bottom'))}, longitudinal ${f(env('longitudinal'))}, seat moment ${m(env('torque'))} (section “Forces delivered to the building”; unfactored by load type in “Support reactions”).`};
   const force=sentences(t.check.note).find(x=>/\d\s*(kip|kN)\b/.test(x));
-  return {title:t.check.title,remains:firstSentence(t.check.note.replace(/^Not checked here:\s*/,'')),forces:force?.trim()??'See “Forces delivered to the building”.'};
+  const rest=firstSentence(t.check.note.replace(/^Not checked here:\s*/,''));
+  return {title:t.check.title,remains:rest.charAt(0).toUpperCase()+rest.slice(1),forces:force?.trim()??'See “Forces delivered to the building”.'};
  });
 }
 export function byOthersBlock(tax:Taxonomy,s:CalculationSnapshot,compact=false){

@@ -2,6 +2,7 @@ import {dcText} from '../engine/checkPresentation';
 import {checkFigureHtml,checkFigureCss} from '../components/checkFigures';
 import katex from 'katex';
 import { compactReport } from './compactReport';
+import { reviewDraftExportable } from '../engine/checkTaxonomy';
 import { appendPlanSheet } from '../components/planSheet';
 import { defaultFraming, type FramingSettings } from '../components/framingSettings';
 import type { CalculationSnapshot } from '../engine/types';
@@ -9,11 +10,12 @@ import { diagramSet } from '../components/diagrams';
 import { references } from '../engine/references';
 import { format, type Quantity } from '../engine/units';
 const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export function reportHtml(s:CalculationSnapshot, framing:FramingSettings=defaultFraming, fontCss=""){
- return appendPlanSheet(calculationReportHtml(s,fontCss),s,framing);
+/** `reviewDraft`: export a snapshot whose only blockers are missing-data open items, marked REVIEW DRAFT (reviewDraftExportable). */
+export function reportHtml(s:CalculationSnapshot, framing:FramingSettings=defaultFraming, fontCss="", options:{reviewDraft?:boolean}={}){
+ return appendPlanSheet(calculationReportHtml(s,fontCss,!!options.reviewDraft),s,framing);
 }
-function calculationReportHtml(s:CalculationSnapshot,fontCss:string){
- if(!s.eligible||!s.analysis||!s.properties)throw Error('This calculation snapshot is not eligible for export.');
+function calculationReportHtml(s:CalculationSnapshot,fontCss:string,reviewDraft=false){
+ if(!(s.eligible||(reviewDraft&&reviewDraftExportable(s)))||!s.analysis||!s.properties)throw Error('This calculation snapshot is not eligible for export.');
  if(s.input.scope==='design'&&s.detailResults)return compactReport(s,fontCss,s.input.reportFormat==='detailed');
  const p=s.input,a=s.analysis,design=s.designAnalysis,props=s.properties,fmt=(v:number,q:Quantity)=>esc(format(v,q,p.units,4));
  const rows=(values:[string,string|number][])=>values.map(([k,v])=>`<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('');
