@@ -28,3 +28,11 @@ export function presentCheck(check:CheckResult,units:ProjectInput['units']):Chec
  }
  return c;
 }
+/**
+ * Demand/capacity ratio as printed. A check whose capacity is zero (a clearance that is used up, a part that
+ * cannot carry the action at all) reports a sentinel ratio of 1e12 or more: it reads NO CAPACITY, not a number.
+ */
+export function dcText(u:number|undefined,digits:number,empty='-'){
+ if(u===undefined||Number.isNaN(u))return empty;
+ return !Number.isFinite(u)||u>=1e6?'NO CAPACITY':u.toFixed(digits);
+}
