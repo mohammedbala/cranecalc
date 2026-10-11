@@ -2,7 +2,7 @@ import {supportColumn,runwayElevations} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,drawingElevation,electrodeClass,plateInches} from './drawingFormat';
-import {sheetDrawingScale,textWidth,wrapToWidth,labelCaps,line,rect,text,circle,n,dimH,dimV,breakLine,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,type XY} from './sheetGraphics';
+import {sheetDrawingScale,textWidth,wrapToWidth,labelCaps,line,rect,text,circle,n,dimH,dimV,breakLine,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,capChannelSection,type XY} from './sheetGraphics';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {bracketForceBlocks} from './bracketForceTable';
@@ -84,7 +84,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const gx=(x:number)=>X(a+x),bf=sec.bf,tf=sec.tf,gw=sec.tw,z0=tbp,zw=z0+tf+web,zg=zw+gap,z1=zg+web+tf;
   svg+=rect(gx(bf/2),Y(z0+tf),bf*k,tf*k,'reference-line')+rect(gx(gw/2),Y(zw),gw*k,web*k,'reference-line')+rect(gx(gw/2),Y(z1-tf),gw*k,web*k,'reference-line')+rect(gx(bf/2),Y(z1),bf*k,tf*k,'reference-line');
   for(const z of [zw,zg])svg+=breakLine([gx(bf/2+12),Y(z)],[gx(-bf/2-12),Y(z)]);
-  if(cap)svg+=rect(gx(sec.capWidth/2),Y(z1+cap),sec.capWidth*k,cap*k,'reference-line');
+  if(cap)svg+=capChannelSection(sec,(x,z)=>[gx(x),Y(z1+z)],'reference-line');
   const r=d.rail,rz=z1+cap+railTopAboveSteel(p)-p.railHeight;
   svg+=rect(gx(r.baseWidth/2),Y(rz+r.baseThickness),r.baseWidth*k,r.baseThickness*k,'reference-line')+rect(gx(r.webThickness/2),Y(rz+p.railHeight-r.headThickness),r.webThickness*k,(p.railHeight-r.headThickness-r.baseThickness)*k,'reference-line')+rect(gx(r.headWidth/2),Y(rz+p.railHeight),r.headWidth*k,r.headThickness*k,'reference-line');
   // Girder web line (runway centerline at the bracket), carried down as the reach extension line.

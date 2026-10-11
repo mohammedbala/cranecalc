@@ -6,7 +6,7 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {boltProperties} from '../engine/connectionStrength';
 import {runwayElevations} from '../engine/drawingData';
 import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,textWidth,detailTitles,bearingBoltsTitle,labelColumn,breakLine,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,textWidth,detailTitles,bearingBoltsTitle,labelColumn,breakLine,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {heavyHex,hexSide} from './heavyHex';
 import {bearingStiffenerProfile} from './bearingStiffenerGeometry';
@@ -55,7 +55,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   const yb=bt,yt=bt+b.d;
   // Girder: flanges, web and the fitted bearing stiffener pair beyond, coped at the web corners.
   svg+=rect(X(-b.bf/2),Y(yb+b.tf),b.bf*kk,b.tf*kk,'runway-line')+rect(X(-b.tw/2),Y(yt-b.tf),b.tw*kk,web*kk,'runway-line')+rect(X(-b.bf/2),Y(yt),b.bf*kk,b.tf*kk,'runway-line');
-  if(b.kind==='cap'){svg+=rect(X(-b.capWidth/2),Y(yt+b.capTw),b.capWidth*kk,b.capTw*kk,'runway-line');for(const sign of [-1,1])svg+=rect(X(sign*b.capWidth/2-(sign>0?b.capTf:0)),Y(yt),b.capTf*kk,(b.capDepth-b.capTw)*kk,'runway-line');}
+  if(b.kind==='cap')svg+=capChannelSection(b,(x,z)=>[X(x),Y(yt+z)]);
   const stiffPts:XY[]=[];
   for(const side of [-1,1]){
    const profile=bearingStiffenerProfile(bs.stiffenerWidth,web,bs.cope).map(([z,v]):XY=>[X(side*(b.tw/2+z)),Y(yb+b.tf+v)]);

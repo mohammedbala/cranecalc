@@ -7,7 +7,7 @@ import {endStopGeometry,stopBumperForce,activeEndStop,wrenchClearance} from '../
 import {craneCombinations} from '../engine/aistLoads';
 import {boltProperties} from '../engine/connectionStrength';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,labelCaps,textWidth,n,breakLine,sectionCut,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,labelCaps,textWidth,n,breakLine,sectionCut,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {flangeTieGeometry} from '../engine/tieGeometry';
@@ -156,7 +156,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const cutDepth=capT+b.tf+3*inch,k=drawingScale(Math.min(.36,260/Math.max(Wb,g.surfaceWidth),215/(H+tb+cutDepth+2*inch)),u),kk=k.pointsPerMm,cx=250,ys=412+(tb+H)*kk,X=(z:number)=>cx+z*kk,Y=(h:number)=>ys-h*kk;
   const wTop=ys+capT*kk,wFl=wTop+b.tf*kk,cut=ys+cutDepth*kk,yb=Y(tb);
   svg+='<g data-view="end-stop-section">';
-  if(capped){svg+=rect(X(-b.capWidth/2),ys,b.capWidth*kk,capT*kk,'runway-line');for(const side of [-1,1])svg+=rect(side<0?X(-b.capWidth/2):X(b.capWidth/2)-b.capTf*kk,wTop,b.capTf*kk,(b.capDepth-b.capTw)*kk,'runway-line');}
+  if(capped)svg+=capChannelSection(b,(x,z)=>[X(x),wTop-z*kk]);
   svg+=rect(X(-b.bf/2),wTop,b.bf*kk,b.tf*kk,'runway-line')+line([X(-b.tw/2),wFl],[X(-b.tw/2),cut],'runway-line')+line([X(b.tw/2),wFl],[X(b.tw/2),cut],'runway-line');
   svg+=breakLine([X(-b.tw/2)-10,cut],[X(b.tw/2)+10,cut]);
   svg+=rect(X(-Wb/2),yb,Wb*kk,tb*kk,'runway-line')+rect(X(-Wb/2),Y(tb+H),Wb*kk,H*kk,'runway-line');

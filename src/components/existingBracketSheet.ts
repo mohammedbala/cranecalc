@@ -1,4 +1,5 @@
 import {existingBracketLabel} from '../engine/bracketProfiles';
+import {capChannelGeometry} from './capChannelGeometry';
 import * as THREE from 'three';
 import type {CalculationSnapshot} from '../engine/types';
 import {existingBracket,existingBoltPositions,usesExistingBracket} from '../engine/existingBracket';
@@ -33,8 +34,7 @@ export function existingBracketTopic(s:CalculationSnapshot):DetailTopic|undefine
   box('new-runway-web-'+i,v.z-v.a,p.section.d-2*p.section.tf,p.section.tw,(v.a+v.z)/2,d.bearing.thickness+p.section.d/2,0);
   if(p.section.kind==='cap'){
    const c=p.section,top=d.bearing.thickness+c.d;
-   box('new-cap-web-'+i,v.z-v.a,c.capTw,c.capWidth,(v.a+v.z)/2,top+c.capTw/2,0);
-   for(const sign of [-1,1])box('new-cap-leg-'+i+'-'+sign,v.z-v.a,c.capDepth-c.capTw,c.capTf,(v.a+v.z)/2,top-(c.capDepth-c.capTw)/2,sign*(c.capWidth-c.capTf)/2);
+   const cap=new THREE.Mesh(capChannelGeometry(c,(v.z-v.a)*mm),material);cap.name='new-cap-'+i;cap.userData.existingSteel=false;cap.position.set((v.a+v.z)/2*mm,top*mm,0);group.add(cap);
   }
  }
  const side=projection(group,v=>[v.z,-v.y],{x:65,y:92,w:285,h:217},p.units),front=projection(group,v=>[v.x,-v.y],{x:687,y:92,w:278,h:217},p.units),plan=projection(group,v=>[v.x,v.z],{x:67,y:409,w:282,h:210},p.units);
