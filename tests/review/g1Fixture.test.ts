@@ -33,8 +33,12 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
   // G1: vertical (L/1000), building-class. G2 (column review): column-*, brace-drift, cap-angle-column-holes (F13.1 as a
   // modifier). G3 (girder review): web class and F4 flexure, TR-13 wheel bearing length, cap development and cap welds,
   // US fatigue constants (relative changes under 0.1 % are within the tolerance below; R_FIL in inches moves two more).
+  // G4 (connections): CE as information, the by-others load path, beveled-washer cap bolts, fit tolerances, tight rail
+  // joints. detail-equilibrium (a solver residual) moves with G2's appended TR-13 rows.
   const changed=new Set(['vertical','building-class','column-axial','column-flexure','column-interaction','column-drift','brace-drift','cap-angle-column-holes',
-   'compact-web','major','combined','flexure-load-height','wheel-yield','wheel-cripple','cap-development','cap-weld-strength','cap-weld-metal','cap-weld-rupture','cap-weld-fatigue','haunch-colstiff-fatigue-plate','rail-keeper-root']);
+   'compact-web','major','combined','flexure-load-height','wheel-yield','wheel-cripple','cap-development','cap-weld-strength','cap-weld-metal','cap-weld-rupture','cap-weld-fatigue','haunch-colstiff-fatigue-plate','rail-keeper-root',
+   'column-weld-ce','bracket-load-path','cap-angle-channel-flange','cap-angle-nut-seat','cap-angle-nut-fit','cap-angle-endplate-edge','end-bearing-seat-fit',
+   'rail-joint-bearing','rail-joint-plate','rail-joint-block','rail-expansion-gap','rail-joint-slot','rail-end-gap','rail-joint-fatigue','detail-equilibrium']);
   for(const b of demoFocus005Before().checks){if(changed.has(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
  });
 });
