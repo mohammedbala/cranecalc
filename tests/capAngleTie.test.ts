@@ -12,19 +12,16 @@ import {references} from '../src/engine/references';
 import {capAngleTopic,capAngleTitles} from '../src/components/capAngleSheet';
 import {checkFigure} from '../src/components/checkFigures';
 import {compactReport} from '../src/report/compactReport';
+import {loadPathFigure} from '../src/report/designSummary';
 import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
 
 const inch=25.4,kip=4448.2216152605,ksi=6.894757293168,E=29000;
 /**
- * The capped 2-ton demonstration with the cap tieback angle: existing W14X90 columns, the bracket's receiving column
- * the W14X90 with its J10.8 stiffener pairs at the seat and rib bottom, and 5/16 in end plate fillets.
+ * The capped 2-ton demonstration with the cap tieback angle: its bracket's receiving column is the surveyed existing
+ * W14X90 (t_f 0.71 in) with the J10.8 stiffener pairs at the seat and rib bottom; 5/16 in end plate fillets.
  */
 export function capAngleDemonstration(){
  const p=cappedDemonstrationProject();p.units='US';p.details=selectTieArrangement(p.details!,'cap-angle');
- const b=p.details.bracket!;
- b.receiver={...b.receiver,depth:14*inch,width:14.5*inch,flangeThickness:.71*inch,webThickness:.44*inch,Fy:50*ksi,Fu:65*ksi,source:'Fictitious survey: existing W14X90 column, ASTM A992'};
- p.existingColumn!.shape='W14X90';
- b.columnStiffeners={enabled:true,thickness:inch,width:6.75*inch,length:'half',clip:.75*inch,flangeWeld:5/16*inch,webWeld:5/16*inch};
  p.details.brace.capAngle!.weldSize=5/16*inch;
  return p;
 }
@@ -64,7 +61,8 @@ describe('cap tieback angle: components hand-checked on the capped demonstration
   close(g.endPlate.z0/inch,-2.75);close(g.endPlate.z1/inch,3.25);close(g.column.zs[0]/inch,2.25);close(g.column.zs[1]/inch,-1.75);
   // Cap bolt line above the bearing: d + t_w,cap − gauge = 24.3 + 0.4 − 2.25 in.
   close(g.boltHeight/inch,22.45);
-  expect(g.column.receiver?.shape).toBe('W14X90');close(g.column.receiver!.tf/inch,.71);
+  expect(p.existingColumn?.shape).toBe('W14X90');expect(p.details!.bracket!.columnStiffeners?.enabled).toBe(true);
+  expect(g.column.receiver?.shape).toBe('W14X90');close(g.column.receiver!.tf/inch,.71);close(g.column.receiver!.width/inch,14.5);
  });
  it('cap bolts: T = F/2 plus the prying force of the angle leg; the channel flange does not pry',()=>{
   // F = 20 kip: T = 10 kip. Angle leg: b = 2.25 − 0.5 = 1.75 in, b' = 1.4375 in; a = min(4, 3.4) − 2.25 = 1.15 in,
@@ -197,6 +195,10 @@ describe('cap tieback angle: the calculated demonstration',()=>{
   const ss=simpleSupportInput(p),theta=s.designAnalysis!.endRotation;
   const travel=theta*(24.3+.4-2.25)*inch+12e-6*Math.max(...p.spans)*Math.max(ss.temperatureRise,ss.temperatureFall)+ss.settingTolerance;
   close(check(s,'cap-angle-slot-travel').demand!,travel,1e-6);close(check(s,'cap-angle-slot-travel').capacity!,.375*inch,1e-9);
+  // The lower column bolt (1.75 in below the top of the cap) clears the bracket's column stiffeners at the seat
+  // (2 in seat plate, 1 in plates centered on it): z_b − z_st = t_bearing + 24.3 + 0.4 − 1.75 − (−1 + 0.5) in ≥ C1.
+  const clear=check(s,'cap-angle-bracket-stiffener-clear'),bs=p.details!.bracket!;
+  expect(clear.status).toBe('pass');close(clear.capacity!,p.details!.bearing.thickness+(24.3+.4-1.75)*inch-(-bs.seatThickness/2+bs.columnStiffeners!.thickness/2),1e-6);
   // The fatigue register has the channel flange holes and they pass in the girder fatigue checks.
   expect(s.checks.some(c=>c.id.includes('CA1-L'))).toBe(true);
  });
@@ -219,6 +221,12 @@ describe('cap tieback angle: the calculated demonstration',()=>{
    expect(html).toContain('Cap tieback angle');for(const page of ['04E','04F','04G'])expect(html).toContain(page);
    expect(body).not.toMatch(/\b(NaN|undefined|Infinity)\b/);
   }
-  const f=checkFigure('Cap tieback',p);expect(f.path).toHaveLength(6);expect(f.svg).not.toMatch(/NaN|undefined/);
+  // The isometric figure from the tie geometry, numbered as the six caption steps; the summary still names the top tie.
+  const markers=(svg:string)=>[...svg.matchAll(/font-weight="700" fill="#000">(\d+)<\/text>/g)].map(m=>Number(m[1])).sort((a,b)=>a-b);
+  for(const topic of ['Cap tieback','Cap tieback movement','Connections']){
+   const f=checkFigure(topic,p);expect(f.view,topic).toBe('isometric');expect(f.path).toHaveLength(6);expect(markers(f.svg)).toEqual([1,2,3,4,5,6]);
+   expect(f.svg).toContain('CAP ANGLE TIE');expect(f.svg).not.toMatch(/NaN|undefined|Infinity/);
+  }
+  const summary=loadPathFigure(p);expect(summary).toContain('TOP TIE');expect(summary).not.toMatch(/NaN|undefined/);
  });
 });
