@@ -8,6 +8,7 @@ import {filletWeld} from './weldGeometry';
 import {buildExistingBrackets} from './existingBracketGeometry';
 import {weldedRibBracket,haunchTipDepth} from '../engine/bracketRib';
 import type {HardwareBuilder} from './connectionDetails';
+import {addColumnStiffeners} from './columnStiffenerGeometry';
 export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:number,steel:THREE.Material,edge:THREE.LineBasicMaterial,bearing?:{width:number;length:number;thickness:number},weldMaterial:THREE.Material=steel,hardware?:HardwareBuilder,columnIsNew=false){
  if(isExistingBracketType(bracketArrangement(b)))return buildExistingBrackets(b,supports,seatTop,steel,edge,bearing,hardware);
  if(bracketArrangement(b)==='rolled-corbel')return buildRolledBrackets(b,supports,seatTop,steel,edge,bearing,weldMaterial,columnIsNew);
@@ -38,6 +39,7 @@ export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:num
    }
   }
  });
+ addColumnStiffeners(group,b,supports,seatTop,steel,edge,weldMaterial,columnIsNew);
  return group;
 }
 /**
@@ -88,5 +90,6 @@ export function buildRolledBrackets(b:BracketInput,supports:number[],seatTop:num
   }
   for(const sx of [-1,1])filletWeld(group,`${id}-web-column-${sx}`,V(x+sx*tw/2,top-k,face),V(x+sx*tw/2,top-d+k,face),V(sx,0,0),V(0,0,-1),r.webWeld*mm,weldMaterial,`${where} fillet, web to the column flange; designed weld group.`,support,column);
  });
+ addColumnStiffeners(group,b,supports,seatTop,steel,edge,weldMaterial,columnIsNew);
  return group;
 }

@@ -15,6 +15,8 @@ import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiL
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {ribGeometry,ribDepthAt} from '../engine/bracketRib';
 import {haunchedRibOutline} from './haunchedBracketDrawing';
+import {columnStiffenerGeometry} from '../engine/columnStiffeners';
+import {columnStiffenerTitle} from './columnStiffenerDrawing';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 
 const inch=25.4;
@@ -100,6 +102,9 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   svg+=line([X(0),Y(top)-8],[X(0),Y(ftgBot)+6],'grid-line');
   // Bracket seat and ribs on the girder-side flange.
   if(br&&bseat){const ws=rolledUnderSeat(p);if(ws){const y0=ws.seat?.y0??0;svg+=rect(X(c.d/2+y0),Y(seat),(br.seatProjection-y0)*kk,bseat.thickness*kk,'runway-line')+rect(X(c.d/2),Y(seat-bseat.thickness),br.seatProjection*kk,bseat.depth*kk,'runway-line');for(const off of [ws.tf,ws.d-ws.tf])svg+=line([X(c.d/2),Y(seat-bseat.thickness-off+(ws.seat?0:ws.tf))],[X(c.d/2+br.seatProjection),Y(seat-bseat.thickness-off+(ws.seat?0:ws.tf))],'runway-line');}else{const rg=ribGeometry(br);svg+=rect(X(c.d/2),Y(seat),br.seatProjection*kk,br.seatThickness*kk,'runway-line')+(rg.tapered?haunchedRibOutline(rg,X(c.d/2)+br.seatProjection*kk,X(c.d/2),Y(seat-br.seatThickness),kk):rect(X(c.d/2),Y(seat-br.seatThickness),br.seatProjection*kk,br.ribDepth*kk,'runway-line'));}}
+  // Column stiffeners edge-on between the flanges at the bracket's force levels.
+  const cs=br?columnStiffenerGeometry(p):undefined;
+  if(cs)for(const l of cs.levels)svg+=rect(X(c.d/2-cs.tf-cs.length),Y(seat+l.z+cs.t/2),cs.length*kk,cs.t*kk,'runway-line');
   // Bearing plate, girder section with the cap channel, and the rail.
   svg+=rect(X(girderZ-d.bearing.width/2),Y(y0),d.bearing.width*kk,bt*kk,'runway-line');
   svg+=`<path class="runway-line" d="M${n(X(girderZ-g.bf/2))},${n(Y(y0))}H${n(X(girderZ+g.bf/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ+g.tw/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ+g.bf/2))}V${n(Y(tos))}H${n(X(girderZ-g.bf/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ-g.tw/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ-g.bf/2))}Z"/>`;
@@ -159,6 +164,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ...(capG?[{at:[X(capG.cap.plate.width/2),Y(seat-capG.cap.plate.thickness/2)] as XY,labels:['COLUMN CAP, GIRDER CENTERED',`SEE ${detailRef(columnCapTitles.section)}`]}]:[]),
    ...(br&&bseat?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-bseat.thickness-(bseat.rolled?bseat.depth:ribDepthAt(ribGeometry(br),br.seatProjection*.7))*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef(detailTitles.weldedBracket)}`]}]:[]),
    ...strutItems,
+   ...(cs?[{at:[X(c.d/2-cs.tf-cs.length*.5),Y(seat+cs.levels[1].z-cs.t/2)] as XY,labels:['COLUMN STIFFENERS',`SEE ${detailRef(columnStiffenerTitle)}`]}]:[]),
    {at:[X(c.d/2),Y(broken?upperFrom+(seat-upperFrom)*.25:H*.5)],labels:[`NEW ${name}`,'COLUMN, ASTM A992']},
    {at:[X(row+hw.washer/2),Y(hw.washerThickness/2)],labels:[`PL ${size(tb)} BASE PL`,`SEE ${detailRef(detailTitles.basePlate)}`]},
    {at:[X(b.plate.N/2+inch),Y(-tb-gr/2)],labels:[`${size(gr)} NON-SHRINK GROUT`]},

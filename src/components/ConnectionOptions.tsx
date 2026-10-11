@@ -10,6 +10,7 @@ import type {RunwayDetails} from '../engine/runwayDetails';
 import type {Quantity} from '../engine/units';
 import ExistingBracketInputs from './ExistingBracketInputs';
 import RolledBracketInputs from './RolledBracketInputs';
+import ColumnStiffenerInputs from './ColumnStiffenerInputs';
 
 /** Original schematic, deliberately not a copy of a proprietary fabrication detail. */
 export function ConnectionOptionSketch({kind,topFlange=false}:{kind:BracketArrangement|TieArrangement;topFlange?:boolean}){
@@ -59,6 +60,7 @@ export default function ConnectionOptions({value,onChange,numeric,system,units='
   {isExistingBracketType(bk)&&b.enabled&&<ExistingBracketInputs value={{...value,bracket:b}} onChange={onChange} numeric={numeric} units={units}/>}
   {bk==='haunched-seat'&&numeric('Haunch tip depth at seat edge',haunchTipDepth(b),v=>onChange({...value,bracket:{...b,tipDepth:v}}))}
   {bk==='rolled-corbel'&&b.enabled&&<RolledBracketInputs value={{...value,bracket:b}} onChange={onChange} numeric={numeric} units={units}/>}
+  {(weldedRibBracket(b)||bk==='rolled-corbel')&&b.enabled&&<ColumnStiffenerInputs value={{...value,bracket:b}} onChange={onChange} numeric={numeric}/>}
   {tk!=='paired-bars'&&tk!=='flexible-plate'&&!isAngleTie(tk)&&<details className="form-details" open><summary>Reference tie geometry · no assigned capacity</summary><div className="field-grid">{field('Pin diameter','pinDiameter')}{field('Bearing eye diameter','eyeDiameter')}{field('Bearing eye thickness','eyeThickness')}{field('Link body diameter','linkDiameter')}{field('Clevis plate thickness','forkThickness')}{tk==='paired-links'&&field('Shared clevis spacing','linkSpacing')}{field('End pin / attachment setback','pinSetback')}</div><p className="form-note">Clear length follows the flange-to-column gap. These dimensions are illustrative and do not represent a selected supplier product.</p></details>}
  </div>;
 }

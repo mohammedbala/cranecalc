@@ -51,8 +51,9 @@ describe('welded bracket independent statics and limit states',()=>{
   expect(c.result.service.deflection.value).toBe(direct.deflection);
   expect(c.result.strength.vertical.value).toBeGreaterThan(40000); // own weight only in strength
  });
- it('blocks unconfirmed geometry and fails thin seat, uplift and high column axial force',()=>{
-  const p=cappedDemonstrationProject(),b=p.details!.bracket!;b.seatThickness=12.7;b.receiver.axialDemand=1e8;b.receiver.confirmed=false;
+ it('blocks unconfirmed geometry and fails thin seat, uplift without a hold-down and high column axial force',()=>{
+  // Without bolted end bearings nothing holds the girder down: uplift fails the gravity bracket.
+  const p=cappedDemonstrationProject(),b=p.details!.bracket!;b.seatThickness=12.7;b.receiver.axialDemand=1e8;b.receiver.confirmed=false;p.details!.endBearing!.enabled=false;
   const c=createBracketCollector(p)!;c.observe('strength','test',0,[{vertical:80000,offset:180}],-1);c.observe('strength','uplift',0,[{vertical:-5000,offset:0}],-1);
   const checks=bracketChecks(p,c.result),get=(id:string)=>checks.find(v=>v.id==='bracket-'+id)!;
   expect(get('receiver').status).toBe('unverified');expect(get('seat-flexure').status).toBe('fail');expect(get('column-panel').status).toBe('fail');expect(get('uplift').status).toBe('fail');

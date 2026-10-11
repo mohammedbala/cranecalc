@@ -106,6 +106,7 @@ export function cappedDemonstrationProject():ProjectInput {
  const none={P:0,Mx:0,My:0,V:0};
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,height:26*foot,seatElevation:18*foot,Lcx:26*foot,Lcy:8*foot,Lcz:8*foot,
   existing:{D:{P:25*kip,Mx:15*kip*foot,My:0,V:1*kip},L:{...none},Lr:{P:12*kip,Mx:6*kip*foot,My:0,V:.5*kip},S:{P:20*kip,Mx:10*kip*foot,My:0,V:.8*kip},R:{...none},W:{P:-8*kip,Mx:40*kip*foot,My:0,V:4*kip},E:{P:0,Mx:20*kip*foot,My:0,V:2*kip}},
+  welding:{basis:'mill-certificates',grade:'ASTM A572 Grade 50',carbonEquivalent:.42,preheat:(150-32)*5/9,deadLoadOnly:true,source:'Fictitious demonstration: mill certificates with the original building records, heat 4471'},
   source:'Fictitious demonstration: original building calculation sheets 14-17, column line B',confirmed:true};
  // The surveyed seat sets the rail elevation the drawings show; no separate top of rail is entered.
  delete p.drawing!.railElevation;

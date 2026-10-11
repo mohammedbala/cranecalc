@@ -154,7 +154,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
  const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0};
  const mechanics=cap?{Iy:cap.Iy,topOffset:cap.topOffset,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
- const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
+ const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),observedSets=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
  const snap=(x:number)=>supports.find(v=>Math.abs(v-x)<1e-6)??x;
  const braceFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
  function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
@@ -309,6 +309,9 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    // The bottom-flange force passes through the bearing bolts: at a continuous runway end, at the bearing's center.
    const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:f.longitudinal,bottom:f.bottom,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:Math.sign(edge)*Lbr/2};
    const key=[...loads.map(v=>v.vertical),horizontal.longitudinal].join();if(distinct.has(key))continue;distinct.add(key);
+   // The same whole set at the same support recurs whenever the loads that reach it repeat (another crane elsewhere,
+   // a combination with the same factors here): the collectors have already recorded everything it can set.
+   const setKey=[e.kind,bin,x,...loads.flatMap(v=>[v.vertical,v.offset]),f.vertical,f.moment,f.longitudinal,f.top,f.bottom,horizontal.offset].join();if(observedSets.has(setKey))continue;observedSets.add(setKey);
    bracket?.observe(e.kind,f.id,x,loads,bin,horizontal);
    existingBracket?.observe(e.kind,f.id,x,loads,bin);
    capCollector?.observe(e.kind,x,f,bin);
