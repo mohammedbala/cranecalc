@@ -181,8 +181,10 @@ export function validateBracket(p:ProjectInput){
  const add=(bad:boolean,message:string)=>{if(bad)errors.push('details.bracket: '+message);};
  add(b.reach<=d.bearing.width/2,'bearing patch must lie clear of the column face.');
  add(b.seatProjection<b.reach+d.bearing.width/2,'seat and ribs must extend beyond the complete bearing patch.');
- const endOffset=p.system==='simple'?(d.simpleSupport?.endGap??25.4)/2+d.bearing.length/2:0;
- add(b.seatLength<2*endOffset+d.bearing.length,'seat must cover both independent bearing plates.');
+ // Simple spans: both girder ends' bearings either side of the joint. Continuous: the runway-end bearing, which runs
+ // inboard from the girder end on the grid, so the typical seat reaches one bearing length each way.
+ const endOffset=p.system==='simple'?(d.simpleSupport?.endGap??25.4)/2+d.bearing.length/2:d.bearing.length/2;
+ add(b.seatLength<2*endOffset+d.bearing.length,p.system==='simple'?'seat must cover both independent bearing plates.':'seat must cover the runway-end bearing plate, which runs inboard from the grid.');
  if(bracketArrangement(b)!=='rolled-corbel'){
   add(b.ribSpacing+b.ribThickness+2*b.seatWeld>b.seatLength,'rib welds must fit below the seat.');
   add(b.ribSpacing+b.ribThickness+2*b.rootWeld+12.7>r.width,'both root welds must fit within the receiving column flange.');

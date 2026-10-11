@@ -25,6 +25,11 @@ describe('longitudinal force at the supports',()=>{
   // runway, even on an end bay, no stop is struck and no longitudinal force reaches a support.
   for(const origin of [30*foot,2*foot,62*foot])expect(envelope(p,[event(p,'off','LRFD 8',origin,F)]).map(v=>v.longitudinal.longitudinal)).toEqual([0,0,0,0]);
   expect([craneAtStop(p,0,c.travelStart),craneAtStop(p,0,c.travelEnd),craneAtStop(p,0,2*foot)]).toEqual(['left','right',undefined]);
+  // Two cranes, the second cloned with full travel as the UI adds one: the first reaches only the left stop and the
+  // second only the right; each one's travel limit toward the other crane is that crane, not a stop.
+  const two=cappedDemonstrationProject();two.cranes.push(structuredClone(two.cranes[0]));
+  const [a,b]=two.cranes;
+  expect([craneAtStop(two,0,a.travelStart),craneAtStop(two,0,a.travelEnd),craneAtStop(two,1,b.travelStart),craneAtStop(two,1,b.travelEnd)]).toEqual(['left',undefined,undefined,'right']);
   // At the left stop it pushes RG1 toward grid 1, delivered at its locating end; its far end lifts.
   const left=envelope(p,[event(p,'left','LRFD 8',c.travelStart,F)]);
   expect(left.map(v=>v.longitudinal.longitudinal)).toEqual([-F,0,0,0]);expect(left[0].reversible.longitudinal).toBe(false);
@@ -48,6 +53,23 @@ describe('longitudinal force at the supports',()=>{
   // Toward the stop the crane is against: the left one here, the right one at the other end of its travel.
   expect(f[locatingSupport(p)].longitudinal.longitudinal).toBe(-20000);
   expect(envelope(p,[event(p,'stop','LRFD 8',p.cranes[0].travelEnd,20000)])[locatingSupport(p)].longitudinal.longitudinal).toBe(20000);
+ });
+});
+
+describe('continuous girder runway-end bearings',()=>{
+ it('takes the end-grid reaction inboard of the grid, at 0.8 of the bearing length, with its seat moment',()=>{
+  const p=cappedDemonstrationProject();p.system='continuous';p.details!.brace.flangeAttachment!.enabled=false;
+  const Lbr=p.details!.bearing.length,stations=p.spans.reduce((a,v)=>[...a,a.at(-1)!+v],[0]),c=createDetailCollector(p,sectionProperties(p.section),20);
+  // A continuous girder's support reactions come from the runway analysis with the event.
+  c.observe({...event(p,'mid','LRFD 2b',30*foot,0),verticalReactions:stations.map(x=>({x,r:100000}))});
+  const r=c.finish(),f=r.bracketForces!;
+  expect(f[0].maxVertical.moment).toBeCloseTo(f[0].maxVertical.vertical*.8*Lbr,3);
+  expect(f.at(-1)!.maxVertical.moment).toBeCloseTo(-f.at(-1)!.maxVertical.vertical*.8*Lbr,3);
+  expect(f[0].maxVertical.vertical).toBeCloseTo(100000,6);for(const v of f.slice(1,-1))expect(v.maxVertical.moment).toBe(0);
+  // The twin ribs share an interior reaction about equally; at a runway end the inboard rib takes most of it.
+  const at=(x:number)=>r.bracket!.stations.find(v=>Math.abs(v.x-x)<1e-6)!;
+  expect(at(0).rightRib).toBeGreaterThan(1.5*at(0).leftRib);expect(at(stations.at(-1)!).leftRib).toBeGreaterThan(1.5*at(stations.at(-1)!).rightRib);
+  expect(at(stations[1]).leftRib).toBeCloseTo(at(stations[1]).rightRib,-2);
  });
 });
 
