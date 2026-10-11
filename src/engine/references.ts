@@ -4,7 +4,47 @@ export const referenceVersion='2026-10-09.angle-ties-1';
 const aiscUrl='';
 const trUrl='';
 const steel=(id:string,clause:string,evidence:string):ReferenceRecord=>({id,title:'ANSI/AISC 360-16',edition:'2016 · June 2018 printing',clause,url:aiscUrl,status:'verified',evidence:'Original AISC-authored specification text; publisher, edition and printing checked. '+evidence+' Hash and retrieval provenance in references/SOURCE_REGISTER.md. Verified text does not certify project applicability or restraints.'});
-const aist=(id:string,clause:string,evidence:string):ReferenceRecord=>({id,title:'AIST Technical Report 13',edition:'Supplied reference · February 24, 2020',clause,url:trUrl,status:'verified',evidence:'User-supplied reference read and rendered. '+evidence+' Exact source-file identity, date, hash and clause locations are recorded in references/SOURCE_REGISTER.md.'});
+// AIST TR-13: the published guide (last printed 2021, per the AIST Cranes Technology Committee agenda of November 2024)
+// is cited. Provisions were transcribed from the committee's February 24, 2020 ballot draft (references/SOURCE_REGISTER.md);
+// they have not been re-read against the printed text, so every TR-13 entry is 'partial'. Clause numbers follow the
+// published numbering where it could be confirmed (see tr13ClauseBasis); the rest are UNVERIFIED.
+const aist=(id:string,clause:string,evidence:string):ReferenceRecord=>({id,title:'AIST Technical Report 13',edition:'Published edition (2021 printing); provisions transcribed from the Feb. 24, 2020 committee draft',clause,url:trUrl,status:'partial',evidence:'Clause numbers per the published edition where confirmed; wording taken from the February 24, 2020 ballot draft and not re-read against the printed guide. '+evidence+' Source-file identity and hash are recorded in references/SOURCE_REGISTER.md.'});
+/**
+ * The TR-13 clause each check rests on, by check id, so a citation names the provision that governs the limit
+ * state rather than the first clause of a register entry. An empty string means no TR-13 clause governs that limit
+ * state (AISC 360 alone, e.g. bolt edge distances); the TR-13 citation is then left off. First match wins.
+ */
+export const tr13Clauses:[RegExp,string][]=[
+ [/^building-class$/,'§1.4, Table 1.1'],
+ [/^crane-\d+-(impact|side)$/,'§3.6.2, Table 3.2'],[/^crane-\d+-traction$/,'§3.6.2'],[/^crane-\d+-bumper/,'§3.6.3'],
+ [/(fatigue|^detail-full-cycle-|^rail-keeper-root$)/,'§3.10.2.3, §5.7'],
+ [/^(load-basis|design-scope|axial|crane-\d+-split)$/,'§3.10'],
+ [/^end-stop-/,'§3.6.3, §3.10'],
+ [/^(vertical|lateral|rail-head)$/,'§5.8.7'],
+ [/^(wheel-yield|wheel-cripple|wheel-web-tr13)$/,'§5.8.6'],
+ [/^camber$/,'§5.8.8'],
+ [/^(compact-flange|compact-web|shear)$/,'§5.8'],
+ [/^end-bearing-(locating-slip|sleeve|sleeve-bearing|sliding)$/,'§5.14'],
+ [/^(end-bearing-|simple-)/,''],
+ [/^rail-joint-/,'§5.16.1'],[/^(rail-|hook-bolts$)/,'§5.16'],
+ [/^minimum-thickness$/,'§5.13'],
+ [/^(column-brackets|supporting-structure)$|^haunch-/,'§5.9.2'],
+ [/^brace-drift/,'§5.5'],[/^brace-/,'§3.6.2']
+];
+export const tr13Clause=(id:string)=>tr13Clauses.find(([re])=>re.test(id))?.[1];
+/**
+ * How each TR-13 clause number used above was checked against the published edition (paywalled). 'secondary' = the
+ * clause title is confirmed by a public listing of the published table of contents; 'review' = taken from the
+ * structural review of DEMO-FOCUS-005, not independently confirmed (UNVERIFIED).
+ */
+export const tr13ClauseBasis:Record<string,{title:string;basis:'secondary'|'review'}>={
+ '§1.4':{title:'Building classification (Table 1.1)',basis:'review'},'§3.6.2':{title:'Crane runway loads: impact, side thrust, traction (Table 3.2)',basis:'review'},
+ '§3.6.3':{title:'Crane stop (bumper) force',basis:'review'},'§3.10':{title:'Load combinations (§3.10.2.3 fatigue loads)',basis:'review'},
+ '§5.5':{title:'Bracing',basis:'review'},'§5.7':{title:'Fatigue',basis:'secondary'},'§5.8':{title:'Crane runway girders',basis:'secondary'},
+ '§5.8.6':{title:'Local wheel support',basis:'review'},'§5.8.7':{title:'Deflection',basis:'review'},'§5.8.8':{title:'Camber',basis:'review'},
+ '§5.9':{title:'Columns (§5.9.2 brackets and longitudinal load path)',basis:'review'},'§5.13':{title:'Minimum thickness',basis:'review'},
+ '§5.14':{title:'Bolted connections (pretensioned)',basis:'review'},'§5.16':{title:'Crane rails (§5.16.1 joints)',basis:'review'}
+};
 export const references:ReferenceRecord[] = [
  {id:'angle-tie-basis',title:'Custom angle tiebacks / AISC section geometry',edition:'AISC Shapes Database v16.0; custom arrangement 2026-10-09',clause:'US L-section dimensions; DG7 §11.2 movement principles',url:'https://www.aisc.org/aisc/publications/steel-construction-manual/aisc-shapes-database-v160/',status:'partial',evidence:'Single and paired L-section ties use catalogue d, b and t from the pinned AISC workbook. The selectable top-flange slotted column-angle arrangement is inspired by the user-supplied Figure 14, whose publication is not identified; paired clips and the cap attachment are application adaptations. The earlier welded gusset arrangement is retained. Neither is a prequalified AISC detail. DG7 and Fisher / Van de Pas establish lateral restraint, imposed movement and fatigue requirements, not approval of these angles or their both-flange placement. Strength, buckling, eccentricity, load sharing, welds, stiffness and movement remain unverified; no flat-bar capacity is inherited.'},
  {id:'existing-bracket-basis',title:'Existing bracket installation / assessment basis',edition:'Great Falls Airport RFP · August 2025; app mechanics 2026-10-09',clause:'RFP pp. 1–3; AISC J3/J4; elastic seat-strip mechanics',url:'',status:'partial',evidence:'The RFP specifies new runway beams bolted to existing PEMB brackets. The photograph establishes an arrangement only, with no verified bracket dimensions, material, weld or capacity. The app checks the new seat plate and bolt fit, collects simultaneous eccentric support actions, and compares them with documented available resistance/fatigue envelopes. Existing assembly strength, contact, serviceability and new attachment adequacy require a project engineering assessment. No RFP or catalogue rating is assigned.'},
@@ -33,12 +73,12 @@ export const references:ReferenceRecord[] = [
  steel('aisc-connections','J2.2, J2.4; J3.1–J3.10; J4.1–J4.5; J7; J10.8','Bolt-group forces, standard-hole pretension/slip, combined bolt shear/tension, plate bearing/net section/block shear, elastic weld groups, fitted bearing stiffeners.'),
  {id:'mechanics',title:'Euler–Bernoulli beam mechanics',edition:'Linear elastic analysis',clause:'Direct stiffness; equilibrium; superposition',url:'',status:'verified',evidence:'Independent closed-form point-load/UDL, continuous-span compatibility, equilibrium and moving-load refinement benchmarks. Mechanics basis, not a crane standard.'},
  {id:'criteria',title:'Project serviceability criteria',edition:'User-defined',clause:'Stricter owner span/deflection ratios',url:'',status:'verified',evidence:'Owner criteria supplement AIST limits in design scope. Analysis scope compares supplied criteria without asserting code compliance.'},
- aist('tr13','§§3.6, 3.10, 5.7–5.9, 5.13–5.17','Crane/runway provisions and limitations inspected.'),
+ aist('tr13','§3.6; §3.10; §5.7; §5.8; §5.9; §5.13; §5.14; §5.16; §5.17','Crane/runway provisions and limitations inspected.'),
  aist('tr13-class','§1.4 · Table 1.1 · building classes A–D','Building repetitions differ from CMAA crane classes.'),
  aist('tr13-crane','§3.6.2 · Table 3.2; §3.6.3','Impact, greatest-of side thrust, driving-wheel traction and manufacturer full-speed bumper.'),
- aist('tr13-load','§§3.10.1, 3.10.2.1–3.10.2.4','Dead/lift/impact separation, single/multiple crane LRFD/ASD cases and unfactored fatigue. Runway-only projection is explicit.'),
- aist('tr13-girder','§§5.7, 5.8.1–5.8.9','Compactness; wheel bearing length; single-crane deflection; no tension field action; force-couple and long-span requirements. General torsion solution is beyond TR13.'),
- aist('tr13-detail','§5.9.2; §§5.13–5.16.4','Bracket support below 50 kip, minimum thickness, cyclic slip-critical bolts, paired rail clips and pad spacing.'),
+ aist('tr13-load','§3.10 load combinations; §3.10.2.3 fatigue loads; §3.6.3 crane stops; §5.7 fatigue','Dead/lift/impact separation, single/multiple crane LRFD/ASD cases and unfactored fatigue. Runway-only projection is explicit.'),
+ aist('tr13-girder','§5.8 crane runway girders; §5.8.6 local wheel support; §5.8.7 deflection; §5.8.8 camber; §5.14 bolted connections','Compactness; wheel bearing length; single-crane deflection; no tension field action; force-couple and long-span requirements. General torsion solution is beyond TR13.'),
+ aist('tr13-detail','§5.9.2 brackets; §5.13 minimum thickness; §5.14 bolted connections; §5.16 crane rails; §5.16.1 rail joints; §5.7 fatigue','Bracket support below 50 kip, minimum thickness, cyclic slip-critical bolts, paired rail clips and pad spacing.'),
  steel('aisc-b','B4.1 · Tables B4.1a/b','Compactness and clear web depth.'),
  steel('aisc-e','E3, E4, E7 · Appendix 8.2','Axial buckling, effective plate widths, conservative B1 amplification.'),
  steel('aisc-f2','F1/F2 · F2-1–F2-8','Compact doubly symmetric I-section yielding/LTB; phi=0.90, Omega=1.67, Cb=1.0. Cap/noncompact girders remain outside implemented branch.'),

@@ -1,5 +1,5 @@
 import katex from 'katex';
-import {references} from '../engine/references';
+import {references,tr13Clause} from '../engine/references';
 import {dcText} from '../engine/checkPresentation';
 import type {CheckResult,ProjectInput} from '../engine/types';
 import {toDisplay,unit,type Quantity} from '../engine/units';
@@ -68,7 +68,9 @@ export function shortReference(c:CheckResult){
   if(!g.heads.length)g.heads=clauseHeads(r.clause);
   groups.set(name,g);
  }
- return [...groups].map(([name,g])=>`${name} ${(g.specific.length?g.specific:g.id?[g.id]:g.heads).slice(0,4).join(', ')}`.trim()).join(' · ');
+ // TR-13: the clause that governs this limit state (tr13Clauses), not the first clause of the register entry; none → left off.
+ const tr13=tr13Clause(c.id);
+ return [...groups].filter(([name])=>!(name==='AIST TR-13'&&tr13==='')).map(([name,g])=>`${name} ${(name==='AIST TR-13'&&tr13?tr13.split(', '):g.specific.length?g.specific:g.id?[g.id]:g.heads).slice(0,4).join(', ')}`.trim()).join(' · ');
 }
 const superscript=(n:number)=>String(n).replace(/[-0-9]/g,c=>'⁻⁰¹²³⁴⁵⁶⁷⁸⁹'['-0123456789'.indexOf(c)]);
 /** Mantissa (two decimals) and exponent of a value written as m × 10^e. */

@@ -121,7 +121,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
     snapshot.checks.push(...detailed);
    }
   } catch(e) {snapshot.errors.push(e instanceof Error?e.message:'AIST design analysis failed.');}
-  snapshot.warnings.push('Reference: AIST Technical Report 13, supplied source dated February 24, 2020. The 3D building is reference geometry. Enabled bracket geometry uses project inputs. Existing brackets require surveyed data and a recorded capacity assessment; whole-building adequacy is not established.');
+  snapshot.warnings.push('Reference: AIST Technical Report 13 (published edition, 2021 printing; provisions transcribed from the February 24, 2020 committee draft and not re-read against the printed guide). The 3D building is reference geometry. Enabled bracket geometry uses project inputs. Existing brackets require surveyed data and a recorded capacity assessment; whole-building adequacy is not established.');
   snapshot.warnings.push('Design combinations are runway-only projections. Roof, wind, seismic and other building actions require a separate design where applicable. The displayed supplied-load diagram envelopes remain separate from factored AIST design demands.');
  }else{
  snapshot.warnings.push('ANALYSIS REPORT ONLY: supplied-load bending and user serviceability criteria. This report does not establish AISC/DG7/TR-13/ASCE compliance or validate strength, fatigue, torsion, bracing or connections.');
