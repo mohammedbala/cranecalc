@@ -8,6 +8,8 @@ import {format} from '../engine/units';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {existingBracketTopic} from './existingBracketSheet';
 import {rolledBracketTopic} from './rolledBracketSheet';
+import {taperedHaunchTopic} from './taperedHaunchSheet';
+import {usesTaperedHaunch} from '../engine/taperedHaunch';
 import {usesRolledBracket} from '../engine/rolledBracket';
 import {bracketForceBlocks} from './bracketForceTable';
 import {designsBracing} from '../engine/newColumnBracing';
@@ -30,6 +32,7 @@ const bracketPlanTitle='WELDED BRACKET / PLAN';
 export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
  if(usesExistingBracket(s.input))return existingBracketTopic(s);
  if(usesRolledBracket(s.input))return rolledBracketTopic(s);
+ if(usesTaperedHaunch(s.input))return taperedHaunchTopic(s);
  const p=s.input,d=p.details,b=d?.bracket;if(!d||!b?.enabled)return undefined;
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const sc=supportColumn(p),cw=seatColumnWeld(p,s.detailResults?.bracket),collector=designsBracing(p);

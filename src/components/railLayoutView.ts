@@ -56,7 +56,10 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
    for(let i=1;i<chain.length;i++)svg+=dimension(X(chain[i-1]),X(chain[i]),fromOuter,outer,dim(Math.abs(chain[i]-chain[i-1])),i===1?'left':'right');
    for(const j of rail.joints){
     const g=grids.reduce((a,b)=>Math.abs(b-j)<Math.abs(a-j)?b:a);
-    svg+=dimension(X(g),X(j),fromInner,inner,dim(Math.abs(j-g)),j<g?'left':'right');
+    // One level further in where the text would overlap a joint dimension already placed.
+    const label=dim(Math.abs(j-g)),w=textWidth(label,9),a=Math.min(X(g),X(j)),b=Math.max(X(g),X(j)),left=w+6<=b-a?(a+b)/2-w/2:j<g?a-4-w:b+4;
+    const level=boxes.some(q=>q[2]===inner-12&&left-2<q[1]&&left+w+2>q[0])?(up?inner+14:inner-14):inner;
+    svg+=dimension(X(g),X(j),fromInner,level,label,j<g?'left':'right');
    }
   }
   // Grid lines through both runways, broken where dimension text crosses them.

@@ -13,7 +13,7 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 
 export function independentBearingSettings(p:ProjectInput){
  if(p.system!=='simple')return undefined;
- return {thickness:(p.details?.bearing.thickness??25.4)/1000,seatLength:(2*(p.details?.bearing.length??254)+simpleSupportInput(p).endGap+2*simpleSupportInput(p).guideTravel)/1000};
+ return {thickness:(p.details?.bearing.thickness??25.4)/1000,width:(p.details?.bearing.width??304.8)/1000,seatLength:(2*(p.details?.bearing.length??254)+simpleSupportInput(p).endGap+2*simpleSupportInput(p).guideTravel)/1000};
 }
 /** Dimensioned girder-side plates; receiving column gussets are reference
  * interfaces. No bottom-flange drilling or cross-joint plate is introduced. */

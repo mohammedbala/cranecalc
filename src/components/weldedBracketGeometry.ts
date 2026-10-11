@@ -4,14 +4,18 @@ import type {BracketInput} from '../engine/bracketInputs';
 import type {PartInfo} from './connectionDetails';
 import {bracketArrangement} from '../engine/connectionOptions';
 import {rolledStub} from '../engine/rolledBracketInputs';
+import {haunchGeometry} from '../engine/taperedHaunchInputs';
+import {haunchPlatesAndWelds,type XYZ} from '../engine/taperedHaunchParts';
 import {filletWeld} from './weldGeometry';
 import {buildExistingBrackets} from './existingBracketGeometry';
 import {weldedRibBracket,haunchTipDepth} from '../engine/bracketRib';
 import type {HardwareBuilder} from './connectionDetails';
 import {addColumnStiffeners} from './columnStiffenerGeometry';
-export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:number,steel:THREE.Material,edge:THREE.LineBasicMaterial,bearing?:{width:number;length:number;thickness:number},weldMaterial:THREE.Material=steel,hardware?:HardwareBuilder,columnIsNew=false){
+/** bearingWidth: the girder bearing plate width across the runway (m), which places a tapered haunch's top flange flare. */
+export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:number,steel:THREE.Material,edge:THREE.LineBasicMaterial,bearing?:{width:number;length:number;thickness:number},weldMaterial:THREE.Material=steel,hardware?:HardwareBuilder,columnIsNew=false,bearingWidth?:number){
  if(isExistingBracketType(bracketArrangement(b)))return buildExistingBrackets(b,supports,seatTop,steel,edge,bearing,hardware);
  if(bracketArrangement(b)==='rolled-corbel')return buildRolledBrackets(b,supports,seatTop,steel,edge,bearing,weldMaterial,columnIsNew);
+ if(bracketArrangement(b)==='tapered-haunch')return buildTaperedHaunches(b,supports,seatTop,steel,edge,bearing,weldMaterial,columnIsNew,bearingWidth);
  const group=new THREE.Group(),kind=bracketArrangement(b);group.name='designed-welded-column-brackets';group.userData.designedBracket=weldedRibBracket(b);group.userData.bracketArrangement=kind;
  const mm=.001,face=b.reach*mm,tip=face-b.seatProjection*mm,top=seatTop-b.seatThickness*mm;
  const add=(geometry:THREE.BufferGeometry,id:string,family:string,x:number,y:number,z:number,station:number)=>{
@@ -89,6 +93,40 @@ export function buildRolledBrackets(b:BracketInput,supports:number[],seatTop:num
    mesh.userData.part={id:mesh.name,family:'CJP weld indication',description:`${where} CJP groove weld, flange to the column flange. Surface indication only; groove preparation and backing are not modeled.`,support,weld:{kind:'CJP indication',length:st.bf/1000,...column}} satisfies PartInfo;group.add(mesh);
   }
   for(const sx of [-1,1])filletWeld(group,`${id}-web-column-${sx}`,V(x+sx*tw/2,top-k,face),V(x+sx*tw/2,top-d+k,face),V(sx,0,0),V(0,0,-1),r.webWeld*mm,weldMaterial,`${where} fillet, web to the column flange; designed weld group.`,support,column);
+ });
+ addColumnStiffeners(group,b,supports,seatTop,steel,edge,weldMaterial,columnIsNew);
+ return group;
+}
+/**
+ * New built-up tapered I haunches: every plate (web, flared top flange, sloping bottom flange, bearing stiffeners,
+ * tip end plate) and every fillet to the designed sizes, from the same geometry as the checks and the details; the
+ * CJP flange joints as surface indications. x along the runway, y up, z from the girder web line toward the column.
+ */
+export function buildTaperedHaunches(b:BracketInput,supports:number[],seatTop:number,steel:THREE.Material,edge:THREE.LineBasicMaterial,bearing?:{width:number;length:number;thickness:number},weldMaterial:THREE.Material=steel,columnIsNew=false,bearingWidth?:number){
+ const group=new THREE.Group();group.name='designed-welded-column-brackets';group.userData.designedBracket=true;group.userData.bracketArrangement='tapered-haunch';
+ const mm=.001,W=(bearing?.width??bearingWidth??0)/mm,g=haunchGeometry(b,W),{plates,welds}=haunchPlatesAndWelds(g,!columnIsNew),face=b.reach*mm;
+ const description='Designed built-up tapered I haunch; see Column bracket checks and the bracket details. Receiving building global capacity is separate.';
+ supports.forEach((x,i)=>{
+  const id=`WB-S${i+1}`,support={x,z:face};
+  // Haunch coordinates (mm: x along the runway, y from the column face, z up from the top) to the model (m).
+  const P=(q:XYZ)=>new THREE.Vector3(x+q[0]*mm,seatTop+q[2]*mm,face-q[1]*mm),D=(q:XYZ)=>new THREE.Vector3(q[0],q[2],-q[1]).normalize();
+  // A continuous girder's bearing plate, centered on the grid (simple-span bearings are drawn with the girder ends).
+  if(bearing){const box=new THREE.Mesh(new THREE.BoxGeometry(bearing.length,bearing.thickness,bearing.width),steel);box.name=`${id}-bearing`;box.position.set(x,seatTop+bearing.thickness/2,0);box.userData.part={id:box.name,family:'Girder bearing plate',description,support} satisfies PartInfo;group.add(box);}
+  for(const pl of plates){
+   // A prism: the outline in its own plane extruded through the thickness along the face normal.
+   const pts=pl.outline.map(P),o=pts[0],u=pts[1].clone().sub(o).normalize(),n=D(pl.normal),v=new THREE.Vector3().crossVectors(n,u);
+   const shape=new THREE.Shape(pts.map(q=>{const r=q.clone().sub(o);return new THREE.Vector2(r.dot(u),r.dot(v));}));
+   const geo=new THREE.ExtrudeGeometry(shape,{depth:pl.thickness*mm,bevelEnabled:false});geo.applyMatrix4(new THREE.Matrix4().makeBasis(u,v,n).setPosition(o));
+   const mesh=new THREE.Mesh(geo,steel);mesh.name=`${id}-${pl.id}`;mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo),edge));
+   mesh.userData.part={id:mesh.name,family:`Tapered haunch ${pl.name.toLowerCase()}`,description,support} satisfies PartInfo;group.add(mesh);
+  }
+  for(const w of welds){
+   const execution={location:w.location,existingSteel:w.location==='field'};
+   if(w.kind==='cjp'){
+    const a=P(w.path[0]),c=P(w.path[1]),mesh=new THREE.Mesh(new THREE.BoxGeometry(a.distanceTo(c),w.size*mm,.001),weldMaterial);mesh.position.copy(a.clone().add(c).multiplyScalar(.5));mesh.position.z+=.0005;mesh.name=`${id}-${w.id}`;
+    mesh.userData.part={id:mesh.name,family:'CJP weld indication',description:`${w.location==='field'?'Field':'Shop'} CJP groove weld, ${w.name.toLowerCase()}. Surface indication only; groove preparation and backing are not modeled.`,support,weld:{kind:'CJP indication',length:a.distanceTo(c),...execution}} satisfies PartInfo;group.add(mesh);
+   }else w.runs.forEach((r,j)=>filletWeld(group,`${id}-${w.id}-${j}`,P(r.path[0]),P(r.path[1]),D(r.legs[0]),D(r.legs[1]),w.size*mm,weldMaterial,`${w.location==='field'?'Field':'Shop'} fillet, ${w.name.toLowerCase()}; designed size.`,support,execution));
+  }
  });
  addColumnStiffeners(group,b,supports,seatTop,steel,edge,weldMaterial,columnIsNew);
  return group;

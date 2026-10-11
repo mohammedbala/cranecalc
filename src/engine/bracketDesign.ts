@@ -7,6 +7,7 @@ import {bracketArrangement} from './connectionOptions';
 import {minimumFillet,parallelWeldGroup,transverseFilletFatigue,boltCapacity} from './connectionStrength';
 import {designsBracing,bracingDesign} from './newColumnBracing';
 import {validateRolledBracket} from './rolledBracket';
+import {validateTaperedHaunch} from './taperedHaunch';
 import {ribGeometry,ribResponse,ribFlexure,rootCornerStress,weldedRibBracket,haunchedRibErrors} from './bracketRib';
 import {haunchedRibData,haunchedRibChecks} from './haunchedSeat';
 import {activeEndBearing} from './endBearingInputs';
@@ -249,6 +250,7 @@ export function validateBracket(p:ProjectInput){
  const stiffeners=columnStiffenerErrors(p);
  if(isExistingBracketType(bracketArrangement(b)))return stiffeners;
  if(bracketArrangement(b)==='rolled-corbel'){const rolled=validateRolledBracket(p);return rolled.some(v=>v.includes('corbelShape'))?rolled:[...rolled,...stiffeners];}
+ if(bracketArrangement(b)==='tapered-haunch')return [...validateTaperedHaunch(p),...stiffeners];
  const errors:string[]=[...stiffeners],d=p.details!,r=b.receiver;
  const add=(bad:boolean,message:string)=>{if(bad)errors.push('details.bracket: '+message);};
  add(b.reach<=d.bearing.width/2,'bearing patch must lie clear of the column face.');

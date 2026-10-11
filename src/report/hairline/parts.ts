@@ -9,6 +9,7 @@ import {activeEndBearing} from '../../engine/endBearingInputs';
 import {simpleSupportInput} from '../../engine/simpleSupports';
 import {railTopAboveSteel} from '../../engine/railSeat';
 import {columnStiffenerGeometry} from '../../engine/columnStiffeners';
+import {haunchGeometry,isTaperedHaunch} from '../../engine/taperedHaunchInputs';
 
 /**
  * The runway parts at one support, to the project's sizes, for the report's isometric figures. World: x along the
@@ -20,21 +21,23 @@ export interface SupportGeometry{
  reach:number;gap:number;bearing:{length:number;width:number;thickness:number};girder:{z0:number;d:number;bf:number;tf:number;tw:number;top:number;cap?:{width:number;depth:number;tf:number;tw:number}};
  rail:{z:number;baseWidth:number;baseThickness:number;webThickness:number;headWidth:number;headThickness:number;height:number};
  column:{d:number;bf:number;tf:number;tw:number;name:string;existing:boolean;isNew:boolean;bottom:number;top:number};
- support:'twin-rib'|'haunched-seat'|'rolled-corbel'|'existing'|'column-cap'|'by-others';
+ support:'twin-rib'|'haunched-seat'|'rolled-corbel'|'tapered-haunch'|'existing'|'column-cap'|'by-others';
  seat:{length:number;projection:number;thickness:number};show:number;simple:boolean;
 }
 export function supportGeometry(p:ProjectInput):SupportGeometry{
  const d=p.details,b=d?.bracket,s=p.section,cap=s.kind==='cap'?{width:s.capWidth,depth:s.capDepth,tf:s.capTf,tw:s.capTw}:undefined;
  const bearing=d?{length:d.bearing.length,width:d.bearing.width,thickness:d.bearing.thickness}:{length:10*inch,width:12*inch,thickness:inch};
  const colCap=activeColumnCap(p),col=p.existingColumn?.enabled?existingColumnSection(p).section:{d:14*inch,bf:14.5*inch,tf:.71*inch,tw:.44*inch};
- const support=colCap?'column-cap':!b?.enabled?'by-others':(b.arrangement??'twin-rib').startsWith('existing')?'existing':b.arrangement==='haunched-seat'?'haunched-seat':b.arrangement==='rolled-corbel'?'rolled-corbel':'twin-rib';
+ const support=colCap?'column-cap':!b?.enabled?'by-others':(b.arrangement??'twin-rib').startsWith('existing')?'existing':b.arrangement==='haunched-seat'?'haunched-seat':b.arrangement==='rolled-corbel'?'rolled-corbel':isTaperedHaunch(b)?'tapered-haunch':'twin-rib';
  const reach=colCap?0:b?.enabled?b.reach:(d?.brace.flangeAttachment?.columnFace??18*inch);
  const z0=bearing.thickness,top=z0+s.d+(cap?cap.tw:0),rd=d?.rail,railH=railTopAboveSteel(p);
  // The rail base sits on the pad when there is one; the head top is the rail height above the girder steel.
  const pad=rd?.padThickness&&p.aist?.railPad?rd.padThickness:0;
  const rail={z:top+pad,height:railH-pad,...(rd?{baseWidth:rd.baseWidth,baseThickness:rd.baseThickness,webThickness:rd.webThickness,headWidth:rd.headWidth,headThickness:rd.headThickness}:{baseWidth:5*inch,baseThickness:.75*inch,webThickness:.6*inch,headWidth:2.5*inch,headThickness:1.2*inch})};
- const seat=b?.enabled?{length:b.seatLength,projection:b.seatProjection,thickness:b.seatThickness}:{length:bearing.length*2+inch,projection:reach+bearing.width/2,thickness:inch};
- const ribBottom=b?.enabled?(support==='rolled-corbel'?(rolledStub(b)?.d??12*inch)+(rolledStub(b)?.seat?.t??0):b.seatThickness+b.ribDepth):2*inch;
+ // A tapered I haunch: its top flange is the seat, along the runway its seat width.
+ const hg=support==='tapered-haunch'?haunchGeometry(b!,bearing.width):undefined;
+ const seat=hg?{length:hg.bt,projection:hg.L,thickness:hg.tt}:b?.enabled?{length:b.seatLength,projection:b.seatProjection,thickness:b.seatThickness}:{length:bearing.length*2+inch,projection:reach+bearing.width/2,thickness:inch};
+ const ribBottom=hg?hg.hr:b?.enabled?(support==='rolled-corbel'?(rolledStub(b)?.d??12*inch)+(rolledStub(b)?.seat?.t??0):b.seatThickness+b.ribDepth):2*inch;
  return {reach,gap:p.system==='simple'?simpleSupportInput(p).endGap:0,bearing,girder:{z0,d:s.d,bf:s.bf,tf:s.tf,tw:s.tw,top,cap},rail,
   column:{d:col.d,bf:col.bf,tf:col.tf,tw:col.tw,name:p.existingColumn?.shape||'COLUMN',existing:!!p.existingColumn?.enabled&&!p.existingColumn.isNew,isNew:!!p.existingColumn?.isNew,bottom:-ribBottom-8*inch,top:top+6*inch},
   support,seat,show:Math.max(36*inch,3*bearing.length),simple:p.system==='simple'};
@@ -55,6 +58,18 @@ export function bracket(S:Scene,p:ProjectInput,g:SupportGeometry,role:Role){
   if(st.seat)S.box(-st.seat.length/2,0,-t,st.seat.length/2,L,0,role);
   S.box(-st.bf/2,0,-t-st.tf,st.bf/2,L,-t,role).box(-st.tw/2,0,-t-st.d+st.tf,st.tw/2,L,-t-st.tf,role).box(-st.bf/2,0,-t-st.d,st.bf/2,L,-t-st.d+st.tf,role);
   if(st.stiffener)for(const side of [-1,1])S.box(side>0?st.tw/2:-st.bf/2+inch/4,g.reach-st.stiffener.t/2,-t-st.d+st.tf,side>0?st.bf/2-inch/4:-st.tw/2,g.reach+st.stiffener.t/2,-t-st.tf,role);
+  return S;
+ }
+ if(g.support==='tapered-haunch'){
+  // Web plate in the grid plane (x = 0) with the tapered profile, the top flange (the seat, flared to the bearing
+  // width), the sloping bottom flange, the stiffener pair at the girder web line and the tip end plate.
+  const h=haunchGeometry(b,p.details!.bearing.width),st=h.stiffener,tep=h.endPlate?st.t:0,Lw=h.L-tep,inner=(y:number)=>-h.depth(y)+h.tbv;
+  S.prism(0,[[0,-h.tt],[Lw,-h.tt],[Lw,inner(Lw)],[0,inner(0)]],-h.tw/2,h.tw/2,role);
+  const f=h.flare,top:Vec2[]=f?[[-h.btr/2,0],[h.btr/2,0],[h.btr/2,f.y0],[h.bt/2,f.y1],[h.bt/2,h.L],[-h.bt/2,h.L],[-h.bt/2,f.y1],[-h.btr/2,f.y0]]:[[-h.bt/2,0],[h.bt/2,0],[h.bt/2,h.L],[-h.bt/2,h.L]];
+  S.prism(2,top,-h.tt,0,role);
+  S.prism(0,[[0,-h.hr],[h.L,-h.ht],[h.L,-h.ht+h.tbv],[0,-h.hr+h.tbv]],-h.bb/2,h.bb/2,role);
+  for(const side of [-1,1])S.box(side*h.tw/2,h.a-st.t/2,inner(h.a),side*(h.tw/2+st.width),h.a+st.t/2,-h.tt,role);
+  if(tep)S.box(-h.bb/2,Lw,inner(h.L),h.bb/2,h.L,-h.tt,role);
   return S;
  }
  if(g.support==='existing'){

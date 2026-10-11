@@ -129,7 +129,7 @@ function bracing(p:ProjectInput,g:SupportGeometry){
 }
 function bracketFigure(p:ProjectInput,g:SupportGeometry){
  const S=new Scene(),b=p.details?.bracket,G=g.girder,enabled=!!b?.enabled&&g.support!=='column-cap',ts=g.seat.thickness;
- const ribBottom=-(b?.enabled?(g.support==='rolled-corbel'?ts+(G.d*.5):ts+(b.ribDepth??0)):ts);
+ const ribBottom=-(b?.enabled?(g.support==='rolled-corbel'?ts+(G.d*.5):g.support==='tapered-haunch'?-(g.column.bottom+8*inch):ts+(b.ribDepth??0)):ts);
  column(S,g,'context',Math.min(ribBottom,-ts)-G.d*.35,steelTop(g)+G.d*.15);stiffeners(S,p,g,'focus');
  bracket(S,p,g,enabled?'focus':'context');
  const h={...g,simple:true,gap:Math.max(g.gap,0)};girders(S,h,'context','context','focus',G.d*.9);
@@ -138,6 +138,11 @@ function bracketFigure(p:ProjectInput,g:SupportGeometry){
  const L=g.seat.projection,xe=g.seat.length/2+60;
  if(!enabled){S.label('SEAT BY OTHERS',[g.seat.length/2,L,-ts],8,12,'start');return finish(S,[[[xb,y,top],-24,-6],[[xb,y+g.bearing.width/2,G.z0/2],-30,14],[[-g.seat.length/2,L*.6,-ts],-26,-2]],{az:50});}
  S.dim([xe,0,0],[xe,y,0],'e',6,0);
+ // Tapered I haunch: 1 reaction, 2 top flange and stiffeners, 3 web and flanges, 4 welds at the column face, 5 column.
+ if(g.support==='tapered-haunch'){
+  const zw=(ribBottom-ts)/2;
+  return finish(S,[[[xb,y,top],-24,-6],[[g.seat.length*.3,y,-ts/2],30,-6],[[0,L*.5,zw*.8],32,12],[[0,0,ribBottom*.7],-34,10],[[g.column.bf/2,-g.column.tf,steelTop(g)],26,-8]],{az:50});
+ }
  const existing=g.support==='existing',corbel=g.support==='rolled-corbel',rib=b!.ribSpacing/2;
  if(existing)S.label('EXISTING',[0,L*.5,ribBottom],0,14,'middle',true);
  const zMid=(ribBottom-ts)/2,xr=corbel||existing?0:rib;

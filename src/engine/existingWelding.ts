@@ -3,6 +3,7 @@ import type {ExistingWeldingInput} from './existingColumnInputs';
 import {format} from './units';
 import {rolledStub} from './rolledBracketInputs';
 import {activeColumnStiffeners} from './columnStiffenerInputs';
+import {haunchInput} from './taperedHaunchInputs';
 
 /**
  * Welding new steel to an existing column: the base metal must be identified, its carbon equivalent known, the
@@ -19,6 +20,7 @@ export function weldedAttachments(p:ProjectInput):{name:string;t:number}[]{
  const b=d.bracket;
  if(b?.enabled&&!(b.arrangement??'twin-rib').startsWith('existing-')){
   if(b.arrangement==='rolled-corbel'){const st=rolledStub(b);if(st)out.push({name:`${st.name} bracket flange`,t:st.tf});}
+  else if(b.arrangement==='tapered-haunch'){const h=haunchInput(b);out.push({name:'haunch top flange',t:h.topThickness},{name:'haunch bottom flange',t:h.bottomThickness},{name:'haunch web',t:h.webThickness});}
   else out.push({name:'bracket rib',t:b.ribThickness},{name:'bracket seat plate',t:b.seatThickness});
  }
  // Continuity plates are fillet welded to the existing column's flanges and web.

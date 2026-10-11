@@ -8,6 +8,7 @@ import {aiscShapeByName} from '../data/aiscSections';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 import {usesRolledBracket,rolledSeatChecks} from './rolledBracket';
+import {usesTaperedHaunch,haunchSeatChecks} from './taperedHaunch';
 import {slidingBolts,continuousBearings,type EndBearingInput} from './endBearingInputs';
 import {activeColumnCap} from './columnCapInputs';
 export {endBearingSchema,defaultEndBearing,activeEndBearing,slidingBolts,continuousBearings,locatingSupport,type EndBearingInput} from './endBearingInputs';
@@ -103,6 +104,7 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
    compared('end-bearing-seat-fit','Bearings and bolts fit on the seat',(locates?0:simpleSupportInput(p).endGap/2)+bs.length,wb.seatLength/2,'length','g/2+L_{bearing}\\le L_{seat}/2',locates?'A runway-end bearing, and its bolts, lie on the half of the seat under the girder; interior bearings are centered on it.':'Each girder bearing, and its bolts, lie on its half of the shared seat.')
   );
  }else if(usesRolledBracket(p))checks.push(...rolledSeatChecks(p,e,g,V,T,C,tMin,compared));
+ else if(usesTaperedHaunch(p))checks.push(...haunchSeatChecks(p,e,g,V,T,C,tMin,compared));
  else if(!activeColumnCap(p))checks.push(byOthers('end-bearing-seat','Bracket seat holes and nut clearance','The seat is by others: provide matching standard holes, nut clearance below the seat, and a seat that carries the bolt forces reported here.'));
  return checks;
 }

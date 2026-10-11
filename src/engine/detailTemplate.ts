@@ -9,6 +9,8 @@ import {railSeatDefaults} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 import {keeperGeometry} from './railSeat';
+/** Template sizing of the tapered I haunch for the project's reactions. */
+export {sizeTaperedHaunch} from './taperedHaunchSizing';
 
 const inch=25.4,ksi=6.894757293;
 /** Marker for inputs the template cannot know; any string starting with it blocks eligibility. */

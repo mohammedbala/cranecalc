@@ -21,6 +21,7 @@ import {format} from './units';
 import {activeColumnStiffeners,receiverK,clipMargin,type ColumnStiffenerInput} from './columnStiffenerInputs';
 import {rolledStub,isRolledBracket} from './rolledBracketInputs';
 import {weldedRibBracket,haunchedBracket} from './bracketRib';
+import {isTaperedHaunch,haunchGeometry} from './taperedHaunchInputs';
 import {designsBracing,bracingGeometry,gussetOutlines,bracingLayout} from './newColumnBracing';
 import {existingColumnSection} from './existingColumn';
 
@@ -54,6 +55,12 @@ export function flangeForceLevels(o:{top:number;depth:number;tf:number;bf:number
  */
 export function bracketForceLevels(b:BracketInput,t:number):BracketForceLevels|undefined{
  if(isRolledBracket(b)){const st=rolledStub(b);return st?{bracket:`${st.name} STUB`,levels:flangeForceLevels({top:-(st.seat?.t??0),depth:st.d,tf:st.tf,bf:st.bf,label:'stub',section:st.name})}:undefined;}
+ // Tapered I haunch: its top flange (the seat) and its sloping bottom flange at the column face, whose vertical cut
+ // tb/cos(alpha) is the band; the flange's own thickness sets the J10.8 proportions.
+ if(isTaperedHaunch(b)){
+  const g=haunchGeometry(b),o={top:0,depth:g.hr,label:'haunch',section:'haunch'},lower=flangeForceLevels({...o,tf:g.tbv,bf:g.bb})[1];
+  return {bracket:'TAPERED HAUNCH',levels:[flangeForceLevels({...o,tf:g.tt,bf:g.btr})[0],{...lower,plate:{...lower.plate,thickness:g.tb}}]};
+ }
  if(!weldedRibBracket(b))return undefined;
  // The rib (haunch root) bottom at the column face: the pair sits on it, within the bottom sixth of the root depth
  // where the compression resultant of the root's elastic stress block lies.
@@ -108,7 +115,7 @@ export function columnStiffenerErrors(p:ProjectInput):string[]{
  const b=p.details?.bracket;if(!activeColumnStiffeners(b))return [];
  const errors:string[]=[],add=(bad:boolean,m:string)=>{if(bad)errors.push('details.bracket.columnStiffeners: '+m);};
  if(isRolledBracket(b)&&!rolledStub(b!))return errors;
- if(!bracketForceLevels(b!,b!.columnStiffeners!.thickness)){add(true,'column stiffeners are designed for the welded twin-rib, haunched and W-stub brackets, which define the levels where they deliver force to the column.');return errors;}
+ if(!bracketForceLevels(b!,b!.columnStiffeners!.thickness)){add(true,'column stiffeners are designed for the welded twin-rib, haunched and W-stub brackets and the tapered I haunch, which define the levels where they deliver force to the column.');return errors;}
  const g=columnStiffenerGeometry(p)!,f=(v:number)=>format(v,'length',p.units,3);
  add(!g.K,'enter the receiving column k (k_des) from the survey: no AISC shape identifies the column (set the existing column shape to the surveyed W-section, or enter k).');
  add(g.width+g.tw/2>g.c.width/2+1e-6,`plates ${f(g.width)} wide do not fit within the column flange: at most (bf - tw)/2 = ${f((g.c.width-g.tw)/2)}.`);

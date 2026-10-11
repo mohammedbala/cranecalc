@@ -4,7 +4,7 @@ import {bracket,column,girders,rail,steelTop,stiffeners,supportGeometry,ties,whe
 import {activeColumnCap} from '../../engine/columnCapInputs';
 import {defaultColumnBase} from '../../engine/columnBaseInputs';
 
-const supportName:Record<string,string>={'twin-rib':'TWIN-RIB BRACKET','haunched-seat':'HAUNCHED SEAT','rolled-corbel':'W STUB','existing':'EXISTING BRACKET','column-cap':'COLUMN CAP','by-others':'SEAT BY OTHERS'};
+const supportName:Record<string,string>={'twin-rib':'TWIN-RIB BRACKET','haunched-seat':'HAUNCHED SEAT','rolled-corbel':'W STUB','tapered-haunch':'TAPERED I HAUNCH','existing':'EXISTING BRACKET','column-cap':'COLUMN CAP','by-others':'SEAT BY OTHERS'};
 /**
  * The summary figure: the support assembly, isometric, with the load path numbered as in the summary table:
  * 1 rail, 2 girder, 3 bearing, 4 support, 5 column, 6 base, 7 lateral restraint, 8 longitudinal force.

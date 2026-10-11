@@ -20,8 +20,8 @@ import {compactReport} from '../server/compactReport';
 function project(){const p=cappedDemonstrationProject();p.units='US';p.details=selectBracketArrangement(p.details!,'existing-w-corbel');return p;}
 
 describe('selectable bracket library',()=>{
- it('keeps the RFP-style W bracket as one of five families, independent of the girder',()=>{
-  expect(bracketOptions.map(v=>v.id)).toEqual(['twin-rib','haunched-seat','rolled-corbel','existing-w-corbel','existing-corbel']);
+ it('keeps the RFP-style W bracket as one of six families, independent of the girder',()=>{
+  expect(bracketOptions.map(v=>v.id)).toEqual(['twin-rib','haunched-seat','rolled-corbel','tapered-haunch','existing-w-corbel','existing-corbel']);
   const base=cappedDemonstrationProject(),p=project();expect(base.details!.bracket!.arrangement??'twin-rib').toBe('twin-rib');
   expect(p.section).toEqual(base.section);expect(p.details!.bracket!.wideFlange!.shape).toBe('W12X65');expect(validateProject(p)).toEqual([]);
   const parsed=projectSchema.parse(JSON.parse(JSON.stringify(p)));expect(parsed.details!.bracket!.wideFlange).toEqual(p.details!.bracket!.wideFlange);
