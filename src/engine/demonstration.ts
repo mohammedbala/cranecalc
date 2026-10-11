@@ -108,12 +108,20 @@ export function cappedDemonstrationProject():ProjectInput {
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,height:26*foot,seatElevation:18*foot,Lcx:26*foot,Lcy:8*foot,Lcz:8*foot,
   existing:{D:{P:25*kip,Mx:15*kip*foot,My:0,V:1*kip},L:{...none},Lr:{P:12*kip,Mx:6*kip*foot,My:0,V:.5*kip},S:{P:20*kip,Mx:10*kip*foot,My:0,V:.8*kip},R:{...none},W:{P:-8*kip,Mx:40*kip*foot,My:0,V:4*kip},E:{P:0,Mx:20*kip*foot,My:0,V:2*kip}},
   welding:{basis:'mill-certificates',grade:'ASTM A572 Grade 50',carbonEquivalent:.42,preheat:(150-32)*5/9,deadLoadOnly:true,source:'Fictitious demonstration: mill certificates with the original building records, heat 4471'},
-  source:'Fictitious demonstration: original building calculation sheets 14-17, column line B',confirmed:true};
+  source:'Fictitious demonstration: original building calculation sheets 14-17, column line B',confirmed:true,
+  // Structural review records for the existing column line: the sidewall rod bracing's crane-level strut connects at
+  // the column centerline (so the girder offset still twists the column), a braced frame, the frame's 10-year wind
+  // drift and gravity spread at the runway, the site seismic data and the alteration evaluation.
+  longitudinalExit:'column-strut',
+  frame:{type:'braced',source:'Fictitious demonstration: column line B braced by the roof diaphragm and the sidewall rod bracing (building report DEMO-ER-02)'},
+  service:{wind10:.3*inch,spreadD:.05*inch,spreadS:.15*inch,roofSnow:25*4.788025898e-5,source:'Fictitious demonstration: building frame report DEMO-ER-02, 10-year wind and dead/snow runs at the crane girder'},
+  siteSeismic:{enabled:true,SDS:.25,sdc:'B',Ie:1,R:3,liftedLoadSecured:false,friction:.6,source:'Fictitious demonstration: site data from the original building report (Site Class D, SDS 0.25, SDC B; steel system not specifically detailed for seismic, R = 3)',
+   alteration:{dcrIncrease:.06,source:'Fictitious demonstration: evaluation DEMO-ER-02 of the existing bracing and frames with the runway and crane mass added (largest D/C increase 6%)'}}};
  // The surveyed seat sets the rail elevation the drawings show; no separate top of rail is entered.
  delete p.drawing!.railElevation;
  // Fictitious sidewall rod bracing up to the crane-level strut, with the building's own longitudinal wind and seismic forces.
  p.longitudinalBracing={...structuredClone(defaultLongitudinalBracing),enabled:true,bayWidth:25*foot,height:18*foot,existing:{W:6*kip,E:3*kip},
-  source:'Fictitious demonstration: sidewall rod bracing at grid lines 2-3 and the original wind/seismic report',confirmed:true};
+  wind10:3.5*kip,source:'Fictitious demonstration: sidewall rod bracing at grid lines 2-3 and the original wind/seismic report (10-year wind 3.5 kip on this line)',confirmed:true};
  // Revised independent ties: shorter, shifted clear of bearing stiffeners,
  // directly attached to flange saddles. No holes or cuts in the cap channel.
  Object.assign(p.details!.brace,{length:18*inch,reach:18*inch,width:5.25*inch,thickness:.3125*inch,gussetThickness:.875*inch,connectionLength:6*inch,

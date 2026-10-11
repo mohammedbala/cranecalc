@@ -8,6 +8,7 @@ import {railKeeperStations,girderSegments} from './simpleSupports';
 import {adjacentReactions} from './continuation';
 import {railTopAboveSteel} from './railSeat';
 import {craneAtStop} from './endStopInputs';
+import {runwaySiteSeismic,seismicCraneCombinations} from './columnSupport';
 
 const abs=(xs:number[])=>Math.max(0,...xs.map(Math.abs));
 export interface RunwayCaseEvent {
@@ -66,7 +67,10 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
     fatigueV:[atDetail(vd,cd),atDetail(vl,cv)],fatigueT:[atDetail(td,cd),atDetail(tl,cv),atDetail(th,h)],fatigueB:[atDetail(bd,cd),atDetail(bl,cv),atDetail(bh,h)]};
   });
  });
- const combinations=craneCombinations(p.method,di.concurrency==='full'),records=new Map<string,DesignCaseSummary>();
+ // Site seismic data adds TR-13 5a and 7a: the crane's seismic force on this runway at the rail head (Cs times its wheel
+ // loads across, capped by wheel friction along) and the girder line's own along the runway (review B11).
+ const site=runwaySiteSeismic(p),secured=site?.input.liftedLoadSecured?1:0,lineMass=site?site.mass.line*Math.max(...p.spans):0;
+ const combinations:(ReturnType<typeof craneCombinations>[number]&{seismic?:number})[]=[...craneCombinations(p.method,di.concurrency==='full'),...seismicCraneCombinations(p)],records=new Map<string,DesignCaseSummary>();
  for(const c of combinations)records.set(c.id,{id:`${p.method} ${c.id}`,equation:c.equation,moment:0,lateralMoment:0,shear:0,reaction:0,axial:0,interaction:0,positions:[],location:0});
  const result:DesignAnalysis={combinations:[],cases:0,convergence:0,meshConvergence:0,equilibriumError:0,singleVertical:0,serviceRotation:0,deadRotation:abs(supportNodes.map(i=>dead.rotation[i])),singleLateral:0,endRotation:0,serviceReaction:0,fatigueMin:0,fatigueMax:0,wheelLoad:0,wheelNearEndLoad:0,torsion:0,moment:0,shear:0,reaction:0,uplift:0,axial:0,lateralMoment:0,topLateralMoment:0,bottomLateralMoment:0,interaction:0,governing:{}};
  const railTM=samples.map(x=>momentAt(x,railT.reactions,[],p.railWeight*verticalLever)),railBM=samples.map(x=>momentAt(x,railB.reactions,[],-p.railWeight*verticalLever));
@@ -113,8 +117,9 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
    }
    for(const factors of combinations){
     if(factors.single&&chosen.length!==1)continue;
-    const ids=chosen.length&&(factors.h||factors.l||factors.bumper)?Array.from({length:chosen.length},(_,i)=>i):[-1];
-    for(const hi of ids)for(const sign of factors.h?[-1,1]:[1]){
+    const eq=site?factors.seismic??0:0;
+    const ids=chosen.length&&(factors.h||factors.l||factors.bumper||eq)?Array.from({length:chosen.length},(_,i)=>i):[-1];
+    for(const hi of ids)for(const sign of factors.h||eq?[-1,1]:[1]){
      // The crane stop force exists only with that crane against a stop: the stop combinations are evaluated there
      // alone, so the girder, its end stop and its locating bearing all see the crane at the stop.
      const stop=factors.bumper&&hi>=0?craneAtStop(p,chosen[hi].index,chosen[hi].response.origin):undefined;
@@ -124,14 +129,15 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
      const traction=hi<0?0:factors.l*Math.max(p.cranes[chosen[hi].index].longitudinal,craneDesignMinimum(p.cranes[chosen[hi].index]).traction),bumper=hi<0?0:factors.bumper*(p.cranes[chosen[hi].index].design?.bumperBypassesGirder?0:p.cranes[chosen[hi].index].design?.bumperForce??0);
      // Traction acts at the top of the rail and the bumper above it; both are resisted at the girder bearing,
      // so each bay carries the end couple F*e as equal and opposite end reactions F*e/L.
-     const axial=traction+bumper,longitudinalCouple=traction*railTop+bumper*bumperLever;
+     const quake=hi<0||!eq?0:eq*site!.along*chosen[hi].response.wheels.reduce((a,w)=>a+w.unloaded+secured*(w.static-w.unloaded),0),eh=eq?eq*site!.across*sign:0;
+     const axial=traction+bumper+quake+(eq?eq*site!.Cs*lineMass:0),longitudinalCouple=traction*railTop+bumper*bumperLever+quake*railTop;
      const record=records.get(factors.id)!;
      const c:DesignCaseSummary={id:record.id,equation:record.equation,moment:0,lateralMoment:0,shear:0,reaction:0,interaction:0,positions:chosen.map(s=>s.response.origin),axial,location:0};
-     const wheels=chosen.flatMap((s,i)=>s.response.wheels.map(w=>({x:w.x,p:factors.cd*w.unloaded+f[i]*(w.static-w.unloaded)+factors.i*w.static*s.response.impact,h:i===hi?factors.h*w.lateral*sign:0})));
+     const wheels=chosen.flatMap((s,i)=>s.response.wheels.map(w=>({x:w.x,p:factors.cd*w.unloaded+f[i]*(w.static-w.unloaded)+factors.i*w.static*s.response.impact,h:i===hi?factors.h*w.lateral*sign+eh*(w.unloaded+secured*(w.static-w.unloaded)):0})));
      const vr=dead.reactions.map((r,j)=>({x:r.x,r:factors.d*r.r+factors.live*live.reactions[j].r+chosen.reduce((sum,s,i)=>sum+factors.cd*s.response.vd.reactions[j].r+f[i]*s.response.vl.reactions[j].r+factors.i*s.response.vi.reactions[j].r,0)}));
      const ar=dead.reactions.map((r,j)=>({x:r.x,r:factors.d*deadAdjacent[j]+factors.live*liveAdjacent[j]+chosen.reduce((sum,s,i)=>sum+factors.cd*s.response.adjacent.vd[j]+f[i]*s.response.adjacent.vl[j]+factors.i*s.response.adjacent.vi[j],0)}));
-     const tr=t0.reactions.map((r,j)=>({x:r.x,r:factors.d*railT.reactions[j].r+chosen.reduce((sum,s,i)=>sum+verticalLever*(factors.cd*s.response.td.reactions[j].r+f[i]*s.response.tl.reactions[j].r+factors.i*s.response.ti.reactions[j].r)+(i===hi?(1+railLever)*factors.h*s.response.th.reactions[j].r*sign:0),0)}));
-     const br=b0.reactions.map((r,j)=>({x:r.x,r:factors.d*railB.reactions[j].r+chosen.reduce((sum,s,i)=>sum-verticalLever*(factors.cd*s.response.bd.reactions[j].r+f[i]*s.response.bl.reactions[j].r+factors.i*s.response.bi.reactions[j].r)+(i===hi?-railLever*factors.h*s.response.bh.reactions[j].r*sign:0),0)}));
+     const tr=t0.reactions.map((r,j)=>({x:r.x,r:factors.d*railT.reactions[j].r+chosen.reduce((sum,s,i)=>sum+verticalLever*(factors.cd*s.response.td.reactions[j].r+f[i]*s.response.tl.reactions[j].r+factors.i*s.response.ti.reactions[j].r)+(i===hi?(1+railLever)*(factors.h*s.response.th.reactions[j].r*sign+eh*(s.response.td.reactions[j].r+secured*s.response.tl.reactions[j].r)):0),0)}));
+     const br=b0.reactions.map((r,j)=>({x:r.x,r:factors.d*railB.reactions[j].r+chosen.reduce((sum,s,i)=>sum-verticalLever*(factors.cd*s.response.bd.reactions[j].r+f[i]*s.response.bl.reactions[j].r+factors.i*s.response.bi.reactions[j].r)+(i===hi?-railLever*(factors.h*s.response.bh.reactions[j].r*sign+eh*(s.response.bd.reactions[j].r+secured*s.response.bl.reactions[j].r)):0),0)}));
      observe?.({kind:'strength',adjacentReactions:ar,longitudinalCouple,...(stop?{stop}:{}),id:`D-${result.cases}`,combination:record.id,cranes:chosen.map((s,i)=>({index:s.index,origin:s.response.origin,loaded:full[i]})),horizontalCrane:chosen[hi]?.index??-1,lateralSign:sign,wheels,q:factors.d*q+factors.live*di.liveLoad,railTorquePerLength:factors.d*p.railWeight*p.railEccentricity,axial,verticalReactions:vr});
      for(let j=0;j<dead.rotation.length;j++)result.endRotation=Math.max(result.endRotation,Math.abs(factors.d*dead.rotation[j]+factors.live*live.rotation[j]+chosen.reduce((sum,s,i)=>sum+factors.cd*s.response.vd.rotation[j]+f[i]*s.response.vl.rotation[j]+factors.i*s.response.vi.rotation[j],0)));
      const vLoads=wheels.map(w=>({x:w.x,p:w.p})),tLoads=wheels.map(w=>({x:w.x,p:verticalLever*w.p+(1+railLever)*w.h})),bLoads=wheels.map(w=>({x:w.x,p:-verticalLever*w.p-railLever*w.h}));
@@ -139,7 +145,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
       const wheel=n>=samples.length,x=wheel?wheels[n-samples.length].x:samples[n];
       let M:number,Mt:number,Mb:number;
       if(wheel){M=momentAt(x,vr,vLoads,factors.d*q+factors.live*di.liveLoad);Mt=momentAt(x,tr,tLoads,factors.d*p.railWeight*verticalLever);Mb=momentAt(x,br,bLoads,-factors.d*p.railWeight*verticalLever);}
-      else{M=factors.d*deadM[n]+factors.live*liveM[n];Mt=factors.d*railTM[n];Mb=factors.d*railBM[n];chosen.forEach((s,i)=>{const m=s.response.moments;M+=factors.cd*m.vd[n]+f[i]*m.vl[n]+factors.i*m.vi[n];Mt+=verticalLever*(factors.cd*m.td[n]+f[i]*m.tl[n]+factors.i*m.ti[n])+(i===hi?(1+railLever)*factors.h*m.th[n]*sign:0);Mb-=verticalLever*(factors.cd*m.bd[n]+f[i]*m.bl[n]+factors.i*m.bi[n])+(i===hi?railLever*factors.h*m.bh[n]*sign:0);});}
+      else{M=factors.d*deadM[n]+factors.live*liveM[n];Mt=factors.d*railTM[n];Mb=factors.d*railBM[n];chosen.forEach((s,i)=>{const m=s.response.moments;M+=factors.cd*m.vd[n]+f[i]*m.vl[n]+factors.i*m.vi[n];Mt+=verticalLever*(factors.cd*m.td[n]+f[i]*m.tl[n]+factors.i*m.ti[n])+(i===hi?(1+railLever)*(factors.h*m.th[n]*sign+eh*(m.td[n]+secured*m.tl[n])):0);Mb-=verticalLever*(factors.cd*m.bd[n]+f[i]*m.bl[n]+factors.i*m.bi[n])+(i===hi?railLever*(factors.h*m.bh[n]*sign+eh*(m.bd[n]+secured*m.bl[n])):0);});}
       const My=Math.max(Math.abs(Mt),Math.abs(Mb)),u=Math.max(interaction(axial,M,Mt,{...strength,flangeMinor:strength.topMinor??strength.flangeMinor},p.method).utilization,interaction(axial,M,Mb,{...strength,flangeMinor:strength.bottomMinor??strength.flangeMinor},p.method).utilization);
       c.moment=Math.max(c.moment,Math.abs(M));c.lateralMoment=Math.max(c.lateralMoment,My);
       if(u>c.interaction){c.interaction=u;c.location=x;}

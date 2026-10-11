@@ -43,7 +43,9 @@ describe('existing column member check',()=>{
   expect(combo.Mx/combo.B1x).toBeCloseTo(Mx,3);
   expect(combo.P).toBeCloseTo(1.2*50*kip+runway,3);
   expect(combo.B1x).toBeCloseTo(1/(1-combo.P/(Math.PI**2*E*Ix/c.Lcx**2)),9);
-  const ratio=combo.P/r.capacity.Pc,flex=combo.Mx/r.capacity.Mcx;
+  // Review B7: the weak axis takes the seat moment and the traction at the locating seat (eave-strut path assumed).
+  expect(combo.My).toBeGreaterThan(0);
+  const ratio=combo.P/r.capacity.Pc,flex=combo.Mx/r.capacity.Mcx+combo.My/r.capacity.Mcy;
   expect(combo.U).toBeCloseTo(ratio>=.2?ratio+8/9*flex:ratio/2+flex,9);
   expect(s.checks.find(k=>k.id==='column-interaction')).toMatchObject({demand:r.governing.U.U});
   expect(s.checks.find(k=>k.id==='column-longitudinal')?.status).toBe('excluded');
