@@ -2,10 +2,12 @@ import {describe,it,expect} from 'vitest';
 import {cappedDemonstrationProject,demonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {createDetailCollector,longitudinalPaths} from '../src/engine/detailAnalysis';
 import {sectionProperties} from '../src/engine/section';
-import {columnWeldGroup,columnWeldField,columnWeldStress,createBracketCollector,bracketChecks,seatColumnWeld,seatColumnWeldSizes,seatColumnWeldLength} from '../src/engine/bracketDesign';
+import {bracketResponse,columnWeldGroup,columnWeldField,columnWeldStress,createBracketCollector,bracketChecks,seatColumnWeld,seatColumnWeldSizes,seatColumnWeldLength} from '../src/engine/bracketDesign';
+import {createSupportForceEnvelope,type SupportForceSet} from '../src/engine/bracketForces';
 import {minimumFillet} from '../src/engine/connectionStrength';
 import {bracingDesign} from '../src/engine/newColumnBracing';
 import {locatingSupport} from '../src/engine/endBearingInputs';
+import {craneAtStop} from '../src/engine/endStopInputs';
 import type {RunwayCaseEvent} from '../src/engine/designAnalysis';
 import type {ProjectInput} from '../src/engine/types';
 
@@ -17,19 +19,22 @@ const envelope=(p:ProjectInput,events:RunwayCaseEvent[])=>{const c=createDetailC
 
 describe('longitudinal force at the supports',()=>{
  it('takes the crane stop force only into the end bays that carry a stop, toward the stop, and traction into every occupied bay',()=>{
-  const p=cappedDemonstrationProject(),F=17793;
+  const p=cappedDemonstrationProject(),F=17793,c=p.cranes[0];
   expect(longitudinalPaths(p,[0,1,2,3].map(i=>i*25*foot)).stopBays).toEqual([{bay:1,sign:-1},{bay:3,sign:1}]);
-  // Crane on bay 2 at the stop combination: no stop is struck there, so no longitudinal force anywhere.
-  expect(envelope(p,[event(p,'mid','LRFD 8',30*foot,F)]).map(v=>v.longitudinal.longitudinal)).toEqual([0,0,0,0]);
-  // On bay 1 the left stop pushes RG1 toward grid 1, delivered at its locating end; its far end lifts.
-  const left=envelope(p,[event(p,'left','LRFD 8',2*foot,F)]);
+  // The stop force exists only with the crane against a stop, at the end of its travel: anywhere else on the
+  // runway, even on an end bay, no stop is struck and no longitudinal force reaches a support.
+  for(const origin of [30*foot,2*foot,62*foot])expect(envelope(p,[event(p,'off','LRFD 8',origin,F)]).map(v=>v.longitudinal.longitudinal)).toEqual([0,0,0,0]);
+  expect([craneAtStop(p,0,c.travelStart),craneAtStop(p,0,c.travelEnd),craneAtStop(p,0,2*foot)]).toEqual(['left','right',undefined]);
+  // At the left stop it pushes RG1 toward grid 1, delivered at its locating end; its far end lifts.
+  const left=envelope(p,[event(p,'left','LRFD 8',c.travelStart,F)]);
   expect(left.map(v=>v.longitudinal.longitudinal)).toEqual([-F,0,0,0]);expect(left[0].reversible.longitudinal).toBe(false);
   const couple=F*1000/(25*foot),stop=left[1].minBearing.ends.find(v=>v.bay===1)!;
-  const still=envelope(p,[{...event(p,'left','LRFD 8',2*foot,F),axial:0,longitudinalCouple:0}])[1].minBearing.ends.find(v=>v.bay===1)!;
+  const still=envelope(p,[{...event(p,'left','LRFD 8',c.travelStart,F),axial:0,longitudinalCouple:0}])[1].minBearing.ends.find(v=>v.bay===1)!;
   expect(stop.vertical).toBeCloseTo(still.vertical-couple,6);
-  // On bay 3 the right stop pushes RG3 toward grid 4; RG3 locates at grid 3.
-  const right=envelope(p,[event(p,'right','LRFD 8',62*foot,F)]);
+  // At the right stop it pushes RG3 toward grid 4; RG3 locates at grid 3. The event names the stop it strikes.
+  const right=envelope(p,[event(p,'right','LRFD 8',c.travelEnd,F)]);
   expect(right.map(v=>v.longitudinal.longitudinal)).toEqual([0,0,F,0]);
+  expect(envelope(p,[{...event(p,'named','LRFD 8',c.travelEnd,F),stop:'right'}]).map(v=>v.longitudinal.longitudinal)).toEqual([0,0,F,0]);
   // Traction reaches the occupied bay's locating end in either direction.
   const traction=envelope(p,[event(p,'drive','LRFD 2b',30*foot,F/10)]);
   expect(traction.map(v=>Math.abs(v.longitudinal.longitudinal))).toEqual([0,F/10,0,0]);expect(traction[1].reversible.longitudinal).toBe(true);
@@ -38,8 +43,44 @@ describe('longitudinal force at the supports',()=>{
   const p=demonstrationProject();p.system='continuous';p.details!.brace.flangeAttachment!.enabled=false;
   const stations=[0,1,2,3].map(i=>i*25*foot),at=stations[locatingSupport(p)];
   expect(longitudinalPaths(p,stations).continuousAt(at)).toBe(true);expect(longitudinalPaths(p,stations).continuousAt(0)).toBe(false);
-  const f=envelope(p,[event(p,'drive','LRFD 2b',30*foot,4000),event(p,'stop','LRFD 8',2*foot,20000)]);
+  const f=envelope(p,[event(p,'drive','LRFD 2b',30*foot,4000),event(p,'stop','LRFD 8',p.cranes[0].travelStart,20000)]);
   expect(f.map(v=>Math.abs(v.longitudinal.longitudinal))).toEqual(stations.map(x=>x===at?20000:0));
+  // Toward the stop the crane is against: the left one here, the right one at the other end of its travel.
+  expect(f[locatingSupport(p)].longitudinal.longitudinal).toBe(-20000);
+  expect(envelope(p,[event(p,'stop','LRFD 8',p.cranes[0].travelEnd,20000)])[locatingSupport(p)].longitudinal.longitudinal).toBe(20000);
+ });
+});
+
+describe('bracket design force envelope',()=>{
+ it('keeps whole concurrent sets, and the bracket weld group is checked for the same sets',()=>{
+  const p=cappedDemonstrationProject(),c=p.cranes[0],F=17793,b=p.details!.bracket!,Lbr=p.details!.bearing.length;
+  const collector=createDetailCollector(p,sectionProperties(p.section),20);
+  // The crane against the right stop: one concurrent set at each support, so every criterion there is that set.
+  collector.observe(event(p,'stop','LRFD 8',c.travelEnd,F));
+  const r=collector.finish(),forces=r.bracketForces!;
+  for(const v of forces)for(const k of ['maxVertical','maxMoment','minVertical','minBearing','top','bottom'] as const)expect(v[k]).toEqual(v.longitudinal);
+  expect(forces[2].longitudinal.longitudinal).toBe(F);expect(forces[2].forward).toEqual(forces[2].longitudinal);expect(forces[2].backward).toBeUndefined();
+  // The weld group peak from the tabulated sets, with the bracket self-weight and the bottom-flange force either
+  // way at the mean bearing offset, is the one the bracket checks record.
+  const self=1.4*(b.seatLength*b.seatProjection*b.seatThickness+2*b.ribDepth*b.ribThickness*b.seatProjection)*p.section.density*9.80665/1e9;
+  seatColumnWeldSizes(p).forEach((w,i)=>{
+   const g=columnWeldGroup(b,w);let seat=0;
+   for(const v of forces){
+    const f=v.longitudinal,rr=bracketResponse(p,[...f.ends.map(e=>({vertical:e.vertical,offset:e.offset,length:.4*Lbr})),{vertical:self,offset:0,length:b.seatLength}]);
+    const xH=f.ends.reduce((a,e)=>a+e.offset-(e.end==='left'?1:-1)*.3*Lbr,0)/f.ends.length;
+    for(const H of [f.bottom,-f.bottom])seat=Math.max(seat,columnWeldStress(b,g,rr.e,{V:rr.V,Mseat:rr.Mx,F:f.longitudinal,H,xH}).seat);
+   }
+   expect(r.bracket!.columnWeld!.peaks[i].seat.value).toBeCloseTo(seat,6);
+  });
+ });
+ it('breaks ties toward the heavier companions and keeps both senses of a reversing longitudinal force',()=>{
+  const env=createSupportForceEnvelope([0]);
+  const set=(id:string,vertical:number,moment:number,longitudinal:number,top=0):SupportForceSet=>({id,combination:'LRFD 2c',vertical,moment,longitudinal,top,bottom:-top/3,ends:[]});
+  env.add(0,set('a',50,10,-6400));env.add(0,set('b',60,5,-6400));env.add(0,set('c',60,20,-6400));env.add(0,set('d',58,0,6400));env.add(0,set('e',10,0,6400));env.add(0,set('f',10,0,0,500));
+  const [v]=env.result();
+  expect(v.longitudinal.id).toBe('c');expect(v.backward!.id).toBe('c');expect(v.forward!.id).toBe('d');expect(v.reversible.longitudinal).toBe(true);
+  // The least total reaction keeps the case with the larger horizontal forces.
+  expect(v.minVertical.id).toBe('e');expect(v.minBearing.id).toBe('e');
  });
 });
 

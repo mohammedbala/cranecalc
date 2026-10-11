@@ -10,6 +10,7 @@ import {annotationClashes} from '../src/components/detailSheet';
 import {coverSheetSvg} from '../src/components/coverSheet';
 import {format} from '../src/engine/units';
 import type {CalculationSnapshot} from '../src/engine/types';
+import {bracketForceCases,bracketForceCells} from '../src/components/bracketForceTable';
 
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
 const capped=calculate(cappedDemonstrationProject()),demo=calculate(demonstrationProject()),newColumn=calculate(newColumnDemonstrationProject());
@@ -155,7 +156,20 @@ describe('drawings agree with the calculation',()=>{
    expect(V[3]).toBeCloseTo(V[0],6);expect(V[2]).toBeCloseTo(V[1],6);expect(M[3]).toBeCloseTo(-M[0],3);expect(M[0]).toBeGreaterThan(0);
    expect(f[1].reversible.vertical&&f[2].reversible.vertical&&f[1].reversible.moment).toBe(true);expect(Math.abs(M[2])).toBeCloseTo(Math.abs(M[1]),3);
    for(const v of f)expect(cells).toContain(kip(v.maxVertical.vertical));
-   expect(cells).toContain(`±${format(Math.abs(f[1].maxVertical.moment),'moment','US',2).toUpperCase()}`);
+   // An interior grid reaches its largest reaction from either side, but the two cases differ in their
+   // longitudinal force: both are listed, each with its own sign of seat moment.
+   const kipft=(v:number)=>format(v,'moment','US',2).toUpperCase();
+   expect(Math.abs(f[1].mirror.vertical!.longitudinal-f[1].maxVertical.longitudinal)).toBeGreaterThan(1);expect(cells).toContain(kipft(f[1].maxVertical.moment));expect(cells).toContain(kipft(f[1].mirror.vertical!.moment));
+   // One table, every row a whole concurrent case: all its reactions, seat moment, longitudinal and lateral forces.
+   expect(cells).toEqual(expect.arrayContaining(['GRID','CASE','COMB.','V','LEFT V','RIGHT V','SEAT M','LONG.','H TOP','H BOT.']));
+   const cases=bracketForceCases(s);
+   for(const g of cases)for(const c of g.cases)for(const value of Object.values(bracketForceCells(c.force,c.mirrored,'US')))if(value!=='—')expect(cells).toContain(value.toUpperCase());
+   const stopRow=cases[2].cases.find(c=>c.label.includes('MAX LONG.'))!;
+   expect(stopRow.force).toBe(f[2].longitudinal);expect(stopRow.force.ends).toHaveLength(2);expect(stopRow.force.combination).toBe('LRFD 8');
+   // The crane is against the grid-4 stop, so RG3 carries its own dead load and the couple only: the least V at
+   // grid 3 mirrors grid 2, and its row gives the concurrent stop force.
+   expect(f[2].minVertical.vertical).toBeCloseTo(f[1].minVertical.vertical,6);expect(f[2].minVertical.longitudinal).toBeGreaterThan(0);
+   expect(cases[2].cases.some(c=>c.force===f[2].minVertical&&c.label.startsWith('MIN V'))).toBe(true);
    // Longitudinal force at the three locating bearings, none at the sliding end. The crane stop force reaches only
    // the locating ends of the end bays that carry the stops (grids 1 and 3), toward the stop; grid 2 takes traction.
    expect(f.map(v=>Math.abs(v.longitudinal.longitudinal)>0)).toEqual([true,true,true,false]);
@@ -163,11 +177,15 @@ describe('drawings agree with the calculation',()=>{
    expect(f[0].longitudinal.longitudinal).toBeLessThan(0);expect(f[2].longitudinal.longitudinal).toBeGreaterThan(0);
    expect(Math.abs(f[1].longitudinal.longitudinal)).toBeLessThan(Math.abs(f[0].longitudinal.longitudinal));
    expect(f.slice(0,3).map(v=>v.reversible.longitudinal)).toEqual([false,true,false]);
-   expect(cells).toContain(`-${kip(-f[0].longitudinal.longitudinal)}`);expect(cells).toContain(`+${kip(f[2].longitudinal.longitudinal)}`);expect(cells).toContain(`±${kip(Math.abs(f[1].longitudinal.longitudinal))}`);
+   expect(cells).toContain(`-${kip(-f[0].longitudinal.longitudinal)}`);expect(cells).toContain(`+${kip(f[2].longitudinal.longitudinal)}`);
+   // Traction governs grid 2 and reverses with its end couple: both senses are listed, each with its own reactions.
+   expect(f[1].forward!.longitudinal).toBeCloseTo(-f[1].backward!.longitudinal,6);expect(f[1].forward!.vertical).toBeLessThan(f[1].backward!.vertical);
+   expect(cells).toContain(`-${kip(Math.abs(f[1].longitudinal.longitudinal))}`);expect(cells).toContain(`+${kip(Math.abs(f[1].longitudinal.longitudinal))}`);
+   expect(cases[1].cases.filter(c=>c.label.includes('LONG.')).map(c=>Math.sign(c.force.longitudinal))).toEqual([-1,1]);
    // H TOP and H BOTTOM of one case act together, opposite: a couple, signed relative to each other.
    expect(Math.sign(f[0].top.top)).toBe(-Math.sign(f[0].top.bottom));
    expect(cells).toContain(`±${kip(Math.abs(f[0].top.top))}`);expect(cells).toContain(`-${kip(Math.abs(f[0].top.bottom))}`);
-   expect(cells.join(' ')).toContain('H BOTTOM IS SIGNED RELATIVE TO H TOP');expect(cells.join(' ')).not.toContain('ITS OWN MAXIMUM');
+   expect(cells.join(' ')).toContain('H BOT. IS SIGNED RELATIVE TO H TOP');expect(cells.join(' ')).not.toContain('ITS OWN MAXIMUM');
   }
   // The bracket is checked for the same concurrent sets, so its governing rows mirror too.
   const st=capped.detailResults!.bracket!.stations;expect(st[3].vertical).toBeCloseTo(st[0].vertical,6);expect(st[3].leftRib).toBeCloseTo(st[0].rightRib,6);
