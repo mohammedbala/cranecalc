@@ -10,6 +10,7 @@ import {simpleSupportInput} from '../../engine/simpleSupports';
 import {railTopAboveSteel} from '../../engine/railSeat';
 import {columnStiffenerGeometry} from '../../engine/columnStiffeners';
 import {capAngleTies} from './capAngleParts';
+import {channelProfile} from '../../engine/channelProfile';
 import {haunchGeometry,isTaperedHaunch} from '../../engine/taperedHaunchInputs';
 
 /**
@@ -95,7 +96,8 @@ export function bracket(S:Scene,p:ProjectInput,g:SupportGeometry,role:Role){
 export function beam(S:Scene,g:SupportGeometry,x0:number,x1:number,y:number,role:Role,z0=g.girder.z0,capRole:Role=role){
  const G=g.girder,a=Math.min(x0,x1),b=Math.max(x0,x1);
  S.group('girder/bottom-flange',()=>S.box(a,y-G.bf/2,z0,b,y+G.bf/2,z0+G.tf,role)).group('girder/web',()=>S.box(a,y-G.tw/2,z0+G.tf,b,y+G.tw/2,z0+G.d-G.tf,role)).group('girder/top-flange',()=>S.box(a,y-G.bf/2,z0+G.d-G.tf,b,y+G.bf/2,z0+G.d,role));
- if(G.cap){const c=G.cap,zt=z0+G.d+c.tw;S.group('girder/cap',()=>S.box(a,y-c.width/2,z0+G.d,b,y+c.width/2,zt,capRole)).group('girder/cap-leg',()=>S.box(a,y-c.width/2,zt-c.depth,b,y-c.width/2+c.tf,z0+G.d,capRole).box(a,y+c.width/2-c.tf,zt-c.depth,b,y+c.width/2,z0+G.d,capRole));}
+ // Cap channel: web as a plate, each turned-down flange a convex trapezoid with its 2:12 sloped inner face.
+ if(G.cap){const c=G.cap,zt=z0+G.d+c.tw,leg=channelProfile({d:c.width,bf:c.depth,tw:c.tw,tf:c.tf}).leg;S.group('girder/cap',()=>S.box(a,y-c.width/2,z0+G.d,b,y+c.width/2,zt,capRole)).group('girder/cap-leg',()=>{for(const sx of [-1,1])S.prism(0,leg.map(([u,v]):Vec2=>[y+sx*u,z0+G.d+v]),a,b,capRole);});}
  return S;
 }
 /** Top of the girder steel (the cap web when capped) above z0. */
