@@ -2,7 +2,8 @@ import {describe,it,expect} from 'vitest';
 import * as THREE from 'three';
 import {buildWeldedBrackets} from '../src/components/weldedBracketGeometry';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
-import {calculate,validateProject} from '../src/engine/calculate';
+import {calculate as calculateProject,validateProject} from '../src/engine/calculate';
+import {withColumnReviewData} from './fixtures/columnReviewData';
 import {projectSchema} from '../src/engine/types';
 import type {CalculationSnapshot,CheckResult,ProjectInput} from '../src/engine/types';
 import {selectBracketArrangement,connectionOptionChecks} from '../src/engine/connectionOptions';
@@ -17,6 +18,8 @@ import {compactReport} from '../src/report/compactReport';
 import {drawingSheetSet} from '../src/components/planSheet';
 import {checkFigure} from '../src/components/checkFigures';
 import {cappedTaperedHaunch,existingBuildingHaunch} from './fixtures/taperedHaunchProjects';
+// Review G2: supply the supporting-column records so the package can pass and export.
+const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 const inch=25.4,kip=4448.2216152605,ksi=6.894757293168,E=29000*ksi,Fy=50*ksi;
 /**

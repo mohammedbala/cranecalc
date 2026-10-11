@@ -1,7 +1,10 @@
 import {describe,expect,it} from 'vitest';
-import {calculate} from '../src/engine/calculate';
+import {calculate as calculateProject} from '../src/engine/calculate';
+import {withColumnReviewData} from './fixtures/columnReviewData';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
 import {compactReport} from '../src/report/compactReport';
+// Review G2: supply the supporting-column records so the package can pass and export.
+const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 const s=calculate(cappedDemonstrationProject());
 
