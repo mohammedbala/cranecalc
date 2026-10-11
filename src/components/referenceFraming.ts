@@ -44,7 +44,7 @@ interface FramingOptions {
   bracket?:BracketInput;
   columnConnectionHoles?:{station:number;x:number;y:number;diameter:number}[];
   continuousBearing?:{width:number;length:number;thickness:number};
-  independentBearing?: {thickness:number;seatLength:number};
+  independentBearing?: {thickness:number;seatLength:number;width?:number};
   /** Column face from the girder centerline, m, set by a flange tie where the bracket is by others. */
   columnFace?:number;
   /** New runway columns designed here replace the building columns at the supports. */
@@ -187,6 +187,6 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
   }
   // New columns and their bases are new work: drawn as designed steel, not reference framing.
   if(newColumn)group.traverse(o=>{if(/^(column|column-cap|cap-stiffener|cap-bearing|base-plate|footing)-S\d/.test(o.name)||o.userData.part?.family==='Headed anchor rod')o.userData.designedBracket=true;});
-  if(bracket)group.add(buildWeldedBrackets(bracket,supports,seatTop,materials.plate,materials.edge,continuousBearing,materials.weld,hardware,!!newColumn));
+  if(bracket)group.add(buildWeldedBrackets(bracket,supports,seatTop,materials.plate,materials.edge,continuousBearing,materials.weld,hardware,!!newColumn,independentBearing?.width));
   return {group,floor,columnBottom,columnTop,columnOffset,columnFace,beamTop,beamBottom,capLength,bracketStart,bracketEnd,seatTop,girderBoltHoles,profile,columnOuter:(y:number)=>columnOffset+profileUpper(profile,y-columnMid)};
 }

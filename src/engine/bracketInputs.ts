@@ -1,15 +1,18 @@
 import {z} from 'zod';
 import {existingBracketSchema} from './existingBracketInputs';
 import {rolledBracketSchema} from './rolledBracketInputs';
+import {taperedHaunchSchema} from './taperedHaunchInputs';
 const pos=z.number().finite().positive();
 /** Dimensions are calculation inputs in mm, never reference-view preferences. */
 export const bracketSchema=z.object({
- arrangement:z.enum(['twin-rib','haunched-seat','rolled-corbel','existing-corbel','existing-w-corbel']).optional(),
+ arrangement:z.enum(['twin-rib','haunched-seat','rolled-corbel','tapered-haunch','existing-corbel','existing-w-corbel']).optional(),
  existing:existingBracketSchema.optional(),
  wideFlange:existingBracketSchema.extend({shape:z.string().min(1).max(30)}).optional(),
  tipDepth:pos.optional(),corbelShape:z.string().min(1).max(30).optional(),
  /** New rolled wide-flange bracket ('rolled-corbel'): stub steel, welds and bearing stiffeners. */
  rolled:rolledBracketSchema.optional(),
+ /** New built-up tapered I haunch ('tapered-haunch'): plates, stiffeners and welds; reach, seatProjection (its length) and rootWeld (web-to-column fillet) are the bracket fields above. */
+ haunch:taperedHaunchSchema.optional(),
  enabled:z.boolean(),reach:pos,seatLength:pos,seatProjection:pos,seatThickness:pos,
  ribDepth:pos,ribThickness:pos,ribSpacing:pos,rootWeld:pos,seatWeld:pos,
  deflectionLimit:pos,rotationLimit:pos,

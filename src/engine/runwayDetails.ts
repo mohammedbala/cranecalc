@@ -4,6 +4,7 @@ import {angleTieSchema} from './angleTie';
 import {endStopSchema} from './endStopInputs';
 import {endBearingSchema} from './endBearingInputs';
 import type {RolledBracketResults} from './rolledBracket';
+import type {TaperedHaunchResults} from './taperedHaunch';
 import type {BracketResults} from './bracketDesign';
 import type {ExistingBracketResults} from './existingBracket';
 import type {SupportForceEnvelope} from './bracketForces';
@@ -68,6 +69,8 @@ export interface RunwayDetailResults {
  existingBracket?:ExistingBracketResults;
  /** New rolled wide-flange bracket ('rolled-corbel'). */
  rolledBracket?:RolledBracketResults;
+ /** New built-up tapered I haunch ('tapered-haunch'). */
+ taperedHaunch?:TaperedHaunchResults;
  /** Factored strength envelope of the girder end forces at each support, for the bracket and its attachments. */
  bracketForces?:SupportForceEnvelope[];
  /** Column cap on new freestanding columns: per-grid cap, stiffener, bolt and weld demands, and the fork restraint. */

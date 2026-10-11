@@ -1,6 +1,7 @@
 import {newColumnTopic} from './newColumnSheet';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
+import {haunchUnderSeat} from './taperedHaunchSheet';
 import {bracingOnElevation,bracingTopic,specifiedSeparation} from './bracingSheet';
 import {ribGeometry} from '../engine/bracketRib';
 import {flangeTieTopic} from './flangeTieSheet';
@@ -322,6 +323,11 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     const wb=p.details?.bracket;
     const ws=wb?.enabled?rolledUnderSeat(p):undefined;
     if(ws){const sy=bottom+(p.details!.bearing.thickness/1000)*ek,t=(ws.seat?.t??0)/1000*ek;if(ws.seat)svg+=rect(EX(x-ws.seat.length/2000),sy,ws.seat.length/1000*ek,t,'runway-line');for(const off of [0,ws.d-ws.tf])svg+=rect(EX(x-ws.bf/2000),sy+t+off/1000*ek,ws.bf/1000*ek,ws.tf/1000*ek,'runway-line');svg+=rect(EX(x-ws.tw/2000),sy+t+ws.tf/1000*ek,ws.tw/1000*ek,(ws.d-2*ws.tf)/1000*ek,'runway-line');}
+    else if(wb?.enabled&&haunchUnderSeat(p)){
+     // Tapered I haunch seen from the runway: its top flange (the seat) and, below it, the tip with the sloping bottom flange beyond to the root.
+     const h=haunchUnderSeat(p)!.g,sy=bottom+(p.details!.bearing.thickness/1000)*ek;
+     svg+=rect(EX(x-h.bt/2000),sy,h.bt/1000*ek,h.tt/1000*ek,'runway-line')+rect(EX(x-h.bb/2000),sy+h.tt/1000*ek,h.bb/1000*ek,(h.hr-h.tt)/1000*ek,'runway-line');
+    }
     else if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1]){svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');const rg=ribGeometry(wb);if(rg.tapered)svg+=line([EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],[EX(x+(side*wb.ribSpacing+wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],'runway-line');}}else if(!capGeo)svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
     svg+=line([EX(x),bubbleY+12],[EX(x),below+33],'grid-line')+gridBubble(EX(x),bubbleY,String(i+1));
     if(i)svg+=dimH(EX(m.supports[i-1]),EX(x),below+34,below+54,dim(p.spans[i-1]/1000));

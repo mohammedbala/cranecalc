@@ -1,6 +1,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
+import {haunchUnderSeat} from './taperedHaunchSheet';
 import {activeEndBearing,endBearingGeometry} from '../engine/endBearing';
 import {slidingBolts} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
@@ -23,7 +24,7 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
  const p=s.input,e=activeEndBearing(p),d=p.details;if(!e||!d)return undefined;
  const g=endBearingGeometry(p,e);if(!g.sleeve)return undefined;
  return {title:detailTitles.slidingBolt,render:()=>{
-  const b=p.section,bs=d.bearing,sl=slidingBolts(e),db=e.bolts.diameter,wb=d.bracket?.enabled?d.bracket:undefined,cs=capSeat(p),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),ws=cs?undefined:rolledUnderSeat(p);
+  const b=p.section,bs=d.bearing,sl=slidingBolts(e),db=e.bolts.diameter,wb=d.bracket?.enabled?d.bracket:undefined,cs=capSeat(p),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
   const size=(v:number)=>plateInches(v,p.units),hx=heavyHex(db),washer=hx.washer,sleeve=g.sleeve!;
   // Grip: plate washer, sleeve, bearing plate and seat, from under the head to under the F436 washer.
   const plies=e.washerThickness+sleeve.length+bs.thickness,grip=wb||cs?`LENGTH ${size(boltLength(db,plies+seatT,p.units))}, GRIP ${size(plies+seatT)}`:`LENGTH TO SUIT SEAT, GRIP = ${size(plies)} + SEAT`;

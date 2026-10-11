@@ -10,6 +10,7 @@ import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
+import {usesTaperedHaunch} from '../engine/taperedHaunch';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {drawingLength,drawingElevation,electrodeClass,plateInches} from './drawingFormat';
 import {railPad} from '../engine/railSeat';
@@ -232,6 +233,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(p.capDesign&&p.section.kind==='cap'?[['CAP CHANNEL',`Fy = ${ksi(p.capDesign.Fy)}; ${p.capDesign.materialSource}`]]:[]),
   ...(d?[['PLATES, BARS, TIES',`Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`ASTM A513 OR A500 GR. C STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND BRACKETS AND TIES TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),['CRANE RAIL',`${d.rail.name}; Fy = ${ksi(d.rail.Fy)}`],...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
   ...(usesRolledBracket(p)?(()=>{const w=projectStub(p);return [['COLUMN BRACKETS',`ASTM A992 ${w.name}, Fy = ${ksi(w.input.Fy)}, Fu = ${ksi(w.input.Fu)}; ${w.seat?'SEAT PL AND ':''}STIFFENERS AS PLATES`]];})():[]),
+  ...(usesTaperedHaunch(p)&&d?[['COLUMN BRACKETS',`BUILT-UP TAPERED I HAUNCH PLATES, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}; ${p.existingColumn?.enabled&&!p.existingColumn.isNew?'FIELD WELDED TO EXISTING COLUMNS: VERIFY WELDABILITY':'SHOP WELDED'}`]]:[]),
   ...(p.existingColumn?.enabled&&p.existingColumn.isNew?[['NEW COLUMNS',`ASTM A992${p.existingColumn.shape?` ${p.existingColumn.shape}`:''}, Fy = ${ksi(p.existingColumn.Fy)}`]]:[]),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['BASE PLATES',`ASTM A572 GR. 50, Fy = ${ksi(p.columnBase.plate.Fy)}`],['ANCHOR RODS',`ASTM F1554 GR. ${p.columnBase.anchors.grade.split('-')[1]}, A563 HEAVY HEX NUTS; DG1 HOLES AND PLATE WASHERS`],['CONCRETE / REBAR',`f'c = ${ksi(p.columnBase.concrete.fc)}; EXPOSURE F0, S0, W1, C1 (ACI 318-19 TABLE 19.3.1.1: INTERIOR FOOTING IN SOIL; CONFIRM THE SULFATE CLASS WITH THE GEOTECHNICAL REPORT); ASTM A615 Fy = ${ksi(p.columnBase.footing.fy)}; NON-SHRINK GROUT ASTM C1107`]]:[]),
   // Only new bracing is furnished; existing bracing is checked and described in the existing building notes.

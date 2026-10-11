@@ -10,6 +10,7 @@ import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,bubble
 import {heavyHex,hexSide} from './heavyHex';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
+import {haunchUnderSeat} from './taperedHaunchSheet';
 import type {ViewRender} from './detailSheet';
 
 const inch=25.4;
@@ -28,7 +29,7 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
  const p=s.input,d=p.details!,e=activeEndBearing(p)!,b=p.section,bs=d.bearing,g=endBearingGeometry(p,e),ss=simpleSupportInput(p);
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,gap=ss.endGap,hx=heavyHex(db);
  // On a column cap the bolts pass through the cap plate, the seat.
- const cs=capSeat(p),wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),seatL=cs?.length??(wb?bracketSeat(wb).length:2*bs.length+gap+2*inch),ws=cs?undefined:rolledUnderSeat(p);
+ const cs=capSeat(p),wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),seatL=cs?.length??(wb?bracketSeat(wb).length:2*bs.length+gap+2*inch),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
  const extent=gap/2+bs.length+2.5*inch,k=drawingScale(Math.min(.36,290/(2*extent),80/(b.tf+2.5*inch+bs.thickness+seatT+1.5*inch),125/Math.max(b.bf,bs.width)),p.units),kk=k.pointsPerMm;
  const X0=770,X=(x:number)=>X0+x*kk,yB=118+(b.tf+2.5*inch)*kk,Y=(h:number)=>yB-h*kk;
  const yTop=Y(b.tf+2.5*inch),yBearing=yB+bs.thickness*kk,ySeat=yBearing+seatT*kk;
@@ -116,7 +117,7 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
 function continuousBearingView(s:CalculationSnapshot):ViewRender{
  const p=s.input,d=p.details!,e=activeEndBearing(p)!,b=p.section,bs=d.bearing,g=endBearingGeometry(p,e),all=continuousBearings(p);
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,hx=heavyHex(db);
- const cs=capSeat(p),wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),seatL=cs?.length??(wb?bracketSeat(wb).length:bs.length+2*inch),ws=cs?undefined:rolledUnderSeat(p);
+ const cs=capSeat(p),wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),seatL=cs?.length??(wb?bracketSeat(wb).length:bs.length+2*inch),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
  const locating=all.find(v=>v.role==='LOCATING')!,sliding=all.filter(v=>v.role==='SLIDING'),last=all.length,isEnd=(grid:number)=>grid===1||grid===last;
  const ends=sliding.filter(v=>isEnd(v.grid)),interior=sliding.filter(v=>!isEnd(v.grid)),shown=ends[0]??sliding[0];
  // Girder direction from the drawn sliding grid: +1 runs on from a left runway end, -1 from a right one, 0 runs through.
