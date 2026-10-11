@@ -70,7 +70,7 @@ function tie(p?:ProjectInput,attachment=false):{linework:string;title:string;not
   note='Review the selected angle, gussets, welds and eccentric load path. This option requires its own stiffness, movement and strength model.';
  }else if(kind==='flexible-plate'){
   drawing+=rect(87,43,105,31,true)+path('M114 83Q140 94 168 83',true,true)+label(138,21,'FLEXIBLE PLATE');
-  title='Flexible plate tieback';note='Review lateral force transfer and out-of-plane movement of the flexible plate. Its connection design model is still required.';
+  title='Flexible plate tieback';note='One plate in single shear on the saddle and column gussets: axial force, lap couple, weak-axis movement and fatigue.';
  }else if(kind==='bearing-link'||kind==='paired-links'){
   for(const y of kind==='paired-links'?[44,76]:[58])drawing+=path(`M99 ${y}H180`,true)+circle(96,y,7,true)+circle(183,y,7,true);
   drawing+=label(140,21,'PINS / LINKS');title=kind==='paired-links'?'Paired articulated links':'Articulated bearing link';

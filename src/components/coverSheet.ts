@@ -15,7 +15,7 @@ import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheet
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
 import {existingLayout} from '../engine/existingLayout';
-import {tieRelease,stiffenerTieGeometry} from '../engine/tieGeometry';
+import {tieRelease,stiffenerTieGeometry,flangeTieGeometry} from '../engine/tieGeometry';
 import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newColumnBracing';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
 
@@ -135,6 +135,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   d.fabrication.railAlignment,
   'SURVEY RAIL ALIGNMENT, GAUGE AND ELEVATION AFTER ERECTION AND BEFORE THE LOAD TEST; SUBMIT THE SURVEY.',
   ...(activeEndStop(p)?[`INSTALL THE RUNWAY END STOPS (${detailRef(detailTitles.endStop)}) AT ${stopLocation(p).toUpperCase()} BEFORE THE CRANE IS OPERATED OR LOAD TESTED.`]:[]),
+  // The flexible plate tie works only while it can flex: no forced fit, no welds or stiffeners on its clear length.
+  ...(flangeTieGeometry(p)?.plies===1?[`FLEXIBLE PLATE TIES (${detailRef(detailTitles.flangeTie)}): BOLT THE PLATE WITHOUT JACKING, HEATING OR SHIMMING TO FORCE FIT; DO NOT WELD, DRILL OR STIFFEN IT BETWEEN ITS BOLT GROUPS. INSPECT THE PLATE AND ITS BOLTS AT THE CRANE INSPECTION INTERVALS.`]:[]),
   'LOAD TEST THE CRANE PER ASME B30.2 AND THE MANUFACTURER. THE TEST LOAD SHALL NOT EXCEED 125% OF THE RATED LOAD; COORDINATE ANY TEST LOAD ABOVE THE RATED LOAD WITH THE ENGINEER OF RECORD BEFORE TESTING.'
  ].map(v=>v.toUpperCase())));
  // Column 2: criteria.

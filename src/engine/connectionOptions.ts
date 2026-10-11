@@ -20,7 +20,7 @@ export const tieOptions=[
  {id:'paired-bars',name:'Paired flat-bar ties',status:'Component checks available',basis:'AISC DG7 §11.2 · current custom plate connection',url:'https://ej.aisc.org/index.php/engj/article/view/777',description:'Symmetric double-cover bars at the top flange (both flanges without bolted end bearings), on direct flange saddles when enabled. The thin bars flex with end rotation and thermal travel; sleeved bolts in vertical slots at the column gusset release support deflection.',required:'Bar, bolt, weld and flange-saddle checks with imposed-movement fatigue and strength, slot travel and sleeve checks.'},
  {id:'single-angle',name:'Single-angle tieback',status:'Project design required',basis:'AISC Shapes Database v16.0 · DG7 §11.2 movement principles',url:'https://ej.aisc.org/index.php/engj/article/view/777',description:'Select a slotted top-flange column angle inspired by supplied Figure 14, or retain the earlier gusseted both-flange arrangement. The top-flange detail has a tie plate, bolted clip angle, shim pack and plate washers. Catalogue geometry does not establish capacity.',required:'Slotted clip: bolts, bearing/slip, washers, prying, top plate/cap welds and column effects. Gusseted option: eccentric force, buckling and weld groups. Both require lateral stiffness, movement and fatigue design.'},
  {id:'double-angle',name:'Double-angle tieback',status:'Project design required',basis:'AISC Shapes Database v16.0 · DG7 §11.2 movement principles',url:'https://ej.aisc.org/index.php/engj/article/view/777',description:'Select two slotted column angles straddling one top-flange tie plate, or retain the earlier paired gusseted members. The top-flange arrangement is a paired-angle variation inspired by supplied Figure 14; it provides no lower-flange tie or assigned capacity.',required:'Paired-angle load sharing, prying, slotted bolt groups or gusseted weld groups, lateral stiffness, imposed movement and fatigue. A stiffer pair does not establish girder-end rotation compatibility.'},
- {id:'flexible-plate',name:'Flexible plate tieback',status:'Project design required',basis:'AISC DG7 §11.2 / Fig. 11-1; Fisher & Van de Pas (2002), Fig. 1',url:'https://ej.aisc.org/index.php/engj/article/view/777',description:'A thin vertical plate between flange and column attachments. Intended to flex out of plane with girder-end movement. The illustrated plate is a concept, not a verified copy of the published connection.',required:'Tension/compression, lateral restraint stiffness, imposed-displacement bending, welded attachments and fatigue. Plate dimensions alone do not establish flexibility.'},
+ {id:'flexible-plate',name:'Flexible plate tieback',status:'Component checks available',basis:'AISC DG7 §11.2 / Fig. 11-1; Fisher & Van de Pas (2002), Fig. 1',url:'https://ej.aisc.org/index.php/engj/article/view/777',description:'One thin vertical plate, its plane across the runway, bolted in single shear to the girder gusset on a direct flange saddle and to a gusset on the column. Stiff across the runway, it flexes about its weak axis with girder end rotation and thermal travel; sleeved bolts in vertical slots at the column gusset release support deflection. An original detail following the published principle, not a copy of the published connection.',required:'Plate tension and compression, imposed-movement weak-axis bending with H1 and Category B fatigue, single-shear bolts with lap-couple tension, prying and slip, gusset, saddle, weld and column checks, slot travel and sleeve checks.'},
  {id:'bearing-link',name:'Single articulated bearing link',status:'Supplier design required',basis:'Gantrex single tieback; Molyneux PFSL / TBL link families',url:'https://www.gantrex.com/products/tieback-assemblies/',description:'A steel link with bearing eyes at each end, attached to individual girder and column clevises. Supplier examples accommodate girder movement while transferring lateral force. Geometry is generic and carries no supplier rating.',required:'Supplier tension/compression, stiffness, articulation and fatigue ratings; pins, clevises, welds and receiving steel. Both-flange placement shown here requires project review.'},
  {id:'paired-links',name:'Double articulated tieback',status:'Supplier design required',basis:'Gantrex double tieback / adjacent girder arrangement',url:'https://www.gantrex.com/products/tieback-assemblies/',description:'Separate links from adjacent simple-span girder ends to a shared column attachment. End columns have one active link. The generic model is not a manufacturer assembly.',required:'Shared column attachment under concurrent signed link forces; supplier bearing/pin ratings, articulation envelope, fatigue and separate lower-flange restraint.'},
 ] as const;
@@ -53,7 +53,9 @@ export function selectTieArrangement(d:RunwayDetails,kind:TieArrangement):Runway
  if(kind==='single-angle')brace.singleAngle??={...defaultSingleAngle};
  else if(kind==='double-angle')brace.doubleAngle??={...defaultDoubleAngle};
  else if(kind!=='paired-bars')brace.referenceDetail??={...defaultReferenceTie};
- return {...d,bracket:kind==='paired-bars'?d.bracket:{...(d.bracket??defaultBracket),enabled:true},brace};
+ // The flexible plate uses the flange-tie dimensions on the direct flange saddle and the same column face.
+ if(kind==='flexible-plate'&&brace.flangeAttachment)brace.flangeAttachment={...brace.flangeAttachment,enabled:true};
+ return {...d,bracket:kind==='paired-bars'||kind==='flexible-plate'?d.bracket:{...(d.bracket??defaultBracket),enabled:true},brace};
 }
 export const bracketModelDepth=(b:BracketInput)=>isExistingBracketType(bracketArrangement(b))?existingBracketProfile(b).depth:bracketArrangement(b)==='rolled-corbel'?(aiscShapeByName(b.corbelShape??'W12X40')?.d??12)*25.4:b.ribDepth;
 export function connectionOptionChecks(p:ProjectInput):CheckResult[]{
@@ -62,7 +64,7 @@ export function connectionOptionChecks(p:ProjectInput):CheckResult[]{
  const bracket=bracketOptions.find(o=>o.id===bracketArrangement(d.bracket))!;
  const tie=tieOptions.find(o=>o.id===tieArrangement(d))!;
  if(d.bracket?.enabled&&bracket.id!=='twin-rib'&&!isExistingBracketType(bracket.id))checks.push({id:'option-bracket-model',group:'Column bracket',title:`${bracket.name} · design model`,status:'unsupported',equation:'',note:bracket.required+' Preview geometry only; no capacity is assigned and the current twin-rib results are not reused.',referenceIds:['connection-options','tr13-bracket']});
- if(tie.id!=='paired-bars')checks.push({id:'option-tie-model',group:'Connections',title:`${tie.name} · design model`,status:'unsupported',equation:'',note:(topFlangeAngleData(p)?'Top-flange-only attachment inspired by supplied Figure 14. Check tie plate and angle strength, bolt slip/bearing, prying, slotted-hole and washer detailing, flange/cap weld fatigue, existing column local effects and imposed movement. Lower-flange restraint is not provided by this arrangement.':tie.required)+' No proprietary rating or existing flat-bar stiffness is assigned. Report generation remains blocked.',referenceIds:['connection-options',isAngleTie(tie.id)?'angle-tie-basis':tie.id==='flexible-plate'?'tieback-practice':'bearing-link-practice']});
+ if(tie.id!=='paired-bars'&&tie.id!=='flexible-plate')checks.push({id:'option-tie-model',group:'Connections',title:`${tie.name} · design model`,status:'unsupported',equation:'',note:(topFlangeAngleData(p)?'Top-flange-only attachment inspired by supplied Figure 14. Check tie plate and angle strength, bolt slip/bearing, prying, slotted-hole and washer detailing, flange/cap weld fatigue, existing column local effects and imposed movement. Lower-flange restraint is not provided by this arrangement.':tie.required)+' No proprietary rating or existing flat-bar stiffness is assigned. Report generation remains blocked.',referenceIds:['connection-options',isAngleTie(tie.id)?'angle-tie-basis':'bearing-link-practice']});
  return checks;
 }
 /** Static bolt probes can review this new drilled/bolted preview independently
@@ -78,7 +80,8 @@ export function validateConnectionOptions(p:ProjectInput):string[]{
   if(!shape)errors.push('details.bracket.corbelShape: select a valid AISC W-section.');
   else if(shape.bf*25.4>b.seatLength||shape.bf*25.4+2*b.rootWeld>b.receiver.width)errors.push('details.bracket: corbel flanges and root welds must fit on the seat and receiving column.');
  }
- if(tie!=='paired-bars'){
+ // The flexible plate is designed with the direct flange-tie family; its geometry is validated with it.
+ if(tie!=='paired-bars'&&tie!=='flexible-plate'){
   if(!b?.enabled)errors.push('details.brace: alternative tie previews require an enabled column bracket to locate the receiving face.');
   if(isAngleTie(tie)){
    const a=angleTie(d),setback=a.endSetback,ends=independentBearings(p);
@@ -120,15 +123,15 @@ export function validateConnectionOptions(p:ProjectInput):string[]{
    return errors;
   }
   if(tie==='paired-links'&&p.system!=='simple')errors.push('details.brace: a double articulated tieback requires separate simple-span girder ends. Use a single link for a continuous girder.');
-  const flexible=tie==='flexible-plate',rise=flexible?r.plateWidth:r.eyeDiameter+25.4;
+  const rise=r.eyeDiameter+25.4;
   const capDrop=p.section.kind==='cap'?Math.max(0,p.section.capDepth-p.section.capTw-p.section.tf):0;
-  if(b&&b.reach-p.section.bf/2-2*r.pinSetback<=(flexible?76.2:r.eyeDiameter))errors.push('details.brace: insufficient clear link/plate length between girder flange and column. Reduce attachment setback or increase bracket reach.');
+  if(b&&b.reach-p.section.bf/2-2*r.pinSetback<=r.eyeDiameter)errors.push('details.brace: insufficient clear link length between girder flange and column. Reduce attachment setback or increase bracket reach.');
   if((p.section.bf-p.section.tw)/2<=25.4)errors.push('details.brace: reference flange saddle requires more than 1 in clear flange outstand.');
   if(p.section.d-2*p.section.tf-capDrop-50.8<=2*rise)errors.push('details.brace: top and bottom reference tie assemblies overlap.');
   const ends=independentBearings(p),setback=d.brace.flangeAttachment?.longitudinalSetback??50.8;
-  const saddleLength=Math.max(flexible?r.plateThickness+38.1:r.eyeThickness+2*r.forkThickness+25.4,d.brace.flangeAttachment?.saddleLength??127);
+  const saddleLength=Math.max(r.eyeThickness+2*r.forkThickness+25.4,d.brace.flangeAttachment?.saddleLength??127);
   if(ends.some(e=>{const x=e.center+(e.end==='left'?-1:1)*setback;return x-saddleLength/2<e.start||x+saddleLength/2>e.finish;}))errors.push('details.brace: reference flange saddles must remain within their own girder end bearing regions.');
-  if(!flexible){
+  {
    if(r.pinSetback<.675*r.eyeDiameter+31.75)errors.push('details.brace: pin setback must fit the clevis and both root plates.');
    if(r.eyeDiameter<=1.5*r.pinDiameter+12.7)errors.push('details.brace: bearing eye must leave at least 1/4 in radial material outside the bearing insert.');
    if(r.linkDiameter>=r.eyeDiameter)errors.push('details.brace: link body must be smaller than the bearing eye.');

@@ -1,10 +1,21 @@
 import type {ProjectInput} from './types';
+import type {RunwayDetails} from './runwayDetails';
 import {independentBearings} from './simpleSupports';
 import {tieArrangement} from './connectionOptions';
 import {boltProperties} from './connectionStrength';
 import {existingColumnSection} from './existingColumn';
 import {activeEndBearing} from './endBearingInputs';
 
+/**
+ * Ties of the direct flange-tie family: two flat bars, one each side of the girder and column gussets, or one
+ * flexible plate on one face of the same gussets (AISC DG7 §11.2 flexible tieback). Both share the saddle,
+ * gussets, bolt groups and column-end release; only the plies differ.
+ */
+export const flangeTieFamily=(d?:RunwayDetails)=>{const k=tieArrangement(d);return k==='paired-bars'||k==='flexible-plate';};
+/** Plies at each tie: two flat bars in double shear, or one flexible plate in single shear. */
+export const tiePlies=(p:ProjectInput):1|2=>tieArrangement(p.details)==='flexible-plate'?1:2;
+/** Lap eccentricity of a single flexible plate, plate centroid to gusset mid-plane, mm; zero for the symmetric bars. */
+export const tieEccentricity=(p:ProjectInput)=>tiePlies(p)===1?(p.details!.brace.thickness+p.details!.brace.gussetThickness)/2:0;
 /** Flanges with paired-bar ties: the top flange only where bolted end bearings restrain the bottom flange at the seat. */
 export const tieSides=(p:ProjectInput):(1|-1)[]=>activeEndBearing(p)?[1]:[-1,1];
 
@@ -60,7 +71,7 @@ export const columnGussetExtension=(p:ProjectInput)=>{const r=tieRelease(p);retu
  */
 export function flangeTieGeometry(p:ProjectInput){
  const d=p.details,a=d?.brace.flangeAttachment;
- if(!d||tieArrangement(d)!=='paired-bars'||!a?.enabled||p.system!=='simple')return undefined;
+ if(!d||!flangeTieFamily(d)||!a?.enabled||p.system!=='simple')return undefined;
  const face=d.bracket?.enabled?d.bracket.reach:a.columnFace;if(!face)return undefined;
  const b=p.section,t=d.brace,c=t.connection;
  const barGap=tieBarGap(c.weldSize),barEnd=face-barGap,start=barEnd-t.length,connection=(c.rows-1)*c.pitch+2*c.edge;
@@ -83,10 +94,31 @@ export function flangeTieGeometry(p:ProjectInput){
   topDrop:topClear+t.width/2,bottomDrop:bottomClear+t.width/2,
   topCenter:b.d/2-b.tf-topClear-t.width/2,bottomCenter:-b.d/2+b.tf+bottomClear+t.width/2,
   // Clear bar length between the girder gusset and the column gusset ends.
-  gussetEnd,freeLength:t.length-2*connection-extension,
-  stations:independentBearings(p).map(e=>({...e,tieX:e.center+(e.end==='left'?-1:1)*a.longitudinalSetback}))};
+  gussetEnd,freeLength:t.length-2*connection-extension,plies:tiePlies(p),eccentricity:tieEccentricity(p),lapShare:lapShare(p,t.length-2*connection-extension,face-columnGussetStart,rootLength,topClear+t.width/2-a.saddleThickness),
+  // A single flexible plate lies on the gusset face toward its own girder end, away from the bearing stiffener.
+  stations:independentBearings(p).map(e=>({...e,tieX:e.center+(e.end==='left'?-1:1)*a.longitudinalSetback,plateSide:(e.end==='left'?-1:1) as -1|1}))};
 }
 
+/**
+ * Rotational stiffnesses about the vertical axis, per unit E, of the two gussets a single flexible plate laps: the
+ * column gusset as a cantilever of its projection L_g bending about its weak axis, E·h_g·t³/(12L_g); the girder
+ * gusset hanging from the saddle weld as a plate twisting over its depth a to the tie line, G·b·t³/(3a) with
+ * G = E/2.6 and b the saddle width.
+ */
+export function gussetRotation(p:ProjectInput,columnProjection:number,rootLength:number,girderArm:number){
+ const tg=p.details!.brace.gussetThickness;
+ return {column:columnGussetHeight(p)*tg**3/(12*columnProjection),girder:rootLength*tg**3/(2.6*3*girderArm)};
+}
+/**
+ * Share of a single plate's lap couple F·e taken by the plate itself. The couple acts at both laps in the same sense
+ * (single curvature); the plate ends rotate with the gussets they are clamped to: plate end stiffness 2EI_p/L for
+ * equal end rotations against the more flexible gusset. The gussets are checked for the whole couple.
+ */
+function lapShare(p:ProjectInput,free:number,columnProjection:number,rootLength:number,girderArm:number){
+ const t=p.details!.brace;if(tiePlies(p)!==1||free<=0)return 0;
+ const plate=2*t.width*t.thickness**3/12/free,k=gussetRotation(p,columnProjection,rootLength,girderArm);
+ return plate/(plate+Math.min(k.column,k.girder));
+}
 /** Clear gap from the bearing stiffener to the bars, and from the tied flange to the gusset, mm. */
 const stiffenerTieClearance=6.35;
 /**

@@ -95,11 +95,12 @@ function tieColumn(s:CalculationSnapshot){
 
 /** Transverse elevation of the top-flange tie, projected along the installed bolt axes. */
 export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleCut=false):ViewRender{
- const p=s.input,u=p.units,g=flangeTieGeometry(p)!;const b=p.section,t=p.details!.brace,a=g.attachment,c=t.connection,rel=tieRelease(p),col=tieColumn(s);
+ const p=s.input,u=p.units,g=flangeTieGeometry(p)!;const b=p.section,t=p.details!.brace,a=g.attachment,c=t.connection,rel=tieRelease(p),col=tieColumn(s),single=g.plies===1;
  // x is the left edge of the view: the girder half-width, the tie and the column flange ahead of a callout column.
  const scale=drawingScale(Math.min(.38,380/(g.face+col.flange+b.bf/2)),u),k=scale.pointsPerMm,xc=x+b.bf/2*k,X=(z:number)=>xc+z*k,Y=(v:number)=>y+v*k;
  const drop=g.topDrop,dim=(v:number)=>tieDim(v,u),sz=(v:number)=>tieSize(v,u),hole=boltProperties(c.grade,c.diameter).hole,hg=g.columnGusset;
  const barTop=drop-t.width/2,barBottom=drop+t.width/2,cap=b.kind==='cap',capDrop=cap?b.capDepth-b.capTw-b.tf:0,gap=3;
+ // A single flexible plate is seen on its near face, over the gussets; paired bars show the near bar.
  let svg=`<g data-view="flange-saddle-section">`;
  // Girder flange and web, broken below the tie.
  const webEnd=Y(barBottom+25.4);
@@ -130,8 +131,9 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
   svg+=circle(cx,cy,hole*k/2,'runway-line');
   if(end&&rel)svg+=verticalSlot(cx,cy,rel.slot*k,rel.width*k,'hidden-line')+circle(cx,cy,rel.od*k/2,'hidden-line');
  }
- // Release filler between a bar and the girder gusset, behind the near bar, so the bars stay parallel.
- if(rel)svg+=rect(X(g.start)+1.5,Y(barTop)+1.5,g.connection*k-3,t.width*k-3,'hidden-line');
+ // Release filler between a bar and the girder gusset, behind the near bar, so the bars stay parallel. A single plate
+ // has none: it flexes to take up the sleeve projection.
+ if(rel&&!single)svg+=rect(X(g.start)+1.5,Y(barTop)+1.5,g.connection*k-3,t.width*k-3,'hidden-line');
  // Hole layout of each bar end, chained from the bar end with the closing edge, under the bars and clear of
  // the web break; the bar length on the tier below. Extension lines start a gap clear of the parts.
  // The column-end chain starts at the gusset end, whose edge to the first slots may exceed the bar edge.
@@ -159,7 +161,7 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
   {at:[X(g.rootStart+g.rootLength*.3),Y(a.saddleThickness/2)],labels:[`SADDLE PL ${sz(a.saddleThickness)} X ${sz(a.saddleLength)} X ${sz(g.rootLength)}`]},
   {at:[X(g.rootStart+g.rootLength*.62),Y(0)],weld:saddleWeld,labels:[`SADDLE TO FLANGE, EACH END; ${detailRef(detailTitles.saddle)}`]},
   {at:[X(g.rootStart+g.rootLength*.46),Y(a.saddleThickness)],weld:gussetWeld,labels:[`GIRDER GUSSET PL ${sz(t.gussetThickness)} X ${sz(barBottom-a.saddleThickness)} X ${sz(g.gussetEnd-g.rootStart)}`,'TO SADDLE, BOTH FACES']},
-  {at:[X(g.columnGussetStart)-14,Y(barTop)],labels:[`2 FL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)}, ${sz(g.barGap)} CLR. TO COLUMN;`,`GIRDER END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC, ${sz(hole)} STD HOLES${rel?`;`:''}`,...(rel?[`${sz(rel.clearance)} FILLER (HIDDEN)`]:[])]},
+  {at:[X(g.columnGussetStart)-14,Y(barTop)],labels:single?[`FLEXIBLE PL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)}, ${sz(g.barGap)} CLR. TO COLUMN;`,`GIRDER END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC, SINGLE SHEAR,`,`${sz(hole)} STD HOLES; HEADS ON PLATE`]:[`2 FL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)}, ${sz(g.barGap)} CLR. TO COLUMN;`,`GIRDER END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC, ${sz(hole)} STD HOLES${rel?`;`:''}`,...(rel?[`${sz(rel.clearance)} FILLER (HIDDEN)`]:[])]},
   {at:[X(g.barEnd-g.connection*.5),cy0],labels:[...(rel?[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} PRETENSIONED`,`AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)};`,`${sz(rel.width)} X ${sz(rel.slot)} VERT. SLOTS IN GUSSET`]:[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC,`,`${sz(hole)} STD HOLES`]),`COLUMN GUSSET PL ${sz(t.gussetThickness)} X ${sz(hg)} X ${sz(g.columnGussetLength)}`]},
   {at:[X(g.face),cy0+3],weld:rootWeld,labels:col.isNew?['SHOP WELD COLUMN GUSSET TO',`${col.label} FLANGE; ${detailRef(detailTitles.tiePlan)}`]:[`COLUMN GUSSET TO ${g.receiver?'EXISTING':'COLUMN'}`,`${g.receiver?'COLUMN ':''}FLANGE${g.receiver?'':' BY OTHERS'} (DASHED); ${detailRef(detailTitles.tiePlan)}`]},
   ...capItem];
@@ -169,7 +171,8 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
  if(saddleCut){const xs=X(g.rootStart+g.rootLength/2);svg+=sectionCut([xs,Y(-b.tf-(cap?b.capTw:0))-4],[xs,Y(barBottom)+4],[-1,0],detailTitles.saddle,['a']);}
  const notesY=Math.max(bottom,overall)+17;
  svg+=text(x,notesY,rel?`SLOTS GIVE ${sz(rel.travel)} VERTICAL TRAVEL EACH WAY; DO NOT CLAMP THE COLUMN GUSSET`:'COLUMN END BOLTS PRETENSIONED IN STANDARD HOLES',8);
- svg+=text(x,notesY+16,cap?`TOP BAR CLEAR OF CAP BY ${sz(a.clearance)} MIN. / NO CAP HOLES OR CUTS AT THE TIE`:`TOP BAR ${sz(g.saddleClear)} CLEAR OF SADDLE / NO FLANGE HOLES OR CUTS AT THE TIE`,8);
+ const topPart=single?'TOP OF PLATE':'TOP BAR';
+ svg+=text(x,notesY+16,cap?`${topPart} CLEAR OF CAP BY ${sz(a.clearance)} MIN. / NO CAP HOLES OR CUTS AT THE TIE`:`${topPart} ${sz(g.saddleClear)} CLEAR OF SADDLE / NO FLANGE HOLES OR CUTS AT THE TIE`,8);
  return {svg:svg+'</g>',scale:scale.label};
 }
 /** Direct flange tie details on their own sheet. */
@@ -179,7 +182,7 @@ export function flangeTieSheetSvg(s:CalculationSnapshot,number='S-06'){
 /** Direct flange tie section, tie plan at a support, saddle section, and the tie notes. */
 export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const p=s.input,u=p.units,g=flangeTieGeometry(p);if(!g)return undefined;const d=p.details!,b=p.section,a=g.attachment,t=d.brace,c=t.connection,sz=(v:number)=>tieSize(v,u),dim=(v:number)=>tieDim(v,u);
- const rel=tieRelease(p),col=tieColumn(s),cap=b.kind==='cap';
+ const rel=tieRelease(p),col=tieColumn(s),cap=b.kind==='cap',single=g.plies===1;
  const plan=():ViewRender=>{
  const scale=drawingScale(.30,u),k=scale.pointsPerMm,cx=890,cy=150;
  const pair=g.stations.filter(v=>v.station===p.spans[0]),grid=p.spans[0];
@@ -198,7 +201,8 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
   if(cap)for(const z of [b.bf/2,b.capWidth/2-b.capTf])for(const side of [-1,1])svg+=line([end,Z(side*z)],[far,Z(side*z)],'hidden-line');
   for(const side of [-1,1])svg+=rect(sx-d.bearing.stiffenerThickness*k/2,side<0?stiffTop:Z(b.tw/2),d.bearing.stiffenerThickness*k,d.bearing.stiffenerWidth*k,'hidden-line');
   svg+=rect(tx-a.saddleLength*k/2,Z(g.rootStart),a.saddleLength*k,g.rootLength*k,'hidden-line');
-  for(const sign of [-1,1])svg+=plate(tx+(sign*(t.gussetThickness+t.thickness)/2-t.thickness/2)*k,t.thickness*k,g.start,g.barEnd);
+  // Paired bars each side of the gussets, or the single plate on the gusset face toward its own girder end.
+  for(const sign of single?[e.plateSide]:[-1,1])svg+=plate(tx+(sign*(t.gussetThickness+t.thickness)/2-t.thickness/2)*k,t.thickness*k,g.start,g.barEnd);
   svg+=plate(tx-t.gussetThickness*k/2,t.gussetThickness*k,g.rootStart,g.gussetEnd);
   svg+=rect(tx-t.gussetThickness*k/2,Z(g.columnGussetStart),t.gussetThickness*k,g.columnGussetLength*k,'runway-line');
   // Tie from the stiffener, and the stiffener from the girder end, each from the parts themselves.
@@ -221,7 +225,9 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  // Longitudinal section through the middle of the saddle, looking from the column toward the web: the flange
  // (and cap web), saddle, gusset, bars and filler are cut; the girder-end bolts nearer the web are beyond.
  const bs=drawingScale(1.25,u),k=bs.pointsPerMm,bx=200,by=462,X=(v:number)=>bx+v*k,Y=(v:number)=>by+v*k;
- const B=a.saddleLength,ts=a.saddleThickness,w=a.weldSize,tg=t.gussetThickness,tb=t.thickness,filler=rel?.clearance??0,db=c.diameter;
+ const B=a.saddleLength,ts=a.saddleThickness,w=a.weldSize,tg=t.gussetThickness,tb=t.thickness,filler=single?0:rel?.clearance??0,db=c.diameter;
+ // The cut is through the right girder at the first interior grid; a single plate lies on its gusset face toward that girder's end.
+ const side=single?(g.stations.filter(v=>v.station===p.spans[0]).at(-1)?.plateSide??1):1;
  const drop=g.topDrop,barTop=drop-t.width/2,barBottom=drop+t.width/2,half=B/2+38.1,topFace=-b.tf-(cap?b.capTw:0);
  let svg='<g data-view="saddle-longitudinal-section">';
  // Flange and cap web, cut and broken beyond the saddle.
@@ -234,34 +240,39 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  // Gusset with its fillets to the saddle, both faces.
  svg+=rect(X(-tg/2),Y(ts),tg*k,(barBottom-ts)*k,'runway-line');
  for(const side of [-1,1])svg+=filletSection(X(side*tg/2),Y(ts),side,w*k);
- // Bars clamp the gusset, with the release filler between the gusset and one bar.
- const left=-tg/2-tb,right=tg/2+filler;
- for(const x0 of [left,right])svg+=rect(X(x0),Y(barTop),tb*k,t.width*k,'runway-line');
+ // Bars clamp the gusset, with the release filler between the gusset and one bar; a single plate lies on one face.
+ const left=single&&side>0?-tg/2:-tg/2-tb,right=single&&side>0?tg/2:tg/2+filler;
+ for(const x0 of single?[side>0?tg/2:-tg/2-tb]:[left,right])svg+=rect(X(x0),Y(barTop),tb*k,t.width*k,'runway-line');
  if(filler)svg+=rect(X(tg/2),Y(barTop),filler*k,t.width*k,'runway-line');
  // Girder-end bolts beyond the cut: heavy hex head, F436 washer and nut; the shank is hidden in the plies.
  const rows=Array.from({length:c.rows},(_,i)=>g.start+c.edge+i*c.pitch),cutAt=g.rootStart+g.rootLength/2,beyond=rows.some(v=>v<cutAt);
- const head=.65*db,flats=1.5*db+3.175,washer={t:3.97,od:2*db+3.175},nut=db,stick=.4*db,outer=right+tb;
+ const head=.65*db,flats=1.5*db+3.175,washer={t:3.97,od:2*db+3.175},nut=db,stick=.4*db;
+ // Heads on the outer ply (the plate, for a single plate), F436 washer and nut on the other face. A mirrored stack
+ // (single plate on the -x face) is drawn by reflecting about the gusset mid-plane.
+ const near=single?(side>0?tg/2+tb:-tg/2-tb):left,far=single?(side>0?-tg/2:tg/2):right+tb,dir=Math.sign(far-near)||1,headFace=near,nutFace=far;
+ const outer=Math.max(near,far),lowest=Math.min(near,far);
  if(beyond)for(const sign of [-1,1]){
-  const yb=drop+sign*c.gauge/2;
-  svg+=rect(X(left-head),Y(yb-flats/2),head*k,flats*k,'runway-line');
-  svg+=rect(X(outer),Y(yb-washer.od/2),washer.t*k,washer.od*k,'runway-line')+rect(X(outer+washer.t),Y(yb-flats/2),nut*k,flats*k,'runway-line');
-  for(const e of [-1,1])svg+=line([X(left),Y(yb+e*db/2)],[X(outer),Y(yb+e*db/2)],'hidden-line')+line([X(outer+washer.t+nut),Y(yb+e*db/2)],[X(outer+washer.t+nut+stick),Y(yb+e*db/2)],'runway-line');
-  svg+=line([X(outer+washer.t+nut+stick),Y(yb-db/2)],[X(outer+washer.t+nut+stick),Y(yb+db/2)],'runway-line');
+  const yb=drop+sign*c.gauge/2,hx=(v:number)=>X(headFace-dir*v),nx=(v:number)=>X(nutFace+dir*v);
+  svg+=rect(Math.min(hx(0),hx(head)),Y(yb-flats/2),head*k,flats*k,'runway-line');
+  svg+=rect(Math.min(nx(0),nx(washer.t)),Y(yb-washer.od/2),washer.t*k,washer.od*k,'runway-line')+rect(Math.min(nx(washer.t),nx(washer.t+nut)),Y(yb-flats/2),nut*k,flats*k,'runway-line');
+  for(const e of [-1,1])svg+=line([X(lowest),Y(yb+e*db/2)],[X(outer),Y(yb+e*db/2)],'hidden-line')+line([nx(washer.t+nut),Y(yb+e*db/2)],[nx(washer.t+nut+stick),Y(yb+e*db/2)],'runway-line');
+  svg+=line([nx(washer.t+nut+stick),Y(yb-db/2)],[nx(washer.t+nut+stick),Y(yb+db/2)],'runway-line');
  }
+ const nutEnd=nutFace+dir*(washer.t+nut+stick);
  // Saddle length from its visible underside, the extension lines a gap clear of it and of the bolts.
  const dimY=Y(barBottom)+18;
  svg+=line([X(-B/2),Y(ts)+3],[X(-B/2),dimY+5])+line([X(B/2),Y(ts)+3],[X(B/2),dimY+5])+dimH(X(-B/2),X(B/2),dimY+5,dimY,dim(B));
  const endWeld:Weld={size:sz(w),length:weldLength(g.endWeldLength,u),both:false},legAt=(side:number):XY=>[X(side*(B/2+w/3)),Y(w/3)];
- const lx=X(-half)-150,rx=X(Math.max(half,outer+washer.t+nut+stick))+40;
+ const lx=X(Math.min(-half,nutEnd,headFace-dir*head))-150,rx=X(Math.max(half,nutEnd,headFace-dir*head))+40;
  // One symbol for each end fillet: the left end, and the right end in the callout column.
  svg+=weldLeader([legAt(-1)],[lx,Y(topFace)+6],endWeld,['SADDLE TO FLANGE, END 1','TRANSVERSE END FILLET']);
  const items:Callout[]=[
   {at:legAt(1),weld:endWeld,labels:['SADDLE TO FLANGE, END 2','TRANSVERSE END FILLET']},
   {at:[X(B/2)-6,Y(ts*.5)],labels:[`SADDLE PL ${sz(ts)} X ${sz(B)} X ${sz(g.rootLength)}`]},
   {at:[X(tg/2+w/3),Y(ts+w/3)],weld:{size:sz(w),length:weldLength(g.rootLength,u),both:true},labels:['GUSSET TO SADDLE']},
-  {at:[X(right+tb),Y(barTop+t.width*.08)],labels:[`2 FL ${sz(tb)} X ${sz(t.width)} TIE BARS; ${detailRef(detailTitles.flangeTie)}`]},
+  {at:[X(single?(side>0?tg/2+tb:-tg/2-tb):right+tb),Y(barTop+t.width*.08)],labels:[single?`FLEXIBLE PL ${sz(tb)} X ${sz(t.width)}; ${detailRef(detailTitles.flangeTie)}`:`2 FL ${sz(tb)} X ${sz(t.width)} TIE BARS; ${detailRef(detailTitles.flangeTie)}`]},
   ...(filler?[{at:[X(tg/2+filler/2),Y(drop)] as XY,labels:[`${sz(filler)} FILLER, CLASS B SURFACES`]}]:[]),
-  ...(beyond?[{at:[X(outer+washer.t+nut),Y(drop+c.gauge/2)] as XY,labels:[`${sz(db)} ${c.grade} SC BOLTS (BEYOND)`]}]:[]),
+  ...(beyond?[{at:[X(nutFace+dir*(washer.t+nut)),Y(drop+c.gauge/2)] as XY,labels:[single?`${sz(db)} ${c.grade} SC BOLTS (BEYOND),`:`${sz(db)} ${c.grade} SC BOLTS (BEYOND)`,...(single?['SINGLE SHEAR']:[])]}]:[]),
   {at:[X(half)-8,Y(topFace*.5)],labels:[cap?`${b.capCatalogueId??'CAP'} CAP WEB AND`:`${b.catalogueId??b.name} TOP FLANGE`,...(cap?[`${b.catalogueId??'W'} TOP FLANGE`]:[])]}];
  svg+=calloutColumn(items,rx,Math.min(columnTop(items),Y(topFace)-14));
  svg+=text(bx,dimY+28,'SADDLE EDGES ALONG THE RUNWAY ARE NOT WELDED.',8,'middle')+text(bx,dimY+42,'SADDLE STOPS CLEAR OF THE ROLLED ROOT AND BEARING STIFFENER WELDS.',8,'middle');
@@ -269,23 +280,24 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const support=s.checks.find(v=>v.id==='tie-move-support'),bottom=g.sides.includes(-1),stress=(v:number)=>format(v,'stress',u,0);
  // Flange holes the set does detail: bearing bolts through the bottom flange, stop bolts through the top flange.
  const drilled=[...(activeEndBearing(p)?['END BEARINGS']:[]),...(activeEndStop(p)?['END STOPS']:[])];
- const notes=[`TIES: ${dim(t.length)} LONG, ${bottom?'AT BOTH FLANGES':`AT THE TOP FLANGE. THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef(detailTitles.endBearing)})`}. SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS. BAR ENDS ${sz(g.barGap)} CLEAR OF THE COLUMN FLANGE.`,
+ const notes=[single?`FLEXIBLE PLATE TIES (AISC DG7 §11.2): ONE PL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)} ${bottom?'AT EACH FLANGE':`AT THE TOP FLANGE. THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef(detailTitles.endBearing)})`}, ON THE GUSSET FACE TOWARD THE GIRDER END. SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS. PLATE ENDS ${sz(g.barGap)} CLEAR OF THE COLUMN FLANGE.`:`TIES: ${dim(t.length)} LONG, ${bottom?'AT BOTH FLANGES':`AT THE TOP FLANGE. THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef(detailTitles.endBearing)})`}. SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS. BAR ENDS ${sz(g.barGap)} CLEAR OF THE COLUMN FLANGE.`,
   `GIRDER FORCE TRANSFERS THROUGH THE GUSSET AND SADDLE DIRECTLY TO THE FLANGE. DO NOT WELD THE GUSSET TO THE WEB. WELD THE SADDLE TO THE FLANGE ONLY WITH THE TWO ${sz(a.weldSize).replaceAll('"','')} TRANSVERSE END FILLETS, ONE ACROSS EACH END, ${dim(g.endWeldLength)} LONG, WITHOUT END RETURNS; DO NOT WELD THE SADDLE EDGES ALONG THE RUNWAY.`,
   col.isNew?`SHOP WELD COLUMN GUSSET TO THE ${col.name}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}.`:`FIELD WELD COLUMN GUSSET TO ${g.receiver?'EXISTING COLUMN':'THE COLUMN'}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}. VERIFY STEEL GRADE, WELDABILITY AND SURFACE CONDITION.`,
-  rel?`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)} LONG (FY ${stress(d.material.Fy)} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. PROVIDE A ${sz(rel.clearance)} FILLER (CLASS B SURFACES) AT THE GIRDER GUSSET SO THE BARS STAY PARALLEL.`:'COLUMN END: STANDARD HOLES; THE BARS ALSO FLEX WITH SUPPORT DEFLECTION.',
-  `TIE BARS FLEX OUT OF PLANE WITH GIRDER END ROTATION AND, AT SLIDING ENDS, THERMAL TRAVEL; SEE THE TIE MOVEMENT CHECKS.${support?.capacity!==undefined?` BRACKET BY OTHERS: VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${dim(support.capacity)} MAX.`:''}`,
-  `GIRDER END: STANDARD HOLES, PRETENSIONED ${c.grade} BOLTS, CLASS B FAYING SURFACES. NO HOLES OR CUTS THROUGH THE ${cap?'CAP OR ':''}W FLANGES${drilled.length?` EXCEPT THOSE DETAILED FOR THE ${drilled.join(' AND ')}`:''}.` ];
+  rel?single?`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)} LONG (FY ${stress(d.material.Fy)} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET, THE PLATE ON ONE SLEEVE END AND AN F436 WASHER ON THE OTHER. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. NO FILLER: THE PLATE FLEXES TO TAKE UP THE SLEEVE PROJECTION.`:`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)} LONG (FY ${stress(d.material.Fy)} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. PROVIDE A ${sz(rel.clearance)} FILLER (CLASS B SURFACES) AT THE GIRDER GUSSET SO THE BARS STAY PARALLEL.`:single?'COLUMN END: STANDARD HOLES; THE PLATE ALSO FLEXES WITH SUPPORT DEFLECTION.':'COLUMN END: STANDARD HOLES; THE BARS ALSO FLEX WITH SUPPORT DEFLECTION.',
+  `${single?'THE PLATE FLEXES ABOUT ITS WEAK AXIS':'TIE BARS FLEX OUT OF PLANE'} WITH GIRDER END ROTATION AND, AT SLIDING ENDS, THERMAL TRAVEL; SEE THE TIE MOVEMENT CHECKS.${single?` KEEP ITS CLEAR LENGTH FREE OF ATTACHMENTS AND WELDS. SET THE COLUMN GUSSET IN LINE WITH THE GIRDER GUSSET WITHIN ${sz(25.4/16)} ALONG THE RUNWAY; THE PLATE FLEXURE CHECK INCLUDES THAT OFFSET${rel?' AND HALF THE SLEEVE CLEARANCE':''}.`:''}${support?.capacity!==undefined?` BRACKET BY OTHERS: VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${dim(support.capacity)} MAX.`:''}`,
+  `GIRDER END: STANDARD HOLES, PRETENSIONED ${c.grade} BOLTS${single?' IN SINGLE SHEAR, HEADS ON THE PLATE':''}, CLASS B FAYING SURFACES. NO HOLES OR CUTS THROUGH THE ${cap?'CAP OR ':''}W FLANGES${drilled.length?` EXCEPT THOSE DETAILED FOR THE ${drilled.join(' AND ')}`:''}.` ];
  // The summary D/C is the largest strength and fatigue ratio. Minimum weld sizes, clearances, edge distances and
  // slenderness are detailing limits: one scores 1.00 whenever the provided size equals the limit, which would read
  // as a fully stressed connection. A saddle fillet at the minimum size is stated instead.
- const checks=s.checks.filter(v=>(v.group==='Flange attachment'||v.group==='Tie movement')&&v.status!=='excluded');
+ // The single plate's member, lap and bolt checks are rated with the flange attachment and movement checks.
+ const checks=s.checks.filter(v=>(v.group==='Flange attachment'||v.group==='Tie movement'||(single&&(v.id.startsWith('plate-tie')||/^tie-(bolt|prying|slip|bearing|net|block|weld)$/.test(v.id))))&&v.status!=='excluded'&&v.status!=='not-applicable');
  const rated=checks.filter(v=>v.utilization!==undefined&&v.quantity!=='length'&&v.id!=='tie-slenderness'),most=(list:typeof checks)=>Math.max(0,...list.map(v=>v.utilization??0));
  const strength=most(rated.filter(v=>!v.id.includes('fatigue'))),fatigue=most(rated.filter(v=>v.id.includes('fatigue')));
  const minimumWeld=checks.some(v=>v.id==='flange-tie-weld-minimum'&&v.status==='pass'&&(v.utilization??0)>=1-1e-9);
  const summary=rated.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue.toFixed(2)} FATIGUE${minimumWeld?`; MINIMUM FILLET SIZE GOVERNS THE ${sz(a.weldSize).replaceAll('"','')} SADDLE WELDS`:''})`:'';
- return {key:'flange-tie',name:'FLANGE TIES',views:[
+ return {key:'flange-tie',name:single?'FLEXIBLE PLATE TIES':'FLANGE TIES',views:[
   {title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,128,true)},
   {title:detailTitles.tiePlan,render:plan},
   {title:detailTitles.saddle,render:saddle}
- ],notes:(st:Style)=>[heading(st,'FLANGE TIE CONNECTION NOTES / LOCAL CHECKS'),...numbered(st,notes),paragraph(st,`TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT${summary}.`)]};
+ ],notes:(st:Style)=>[heading(st,single?'FLEXIBLE PLATE TIE NOTES / LOCAL CHECKS':'FLANGE TIE CONNECTION NOTES / LOCAL CHECKS'),...numbered(st,notes),paragraph(st,`${single?'PLATE, LAP, LOCAL':'TIE LOCAL'} AND MOVEMENT CHECKS: SEE CALCULATION REPORT${summary}.`)]};
 }
