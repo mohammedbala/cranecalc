@@ -1,6 +1,6 @@
 import type {ProjectInput} from '../../engine/types';
 import {Scene} from './scene';
-import {bracket,column,girders,rail,steelTop,supportGeometry,ties,wheel} from './parts';
+import {bracket,column,girders,rail,steelTop,stiffeners,supportGeometry,ties,wheel} from './parts';
 import {activeColumnCap} from '../../engine/columnCapInputs';
 import {defaultColumnBase} from '../../engine/columnBaseInputs';
 
@@ -17,7 +17,7 @@ export function supportAssemblyFigure(p:ProjectInput,o:{className?:string}={}){
   // The girder sits centered on the column: cap plate on the column top, stiffeners under it.
   const pl=cap.plate;S.at(0,c.d/2);column(S,g,'context',-pl.thickness-G.d*1.1,-pl.thickness);S.at();
   S.box(-pl.length/2,-pl.width/2,-pl.thickness,pl.length/2,pl.width/2,0,'context');
- }else{column(S,g,'context');bracket(S,p,g,'context');}
+ }else{column(S,g,'context');stiffeners(S,p,g,'context');bracket(S,p,g,'context');}
  if(base){
   // The column broken below the support; its base plate and footing at the foot.
   const zb=foot-brk-G.d*.8,pl=(base??defaultColumnBase).plate,ym=cap?0:-c.d/2;

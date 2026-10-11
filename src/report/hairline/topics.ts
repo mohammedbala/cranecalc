@@ -1,6 +1,6 @@
 import type {ProjectInput} from '../../engine/types';
 import {Scene,type RenderOptions,type Role,type Vec3} from './scene';
-import {beam,bracket,column,girders,keepers,railRun,steelTop,supportGeometry,ties,wheel,type SupportGeometry} from './parts';
+import {beam,bracket,column,girders,keepers,railRun,steelTop,stiffeners,supportGeometry,ties,wheel,type SupportGeometry} from './parts';
 import {cappedMechanics} from '../../engine/cappedMechanics';
 import {activeColumnCap} from '../../engine/columnCapInputs';
 import {defaultEndStop,stopBoltRows,stopLip,stopRailEnd} from '../../engine/endStopInputs';
@@ -130,7 +130,7 @@ function bracing(p:ProjectInput,g:SupportGeometry){
 function bracketFigure(p:ProjectInput,g:SupportGeometry){
  const S=new Scene(),b=p.details?.bracket,G=g.girder,enabled=!!b?.enabled&&g.support!=='column-cap',ts=g.seat.thickness;
  const ribBottom=-(b?.enabled?(g.support==='rolled-corbel'?ts+(G.d*.5):ts+(b.ribDepth??0)):ts);
- column(S,g,'context',Math.min(ribBottom,-ts)-G.d*.35,steelTop(g)+G.d*.15);
+ column(S,g,'context',Math.min(ribBottom,-ts)-G.d*.35,steelTop(g)+G.d*.15);stiffeners(S,p,g,'focus');
  bracket(S,p,g,enabled?'focus':'context');
  const h={...g,simple:true,gap:Math.max(g.gap,0)};girders(S,h,'context','context','focus',G.d*.9);
  const xb=-h.gap/2-g.bearing.length/2,y=g.reach,top=steelTop(g);

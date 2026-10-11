@@ -8,6 +8,7 @@ import {activeColumnCap} from '../../engine/columnCapInputs';
 import {activeEndBearing} from '../../engine/endBearingInputs';
 import {simpleSupportInput} from '../../engine/simpleSupports';
 import {railTopAboveSteel} from '../../engine/railSeat';
+import {columnStiffenerGeometry} from '../../engine/columnStiffeners';
 
 /**
  * The runway parts at one support, to the project's sizes, for the report's isometric figures. World: x along the
@@ -128,9 +129,10 @@ export function ties(S:Scene,p:ProjectInput,g:SupportGeometry,role:Role,both=fal
  }
  return S;
 }
-/** Column stiffeners at the bracket flange levels, when designed. */
-export function stiffeners(S:Scene,p:ProjectInput,g:SupportGeometry,role:Role,levels:number[]){
- const c=g.column;for(const z of levels)for(const side of [-1,1])S.box(side>0?c.tw/2:-c.bf/2+6,-c.d+c.tf,z-12,side>0?c.bf/2-6:-c.tw/2,-c.tf,z+12,role);
+/** Column stiffeners (continuity plates) at the bracket's force levels, when designed: a plate each side of the web. */
+export function stiffeners(S:Scene,p:ProjectInput,g:SupportGeometry,role:Role){
+ const x=columnStiffenerGeometry(p);if(!x||g.support==='column-cap')return S;
+ for(const l of x.levels)for(const side of [-1,1])S.box(side*x.tw/2,-x.tf-x.length,l.z-x.t/2,side*(x.tw/2+x.width),-x.tf,l.z+x.t/2,role);
  return S;
 }
 export const hasEndBearing=(p:ProjectInput)=>!!activeEndBearing(p);
