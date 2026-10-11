@@ -37,6 +37,20 @@ export type AdjacentBuildingInput=z.infer<typeof adjacentBuildingSchema>;
  * enabled, otherwise the catalogue shape, otherwise the entered plates.
  * Elevations are measured from the column base. Canonical units mm, N, MPa.
  */
+/**
+ * Field welding of new steel to an existing column: how its base metal is identified, its carbon equivalent, the
+ * specified minimum preheat (stored in °C) and whether the column carries dead load only while it is welded.
+ */
+export const existingWeldingSchema=z.object({
+ basis:z.enum(['mill-certificates','chemical-analysis','original-documents','not-established']),
+ grade:z.string().max(80),
+ carbonEquivalent:z.number().finite().nonnegative().max(2).optional(),
+ preheat:z.number().finite().min(-40).max(400),
+ deadLoadOnly:z.boolean(),
+ source:z.string().max(300)
+});
+export type ExistingWeldingInput=z.infer<typeof existingWeldingSchema>;
+export const defaultExistingWelding:ExistingWeldingInput={basis:'not-established',grade:'',preheat:10,deadLoadOnly:false,source:''};
 export const existingColumnSchema=z.object({
  enabled:z.boolean(),
  /** A new column designed here, with its base and footing; it carries no existing building loads. */
@@ -58,6 +72,8 @@ export const existingColumnSchema=z.object({
  /** New freestanding columns: the surveyed existing building beside the runway, drawn and checked for clearance. */
  adjacent:adjacentBuildingSchema.optional(),
  existing:z.object({D:effect,L:effect,Lr:effect,S:effect,R:effect,W:effect,E:effect}),
+ /** Welding new brackets, gussets or plates to this existing column. */
+ welding:existingWeldingSchema.optional(),
  source:z.string().max(500),confirmed:z.boolean()
 });
 export type ExistingColumnInput=z.infer<typeof existingColumnSchema>;
