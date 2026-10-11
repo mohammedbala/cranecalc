@@ -4,7 +4,7 @@ import {flangeTieGeometry} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
 import {createBracketCollector} from './bracketDesign';
-import {createSupportForceEnvelope,seatOffset} from './bracketForces';
+import {createSupportForceEnvelope,seatOffset,type SupportForceSet} from './bracketForces';
 import {createExistingBracketCollector} from './existingBracket';
 import { LateralTorsionBeam } from './lateralTorsion';
 import { beamSystem,momentAt } from './beam';
@@ -15,7 +15,7 @@ import type { FatigueDetailResult,InterfaceAction,RunwayDetailResults } from './
 import { railKeeperResponse } from './railKeeper';
 import { railTopAboveSteel } from './railSeat';
 import {tractionBays,railKeeperStations,girderSegments,independentBearings} from './simpleSupports';
-import {activeEndStop,stopBoltRows,stopEnds} from './endStopInputs';
+import {activeEndStop,craneAtStop,stopBoltRows,stopEnds} from './endStopInputs';
 import {activeEndBearing,locatingSupport} from './endBearingInputs';
 import {craneCombinations} from './aistLoads';
 import {runwayEnds} from './continuation';
@@ -96,22 +96,24 @@ export function automaticFatigueDetails(p:ProjectInput){
 }
 /**
  * Where the girder's longitudinal force reaches the supports. Simple bays: traction at the locating (left) end of
- * each occupied bay, either way; the crane stop force (AIST stop combinations) only on an end bay that carries a
- * stop, with the crane on it, toward the stop: bay 1 for a stop at the left runway end, the last bay for one at
- * the right end, which that bay delivers to its own locating end. A continuous girder with bolted bearings locates
- * at one support; otherwise the runway ends take it.
+ * each occupied bay, either way; the crane stop force (AIST stop combinations) only with the crane against a stop
+ * (craneAtStop), on the end bay that carries that stop, toward the stop: bay 1 for the stop at the left runway end,
+ * the last bay for the one at the right end, which that bay delivers to its own locating end. A continuous girder
+ * with bolted bearings locates at one support; otherwise the runway ends take it.
  */
 export function longitudinalPaths(p:ProjectInput,supports:number[]){
  const stops=new Set(craneCombinations(p.method).filter(c=>c.bumper>0).map(c=>`${p.method} ${c.id}`));
  const ends=stopEnds(p).length?stopEnds(p):runwayEnds(p),stopBays=[...(ends.includes('left')?[{bay:1,sign:-1}]:[]),...(ends.includes('right')?[{bay:p.spans.length,sign:1}]:[])];
  const L=supports.at(-1)!,locating=p.system==='continuous'&&activeEndBearing(p)?supports[locatingSupport(p)]:undefined;
+ // The stop the crane is against, toward which its stop force acts.
+ const struckBy=(e:RunwayCaseEvent)=>{const crane=e.cranes.find(c=>c.index===e.horizontalCrane),end=e.stop??(crane&&craneAtStop(p,crane.index,crane.origin));return stopBays.filter(v=>v.sign===(end==='left'?-1:end==='right'?1:0));};
  return {
   actions(e:RunwayCaseEvent):{bay:number;sign:number}[]{
    const stop=stops.has(e.combination);
-   if(p.system!=='simple')return stop?stopBays.map(v=>({bay:-1,sign:v.sign})):[{bay:-1,sign:-1},{bay:-1,sign:1}];
+   if(p.system!=='simple')return stop?struckBy(e).map(v=>({bay:-1,sign:v.sign})):[{bay:-1,sign:-1},{bay:-1,sign:1}];
    const occupied=tractionBays(p,e);
    if(!stop)return occupied.flatMap(bay=>[-1,1].map(sign=>({bay,sign})));
-   const struck=stopBays.filter(v=>occupied.includes(v.bay));
+   const struck=struckBy(e).filter(v=>occupied.includes(v.bay));
    return struck.length?struck:[{bay:-1,sign:1}];
   },
   continuousAt:(x:number)=>locating===undefined?Math.abs(x)<1e-6||Math.abs(x-L)<1e-6:Math.abs(x-locating)<1e-6,
@@ -272,26 +274,34 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   };
   // Longitudinal force delivered at a station by a concurrent set: its bays' locating ends, or the continuous girder's locating support.
   const delivered=(x:number,c:{sign:number;ends?:typeof endActions})=>c.ends?c.ends.reduce((a,v)=>a+v.longitudinal,0):e.kind==='strength'&&longitudinal.continuousAt(x)?c.sign*e.axial:0;
-  // The bracket takes the same concurrent sets as the support force envelope, each girder reaction over the
-  // inner 0.4 of its bearing plate.
+  // One whole concurrent set at a support: the girder end reactions (each at 0.8 of its bearing length from its
+  // girder end), their seat moment, the locating bearing's longitudinal force and the flange lateral forces of all
+  // girder ends at the grid. The bracket design force envelope tabulates these sets and the bracket checks take them.
+  const supportSet=(x:number,c:ReturnType<typeof concurrent>[number]):SupportForceSet=>{
+   const r=reactions.get(x)??{top:0,bottom:0},ends=c.ends??[],at=(v?:{x:number;r:number}[])=>v?.find(w=>Math.abs(w.x-x)<1e-6)?.r??0;
+   return {id:c.id,combination:e.combination,vertical:c.ends?ends.reduce((a,v)=>a+v.vertical,0):at(e.verticalReactions)+at(e.adjacentReactions)+c.couple,moment:ends.reduce((a,v)=>a+v.vertical*seatOffset(v,Lbr),0),
+    longitudinal:delivered(x,c),top:r.top,bottom:r.bottom,ends:ends.map(v=>({bay:v.bay,end:v.end,vertical:v.vertical,offset:seatOffset(v,Lbr),...(v.existing?{existing:true}:{})}))};
+  };
+  // The bracket takes the same concurrent sets, each girder reaction over the inner 0.4 of its bearing plate.
   // A bay carrying the force away from this support leaves its reactions unchanged: each distinct set once.
   // The seat also takes the locating bearing's longitudinal force and, through the bearing bolts, the bottom-flange
   // lateral force of the girder ends at the grid, at their bearings' mean offset along the runway.
   if(bracket||existingBracket)for(const x of supports){const distinct=new Set<string>();for(const c of concurrent(x)){
-   const loads=c.ends?c.ends.map(v=>({vertical:v.vertical,offset:seatOffset(v,Lbr),length:.4*Lbr})):[{vertical:e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0,offset:0}];
-   const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:delivered(x,c),bottom:reactions.get(x)?.bottom??0,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:0};
+   const f=supportSet(x,c),loads=f.ends.length?f.ends.map(v=>({vertical:v.vertical,offset:v.offset,length:.4*Lbr})):[{vertical:f.vertical,offset:0}];
+   const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:f.longitudinal,bottom:f.bottom,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:0};
    const key=[...loads.map(v=>v.vertical),horizontal.longitudinal].join();if(distinct.has(key))continue;distinct.add(key);
-   bracket?.observe(e.kind,c.id,x,loads,bin,horizontal);
-   existingBracket?.observe(e.kind,c.id,x,loads,bin);
+   bracket?.observe(e.kind,f.id,x,loads,bin,horizontal);
+   existingBracket?.observe(e.kind,f.id,x,loads,bin);
   }}
   if(e.kind==='strength'){
    for(const [x,r] of reactions){
     result.demands.brace=Math.max(result.demands.brace,Math.abs(r.top),Math.abs(r.bottom));
     const support=supports.indexOf(x);
-    for(const {id,sign,couple,ends} of concurrent(x)){
+    for(const c of concurrent(x)){
+     const {id,sign,couple,ends}=c;
      const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple,top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);
-     if(support>=0)forces.add(support,{id,combination:e.combination,vertical:ends?ends.reduce((sum,v)=>sum+v.vertical,0):item.vertical,moment:ends?ends.reduce((sum,v)=>sum+v.vertical*seatOffset(v,Lbr),0):0,longitudinal:item.longitudinal,top:r.top,bottom:r.bottom,ends:(ends??[]).map(v=>({bay:v.bay,end:v.end,vertical:v.vertical,offset:seatOffset(v,Lbr),...(v.existing?{existing:true}:{})}))});
+     if(support>=0)forces.add(support,supportSet(x,c));
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
       const k=`${e.combination}:${x}:${component}:${dir}`,old=interfaceExtremes.get(k);
       if(!old||dir*item[component]>dir*old[component])interfaceExtremes.set(k,{...item,controls:[`${component} ${dir===1?'max':'min'}`]});
