@@ -1,6 +1,6 @@
 import type {ReactNode} from 'react';
 import {aiscWShapes,aiscShapeByName} from '../data/aiscSections';
-import {defaultExistingColumn,defaultRunwaySeismic,existingLoadKeys,type ExistingColumnInput} from '../engine/existingColumnInputs';
+import {defaultAdjacentBuilding,defaultExistingColumn,defaultExistingLine,defaultRunwaySeismic,existingLoadKeys,type AdjacentBuildingInput,type ExistingColumnInput,type ExistingLineInput} from '../engine/existingColumnInputs';
 import {cantileverSystems} from '../engine/runwaySeismic';
 import {anchorGrades,barSizes,defaultColumnBase,type ColumnBaseInput} from '../engine/columnBaseInputs';
 import {defaultLongitudinalBracing,type BracingDesignInput,type LongitudinalBracingInput} from '../engine/longitudinalBracingInputs';
@@ -38,6 +38,7 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
    <div className="field-grid">{numeric('Strong-axis effective length Lcx',c.Lcx,v=>set({Lcx:v}),'length','Use K for the actual end conditions; at least 1.0H pinned-braced, 0.8H fixed-braced, 2.1H fixed-free.')}{numeric('Weak-axis effective length Lcy',c.Lcy,v=>set({Lcy:v}))}{numeric('Torsional effective length Lcz',c.Lcz,v=>set({Lcz:v}))}{!bracket&&numeric('Flange unbraced length Lb',c.Lb,v=>set({Lb:v}))}</div>
    <div className="field-grid"><label className="field"><span>Crane longitudinal force</span><select value={c.longitudinal} onChange={e=>set({longitudinal:e.target.value as ExistingColumnInput['longitudinal']})}><option value="bracing">Bracing</option><option value="column">This column</option></select></label>{numeric('Runway drift limit h / n',c.driftLimit,v=>set({driftLimit:v}),'ratio')}</div>
    {c.isNew&&<SeismicInputs column={c} set={set} numeric={numeric}/>}
+   {c.isNew&&<AdjacentBuildingInputs column={c} set={set} numeric={numeric}/>}
    {c.isNew?<ColumnBaseInputs project={project} update={update} numeric={numeric}/>:<>
    <div className="form-section-title"><span>02</span>Existing load effects at the governing section</div>
    <p className="form-note">Unfactored effects from the building's own analysis, per load type. Compression positive. Moments are added to the crane peaks without sign credit; W and E are applied in both directions.</p>
@@ -67,13 +68,41 @@ function SeismicInputs({column,set,numeric}:{column:ExistingColumnInput;set:(pat
  </>;
 }
 
+/** The surveyed existing building beside new freestanding columns: drawn on S-01 and checked for clearance. */
+function AdjacentBuildingInputs({column,set,numeric}:{column:ExistingColumnInput;set:(patch:Partial<ExistingColumnInput>)=>void;numeric:NumericField}){
+ const a=column.adjacent??defaultAdjacentBuilding,put=(patch:Partial<AdjacentBuildingInput>)=>set({adjacent:{...a,...patch}});
+ const lineInputs=(key:'A'|'B')=>{
+  const e=a[key],other=a[key==='A'?'B':'A'],place=(v:ExistingLineInput|undefined)=>put(key==='A'?{A:v}:{B:v}),edit=(patch:Partial<ExistingLineInput>)=>place({...(e??defaultExistingLine),...patch});
+  return <div key={key}>
+   <label className="checkbox-field"><input type="checkbox" checked={!!e} onChange={ev=>place(ev.target.checked?structuredClone(other??defaultExistingLine):undefined)}/>Existing columns beside grid line {key}</label>
+   {e&&<div className="field-grid">
+    {numeric(`Grid ${key} to the existing column line`,e.offset,v=>edit({offset:v}),'length','Across the runway, positive away from the crane span.',-1e15)}
+    {numeric('Existing column spacing',e.spacing,v=>edit({spacing:v}),'length','Zero puts an existing column at every runway grid.',0)}
+    {numeric(e.spacing>0?'First existing column from grid 1':'Existing columns off their runway grids',e.start,v=>edit({start:v}),'length','Along the runway, positive toward grid 2.',-1e15)}
+    <label className="field"><span>Existing column section</span><select value={aiscShapeByName(e.shape)?e.shape:''} onChange={ev=>{const w=aiscShapeByName(ev.target.value);edit(w?{shape:w.name,d:w.d*25.4,bf:w.bf*25.4}:{shape:''});}}><option value="">Other (enter its size)</option>{aiscWShapes.map(w=><option key={w.name} value={w.name}>{w.name}</option>)}</select></label>
+    {!aiscShapeByName(e.shape)&&<>{numeric('Column depth across the runway',e.d,v=>edit({d:v}))}{numeric('Column width along the runway',e.bf,v=>edit({bf:v}))}</>}
+    {numeric('Existing footing across the runway',e.footing.L,v=>edit({footing:{...e.footing,L:v}}),'length','Zero where it is not known: the footing clearance check then stays incomplete.',0)}
+    {numeric('Existing footing along the runway',e.footing.B,v=>edit({footing:{...e.footing,B:v}}),'length',undefined,0)}
+   </div>}
+  </div>;
+ };
+ return <>
+  <div className="form-section-title"><span>03</span>Existing building beside the runway</div>
+  <label className="checkbox-field"><input type="checkbox" checked={a.enabled} onChange={e=>put({enabled:e.target.checked})}/>Show the surveyed existing columns and footings and check the clearances to them</label>
+  <p className="form-note">The existing columns and footings beside each runway grid line are drawn dashed on the runway plan and typical section, with an enlarged plan at the least clearance. The new columns, brackets and girders are checked against the ASCE 7 §12.12.3 separation above, and the new footings against the least clear distance below. Walls, girts and other framing remain field verified.</p>
+  {a.enabled&&<>{lineInputs('A')}{lineInputs('B')}
+   <div className="field-grid">{numeric('Least clear distance between footings',a.footingClear,v=>put({footingClear:v}),'length','In plan, between a new and an existing footing.',0)}</div>
+   <label className="field"><span>Source of the existing building survey</span><input value={a.source} placeholder="Survey or record drawings of the existing columns and footings" onChange={e=>put({source:e.target.value})}/></label></>}
+ </>;
+}
+
 /** Base plate, anchor rods and spread footing of a new column. */
 function ColumnBaseInputs({project,update,numeric}:{project:ProjectInput;update:(fn:(p:ProjectInput)=>void)=>void;numeric:NumericField}){
  const b=project.columnBase??defaultColumnBase;
  const set=(patch:Partial<ColumnBaseInput>)=>update(p=>{p.columnBase={...(p.columnBase??structuredClone(defaultColumnBase)),...patch};});
  const part=<K extends 'plate'|'anchors'|'concrete'|'footing'|'soil'>(key:K,patch:Partial<ColumnBaseInput[K]>)=>set({[key]:{...b[key],...patch}} as Partial<ColumnBaseInput>);
  return <>
-  <div className="form-section-title"><span>03</span>Base plate, anchor rods and footing</div>
+  <div className="form-section-title"><span>04</span>Base plate, anchor rods and footing</div>
   <label className="checkbox-field"><input type="checkbox" checked={b.enabled} onChange={e=>set({enabled:e.target.checked})}/>Design the base plate, anchor rods and spread footing of the new column</label>
   <p className="form-note">AISC Design Guide 1 base plate, ACI 318-19 Chapter 17 headed cast-in rods in two rows across the column depth, and a concentric spread footing for soil bearing, overturning, sliding, shear and flexure. N runs along the column depth. The plate sits on grout on the footing; when a top-of-rail elevation is entered, the seat must put the rail there from the column base.</p>
   {b.enabled&&<>

@@ -9,7 +9,7 @@ import { emptyAistInputs,emptyCraneDesign } from './aistLoads';
 import type { ProjectInput } from './types';
 import type { LapConnection,RunwayDetails } from './runwayDetails';
 import {defaultSimpleSupport} from './simpleSupports';
-import {defaultExistingColumn} from './existingColumnInputs';
+import {defaultExistingColumn,defaultExistingLine} from './existingColumnInputs';
 import {defaultBracingDesign,defaultLongitudinalBracing} from './longitudinalBracingInputs';
 import {defaultColumnBase} from './columnBaseInputs';
 import {columnBaseElevation} from './columnBase';
@@ -153,7 +153,10 @@ export function newColumnDemonstrationProject():ProjectInput {
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,isNew:true,shape,Fy:50*ksi,Fu:65*ksi,height:top,seatElevation:seat,
   strong:{base:'fixed',top:'free'},weak:{base:'fixed',top:'braced'},Lcx:2.1*top,Lcy:top,Lcz:top,Lb:top,longitudinal:'bracing',driftLimit:240,source:'New column designed here',confirmed:true,
   seismic:{enabled:true,sdc:'B',SDS:.2,system:'ordinary',Ie:1,rho:1,source:'Fictitious site data: SDS 0.20, SD1 0.08, Site Class D, Risk Category II, SDC B',
-   building:{drift:1.5*inch,source:'Fictitious original building report: maximum inelastic displacement 1.5 in at the runway level'}}};
+   building:{drift:1.5*inch,source:'Fictitious original building report: maximum inelastic displacement 1.5 in at the runway level'}},
+  // The existing building's W12X40 frame columns stand 6 ft outboard of each runway grid line, on the same grids.
+  adjacent:{enabled:true,A:{...defaultExistingLine,offset:6*foot,footing:{L:4*foot,B:4*foot}},B:{...defaultExistingLine,offset:6*foot,footing:{L:4*foot,B:4*foot}},footingClear:6*inch,
+   source:'Fictitious survey SV-02: existing column faces located at every grid, footings by test pits at grids 1 and 3'}};
  p.columnBase=base;
  p.longitudinalBracing={...p.longitudinalBracing!,height:seat,existing:{W:0,E:0},source:'Fictitious new crane-level rod X-bracing between the new columns at grid lines 2-3; no building wind or seismic on this line',confirmed:true,
   // Clevis rods in the middle span, a W8X24 strut on the column line and the bracket seats welded to the columns.

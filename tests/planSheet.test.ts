@@ -7,7 +7,7 @@ import { defaultFraming, framingSchema } from '../src/components/framingSettings
 import { reportHtml } from '../server/report';
 import {feetInches,plateInches,drawingScale} from '../src/components/drawingFormat';
 import {structuralGeneralNotes} from '../src/components/structuralNotes';
-import {demonstrationProject} from '../src/engine/demonstration';
+import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 import {sheetDrawingScale,sheetFormat} from '../src/components/sheetGraphics';
 
 let snapshot: CalculationSnapshot;
@@ -121,6 +121,17 @@ describe('ARCH D arrangement sheet', () => {
       expect(sheet).toContain('data-stamp="blank"');expect(sheet).toContain('CHECKER');expect(sheet).toContain('Checker name');
       expect(sheet).toContain('&lt;script&gt;ORIGINATOR&lt;/script&gt;');expect(sheet).not.toContain('<script>');
       expect(sheet).not.toMatch(/NaN|Infinity/);
+    }
+  });
+  it('breaks the existing columns on the girder elevation clear above the top of rail, off the T.O.R. target',()=>{
+    for(const p of [demonstrationProject(),cappedDemonstrationProject()]){
+      const svg=planSheetSvg({...snapshot,input:p}),elevation=svg.split('<g data-view="elevation">')[1].split('<g data-view="typical-section">')[0];
+      const tor=Number(/data-elevation-datum="top-of-rail"><line[^>]*y1="([\d.]+)"/.exec(elevation)![1]);
+      // Horizontal break symbols above the rail: one on each column where it continues to the roof.
+      const breaks=[...elevation.matchAll(/<polyline class="annotation" points="([^"]+)"\/>/g)].map(m=>m[1].split(' ').map(v=>Number(v.split(',')[1]))).filter(ys=>Math.max(...ys)-Math.min(...ys)<10);
+      const above=breaks.filter(ys=>Math.min(...ys)<tor);
+      expect(above).toHaveLength(p.spans.length+1);
+      for(const ys of above)expect(Math.max(...ys)).toBeLessThan(tor-6);
     }
   });
 

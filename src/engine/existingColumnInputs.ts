@@ -6,6 +6,32 @@ const support=z.object({base:z.enum(['pinned','fixed']),top:z.enum(['braced','fr
 export const existingLoadKeys=['D','L','Lr','S','R','W','E'] as const;
 export type ExistingLoadKey=typeof existingLoadKeys[number];
 /**
+ * A surveyed existing building column line beside one runway grid line of new freestanding columns, in plan.
+ * Across the runway the offset is measured from the runway grid line, positive away from the crane span; along
+ * it stations are from runway grid 1, positive toward grid 2. The existing column's depth runs across the runway.
+ */
+export const existingLineSchema=z.object({
+ offset:num,
+ /** Existing column spacing along the runway; zero puts an existing column at every runway grid. */
+ spacing:z.number().finite().nonnegative(),
+ /** First existing column from grid 1; with zero spacing, each existing column's offset from its runway grid. */
+ start:num,
+ shape:z.string().max(30),
+ d:pos,bf:pos,
+ /** Existing footing across (L) and along (B) the runway, concentric with the column; zero where not known. */
+ footing:z.object({L:z.number().finite().nonnegative(),B:z.number().finite().nonnegative()})
+});
+export type ExistingLineInput=z.infer<typeof existingLineSchema>;
+/** The existing building next to a new freestanding runway, from survey: its column lines beside grids A and B. */
+export const adjacentBuildingSchema=z.object({
+ enabled:z.boolean(),
+ A:existingLineSchema.optional(),B:existingLineSchema.optional(),
+ /** Least clear distance in plan between a new and an existing footing. */
+ footingClear:z.number().finite().nonnegative(),
+ source:z.string().max(300)
+});
+export type AdjacentBuildingInput=z.infer<typeof adjacentBuildingSchema>;
+/**
  * A surveyed existing building column that receives a runway support. The
  * column section is the bracket's receiving column when a bracket is
  * enabled, otherwise the catalogue shape, otherwise the entered plates.
@@ -26,6 +52,8 @@ export const existingColumnSchema=z.object({
  seismic:z.object({enabled:z.boolean(),sdc:z.enum(['A','B','C','D','E','F']),SDS:z.number().finite().nonnegative(),system:z.enum(['ordinary','special']),Ie:pos,rho:pos,source:z.string().max(300),
   /** Maximum inelastic displacement δM of the existing building at the runway, for the §12.12.3 separation; zero when not known. */
   building:z.object({drift:z.number().finite().nonnegative(),source:z.string().max(300)}).optional()}).optional(),
+ /** New freestanding columns: the surveyed existing building beside the runway, drawn and checked for clearance. */
+ adjacent:adjacentBuildingSchema.optional(),
  existing:z.object({D:effect,L:effect,Lr:effect,S:effect,R:effect,W:effect,E:effect}),
  source:z.string().max(500),confirmed:z.boolean()
 });
@@ -37,3 +65,6 @@ export const defaultExistingColumn:ExistingColumnInput={enabled:false,shape:'W14
  Lcx:24*foot,Lcy:8*foot,Lcz:8*foot,Lb:8*foot,longitudinal:'bracing',driftLimit:240,
  existing:{D:{...zero},L:{...zero},Lr:{...zero},S:{...zero},R:{...zero},W:{...zero},E:{...zero}},source:'',confirmed:false};
 export const defaultRunwaySeismic:NonNullable<ExistingColumnInput['seismic']>={enabled:false,sdc:'B',SDS:.25,system:'ordinary',Ie:1,rho:1,source:''};
+// W12X40 existing columns 6 ft outboard of the runway grid on 4 ft square footings: an illustrative start for the survey.
+export const defaultExistingLine:ExistingLineInput={offset:6*foot,spacing:0,start:0,shape:'W12X40',d:11.9*inch,bf:8.01*inch,footing:{L:4*foot,B:4*foot}};
+export const defaultAdjacentBuilding:AdjacentBuildingInput={enabled:false,A:{...defaultExistingLine,footing:{...defaultExistingLine.footing}},B:{...defaultExistingLine,footing:{...defaultExistingLine.footing}},footingClear:6*inch,source:''};
