@@ -12,6 +12,8 @@ import {references} from '../src/engine/references';
 import {capAngleTopic,capAngleTitles} from '../src/components/capAngleSheet';
 import {checkFigure} from '../src/components/checkFigures';
 import {compactReport} from '../src/report/compactReport';
+import {buildAlternativeTies} from '../src/components/alternativeTieGeometry';
+import * as THREE from 'three';
 import {loadPathFigure} from '../src/report/designSummary';
 import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
 
@@ -139,6 +141,15 @@ describe('cap tieback angle: components hand-checked on the capped demonstration
   expect(parts.station).toMatchObject({bay:1,end:'right'});close(parts.station!.offsetFromColumn/inch,-4,1e-6);
   expect(parts.boxes.some(b=>b.kind==='stiffener')).toBe(false);expect(capAngleTieParts(p,{stiffener:true})!.boxes.some(b=>b.kind==='stiffener')).toBe(true);
   expect(parts.welds[0]).toMatchObject({bothSides:true});close(parts.welds[0].size/inch,.3125,1e-9);
+  // The 3D viewer draws the same parts (not the generic reference tieback): the tie plate on the long leg at the
+  // top of the cap, the end plate against the modeled column face.
+  const model=buildAlternativeTies(p,20*inch/1000,new THREE.MeshBasicMaterial(),new THREE.LineBasicMaterial());
+  expect(model.name).toBe('cap-angle-ties');
+  const meshes=model.children.filter(o=>o instanceof THREE.Mesh) as THREE.Mesh[],fam=(f:string)=>meshes.filter(m=>m.userData.part?.family===f);
+  expect(fam('Cap tieback tie plate')).toHaveLength(g.stations.length);expect(fam('Cap tieback angle')).toHaveLength(2*g.stations.length);
+  const plate=fam('Cap tieback tie plate')[0],bounds=new THREE.Box3().setFromObject(plate),top=(p.section.d/2+p.section.capTw)/1000;
+  close(bounds.max.y,top+.5*inch/1000,1e-6);close(bounds.max.z,(20-.75)*inch/1000,1e-6);
+  expect(meshes.filter(m=>m.userData.part?.weld?.kind==='fillet')).toHaveLength(2*g.stations.length);
  });
 });
 
