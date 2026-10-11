@@ -54,6 +54,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   rail:{name:`${toBeEntered} rail designation and supplier`,headWidth:up(.55*h,1.5875),headThickness:up(.3*h,1.5875),baseWidth:up(h,1.5875),baseThickness:up(.17*h,1.5875),webThickness:up(.12*h,1.5875),Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:`${toBeEntered} rail pad rating source`,
    padThickness:.25*inch,padWidth:up(h,1.5875),
    // Keeper under 4 in long (AISC Table A-3.1 Category D at the flange), 1/16 in clear of the rail-base toe, lip overlapping 1/2 in.
+   // 5/16 in fillets: the end fillets (1 11/16 in, anchor 1 1/2 in) are over four weld sizes long (AISC 360-16 J2.2b), and the
+   // 1/2 in anchor notch leaves 1/4 in of flat notch end beyond its 1/4 in radius corner holes.
    clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.3125*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1*inch,jointPlateHeight:up(.55*h,1.5875),jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
   criteria:{twistLimit:.005,railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,

@@ -58,6 +58,11 @@ export function transverseFilletFatigue(thickness:number,weld:number,cycles:numb
 }
 /** Table J2.4: use the thicker joined part; inches converted to mm. */
 export function minimumFillet(thickerPart:number){return (thickerPart<=6.35?1/8:thickerPart<=12.7?3/16:thickerPart<=19.05?1/4:5/16)*25.4;}
+/**
+ * J2.2b(c): a fillet designed for strength is at least four times its size long, or else its effective size
+ * is taken as no more than one quarter of its length.
+ */
+export function filletEffectiveSize(size:number,length:number){return Math.min(size,Math.max(0,length)/4);}
 /** Two parallel fillet-weld lines on x=+-g/2, from y=-L/2 to +L/2.
  * Evaluates the four endpoints; the norm of the affine elastic stress field has
  * its maximum there. No directional-strength increase or plastic redistribution.

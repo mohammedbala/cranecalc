@@ -30,8 +30,11 @@ export function demonstrationDetails():RunwayDetails{return {
  end:{...lap(),rows:4,gauge:2.875*inch,edge:1.25*inch,thickness:.75*inch,weldSize:.4375*inch,weldLength:11.5*inch,projection:1.5*inch},
  bearing:{width:12*inch,length:12.5*inch,thickness:1*inch,stiffenerWidth:5*inch,stiffenerThickness:1*inch,cope:1*inch,weldSize:.3125*inch},
  rail:{name:'Demo R-6 crane rail · idealized plate geometry',headWidth:3*inch,headThickness:1.25*inch,baseWidth:6*inch,baseThickness:.75*inch,webThickness:.75*inch,Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:'Fictitious RP-01 polyurethane crane-rail pad; allowable compression per fictitious supplier rating sheet RP-01',padThickness:.125*inch,padWidth:6*inch,
-  // Keeper: 3/4 in lip over a 2 in body, 1/16 in clear of the rail-base toe, 1/2 in lip overlap; 1/2 in fillets on the outer face and both ends.
-  clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.5*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1.25*inch,jointPlateHeight:3.875*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+  // Keeper: 3/4 in lip over a 2 3/8 in body, 1/16 in clear of the rail-base toe, 1/2 in lip overlap; 3/8 in fillets on the
+  // outer face and both ends. The end fillets (2 in, anchor 1 7/8 in) are over four weld sizes long (AISC 360-16 J2.2b),
+  // and the keeper and its outer fillet fit a 12 in flange. 1/2 in anchor notch: the anchor keeper bears on 1/4 in of
+  // flat notch end beyond the 1/4 in radius corner holes.
+  clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2.375*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.375*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1.25*inch,jointPlateHeight:3.875*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
  criteria:{twistLimit:.005,railLateralLimit:400,railGauge:40*foot+.5*inch,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
  fatigueDetails:[
   {id:'F1',name:'Rolled bottom flange at midspan',x:12.5*foot,point:'bottom-left',category:'A',reference:'AISC Table A-3.1, 1.1 · plain rolled base metal'},
@@ -120,10 +123,11 @@ export function cappedDemonstrationProject():ProjectInput {
  // ahead of the front bolts (on a 12 in base plate, so both bolt rows stay put) keep the heads clear of the welds.
  Object.assign(p.details!.endStop!,{setback:6.75*inch,base:{length:12*inch,width:9*inch,thickness:.75*inch},face:{thickness:.75*inch,height:15*inch},stiffener:{thickness:.5*inch,length:8.5*inch,spacing:2.75*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.75*inch,edge:1.5*inch},source:'Fictitious supplier data CAP-CS-02: bumper force, bumper centerline height and contact diameter'});
  p.details!.end.weldSize=.3125*inch;p.details!.end.gauge=2.5*inch;p.details!.bearing.weldSize=.3125*inch;
- // Light crane: the rail bears directly on the cap web, without a pad. Keeper 1/2 in lip over a 1 in body,
- // 3/8 in lip overlap; 5/16 in fillets on the outer face and both ends; 5/16 in anchor notch.
+ // Light crane: the rail bears directly on the cap web, without a pad. Keeper 1/2 in lip over a 1 5/8 in body,
+ // 3/8 in lip overlap; 1/4 in fillets on the outer face and both ends, the end fillets (1 3/8 in, anchor 1 1/8 in)
+ // over four weld sizes long (AISC 360-16 J2.2b); 1/2 in anchor notch, 1/4 in flat bearing beyond its corner holes.
  p.aist!.railPad=false;
- Object.assign(p.details!.rail,{clipWidth:3.875*inch,clipThickness:.5*inch,clipBodyWidth:inch,clipClearance:inch/16,clipProjection:.4375*inch,clipWeld:.3125*inch,anchorNotch:.3125*inch});
+ Object.assign(p.details!.rail,{clipWidth:3.875*inch,clipThickness:.5*inch,clipBodyWidth:1.625*inch,clipClearance:inch/16,clipProjection:.4375*inch,clipWeld:.25*inch,anchorNotch:.5*inch});
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';
  p.details!.fabrication.welding+=' Cap: 5/16 continuous fillet each W top-flange edge; 5-ft minimum development each end. Full cap bearing contact required. Bearing stiffeners CJP to W top flange, bottom fitted.';
  p.notes+=' Separate capped example: 2-ton crane on W24X94 + C15X33.9, centered rail, continuous cap welds and full contact. This is not a substitute section for the 10-ton demonstration.';
