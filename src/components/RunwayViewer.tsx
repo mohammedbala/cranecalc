@@ -21,6 +21,7 @@ import { buildReferenceFraming,newColumnFraming } from './referenceFraming';
 import { buildRunwayDetails, createHardwareBuilder, holeRimGeometry, type Hole, type PartInfo } from './connectionDetails';
 import { buildReferenceStructure, cloneOppositeRunway } from './referenceStructure';
 import {railKeeperStations} from '../engine/simpleSupports';
+import {buildGirderSplices} from './spliceGeometry3d';
 import {independentBearingSettings,buildIndependentSupports} from './independentSupportGeometry';
 import type { FrameStyle } from './metalBuildingGeometry';
 import { defaultFraming, type FramingSettings } from './framingSettings';
@@ -97,6 +98,8 @@ export default function RunwayViewer({input,snapshot,expanded=false,framing,setF
   if(input.system==='simple')group.add(buildIndependentSupports(input,reference?.columnFace??.65,plateMaterial,framingEdges,hardware,true,weldMaterial));
   else if(tieArrangement(input.details)!=='paired-bars')group.add(buildAlternativeTies(input,reference?.columnFace??.65,plateMaterial,framingEdges,weldMaterial,hardware));
   group.add(buildRunwaySteel(input,{steel,cap,rail,weld:weldMaterial,edge:framingEdges},runwayDetails?.railHoles,reference?.girderBoltHoles));
+  // Girder field splices: plates and pretensioned bolts at each joint.
+  if(input.details)group.add(buildGirderSplices(input,{plate:plateMaterial,edge:framingEdges},hardware));
   const radius=Math.max(.075,d*.16);
   for(const [index,point] of (loadCase?.points??[]).entries()){
    const wheel=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,.06,32),wheelMaterial);wheel.rotation.x=Math.PI/2;wheel.position.set(point.x/1000-length/2,railBase+railH+.0125+radius,railZ);group.add(wheel);

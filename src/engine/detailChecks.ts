@@ -21,6 +21,7 @@ import {endStopChecks} from './endStop';
 import {endBearingChecks,activeEndBearing} from './endBearing';
 import {activeColumnCap} from './columnCapInputs';
 import {columnCapChecks} from './columnCap';
+import {spliceChecks,spliceDifferences} from './girderSplice';
 
 const compared=(id:string,group:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds=['aisc-connections']):CheckResult=>({id,group,title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds});
 const resolved=(id:string,title:string,note:string,referenceIds=['aisc-connections']):CheckResult=>({id,group:'Connections',title,status:'not-applicable',equation:'',note,referenceIds});
@@ -74,6 +75,7 @@ const differences=(a:RunwayDetailResults,b:RunwayDetailResults)=>Math.max(
   ...b.rolledBracket.fatigue.flatMap((f,i)=>(['flange','web','webWeld','column','stiffenerWeld','stiffenerToe'] as const).map(k=>Math.abs(f[k]-a.rolledBracket!.fatigue[i][k])/Math.max(f[k],1)))]:[]),
  ...(b.bracket&&a.bracket?b.bracket.fatigue.flatMap((f,i)=>(['rib','seat','rootWeld','seatWeld','column'] as const).map(k=>Math.abs(f[k]-a.bracket!.fatigue[i][k])/Math.max(f[k],1))):[]),
  ...b.fatigue.map((f,i)=>Math.abs(a.fatigue[i].range-f.range)/Math.max(f.range,1)),
+ ...(b.splices&&a.splices?spliceDifferences(a.splices,b.splices):[]),
  ...(b.cap&&a.cap?[Math.abs(a.cap.longitudinalFlow-b.cap.longitudinalFlow)/Math.max(b.cap.longitudinalFlow,1),...b.cap.fatigueFlows.map((q,i)=>Math.abs(a.cap!.fatigueFlows[i]-q)/Math.max(q,1))]:[])
 );
 export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
@@ -174,6 +176,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  checks.push(...tieMovementChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,member:brace.member}));
  if(plate)checks.push(...plateTieChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,cos:brace.cos,member:brace.member}));
  }
+ checks.push(...spliceChecks(s));
  checks.push(...railChecks(s),...capAttachmentChecks(s),...simpleSupportChecks(p,a.endRotation),...endStopChecks(p,{analysis:a,strength,props,holdDown:checks.find(c=>c.id==='hold-down-model')?.capacity??0}));
 
  return checks;

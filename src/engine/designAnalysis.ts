@@ -8,6 +8,7 @@ import {railKeeperStations,girderSegments} from './simpleSupports';
 import {adjacentReactions} from './continuation';
 import {railTopAboveSteel} from './railSeat';
 import {craneAtStop} from './endStopInputs';
+import {spliceCriticalStations} from './spliceInputs';
 
 const abs=(xs:number[])=>Math.max(0,...xs.map(Math.abs));
 export interface RunwayCaseEvent {
@@ -36,6 +37,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  if(p.details){
   criticalStations.push(...p.details.fatigueDetails.map(f=>f.x));
   criticalStations.push(...railKeeperStations(p),...girderSegments(p).flatMap(m=>[m.start,m.end]));
+  criticalStations.push(...spliceCriticalStations(p));
  }
  const samples=[...new Set([...v0.x,...t0.x,...b0.x])].sort((a,b)=>a-b);
  const supportNodes=v0.x.flatMap((x,i)=>stations.some(s=>Math.abs(s-x)<1e-6)?[i]:[]);

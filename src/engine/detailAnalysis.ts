@@ -23,6 +23,7 @@ import {craneCombinations} from './aistLoads';
 import {runwayEnds} from './continuation';
 import {activeColumnCap} from './columnCapInputs';
 import {capForkStiffness,createColumnCapCollector} from './columnCap';
+import {createSpliceCollector} from './girderSplice';
 
 export function braceSystem(p:ProjectInput){
  const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875),plies=tiePlies(p);
@@ -129,6 +130,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const existingBracket=createExistingBracketCollector(p);
  const rolledBracket=createRolledBracketCollector(p);
  const capCollector=createColumnCapCollector(p);
+ // Girder field splices: their stations are nodes of the lateral/torsional mesh.
+ const splice=createSpliceCollector(p,props);
  const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+railTopAboveSteel(p)-cap.shearCenter:railTopAboveSteel(p)+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
@@ -171,7 +174,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    let restraintForces=bayStates.get(bayKey),r:ReturnType<LateralTorsionBeam['solve']>|undefined;
    if(!restraintForces){
    const beam=new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
-    loads:wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),
+    loads:[...wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),...(splice?.nodes??[]).filter(x=>x>start+1e-6&&x<end-1e-6).map(x=>({x:x-start,lateral:0,torque:0}))],
     restraints:stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?topK(x)*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?bottomK(x)*stiffnessFactor:0})),
     axial:strength?e.axial:0,moment:strength?x=>moment(x+start):undefined,
     distributedTorque:e.railTorquePerLength,
@@ -224,6 +227,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    if(p.system==='simple'&&bayIndex)joints.push({bay:bayIndex+1,p:wheels.filter(w=>Math.abs(w.x-start)<=1e-6).reduce((a,w)=>a+w.p,0)});
    for(const re of restraintForces){const x=snap(re.x+start),old=reactions.get(x)??{top:0,bottom:0};reactions.set(x,{top:old.top+re.top,bottom:old.bottom+re.bottom});}
    if(!r)continue;
+   splice?.observe(e,bin,r,start,end,moment);
    for(const s of r.stations){
     const x=s.x+start,M=moment(x),warping=E*Math.abs(s.warpingCurvature)*props.h0*p.section.bf/4;
     if(strength){
@@ -394,6 +398,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   if(existingBracket)result.existingBracket=existingBracket.result;
   if(rolledBracket)result.rolledBracket=rolledBracket.result;
   if(capCollector)result.columnCap=capCollector.finish();
+  if(splice)result.splices=splice.finish();
   return result;
  };
  return {observe,finish};

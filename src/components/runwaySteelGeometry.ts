@@ -3,14 +3,20 @@ import type {ProjectInput} from '../engine/types';
 import {girderSegments} from '../engine/simpleSupports';
 import {horizontalPlateGeometry,type Hole,type PartInfo} from './connectionDetails';
 import {filletWeld} from './weldGeometry';
+import {girderPieces,spliceStations} from '../engine/spliceInputs';
+import {spliceGirderHoles,verticalPlateGeometry} from './spliceGeometry3d';
 export function buildRunwaySteel(p:ProjectInput,materials:{steel:THREE.Material;cap:THREE.Material;rail:THREE.Material;weld:THREE.Material;edge:THREE.LineBasicMaterial},railHoles:Hole[]=[],seatHoles:Hole[]=[]){
  const group=new THREE.Group();group.name='runway-members';const s=p.section,L=p.spans.reduce((a,b)=>a+b,0)/1000,d=s.d/1000,bf=s.bf/1000,tf=s.tf/1000,tw=s.tw/1000,railBase=d/2+(s.kind==='cap'?s.capTw/1000:0),railZ=p.railEccentricity/1000;
  const add=(id:string,family:string,g:THREE.BufferGeometry,x:number,y:number,z:number,material:THREE.Material)=>{const mesh=new THREE.Mesh(g,material);mesh.name=id;mesh.position.set(x,y,z);mesh.userData.part={id,family,description:'Entered runway section geometry; rail section remains the supplied idealization.'} satisfies PartInfo;mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g),materials.edge));group.add(mesh);return mesh;};
- for(const [i,member] of girderSegments(p).entries()){
+ // A spliced girder is built of its pieces, drilled for the splice bolts.
+ const spliced=p.details?spliceStations(p).length>0:false,splice=spliced?spliceGirderHoles(p):undefined;
+ if(splice){railHoles=[...railHoles,...splice.top];seatHoles=[...seatHoles,...splice.bottom];}
+ for(const [i,member] of (spliced?girderPieces(p):girderSegments(p)).entries()){
   const l=(member.end-member.start)/1000,x=(member.start+member.end)/2000-L/2,id=`girder-${i+1}`;
   const flange=(name:string,t:number,w:number,y:number,material:THREE.Material,holes:Hole[])=>add(name,'Runway flange',horizontalPlateGeometry(l,w,t,holes.filter(h=>h.x>x-l/2+.012&&h.x<x+l/2-.012).map(h=>({...h,x:h.x-x}))),x,y,0,material);
   flange(`${id}-top-flange`,tf,bf,d/2-tf/2,materials.steel,s.kind==='cap'?[]:railHoles);flange(`${id}-bottom-flange`,tf,bf,-d/2+tf/2,materials.steel,seatHoles);
-  add(`${id}-web`,'Runway web',new THREE.BoxGeometry(l,d-2*tf,tw),x,0,0,materials.steel);
+  const webHoles=splice?.web.filter(h=>h.x>x-l/2+.012&&h.x<x+l/2-.012)??[];
+  add(`${id}-web`,'Runway web',webHoles.length?verticalPlateGeometry(l,d-2*tf,tw,webHoles.map(h=>({...h,x:h.x-x}))):new THREE.BoxGeometry(l,d-2*tf,tw),x,0,0,materials.steel);
   if(s.kind==='cap'){
    flange(`${id}-cap-web`,s.capTw/1000,s.capWidth/1000,d/2+s.capTw/2000,materials.cap,railHoles);
    for(const side of [-1,1]){

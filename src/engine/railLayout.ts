@@ -1,6 +1,7 @@
 import type {ProjectInput} from './types';
 import {adjacentBays,continues} from './continuation';
 import {activeEndStop,stopEnds,stopRailEnd} from './endStopInputs';
+import {spliceStations,spliceKeeperZones} from './spliceInputs';
 
 const foot=304.8;
 /**
@@ -37,7 +38,8 @@ export function railLayout(p:ProjectInput):RailLayout{
  const existing={left:continues(p,'left'),right:continues(p,'right')};
  const start=existing.left?-clear:stops.includes('left')?railEnd:0,end=existing.right?L+clear:stops.includes('right')?L-railEnd:L;
  let x=0;const grids=[0,...p.spans.map(s=>x+=s)];
- const girderJoints=p.system==='simple'?grids.filter((g,i)=>(i>0&&i<grids.length-1)||adjacentBays(p).some(b=>b.station===g)):[];
+ // Girder field splices are girder joints too: rail joints stay clear of them.
+ const girderJoints=[...(p.system==='simple'?grids.filter((g,i)=>(i>0&&i<grids.length-1)||adjacentBays(p).some(b=>b.station===g)):[]),...(p.details?spliceStations(p):[])].sort((a,b)=>a-b);
  const steps=new Set<number>([0]);
  for(const c of p.cranes)for(const a of c.wheels)for(const b of c.wheels)if(b.offset>a.offset)steps.add(Math.round(b.offset-a.offset));
  const wheelSteps=[...steps].sort((a,b)=>a-b),conflicts:number[]=[];
@@ -75,7 +77,13 @@ export const railExpansion=12e-6;
 export function railAnchors(p:ProjectInput,layout:RailLayout=railLayout(p)){
  const L=p.spans.reduce((s,v)=>s+v,0),half=(p.details?.rail.clipWidth??0)/2+76.2;
  let x=0;const ends=p.system==='simple'?[0,...p.spans.map(v=>x+=v)]:[0,L];
- const girders=ends.slice(1).map((e,i)=>[ends[i]+half,e-half] as const).filter(([a,b])=>b>a);
+ // Anchor keepers, like the others, stand clear of the girder field splices.
+ const zones=p.details?spliceKeeperZones(p):[];
+ const girders=ends.slice(1).map((e,i)=>[ends[i]+half,e-half] as const).filter(([a,b])=>b>a).flatMap(([a,b])=>{
+  let parts:(readonly [number,number])[]=[[a,b]];
+  for(const [z0,z1] of zones)parts=parts.flatMap(([u,v])=>z1<=u||z0>=v?[[u,v] as const]:[...(z0>u?[[u,z0] as const]:[]),...(z1<v?[[z1,v] as const]:[])]);
+  return parts;
+ });
  return layout.rails.map(rail=>{
   const stations=[rail.start,...rail.joints,rail.end];
   return {side:rail.side,anchors:rail.pieces.map((_,i)=>{

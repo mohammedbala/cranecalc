@@ -9,6 +9,7 @@ import {railSeatDefaults} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 import {keeperGeometry} from './railSeat';
+import {defaultSplices} from './spliceInputs';
 
 const inch=25.4,ksi=6.894757293;
 /** Marker for inputs the template cannot know; any string starting with it blocks eligibility. */
@@ -82,6 +83,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  if(release){c.gauge=Math.max(c.gauge,release.minimumGauge);tie.width=Math.max(tie.width,up(c.gauge+2*c.edge,.25*inch));}
  // Root fillets run the full column gusset height, which contains the release slots.
  c.weldLength=columnGussetHeight({...p,details});
+ // Girder field splices wherever a girder exceeds a 60 ft piece, sized to the girder and rail for review.
+ details.splices=defaultSplices(p,details.rail);
  return details;
 }
 

@@ -1,6 +1,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {railLayout,railLayoutCriteria,railMovements,railJointMovement} from '../engine/railLayout';
 import {railAnchorForce} from '../engine/railKeeper';
+import {spliceStations} from '../engine/spliceInputs';
 import {format} from '../engine/units';
 import {drawingLength,plateInches} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,line,rect,text,dimH,bubble,wrapToWidth,textWidth,detailRef,detailTitles,labelCaps,n} from './sheetGraphics';
@@ -40,7 +41,8 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
    const y=rows[rail.side],up=rail.side==='B',stations=[rail.start,...rail.joints,rail.end];
    svg+=text(x0-12,y+3,`GRID ${rail.side}`,8.5,'end',700);
    // Girders broken at their joints; the rail broken at its own joints with joint bars across.
-   const L=grids.at(-1)!,cuts=[0,...(p.system==='simple'?grids.slice(1,-1):[]),L];
+   // Girders broken at their joints and at their field splices.
+   const L=grids.at(-1)!,cuts=[0,...[...(p.system==='simple'?grids.slice(1,-1):[]),...(p.details?spliceStations(p):[])].sort((a,c)=>a-c),L];
    for(let i=1;i<cuts.length;i++)svg+=rect(X(cuts[i-1])+(i>1?1:0),y-4,X(cuts[i])-X(cuts[i-1])-(i>1?1:0)-(i<cuts.length-1?1:0),8,'runway-line');
    // Existing girders of a continued runway, dashed, as far as the new rail runs onto them.
    if(r.existing.left)svg+=rect(X(lo)-6,y-4,X(0)-X(lo)+5,8,'reference-line');
@@ -54,10 +56,12 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
    const outer=up?y-30:y+32,inner=up?y+26:y-24,fromOuter=up?y-6:y+6,fromInner=up?y+6:y-6;
    const chain=[0,...stations,grids.at(-1)!].filter((v,i,a)=>i===0||Math.abs(v-a[i-1])>1);
    for(let i=1;i<chain.length;i++)svg+=dimension(X(chain[i-1]),X(chain[i]),fromOuter,outer,dim(Math.abs(chain[i]-chain[i-1])),i===1?'left':'right');
-   for(const j of rail.joints){
-    const g=grids.reduce((a,b)=>Math.abs(b-j)<Math.abs(a-j)?b:a);
-    svg+=dimension(X(g),X(j),fromInner,inner,dim(Math.abs(j-g)),j<g?'left':'right');
-   }
+   // Text too long for its dimension reads beyond the joint, or beyond the grid where it would meet another's text.
+   const joints=rail.joints.map(j=>{const g=grids.reduce((a,b)=>Math.abs(b-j)<Math.abs(a-j)?b:a);return {x1:X(g),x2:X(j),label:dim(Math.abs(j-g)),side:(j<g?'left':'right') as 'left'|'right'};});
+   const span=(v:typeof joints[number],side:'left'|'right')=>{const w=textWidth(v.label,9),a=Math.min(v.x1,v.x2),b=Math.max(v.x1,v.x2),x=w+6<=b-a?(a+b)/2-w/2:side==='right'?b+4:a-4-w;return [x,x+w];};
+   const meets=(i:number,side:'left'|'right')=>{const [a,b]=span(joints[i],side);return joints.some((v,j)=>{if(j===i)return false;const [c,d]=span(v,v.side);return a<d&&c<b;});};
+   for(const [i,v] of joints.entries())if(meets(i,v.side)){const other=v.side==='left'?'right':'left';if(!meets(i,other))v.side=other;}
+   for(const v of joints)svg+=dimension(v.x1,v.x2,fromInner,inner,v.label,v.side);
   }
   // Grid lines through both runways, broken where dimension text crosses them.
   for(const [i,g] of grids.entries()){
@@ -68,7 +72,7 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
   }
   const steps=r.wheelSteps.filter(v=>v>0).map(dim).join(', ');
   const notes=[
-   `RAIL PIECES ${dim(stock)} MAX. (MILL LENGTH); SAW-CUT THE SHORTER PIECES SHOWN, NO FLAME CUTTING. KEEP RAIL JOINTS ${dim(clear)} MIN. FROM GIRDER JOINTS AND FROM THE OPPOSITE RAIL JOINTS, AND OPPOSITE JOINTS ${dim(clear)} MIN. FROM ANY CRANE WHEEL SPACING${steps?` (${steps})`:''}.`,
+   `RAIL PIECES ${dim(stock)} MAX. (MILL LENGTH); SAW-CUT THE SHORTER PIECES SHOWN, NO FLAME CUTTING. KEEP RAIL JOINTS ${dim(clear)} MIN. FROM GIRDER JOINTS${p.details&&spliceStations(p).length?' AND FIELD SPLICES':''} AND FROM THE OPPOSITE RAIL JOINTS, AND OPPOSITE JOINTS ${dim(clear)} MIN. FROM ANY CRANE WHEEL SPACING${steps?` (${steps})`:''}.`,
    `BOLTED RAIL JOINTS AND KEEPERS EACH SIDE OF EVERY JOINT: ${detailRef(detailTitles.railKeeper)}. RUNWAYS ARE DRAWN CLOSER THAN THE CRANE SPAN.`,
    ...(moves?[(()=>{const F=railAnchorForce(p),u=p.units,gap=p.details!.rail.jointGap;
     return `RAIL ANCHORS, SOLID TRIANGLES: AT MID-LENGTH OF EACH RAIL PIECE THE KEEPER PAIR IS SET IN RAIL-BASE NOTCHES (${detailRef(detailTitles.railKeeper)}) AND TAKES THE CRANE LONGITUDINAL FORCE (TRACTION AND BRAKING, ${labelForce(F.force,u)} FACTORED) AND RAIL CREEP INTO THE GIRDER. ALL OTHER KEEPERS LET THE RAIL SLIDE; EACH PIECE MOVES THERMALLY FROM ITS ANCHOR, UP TO ${movementUpTo(railJointMovement(moves),u)} AT A JOINT (${u==='SI'?`${Math.round(gap*2)/2} mm`:plateInches(gap,u)} GAP). AT EACH PERIODIC CRANE INSPECTION CHECK THE JOINT GAPS AND THE RAIL ENDS AT THE STOPS FOR CREEP.`;})()]:[]),

@@ -31,6 +31,8 @@ import { activeColumnCap } from '../engine/columnCapInputs';
 import { columnCapGeometry } from '../engine/columnCap';
 import { columnCapTitles,columnCapTopic } from './columnCapSheet';
 import { existingClearancePlan,existingClearanceShown,existingClearanceTitle,governingPair } from './existingClearancePlan';
+import { spliceLayout,spliceMark,activeSplices,spliceGeometry } from '../engine/spliceInputs';
+import { spliceTopic,spliceTitles } from './spliceSheet';
 export { planSheetGeometry } from './planSheetGeometry';
 export { connectionSheetSvg } from './connectionSheet';
 
@@ -177,9 +179,11 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   // Each girder mark at its girder's mid-length, or mid-span of the bay before when that is at or near a grid (a continuous
   // girder over an even number of spans), so the mark never sits on a grid line, bracket or bearing.
   const stations=p.spans.reduce((a,v)=>[...a,a.at(-1)!+v],[0]);
+  const splices=spliceLayout(p).errors.length?[]:spliceLayout(p).stations;
   const marks=girderMarks(p),mid=(g:typeof marks[number])=>{
-   const c=(g.start+g.end)/2,i=stations.findIndex(x=>x>g.start+1&&x<g.end-1&&Math.abs(x-c)<.15*Math.min(...p.spans));
-   return (i>0?(stations[i-1]+stations[i])/2:c)/1000-m.length/2;
+   const c=(g.start+g.end)/2,i=stations.findIndex(x=>x>g.start+1&&x<g.end-1&&Math.abs(x-c)<.15*Math.min(...p.spans)),at=i>0?(stations[i-1]+stations[i])/2:c;
+   // A spliced piece keeps its mark on itself.
+   return (at>g.start&&at<g.end?at:c)/1000-m.length/2;
   };
   svg+=viewTitle(gaLayout.iso.x+gaLayout.iso.w/2,gaLayout.iso.y+gaLayout.iso.h+44,'ISOMETRIC VIEW','NOT TO SCALE',ga)+'</g>';
 
@@ -222,6 +226,8 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     // Labels sit inboard of each runway, clear of the grid line outboard.
     const [markY,nameY]=side?[Y(z)+15,Y(z)+24]:[Y(z)-19,Y(z)-10];
     for(const g of marks)svg+=`<g data-girder-mark="${g.mark}">${text(X(mid(g)),markY,g.mark,8.5,'middle',700)}${text(X(mid(g)),nameY,p.section.name,7.2,'middle')}</g>`;
+    // Girder field splices: the joint across the girder and its mark.
+    for(const [i,x] of splices.entries())svg+=`<g data-splice="${spliceMark(i)}">${line([X(x/1000-m.length/2),Y(z-m.bf/2)-3],[X(x/1000-m.length/2),Y(z+m.bf/2)+3],'runway-line')}${text(X(x/1000-m.length/2),markY,spliceMark(i),8,'middle',700)}</g>`;
 
   }
   // Labels sit on the inboard side of their target so a leader never crosses its own text.
@@ -231,7 +237,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const middle=Math.ceil(p.spans.length/2),strutSpan=s.bracingSystem?(s.bracingSystem.layout.spans.includes(middle)?middle:s.bracingSystem.layout.spans[0]):0;
   if(newColumns){const strutGrid=s.bracingSystem?strutSpan-1:-1,j=strutGrid===1&&m.supports.length>2?2:1;
    const labels=[`NEW ${columnName} COLUMN ON`,`SPREAD FOOTING, TYP. ${2*m.supports.length}`,`SEE ${detailRef('NEW RUNWAY COLUMN / ELEVATION')}`],x0=X(m.supports[j]??m.supports[0]),w=Math.max(...labels.map(v=>textWidth(v,7.5)));svg+=`<g data-new-column="plan">${multiLeader([[x0+m.column.bf/2*k,Y(rows[0]-m.column.d/2)]],[x0+m.column.bf/2*k+16,Y(-m.width/2)-8],labels,7.5,[],w)}</g>`;}
-  if(stop){const first=ends[0],labels=[`END STOP, TYP. ${2*ends.length}`,`SEE ${detailRef('END STOP / ELEVATION')}`];svg+=multiLeader([[first==='left'?left+stopGeom!.front/1000*k:right-stopGeom!.front/1000*k,Y(-m.bf/2)]],[inboard(first,['END STOP, TYP. 4','SEE 1/S-07'],70),Y(-m.width/2)+4],labels,7.5);}
+  // On a spliced runway the leader lands at an end whose end piece is long enough to keep the girder marks clear of it.
+  const endPiece=(e:'left'|'right')=>{const g=e==='left'?marks[0]:marks.at(-1)!;return (g.end-g.start)/1000*k;};
+  if(stop){const first=splices.length?ends.find(e=>endPiece(e)>=120)??ends[0]:ends[0],labels=[`END STOP, TYP. ${2*ends.length}`,`SEE ${detailRef('END STOP / ELEVATION')}`];svg+=multiLeader([[first==='left'?left+stopGeom!.front/1000*k:right-stopGeom!.front/1000*k,Y(-m.bf/2)]],[inboard(first,['END STOP, TYP. 4','SEE 1/S-07'],70),Y(-m.width/2)+4],labels,7.5);}
   for(const b of adjacent){const labels=['EXISTING RUNWAY CONTINUES',`ADJ. BAY ${dim(b.length/1000)}, FIELD VERIFY`];svg+=`<g data-existing-bay-label="${b.end}">${multiLeader([[b.end==='left'?left-stub/2:right+stub/2,Y(-m.bf/2)]],[inboard(b.end,labels,16),Y(-m.width/2)+26],labels,7.5)}</g>`;}
   // Section cut at mid-bay, both ends outside the grids, arrows looking back at the frame on the grid.
   {const xc=X(m.section.at),label=detailRef(typicalSectionTitle);
@@ -333,6 +341,19 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     svg+=line([ml,top+m.tf*ek],[mr,top+m.tf*ek],'runway-line')+line([ml,bottom-m.tf*ek],[mr,bottom-m.tf*ek],'runway-line');
     if(p.section.kind==='cap')svg+=rect(ml,EY(m.railBase),mr-ml,p.section.capTw/1000*ek,'runway-line');
   }
+  // Girder field splices: the joint, the splice plates and the splice mark.
+  {const sp=activeSplices(p);if(sp&&splices.length){const sg=spliceGeometry(p,sp),T=sg.top,B=sg.bottom,tf=m.tf*ek;
+   for(const [i,x] of splices.entries()){
+    const xs=EX(x/1000-m.length/2),k=ek/1000,ti=T.inner?T.input.innerThickness*k:0,bo=B.outer?B.input.outerThickness*k:0,bi=B.inner?B.input.innerThickness*k:0;
+    svg+=`<g data-splice="${spliceMark(i)}">`+[-1,1].map(sd=>line([xs+sd*Math.max(.6,sp.gap/2*k),top],[xs+sd*Math.max(.6,sp.gap/2*k),bottom],'runway-line')).join('');
+    if(ti)svg+=rect(xs-T.half*k,top+tf,2*T.half*k,ti,'runway-line');
+    if(bi)svg+=rect(xs-B.half*k,bottom-tf-bi,2*B.half*k,bi,'runway-line');
+    if(bo)svg+=rect(xs-B.half*k,bottom,2*B.half*k,bo,'runway-line');
+    svg+=rect(xs-sg.web.half*k,(top+bottom)/2-sp.web.height*k/2,2*sg.web.half*k,sp.web.height*k,'runway-line');
+    // The splice mark under the joint, a line lower where it would meet a girder section label.
+    const label=`${spliceMark(i)} / ${detailRef(spliceTitles.elevation)}`,w=textWidth(label,9)/2+4,names=marks.map(g=>[EX(mid(g)),textWidth(p.section.name,9)/2]);
+    svg+=text(xs,bottom+(names.some(([c,h])=>Math.abs(c-xs)<h+w)?29:17),label,9,'middle',700)+'</g>';
+   }}}
   const railDepth=(p.aist?.railDepth??p.railHeight)/1000;
   svg+=rect(el+railInset('left')*ek,EY(m.railBase+railDepth),(m.length-railInset('left')-railInset('right'))*ek,railDepth*ek,'rail-line');
   for(const b of adjacent){
@@ -373,17 +394,22 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
 function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:number;height:number}){
   const p=s.input,u=p.units,len=(mm:number)=>drawingLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
   const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP',surveyed=newColumns?existingLayout(p):undefined,separation=s.bracingSystem?.separation;
+  const spliced=spliceLayout(p).errors.length?[]:spliceLayout(p).stations,grids=p.spans.reduce((a,v)=>[...a,a.at(-1)!+v],[0]),nearestGrid=(x:number)=>grids.reduce((a,v)=>Math.abs(v-x)<Math.abs(a-x)?v:a);
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
   const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LOCATES AT THE LOWER-NUMBERED GRID, SLIDES AT THE OTHER; SEE ${detailRef(activeEndBearing(p)?bearingBoltsTitle(p):detailTitles.movement)}`;
   const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
-    return [mark,String(all.length*2),`${p.section.name}${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
+    // A spliced piece runs from a grid or a splice to a grid or a splice.
+    const from=(v:typeof g)=>'leftSplice' in v&&v.leftSplice!==undefined?spliceMark(v.leftSplice):grid(v.leftGrid),to=(v:typeof g)=>'rightSplice' in v&&v.rightSplice!==undefined?spliceMark(v.rightSplice):grid(v.rightGrid);
+    const spliced=all.some(v=>v.leftSplice!==undefined||v.rightSplice!==undefined);
+    return [mark,String(all.length*2),`${p.section.name}${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${from(v)}-${to(v)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',spliced?`${ends}; FIELD SPLICE PER ${detailRef(spliceTitles.elevation)}`:ends];});
   const notes=[
     'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
     newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${len(specifiedSeparation(separation.required,u))} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
     `ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`,
     `SET RAIL C/L SPACING (CRANE SPAN) TO ${d?len(d.criteria.railGauge):'THE CRANE MANUFACTURER\'S GAUGE'}, EACH RAIL ON ITS GIRDER WEB C/L${d?` WITHIN ${len(d.criteria.alignmentTolerance)}`:''}. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${len(Math.abs(p.railEccentricity))}; IT IS NOT A SETTING DIMENSION.`,
-    p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
+    p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT.':spliced.length?'GIRDER PIECE LENGTHS ARE OUT-TO-OUT OF STEEL, EACH PIECE ENDING AT A GRID OR AT ITS FIELD SPLICE.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
+    ...(spliced.length?[`BOLTED SLIP-CRITICAL FIELD SPLICES ${spliced.map((x,i)=>`${spliceMark(i)} AT ${len(Math.abs(x-nearestGrid(x)))} ${x<nearestGrid(x)?'BEFORE':'PAST'} GRID ${grids.indexOf(nearestGrid(x))+1}`).join(', ')} (JOINT C/L), MARKED ON THE PLAN AND ELEVATION; SEE ${detailRef(spliceTitles.elevation)}. GIRDER PIECES ${len(activeSplices(p)!.maxPiece)} MAX.; NO OTHER FIELD SPLICES WITHOUT ENGINEER APPROVAL.`]:[]),
     ...adjacentBays(p).map(b=>`AT GRID ${b.end==='left'?1:p.spans.length+1} THE EXISTING RUNWAY CONTINUES (${short((p.continuation?.source??'').toUpperCase(),70)}). THE EXISTING ${len(b.length)} GIRDER BEARS ON THE SAME SUPPORT AND STAYS IN PLACE; ITS REACTION IS INCLUDED IN THE SUPPORT DESIGN. FIELD VERIFY ITS SPAN, BEARING, TIE AND RAIL JOINT BEFORE FABRICATION.`)
   ];
   return noteStack([(t:Style)=>[heading(t,'RUNWAY GIRDER SCHEDULE'),table(t,['MARK','QTY','SECTION','LENGTH','GRIDS','CAMBER','ENDS'],rows,[.55,.45,1.6,.8,.75,.65,1.9]),heading(t,'SHEET NOTES'),...numbered(t,notes)]],u,box,[1.5,1.4,1.3,1.2,1.1]);
@@ -430,6 +456,7 @@ export function detailTopics(s:CalculationSnapshot,f:FramingSettings=defaultFram
     ...(p.section.kind==='cap'&&p.capDesign&&d?[capTopic(s)]:[]),
     ...(supports?[supports]:[]),...(bracket?[bracket]:[]),...(ties?[ties]:[]),
     ...(d&&activeEndStop(p)?[endStopTopic(s)]:[]),
+    ...(d&&!spliceLayout(p).errors.length&&spliceLayout(p).stations.length?[spliceTopic(s)]:[]),
     ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[...(activeColumnCap(p)?[columnCapTopic(s)]:[]),newColumnTopic(s)]:[]),
     ...(s.bracingSystem?[bracingTopic(s)]:[])];
 }
