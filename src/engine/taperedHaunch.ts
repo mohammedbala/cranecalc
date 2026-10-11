@@ -77,9 +77,12 @@ export function haunchStations(g:HaunchGeometry,E:number,Fy:number,e:number,W:nu
  const ys=[...new Set([...Array.from({length:n+1},(_,i)=>e*i/n),g.a-W/2,g.a].filter(y=>y>=0&&y<=e).map(y=>Math.round(y*1e6)/1e6))].sort((u,v)=>u-v);
  const Lb=2*g.L;
  const raw=ys.map(y=>{const s=haunchSection(g,y);return {y,s,pos:weldedIFlexure(asI(g,s),E,Fy,Lb),neg:weldedIFlexure(asI(g,s,false),E,Fy,Lb)};});
- const Fpos=Math.min(...raw.map(v=>v.pos.ltb/v.s.Sxc)),Fneg=Math.min(...raw.map(v=>v.neg.ltb/v.s.Sxt));
+ // Only stations where lateral-torsional buckling reduces the strength (Lb > Lp) set the member's LTB stress; where
+ // none does, the limit state does not apply (F4.2(a)).
+ const least=(v:number[])=>Math.min(Infinity,...v);
+ const Fpos=least(raw.filter(v=>v.pos.ltb<v.pos.cfy).map(v=>v.pos.ltb/v.s.Sxc)),Fneg=least(raw.filter(v=>v.neg.ltb<v.neg.cfy).map(v=>v.neg.ltb/v.s.Sxt));
  return raw.map(v=>{
-  const pos={...v.pos,ltb:Fpos*v.s.Sxc},neg={...v.neg,ltb:Fneg*v.s.Sxt};
+  const pos={...v.pos,ltb:Math.min(v.pos.cfy,Fpos*v.s.Sxc)},neg={...v.neg,ltb:Math.min(v.neg.cfy,Fneg*v.s.Sxt)};
   pos.Mn=Math.min(pos.cfy,pos.ltb,pos.cflb,pos.tfy);neg.Mn=Math.min(neg.cfy,neg.ltb,neg.cflb,neg.tfy);
   return {...v,pos,neg,Fltb:Fpos};
  });
@@ -134,10 +137,14 @@ export function haunchActions(g:HaunchGeometry,root:HaunchSection,e:number,loads
   return {P,x:P?Math.abs(m/P):0};});
  return {V,Mseat,e,F,H,xH,Mx,N,T,Qtop,Qbot,Mtop,Mbot,Tt,C,sides};
 }
-/** Normal stress at the four flange tips at the root: [top -x, top +x, bottom -x, bottom +x] (tension positive). */
+/**
+ * Normal stress at the four flange tips at the root: [top -x, top +x, bottom -x, bottom +x] (tension positive). The
+ * sloping bottom flange's stress is along its slope: the vertical section carries its horizontal component on the
+ * flange area bb tb, so the axial and bending part is divided by cos(alpha); its lateral bending is in its own plane.
+ */
 export function haunchTipStresses(g:HaunchGeometry,s:HaunchSection,f:HaunchActions){
- const n=f.N/s.A,top=f.Mx*(s.h-s.ybar)/s.Ix,bot=-f.Mx*s.ybar/s.Ix,St=g.tt*g.btr**2/6,Sb=g.tb*g.bb**2/6;
- return [n+top-f.Mtop/St,n+top+f.Mtop/St,n+bot-f.Mbot/Sb,n+bot+f.Mbot/Sb];
+ const n=f.N/s.A,top=f.Mx*(s.h-s.ybar)/s.Ix,bot=(n-f.Mx*s.ybar/s.Ix)/g.cos,St=g.tt*g.btr**2/6,Sb=g.tb*g.bb**2/6;
+ return [n+top-f.Mtop/St,n+top+f.Mtop/St,bot-f.Mbot/Sb,bot+f.Mbot/Sb];
 }
 
 type Line={a:[number,number];b:[number,number];size:number;part:'top'|'bottom'|'web'};
@@ -262,7 +269,7 @@ export function topFlangeStrip(g:HaunchGeometry,loads:BracketLoads,W:number,bear
  return {across,along,moment:Math.max(across,along),c,xs};
 }
 /** Plate thickness at the column face and at the bracket: the nearer end of a flange is the column (y = 0). */
-const receiverModulus=(c:{depth:number;width:number;flangeThickness:number;webThickness:number})=>{
+export const receiverModulus=(c:{depth:number;width:number;flangeThickness:number;webThickness:number})=>{
  const I=2*c.width*c.flangeThickness*((c.depth-c.flangeThickness)/2)**2+c.webThickness*(c.depth-2*c.flangeThickness)**3/12;return I/(c.depth/2);
 };
 /**
@@ -281,6 +288,25 @@ export function haunchColumnForces(g:HaunchGeometry,f:HaunchActions){
  return {tension,compression,pull:top.upperT,stiffeners,vertical:Math.max(0,f.C)*Math.sin(g.alpha),
   /** Elevations of the flange force lines below the top of the haunch. */
   topLevel:g.tt/2,bottomLevel:g.hr-g.tbv/2};
+}
+
+/**
+ * Unstiffened available strengths of the receiving column at the haunch's two flange levels (AISC J10.1-J10.4): flange
+ * local bending under the top flange, web local yielding at both, crippling and sidesway buckling under the bottom
+ * flange, with the end-region expressions where the column top is close (or its height is not entered). k = tf (no
+ * rolled-fillet credit); lb the flange thickness, the sloping flange's vertical cut tb/cos(alpha) at the bottom.
+ */
+export function haunchColumnStrengths(p:ProjectInput,g:HaunchGeometry){
+ const c=p.details!.bracket!.receiver,E=p.section.E,method=p.method;
+ const columnEnd=p.existingColumn?.enabled?p.existingColumn.height-p.existingColumn.seatElevation:0,known=!!p.existingColumn?.enabled;
+ const topFlangeEnd=!known||columnEnd<10*c.flangeThickness,topWebEnd=!known||!(columnEnd>c.depth),botWebEnd=!known||!(columnEnd+g.hr>c.depth),botCrippleEnd=!known||!(columnEnd+g.hr>=c.depth/2);
+ const N=g.tbv,term=botCrippleEnd&&N/c.depth>.2?4*N/c.depth-.2:3*N/c.depth,hcol=c.depth-2*c.flangeThickness,sway=(hcol/c.webThickness)/(c.unbracedLength/c.width);
+ return {columnEnd,topFlangeEnd,topWebEnd,botWebEnd,botCrippleEnd,N,hcol,sway,
+  flange:available((topFlangeEnd?.5:1)*6.25*c.Fy*c.flangeThickness**2,method,.9,1.67),
+  yieldTop:available(c.Fy*c.webThickness*((topWebEnd?2.5:5)*c.flangeThickness+g.tt),method,1,1.5),
+  yieldBottom:available(c.Fy*c.webThickness*((botWebEnd?2.5:5)*c.flangeThickness+g.tbv),method,1,1.5),
+  crippling:available((botCrippleEnd?.4:.8)*c.webThickness**2*(1+term*(c.webThickness/c.flangeThickness)**1.5)*Math.sqrt(E*c.Fy*c.flangeThickness/c.webThickness),method,.75,2),
+  sidesway:sway<=1.7?available(3.3e6*c.webThickness**3*c.flangeThickness/hcol**2*.4*sway**3,method,.85,1.76):undefined};
 }
 
 export interface TaperedHaunchResults {
@@ -328,7 +354,7 @@ export function createTaperedHaunchCollector(p:ProjectInput){
   const sets=(kind==='fatigue'?[h.bottom]:[h.bottom,-h.bottom]).map(H=>haunchActions(g,root,e,all,{...h,bottom:H}));
   if(kind==='fatigue'){
    const out=result.fatigue[bin],f=sets[0],put=(key:typeof fatigueKeys[number],id:string,value:number)=>{out[key]=Math.max(out[key],range(bin,id,value));};
-   const tips=haunchTipStresses(g,root,f);tips.slice(0,2).forEach((v,i)=>put('topFlange','t:'+i,v));
+   const tips=haunchTipStresses(g,root,f);tips.slice(0,2).forEach((v,i)=>put('topFlange','t:'+i,v));tips.slice(2).forEach((v,i)=>put('bottomFlange','b:'+i,v));
    // Base metal at the flange-to-web fillets (Category B) at the root: the bending stress at both junctions.
    for(const [id,z] of [['ft',root.h-g.tt],['fb',g.tbv]] as const)put('flangeWeb',id,f.N/root.A+f.Mx*(z-root.ybar)/root.Ix);
    put('stiffenerToe','toe',stationMoment(f,sa,g.a)/sa.Sxt);
@@ -491,14 +517,14 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
  // Strong-axis flexure on the stations of the taper.
  const fx=S.flexure,sf=at(fx?.y),fl=sf.pos;
  add('flexure',`${name} · flexure along the taper (F4/F5, stress form)`,fx?.demand??0,fx?.capacity??1,'stress',`f_{bc}(y)=\\frac{M(y)}{S_{xc}(y)}\\le\\frac{\\phi M_n(y)}{S_{xc}(y)};\\;M(y)=V(e-y)+Hz_t(y);\\;M_n=\\min(R_{pc}M_{yc},F_{LTB}S_{xc},M_{n,CFLB},R_{pt}M_{yt})`,
-  `${common} Built-up I on every vertical section ${taper}, ${stations.length} stations from the root to e. Governing station y = ${fmt(sf.y)} (h = ${fmt(sf.s.h)}): ${flexureBranch(fl)}; web ${fl.web} (hc/tw = ${fl.lw.toFixed(1)}, λpw = ${fl.lpw.toFixed(1)}, λrw = ${fl.lrw.toFixed(1)}), ${fl.clause==='F4'?`Rpc = ${fl.R.toFixed(3)}`:`Rpg = ${fl.R.toFixed(3)}`}; bottom flange b/2t = ${fl.lf.toFixed(2)} (λpf = ${fl.lpf.toFixed(2)}, kc = ${fl.kc.toFixed(3)}). Lateral-torsional buckling of the sloping compression (bottom) flange as a member: Lb = 2L = ${fmt(2*g.L)}, Cb = 1.0 (cantilever free at its tip, no restraint credited to the girder), the least station LTB stress ${fmt(sf.Fltb,'stress')} applied at every station (AISC DG25 stress form). Uplift (top flange in compression) is checked the same way.`,fx?.caseId,['haunch-basis','dg25','aisc-f5']);
+  `${common} Built-up I on every vertical section ${taper}, ${stations.length} stations from the root to e. Governing station y = ${fmt(sf.y)} (h = ${fmt(sf.s.h)}): ${flexureBranch(fl)}; web ${fl.web} (hc/tw = ${fl.lw.toFixed(1)}, λpw = ${fl.lpw.toFixed(1)}, λrw = ${fl.lrw.toFixed(1)}), ${fl.clause==='F4'?`Rpc = ${fl.R.toFixed(3)}`:`Rpg = ${fl.R.toFixed(3)}`}; bottom flange b/2t = ${fl.lf.toFixed(2)} (λpf = ${fl.lpf.toFixed(2)}, kc = ${fl.kc.toFixed(3)}). Lateral-torsional buckling of the sloping compression (bottom) flange as a member: Lb = 2L = ${fmt(2*g.L)}, Cb = 1.0 (cantilever free at its tip, no restraint credited to the girder), ${Number.isFinite(sf.Fltb)?`the least station LTB stress ${fmt(sf.Fltb,'stress')} applied at every station (AISC DG25 stress form)`:'Lb does not exceed Lp at any station, so LTB does not apply (F4.2(a))'}. Uplift (top flange in compression) is checked the same way.`,fx?.caseId,['haunch-basis','dg25','aisc-f5']);
  const sv=S.shear,ss=at(sv?.y),sh=haunchWebShear(g,ss.s,E,Fy,method);
  add('shear',`${name} · web shear along the taper (G2.1)`,sv?.demand??0,sv?.capacity??1,'force','V_u\\le\\phi_v0.6F_yA_wC_{v1},\\;A_w=h(y)t_w,\\;k_v=5.34',`${common} Web shear on every section from the root to the far bearing edge with the whole reaction (shallowest loaded section governs): y = ${fmt(ss.y)}, h = ${fmt(ss.s.h)}, clear web ${fmt(ss.s.hw)}, h/tw = ${sh.ratio.toFixed(1)} (limit ${sh.limit.toFixed(1)}), Cv1 = ${sh.Cv1.toFixed(3)}, φv = 0.90 (built-up). Unstiffened kv = 5.34 to the bearing stiffeners, no tension field. No Résal credit: the vertical component of the sloping bottom flange force is not deducted from the web shear.`,sv?.caseId,['haunch-basis','aisc-g']);
  const sa=haunchSection(g,g.a);
  from('flangeShear','flange-shear',`${name} · flange lateral shear from torsion (G6, H3.3)`,available(.6*Fy,method,.9,1.67),'stress','\\tau=\\frac{1.5Q}{bt},\\;Q_{t,b}=F\\frac{I_{yt,b}}{I_y}\\pm\\frac{T}{h_0(a)},\\;T=\\Sigma V_ix_i+F(z_t-z_{sc})',`The torque (seat moment and F above the shear center) is carried by opposite flange shears T/h0(y) over the taper (warping fixed at the column, Saint-Venant relief not credited), largest at the girder web line where h0 = ${fmt(sa.h0)}; F at the shear center splits by the flanges' lateral stiffness. Elastic peak shear on each flange.`,['haunch-basis','aisc-g','aisc-h3']);
  const minorRoot=available(haunchMinor(g,root,E,Fy),method,.9,1.67);
  add('interaction',`${name} · axial force and biaxial flexure (H1)`,S.interaction?.value??0,1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}(y)}{M_{cx}(y)}+\\frac{M_{ry}(y)}{M_{cy}(y)}\\right)\\le1',`The lateral force H acts along the haunch axis: Pr = |H|, tension (D2 yielding) or compression (E3, KL = 2L about the vertical axis). Mrx and Mcx at each station as the flexure check; Mry = F(a − y) + |H·xH| about the vertical axis with Mcy per F6 (${fmt(minorRoot,'moment')} at the root). Governing station y = ${fmt(S.interaction?.y??0)}. Torsion is in the H3.3 stress checks.`,S.interaction?.caseId,['haunch-basis','aisc-h','aisc-f6']);
- from('normal','combined',`${name} · combined normal stress at the root (H3.3)`,available(Fy,method,.9,1.67),'stress','f_n=\\frac{N}{A}+\\frac{M_xc}{I_x}+\\frac{M_f}{tb^2/6}\\le\\phi F_y',`Elastic sum at the four flange tips at the column face: axial force, strong-axis bending and the flange lateral bending from torsion (M_f = T∫dy/h0 over the taper, warping fixed at the column), F and H·xH (on the top flange). H3-7, normal-stress yielding.`,['haunch-basis','aisc-h3']);
+ from('normal','combined',`${name} · combined normal stress at the root (H3.3)`,available(Fy,method,.9,1.67),'stress','f_n=\\frac{N}{A}+\\frac{M_xc}{I_x}+\\frac{M_f}{tb^2/6}\\le\\phi F_y',`Elastic sum at the four flange tips at the column face (the sloping bottom flange's along its slope, the section stress divided by cos α): axial force, strong-axis bending and the flange lateral bending from torsion (M_f = T∫dy/h0 over the taper, warping fixed at the column), F and H·xH (on the top flange). H3-7, normal-stress yielding.`,['haunch-basis','aisc-h3']);
  // Flanges at the root.
  const lambdaB=g.bb/(2*g.tb),kc=clamp(4/Math.sqrt(root.hw/g.tw),.35,.76),lrB=.64*Math.sqrt(kc*E/Fy);
  from('bottomFlange','bottom-flange',`${name} · sloping bottom flange in compression at the root`,available(Fy,method,.9,1.67),'stress','C=\\frac{M_x/h_0-N/2}{\\cos\\alpha};\\;f=\\frac{C}{b_bt_b}+\\frac{M_{f,b}}{t_bb_b^2/6}\\le\\phi F_y',`Flange-force method at the column face, h0 = ${fmt(root.h0)}, α = ${deg}°: the web's share of the moment is not credited. Lateral bending from torsion over the sloping length. C sin α = vertical component into the column-face welds (weld checks). H3.3 yielding.`,['haunch-basis','aisc-h3']);
@@ -547,21 +573,18 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
  add('web-weld-minimum','Web-to-column fillets · minimum leg (J2.4)',minimumFillet(Math.max(g.tw,c.flangeThickness)),g.webWeld,'length','w\\ge w_{min,J2.4}','Thicker of the haunch web and the existing column flange (bounds the cooling rate of the thick existing flange).',undefined,['haunch-basis','aisc-connections']);
  add('web-weld-maximum','Web-to-column fillets · maximum leg',g.webWeld,Math.min(g.tw,c.flangeThickness)-(Math.min(g.tw,c.flangeThickness)<6.35?0:1.5875),'length','w\\le t_{min}-1/16\\,in','Thinner of the haunch web and the existing column flange, less 1/16 in (J2.2b, conservative for the T-joint).',undefined,['haunch-basis','aisc-connections']);
  // Existing column, local, at the two flange levels, unstiffened; column stiffeners, where provided, take over below.
- const columnEnd=p.existingColumn?.enabled?p.existingColumn.height-p.existingColumn.seatElevation:0,known=!!p.existingColumn?.enabled;
- const topFlangeEnd=!known||columnEnd<10*c.flangeThickness,topWebEnd=!known||!(columnEnd>c.depth),botWebEnd=!known||!(columnEnd+g.hr>c.depth),botCrippleEnd=!known||!(columnEnd+g.hr>=c.depth/2);
+ const J=haunchColumnStrengths(p,g),{columnEnd,topFlangeEnd,topWebEnd,botWebEnd,botCrippleEnd,N,hcol,sway}=J;
  const colStiff=!!activeColumnStiffeners(b),hook=colStiff?'':'No column stiffeners are provided: where a J10.1 to J10.4 check fails, column stiffeners (continuity plates) at the haunch flange levels take the force above the unstiffened strength.';
- from('pull','column-flange','Existing column flange · local bending at the top flange (J10.1)',available((topFlangeEnd?.5:1)*6.25*c.Fy*c.flangeThickness**2,method,.9,1.67),'force','T_t+3M_{f,t}/b_t\\le\\phi R_n=\\phi6.25F_{yf}t_{cf}^2',`Top flange force M/h0 + N/2 with its in-plane bending from torsion and the longitudinal force, as twice the more loaded half-flange resultant over the ${fmt(g.btr)} welded flange width.${topFlangeEnd?' Within 10tf of the column top, or the column height not entered: half strength.':''}${hook?' '+hook:''}`,['haunch-basis','aisc-j']);
- from('tension','column-yield-top','Existing column web · local yielding at the top flange (J10.2)',available(c.Fy*c.webThickness*((topWebEnd?2.5:5)*c.flangeThickness+g.tt),method,1,1.5),'force',`R_n=F_yt_{cw}(${topWebEnd?'2.5':'5'}k+l_b)`,`Tensile flange force; k = tf of the column (no rolled fillet credit), lb = top flange thickness ${fmt(g.tt)}.${topWebEnd?' End-region expression: the column top is within the column depth, or not entered.':''}`,['haunch-basis','aisc-j']);
- from('compression','column-yield-bottom','Existing column web · local yielding at the bottom flange (J10.2)',available(c.Fy*c.webThickness*((botWebEnd?2.5:5)*c.flangeThickness+g.tbv),method,1,1.5),'force',`R_n=F_yt_{cw}(${botWebEnd?'2.5':'5'}k+l_b)`,`Horizontal component of the sloping flange force, C cos α = M/h0 − N/2; lb = tb/cos α = ${fmt(g.tbv)} (the flange's vertical cut at the face).${botWebEnd?' End-region expression.':''}`,['haunch-basis','aisc-j']);
- const N=g.tbv,term=botCrippleEnd&&N/c.depth>.2?4*N/c.depth-.2:3*N/c.depth;
- from('compression','column-crippling','Existing column web · crippling at the bottom flange (J10.3)',available((botCrippleEnd?.4:.8)*c.webThickness**2*(1+term*(c.webThickness/c.flangeThickness)**1.5)*Math.sqrt(E*c.Fy*c.flangeThickness/c.webThickness),method,.75,2),'force',`R_n=${botCrippleEnd?'0.40':'0.80'}t_w^2[1+\\eta(t_w/t_f)^{1.5}]\\sqrt{EF_yt_f/t_w}`,`${botCrippleEnd?'End-region':'Interior'} expression at the bottom flange level, ${fmt(columnEnd+g.hr)} below the column top; lb = ${fmt(N)}. Confirmed receiver geometry required.${hook?' '+hook:''}`,['haunch-basis','aisc-j']);
- const hcol=c.depth-2*c.flangeThickness,sway=(hcol/c.webThickness)/(c.unbracedLength/c.width);
- if(sway<=1.7)from('compression','column-sidesway','Existing column web · sidesway buckling (J10.4)',available(3.3e6*c.webThickness**3*c.flangeThickness/hcol**2*.4*sway**3,method,.85,1.76),'force','R_n=(C_rt_w^3t_f/h^2)[0.4((h/t_w)/(L_b/b_f))^3]','J10.4 unrestrained compression-flange rotation; conservative Cr regardless of column moment; entered largest flange unbraced length.',['haunch-basis','aisc-j']);
+ from('pull','column-flange','Existing column flange · local bending at the top flange (J10.1)',J.flange,'force','T_t+3M_{f,t}/b_t\\le\\phi R_n=\\phi6.25F_{yf}t_{cf}^2',`Top flange force M/h0 + N/2 with its in-plane bending from torsion and the longitudinal force, as twice the more loaded half-flange resultant over the ${fmt(g.btr)} welded flange width.${topFlangeEnd?' Within 10tf of the column top, or the column height not entered: half strength.':''}${hook?' '+hook:''}`,['haunch-basis','aisc-j']);
+ from('tension','column-yield-top','Existing column web · local yielding at the top flange (J10.2)',J.yieldTop,'force',`R_n=F_yt_{cw}(${topWebEnd?'2.5':'5'}k+l_b)`,`Tensile flange force; k = tf of the column (no rolled fillet credit), lb = top flange thickness ${fmt(g.tt)}.${topWebEnd?' End-region expression: the column top is within the column depth, or not entered.':''}`,['haunch-basis','aisc-j']);
+ from('compression','column-yield-bottom','Existing column web · local yielding at the bottom flange (J10.2)',J.yieldBottom,'force',`R_n=F_yt_{cw}(${botWebEnd?'2.5':'5'}k+l_b)`,`Horizontal component of the sloping flange force, C cos α = M/h0 − N/2; lb = tb/cos α = ${fmt(g.tbv)} (the flange's vertical cut at the face).${botWebEnd?' End-region expression.':''}`,['haunch-basis','aisc-j']);
+ from('compression','column-crippling','Existing column web · crippling at the bottom flange (J10.3)',J.crippling,'force',`R_n=${botCrippleEnd?'0.40':'0.80'}t_w^2[1+\\eta(t_w/t_f)^{1.5}]\\sqrt{EF_yt_f/t_w}`,`${botCrippleEnd?'End-region':'Interior'} expression at the bottom flange level, ${fmt(columnEnd+g.hr)} below the column top; lb = ${fmt(N)}. Confirmed receiver geometry required.${hook?' '+hook:''}`,['haunch-basis','aisc-j']);
+ if(J.sidesway!==undefined)from('compression','column-sidesway','Existing column web · sidesway buckling (J10.4)',J.sidesway,'force','R_n=(C_rt_w^3t_f/h^2)[0.4((h/t_w)/(L_b/b_f))^3]','J10.4 unrestrained compression-flange rotation; conservative Cr regardless of column moment; entered largest flange unbraced length.',['haunch-basis','aisc-j']);
  else na('column-sidesway','Existing column web · sidesway buckling (J10.4)','(h/t_w)/(L_b/b_f)>1.7','AISC J10.4(b)(2): not applicable beyond 1.7.',['haunch-basis','aisc-j']);
  const area=2*c.width*c.flangeThickness+hcol*c.webThickness,axialRatio=(method==='LRFD'?1:1.6)*(c.axialDemand+(S.vertical?.value??0))/(c.Fy*area);
  from('panel','column-panel','Existing column web · panel shear with axial force (J10.6)',available(.6*c.Fy*c.depth*c.webThickness*Math.max(0,Math.min(1,1.4-axialRatio)),method,.9,1.67),'force','R_n=0.6F_yd_ct_w\\min(1,1.4-\\alpha P_r/P_y)',`J10.6(a), one-sided bracket: the larger flange force is the panel shear; no inelastic panel-zone credit. Concurrent entered column axial force plus the bracket reaction. Global column strength remains separate.${colStiff?panelStiffenerNote:' Column stiffeners add no panel shear strength; a failure here needs a heavier column (a J10.9 web doubler plate is outside this design).'}`,['haunch-basis','aisc-j']);
  // Applicability and geometry limits of the model (validated; reported for the record).
- add('slope','Bottom flange slope',g.degrees,haunchSlopeLimit,'ratio','\\alpha=\\arctan\\frac{h_r-h_t}{L}\\le45^\\circ',`Vertical sections with the flange-force resolution represent the haunch up to 45°; ${deg}° here.`,undefined,['haunch-basis','dg25']);
+ add('slope',`${name} · bottom flange slope (model limit, DG25)`,g.degrees,haunchSlopeLimit,'ratio','\\alpha=\\arctan\\frac{h_r-h_t}{L}\\le45^\\circ',`Vertical sections with the flange-force resolution represent the haunch up to 45°; ${deg}° here.`,undefined,['haunch-basis','dg25']);
  add('web-slenderness','Web slenderness without intermediate stiffeners (F13.2, G2.1)',root.hw/g.tw,Math.min(260,.40*E/Fy),'ratio','h/t_w\\le\\min(260,0.40E/F_y)',`Root clear web ${fmt(root.hw)} on ${fmt(g.tw)}.`,undefined,['haunch-basis','aisc-f13']);
  // Service, applicability and uplift.
  const service=res.service.vertical?.value??0;

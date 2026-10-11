@@ -72,7 +72,11 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   const uA=-m.columnOffset,uB=m.width+m.columnOffset,uRA=-m.railZ,uRB=m.width+m.railZ;
   // The crane span is shortened by a break between the runways, so the runways draw at a larger scale;
   // its dimensions keep their true values.
-  const keep=2.8,gap=.9,span=uRB-uRA-2*keep>1.5?{from:uRA+keep,to:uRB-keep}:undefined,shift=span?span.to-span.from-gap:0;
+  // Each runway keeps at least 2.8 m, and enough at the scale the band's height allows (a deep bracket lowers it)
+  // for the callouts between the runways to clear the break and each other.
+  const gap=.9,kh=drawingScale((box.bottom-top-150)/(vTop-vBottom)/1000,p.units,ga).pointsPerMm*1000;
+  const wl=Math.max(textWidth('EXISTING BUILDING COLUMN (REF.), FIELD VERIFY',8.5),textWidth(`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`,8.5)),wr=textWidth('RUNWAY AT GRID B OPPOSITE HAND',8.5);
+  const keep=Math.max(2.8,(76+wl)/kh-gap/2,((160+wl+wr)/kh-gap)/2),span=uRB-uRA-2*keep>1.5?{from:uRA+keep,to:uRB-keep}:undefined,shift=span?span.to-span.from-gap:0;
   // Looking toward -x, grid A is at the left: u = -z.
   const clip=(segments:Segment[])=>segments.flatMap(([a,b]):Segment[]=>{
     let [p0,p1]:XY[]=[[-a[2],a[1]],[-b[2],b[1]]];if(p0[1]>p1[1])[p0,p1]=[p1,p0];
@@ -232,7 +236,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const middle=Math.ceil(p.spans.length/2),strutSpan=s.bracingSystem?(s.bracingSystem.layout.spans.includes(middle)?middle:s.bracingSystem.layout.spans[0]):0;
   if(newColumns){const strutGrid=s.bracingSystem?strutSpan-1:-1,j=strutGrid===1&&m.supports.length>2?2:1;
    const labels=[`NEW ${columnName} COLUMN ON`,`SPREAD FOOTING, TYP. ${2*m.supports.length}`,`SEE ${detailRef('NEW RUNWAY COLUMN / ELEVATION')}`],x0=X(m.supports[j]??m.supports[0]),w=Math.max(...labels.map(v=>textWidth(v,7.5)));svg+=`<g data-new-column="plan">${multiLeader([[x0+m.column.bf/2*k,Y(rows[0]-m.column.d/2)]],[x0+m.column.bf/2*k+16,Y(-m.width/2)-8],labels,7.5,[],w)}</g>`;}
-  if(stop){const first=ends[0],labels=[`END STOP, TYP. ${2*ends.length}`,`SEE ${detailRef('END STOP / ELEVATION')}`];svg+=multiLeader([[first==='left'?left+stopGeom!.front/1000*k:right-stopGeom!.front/1000*k,Y(-m.bf/2)]],[inboard(first,['END STOP, TYP. 4','SEE 1/S-07'],70),Y(-m.width/2)+4],labels,7.5);}
+  // The end stop callout within the end bay, clear of the next grid line where the bay draws short.
+  const stopDx=(end:'left'|'right')=>{const w=textWidth('END STOP, TYP. 4',7.5),bay=m.supports.length>1?(end==='left'?X(m.supports[1])-left:right-X(m.supports[m.supports.length-2])):Infinity;return 70+w+6>bay?Math.max(12,bay-w-6):70;};
+  if(stop){const first=ends[0],labels=[`END STOP, TYP. ${2*ends.length}`,`SEE ${detailRef('END STOP / ELEVATION')}`];svg+=multiLeader([[first==='left'?left+stopGeom!.front/1000*k:right-stopGeom!.front/1000*k,Y(-m.bf/2)]],[inboard(first,['END STOP, TYP. 4','SEE 1/S-07'],stopDx(first)),Y(-m.width/2)+4],labels,7.5);}
   for(const b of adjacent){const labels=['EXISTING RUNWAY CONTINUES',`ADJ. BAY ${dim(b.length/1000)}, FIELD VERIFY`];svg+=`<g data-existing-bay-label="${b.end}">${multiLeader([[b.end==='left'?left-stub/2:right+stub/2,Y(-m.bf/2)]],[inboard(b.end,labels,16),Y(-m.width/2)+26],labels,7.5)}</g>`;}
   // Section cut at mid-bay, both ends outside the grids, arrows looking back at the frame on the grid.
   {const xc=X(m.section.at),label=detailRef(typicalSectionTitle);

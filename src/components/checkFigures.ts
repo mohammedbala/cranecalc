@@ -1,6 +1,7 @@
 import type {ProjectInput} from '../engine/types';
 import {componentDetail,type Component} from './figureDetails';
 import {activeEndBearing} from '../engine/endBearingInputs';
+import {isoTopicFigure} from '../report/hairline/topics';
 
 /** Shared explanatory linework for the live worksheet and server-rendered PDF.
  * Black and white: the components a figure is about are drawn heavy with a light gray fill, everything else is
@@ -128,7 +129,7 @@ function bracket(p?:ProjectInput):Drawing{
   note:existing?'Check the new seat and eccentric reaction against the documented assessment of the existing bracket and receiving steel.':kind==='twin-rib'?'Trace reaction R through the seat and ribs. Eccentricity e produces root moment; check welds and local column effects.':kind==='haunched-seat'?'Trace reaction R through the seat into the tapered ribs. R(e − x) peaks against the shrinking section at the critical section of the taper; check the sloping free edge, root welds and local column effects.':kind==='tapered-haunch'?'Trace reaction R through the top flange and the bearing stiffeners into the tapered web. R·(e − y) bends every section of the taper; the bearing offsets along the runway twist it through opposite flange shears. Check the flange forces and weld group at the column face, and the column flange and web (J10) under the two flange forces.':kind==='rolled-corbel'?'Trace reaction R through the W stub to its welds on the column. Eccentricity e bends the stub; the bearing offsets along the runway twist it. Check the web under the bearing, the stiffeners, the weld group and local column effects.':'Trace reaction and eccentricity through the selected bracket. This alternative still requires its own strength and connection design model.',
   path:steps,detail:['support']};
 }
-export interface CheckFigure{title:string;note:string;svg:string;path:string[];detail:string}
+export interface CheckFigure{title:string;note:string;svg:string;path:string[];detail:string;view:'isometric'|'schematic'}
 export function checkFigure(topic:string,p?:ProjectInput):CheckFigure{
  let title=topic,note=checkGroupPurpose[topic]??'Review the stated inputs, calculation basis and acceptance limits.',drawing='',steps:string[]=[],detail:Component[]=[];
  switch(topic){
@@ -183,14 +184,17 @@ export function checkFigure(topic:string,p?:ProjectInput):CheckFigure{
   default:title='Inputs, checks and report record';drawing=[26,100,174].map((x,i)=>rect(x,29,43,45,i===1)+path(`M${x+9} 42h25M${x+9} 51h25M${x+9} 60h17`)+label(x+21,90,['INPUT','CHECK','REPORT'][i])).join('')+arrow(71,51,96,51)+arrow(145,51,170,51)+mark(1,47,104)+mark(2,121,104)+mark(3,195,104);note='Record project inputs, calculation revision and references. Export is controlled by the actual validation results.';
    steps=['Project inputs','Every check evaluated','Report and drawings'];detail=[];
  }
+ // The project's own parts in the Hairline isometric style, where the topic has one and it numbers the same steps.
+ const iso=p?isoTopicFigure(topic,p,{topOnly:!!activeEndBearing(p)}):undefined;
+ const isometric=!!iso&&iso.markers===steps.length;if(isometric)drawing=iso.body;
  const text=p?detail.map(k=>componentDetail(k,p)).join('; '):'';
- return {title,note,path:steps,detail:text,svg:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="${escape(title)}" data-check-figure="${escape(topic)}"><title>${escape(title)}</title><desc>${escape(note)} Load path: ${escape(steps.map((s,i)=>`${i+1} ${s}`).join('; '))}. Schematic, not to scale. Heavy gray-filled parts are the reviewed components; numbered markers follow the load path.</desc>${drawing}</svg>`};
+ return {title,note,path:steps,detail:text,view:isometric?'isometric':'schematic',svg:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="${escape(title)}" data-check-figure="${escape(topic)}"><title>${escape(title)}</title><desc>${escape(note)} Load path: ${escape(steps.map((s,i)=>`${i+1} ${s}`).join('; '))}. ${isometric?'Isometric view of the project\'s parts, not to scale':'Schematic, not to scale'}. Heavy gray-filled parts are the reviewed components; numbered markers follow the load path.</desc>${drawing}</svg>`};
 }
 /** A load-path step number styled like the figure markers. */
 export const stepBadge=(n:number|string)=>`<span class="step">${escape(n)}</span>`;
 export function checkFigureHtml(topic:string,p?:ProjectInput){
  const f=checkFigure(topic,p);
- return `<figure class="calculation-figure">${f.svg}<figcaption><strong>${escape(f.title)}</strong>${f.detail?`<p class="figure-detail"><b>Detail:</b> ${escape(f.detail)}</p>`:''}<p class="figure-path"><b>Load path:</b> ${f.path.map((s,i)=>`${stepBadge(i+1)} ${escape(s)}`).join(' → ')}</p><small>SCHEMATIC · NOT TO SCALE</small></figcaption></figure>`;
+ return `<figure class="calculation-figure">${f.svg}<figcaption><strong>${escape(f.title)}</strong>${f.detail?`<p class="figure-detail"><b>Detail:</b> ${escape(f.detail)}</p>`:''}<p class="figure-path"><b>Load path:</b> ${f.path.map((s,i)=>`${stepBadge(i+1)} ${escape(s)}`).join(' → ')}</p><small>${f.view==='isometric'?'ISOMETRIC':'SCHEMATIC'} · NOT TO SCALE</small></figcaption></figure>`;
 }
 /** Scoped so ARCH D drawing SVGs and existing equation styles are untouched. Black and white throughout. */
 export const checkFigureCss=`.calculation-figure{display:flex;align-items:center;gap:12px;margin:6px 0 8px;padding:5px 8px;background:#fff;border:1px solid #000;break-inside:avoid;page-break-inside:avoid;break-after:avoid}.calculation-figure>svg{display:block;width:240px;height:120px;flex:0 0 240px}.calculation-figure figcaption{min-width:0;color:#000;font:10px/1.4 Arial,sans-serif}.calculation-figure figcaption strong{display:block;font-size:11px;color:#000}.calculation-figure figcaption p{margin:3px 0}.calculation-figure figcaption small{display:block;font-size:7.5px;color:${muted};letter-spacing:.4px}.calculation-figure .step,.step{display:inline-block;min-width:13px;height:13px;line-height:11px;border:1px solid #000;border-radius:7px;text-align:center;font-size:8px;font-weight:700;color:#000;background:#fff;vertical-align:1px}.report-figure-strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;break-inside:avoid;break-after:avoid}.report-figure-strip>.calculation-figure{display:block;margin:0}.report-figure-strip>.calculation-figure>svg{width:240px;height:120px;max-width:100%;margin:0 auto}.report-figure-strip>.calculation-figure figcaption{font-size:9px}.report-figure-strip>.calculation-figure:only-child{grid-column:1/-1;display:flex}`;

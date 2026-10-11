@@ -2,7 +2,7 @@ import {supportColumn,runwayElevations} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,drawingElevation,electrodeClass,plateInches} from './drawingFormat';
-import {sheetDrawingScale,textWidth,line,rect,text,circle,n,dimH,dimV,breakLine,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,type XY} from './sheetGraphics';
+import {sheetDrawingScale,textWidth,wrapToWidth,labelCaps,line,rect,text,circle,n,dimH,dimV,breakLine,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,type XY} from './sheetGraphics';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {bracketForceBlocks} from './bracketForceTable';
@@ -19,9 +19,9 @@ import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffe
 export const haunchPlanTitle='TAPERED HAUNCH / TOP FLANGE PLAN';
 export const haunchSectionTitle='TAPERED HAUNCH / SECTION AT STIFFENERS';
 type Item={at:XY;labels:string[];weld?:string;both?:boolean;field?:boolean;groove?:boolean;allAround?:boolean};
-/** Callouts in a column at x, ordered by target height between top and bottom: plain, fillet or CJP groove. */
-function calloutColumn(items:Item[],x:number,top:number,bottom:number){
- const sorted=[...items].sort((a,b)=>a.at[1]-b.at[1]),height=(v:Item)=>(v.weld||v.groove?17:0)+v.labels.length*11;
+/** Callouts in a column at x, ordered by target height (or as given) between top and bottom: plain, fillet or CJP groove. */
+function calloutColumn(items:Item[],x:number,top:number,bottom:number,sort=true){
+ const sorted=sort?[...items].sort((a,b)=>a.at[1]-b.at[1]):items,height=(v:Item)=>(v.weld||v.groove?17:0)+v.labels.length*11;
  const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
  let y=top,svg='';
  for(const v of sorted){
@@ -30,11 +30,18 @@ function calloutColumn(items:Item[],x:number,top:number,bottom:number){
  }
  return svg;
 }
-/** Vertical dimension whose two extension lines leave the part at different x (dimV with one origin per end). */
-function dimVFrom(y1:number,x1:number,y2:number,x2:number,x:number,label:string){
- const w=textWidth(label,9),fits=w+6<=Math.abs(y2-y1),far=Math.max(y1,y2),ext=(from:number)=>x+(x<from?-4:5);
- return line([x1,y1],[ext(x1),y1])+line([x2,y2],[ext(x2),y2])+line([x,Math.min(y1,y2)],[x,fits?far:far+w+6])+[y1,y2].map(y=>line([x-3,y+2.5],[x+3,y-2.5])).join('')+text(x-6,fits?(y1+y2)/2:far+4+w/2,label,9,'middle',400,-90);
+/**
+ * Vertical dimension whose two extension lines leave the part at different x (dimV with one origin per end). The
+ * text is centered on `at` (the middle by default) where it fits between the ends, else beyond the lower end.
+ */
+function dimVFrom(y1:number,x1:number,y2:number,x2:number,x:number,label:string,at=(y1+y2)/2){
+ const w=textWidth(label,9),lo=Math.min(y1,y2),far=Math.max(y1,y2),fits=at-w/2-3>=lo&&at+w/2+3<=far,ext=(from:number)=>x+(x<from?-4:5);
+ return line([x1,y1],[ext(x1),y1])+line([x2,y2],[ext(x2),y2])+line([x,lo],[x,fits?far:far+w+6])+[y1,y2].map(y=>line([x-3,y+2.5],[x+3,y-2.5])).join('')+text(x-6,fits?at:far+4+w/2,label,9,'middle',400,-90);
 }
+/** Rows of a label no wider than `width`, never breaking a dimension (1'-0 9/16", 12.7 mm). */
+const wrapRows=(v:string,width:number,size=8.5)=>wrapToWidth(labelCaps(v).replace(/(\d) (\d+\/\d+|mm\b|m\b)/g,'$1\u00a0$2'),width,size).map(r=>r.replaceAll('\u00a0',' '));
+/** Callout lines no wider than a weld reference line, so a leader leaving its far end clears the text. */
+const wrapped=(v:string)=>wrapRows(v,90,8);
 const poly=(pts:XY[],cls='runway-line')=>`<path class="${cls}" d="M${pts.map(q=>`${n(q[0])},${n(q[1])}`).join('L')}Z"/>`;
 
 /** Built-up tapered I haunch: elevation along the runway, plan of the top flange and section at the stiffeners, with notes. */
@@ -55,7 +62,12 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
  views.push({title:detailTitles.weldedBracket,render:()=>{
   // The girder end is drawn with its web broken: 3 in of web above the bottom flange and below the top flange.
   const sec=p.section,cap=sec.kind==='cap'?sec.capTw:0,web=3*25.4,gap=1.5*25.4,shown=2*sec.tf+2*web+gap,above=tbp+shown+cap+railTopAboveSteel(p);
-  const scale=sheetDrawingScale(Math.min(.3,205/(hr+above),250/(L+(cs?c.depth:0))),p.units),k=scale.pointsPerMm;
+  // Callouts above the haunch at the left: the stiffeners (their welds are on the section) and the end plate weld,
+  // its lines no wider than the weld reference line.
+  const stiffLabels=wrapRows(`${stiffLabel} AT GIRDER C/L; SEE ${detailRef(haunchSectionTitle)}`,130),endLabels=wrapped(`END PL ${size(tep)}, ALL AROUND, SHOP`);
+  const need=11*stiffLabels.length+(g.endPlate?8+17+11*endLabels.length:0);
+  // Fit within the detail cell (312 high): the callouts above, the haunch, the dimensions below.
+  const scale=sheetDrawingScale(Math.min(.3,205/(hr+above),250/(L+(cs?c.depth:0)),Math.max(40,296-need-60)/hr),p.units),k=scale.pointsPerMm;
   const X=(y:number)=>-y*k,Y=(z:number)=>-z*k,tc=c.flangeThickness*k,topY=Y(above)-14,botY=Y(-hr)+16;
   let svg='<g data-view="tapered-haunch-elevation">';
   // Existing column flange (receiving face at x = 0) and the haunch plates.
@@ -80,13 +92,23 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   // Dimensions: reach and projection below; tip and root depths beyond the tip; top of the haunch.
   svg+=dimH(X(a),X(0),Y(-hr)+3,Y(-hr)+18,dim(a));
   svg+=line([X(L),Y(-ht)+3],[X(L),Y(-hr)+3])+dimH(X(L),X(0),Y(-hr)+3,Y(-hr)+38,dim(L));
-  svg+=dimV(Y(0),Y(-ht),X(L)-4,X(L)-18,dim(ht));
-  svg+=dimVFrom(Y(0),X(L)-4,Y(-hr),X(0)-3,X(L)-40,dim(hr));
+  // The tip depth inside the root depth; where the tip's text does not fit between its ends (it would then sit on the
+  // root's long lower extension line), the root depth inside instead, its text clear of the tip's extension line.
+  const rw=textWidth(dim(hr),9)/2+4,yt=Y(-ht),mid=(Y(0)+Y(-hr))/2;
+  if(textWidth(dim(ht),9)+6<=yt-Y(0)){
+   svg+=dimVFrom(Y(0),X(L)-4,Y(-ht),X(L)-4,X(L)-18,dim(ht));
+   svg+=dimVFrom(Y(0),X(L)-4,Y(-hr),X(0)-3,X(L)-40,dim(hr));
+  }else{
+   const rootAt=Math.abs(mid-yt)>=rw?mid:Y(-hr)-yt>=2*rw?(yt+Y(-hr))/2:yt-Y(0)>=2*rw?(Y(0)+yt)/2:Y(-hr)+1e3;
+   svg+=dimVFrom(Y(0),X(L)-4,Y(-hr),X(0)-3,X(L)-18,dim(hr),rootAt);
+   svg+=dimVFrom(Y(0),X(L)-4,Y(-ht),X(L)-4,X(L)-40,dim(ht));
+  }
   const el=runwayElevations(p),elev=el?`T.O. HAUNCH (SEAT) EL. ${drawingElevation(el.seat,p.units)}`:'T.O. HAUNCH (SEAT)';
   svg+=`<g data-elevation-datum="top-of-haunch">${line([X(L)-44,Y(0)],[X(L)-58,Y(0)])}<path class="leader-arrow" d="M${n(X(L)-50)},${n(Y(0))}l-2.4,-2.4h4.8z"/>${text(X(L)-60,Y(0)+3,elev,8.5,'end')}</g>`;
   // Slope of the bottom flange, in the space below it where it fits above the root-depth extension line.
-  const slope=`SLOPE ${deg}°`,sx=X(.5*L),sy=Y(under(.5*L))+10;
-  if(sy<Y(-hr)-4&&sx-textWidth(slope,8)>X(L)+3)svg+=text(sx,sy,slope,8,'end');
+  // Right of the girder web line, clear of it and of the column, where it fits above the root-depth extension line.
+  const slope=`SLOPE ${deg}°`,sw=textWidth(slope,8),sx=X(a)+6,sy=Y(under(a-(6+sw)/k))+10;
+  if(sy<Y(-hr)-4&&sx+sw<-4)svg+=text(sx,sy,slope,8,'start');
   // Callouts: the column joints and the girder-side parts on the right; the shop welds above the haunch.
   const right:Item[]=[
    {at:[tc+2,topY+8],labels:[colName,sc.isNew?'CHECKED UNDER NEW COLUMN':'SURVEY-VERIFIED SECTION']},
@@ -95,18 +117,20 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
    flangeWeld([0,Y(-hr+tbv/2)],'BOTTOM'),
    {at:[X(a-W*.3),Y(tbp)],labels:[`BEARING PL ${size(tbp)} X ${dim(W)}`,`EACH GIRDER END; ${detailRef(eb?bearingBoltsTitle(p):detailTitles.bearing)}`]},
    {at:[gx(-sec.bf/2),Y(z0+tf/2)],labels:['RUNWAY GIRDER, RAIL (PHANTOM)']},
-   ...(cs?[{at:lowerEdgeTarget(cs.g,{face:0,k,Y}),labels:cs.callout}]:[])
+   ...(cs?[{at:lowerEdgeTarget(cs.g,{face:0,k,Y}),labels:cs.callout.flatMap(v=>wrapRows(v,230))}]:[])
   ];
   svg+=calloutColumn(right,(cs?c.depth*k:tc)+46,topY-6,botY+(cs?60:24));
   // Targets step down and toward the tip, so the leaders nest: the stiffener, the bottom flange-to-web joint near the
   // tip, the end plate.
+  // Targets just under the top flange, so the leaders run above the depth dimensions' text; the farther target
+  // takes the upper label, so the leaders nest.
   const left:Item[]=[
-   {at:[X((a+Lw)/2),Y(inner((a+Lw)/2))],labels:['TOP AND BOTTOM FLANGES TO WEB,','BOTH SIDES, FULL LENGTH, SHOP'],weld:size(g.flangeWebWeld),both:true},
-   {at:[X(a+st.t/2),Y(-tt-st.height*.3)],labels:[`${stiffLabel} AT GIRDER C/L,`,'FIT TO BEAR, WELD BOTH SIDES, SHOP'],weld:size(st.weld),both:true},
-   ...(g.endPlate?[{at:[X(L-tep/2),Y((-tt+inner(Lw))/2)] as XY,labels:[`END PL ${size(tep)}, ALL AROUND,`,'SHOP'],weld:size(st.weld),allAround:true}]:[])
+   {at:[X(a+st.t/2),Y(-tt)+Math.min(6,st.height*k*.3)],labels:stiffLabels},
+   ...(g.endPlate?[{at:[X(L-tep/2),Y(-tt)+Math.min(8,(ht-tt)*k*.25)] as XY,labels:endLabels,weld:size(st.weld),allAround:true}]:[])
   ];
-  const need=left.reduce((h,v)=>h+17+11*v.labels.length,0)+8*(left.length-1);
-  svg+=calloutColumn(left,X(L)-230,Math.min(topY-6,Y(0)-6-need),Y(0)-6);
+  // Each label ends short of its target, so every leader leaves the label's far end toward the haunch.
+  const x0=Math.min(X(L)-130,...left.map(v=>v.at[0]-(v.weld?106:Math.max(...v.labels.map(t=>textWidth(labelCaps(t),8.5))))-24));
+  svg+=calloutColumn(left,x0,Y(0)-6-need,Y(0)-6,false);
   return {svg:svg+'</g>',scale:scale.label};
  }});
  // 2. Plan of the top flange at an interior grid: its outline with the flare, the bearing plates and their holes,
@@ -146,13 +170,12 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
    svg+=text(left,tip+100,`AT A RUNWAY-END GRID: ONE BEARING, ITS GIRDER END ON THE GRID; HOLES ${dim(eb.bolts.edge)} AND ${dim(d.bearing.length-eb.bolts.edge)} FROM IT.`,7.5);
   }else svg+=dimH(left,right,tip,tip+20,dim(bt));
   const xl=X(-cw/2)-2;
-  if(f)svg+=dimVFrom(0,xl,Y(f.y0),X(-btr/2)-2,left-16,dim(f.y0));
   svg+=dimVFrom(0,xl,Y(a),left-12,left-34,dim(a))+dimVFrom(0,xl,tip,left-2,left-52,dim(L));
   // Keys: the elevation from beyond the flange tip, the section through the stiffeners looking at the column.
   svg+=sectionCut([right+14,-3],[right+14,tip+3],[-1,0],detailTitles.weldedBracket,['a']);
   svg+=sectionCut([left-70,Y(a+st.t/2+12)],[right+6,Y(a+st.t/2+12)],[0,-1],haunchSectionTitle,['a'],'tip');
   const pl=plates[plates.length-1],last=bolts.filter(h=>Math.abs(h.x-(xs.at(-1)??0))<1e-3).sort((u,v)=>v.y-u.y)[0],items:Item[]=[
-   {at:[right,Y(f?(f.y1+L)/2:L*.62)],labels:[topLabel,...(f?[`FLARED 45° FROM ${dim(f.y0)},`,`${size(f.radius)} RADIUS, GRIND SMOOTH`]:[]),'WEB, STIFFENERS HIDDEN']},
+   {at:[right,Y(f?(f.y1+L)/2:L*.62)],labels:[topLabel,...(f?[`45° FLARE STARTS ${dim(f.y0)} FROM`,`THE COLUMN FACE, ${size(f.radius)} RADIUS,`,'GRIND SMOOTH']:[]),'WEB, STIFFENERS HIDDEN']},
    {at:[X(pl.x1)-((pl.x1-pl.x0)*k)*.2,Y(pl.y0)],labels:[`BEARING PL ${size(tbp)} X ${dim(W)} X ${dim(d.bearing.length)}`,`EACH GIRDER END; SEE ${detailRef(eb?bearingBoltsTitle(p):detailTitles.bearing)}`]},
    ...(eb&&last?[{at:[X(last.x)+last.hole/2*k,Y(last.y)] as XY,labels:[`${bolts.length} - ${size(last.hole)} STD. HOLES IN THE TOP FL.`,`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[])
   ];
@@ -173,8 +196,8 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=rect(X(-bt/2),Y(0),bt*k,tt*k,'runway-line')+rect(X(-tw/2),Y(-tt),tw*k,(zb+tt)*-k,'runway-line')+rect(X(-bb/2),Y(zb),bb*k,tbv*k,'runway-line');
   for(const sx of [-1,1]){const x0=sx*tw/2,x1=sx*(tw/2+st.width),cl=st.clip;
    svg+=poly([[X(x0+sx*cl),Y(-tt)],[X(x1),Y(-tt)],[X(x1),Y(zb)],[X(x0+sx*cl),Y(zb)],[X(x0),Y(zb+cl)],[X(x0),Y(-tt-cl)]]);}
-  svg+=dimH(X(-bt/2),X(bt/2),Y(0)-2,Y(0)-20,dim(bt));
-  svg+=dimH(X(-bb/2),X(bb/2),Y(-hr)+2,Y(-hr)+20,dim(bb));
+  svg+=dimH(X(-bt/2),X(bt/2),Y(0)-2,Y(ext)-16,dim(bt));
+  svg+=dimH(X(-bb/2),X(bb/2),Y(-hr)+2,Y(-hr-ext)+16,dim(bb));
   svg+=dimV(Y(0),Y(zu),X(-wide/2)-4,X(-wide/2)-18,dim(h));
   const items:Item[]=[
    {at:[X(c.width/2)+2,Y(ext)+8],labels:[colName,'BEYOND']},

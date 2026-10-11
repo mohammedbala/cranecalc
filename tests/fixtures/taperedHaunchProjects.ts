@@ -28,10 +28,10 @@ export function cappedTaperedHaunch():ProjectInput{
  * end bearings, girder end stops, and the building's existing rod X-bracing in one bay taking the crane longitudinal
  * forces.
  *
- * The haunch is 42 in deep at the column: the unbalanced reactions of the two girder ends twist it, and with warping
- * fixed at the column the flange couples at the root reach the 0.71 in column flange. Column stiffeners (1 in, full
- * depth) at both haunch flange levels take the force above the unstiffened J10.1 strength; the deep root keeps their
- * welds and the stiffener fatigue within limits.
+ * The sizing makes the haunch deep at the column: the unbalanced reactions of the two girder ends twist it, and with
+ * warping fixed at the column the flange couples at the root reach the 0.71 in column flange. The unstiffened column
+ * fails J10.1, so the sizing adds column stiffeners at both haunch flange levels (1 in, full depth, 5/8 in fillets)
+ * and deepens the haunch until the stiffeners' web shear and fillet throat fatigue are within limits.
  */
 export function existingBuildingHaunch(units:'US'|'SI'='US'):ProjectInput{
  const p=demonstrationProject();
@@ -70,15 +70,8 @@ export function existingBuildingHaunch(units:'US'|'SI'='US'):ProjectInput{
   source:'EXISTING W14X90 COLUMN, SURVEY-VERIFIED (fictitious survey SV-TH-01): d 14.0 in, bf 14.5 in, tf 0.71 in (UT), tw 0.44 in; A992 per mill certificates; 10 ft flange unbraced length (girts); 60 kip concurrent axial from the building.'}};
  delete b.haunch;
  p.details=selectBracketArrangement({...d,bracket:b},'tapered-haunch');
- // A 42 in root (21 in tip) for the column-face flange couples from torsion; the sizing grows the plates from it.
- const h=p.details.bracket!.haunch!;h.rootDepth=42*inch;h.tipDepth=21*inch;
  // The top-flange tie lands on the existing 0.71 in W14X90 flange: a 6 1/2 in deep tie and column gusset and a
  // 3 1/2 in saddle set back to the girder end.
  const t=p.details.brace;t.width=6.5*inch;t.connection.weldLength=6.5*inch;t.flangeAttachment!.saddleLength=3.5*inch;t.flangeAttachment!.longitudinalSetback=4.5*inch;
- const q=sizeTaperedHaunch(p);
- // Column stiffeners at both haunch flange levels: 1 in plates, full depth, 1/4 in inside the flange tips, the corner
- // clip 1/8 in clear of the W14X90's 0.60 in rolled fillet (k_des 1.31 in), 5/8 in fillets to the flanges (throat
- // fatigue) and 1/2 in to the web.
- q.details!.bracket!.columnStiffeners={enabled:true,thickness:inch,width:6.75*inch,length:'full',clip:.75*inch,flangeWeld:.625*inch,webWeld:.5*inch};
- return q;
+ return sizeTaperedHaunch(p);
 }

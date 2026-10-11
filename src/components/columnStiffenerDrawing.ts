@@ -104,7 +104,8 @@ export function columnStiffenerView(s:CalculationSnapshot):DetailView|undefined{
   // Callouts: the column and the plates at the right, the flange fillet below them, the web fillet at the left.
   const lx=X(c.width/2)+56;
   svg+=multiLeader([[X(c.width/2)-3,top+g.tf*k/2]],[lx,top-26],sc.isNew?[sc.name]:[sc.reference,'FIELD VERIFY']);
-  svg+=multiLeader([[X(g.tw/2+g.width*.6),yIn-g.length*k*.4]],[lx,top+8],[`2 ${v.plate} EACH LEVEL,`,`${v.depth}; ${size(g.clip)} X ${size(g.clip)} CORNER CLIPS`,`CLEAR OF THE COLUMN FILLET, k = ${size(g.K?.k??0)}`]);
+  // Full-depth plates: the leader lands above the plate length's dimension text.
+  svg+=multiLeader([[X(g.tw/2+g.width*.6),yIn-g.length*k*(g.full?.75:.4)]],[lx,top+8],[`2 ${v.plate} EACH LEVEL,`,`${v.depth}; ${size(g.clip)} X ${size(g.clip)} CORNER CLIPS`,`CLEAR OF THE COLUMN FILLET, k = ${size(g.K?.k??0)}`]);
   svg+=filletLeader([[X(g.tw/2+g.clip+g.contact*.7),yIn]],[lx,yIn+12],size(g.s.flangeWeld),[`STIFFENER TO ${g.full?'EACH FLANGE':'LOADED FLANGE'},`,`BOTH FACES, ${v.where}`],true,[],sc.field);
   const webAt:XY=[X(-g.tw/2),yIn-(g.clip+g.webLength*.5)*k],wx=X(-c.width/2)-150;
   svg+=filletLeader([webAt],[wx,webAt[1]+3],size(g.s.webWeld),['STIFFENER TO WEB,',`BOTH FACES, ${v.where}`],true,[],sc.field);
