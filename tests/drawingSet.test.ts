@@ -1,6 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {calculate as calculateProject} from '../src/engine/calculate';
-import {withColumnReviewData} from './fixtures/columnReviewData';
+import {calculate} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {drawingSheetSet,resolveSheetSet,sheetIndex,detailReferences,detailTopics} from '../src/components/planSheet';
 import {sheetsDxf,sheetEntities,drawingSetDxf,sheetLayers} from '../src/components/sheetDxf';
@@ -12,8 +11,6 @@ import {coverSheetSvg} from '../src/components/coverSheet';
 import {format} from '../src/engine/units';
 import type {CalculationSnapshot} from '../src/engine/types';
 import {bracketForceCases,bracketForceCells} from '../src/components/bracketForceTable';
-// Review G2: supply the supporting-column records so the package can pass and export.
-const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
 const capped=calculate(cappedDemonstrationProject()),demo=calculate(demonstrationProject()),newColumn=calculate(newColumnDemonstrationProject());

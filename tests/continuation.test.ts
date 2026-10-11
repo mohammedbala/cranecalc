@@ -1,6 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {calculate as calculateProject,validateProject} from '../src/engine/calculate';
-import {withColumnReviewData} from './fixtures/columnReviewData';
+import {calculate,validateProject} from '../src/engine/calculate';
 import {exampleProject} from '../src/engine/defaults';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
 import {supportReactions} from '../src/engine/supportReactions';
@@ -11,8 +10,6 @@ import {movingAnalysis} from '../src/engine/analysis';
 import {stopEnds} from '../src/engine/endStopInputs';
 import {drawingSheetSet} from '../src/components/planSheet';
 import type {ProjectInput} from '../src/engine/types';
-// Review G2: supply the supporting-column records so the package can pass and export.
-const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 const L=7620,foot=304.8;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&')).join(' ');

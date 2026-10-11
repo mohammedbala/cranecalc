@@ -1,8 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import * as THREE from 'three';
 import {cappedDemonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
-import {calculate as calculateProject,validateProject} from '../src/engine/calculate';
-import {withColumnReviewData} from './fixtures/columnReviewData';
+import {calculate,validateProject} from '../src/engine/calculate';
 import {projectSchema} from '../src/engine/types';
 import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
 import {connectionOptionChecks,selectBracketArrangement} from '../src/engine/connectionOptions';
@@ -12,8 +11,6 @@ import {seatStrip} from '../src/engine/bracketDesign';
 import {compactReport} from '../src/report/compactReport';
 import {bracketSheetSvg} from '../src/components/bracketSheet';
 import {buildWeldedBrackets} from '../src/components/weldedBracketGeometry';
-// Review G2: supply the supporting-column records so the package can pass and export.
-const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 // Leader routes of different callouts that cross, in sheet coordinates (as in drawingLeaders.test.ts).
 type Point=[number,number];

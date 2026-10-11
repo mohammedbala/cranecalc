@@ -1,8 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import * as THREE from 'three';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
-import {calculate as calculateProject,validateProject} from '../src/engine/calculate';
-import {withColumnReviewData} from './fixtures/columnReviewData';
+import {calculate,validateProject} from '../src/engine/calculate';
 import {selectBracketArrangement,connectionOptionChecks} from '../src/engine/connectionOptions';
 import {bracketResponse,columnWeldGroup,columnWeldStress,validateBracket} from '../src/engine/bracketDesign';
 import {ribGeometry,ribResponse,ribFlexure,ribFreeEdge,rootCornerStress,ribDepthAt} from '../src/engine/bracketRib';
@@ -13,8 +12,6 @@ import {detailedDrawings} from '../src/components/detailedDrawings';
 import {drawingLength,plateInches} from '../src/components/drawingFormat';
 import {esc} from '../src/components/sheetGraphics';
 import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
-// Review G2: supply the supporting-column records so the package can pass and export.
-const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 const inch=25.4,ksi=6.894757293168;
 /** The capped demonstration with the haunched seat: 24 in root, 8 in tip, 28 in projection, 1 1/2 in ribs. */

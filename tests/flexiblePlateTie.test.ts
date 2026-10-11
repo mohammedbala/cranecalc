@@ -1,8 +1,7 @@
 import {describe,it,expect,beforeAll} from 'vitest';
 import * as THREE from 'three';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
-import {calculate as calculateProject,validateProject} from '../src/engine/calculate';
-import {withColumnReviewData} from './fixtures/columnReviewData';
+import {calculate,validateProject} from '../src/engine/calculate';
 import {selectTieArrangement,tieOptions,connectionOptionChecks} from '../src/engine/connectionOptions';
 import {flangeTieGeometry,tieRelease,tiePlies,tieEccentricity} from '../src/engine/tieGeometry';
 import {braceSystem} from '../src/engine/detailAnalysis';
@@ -17,8 +16,6 @@ import {buildIndependentSupports} from '../src/components/independentSupportGeom
 import {createHardwareBuilder} from '../src/components/connectionDetails';
 import {references} from '../src/engine/references';
 import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
-// Review G2: supply the supporting-column records so the package can pass and export.
-const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 const inch=25.4,ksi=6.894757293168;
 /** The 10-ton demonstration with one 1/2 in flexible plate on 1 in gussets (the documented test project). */

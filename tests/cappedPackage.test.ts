@@ -1,13 +1,10 @@
 import {beforeAll,it,expect} from 'vitest';
 import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/demonstration';
-import {calculate as calculateProject,fingerprint} from '../src/engine/calculate';
-import {withColumnReviewData} from './fixtures/columnReviewData';
+import {calculate,fingerprint} from '../src/engine/calculate';
 import {capAttachmentChecks} from '../src/engine/capChecks';
 import {drawingSheetSet} from '../src/components/planSheet';
 import {reportHtml} from '../server/report';
 import type {CalculationSnapshot} from '../src/engine/types';
-// Review G2: supply the supporting-column records so the package can pass and export.
-const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 let s:CalculationSnapshot;
 beforeAll(()=>{s=calculate(cappedDemonstrationProject());},120000);
 it('runs the complete three-bay capped example with no unresolved or failed checks',()=>{

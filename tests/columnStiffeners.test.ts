@@ -11,15 +11,12 @@ import {columnStiffenerTitle} from '../src/components/columnStiffenerDrawing';
 import {addColumnStiffeners} from '../src/components/columnStiffenerGeometry';
 import {projectSchema} from '../src/engine/types';
 import type {CalculationSnapshot,CheckResult,ProjectInput} from '../src/engine/types';
-import {calculate as calculateProject} from '../src/engine/calculate';
-import {withColumnReviewData} from './fixtures/columnReviewData';
+import {calculate} from '../src/engine/calculate';
 import {drawingSheetSet} from '../src/components/planSheet';
 import {sheetEntities} from '../src/components/sheetDxf';
 import {textWidth} from '../src/components/sheetGraphics';
 import {annotationClashes} from '../src/components/detailSheet';
 import {cappedTwinRibW14X90,cappedStubW14X90,newW14X90Columns} from './fixtures/columnStiffenerProjects';
-// Review G2: supply the supporting-column records so the package can pass and export.
-const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 const inch=25.4,ksi=6.894757293168,kip=4448.2216152605;
 /** The capped demonstration on a surveyed W14X90 receiving column (d 14.0, bf 14.5, tf 0.71, tw 0.44 in, kdes 1.31 in). */

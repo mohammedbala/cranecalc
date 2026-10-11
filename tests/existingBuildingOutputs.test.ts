@@ -1,12 +1,9 @@
 import {beforeAll,describe,it,expect} from 'vitest';
-import {calculate as calculateProject} from '../src/engine/calculate';
-import {withColumnReviewData} from './fixtures/columnReviewData';
+import {calculate} from '../src/engine/calculate';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
 import {interfaceCsv,supportReactionsCsv} from '../src/engine/detailExports';
 import {reportHtml} from '../server/report';
 import type {CalculationSnapshot} from '../src/engine/types';
-// Review G2: supply the supporting-column records so the package can pass and export.
-const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 let s:CalculationSnapshot;
 beforeAll(()=>{s=calculate(cappedDemonstrationProject());},120000);

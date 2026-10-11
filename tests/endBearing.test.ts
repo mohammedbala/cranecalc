@@ -1,6 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {calculate as calculateProject,validateProject} from '../src/engine/calculate';
-import {withColumnReviewData} from './fixtures/columnReviewData';
+import {calculate,validateProject} from '../src/engine/calculate';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
 import {endBearingChecks,endBearingGeometry,activeEndBearing,continuousBearings,locatingSupport} from '../src/engine/endBearing';
 import {boltCapacity} from '../src/engine/connectionStrength';
@@ -10,8 +9,6 @@ import {compactReport} from '../src/report/compactReport';
 import {endBearingView} from '../src/components/endBearingDetail';
 import {slidingBoltView} from '../src/components/slidingBoltSection';
 import {detailTitles} from '../src/components/sheetGraphics';
-// Review G2: supply the supporting-column records so the package can pass and export.
-const calculate=(p:Parameters<typeof calculateProject>[0])=>calculateProject(withColumnReviewData(p));
 
 const inch=25.4,foot=304.8;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));

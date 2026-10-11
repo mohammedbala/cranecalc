@@ -4,9 +4,10 @@ import {designsBracing} from '../../src/engine/newColumnBracing';
 /**
  * Supporting-column data that the structural review (group G2) made required for an existing building column:
  * where the crane longitudinal force leaves the column, the frame type, the TR-13 §5.3 frame service data, the site
- * seismic record and the lateral-system evaluation, and the 10-year wind on the braced line. Test projects that
- * assert a fully passing, exportable package supply these fictitious records; without them the package carries the
- * open items (as DEMO-FOCUS-005 does). Mutates and returns `p`.
+ * seismic record and the lateral-system evaluation, and the 10-year wind on the braced line. The app demonstrations
+ * carry their own records (demonstration.ts); test-only projects that rebuild the existing column or its bracing
+ * (taperedHaunchProjects) and still assert a fully passing, exportable package fill the gaps here. Without them the
+ * package carries the open items, as DEMO-FOCUS-005 does. Mutates and returns `p`; entered records are kept.
  */
 export function withColumnReviewData<T extends ProjectInput>(p:T):T{
  const c=p.existingColumn;
