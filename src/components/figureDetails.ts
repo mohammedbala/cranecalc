@@ -1,3 +1,5 @@
+import {deflectionCriteria} from '../engine/aistChecks';
+import {effectiveBuildingClass} from '../engine/buildingClass';
 import type {ProjectInput} from '../engine/types';
 import {format} from '../engine/units';
 import {drawingLength,plateInches} from './drawingFormat';
@@ -82,7 +84,7 @@ function crane(p:ProjectInput){
 }
 function criteria(p:ProjectInput){
  const d=p.details;
- return `Class ${p.aist?.buildingClass??'-'}; ${p.fatigue.cycles.toLocaleString()} cycles; vertical L/${p.verticalLimit}, lateral L/${d?.criteria.railLateralLimit??p.lateralLimit}`;
+ return `Class ${p.aist?effectiveBuildingClass(p):'-'}; ${p.fatigue.cycles.toLocaleString()} cycles; vertical L/${p.aist?deflectionCriteria(p).nv:p.verticalLimit}, lateral L/${d?.criteria.railLateralLimit??p.lateralLimit}`;
 }
 export function componentDetail(kind:Component,p:ProjectInput):string{
  switch(kind){

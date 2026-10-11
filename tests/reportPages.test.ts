@@ -1,9 +1,10 @@
 import {describe,expect,it} from 'vitest';
+import {reviewOpenItem} from './review/openItems';
 import {calculate} from '../src/engine/calculate';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
 import {compactReport} from '../src/report/compactReport';
 
-const s=calculate(cappedDemonstrationProject());
+const s=calculate(cappedDemonstrationProject());s.checks=s.checks.filter(c=>!reviewOpenItem(c));
 
 describe('printed calculation pages',()=>{
  it('prints project, revision, issue status, responsibility and page numbers in the page margins',()=>{

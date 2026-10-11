@@ -7,6 +7,7 @@ import {existingColumnSection} from '../engine/existingColumn';
 import {format} from '../engine/units';
 import {craneDesignMinimum,craneCombinations} from '../engine/aistLoads';
 import {deflectionCriteria} from '../engine/aistChecks';
+import {buildingClassBasis} from '../engine/buildingClass';
 import {runwayElevations,issueStatus,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
@@ -210,7 +211,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['RUNWAY GIRDER',`${p.section.name}${p.section.kind==='cap'?' (CAPPED)':''}, Fy = ${ksi(p.section.Fy)}`],
   ['SPANS',`${p.spans.map(len).join(' + ')} ${p.system==='continuous'?'CONTINUOUS':'SIMPLE SPANS'}`],
   ['DESIGN METHOD',`${p.method}; RUNWAY: AIST TR-13 §3.10; BUILDING CHECKS: ASCE 7 §2.3/§2.4`],
-  ['AIST BUILDING CLASS',a?`CLASS ${a.buildingClass} FOR ${a.buildingCycles.toLocaleString()} OWNER FULL-LOAD REPETITIONS`:'-'],
+  ['AIST BUILDING CLASS',a?(()=>{const k=buildingClassBasis(p);return `CLASS ${k.effective} (TR-13 TABLE 1.1, ${k.basis==='full-load'?`${k.repetitions.toLocaleString()} FULL-LOAD REPETITIONS COUNTED`:`ALL ${k.counted.toLocaleString()} LOAD CYCLES COUNTED`}${k.effective!==k.entered?`; ENTERED CLASS ${k.entered}`:''}). RUNWAY INSPECTION AT THE TR-13 APPENDIX C INTERVAL FOR CLASS ${k.effective}`;})():'-'],
   // AIST TR-13 multiple cranes: every loaded / empty arrangement, closest approach included; one crane's side thrust.
   ...(p.cranes.length>1?[['CRANES ON THE RUNWAY',`${p.cranes.length} CRANES, MIN. ${len(Math.max(...p.cranes.map(c=>c.minSeparation)))} WHEEL TO WHEEL. STRENGTH: EVERY LOADED AND EMPTY ARRANGEMENT AT ALL POSITIONS, CLOSEST APPROACH INCLUDED, WITH IMPACT ON EACH CRANE AND SIDE THRUST FROM ONE CRANE AT A TIME. FATIGUE: ${p.aist?.fatigueCranes==='single'?'ONE CRANE AT A TIME':'ALL CRANES TOGETHER, SIDE THRUST FROM ONE'}.`]]:[]),
   ['VERTICAL / LATERAL DEFLECTION',`${ratio(vertical,criteria.nv)} / ${ratio(lateral,criteria.nh)} OF EACH BAY (ONE CRANE, NO IMPACT)`],
