@@ -234,9 +234,11 @@ function centroid(h:Vec2[]):Vec2{
  * no other leader, circle or label.
  */
 function placeCircle(p:Vec2,pref:[number,number],R:number,W:number,H:number,placed:FigureLayout['markers'],labels:FigureLayout['labels'],arrows:{from:Vec2;to:Vec2}[]):Vec2{
- const len=Math.max(18,Math.hypot(pref[0],pref[1])),a0=Math.atan2(pref[1],pref[0]);
- const cands:Vec2[]=[[p[0]+pref[0],p[1]+pref[1]]];
- for(const r of [len,len+8,len-6,len+16,len+26,len+38,len+52])for(let k=1;k<=12;k++)for(const s of [1,-1]){const a=a0+s*k*Math.PI/12;if(r>=16)cands.push([p[0]+r*Math.cos(a),p[1]+r*Math.sin(a)]);}
+ const len=Math.min(60,Math.max(18,Math.hypot(pref[0],pref[1]))),a0=Math.atan2(pref[1],pref[0]);
+ // Every candidate is kept inside the figure box; its leader still reaches the anchor.
+ const inBox=(c:Vec2):Vec2=>[Math.min(W-R-1,Math.max(R+1,c[0])),Math.min(H-R-1,Math.max(R+1,c[1]))];
+ const cands:Vec2[]=[inBox([p[0]+pref[0],p[1]+pref[1]])];
+ for(const r of [len,len+8,len-6,len+16,len+26,len+38,len+52])for(let k=1;k<=12;k++)for(const s of [1,-1]){const a=a0+s*k*Math.PI/12;if(r>=16)cands.push(inBox([p[0]+r*Math.cos(a),p[1]+r*Math.sin(a)]));}
  const cost=(c:Vec2)=>{
   let bad=0;
   if(c[0]<R+1||c[0]>W-R-1||c[1]<R+1||c[1]>H-R-1)bad+=100;
