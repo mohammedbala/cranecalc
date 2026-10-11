@@ -9,6 +9,7 @@ import {connectionConceptSheetSvg} from '../src/components/connectionConceptShee
 import {loadAiscSection,aiscWShapes} from '../src/data/aiscSections';
 import {validateProject} from '../src/engine/calculate';
 import {defaultFraming} from '../src/components/framingSettings';
+import {dimH,dimV} from '../src/components/sheetGraphics';
 import type {CalculationSnapshot} from '../src/engine/types';
 import {detailRef} from '../src/components/sheetGraphics';
 
@@ -88,5 +89,23 @@ describe('connection-sheet leader routes',()=>{
   expect(crossingLeaders(route('0,0 10,10')+route('0,10 10,0'))).toHaveLength(1);
   expect(crossingLeaders(route('0,0 10,0')+route('5,0 15,0'))).toHaveLength(1);
   expect(crossingLeaders('<g data-multileader="component"><polyline data-leader-path="true" points="0,0 10,10"/><polyline data-leader-path="true" points="0,10 10,0"/></g>')).toEqual([]);
+ });
+});
+
+describe('dimension extension lines',()=>{
+ const lines=(svg:string)=>[...svg.matchAll(/<line class="[^"]*" x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"/g)].map(m=>m.slice(1,5).map(Number));
+ it('run past the dimension line, away from the part, on every side',()=>{
+  // Horizontal dimensions above (y < part) and below (y > part) a part at y = 100.
+  for(const y of [60,140]){
+   const ext=lines(dimH(10,90,100,y,'1\'-0"')).filter(([x1,,x2])=>x1===x2&&(x1===10||x1===90));
+   expect(ext).toHaveLength(2);
+   for(const [,y1,,y2] of ext){expect(y1).toBe(100);expect(y<100?y2<y:y2>y).toBe(true);}
+  }
+  // Vertical dimensions left (x < part) and right (x > part) of a part at x = 100.
+  for(const x of [60,140]){
+   const ext=lines(dimV(10,90,100,x,'1\'-0"')).filter(([,y1,,y2])=>y1===y2&&(y1===10||y1===90));
+   expect(ext).toHaveLength(2);
+   for(const [x1,,x2] of ext){expect(x1).toBe(100);expect(x<100?x2<x:x2>x).toBe(true);}
+  }
  });
 });

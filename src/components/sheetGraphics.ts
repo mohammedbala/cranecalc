@@ -47,13 +47,16 @@ export function dimH(x1: number, x2: number, fromY: number, y: number, label: st
   const w = textWidth(label, 9), fits = w + 6 <= Math.abs(x2 - x1), lo = Math.min(x1, x2), hi = Math.max(x1, x2);
   const l = Math.min(lo, clear ?? lo), r = Math.max(hi, clear ?? hi);
   const [a, b] = fits ? [lo, hi] : outside === 'right' ? [lo, r + w + 6] : [l - w - 6, hi];
-  return line([x1, fromY], [x1, y + 5]) + line([x2, fromY], [x2, y + 5]) + line([a, y], [b, y])
+  // Extension lines run just past the dimension line, away from the part.
+  const ext = y + (y < fromY ? -4 : 5);
+  return line([x1, fromY], [x1, ext]) + line([x2, fromY], [x2, ext]) + line([a, y], [b, y])
     + [x1, x2].map(x => line([x - 2.5, y + 3], [x + 2.5, y - 3])).join('')
     + (fits ? text((x1 + x2) / 2, y - 5, label, 9, 'middle') : outside === 'right' ? text(r + 4, y - 5, label, 9, 'start') : text(l - 4, y - 5, label, 9, 'end'));
 }
 export function dimV(y1: number, y2: number, fromX: number, x: number, label: string) {
   const w = textWidth(label, 9), fits = w + 6 <= Math.abs(y2 - y1), far = Math.max(y1, y2);
-  return line([fromX, y1], [x + 5, y1]) + line([fromX, y2], [x + 5, y2]) + line([x, Math.min(y1, y2)], [x, fits ? far : far + w + 6])
+  const ext = x + (x < fromX ? -4 : 5);
+  return line([fromX, y1], [ext, y1]) + line([fromX, y2], [ext, y2]) + line([x, Math.min(y1, y2)], [x, fits ? far : far + w + 6])
     + [y1, y2].map(y => line([x - 3, y + 2.5], [x + 3, y - 2.5])).join('')
     + text(x - 6, fits ? (y1 + y2) / 2 : far + 4 + w / 2, label, 9, 'middle', 400, -90);
 }
