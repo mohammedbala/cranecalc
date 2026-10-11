@@ -1,5 +1,6 @@
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import type {FatigueDetailResult} from './runwayDetails';
+import {columnStiffenerGeometry} from './columnStiffeners';
 
 /**
  * Check taxonomy: what each computed result is, whether it applies, which results repeat or say the same thing, and
@@ -50,8 +51,8 @@ const idRules:Rule[]=[
  T(/^(supporting-structure|brace-by-others|bracket-load-path)$/,'by-others'),T(/-by-others$/,'by-others'),
  // Classification: section/element slenderness, applicability tests feeding a strength check, F13.1 capacity modifier
  T(/^(compact-flange|compact-web|cap-proportion|flange-net|column-brackets|hook-bolts)$/,'classification'),
- T(/(-slenderness|-slope)$/,'classification'),T(/^cap-angle-column-holes$/,'classification'),T(/^end-stop-stiffener$/,'classification'),
- T(/-tr13-load$/,'classification'),
+ T(/^cap-angle-plate-slenderness$/,'detailing'),T(/(-slenderness|-slope)$/,'classification'),T(/^cap-angle-column-holes$/,'classification'),T(/^end-stop-stiffener$/,'classification'),
+ T(/-tr13-load$/,'classification'),T(/^cap-angle-stiffener$/,'detailing'),
  // Fatigue (design)
  D(/^detail-(fatigue|full-cycle)-/,'fatigue'),D(/fatigue|^rail-keeper-root$/,'fatigue'),
  // Movement capacity (design)
@@ -66,6 +67,7 @@ const idRules:Rule[]=[
  T(/^(cap-development-length|cap-rail-footprint|haunch-colstiff-weld-minimum)$/,'detailing'),
  T(/^cap-angle-plate-slenderness$/,'detailing'),
  // Design: strength and serviceability, by effect
+ D(/^(cap-weld-(strength|metal|rupture)|rail-joint-plate|end-stop-bearing-(base|flange)|cap-development(-full-force)?)$/,'connection'),
  D(/^(axial|column-axial|brace-tension|brace-rod)$|-(plate-yield|plate-rupture|plate-compression|leg-tension|tension)$/,'axial'),
  D(/^(shear|torsion-shear|column-shear|haunch-shear|haunch-flange-shear)$|-(shear|shear-rupture|web-shear)$/,'shear'),
  D(/^(wheel-yield|wheel-cripple|wheel-web-tr13|sidesway|rail-web|rail-flange-local|haunch-seat-strip|stiffener-lateral-flexure)$/,'local'),
@@ -106,7 +108,7 @@ const categories:Record<string,{th:number;cf:number}>={A:{th:24,cf:250},B:{th:16
 const normalCategory=(c:string)=>({B1:'B′',E1:'E′',"B'":'B′',"C'":'C′',"E'":'E′','E-prime':'E′','B-prime':'B′','C-prime':'C′'} as Record<string,string>)[c]??c;
 /** All-cycle allowable range (MPa) without threshold credit, for a category at n cycles. */
 export function allCycleRange(category:string,n:number){
- const k=normalCategory(category);if(k==='F')return 100*(1.5e10/n)**.167*ksi;
+ const k=normalCategory(category);if(k==='F')return 690*(1.5/n)**.167;
  const v=categories[k];return v?((v.cf*1e8)/n)**(1/3)*ksi:NaN;
 }
 export const thresholdOf=(category:string)=>{const v=categories[normalCategory(category)];return v?v.th*ksi:NaN;};
@@ -114,8 +116,9 @@ export interface FatigueData{range:number;threshold:number;category:string;miner
 const haunchKeys:Record<string,string>={'top-flange':'topFlange','bottom-flange':'bottomFlange','flange-web':'flangeWeb','stiffener-toe':'stiffenerToe',flare:'flare',column:'column'};
 const parseCategory=(note:string)=>{
  const m=note.match(/Category\s+([A-F](?:-double-prime|-prime|′′|′|''|')?)/i)??note.match(/\bcategory\s+([A-F]\d?)\b/i);
- if(!m)return undefined;const c=m[1].toUpperCase().replace('-DOUBLE-PRIME',"''").replace('-PRIME','′').replace(/''|′′/,"''").replace("'",'′');
- return c;
+ if(!m)return undefined;const c=m[1].toUpperCase();
+ if(/-DOUBLE-PRIME$|''$|′′$/.test(c))return `${c[0]}''`;
+ return /-PRIME$|'$|′$/.test(c)?`${c[0]}′`:c;
 };
 /** Total fatigue cycles: the duty spectrum where one is entered, else the project count. */
 export function fatigueCycles(s:CalculationSnapshot){const sp=s.input.details?.spectrum??[];return sp.length?sp.reduce((a,v)=>a+v.cycles,0):s.input.fatigue.cycles;}
@@ -130,21 +133,29 @@ export function fatigueData(s:CalculationSnapshot,c:CheckResult):FatigueData|und
   const cat=normalCategory(f.category);return {range:f.range,threshold:f.threshold??thresholdOf(cat),category:cat,miner:f.damage,allCycle:f.range/allCycleRange(cat,n),location:`${f.name} at x = ${(f.x/304.8).toFixed(1)} ft`,source:'register'};}
  const note=c.note??'';
  // An explicit threshold in the note (bolts: F_TH = 7 ksi).
- const th=note.match(/F_?TH\s*=\s*([\d.]+)\s*(ksi|MPa)/);
+ const th=note.match(/F_?TH\s*=\s*(\d+(?:\.\d+)?)\s*(ksi|MPa)/);
  let cat=parseCategory(note);
  const haunch=c.id.match(/^(haunch|wbracket|bracket)-fatigue-(top-flange|bottom-flange|flange-web|stiffener-toe|flare|column)$/);
  if(haunch&&haunch[1]==='haunch'&&r?.taperedHaunch){
   const key=haunchKeys[haunch[2]],range=Math.max(0,...r.taperedHaunch.fatigue.map(v=>(v as unknown as Record<string,number>)[key]??0));
   const k=cat??'C';return {range,threshold:thresholdOf(k),category:k,miner:c.utilization,allCycle:range/allCycleRange(k,n),source:'haunch results'};
  }
+ const cs=c.id.match(/^haunch-colstiff-fatigue-(plate|toe)$/);
+ if(cs&&r?.taperedHaunch){
+  const F=r.taperedHaunch.fatigue;
+  if(cs[1]==='toe'){const range=Math.max(0,...F.map(v=>v.column));return {range,threshold:thresholdOf('C'),category:'C',miner:c.utilization,allCycle:range/allCycleRange('C',n),source:'haunch results'};}
+  const g=columnStiffenerGeometry(s.input);
+  if(g){const range=Math.max(0,...F.map(v=>Math.max(v.stiffUpper??0,v.stiffLower??0)))/(g.contact*g.t),rf=note.match(/R_FIL\s*=\s*(\d+(?:\.\d+)?)/),R=rf?Number(rf[1]):1;
+   return {range,threshold:R*thresholdOf('C'),category:rf?"C''":'C',miner:c.utilization,allCycle:range/(R*allCycleRange('C',n)),source:'haunch results'};}
+ }
  if(c.quantity!=='stress'||c.demand===undefined||c.capacity===undefined)return undefined;
  // All-cycle checks: the demand is the largest range. Root cracks (C'', R_FIL): threshold R·F_TH,C with R from the note
  // or from the allowable against the plain Category C curve.
- const rfil=note.match(/R_FIL\s*=\s*([\d.]+)/);
+ const rfil=note.match(/R_FIL\s*=\s*(\d+(?:\.\d+)?)/);
  if(cat==="C''"||(!cat&&rfil)){const R=rfil?Number(rfil[1]):c.capacity/allCycleRange('C',n);return {range:c.demand,threshold:R*thresholdOf('C'),category:"C''",allCycle:c.utilization,source:'check'};}
  if(th){const v=Number(th[1])*(th[2]==='ksi'?ksi:1);return {range:c.demand,threshold:v,category:cat??(/bolt/i.test(c.title)?'bolt':'—'),allCycle:c.utilization,source:'check'};}
  // No category stated: the one whose all-cycle curve gives the check's allowable.
- if(!cat)cat=Object.keys(categories).filter(k=>k!=='bolt').find(k=>Math.abs(allCycleRange(k,n)/c.capacity!-1)<5e-3);
+ if(!cat)cat=Object.keys(categories).filter(k=>k!=='bolt').find(k=>Math.abs(allCycleRange(k,n)/c.capacity!-1)<1.5e-2);
  if(!cat||!categories[normalCategory(cat)])return undefined;
  cat=normalCategory(cat);return {range:c.demand,threshold:thresholdOf(cat),category:cat,allCycle:c.utilization,source:'check'};
 }
@@ -153,12 +164,12 @@ const isPeak=(id:string)=>/^fatigue-peak/.test(id);
 
 export interface GateResult{gate:Gate;reason?:string}
 /** The project's governing fatigue method: Miner's sum over the duty bins (default) or the all-cycle bound. */
-export const fatigueMethod=(p:ProjectInput)=>(p.fatigue as {method?:'miner'|'all-cycle'}).method??'miner';
+export const fatigueMethod=(p:ProjectInput)=>p.fatigue.method??'miner';
 const j10Required=(s:CalculationSnapshot,prefix:string,column:boolean)=>{
  if(column){
   // Column stiffeners: J10.1–J10.4 require them where the unstiffened column carries less than R_u (R_st > 0).
   const notes=s.checks.filter(v=>new RegExp(`^${prefix}-colstiff-(upper|lower)$`).test(v.id)).map(v=>v.note);
-  const rst=notes.flatMap(t=>[...t.matchAll(/R_st\s*=\s*([\d.]+)/g)].map(m=>Number(m[1])));
+  const rst=notes.flatMap(t=>[...t.matchAll(/R_st\s*=\s*(\d+(?:\.\d+)?)/g)].map(m=>Number(m[1])));
   return rst.length?rst.some(v=>v>0):true;
  }
  const web=s.checks.filter(v=>new RegExp(`^${prefix}-web-(yielding|crippling)$`).test(v.id));
@@ -193,41 +204,48 @@ function firstSentence(v:string){const m=v.match(/^.{10,200}?[.;](\s|$)/);return
 
 // ---------------------------------------------------------------- repeats and merges
 /** Register points of one detail family (keepers, cap weld base metal, cap ends, holes) share geometry and category. */
-export const registerFamily=(id:string)=>{const m=id.match(/^detail-(?:fatigue|full-cycle)-([A-Z]+)(?:-(left|right))?\d*(?:-(?:left|right|L|R))?$/);return m?`${m[1]}${m[2]?`-${m[2]}`:''}`:undefined;};
+/** Register points of one family: same prefix (RC keepers, CW cap weld, CE cap ends, CA/SH holes), category and detail. */
+export function registerFamily(s:CalculationSnapshot,id:string){
+ const m=id.match(/^detail-(?:fatigue|full-cycle)-(.+)$/),f=m&&s.detailResults?.fatigue.find(v=>v.id===m[1]);if(!f)return undefined;
+ return `register:${f.id.match(/^[A-Z]+/)?.[0]??f.id}|${f.category}|${familyTitle(f.name)}`;
+}
+/** Named fatigue checks of one detail: the haunch (bracket) flanges at their welds to the column, top and bottom. */
+const fatigueDetailKey=(id:string)=>id.replace(/^(haunch|wbracket|bracket)-fatigue-(top|bottom)-flange$/,'$1-fatigue-flanges');
+const fatigueDetailTitle:Record<string,string>={'haunch-fatigue-flanges':'Haunch flanges at the column welds (top and bottom)'};
 const familyTitle=(name:string)=>name.replace(/\s+\d+\b/,'').replace(/,\s*bay \d+.*?(?=·|$)/,'').replace(/\s*·\s*(left|right|channel flange (left|right))\b/,'').replace(/\s*·\s*all-cycle bound$/,'').replace(/\s+(front|back) row/,'').trim();
-interface MergeDef{key:string;title:string;re:RegExp;prefer?:RegExp}
+interface MergeDef{key:string;title:string;re:RegExp;prefer?:RegExp;effect?:Effect}
 /**
  * Redundant checks reported as one line, the controlling limit state named: one combined-action check and one LTB
  * check per member, one line per bolt group, stiffener set and weld group, one line for the rail joint.
  */
 export const mergeDefs:MergeDef[]=[
  {key:'girder-combined',title:'Combined axial, major and flange lateral flexure (AISC H1 with the DG7 flange lateral moment)',re:/^(combined|minor|torsion-normal)$/,prefer:/^combined$/},
- {key:'girder-ltb',title:'Major flexure and lateral-torsional buckling (load height)',re:/^(major|flexure-load-height|torsion-stability)$/,prefer:/^flexure-load-height$/},
+ {key:'girder-ltb',effect:'flexure',title:'Major flexure and lateral-torsional buckling (load height)',re:/^(major|flexure-load-height|torsion-stability)$/,prefer:/^flexure-load-height$/},
  {key:'girder-shear',title:'Web shear including Saint-Venant and warping shear',re:/^(shear|torsion-shear)$/,prefer:/^shear$/},
  {key:'wheel-local',title:'Web local yielding and crippling under the wheel',re:/^(wheel-yield|wheel-cripple|wheel-web-tr13)$/},
- {key:'girder-stiffeners',title:'Girder bearing stiffeners (column buckling, fitted bearing, welds)',re:/^(stiffener-column|stiffener-bearing|stiffener-weld|stiffener-combined-weld|stiffener-lateral-flexure)$/},
+ {key:'girder-stiffeners',effect:'local',title:'Girder bearing stiffeners (column buckling, fitted bearing, welds)',re:/^(stiffener-column|stiffener-bearing|stiffener-weld|stiffener-combined-weld|stiffener-lateral-flexure)$/},
  {key:'bearing-plate',title:'Bearing plate and contact',re:/^(bearing-plate|bearing-contact|hold-down-model)$/},
- {key:'end-bearing-bolts',title:'End bearing bolt group (slip, shear, tension, bearing/tearout)',re:/^end-bearing-(locating-slip|locating-shear|locating-tension|flange-bearing|plate-bearing|seat-bearing|sliding)$/},
- {key:'end-bearing-sleeves',title:'End bearing sleeves and plate washers',re:/^end-bearing-(sleeve|sleeve-bearing|washer-bending)$/},
+ {key:'end-bearing-bolts',effect:'connection',title:'End bearing bolt group (slip, shear, tension, bearing/tearout)',re:/^end-bearing-(locating-slip|locating-shear|locating-tension|flange-bearing|plate-bearing|seat-bearing|sliding)$/},
+ {key:'end-bearing-sleeves',effect:'connection',title:'End bearing sleeves and plate washers',re:/^end-bearing-(sleeve|sleeve-bearing|washer-bending)$/},
  {key:'end-bearing-prying',title:'End bearing plies · thickness for no prying',re:/^end-bearing-(flange-prying|seat-prying)$/},
- {key:'haunch-stiffeners',title:'Haunch bearing stiffeners (column buckling, fitted bearing, welds)',re:/^haunch-stiffener-(column|bearing|weld)$/},
- {key:'haunch-column-welds',title:'Haunch-to-column welds (flange CJPs, web fillets, connected metal)',re:/^haunch-(top-flange-cjp|bottom-flange-cjp|web-weld|web-base)$/},
+ {key:'haunch-stiffeners',effect:'local',title:'Haunch bearing stiffeners (column buckling, fitted bearing, welds)',re:/^haunch-stiffener-(column|bearing|weld)$/},
+ {key:'haunch-column-welds',effect:'connection',title:'Haunch-to-column welds (flange CJPs, web fillets, connected metal)',re:/^haunch-(top-flange-cjp|bottom-flange-cjp|web-weld|web-base)$/},
  {key:'haunch-web-local',title:'Haunch web local yielding and crippling (J10.2, J10.3)',re:/^haunch-web-(yielding|crippling)$/},
  {key:'haunch-column-local',title:'Column web and flange local effects at the haunch (J10.1–J10.4, J10.6)',re:/^haunch-column-(flange|yield-top|yield-bottom|crippling|sidesway|panel)$/},
- {key:'column-stiffeners',title:'Column stiffeners at the haunch (strength, welds, web shear)',re:/^haunch-colstiff-(upper|lower|flange-weld|web-weld|web-shear)$/},
- {key:'cap-welds',title:'Cap channel welds (shear flow, connected metal)',re:/^cap-weld-(strength|metal|rupture)$/},
- {key:'cap-angle-lap-bolts',title:'Cap tie lap bolt group (slip, shear, tension, bearing/tearout)',re:/^cap-angle-lap-(slip|shear|tension|bearing)$/},
- {key:'cap-angle-cap-bolts',title:'Cap tie cap bolts · tension with prying (bolts, angle leg, channel flange)',re:/^cap-angle-(cap-bolt|leg-prying|channel-flange)$/,prefer:/^cap-angle-cap-bolt$/},
- {key:'cap-angle-col-bolts',title:'Cap tie column bolts · tension with prying (bolts, end plate, column flange)',re:/^cap-angle-(col-bolt|endplate-prying|column-flange)$/,prefer:/^cap-angle-col-bolt$/},
- {key:'cap-angle-plate',title:'Cap tie plate · tension, compression and block shear',re:/^cap-angle-(plate-yield|plate-rupture|plate-compression|block|leg-tension)$/},
- {key:'cap-angle-sleeves',title:'Cap tie sleeves and plate washers',re:/^cap-angle-(sleeve|sleeve-bearing|washer-bending)$/},
- {key:'end-stop-bolts',title:'End stop bolt group (tension, shear, slip, bearing/tearout)',re:/^end-stop-(bolt-tension|bolt-shear|slip|bearing-base|bearing-flange)$/},
- {key:'end-stop-welds',title:'End stop welds',re:/^end-stop-(weld|stiffener-weld)$/},
+ {key:'column-stiffeners',effect:'local',title:'Column stiffeners at the haunch (strength, welds, web shear)',re:/^haunch-colstiff-(upper|lower|flange-weld|web-weld|web-shear)$/},
+ {key:'cap-welds',effect:'connection',title:'Cap channel welds (shear flow, connected metal)',re:/^cap-weld-(strength|metal|rupture)$/},
+ {key:'cap-angle-lap-bolts',effect:'connection',title:'Cap tie lap bolt group (slip, shear, tension, bearing/tearout)',re:/^cap-angle-lap-(slip|shear|tension|bearing)$/},
+ {key:'cap-angle-cap-bolts',effect:'connection',title:'Cap tie cap bolts · tension with prying (bolts, angle leg, channel flange)',re:/^cap-angle-(cap-bolt|leg-prying|channel-flange)$/,prefer:/^cap-angle-cap-bolt$/},
+ {key:'cap-angle-col-bolts',effect:'connection',title:'Cap tie column bolts · tension with prying (bolts, end plate, column flange)',re:/^cap-angle-(col-bolt|endplate-prying|column-flange)$/,prefer:/^cap-angle-col-bolt$/},
+ {key:'cap-angle-plate',effect:'axial',title:'Cap tie plate · tension, compression and block shear',re:/^cap-angle-(plate-yield|plate-rupture|plate-compression|block|leg-tension)$/},
+ {key:'cap-angle-sleeves',effect:'connection',title:'Cap tie sleeves and plate washers',re:/^cap-angle-(sleeve|sleeve-bearing|washer-bending)$/},
+ {key:'end-stop-bolts',effect:'connection',title:'End stop bolt group (tension, shear, slip, bearing/tearout)',re:/^end-stop-(bolt-tension|bolt-shear|slip|bearing-base|bearing-flange)$/},
+ {key:'end-stop-welds',effect:'connection',title:'End stop welds',re:/^end-stop-(weld|stiffener-weld)$/},
  {key:'end-stop-prying',title:'End stop plies · thickness for no prying',re:/^end-stop-(base-prying|flange-prying)$/},
  {key:'end-stop-body',title:'End stop body and face plate',re:/^end-stop-(flexure|shear|face|face-outstand)$/},
- {key:'rail-joint',title:'Rail joint (bars and bolts)',re:/^rail-joint-(bolts|bearing|net|plate|block)$/},
- {key:'rail-keepers',title:'Rail keepers (lip, shear, welds)',re:/^rail-keeper-(flexure|shear|weld)$/},
- {key:'rail-anchor',title:'Rail anchor (welds, notch bearing)',re:/^rail-anchor-(weld|bearing)$/},
+ {key:'rail-joint',effect:'connection',title:'Rail joint (bars and bolts)',re:/^rail-joint-(bolts|bearing|net|plate|block)$/},
+ {key:'rail-keepers',effect:'connection',title:'Rail keepers (lip, shear, welds)',re:/^rail-keeper-(flexure|shear|weld)$/},
+ {key:'rail-anchor',effect:'connection',title:'Rail anchor (welds, notch bearing)',re:/^rail-anchor-(weld|bearing)$/},
  {key:'fatigue-peak',title:'Peak elastic stress (AISC Appendix 3.1, 0.66Fy)',re:/^fatigue-peak(-detailed)?$/},
 ];
 
@@ -263,7 +281,7 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
  // Repeats: register points by detail family; other checks repeating one equation over stations (3 or more).
  const repeats=new Map<string,TaxonEntry[]>();
  for(const t of entries.values()){
-  const fam=registerFamily(t.check.id),key=fam?`register:${fam.replace(/-(left|right)$/,'')}`:t.check.equation?`${t.check.group}|${t.check.equation}|${t.check.referenceIds.join(',')}`:undefined;
+  const fam=registerFamily(s,t.check.id),key=fam?fam:t.check.equation?`${t.check.group}|${t.check.equation}|${t.check.referenceIds.join(',')}`:undefined;
   if(key)repeats.set(key,[...(repeats.get(key)??[]),t]);
  }
  for(const [key,v] of repeats){
@@ -283,7 +301,7 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
   for(const [el,v] of byEl){
    const members=v.map(t=>t.check),preferred=m.prefer?members.find(c=>m.prefer!.test(c.id)):undefined,top=pick(members);
    const controlling=preferred&&dcOf(preferred)>=dcOf(top)-1e-9&&top.status!=='fail'?preferred:top;
-   const line:BodyLine={key:`${m.key}@${el}`,title:members.length>1?m.title:v[0].check.title,element:el,elementLabel:v[0].elementLabel,effect:v[0].effect??'other',members,controlling,
+   const line:BodyLine={key:`${m.key}@${el}`,title:members.length>1?m.title:v[0].check.title,element:el,elementLabel:v[0].elementLabel,effect:m.effect??v[0].effect??'other',members,controlling,
     also:members.filter(c=>c!==controlling&&dcOf(c)>=.5),merged:members.length>1,owner:v.some(t=>t.owner)};
    lines.push(line);for(const t of v){used.add(t.check.id);t.line=line.key;}
   }
@@ -300,15 +318,17 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
  const fatigueRows:FatigueRow[]=[];
  const fatigueEntries=[...entries.values()].filter(t=>t.type==='design'&&t.effect==='fatigue'&&!/^fatigue-peak/.test(t.check.id)&&t.check.status!=='not-applicable');
  const families=new Map<string,TaxonEntry[]>();
- for(const t of fatigueEntries){const fam=registerFamily(t.check.id),k=fam?`register:${fam.replace(/-(left|right)$/,'')}`:t.check.id;families.set(k,[...(families.get(k)??[]),t]);}
+ for(const t of fatigueEntries){const k=registerFamily(s,t.check.id)??fatigueDetailKey(t.check.id);families.set(k,[...(families.get(k)??[]),t]);}
  for(const [key,v] of families){
   const members=v.map(t=>t.check),data=members.map(c=>({c,f:fatigueData(s,c)})),worst=data.reduce((a,b)=>(b.f?.range??-1)>(a.f?.range??-1)?b:a,data[0]);
   const miner=Math.max(...data.map(d=>d.c.id.startsWith('detail-full-cycle-')?-1:d.f?.miner??-1)),allCycle=Math.max(...data.map(d=>d.f?.allCycle??-1));
   const m=miner>=0?miner:undefined,ac=allCycle>=0?allCycle:undefined,dc=method==='miner'?m??ac:ac??m;
-  const evaluated=v.some(t=>t.gate==='evaluated'),gov=pick(members.filter(c=>entries.get(c.id)!.gate===(evaluated?'evaluated':'screened')).length?members.filter(c=>entries.get(c.id)!.gate===(evaluated?'evaluated':'screened')):members);
+  const evaluated=v.some(t=>t.gate==='evaluated'),inGate=members.filter(c=>entries.get(c.id)!.gate===(evaluated?'evaluated':'screened'));
+  // The governing member follows the project's method: register Miner points (detail-fatigue-) or all-cycle bounds.
+  const byMethod=inGate.filter(c=>method==='miner'?!c.id.startsWith('detail-full-cycle-'):!c.id.startsWith('detail-fatigue-')),gov=pick(byMethod.length?byMethod:inGate.length?inGate:members);
   const t0=entries.get(gov.id)!;
-  fatigueRows.push({key,title:key.startsWith('register:')?familyTitle(gov.title):gov.title.replace(/\s*·\s*fatigue\b.*$/i,'').replace(/ fatigue$/i,''),element:t0.element,category:worst.f?.category??'—',
-   location:t0.location??(t0.elementLabel),range:worst.f?.range,threshold:worst.f?.threshold,miner:m,allCycle:ac,dc,gate:evaluated?'evaluated':v[0].gate,reason:evaluated?undefined:v.find(t=>t.reason)?.reason,typicalOf:members.length,members,governing:gov});
+  fatigueRows.push({key,title:key.startsWith('register:')?familyTitle(gov.title):fatigueDetailTitle[key]??gov.title.replace(/\s*·\s*fatigue\b.*$/i,'').replace(/ fatigue$/i,''),element:t0.element,category:worst.f?.category??'—',
+   location:t0.location??(t0.elementLabel),range:worst.f?.range,threshold:worst.f?.threshold,miner:m,allCycle:ac,dc,gate:evaluated?'evaluated':v[0].gate,reason:evaluated?undefined:entries.get(worst.c.id)!.reason??v.find(t=>t.reason)?.reason,typicalOf:key.startsWith('register:')?members.length:1,members,governing:gov});
  }
  fatigueRows.sort((a,b)=>(a.gate==='evaluated'?0:1)-(b.gate==='evaluated'?0:1)||(b.dc??0)-(a.dc??0));
  const evaluatedFatigue=fatigueRows.filter(r=>r.gate==='evaluated'),screenedFatigue=fatigueRows.filter(r=>r.gate==='screened');
@@ -318,7 +338,7 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
  for(const e of elementDefs){
   const v=bodyLines.filter(l=>l.element===e.key);if(!v.length&&!evaluatedFatigue.some(r=>r.element===e.key))continue;
   const sel=new Set<BodyLine>();
-  for(const eff of new Set(v.map(l=>l.effect))){const w=v.filter(l=>l.effect===eff);sel.add(w.reduce((a,b)=>rank(b)>rank(a)?b:a,w[0]));}
+  for(const eff of new Set(v.map(l=>bodyEffect(l.effect)))){const w=v.filter(l=>bodyEffect(l.effect)===eff);sel.add(w.reduce((a,b)=>rank(b)>rank(a)?b:a,w[0]));}
   for(const l of v)if(dcOf(l.controlling)>=.5||l.also.length||l.controlling.status==='fail')sel.add(l);
   const list=v.filter(l=>sel.has(l)),rest=v.filter(l=>!sel.has(l)),restChecks=rest.flatMap(l=>l.members);
   shown.push(...list);
@@ -351,8 +371,10 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
  return {entries,lines,shown,elements,
   fatigue:{method,cycles,rows:fatigueRows,evaluated:evaluatedFatigue,screened:screenedFatigue,peak:lines.find(l=>l.key.startsWith('fatigue-peak'))},
   detailing:{evaluated:detEval,flagged,satisfied:detEval.length-flagged.length,gated},
-  counts:{total:entries.size,byType,designEvaluated:designAll.filter(t=>t.gate==='evaluated'&&!['not-applicable','excluded'].includes(t.check.status)).length,designShown:shown.length+evaluatedFatigue.length+(lines.some(l=>l.key.startsWith('fatigue-peak'))?1:0),
+  counts:{total:entries.size,byType,designEvaluated:designAll.filter(t=>t.gate==='evaluated'&&!['not-applicable','excluded'].includes(t.check.status)).length,designShown:shown.length+evaluatedFatigue.length,
    designScreened:designAll.filter(t=>t.gate==='screened').length,designNotApplicable:designAll.filter(t=>t.gate==='not-applicable'||t.check.status==='not-applicable').length,detailing:detEval.length,detailingFlagged:flagged.length},
   openItems,byOthers:[...entries.values()].filter(t=>t.type==='by-others'),governing:top&&top.dc>=0?{title:top.title,dc:top.dc,check:top.check,element:top.element}:undefined};
 }
+/** The force effects the body reports one governing line for (stability with flexure). */
+export const bodyEffect=(e:Effect):Effect=>e==='stability'||e==='other'?'flexure':e;
 const rank=(l:BodyLine)=>(l.controlling.status==='fail'?1e9:0)+dcOf(l.controlling);
