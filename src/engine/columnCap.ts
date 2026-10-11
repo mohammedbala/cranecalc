@@ -1,3 +1,4 @@
+import {categoryF} from './fatigueConstants';
 import {available} from './aiscStrength';
 import {aiscShapeByName} from '../data/aiscSections';
 import {boltCapacity,boltProperties,plateBearing,minimumFillet} from './connectionStrength';
@@ -16,7 +17,6 @@ export {activeColumnCap,columnCapSchema,defaultColumnCap,type ColumnCapInput} fr
 
 const inch=25.4,up=(v:number,step=inch/8)=>Math.ceil(v/step-1e-9)*step;
 /** AISC Table A-3.1 Category F weld throat shear: F_SR = max[8 ksi, (Cf/n)^(1/6)], in MPa. */
-const categoryF=(cycles:number)=>Math.max(55,690*(1.5/cycles)**.167);
 
 /** The new column under the cap: depth across the runway, flange width along it, the catalogue fillet where known. */
 export function capColumn(p:ProjectInput){

@@ -1,3 +1,4 @@
+import {categoryF} from './fatigueConstants';
 import type { CalculationSnapshot,CheckResult } from './types';
 import { available } from './aiscStrength';
 import { boltCapacity,plateBearing,blockShear,minimumFillet,transverseFilletFatigue,filletEffectiveSize } from './connectionStrength';
@@ -64,7 +65,7 @@ export function railChecks(s:CalculationSnapshot):CheckResult[]{
  const anchorForce=railAnchorForce(p),anchor=railAnchorResponse(p,P,H,anchorForce.force),ag=anchor.geometry;
  check('rail-anchor-weld','Rail anchor keeper fillet welds',anchor.weldStress,available(.6*m.Fexx,method,.75,2),'stress','f_w=\\max\\sqrt{(V_x/A-T y/J)^2+(F/A+T x/J)^2+(N/A+M_y x/I_y+F h\\,y/I_x)^2};\\quad A,I,J\\text{ on }0.707\\min(w,L/4)',`Factored crane longitudinal force F=${latexNumber(anchorForce.factor)}C_ls on one anchor keeper of each rail piece, concurrent with its keeper forces in either role. F bears where the keeper end meets the flat notch end, over ${len(ag.bearing)} beyond the corner hole, at mid-height of the rail base; end fillets ${len(ag.endWeld)} stop ${len(anchorEndClearance)} outside the un-notched rail-base toe. ${effective(ag)} The other keepers let the rail slide.`);
  check('rail-anchor-bearing','Rail anchor · rail-base notch bearing',anchorForce.force,available(1.8*Math.min(m.Fy,r.Fy)*anchor.bearingArea,method,.75,2),'force','R_n=1.8F_yA_{pb};\\quad A_{pb}=(d_n-r_n)t_{base}',`Rail-base notch ${len(ag.notch)} deep and ${len(ag.notchLength)} long, ${len(anchorEndClearance)} clear of each keeper end, with drilled holes of ${len(ag.cornerRadius)} radius centered on its re-entrant corners. The keeper end bears on the flat notch end between the toe and the corner hole, ${len(ag.bearing)} deep, over the rail-base thickness.`);
- const cycles=d.spectrum.reduce((n,b)=>n+b.cycles,0),F=Math.max(55,690*(1.5/cycles)**.167);
+ const cycles=d.spectrum.reduce((n,b)=>n+b.cycles,0),F=categoryF(cycles);
  // The rail pushes the keeper outward and lifts its lip but never pulls it inward or presses the lip down:
  // each passage loads a keeper weld from zero to its bin value.
  const keeperWeldRange=Math.max(...a.railFatigueBins.map(b=>b.weldStress));

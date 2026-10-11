@@ -48,7 +48,7 @@ export const runwayDetailsSchema=z.object({
   padThickness:pos.optional(),padWidth:pos.optional(),
   clipWidth:pos,clipThickness:pos,clipProjection:pos,clipWeld:pos,clipBodyWidth:pos.optional(),clipClearance:pos.optional(),anchorNotch:pos.optional(),
   jointGap:nn,jointPlateThickness:pos,jointPlateHeight:pos,jointBoltDiameter:pos,jointPitch:pos,jointEdge:pos,temperatureRange:nn}),
- criteria:z.object({twistLimit:pos,railLateralLimit:pos,railGauge:pos,alignmentTolerance:pos,levelTolerance:pos,rotationClearance:pos,temperatureMaximum:z.number().finite(),corrosionProtected:z.boolean()}),
+ criteria:z.object({twistLimit:pos.optional(),railLateralLimit:pos,railGauge:pos,alignmentTolerance:pos,levelTolerance:pos,rotationClearance:pos,temperatureMaximum:z.number().finite(),corrosionProtected:z.boolean()}),
  fatigueDetails:z.array(z.object({id:z.string().min(1).max(40),name:z.string().min(1).max(120),x:nn,point:z.enum(['top-left','top-right','bottom-left','bottom-right']),category:z.enum(['A','B','B1','C','D','E','E1']),reference:z.string().min(1).max(300)})).min(1).max(16),
  spectrum:z.array(z.object({name:z.string().min(1).max(80),liftFraction:nn.max(1),cycles:pos})).min(1).max(8),
  fabrication:z.object({steel:z.string().min(1).max(200),bolting:z.string().min(1).max(400),welding:z.string().min(1).max(400),inspection:z.string().min(1).max(700),erection:z.string().min(1).max(700),railAlignment:z.string().min(1).max(700)})
@@ -64,6 +64,8 @@ export interface InterfaceAction {
 }
 export interface FatigueDetailResult {
  id:string;name:string;x:number;category:string;reference:string;
+ /** AISC 360-16 Table A-3.1 threshold stress range F_TH of the category, MPa. */
+ threshold:number;
  bins:{name:string;cycles:number;minimum:number;maximum:number;range:number;allowable:number;damage:number}[];
  damage:number;range:number;peak:number;
 }

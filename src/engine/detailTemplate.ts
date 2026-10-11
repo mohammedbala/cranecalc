@@ -61,7 +61,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    // 5/16 in fillets: the end fillets (1 11/16 in, anchor 1 1/2 in) are over four weld sizes long (AISC 360-16 J2.2b), and the
    // 1/2 in anchor notch leaves 1/4 in of flat notch end beyond its 1/4 in radius corner holes.
    clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.3125*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1*inch,jointPlateHeight:Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/1.5875)*1.5875,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
-  criteria:{twistLimit:.005,railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
+  criteria:{...(p.details?.criteria.twistLimit?{twistLimit:p.details.criteria.twistLimit}:{}),railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],
   fabrication:{

@@ -1,3 +1,4 @@
+import {finiteLife,fatigueCoefficient,fatigueThreshold,KSI} from './fatigueConstants';
 import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
 import {flangeTieGeometry,tiePlies} from './tieGeometry';
@@ -65,14 +66,15 @@ export function flangeRestraintGaps(p:ProjectInput){
 }
 /** Compression-flange unbraced length: top flange on simple spans, either flange on continuous spans. */
 export function compressionFlangeGap(p:ProjectInput){const g=flangeRestraintGaps(p);return p.system==='continuous'?Math.max(g.top,g.bottom):g.top;}
-const constants={A:[25,165],B:[12,110],B1:[6.1,83],C:[4.4,69],D:[2.2,48],E:[1.1,31],E1:[.39,18]} as const;
+const constants={A:[25,24*KSI],B:[12,16*KSI],B1:[6.1,12*KSI],C:[4.4,10*KSI],D:[2.2,7*KSI],E:[1.1,4.5*KSI],E1:[.39,2.6*KSI]} as const;
 export function fatigueSpectrumBin(category:keyof typeof constants,range:number,cycles:number){
  const [cf]=constants[category];
- const allowable=6900*(cf/cycles)**(1/3);
+ const allowable=finiteLife(cf,cycles);
  // Palmgren–Miner cumulative damage using the AISC cubic S-N curve. Below
  // the threshold receives damage too: no endurance-limit credit for a mixed spectrum.
- const damage=range===0?0:cycles/(cf*(6900/range)**3);
- return {allowable,damage};
+ const damage=range===0?0:cycles/(cf*(fatigueCoefficient/range)**3);
+ // threshold: Table A-3.1 F_TH for the category, so a register point can be screened (range < F_TH).
+ return {allowable,damage,threshold:fatigueThreshold(category)};
 }
 export function automaticFatigueDetails(p:ProjectInput){
  const d=p.details!,L=p.spans.reduce((s,v)=>s+v,0),list=[...d.fatigueDetails];
@@ -151,7 +153,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const bearings=independentBearings(p),adjacent=adjacentBays(p);
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
  const detailInputs=automaticFatigueDetails(p);
- const fatigue:FatigueDetailResult[]=detailInputs.map(f=>({id:f.id,name:f.name,x:f.x,category:f.category,reference:f.reference,bins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,minimum:0,maximum:0,range:0,allowable:0,damage:0})),damage:0,range:0,peak:0}));
+ const fatigue:FatigueDetailResult[]=detailInputs.map(f=>({id:f.id,name:f.name,x:f.x,category:f.category,threshold:fatigueThreshold(f.category),reference:f.reference,bins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,minimum:0,maximum:0,range:0,allowable:0,damage:0})),damage:0,range:0,peak:0}));
  const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,flangeStress:0,plateStress:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
  const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0};

@@ -34,7 +34,7 @@ describe('representative runway package',()=>{
  it('retains true fatigue-cycle and root-weld behavior without an endurance loophole',()=>{
   expect(fatigueSpectrumBin('C',10,1e6).damage).toBeGreaterThan(0);
   expect(fatigueSpectrumBin('C',100,2e6).damage).toBeCloseTo(2*fatigueSpectrumBin('C',100,1e6).damage,12);
-  expect(transverseFilletFatigue(25.4,6.35,1e6).reduction).toBeCloseTo(.2408,3);
+  expect(transverseFilletFatigue(25.4,6.35,1e6).reduction).toBeCloseTo(.24,6); // US A-3-6: (0.06+0.72·0.25)/1^0.167
   expect(transverseFilletFatigue(25.4,6.35,1e12).capacity).toBeLessThan(1);
   expect(minimumFillet(50)).toBe(7.9375);
  });

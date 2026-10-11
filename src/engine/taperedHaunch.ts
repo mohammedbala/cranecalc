@@ -1,3 +1,4 @@
+import {categoryF,finiteLife} from './fatigueConstants';
 /**
  * New built-up tapered I haunch welded to the flange of an existing W column ('tapered-haunch'): a vertical tapered
  * web plate in the plane of the grid, a level top flange that is the seat of both girder bearings, a sloping bottom
@@ -596,7 +597,7 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
  if(eb)add('uplift','Bearing uplift · held down through the top flange',uplift,4*boltCapacity({grade:eb.bolts.grade,diameter:eb.bolts.diameter,planes:1,surface:'B',shear:0,tension:uplift/4,method}).tension,'force','V_{uplift}\\le4\\phi R_{nt}','Any uplift at a girder end is held down by its four bearing bolts in tension through the haunch top flange; bolt shear with tension and top-flange prying (thickness for no prying, with the top flange thickness) are checked under End bearings; the haunch checks above take the signed reactions.',S.uplift?.caseId,['haunch-basis','aisc-connections']);
  else add('uplift','Bearing contact · uplift requiring separate restraint',uplift,1,'force','V_{uplift}\\le0','Gravity bearing without bolted end bearings: uplift above 1 N requires a separately designed hold-down.',S.uplift?.caseId);
  // Fatigue, AISC Appendix 3, under the duty spectrum (unfactored bin loads without impact).
- const F=res.fatigue,Cn=(cf:number,n:number,R=1)=>6900*R*(cf/n)**(1/3),total=p.fatigue.cycles,weldF=Math.max(55,690*(1.5/total)**.167);
+ const F=res.fatigue,Cn=(cf:number,n:number,R=1)=>finiteLife(cf,n,R),total=p.fatigue.cycles,weldF=categoryF(total);
  const miner=(key:'topFlange'|'bottomFlange'|'flangeWeb'|'stiffenerToe'|'column'|'flare',limit:(n:number)=>number)=>F.reduce((s,v)=>s+(v[key]>0?(v[key]/limit(v.cycles))**3:0),0);
  const fatRefs=['haunch-basis','aisc-fatigue'],rTop=transverseFilletFatigue(g.tt,g.flangeWeld,total).reduction;
  if(grp.cjp)add('fatigue-top-flange','Top flange at the column CJP weld · fatigue',miner('topFlange',n=>Cn(4.4,n)),1,'ratio','D=\\sum_i(\\Delta f_i/F_{SR,C})^3\\le1','Table A-3.1 item 5.4, Category C: base and weld metal at the toe of the CJP T-joint with the reinforcement left in place. Range per bin of the top flange tip stress (bending, axial, lateral bending from torsion); Miner sum, no endurance-limit credit.',undefined,fatRefs);
