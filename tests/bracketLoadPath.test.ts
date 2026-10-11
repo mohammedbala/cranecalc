@@ -51,6 +51,23 @@ describe('longitudinal force at the supports',()=>{
  });
 });
 
+describe('continuous girder runway-end bearings',()=>{
+ it('takes the end-grid reaction inboard of the grid, at 0.8 of the bearing length, with its seat moment',()=>{
+  const p=cappedDemonstrationProject();p.system='continuous';p.details!.brace.flangeAttachment!.enabled=false;
+  const Lbr=p.details!.bearing.length,stations=p.spans.reduce((a,v)=>[...a,a.at(-1)!+v],[0]),c=createDetailCollector(p,sectionProperties(p.section),20);
+  // A continuous girder's support reactions come from the runway analysis with the event.
+  c.observe({...event(p,'mid','LRFD 2b',30*foot,0),verticalReactions:stations.map(x=>({x,r:100000}))});
+  const r=c.finish(),f=r.bracketForces!;
+  expect(f[0].maxVertical.moment).toBeCloseTo(f[0].maxVertical.vertical*.8*Lbr,3);
+  expect(f.at(-1)!.maxVertical.moment).toBeCloseTo(-f.at(-1)!.maxVertical.vertical*.8*Lbr,3);
+  expect(f[0].maxVertical.vertical).toBeCloseTo(100000,6);for(const v of f.slice(1,-1))expect(v.maxVertical.moment).toBe(0);
+  // The twin ribs share an interior reaction about equally; at a runway end the inboard rib takes most of it.
+  const at=(x:number)=>r.bracket!.stations.find(v=>Math.abs(v.x-x)<1e-6)!;
+  expect(at(0).rightRib).toBeGreaterThan(1.5*at(0).leftRib);expect(at(stations.at(-1)!).leftRib).toBeGreaterThan(1.5*at(stations.at(-1)!).rightRib);
+  expect(at(stations[1]).leftRib).toBeCloseTo(at(stations[1]).rightRib,-2);
+ });
+});
+
 describe('bracket design force envelope',()=>{
  it('keeps whole concurrent sets, and the bracket weld group is checked for the same sets',()=>{
   const p=cappedDemonstrationProject(),c=p.cranes[0],F=17793,b=p.details!.bracket!,Lbr=p.details!.bearing.length;
