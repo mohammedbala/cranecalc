@@ -51,7 +51,7 @@ export function elementChecks(s:CalculationSnapshot){
 export const loadPathFigure=(p:ProjectInput)=>supportAssemblyFigure(p,{className:'load-path-figure'});
 
 /** A failure first; otherwise the governing strength or stress check, not a dimensional rule met at its minimum. */
-function governingForSummary(checks:CheckResult[]){
+export function governingForSummary(checks:CheckResult[]){
  const failed=checks.filter(c=>c.status==='fail');if(failed.length)return governing(failed);
  const strength=checks.filter(c=>c.utilization!==undefined&&c.quantity!=='length'&&c.status==='pass');
  return governing(strength.length?strength:checks);
