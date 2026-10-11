@@ -19,20 +19,22 @@ export function capAngleTies(S:Scene,p:ProjectInput,g:SupportGeometry,role:Role,
    if(b.kind==='channel-flange'||b.kind==='column-flange'||b.kind==='sleeve')continue;
    // The short leg stops under the long leg so the two legs do not overlap (painted as separate plates).
    const z1=b.name.startsWith('angle short leg')?-c.ta:b.max[2];
-   S.box(X(b.min[0]),Y(b.max[1]),Z(b.min[2]),X(b.max[0]),Y(b.min[1]),Z(z1),role);
+   S.group(`cap-angle/${b.kind}`,()=>S.box(X(b.min[0]),Y(b.max[1]),Z(b.min[2]),X(b.max[0]),Y(b.min[1]),Z(z1),role));
   }
   if(!o.bolts)continue;
+  const was=S.tag('cap-angle/bolt');
   for(const b of parts.bolts){
    const r=b.diameter/2;
    if(b.axis==='z')S.cylinder(2,[X(b.head[0]),Y(b.head[1])],r,Z(b.nut[2]),Z(b.head[2]),role);
    else S.cylinder(1,[X(b.head[0]),Z(b.head[2])],r,Y(Math.max(b.head[1],b.nut[1])),Y(Math.min(b.head[1],b.nut[1])),role);
   }
+  S.tag(was);
  }
  return S;
 }
 
-/** Load-path marker as [point, paper dx, paper dy]. */
-type Mark=[Vec3,number,number];
+/** Load-path marker as [part key, paper dx, paper dy, hint on the part]. */
+type Mark=[string,number,number,Vec3];
 /**
  * The cap tieback figure for the 'Cap tieback' calculation groups (and 'Connections'): the far girder end with its
  * cap, the angle on the column-side channel flange, the tie plate, the end plate on the column flange, numbered as
@@ -51,12 +53,13 @@ export function capAngleFigure(p:ProjectInput,g:SupportGeometry){
  S.label('CAP ANGLE TIE',[g.seat.length/2,g.seat.projection,-g.seat.thickness],6,14,'start',true);
  const L=c.input.length,cap=G.cap;
  const marks:Mark[]=[
-  [[xr+G.d*.3,y+G.bf*1.4,zr],-6,-18],
-  [[xt-L/2-G.d*.25,y-(cap?.width??G.bf)/2,top-(cap?.depth??G.tf)/2],-26,14],
-  [[xt-c.cap.pitch/2,y-c.y0-c.ta,top+c.cap.z],-24,22],
-  [[xt,y-(c.lap.y+c.toe)/2,top+c.plate.thickness],8,-22],
-  [[xt,y-c.endPlate.y0,top+c.endPlate.z1],22,-14],
-  [[xt+c.endPlate.width,0,top+c.endPlate.z0-G.d*.15],26,14]];
- marks.forEach(([at,dx,dy],i)=>S.marker(i+1,at,dx,dy));
- return {body:S.body({width:240,height:120,margin:[34,26],az:56}),markers:marks.length};
+  ['load/H',-6,-18,[xr+G.d*.3,y+G.bf*1.4,zr]],
+  [cap?'girder/cap-leg':'girder/top-flange',-26,14,[xt-L/2-G.d*.25,y-(cap?.width??G.bf)/2,top-(cap?.depth??G.tf)/2]],
+  ['cap-angle/bolt',-24,22,[xt-c.cap.pitch/2,y-c.y0-c.ta,top+c.cap.z]],
+  ['cap-angle/tie-plate',8,-22,[xt,y-(c.lap.y+c.toe)/2,top+c.plate.thickness]],
+  ['cap-angle/end-plate',22,-14,[xt,y-c.endPlate.y0,top+c.endPlate.z1]],
+  ['column/flange',26,14,[xt+c.endPlate.width,0,top+c.endPlate.z0-G.d*.15]]];
+ marks.forEach(([part,dx,dy,at],i)=>S.marker(i+1,part,dx,dy,at));
+ const options={width:240,height:120,margin:[34,26] as [number,number],az:56};
+ return {body:S.body(options),markers:marks.length,layout:()=>S.layout(options)};
 }

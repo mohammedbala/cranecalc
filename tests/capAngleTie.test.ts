@@ -1,3 +1,4 @@
+import {overPrecise} from './fixtures/reportText';
 import {describe,it,expect,beforeAll} from 'vitest';
 import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/demonstration';
 import {calculate,validateProject} from '../src/engine/calculate';
@@ -229,8 +230,9 @@ describe('cap tieback angle: the calculated demonstration',()=>{
  it('prints the cap tieback pages and figure without NaN, in US and SI',()=>{
   for(const v of [s,si]){
    const html=compactReport(v,''),body=html.replace(/<style[\s\S]*?<\/style>/g,'').replace(/<[^>]+>/g,' ');
-   expect(html).toContain('Cap tieback angle');for(const page of ['04E','04F','04G'])expect(html).toContain(page);
+   expect(html).toContain('Cap tieback angle');for(const page of [/5\.\d+ \/ Cap tieback angle/,/5\.\d+ \/ Cap tieback fatigue &amp; stiffness/,/5\.\d+ \/ Cap tieback movement/])expect(html).toMatch(page);
    expect(body).not.toMatch(/\b(NaN|undefined|Infinity)\b/);
+   expect(overPrecise(html)).toEqual([]);
   }
   // The isometric figure from the tie geometry, numbered as the six caption steps; the summary still names the top tie.
   const markers=(svg:string)=>[...svg.matchAll(/font-weight="700" fill="#000">(\d+)<\/text>/g)].map(m=>Number(m[1])).sort((a,b)=>a-b);

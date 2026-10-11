@@ -33,7 +33,7 @@ it('shows the cap-specific equations and scaled cap attachment details',()=>{
  // The tie details coordinate with the cap: the girder gusset clears the channel flange by at least 1/2 in.
  expect(s.checks.find(c=>c.id==='flange-tie-cap-clearance')).toMatchObject({status:'pass'});
  expect(s.checks.find(c=>c.id==='flange-tie-cap-clearance')!.capacity).toBeGreaterThanOrEqual(12.7);
- expect(html).toContain('Capped girder properties');expect(html).toContain('Cap attachment strength');
+ expect(html).toContain('Runway girder · capped section properties');expect(html).toContain('Cap channel welds &amp; end development');
  expect(html).not.toContain('katex-error');expect(html).not.toContain('remains pending');
 });
 it('preserves cap-weld failures and invalidates the previous input fingerprint',()=>{

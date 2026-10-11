@@ -3,7 +3,7 @@ import {railSeat,anchorEndClearance} from '../engine/railSeat';
 import {boltProperties} from '../engine/connectionStrength';
 import {format} from '../engine/units';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,capChannelSection,type XY} from './sheetGraphics';
 import {contentBounds,type DetailView} from './detailSheet';
 
 const path=(pts:XY[],cls:string,close=true)=>`<path class="${cls}" d="${pts.map(([x,y],i)=>`${i?'L':'M'}${n(x)},${n(y)}`).join('')}${close?'Z':''}"/>`;
@@ -83,7 +83,7 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   if(pad)sec+=rect(X(-pad.width/2),yBaseBot,X(pad.width),X(pt),'rail-line')+hatchRect(X(-pad.width/2),yBaseBot,X(pad.width),X(pt),2.5);
   const wTop=ySteel+(capped?X(b.capTw):0),wBot=wTop+X(b.tf);
   sec+=rect(X(-b.bf/2),wTop,X(b.bf),X(b.tf),'runway-line')+line([X(-b.tw/2),wBot],[X(-b.tw/2),wBot+stub],'runway-line')+line([X(b.tw/2),wBot],[X(b.tw/2),wBot+stub],'runway-line')+breakLine([X(-b.tw/2)-6,wBot+stub],[X(b.tw/2)+6,wBot+stub]);
-  if(capped){sec+=rect(X(-b.capWidth/2),ySteel,X(b.capWidth),X(b.capTw),'runway-line');for(const sign of [-1,1])sec+=rect(sign<0?X(-b.capWidth/2):X(b.capWidth/2-b.capTf),ySteel+X(b.capTw),X(b.capTf),X(b.capDepth-b.capTw),'runway-line');}
+  if(capped)sec+=capChannelSection(b,(x,z)=>[X(x),wTop-X(z)]);
   for(const sign of [-1,1]){
    sec+=path([[X(sign*K.outer),ySteel],[X(sign*K.outer),yLip],[X(sign*K.tip),yLip],[X(sign*K.tip),yBaseTop],[X(sign*K.inner),yBaseTop],[X(sign*K.inner),ySteel]],'runway-line');
    sec+=path([[X(sign*K.outer),ySteel],[X(sign*(K.outer+K.weld)),ySteel],[X(sign*K.outer),ySteel-X(K.weld)]],'runway-line');
@@ -102,7 +102,7 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
    ...(pad?[{at:[X(-r.baseWidth/2+r.headWidth/4),yBaseBot+X(pt)/2] as XY,via:[[X(-r.baseWidth/2+r.headWidth/4)-10,yBaseTop-12] as XY],labels:[`RAIL PAD ${size(pt)} X ${size(pad.width)}, CONT.:`,...productLines,`ALLOWABLE COMPRESSION ${format(r.padAllowable,'stress',u,u==='SI'?1:2)}`]}]:[]),
    {at:[X(-K.toe-K.clearance/2),yBaseTop+X(r.baseThickness)*.6],via:[[X(-K.outer)-4,yBaseTop+X(r.baseThickness)*.6]],labels:[`K1 ${size(K.clearance)} CLEAR OF RAIL-BASE TOE (${size(Math.max(K.clearance,Math.abs(p.railEccentricity)-d.criteria.alignmentTolerance))} MAX.),`,`LIP BEARS ${size(K.overlap)}; SHIM, WELD, REMOVE SHIM`]},
    {at:[X(-K.outer-K.weld*.4),ySteel-X(K.weld)*.4],labels:['OUTER FACE, EACH KEEPER'],weld:true},
-   {at:[X(-recW/2)+3,capped?ySteel+X(b.capTw):wBot],labels:capped?[`${b.name} GIRDER`,p.capDesign?`CAP ATTACHMENT: SEE ${detailRef(detailTitles.capSection)}`:'CAP ATTACHMENT BY OTHERS']:[`${b.name} GIRDER, PARTIAL`]}
+   {at:[X(-recW/2)+(capped?0:3),capped?ySteel+X(b.capTw):wBot],labels:capped?[`${b.name} GIRDER`,p.capDesign?`CAP ATTACHMENT: SEE ${detailRef(detailTitles.capSection)}`:'CAP ATTACHMENT BY OTHERS']:[`${b.name} GIRDER, PARTIAL`]}
   ];
   const cw=Math.max(...items.map(v=>v.weld?110:labelWidth(v.labels))),cx=-edge-26-cw;
   let ly=-4;

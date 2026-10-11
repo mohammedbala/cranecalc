@@ -1,3 +1,4 @@
+import { capChannelProfile } from '../engine/channelProfile';
 import { issueStatus } from '../engine/drawingData';
 import {girderSegments} from '../engine/simpleSupports';
 import { detailedDrawings } from './detailedDrawings';
@@ -106,7 +107,7 @@ function elevationDrawing(s: CalculationSnapshot): CadDrawing {
     d.rect(X(a),top,(z-a)*k,b.d*k);
     d.line(X(a),top+b.tf*k,X(z),top+b.tf*k);
     d.line(X(a),bottom-b.tf*k,X(z),bottom-b.tf*k);
-    if(b.kind==='cap')d.rect(X(a),top-b.capTw*k,(z-a)*k,b.capTw*k,'RAIL');
+    if(b.kind==='cap'){d.rect(X(a),top-b.capTw*k,(z-a)*k,b.capTw*k,'RAIL');d.line(X(a),top+(b.capDepth-b.capTw)*k,X(z),top+(b.capDepth-b.capTw)*k,'RAIL');}
   }
   p.spans.forEach((span,i)=>{d.dimH(X(x),X(x+span),bottom+18,dimY,`L${i+1} = ${drawingLength(span,p.units)}`);x+=span;});
   d.line(X(0), railY, X(L), railY, 'RAIL');
@@ -161,12 +162,13 @@ function sectionDrawing(s: CalculationSnapshot): CadDrawing {
   d.hatch(x - bf / 2, y, bf, tf); d.hatch(x - tw / 2, y + tf, tw, h - 2 * tf); d.hatch(x - bf / 2, y + h - tf, bf, tf);
   d.poly([[x - bf / 2, y], [x + bf / 2, y], [x + bf / 2, y + tf], [x + tw / 2, y + tf], [x + tw / 2, y + h - tf], [x + bf / 2, y + h - tf], [x + bf / 2, y + h], [x - bf / 2, y + h], [x - bf / 2, y + h - tf], [x - tw / 2, y + h - tf], [x - tw / 2, y + tf], [x - bf / 2, y + tf]], true);
   if (b.kind === 'cap') {
-    const w = b.capWidth * k, t = b.capTw * k, f = b.capTf * k, depth = b.capDepth * k, top = y - t;
+    // True channel profile (2:12 sloped flanges, root fillets); the hatch keeps inside it (legs hatched to the toe thickness).
+    const ch = capChannelProfile(b), w = b.capWidth * k, t = b.capTw * k, f = ch.toeThickness * k, depth = b.capDepth * k, top = y - t;
     d.hatch(x - w / 2, top, w, t); d.hatch(x - w / 2, y, f, depth - t); d.hatch(x + w / 2 - f, y, f, depth - t);
-    d.poly([[x - w / 2, top], [x + w / 2, top], [x + w / 2, top + depth], [x + w / 2 - f, top + depth], [x + w / 2 - f, y], [x - w / 2 + f, y], [x - w / 2 + f, top + depth], [x - w / 2, top + depth]], true, 'RAIL');
+    d.poly(ch.outline.map(([cx, cz]) => [x + cx * k, y - cz * k] as Point), true, 'RAIL');
     d.text(640, 252, `CAP WIDTH = ${drawingLength(b.capWidth, p.units)}`, 10);
     d.text(640, 272, `DEPTH = ${drawingLength(b.capDepth, p.units)}`, 10);
-    d.text(640, 292, `tf / tw = ${plateInches(b.capTf, p.units)} / ${plateInches(b.capTw, p.units)}`, 10);
+    d.text(640, 292, `tf (avg) / tw = ${plateInches(b.capTf, p.units)} / ${plateInches(b.capTw, p.units)}`, 10);
   }
   d.line(x, 55, x, 331, 'CENTER'); d.line(x - Math.max(bf, cw * k) / 2 - 20, y + h / 2, x + Math.max(bf, cw * k) / 2 + 20, y + h / 2, 'CENTER');
   d.dimH(x - bf / 2, x + bf / 2, y + h + 3, 327, `bf = ${drawingLength(b.bf, p.units)}`);

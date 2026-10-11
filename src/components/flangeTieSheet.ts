@@ -7,7 +7,8 @@ import {activeEndStop} from '../engine/endStopInputs';
 import {boltProperties} from '../engine/connectionStrength';
 import {format} from '../engine/units';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,filletLeader,multiLeader,detailRef,detailTitles,columnReference,breakLine,textWidth,labelCaps,n,sectionCut,type XY} from './sheetGraphics';
+import {capChannelProfile} from '../engine/channelProfile';
+import {sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,filletLeader,multiLeader,detailRef,detailTitles,columnReference,breakLine,textWidth,labelCaps,n,sectionCut,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,paragraph,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type ViewRender} from './detailSheet';
 
@@ -107,8 +108,7 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
  svg+=rect(X(-b.bf/2),Y(-b.tf),b.bf*k,b.tf*k,'runway-line');
  svg+=line([X(-b.tw/2),Y(0)],[X(-b.tw/2),webEnd],'runway-line')+line([X(b.tw/2),Y(0)],[X(b.tw/2),webEnd],'runway-line')+breakLine([X(-b.tw/2)-4,webEnd],[X(b.tw/2)+4,webEnd]);
  if(cap){
-  svg+=rect(X(-b.capWidth/2),Y(-b.tf-b.capTw),b.capWidth*k,b.capTw*k,'runway-line');
-  for(const side of [-1,1])svg+=rect(X(side*b.capWidth/2-(side>0?b.capTf:0)),Y(-b.tf),b.capTf*k,(b.capDepth-b.capTw)*k,'runway-line');
+  svg+=capChannelSection(b,(x,z)=>[X(x),Y(-b.tf-z)]);
  }
  svg+=rect(X(g.rootStart),Y(0),g.rootLength*k,a.saddleThickness*k,'runway-line');
  // Girder gusset under the saddle; its end behind the near bar is hidden.
@@ -197,8 +197,8 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  for(const e of pair){const tx=cx+(e.tieX-grid)*k,sx=cx+(e.center-grid)*k,end=cx+((e.end==='left'?e.start:e.finish)-grid)*k,far=cx+((e.end==='left'?e.finish:e.start)-grid)*k,out=e.end==='left'?'right':'left';
   // Girder end at the gap, broken away from it.
   svg+=line([end,flange],[far,flange],'runway-line')+line([end,Z(edge)],[far,Z(edge)],'runway-line')+line([end,flange],[end,Z(edge)],'runway-line')+breakLine([far,flange-4],[far,Z(edge)+4]);
-  // Under the cap web: the W flange tips and the inner faces of the turned-down channel flanges.
-  if(cap)for(const z of [b.bf/2,b.capWidth/2-b.capTf])for(const side of [-1,1])svg+=line([end,Z(side*z)],[far,Z(side*z)],'hidden-line');
+  // Under the cap web: the W flange tips and the inner toe edges of the turned-down (sloped) channel flanges.
+  if(cap)for(const z of [b.bf/2,capChannelProfile(b).toeInner])for(const side of [-1,1])svg+=line([end,Z(side*z)],[far,Z(side*z)],'hidden-line');
   for(const side of [-1,1])svg+=rect(sx-d.bearing.stiffenerThickness*k/2,side<0?stiffTop:Z(b.tw/2),d.bearing.stiffenerThickness*k,d.bearing.stiffenerWidth*k,'hidden-line');
   svg+=rect(tx-a.saddleLength*k/2,Z(g.rootStart),a.saddleLength*k,g.rootLength*k,'hidden-line');
   // Paired bars each side of the gussets, or the single plate on the gusset face toward its own girder end.

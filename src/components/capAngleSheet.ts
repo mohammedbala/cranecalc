@@ -3,7 +3,8 @@ import {capAngleGeometry,boltHardware,capAngleStiffenerGeometry,type CapAngleGeo
 import {capAngleResult} from '../engine/capAngleTie';
 import {keeperGeometry,railPadThickness} from '../engine/railSeat';
 import {supportColumn} from '../engine/drawingData';
-import {sheetDrawingScale as drawingScale,line,rect,text,dimH,dimV,multiLeader,breakLine,textWidth,labelCaps,bubble,n,detailRef,type XY} from './sheetGraphics';
+import {capChannelProfile} from '../engine/channelProfile';
+import {sheetDrawingScale as drawingScale,line,rect,text,dimH,dimV,multiLeader,breakLine,textWidth,labelCaps,bubble,n,detailRef,capChannelSection,type XY} from './sheetGraphics';
 import {tieSize,tieDim,weldLength,weldLeader,type Weld} from './flangeTieSheet';
 import {heading,numbered,paragraph,type Style} from './noteBlocks';
 import type {DetailTopic,ViewRender} from './detailSheet';
@@ -21,6 +22,8 @@ function callouts(items:Callout[],x:number,top:number){
 const columnHeight=(items:Callout[])=>items.reduce((a,v)=>a+calloutHeight(v),0)+8*Math.max(0,items.length-1);
 /** A closed outline through the given points. */
 const poly=(pts:XY[],cls='runway-line')=>`<path class="${cls}" d="M${pts.map(p=>`${n(p[0])},${n(p[1])}`).join('L')}Z"/>`;
+/** Whether the cap bolt nuts need a beveled washer: the RCSC Specification calls for one where a bolted face slopes more than 1:20 (C shape flanges slope 1:6). */
+export const beveledCapWasher=(b:Parameters<typeof capChannelProfile>[0])=>capChannelProfile(b,1).slope>1/20+1e-9;
 /** The column the end plates bolt to, as drawn and named. */
 function tieColumn(s:CalculationSnapshot,g:CapAngleGeometry){
  const col=g.column.receiver,sc=supportColumn(s.input);
@@ -40,7 +43,9 @@ export function capAngleSection(s:CalculationSnapshot):ViewRender{
  // Girder: W top flange and web (broken), cap channel web and column-side flange; rail, pad and keeper (context).
  const wTop=-b.capTw,wBot=wTop-b.tf,webEnd=Math.min(-b.capDepth,g.endPlate.z0,-g.dv)-25.4;
  svg+=poly([[X(yL),Z(wTop)],[X(b.bf/2),Z(wTop)],[X(b.bf/2),Z(wBot)],[X(b.tw/2),Z(wBot)],[X(b.tw/2),Z(webEnd)],[X(-b.tw/2),Z(webEnd)],[X(-b.tw/2),Z(wBot)],[X(yL),Z(wBot)]]);
- svg+=poly([[X(yL),Z(0)],[X(b.capWidth/2),Z(0)],[X(b.capWidth/2),Z(-b.capDepth)],[X(b.capWidth/2-b.capTf),Z(-b.capDepth)],[X(b.capWidth/2-b.capTf),Z(wTop)],[X(yL),Z(wTop)]]);
+ // The cap channel in true section (2:12 sloped flange, root fillet), broken left of the rail.
+ const chan=capChannelProfile(b),channelFace=chan.innerFace;
+ svg+=poly([[X(yL),Z(0)],...chan.side.map(([x,z]):XY=>[X(x),Z(z+wTop)]),[X(yL),Z(wTop)]]);
  svg+=breakLine([X(yL)-4,Z(0)-2],[X(yL)-4,Z(wBot)+2])+breakLine([X(-b.tw/2)-4,Z(webEnd)+4],[X(b.tw/2)+4,Z(webEnd)+4]);
  const rb=rail.baseWidth/2,rt=rail.webThickness/2,rh=rail.headWidth/2,z1=pad+rail.baseThickness,z3=railTop-rail.headThickness;
  if(pad)svg+=rect(X(-rb),Z(pad),2*rb*k,pad*k,'runway-line');
@@ -48,12 +53,14 @@ export function capAngleSection(s:CalculationSnapshot):ViewRender{
  svg+=poly([[X(keeper.inner),Z(0)],[X(keeper.outer),Z(0)],[X(keeper.outer),Z(keeper.height)],[X(keeper.tip),Z(keeper.height)],[X(keeper.tip),Z(keeper.bodyHeight)],[X(keeper.inner),Z(keeper.bodyHeight)]]);
  // Cap angle: short leg on the channel flange, long leg level with the top of the cap.
  svg+=poly([[X(g.y0),Z(0)],[X(g.toe),Z(0)],[X(g.toe),Z(-g.ta)],[X(g.y0+g.ta),Z(-g.ta)],[X(g.y0+g.ta),Z(-g.dv)],[X(g.y0),Z(-g.dv)]]);
- // Cap bolt: plate washer and head outside (the sleeve and slot hidden); F436 washer and nut inside the channel.
- const cb=g.cap,ch=boltHardware(cb.diameter),zc=cb.z,outer=g.y0+g.ta+(cb.sleeve?c.sleeveClearance:0),inner=g.y0-b.capTf,headEnd=outer+cb.washer.thickness+ch.head;
+ // Cap bolt: plate washer and head outside (the sleeve and slot hidden); F436 washer and nut inside the channel. On a
+ // flange sloped steeper than 1:20 the washer is an F436 beveled washer (1:6, 5/16 in mean thickness) seated on the slope.
+ const cb=g.cap,ch=boltHardware(cb.diameter),zc=cb.z,outer=g.y0+g.ta+(cb.sleeve?c.sleeveClearance:0),headEnd=outer+cb.washer.thickness+ch.head;
+ const face=(z:number)=>channelFace(z+b.capTw),inner=face(zc),wt=beveledCapWasher(b)?5/16*25.4:ch.washer.t,wr=ch.washer.od/2;
  svg+=rect(X(outer),Z(zc+cb.washer.height/2),cb.washer.thickness*k,cb.washer.height*k,'runway-line');
  svg+=rect(X(outer+cb.washer.thickness),Z(zc+ch.corners/2),ch.head*k,ch.corners*k,'runway-line');
- svg+=rect(X(inner-ch.washer.t),Z(zc+ch.washer.od/2),ch.washer.t*k,ch.washer.od*k,'runway-line')+rect(X(inner-ch.washer.t-ch.nut),Z(zc+ch.corners/2),ch.nut*k,ch.corners*k,'runway-line');
- svg+=rect(X(inner-ch.washer.t-ch.nut-ch.stick),Z(zc+cb.diameter/2),ch.stick*k,cb.diameter*k,'runway-line');
+ svg+=poly([[X(face(zc+wr)),Z(zc+wr)],[X(inner-wt),Z(zc+wr)],[X(inner-wt),Z(zc-wr)],[X(face(zc-wr)),Z(zc-wr)]])+rect(X(inner-wt-ch.nut),Z(zc+ch.corners/2),ch.nut*k,ch.corners*k,'runway-line');
+ svg+=rect(X(inner-wt-ch.nut-ch.stick),Z(zc+cb.diameter/2),ch.stick*k,cb.diameter*k,'runway-line');
  for(const e of [-1,1])svg+=line([X(inner),Z(zc+e*cb.diameter/2)],[X(outer+cb.washer.thickness),Z(zc+e*cb.diameter/2)],'hidden-line')+line([X(g.y0),Z(zc+e*cb.slotWidth/2)],[X(g.y0+g.ta),Z(zc+e*cb.slotWidth/2)],'hidden-line');
  // Tie plate on the long leg; lap bolt heads on the plate, nuts under the leg.
  const tp=g.plate.thickness,lh=boltHardware(g.lap.diameter),yl=g.lap.y,lapTop=tp+lh.washer.t+lh.head,lapBottom=-g.ta-lh.washer.t-lh.nut-lh.stick;
@@ -131,7 +138,7 @@ export function capAngleSharedPlan(s:CalculationSnapshot):ViewRender{
  const pair=g.stations.filter(v=>Math.abs(v.station-shared)<1e-6),col=tc.col,bf=col?.width??355.6,ep=g.endPlate;
  const half=Math.max(bf/2,...pair.map(v=>Math.abs(v.offset)+c.length/2))+50.8;
  // Across the runway from the channel flange inner face to beyond the column flange, the tie plates broken in their clear span.
- const yTop=b.capWidth/2-b.capTf-25.4,brk1=g.toe+25.4,brk2=ep.y0-19.05,yBot=g.face+tc.tf+38.1,broken=brk2-brk1>38.1,gap=broken?16:0;
+ const toeInner=capChannelProfile(b).toeInner,yTop=b.capWidth/2-b.capTf-25.4,brk1=g.toe+25.4,brk2=ep.y0-19.05,yBot=g.face+tc.tf+38.1,broken=brk2-brk1>38.1,gap=broken?16:0;
  const depth=broken?brk1-yTop+yBot-brk2:yBot-yTop;
  const scale=drawingScale(Math.min(.72,360/(2*half),200/depth),u),k=scale.pointsPerMm,cx=40+half*k,X=(x:number)=>cx+(x-shared)*k;
  const Y=(y:number)=>110+(!broken||y<=brk1+1e-9?(y-yTop)*k:(brk1-yTop)*k+gap+(y-brk2)*k);
@@ -140,7 +147,7 @@ export function capAngleSharedPlan(s:CalculationSnapshot):ViewRender{
  for(const v of pair){
   // Girder end: the cap's column-side edge and its flange inner face (hidden), broken away from the joint.
   const a=X(v.girderEnd),f=X(v.end==='left'?shared+half-6:shared-half+6);
-  svg+=line([a,Y(yTop)],[a,Y(b.capWidth/2)],'runway-line')+line([a,Y(b.capWidth/2)],[f,Y(b.capWidth/2)],'runway-line')+line([a,Y(b.capWidth/2-b.capTf)],[f,Y(b.capWidth/2-b.capTf)],'hidden-line');
+  svg+=line([a,Y(yTop)],[a,Y(b.capWidth/2)],'runway-line')+line([a,Y(b.capWidth/2)],[f,Y(b.capWidth/2)],'runway-line')+line([a,Y(toeInner)],[f,Y(toeInner)],'hidden-line');
   svg+=breakLine([f,Y(yTop)-2],[f,Y(b.capWidth/2)+4]);
   // Angle long leg, its short leg below it (hidden) with the slots along the runway; tie plate with the lap bolt slots.
   const x0=v.x-c.length/2,pw=g.plate.width;
@@ -190,7 +197,7 @@ export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `CAP TIEBACK ANGLES (AISC DG7, TOP FLANGE CONNECTED DIRECTLY TO THE COLUMN): ONE AT EACH GIRDER END, ${dim(c.setback)} FROM THE GIRDER END TO ITS CENTERLINE, ON THE COLUMN-SIDE CHANNEL FLANGE. THE BOTTOM FLANGE IS RESTRAINED BY THE BOLTED END BEARINGS.`,
   cb.sleeved?`CAP BOLTS: PRETENSION AGAINST STEEL SLEEVES ${sz(cb.sleeve!.od)} OD X ${sz(cb.sleeve!.length)} LONG THROUGH ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} X ${sz(cb.washer.height)} X ${sz(cb.washer.length)} PLATE WASHERS. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE ANGLE IS NOT CLAMPED: THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`
    :`CAP BOLTS: SNUG-TIGHT WITH JAM NUTS IN ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} PLATE WASHERS (AISC J1.10, CRANES OF 5 TONS OR LESS). THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`,
-  `DRILL STANDARD HOLES IN THE CAP CHANNEL FLANGE ONLY AT THE TIE; NO OTHER HOLES, CUTS OR WELDS IN THE CAP OR GIRDER. INSTALL AND TENSION THE CAP BOLTS BEFORE THE TIE PLATE AND LAP BOLTS.`,
+  `DRILL STANDARD HOLES IN THE CAP CHANNEL FLANGE ONLY AT THE TIE; NO OTHER HOLES, CUTS OR WELDS IN THE CAP OR GIRDER.${beveledCapWasher(p.section)?' F436 1:6 BEVELED WASHERS UNDER THE CAP BOLT NUTS ON THE SLOPED INSIDE FACE OF THE CHANNEL FLANGE.':''} INSTALL AND TENSION THE CAP BOLTS BEFORE THE TIE PLATE AND LAP BOLTS.`,
   `LAP BOLTS: PRETENSIONED, SLIP-CRITICAL, CLASS ${g.lap.surface} FAYING SURFACES, IN SHORT SLOTS ACROSS THE RUNWAY IN THE TIE PLATE FOR FIT-UP; F436 WASHERS OVER THE SLOTS.`,
   `END PLATE: SHOP WELD TO THE TIE PLATE. FIELD-DRILL ${sz(g.column.hole)} HOLES IN THE ${tc.isNew?'COLUMN':'EXISTING COLUMN'} FLANGE TO MATCH; NO FIELD WELDING TO THE COLUMN FOR THE TIE. FINGER SHIMS 0 TO ${sz(c.shimMax)} TAKE UP THE FIT-UP; PRETENSION THE COLUMN BOLTS.`,
   ...(res?.stiffener.provided?[`COLUMN STIFFENER AT THE TIE LEVEL, ON THE TIE SIDE OF THE COLUMN WEB: ${tc.isNew?'SHOP':'FIELD'} WELD TO THE COLUMN FLANGE AND WEB (SEE EXISTING COLUMN WELDING).`]:[]),
