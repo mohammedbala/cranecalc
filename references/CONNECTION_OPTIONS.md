@@ -5,7 +5,7 @@ The Connections worksheet has independent bracket and tieback selectors. Selecti
 | Family | Display and calculation status |
 | --- | --- |
 | Welded twin-rib seat | Existing rectangular-rib component checks. Its movement and whole-building limitations remain. |
-| Welded haunched seat | Actual tapered rib geometry with editable tip depth. Separate variable-depth, weld, column and fatigue design required. |
+| Welded haunched seat | Designed: tapered rib (root and tip depth) checked on every section of the taper, the sloping free edge (bracket-plate slenderness and edge stress), root weld corner shear, the twin-rib seat, weld group, column and fatigue checks, and integrated deflection. |
 | Rolled W-section corbel | Actual selected AISC v16 W dimensions. Corbel, seat, full root weld group, receiving column and fatigue design required. |
 | Paired flat-bar ties | Existing double-cover bar model and enabled flange-saddle checks. Movement compatibility remains separate. |
 | Single-angle tieback | AISC L-section with a welded vertical leg at girder/column gussets. Eccentricity, buckling, shear lag, strength, stiffness, movement and fatigue remain unverified. |
