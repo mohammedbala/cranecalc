@@ -2,6 +2,7 @@ import type {CheckResult,ProjectInput} from './types';
 import type {ExistingWeldingInput} from './existingColumnInputs';
 import {format} from './units';
 import {rolledStub} from './rolledBracketInputs';
+import {activeColumnStiffeners} from './columnStiffenerInputs';
 
 /**
  * Welding new steel to an existing column: the base metal must be identified, its carbon equivalent known, the
@@ -20,6 +21,8 @@ export function weldedAttachments(p:ProjectInput):{name:string;t:number}[]{
   if(b.arrangement==='rolled-corbel'){const st=rolledStub(b);if(st)out.push({name:`${st.name} bracket flange`,t:st.tf});}
   else out.push({name:'bracket rib',t:b.ribThickness},{name:'bracket seat plate',t:b.seatThickness});
  }
+ // Continuity plates are fillet welded to the existing column's flanges and web.
+ const cs=activeColumnStiffeners(b);if(cs)out.push({name:'column stiffener',t:cs.thickness});
  // Every tie arrangement reaches the column through a gusset welded to its flange.
  out.push({name:'tie gusset',t:d.brace.gussetThickness});
  return out;
