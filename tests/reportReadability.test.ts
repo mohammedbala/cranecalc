@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {reviewOpenItem} from './review/openItems';
 import {calculate} from '../src/engine/calculate';
 import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/demonstration';
 import {compactReport} from '../src/report/compactReport';
@@ -104,7 +105,7 @@ describe('compact, readable calculation report',()=>{
   expect(out).toContain('data-checks="s1 s2 s3"');
  });
  it('flags failures at the top and in each row',()=>{
-  const s=structuredClone(calculate(demonstrationProject()));const c=s.checks.find(v=>v.id==='major')!;c.status='fail';c.utilization=1.2;
+  const s=structuredClone(calculate(demonstrationProject()));s.checks=s.checks.filter(v=>!reviewOpenItem(v));const c=s.checks.find(v=>v.id==='major')!;c.status='fail';c.utilization=1.2;
   const out=compactReport(s,'');
   expect(out).toContain('1 CHECK NOT SATISFIED');expect(out).toContain('<b class="fail">NG</b>');
  },240000);

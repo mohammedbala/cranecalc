@@ -23,6 +23,7 @@ import { columnBaseAnalysis,columnBaseChecks,validateColumnBase } from './column
 import { longitudinalBracingAnalysis,longitudinalBracingChecks,validateLongitudinalBracing } from './longitudinalBracing';
 import { existingLayoutChecks,validateAdjacentBuilding } from './existingLayout';
 import { validateColumnCap } from './columnCap';
+import { bumperSelectionChecks,craneInputChecks,craneInputWarnings } from './craneInput';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
@@ -97,6 +98,8 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
   snapshot.checks=snapshot.checks.filter(c=>c.group!=='Serviceability');
   try {
    snapshot.checks.push(...aistChecks(snapshot),...capInputChecks(p));
+   // Statics and required data of the crane input: open items, never validation errors.
+   const craneInput=craneInputChecks(p);snapshot.checks.push(...craneInput);snapshot.warnings.push(...craneInputWarnings(craneInput));
    // Unfactored reactions by load type for the building that carries the runway.
    snapshot.supportReactions=supportReactions(p,props);
    // Bracing between new columns is analysed first: its forces load the braced columns and their bases.
@@ -120,6 +123,8 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
     }
     snapshot.checks.push(...detailed);
    }
+   // Bumper selection against the stop design strength, after the end-stop checks.
+   snapshot.checks.push(...bumperSelectionChecks(p,snapshot.checks));
   } catch(e) {snapshot.errors.push(e instanceof Error?e.message:'AIST design analysis failed.');}
   snapshot.warnings.push('Reference: AIST Technical Report 13, supplied source dated February 24, 2020. The 3D building is reference geometry. Enabled bracket geometry uses project inputs. Existing brackets require surveyed data and a recorded capacity assessment; whole-building adequacy is not established.');
   snapshot.warnings.push('Design combinations are runway-only projections. Roof, wind, seismic and other building actions require a separate design where applicable. The displayed supplied-load diagram envelopes remain separate from factored AIST design demands.');
