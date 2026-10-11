@@ -6,6 +6,8 @@ import {available} from './aiscStrength';
 import {bracketArrangement} from './connectionOptions';
 import {minimumFillet,parallelWeldGroup,transverseFilletFatigue} from './connectionStrength';
 import {designsBracing,bracingDesign} from './newColumnBracing';
+import {ribGeometry,ribResponse,ribFlexure,rootCornerStress,weldedRibBracket,haunchedRibErrors} from './bracketRib';
+import {haunchedRibData,haunchedRibChecks} from './haunchedSeat';
 
 const inch=25.4;
 
@@ -29,7 +31,9 @@ type Peak={value:number;caseId:string;x:number};
 export interface SeatHorizontal {longitudinal:number;bottom:number;offset:number}
 export interface BracketResults {
  strength:Record<string,Peak>;service:Record<string,Peak>;
- fatigue:{name:string;cycles:number;rib:number;seat:number;rootWeld:number;seatWeld:number;column:number;columnWeld?:number[]}[];
+ fatigue:{name:string;cycles:number;rib:number;seat:number;rootWeld:number;seatWeld:number;column:number;columnWeld?:number[];
+  /** Haunched ribs: stress range along the sloping free edge at the critical section. */
+  ribEdge?:number}[];
  stations:{x:number;caseId:string;vertical:number;seatMoment:number;leftRib:number;rightRib:number;rootMoment:number}[];
  /** Seat-to-column fillet candidates and, for each, the strength peaks of the weld group: rib root lines, seat line, and the seat's pull on the column flange. */
  columnWeld?:{sizes:number[];peaks:{root:Peak;seat:Peak;pull:Peak}[]};
@@ -68,7 +72,8 @@ export function columnWeldGroup(b:BracketInput,seatWeld:number){
  const len=(l:WeldLine)=>Math.hypot(l.b[0]-l.a[0],l.b[1]-l.a[1]),mid=(l:WeldLine,i:0|1)=>(l.a[i]+l.b[i])/2;
  const A=lines.reduce((s,l)=>s+l.t*len(l),0),xc=lines.reduce((s,l)=>s+l.t*len(l)*mid(l,0),0)/A,yc=lines.reduce((s,l)=>s+l.t*len(l)*mid(l,1),0)/A;
  const Ix=lines.reduce((s,l)=>s+l.t*len(l)*((mid(l,1)-yc)**2+(l.b[1]-l.a[1])**2/12),0),Iy=lines.reduce((s,l)=>s+l.t*len(l)*((mid(l,0)-xc)**2+(l.b[0]-l.a[0])**2/12),0);
- return {lines,A,xc,yc,Ix,Iy,J:Ix+Iy,ys,L,seatThroat:seatWeld/Math.SQRT2};
+ // A haunched rib's sloping free edge meets the root at its bottom (y = 0): see columnWeldStress.
+ return {lines,A,xc,yc,Ix,Iy,J:Ix+Iy,ys,L,seatThroat:seatWeld/Math.SQRT2,slope:ribGeometry(b).slope};
 }
 /** A concurrent force set on the bracket at the column face; Mseat is ΣV·x along the runway about the grid. */
 export type SeatForceSet={V:number;Mseat:number;F:number;H:number;xH:number};
@@ -90,25 +95,30 @@ export function columnWeldField(b:BracketInput,g:ReturnType<typeof columnWeldGro
 export function columnWeldStress(b:BracketInput,g:ReturnType<typeof columnWeldGroup>,e:number,f:SeatForceSet){
  const at=columnWeldField(b,g,e,f);
  let root=0,seat=0;const ends:number[]=[];
- for(const l of g.lines)for(const q of [l.a,l.b]){const s=at(q[0],q[1]);if(l.seat){seat=Math.max(seat,s.f);ends.push(s.n);}else root=Math.max(root,s.f);}
+ // At the bottom of a haunched rib's root the traction-free sloping edge adds the vertical shear n tan(alpha).
+ for(const l of g.lines)for(const q of [l.a,l.b]){const s=at(q[0],q[1]);if(l.seat){seat=Math.max(seat,s.f);ends.push(s.n);}else root=Math.max(root,q[1]===0&&g.slope?Math.hypot(s.n,s.tx,s.ty+s.n*g.slope):s.f);}
  return {root,seat,ends,pull:Math.max(0,...ends)*g.seatThroat*g.L};
 }
-/** Two independent rectangular cantilever ribs, continuously welded to seat
+/** Two independent cantilever ribs, rectangular or tapered (haunched), continuously welded to seat
  * and column flange. Seat stiffness/diaphragm action is NOT credited for LTB.
  * The ribs take the gravity bearing load. The longitudinal force of the
  * locating bearing and the bottom-flange lateral force reach the seat through
  * the bearing bolts and the column through the seat-to-column fillet with the
  * rib root fillets (columnWeldStress); the top-flange tie connects separately.
- * No frictional sharing is credited.
+ * No frictional sharing is credited. A tapered rib is checked on every vertical
+ * section between the root and the load (ribResponse): bending and its sloping
+ * free-edge stress at the critical section, shear at the shallowest loaded section.
  */
 export function bracketResponse(p:ProjectInput,loads:BracketLoads){
  const b=p.details!.bracket!,m=p.details!.material,E=p.section.E,G=E/2.6;
  const V=loads.reduce((a,v)=>a+v.vertical,0),Mx=loads.reduce((a,v)=>a+v.vertical*v.offset,0);
  const ribs=[V/2-Mx/b.ribSpacing,V/2+Mx/b.ribSpacing];
  // Entire patch at its far transverse edge; no uniform-patch relief.
- const e=b.reach+p.details!.bearing.width/2,A=b.ribDepth*b.ribThickness,S=b.ribThickness*b.ribDepth**2/6,I=S*b.ribDepth/2;
- const R=Math.max(...ribs.map(Math.abs)),M=R*e,normal=M/S,shear=1.5*R/A;
- const root=parallelWeldGroup({length:b.ribDepth,gauge:b.ribThickness,size:b.rootWeld,Fexx:m.Fexx,method:p.method,vx:0,vy:R,normal:0,mx:M,my:0,mz:0});
+ const e=b.reach+p.details!.bearing.width/2,g=ribGeometry(b),rib=ribResponse(g,e,E,G);
+ const R=Math.max(...ribs.map(Math.abs)),M=R*rib.critical.moment,normal=R*rib.critical.bending,shear=R*rib.load.shear;
+ const root=parallelWeldGroup({length:b.ribDepth,gauge:b.ribThickness,size:b.rootWeld,Fexx:m.Fexx,method:p.method,vx:0,vy:R,normal:0,mx:R*e,my:0,mz:0});
+ // Haunched rib: the sloping free edge meets the root fillets at their bottom ends.
+ const rootDemand=g.tapered?Math.max(root.demand,rootCornerStress(R*e*(b.ribDepth/2)/root.Ix,R/root.A,g.slope)):root.demand;
  const seat=seatStrip(loads,b.ribSpacing,p.details!.bearing.length);
  const seatNormal=6*seat.moment/(p.details!.bearing.width*b.seatThickness**2);
  const seatShear=1.5*seat.shear/(p.details!.bearing.width*b.seatThickness);
@@ -121,37 +131,40 @@ export function bracketResponse(p:ProjectInput,loads:BracketLoads){
  const c=b.receiver,colI=2*c.width*c.flangeThickness*((c.depth-c.flangeThickness)/2)**2+c.webThickness*(c.depth-2*c.flangeThickness)**3/12,colS=colI/(c.depth/2);
  const columnStress=ribs.map(()=>V*(e+c.depth/2)/colS);
  const uplift=loads.reduce((sum,v)=>sum+Math.max(0,-v.vertical),0);
- const perForce=R>0?root.demand/R:0,seatPerForce=1/(2*(b.seatWeld/Math.sqrt(2))*weldLength);
- return {V,Mx,ribs,e,R,M,normal,shear,seatNormal,seatShear,ribTension:Math.max(...ribTension.map(Math.abs)),
-  signed:{rib:ribs.map(v=>v*e/S),rootWeld:ribs.map(v=>v*perForce),seatWeld:ribs.map(v=>v*seatPerForce),column:columnStress,seat:[seatNormal]},
-  rootWeld:root.demand,rootBase:root.demand*root.A/(2*b.ribDepth*Math.min(b.ribThickness,b.receiver.flangeThickness)),seatWeld,receiverForce,uplift,
+ const perForce=R>0?rootDemand/R:0,seatPerForce=1/(2*(b.seatWeld/Math.sqrt(2))*weldLength);
+ const Fb=available(m.Fy,p.method,.9,1.67),Fv=available(.6*m.Fy,p.method,.9,1.67);
+ // A rectangular rib's root is its critical section and its bottom edge is level: the stresses coincide.
+ const haunched=g.tapered?{ribRootMoment:R*e,ribRootNormal:R*rib.root.bending,ribRootShear:R*rib.root.shear,ribEdge:R*rib.critical.edge}:undefined;
+ return {V,Mx,ribs,e,R,M,normal,shear,seatNormal,seatShear,ribTension:Math.max(...ribTension.map(Math.abs)),haunched,
+  // Fatigue at the rib root: the stress along the edge at the bottom of the root (the level bottom edge of a rectangular rib).
+  signed:{rib:ribs.map(v=>v*rib.root.edge),rootWeld:ribs.map(v=>v*perForce),seatWeld:ribs.map(v=>v*seatPerForce),column:columnStress,seat:[seatNormal],...(g.tapered?{ribEdge:ribs.map(v=>v*rib.critical.edge)}:{})},
+  rootWeld:rootDemand,rootBase:rootDemand*root.A/(2*b.ribDepth*Math.min(b.ribThickness,b.receiver.flangeThickness)),seatWeld,receiverForce,uplift,
   // Interpolation-error bound |v(x)| <= max|M/EI| |(x-r1)(x-r2)|/2
   // for a seat with zero displacement at each rib, including both overhangs.
-  deflection:R*e**3/(3*E*I)+R*e/(5/6*G*A)+seat.moment/(2*E*(p.details!.bearing.width*b.seatThickness**3/12))*Math.max(b.ribSpacing**2/4,(b.seatLength**2-b.ribSpacing**2)/4),rotation:R*e**2/(2*E*I),
-  interaction:normal/available(m.Fy,p.method,.9,1.67)+shear/available(.6*m.Fy,p.method,.9,1.67)};
+  deflection:R*rib.delta+seat.moment/(2*E*(p.details!.bearing.width*b.seatThickness**3/12))*Math.max(b.ribSpacing**2/4,(b.seatLength**2-b.ribSpacing**2)/4),rotation:R*rib.theta,
+  interaction:R*rib.interaction(Fb,Fv)};
 }
 /** Column flange strip at each rib: 45° spread from the rib tension zone (half its depth) to the web root. */
 export function receiverStrip(p:ProjectInput){
  const b=p.details!.bracket!,c=b.receiver,m=b.ribSpacing/2-c.webThickness/2,N=b.ribDepth/2;
  return {m,N,length:N+2*Math.max(0,m)};
 }
+/** F11 flexure of a rib at its root (ribFlexure gives any section of a tapered rib). */
 export function rectangularRibFlexure(b:BracketInput,E:number,Fy:number,method:ProjectInput['method']){
- const S=b.ribThickness*b.ribDepth**2/6,Mp=Fy*b.ribThickness*b.ribDepth**2/4;
- const slenderness=2*b.seatProjection*b.ribDepth/b.ribThickness**2,ratio=slenderness*Fy/E;
- const nominal=ratio<=.08?Mp:ratio<=1.9?Math.min(Mp,(1.52-.274*ratio)*Fy*S):Math.min(Mp,1.9*E/slenderness*S);
- return {slenderness,nominal,capacity:available(nominal,method,.9,1.67)};
+ const {slenderness,nominal,capacity}=ribFlexure(b,E,Fy,method,0);return {slenderness,nominal,capacity};
 }
 export function createBracketCollector(p:ProjectInput){
- if(!p.details?.bracket?.enabled||bracketArrangement(p.details.bracket)!=='twin-rib')return undefined;
+ if(!p.details?.bracket?.enabled||!weldedRibBracket(p.details.bracket))return undefined;
  const sizes=seatColumnWeldSizes(p),groups=sizes.map(w=>columnWeldGroup(p.details!.bracket!,w)),none={value:0,caseId:'',x:0};
- const result:BracketResults={strength:{},service:{},fatigue:p.details.spectrum.map(v=>({name:v.name,cycles:v.cycles,rib:0,seat:0,rootWeld:0,seatWeld:0,column:0,columnWeld:sizes.map(()=>0)})),stations:[],
+ const tapered=ribGeometry(p.details.bracket).tapered;
+ const result:BracketResults={strength:{},service:{},fatigue:p.details.spectrum.map(v=>({name:v.name,cycles:v.cycles,rib:0,seat:0,rootWeld:0,seatWeld:0,column:0,columnWeld:sizes.map(()=>0),...(tapered?{ribEdge:0}:{})})),stations:[],
   columnWeld:{sizes,peaks:sizes.map(()=>({root:{...none},seat:{...none},pull:{...none}}))}};
  // Signed extremes per bin, key and rib: a gravity bracket does not reverse, so the range is max - min.
  const extremes=p.details.spectrum.map(()=>new Map<string,{min:number;max:number}>());
  const range=(bin:number,id:string,value:number)=>{const x=extremes[bin].get(id)??{min:0,max:0};x.min=Math.min(x.min,value);x.max=Math.max(x.max,value);extremes[bin].set(id,x);return x.max-x.min;};
  const observe=(kind:'strength'|'service'|'fatigue',caseId:string,x:number,loads:BracketLoads,bin:number,horizontal?:SeatHorizontal)=>{
   const b=p.details!.bracket!,h=horizontal??{longitudinal:0,bottom:0,offset:0};
-  const selfWeight=(b.seatLength*b.seatProjection*b.seatThickness+2*b.ribDepth*b.ribThickness*b.seatProjection)*p.section.density*9.80665/1e9;
+  const selfWeight=(b.seatLength*b.seatProjection*b.seatThickness+2*ribGeometry(b).area*b.ribThickness)*p.section.density*9.80665/1e9;
   const r=bracketResponse(p,kind==='strength'?[...loads,{vertical:selfWeight*(p.method==='LRFD'?1.4:1),offset:0,length:b.seatLength}]:loads);
   // The seat-to-column fillet and the rib root fillets as one group under the whole concurrent set. The lateral
   // force is taken in both senses: without side thrust its sense follows the rail eccentricity, either way.
@@ -165,7 +178,7 @@ export function createBracketCollector(p:ProjectInput){
   if(kind==='strength')groups.forEach((g,i)=>{const peak=result.columnWeld!.peaks[i];for(const set of sets){const w=columnWeldStress(b,g,r.e,set);
    for(const [key,value] of [['root',w.root],['seat',w.seat],['pull',w.pull]] as const)if(value>peak[key].value)peak[key]={value,caseId,x};}});
   const target=kind==='strength'?result.strength:result.service;
-  const values=kind==='strength'?{vertical:Math.abs(r.V),ribReaction:r.R,ribMoment:r.M,ribNormal:r.normal,ribShear:r.shear,interaction:r.interaction,seatNormal:r.seatNormal,seatShear:r.seatShear,rootWeld:r.rootWeld,rootBase:r.rootBase,seatWeld:r.seatWeld,receiverForce:r.receiverForce,ribTension:r.ribTension,uplift:r.uplift}:{vertical:Math.abs(r.V),deflection:r.deflection,rotation:r.rotation};
+  const values=kind==='strength'?{vertical:Math.abs(r.V),ribReaction:r.R,ribMoment:r.M,ribNormal:r.normal,ribShear:r.shear,interaction:r.interaction,seatNormal:r.seatNormal,seatShear:r.seatShear,rootWeld:r.rootWeld,rootBase:r.rootBase,seatWeld:r.seatWeld,receiverForce:r.receiverForce,ribTension:r.ribTension,uplift:r.uplift,...r.haunched}:{vertical:Math.abs(r.V),deflection:r.deflection,rotation:r.rotation};
   for(const [key,value] of Object.entries(values))if(!target[key]||value>target[key].value)target[key]={value,caseId,x};
   if(kind==='strength'){
    const old=result.stations.find(v=>v.x===x);
@@ -191,6 +204,7 @@ export function validateBracket(p:ProjectInput){
   add(b.ribSpacing<=b.ribThickness+2*b.rootWeld,'rib root welds overlap.');
  }
  add(r.depth<=2*r.flangeThickness||r.webThickness>=r.width,'invalid receiving column I-section.');
+ errors.push(...haunchedRibErrors(b));
  add(r.Fu<r.Fy,'receiver Fu must be at least Fy.');
  add(b.ribDepth<4*b.rootWeld||d.bearing.width<4*b.seatWeld,'effective weld lengths must be at least four weld sizes.');
  add(p.scope!=='design'||!p.aist?.runwayOnly,'bracket design requires the detailed runway design model.');
@@ -199,20 +213,30 @@ export function validateBracket(p:ProjectInput){
 /** serviceReaction: largest unfactored support reaction with all cranes, impact and dead load (the AIST §5.9.2 basis). */
 export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:number):CheckResult[]{
  const b=p.details!.bracket!,m=p.details!.material,c=b.receiver,E=p.section.E,checks:CheckResult[]=[];
+ // A haunched (tapered) rib: its geometry and critical section for the rib checks and notes.
+ const hr=ribGeometry(b).tapered?haunchedRibData(p):undefined,hf=(v:number)=>format(v,'length',p.units,3);
  // byOthers: confirmation that an adequacy outside this calculation is addressed elsewhere; never reported as a pass.
  const gate=(id:string,title:string,ok:boolean,note:string,byOthers=false)=>checks.push({id:'bracket-'+id,group:'Column bracket',title,status:ok?(byOthers?'excluded':'pass'):'unverified',equation:'',note,referenceIds:['bracket-basis']});
  gate('receiver','Receiving column · surveyed geometry and material',c.confirmed&&!!c.source.trim(),c.source?`${c.source} Survey data only; the receiving column member, frame and foundation are not checked here (see Supporting structure).`:'Enter and confirm surveyed receiving-column geometry and material; the reference frame is not a capacity input.');
- gate('load-path','Bracket load paths / top-flange tie connected separately',b.loadPathConfirmed,'Two rectangular ribs and a seat plate welded directly to the column flange, the seat also by a top fillet across the flange. The ribs carry the vertical bearings. The bearing bolts deliver the locating end\'s longitudinal force and the bottom-flange lateral force to the seat, checked below with the seat and rib root fillets as one weld group and the column flange and web under the seat. The top-flange tie connects to the column independently; '+(p.existingColumn?.enabled&&p.existingColumn.isNew?'its column-side connection is checked with the flange attachment, and uplift is restrained at the bolted bearings.':'its column-side adequacy, and any uplift restraint, are by others.'),!(p.existingColumn?.enabled&&p.existingColumn.isNew));
+ gate('load-path','Bracket load paths / top-flange tie connected separately',b.loadPathConfirmed,(hr?'Two tapered (haunched) rib plates':'Two rectangular ribs')+' and a seat plate welded directly to the column flange, the seat also by a top fillet across the flange. The ribs carry the vertical bearings. The bearing bolts deliver the locating end\'s longitudinal force and the bottom-flange lateral force to the seat, checked below with the seat and rib root fillets as one weld group and the column flange and web under the seat. The top-flange tie connects to the column independently; '+(p.existingColumn?.enabled&&p.existingColumn.isNew?'its column-side connection is checked with the flange attachment, and uplift is restrained at the bolted bearings.':'its column-side adequacy, and any uplift restraint, are by others.'),!(p.existingColumn?.enabled&&p.existingColumn.isNew));
  const add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,caseId?:string,refs=['bracket-basis','tr13-bracket'])=>checks.push({id:'bracket-'+id,group:'Column bracket',title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&demand<=capacity*(1+1e-9)?'pass':'fail',equation,note,caseId,referenceIds:refs});
  const from=(key:string,id:string,title:string,capacity:number,q:CheckResult['quantity'],eq:string,note:string)=>{const peak=r.strength[key];add(id,title,peak?.value??0,capacity,q,eq,note,peak?.caseId);};
  const common='Every concurrent case of the bracket design force envelope: all strength combinations and crane positions, each bay carrying the longitudinal force in either direction with its end couple, and a wheel over a shared grid on either girder end; impact included. Full bracket self-weight added with 1.4 LRFD / 1.0 ASD factor at the conservative bearing eccentricity. Ribs at ±g/2 take P±=V/2±Σ(Vi xi)/g; full patch at its far transverse edge. No seat-flange composite section credit.';
+ if(hr){
+  const x=hr.rib.critical,taper=`Ribs taper from ${hf(hr.g.root)} at the root to ${hf(hr.g.tip)} at the seat edge over ${hf(hr.g.length)}; e = ${hf(hr.e)} to the far bearing edge.`;
+  from('ribMoment','rib-flexure','Haunched ribs · flexure / lateral buckling at the critical section',ribFlexure(b,E,m.Fy,p.method,x.x).capacity,'moment','P_\\pm=V/2\\pm M_s/g;\\;h(x)=h_r-(h_r-h_t)\\tfrac{x}{L};\\;x_c=\\max[0,\\min(e,\\,2e-h_r/s)];\\;M_r=|P_\\pm|(e-x_c);\\;M_n=\\min(F_yZ,F_{cr}S)\\big|_{x_c}',`${common} ${taper} The bending stress (e − x)/S(x) is greatest at x_c = ${hf(x.x)} from the column face, depth ${hf(x.depth)} (s = (h_r − h_t)/L); the root is checked separately below. AISC F11 rectangular bar at that section with Lb = 2L and the slenderness of the root depth; doubled cantilever length is a conservative model assumption.`);
+  from('ribShear','rib-shear','Haunched ribs · shear at the shallowest loaded section',available(.6*m.Fy,p.method,.9,1.67),'stress','\\tau=1.5|P|/[h(e)\\,t]',`${common} ${taper} The whole rib reaction crosses every section up to the load: the shallowest, at the far bearing edge, is ${hf(hr.rib.load.depth)} deep. Elastic peak shear; no relief from the inclined free-edge force (Résal effect) and no plastic shear distribution.`);
+  from('interaction','rib-interaction','Haunched ribs · combined elastic stress',1,'ratio','\\max_{0\\le x\\le e}\\left[\\frac{|P|(e-x)}{S(x)F_b}+\\frac{1.5|P|}{h(x)tF_v}\\right]\\le1','Conservative linear interaction bounds first yield under concurrent bending and shear on every vertical section between the root and the load; F11 stability and the free edge checked separately.');
+ }else{
  from('ribMoment','rib-flexure','Bracket ribs · flexure / lateral buckling',rectangularRibFlexure(b,E,m.Fy,p.method).capacity,'moment','P_\\pm=V/2\\pm M_s/g;\\quad M_r=|P_\\pm|e;\\quad M_n=F_{11}(L_b=2L,C_b=1)',common+' AISC F11 rectangular bars; doubled cantilever length is a conservative model assumption.');
  from('ribShear','rib-shear','Bracket ribs · shear',available(.6*m.Fy,p.method,.9,1.67),'stress','\\tau=1.5|P|/(ht)',common+' Elastic peak shear; no plastic shear distribution.');
  from('interaction','rib-interaction','Bracket ribs · combined elastic stress',1,'ratio','|f_b|/F_b+|\\tau|/F_v\\le1','Conservative linear interaction bounds first yield under concurrent bending and shear; F11 stability checked separately.');
+ }
+ if(hr)haunchedRibChecks(p,r,add,common);
  from('seatNormal','seat-flexure','Spreader seat · plate bending',available(m.Fy,p.method,.9,1.67),'stress','M(x)=\\sum R_j\\langle x-r_j\\rangle-\\sum(q_i/2)[\\langle x-a_i\\rangle^2-\\langle x-b_i\\rangle^2];\\quad f=6M_{max}/(b_pt_p^2)','Uniform contact under each actual bearing patch; simultaneous rib reactions. Evaluates load/support edges and all interior zero-shear locations, including both overhangs. Effective strip width is the transverse bearing width.');
  from('seatShear','seat-shear','Spreader seat · peak shear',available(.6*m.Fy,p.method,.9,1.67),'stress','\\tau=1.5|V_{strip,max}|/(b_pt_p)','Maximum absolute strip shear on either side of each load and rib-support edge; effective strip width is the transverse bearing width.');
  const wr=parallelWeldGroup({length:b.ribDepth,gauge:b.ribThickness,size:b.rootWeld,Fexx:m.Fexx,method:p.method,vx:0,vy:0,normal:0,mx:0,my:0,mz:0});
- from('rootWeld','root-weld','Rib-to-column · eccentric fillet welds',wr.capacity,'stress','f_w=\\sqrt{(P/A_w)^2+(Pe\\,h/(2I_w))^2}','Two continuous vertical root fillets per rib. Elastic endpoint resultant includes eccentric moment. J2.2 long-weld reduction; no directional strength increase.');
+ from('rootWeld','root-weld','Rib-to-column · eccentric fillet welds',wr.capacity,'stress',hr?'f_b=\\frac{Pe\\,h_r}{2I_w};\\quad f_w=\\max\\left[\\sqrt{(P/A_w)^2+f_b^2},\\;\\sqrt{(P/A_w+f_b\\tan\\alpha)^2+f_b^2}\\right]':'f_w=\\sqrt{(P/A_w)^2+(Pe\\,h/(2I_w))^2}','Two continuous vertical root fillets per rib. Elastic endpoint resultant includes eccentric moment.'+(hr?` At the bottom of the root the traction-free sloping edge (α = ${hr.degrees.toFixed(1)}°) also puts the shear f_b tan α on the weld; it is added to the uniform shear.`:'')+' J2.2 long-weld reduction; no directional strength increase.');
  from('rootBase','root-base','Column flange / rib · connected metal',Math.min(available(.6*Math.min(m.Fy,c.Fy),p.method,1,1.5),available(.6*Math.min(m.Fu,c.Fu),p.method,.75,2)),'stress','f_{base}=f_w A_w/[2h\\min(t_r,t_{cf})]','Conservative resultant on the smaller joined base-metal area; shear yielding and rupture strengths also bound normal traction. Column local effects checked below.');
  const length=p.details!.bearing.width,ratio=length/b.seatWeld,beta=ratio<=100?1:ratio<=300?1.2-.002*ratio:180/ratio;
  from('seatWeld','seat-weld','Seat-to-rib · continuous fillet welds',available(.6*m.Fexx*beta,p.method,.75,2),'stress','f_w=|P|/[2(0.707w)b_p]','Two continuous fillets along each rib; only bearing-patch length credited. Includes tension in a rib caused by longitudinal seat eccentricity.');
@@ -220,7 +244,7 @@ export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:n
  const cw=seatColumnWeld(p,r),cwPeaks=cw.peaks,cwf=(v:number)=>format(v,'length',p.units,3),columnEnd=p.existingColumn?.enabled?p.existingColumn.height-p.existingColumn.seatElevation:0;
  if(cwPeaks){
   const governs=cwPeaks.seat.value>=cwPeaks.root.value?cwPeaks.seat:cwPeaks.root;
-  add('column-weld','Seat and rib welds to column · with longitudinal and lateral force',governs.value,cw.capacity,'stress','f=\\sqrt{\\left(\\frac{H}{A}+\\frac{M_xv}{I_x}-\\frac{M_yu}{I_y}\\right)^2+\\left(\\frac{F}{A}-\\frac{M_zv}{J}\\right)^2+\\left(\\frac{V}{A}-\\frac{M_zu}{J}\\right)^2}',`Every concurrent case of the bracket design force envelope with its longitudinal force F from the locating bearing bolts (at the girder web line, ${cwf(b.reach)} from the flange) and its bottom-flange lateral force H through the bearing bolts (both senses), at the seat top; V at the far bearing edge with its seat moment and the bracket self-weight. One elastic group on the column flange: the two ${cwf(b.rootWeld)} root fillets of each rib over ${cwf(b.ribDepth)} and the ${cwf(cw.size)} top fillet of the seat, ${cwf(cw.length)} long across the flange (${cw.entered?'entered with the bracing collector':'the smallest standard fillet from the J2.4 minimum that carries these forces'}); throat stresses at the line ends, no directional increase. Peak on the ${governs===cwPeaks.seat?'seat':'rib root'} line. The seat-line share of the bracket moment is included; the ribs alone are checked for gravity above.`,governs.caseId);
+  add('column-weld','Seat and rib welds to column · with longitudinal and lateral force',governs.value,cw.capacity,'stress','f=\\sqrt{\\left(\\frac{H}{A}+\\frac{M_xv}{I_x}-\\frac{M_yu}{I_y}\\right)^2+\\left(\\frac{F}{A}-\\frac{M_zv}{J}\\right)^2+\\left(\\frac{V}{A}-\\frac{M_zu}{J}\\right)^2}',`Every concurrent case of the bracket design force envelope with its longitudinal force F from the locating bearing bolts (at the girder web line, ${cwf(b.reach)} from the flange) and its bottom-flange lateral force H through the bearing bolts (both senses), at the seat top; V at the far bearing edge with its seat moment and the bracket self-weight. One elastic group on the column flange: the two ${cwf(b.rootWeld)} root fillets of each rib over ${cwf(b.ribDepth)} and the ${cwf(cw.size)} top fillet of the seat, ${cwf(cw.length)} long across the flange (${cw.entered?'entered with the bracing collector':'the smallest standard fillet from the J2.4 minimum that carries these forces'}); throat stresses at the line ends, no directional increase. Peak on the ${governs===cwPeaks.seat?'seat':'rib root'} line.${hr?' At the bottom of each haunched root the shear n tan α of the sloping free edge is added.':''} The seat-line share of the bracket moment is included; the ribs alone are checked for gravity above.`,governs.caseId);
   add('column-weld-minimum','Seat-to-column fillet · minimum leg',minimumFillet(Math.max(b.seatThickness,c.flangeThickness)),cw.size,'length','w\\ge w_{min,J2.4}','Thicker of the seat plate and the column flange controls.');
   // J10.1/J10.2 for the seat's pull on the flange; within 10tf (or d) of the column top the end-region values apply.
   const flangeEnd=columnEnd<10*c.flangeThickness,webEnd=!(columnEnd>c.depth);
@@ -246,13 +270,13 @@ export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:n
  // A single loaded flange does not create opposing double compression forces.
  const vertical=r.service.vertical?.value??0;
  add('tr13-load','AIST column bracket · reaction recommendation',Math.max(vertical,serviceReaction??0),50*4448.221615,'force',p.units==='SI'?'R_{bracket}<222.411\\,kN':'R_{bracket}<50\\,kip','Reference AIST Technical Report 13 §5.9.2. Unfactored support reaction with all cranes, impact and dead load, the same basis as the Detailing column-bracket applicability check.');
- for(const [key,limit,q,eq] of [['deflection',b.deflectionLimit,'length','\\delta\\le Pe^3/(3EI)+Pe/(\\kappa GA)+\\delta_{seat}'],['rotation',b.rotationLimit,'ratio','\\theta=Pe^2/(2EI)']] as const){
-  const peak=r.service[key];add(key,`Bracket · vertical ${key}`,peak?.value??0,limit,q,eq,'Unfactored single-crane service-load bound; column fixed at interface. User-entered incremental limits. Building deformation and dead-load setting are separate.',peak?.caseId);
+ for(const [key,limit,q,eq] of [['deflection',b.deflectionLimit,'length',hr?'\\delta=\\int_0^e\\frac{P(e-x)^2}{EI(x)}dx+\\int_0^e\\frac{P\\,dx}{\\kappa GA(x)}+\\delta_{seat}':'\\delta\\le Pe^3/(3EI)+Pe/(\\kappa GA)+\\delta_{seat}'],['rotation',b.rotationLimit,'ratio',hr?'\\theta=\\int_0^e\\frac{P(e-x)}{EI(x)}dx':'\\theta=Pe^2/(2EI)']] as const){
+  const peak=r.service[key];add(key,`Bracket · vertical ${key}`,peak?.value??0,limit,q,eq,'Unfactored single-crane service-load bound; column fixed at interface.'+(hr?` Integrated over the tapered rib, I(x) and A(x) of the depth h(x) from ${hf(hr.g.root)} to ${hf(hr.g.tip)}.`:'')+' User-entered incremental limits. Building deformation and dead-load setting are separate.',peak?.caseId);
  }
  from('uplift','uplift','Bearing contact · uplift requiring separate restraint',1,'force','V_{uplift}\\le0','Gravity-only bracket. Uplift above 1 N numerical tolerance fails this arrangement until a separate compatible hold-down load path is designed.');
  const fatigue=(key:'rib'|'seat',title:string)=>{
   const damage=r.fatigue.reduce((sum,v)=>{const limit=Math.min(6900*(.39/v.cycles)**(1/3),transverseFilletFatigue(key==='rib'?b.ribThickness:b.seatThickness,key==='rib'?b.rootWeld:b.seatWeld,v.cycles).capacity);return sum+(v[key]/limit)**3;},0);
-  add('fatigue-'+key,title,damage,1,'ratio','D=\\sum_i(\\Delta f_i/F_{SR,i})^3\\le1',"Unfactored duty-bin loads without impact. Range of the signed response of each rib over the bin (a gravity bracket does not reverse; zero with no crane present). Conservative Category E-prime base-metal bound plus transverse fillet-root reduction; no endurance-limit credit.",undefined,['bracket-basis','aisc-fatigue']);
+  add('fatigue-'+key,title,damage,1,'ratio','D=\\sum_i(\\Delta f_i/F_{SR,i})^3\\le1',"Unfactored duty-bin loads without impact. Range of the signed response of each rib over the bin (a gravity bracket does not reverse; zero with no crane present)."+(hr&&key==='rib'?' At the bottom of the haunched root, the stress along the sloping edge, f_b/cos²α.':'')+" Conservative Category E-prime base-metal bound plus transverse fillet-root reduction; no endurance-limit credit.",undefined,['bracket-basis','aisc-fatigue']);
  };
  fatigue('rib','Rib root · fatigue');fatigue('seat','Seat plate · fatigue');
  // Column flange base metal at the rib root weld toes: the rib is an attachment longer than 4 in along the column.
@@ -261,6 +285,6 @@ export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:n
  for(const key of ['rootWeld','seatWeld'] as const){
   add('fatigue-'+key,key==='rootWeld'?'Column root weld · fatigue':'Seat fillet weld · fatigue',Math.max(...r.fatigue.map(v=>v[key])),Math.max(55,690*(1.5/p.fatigue.cycles)**.167),'stress','\\Delta f_w\\le\\max[55,690(1.5/n)^{0.167}]','AISC A-3-2M, Category F. Largest unfactored range of the signed weld stress assigned to ALL project cycles; no mixed-spectrum endurance exemption.',undefined,['bracket-basis','aisc-fatigue']);
  }
- from('ribNormal','fatigue-peak','Bracket rib · maximum cyclic normal stress',.66*m.Fy,'stress','f_{peak}\\le0.66F_y','Strength-envelope peak including dead load and impact used as a conservative bound for the unfactored fatigue peak.');
+ from(hr?'ribEdge':'ribNormal','fatigue-peak','Bracket rib · maximum cyclic normal stress',.66*m.Fy,'stress','f_{peak}\\le0.66F_y','Strength-envelope peak including dead load and impact used as a conservative bound for the unfactored fatigue peak.'+(hr?' Haunched ribs: the stress along the sloping free edge at the critical section.':''));
  return checks;
 }
