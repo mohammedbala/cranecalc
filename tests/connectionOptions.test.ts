@@ -21,7 +21,7 @@ describe('connection arrangement library and design boundaries',()=>{
   const p=cappedDemonstrationProject(),previous=fingerprint(p);p.details!.bracket!.arrangement='haunched-seat';p.details!.bracket!.tipDepth=127;p.details!.brace.arrangement='bearing-link';p.details!.brace.referenceDetail={...defaultReferenceTie,pinDiameter:31.75};
   const restored=projectSchema.parse(JSON.parse(JSON.stringify(p)));expect(restored.details!.bracket!.tipDepth).toBe(127);expect(restored.details!.brace.referenceDetail!.pinDiameter).toBe(31.75);expect(fingerprint(p)).not.toBe(previous);expect(validateProject(restored)).toEqual([]);
  });
- it.each(['haunched-seat','rolled-corbel'] as const)('does not assign twin-rib resistance to %s',kind=>{
+ it.each(['rolled-corbel'] as const)('does not assign twin-rib resistance to %s',kind=>{
   const p=cappedDemonstrationProject();p.details!.bracket!.arrangement=kind;
   const s=calculate(p);expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);expect(s.detailResults).toBeUndefined();
   expect(s.checks.find(c=>c.id==='option-bracket-model')).toMatchObject({status:'unsupported'});expect(s.checks.find(c=>c.id==='option-bracket-model')?.capacity).toBeUndefined();expect(s.checks.some(c=>c.id==='bracket-rib-flexure')).toBe(false);
@@ -37,7 +37,7 @@ describe('connection arrangement library and design boundaries',()=>{
   p.details!.bracket!.arrangement='twin-rib';p.details!.brace.arrangement='paired-links';p.system='continuous';expect(validateConnectionOptions(p).join(' ')).toContain('separate simple-span');
  });
  it('rejects tapered ribs deeper at the tip and eyes without pin material',()=>{
-  const p=cappedDemonstrationProject(),b=p.details!.bracket!;b.arrangement='haunched-seat';b.tipDepth=b.ribDepth+1;expect(validateConnectionOptions(p).join(' ')).toContain('tip depth');
+  const p=cappedDemonstrationProject(),b=p.details!.bracket!;b.arrangement='haunched-seat';b.tipDepth=b.ribDepth+1;expect(validateProject(p).join(' ')).toContain('tip depth');
   b.tipDepth=b.ribDepth/4;p.details!.brace.arrangement='bearing-link';p.details!.brace.referenceDetail={...defaultReferenceTie,eyeDiameter:30,pinDiameter:25.4};expect(validateConnectionOptions(p).join(' ')).toContain('radial material');
  });
  it('validates the selected tie geometry without applying inactive bolt or bearing dimensions',()=>{
@@ -50,7 +50,7 @@ describe('connection arrangement library and design boundaries',()=>{
  it('builds actual tapered ribs with the exact trapezoid volume',()=>{
   const b=cappedDemonstrationProject().details!.bracket!;b.arrangement='haunched-seat';b.tipDepth=127;
   const group=buildWeldedBrackets(b,[0],0,material,edge),rib=group.getObjectByName('WB-S1-rib-1') as THREE.Mesh;
-  expect(volume(rib.geometry)).toBeCloseTo((b.ribDepth+b.tipDepth)/2*b.seatProjection*b.ribThickness/1e9,9);expect(group.userData.designedBracket).toBe(false);
+  expect(volume(rib.geometry)).toBeCloseTo((b.ribDepth+b.tipDepth)/2*b.seatProjection*b.ribThickness/1e9,9);expect(group.userData.designedBracket).toBe(true);
  });
  it('uses the selected AISC W dimensions for corbel flanges and web',()=>{
   const b=cappedDemonstrationProject().details!.bracket!;b.arrangement='rolled-corbel';b.corbelShape='W12X40';const shape=aiscShapeByName(b.corbelShape)!;

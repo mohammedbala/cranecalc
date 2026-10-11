@@ -11,6 +11,8 @@ import {columnCapTitles} from './columnCapSheet';
 import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
+import {ribGeometry,ribDepthAt} from '../engine/bracketRib';
+import {haunchedRibOutline} from './haunchedBracketDrawing';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 
 const inch=25.4;
@@ -95,7 +97,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   if(capG)svg+=rect(X(-capG.cap.plate.width/2),Y(H),capG.cap.plate.width*kk,capG.cap.plate.thickness*kk,'runway-line');
   svg+=line([X(0),Y(top)-8],[X(0),Y(ftgBot)+6],'grid-line');
   // Bracket seat and ribs on the girder-side flange.
-  if(br){svg+=rect(X(c.d/2),Y(seat),br.seatProjection*kk,br.seatThickness*kk,'runway-line')+rect(X(c.d/2),Y(seat-br.seatThickness),br.seatProjection*kk,br.ribDepth*kk,'runway-line');}
+  if(br){const rg=ribGeometry(br);svg+=rect(X(c.d/2),Y(seat),br.seatProjection*kk,br.seatThickness*kk,'runway-line')+(rg.tapered?haunchedRibOutline(rg,X(c.d/2)+br.seatProjection*kk,X(c.d/2),Y(seat-br.seatThickness),kk):rect(X(c.d/2),Y(seat-br.seatThickness),br.seatProjection*kk,br.ribDepth*kk,'runway-line'));}
   // Bearing plate, girder section with the cap channel, and the rail.
   svg+=rect(X(girderZ-d.bearing.width/2),Y(y0),d.bearing.width*kk,bt*kk,'runway-line');
   svg+=`<path class="runway-line" d="M${n(X(girderZ-g.bf/2))},${n(Y(y0))}H${n(X(girderZ+g.bf/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ+g.tw/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ+g.bf/2))}V${n(Y(tos))}H${n(X(girderZ-g.bf/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ-g.tw/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ-g.bf/2))}Z"/>`;
@@ -153,7 +155,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ...ties.map(t=>({at:[X((t.z1+t.z2)/2),Y(t.yc-t.w/2)] as XY,labels:[`${t.side>0?'TOP':'BOTTOM'} FLANGE TIE`,`SEE ${detailRef(detailTitles.flangeTie)}`]})),
    {at:[X(girderZ+g.bf/2),Y(y0+g.tf/2)],labels:[`${g.name}`,'GIRDER, SEE S-01']},
    ...(capG?[{at:[X(capG.cap.plate.width/2),Y(seat-capG.cap.plate.thickness/2)] as XY,labels:['COLUMN CAP, GIRDER CENTERED',`SEE ${detailRef(columnCapTitles.section)}`]}]:[]),
-   ...(br?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-br.seatThickness-br.ribDepth*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef(detailTitles.weldedBracket)}`]}]:[]),
+   ...(br?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-br.seatThickness-ribDepthAt(ribGeometry(br),br.seatProjection*.7)*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef(detailTitles.weldedBracket)}`]}]:[]),
    ...strutItems,
    {at:[X(c.d/2),Y(broken?upperFrom+(seat-upperFrom)*.25:H*.5)],labels:[`NEW ${name}`,'COLUMN, ASTM A992']},
    {at:[X(row+hw.washer/2),Y(hw.washerThickness/2)],labels:[`PL ${size(tb)} BASE PL`,`SEE ${detailRef(detailTitles.basePlate)}`]},
