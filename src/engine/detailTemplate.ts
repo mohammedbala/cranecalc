@@ -60,15 +60,15 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    // Keeper under 4 in long (AISC Table A-3.1 Category D at the flange), 1/16 in clear of the rail-base toe, lip overlapping 1/2 in.
    // 5/16 in fillets: the end fillets (1 11/16 in, anchor 1 1/2 in) are over four weld sizes long (AISC 360-16 J2.2b), and the
    // 1/2 in anchor notch leaves 1/4 in of flat notch end beyond its 1/4 in radius corner holes.
-   clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.3125*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1*inch,jointPlateHeight:Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/1.5875)*1.5875,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+   clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.3125*inch,anchorNotch:.5*inch,jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/1.5875)*1.5875,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
   criteria:{twistLimit:.005,railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],
   fabrication:{
    steel:'Runway girder per the section shown; plates, bars and stiffeners ASTM A572 Grade 50 unless noted.',
-   bolting:'ASTM F3125 Grade A325, pretensioned, Class B faying surfaces, standard holes unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts pretensioned against steel sleeves. Rail-joint bolts snug-tight.',
-   welding:'E70XX low-hydrogen electrodes per AWS D1.1, cyclically loaded provisions. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts and stops.',
-   inspection:'Visual inspection of all welds; magnetic particle testing of fillets at fatigue-sensitive attachments; ultrasonic testing of CJP welds where shown; bolt pretension verification per RCSC.',
+   bolting:'ASTM F3125 Grade A325, pretensioned, Class B faying surfaces, standard holes unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts pretensioned against steel sleeves. Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.',
+   welding:'E70XX low-hydrogen electrodes per AWS D1.1/D1.1M:2020, cyclically loaded provisions. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts and stops.',
+   inspection:'Visual inspection of all welds; AWS D1.1:2020 cyclically loaded acceptance criteria; magnetic particle testing of fillets at fatigue-sensitive attachments; 100% ultrasonic testing of CJP welds; bolt pretension verification per RCSC.',
    erection:'Set and level the bearings, install the end bearings and flange ties, then set the rails. Provide temporary restraint until the permanent ties are complete.',
    railAlignment:'Set the rails to the specified gauge, alignment and level tolerances and survey them after erection, before the load test.'
   },

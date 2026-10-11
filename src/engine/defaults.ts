@@ -6,7 +6,7 @@ export const exampleProject:ProjectInput = {
  cranes:[{id:'crane-1',name:'Bridge crane 01',wheels:[{offset:0,loaded:110000,unloaded:42000,lateral:8000},{offset:3657.6,loaded:110000,unloaded:42000,lateral:8000}],impact:0.25,includesImpact:false,longitudinal:22000,minSeparation:1500,travelStart:0,travelEnd:7620,operatingClass:'Owner to confirm',loadSource:'Illustrative manufacturer schedule; replace before design'}],
  deadLoad:0,railWeight:0.3,railEccentricity:0,railHeight:75,unbracedLength:7620,lateralBraceSpacing:7620,verticalLimit:600,lateralLimit:400,criteriaSource:'User-defined serviceability criteria; confirm with crane supplier',
  fatigue:{category:'C',cycles:2000000,detail:'Select and document actual welded detail',location:3810},
- connections:{enabled:true,bolts:4,boltDiameter:19.05,plateThickness:12.7,edgeDistance:38.1,boltPitch:76.2,weldSize:6,weldLength:150,stiffenerThickness:12,stiffenerWidth:100,braceArea:600,braceLength:3000,braceRadius:20,Fexx:490},notes:'Example inputs only. Replace with project-specific crane and restraint data.'
+ connections:{enabled:true,bolts:4,boltDiameter:19.05,plateThickness:12.7,edgeDistance:38.1,boltPitch:76.2,weldSize:6,weldLength:150,stiffenerThickness:12,stiffenerWidth:100,braceArea:600,braceLength:3000,braceRadius:20,Fexx:70*6.894757293168},notes:'Example inputs only. Replace with project-specific crane and restraint data.'
 };
 
 // Upgrade only the old illustrative section, preserving project loads, material,

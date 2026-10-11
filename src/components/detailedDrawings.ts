@@ -20,6 +20,9 @@ import { format } from '../engine/units';
 import { plateInches } from './drawingFormat';
 import { detailSheetNumbers } from './planSheet';
 import {railSeat} from '../engine/railSeat';
+import {railJointType,railJointGap} from '../engine/railLayout';
+import {capAngleGeometry,capAngleTieParts,capBoltNutEnvelope,boltHardware} from '../engine/capAngle';
+import {capChannelProfile as channelOutline} from '../engine/channelProfile';
 export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  const p=s.input,d=p.details;if(!d)return [];
  if(connectionOptionChecks(p).length)return [];
@@ -36,7 +39,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  dr.dimH(cx-bs.width*k/2,cx+bs.width*k/2,y+b.d*k+bs.thickness*k,400,`SEAT WIDTH ${f(bs.width)}`);
  dr.dimV(y,y+b.d*k,right,430,`${b.name} / d ${f(b.d)}`);
  if(b.kind==='cap')dr.poly(capChannelProfile(b).outline.map(([x,z])=>[cx+x*k,y-z*k]),true);
- const notes=[`Bearing plate: ${f(bs.width)} wide x ${f(bs.length)} along girder x ${f(bs.thickness)}`,`Pair fitted stiffeners: outstand ${f(bs.stiffenerWidth)} x ${f(bs.stiffenerThickness)}`,`Web-side corner cope: ${f(bs.cope)}; web fillets: ${f(bs.weldSize)}, four lines`,b.kind==='cap'?`Fit/mill ends; top flange CJP; continuous web fillets`:`Fit/mill ends; continuous web AND flange fillets`,`Top-flange ties at x: ${flangeRestraintStations(p).top.map(f).join(', ')}`,`Bottom-flange ties at x: ${flangeRestraintStations(p).bottom.map(f).join(', ')}`,`Tie stiffness at EACH flange: ${format(s.detailResults?.braceStiffness??0,'stiffness',p.units)}`,`Bearing reaction envelope: ${force(s.designAnalysis?.reaction??0)}`,`End rotation clearance: ${f(d.criteria.rotationClearance)}`];
+ const notes=[`Bearing plate: ${f(bs.width)} wide x ${f(bs.length)} along girder x ${f(bs.thickness)}`,`Pair fitted stiffeners: outstand ${f(bs.stiffenerWidth)} x ${f(bs.stiffenerThickness)}`,`Web-side corner cope: ${f(bs.cope)}; web fillets: ${f(bs.weldSize)}, four lines`,b.kind==='cap'?`Fit/mill ends; top flange CJP; continuous web fillets`:`Fit/mill ends; continuous web AND flange fillets`,`Top-flange ties at x: ${flangeRestraintStations(p).top.map(f).join(', ')}${capAngleGeometry(p)?' (cap tieback angles, SK-06)':''}`,activeEndBearing(p)?'Bottom flange held by the bolted end bearings (SK-05); no bottom ties':`Bottom-flange ties at x: ${flangeRestraintStations(p).bottom.map(f).join(', ')}`,`Tie stiffness at ${activeEndBearing(p)?'the top flange':'EACH flange'}: ${format(s.detailResults?.braceStiffness??0,'stiffness',p.units)}`,`Bearing reaction envelope: ${force(s.designAnalysis?.reaction??0)}`,`End rotation clearance: ${f(d.criteria.rotationClearance)}`];
  notes.forEach((n,i)=>dr.text(500,85+29*i,n,10));dr.text(80,55,'SECTION AT SUPPORT; STIFFENERS ALSO AT EACH RESTRAINT',10);output.push(dr.drawing);
  }
  const eb=activeEndBearing(p);
@@ -52,12 +55,15 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
     dr.line(cx-8,cy,cx+8,cy,'CENTER');dr.line(cx,cy-8,cx,cy+8,'CENTER');}
    dr.dimH(x0,x0+g.rows[0]*k,y0+W*k,y0+W*k+22,`${f(g.rows[0])}`);dr.dimH(x0+g.rows[0]*k,x0+g.rows[1]*k,y0+W*k,y0+W*k+22,`${f(g.spacing)}`);
   }
-  const notes=[`4 ${eb.bolts.grade} bolts each ${p.system==='continuous'?'support':'end'}, diameter ${f(eb.bolts.diameter)}; gauge ${f(eb.bolts.gauge)}`,`Locating: ${f(g.hole)} standard holes in all plies; pretensioned, Class B (SC)`,`Sliding: ${f(g.slotWidth)} x ${f(g.slot)} slots in the girder flange`,`Sliding allowance ${f(g.travel)} each way; ${g.sleeve?`bolts pretensioned against ${f(g.sleeve.od)} OD steel sleeves`:'snug-tight bolts with jam nuts'}`,`Plate washers ${f(eb.washerThickness)} x ${f(g.washer.width)} x ${f(g.washer.length)}`,`Bolt rows ${f(eb.bolts.edge)} from each bearing plate end, clear of the stiffeners`];
+  const notes=[`4 ${eb.bolts.grade} bolts each ${p.system==='continuous'?'support':'end'}, diameter ${f(eb.bolts.diameter)}; gauge ${f(eb.bolts.gauge)}`,`Locating: ${f(g.hole)} standard holes in all plies; pretensioned, Class B (SC)`,`Sliding: ${f(g.slotWidth)} x ${f(g.slot)} slots in the girder flange`,`Sliding allowance ${f(g.travel)} each way; ${g.sleeve?`bolts pretensioned against ${f(g.sleeve.od)} OD steel sleeves`:'SNUG-TIGHT BOLTS ENTERED: NOT PERMITTED, see calc'}`,`Plate washers ${f(eb.washerThickness)} x ${f(g.washer.width)} x ${f(g.washer.length)}`,`Bolt rows ${f(eb.bolts.edge)} from each bearing plate end, clear of the stiffeners`];
   notes.forEach((n,i)=>dr.text(110,330+24*i,n,10));output.push(dr.drawing);
  }
  // A flexible plate tie laps one face of each gusset: one ply in single shear, with the lap couple, bolt tension and prying checked.
  const single=tiePlies(p)===1;
- for(const [key,c,title,number,central] of [...(eb?[]:[['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw]] as const),['tie',d.brace.connection,single?'Flexible plate tie / single-shear lap connection':'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const){
+ // SK-06 shows the tie that is checked: the cap tieback angle is drawn from the engine's tie parts (capAngleTieParts);
+ // the gusseted double-cover template applies only to the flange-tie family.
+ const capTie=capAngleGeometry(p)?capAngleSketch(s):undefined;
+ for(const [key,c,title,number,central] of [...(eb?[]:[['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw]] as const),...(capTie?[]:[['tie',d.brace.connection,single?'Flexible plate tie / single-shear lap connection':'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const)]){
  const one=key==='tie'&&single,w=c.gauge+2*c.edge,h=(c.rows-1)*c.pitch+2*c.edge,k=Math.min(240/w,230/h),x=125,y=90,dr=new Draft(s,`${key}-connection-detail`,title,number,500,1/k,one?'One flexible plate on one gusset face; standard holes, pretensioned. Lap couple, bolt tension with prying and slip are checked.':'In-plane force template. Two cover plates; standard holes. Out-of-plane forces/prying require another model.');
  dr.rect(x,y,w*k,h*k);const hole=boltProperties(c.grade,c.diameter).hole;
  for(let row=0;row<c.rows;row++)for(let col=0;col<2;col++){const bx=x+(c.edge+col*c.gauge)*k,by=y+(c.edge+row*c.pitch)*k;dr.circle(bx,by,hole*k/2);dr.line(bx-8,by,bx+8,by,'CENTER');dr.line(bx,by-8,bx,by+8,'CENTER');}
@@ -68,24 +74,25 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  // Actual ply thicknesses in a separated orthographic section.
  let px=125;for(const t of one?[d.brace.thickness,central]:[c.thickness,central,c.thickness]){dr.rect(px,395,90,t*k);px+=110;}dr.text(125,387,'SEPARATED PLY SECTION / THICKNESSES TO SCALE',9);output.push(dr.drawing);
  }
+ if(capTie)output.push(capTie);
  {
- const r=d.rail,k=1.25,depth=p.aist!.railDepth,dr=new Draft(s,'rail-detail','Sliding rail keepers / bolted expansion joint','SK-07',620,1/k,'Idealized rail without fillets. Pad rating per entered supplier basis. Rail wheel-contact wear/hardness is a supplier selection item.');
+ const r=d.rail,k=1.25,depth=p.aist!.railDepth,dr=new Draft(s,'rail-detail',railJointType(p)==='tight'?'Sliding rail keepers / tight bolted rail joint':'Sliding rail keepers / bolted expansion joint','SK-07',620,1/k,'Idealized rail without fillets. Pad rating per entered supplier basis. Rail wheel-contact wear/hardness is a supplier selection item.');
  const cx=215,y=85;dr.rect(cx-r.headWidth*k/2,y,r.headWidth*k,r.headThickness*k,'RAIL');dr.rect(cx-r.webThickness*k/2,y+r.headThickness*k,r.webThickness*k,(depth-r.headThickness-r.baseThickness)*k,'RAIL');dr.rect(cx-r.baseWidth*k/2,y+(depth-r.baseThickness)*k,r.baseWidth*k,r.baseThickness*k,'RAIL');
  // Keepers stand on the girder beside the pad and rail base; the lip bears on the rail base.
  const seat=railSeat(p),K=seat.keeper,pt=seat.pad?.thickness??0,base=y+depth*k,steel=base+pt*k;
  if(seat.pad)dr.rect(cx-seat.pad.width*k/2,base,seat.pad.width*k,pt*k,'RAIL');
  for(const sign of [-1,1]){const xi=cx+sign*K.inner*k,xo=cx+sign*K.outer*k,xt=cx+sign*K.tip*k,lip=steel-K.height*k;dr.rect(Math.min(xi,xo),steel-K.bodyHeight*k,Math.abs(xo-xi),K.bodyHeight*k);dr.rect(Math.min(xt,xo),lip,Math.abs(xo-xt),K.lip*k);}
  dr.dimV(y,y+depth*k,cx-r.baseWidth*k/2,80,`RAIL DEPTH ${f(depth)}`);dr.dimH(cx-r.baseWidth*k/2,cx+r.baseWidth*k/2,y+depth*k,310,`BASE ${f(r.baseWidth)}`);
- const rn=[`Head ${f(r.headWidth)} x ${f(r.headThickness)}; web ${f(r.webThickness)}`,`Base ${f(r.baseWidth)} x ${f(r.baseThickness)}; rail Fy ${format(r.Fy,'stress',p.units)}`,`Integral stepped keeper pairs at ${f(p.aist!.clipSpacing)} maximum, ${f(K.clearance)} clear of the rail-base toes`,`Keeper ${f(K.length)} along rail; lip ${f(K.lip)} over a ${f(K.bodyWidth)} body, overlap ${f(K.overlap)}`,`${f(K.weld)} fillets on the outer face and both ends; rail-side face not welded`,seat.pad?`Rail pad ${f(pt)} x ${f(seat.pad.width)}, compression rating ${format(r.padAllowable,'stress',p.units)}`:'No rail pad: rail bears on the girder',`Anchor keepers in rail-base notches at mid-length of each rail piece`,`Rail expansion gap ${f(r.jointGap)}; temperature swing ${r.temperatureRange} C`,`Other keepers permit longitudinal sliding; no rail/girder composite action`];rn.forEach((n,i)=>dr.text(420,85+i*26,n,10));
- const barLength=2*(2*r.jointEdge+r.jointPitch)+r.jointGap,jx=80,jy=365;
- dr.rect(jx,jy,barLength*k,r.jointPlateHeight*k);dr.line(jx+barLength*k/2-r.jointGap*k/2,jy-8,jx+barLength*k/2-r.jointGap*k/2,jy+r.jointPlateHeight*k+8,'CENTER');dr.line(jx+barLength*k/2+r.jointGap*k/2,jy-8,jx+barLength*k/2+r.jointGap*k/2,jy+r.jointPlateHeight*k+8,'CENTER');
+ const rn=[`Head ${f(r.headWidth)} x ${f(r.headThickness)}; web ${f(r.webThickness)}`,`Base ${f(r.baseWidth)} x ${f(r.baseThickness)}; rail Fy ${format(r.Fy,'stress',p.units)}`,`Integral stepped keeper pairs at ${f(p.aist!.clipSpacing)} maximum, ${f(K.clearance)} clear of the rail-base toes`,`Keeper ${f(K.length)} along rail; lip ${f(K.lip)} over a ${f(K.bodyWidth)} body, overlap ${f(K.overlap)}`,`${f(K.weld)} fillets on the outer face and both ends; rail-side face not welded`,seat.pad?`Rail pad ${f(pt)} x ${f(seat.pad.width)}, compression rating ${format(r.padAllowable,'stress',p.units)}`:'No rail pad: rail bears on the girder',railJointType(p)==='tight'?'Anchor keepers in rail-base notches, one per rail near mid-runway':'Anchor keepers in rail-base notches at mid-length of each rail piece',railJointType(p)==='tight'?`Tight joints, gap 1/16 in max. (TR-13 5.16.1); end-stop gap takes the ${r.temperatureRange} C swing`:`Rail expansion gap ${f(r.jointGap)}; temperature swing ${r.temperatureRange} C`,`Other keepers permit longitudinal sliding; no rail/girder composite action`];rn.forEach((n,i)=>dr.text(420,85+i*26,n,10));
+ const jGap=railJointGap(p),tightJoint=railJointType(p)==='tight',barLength=2*(2*r.jointEdge+r.jointPitch)+jGap,jx=80,jy=365;
+ dr.rect(jx,jy,barLength*k,r.jointPlateHeight*k);dr.line(jx+barLength*k/2-jGap*k/2,jy-8,jx+barLength*k/2-jGap*k/2,jy+r.jointPlateHeight*k+8,'CENTER');dr.line(jx+barLength*k/2+jGap*k/2,jy-8,jx+barLength*k/2+jGap*k/2,jy+r.jointPlateHeight*k+8,'CENTER');
  const dh=boltProperties('A325',r.jointBoltDiameter).hole;
- for(const at of [r.jointEdge,r.jointEdge+r.jointPitch,barLength-r.jointEdge-r.jointPitch,barLength-r.jointEdge]){dr.rect(jx+(at-.75*r.jointBoltDiameter)*k,jy+(r.jointPlateHeight-dh)*k/2,1.5*r.jointBoltDiameter*k,dh*k,'HIDDEN');dr.circle(jx+at*k,jy+r.jointPlateHeight*k/2,r.jointBoltDiameter*k/2);}
+ for(const at of [r.jointEdge,r.jointEdge+r.jointPitch,barLength-r.jointEdge-r.jointPitch,barLength-r.jointEdge]){if(tightJoint)dr.circle(jx+at*k,jy+r.jointPlateHeight*k/2,dh*k/2,'HIDDEN');else dr.rect(jx+(at-.75*r.jointBoltDiameter)*k,jy+(r.jointPlateHeight-dh)*k/2,1.5*r.jointBoltDiameter*k,dh*k,'HIDDEN');dr.circle(jx+at*k,jy+r.jointPlateHeight*k/2,r.jointBoltDiameter*k/2);}
  dr.dimH(jx,jx+barLength*k,jy+r.jointPlateHeight*k,520,`JOINT BARS ${f(barLength)} LONG x ${f(r.jointPlateHeight)} HIGH x ${f(r.jointPlateThickness)} EACH`);
- dr.text(620,370,`4 A325 bolts, diameter ${f(r.jointBoltDiameter)}`,10);dr.text(620,395,`2 bolts each side; pitch ${f(r.jointPitch)}`,10);dr.text(620,420,`Edge ${f(r.jointEdge)}; two shear planes`,10);dr.text(620,445,`Joint bars slotted ${f(1.5*r.jointBoltDiameter)} x ${f(dh)} along rail`,10);dr.text(620,470,`Rail web: ${f(dh)} drilled holes; snug-tight`,10);dr.text(620,495,'Keeper pair on each cut rail end',10);output.push(dr.drawing);
+ dr.text(620,370,`4 A325 bolts, diameter ${f(r.jointBoltDiameter)}`,10);dr.text(620,395,`2 bolts each side; pitch ${f(r.jointPitch)}`,10);dr.text(620,420,`Edge ${f(r.jointEdge)}; two shear planes`,10);dr.text(620,445,tightJoint?`Joint bars: ${f(dh)} standard holes`:`Joint bars slotted ${f(1.5*r.jointBoltDiameter)} x ${f(dh)} along rail`,10);dr.text(620,470,`Rail web: ${f(dh)} drilled holes; pretensioned`,10);dr.text(620,520,'Re-tighten after 30 and 90 days of operation',10);dr.text(620,495,'Keeper pair on each cut rail end',10);output.push(dr.drawing);
  }
  if(p.section.kind==='cap'&&p.capDesign){
-  const b=p.section,c=p.capDesign,k=230/b.d,dr=new Draft(s,'cap-attachment-detail','Continuous cap-channel attachment','SK-08',500,1/k,`Full-bearing cap; continuous longitudinal fillets; no holes in channel / W top flange. See ${sheets('cap')} for printed scales.`);
+  const b=p.section,c=p.capDesign,k=230/b.d,dr=new Draft(s,'cap-attachment-detail','Continuous cap-channel attachment','SK-08',500,1/k,`Full-bearing cap; continuous longitudinal fillets; ${capAngleGeometry(p)?'no holes in the channel except the cap tieback bolt holes (SK-06); none in the W top flange':'no holes in channel / W top flange'}. See ${sheets('cap')} for printed scales.`);
   const cx=220,y=105,left=cx-b.bf*k/2,right=cx+b.bf*k/2;
   dr.rect(left,y,b.bf*k,b.tf*k);dr.rect(cx-b.tw*k/2,y+b.tf*k,b.tw*k,(b.d-2*b.tf)*k);dr.rect(left,y+(b.d-b.tf)*k,b.bf*k,b.tf*k);
   dr.poly(capChannelProfile(b).outline.map(([x,z])=>[cx+x*k,y-z*k]),true);
@@ -113,7 +120,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   }
   dr.dimH(cx-g,cx+g,y,74,`GAP ${f(c.endGap)}`);
   dr.line(cx,60,cx,430,'CENTER');dr.text(cx,452,b.name,12,'middle');
-  [`SEPARATE BEARING PL ${f(bs.thickness)} X ${f(bs.width)} X ${f(bs.length)}`,'PAIRED BEARING STIFFENERS AT EACH END / SK-04','LEFT END OF EACH BAY: LONGITUDINAL LOCATING','RIGHT END OF EACH BAY: SLIDING',`MOVEMENT ALLOWANCE ${f(c.guideTravel)} EACH DIRECTION`,'INDIVIDUAL TOP / BOTTOM TIES TO COLUMN / SK-06','DO NOT SPLICE GIRDER FLANGES OR CAP ACROSS GAP',usesExistingBracket(p)?`EXISTING BRACKET / NEW SEAT: SK-10 / ${sheets('bracket')}`:d.bracket?.enabled?`WELDED BRACKET / SPREADER: SK-10 / ${sheets('bracket')}`:'COLUMN BRACKET / SPREADER: REFERENCE ONLY','MOVEMENT-COMPATIBLE ATTACHMENTS REQUIRE DESIGN',`BRACKET DESIGN FORCES: SEE ${sheets(bracketForceTopic(s)??'support')}`].forEach((note,i)=>dr.text(520,110+i*30,note,9));
+  [`SEPARATE BEARING PL ${f(bs.thickness)} X ${f(bs.width)} X ${f(bs.length)}`,'PAIRED BEARING STIFFENERS AT EACH END / SK-04','LEFT END OF EACH BAY: LONGITUDINAL LOCATING','RIGHT END OF EACH BAY: SLIDING',`MOVEMENT ALLOWANCE ${f(c.guideTravel)} EACH DIRECTION`,capAngleGeometry(p)?'CAP TIEBACK ANGLE AT EACH GIRDER END / SK-06':activeEndBearing(p)?'INDIVIDUAL TOP-FLANGE TIES TO COLUMN / SK-06':'INDIVIDUAL TOP / BOTTOM TIES TO COLUMN / SK-06','DO NOT SPLICE GIRDER FLANGES OR CAP ACROSS GAP',usesExistingBracket(p)?`EXISTING BRACKET / NEW SEAT: SK-10 / ${sheets('bracket')}`:d.bracket?.enabled?`${usesTaperedHaunch(p)?'TAPERED I HAUNCH':usesRolledBracket(p)?'WIDE-FLANGE BRACKET':'WELDED BRACKET / SPREADER'}: SK-10 / ${sheets('bracket')}`:'COLUMN BRACKET / SPREADER: REFERENCE ONLY','MOVEMENT-COMPATIBLE ATTACHMENTS REQUIRE DESIGN',`BRACKET DESIGN FORCES: SEE ${sheets(bracketForceTopic(s)??'support')}`].forEach((note,i)=>dr.text(520,110+i*30,note,9));
   output.push(dr.drawing);
  }
  if(usesExistingBracket(p)){
@@ -190,4 +197,52 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   dr.fieldFilletLeader(X(tie.face),Y(tie.topDrop),545,385,f(c.weldSize),[`${supportColumn(p).weld} GUSSET TO ${supportColumn(p).name}`,`TWO CONT. LINES X ${f(tie.columnGusset)}`],true,supportColumn(p).field);output.push(dr.drawing);
  }
  return output;
+}
+
+/**
+ * SK-06 for the cap tieback angle: section at the tie looking along the runway, drawn from the engine's tie parts
+ * (capAngleTieParts / capBoltNutEnvelope) so the sketch is the checked arrangement: the angle on the column-side cap
+ * channel flange, the cap bolts with the beveled washers and nuts inside the channel, the tie plate lapped on the long
+ * leg, the end plate, shims and column bolts in field-drilled holes.
+ */
+function capAngleSketch(s:CalculationSnapshot):CadDrawing|undefined{
+ const p=s.input,g=capAngleGeometry(p),parts=capAngleTieParts(p);if(!g||!parts)return undefined;
+ const f=(v:number)=>plateInches(v,p.units),c=g.input,b=p.section,col=g.column.receiver;
+ const yMin=b.tw/2-12.7,yMax=g.face+(col?.tf??19.05)+38.1,zMax=Math.max(g.endPlate.z1,g.plate.z1)+25.4,zMin=Math.min(g.endPlate.z0,-g.dv,-b.capDepth)-25.4;
+ const k=Math.min(420/(yMax-yMin),300/(zMax-zMin)),x0=60,y0=80+zMax*k,X=(y:number)=>x0+(y-yMin)*k,Z=(z:number)=>y0-z*k;
+ const dr=new Draft(s,'tie-connection-detail',`Cap tieback angle ${c.shape} / bolted to the cap channel and the column`,'SK-06',540,1/k,'Drawn from the checked tie geometry. Section at the tie looking along the runway; plate washers, sleeves and slots per the cap tieback checks.');
+ // Girder context: W top flange and web, cap channel in true section (hidden: not part of the tie).
+ const top=-b.capTw;dr.rect(X(yMin),Z(top),(b.bf/2-yMin)*k,b.tf*k,'HIDDEN');dr.rect(X(-b.tw/2),Z(top-b.tf),b.tw*k,(zMax-zMin)*k*.25,'HIDDEN');
+ dr.poly(channelOutline(b).side.map(([x,z])=>[X(x),Z(z+top)] as [number,number]),false,'HIDDEN');
+ for(const box of parts.boxes){
+  if(box.kind==='sleeve')continue;
+  const ctx=box.kind==='channel-flange'||box.kind==='column-flange';
+  if(box.kind==='channel-flange')continue;
+  const z1=box.name.startsWith('angle short leg')?-g.ta:box.max[2];
+  dr.rect(X(box.min[1]),Z(z1),(box.max[1]-box.min[1])*k,(z1-box.min[2])*k,ctx?'HIDDEN':'OUTLINE');
+ }
+ // Cap bolts: plate washer and head outside, beveled washer, nut and bolt end inside the channel.
+ const hw=boltHardware(g.cap.diameter),zc=g.cap.z,head=parts.bolts.find(v=>v.group==='cap')!.head[1];
+ dr.rect(X(head),Z(zc+hw.corners/2),hw.head*k,hw.corners*k);
+ for(const part of capBoltNutEnvelope(g)[0].parts)dr.rect(X(part.min[1]),Z(part.max[2]),(part.max[1]-part.min[1])*k,(part.max[2]-part.min[2])*k);
+ dr.line(X(g.y0-g.cap.seat.nutFace-hw.nut-hw.stick)-6,Z(zc),X(head+hw.head)+6,Z(zc),'CENTER');
+ // Lap bolts (vertical) and column bolts (horizontal): center lines through the plies.
+ for(const v of parts.bolts.filter(v=>v.group==='lap').slice(0,1))dr.line(X(v.head[1]),Z(v.head[2]+12),X(v.nut[1]),Z(v.nut[2]-12),'CENTER');
+ for(const v of parts.bolts.filter(v=>v.group==='column'))dr.line(X(v.head[1])-8,Z(v.head[2]),X(v.nut[1])+8,Z(v.head[2]),'CENTER');
+ dr.dimH(X(g.y0),X(g.face),Z(zMin)+10,Z(zMin)+34,`ANGLE BACK TO COLUMN FACE ${f(g.face-g.y0)}`);
+ dr.dimV(Z(0),Z(zc),X(g.y0),X(g.y0)-26,`${f(g.cap.gauge)}`);
+ const seat=g.cap.seat,cl=g.column,lap=g.lap,ep=g.endPlate;
+ const notes=[
+  `${c.shape} x ${f(c.length)} long at each girder end, centered ${f(c.setback)} from the girder end`,
+  `Cap bolts: 2 - ${f(g.cap.diameter)} ${g.cap.grade} at ${f(g.cap.pitch)}, ${f(g.cap.gauge)} below top of cap`,
+  `${f(g.cap.slotWidth)} x ${f(g.cap.slotLength)} horizontal slots in the angle; ${g.cap.sleeved?`pretensioned against ${f(g.cap.sleeve!.od)} OD sleeves`:'PRETENSIONED BOLTS REQUIRED (see calc)'}`,
+  `Plate washers ${f(g.cap.washer.thickness)} x ${f(g.cap.washer.height)} x ${f(g.cap.washer.length)} over the slots`,
+  `${seat.washer.kind==='beveled'?`F436 1:6 beveled washers (${f(seat.washer.width)} sq.)`:'F436 washers'} under the nuts; flange ${f(seat.thickness)} at the bolt line`,
+  `Tie plate ${f(g.plate.thickness)} x ${f(g.plate.width)} x ${f(g.plate.length)} lapped on the long leg`,
+  `Lap bolts: 2 - ${f(lap.diameter)} ${lap.grade} slip-critical Class ${lap.surface}, short slots`,
+  `End plate ${f(ep.thickness)} x ${f(ep.width)} x ${f(ep.height)}; ${f(g.weld)} fillets both faces`,
+  `Column bolts: 2 - ${f(cl.diameter)} ${cl.grade}, ${f(2*cl.gauge)} apart, field-drilled holes`,
+  `Finger shims up to ${f(g.shim.max)}; no welding at the tie (cap, girder, column)`];
+ notes.forEach((n,i)=>dr.text(560,80+i*26,n,9));
+ return dr.drawing;
 }

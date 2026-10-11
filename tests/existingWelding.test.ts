@@ -23,15 +23,16 @@ describe('field welding to the existing column',()=>{
   expect(w.every(c=>c.group==='Existing column'&&c.referenceIds.includes('existing-steel-welding'))).toBe(true);
   expect(w.find(c=>c.id==='column-weld-preheat')!.note).toContain('150 °F minimum');
   const cover=drawingSheetSet(s).find(v=>v.number==='S-00')!.svg.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
-  expect(cover).toContain('PREHEAT AND INTERPASS AT LEAST 150 °F');expect(cover).toContain('ASTM A572 GRADE 50 (MILL CERTIFICATES, CARBON EQUIVALENT 0.42)');
+  expect(cover).toContain('PREHEAT AND INTERPASS TEMPERATURE AT LEAST 150 °F');expect(cover).toContain('ASTM A572 GRADE 50 (MILL CERTIFICATES)');expect(cover).toContain('AWS D1.1/D1.1M:2020 TABLE 5.8, CATEGORY B, MINIMUM 150 °F');
  },240000);
  it('reports missing data as unverified and a high carbon equivalent or low preheat as failing',()=>{
   const p=cappedDemonstrationProject(),tf=existingColumnSection(p).section.tf;
   delete p.existingColumn!.welding;
-  expect(existingWeldingChecks(p,tf).map(c=>c.status)).toEqual(['unverified','unverified','unverified','unverified']);
+  // The carbon equivalent is information (no code limit for prequalified A572 Gr 50): never unverified or failing.
+  expect(existingWeldingChecks(p,tf).map(c=>c.status)).toEqual(['unverified','pass','unverified','unverified']);
   p.existingColumn!.welding={basis:'chemical-analysis',grade:'Unknown 1960s structural steel',carbonEquivalent:.52,preheat:10,deadLoadOnly:true,source:'Lab report 22-118'};
   const c=existingWeldingChecks(p,tf);
-  expect(c.find(v=>v.id==='column-weld-ce')!.status).toBe('fail');expect(c.find(v=>v.id==='column-weld-preheat')!.status).toBe('fail');
+  expect(c.find(v=>v.id==='column-weld-ce')!.status).toBe('pass');expect(c.find(v=>v.id==='column-weld-ce')!.note).toMatch(/above 0\.45/);expect(c.find(v=>v.id==='column-weld-preheat')!.status).toBe('fail');
   // SI: the °C table, 65 °C for the 2 in (51 mm) seat.
   const si=withSiUnits(p);si.existingColumn!.welding!.preheat=65;
   expect(existingWeldingChecks(si,tf).find(v=>v.id==='column-weld-preheat')!.status).toBe('pass');

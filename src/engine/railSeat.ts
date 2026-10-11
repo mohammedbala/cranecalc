@@ -66,12 +66,14 @@ export type AnchorGeometry=ReturnType<typeof anchorGeometry>;
 
 /** Rail inputs with the optional pad, keeper and anchor values filled from their defaults, in input order. */
 export function railInputsWithDefaults(rail:Rail):Rail{
- const {padThickness,padWidth,clipBodyWidth,clipClearance,anchorNotch,...rest}=rail,out:Record<string,unknown>={};
+ const {padThickness,padWidth,clipBodyWidth,clipClearance,anchorNotch,jointType,...rest}=rail,out:Record<string,unknown>={};
  for(const [key,value] of Object.entries(rest)){
   out[key]=value;
   if(key==='padSource')Object.assign(out,{padThickness:padThickness??railSeatDefaults.padThickness,padWidth:padWidth??rail.baseWidth});
   if(key==='clipThickness')out.clipBodyWidth=clipBodyWidth??rail.clipThickness;
   if(key==='clipWeld')Object.assign(out,{clipClearance:clipClearance??railSeatDefaults.clipClearance,anchorNotch:anchorNotch??railSeatDefaults.anchorNotch});
+  // Rail joints: AIST TR-13 §5.16.1 tight joints unless open joints are chosen.
+  if(key==='temperatureRange')out.jointType=jointType??'tight';
  }
  return out as Rail;
 }

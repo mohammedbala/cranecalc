@@ -8,6 +8,8 @@ import {runwayElevations} from '../src/engine/drawingData';
 import {validateProject} from '../src/engine/calculate';
 import {projectSchema,type CalculationSnapshot,type ProjectInput} from '../src/engine/types';
 import {railKeeperView} from '../src/components/railKeeperView';
+/** The open-joint scheme (expansion gap at every joint, each piece anchored): a project choice; TR-13 tight joints are the default. */
+const openJoints=(p:ProjectInput)=>{p.details!.rail.jointType='open';p.details!.rail.jointGap=.375*25.4;return p;};
 import {railLayoutView,movementUpTo} from '../src/components/railLayoutView';
 import {coverSheetSvg} from '../src/components/coverSheet';
 
@@ -66,8 +68,16 @@ describe('rail seat: pad, keepers and anchors',()=>{
   for(const c of [demo,capped])for(const id of ['rail-keeper-weld','rail-anchor-weld','rail-anchor-bearing','rail-keeper-flexure','rail-flange-local'])expect(c.find(v=>v.id===id)?.status).toBe('pass');
   expect(railAnchorForce(demonstrationProject()).force/kip).toBeCloseTo(1.6*4,6);
  });
+ it('defaults to AIST TR-13 tight rail joints: one anchor per rail, no joint movement, pretensioned bolts in standard holes',()=>{
+  const p=demonstrationProject(),layout=railLayout(p),anchors=railAnchors(p,layout),moves=railMovements(p,layout);
+  expect(p.details!.rail.jointType).toBeUndefined();expect(p.details!.rail.jointGap).toBeCloseTo(25.4/16,9);
+  expect(anchors.every(a=>a.anchors.length===1)).toBe(true);expect(moves.joints.every(v=>v.movement===0)).toBe(true);
+  const note=texts(railKeeperView(snapshot(p)).render().svg).join(' ');
+  expect(note).toContain('TIGHT JOINT (AIST TR-13 §5.16.1)');expect(note).toContain('PRETENSIONED IN 15/16" STANDARD HOLES');expect(note).toContain('RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS');expect(note).not.toContain('SNUG');
+  const plan=texts(railLayoutView(snapshot(p)).render().svg).join(' ');expect(plan).toContain('ONE PER RAIL NEAR MID-RUNWAY');expect(plan).toContain('AT A RAIL END');
+ });
  it('anchors each rail piece at mid-length and closes each joint by the growth from both anchors',()=>{
-  const p=demonstrationProject(),layout=railLayout(p),anchors=railAnchors(p,layout),moves=railMovements(p,layout),dT=p.details!.rail.temperatureRange;
+  const p=openJoints(demonstrationProject()),layout=railLayout(p),anchors=railAnchors(p,layout),moves=railMovements(p,layout),dT=p.details!.rail.temperatureRange;
   layout.rails.forEach((rail,i)=>{
    const stations=[rail.start,...rail.joints,rail.end];
    expect(anchors[i].anchors.map(a=>a.station)).toEqual(rail.pieces.map((_,j)=>(stations[j]+stations[j+1])/2));
@@ -81,7 +91,7 @@ describe('rail seat: pad, keepers and anchors',()=>{
   expect((el.tor-el.tos)/25.4).toBeCloseTo(6+p.section.capTw/25.4,6);
  });
  it('draws and specifies the pad, the keeper and its welds, the anchor and the joint dimensions',()=>{
-  const us=texts(railKeeperView(snapshot(demonstrationProject())).render().svg);
+  const us=texts(railKeeperView(snapshot(openJoints(demonstrationProject()))).render().svg);
   // K1: 9/16 in projection and 2 3/8 in body (2 15/16 in), 3/4 in lip and 7/8 in under it (1 5/8 in); 3/8 in fillets,
   // 3 7/8 in on the outer face and 2 in on each end.
   for(const t of ['RAIL PAD 1/8" X 6", CONT.:','ALLOWABLE COMPRESSION 1.45 KSI','6 1/8"','T.O.R.','T.O.S.','OUTER FACE, EACH KEEPER','BOTH ENDS OF EACH KEEPER, STOPPED','KEEPER K1 / SECTION','KEEPERS AND RAIL ANCHOR / PLAN','2 3/8"','9/16"','2 15/16"','3/4"','7/8"','1 5/8"','3/8','2','3 7/8'])expect(us).toContain(t);
@@ -92,12 +102,12 @@ describe('rail seat: pad, keepers and anchors',()=>{
   expect(us.filter(t=>t==='1 1/2"')).toHaveLength(2);expect(us).toContain('3"');expect(us).toContain('1\'-0 3/8"');
   const capped=texts(railKeeperView(snapshot(cappedDemonstrationProject())).render().svg);
   expect(capped.some(t=>t.startsWith('RAIL PAD'))).toBe(false);expect(capped).toContain('6 3/8"');
-  const si=demonstrationProject();si.units='SI';
+  const si=openJoints(demonstrationProject());si.units='SI';
   const metric=texts(railKeeperView(snapshot(si)).render().svg).join(' ');
   expect(metric).not.toMatch(/"|KSI|KIP|\d\.\d{2,} ?mm|\d\.[1-46-9] ?mm/);expect(metric).toContain('10 MPa');expect(metric).toContain('1.5 mm CLEAR');
  });
  it('specifies the rail fabrication, the anchor notch corner holes and the slotted joint bars',()=>{
-  const svg=railKeeperView(snapshot(demonstrationProject())).render().svg,note=texts(svg).join(' ');
+  const svg=railKeeperView(snapshot(openJoints(demonstrationProject()))).render().svg,note=texts(svg).join(' ');
   // Joint: the bars are slotted (their net section and block shear are checked so); the rail web is drilled.
   expect(note).toContain('2 BARS 1 1/4" X 3 7/8" X 1\'-0 3/8", SLOTTED 1 5/16" X 15/16" ALONG THE RAIL');
   expect(note).toContain('15/16" DRILLED HOLES IN THE RAIL WEB');
@@ -123,16 +133,16 @@ describe('rail seat: pad, keepers and anchors',()=>{
   [.53,2.47,.77].forEach((x,i)=>expect(Math.abs(v[[1,2,3][i]]-x*inch)).toBeLessThan(1));
  });
  it('marks the rail anchors on the joint layout and states the longitudinal restraint',()=>{
-  const p=demonstrationProject(),svg=railLayoutView(snapshot(p)).render().svg,layout=railLayout(p);
+  const p=openJoints(demonstrationProject()),svg=railLayoutView(snapshot(p)).render().svg,layout=railLayout(p);
   expect(svg.match(/data-rail-anchor=/g)).toHaveLength(layout.rails.reduce((n,r)=>n+r.pieces.length,0));
   const note=texts(svg).join(' ');
   expect(note).toContain('RAIL ANCHORS');expect(note).toContain('6.4 KIP FACTORED');expect(note).toContain('CREEP');
   expect(note).toContain('SAW-CUT THE SHORTER PIECES SHOWN, NO FLAME CUTTING');
   // The computed joint closure (3.94 mm, the thermal check's movement), rounded up, with the gap it closes.
   const moved=railJointMovement(railMovements(p));expect(moved).toBeCloseTo(3.94,2);
-  expect(note).toContain(`UP TO ${movementUpTo(moved,'US')} AT A JOINT (3/8" GAP)`);expect(movementUpTo(moved,'US')).toBe('5/32"');
-  const si=demonstrationProject();si.units='SI';const metric=texts(railLayoutView(snapshot(si)).render().svg).join(' ');
-  expect(metric).toContain('28.5 kN FACTORED');expect(metric).toContain('UP TO 4 mm AT A JOINT (9.5 mm GAP)');
+  expect(note).toContain(`UP TO ${movementUpTo(moved,'US')} AT A JOINT (OPEN JOINTS, 3/8" GAP)`);expect(movementUpTo(moved,'US')).toBe('5/32"');
+  const si=openJoints(demonstrationProject());si.units='SI';const metric=texts(railLayoutView(snapshot(si)).render().svg).join(' ');
+  expect(metric).toContain('28.5 kN FACTORED');expect(metric).toContain('UP TO 4 mm AT A JOINT (OPEN JOINTS, 9.5 mm GAP)');
  });
  it('states a movement limit rounded up',()=>{
   expect(movementUpTo(3.175,'US')).toBe('1/8"');expect(movementUpTo(3.2,'US')).toBe('5/32"');expect(movementUpTo(25.4,'US')).toBe('1"');

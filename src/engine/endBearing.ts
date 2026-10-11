@@ -1,3 +1,4 @@
+import {seatSettingTolerance} from './fitTolerances';
 import type {CheckResult,DesignAnalysis,ProjectInput} from './types';
 import {available} from './aiscStrength';
 import {boltCapacity,boltProperties,plateBearing} from './connectionStrength';
@@ -6,6 +7,7 @@ import {weldedRibBracket} from './bracketRib';
 import {wrenchClearance} from './endStop';
 import {aiscShapeByName} from '../data/aiscSections';
 import {format} from './units';
+import {snugTightNotPermitted} from './boltingBasis';
 import {latexNumber,withinLimit} from './math';
 import {usesRolledBracket,rolledSeatChecks} from './rolledBracket';
 import {usesTaperedHaunch,haunchSeatChecks} from './taperedHaunch';
@@ -41,10 +43,10 @@ const byOthers=(id:string,title:string,note:string):CheckResult=>({id,group:'End
 /**
  * Locating end: pretensioned slip-critical bolts in standard holes take the
  * longitudinal force with the bottom-flange tie force and uplift. Sliding end:
- * bolts pretensioned against steel sleeves (AISC J1.10(c)) leave the flange
- * free to slide; the sleeves carry the transverse force in bearing on the slot
- * sides and plate washers hold the flange down. Snug-tight bolts with jam nuts
- * are an alternative for cranes of 5 tons or less. A continuous girder locates
+ * bolts pretensioned against steel sleeves (AIST TR-13 §5.14, RCSC §4.2) leave
+ * the flange free to slide; the sleeves carry the transverse force in bearing on
+ * the slot sides and plate washers hold the flange down. Snug-tight bolts are not
+ * permitted on the runway under cyclic crane load. A continuous girder locates
  * at one support and slides at the others, whose slots take the thermal travel
  * from the locating support.
  */
@@ -70,13 +72,13 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   compared('end-bearing-sliding',`${SE} · bolts in bearing`,Math.hypot(Vs/Math.max(sliding.shear,1e-9),T/Math.max(sliding.tension,1e-9)),1,'ratio','\\sqrt{(V/\\phi R_{nv})^2+(T/\\phi R_{nt})^2}\\le1',`${g.sleeved?'Bolts pretensioned against steel sleeves; the sleeves bear on the slot sides for the transverse tie force and the plate washers take the uplift into the bolts':'Snug-tight bolts with double nuts in long slots carry the transverse tie force in bearing and the uplift in tension'}; no longitudinal force. ${force}`),
   compared('end-bearing-flange-prying','Girder bottom flange · thickness for no prying',tMin(T,flangeB-db/2,flangeP,b.Fu),b.tf,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`Flange cantilevers from the web: b = ${f(flangeB)}, p = ${f(flangeP)}.`),
   ...(g.sleeve?[
-   compared('end-bearing-sleeve',`${SE} · sleeves under bolt pretension`,1.5*sliding.pretension,m.Fy*g.sleeve.area,'force','1.5T_b\\le F_yA_{sleeve}',`Steel sleeve ${f(g.sleeve.od)} OD × ${f(g.hole)} bore × ${f(g.sleeve.length)} long, F_y as the plate material. 1.5 × minimum pretension bounds turn-of-nut overshoot (RCSC commentary). AISC J1.10(c): crane supports in buildings with cranes over 5 tons need pretensioned bolts; the sleeve takes the clamp so the flange still slides.`),
+   compared('end-bearing-sleeve',`${SE} · sleeves under bolt pretension`,1.5*sliding.pretension,m.Fy*g.sleeve.area,'force','1.5T_b\\le F_yA_{sleeve}',`Steel sleeve ${f(g.sleeve.od)} OD × ${f(g.hole)} bore × ${f(g.sleeve.length)} long, F_y as the plate material. 1.5 × minimum pretension bounds turn-of-nut overshoot (RCSC commentary). AIST TR-13 §5.14 and RCSC §4.2: runway connections under cyclic crane load are pretensioned; the sleeve takes the clamp so the flange still slides.`),
    compared('end-bearing-sleeve-length',`${SE} · sleeve projects above the flange`,inch/32,g.sleeve.length-b.tf,'length','l_{sleeve}-t_f\\ge1/32\\,in','Cut each sleeve to the measured flange thickness plus the clearance, so the plate washer clears the flange.'),
    compared('end-bearing-sleeve-bearing',`${SE} · flange bearing on sleeves`,Vs,available(Math.min(1.0*((b.bf-gauge)/2-g.slotWidth/2)*b.tf*b.Fu,2.0*g.sleeve.od*b.tf*b.Fu),method,.75,2),'force','R_n=\\min(1.0l_ctF_u,\\,2.0d_st_fF_u)','AISC J3.10 for long slots perpendicular to the force, with the sleeve diameter; clear distance to the flange tip.'),
    compared('end-bearing-washer-bending',`${SE} · plate washer under uplift`,6*(T/2)*Math.max(0,g.slotWidth/2-.8*db)/(g.washer.length*e.washerThickness**2),available(m.Fy,method,.9,1.67),'stress','f=\\frac{6(T/2)a}{l_wt_w^2};\\quad a=w_{slot}/2-0.8d_b','The flange bears up on the washer at both slot edges; the washer cantilevers from the bolt head.')
   ]:[
    compared('end-bearing-slot',`${SE} · slot length for travel`,g.slot,2.5*db,'length','L_{slot}=d_h+2u\\le2.5d_b',`Long-slotted holes in the girder flange per AISC Table J3.3 for the sliding allowance ${f(g.travel)} each way. The movement demand is checked against that allowance separately.`),
-   compared('end-bearing-j110',`${SE} · snug-tight bolts permitted`,Math.max(0,...p.cranes.map(c=>c.design?.ratedLoad??Infinity)),5*8896.443,'force','W_{rated}\\le5\\,tons','AISC J1.10(c): in buildings with cranes over 5 tons, crane supports need pretensioned bolts or welds. Use sleeved sliding bolts for heavier cranes.')
+   snugTightNotPermitted('end-bearing-j110',`${SE} · snug-tight bolts not permitted`,'End bearings','sliding-end bearing bolts')
   ]),
   compared('end-bearing-washer',`${SE} · plate washer thickness`,5/16*inch,e.washerThickness,'length','t_w\\ge5/16\\,in','AISC J3.2: plate washers cover the long slots in the outer ply.'),
   compared('end-bearing-flange-edge','Girder flange · bolt edge distance',1.5*db-g.hole/2+g.slotWidth/2,(b.bf-gauge)/2,'length','(b_f-g)/2\\ge1.5d_b-d_h/2+w_{slot}/2','Rolled flange edge; the sliding-end slot keeps the clear material of a standard hole at the J3.4 minimum.'),
@@ -101,7 +103,7 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
    compared('end-bearing-seat-bearing','Bracket seat · bolt bearing',V,plateBearing(db,g.hole,wb.seatThickness,m.Fu,Math.max(e.bolts.edge,wb.seatLength/2-g.rows[1]),g.spacing,method).capacity,'force','R_n=\\min(1.2l_ctF_u,2.4dtF_u)','Standard holes in the welded seat plate.'),
    compared('end-bearing-seat-prying','Bracket seat · thickness for no prying',tMin(T,seatB-db/2,seatP,m.Fu),wb.seatThickness,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`Seat cantilevers from the nearer rib: b = ${f(seatB)}.`),
    compared('end-bearing-wrench-rib','Nut clearance below seat · bracket ribs',C,ribClear,'length','|x_{bolt}-x_{rib}|-t_{rib}/2-w\\ge c_{wrench}','Both the runway-end grid and shared interior grids; ribs placed under the bearing stiffeners clear the bolt rows.'),
-   compared('end-bearing-seat-fit','Bearings and bolts fit on the seat',(locates?0:simpleSupportInput(p).endGap/2)+bs.length,wb.seatLength/2,'length','g/2+L_{bearing}\\le L_{seat}/2',locates?'A runway-end bearing, and its bolts, lie on the half of the seat under the girder; interior bearings are centered on it.':'Each girder bearing, and its bolts, lie on its half of the shared seat.')
+   compared('end-bearing-seat-fit','Bearings and bolts fit on the seat',(locates?0:simpleSupportInput(p).endGap/2)+bs.length+seatSettingTolerance,wb.seatLength/2,'length','g/2+L_{bearing}+t_{set}\\le L_{seat}/2',(locates?'A runway-end bearing, and its bolts, lie on the half of the seat under the girder; interior bearings are centered on it.':'Each girder bearing, and its bolts, lie on its half of the shared seat.')+' Includes the 1/8 in bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in).')
   );
  }else if(usesRolledBracket(p))checks.push(...rolledSeatChecks(p,e,g,V,T,C,tMin,compared));
  else if(usesTaperedHaunch(p))checks.push(...haunchSeatChecks(p,e,g,V,T,C,tMin,compared));

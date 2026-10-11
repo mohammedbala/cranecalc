@@ -1,9 +1,9 @@
 import {cantileverSystems,seismicBasis} from '../engine/runwaySeismic';
+import {preheatBasis,constructionRequirements,enteredFabricationNote,cjpWelds,awsEdition} from '../engine/constructionNotes';
 import {codeBasis} from '../engine/drawingData';
 import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot,Crane,ProjectInput} from '../engine/types';
-import {existingWeldingDemand,weldingBasisLabel,weldsToExistingColumn} from '../engine/existingWelding';
-import {existingColumnSection} from '../engine/existingColumn';
+import {weldingBasisLabel,weldsToExistingColumn} from '../engine/existingWelding';
 import {format} from '../engine/units';
 import {craneDesignMinimum,craneCombinations} from '../engine/aistLoads';
 import {deflectionCriteria} from '../engine/aistChecks';
@@ -111,9 +111,10 @@ export const coverSheetTitle='COVER, GENERAL NOTES & DESIGN CRITERIA';
 /** The specified field-welding requirements for the existing columns, from the calculation's welding checks. */
 function existingWeldNote(p:ProjectInput){
  if(!weldsToExistingColumn(p))return [];
- const w=p.existingColumn!.welding,{t,need}=existingWeldingDemand(p,existingColumnSection(p).section.tf),temp=(v:number)=>format(v,'temperature',p.units,0).toUpperCase();
- const steel=w&&w.basis!=='not-established'&&w.grade.trim()?`${w.grade.toUpperCase()} (${weldingBasisLabel[w.basis].toUpperCase()}${w.carbonEquivalent!==undefined?`, CARBON EQUIVALENT ${w.carbonEquivalent.toFixed(2)}`:''})`:'TO BE IDENTIFIED BEFORE WELDING';
- return [`FIELD WELDS TO THE EXISTING COLUMNS: EXISTING STEEL ${steel}. LOW-HYDROGEN PROCESSES ONLY. PREHEAT AND INTERPASS AT LEAST ${temp(Math.max(need,w?.preheat??need))} (AWS D1.1 TABLE 5.8, CATEGORY B, THICKEST PART ${format(t,'length',p.units,3).toUpperCase()}). WELD WITH THE CRANE OUT OF SERVICE AND THE COLUMN UNDER DEAD LOAD ONLY; SEQUENCE THE WELDS TO LIMIT HEAT INPUT.`];
+ const w=p.existingColumn!.welding,heat=preheatBasis(p)!;
+ const steel=w&&w.basis!=='not-established'&&w.grade.trim()?`${w.grade.toUpperCase()} (${weldingBasisLabel[w.basis].toUpperCase()})`:'TO BE IDENTIFIED BEFORE WELDING';
+ // One thickness basis with the calculation and the bracket sheet: the thickest part at the weld (preheatBasis).
+ return [`FIELD WELDS TO THE EXISTING COLUMNS: EXISTING STEEL ${steel}. WELD ONLY TO A WPS APPROVED BY THE ENGINEER OF RECORD FOR THAT STEEL; LOW-HYDROGEN PROCESSES ONLY. ${heat.text.toUpperCase()}. WELD WITH THE CRANE OUT OF SERVICE AND THE COLUMN UNDER DEAD LOAD ONLY; SEQUENCE THE WELDS TO LIMIT HEAT INPUT.`];
 }
 export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
  const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>drawingLength(mm,u);
@@ -143,7 +144,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  const surveyed=existingLayout(p);
  if(existing)blocks.push(H('EXISTING BUILDING NOTES'),...N([
   'EXISTING CONSTRUCTION IS SHOWN DASHED AND IS BASED ON THE SURVEY AND SOURCES LISTED BELOW. FIELD VERIFY MEMBER SIZES, CONDITION, PLUMBNESS AND ELEVATIONS BEFORE FABRICATION AND REPORT DIFFERENCES TO THE ENGINEER OF RECORD.',
-  ...(onExisting?['DO NOT CUT, DRILL OR WELD EXISTING STEEL UNTIL ITS MATERIAL AND WELDABILITY ARE CONFIRMED (MILL DATA OR CHEMICAL ANALYSIS AND CARBON EQUIVALENT PER AWS D1.1). REMOVE COATINGS AND PREHEAT AS REQUIRED BY THE APPROVED WPS.',
+  ...(onExisting?['DO NOT CUT, DRILL OR WELD EXISTING STEEL UNTIL ITS MATERIAL IS CONFIRMED (MILL CERTIFICATES OR CHEMICAL ANALYSIS, AISC 360-16 APPENDIX 5.2.3) AND THE WPS FOR IT IS APPROVED. REMOVE COATINGS AND PREHEAT AS REQUIRED BY THE APPROVED WPS.',
   ...existingWeldNote(p),
   'SHORE OR UNLOAD EXISTING MEMBERS AS REQUIRED BY THE ERECTION PROCEDURE. DO NOT REMOVE EXISTING BRACING WITHOUT A TEMPORARY REPLACEMENT APPROVED BY THE ENGINEER.']:[
    `${surveyed?`THE EXISTING COLUMNS AND FOOTINGS ON S-01 ARE FROM ${surveyed.source||'A SURVEY NOT YET IDENTIFIED'}. CONFIRM THEM AND LOCATE SLABS`:'LOCATE THE EXISTING COLUMNS, FOOTINGS, SLABS'} AND BURIED UTILITIES BY SURVEY BEFORE LAYOUT. KEEP THE NEW FOOTINGS ${surveyed?`${len(surveyed.footingClear)} MIN. `:''}CLEAR OF EXISTING FOOTINGS AND THE NEW STEEL CLEAR OF THE EXISTING BUILDING BY THE SEPARATION SHOWN ON S-01; REPORT CONFLICTS TO THE ENGINEER OF RECORD BEFORE EXCAVATION.`]),
@@ -156,7 +157,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  if(d)blocks.push(H('CRANE RUNWAY INSTALLATION'),...N([
   `RAIL: ${d.rail.name}. SET THE RAIL C/L ON THE GIRDER WEB C/L WITHIN ${len(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${len(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${len(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION.`,
   `RAIL GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${len(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS, UNLESS THE CRANE MANUFACTURER REQUIRES LESS. VERIFY WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
-  d.fabrication.railAlignment,
+  ...(enteredFabricationNote(p,'railAlignment')?[enteredFabricationNote(p,'railAlignment')]:[]),
+  ...constructionRequirements(p).filter(v=>v.key==='tolerances').map(v=>v.items.join(' ')),
+  ...(constructionRequirements(p).find(v=>v.key==='erection')?.items.slice(1)??[]),
   'SURVEY RAIL ALIGNMENT, GAUGE AND ELEVATION AFTER ERECTION AND BEFORE THE LOAD TEST; SUBMIT THE SURVEY.',
   ...(activeEndStop(p)?[`INSTALL THE RUNWAY END STOPS (${detailRef(detailTitles.endStop)}) AT ${stopLocation(p).toUpperCase()} BEFORE THE CRANE IS OPERATED OR LOAD TESTED.`]:[]),
   // The flexible plate tie works only while it can flex: no forced fit, no welds or stiffeners on its clear length.
@@ -178,7 +181,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['AIST TECH. REPORT 13','GUIDE FOR THE DESIGN AND CONSTRUCTION OF MILL BUILDINGS, COPY DATED FEBRUARY 24, 2020: RUNWAY LOADS AND CRITERIA'],
   ['AISC DESIGN GUIDE 7','3RD ED. (2019) WITH 2023 ERRATA'],
   // Welding and bolting standards are the editions the cited AISC 360 references.
-  ['AWS D1.1/D1.1M',`${code.adopted2022?'2020':'2015'}: STRUCTURAL WELDING CODE - STEEL (CYCLICALLY LOADED), AS REFERENCED BY AISC 360-${code.adopted2022?'22':'16'}`],
+  // One AWS D1.1 edition throughout: the 2020 edition, whose clause and table numbers the calculation cites.
+  ['AWS D1.1/D1.1M',`${awsEdition}: STRUCTURAL WELDING CODE - STEEL (CYCLICALLY LOADED); CLAUSE AND TABLE NUMBERS CITED ARE OF THIS EDITION${code.adopted2022?'':' (AISC 360-16 REFERENCES THE 2015 EDITION)'}`],
   ['RCSC',`${code.adopted2022?'2020':'2014'} SPECIFICATION FOR STRUCTURAL JOINTS, AS REFERENCED BY AISC 360-${code.adopted2022?'22':'16'}`],
   // ASCE 7 §14.1.2.2.1: a cantilever column system in SDC B to F is designed and detailed to AISC 341; the R = 3
   // exemption excludes cantilever columns. The crane-level rod bracing (R = 3) stays under AISC 360.
@@ -257,27 +261,30 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(p.longitudinalBracing?.enabled&&p.existingColumn?.isNew?[[p.longitudinalBracing.system==='rod-x'?'BRACING RODS':'BRACING',p.longitudinalBracing.system==='rod-x'?`RODS Fy = ${ksi(p.longitudinalBracing.rod.Fy)}, Fu = ${ksi(p.longitudinalBracing.rod.Fu)}`:`${p.longitudinalBracing.angle.shape}, Fy = ${ksi(p.longitudinalBracing.angle.Fy)}`]]:[])
  ],[1.2,2.8]));
  // Numbered under their own heading, so one carried to the next column still reads in context.
- if(d)blocks.push(H('MATERIAL NOTES'),...N([`STEEL: ${d.fabrication.steel}`,`BOLTING: ${d.fabrication.bolting}`,`WELDING: ${d.fabrication.welding}`]));
+ // Bolting and welding requirements are generated from the calculation; entered notes that contradict them are dropped
+ // here and reported as an open item in the calculation.
+ const req=constructionRequirements(p),items=(k:string)=>req.find(v=>v.key===k)?.items??[];
+ if(d)blocks.push(H('MATERIAL NOTES'),...N([`STEEL: ${d.fabrication.steel}`,`BOLTING: ${[...items('bolting'),enteredFabricationNote(p,'bolting')].filter(Boolean).join(' ')}`.toUpperCase(),`WELDING: ${[...items('welding'),enteredFabricationNote(p,'welding')].filter(Boolean).join(' ')}`.toUpperCase()]));
  // AISC 360 Chapter N assigns steel tasks to observe (O) or perform (P); IBC Table 1705.3 rates concrete
  // tasks continuous (C) or periodic (P).
  // CJP joints in the set: capped-girder bearing stiffeners to the W top flange, and the paired-bar tie gusset to its stiffener.
- const cjpWelds=!!d&&(p.section.kind==='cap'||!!stiffenerTieGeometry(p));
+ const cjpList=cjpWelds(p),cjpPresent=!!d&&(cjpList.length>0||!!stiffenerTieGeometry(p));
  const fieldWelds=!!d&&supportColumn(p).field&&(!!d.brace.flangeAttachment?.enabled||!!d.bracket?.enabled);
  blocks.push(H('SPECIAL INSPECTIONS (IBC 1704, 1705 / AISC 360 CHAPTER N)'),T(['ITEM','REQUIREMENT','FREQ.'],[
   ['STATEMENT','STATEMENT OF SPECIAL INSPECTIONS BY THE ENGINEER OF RECORD (IBC 1704.3); APPROVED AGENCY RETAINED BY THE OWNER (IBC 1704.2)','-'],
   ['FABRICATOR','AISC-CERTIFIED FABRICATOR, OR SHOP INSPECTION BY THE APPROVED AGENCY (IBC 1704.2.5)','-'],
   ['MATERIAL','MILL CERTIFICATES: STEEL, BOLTS, NUTS, WASHERS, WELD FILLER','P'],
   ['WELDING','AISC N5.4 TASKS BEFORE, DURING AND AFTER WELDING; QUALIFIED WPS AND WELDERS','O / P'],
-  ['NDT',`${cjpWelds?'UT ALL CJP GROOVE WELDS; ':''}MT FILLETS ON CYCLIC DETAILS AS NOTED`,'P'],
+  ['NDT',`${cjpPresent?`UT 100% OF CJP GROOVE WELDS${cjpList.length?` (${cjpList.join('; ')})`:''}; `:''}MT AT FILLET TERMINATIONS ON CYCLIC DETAILS; AWS D1.1:${awsEdition} CLAUSE 8 ACCEPTANCE CRITERIA FOR CYCLICALLY LOADED CONNECTIONS FOR THE RUNWAY GIRDER WELDS${fieldWelds?' AND THE WELDS TO THE EXISTING COLUMN':''} (AIST TR-13 §5.17)`.toUpperCase(),'P'],
   ['BOLTING',`AISC N5.6 TASKS; PRETENSION VERIFICATION PER RCSC; FAYING SURFACE CLASS${d&&(tieRelease(p)||activeEndBearing(p))?'; SLEEVE LENGTHS AND SLOT TRAVEL AT SLEEVED BOLTS':''}`,'O / P'],
   ...(p.existingColumn?.isNew&&p.existingColumn.enabled?[]:[['EXISTING STEEL','FIELD-VERIFY SIZES, CONDITION AND WELDABILITY BEFORE WORK','P']]),
-  ...(fieldWelds?[['FIELD WELDS TO EXISTING STEEL',`CARBON EQUIVALENT AND PREHEAT PER THE APPROVED WPS; VISUAL AND MT OF EVERY FIELD WELD TO EXISTING STEEL${columnStiffenerGeometry(p)?', INCLUDING THE COLUMN STIFFENER WELDS':''}`,'P']]:[]),
+  ...(fieldWelds?[['FIELD WELDS TO EXISTING STEEL',`BASE METAL CONFIRMED, WPS APPROVED, PREHEAT ${(preheatBasis(p)?format(preheatBasis(p)!.governing,'temperature',u,0).toUpperCase()+' MIN.':'PER THE APPROVED WPS')}; VISUAL AND MT OF EVERY FIELD WELD TO EXISTING STEEL${columnStiffenerGeometry(p)?', INCLUDING THE COLUMN STIFFENER WELDS':''}`,'P']]:[]),
   ...(d&&columnStiffenerGeometry(p)?[['COLUMN STIFFENERS',`FIT-UP AT THE BRACKET FORCE LEVELS WITH THE CORNER CLIPS CLEAR OF THE COLUMN FILLETS${supportColumn(p).field?' (SURVEY THE COLUMN AT BOTH LEVELS FIRST)':''}; VISUAL OF EVERY STIFFENER WELD, MT OF THE FLANGE FILLETS`,'P']]:[]),
   ...(d?[['FIELD WELDS',`RAIL KEEPERS AND ANCHORS${p.columnBase?.enabled&&p.existingColumn?.isNew?', ANCHOR ROD PLATE WASHERS':''}: VISUAL OF EVERY WELD; MT AT THE KEEPER WELD ENDS`,'P']]:[]),
   ...(seismic341?[['SEISMIC (IBC 1705.12.1.1, 1705.13.1.1)','NEW COLUMNS, BASE PLATES AND THEIR WELDS: QUALITY ASSURANCE PER AISC 341 CHAPTER J; CRANE-LEVEL ROD BRACING EXEMPT (R = 3)','O / P']]:[]),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS (IBC 1705.3, 1705.6)','REINFORCEMENT AND ANCHOR ROD PLACEMENT; BEARING SOIL VERIFIED BEFORE CONCRETE','P'],['CONCRETE (IBC 1705.3)','SAMPLING AND TESTING OF FRESH CONCRETE; PLACEMENT','C']]:[]),
   ['RAIL / RUNWAY','ALIGNMENT, GAUGE AND LEVEL SURVEY AFTER ERECTION','P'],
-  ...(d?[['PROJECT REQUIREMENTS',d.fabrication.inspection.toUpperCase(),'-']]:[])
+  ...(d&&enteredFabricationNote(p,'inspection')?[['PROJECT REQUIREMENTS',enteredFabricationNote(p,'inspection').toUpperCase(),'-']]:[])
  ],[1.05,2.45,.5]),P('STEEL: O OBSERVE, P PERFORM (AISC 360 N5). CONCRETE AND SOILS: C CONTINUOUS, P PERIODIC (IBC TABLE 1705.3).'));
  blocks.push(H('SUBMITTALS'),...N([
   'SHOP AND ERECTION DRAWINGS FOR ALL NEW STEEL, SHOWING HOLES, SLOTS, WELDS AND FIELD WORK.',

@@ -56,7 +56,7 @@ describe('bolted girder end bearings',()=>{
   const ss=p.details!.simpleSupport!,travel=checks['end-bearing-travel'];
   expect(travel.demand).toBeCloseTo(12e-6*50*foot*Math.max(ss.temperatureRise,ss.temperatureFall)+p.section.d*capped.designAnalysis!.endRotation+ss.settingTolerance,6);
   expect(travel.capacity).toBeCloseTo(ss.guideTravel,9);expect(travel.status).toBe('pass');
-  expect(checks['end-bearing-seat-fit'].demand).toBeCloseTo(bs.length,9);
+  expect(checks['end-bearing-seat-fit'].demand).toBeCloseTo(bs.length+25.4/8,9);// with the 1/8 in bearing setting tolerance
  });
  it('sections a headed sliding bolt with its grip, keyed on the bearing plan',()=>{
   const bolt=slidingBoltView(capped)!.render().svg,t=texts(bolt).join(' | ');

@@ -47,7 +47,10 @@ export const runwayDetailsSchema=z.object({
  rail:z.object({name:z.string().min(1).max(100),headWidth:pos,headThickness:pos,baseWidth:pos,baseThickness:pos,webThickness:pos,Fy:pos,Fu:pos,padAllowable:pos,padSource:z.string().min(1).max(300),
   padThickness:pos.optional(),padWidth:pos.optional(),
   clipWidth:pos,clipThickness:pos,clipProjection:pos,clipWeld:pos,clipBodyWidth:pos.optional(),clipClearance:pos.optional(),anchorNotch:pos.optional(),
-  jointGap:nn,jointPlateThickness:pos,jointPlateHeight:pos,jointBoltDiameter:pos,jointPitch:pos,jointEdge:pos,temperatureRange:nn}),
+  jointGap:nn,jointPlateThickness:pos,jointPlateHeight:pos,jointBoltDiameter:pos,jointPitch:pos,jointEdge:pos,temperatureRange:nn,
+  // Bolted rail joints: 'tight' (default, AIST TR-13 §5.16.1: gap 1/16 in or less, the rail string slides in the keepers and
+  // the end-stop gap takes the thermal movement) or 'open' (expansion gap jointGap, each piece anchored at mid-length).
+  jointType:z.enum(['tight','open']).optional()}),
  criteria:z.object({twistLimit:pos,railLateralLimit:pos,railGauge:pos,alignmentTolerance:pos,levelTolerance:pos,rotationClearance:pos,temperatureMaximum:z.number().finite(),corrosionProtected:z.boolean()}),
  fatigueDetails:z.array(z.object({id:z.string().min(1).max(40),name:z.string().min(1).max(120),x:nn,point:z.enum(['top-left','top-right','bottom-left','bottom-right']),category:z.enum(['A','B','B1','C','D','E','E1']),reference:z.string().min(1).max(300)})).min(1).max(16),
  spectrum:z.array(z.object({name:z.string().min(1).max(80),liftFraction:nn.max(1),cycles:pos})).min(1).max(8),

@@ -14,7 +14,7 @@ export default function CapAngleInputs({value,onChange,numeric,units}:{value:Run
  const r=value.bracket?.receiver,stiffener=c.stiffener;
  return <details className="form-details" open><summary>Cap tieback angle · bolted to the channel cap</summary>
   <label className="field"><span>AISC cap angle (long leg toward the column)</span><select aria-label="AISC cap angle" value={c.shape} onChange={e=>edit({shape:e.target.value})}>{aiscAngles.filter(s=>s.d>=3&&s.t>=.375).map(s=><option key={s.name} value={s.name}>{s.name} · {formatSectionMass(s.weight,units)}</option>)}</select></label>
-  <label className="field"><span>Cap bolts in the angle slots</span><select aria-label="Cap bolt mode" value={c.mode} onChange={e=>edit({mode:e.target.value as CapAngleInput['mode']})}><option value="sleeved">Pretensioned against steel sleeves</option><option value="snug-tight">Snug-tight with plate washers (cranes of 5 tons or less)</option></select></label>
+  <label className="field"><span>Cap bolts in the angle slots</span><select aria-label="Cap bolt mode" value={c.mode} onChange={e=>edit({mode:e.target.value as CapAngleInput['mode']})}><option value="sleeved">Pretensioned against steel sleeves</option><option value="snug-tight">Snug-tight (not permitted: open item)</option></select></label>
   <div className="field-grid">
    {num('Angle length along runway',c.length,v=>edit({length:v}))}
    {num('Girder end to tie centerline',c.setback,v=>edit({setback:v}))}

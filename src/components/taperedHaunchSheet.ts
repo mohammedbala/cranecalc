@@ -1,3 +1,4 @@
+import {preheatBasis} from '../engine/constructionNotes';
 import {supportColumn,runwayElevations} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
@@ -219,7 +220,8 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `WELDS: ${electrodeClass(d.material.Fexx,p.units)} LOW-HYDROGEN ELECTRODE${g.joint==='cjp'?', MATCHING FILLER FOR THE CJP WELDS WITH STEEL BACKING REMOVED, ROOT BACKGOUGED AND REWELDED, UT PER S-00':''}. CONTINUOUS WELDS AS SHOWN; NO INTERMITTENT WELDS.${f?` CUT THE TOP FLANGE FLARE WITH A ${size(f.radius)} RADIUS AT THE RE-ENTRANT CORNERS AND GRIND SMOOTH.`:''}`,
   ...(sc.isNew?[`SHOP WELD THE HAUNCH TO THE ${sc.name} BEFORE ERECTION; INSPECT STARTS, STOPS AND TOES.`]:[
    'WELDING TO EXISTING STEEL: VERIFY THE WELDABILITY OF THE EXISTING COLUMN BY MILL CERTIFICATES OR COUPON TESTS (CHEMISTRY AND CARBON EQUIVALENT) BEFORE FABRICATION.',
-   `PREHEAT AND INTERPASS TEMPERATURE PER AWS D1.1 FOR THE THICKER PART JOINED (EXISTING COLUMN FLANGE ${size(c.flangeThickness)}).`,
+   // Same thickness basis as the calculation and S-00: the thickest part at the weld (preheatBasis).
+   preheatBasis(p)?`${preheatBasis(p)!.text.toUpperCase()}.`:`PREHEAT AND INTERPASS TEMPERATURE PER AWS D1.1:2020 TABLE 5.8 FOR THE THICKEST PART AT THE WELD.`,
    'REMOVE PAINT, COATINGS, MILL SCALE AND RUST FROM THE EXISTING COLUMN FLANGE AT THE WELDS; CLEAN TO BRIGHT METAL.',
    'WELD WITH THE COLUMN CARRYING DEAD LOAD ONLY (NO CRANE IN SERVICE ON THIS COLUMN LINE), PER AWS D1.1 CLAUSE 11, STRENGTHENING AND REPAIR OF EXISTING STRUCTURES.'
   ]),

@@ -103,8 +103,8 @@ describe('sliding end bearings under AISC J1.10(c)',()=>{
   expect(checks.some(c=>c.id==='end-bearing-j110')).toBe(false);
   expect(checks.filter(c=>c.id.startsWith('end-bearing-sleeve')).every(c=>c.status==='pass')).toBe(true);
  });
- it('permits snug-tight sliding bolts only for cranes of 5 tons or less',()=>{
-  for(const [s,expected] of [[demo,'fail'],[capped,'pass']] as const){
+ it('reports snug-tight sliding bolts as not permitted for any crane capacity (AIST TR-13 §5.14)',()=>{
+  for(const [s,expected] of [[demo,'fail'],[capped,'fail']] as const){
    const p=structuredClone(s.input),e=p.details!.endBearing!;e.sliding='snug-tight';
    const check=endBearingChecks(p,e,{analysis:s.designAnalysis!,lateral:s.detailResults!.demands.brace}).find(c=>c.id==='end-bearing-j110')!;
    expect(check.status).toBe(expected);
