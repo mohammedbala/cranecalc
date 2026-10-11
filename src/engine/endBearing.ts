@@ -2,13 +2,14 @@ import type {CheckResult,DesignAnalysis,ProjectInput} from './types';
 import {available} from './aiscStrength';
 import {boltCapacity,boltProperties,plateBearing} from './connectionStrength';
 import {simpleSupportInput} from './simpleSupports';
-import {bracketArrangement} from './connectionOptions';
+import {weldedRibBracket} from './bracketRib';
 import {wrenchClearance} from './endStop';
 import {aiscShapeByName} from '../data/aiscSections';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 import {usesRolledBracket,rolledSeatChecks} from './rolledBracket';
 import {slidingBolts,continuousBearings,type EndBearingInput} from './endBearingInputs';
+import {activeColumnCap} from './columnCapInputs';
 export {endBearingSchema,defaultEndBearing,activeEndBearing,slidingBolts,continuousBearings,locatingSupport,type EndBearingInput} from './endBearingInputs';
 
 const inch=25.4;
@@ -29,7 +30,7 @@ export function endBearingGeometry(p:ProjectInput,e:EndBearingInput){
  const washer={length:slotWidth+4*travel+12.7,width:Math.max(2.5*db,slotWidth+25.4),thickness:e.washerThickness};
  // Simple spans: the girder end is at the grid on a runway end, half the gap from it at a shared grid. A
  // continuous girder ends at the runway-end grids and is centered on the interior ones.
- const b=d.bracket?.enabled?d.bracket:undefined,ribs=b&&bracketArrangement(b)==='twin-rib'?p.system==='continuous'?[b.ribSpacing/2,bs.length/2-b.ribSpacing/2,bs.length/2+b.ribSpacing/2]:[b.ribSpacing/2,b.ribSpacing/2-gap/2]:[];
+ const b=d.bracket?.enabled?d.bracket:undefined,ribs=weldedRibBracket(b)&&b?p.system==='continuous'?[b.ribSpacing/2,bs.length/2-b.ribSpacing/2,bs.length/2+b.ribSpacing/2]:[b.ribSpacing/2,b.ribSpacing/2-gap/2]:[];
  return {rows,stiffener,slot,slotWidth,sleeve,sleeved,hole,washer,travel,ribs,spacing:rows[1]-rows[0]};
 }
 
@@ -91,7 +92,7 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   const c=simpleSupportInput(p),far=Math.max(...supports.map(v=>v.distance));
   checks.push(compared('end-bearing-travel',`${SE} · movement allowance each direction`,12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance,g.travel,'length','u_{req}=\\alpha x_{max}\\max(\\Delta T_+,\\Delta T_-)+d|\\theta|+t_{set}',`Farthest sliding support ${f(far)} from the locating support at grid ${locates.grid}; the flange slots give ${f(g.travel)} each way. Thermal coefficient ${u==='US'?'6.6667 × 10⁻⁶ /°F':'12 × 10⁻⁶ /°C'} is a stated steel modeling assumption; temperature changes are measured from erection. Reference AIST Technical Report 13 §5.8.1.`,['tr13-girder','mechanics','criteria']));
  }
- const wb=d.bracket?.enabled&&bracketArrangement(d.bracket)==='twin-rib'?d.bracket:undefined;
+ const wb=d.bracket?.enabled&&weldedRibBracket(d.bracket)?d.bracket:undefined;
  if(wb){
   const ribClear=Math.min(...g.ribs.flatMap(r=>g.rows.map(x=>Math.abs(x-r))))-wb.ribThickness/2-wb.seatWeld;
   const seatB=Math.max(1e-9,ribClear+wb.seatWeld),seatP=Math.min(gauge,3.5*seatB);
@@ -102,6 +103,6 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
    compared('end-bearing-seat-fit','Bearings and bolts fit on the seat',(locates?0:simpleSupportInput(p).endGap/2)+bs.length,wb.seatLength/2,'length','g/2+L_{bearing}\\le L_{seat}/2',locates?'A runway-end bearing, and its bolts, lie on the half of the seat under the girder; interior bearings are centered on it.':'Each girder bearing, and its bolts, lie on its half of the shared seat.')
   );
  }else if(usesRolledBracket(p))checks.push(...rolledSeatChecks(p,e,g,V,T,C,tMin,compared));
- else checks.push(byOthers('end-bearing-seat','Bracket seat holes and nut clearance','The seat is by others: provide matching standard holes, nut clearance below the seat, and a seat that carries the bolt forces reported here.'));
+ else if(!activeColumnCap(p))checks.push(byOthers('end-bearing-seat','Bracket seat holes and nut clearance','The seat is by others: provide matching standard holes, nut clearance below the seat, and a seat that carries the bolt forces reported here.'));
  return checks;
 }

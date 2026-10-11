@@ -7,9 +7,14 @@ import {anchorHardware,columnBaseElevation} from '../engine/columnBaseInputs';
 import {barDiameter,plateWasherWeld} from '../engine/columnBase';
 import {runwayElevations} from '../engine/drawingData';
 import {flangeTieGeometry} from '../engine/tieGeometry';
+import {activeColumnCap} from '../engine/columnCapInputs';
+import {columnCapGeometry} from '../engine/columnCap';
+import {columnCapTitles} from './columnCapSheet';
 import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
+import {ribGeometry,ribDepthAt} from '../engine/bracketRib';
+import {haunchedRibOutline} from './haunchedBracketDrawing';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 
 const inch=25.4;
@@ -56,7 +61,9 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  const c=existingColumnSection(p).section,name=col.shape||`BUILT-UP ${size(c.d)} X ${size(c.bf)}`;
  const tb=b.plate.thickness,gr=b.grout,ft=b.footing,hf=ft.thickness,a=b.anchors,hw=anchorHardware(a.diameter),row=b.plate.N/2-a.edge;
  const bt=d.bearing.thickness,seat=col.seatElevation,H=col.height,cap=g.kind==='cap'?g.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,rl=d.rail;
- const girderZ=br?c.d/2+br.reach:col.eccentricity,y0=seat+bt,tos=y0+g.d,railZ=girderZ-p.railEccentricity;
+ // A column cap carries the girder centered on the column; the column shaft stops under the cap plate.
+ const capG=activeColumnCap(p)?columnCapGeometry(p):undefined,Hc=capG?H-capG.cap.plate.thickness:H;
+ const girderZ=capG?0:br?c.d/2+br.reach:col.eccentricity,y0=seat+bt,tos=y0+g.d,railZ=girderZ-p.railEccentricity;
  const xs=Array.from({length:a.perRow},(_,i)=>a.perRow>1?-a.gauge/2+i*a.gauge/(a.perRow-1):0);
  const db=barDiameter[ft.bar],ftgTop=-(tb+gr),ftgBot=ftgTop-hf,floor=ftgTop+ft.soil,ext=Math.max(12*inch,ft.L*.12);
  const el=runwayElevations(p),datum=p.drawing?.datumElevation??0,elev=(y:number)=>`EL. ${drawingElevation(datum+columnBaseElevation(b)+y,u)}`;
@@ -71,7 +78,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  // the base and the bracket so both ends draw at a legible scale; dimensions govern.
  views.push({title:detailTitles.newColumn,rows:2,render:()=>{
   let svg='';
-  const top=Math.max(H,tos+cap+railDepth),bottom=ftgBot-4*inch,upperFrom=seat-(bseat?bseat.thickness+bseat.depth:0)-9*inch,lowerTo=Math.max(14*inch,ft.soil+8*inch);
+  const top=Math.max(H,tos+cap+railDepth),bottom=ftgBot-4*inch,upperFrom=seat-(bseat?bseat.thickness+bseat.depth:capG&&s.bracingSystem?capG.drop+capG.strutDepth/2:capG?capG.cap.plate.thickness+capG.hang:0)-9*inch,lowerTo=Math.max(14*inch,ft.soil+8*inch);
   const broken=upperFrom-lowerTo>18*inch,gap=broken?22:0,shown=broken?(top-upperFrom)+(lowerTo-bottom):top-bottom;
   const zMin=-ft.L/2-ext*.55,zMax=Math.max(ft.L/2+ext*.55,girderZ+Math.max(g.bf,g.kind==='cap'?g.capWidth:0)/2);
   const k=drawingScale(Math.min((600-gap)/shown,280/(zMax-zMin)),u),kk=k.pointsPerMm,cx=124+(-zMin)*kk,X=(z:number)=>cx+z*kk;
@@ -84,24 +91,26 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   const colPart=(y1:number,y2:number)=>rect(X(-c.d/2),Y(y2),c.d*kk,Y(y1)-Y(y2),'runway-line').replace(/<rect([^>]*)\/>/,(m)=>m)+line([X(-c.d/2+c.tf),Y(y2)],[X(-c.d/2+c.tf),Y(y1)],'runway-line')+line([X(c.d/2-c.tf),Y(y2)],[X(c.d/2-c.tf),Y(y1)],'runway-line');
   if(broken){
    const yb=Y(lowerTo),yt=Y(upperFrom);
-   svg+=line([X(-c.d/2),Y(0)],[X(-c.d/2),yb],'runway-line')+line([X(c.d/2),Y(0)],[X(c.d/2),yb],'runway-line')+line([X(-c.d/2),Y(H)],[X(c.d/2),Y(H)],'runway-line')+line([X(-c.d/2),yt],[X(-c.d/2),Y(H)],'runway-line')+line([X(c.d/2),yt],[X(c.d/2),Y(H)],'runway-line');
-   for(const [y1,y2] of [[0,lowerTo],[upperFrom,H]] as const)for(const z of [-c.d/2+c.tf,c.d/2-c.tf])svg+=line([X(z),Y(y2)],[X(z),Y(y1)],'runway-line');
+   svg+=line([X(-c.d/2),Y(0)],[X(-c.d/2),yb],'runway-line')+line([X(c.d/2),Y(0)],[X(c.d/2),yb],'runway-line')+line([X(-c.d/2),Y(Hc)],[X(c.d/2),Y(Hc)],'runway-line')+line([X(-c.d/2),yt],[X(-c.d/2),Y(Hc)],'runway-line')+line([X(c.d/2),yt],[X(c.d/2),Y(Hc)],'runway-line');
+   for(const [y1,y2] of [[0,lowerTo],[upperFrom,Hc]] as const)for(const z of [-c.d/2+c.tf,c.d/2-c.tf])svg+=line([X(z),Y(y2)],[X(z),Y(y1)],'runway-line');
    svg+=breakLine([X(-c.d/2)-6,yb],[X(c.d/2)+6,yb])+breakLine([X(-c.d/2)-6,yt],[X(c.d/2)+6,yt]);
-  }else svg+=colPart(0,H);
+  }else svg+=colPart(0,Hc);
+  // Column cap plate on the milled column top, under the girder bearing plate.
+  if(capG)svg+=rect(X(-capG.cap.plate.width/2),Y(H),capG.cap.plate.width*kk,capG.cap.plate.thickness*kk,'runway-line');
   svg+=line([X(0),Y(top)-8],[X(0),Y(ftgBot)+6],'grid-line');
   // Bracket seat and ribs on the girder-side flange.
-  if(br&&bseat){const ws=rolledUnderSeat(p),y0=ws?.seat?.y0??0;svg+=rect(X(c.d/2+y0),Y(seat),(br.seatProjection-y0)*kk,bseat.thickness*kk,'runway-line')+rect(X(c.d/2),Y(seat-bseat.thickness),br.seatProjection*kk,bseat.depth*kk,'runway-line');if(ws)for(const off of [ws.tf,ws.d-ws.tf])svg+=line([X(c.d/2),Y(seat-bseat.thickness-off+(ws.seat?0:ws.tf))],[X(c.d/2+br.seatProjection),Y(seat-bseat.thickness-off+(ws.seat?0:ws.tf))],'runway-line');}
+  if(br&&bseat){const ws=rolledUnderSeat(p);if(ws){const y0=ws.seat?.y0??0;svg+=rect(X(c.d/2+y0),Y(seat),(br.seatProjection-y0)*kk,bseat.thickness*kk,'runway-line')+rect(X(c.d/2),Y(seat-bseat.thickness),br.seatProjection*kk,bseat.depth*kk,'runway-line');for(const off of [ws.tf,ws.d-ws.tf])svg+=line([X(c.d/2),Y(seat-bseat.thickness-off+(ws.seat?0:ws.tf))],[X(c.d/2+br.seatProjection),Y(seat-bseat.thickness-off+(ws.seat?0:ws.tf))],'runway-line');}else{const rg=ribGeometry(br);svg+=rect(X(c.d/2),Y(seat),br.seatProjection*kk,br.seatThickness*kk,'runway-line')+(rg.tapered?haunchedRibOutline(rg,X(c.d/2)+br.seatProjection*kk,X(c.d/2),Y(seat-br.seatThickness),kk):rect(X(c.d/2),Y(seat-br.seatThickness),br.seatProjection*kk,br.ribDepth*kk,'runway-line'));}}
   // Bearing plate, girder section with the cap channel, and the rail.
   svg+=rect(X(girderZ-d.bearing.width/2),Y(y0),d.bearing.width*kk,bt*kk,'runway-line');
   svg+=`<path class="runway-line" d="M${n(X(girderZ-g.bf/2))},${n(Y(y0))}H${n(X(girderZ+g.bf/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ+g.tw/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ+g.bf/2))}V${n(Y(tos))}H${n(X(girderZ-g.bf/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ-g.tw/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ-g.bf/2))}Z"/>`;
   if(g.kind==='cap'){const w=g.capWidth/2,leg=g.capDepth-g.capTw;svg+=`<path class="runway-line" d="M${n(X(girderZ-w))},${n(Y(tos+cap))}H${n(X(girderZ+w))}V${n(Y(tos-leg))}H${n(X(girderZ+w-g.capTf))}V${n(Y(tos))}H${n(X(girderZ-w+g.capTf))}V${n(Y(tos-leg))}H${n(X(girderZ-w))}Z"/>`;}
   const rb=tos+cap;svg+=`<path class="rail-line" d="M${n(X(railZ-rl.baseWidth/2))},${n(Y(rb))}H${n(X(railZ+rl.baseWidth/2))}V${n(Y(rb+rl.baseThickness))}H${n(X(railZ+rl.webThickness/2))}V${n(Y(rb+railDepth-rl.headThickness))}H${n(X(railZ+rl.headWidth/2))}V${n(Y(rb+railDepth))}H${n(X(railZ-rl.headWidth/2))}V${n(Y(rb+railDepth-rl.headThickness))}H${n(X(railZ-rl.webThickness/2))}V${n(Y(rb+rl.baseThickness))}H${n(X(railZ-rl.baseWidth/2))}Z"/>`;
-  svg+=line([X(girderZ),Y(top)-8],[X(girderZ),Y(y0)+8],'grid-line');
+  if(!capG)svg+=line([X(girderZ),Y(top)-8],[X(girderZ),Y(y0)+8],'grid-line');
   // Braced columns: the crane-level strut seen end-on at the work point, its web on the girder face of the rod
   // gusset, and the rod gussets edge-on below it and on the base plate.
   const bs=s.bracingSystem,strutItems:{at:XY;labels:string[]}[]=[];
   if(bs){
-   const g2=bs.geometry,sg=g2.strut,t=g2.t,wc=t/2+sg.tw/2,ys=seat;
+   const g2=bs.geometry,sg=g2.strut,t=g2.t,wc=t/2+sg.tw/2,ys=seat-(capG?capG.drop:0);
    const strut=(z:number,y:number):XY=>[X(z),Y(y)];
    svg+=`<path class="runway-line" d="M${[[wc-sg.bf/2,ys+sg.d/2],[wc+sg.bf/2,ys+sg.d/2],[wc+sg.bf/2,ys+sg.d/2-sg.tf],[wc+sg.tw/2,ys+sg.d/2-sg.tf],[wc+sg.tw/2,ys-sg.d/2+sg.tf],[wc+sg.bf/2,ys-sg.d/2+sg.tf],[wc+sg.bf/2,ys-sg.d/2],[wc-sg.bf/2,ys-sg.d/2],[wc-sg.bf/2,ys-sg.d/2+sg.tf],[wc-sg.tw/2,ys-sg.d/2+sg.tf],[wc-sg.tw/2,ys+sg.d/2-sg.tf],[wc-sg.bf/2,ys+sg.d/2-sg.tf]].map(([z,y])=>strut(z,y).map(n).join(',')).join('L')}Z"/>`;
    const upperLow=ys+Math.min(...bs.outlines.upper.map(q=>q[1])),upperTop=ys-sg.d/2,lowerTop=Math.max(...bs.outlines.lower.map(q=>q[1]));
@@ -138,7 +147,8 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    {y:Y(0),label:`T/BASE PL ${elev(0)}`},{y:Y(ftgTop),label:`T/FTG ${ft.soil>0?'':'= T/SLAB '}${elev(ftgTop)}`},{y:Y(ftgBot),label:`B/FTG ${elev(ftgBot)}`}
   ],left,'left',yy=>yy===Y(0)?X(-b.plate.N/2)-2:X(-ft.L/2)-2);
   // Column and seat heights from the base (across the break), footing width.
-  svg+=dimV(Y(H),Y(0),X(-c.d/2),X(-c.d/2)-18,dim(H))+dimV(Y(seat),Y(0),X(-c.d/2),X(-c.d/2)-36,dim(seat));
+  // On a column cap the column top is the bearing seat: one dimension.
+  svg+=dimV(Y(H),Y(0),X(-c.d/2),X(-c.d/2)-18,dim(H))+(Math.abs(H-seat)>.5?dimV(Y(seat),Y(0),X(-c.d/2),X(-c.d/2)-36,dim(seat)):'');
   svg+=dimH(X(-ft.L/2),X(ft.L/2),Y(ftgBot),Y(ftgBot)+20,dim(ft.L));
   if(br)svg+=dimH(X(c.d/2),X(girderZ),Y(top),Y(top)-8,dim(br.reach));
   void brk;
@@ -146,7 +156,8 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   const items:{at:XY;labels:string[]}[]=[
    ...ties.map(t=>({at:[X((t.z1+t.z2)/2),Y(t.yc-t.w/2)] as XY,labels:[`${t.side>0?'TOP':'BOTTOM'} FLANGE TIE`,`SEE ${detailRef(detailTitles.flangeTie)}`]})),
    {at:[X(girderZ+g.bf/2),Y(y0+g.tf/2)],labels:[`${g.name}`,'GIRDER, SEE S-01']},
-   ...(br&&bseat?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-bseat.thickness-bseat.depth*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef(detailTitles.weldedBracket)}`]}]:[]),
+   ...(capG?[{at:[X(capG.cap.plate.width/2),Y(seat-capG.cap.plate.thickness/2)] as XY,labels:['COLUMN CAP, GIRDER CENTERED',`SEE ${detailRef(columnCapTitles.section)}`]}]:[]),
+   ...(br&&bseat?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-bseat.thickness-(bseat.rolled?bseat.depth:ribDepthAt(ribGeometry(br),br.seatProjection*.7))*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef(detailTitles.weldedBracket)}`]}]:[]),
    ...strutItems,
    {at:[X(c.d/2),Y(broken?upperFrom+(seat-upperFrom)*.25:H*.5)],labels:[`NEW ${name}`,'COLUMN, ASTM A992']},
    {at:[X(row+hw.washer/2),Y(hw.washerThickness/2)],labels:[`PL ${size(tb)} BASE PL`,`SEE ${detailRef(detailTitles.basePlate)}`]},
@@ -228,9 +239,13 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   }
   svg+=earth(X(-ft.L/2-ext*.5),X(ft.L/2+ext*.5),Y(ftgBot))+line([X(-ft.L/2-ext*.5),Y(ftgBot)],[X(-ft.L/2),Y(ftgBot)],'annotation')+line([X(ft.L/2),Y(ftgBot)],[X(ft.L/2+ext*.5),Y(ftgBot)],'annotation');
   // Dimensions: footing thickness and rod embedment left of the section; rod spacing above; cover in the bar callout.
-  const lx=X(-ft.L/2),dx=x0-10;
-  svg+=dimV(Y(ftgTop),Y(head),X(-row-nut/2),dx,dim(a.embedment))+dimV(Y(ftgTop),Y(ftgBot),lx,dx-20,dim(hf));
-  svg+=dimH(X(-row),X(row),Y(hw.washerThickness+a.diameter*1.6),Y(stub)-6,dim(2*row));
+  // An embedment too short for its text carries the text above the footing, clear of the thickness string below; a
+  // rod spacing too short for its text carries it to the left, above the slab and clear of the callout leaders.
+  const lx=X(-ft.L/2),dx=x0-10,emb=dim(a.embedment),ew=textWidth(emb,9),ey1=Y(ftgTop),ey2=Y(head);
+  svg+=ew+6<=ey2-ey1?dimV(ey1,ey2,X(-row-nut/2),dx,emb):line([X(-row-nut/2),ey1],[dx-4,ey1])+line([X(-row-nut/2),ey2],[dx-4,ey2])+line([dx,ey1-ew-6],[dx,ey2])+[ey1,ey2].map(y=>line([dx-3,y+2.5],[dx+3,y-2.5])).join('')+text(dx-6,ey1-4-ew/2,emb,9,'middle',400,-90);
+  svg+=dimV(Y(ftgTop),Y(ftgBot),lx,dx-20,dim(hf));
+  const spacing=dim(2*row),short=textWidth(spacing,9)+6>2*row*kk,sy=short&&ft.slab>0?Math.min(Y(stub)-6,Y(slabTop)-8):Y(stub)-6;
+  svg+=dimH(X(-row),X(row),Y(hw.washerThickness+a.diameter*1.6),sy,spacing,short?'left':'right');
   const rx=X(ft.L/2+ext*.5)+28,slabZ=(ft.soil>0?b.plate.N/2+12*inch+ft.L/2+ext*.5:ft.L+ext*.5)/2;
   const items:{at:XY;labels:string[];weld?:string;field?:boolean;arrowSide?:boolean;allAround?:boolean}[]=[
    {at:[X(c.d/2),Y(stub*.8)],labels:[`${name} COLUMN`]},
@@ -265,7 +280,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ['DATA SOURCE',!b.source?'NOT ENTERED':u==='US'?b.source:`${b.source.split(':')[0]} (VALUES CONVERTED ABOVE AND IN THE NOTES)`]
   ];
   const notes=[
-   `NEW COLUMNS: ASTM A992 ${name}, ONE AT EACH SUPPORT OF BOTH RUNWAYS. FIXED BASE, FREE TOP ACROSS THE RUNWAY; ALONG THE RUNWAY BY THE CRANE-LEVEL BRACING. COLUMN TOP AT OR BELOW THE TOP OF THE GIRDER, CLEAR OF THE CRANE END TRUCKS; VERIFY CLEARANCE WITH THE CRANE SUPPLIER.`,
+   `NEW COLUMNS: ASTM A992 ${name}, ONE AT EACH SUPPORT OF BOTH RUNWAYS. FIXED BASE, FREE TOP ACROSS THE RUNWAY; ALONG THE RUNWAY BY THE CRANE-LEVEL BRACING. ${capG?`COLUMN TOP MILLED TO BEAR UNDER THE COLUMN CAP, THE GIRDER CENTERED ON THE COLUMN (${detailRef(columnCapTitles.section)}).`:'COLUMN TOP AT OR BELOW THE TOP OF THE GIRDER, CLEAR OF THE CRANE END TRUCKS; VERIFY CLEARANCE WITH THE CRANE SUPPLIER.'}`,
    `BASE PLATE ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN, ${size(b.plate.weld)} FILLETS BOTH SIDES OF FLANGES AND WEB. HOLES ${size(hw.hole)} DIA. (AISC DG1 TABLE 2.3) WITH ${size(hw.washer)} X ${size(hw.washer)} X ${size(hw.washerThickness)} PLATE WASHERS; WELD WASHERS TO THE PLATE, ${size(plateWasherWeld(b).size)} FILLET ALL AROUND, AFTER THE NUTS ARE SNUG SO ALL RODS SHARE THE SHEAR.`,
    `ANCHOR RODS ASTM F1554 GR. ${a.grade.split('-')[1]} WITH ASTM A563 HEAVY HEX NUTS; EMBEDDED HEAVY HEX NUT TACK WELDED TO THE ROD. SET WITH A TEMPLATE TO AISC CODE OF STANDARD PRACTICE §7.5 TOLERANCES. DO NOT FIELD BEND OR HEAT RODS.`,
    `SET THE PLATE ON SHIM STACKS OR LEVELING NUTS AND FILL ${size(gr)} OF NON-SHRINK, NON-METALLIC GROUT (ASTM C1107, ${u==='US'?'5,000 PSI':'35 MPa'} MINIMUM) TO FULL BEARING BEFORE THE GIRDER IS SET.`,
@@ -274,8 +289,8 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    `BEAR FOOTINGS ON UNDISTURBED SOIL OR COMPACTED FILL APPROVED BY THE GEOTECHNICAL ENGINEER: ${force(b.soil.allowable,'pressure')} ALLOWABLE. BOTTOM OF FOOTING ${dim(ft.soil+hf)} BELOW THE FLOOR${b.soil.frost>0?`, BELOW THE ${dim(b.soil.frost)} FROST DEPTH`:', INTERIOR FOOTING PROTECTED FROM FROST'}.`,
    ...(s.existingColumn?.seismic?(()=>{const z=s.existingColumn!.seismic!.basis,aisc341=!z.integrityOnly;
     // ASCE 7 §14.1.2.2.1: a cantilever column system in SDC B to F is detailed to AISC 341 (§E5 / §E6).
-    return [`SEISMIC: ${z.system.toUpperCase()} STEEL CANTILEVER COLUMN SYSTEM ACROSS THE RUNWAY (ASCE 7 TABLE 12.2-1${aisc341?`; AISC 341 ${z.system==='special'?'§E6':'§E5'}`:''}). THE COLUMNS${aisc341?'':' ARE DESIGNED FOR THE SEISMIC LOAD;'} ${aisc341?'AND ':''}THE BASE PLATES, ANCHOR RODS AND FOOTINGS ARE DESIGNED FOR THE OVERSTRENGTH SEISMIC LOAD (§12.2.5.2${aisc341?', AISC 341 §E5.4a':''})${z.sdc>='C'?' AND THE ANCHORS FOR ACI 318 §17.10':''}.${aisc341?' MAKE THE COLUMN-TO-BASE-PLATE, BRACKET, TIE AND PLATE WASHER WELDS WITH FILLER METAL MEETING AWS D1.8 CLAUSE 6.3.':''} THE CRANE-LEVEL BRACING CARRIES SEISMIC FORCE ALONG THE RUNWAY.`];})():[]),
-   `SPECIAL INSPECTION PER IBC 1705.3${s.existingColumn?.seismic&&!s.existingColumn.seismic.basis.integrityOnly?', IBC 1705.12.1.1 (AISC 341 CHAPTER J)':''} AND THE STATEMENT OF SPECIAL INSPECTIONS: ANCHOR ROD PLACEMENT, REINFORCEMENT, CONCRETE SAMPLING AND PLACEMENT, THE COLUMN-TO-PLATE AND BRACKET WELDS, AND THE FIELD-WELDED PLATE WASHERS.`
+    return [`SEISMIC: ${z.system.toUpperCase()} STEEL CANTILEVER COLUMN SYSTEM ACROSS THE RUNWAY (ASCE 7 TABLE 12.2-1${aisc341?`; AISC 341 ${z.system==='special'?'§E6':'§E5'}`:''}). THE COLUMNS${aisc341?'':' ARE DESIGNED FOR THE SEISMIC LOAD;'} ${aisc341?'AND ':''}THE BASE PLATES, ANCHOR RODS AND FOOTINGS ARE DESIGNED FOR THE OVERSTRENGTH SEISMIC LOAD (§12.2.5.2${aisc341?', AISC 341 §E5.4a':''})${z.sdc>='C'?' AND THE ANCHORS FOR ACI 318 §17.10':''}.${aisc341?` MAKE THE COLUMN-TO-BASE-PLATE, ${capG?'CAP, CAP STIFFENER':'BRACKET, TIE'} AND PLATE WASHER WELDS WITH FILLER METAL MEETING AWS D1.8 CLAUSE 6.3.`:''} THE CRANE-LEVEL BRACING CARRIES SEISMIC FORCE ALONG THE RUNWAY.`];})():[]),
+   `SPECIAL INSPECTION PER IBC 1705.3${s.existingColumn?.seismic&&!s.existingColumn.seismic.basis.integrityOnly?', IBC 1705.12.1.1 (AISC 341 CHAPTER J)':''} AND THE STATEMENT OF SPECIAL INSPECTIONS: ANCHOR ROD PLACEMENT, REINFORCEMENT, CONCRETE SAMPLING AND PLACEMENT, THE COLUMN-TO-PLATE AND ${capG?'CAP':'BRACKET'} WELDS, AND THE FIELD-WELDED PLATE WASHERS.`
   ];
   return {key:'new-column',name:'NEW COLUMNS & FOOTINGS',views,notes:(t:Style)=>[heading(t,'NEW COLUMN DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.25,1.75]),heading(t,'NEW COLUMN AND FOUNDATION NOTES'),...numbered(t,notes)]};
  }

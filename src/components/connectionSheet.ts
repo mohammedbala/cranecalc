@@ -3,6 +3,7 @@ import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {activeEndBearing} from '../engine/endBearingInputs';
+import {activeColumnCap} from '../engine/columnCapInputs';
 import {endBearingView} from './endBearingDetail';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {flangeTieSection} from './flangeTieSheet';
@@ -18,6 +19,8 @@ import { sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
 import { railKeeperView } from './railKeeperView';
+import {ribGeometry} from '../engine/bracketRib';
+import {haunchedRibOutline} from './haunchedBracketDrawing';
 import { slidingBoltView } from './slidingBoltSection';
 
 /** Girder bearing, end connection, flange tie and rail keeper details on their own sheet. */
@@ -34,9 +37,11 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  let framing:ReturnType<typeof planSheetGeometry>|undefined;const m=()=>framing??=planSheetGeometry(p,f);
  const wb=d?.bracket?.enabled?d.bracket:undefined;
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
- const sc=supportColumn(p),colName=sc.isNew?sc.name:f.frameStyle==='tapered'?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN',colRef=sc.isNew?columnReference(p):`${colName} (REF.)`;
+ // A surveyed existing column is named and drawn as surveyed; only an unsurveyed one takes the reference framing style.
+ const sc=supportColumn(p),surveyed=!sc.isNew&&!!p.existingColumn?.enabled,tapered=f.frameStyle==='tapered'&&!surveyed;
+ const colName=sc.isNew?sc.name:surveyed?`EXISTING ${p.existingColumn!.shape||'BUILT-UP'} COLUMN`:tapered?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN',colRef=sc.isNew?columnReference(p):`${colName} (REF.)`;
  const bracket=referenceCrossheads.find(v=>v.name===f.crosshead)!;
- const colAt=(y:number)=>f.frameStyle==='tapered'&&!sc.isNew?m().columnDepthAt(y):m().column.d,colLine=sc.isNew?'runway-line':'reference-line';
+ const colAt=(y:number)=>tapered?m().columnDepthAt(y):m().column.d,colLine=sc.isNew?'runway-line':'reference-line';
  const bracketRef=detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket);
 
  const hole=(x:number,y:number,r:number)=>circle(x,y,r,'runway-line')+line([x-r-3,y],[x+r+3,y],'grid-line')+line([x,y-r-3],[x,y+r+3],'grid-line');
@@ -55,7 +60,9 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
 
  // 1: Actual girder transverse section, fitted stiffeners and bearing plate.
  // Receiving bracket and building-column profile remain dashed reference geometry.
- views.push({title:detailTitles.bearing,render:()=>{
+ // A column cap carries the girder on the column (column cap details); there is no bracket or flange tie.
+ const capped=!!activeColumnCap(p);
+ if(!capped)views.push({title:detailTitles.bearing,render:()=>{
   let svg='<g data-view="bracket-connection">';
   // Depth drawn below the bearing: the bracket designed here, or the reference bracket. The section is
   // drawn up to 240 deep, its callouts placed against the girder and bracket.
@@ -69,7 +76,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   svg+=line([inner+m().column.tf*k,98],[inner+m().column.tf*k,colBot],colLine)+line([inner+C(98)-m().column.tf*k,98],[inner+C(colBot)-m().column.tf*k,colBot],colLine);
   if(ws){const wx=inner-ws.L/1000*k,sy=bt+(ws.hasSeat?ws.seat!.t/1000*k:0);if(ws.seat)svg+=rect(inner-ws.seat.y1/1000*k,bt,(ws.seat.y1-ws.seat.y0)/1000*k,ws.seat.t/1000*k,'runway-line');
    svg+=rect(wx,sy,ws.L/1000*k,ws.d/1000*k,'runway-line')+line([wx,sy+ws.tf/1000*k],[inner,sy+ws.tf/1000*k],'runway-line')+line([wx,sy+(ws.d-ws.tf)/1000*k],[inner,sy+(ws.d-ws.tf)/1000*k],'runway-line');}
-  else if(wb){const wx=inner-wb.seatProjection/1000*k;svg+=rect(wx,bt,wb.seatProjection/1000*k,wb.seatThickness/1000*k,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),ex=inner-e.projection/1000*k,y=bt+wb.seatThickness/1000*k;svg+=rect(ex,y,e.projection/1000*k,e.depth/1000*k,'reference-line');for(const off of [e.flangeThickness,e.depth-e.flangeThickness])svg+=line([ex,y+off/1000*k],[inner,y+off/1000*k],'reference-line');}else svg+=rect(wx,bt+wb.seatThickness/1000*k,wb.seatProjection/1000*k,wb.ribDepth/1000*k,'runway-line');}else{
+  else if(wb){const wx=inner-wb.seatProjection/1000*k;svg+=rect(wx,bt,wb.seatProjection/1000*k,wb.seatThickness/1000*k,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),ex=inner-e.projection/1000*k,y=bt+wb.seatThickness/1000*k;svg+=rect(ex,y,e.projection/1000*k,e.depth/1000*k,'reference-line');for(const off of [e.flangeThickness,e.depth-e.flangeThickness])svg+=line([ex,y+off/1000*k],[inner,y+off/1000*k],'reference-line');}else svg+=ribGeometry(wb).tapered?haunchedRibOutline(ribGeometry(wb),wx,inner,bt+wb.seatThickness/1000*k,k/1000):rect(wx,bt+wb.seatThickness/1000*k,wb.seatProjection/1000*k,wb.ribDepth/1000*k,'runway-line');}else{
   svg+=rect(cx-pw/2-8,bt,inner-(cx-pw/2-8),bb-bt,'reference-line');
   svg+=line([cx-pw/2-8,bt+bracket.tf*25.4/1000*k],[inner,bt+bracket.tf*25.4/1000*k],'reference-line')+line([cx-pw/2-8,bb-bracket.tf*25.4/1000*k],[inner,bb-bracket.tf*25.4/1000*k],'reference-line');
   svg+=line([cx-10,bb],[inner,bb+26],'reference-line');
@@ -151,7 +158,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  // 3: Plan of an actual flange-to-column tie. The symmetric pair of bars is
  // represented by front/back outlines; arrows identify both end bolt groups.
  if(d.brace.flangeAttachment?.enabled){if(withFlangeTie)views.push({title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,436)});}
- else views.push({title:detailTitles.tie,render:()=>{
+ else if(!capped)views.push({title:detailTitles.tie,render:()=>{
   let svg='<g data-view="tie-connection">';
   // Across the runway (down the sheet) from the web centerline; along the runway from the tie-side bearing stiffener.
   const c=d.brace.connection,t=d.brace,bs=d.bearing,g=stiffenerTieGeometry(p)!,rel=tieRelease(p),hg=columnGussetHeight(p),hole=boltProperties(c.grade,c.diameter).hole;

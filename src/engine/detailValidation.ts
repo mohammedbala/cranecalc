@@ -1,5 +1,6 @@
 import {activeEndBearing} from './endBearingInputs';
-import {flangeTieGeometry} from './tieGeometry';
+import {flangeTieGeometry,flangeTieFamily} from './tieGeometry';
+import {validatePlateTie} from './plateTie';
 import {tieArrangement,validateConnectionOptions} from './connectionOptions';
 import type { ProjectInput } from './types';
 import {validateBracket} from './bracketDesign';
@@ -44,16 +45,18 @@ export function validateRunwayDetails(p:ProjectInput){
  add(d.criteria.temperatureMaximum>150||!d.criteria.corrosionProtected,`Appendix 3 fatigue model requires temperature at most ${p.units==='US'?'302 °F':'150 °C'} and corrosion protection.`);
  add(p.cranes.some(c=>!c.design?.bumperBypassesGirder)&&!d.endStop?.enabled,'a crane stop force reaches the girder: design the girder-mounted runway end stops, or mark the crane stops as building-mounted.');
  add(d.material.Fu<d.material.Fy,'plate Fu must not be less than Fy.');
- if(tieArrangement(d)==='paired-bars')add(b.reach>b.length,'brace reach cannot exceed its length.');
- if(b.flangeAttachment?.enabled&&tieArrangement(d)==='paired-bars'){
+ // Paired flat bars and the single flexible plate share the tie dimensions, saddle, gussets and bolt groups.
+ const family=flangeTieFamily(d);
+ if(family)add(b.reach>b.length,'brace reach cannot exceed its length.');
+ if(b.flangeAttachment?.enabled&&family){
   const g=flangeTieGeometry(p);add(!g,p.system==='simple'?'direct flange ties need the column face: enable the designed column bracket, or enter the column face distance for a bracket by others.':'direct flange ties require independent simple spans.');
   if(g){
    add(g.rootLength<=4*g.attachment.weldSize,'flange saddle must leave at least four weld legs of effective length.');
    add(g.start<=g.rootStart||g.gussetEnd<=g.rootEnd,'girder gusset must extend from the flange saddle through the complete bolt group.');
-   add(g.freeLength<=0,'tie bars require clear length between the two bolt groups.');
+   add(g.freeLength<=0,tieArrangement(d)==='flexible-plate'?'flexible plate requires clear length between the two bolt groups.':'tie bars require clear length between the two bolt groups.');
    add(Math.abs(b.length-b.reach)>1e-6,'direct transverse tie model requires reach equal to bar length.');
    add(Math.abs(b.connection.weldLength-g.columnGusset)>1e-6,`column root weld length must equal the column gusset height (${(g.columnGusset/25.4).toFixed(3)} in).`);
-   add(b.connectionLength<g.gussetEnd-g.rootStart,'unbraced gusset length must include its full flange-to-end extension.');
+   add(b.connectionLength<g.gussetEnd-g.rootStart-1e-6,'unbraced gusset length must include its full flange-to-end extension.');
    add(g.stations.some(v=>v.tieX-g.attachment.saddleLength/2<v.start-1e-6||v.tieX+g.attachment.saddleLength/2>v.finish+1e-6),'saddle must remain within its own girder end bearing region.');
    if(g.receiver)add(g.stations.some(v=>Math.abs(v.tieX-v.station)+b.gussetThickness/2+b.connection.weldSize>g.receiver!.width/2),'column tie root welds must fit on the receiver flange.');
    if(g.sides.includes(-1)){
@@ -71,8 +74,8 @@ export function validateRunwayDetails(p:ProjectInput){
  add(d.bearing.cope>=d.bearing.stiffenerWidth,'stiffener cope must be smaller than its outstand.');
  add(2*d.bearing.stiffenerWidth+p.section.tw>d.bearing.width,'bearing plate must support both stiffener outstands.');
  add(d.bearing.length<(p.aist?.bearingLength??0),'bearing plate length must cover the entered effective bearing length.');
- if(tieArrangement(d)==='paired-bars'){
-  add(Math.abs(b.connection.thickness-b.thickness)>1e-6,'tie cover-plate thickness must equal the paired tie-bar thickness in this template.');
+ if(family){
+  add(Math.abs(b.connection.thickness-b.thickness)>1e-6,tieArrangement(d)==='flexible-plate'?'tie connection plate thickness must equal the flexible plate thickness.':'tie cover-plate thickness must equal the paired tie-bar thickness in this template.');
   add(b.width<b.connection.gauge+2*b.connection.edge,'brace bar width must contain the two bolt lines and edge distances.');
  }
  if(webEnd)add((d.end.rows-1)*d.end.pitch+2*d.end.edge>p.section.d-2*p.section.tf,'end bolt pattern must fit within the clear girder web.');
@@ -81,9 +84,9 @@ export function validateRunwayDetails(p:ProjectInput){
  add(d.fatigueDetails.some(v=>v.x>L),'fatigue stations must lie on the modeled girder.');
  add(Math.abs(d.spectrum.reduce((a,v)=>a+v.cycles,0)-p.fatigue.cycles)>.5,'duty-bin cycles must sum to the project fatigue cycles.');
  add(new Set(d.fatigueDetails.map(f=>f.id)).size!==d.fatigueDetails.length,'fatigue detail IDs must be unique.');
- for(const c of [...(webEnd?[d.end]:[]),...(tieArrangement(d)==='paired-bars'?[b.connection]:[])])try{
+ for(const c of [...(webEnd?[d.end]:[]),...(family?[b.connection]:[])])try{
   const bolt=boltProperties(c.grade,c.diameter);add(c.weldLength<4*c.weldSize,'fillet weld effective length must be at least four times its leg.');add(c.edge<=bolt.hole/2||Math.min(c.gauge,c.pitch)<=bolt.hole,'bolt holes overlap or cross the plate edge.');
  }catch(e){errors.push(`details: ${e instanceof Error?e.message:String(e)}`);}
  try{const bolt=boltProperties('A325',r.jointBoltDiameter);add(r.jointPlateHeight<=bolt.hole+1.5875||r.jointPitch<=1.5*r.jointBoltDiameter+1.5875||r.jointEdge<=.75*r.jointBoltDiameter+1.5875,'rail-joint slots leave insufficient net material.');}catch(e){errors.push(`details: ${e instanceof Error?e.message:String(e)}`);}
- return [...errors,...validateBracket(p),...validateConnectionOptions(p)];
+ return [...errors,...validatePlateTie(p),...validateBracket(p),...validateConnectionOptions(p)];
 }

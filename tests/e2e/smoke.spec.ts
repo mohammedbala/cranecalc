@@ -59,3 +59,22 @@ test('designs new freestanding columns with base plates and footings',async({pag
  await expect(page.locator('.drafting-linework svg')).toContainText('BRACED BAY / ELEVATION');
  expect(errors).toEqual([]);
 });
+
+test('carries the girder on column caps over new freestanding columns',async({page})=>{
+ const errors=watch(page);
+ await page.goto('/');
+ await page.getByRole('button',{name:'Load new-column example'}).first().click();
+ await expect(page.getByRole('button',{name:'Generate output',exact:true})).toBeEnabled({timeout:540000});
+ // Direct column bearing replaces the bracket: the cap inputs appear and the cap checks replace the tie.
+ await page.getByLabel('Girder support on the new column').selectOption('cap');
+ await expect(page.getByText('Cap plate length along runway')).toBeVisible();
+ await expect(page.getByText('Column cap · arrangement and load path').first()).toBeAttached({timeout:540000});
+ await expect(page.getByRole('button',{name:'Generate output',exact:true})).toBeEnabled({timeout:540000});
+ await page.getByRole('button',{name:'Drawings'}).click();
+ const tabs=page.locator('.drafting-views button');
+ await expect(tabs.filter({hasText:'S-03'})).toHaveCount(1,{timeout:120000});
+ await tabs.filter({hasText:'S-03'}).first().click();
+ await expect(page.locator('.drafting-linework svg')).toContainText('GIRDER BEARING / COLUMN CAP');
+ await expect(page.locator('.drafting-linework svg')).toContainText('COLUMN CAP DESIGN FORCES');
+ expect(errors).toEqual([]);
+});

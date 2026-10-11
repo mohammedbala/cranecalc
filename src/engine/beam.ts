@@ -10,7 +10,14 @@ export class Beam {
   const anchors=[start,...supports.filter(x=>x>start&&x<end),end].sort((a,b)=>a-b);
   const set=new Set<number>(anchors);
   for(let i=0;i<subdivisions;i++)set.add(start+(end-start)*i/subdivisions);
-  this.nodes=[...set].sort((a,b)=>a-b);const n=this.nodes.length*2;
+  // Merge nodes closer than 1e-6 mm: spans summed in floating point leave grid stations a few 1e-13 mm from
+  // the subdivision points, and such sliver elements ruin the stiffness conditioning. Anchors keep their value.
+  const nodes:number[]=[];
+  for(const x of [...set].sort((a,b)=>a-b)){
+   if(nodes.length&&x-nodes[nodes.length-1]<1e-6){if(anchors.includes(x))nodes[nodes.length-1]=x;continue;}
+   nodes.push(x);
+  }
+  this.nodes=nodes;const n=this.nodes.length*2;
   this.K=Array.from({length:n},()=>Array(n).fill(0) as number[]);
   for(let e=0;e<this.nodes.length-1;e++){const k=stiffness(EI,this.nodes[e+1]-this.nodes[e]);for(let i=0;i<4;i++)for(let j=0;j<4;j++)this.K[2*e+i][2*e+j]+=k[i][j];}
   this.fixed=this.nodes.flatMap((x,i)=>supports.some(s=>Math.abs(s-x)<1e-6)?[2*i]:[]);

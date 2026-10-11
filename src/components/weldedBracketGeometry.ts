@@ -6,25 +6,27 @@ import {bracketArrangement} from '../engine/connectionOptions';
 import {rolledStub} from '../engine/rolledBracketInputs';
 import {filletWeld} from './weldGeometry';
 import {buildExistingBrackets} from './existingBracketGeometry';
+import {weldedRibBracket,haunchTipDepth} from '../engine/bracketRib';
 import type {HardwareBuilder} from './connectionDetails';
 export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:number,steel:THREE.Material,edge:THREE.LineBasicMaterial,bearing?:{width:number;length:number;thickness:number},weldMaterial:THREE.Material=steel,hardware?:HardwareBuilder,columnIsNew=false){
  if(isExistingBracketType(bracketArrangement(b)))return buildExistingBrackets(b,supports,seatTop,steel,edge,bearing,hardware);
  if(bracketArrangement(b)==='rolled-corbel')return buildRolledBrackets(b,supports,seatTop,steel,edge,bearing,weldMaterial,columnIsNew);
- const group=new THREE.Group(),kind=bracketArrangement(b);group.name='designed-welded-column-brackets';group.userData.designedBracket=kind==='twin-rib';group.userData.bracketArrangement=kind;
+ const group=new THREE.Group(),kind=bracketArrangement(b);group.name='designed-welded-column-brackets';group.userData.designedBracket=weldedRibBracket(b);group.userData.bracketArrangement=kind;
  const mm=.001,face=b.reach*mm,tip=face-b.seatProjection*mm,top=seatTop-b.seatThickness*mm;
  const add=(geometry:THREE.BufferGeometry,id:string,family:string,x:number,y:number,z:number,station:number)=>{
   const isWeld=family.includes('fillet'),mesh=new THREE.Mesh(geometry,isWeld?weldMaterial:steel);mesh.name=id;mesh.position.set(x,y,z);mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry),edge));
-  mesh.userData.part={id,family,description:kind==='twin-rib'?'Project bracket geometry; see Column bracket checks and the bracket details. Receiving building global capacity is separate.':'Reference bracket arrangement. Geometry and welds shown to the entered dimensions; connection strength, stability and fatigue require a new project model.',support:{x:station,z:face},...(isWeld?{weld:{kind:'fillet',location:family.includes('column')?'field':'shop',existingSteel:family.includes('column'),size:(family.includes('column')?b.rootWeld:b.seatWeld)/1000,length:(family.includes('column')?b.ribDepth:b.seatProjection)/1000}}:{})} satisfies PartInfo;group.add(mesh);return mesh;
+  mesh.userData.part={id,family,description:weldedRibBracket(b)?'Project bracket geometry; see Column bracket checks and the bracket details. Receiving building global capacity is separate.':'Reference bracket arrangement. Geometry and welds shown to the entered dimensions; connection strength, stability and fatigue require a new project model.',support:{x:station,z:face},...(isWeld?{weld:{kind:'fillet',location:family.includes('column')?'field':'shop',existingSteel:family.includes('column'),size:(family.includes('column')?b.rootWeld:b.seatWeld)/1000,length:(family.includes('column')?b.ribDepth:b.seatProjection)/1000}}:{})} satisfies PartInfo;group.add(mesh);return mesh;
  };
  supports.forEach((x,i)=>{
-  add(new THREE.BoxGeometry(b.seatLength*mm,b.seatThickness*mm,b.seatProjection*mm),`WB-S${i+1}-seat`,kind==='twin-rib'?'Designed bracket seat':'Bracket seat (reference)',x,seatTop-b.seatThickness*mm/2,(face+tip)/2,x);
+  add(new THREE.BoxGeometry(b.seatLength*mm,b.seatThickness*mm,b.seatProjection*mm),`WB-S${i+1}-seat`,weldedRibBracket(b)?'Designed bracket seat':'Bracket seat (reference)',x,seatTop-b.seatThickness*mm/2,(face+tip)/2,x);
   if(bearing)add(new THREE.BoxGeometry(bearing.length,bearing.thickness,bearing.width),`WB-S${i+1}-bearing`,'Girder bearing plate',x,seatTop+bearing.thickness/2,0,x);
   for(const side of [-1,1]){
    const rx=x+side*b.ribSpacing*mm/2;
    if(kind==='haunched-seat'){
-    const profile=new THREE.Shape();profile.moveTo(0,0);profile.lineTo(b.seatProjection*mm,0);profile.lineTo(b.seatProjection*mm,-b.ribDepth*mm);profile.lineTo(0,-(b.tipDepth??b.ribDepth/4)*mm);profile.closePath();
+    // Root depth at the column face, the tip depth at the seat edge: the rib the checks and details use.
+    const profile=new THREE.Shape();profile.moveTo(0,0);profile.lineTo(b.seatProjection*mm,0);profile.lineTo(b.seatProjection*mm,-b.ribDepth*mm);profile.lineTo(0,-haunchTipDepth(b)*mm);profile.closePath();
     const geo=new THREE.ExtrudeGeometry(profile,{depth:b.ribThickness*mm,bevelEnabled:false});geo.rotateY(-Math.PI/2);geo.translate(b.ribThickness*mm/2,0,0);
-    add(geo,`WB-S${i+1}-rib-${side}`,'Tapered bracket rib (reference)',rx,top,tip,x);
+    add(geo,`WB-S${i+1}-rib-${side}`,'Designed haunched bracket rib',rx,top,tip,x);
    }else add(new THREE.BoxGeometry(b.ribThickness*mm,b.ribDepth*mm,b.seatProjection*mm),`WB-S${i+1}-rib-${side}`,'Designed rectangular bracket rib',rx,top-b.ribDepth*mm/2,(face+tip)/2,x);
    for(const sign of [-1,1]){
     const rw=b.rootWeld*mm,sw=b.seatWeld*mm;

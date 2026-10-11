@@ -1,6 +1,6 @@
 import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
-import {flangeTieGeometry} from './tieGeometry';
+import {flangeTieGeometry,tiePlies} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
 import {createBracketCollector} from './bracketDesign';
@@ -21,26 +21,28 @@ import {activeEndStop,craneAtStop,stopBoltRows,stopEnds} from './endStopInputs';
 import {activeEndBearing,locatingSupport} from './endBearingInputs';
 import {craneCombinations} from './aistLoads';
 import {runwayEnds} from './continuation';
+import {activeColumnCap} from './columnCapInputs';
+import {capForkStiffness,createColumnCapCollector} from './columnCap';
 
 export function braceSystem(p:ProjectInput){
- const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875);
+ const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875),plies=tiePlies(p);
  const plate=plateMember(b.width,b.thickness,b.length,p.section.E,m.Fy,m.Fu,b.width-holes,p.method),cos=b.reach/b.length;
  // Each bar buckles out of plane between the innermost bolt rows, fixed in the girder bolt group and
  // pinned at the column end: K = 0.8 (AISC Commentary Table C-A-7.1 recommended value).
  const between=b.length-2*(b.connection.edge+(b.connection.rows-1)*b.connection.pitch),bucklingLength=.8*Math.max(between,b.thickness);
  const member={...plate,bucklingLength,compression:compressionResistance(plate.A,plate.r,bucklingLength,p.section.E,m.Fy,p.method)};
- // Two flat bars in parallel, two end connections in series. The connection
+ // Two flat bars (or one flexible plate in single shear) in parallel, two end connections in series. The connection
  // model includes gusset axial strain and conservative bolt shear deformation;
  // no stiffness from the excluded supporting building is inferred.
- const n=2*b.connection.rows,G=p.section.E/2.6,grip=2*b.thickness+b.gussetThickness;
+ const n=2*b.connection.rows,G=p.section.E/2.6,grip=plies*b.thickness+b.gussetThickness;
  const plateK=p.section.E*b.gussetThickness*(b.connection.gauge+2*b.connection.edge)/b.connectionLength;
- const boltK=n*2*G*bolt.area/grip;
+ const boltK=n*plies*G*bolt.area/grip;
  const weldArea=2*b.connection.weldLength*b.connection.weldSize/Math.sqrt(2);
  const weldK=G*weldArea/(2*b.connection.weldSize);
  const connectionK=1/(1/plateK+1/boltK+1/weldK);
  const localCompliance=flangeTieGeometry(p)?flangeTieResponse(p,1).compliance:0;
- const stiffness=cos*cos/(1/(2*member.stiffness)+2/connectionK+localCompliance);
- return {member,cos,connectionK,stiffness,capacity:2*Math.min(member.tension,member.compression.capacity)*cos};
+ const stiffness=cos*cos/(1/(plies*member.stiffness)+2/connectionK+localCompliance);
+ return {member,cos,connectionK,stiffness,plies,capacity:plies*Math.min(member.tension,member.compression.capacity)*cos};
 }
 const mergeStations=(xs:number[])=>[...xs].sort((a,b)=>a-b).filter((x,i,s)=>!i||x-s[i-1]>1e-6);
 /** Each flange is restrained only at its own brace stations; both flanges are tied at supports. */
@@ -126,6 +128,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const bracket=createBracketCollector(p);
  const existingBracket=createExistingBracketCollector(p);
  const rolledBracket=createRolledBracketCollector(p);
+ const capCollector=createColumnCapCollector(p);
  const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+railTopAboveSteel(p)-cap.shearCenter:railTopAboveSteel(p)+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
@@ -133,8 +136,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  // Bolted end bearings restrain the bottom flange at each support through four bolts into the seat: bolt shear
  // deformation over the flange, bearing plate and seat grip. Otherwise the bottom flange tie is the brace pair.
  const eb=activeEndBearing(p),ebBolt=eb?boltProperties(eb.bolts.grade,eb.bolts.diameter):undefined;
- const ebK=eb&&ebBolt?4*G*ebBolt.area/(p.section.tf+details.bearing.thickness+(details.bracket?.enabled?bracketSeat(details.bracket).thickness:details.bearing.thickness)):0;
+ const columnCap=activeColumnCap(p);
+ const ebK=eb&&ebBolt?4*G*ebBolt.area/(p.section.tf+details.bearing.thickness+(details.bracket?.enabled?bracketSeat(details.bracket).thickness:columnCap?columnCap.plate.thickness:details.bearing.thickness)):0;
  const bottomK=(x:number)=>ebK&&supports.some(v=>Math.abs(v-x)<=1e-6)?ebK:brace.stiffness;
+ // On a column cap no tie reaches the top flange: the bearing stiffeners and the bolted bottom flange form a fork.
+ const forkK=columnCap&&eb?capForkStiffness(p).k:0,topK=(x:number)=>forkK&&supports.some(v=>Math.abs(v-x)<=1e-6)?forkK:brace.stiffness;
  const bearings=independentBearings(p),adjacent=adjacentBays(p);
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
  const detailInputs=automaticFatigueDetails(p);
@@ -166,7 +172,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    if(!restraintForces){
    const beam=new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
     loads:wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),
-    restraints:stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?brace.stiffness*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?bottomK(x)*stiffnessFactor:0})),
+    restraints:stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?topK(x)*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?bottomK(x)*stiffnessFactor:0})),
     axial:strength?e.axial:0,moment:strength?x=>moment(x+start):undefined,
     distributedTorque:e.railTorquePerLength,
     // Apply the full UDL at rail height for the stability test conservatively.
@@ -280,21 +286,27 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   // One whole concurrent set at a support: the girder end reactions (each at 0.8 of its bearing length from its
   // girder end), their seat moment, the locating bearing's longitudinal force and the flange lateral forces of all
   // girder ends at the grid. The bracket design force envelope tabulates these sets and the bracket checks take them.
+  // A continuous girder bears centered on its interior grids. At a runway-end grid its girder end is on the grid and
+  // its bearing runs inboard, the reaction at 0.8 of the bearing length from that end as at a simple-span end.
+  const endBearingOffset=(x:number)=>simple?0:Math.abs(x-supports[0])<1e-6?seatOffset({end:'left',offset:Lbr/2},Lbr):Math.abs(x-supports.at(-1)!)<1e-6?seatOffset({end:'right',offset:-Lbr/2},Lbr):0;
   const supportSet=(x:number,c:ReturnType<typeof concurrent>[number]):SupportForceSet=>{
    const r=reactions.get(x)??{top:0,bottom:0},ends=c.ends??[],at=(v?:{x:number;r:number}[])=>v?.find(w=>Math.abs(w.x-x)<1e-6)?.r??0;
-   return {id:c.id,combination:e.combination,vertical:c.ends?ends.reduce((a,v)=>a+v.vertical,0):at(e.verticalReactions)+at(e.adjacentReactions)+c.couple,moment:ends.reduce((a,v)=>a+v.vertical*seatOffset(v,Lbr),0),
+   const vertical=c.ends?ends.reduce((a,v)=>a+v.vertical,0):at(e.verticalReactions)+at(e.adjacentReactions)+c.couple;
+   return {id:c.id,combination:e.combination,vertical,moment:c.ends?ends.reduce((a,v)=>a+v.vertical*seatOffset(v,Lbr),0):vertical*endBearingOffset(x),
     longitudinal:delivered(x,c),top:r.top,bottom:r.bottom,ends:ends.map(v=>({bay:v.bay,end:v.end,vertical:v.vertical,offset:seatOffset(v,Lbr),...(v.existing?{existing:true}:{})}))};
   };
   // The bracket takes the same concurrent sets, each girder reaction over the inner 0.4 of its bearing plate.
   // A bay carrying the force away from this support leaves its reactions unchanged: each distinct set once.
   // The seat also takes the locating bearing's longitudinal force and, through the bearing bolts, the bottom-flange
   // lateral force of the girder ends at the grid, at their bearings' mean offset along the runway.
-  if(bracket||existingBracket||rolledBracket)for(const x of supports){const distinct=new Set<string>();for(const c of concurrent(x)){
-   const f=supportSet(x,c),loads=f.ends.length?f.ends.map(v=>({vertical:v.vertical,offset:v.offset,length:.4*Lbr})):[{vertical:f.vertical,offset:0}];
-   const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:f.longitudinal,bottom:f.bottom,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:0};
+  if(bracket||existingBracket||capCollector||rolledBracket)for(const x of supports){const distinct=new Set<string>();for(const c of concurrent(x)){
+   const edge=endBearingOffset(x),f=supportSet(x,c),loads=f.ends.length?f.ends.map(v=>({vertical:v.vertical,offset:v.offset,length:.4*Lbr})):[edge?{vertical:f.vertical,offset:edge,length:.4*Lbr}:{vertical:f.vertical,offset:0}];
+   // The bottom-flange force passes through the bearing bolts: at a continuous runway end, at the bearing's center.
+   const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:f.longitudinal,bottom:f.bottom,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:Math.sign(edge)*Lbr/2};
    const key=[...loads.map(v=>v.vertical),horizontal.longitudinal].join();if(distinct.has(key))continue;distinct.add(key);
    bracket?.observe(e.kind,f.id,x,loads,bin,horizontal);
    existingBracket?.observe(e.kind,f.id,x,loads,bin);
+   capCollector?.observe(e.kind,x,f,bin);
    rolledBracket?.observe(e.kind,f.id,x,loads,bin,horizontal);
   }}
   if(e.kind==='strength'){
@@ -304,7 +316,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     for(const c of concurrent(x)){
      const {id,sign,couple,ends}=c;
      const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple,top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
-     if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);
+     if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);else if(endBearingOffset(x))item.seatMoment=item.vertical*Math.sign(endBearingOffset(x))*Lbr/2;
      if(support>=0)forces.add(support,supportSet(x,c));
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
       const k=`${e.combination}:${x}:${component}:${dir}`,old=interfaceExtremes.get(k);
@@ -351,7 +363,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const deadBounds=detailInputs.map(f=>Math.abs(momentAt(f.x,dead.reactions,[],q))/props.Sx);
   for(const [start,end] of groups){
    const beam=new LateralTorsionBeam({length:end-start,E,G,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
-    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:restrains(flanges.top,x)?brace.stiffness:0,bottom:restrains(flanges.bottom,x)?bottomK(x):0})),
+    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:restrains(flanges.top,x)?topK(x):0,bottom:restrains(flanges.bottom,x)?bottomK(x):0})),
     loads:[],distributedTorque:p.railWeight*p.railEccentricity});
    const deadT=beam.solve();
    detailInputs.forEach((f,i)=>{if(f.x>=start&&f.x<=end){const v=deadT.at(f.x-start);deadBounds[i]+=E*Math.abs(v.curvature)*(cap?p.section.capWidth:p.section.bf)/2+E*Math.abs(v.warpingCurvature)*(cap?.omegaMax??props.h0*p.section.bf/4);}});
@@ -381,6 +393,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   if(bracket)result.bracket=bracket.result;
   if(existingBracket)result.existingBracket=existingBracket.result;
   if(rolledBracket)result.rolledBracket=rolledBracket.result;
+  if(capCollector)result.columnCap=capCollector.finish();
   return result;
  };
  return {observe,finish};

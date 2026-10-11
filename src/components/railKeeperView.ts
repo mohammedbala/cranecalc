@@ -93,10 +93,13 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   const edge=X(recW/2),xd=edge+10;
   sec+=line([X(r.headWidth/2)+2,0],[xd+5,0])+line([edge+2,wTop],[xd+5,wTop])+line([xd,0],[xd,wTop])+[0,wTop].map(y=>line([xd-3,y+2.5],[xd+3,y-2.5])).join('')+text(xd-6,wTop/2,size(depth+pt+(capped?b.capTw:0)),9,'middle',400,-90)+text(xd+8,3,'T.O.R.',7.5)+text(xd+8,wTop+3,'T.O.S.',7.5);
   // Callouts left of the section, in the order of their targets down the section.
-  const productName=r.padSource.split(/[:;]/)[0].trim();
+  // The pad product reads as its name, wrapped to the width of the other callouts so a long entry cannot widen
+  // the callout column past the cell; the rating source stays in the calculation and S-00 materials.
+  const productName=r.padSource.split(/[:;]/)[0].trim(),railLabel=`${size(depth)} RAIL: HEAD ${size(r.headWidth)} X ${size(r.headThickness)},`;
+  const productLines=wrapToWidth(labelCaps(productName),Math.max(160,labelWidth([railLabel,`RAIL PAD ${size(pt)} X ${size(pad?.width??0)}, CONT.:`,`ALLOWABLE COMPRESSION ${format(r.padAllowable,'stress',u,u==='SI'?1:2)}`])),8.5);
   const items:{at:XY;labels:string[];via?:XY[];weld?:boolean}[]=[
-   {at:[X(-r.headWidth/2)+4,X(r.headThickness)*.5],labels:[`${size(depth)} RAIL: HEAD ${size(r.headWidth)} X ${size(r.headThickness)},`,`BASE ${size(r.baseWidth)} X ${size(r.baseThickness)}`]},
-   ...(pad?[{at:[X(-r.baseWidth/2+r.headWidth/4),yBaseBot+X(pt)/2] as XY,via:[[X(-r.baseWidth/2+r.headWidth/4)-10,yBaseTop-12] as XY],labels:[`RAIL PAD ${size(pt)} X ${size(pad.width)}, CONT.:`,productName,`ALLOWABLE COMPRESSION ${format(r.padAllowable,'stress',u,u==='SI'?1:2)}`]}]:[]),
+   {at:[X(-r.headWidth/2)+4,X(r.headThickness)*.5],labels:[railLabel,`BASE ${size(r.baseWidth)} X ${size(r.baseThickness)}`]},
+   ...(pad?[{at:[X(-r.baseWidth/2+r.headWidth/4),yBaseBot+X(pt)/2] as XY,via:[[X(-r.baseWidth/2+r.headWidth/4)-10,yBaseTop-12] as XY],labels:[`RAIL PAD ${size(pt)} X ${size(pad.width)}, CONT.:`,...productLines,`ALLOWABLE COMPRESSION ${format(r.padAllowable,'stress',u,u==='SI'?1:2)}`]}]:[]),
    {at:[X(-K.toe-K.clearance/2),yBaseTop+X(r.baseThickness)*.6],via:[[X(-K.outer)-4,yBaseTop+X(r.baseThickness)*.6]],labels:[`K1 ${size(K.clearance)} CLEAR OF RAIL-BASE TOE (${size(Math.max(K.clearance,Math.abs(p.railEccentricity)-d.criteria.alignmentTolerance))} MAX.),`,`LIP BEARS ${size(K.overlap)}; SHIM, WELD, REMOVE SHIM`]},
    {at:[X(-K.outer-K.weld*.4),ySteel-X(K.weld)*.4],labels:['OUTER FACE, EACH KEEPER'],weld:true},
    {at:[X(-recW/2)+3,capped?ySteel+X(b.capTw):wBot],labels:capped?[`${b.name} GIRDER`,p.capDesign?`CAP ATTACHMENT: SEE ${detailRef(detailTitles.capSection)}`:'CAP ATTACHMENT BY OTHERS']:[`${b.name} GIRDER, PARTIAL`]}

@@ -4,18 +4,20 @@ import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot,Crane} from '../engine/types';
 import {format} from '../engine/units';
 import {craneDesignMinimum,craneCombinations} from '../engine/aistLoads';
+import {deflectionCriteria} from '../engine/aistChecks';
 import {runwayElevations,issueStatus,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
+import {activeColumnCap} from '../engine/columnCapInputs';
 import {drawingLength,drawingElevation,electrodeClass,plateInches} from './drawingFormat';
 import {railPad} from '../engine/railSeat';
 import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
 import {existingLayout} from '../engine/existingLayout';
-import {tieRelease} from '../engine/tieGeometry';
+import {tieRelease,stiffenerTieGeometry,flangeTieGeometry} from '../engine/tieGeometry';
 import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newColumnBracing';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
 
@@ -25,7 +27,9 @@ export interface SheetEntry {number:string;title:string;details?:readonly string
 // The last column stops above the seal and issue labels at the lower right.
 const columnWidth=594,columns=[0,1,2,3].map(i=>14+i*(columnWidth+40)),top=18,limits=[1494,1494,1494,1318];
 /** Symbols and line types used on the sheets, each drawn as it appears with its meaning. */
-function legend(t:Style):Block{
+function legend(t:Style,units:'US'|'SI'):Block{
+ // A sample fillet size as the details print it: 1/4 (inches), or 6 mm.
+ const leg=units==='SI'?'6 mm':'1/4';
  const sample=150,row=Math.max(22,t.leading*2.2);
  const items:[(x:number,y:number)=>string,string][]=[
   [(x,y)=>line([x,y],[x+sample-20,y],'runway-line'),'NEW STEEL, PLATES AND WELDS (SOLID)'],
@@ -35,9 +39,9 @@ function legend(t:Style):Block{
   [(x,y)=>rect(x,y-3,sample-20,6,'rail-line'),'CRANE RAIL'],
   [(x,y)=>bubble(x+12,y,'A',10),'GRID DESIGNATION'],
   [(x,y)=>`${circle(x+14,y,13,'divider')}${line([x+1,y],[x+27,y],'annotation')}${text(x+14,y-3,'1',10,'middle',700)}${text(x+14,y+8.5,'S-02',7,'middle')}`,'DETAIL NUMBER OVER THE SHEET WHERE IT IS DRAWN; REFERENCES READ 1/S-02'],
-  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],false),'FILLET WELD, ARROW SIDE; SIZE LEFT OF THE SYMBOL'],
-  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],true),'FILLET WELD, BOTH SIDES'],
-  [(x,y)=>fieldFilletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],true),'FIELD WELD (FLAG); SHOP WELD U.N.O.'],
+  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],leg,[],false),'FILLET WELD, ARROW SIDE; SIZE LEFT OF THE SYMBOL'],
+  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],leg,[],true),'FILLET WELD, BOTH SIDES'],
+  [(x,y)=>fieldFilletLeader([[x+2,y+8]],[x+22,y+3],leg,[],true),'FIELD WELD (FLAG); SHOP WELD U.N.O.'],
   [(x,y)=>`${line([x,y],[x+40,y])}<path class="leader-arrow" d="M${n(x+40)},${n(y)}l-2.4,-3.2h4.8z"/>${line([x+40,y],[x+50,y-6])}${line([x+50,y-6],[x+56,y-6])}${text(x+60,y-3,'EL.',7.5)}`,'ELEVATION DATUM']
  ];
  const head=heading(t,'SYMBOLS AND LINE TYPES');
@@ -84,7 +88,10 @@ function wheelDiagram(t:Style,c:Crane,o:{force:(v:number)=>string;length:(mm:num
 function flow(blocks:Block[],limit:number,overflow=false){
  const placed:{x:number;y:number;b:Block}[]=[];let column=0,y=top,section:Block|undefined;
  for(let i=0;i<blocks.length;i++){
-  const b=blocks[i],need=b.height+(b.keep&&blocks[i+1]?2.4+blocks[i+1].height:0),bottom=Math.min(limit,limits[column]);
+  // A kept block needs room for the block after it, and a heading over a kept table also for the table's key,
+  // so the heading never stays behind alone; a chain taller than a column falls back to the next block only.
+  const b=blocks[i],next=b.keep?blocks[i+1]:undefined,after=b.continued&&next?.keep?blocks[i+2]:undefined,bottom=Math.min(limit,limits[column]);
+  const pair=b.height+(next?2.4+next.height:0),chain=pair+(after?2.4+after.height:0),need=chain<=Math.min(limit,limits[column])-top?chain:pair;
   if(b.continued)section=b;
   if(y>top&&y+need>bottom&&column<columns.length-1){column++;y=top;if(!b.continued&&section){const c=section.continued!();placed.push({x:columns[column],y,b:c});y+=c.height+2.4;}}
   else if(y>top&&y+need>bottom&&!overflow)return undefined;
@@ -101,7 +108,7 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
  const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} TONNES (${f(N)})`;
  const length=p.spans.reduce((a,b)=>a+b,0),cranes=p.cranes.map(c=>c.design?`${capacity(c.design.ratedLoad)} ${c.design.type} crane`:c.name).join(' and ');
 const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
- const supports=isNew?`new freestanding ${p.existingColumn!.shape||'built-up'} runway columns${d?.bracket?.enabled?' with welded brackets':''}${p.columnBase?.enabled?', base plates, anchor rods and spread footings':''}`:d?.bracket?.enabled?(usesExistingBracket(p)?'existing column brackets with new bolted seats':'new brackets welded to the existing building columns'):p.aist?.supportType==='column'?'independent runway columns':'the building columns';
+ const supports=isNew?`new freestanding ${p.existingColumn!.shape||'built-up'} runway columns${d?.bracket?.enabled?' with welded brackets':activeColumnCap(p)?' with column caps, the girders bearing directly on the columns':''}${p.columnBase?.enabled?', base plates, anchor rods and spread footings':''}`:d?.bracket?.enabled?(usesExistingBracket(p)?'existing column brackets with new bolted seats':'new brackets welded to the existing building columns'):p.aist?.supportType==='column'?'independent runway columns':'the building columns';
  const scope=`Furnish and install one crane runway line, ${len(length)} long in ${p.spans.length} ${p.system==='continuous'?'continuous':'simple'} span${p.spans.length>1?'s':''}, for ${cranes}: ${p.section.name}${p.section.kind==='cap'?' capped':''} runway girders, rail, rail attachments, end stops and connections, supported on ${supports}.${isNew?' The new columns carry only the crane and runway; the existing building carries no crane load.':p.existingColumn?.enabled?' The existing column receiving the runway is checked for the added crane reactions.':''}${p.longitudinalBracing?.enabled?(designsBracing(p)?' The new crane-level rod X-bracing, its strut, gussets, pins and the braced columns and footings are designed for crane traction, stop and seismic forces along the runway.':` The ${isNew?'new':'existing'} crane-level longitudinal bracing is checked for crane traction and stop forces.`):''} The opposite runway is identical unless noted.`;
  const build=(t:Style)=>{
  const H=(v:string)=>heading(t,v),N=(v:string[])=>numbered(t,v),P=(v:string)=>paragraph(t,v),T=(h:string[],r:string[][],w:number[])=>table(t,h,r,w);
@@ -135,6 +142,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   d.fabrication.railAlignment,
   'SURVEY RAIL ALIGNMENT, GAUGE AND ELEVATION AFTER ERECTION AND BEFORE THE LOAD TEST; SUBMIT THE SURVEY.',
   ...(activeEndStop(p)?[`INSTALL THE RUNWAY END STOPS (${detailRef(detailTitles.endStop)}) AT ${stopLocation(p).toUpperCase()} BEFORE THE CRANE IS OPERATED OR LOAD TESTED.`]:[]),
+  // The flexible plate tie works only while it can flex: no forced fit, no welds or stiffeners on its clear length.
+  ...(flangeTieGeometry(p)?.plies===1?[`FLEXIBLE PLATE TIES (${detailRef(detailTitles.flangeTie)}): BOLT THE PLATE WITHOUT JACKING, HEATING OR SHIMMING TO FORCE FIT; DO NOT WELD, DRILL OR STIFFEN IT BETWEEN ITS BOLT GROUPS. INSPECT THE PLATE AND ITS BOLTS AT THE CRANE INSPECTION INTERVALS.`]:[]),
   'LOAD TEST THE CRANE PER ASME B30.2 AND THE MANUFACTURER. THE TEST LOAD SHALL NOT EXCEED 125% OF THE RATED LOAD; COORDINATE ANY TEST LOAD ABOVE THE RATED LOAD WITH THE ENGINEER OF RECORD BEFORE TESTING.'
  ].map(v=>v.toUpperCase())));
  // Column 2: criteria.
@@ -177,13 +186,13 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
    lateral:Math.max(c.wheels.reduce((a,w)=>a+w.lateral,0),m.runwaySide),traction:Math.max(c.longitudinal,m.traction),bumper:dd?.bumperForce||undefined}));
  }
  const a=p.aist,vertical=s.checks.find(c=>c.id==='vertical'),lateral=s.checks.find(c=>c.id==='lateral'),shortest=Math.min(...p.spans);
- const ratio=(c:typeof vertical)=>c?.capacity?`L/${Math.round(shortest/c.capacity)}`:'-';
+ const criteria=deflectionCriteria(p),ratio=(c:typeof vertical,n:number)=>c?`L/${n}`:'-';
  blocks.push(H('DESIGN CRITERIA · RUNWAY'),T(['ITEM','VALUE'],[
   ['RUNWAY GIRDER',`${p.section.name}${p.section.kind==='cap'?' (CAPPED)':''}, Fy = ${ksi(p.section.Fy)}`],
   ['SPANS',`${p.spans.map(len).join(' + ')} ${p.system==='continuous'?'CONTINUOUS':'SIMPLE SPANS'}`],
   ['DESIGN METHOD',`${p.method}; RUNWAY: AIST TR-13 §3.10; BUILDING CHECKS: ASCE 7 §2.3/§2.4`],
   ['AIST BUILDING CLASS',a?`CLASS ${a.buildingClass} FOR ${a.buildingCycles.toLocaleString()} OWNER FULL-LOAD REPETITIONS`:'-'],
-  ['VERTICAL / LATERAL DEFLECTION',`${ratio(vertical)} / ${ratio(lateral)} (ONE CRANE, NO IMPACT)`],
+  ['VERTICAL / LATERAL DEFLECTION',`${ratio(vertical,criteria.nv)} / ${ratio(lateral,criteria.nh)} OF EACH BAY (ONE CRANE, NO IMPACT)`],
   ['FATIGUE SPECTRUM',d?(()=>{const rated=d.spectrum.filter(b=>b.liftFraction>=1).reduce((sum,b)=>sum+b.cycles,0),perPass=a&&a.buildingCycles>0?rated/a.buildingCycles:0;
    // The rated-lift bin relates to the owner's full-load repetitions by the stress cycles per crane pass.
    return `${d.spectrum.reduce((sum,b)=>sum+b.cycles,0).toLocaleString()} STRESS CYCLES AT EACH DETAIL IN ${d.spectrum.length} DUTY BINS (${rated.toLocaleString()} AT RATED LIFT${perPass>0?`: ${Number(perPass.toFixed(2))} STRESS CYCLE${perPass===1?'':'S'} PER FULL-LOAD REPETITION`:''})`;})():`${p.fatigue.cycles.toLocaleString()} CYCLES, CATEGORY ${p.fatigue.category}`],
@@ -226,13 +235,15 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  if(d)blocks.push(H('MATERIAL NOTES'),...N([`STEEL: ${d.fabrication.steel}`,`BOLTING: ${d.fabrication.bolting}`,`WELDING: ${d.fabrication.welding}`]));
  // AISC 360 Chapter N assigns steel tasks to observe (O) or perform (P); IBC Table 1705.3 rates concrete
  // tasks continuous (C) or periodic (P).
+ // CJP joints in the set: capped-girder bearing stiffeners to the W top flange, and the paired-bar tie gusset to its stiffener.
+ const cjpWelds=!!d&&(p.section.kind==='cap'||!!stiffenerTieGeometry(p));
  const fieldWelds=!!d&&supportColumn(p).field&&(!!d.brace.flangeAttachment?.enabled||!!d.bracket?.enabled);
  blocks.push(H('SPECIAL INSPECTIONS (IBC 1704, 1705 / AISC 360 CHAPTER N)'),T(['ITEM','REQUIREMENT','FREQ.'],[
   ['STATEMENT','STATEMENT OF SPECIAL INSPECTIONS BY THE ENGINEER OF RECORD (IBC 1704.3); APPROVED AGENCY RETAINED BY THE OWNER (IBC 1704.2)','-'],
   ['FABRICATOR','AISC-CERTIFIED FABRICATOR, OR SHOP INSPECTION BY THE APPROVED AGENCY (IBC 1704.2.5)','-'],
   ['MATERIAL','MILL CERTIFICATES: STEEL, BOLTS, NUTS, WASHERS, WELD FILLER','P'],
   ['WELDING','AISC N5.4 TASKS BEFORE, DURING AND AFTER WELDING; QUALIFIED WPS AND WELDERS','O / P'],
-  ['NDT','UT ALL CJP GROOVE WELDS; MT FILLETS ON CYCLIC DETAILS AS NOTED','P'],
+  ['NDT',`${cjpWelds?'UT ALL CJP GROOVE WELDS; ':''}MT FILLETS ON CYCLIC DETAILS AS NOTED`,'P'],
   ['BOLTING',`AISC N5.6 TASKS; PRETENSION VERIFICATION PER RCSC; FAYING SURFACE CLASS${d&&(tieRelease(p)||activeEndBearing(p))?'; SLEEVE LENGTHS AND SLOT TRAVEL AT SLEEVED BOLTS':''}`,'O / P'],
   ...(p.existingColumn?.isNew&&p.existingColumn.enabled?[]:[['EXISTING STEEL','FIELD-VERIFY SIZES, CONDITION AND WELDABILITY BEFORE WORK','P']]),
   ...(fieldWelds?[['FIELD WELDS TO EXISTING STEEL','CARBON EQUIVALENT AND PREHEAT PER THE APPROVED WPS; VISUAL AND MT OF EVERY FIELD WELD TO EXISTING STEEL','P']]:[]),
@@ -256,7 +267,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   'CRANE, END TRUCKS, CRANE-MOUNTED BUMPERS, CONDUCTOR BARS AND ELECTRIFICATION: CRANE SUPPLIER.',
   ...(bypass?['BUILDING-MOUNTED CRANE END STOPS AND THEIR SUPPORT FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
-  ...(!d?.bracket?.enabled?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${len(support.capacity)} MAX.`:'.'}`]:[]),
+  ...(!d?.bracket?.enabled&&!activeColumnCap(p)?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${len(support.capacity)} MAX.`:'.'}`]:[]),
   ...(p.system==='simple'&&d&&!activeEndBearing(p)?[`COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (${detailRef(detailTitles.movement)}) FOR THE LONGITUDINAL, LATERAL AND UPLIFT FORCES IN THE ${bracketForcesAt(s,'cover','ON THIS SHEET')}.`]:[]),
   ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`)
  ];
@@ -269,7 +280,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
    P(`${checked.length?`THE CALCULATION REPORT CHECKS ${checked.join(', ').replace(/, ([^,]*)$/,' AND $1')} FOR THE ADDED CRANE LOADS. `:''}THE ENGINEER OF RECORD SHALL EVALUATE THE FOLLOWING FOR THE FORCES IN THE CALCULATION REPORT AND INCLUDE THE EVALUATION IN THE PERMIT SUBMITTAL; THEY ARE NOT DEFERRED SUBMITTALS. EVALUATION: ${reference?reference.toUpperCase():'NOT REFERENCED; THE SET IS NOT ISSUED UNTIL IT IS'}.`),
    ...N(unchecked.map(c=>c.title.toUpperCase()+'.')));
  }
- blocks.push(legend(t));
+ blocks.push(legend(t,p.units));
  blocks.push(H('ABBREVIATIONS'),P('(E) EXISTING · (N) NEW · C/L CENTERLINE · EL. ELEVATION · T.O.S. TOP OF STEEL · T.O.R. TOP OF RAIL · TYP. TYPICAL · U.N.O. UNLESS NOTED OTHERWISE · SC SLIP-CRITICAL · STD STANDARD HOLE · SSL / LSL SHORT / LONG SLOT · CJP COMPLETE JOINT PENETRATION · FW FIELD WELD · REF. REFERENCE (EXISTING OR BY OTHERS)'));
  blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} CALCULATION REVISION ${s.revision}.`));
  return blocks;};

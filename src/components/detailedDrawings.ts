@@ -5,7 +5,8 @@ import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {connectionOptionChecks} from '../engine/connectionOptions';
-import {flangeTieGeometry} from '../engine/tieGeometry';
+import {ribGeometry} from '../engine/bracketRib';
+import {flangeTieGeometry,tiePlies} from '../engine/tieGeometry';
 import {bearingStiffenerProfile} from './bearingStiffenerGeometry';
 import { Draft, type CadDrawing } from './drafting';
 import { boltProperties } from '../engine/connectionStrength';
@@ -51,16 +52,18 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   const notes=[`4 ${eb.bolts.grade} bolts each ${p.system==='continuous'?'support':'end'}, diameter ${f(eb.bolts.diameter)}; gauge ${f(eb.bolts.gauge)}`,`Locating: ${f(g.hole)} standard holes in all plies; pretensioned, Class B (SC)`,`Sliding: ${f(g.slotWidth)} x ${f(g.slot)} slots in the girder flange`,`Sliding allowance ${f(g.travel)} each way; ${g.sleeve?`bolts pretensioned against ${f(g.sleeve.od)} OD steel sleeves`:'snug-tight bolts with jam nuts'}`,`Plate washers ${f(eb.washerThickness)} x ${f(g.washer.width)} x ${f(g.washer.length)}`,`Bolt rows ${f(eb.bolts.edge)} from each bearing plate end, clear of the stiffeners`];
   notes.forEach((n,i)=>dr.text(110,330+24*i,n,10));output.push(dr.drawing);
  }
- for(const [key,c,title,number,central] of [...(eb?[]:[['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw]] as const),['tie',d.brace.connection,'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const){
- const w=c.gauge+2*c.edge,h=(c.rows-1)*c.pitch+2*c.edge,k=Math.min(240/w,230/h),x=125,y=90,dr=new Draft(s,`${key}-connection-detail`,title,number,500,1/k,'In-plane force template. Two cover plates; standard holes. Out-of-plane forces/prying require another model.');
+ // A flexible plate tie laps one face of each gusset: one ply in single shear, with the lap couple, bolt tension and prying checked.
+ const single=tiePlies(p)===1;
+ for(const [key,c,title,number,central] of [...(eb?[]:[['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw]] as const),['tie',d.brace.connection,single?'Flexible plate tie / single-shear lap connection':'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const){
+ const one=key==='tie'&&single,w=c.gauge+2*c.edge,h=(c.rows-1)*c.pitch+2*c.edge,k=Math.min(240/w,230/h),x=125,y=90,dr=new Draft(s,`${key}-connection-detail`,title,number,500,1/k,one?'One flexible plate on one gusset face; standard holes, pretensioned. Lap couple, bolt tension with prying and slip are checked.':'In-plane force template. Two cover plates; standard holes. Out-of-plane forces/prying require another model.');
  dr.rect(x,y,w*k,h*k);const hole=boltProperties(c.grade,c.diameter).hole;
  for(let row=0;row<c.rows;row++)for(let col=0;col<2;col++){const bx=x+(c.edge+col*c.gauge)*k,by=y+(c.edge+row*c.pitch)*k;dr.circle(bx,by,hole*k/2);dr.line(bx-8,by,bx+8,by,'CENTER');dr.line(bx,by-8,bx,by+8,'CENTER');}
  dr.dimH(x,x+w*k,y+h*k,360,`PLATE WIDTH ${f(w)}`);dr.dimV(y,y+h*k,x,85,`HEIGHT ${f(h)}`);dr.dimH(x+c.edge*k,x+(c.edge+c.gauge)*k,y,62,`GAUGE ${f(c.gauge)}`);
- const notes=[`${2*c.rows} ${c.grade} bolts, diameter ${f(c.diameter)}; hole ${f(hole)}`,`Two cover plates, each ${f(c.thickness)}; central ply ${f(central)}`,`Rows at ${f(c.pitch)}; all plate-edge distances ${f(c.edge)}`,`Class ${c.surface} faying surfaces; two slip/shear planes`,`Load-line to weld eccentricity: ${f(c.projection)}`,`Two effective root fillets: ${f(c.weldSize)} x ${f(c.weldLength)}`,key==='tie'?`Two tie bars per flange: ${f(d.brace.width)} x ${f(d.brace.thickness)}`:'Full reaction plus longitudinal force checked conservatively',key==='tie'?`Bar length ${f(d.brace.length)}; lateral reach ${f(d.brace.reach)}`:'Bearing carries gravity; end covers also provide uplift restraint',key==='tie'?`Unbraced central gusset length ${f(d.brace.connectionLength)}`:`Provide ${f(d.criteria.rotationClearance)} clearance for simple-end rotation`];
+ const notes=[`${2*c.rows} ${c.grade} bolts, diameter ${f(c.diameter)}; hole ${f(hole)}`,one?`One flexible plate ${f(d.brace.thickness)} on one face of a ${f(central)} gusset`:`Two cover plates, each ${f(c.thickness)}; central ply ${f(central)}`,`Rows at ${f(c.pitch)}; all plate-edge distances ${f(c.edge)}`,`Class ${c.surface} faying surfaces; ${one?'one slip/shear plane':'two slip/shear planes'}`,`Load-line to weld eccentricity: ${f(c.projection)}`,`Two effective root fillets: ${f(c.weldSize)} x ${f(c.weldLength)}`,key==='tie'?one?`One flexible plate per tied flange: ${f(d.brace.width)} x ${f(d.brace.thickness)}`:`Two tie bars per flange: ${f(d.brace.width)} x ${f(d.brace.thickness)}`:'Full reaction plus longitudinal force checked conservatively',key==='tie'?`${one?'Plate':'Bar'} length ${f(d.brace.length)}; lateral reach ${f(d.brace.reach)}`:'Bearing carries gravity; end covers also provide uplift restraint',key==='tie'?`Unbraced ${one?'girder':'central'} gusset length ${f(d.brace.connectionLength)}`:`Provide ${f(d.criteria.rotationClearance)} clearance for simple-end rotation`];
  notes.forEach((n,i)=>dr.text(465,85+28*i,n,10));
  if(key==='tie')dr.text(465,345,supportColumn(p).isNew?`COLUMN-SIDE ROOT: SHOP WELD TO ${supportColumn(p).name} / ${sheets('connection','flange-tie')}`:`COLUMN-SIDE ROOT: FIELD WELD TO EXISTING STEEL / ${sheets('connection','flange-tie')}`,9);
  // Actual ply thicknesses in a separated orthographic section.
- let px=125;for(const t of [c.thickness,central,c.thickness]){dr.rect(px,395,90,t*k);px+=110;}dr.text(125,387,'SEPARATED PLY SECTION / THICKNESSES TO SCALE',9);output.push(dr.drawing);
+ let px=125;for(const t of one?[d.brace.thickness,central]:[c.thickness,central,c.thickness]){dr.rect(px,395,90,t*k);px+=110;}dr.text(125,387,'SEPARATED PLY SECTION / THICKNESSES TO SCALE',9);output.push(dr.drawing);
  }
  {
  const r=d.rail,k=1.25,depth=p.aist!.railDepth,dr=new Draft(s,'rail-detail','Sliding rail keepers / bolted expansion joint','SK-07',620,1/k,'Idealized rail without fillets. Pad rating per entered supplier basis. Rail wheel-contact wear/hardness is a supplier selection item.');
@@ -135,13 +138,15 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   output.push(dr.drawing);
  }
  if(d.bracket?.enabled&&!usesExistingBracket(p)&&!usesRolledBracket(p)){
-  const b=d.bracket,k=Math.min(270/b.seatProjection,250/b.ribDepth),dr=new Draft(s,'welded-column-bracket','Welded gravity bracket / two rectangular ribs','SK-10',560,1/k,`AISC F11, J2, J4, J10 and Appendix 3 / Reference AIST Technical Report 13 5.9.2 / see ${sheets('bracket')}.`);
+  const b=d.bracket,rg=ribGeometry(b),k=Math.min(270/b.seatProjection,250/b.ribDepth),dr=new Draft(s,'welded-column-bracket',rg.tapered?'Welded gravity bracket / two haunched ribs':'Welded gravity bracket / two rectangular ribs','SK-10',560,1/k,`AISC F11, J2, J4, J10 and Appendix 3 / Reference AIST Technical Report 13 5.9.2 / see ${sheets('bracket')}.`);
   const face=365,top=100,tip=face-b.seatProjection*k,root=top+b.seatThickness*k,bot=root+b.ribDepth*k;
-  dr.rect(face,75,b.receiver.flangeThickness*k,bot-50,'HIDDEN');dr.rect(tip,top,b.seatProjection*k,b.seatThickness*k);dr.rect(tip,root,b.seatProjection*k,b.ribDepth*k);
-  dr.dimH(tip,face,bot,bot+36,f(b.seatProjection));dr.dimV(root,bot,tip,tip-28,f(b.ribDepth));
+  dr.rect(face,75,b.receiver.flangeThickness*k,bot-50,'HIDDEN');dr.rect(tip,top,b.seatProjection*k,b.seatThickness*k);
+  if(rg.tapered){dr.poly([[tip,root],[face,root],[face,bot],[tip,root+rg.tip*k]],true);dr.dimH(tip,face,bot,bot+36,f(b.seatProjection));dr.dimV(root,root+rg.tip*k,tip,tip-28,f(rg.tip));dr.dimV(root,bot,tip,tip-56,f(b.ribDepth));dr.line(face-2,bot,tip,bot,'DIMENSION');}
+  else{dr.rect(tip,root,b.seatProjection*k,b.ribDepth*k);
+  dr.dimH(tip,face,bot,bot+36,f(b.seatProjection));dr.dimV(root,bot,tip,tip-28,f(b.ribDepth));}
   dr.dimH(face-b.reach*k,face,top,60,f(b.reach));
-  [`SEAT PL ${f(b.seatThickness)} X ${f(b.seatLength)} X ${f(b.seatProjection)}`,`2 RECTANGULAR RIBS ${f(b.ribThickness)} X ${f(b.ribDepth)}`,`RIB CENTERS ${f(b.ribSpacing)}`,`SEAT FILLETS ${f(b.seatWeld).replaceAll('"','')} / BOTH SIDES / FULL PROJECTION`,'HORIZONTAL LOADS: SEPARATE COLUMN ATTACHMENTS','KEEP SLIDING GIRDER BEARINGS FREE','GLOBAL COLUMN / FRAME / FOUNDATIONS: SEPARATE'].forEach((v,i)=>dr.text(485,100+i*29,v,10));
-  dr.fieldFilletLeader(face,root+b.ribDepth*k*.55,485,337,f(b.rootWeld),[`${supportColumn(p).weld} RIBS TO ${supportColumn(p).name}`,'CONT. FULL DEPTH / BOTH SIDES'],true,supportColumn(p).field);
+  [`SEAT PL ${f(b.seatThickness)} X ${f(b.seatLength)} X ${f(b.seatProjection)}`,rg.tapered?`2 HAUNCHED RIBS ${f(b.ribThickness)}, ${f(rg.root)} ROOT TO ${f(rg.tip)} TIP`:`2 RECTANGULAR RIBS ${f(b.ribThickness)} X ${f(b.ribDepth)}`,`RIB CENTERS ${f(b.ribSpacing)}`,`SEAT FILLETS ${f(b.seatWeld).replaceAll('"','')} / BOTH SIDES / FULL PROJECTION`,'HORIZONTAL LOADS: SEPARATE COLUMN ATTACHMENTS','KEEP SLIDING GIRDER BEARINGS FREE','GLOBAL COLUMN / FRAME / FOUNDATIONS: SEPARATE'].forEach((v,i)=>dr.text(485,100+i*29,v,10));
+  dr.fieldFilletLeader(face,root+b.ribDepth*k*.55,485,337,f(b.rootWeld),[`${supportColumn(p).weld} RIBS TO ${supportColumn(p).name}`,rg.tapered?'CONT. FULL ROOT DEPTH / BOTH SIDES':'CONT. FULL DEPTH / BOTH SIDES'],true,supportColumn(p).field);
   output.push(dr.drawing);
  }
  const tie=flangeTieGeometry(p);
@@ -163,7 +168,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   for(const offset of [0,t.length-tie.connection])for(let row=0;row<c.rows;row++)for(const sign of [-1,1])dr.circle(X(tie.start+offset+c.edge+row*c.pitch),Y(tie.topDrop+sign*c.gauge/2),boltProperties(c.grade,c.diameter).hole*k/2);
   dr.dimH(X(tie.start),X(tie.barEnd),Y(tie.topDrop+t.width/2),360,f(t.length));
   dr.dimV(Y(tie.topDrop-t.width/2),Y(tie.topDrop+t.width/2),X(tie.face),X(tie.face)+30,f(t.width));
-  const notes=[`2 FL ${f(t.thickness)} X ${f(t.width)} / ${f(t.length)} LONG`, `CENTRAL GUSSETS ${f(t.gussetThickness)}`,`SADDLE PL ${f(a.saddleThickness)} X ${f(a.saddleLength)} X ${f(tie.rootLength)}`,`SADDLE TO FLANGE: ${f(a.weldSize).replaceAll('"','')} TRANSVERSE END FILLET EACH END X ${f(tie.endWeldLength)}`,`GUSSET TO SADDLE: ${f(a.weldSize).replaceAll('"','')} FILLETS BOTH FACES X ${f(tie.rootLength)}`,`${2*c.rows} - ${f(c.diameter)} ${c.grade} EACH END`, `TIE SETBACK ${f(a.longitudinalSetback)} FROM BEARING CENTER`,`CLEAR CAP AND ROOT BY ${f(a.clearance)} MINIMUM`, 'NO HOLES OR CUTS THROUGH CAP / W FLANGES',`BOTTOM TIE AT SAME SADDLE OFFSET / SEE ${sheets('flange-tie')}`];
+  const notes=[single?`FLEXIBLE PL ${f(t.thickness)} X ${f(t.width)} / ${f(t.length)} LONG, SINGLE SHEAR`:`2 FL ${f(t.thickness)} X ${f(t.width)} / ${f(t.length)} LONG`, single?`GUSSETS ${f(t.gussetThickness)}; PLATE ON THE FACE TOWARD THE GIRDER END`:`CENTRAL GUSSETS ${f(t.gussetThickness)}`,`SADDLE PL ${f(a.saddleThickness)} X ${f(a.saddleLength)} X ${f(tie.rootLength)}`,`SADDLE TO FLANGE: ${f(a.weldSize).replaceAll('"','')} TRANSVERSE END FILLET EACH END X ${f(tie.endWeldLength)}`,`GUSSET TO SADDLE: ${f(a.weldSize).replaceAll('"','')} FILLETS BOTH FACES X ${f(tie.rootLength)}`,`${2*c.rows} - ${f(c.diameter)} ${c.grade} EACH END`, `TIE SETBACK ${f(a.longitudinalSetback)} FROM BEARING CENTER`,`CLEAR CAP AND ROOT BY ${f(a.clearance)} MINIMUM`, 'NO HOLES OR CUTS THROUGH CAP / W FLANGES',`BOTTOM TIE AT SAME SADDLE OFFSET / SEE ${sheets('flange-tie')}`];
   notes.forEach((v,i)=>dr.text(545,95+i*29,v,9));
   dr.fieldFilletLeader(X(tie.face),Y(tie.topDrop),545,385,f(c.weldSize),[`${supportColumn(p).weld} GUSSET TO ${supportColumn(p).name}`,`TWO CONT. LINES X ${f(tie.columnGusset)}`],true,supportColumn(p).field);output.push(dr.drawing);
  }

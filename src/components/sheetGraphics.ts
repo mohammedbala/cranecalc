@@ -182,7 +182,7 @@ export const detailTitles={
  * each end in the viewing direction and the section's detail/sheet reference beside the arrow. `a` and
  * `b` are the ends of the cut across the parent view; `look` is the viewing direction.
  */
-export function sectionCut(a:XY,b:XY,look:XY,title:string,ends:('a'|'b')[]=['a','b'],label:'tail'|'tip'='tail'){
+export function sectionCut(a:XY,b:XY,look:XY,title:string,ends:('a'|'b')[]=['a','b'],label:'tail'|'tip'|'over'='tail'){
  const L=Math.hypot(b[0]-a[0],b[1]-a[1]),t:XY=[(b[0]-a[0])/L,(b[1]-a[1])/L],lv=Math.hypot(look[0],look[1]),v:XY=[look[0]/lv,look[1]/lv],nx=-v[1],ny=v[0];
  const across=Math.abs(t[1])>Math.abs(t[0]),reach=label==='tip'?8:14;
  let svg=`<g data-section-cut="${esc(title)}">`;
@@ -192,7 +192,9 @@ export function sectionCut(a:XY,b:XY,look:XY,title:string,ends:('a'|'b')[]=['a',
   svg+=`<path class="leader-arrow" d="M${n(tip[0])},${n(tip[1])}L${n(base[0]+nx*2.2)},${n(base[1]+ny*2.2)}L${n(base[0]-nx*2.2)},${n(base[1]-ny*2.2)}Z"/>`;
   // The reference reads beyond the arrow tip, or beyond the cut line on the side away from the arrow.
   // Beyond the tip; on a cut across the view the reference reads outward from the cut end, clear of the part it cuts.
-  if(label==='tip')svg+=across?text(tip[0]+v[0]*3,tip[1]+v[1]*3+3,detailRef(title),8,v[0]>0?'start':'end',700)
+  // Over the arrow leg, ending at the cut line: clear of extension lines that run beside the cut end.
+  if(label==='over'&&across)svg+=text(o[0]-Math.sign(v[0])*3,o[1]-4,detailRef(title),8,v[0]<0?'end':'start',700);
+  else if(label==='tip')svg+=across?text(tip[0]+v[0]*3,tip[1]+v[1]*3+3,detailRef(title),8,v[0]>0?'start':'end',700)
    :text(tip[0]-s*4,tip[1]+v[1]*3+(v[1]>0?9:-2),detailRef(title),8,s<0?'end':'start',700);
   else{const q:XY=[o[0]+s*t[0]*4-v[0]*4,o[1]+s*t[1]*4-v[1]*4];svg+=text(q[0],q[1]+(across?(s>0?9:0):(s>0?3:-1)),detailRef(title),8,across?(v[0]>0?'end':'start'):'middle',700);}
  }

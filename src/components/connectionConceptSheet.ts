@@ -89,7 +89,7 @@ export function connectionConceptSheetSvg(s:CalculationSnapshot){
   svg+=multiLeader([tieElevation.project(new THREE.Vector3(xc,(at.top-at.boltLevel)/1000,face-(at.shimThickness+at.thickness)/1000))],[988,516],['HORIZONTAL SLOTS / X',`${plateInches(at.slotLength,p.units)} LONG`, 'PLATE WASHERS']);
   svg+=text(645,654,'SLOTS, BOLTS, PRYING, COLUMN EFFECTS, MOVEMENT AND FATIGUE: DESIGN REQUIRED.',8);
   svg+=text(645,668,'SUPPLIED FIGURE 14 INSPIRED; CAP / PAIRED-ANGLE VARIATIONS REQUIRE REVIEW.',8);
- }else svg+=fieldFilletLeader([plan.project(tieRoot)],[409,530],tie.id==='paired-bars'?plateInches(d.brace.connection.weldSize,p.units):'',['FIELD WELD TO EXISTING COLUMN',tie.id==='paired-bars'?'BOTH SIDES OF COLUMN GUSSET':'SIZE / EXTENT BY CONNECTION DESIGN'],tie.id==='paired-bars');
+ }else{const sized=tie.id==='paired-bars'||tie.id==='flexible-plate';svg+=fieldFilletLeader([plan.project(tieRoot)],[409,530],sized?plateInches(d.brace.connection.weldSize,p.units):'',['FIELD WELD TO EXISTING COLUMN',sized?'BOTH SIDES OF COLUMN GUSSET':'SIZE / EXTENT BY CONNECTION DESIGN'],sized);}
  svg+=viewTitle(315,615,tie.name.toUpperCase()+' / PLAN',plan.label,concept);
  if(isAngleTie(tie.id)&&!topAngle){
   const a=angleTie(d);svg+=text(315,644,`${a.paired?'2 - ':''}${a.shape?.name??'VERIFY ANGLE'} / VERTICAL LEG TO GUSSET`,9,'middle');

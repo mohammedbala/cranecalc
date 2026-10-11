@@ -1,6 +1,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {leastBearing,sideReactions,type SupportForceEnvelope,type SupportForceSet} from '../engine/bracketForces';
 import {activeEndBearing} from '../engine/endBearingInputs';
+import {activeColumnCap} from '../engine/columnCapInputs';
 import {craneCombinations} from '../engine/aistLoads';
 import {toDisplay,unit} from '../engine/units';
 import {heading,paragraph,table,type Block,type Style} from './noteBlocks';
@@ -10,12 +11,15 @@ import {sheetRef} from './sheetGraphics';
  * Details whose notes carry the bracket design force table: the bracket details, else the independent
  * supports. A continuous runway on brackets by others has neither, and the cover carries the table.
  */
-export function bracketForceTopic(s:CalculationSnapshot):'bracket'|'support'|undefined{
+export function bracketForceTopic(s:CalculationSnapshot):'bracket'|'support'|'column-cap'|undefined{
  const p=s.input;if(!p.details)return undefined;
+ if(activeColumnCap(p))return 'column-cap';
  return p.details.bracket?.enabled?'bracket':p.system==='simple'?'support':undefined;
 }
+/** Name of the support design force table: column cap or bracket. */
+export const forceTableName=(s:CalculationSnapshot)=>activeColumnCap(s.input)?'COLUMN CAP DESIGN FORCES':'BRACKET DESIGN FORCES';
 /** Reference from the details of `from` to the bracket design force table. */
-export function bracketForcesAt(s:CalculationSnapshot,from:'bracket'|'support'|'cover',here='BELOW'){const k=bracketForceTopic(s)??'cover';return k===from?`BRACKET DESIGN FORCES ${here}`:`BRACKET DESIGN FORCES ON ${k==='cover'?'S-00':sheetRef(k)}`;}
+export function bracketForcesAt(s:CalculationSnapshot,from:'bracket'|'support'|'column-cap'|'cover',here='BELOW'){const k=bracketForceTopic(s)??'cover',name=forceTableName(s);return k===from?`${name} ${here}`:`${name} ON ${k==='cover'?'S-00':sheetRef(k)}`;}
 const near=(a:number,b:number)=>Math.abs(a-b)<=1e-6*Math.max(Math.abs(a),Math.abs(b),1);
 const sameOrBoth=(a:number|undefined,b:number|undefined)=>a===undefined?b===undefined:b!==undefined&&near(a,b);
 /** One row of the bracket design force table: a whole concurrent set, and the criteria it governs. */
@@ -100,11 +104,13 @@ const combination=(f:SupportForceSet)=>f.combination.replace(/^(LRFD|ASD) /,'');
 /** Factored bracket design force envelope for the drawings: one consistent table wherever bracket forces appear. */
 export function bracketForceBlocks(s:CalculationSnapshot,t:Style):Block[]{
  const p=s.input,u=p.units,simple=p.system==='simple',grids=bracketForceCases(s);
- const title=heading(t,`BRACKET DESIGN FORCES / FACTORED ${p.method} ENVELOPE`);
+ const cap=!!activeColumnCap(p),title=heading(t,`${forceTableName(s)} / FACTORED ${p.method} ENVELOPE`);
  if(!grids.length)return [title,paragraph(t,'PENDING CALCULATION.')];
+ // A continuous girder's runway-end bearings sit inboard of their grids: a seat moment column when any acts.
+ const moments=!simple&&grids.some(g=>g.cases.some(c=>Math.abs(c.force.moment)>=1));
  const rows=grids.flatMap(({grid,cases})=>cases.map((c,i)=>{
   const v=bracketForceCells(c.force,c.mirrored,u),head=[i?'':String(grid),c.label,combination(c.force),v.vertical];
-  return simple?[...head,v.left,v.right,v.moment,v.longitudinal,v.top,v.bottom]:[...head,v.longitudinal,v.top,v.bottom];
+  return simple?[...head,v.left,v.right,v.moment,v.longitudinal,v.top,v.bottom]:[...head,...(moments?[v.moment]:[]),v.longitudinal,v.top,v.bottom];
  }));
  const stops=new Set(craneCombinations(p.method).filter(c=>c.bumper>0).map(c=>`${p.method} ${c.id}`));
  const envelopes=grids.map(g=>g.envelope),uplift=envelopes.some(hasUplift),bolted=activeEndBearing(p);
@@ -113,8 +119,8 @@ export function bracketForceBlocks(s:CalculationSnapshot,t:Style):Block[]{
  const interior=simple&&grids.some(g=>g.cases.some(c=>c.label.includes('END V'))),mirrored=grids.some(g=>g.cases.some(c=>c.mirrored));
  return [title,
   // Column widths in proportion to the widest values, so each value stays on one line.
-  simple?table(t,['GRID','CASE','COMB.','V','LEFT V','RIGHT V','SEAT M','LONG.','H TOP','H BOT.'],rows,[.65,1.89,.81,1,1,1,1.38,1,1.01,.95]):table(t,['GRID','CASE','COMB.','V','LONG.','H TOP','H BOT.'],rows,[.65,1.89,.81,1,1,1.01,.95]),
+  simple?table(t,['GRID','CASE','COMB.','V','LEFT V','RIGHT V','SEAT M','LONG.','H TOP','H BOT.'],rows,[.65,1.89,.81,1,1,1,1.38,1,1.01,.95]):table(t,['GRID','CASE','COMB.','V',...(moments?['SEAT M']:[]),'LONG.','H TOP','H BOT.'],rows,[.65,1.89,.81,1,...(moments?[1.38]:[]),1,1.01,.95]),
   // One note, as short as the two tables it replaced, so the notes column keeps its text size.
-  paragraph(t,`${p.method} FACTORED, AIST TR-13 COMBINATION NUMBERS PER S-00; ENVELOPE OF ALL CRANE POSITIONS. EACH ROW IS ONE CONCURRENT CASE, ITS FORCES ACTING TOGETHER; DO NOT COMBINE ROWS. V: GIRDER REACTIONS ON THE SEAT, DOWNWARD POSITIVE, BRACKET SELF-WEIGHT EXCLUDED${simple?`; LEFT / RIGHT V: GIRDER END ON THE LOWER / HIGHER GRID SIDE. SEAT M = ΣV × e ABOUT THE GRID, e TO EACH REACTION AT 0.8 OF THE BEARING LENGTH FROM ITS GIRDER END${mirrored?'; ±: ALSO WITH LEFT AND RIGHT V EXCHANGED':''}`:'; CONTINUOUS GIRDER BEARING CENTERED ON THE GRID'}. MIN V: LEAST TOTAL V${interior?'; END V: LEAST GIRDER END REACTION':''}${uplift?'; NEGATIVE IS UPLIFT':'; NO UPLIFT'}. LONG.: ${simple?'AT THE LOCATING BEARING OF EACH BAY, AT ITS LOWER-NUMBERED GRID; NONE AT A SLIDING END':locating.length?`AT THE LOCATING SUPPORT, ${list(locating)}`:'NONE'}. ${simple?'SEAT M AND LONG.':'LONG.'} + TOWARD THE HIGHER-NUMBERED GRID. TRACTION ACTS EITHER WAY (BOTH SENSES LISTED WHERE IT GOVERNS); THE CRANE STOP FORCE ACTS ONLY WITH THE CRANE AT THE STOP, AT THE END OF ITS TRAVEL, TOWARD THE STOP${simple&&stop.length?`, AT ${list(stop)}`:''}. H TOP / H BOT.: LATERAL FORCE OF ${simple?'ALL GIRDER ENDS AT THE GRID':'THE GIRDER'} AT THE TOP FLANGE TIES / ${bolted?'THROUGH THE BEARING BOLTS INTO THE SEAT':'AT THE BOTTOM FLANGE TIES'}, ± TOGETHER; H BOT. IS SIGNED RELATIVE TO H TOP: - OPPOSITE (A COUPLE), + THE SAME WAY.`)
+  paragraph(t,`${p.method} FACTORED, AIST TR-13 COMBINATION NUMBERS PER S-00; ENVELOPE OF ALL CRANE POSITIONS. EACH ROW IS ONE CONCURRENT CASE, ITS FORCES ACTING TOGETHER; DO NOT COMBINE ROWS. V: GIRDER REACTIONS ON THE ${cap?'CAP, DOWNWARD POSITIVE':'SEAT, DOWNWARD POSITIVE, BRACKET SELF-WEIGHT EXCLUDED'}${simple?`; LEFT / RIGHT V: GIRDER END ON THE LOWER / HIGHER GRID SIDE. SEAT M = ΣV × e ABOUT THE GRID, e TO EACH REACTION AT 0.8 OF THE BEARING LENGTH FROM ITS GIRDER END${mirrored?'; ±: ALSO WITH LEFT AND RIGHT V EXCHANGED':''}`:moments?'; CONTINUOUS GIRDER BEARING CENTERED ON INTERIOR GRIDS; AT A RUNWAY-END GRID IT RUNS INBOARD FROM THE GIRDER END ON THE GRID. SEAT M = V × e ABOUT THE GRID, e TO THE REACTION AT 0.8 OF THE BEARING LENGTH FROM THE GIRDER END':'; CONTINUOUS GIRDER BEARING CENTERED ON THE GRID'}. MIN V: LEAST TOTAL V${interior?'; END V: LEAST GIRDER END REACTION':''}${uplift?'; NEGATIVE IS UPLIFT':'; NO UPLIFT'}. LONG.: ${simple?'AT THE LOCATING BEARING OF EACH BAY, AT ITS LOWER-NUMBERED GRID; NONE AT A SLIDING END':locating.length?`AT THE LOCATING SUPPORT, ${list(locating)}`:'NONE'}. ${simple||moments?'SEAT M AND LONG.':'LONG.'} + TOWARD THE HIGHER-NUMBERED GRID. TRACTION ACTS EITHER WAY (BOTH SENSES LISTED WHERE IT GOVERNS); THE CRANE STOP FORCE ACTS ONLY WITH THE CRANE AT THE STOP, AT THE END OF ITS TRAVEL, TOWARD THE STOP${simple&&stop.length?`, AT ${list(stop)}`:''}. H TOP / H BOT.: LATERAL FORCE OF ${simple?'ALL GIRDER ENDS AT THE GRID':'THE GIRDER'} ${cap?'AT THE TOP FLANGE, CARRIED DOWN THE BEARING STIFFENERS (FORK) / AT THE BOTTOM FLANGE; BOTH THROUGH THE BEARING BOLTS INTO THE CAP':`AT THE TOP FLANGE TIES / ${bolted?'THROUGH THE BEARING BOLTS INTO THE SEAT':'AT THE BOTTOM FLANGE TIES'}`}, ± TOGETHER; H BOT. IS SIGNED RELATIVE TO H TOP: - OPPOSITE (A COUPLE), + THE SAME WAY.`)
  ];
 }

@@ -5,12 +5,12 @@ The Connections worksheet has independent bracket and tieback selectors. Selecti
 | Family | Display and calculation status |
 | --- | --- |
 | Welded twin-rib seat | Existing rectangular-rib component checks. Its movement and whole-building limitations remain. |
-| Welded haunched seat | Actual tapered rib geometry with editable tip depth. Separate variable-depth, weld, column and fatigue design required. |
+| Welded haunched seat | Designed: tapered rib (root and tip depth) checked on every section of the taper, the sloping free edge (bracket-plate slenderness and edge stress), root weld corner shear, the twin-rib seat, weld group, column and fatigue checks, and integrated deflection. |
 | Rolled W-section corbel | Actual selected AISC v16 W dimensions. Corbel, seat, full root weld group, receiving column and fatigue design required. |
 | Paired flat-bar ties | Existing double-cover bar model and enabled flange-saddle checks. Movement compatibility remains separate. |
 | Single-angle tieback | AISC L-section with a welded vertical leg at girder/column gussets. Eccentricity, buckling, shear lag, strength, stiffness, movement and fatigue remain unverified. |
 | Double-angle tieback | Mirrored AISC angles on opposite faces of a gusset. Paired-member load sharing, attachments, restraint stiffness, movement and fatigue remain unverified. |
-| Flexible plate tieback | Generic vertical flexible plate with lap attachments. Imposed movement, strength, stability, stiffness and fatigue require a new model. |
+| Flexible plate tieback | One vertical plate bolted in single shear to the direct flange-saddle gusset and the column gusset, with the sleeved column-end release. Component checks: plate D2/E3, imposed-movement H1 and Category B fatigue, lap couple, bolt shear/slip/tension with prying, gussets, welds, column flange, stiffness and fit (see README). |
 | Single articulated bearing link | Generic link, open bearing eyes, pins, collars and drilled clevises. No manufacturer rating is assigned. |
 | Double articulated tieback | Adjacent independent girder links to a shared column attachment. Available for simple spans; an end support has one active link. |
 

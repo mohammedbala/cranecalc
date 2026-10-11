@@ -167,7 +167,7 @@ describe('new rolled wide-flange bracket',()=>{
  it('designs the capped demonstration on the wide-flange bracket with every check passing',()=>{
   const s=calculate(rolledProject());expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
   expect(s.checks.filter(c=>c.status==='fail'||c.status==='unverified'||c.status==='unsupported').map(c=>c.id)).toEqual([]);
-  expect(s.detailResults?.rolledBracket).toBeDefined();expect(s.detailResults?.bracket).toBeUndefined();
+  expect(s.detailResults?.rolledBracket).toBeDefined();expect(s.detailResults?.bracket).toBeUndefined();expect(s.checks.some(c=>c.id==='bracket-rib-flexure')).toBe(false);
   const ids=s.checks.filter(c=>c.id.startsWith('wbracket-')).map(c=>c.id);
   for(const id of ['stub-flexure','stub-shear','stub-combined','web-yielding','web-crippling','stiffener-column','stiffener-weld','flange-cjp','web-weld','column-flange','column-yield','seat-flexure','seat-weld','fatigue-flange','fatigue-column','tr13-load','deflection'])expect(ids).toContain('wbracket-'+id);
   for(const id of ['end-bearing-seat-bearing','end-bearing-wrench-stub-web','end-bearing-wrench-stub-tip','end-bearing-wrench-stub-stiffener','end-bearing-seat-fit'])expect(s.checks.find(c=>c.id===id)?.status).toBe('pass');

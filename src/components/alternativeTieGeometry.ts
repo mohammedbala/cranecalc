@@ -7,6 +7,8 @@ import {buildAngleTies} from './angleTieGeometry';
 import {referenceTie,tieArrangement} from '../engine/connectionOptions';
 import {horizontalPlateGeometry,type PartInfo,type HardwareBuilder} from './connectionDetails';
 import {filletWeld} from './weldGeometry';
+import {buildFlexiblePlateTies} from './flexiblePlateGeometry';
+import {flangeTieGeometry} from '../engine/tieGeometry';
 
 /** Generic family preview. Pins/eyes are NOT manufacturer models or rated
  * assemblies, and are excluded from the current installed-bolt clearance audit. */
@@ -14,6 +16,8 @@ export function buildAlternativeTies(p:ProjectInput,columnFace:number,steel:THRE
  const group=new THREE.Group(),d=p.details,kind=tieArrangement(d);group.name='reference-tieback-arrangements';group.userData.tieArrangement=kind;
  if(!d||kind==='paired-bars')return group;
  if(isAngleTie(kind))return buildAngleTies(p,columnFace,steel,edge,weldMaterial,hardware);
+ // The designed flexible plate on the direct flange saddle; the generic concept below remains for a layout it cannot locate.
+ if(kind==='flexible-plate'&&flangeTieGeometry(p))return buildFlexiblePlateTies(p,columnFace,steel,edge,weldMaterial,hardware);
  const r=referenceTie(d),mm=.001,b=p.section,depth=b.d*mm,tf=b.tf*mm,bf=b.bf*mm,tw=b.tw*mm;
  const pinD=r.pinDiameter*mm,eyeD=r.eyeDiameter*mm,eyeT=r.eyeThickness*mm,fork=r.forkThickness*mm;
  const rise=kind==='flexible-plate'?r.plateWidth*mm:eyeD+2*.0127;
