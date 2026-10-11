@@ -115,7 +115,7 @@ export function columnStiffenerErrors(p:ProjectInput):string[]{
  const b=p.details?.bracket;if(!activeColumnStiffeners(b))return [];
  const errors:string[]=[],add=(bad:boolean,m:string)=>{if(bad)errors.push('details.bracket.columnStiffeners: '+m);};
  if(isRolledBracket(b)&&!rolledStub(b!))return errors;
- if(!bracketForceLevels(b!,b!.columnStiffeners!.thickness)){add(true,'column stiffeners are designed for the welded twin-rib, haunched, W-stub and tapered I haunch brackets, which define the levels where they deliver force to the column.');return errors;}
+ if(!bracketForceLevels(b!,b!.columnStiffeners!.thickness)){add(true,'column stiffeners are designed for the welded twin-rib, haunched and W-stub brackets and the tapered I haunch, which define the levels where they deliver force to the column.');return errors;}
  const g=columnStiffenerGeometry(p)!,f=(v:number)=>format(v,'length',p.units,3);
  add(!g.K,'enter the receiving column k (k_des) from the survey: no AISC shape identifies the column (set the existing column shape to the surveyed W-section, or enter k).');
  add(g.width+g.tw/2>g.c.width/2+1e-6,`plates ${f(g.width)} wide do not fit within the column flange: at most (bf - tw)/2 = ${f((g.c.width-g.tw)/2)}.`);

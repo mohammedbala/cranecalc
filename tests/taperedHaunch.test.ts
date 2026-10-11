@@ -1,4 +1,6 @@
 import {describe,it,expect} from 'vitest';
+import * as THREE from 'three';
+import {buildWeldedBrackets} from '../src/components/weldedBracketGeometry';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {projectSchema} from '../src/engine/types';
@@ -182,6 +184,16 @@ describe('tapered I haunch: drawings, parts, report and figures',()=>{
   expect(parts.welds.filter(w=>w.location==='field').map(w=>w.id)).toEqual(expect.arrayContaining(['top-flange-column','bottom-flange-column']));
   expect(parts.welds.every(w=>w.kind==='cjp'||w.runs.length>0)).toBe(true);
   expect(parts.bolts.length).toBeGreaterThan(0);for(const b of parts.bolts)expect(Math.abs(b.x)).toBeLessThan(h.bt/2);
+ });
+ it('builds every plate, weld and column stiffener in the 3D model',()=>{
+  const p=existingBuildingHaunch('US'),b=p.details!.bracket!,steel=new THREE.MeshBasicMaterial(),edge=new THREE.LineBasicMaterial();
+  const group=buildWeldedBrackets(b,[0,7.62],6,steel,edge,undefined,steel,undefined,false,p.details!.bearing.width),names:string[]=[];
+  group.traverse(o=>{if(o instanceof THREE.Mesh)names.push(o.name);});
+  for(const id of ['web','top-flange','bottom-flange','stiffener-left','stiffener-right','end-plate'])expect(names,id).toContain(`WB-S2-${id}`);
+  expect(names.filter(n=>n.startsWith('CS-S1-')&&!n.includes('weld')&&!/flange-|web-/.test(n))).toHaveLength(4);
+  const box=new THREE.Box3().setFromObject(group);expect([box.min.x,box.min.y,box.max.z].every(Number.isFinite)).toBe(true);
+  // The haunch hangs below the seat by its root depth (model in metres).
+  expect(6-box.min.y).toBeGreaterThanOrEqual(projectHaunch(p).hr/1000-1e-6);
  });
  it('reports pages 04B-04D without NaN in US and SI',()=>{
   for(const s of [tp1(),{...tp2(),input:{...tp2().input,units:'SI' as const}}]){
