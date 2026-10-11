@@ -37,7 +37,8 @@ describe('compact, readable calculation report',()=>{
   for(const t of ['Crane wheel loads &amp; impact','Side thrust, traction &amp; bumper forces','Dead loads, load cases &amp; combinations','Fatigue loading'])expect(at(t)).toBeGreaterThan(parts[1]);
   expect(at('Governing design actions')).toBeGreaterThan(parts[2]);expect(at('Bracket design forces')).toBeGreaterThan(parts[2]);expect(at('Bracket design forces')).toBeLessThan(parts[3]);
   // Members before connections: the girder, rail and bracket as a member, then the welds and attachments.
-  for(const t of ['Runway girder · strength &amp; stability','Welded bracket · member checks','Existing column check'])expect(at(t)).toBeGreaterThan(parts[3]),expect(at(t)).toBeLessThan(parts[4]);
+  // The section heading (page 1 may cite the existing-column reference by the same name when one of its checks governs).
+  for(const t of ['Runway girder · strength &amp; stability','Welded bracket · member checks','Existing column check</h2>'])expect(at(t)).toBeGreaterThan(parts[3]),expect(at(t)).toBeLessThan(parts[4]);
   for(const t of ['Cap channel welds','Bolted end bearings','Welded bracket · welds, fatigue','Direct flange attachment','Runway end stops'])expect(at(t)).toBeGreaterThan(parts[4]);
   // Each check group states its loads and governing case, and the girder flexure and shear are worked with numbers.
   expect(html.match(/<p class="basis">/g)!.length).toBeGreaterThan(12);
