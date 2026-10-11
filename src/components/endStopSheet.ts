@@ -14,6 +14,22 @@ import {activeEndBearing,continuousBearings} from '../engine/endBearingInputs';
 import {heavyHex,hexSide,hexPlan} from './heavyHex';
 
 const inch=25.4;
+/**
+ * Dimension practice on the stop views, layout units: each extension line starts a small gap off the feature it
+ * locates (about 1/32 in printed) and runs just past its dimension line.
+ */
+const gap=2,over=4;
+/** Dimension line ticks: horizontal and vertical dimension lines. */
+const tickH=(x:number,y:number)=>line([x-2.5,y+3],[x+2.5,y-3]),tickV=(x:number,y:number)=>line([x-3,y+2.5],[x+3,y-2.5]);
+/** Carries the extension lines of a dimension above its features (dimH stops them short of the line) past the line. */
+const pastAbove=(xs:number[],y:number)=>xs.map(x=>line([x,y+5],[x,y-over])).join('');
+/** Carries the extension lines of a dimension left of its features (dimV stops them short of the line) past the line. */
+const pastLeft=(ys:number[],x:number)=>ys.map(y=>line([x+5,y],[x-over,y])).join('');
+/** Vertical dimension line with its ticks and value (as dimV), for extension lines drawn from their own features. */
+function dimLineV(y1:number,y2:number,x:number,label:string){
+ const w=textWidth(label,9),fits=w+6<=Math.abs(y2-y1),far=Math.max(y1,y2);
+ return line([x,Math.min(y1,y2)],[x,fits?far:far+w+6])+tickV(x,y1)+tickV(x,y2)+text(x-6,fits?(y1+y2)/2:far+4+w/2,label,9,'middle',400,-90);
+}
 
 /** End stop details on their own sheet. */
 export function endStopSheetSvg(s:CalculationSnapshot,number='S-07'){return topicSheetSvg(s,endStopTopic(s),number,'RUNWAY END STOPS');}
@@ -48,9 +64,12 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const yb=Y(tb);
   svg+=rect(X(g.back),yb,e.base.length*kk,tb*kk,'runway-line')+rect(X(g.faceBack),Y(tb+H),tp*kk,H*kk,'runway-line');
   svg+=`<path class="runway-line" d="M${n(X(g.faceBack))},${n(yb)}L${n(X(g.faceBack))},${n(Y(tb+stiffTop))}L${n(X(g.stiffenerEnd))},${n(Y(tb+inch))}L${n(X(g.stiffenerEnd))},${n(yb)}"/>`;
+  // Ordinate dimensions from the girder end, stacked above the stop with the shortest nearest the stop, so no
+  // extension line crosses a dimension line. The bolt center lines run up from the bolts to their dimensions.
+  const top=Y(tb+H),ordinates:[number,string][]=[[g.backRow,'BACK BOLTS'],[g.frontRow,'FRONT BOLTS'],[g.faceFront,'STOP FACE']],tier=(i:number)=>top-10-12*i;
   // Heavy hex bolts with heads on the base plate and nuts below the flange.
-  for(const x of [g.backRow,g.frontRow]){
-   svg+=line([X(x),Y(tb)-hx.head*kk-3],[X(x),wFl+hx.nut*kk+3],'grid-line');
+  for(const [i,x] of [g.backRow,g.frontRow].entries()){
+   svg+=line([X(x),tier(i)-over],[X(x),wFl+hx.nut*kk+3],'grid-line');
    svg+=hexSide(X(x),Y(tb),hx.corners*kk,hx.head*kk,-1)+hexSide(X(x),wFl,hx.corners*kk,hx.nut*kk,1);
   }
   // Rail from its end, with the first keeper pair.
@@ -63,13 +82,15 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const br=e.bumperDiameter/2,bc:XY=[X(g.faceFront)+br*kk,Y(tb+g.contact)];
   svg+=circle(bc[0],bc[1],br*kk,'reference-line')+line([bc[0]+br*kk,bc[1]],[bc[0]+br*kk+28,bc[1]],'reference-line');
   svg+=line([X(g.faceFront)-4,bc[1]],[bc[0]+br*kk+34,bc[1]],'grid-line');
-  // Baseline dimensions from the girder end, stacked above the stop so every label fits.
-  const top=Y(tb+H);
-  // Longest dimension lowest; each label sits outboard of the girder end on its own dimension line,
-  // clear of the stop and of the callout leaders.
-  [[g.front,'BASE PL'],[g.faceFront,'STOP FACE'],[g.frontRow,'FRONT BOLTS'],[g.backRow,'BACK BOLTS']].forEach(([x,label],i)=>{const yd=top-10-12*i;svg+=dimH(X(0),X(x as number),top,yd,'')+line([X(0)-3,yd],[X(0),yd])+text(X(0)-5,yd+3,`${label} ${dim(x as number)}`,7.5,'end');});
-  svg+=dimV(Y(tb+H),Y(tb),X(g.back),X(0)-22,dim(H));
-  svg+=dimH(X(0),X(xs),cut,cut+24,`${dim(xs)} TO BEARING STIFFENER C/L`,'left');
+  // Each label sits outboard of the girder end on its own dimension line, clear of the stop and of the callout
+  // leaders. The origin line rises from the top of the girder end and the stop face line from the top of the face
+  // plate. The base plate is located on the plan.
+  ordinates.forEach(([x,label],i)=>{const yd=tier(i);svg+=line([X(0)-3,yd],[X(x),yd])+tickH(X(0),yd)+tickH(X(x),yd)+text(X(0)-5,yd+3,`${label} ${dim(x)}`,7.5,'end');});
+  svg+=line([X(0),ys-gap],[X(0),tier(ordinates.length-1)-over])+line([X(g.faceFront),top-gap],[X(g.faceFront),tier(ordinates.length-1)-over]);
+  // Face plate height from the top of the base plate, between the girder end and the stop: the upper extension line
+  // from the top of the face plate, the lower from the back of the base plate.
+  {const xh=X(g.back)-14;svg+=line([X(g.faceBack)-gap,top],[xh-over,top])+line([X(g.back)-gap,yb],[xh-over,yb])+dimLineV(top,yb,xh,dim(H));}
+  svg+=dimH(X(0),X(xs),cut+gap,cut+24,`${dim(xs)} TO BEARING STIFFENER C/L`,'left');
   // Labels right of the rail, from above the face plate to below the girder cut, so they follow the drawn size.
   const lx=Math.max(X(shown)+48,bc[0]+br*kk+70);
   svg+=labelColumn([
@@ -85,7 +106,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:[`END BEARING STIFFENERS, SEE ${detailRef(detailTitles.bearing)}`]},
    ...(tie&&endTie?[{at:[X(endTie.tieX),wFl+tie.attachment.saddleThickness*kk] as XY,labels:['TOP TIE SADDLE, FAR SIDE (HIDDEN)',`SEE ${detailRef(detailTitles.flangeTie)}`]}]:[])
   ],lx,Y(tb+H)-54,cut+30);
-  svg+=text(X(0)-28,ys-3,'GIRDER END',7.5,'end',700);
+  // The girder end, led to its end line below the flange.
+  {const label='GIRDER END',w=textWidth(label,7.5,true),ty=(wFl+cut)/2,at:XY=[X(0)-22-w,ty+3];svg+=multiLeader([[X(0),ty]],at,[],7.5,[],w)+text(at[0],at[1],label,7.5,'start',700);}
   return {svg:svg+'</g>',scale:k.label};
  }});
  // 2: Plan on the girder top.
@@ -107,22 +129,26 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // Heavy hex heads seen from above, on the bolt centers.
   const hr=hx.corners/2*kk;
   for(const x of [g.backRow,g.frontRow])for(const side of [-1,1]){const c:XY=[X(x),Z(side*gauge/2)],rr=db/2*kk;svg+=hexPlan(c[0],c[1],hx.flats*kk)+line([c[0]-rr-2,c[1]],[c[0]+rr+2,c[1]])+line([c[0],c[1]-rr-2],[c[0],c[1]+rr+2]);}
-  // Extension lines start clear of the heads and the base plate edge.
-  svg+=dimV(Z(-gauge/2),Z(gauge/2),X(g.backRow)-hr-2,X(0)-22,dim(gauge))+dimV(Z(-Wb/2),Z(Wb/2),X(g.back)-2,X(0)-40,dim(Wb));
-  // Dimensions below the girder, each extension line starting just clear of the feature it locates.
-  const zd=Z(width/2)+16,edge=Z(width/2)+2,from=(x:number,z:number)=>z+2<edge?line([x,z+2],[x,edge]):'';
-  const below=(x1:number,z1:number,x2:number,z2:number,y:number,label:string,outside?:'left'|'right')=>from(x1,z1)+from(x2,z2)+dimH(x1,x2,edge,y,label,outside);
-  svg+=below(X(0),Z(width/2),X(g.back),Z(Wb/2),zd,dim(e.setback))+below(X(g.back),Z(Wb/2),X(g.front),Z(Wb/2),Z(width/2)+30,dim(e.base.length));
-  svg+=below(X(g.faceFront),Z(Wb/2),X(g.railEnd),Z(rz+r.baseWidth/2),zd,dim(e.railGap));
+  // Extension lines start clear of the heads and the base plate edge, and run past the dimension lines.
+  {const xg=X(0)-22,xw=X(0)-40;svg+=dimV(Z(-gauge/2),Z(gauge/2),X(g.backRow)-hr-2,xg,dim(gauge))+pastLeft([Z(-gauge/2),Z(gauge/2)],xg)+dimV(Z(-Wb/2),Z(Wb/2),X(g.back)-2,xw,dim(Wb))+pastLeft([Z(-Wb/2),Z(Wb/2)],xw);}
+  // Separate dimensions on one line below the girder, none chained across a part it does not measure, each extension
+  // line starting just clear of the feature it locates: the base plate from the girder end, the front bolts to the
+  // face plate and the rail end to the stop face. The plates are sized by their callouts. A value too long for its
+  // dimension is led off below it, clear of the extension lines.
+  const edge=Z(width/2)+2,zd=Z(width/2)+16,from=(x:number,z:number)=>z+2<edge?line([x,z+2],[x,edge]):'';
+  const short=(x1:number,z1:number,x2:number,z2:number,label:string,side:-1|1)=>{const w=textWidth(label,9),mid=(x1+x2)/2;
+   return from(x1,z1)+from(x2,z2)+line([x1,edge],[x1,zd+5])+line([x2,edge],[x2,zd+5])+line([x1,zd],[x2,zd])+tickH(x1,zd)+tickH(x2,zd)+multiLeader([[mid,zd]],[side<0?mid-14-w:mid+14,zd+14],[label],9);};
+  svg+=dimH(X(0),X(g.back),edge,zd,dim(e.setback))+from(X(g.back),Z(Wb/2));
   // Front bolt C/L to the back of the face plate: the head clears the face plate fillet toe by the socket clearance.
-  svg+=below(X(g.frontRow),Z(gauge/2)+hx.flats/2*kk,X(g.faceBack),Z(Wb/2),zd,dim(e.bolts.frontClear),'left');
+  svg+=short(X(g.frontRow),Z(gauge/2)+hx.flats/2*kk,X(g.faceBack),Z(Wb/2),dim(e.bolts.frontClear),-1);
+  svg+=short(X(g.faceFront),Z(Wb/2),X(g.railEnd),Z(rz+r.baseWidth/2),dim(e.railGap),1);
   svg+=multiLeader([[X(keeper)+kg.length*kk,Z(rz-kg.outer)]],[X(shown)+44,Z(-width/2)-14],['FIRST KEEPER PAIR',`SPACING PER ${keeperRef}`]);
   // Bolt callout above the girder at the back of the stop, clear of the section cut and the keeper callout.
   {const labels=[boltLabel,'HEADS ON BASE PL'],w=Math.max(...labels.map(v=>textWidth(labelCaps(v),8.5))),c:XY=[X(g.backRow),Z(-gauge/2)];
    svg+=multiLeader([[c[0]-hr*.25,c[1]-hx.flats/2*kk]],[c[0]-24-w,Z(-width/2)-26],labels);}
   // Both stiffeners to the face plate, each side of each stiffener.
   svg+=filletLeader([[X(g.faceBack)-1,Z(sp/2+ts/2)+1]],[X(shown)+44,Math.max(Z(width/2)-4,Z(-width/2)+50)],size(e.weldSize),['TYP. BOTH STIFFENERS TO FACE PL','FULL HEIGHT'],true,[[[X(g.faceFront)+6,Z(width/2)-6]]]);
-  svg+=text(X(0)-4,Z(width/2)+46,'GIRDER END',8,'start',700);
+  svg+=text(X(0)-4,zd+30,'GIRDER END',8,'start',700);
   // Section between the stop face and the rail end, looking at the face.
   {const xs=X((g.faceFront+g.railEnd)/2);svg+=sectionCut([xs,Z(-width/2)-4],[xs,Z(width/2)+4],[-1,0],detailTitles.endStopSection,['a']);}
   return {svg:svg+'</g>',scale:k.label};
@@ -143,9 +169,14 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const tor=Y(pad+railDepth),bc:XY=[X(p.railEccentricity),Y(tb+g.contact)];
   svg+=line([X(-Wb/2)-6,tor],[X(Wb/2)+30,tor],'grid-line')+text(X(Wb/2)+32,tor+3,'T.O.R.',7.5);
   svg+=circle(bc[0],bc[1],e.bumperDiameter/2*kk,'reference-line');
-  // Gauge below the nuts, its text clear of the web break.
-  svg+=dimH(X(-Wb/2),X(Wb/2),Y(tb+H)-2,Y(tb+H)-14,dim(Wb))+dimH(X(-gauge/2),X(gauge/2),wFl+hx.nut*kk+2,cut+26,dim(gauge));
-  svg+=dimV(Y(tb+H),yb,X(-Wb/2)-2,X(-Wb/2)-52,dim(H))+dimV(bc[1],yb,X(-Wb/2)-2,X(-Wb/2)-30,dim(g.contact));
+  // Face plate width above it and gauge below the nuts, its text clear of the web break. Face plate height and bumper
+  // C/L height left of the plates; the bumper C/L runs across the face plate to its dimension. Extension lines run
+  // past their dimension lines.
+  const xH=X(-Wb/2)-52,xC=X(-Wb/2)-30,rb=e.bumperDiameter/2*kk;
+  svg+=dimH(X(-Wb/2),X(Wb/2),Y(tb+H)-2,Y(tb+H)-14,dim(Wb))+pastAbove([X(-Wb/2),X(Wb/2)],Y(tb+H)-14)+dimH(X(-gauge/2),X(gauge/2),wFl+hx.nut*kk+2,cut+26,dim(gauge));
+  svg+=dimV(Y(tb+H),yb,X(-Wb/2)-2,xH,dim(H))+pastLeft([Y(tb+H),yb],xH);
+  // The bumper height shares the base plate extension line of the face plate height.
+  svg+=line([bc[0]+rb+6,bc[1]],[xC-over,bc[1]],'grid-line')+dimLineV(bc[1],yb,xC,dim(g.contact));
   const lx=Math.min(X(Math.max(Wb,g.surfaceWidth)/2)+60,420);
   svg+=labelColumn([
    {at:[bc[0]+e.bumperDiameter/2*kk*.7,bc[1]-e.bumperDiameter/2*kk*.7],labels:['CRANE BUMPER (REF.)',`${size(e.bumperDiameter)} CONTACT, ON RAIL C/L`,`C/L ${dim(g.contact)} ABOVE BASE PL`]},

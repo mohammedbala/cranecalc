@@ -75,9 +75,9 @@ function chainH(xs:number[],fromY:number,y:number,labels:string[]){
  });
  return svg;
 }
-/** Bolt group positions along a bar from its end: edge, then the rows at the pitch, closing with the edge. */
-function groupChain(from:number,c:{rows:number;pitch:number;edge:number},size:(v:number)=>string){
- const xs=[from,from+c.edge],labels=[size(c.edge)];
+/** Bolt group positions from a plate end: the first edge, then the rows at the pitch, closing with the edge. */
+function groupChain(from:number,c:{rows:number;pitch:number;edge:number},size:(v:number)=>string,first=c.edge){
+ const xs=[from,from+first],labels=[size(first)];
  if(c.rows>1){xs.push(from+c.edge+(c.rows-1)*c.pitch);labels.push(c.rows>2?`${c.rows-1} @ ${size(c.pitch)}`:size(c.pitch));}
  xs.push(xs[xs.length-1]+c.edge);labels.push(size(c.edge));
  return {xs,labels};
@@ -116,8 +116,9 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
  svg+=line([gx1,gy0],[gx1,Y(barTop)],'runway-line')+line([gx1,Y(barTop)],[gx1,gy1],'hidden-line');
  svg+=rect(X(g.start),Y(barTop),t.length*k,t.width*k,'runway-line');
  // Column gusset: from the column flange across the gap at the bar ends, as tall as the bars or taller to
- // contain the release slots. Its girder-side edge is hidden behind the near bar.
- const cx0=X(g.barEnd-g.connection),cx1=X(g.face),cy0=Y(drop-hg/2),cy1=Y(drop+hg/2);
+ // contain the release slots, and past the bolt group by its longer slotted end edge. Its girder-side edge is
+ // hidden behind the near bar.
+ const cx0=X(g.columnGussetStart),cx1=X(g.face),cy0=Y(drop-hg/2),cy1=Y(drop+hg/2);
  svg+=line([cx0,cy0],[cx1,cy0],'runway-line')+line([cx0,cy1],[cx1,cy1],'runway-line')+line([cx1,cy0],[cx1,cy1],'runway-line');
  if(hg>t.width)svg+=line([cx0,cy0],[cx0,Y(barTop)],'runway-line')+line([cx0,Y(barBottom)],[cx0,cy1],'runway-line');
  svg+=line([cx0,Y(barTop)],[cx0,Y(barBottom)],'hidden-line');
@@ -133,14 +134,15 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
  if(rel)svg+=rect(X(g.start)+1.5,Y(barTop)+1.5,g.connection*k-3,t.width*k-3,'hidden-line');
  // Hole layout of each bar end, chained from the bar end with the closing edge, under the bars and clear of
  // the web break; the bar length on the tier below. Extension lines start a gap clear of the parts.
- const chain=Math.max(cy1+30,webEnd+16),girderEnd=groupChain(g.start,c,sz),columnEnd=groupChain(g.barEnd-g.connection,c,sz);
+ // The column-end chain starts at the gusset end, whose edge to the first slots may exceed the bar edge.
+ const chain=Math.max(cy1+30,webEnd+16),girderEnd=groupChain(g.start,c,sz),columnEnd=groupChain(g.columnGussetStart,c,sz,rel?.endEdge??c.edge);
  // The column-end chain drops a tier where its outer value would crowd the girder-end closing value.
- const crowded=X(g.barEnd-g.connection)-X(g.gussetEnd)<textWidth(girderEnd.labels[girderEnd.labels.length-1],9)+textWidth(columnEnd.labels[0],9)+28,columnChain=crowded?chain+22:chain;
+ const crowded=X(g.columnGussetStart)-X(g.gussetEnd)<textWidth(girderEnd.labels[girderEnd.labels.length-1],9)+textWidth(columnEnd.labels[0],9)+28,columnChain=crowded?chain+22:chain;
  svg+=chainH(girderEnd.xs.map(X),gy1+gap,chain,girderEnd.labels)+chainH(columnEnd.xs.map(X),cy1+gap,columnChain,columnEnd.labels);
  const overall=columnChain+26;
  svg+=line([X(g.start),gy1+gap],[X(g.start),overall+5])+line([X(g.barEnd),cy1+gap],[X(g.barEnd),overall+5])+dimH(X(g.start),X(g.barEnd),overall+5,overall,dim(t.length));
  // Vertical bolt gauge in the free length of the bars; the value reads across the bar beside its dimension line.
- {const rowEnd=g.start+c.edge+(c.rows-1)*c.pitch,w=textWidth(sz(c.gauge),9),gx=Math.max(X(g.gussetEnd)+12,(X(g.gussetEnd)+X(g.barEnd-g.connection)-w)/2-2),ya=Y(drop-c.gauge/2),yb=Y(drop+c.gauge/2),fx=X(rowEnd)+hole*k/2+2;
+ {const rowEnd=g.start+c.edge+(c.rows-1)*c.pitch,w=textWidth(sz(c.gauge),9),gx=Math.max(X(g.gussetEnd)+12,(X(g.gussetEnd)+X(g.columnGussetStart)-w)/2-2),ya=Y(drop-c.gauge/2),yb=Y(drop+c.gauge/2),fx=X(rowEnd)+hole*k/2+2;
   svg+=line([fx,ya],[gx+5,ya])+line([fx,yb],[gx+5,yb])+line([gx,ya],[gx,yb])+[ya,yb].map(v=>line([gx-3,v+2.5],[gx+3,v-2.5])).join('')+text(gx+4,(ya+yb)/2+3,sz(c.gauge),9);}
  // Capped girder: the gusset end clears the turned-down channel flange (dimensioned where the gusset rises above it).
  const capItem:Callout[]=[];
@@ -157,7 +159,7 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
   {at:[X(g.rootStart+g.rootLength*.3),Y(a.saddleThickness/2)],labels:[`SADDLE PL ${sz(a.saddleThickness)} X ${sz(a.saddleLength)} X ${sz(g.rootLength)}`]},
   {at:[X(g.rootStart+g.rootLength*.62),Y(0)],weld:saddleWeld,labels:[`SADDLE TO FLANGE, EACH END; ${detailRef(detailTitles.saddle)}`]},
   {at:[X(g.rootStart+g.rootLength*.46),Y(a.saddleThickness)],weld:gussetWeld,labels:[`GIRDER GUSSET PL ${sz(t.gussetThickness)} X ${sz(barBottom-a.saddleThickness)} X ${sz(g.gussetEnd-g.rootStart)}`,'TO SADDLE, BOTH FACES']},
-  {at:[X(g.barEnd-g.connection)-14,Y(barTop)],labels:[`2 FL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)}, ${sz(g.barGap)} CLR. TO COLUMN;`,`GIRDER END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC, ${sz(hole)} STD HOLES${rel?`;`:''}`,...(rel?[`${sz(rel.clearance)} FILLER (HIDDEN)`]:[])]},
+  {at:[X(g.columnGussetStart)-14,Y(barTop)],labels:[`2 FL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)}, ${sz(g.barGap)} CLR. TO COLUMN;`,`GIRDER END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC, ${sz(hole)} STD HOLES${rel?`;`:''}`,...(rel?[`${sz(rel.clearance)} FILLER (HIDDEN)`]:[])]},
   {at:[X(g.barEnd-g.connection*.5),cy0],labels:[...(rel?[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} PRETENSIONED`,`AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)};`,`${sz(rel.width)} X ${sz(rel.slot)} VERT. SLOTS IN GUSSET`]:[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC,`,`${sz(hole)} STD HOLES`]),`COLUMN GUSSET PL ${sz(t.gussetThickness)} X ${sz(hg)} X ${sz(g.columnGussetLength)}`]},
   {at:[X(g.face),cy0+3],weld:rootWeld,labels:col.isNew?['SHOP WELD COLUMN GUSSET TO',`${col.label} FLANGE; ${detailRef(detailTitles.tiePlan)}`]:[`COLUMN GUSSET TO ${g.receiver?'EXISTING':'COLUMN'}`,`${g.receiver?'COLUMN ':''}FLANGE${g.receiver?'':' BY OTHERS'} (DASHED); ${detailRef(detailTitles.tiePlan)}`]},
   ...capItem];
@@ -198,7 +200,7 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=rect(tx-a.saddleLength*k/2,Z(g.rootStart),a.saddleLength*k,g.rootLength*k,'hidden-line');
   for(const sign of [-1,1])svg+=plate(tx+(sign*(t.gussetThickness+t.thickness)/2-t.thickness/2)*k,t.thickness*k,g.start,g.barEnd);
   svg+=plate(tx-t.gussetThickness*k/2,t.gussetThickness*k,g.rootStart,g.gussetEnd);
-  svg+=rect(tx-t.gussetThickness*k/2,Z(g.barEnd-g.connection),t.gussetThickness*k,g.columnGussetLength*k,'runway-line');
+  svg+=rect(tx-t.gussetThickness*k/2,Z(g.columnGussetStart),t.gussetThickness*k,g.columnGussetLength*k,'runway-line');
   // Tie from the stiffener, and the stiffener from the girder end, each from the parts themselves.
   svg+=located(sx,stiffTop,tx,Z(g.rootStart),tier,dim(a.longitudinalSetback),out);
   svg+=located(sx,stiffTop,end,flange,tier-16,dim(Math.abs(e.center-(e.end==='left'?e.start:e.finish))),out);
@@ -273,10 +275,17 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
   rel?`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)} LONG (FY ${stress(d.material.Fy)} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. PROVIDE A ${sz(rel.clearance)} FILLER (CLASS B SURFACES) AT THE GIRDER GUSSET SO THE BARS STAY PARALLEL.`:'COLUMN END: STANDARD HOLES; THE BARS ALSO FLEX WITH SUPPORT DEFLECTION.',
   `TIE BARS FLEX OUT OF PLANE WITH GIRDER END ROTATION AND, AT SLIDING ENDS, THERMAL TRAVEL; SEE THE TIE MOVEMENT CHECKS.${support?.capacity!==undefined?` BRACKET BY OTHERS: VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${dim(support.capacity)} MAX.`:''}`,
   `GIRDER END: STANDARD HOLES, PRETENSIONED ${c.grade} BOLTS, CLASS B FAYING SURFACES. NO HOLES OR CUTS THROUGH THE ${cap?'CAP OR ':''}W FLANGES${drilled.length?` EXCEPT THOSE DETAILED FOR THE ${drilled.join(' AND ')}`:''}.` ];
- const checks=s.checks.filter(v=>(v.group==='Flange attachment'||v.group==='Tie movement')&&v.status!=='excluded'),max=Math.max(0,...checks.map(v=>v.utilization??0));
+ // The summary D/C is the largest strength and fatigue ratio. Minimum weld sizes, clearances, edge distances and
+ // slenderness are detailing limits: one scores 1.00 whenever the provided size equals the limit, which would read
+ // as a fully stressed connection. A saddle fillet at the minimum size is stated instead.
+ const checks=s.checks.filter(v=>(v.group==='Flange attachment'||v.group==='Tie movement')&&v.status!=='excluded');
+ const rated=checks.filter(v=>v.utilization!==undefined&&v.quantity!=='length'&&v.id!=='tie-slenderness'),most=(list:typeof checks)=>Math.max(0,...list.map(v=>v.utilization??0));
+ const strength=most(rated.filter(v=>!v.id.includes('fatigue'))),fatigue=most(rated.filter(v=>v.id.includes('fatigue')));
+ const minimumWeld=checks.some(v=>v.id==='flange-tie-weld-minimum'&&v.status==='pass'&&(v.utilization??0)>=1-1e-9);
+ const summary=rated.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue.toFixed(2)} FATIGUE${minimumWeld?`; MINIMUM FILLET SIZE GOVERNS THE ${sz(a.weldSize).replaceAll('"','')} SADDLE WELDS`:''})`:'';
  return {key:'flange-tie',name:'FLANGE TIES',views:[
   {title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,128,true)},
   {title:detailTitles.tiePlan,render:plan},
   {title:detailTitles.saddle,render:saddle}
- ],notes:(st:Style)=>[heading(st,'FLANGE TIE CONNECTION NOTES / LOCAL CHECKS'),...numbered(st,notes),paragraph(st,`TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${max.toFixed(2)})`:''}.`)]};
+ ],notes:(st:Style)=>[heading(st,'FLANGE TIE CONNECTION NOTES / LOCAL CHECKS'),...numbered(st,notes),paragraph(st,`TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT${summary}.`)]};
 }

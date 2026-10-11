@@ -31,7 +31,8 @@ describe('tie movement compatibility',()=>{
   expect(mv.cyclicLongitudinal).toBeCloseTo(a.serviceRotation!*p.section.d,9);
   expect(mv.thermal).toBeCloseTo(12e-6*25*304.8*30,9);
   expect(mv.longitudinal).toBeCloseTo(a.endRotation*p.section.d+mv.thermal,9);
-  expect(mv.freeLength).toBeCloseTo((25.5-2*4.75)*inch,9);
+  // Between the girder gusset and the column gusset, which runs 1/4 in past the bolt group for its slotted end edge.
+  expect(mv.freeLength).toBeCloseTo((25.5-2*4.75-.25)*inch,9);
   // Cyclic out-of-plane bar stress 3EtΔ/L² is part of the Category B range.
   const fatigue=byId(movement(demo),'tie-move-fatigue'),t=p.details!.brace.thickness;
   expect(fatigue.demand!).toBeGreaterThan(3*p.section.E*t*mv.cyclicLongitudinal/mv.freeLength**2);
@@ -48,12 +49,24 @@ describe('tie movement compatibility',()=>{
   const p=capped.input,r=tieRelease(p)!;
   // 5/8 in bolt: 11/16 in bore, 1/4 in wall, 1/16 in clearance; 1/8 in travel each way.
   expect(r.od).toBeCloseTo(1.1875*inch,9);expect(r.width).toBeCloseTo(1.25*inch,9);expect(r.slot).toBeCloseTo(1.5*inch,9);
-  // Slots at the 2 1/2 in gauge plus 1/8 in travel each way, a 1 7/32 in edge and a 1/16 in slot location
-  // tolerance beyond each slot end (5 5/16 in), rounded up to the 1/4 in cutting increment: 5 1/2 in.
+  // Slots at the 2 3/4 in gauge plus 1/8 in travel each way, a 1 7/32 in edge and a 1/16 in slot location
+  // tolerance beyond each slot end (5 9/16 in), rounded up to the 1/4 in cutting increment: 5 3/4 in.
   expect(r.edge).toBeCloseTo(1.21875*inch,9);expect(r.tolerance).toBeCloseTo(inch/16,9);
-  expect(columnGussetHeight(p)).toBeCloseTo(5.5*inch,9);expect(p.details!.brace.connection.weldLength).toBeCloseTo(columnGussetHeight(p),9);
+  expect(columnGussetHeight(p)).toBeCloseTo(5.75*inch,9);expect(p.details!.brace.connection.weldLength).toBeCloseTo(columnGussetHeight(p),9);
   const edge=byId(movement(capped),'tie-release-edge');
-  expect(edge.demand).toBeCloseTo(r.edge+inch/16,9);expect(edge.capacity).toBeCloseTo((5.5-2.5)/2*inch-r.travel,9);expect(edge.utilization).toBeLessThan(.95);
+  expect(edge.demand).toBeCloseTo(r.edge+inch/16,9);expect(edge.capacity).toBeCloseTo((5.75-2.75)/2*inch-r.travel,9);expect(edge.utilization).toBeLessThan(.95);
+  // The slot location tolerance also applies between the two slots of a row and toward the gusset end. Material
+  // between slots: 2 2/3 d - d_h + 1/16 = 1 3/64 in against 2 3/4 - 1 1/2 = 1 1/4 in. A 2 1/2 in gauge would leave
+  // 1 in, short of it: the gauge is the slot length plus that material rounded up to 1/4 in.
+  const ligament=byId(movement(capped),'tie-release-ligament');
+  expect(ligament.demand).toBeCloseTo((8/3*.625-.6875+1/16)*inch,9);expect(ligament.capacity).toBeCloseTo(1.25*inch,9);expect(ligament.utilization).toBeLessThan(.85);
+  expect(r.minimumGauge).toBeCloseTo(2.75*inch,9);expect(r.slot+r.ligament).toBeGreaterThan(2.5*inch);
+  // Gusset end edge: 1 7/32 + 1/16 = 1 9/32 in, rounded up to 1 1/2 in; the bars keep their 1 1/4 in edge.
+  const end=byId(movement(capped),'tie-release-end-edge');
+  expect(end.demand).toBeCloseTo(r.edge+inch/16,9);expect(end.capacity).toBeCloseTo(1.5*inch,9);expect(r.endEdge).toBeCloseTo(1.5*inch,9);expect(end.utilization).toBeLessThan(.9);
+  // Bearing and block shear toward the gusset end use the gusset's own end edge.
+  expect(byId(movement(capped),'tie-release-bearing').status).toBe('pass');
+  for(const s of [demo,capped])for(const id of ['tie-release-ligament','tie-release-edge','tie-release-end-edge'])expect(byId(movement(s),id).utilization,id).toBeLessThan(.95);
   const bolt=boltCapacity({grade:'A325',diameter:.625*inch,planes:2,surface:'B',shear:0,tension:0,method:'LRFD'});
   expect(byId(movement(capped),'tie-release-sleeve').demand).toBeCloseTo(1.5*bolt.pretension,6);
   // A designed bracket's service deflection, times cranes and impact, plus rotation and the positioning allowance.
@@ -63,8 +76,11 @@ describe('tie movement compatibility',()=>{
  it('bends rigid bars with support deflection when the column end is not released',()=>{
   const released=byId(movement(capped),'tie-move-fatigue').demand!;
   const s=structuredClone(capped);s.input.details!.brace.release!.enabled=false;
-  const rigid=byId(movement(s),'tie-move-fatigue').demand!,mv=tieMovements(s),t=s.input.details!.brace;
-  expect(rigid-released).toBeCloseTo(3*s.input.section.E*t.width*mv.cyclicVertical/mv.freeLength**2,6);
+  const rigid=byId(movement(s),'tie-move-fatigue').demand!,mv=tieMovements(s),t=s.input.details!.brace,E=s.input.section.E;
+  // Standard holes need no longer gusset end edge, so the rigid bars are 1/4 in longer between the gussets.
+  const L=tieMovements(capped).freeLength,out=(length:number)=>3*E*t.thickness*mv.cyclicLongitudinal/length**2;
+  expect(mv.freeLength-L).toBeCloseTo(.25*inch,9);
+  expect(rigid-released).toBeCloseTo(3*E*t.width*mv.cyclicVertical/mv.freeLength**2+out(mv.freeLength)-out(L),6);
   expect(movement(s).some(c=>c.id.startsWith('tie-release'))).toBe(false);
  });
  it('states the deflection limit for a bracket by others on the drawings',()=>{

@@ -165,7 +165,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   // Column inner flange at the face, its web broken below.
   const colZ=Z(g.face),colB=colZ+below*k;
   svg+=rect(cx-colW*k/2,colZ,colW*k,colT*k,colLine)+line([cx-m().column.tw*500*k,colZ+colT*k],[cx-m().column.tw*500*k,colB],colLine)+line([cx+m().column.tw*500*k,colZ+colT*k],[cx+m().column.tw*500*k,colB],colLine)+breakLine([cx-colW*k/4,colB],[cx+colW*k/4,colB]);
-  svg+=rect(X(-tg/2),Z(g.face-g.connection),tgk,g.connection*k,'runway-line');
+  svg+=rect(X(-tg/2),Z(g.columnGussetStart),tgk,g.columnGussetLength*k,'runway-line');
   // Bolts run along the runway through bar, gusset and bar; heads and nuts outside the bars.
   const rows=(z0:number)=>Array.from({length:c.rows},(_,i)=>z0+c.edge+i*c.pitch),girderRows=rows(g.start),columnRows=rows(g.face-g.connection);
   for(const z of [...girderRows,...columnRows]){const cls=z<b.bf/2?'hidden-line':'runway-line',head=hole*k*.9,y=Z(z);
@@ -184,7 +184,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
    {at:[X(tg/2)+tbk+3,Z(girderRows.at(-1)!)],labels:[`EACH END: ${2*c.rows} - ${size(c.diameter)} ${c.grade}, ${c.rows} ROWS`,`X 2 AT ${size(c.gauge)} VERT. GAUGE; CLASS ${c.surface}`,`${size(hole)} STD HOLES${rel?' AT THE GIRDER END':''}`]},
    {at:[X(tg/2)+tbk,Z(cut?z1:(g.gussetEnd+g.face-g.connection)/2)-4],labels:[`2 FL ${size(tb)} X ${size(t.width)} (VERTICAL) X ${dim(t.length)}`,'ONE EACH SIDE OF THE GUSSETS']},
    ...(rel?[{at:[X(tg/2)+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`]}]:[]),
-   {at:[X(tg/2),colZ],labels:[`COLUMN GUSSET PL ${size(tg)} X ${size(hg)} X ${size(g.connection)}`,`2 ROOT FILLETS X ${dim(c.weldLength)}, ${sc.weld}`],weld:'fillet'},
+   {at:[X(tg/2),colZ],labels:[`COLUMN GUSSET PL ${size(tg)} X ${size(hg)} X ${size(g.columnGussetLength)}`,`2 ROOT FILLETS X ${dim(c.weldLength)}, ${sc.weld}`],weld:'fillet'},
    {at:[cx+colW*k*.3,colZ+colT*k],labels:[colRef]}
   ];
   const height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*11,y0=Z(-b.bf/2)-10,y1=colB+6,total=items.reduce((a,v)=>a+height(v),0),space=Math.max(8,(y1-y0-total)/(items.length-1));

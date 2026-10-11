@@ -20,7 +20,8 @@ describe('direct flange attachment',()=>{
   }
   const capBottom=b.d/2+b.capTw-b.capDepth;
   expect(capBottom-(g.topCenter+t.width/2)).toBeCloseTo(.25*inch);
-  expect(g.freeLength).toBeCloseTo(9*inch);
+  // Clear of the girder gusset and of the column gusset, which runs 1/4 in past the bolt group for its slotted end edge.
+  expect(g.freeLength).toBeCloseTo(8.75*inch);
   expect(t.connection.gauge).toBeGreaterThan(8*t.connection.diameter/3);
  });
  it('matches independent section-modulus and virtual-work strip bounds',()=>{
@@ -36,7 +37,7 @@ describe('direct flange attachment',()=>{
   for(const key of ['gusset','saddle','flange','column','rootWeld'] as const)expect(twice[key]).toBeCloseTo(2*r[key],8);
   expect(twice.compliance).toBe(r.compliance);
   expect(r.gussetWeld.demand).toBeGreaterThan(F/(2*L*g.attachment.weldSize/Math.sqrt(2)));
-  expect(t.width).toBeCloseTo(5*inch);
+  expect(t.width).toBeCloseTo(5.25*inch);
  });
  it('fails insufficient spacing and local plate resistance rather than suppressing the checks',()=>{
   const p=cappedDemonstrationProject(),snapshot={input:p,detailResults:{demands:{braceFatigue:4000}}} as CalculationSnapshot;
@@ -84,9 +85,11 @@ describe('saddle-to-flange weld, gusset sizing and cap coordination',()=>{
    const g=flangeTieGeometry(p)!,r=tieRelease(p)!,c=p.details!.brace.connection;
    expect(g.columnGusset/(inch/4)).toBeCloseTo(Math.round(g.columnGusset/(inch/4)),9);
    expect((g.columnGusset-c.gauge)/2-r.travel).toBeGreaterThanOrEqual(r.edge+inch/16);
-   expect(g.columnGusset).toBeCloseTo(5.5*inch,9);
+   expect(g.columnGusset).toBeCloseTo(5.75*inch,9);
    expect(g.barGap).toBeCloseTo(.5*inch,9);expect(g.barEnd).toBeCloseTo(g.face-.5*inch,9);expect(g.start).toBeCloseTo(g.barEnd-p.details!.brace.length,9);
-   expect(g.columnGussetLength).toBeCloseTo(g.connection+.5*inch,9);
+   // The slotted gusset's end edge toward the girder, 1 1/2 in, is 1/4 in longer than the bars' 1 1/4 in edge.
+   expect(r.endEdge).toBeCloseTo(1.5*inch,9);expect(g.columnGussetStart).toBeCloseTo(g.barEnd-g.connection-.25*inch,9);
+   expect(g.columnGussetLength).toBeCloseTo(g.connection+.75*inch,9);expect(g.columnGussetLength).toBeCloseTo(g.face-g.columnGussetStart,9);
    expect(validateRunwayDetails(p)).toEqual([]);
   }
   // The bars stop below the toe of the 3/8 in gusset-to-saddle fillets on the rolled demonstration.
@@ -110,7 +113,7 @@ describe('saddle-to-flange weld, gusset sizing and cap coordination',()=>{
   // Transverse section: saddle-to-flange (arrow side), gusset-to-saddle (both sides) and the column root (both sides, field).
   const sectionWelds=welds(section);expect(sectionWelds).toHaveLength(3);
   // Lengths right of the triangles: once for the arrow-side saddle weld, on both sides for the both-sides welds.
-  expect(texts(section).filter(v=>v==='3 1/4')).toHaveLength(3);expect(texts(section).filter(v=>v==='5 1/2')).toHaveLength(2);
+  expect(texts(section).filter(v=>v==='3 1/4')).toHaveLength(3);expect(texts(section).filter(v=>v==='5 3/4')).toHaveLength(2);
   expect(texts(section)).toContain('SADDLE TO FLANGE, EACH END; {{REF:SADDLE%20%2F%20LONGITUDINAL%20SECTION}}');
   expect(texts(section)).toContain('7/8" CLR. TO CAP FLANGE (1/2" MIN.)');expect(section).toContain('data-field-weld="true"');
   // The existing column flange is drawn dashed beside the column gusset.
@@ -120,8 +123,19 @@ describe('saddle-to-flange weld, gusset sizing and cap coordination',()=>{
   expect(texts(saddle)).toEqual(expect.arrayContaining(['C15X33.9 CAP WEB AND','W24X94 TOP FLANGE','5/8" A325 SC BOLTS (BEYOND)']));
   expect(saddle).not.toContain('BOTH EDGES');
   // Plan: the column gusset welds carry their length; the W flange tips and channel flanges are hidden under the cap.
-  expect(texts(plan)).toContain('5 1/2');
+  expect(texts(plan)).toContain('5 3/4');
   expect(plan.match(/hidden-line/g)!.length).toBeGreaterThan(12);
+ });
+ it('summarizes the tie checks by the largest strength and fatigue ratios, not by a fillet at its minimum size',()=>{
+  const p=cappedDemonstrationProject(),s=snapshot(p);s.checks=flangeTieChecks(s,10000);
+  // The 5/16 in saddle fillets equal the minimum for the thickest plate joined: a detailing limit at exactly 1.00.
+  expect(s.checks.find(c=>c.id==='flange-tie-weld-minimum')!.utilization).toBeCloseTo(1,9);
+  const rated=s.checks.filter(c=>c.utilization!==undefined&&c.quantity!=='length'),most=(list:typeof rated)=>Math.max(...list.map(c=>c.utilization!));
+  const strength=most(rated.filter(c=>!c.id.includes('fatigue'))),fatigue=most(rated.filter(c=>c.id.includes('fatigue')));
+  expect(strength).toBeLessThan(1);
+  const words=texts(flangeTieSheetSvg(s)).join(' ');
+  expect(words).toContain(`(MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue.toFixed(2)} FATIGUE; MINIMUM FILLET SIZE GOVERNS THE 5/16 SADDLE WELDS).`);
+  expect(words).not.toContain('MAX. D/C 1.00');
  });
  it('shows no imperial units or soft-converted decimals on the SI tie views and notes',()=>{
   const p=cappedDemonstrationProject();p.units='SI';

@@ -66,7 +66,8 @@ describe('continuous girder bearings, ties and end connection',()=>{
   expect(Object.values(checks).every(c=>c.status==='pass')).toBe(true);
   const svg=view(s,'FLANGE TIE / COLUMN CONNECTION').render().svg,t=texts(svg).join(' | ');
   expect(svg).toContain('data-weld="cjp"');expect(t).toContain('GIRDER GUSSET TO TIE-SIDE BEARING');expect(t).toContain('PLAN; TIE AT TOP FLANGE');
-  expect(t).toContain('GIRDER GUSSET PL 3/4" X 5" X 5"');expect(t).toContain('COLUMN GUSSET PL 3/4"');
+  // The gusset is as tall as the 5 1/4 in bars; the slotted column gusset runs 1/4 in past its bolt group.
+  expect(t).toContain('GIRDER GUSSET PL 3/4" X 5 1/4" X 5"');expect(t).toContain('COLUMN GUSSET PL 3/4" X 5 3/4" X 5"');
  });
  it('names the mating part of every weld of the girder web end connection',()=>{
   const t=texts(view(continuous(false),'GIRDER WEB / END CONNECTION').render().svg).join(' | ');
@@ -86,12 +87,14 @@ describe('continuous girder bearings, ties and end connection',()=>{
 describe('dimensions and weld callouts of the tie, keeper and bearing details',()=>{
  it('chains the girder-end bolts, dimensions the bolt gauge and gussets and draws the release filler',()=>{
   const t=flangeTieTopic(demo)!,section=t.views[0].render().svg,words=texts(section).join(' | ');
-  // Each bar end's hole chain closes with its edge distance: edge, pitch, edge at the girder and column ends.
+  // Each bar end's hole chain closes with its edge distance: edge, pitch, edge at the girder and column ends. The
+  // column-end chain starts at the slotted gusset's 1 1/2 in end edge.
   expect(words).not.toContain('1 1/4" + 2 1/4"');
-  expect(texts(section).filter(v=>v==='1 1/4"')).toHaveLength(4);expect(texts(section).filter(v=>v==='2 1/4"')).toHaveLength(2);expect(texts(section)).toContain('2 1/2"');
-  expect(words).toContain('GIRDER GUSSET PL 3/4" X 5 1/2" X 5 1/4"');expect(words).toContain('1/16" FILLER (HIDDEN)');
-  // The column gusset spans the 1 1/2 in bolt group edges plus the 1/2 in gap to the column flange.
-  expect(words).toContain('COLUMN GUSSET PL 3/4" X 5 1/2" X 5 1/4"');expect(words).toContain('2 FL 3/8" X 5" X 2\'-1 1/2", 1/2" CLR. TO COLUMN;');
+  expect(texts(section).filter(v=>v==='1 1/4"')).toHaveLength(3);expect(texts(section).filter(v=>v==='1 1/2"')).toHaveLength(1);
+  expect(texts(section).filter(v=>v==='2 1/4"')).toHaveLength(2);expect(texts(section)).toContain('2 3/4"');
+  expect(words).toContain('GIRDER GUSSET PL 3/4" X 5 3/4" X 5 1/4"');expect(words).toContain('1/16" FILLER (HIDDEN)');
+  // The column gusset spans the bolt group, its 1 1/2 in end edge and the 1/2 in gap to the column flange.
+  expect(words).toContain('COLUMN GUSSET PL 3/4" X 5 3/4" X 5 1/2"');expect(words).toContain('2 FL 3/8" X 5 1/4" X 2\'-1 1/2", 1/2" CLR. TO COLUMN;');
   // Tie and girder end located from the stiffener at each girder end of the shared support.
   const plan=texts(t.views[1].render().svg);
   expect(plan.filter(v=>v==='0\'-3 1/2"')).toHaveLength(2);expect(plan.filter(v=>v==='0\'-6 1/4"')).toHaveLength(2);
@@ -99,7 +102,8 @@ describe('dimensions and weld callouts of the tie, keeper and bearing details',(
   expect(texts(saddle)).not.toContain('BOTH EDGES');
   const notes=texts(flangeTieSheetSvg(demo)).join(' ');
   expect(notes).toContain('NO HOLES OR CUTS THROUGH THE W FLANGES EXCEPT THOSE DETAILED FOR THE END BEARINGS AND END STOPS.');
-  expect(notes).toMatch(/TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT \(MAX\. D\/C \d\.\d\d\)\./);
+  // The summary gives the largest strength and fatigue ratios, not the detailing limits.
+  expect(notes).toMatch(/TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT \(MAX\. D\/C 0\.\d\d STRENGTH, 0\.\d\d FATIGUE\)\./);
  });
  it('dimensions the keeper, its clearance to the rail base, its lip bearing and length',()=>{
   const t=texts(view(demo,'RAIL KEEPER / GIRDER ATTACHMENT').render().svg);

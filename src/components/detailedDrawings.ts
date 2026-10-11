@@ -143,7 +143,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   dr.rect(X(tie.rootStart),y,tie.rootLength*k,a.saddleThickness*k);
   dr.rect(X(tie.rootStart),Y(a.saddleThickness),(tie.gussetEnd-tie.rootStart)*k,(tie.topDrop+t.width/2-a.saddleThickness)*k);
   dr.rect(X(tie.start),Y(tie.topDrop-t.width/2),t.length*k,t.width*k);
-  dr.rect(X(tie.barEnd-tie.connection),Y(tie.topDrop-tie.columnGusset/2),tie.columnGussetLength*k,tie.columnGusset*k);
+  dr.rect(X(tie.columnGussetStart),Y(tie.topDrop-tie.columnGusset/2),tie.columnGussetLength*k,tie.columnGusset*k);
   dr.line(X(tie.face),Y(-30),X(tie.face),Y(tie.topDrop+t.width/2+30),'HIDDEN');
   for(const offset of [0,t.length-tie.connection])for(let row=0;row<c.rows;row++)for(const sign of [-1,1])dr.circle(X(tie.start+offset+c.edge+row*c.pitch),Y(tie.topDrop+sign*c.gauge/2),boltProperties(c.grade,c.diameter).hole*k/2);
   dr.dimH(X(tie.start),X(tie.barEnd),Y(tie.topDrop+t.width/2),360,f(t.length));
