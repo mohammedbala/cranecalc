@@ -25,6 +25,11 @@ describe('longitudinal force at the supports',()=>{
   // runway, even on an end bay, no stop is struck and no longitudinal force reaches a support.
   for(const origin of [30*foot,2*foot,62*foot])expect(envelope(p,[event(p,'off','LRFD 8',origin,F)]).map(v=>v.longitudinal.longitudinal)).toEqual([0,0,0,0]);
   expect([craneAtStop(p,0,c.travelStart),craneAtStop(p,0,c.travelEnd),craneAtStop(p,0,2*foot)]).toEqual(['left','right',undefined]);
+  // Two cranes, the second cloned with full travel as the UI adds one: the first reaches only the left stop and the
+  // second only the right; each one's travel limit toward the other crane is that crane, not a stop.
+  const two=cappedDemonstrationProject();two.cranes.push(structuredClone(two.cranes[0]));
+  const [a,b]=two.cranes;
+  expect([craneAtStop(two,0,a.travelStart),craneAtStop(two,0,a.travelEnd),craneAtStop(two,1,b.travelStart),craneAtStop(two,1,b.travelEnd)]).toEqual(['left',undefined,undefined,'right']);
   // At the left stop it pushes RG1 toward grid 1, delivered at its locating end; its far end lifts.
   const left=envelope(p,[event(p,'left','LRFD 8',c.travelStart,F)]);
   expect(left.map(v=>v.longitudinal.longitudinal)).toEqual([-F,0,0,0]);expect(left[0].reversible.longitudinal).toBe(false);

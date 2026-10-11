@@ -24,7 +24,9 @@ export interface SheetEntry {number:string;title:string;details?:readonly string
 // The last column stops above the seal and issue labels at the lower right.
 const columnWidth=594,columns=[0,1,2,3].map(i=>14+i*(columnWidth+40)),top=18,limits=[1494,1494,1494,1318];
 /** Symbols and line types used on the sheets, each drawn as it appears with its meaning. */
-function legend(t:Style):Block{
+function legend(t:Style,units:'US'|'SI'):Block{
+ // A sample fillet size as the details print it: 1/4 (inches), or 6 mm.
+ const leg=units==='SI'?'6 mm':'1/4';
  const sample=150,row=Math.max(22,t.leading*2.2);
  const items:[(x:number,y:number)=>string,string][]=[
   [(x,y)=>line([x,y],[x+sample-20,y],'runway-line'),'NEW STEEL, PLATES AND WELDS (SOLID)'],
@@ -34,9 +36,9 @@ function legend(t:Style):Block{
   [(x,y)=>rect(x,y-3,sample-20,6,'rail-line'),'CRANE RAIL'],
   [(x,y)=>bubble(x+12,y,'A',10),'GRID DESIGNATION'],
   [(x,y)=>`${circle(x+14,y,13,'divider')}${line([x+1,y],[x+27,y],'annotation')}${text(x+14,y-3,'1',10,'middle',700)}${text(x+14,y+8.5,'S-02',7,'middle')}`,'DETAIL NUMBER OVER THE SHEET WHERE IT IS DRAWN; REFERENCES READ 1/S-02'],
-  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],false),'FILLET WELD, ARROW SIDE; SIZE LEFT OF THE SYMBOL'],
-  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],true),'FILLET WELD, BOTH SIDES'],
-  [(x,y)=>fieldFilletLeader([[x+2,y+8]],[x+22,y+3],'1/4',[],true),'FIELD WELD (FLAG); SHOP WELD U.N.O.'],
+  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],leg,[],false),'FILLET WELD, ARROW SIDE; SIZE LEFT OF THE SYMBOL'],
+  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],leg,[],true),'FILLET WELD, BOTH SIDES'],
+  [(x,y)=>fieldFilletLeader([[x+2,y+8]],[x+22,y+3],leg,[],true),'FIELD WELD (FLAG); SHOP WELD U.N.O.'],
   [(x,y)=>`${line([x,y],[x+40,y])}<path class="leader-arrow" d="M${n(x+40)},${n(y)}l-2.4,-3.2h4.8z"/>${line([x+40,y],[x+50,y-6])}${line([x+50,y-6],[x+56,y-6])}${text(x+60,y-3,'EL.',7.5)}`,'ELEVATION DATUM']
  ];
  const head=heading(t,'SYMBOLS AND LINE TYPES');
@@ -83,7 +85,10 @@ function wheelDiagram(t:Style,c:Crane,o:{force:(v:number)=>string;length:(mm:num
 function flow(blocks:Block[],limit:number,overflow=false){
  const placed:{x:number;y:number;b:Block}[]=[];let column=0,y=top,section:Block|undefined;
  for(let i=0;i<blocks.length;i++){
-  const b=blocks[i],need=b.height+(b.keep&&blocks[i+1]?2.4+blocks[i+1].height:0),bottom=Math.min(limit,limits[column]);
+  // A kept block needs room for the block after it, and a heading over a kept table also for the table's key,
+  // so the heading never stays behind alone; a chain taller than a column falls back to the next block only.
+  const b=blocks[i],next=b.keep?blocks[i+1]:undefined,after=b.continued&&next?.keep?blocks[i+2]:undefined,bottom=Math.min(limit,limits[column]);
+  const pair=b.height+(next?2.4+next.height:0),chain=pair+(after?2.4+after.height:0),need=chain<=Math.min(limit,limits[column])-top?chain:pair;
   if(b.continued)section=b;
   if(y>top&&y+need>bottom&&column<columns.length-1){column++;y=top;if(!b.continued&&section){const c=section.continued!();placed.push({x:columns[column],y,b:c});y+=c.height+2.4;}}
   else if(y>top&&y+need>bottom&&!overflow)return undefined;
@@ -267,7 +272,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
    P(`${checked.length?`THE CALCULATION REPORT CHECKS ${checked.join(', ').replace(/, ([^,]*)$/,' AND $1')} FOR THE ADDED CRANE LOADS. `:''}THE ENGINEER OF RECORD SHALL EVALUATE THE FOLLOWING FOR THE FORCES IN THE CALCULATION REPORT AND INCLUDE THE EVALUATION IN THE PERMIT SUBMITTAL; THEY ARE NOT DEFERRED SUBMITTALS. EVALUATION: ${reference?reference.toUpperCase():'NOT REFERENCED; THE SET IS NOT ISSUED UNTIL IT IS'}.`),
    ...N(unchecked.map(c=>c.title.toUpperCase()+'.')));
  }
- blocks.push(legend(t));
+ blocks.push(legend(t,p.units));
  blocks.push(H('ABBREVIATIONS'),P('(E) EXISTING · (N) NEW · C/L CENTERLINE · EL. ELEVATION · T.O.S. TOP OF STEEL · T.O.R. TOP OF RAIL · TYP. TYPICAL · U.N.O. UNLESS NOTED OTHERWISE · SC SLIP-CRITICAL · STD STANDARD HOLE · SSL / LSL SHORT / LONG SLOT · CJP COMPLETE JOINT PENETRATION · FW FIELD WELD · REF. REFERENCE (EXISTING OR BY OTHERS)'));
  blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} CALCULATION REVISION ${s.revision}.`));
  return blocks;};
