@@ -11,19 +11,13 @@ export function presentCheck(check:CheckResult,units:ProjectInput['units']):Chec
   c.substitution=`\\frac{${latexNumber(toDisplay(c.demand,q,units))}${suffix}}{${latexNumber(toDisplay(c.capacity,q,units))}${suffix}}=${(c.demand/c.capacity).toFixed(4)}`;
  }
  if(units==='US'){
-  const stress=(v:number)=>toDisplay(v,'stress',units).toFixed(4);
-  if(c.equation.includes('6900')){
-   c.equation=c.equation.replaceAll('6900',stress(6900));
-   c.note+=' Fatigue stress coefficient converted to ksi from the implemented source equation; numerical capacities are unchanged.';
-  }
-  if(c.equation.includes('0.103+1.24w/t_p')){
-   const k=25.4**.167;
-   c.equation=c.equation.replace('0.103+1.24w/t_p',`${(.103/k).toFixed(6)}+${(1.24/k).toFixed(6)}w/t_p`);
-   c.note+=' Use inches for weld leg and plate thickness in the reduction factor.';
-  }
-  if(c.id==='cap-weld-fatigue'){
-   c.equation=c.equation.replace('55,690(',`${stress(55)},${stress(690)}(`);
-   c.note=c.note.replace('Fatigue limit equation uses MPa; displayed stresses follow project units.','Fatigue limit equation and displayed stresses use ksi.');
+  // AISC 360-16 Appendix 3 in its US form (Eqs. A-3-1, A-3-2, A-3-6): the engine evaluates the US constants, so a US
+  // report prints 1000, 100 and 8 ksi and the inch R_FIL coefficients, never the SI 6900 / 690 / 55 MPa forms.
+  if(/6900|55,\\?,?690|max\\left\[55|0\.103\+1\.24/.test(c.equation)){
+   c.equation=c.equation.replaceAll('6900','1000').replaceAll('55,690(','8,100(').replaceAll('\\max\\left[55,\\,690','\\max\\left[8,\\,100')
+    .replaceAll('0.103+1.24w/t_p','0.06+0.72w/t_p').replaceAll('\\;\\text{MPa}','\\;\\text{ksi}').replaceAll(']\\,MPa',']\\,ksi');
+   c.note=c.note.replace(' Fatigue limit equation uses MPa; displayed stresses follow project units.','');
+   if(c.equation.includes('0.06+0.72w/t_p'))c.note+=' Use inches for weld leg and plate thickness in R_FIL.';
   }
  }
  return c;

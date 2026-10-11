@@ -1,3 +1,4 @@
+import {finiteLife} from './fatigueConstants';
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import {available} from './aiscStrength';
 import {boltCapacity,boltProperties,compressionResistance,parallelWeldGroup,minimumFillet,transverseFilletFatigue,blockShear} from './connectionStrength';
@@ -315,21 +316,21 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  // ---------------- Fatigue (service range ΔF, all cycles, AISC Appendix 3)
  const range=loads.range,Tr=range/2,At=tensileArea(cb.diameter);
  const angleF=tStubPrying({T:Tr,t:g.ta,b:cb.gauge-g.ta,a:x.contact,p:x.pa,db:cb.diameter,dPrime:cb.slotLength,Fu:m.Fu,method}),chanF=tStubPrying({T:Tr,t:sec.capTf,b:cb.gauge-sec.capTw,a:x.contact,p:x.pc,db:cb.diameter,dPrime:cb.hole,Fu:p.capDesign?.Fu??m.Fu,method});
- const boltAllow=(n:number)=>Math.max(7*ksi,6900*(.39/n)**(1/3));
+ const boltAllow=(n:number)=>Math.max(7*ksi,finiteLife(.39,n));
  const capRange=(Tr+Math.max(angleF.q,chanF.q))/At;
- add('cap-angle-cap-bolt-fatigue',G,'Cap bolts · axial tension fatigue',capRange,boltAllow(cyc),'stress','\\Delta f=(\\Delta T+\\Delta q)/A_t\\le\\max[(C_f/n)^{1/3},F_{TH}]',`AISC Appendix 3.4 / Table A-3.1 item 8.5: C_f = 3.9 × 10⁸, F_TH = 7 ksi, on the tensile stress area A_t = ${format(At,'area',u,3)} with prying. The angle is not clamped by the sleeved bolts, so the whole applied range ΔT = ΔF/2 = ${force(Tr)} reaches them (no 20% credit). ${cyc.toExponential(2)} cycles.`,['cap-angle-basis','aisc-fatigue']);
+ add('cap-angle-cap-bolt-fatigue',G,'Cap bolts · axial tension fatigue',capRange,boltAllow(cyc),'stress','\\Delta f=(\\Delta T+\\Delta q)/A_t\\le\\max[(C_f/n)^{0.333},F_{TH}]',`AISC Appendix 3.4 / Table A-3.1 item 8.5: C_f = 3.9 × 10⁸, F_TH = 7 ksi, on the tensile stress area A_t = ${format(At,'area',u,3)} with prying. The angle is not clamped by the sleeved bolts, so the whole applied range ΔT = ΔF/2 = ${force(Tr)} reaches them (no 20% credit). ${cyc.toExponential(2)} cycles.`,['cap-angle-basis','aisc-fatigue']);
  const Mvr=x.Mvc,colAt=tensileArea(cl.diameter),Tcr=range/2+Mvr/(2*cl.gauge);
  const endF=tStubPrying({T:Tcr,t:ep.thickness,b:cl.gauge-g.plate.thickness/2,a:ep.height/2-cl.gauge,p:ep.width,db:cl.diameter,dPrime:cl.hole,Fu:m.Fu,method});
  const colF=col?tStubPrying({T:Tcr,t:col.tf,b:x.ez-col.tw/2,a:col.width/2-x.ez,p:x.columnP!.p,db:cl.diameter,dPrime:cl.hole,Fu:col.Fu,method}):undefined;
  const colRange=.2*(Tcr+endF.q+(colF?.q??0))/colAt;
- add('cap-angle-col-bolt-fatigue',G,'Column bolts · axial tension fatigue',colRange,boltAllow(cyc),'stress','\\Delta f=0.2(\\Delta T+\\Delta q)/A_t\\le\\max[(C_f/n)^{1/3},F_{TH}]',`AISC Appendix 3.4: pretensioned bolts with only steel in the grip (end plate, shims, column flange) take 20% of the applied tension range including prying. ΔT = ${force(Tcr)} with the cyclic movement couple. C_f = 3.9 × 10⁸, F_TH = 7 ksi.`,['cap-angle-basis','aisc-fatigue']);
+ add('cap-angle-col-bolt-fatigue',G,'Column bolts · axial tension fatigue',colRange,boltAllow(cyc),'stress','\\Delta f=0.2(\\Delta T+\\Delta q)/A_t\\le\\max[(C_f/n)^{0.333},F_{TH}]',`AISC Appendix 3.4: pretensioned bolts with only steel in the grip (end plate, shims, column flange) take 20% of the applied tension range including prying. ΔT = ${force(Tcr)} with the cyclic movement couple. C_f = 3.9 × 10⁸, F_TH = 7 ksi.`,['cap-angle-basis','aisc-fatigue']);
  const Sn=(g.plate.width-2*(lb.slot.width+inch/16))*g.plate.thickness**2/6,plateRange=range/x.Ae+(range*g.plate.thickness/2+Mvr)/Sn;
- add('cap-angle-plate-fatigue',G,'Tie plate · net section at the slip-critical lap',plateRange,6900*(12/cyc)**(1/3),'stress','\\Delta f=\\frac{\\Delta F}{A_e}+\\frac{\\Delta Ft_p/2+M_{v,s}}{S_n}\\le F_{SR,B}',`AISC Table A-3.1 item 2.2, Category B (net section of a joint installed as slip-critical); all ${cyc.toExponential(2)} cycles at the largest range, no threshold credit. Includes the lap moment range and the single-crane support movement moment ${moment(Mvr)}.`,['cap-angle-basis','aisc-fatigue']);
+ add('cap-angle-plate-fatigue',G,'Tie plate · net section at the slip-critical lap',plateRange,finiteLife(12,cyc),'stress','\\Delta f=\\frac{\\Delta F}{A_e}+\\frac{\\Delta Ft_p/2+M_{v,s}}{S_n}\\le F_{SR,B}',`AISC Table A-3.1 item 2.2, Category B (net section of a joint installed as slip-critical); all ${cyc.toExponential(2)} cycles at the largest range, no threshold credit. Includes the lap moment range and the single-crane support movement moment ${moment(Mvr)}.`,['cap-angle-basis','aisc-fatigue']);
  const toeRange=range/(g.plate.width*g.plate.thickness)+6*Mvr/(g.plate.width*g.plate.thickness**2),root=transverseFilletFatigue(g.plate.thickness,g.weld,cyc);
- add('cap-angle-weld-toe-fatigue',G,'Tie plate at the end plate fillets · toe',toeRange,6900*(4.4/cyc)**(1/3),'stress','\\Delta f=\\frac{\\Delta F}{wt_p}+\\frac{6M_{v,s}}{wt_p^2}\\le F_{SR,C}','AISC Table A-3.1 item 5.5: tension plate with a pair of transverse fillets, crack from the toe, Category C; all cycles, no threshold credit.',['cap-angle-basis','aisc-fatigue']);
+ add('cap-angle-weld-toe-fatigue',G,'Tie plate at the end plate fillets · toe',toeRange,finiteLife(4.4,cyc),'stress','\\Delta f=\\frac{\\Delta F}{wt_p}+\\frac{6M_{v,s}}{wt_p^2}\\le F_{SR,C}','AISC Table A-3.1 item 5.5: tension plate with a pair of transverse fillets, crack from the toe, Category C; all cycles, no threshold credit.',['cap-angle-basis','aisc-fatigue']);
  add('cap-angle-weld-root-fatigue',G,'Tie plate at the end plate fillets · root',toeRange,root.capacity,'stress','F_{SR}=6900R_{FIL}(4.4/n)^{0.333};\\;R_{FIL}=\\frac{0.103+1.24w/t_p}{t_p^{0.167}}\\le1',`AISC Table A-3.1 item 5.5, crack from the root (Eq. A-3-5), R_FIL = ${root.reduction.toFixed(3)}.`,['cap-angle-basis','aisc-fatigue']);
  // Local plate bending at the rolled roots: the angle heel, the channel flange at its web and the column flange at its web.
- const localA=6900*(25/cyc)**(1/3);
+ const localA=finiteLife(25,cyc);
  const locals=[{name:'angle heel',f:6*Tr*Math.max(angleF.bPrime,0)/(1+angleF.delta*Math.min(angleF.alpha,1))/(x.pa*g.ta**2)},{name:'channel flange root',f:6*Tr*Math.max(chanF.bPrime,0)/(1+chanF.delta*Math.min(chanF.alpha,1))/(x.pc*sec.capTf**2)},
   ...(col&&colF?[{name:'column flange root',f:6*Tcr*Math.max(colF.bPrime,0)/(1+colF.delta*Math.min(colF.alpha,1))/(colF.p*col.tf**2)}]:[])];
  const lw=locals.reduce((a,v)=>v.f>a.f?v:a,locals[0]);

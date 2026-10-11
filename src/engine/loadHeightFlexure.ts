@@ -15,8 +15,8 @@ export interface FlexureCurve {
  lowerBound(length:number):number;
 }
 
-// AISC F2-4 (rolled I, c = 1, J omitted for welded plate girders) or F5-4 with the compression-flange
-// rt (capped, R_pg excluded from the elastic moment). A rational elastic Mcr that includes load height,
+// AISC F2-4 (rolled I, c = 1, J omitted for welded plate girders), or for capped sections F4-5 (compact or
+// noncompact web, with J) or F5-4 (slender web) with the compression-flange rt (R_pc / R_pg excluded from the elastic moment). A rational elastic Mcr that includes load height,
 // moment gradient and the modeled restraints maps to the code curve through the equivalent length L_e.
 export function flexureCurves(p:ProjectInput,s:Properties):{positive:FlexureCurve;negative:FlexureCurve}{
  const E=p.section.E,base=girderStrength(p,s),Lb=p.unbracedLength;
@@ -25,7 +25,12 @@ export function flexureCurves(p:ProjectInput,s:Properties):{positive:FlexureCurv
   const available=(L:number)=>pick(girderStrength({...p,unbracedLength:L},s));
   let mcr:(L:number)=>number,length:(M:number)=>number;
   const cap=base.capDirections?.[sign>0?0:1];
-  if(cap){
+  if(cap&&cap.clause==='F4'&&cap.j>0){
+   // F4-5 elastic LTB stress with the compression-flange rt and J/(Sxc h0) (compact / noncompact web, Iyc/Iy > 0.23).
+   const j=cap.j,a=Math.PI**4*E*E*.078*j,b=Math.PI**4*E*E;
+   mcr=L=>Math.PI**2*E/(L/cap.rt)**2*Math.sqrt(1+.078*j*(L/cap.rt)**2)*cap.Sc;
+   length=M=>{const F=M/cap.Sc;return cap.rt*Math.sqrt((a+Math.sqrt(a*a+4*F*F*b))/(2*F*F));};
+  }else if(cap){
    mcr=L=>Math.PI**2*E*cap.Sc*(cap.rt/L)**2;
    length=M=>Math.PI*cap.rt*Math.sqrt(E*cap.Sc/M);
   }else{

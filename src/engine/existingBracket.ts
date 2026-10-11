@@ -1,3 +1,4 @@
+import {finiteLife} from './fatigueConstants';
 import type {ProjectInput,CheckResult} from './types';
 import type {BracketLoads} from './bracketDesign';
 import {seatStrip} from './bracketDesign';
@@ -98,7 +99,7 @@ export function existingBracketChecks(p:ProjectInput,r:ExistingBracketResults):C
  const fatigueReady=e.rating.fatigueRange>0&&e.rating.fatigueRootMoment>0&&e.rating.fatigueSeatMoment>0;
  const fatigueUtilization=fatigueReady?Math.max(0,...r.fatigue.map(f=>f.vertical/e.rating.fatigueRange+f.rootMoment/e.rating.fatigueRootMoment+f.seatMoment/e.rating.fatigueSeatMoment)):0;
  add('fatigue','Existing support · assessed cyclic ranges',fatigueUtilization,fatigueReady?1:0,'ratio','\\Delta V/V_{SR}+\\Delta M_r/M_{r,SR}+\\Delta M_s/M_{s,SR}\\le1','Twice each maximum absolute unfactored bin response bounds reversal; the largest combined ratio applies to all assessed cycles. The source assessment must permit this range interaction.');
- const seatDamage=r.fatigue.reduce((sum,f)=>sum+(f.seatStress/(6900*(.39/f.cycles)**(1/3)))**3,0);
+ const seatDamage=r.fatigue.reduce((sum,f)=>sum+(f.seatStress/(finiteLife(.39,f.cycles)))**3,0);
  add('seat-fatigue','New bolted spreader · fatigue',seatDamage,1,'ratio','D=\\sum(\\Delta f_i/F_{SR,i})^3\\le1','Conservative E-prime base-metal bound at all seat sections, no endurance-limit credit. Twice peak absolute strip stress bounds full reversal. Bolt fatigue and existing steel are covered by the separate assessment.');
  return checks;
 }

@@ -1,3 +1,4 @@
+import {categoryF,finiteLife} from './fatigueConstants';
 /**
  * New rolled wide-flange column bracket: an AISC W-section cantilever stub welded to the column flange, its web
  * vertical and its length along the stub axis from the column face. The runway bearing plates and their bolts land on
@@ -465,7 +466,7 @@ export function rolledBracketChecks(p:ProjectInput,res:RolledBracketResults,serv
  if(eb)add('uplift','Bearing uplift · held down by the bearing bolts',uplift,4*boltCapacity({grade:eb.bolts.grade,diameter:eb.bolts.diameter,planes:1,surface:'B',shear:0,tension:uplift/4,method:p.method}).tension,'force','V_{uplift}\\le4\\phi R_{nt}',`Any uplift at a girder end is held down by its four bearing bolts in tension; bolt shear with tension and ${seat?'seat':'flange'} prying are checked under End bearings, and the stub checks above take the signed reactions.`,S.uplift?.caseId,['w-bracket-basis','aisc-connections']);
  else add('uplift','Bearing contact · uplift requiring separate restraint',uplift,1,'force','V_{uplift}\\le0','Gravity bearing without bolted end bearings: uplift above 1 N requires a separately designed hold-down.',S.uplift?.caseId);
  // Fatigue, AISC Appendix 3, under the duty spectrum (unfactored bin loads without impact).
- const F=res.fatigue,Cn=(cf:number,n:number,R=1)=>6900*R*(cf/n)**(1/3),total=p.fatigue.cycles,weldF=Math.max(55,690*(1.5/total)**.167);
+ const F=res.fatigue,Cn=(cf:number,n:number,R=1)=>finiteLife(cf,n,R),total=p.fatigue.cycles,weldF=categoryF(total);
  const miner=(key:'flange'|'web'|'column'|'stiffenerToe'|'seat',limit:(n:number)=>number)=>F.reduce((s,v)=>s+(v[key]>0?(v[key]/limit(v.cycles))**3:0),0);
  const fatRefs=['w-bracket-basis','aisc-fatigue'],rFlange=transverseFilletFatigue(st.tf,r.flangeWeld,total).reduction,rWeb=transverseFilletFatigue(st.tw,r.webWeld,total).reduction;
  if(g.cjp)add('fatigue-flange','Stub flanges at the CJP welds · fatigue',miner('flange',n=>Cn(4.4,n)),1,'ratio','D=\\sum_i(\\Delta f_i/F_{SR,C})^3\\le1','Table A-3.1 item 5.4, Category C: base and weld metal at the toe of the CJP T-joint with the reinforcement left in place. Range per bin of the flange-tip stress (bending, axial, flange lateral bending); Miner sum, no endurance-limit credit.',undefined,fatRefs);

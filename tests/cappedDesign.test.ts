@@ -55,12 +55,14 @@ describe('capped runway mechanics and design',()=>{
   expect(m.beta).toBeLessThan(0);expect(m.shearCenter).toBeGreaterThan(m.elastic.cy);
   near(m.J/25.4**4,3.77+1.01); // AISC component J, no overlap credit.
  });
- it('uses F5 Lr; simple spans rate positive moment, continuous runways also the reverse sign',()=>{
+ it('uses the F4 Lr for a compact capped web; simple spans rate positive moment, continuous runways also the reverse sign',()=>{
   const p=pcap();p.unbracedLength=360*25.4;p.method='ASD';
   const s=girderStrength(p,sectionProperties(p.section)),top=s.capDirections![0],bottom=s.capDirections![1];
   // Independent substitution of DG7 rounded geometric data, rt=4.50 in.
-  near(top.rt/25.4,4.5,.006);near(top.Lp/25.4,119,.008);near(top.Lr/25.4,407,.009);
-  expect(top.Lr/25.4).toBeLessThan(457); // Published F4 table Lr, deliberately not mixed with F5.
+  near(top.rt/25.4,4.5,.006);near(top.Lp/25.4,119,.008);
+  // The web is compact for the cap in compression (Table B4.1b case 16), so F4 applies: its Lr reproduces the DG7
+  // Table A-2 value, 457 in (review item C23; before, the F5 Lr of 407 in was used for every capped section).
+  expect(top.clause).toBe('F4');expect(top.web).toBe('compact');near(top.Lr/25.4,457,.008);
   // Simple spans: cap and W top flange in compression; the bottom-flange direction is kept for reversal.
   expect(s.major).toBeCloseTo(Math.min(top.Mn/1.67,s.netLimitApplies?s.netMoment:Infinity),6);expect(s.majorReverse).toBeCloseTo(bottom.Mn/1.67,6);
   expect(s.major).toBeGreaterThan(s.majorReverse!);
@@ -89,8 +91,10 @@ describe('capped runway mechanics and design',()=>{
   const checks=capAttachmentChecks(snapshot),w=checks.find(c=>c.id==='cap-weld-strength')!;
   near(w.demand!,100);near(w.capacity!,.75*.6*490*6.35/Math.sqrt(2));
   const fatigue=checks.find(c=>c.id==='cap-weld-fatigue')!;near(fatigue.demand!,100/(6.35/Math.sqrt(2)));
+  // Cap end development (review item C17): cumulative weld 2 x r_w from the cap end against the channel force at
+  // each section; with no factored shear, moment or axial force there is no channel force to develop.
   const dev=checks.find(c=>c.id==='cap-development')!,beta=1.2-.002*1200/6.35;
-  near(dev.capacity!,2*beta*1200*w.capacity!);
+  expect(dev.demand).toBe(0);expect(dev.status).toBe('pass');expect(dev.title).toBe('Cap end · cumulative weld force development');
   snapshot.detailResults!.demands.endLongitudinal=10000;
   const withTraction=capAttachmentChecks(snapshot).find(c=>c.id==='cap-weld-strength')!;
   near(withTraction.demand!,100+10000*(10/39)/(2*beta*1200));

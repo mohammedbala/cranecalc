@@ -1,3 +1,4 @@
+import {categoryF,fatigueCoefficient} from './fatigueConstants';
 /**
  * Template sizing of the tapered I haunch for the project's support reactions. The largest reaction at a grid is put
  * on one girder end at its bearing offset (the torsion of a runway-end grid or of one loaded bay), with one crane's
@@ -70,7 +71,7 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
  // Fatigue: the crane reaction without impact on one girder end, then the other (the warping stress reverses), each
  // duty bin scaled by its lift; the Category C Miner sum as an equivalent stress ratio D^(1/3). Fillet throats
  // (Category F) take the full range at all cycles.
- const N=d.spectrum.reduce((n,v)=>n+v.cycles,0),Fw=Math.max(55,690*(1.5/N)**.167),miner=(range:number)=>Math.cbrt(set.bins.reduce((sum,v)=>sum+v.cycles*(range*v.scale)**3,0)/(6900**3*4.4));
+ const N=d.spectrum.reduce((n,v)=>n+v.cycles,0),Fw=categoryF(N),miner=(range:number)=>Math.cbrt(set.bins.reduce((sum,v)=>sum+v.cycles*(range*v.scale)**3,0)/(fatigueCoefficient**3*4.4));
  const [fa,fb]=set.fatigue.map(loads=>haunchActions(g,root,e,loads,{longitudinal:0,bottom:0,offset:0})),ta=haunchTipStresses(g,root,fa),tb=haunchTipStresses(g,root,fb);
  const tipRange=(i:number)=>Math.max(Math.abs(ta[i]),Math.abs(tb[i]),Math.abs(ta[i]-tb[i]));
  put('fatigueTop',miner(Math.max(tipRange(0),tipRange(1))));put('fatigueBottom',miner(Math.max(tipRange(2),tipRange(3))));
