@@ -44,7 +44,8 @@ describe('calculation section figures',()=>{
   const p=cappedDemonstrationProject();p.spans=[4000,6000];p.system='continuous';
   const before=JSON.stringify(p),f=checkFigure('Geometry',p);
   expect(f.note).toContain('2 continuous');expect(f.svg).toContain('CONTINUOUS GIRDER');
-  expect(f.svg).toContain('L2');expect(f.svg).not.toContain('L3');
+  // Bay labels as text (path data also holds "L" commands).
+  expect(f.svg).toContain('>L2</text>');expect(f.svg).not.toContain('>L3</text>');
   for(const topic of Object.keys(checkGroupPurpose))checkFigureHtml(topic,p);
   expect(JSON.stringify(p)).toBe(before);
  });
