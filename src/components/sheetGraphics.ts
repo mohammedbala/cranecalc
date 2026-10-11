@@ -235,7 +235,7 @@ export function fieldWeldFlag(at:XY){
  const x=at[0]-14,y=at[1]-3;
  return `<g data-field-weld="true">${line([x,y],[x,y-15])}<path class="annotation" style="fill:#111" d="M${x},${y-15}l10,3l-10,3Z"/></g>`;
 }
-export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[],field=false){
+export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[],field=false,allAround=false){
  // AWS-style reference line with the fillet triangle on the arrow side (below).
  // A second triangle denotes both sides only when the template requires it.
  let svg=multiLeader(points,at,[],8,via,89);
@@ -248,7 +248,9 @@ export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],
  svg+=text(x-6,y+7,labelCaps(sizeLabel.replaceAll('"','')),8,'end')+(bothSides?text(x-6,y-2,labelCaps(sizeLabel.replaceAll('"','')),8,'end'):'');
  svg+=labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('');
  const right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+89);
- return `<g data-multileader="weld"${field?' data-weld-location="field"':''}>${svg}${field?fieldWeldFlag(right?[at[0]+117,at[1]]:at):''}</g>`;
+ // Weld-all-around: a circle where the arrow meets the reference line (AWS A2.4).
+ if(allAround)svg+=circle(right?at[0]+92:at[0]-3,y,3);
+ return `<g data-multileader="weld"${field?' data-weld-location="field"':''}${allAround?' data-weld-all-around="true"':''}>${svg}${field?fieldWeldFlag(right?[at[0]+117,at[1]]:at):''}</g>`;
 }
 export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[]){return filletLeader(points,at,sizeLabel,labels,bothSides,via,true);}
 
@@ -256,7 +258,7 @@ export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:stri
  * Leaders to a column of labels, ordered by target height so no two leaders
  * cross; labels are spaced by their line count within [top, bottom].
  */
-export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boolean}[],x:number,top:number,bottom:number){
+export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boolean;arrowSide?:boolean;allAround?:boolean}[],x:number,top:number,bottom:number){
  const sorted=[...items].sort((a,b)=>a.at[1]-b.at[1]),height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*11;
  const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
  const slots=()=>{let y=top;return sorted.map(v=>{const at=y;y+=height(v)+gap;return at;});};
@@ -270,7 +272,7 @@ export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boo
   if(!swapped)break;
  }
  let svg='';const ys=slots();
- sorted.forEach((v,i)=>{const y=ys[i];svg+=v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,true,[],!!v.field):multiLeader([v.at],[x,y],v.labels);});
+ sorted.forEach((v,i)=>{const y=ys[i];svg+=v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,!v.arrowSide,[],!!v.field,!!v.allAround):multiLeader([v.at],[x,y],v.labels);});
  return svg;
 }
 

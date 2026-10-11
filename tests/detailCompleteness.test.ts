@@ -114,5 +114,12 @@ describe('dimensions and weld callouts of the tie, keeper and bearing details',(
   const s=calculate(cappedDemonstrationProject()),svg=view(s,'GIRDER BEARING / COLUMN BRACKET').render().svg,t=texts(svg).join(' | ');
   expect(svg).toContain('data-weld="cjp"');expect(t).toContain('CJP TO W TOP FLANGE');expect(t).toContain('FIT BOTTOM END');
   expect(t).not.toContain('TOP CJP');expect(t).not.toContain('FIT / MILL');
+  // AWS A2.4 single-bevel symbol: the perpendicular and 45 degree legs both leave the reference line at the root and
+  // open away from it; no leg closes back onto the reference line as a fillet triangle would.
+  const at=svg.indexOf('data-weld="cjp"'),g=svg.slice(at,svg.indexOf('>CJP</text>',at));
+  const legs=[...g.matchAll(/<line class="[^"]*" x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"/g)].map(m=>m.slice(1,5).map(Number)).filter(([x1,y1,x2,y2])=>Math.abs(Math.abs(y2-y1)-8)<.01&&(Math.abs(x2-x1)<.01||Math.abs(Math.abs(x2-x1)-8)<.01));
+  expect(legs).toHaveLength(2);
+  expect(legs[0].slice(0,2)).toEqual(legs[1].slice(0,2));
+  for(const [,y1,,y2] of legs)expect(y2).toBeGreaterThan(y1);
  },240000);
 });

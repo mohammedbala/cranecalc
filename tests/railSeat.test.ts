@@ -74,6 +74,12 @@ describe('rail seat: pad, keepers and anchors',()=>{
    rail.joints.forEach((j,n)=>expect(moves.joints.find(v=>v.side===rail.side&&v.station===j)!.movement).toBeCloseTo(railExpansion*dT*(rail.pieces[n]+rail.pieces[n+1])/2,8));
   });
  });
+ it('dimensions T.O.R. to T.O.S. at the top of the W on a capped girder, as the S-00 / S-01 elevations',()=>{
+  const p=cappedDemonstrationProject(),t=texts(railKeeperView(snapshot(p)).render().svg),el=runwayElevations(p)!;
+  // 6 in rail on the 0.40 in C15 web, no pad: 6 3/8 in, the T.O.R. - T.O.S. difference of the elevations.
+  expect(t).toContain('6 3/8"');expect(t).not.toContain('6"');
+  expect((el.tor-el.tos)/25.4).toBeCloseTo(6+p.section.capTw/25.4,6);
+ });
  it('draws and specifies the pad, the keeper and its welds, the anchor and the joint dimensions',()=>{
   const us=texts(railKeeperView(snapshot(demonstrationProject())).render().svg);
   // K1: 9/16 in projection and 2 3/8 in body (2 15/16 in), 3/4 in lip and 7/8 in under it (1 5/8 in); 3/8 in fillets,
@@ -83,7 +89,7 @@ describe('rail seat: pad, keepers and anchors',()=>{
   // Rail joint: bolt pitch, edge distances to the bar end and the rail end, bar length.
   expect(us.filter(t=>t==='1 1/2"')).toHaveLength(2);expect(us).toContain('3"');expect(us).toContain('1\'-0 3/8"');
   const capped=texts(railKeeperView(snapshot(cappedDemonstrationProject())).render().svg);
-  expect(capped.some(t=>t.startsWith('RAIL PAD'))).toBe(false);expect(capped).toContain('6"');
+  expect(capped.some(t=>t.startsWith('RAIL PAD'))).toBe(false);expect(capped).toContain('6 3/8"');
   const si=demonstrationProject();si.units='SI';
   const metric=texts(railKeeperView(snapshot(si)).render().svg).join(' ');
   expect(metric).not.toMatch(/"|KSI|KIP|\d\.\d{2,} ?mm|\d\.[1-46-9] ?mm/);expect(metric).toContain('10 MPa');expect(metric).toContain('1.5 mm CLEAR');

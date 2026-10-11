@@ -2,7 +2,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {existingColumnSection} from '../engine/existingColumn';
 import {anchorHardware,columnBaseElevation} from '../engine/columnBaseInputs';
-import {barDiameter} from '../engine/columnBase';
+import {barDiameter,plateWasherWeld} from '../engine/columnBase';
 import {runwayElevations} from '../engine/drawingData';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
@@ -230,9 +230,10 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   svg+=dimV(Y(ftgTop),Y(head),X(-row-nut/2),dx,dim(a.embedment))+dimV(Y(ftgTop),Y(ftgBot),lx,dx-20,dim(hf));
   svg+=dimH(X(-row),X(row),Y(hw.washerThickness+a.diameter*1.6),Y(stub)-6,dim(2*row));
   const rx=X(ft.L/2+ext*.5)+28,slabZ=(ft.soil>0?b.plate.N/2+12*inch+ft.L/2+ext*.5:ft.L+ext*.5)/2;
-  const items:{at:XY;labels:string[]}[]=[
+  const items:{at:XY;labels:string[];weld?:string;arrowSide?:boolean;allAround?:boolean}[]=[
    {at:[X(c.d/2),Y(stub*.8)],labels:[`${name} COLUMN`]},
-   {at:[X(row+nut/2),Y(hw.washerThickness+a.diameter/2)],labels:['HVY HEX NUT AND PL','WASHER WELDED TO PL']},
+   {at:[X(row+nut/2),Y(hw.washerThickness+a.diameter/2)],labels:['HVY HEX NUT AND','PL WASHER']},
+   {at:[X(row+hw.washer/2),Y(hw.washerThickness*.4)],weld:size(plateWasherWeld(b).size),arrowSide:true,allAround:true,labels:['PL WASHER TO BASE PL,','EACH ROD']},
    {at:[X(b.plate.N/2+inch),Y(-tb-gr/2)],labels:[`${size(gr)} NON-SHRINK GROUT`]},
    ...(ft.slab>0?[{at:[X(slabZ),Y(slabTop-ft.slab/2)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,`${size(inch/2)} ISOLATION JT.`]}]:[]),
    {at:[X(row+nut/2),Y(head+a.diameter/2)],labels:['EMBEDDED HVY HEX NUT,','TACK WELDED TO ROD']},
@@ -263,7 +264,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   ];
   const notes=[
    `NEW COLUMNS: ASTM A992 ${name}, ONE AT EACH SUPPORT OF BOTH RUNWAYS. FIXED BASE, FREE TOP ACROSS THE RUNWAY; ALONG THE RUNWAY BY THE CRANE-LEVEL BRACING. COLUMN TOP AT OR BELOW THE TOP OF THE GIRDER, CLEAR OF THE CRANE END TRUCKS; VERIFY CLEARANCE WITH THE CRANE SUPPLIER.`,
-   `BASE PLATE ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN, ${size(b.plate.weld)} FILLETS BOTH SIDES OF FLANGES AND WEB. HOLES ${size(hw.hole)} DIA. (AISC DG1 TABLE 2.3) WITH ${size(hw.washer)} X ${size(hw.washer)} X ${size(hw.washerThickness)} PLATE WASHERS; WELD WASHERS TO THE PLATE AFTER THE NUTS ARE SNUG SO ALL RODS SHARE THE SHEAR.`,
+   `BASE PLATE ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN, ${size(b.plate.weld)} FILLETS BOTH SIDES OF FLANGES AND WEB. HOLES ${size(hw.hole)} DIA. (AISC DG1 TABLE 2.3) WITH ${size(hw.washer)} X ${size(hw.washer)} X ${size(hw.washerThickness)} PLATE WASHERS; WELD WASHERS TO THE PLATE, ${size(plateWasherWeld(b).size)} FILLET ALL AROUND, AFTER THE NUTS ARE SNUG SO ALL RODS SHARE THE SHEAR.`,
    `ANCHOR RODS ASTM F1554 GR. ${a.grade.split('-')[1]} WITH ASTM A563 HEAVY HEX NUTS; EMBEDDED HEAVY HEX NUT TACK WELDED TO THE ROD. SET WITH A TEMPLATE TO AISC CODE OF STANDARD PRACTICE §7.5 TOLERANCES. DO NOT FIELD BEND OR HEAT RODS.`,
    `SET THE PLATE ON SHIM STACKS OR LEVELING NUTS AND FILL ${size(gr)} OF NON-SHRINK, NON-METALLIC GROUT (ASTM C1107, ${u==='US'?'5,000 PSI':'35 MPa'} MINIMUM) TO FULL BEARING BEFORE THE GIRDER IS SET.`,
    `FOOTING CONCRETE f'c = ${force(b.concrete.fc,'stress')} AT 28 DAYS, NORMALWEIGHT; REINFORCEMENT ${rebarGrade(b.footing.fy,u)}, ${size(ft.cover)} CLEAR COVER CAST AGAINST EARTH, STRAIGHT BARS EACH WAY.`,

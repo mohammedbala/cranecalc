@@ -2,6 +2,7 @@ import {asceCombinations} from './asceCombinations';
 import {columnResponse} from './columnAnalysis';
 import {existingColumnEccentricity,existingColumnRailElevation,existingColumnSection,railForce,seismicHeight} from './existingColumn';
 import {anchorGrades,anchorHardware,barSizes,columnBaseElevation,type ColumnBaseInput} from './columnBaseInputs';
+import {minimumFillet} from './connectionStrength';
 import {sectionProperties} from './section';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
@@ -300,6 +301,16 @@ export function baseDrift(p:ProjectInput,column:ExistingColumnResult){
  const theta=M/(b.soil.subgrade*b.footing.B*b.footing.L**3/12),lever=ht+arm;
  return {theta,lever,column:column.drift.value,total:column.drift.value+theta*lever,limit:column.drift.limit};
 }
+/**
+ * Fillet all around each plate washer to the base plate, so every rod takes its share of the base shear through
+ * the oversized hole (AISC Design Guide 1 §2.10). The size is the Table J2.4 minimum, no more than the J2.2b
+ * maximum along the washer edge; E70XX, no directional increase.
+ */
+export function plateWasherWeld(b:ColumnBaseInput){
+ const hw=anchorHardware(b.anchors.diameter),t=hw.washerThickness,edgeMax=t<6.35?t:t-25.4/16;
+ const size=Math.min(minimumFillet(Math.max(t,b.plate.thickness)),edgeMax),length=4*hw.washer;
+ return {size,length,phiRn:.75*.6*482.6*Math.SQRT1_2*size*length};
+}
 function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
  const b=p.columnBase!,u=p.units,f=(v:number,q:Parameters<typeof format>[1]='force')=>format(v,q,u,3),checks:CheckResult[]=[];
  const add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,refs:string[],caseId?:string)=>checks.push({id:'base-'+id,group:'New column base',title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:Number.isFinite(demand)&&Number.isFinite(capacity)&&capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds:refs,caseId});
@@ -312,6 +323,8 @@ function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
  const rods=`${at}: ${2*b.anchors.perRow} - ${f(b.anchors.diameter,'length')} ${b.anchors.grade} headed rods, hef ${f(a.hef,'length')}; strength-level ASCE 7 loads, ${a.action.id}${a.action.seismic?' with overstrength Ωo (ASCE 7 §12.2.5.2)':''}${a.seismic?'; ACI 318-19 §17.10.5.4: 0.75 on concrete breakout, pullout and side-face blowout':''}. Cracked concrete, Condition B, no anchor reinforcement credited.`;
  add('anchor-tension','Anchor rods · tension',a.T,a.phiNn,'force','\\phi N_n=\\min(\\phi N_{sa},\\phi N_{cbg},\\phi N_{pn},\\phi N_{sbg})',`${rods} Steel ${f(a.steelT)}, concrete breakout ${f(a.breakout)}, pullout ${f(a.pullout)}${a.blowout?`, side-face blowout ${f(a.blowout)}`:''}.`,['aci-318'],a.action.id);
  add('anchor-shear','Anchor rods · shear',a.V,a.phiVn,'force','\\phi V_n=\\min(\\phi V_{sa},\\phi V_{cbg},\\phi V_{cpg})',`${rods} All rods share the base shear with a grout pad (0.8) and no friction credit. Steel ${f(a.steelV)}, pryout ${f(a.pryout)}; breakout toward the footing edge ${f(a.breakoutV)} across the runway (Vx = ${f(a.Vx)})${a.Vy>0?` and ${f(a.breakoutVy)} along it (Vy = ${f(a.Vy)})`:''}, each direction checked separately.`,['aci-318'],a.action.id);
+ {const w=plateWasherWeld(b),n=2*b.anchors.perRow;
+  add('washer-weld','Plate washer · weld to base plate',a.V/n,w.phiRn,'force','\\phi R_n=0.75\\cdot0.60F_{EXX}\\cdot0.707w\\cdot4b_w',`${at}, ${a.action.id}: one rod's share of the base shear, V/${n}. ${f(w.size,'length')} fillet all around each ${f(anchorHardware(b.anchors.diameter).washer,'length')} plate washer, E70XX, L = ${f(w.length,'length')}; Table J2.4 minimum for the thicker part, within the J2.2b edge maximum.`,['aisc-connections','dg1'],a.action.id);}
  add('anchor-interaction','Anchor rods · tension and shear',a.interaction,1,'ratio','\\frac{N_{ua}}{\\phi N_n}+\\frac{V_{ua}}{\\phi V_n}\\le1.2',`${at}, ${a.action.id}: ACI 318-19 §17.8; a ratio of 0.2 or less is checked alone. Reported as a fraction of 1.2.`,['aci-318'],a.action.id);
  add('soil','Footing · soil bearing',ft.qMax,b.soil.allowable,'pressure','q_{max}=\\frac{P}{BL}\\left(1+\\frac{6e}{L}\\right)\;\\text{or}\;\\frac{2P}{3B(L/2-e)}',`${at}, ${ft.soilAction.id} (service): column load plus footing and soil ${f(ft.weight)}; base moment plus base shear times the footing and grout depth.`,['aci-318'],ft.soilAction.id);
  add('overturning','Footing · overturning',ft.overturningRequired,ft.overturning,'ratio',`FS=\\frac{W_D\\,L/2-M_{D,e}}{M_{ot}}\\ge${ft.overturningRequired}`,`${at}, ${ft.stabilityAction.id}${ft.overturningRequired<1.5?' (seismic, reduced dead load, FS 1.0)':''}: dead load of the runway, column, footing and soil about the footing edge against the side thrust (or longitudinal force) moment at the footing base. Across the runway the edge on the bracket side governs, with the runway dead reaction's eccentric moment deducted from the restoring moment; the crane vertical load is not credited.`,['aci-318'],ft.stabilityAction.id);

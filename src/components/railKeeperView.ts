@@ -85,9 +85,10 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
    sec+=path([[X(sign*K.outer),ySteel],[X(sign*K.outer),yLip],[X(sign*K.tip),yLip],[X(sign*K.tip),yBaseTop],[X(sign*K.inner),yBaseTop],[X(sign*K.inner),ySteel]],'runway-line');
    sec+=path([[X(sign*K.outer),ySteel],[X(sign*(K.outer+K.weld)),ySteel],[X(sign*K.outer),ySteel-X(K.weld)]],'runway-line');
   }
-  // Top of rail to the top of the steel it bears on: the rail and the pad, as the T.O.R. elevations use it.
+  // Top of rail to T.O.S., the top of the W as the T.O.R. / T.O.S. elevations on S-00 and S-01 use it: the rail,
+  // the pad and, on a capped girder, the channel web.
   const edge=X(recW/2),xd=edge+10;
-  sec+=line([X(r.headWidth/2)+2,0],[xd+5,0])+line([edge+2,ySteel],[xd+5,ySteel])+line([xd,0],[xd,ySteel])+[0,ySteel].map(y=>line([xd-3,y+2.5],[xd+3,y-2.5])).join('')+text(xd-6,ySteel/2,size(depth+pt),9,'middle',400,-90)+text(xd+8,3,'T.O.R.',7.5)+text(xd+8,ySteel+3,'T.O.S.',7.5);
+  sec+=line([X(r.headWidth/2)+2,0],[xd+5,0])+line([edge+2,wTop],[xd+5,wTop])+line([xd,0],[xd,wTop])+[0,wTop].map(y=>line([xd-3,y+2.5],[xd+3,y-2.5])).join('')+text(xd-6,wTop/2,size(depth+pt+(capped?b.capTw:0)),9,'middle',400,-90)+text(xd+8,3,'T.O.R.',7.5)+text(xd+8,wTop+3,'T.O.S.',7.5);
   // Callouts left of the section, in the order of their targets down the section.
   const productName=r.padSource.split(/[:;]/)[0].trim();
   const items:{at:XY;labels:string[];via?:XY[];weld?:boolean}[]=[
