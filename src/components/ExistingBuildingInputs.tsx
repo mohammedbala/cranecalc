@@ -22,7 +22,9 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
  const c=project.existingColumn,bracket=project.details?.bracket?.enabled;
  // A new column's bracket is welded to it, so the bracket's receiving column follows the selected shape.
  const set=(patch:Partial<ExistingColumnInput>)=>update(p=>{p.existingColumn={...(p.existingColumn??structuredClone(defaultExistingColumn)),...patch};const n=p.existingColumn,b=p.details?.bracket,shape=aiscShapeByName(n.shape??'');
-  if(n.isNew&&b?.enabled&&shape)b.receiver={...b.receiver,depth:shape.d*25.4,width:shape.bf*25.4,flangeThickness:shape.tf*25.4,webThickness:shape.tw*25.4,Fy:n.Fy,Fu:n.Fu,axialDemand:0,confirmed:true,source:b.receiver.source||`New ${n.shape} column designed here`};});
+  if(n.isNew&&b?.enabled&&shape)b.receiver={...b.receiver,depth:shape.d*25.4,width:shape.bf*25.4,flangeThickness:shape.tf*25.4,webThickness:shape.tw*25.4,Fy:n.Fy,Fu:n.Fu,axialDemand:0,confirmed:true,source:b.receiver.source||`New ${n.shape} column designed here`};
+  // An existing column: the bracket is welded to the surveyed shape; its survey record and confirmation stay as entered.
+  else if(b?.enabled&&shape)b.receiver={...b.receiver,depth:shape.d*25.4,width:shape.bf*25.4,flangeThickness:shape.tf*25.4,webThickness:shape.tw*25.4,Fy:n.Fy,Fu:n.Fu};});
  const support=(axis:'strong'|'weak',label:string)=>c&&<div className="field-grid">
   <label className="field"><span>{label} · base</span><select value={c[axis].base} onChange={e=>set({[axis]:{...c[axis],base:e.target.value as 'pinned'|'fixed'}})}><option value="pinned">Pinned</option><option value="fixed">Fixed</option></select></label>
   <label className="field"><span>{label} · top</span><select value={c[axis].top} onChange={e=>set({[axis]:{...c[axis],top:e.target.value as 'braced'|'free'}})}><option value="braced">Braced</option><option value="free">Sways</option></select></label></div>;
@@ -33,7 +35,7 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
   {c?.enabled&&<>
    <label className="checkbox-field"><input type="checkbox" checked={!!c.isNew} onChange={e=>set(e.target.checked?{isNew:true,strong:{base:'fixed',top:'free'},Lcx:2.1*c.height,existing:structuredClone(defaultExistingColumn.existing),source:'New column designed here',confirmed:true}:{isNew:false,confirmed:false,source:''})}/>New freestanding runway column designed here: fixed base, girder on its bracket or column cap, no existing building loads</label>
    {c.isNew&&project.details&&<ColumnCapInputs project={project} update={update} numeric={numeric}/>}
-   {bracket&&!c.isNew?<div className="inline-note">Column section, material, eccentricity and flange unbraced length come from the bracket's receiving column under Connections.</div>:<div className="field-grid">
+   {bracket&&!c.isNew&&!aiscShapeByName(c.shape)?<div className="inline-note">Column plates, material, eccentricity and flange unbraced length come from the bracket's receiving column under Connections. Select a W shape to set the receiving column from the catalogue.<select value="" onChange={e=>set({shape:e.target.value})}><option value="">Surveyed plates</option>{aiscWShapes.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}</select></div>:<div className="field-grid">
     <label className="field"><span>Column section</span><select value={aiscShapeByName(c.shape)?c.shape:''} onChange={e=>set({shape:e.target.value})}><option value="">Custom plates (no fillet credit)</option>{aiscWShapes.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}</select></label>
     {!aiscShapeByName(c.shape)&&<>{numeric('Depth d',c.d,v=>set({d:v}))}{numeric('Flange width bf',c.bf,v=>set({bf:v}))}{numeric('Flange thickness tf',c.tf,v=>set({tf:v}))}{numeric('Web thickness tw',c.tw,v=>set({tw:v}))}</>}
     {numeric('Yield strength Fy',c.Fy,v=>set({Fy:v}),'stress')}{numeric('Tensile strength Fu',c.Fu,v=>set({Fu:v}),'stress')}</div>}

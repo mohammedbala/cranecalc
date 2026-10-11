@@ -18,7 +18,8 @@ import {flangeTieGeometry} from '../src/engine/tieGeometry';
 import {withRunwaySpans} from '../src/engine/runwayGeometry';
 import {compactReport} from '../server/compactReport';
 
-function project(){const p=withSiUnits(cappedDemonstrationProject()),b=p.details!.bracket!;b.arrangement='existing-corbel';b.existing=structuredClone(defaultExistingBracket);b.seatProjection=Math.max(b.seatProjection,b.reach+b.existing.bolts.gauge/2+b.existing.bolts.edge);b.existing.projection=Math.max(b.existing.projection,b.seatProjection);return p;}
+// Set directly (not through selectBracketArrangement): the demonstration's column stiffeners belong to its twin-rib bracket.
+function project(){const p=withSiUnits(cappedDemonstrationProject()),b=p.details!.bracket!;b.arrangement='existing-corbel';delete b.columnStiffeners;b.existing=structuredClone(defaultExistingBracket);b.seatProjection=Math.max(b.seatProjection,b.reach+b.existing.bolts.gauge/2+b.existing.bolts.edge);b.existing.projection=Math.max(b.existing.projection,b.seatProjection);return p;}
 function snapshot():CalculationSnapshot {return {input:project(),revision:'existing-review',createdAt:'2026-10-09',checks:[],properties:null,analysis:null,errors:[],warnings:[],referenceVersion:'test',eligible:false};}
 
 describe('existing bracket assessment and new seat',()=>{
