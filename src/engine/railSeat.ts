@@ -8,6 +8,12 @@ type Rail=RunwayDetails['rail'];
 export const railSeatDefaults={padThickness:.25*inch,clipClearance:inch/16,anchorNotch:.5*inch} as const;
 /** Fit-up clearance between an anchor keeper and each end of its rail-base notch. */
 export const anchorEndClearance=inch/16;
+/**
+ * Re-entrant corners of the rail-base notch: drilled holes of this radius centered on the corners, the notch
+ * then saw-cut or milled to them, so no sharp corner is left in the rail steel and the square keeper corner,
+ * one keeper clearance off the notch bottom, stands in the hole. The notch end is flat beyond the hole.
+ */
+export const anchorNotchRadius=inch/4;
 
 /**
  * The rail pad, when the project specifies one (aist.railPad): a continuous strip under the rail base,
@@ -48,12 +54,13 @@ export type KeeperGeometry=ReturnType<typeof keeperGeometry>;
  * Rail anchor: at mid-length of each rail piece both rail-base toes are notched `notch` deep and the
  * keeper pair there is set into the notches, 1/16 in clear of each notch end, so the rail bears on the
  * keeper ends longitudinally. The anchor keepers are the typical keeper moved toward the rail by the
- * notch depth; their end fillets stop 1/16 in outside the un-notched toe.
+ * notch depth; their end fillets stop 1/16 in outside the un-notched toe. The keeper end overlaps the notch
+ * end over `engagement` and bears on its flat part, from the toe to the corner hole, over `bearing`.
  */
 export function anchorGeometry(rail:Rail,pad=0){
  const k=keeperGeometry(rail,pad),notch=rail.anchorNotch??railSeatDefaults.anchorNotch,engagement=notch-k.clearance;
- const endWeld=k.bodyWidth-Math.max(k.weld,engagement+anchorEndClearance);
- return {...k,notch,notchLength:k.length+2*anchorEndClearance,engagement,endWeld,inner:k.inner-notch,outer:k.outer-notch,tip:k.tip-notch};
+ const endWeld=k.bodyWidth-Math.max(k.weld,engagement+anchorEndClearance),cornerRadius=anchorNotchRadius;
+ return {...k,notch,notchLength:k.length+2*anchorEndClearance,cornerRadius,engagement,bearing:notch-Math.max(k.clearance,cornerRadius),endWeld,inner:k.inner-notch,outer:k.outer-notch,tip:k.tip-notch};
 }
 export type AnchorGeometry=ReturnType<typeof anchorGeometry>;
 

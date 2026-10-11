@@ -17,9 +17,11 @@ describe('TR13 unfactored rail keeper fatigue',()=>{
   const v=railKeeperResponse(p,20*kip,1*kip);
   // Hold-down keeper: U=(1*6+20*.25)/6=11/6 kip, no side force. Bearing keeper: P|e|/b=5/6 kip with H=1 kip.
   expect(v.roles[1].uplift/kip).toBeCloseTo(11/6,10);expect(v.roles[0].uplift/kip).toBeCloseTo(5/6,10);expect(v.roles[0].lateral/kip).toBe(1);
-  // Weld lines: outer face 4 in, ends 2-1/4=1.75 in. A=7.5 in, centroid 1.75^2/7.5 in from the outer face.
-  const A=7.5,xc=1.75**2/A,Iy=4*xc**2+2*(1.75*(.875-xc)**2+1.75**3/12),arm=2+1/16+.25-xc;
-  expect(v.group.A/inch).toBeCloseTo(A,10);expect(v.group.x/inch).toBeCloseTo(xc,10);expect(v.group.Iy/inch**3).toBeCloseTo(Iy,8);
+  // Weld lines: outer face 4 in, ends 2-1/4=1.75 in, all over 4w = 1 in so at full size (J2.2b). Per unit throat
+  // A=7.5 in, centroid 1.75^2/7.5 in from the outer face; the group properties are of the throat area.
+  const A=7.5,xc=1.75**2/A,Iy=4*xc**2+2*(1.75*(.875-xc)**2+1.75**3/12),arm=2+1/16+.25-xc,t=.25/Math.SQRT2;
+  expect(v.group.A/inch**2).toBeCloseTo(A*t,10);expect(v.group.x/inch).toBeCloseTo(xc,10);expect(v.group.Iy/inch**4).toBeCloseTo(Iy*t,8);
+  expect(v.group.lines.every(l=>l.size===l.nominal)).toBe(true);
   // Uplift at mid-overlap of the lip; the side force at the top of the rail base (3/4 in).
   const Mh=11/6*arm,Mb=5/6*arm+.75;
   expect(v.rootMoment/(kip*inch)).toBeCloseTo(Math.max(Mh,Mb),8);
@@ -29,6 +31,24 @@ describe('TR13 unfactored rail keeper fatigue',()=>{
   expect(v.weldStress/ksi).toBeCloseTo((11/6/A+Mh*(1.75-xc)/Iy)/(.25/Math.SQRT2),8);
   expect(railKeeperResponse(p,20*kip,-1*kip)).toEqual(v);
   p.railEccentricity=-p.railEccentricity;expect(railKeeperResponse(p,20*kip,1*kip).weldStress).toBeCloseTo(v.weldStress,10);
+ });
+ it('takes end fillets shorter than four weld sizes at the AISC 360-16 J2.2b effective size L/4',()=>{
+  // The same keeper on a 1 in body: 3/4 in end fillets, under 4w = 1 in, count at 3/16 in, the outer face at 1/4 in.
+  const p=demonstrationProject();p.aist!.railPad=false;
+  Object.assign(p.details!.rail,{clipWidth:4*inch,clipThickness:1*inch,clipBodyWidth:1*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.25*inch});
+  const v=railKeeperResponse(p,20*kip,1*kip),t1=.25/Math.SQRT2,t2=.1875/Math.SQRT2,e=.75;
+  v.group.lines.forEach((l,i)=>expect(l.size/inch).toBeCloseTo([.25,.1875,.1875][i],12));
+  const A=4*t1+2*e*t2,xc=2*e*t2*(e/2)/A,Iy=4*t1*xc**2+2*t2*(e*(e/2-xc)**2+e**3/12),arm=1+1/16+.25;
+  expect(v.group.A/inch**2).toBeCloseTo(A,10);expect(v.group.x/inch).toBeCloseTo(xc,10);expect(v.group.Iy/inch**4).toBeCloseTo(Iy,8);
+  // Hold-down (U=11/6 kip) and bearing (U=5/6 kip with H=1 kip at the top of the 3/4 in rail base), governing at the
+  // inner ends of the end fillets.
+  const hold=11/6/A+11/6*(arm-xc)*(e-xc)/Iy,bearing=Math.hypot(1/A,5/6/A+(5/6*(arm-xc)+.75)*(e-xc)/Iy);
+  expect(v.weldStress/ksi).toBeCloseTo(Math.max(hold,bearing),8);
+  // The end-fillet force per unit length that loads the keeper body is the stress on the reduced throat.
+  expect(v.plateStress/ksi).toBeCloseTo(2*hold*t2/4,8);
+  // At full size the same welds would read lower.
+  const full=Math.max(11/6/(4+2*e)+11/6*(arm-e*e/(4+2*e))*(e-e*e/(4+2*e))/(4*(e*e/(4+2*e))**2+2*(e*(e/2-e*e/(4+2*e))**2+e**3/12)),0)/t1;
+  expect(v.weldStress/ksi).toBeGreaterThan(full);
  });
  function collect(method:'LRFD'|'ASD',impact=.25,enteredImpact=false,strengthMultiplier=1){
   const p=demonstrationProject();p.method=method;

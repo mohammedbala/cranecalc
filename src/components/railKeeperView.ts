@@ -3,7 +3,7 @@ import {railSeat,anchorEndClearance} from '../engine/railSeat';
 import {boltProperties} from '../engine/connectionStrength';
 import {format} from '../engine/units';
 import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,n,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,type XY} from './sheetGraphics';
 import {contentBounds,type DetailView} from './detailSheet';
 
 const path=(pts:XY[],cls:string,close=true)=>`<path class="${cls}" d="${pts.map(([x,y],i)=>`${i?'L':'M'}${n(x)},${n(y)}`).join('')}${close?'Z':''}"/>`;
@@ -46,17 +46,30 @@ const labelWidth=(labels:string[])=>Math.max(0,...labels.map(v=>textWidth(labelC
 
 /**
  * Rail keeper detail, in three columns: the section through a keeper pair with the rail, pad and girder
- * and its callouts, with the keeper K1 piece below it; the callouts for the plan; and the plan of a
- * typical keeper and an anchor keeper over the bolted rail joint. Keepers are welded on the outer face and
- * both ends after the rail is set, so the rail-side face and the clearance gap stay free of weld.
+ * and its callouts, with the keeper K1 piece below it; the callouts for the plan and the rail fabrication
+ * note; and the plan of a typical keeper and an anchor keeper in its notch, with drilled holes on the notch
+ * corners, below the bolted rail joint. Keepers are welded on the outer face and both ends after the rail is
+ * set, so the rail-side face and the clearance gap stay free of weld.
  */
 export function railKeeperView(s:CalculationSnapshot):DetailView{
  return {title:detailTitles.railKeeper,render:()=>{
   const p=s.input,b=p.section,d=p.details!,r=d.rail,u=p.units,depth=p.aist!.railDepth,capped=b.kind==='cap';
-  // SI sizes read to the half millimetre below 100 mm and to the millimetre above: no false precision from
-  // converted inch sizes, and the part dimensions still add up.
-  const si=(v:number)=>`${(v<100?Math.round(v*2)/2:Math.round(v)).toLocaleString('en-US')} mm`;
+  // SI sizes read to the millimetre, and those under 10 mm (clearances, small welds) to the half millimetre:
+  // no false precision from converted inch sizes.
+  const siMm=(v:number)=>`${v.toLocaleString('en-US')} mm`,siValue=(v:number)=>v<10?Math.round(v*2)/2:Math.round(v),si=(v:number)=>siMm(siValue(v));
   const {pad,keeper:K,anchor:A}=railSeat(p),pt=pad?.thickness??0,size=(v:number)=>u==='SI'?si(v):plateInches(v,u),dim=(v:number)=>u==='SI'?si(v):drawingLength(v,u);
+  /**
+   * Labels for a dimension string and its overall that add up: each part is rounded down to the drawing
+   * resolution (1/16 in, or 1 mm and 0.5 mm in a string with a part under 10 mm) and the units the rounded
+   * overall still needs go to the parts with the largest remainders.
+   */
+  const closedChain=(parts:number[])=>{
+   const q=u==='SI'?(Math.min(...parts)<10?.5:1):25.4/16,whole=parts.map(v=>v/q),down=whole.map(v=>Math.floor(v+1e-9));
+   const need=Math.round(parts.reduce((a,v)=>a+v,0)/q+1e-9)-down.reduce((a,v)=>a+v,0);
+   whole.map((v,i)=>i).sort((a,c)=>(whole[c]-down[c])-(whole[a]-down[a])).slice(0,need).forEach(i=>down[i]++);
+   const label=(v:number)=>u==='SI'?siMm(v*q):plateInches(v*q,u);
+   return {parts:down.map(label),total:label(down.reduce((a,v)=>a+v,0))};
+  };
   const recW=capped?b.capWidth:b.bf,below=capped?b.capDepth-b.capTw+b.tf:b.tf,stub=16;
 
   // ---- 1. Section through a keeper pair: rail C/L at x = 0, top of rail at y = 0.
@@ -99,12 +112,14 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   const pTip=0,pIn=P(K.projection),pOut=pIn+P(K.bodyWidth),pLip=P(K.lip),pBot=P(K.height);
   let pc='<g data-view="keeper-piece">';
   pc+=path([[pOut,pBot],[pOut,0],[pTip,0],[pTip,pLip],[pIn,pLip],[pIn,pBot]],'runway-line');
-  pc+=dimH(pTip,pOut,0,-10,size(K.projection+K.bodyWidth));
+  // Each string closes on its overall: lip projection and body width; lip thickness and body height.
+  const across=closedChain([K.projection,K.bodyWidth]),up=closedChain([K.lip,K.bodyHeight]);
+  pc+=dimH(pTip,pOut,0,-10,across.total);
   // Bottom: lip projection past the body and the body width, from the lip tip and the body corners.
-  pc+=dimChain('h',[pTip,pIn,pOut],[pLip,pBot,pBot],pBot+12,[size(K.projection),size(K.bodyWidth)]);
+  pc+=dimChain('h',[pTip,pIn,pOut],[pLip,pBot,pBot],pBot+12,across.parts);
   // Left: lip thickness and body height under the lip, from the lip corners and the body foot.
-  pc+=dimChain('v',[0,pLip,pBot],[pTip,pTip,pIn],pTip-10,[size(K.lip),size(K.bodyHeight)]);
-  pc+=dimV(0,pBot,pOut,pOut+16,size(K.height));
+  pc+=dimChain('v',[0,pLip,pBot],[pTip,pTip,pIn],pTip-10,up.parts);
+  pc+=dimV(0,pBot,pOut,pOut+16,up.total);
   pc+='</g>';
   const piece=place(pc,0,0);
   const pieceSvg=piece.svg+subTitle(piece.w/2,piece.h+12,'KEEPER K1 / SECTION',ps.label)+text(piece.w/2,piece.h+31,`${size(K.length)} LONG ALONG THE RAIL`,7.2,'middle');
@@ -112,11 +127,17 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   // ---- 3. Plan at the right-hand rail-base toe: a typical keeper and the anchor keeper in its notch.
   const ls=drawingScale(Math.min(.75,74/K.length,92/(r.baseWidth/2-r.headWidth/2+K.clearance+K.bodyWidth+K.weld)),u),lk=ls.pointsPerMm,L=(mm:number)=>mm*lk;
   const yHead=-L(r.baseWidth/2-r.headWidth/2),yTip=-L(K.overlap),yIn=L(K.clearance),yOut=L(K.clearance+K.bodyWidth),w=L(K.weld),len=L(K.length);
-  const xa=0,brk=len+22,xb=brk+22,xEnd=xb+len+L(anchorEndClearance)+14,notch=L(A.notch),nc=L(anchorEndClearance);
+  const xa=0,brk=len+16,xb=brk+16,xEnd=xb+len+L(anchorEndClearance)+14,notch=L(A.notch),nc=L(anchorEndClearance),R=L(A.cornerRadius);
   let pv='<g data-view="keeper-plan">';
   pv+=line([xa-14,yHead],[brk-3,yHead],'rail-line')+line([brk+3,yHead],[xEnd,yHead],'rail-line');
   pv+=line([xa-14,0],[xa,0],'rail-line')+line([xa,0],[xa+len,0],'hidden-line')+line([xa+len,0],[brk-3,0],'rail-line');
-  pv+=path([[brk+3,0],[xb-nc,0],[xb-nc,-notch],[xb+len+nc,-notch],[xb+len+nc,0],[xEnd,0]],'rail-line',false)+line([xb-nc,-notch],[xb+len+nc,-notch],'hidden-line');
+  // The notch with a drilled hole centered on each re-entrant corner: the parts beyond the notch ends are
+  // seen; those under the anchor keeper, and the notch bottom between the holes, are hidden.
+  const nl=xb-nc,nr=xb+len+nc,arc=(a:XY,b:XY,cls:string)=>`<path class="${cls}" d="M${n(a[0])},${n(a[1])}A${n(R)},${n(R)} 0 0 1 ${n(b[0])},${n(b[1])}"/>`;
+  pv+=path([[brk+3,0],[nl,0],[nl,R-notch]],'rail-line',false)+path([[nr,R-notch],[nr,0],[xEnd,0]],'rail-line',false);
+  pv+=arc([nl,R-notch],[nl-R,-notch],'rail-line')+arc([nl-R,-notch],[nl,-notch-R],'rail-line')+arc([nl,-notch-R],[nl+R,-notch],'hidden-line');
+  pv+=arc([nr-R,-notch],[nr,-notch-R],'hidden-line')+arc([nr,-notch-R],[nr+R,-notch],'rail-line')+arc([nr+R,-notch],[nr,R-notch],'rail-line');
+  pv+=line([nl+R,-notch],[nr-R,-notch],'hidden-line');
   pv+=breakLine([brk,yHead-6],[brk,yOut+w+6]);
   const keeperPlan=(x0:number,shift:number,endWeld:number)=>{
    const t=yTip-shift,i=yIn-shift,o=yOut-shift,x1=x0+len,e0=o-L(endWeld);
@@ -131,6 +152,8 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
 
   // ---- 4. Bolted rail joint, elevation; edge distances and pitch on the left half, symmetric about the joint.
   const hole=boltProperties('A325',r.jointBoltDiameter).hole,bar=2*(2*r.jointEdge+r.jointPitch)+r.jointGap;
+  // The bar length closes the symmetric string of edge distances, pitches and the gap as they read.
+  const barLabel=u==='SI'?siMm(2*(2*siValue(r.jointEdge)+siValue(r.jointPitch))+siValue(r.jointGap)):dim(bar);
   const js=drawingScale(Math.min(.36,150/bar,60/depth),u),jk=js.pointsPerMm,J=(mm:number)=>mm*jk;
   const jc=J(bar/2)+12,jb=J(depth),jl=jc-J(bar/2),web=J(r.headThickness+(depth-r.headThickness-r.baseThickness-r.jointPlateHeight)/2);
   let jv='<g data-view="rail-joint">';
@@ -141,26 +164,36 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   for(const x of bolts)jv+=rect(x-J(.75*r.jointBoltDiameter),by-J(hole)/2,J(1.5*r.jointBoltDiameter),J(hole),'reference-line')+circle(x,by,J(r.jointBoltDiameter)/2,'runway-line');
   const yd=jb+12,railEnd=jc-J(r.jointGap)/2,pitchFits=textWidth(size(r.jointPitch),9)+6<=J(r.jointPitch);
   jv+=dimChain('h',[jl,bolts[0],bolts[1],railEnd],[jb,jb,jb,jb],yd,[size(r.jointEdge),size(r.jointPitch),size(r.jointEdge)]);
-  jv+=dimH(jl,jl+J(bar),jb+2,yd+(pitchFits?16:26),dim(bar));
+  jv+=dimH(jl,jl+J(bar),jb+2,yd+(pitchFits?16:26),barLabel);
   jv+='</g>';
   const joint=place(jv,0,0);
-  const jointNotes=[`2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${dim(bar)}; 4 - ${size(r.jointBoltDiameter)} A325 SNUG-TIGHT`,`IN SLOTS ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG RAIL; GAP ${size(r.jointGap)}. SYMMETRIC`];
 
-  // ---- Compose. Top: the section and its callouts, the rail joint at the right. Bottom: K1, the plan
-  // callouts and the plan, the callouts landing on their targets in the plan at their right.
-  const rowY=Math.max(section.h,joint.h+52)+18,mx=piece.w+30;
+  // ---- Compose. Top: the section and its callouts, the rail joint at the right with its notes. Bottom: K1,
+  // the plan callouts and the rail fabrication note, and the plan, the callouts landing on their targets in
+  // the plan at their right.
+  const jx=section.w+24,noteW=Math.max(joint.w,660-jx);
+  // Notes wrapped to a width in capitals, an SI value kept on one line with its unit.
+  const wrap=(v:string,width:number,size:number)=>wrapToWidth(labelCaps(v).replace(/(\d) mm\b/g,'$1\u0001mm'),width,size).map(row=>row.replaceAll('\u0001',' '));
+  // The bars carry the slots (their net section and block shear are checked with them); the rail web is drilled.
+  const jointNotes=wrap(`2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}, SLOTTED ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG THE RAIL; 4 - ${size(r.jointBoltDiameter)} A325 SNUG-TIGHT IN ${size(hole)} DRILLED HOLES IN THE RAIL WEB. GAP ${size(r.jointGap)}. SYMMETRIC`,noteW,7.2);
+  const rowY=Math.max(section.h,joint.h+31+jointNotes.length*9)+14,mx=piece.w+24;
   let svg='<g data-view="rail-connection">'+section.svg;
-  const jx=Math.max(section.w+30,0);
-  svg+=`<g transform="translate(${n(jx)} 8)">${joint.svg}${subTitle(joint.w/2,joint.h+12,'RAIL JOINT / ELEVATION',js.label)}${jointNotes.map((v,i)=>text(joint.w/2,joint.h+31+i*9,v,7.2,'middle')).join('')}</g>`;
+  svg+=`<g transform="translate(${n(jx)} 0)">${joint.svg}${subTitle(joint.w/2,joint.h+12,'RAIL JOINT / ELEVATION',js.label)}${jointNotes.map((v,i)=>text(joint.w/2,joint.h+31+i*9,v,7.2,'middle')).join('')}</g>`;
   svg+=`<g transform="translate(0 ${n(rowY+8)})">${pieceSvg}</g>`;
-  const calloutW=Math.max(110,labelWidth([`RAIL ANCHOR AT MID-LENGTH OF EACH RAIL PIECE`,`END FILLETS ${size(A.endWeld)}. HOLDS TRACTION, BRAKING, CREEP`])),planX=mx+calloutW+30,planY=rowY;
+  const planX0=mx+24,calloutW=Math.max(150,660-planX0-24-plan.w),planX=planX0+calloutW+24,planY=rowY;
+  // The anchor: where it is, the notch with its corner holes, the anchor keeper welds and what it holds.
+  const anchorLines=wrap(`RAIL ANCHOR AT MID-LENGTH OF EACH RAIL PIECE (${detailRef(detailTitles.railLayout)}): K1 IN NOTCHES ${size(A.notch)} X ${size(A.notchLength)} IN BOTH RAIL-BASE TOES${pad?' AND THE PAD':''}, ${size(2*A.cornerRadius)} DRILLED HOLES CENTERED ON THE NOTCH CORNERS; K1 WELDS, END FILLETS ${size(A.endWeld)}. HOLDS TRACTION, BRAKING, CREEP`,calloutW,8.5);
+  // Crane rail is high-carbon steel: heat from flame cutting hardens and cracks it.
+  const fabrication=wrap('RAIL STEEL: DRILL HOLES, THEN SAW-CUT OR MILL ENDS AND NOTCHES; NO FLAME CUTTING OR PUNCHING. GRIND SMOOTH; MT NOTCH CORNERS. CONFIRM NOTCHING WITH THE RAIL SUPPLIER.',calloutW,7.2);
   svg+=`<g transform="translate(${n(planX)} ${n(planY)})">${plan.svg}${subTitle(plan.w/2,plan.h+12,'KEEPERS AND RAIL ANCHOR / PLAN',ls.label)}</g>`;
   const T=(x:number,y:number):XY=>[planX+PX(x),planY+PY(y)];
   let my=rowY+4;
   // The anchor note reaches the notch from above the rail head; the end-weld symbol the near end of a typical keeper.
-  svg+=multiLeader([T(xb+len/2,-notch/2)],[mx,my],[`RAIL ANCHOR AT MID-LENGTH OF EACH RAIL PIECE`,`(${detailRef(detailTitles.railLayout)}): K1 IN NOTCHES ${size(A.notch)} X ${size(A.notchLength)} IN`,`BOTH RAIL-BASE TOES${pad?' AND THE PAD':''}; K1 WELDS,`,`END FILLETS ${size(A.endWeld)}. HOLDS TRACTION, BRAKING, CREEP`],8.5,[[T(brk,yHead-10)]],calloutW);
-  my+=44+12;
+  svg+=multiLeader([T(xb+len/2,-notch/2)],[mx,my],anchorLines,8.5,[[T(brk,yHead-10)]],calloutW);
+  my+=anchorLines.length*11+12;
   svg+=fillet([T(xa-w/2,yOut-L(K.endWeld)/2)],[mx,my+3],size(K.weld),size(K.endWeld),['BOTH ENDS OF EACH KEEPER, STOPPED',`${size(K.holdback)} SHORT OF THE RAIL-SIDE FACE`]);
+  my+=17+2*11+8;
+  svg+=`<g data-note="rail-fabrication">${fabrication.map((v,i)=>text(mx,my+i*9,v,7.2)).join('')}</g>`;
   return {svg:svg+'</g>',scale:scale.label};
  }};
 }

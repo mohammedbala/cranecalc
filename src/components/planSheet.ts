@@ -23,6 +23,8 @@ import { endStopTopic } from './endStopSheet';
 import { activeEndStop, stopEnds } from '../engine/endStopInputs';
 import { adjacentBays } from '../engine/continuation';
 import { endStopGeometry } from '../engine/endStop';
+import { existingLayout,type ExistingLayout } from '../engine/existingLayout';
+import { existingClearancePlan,existingClearanceShown,existingClearanceTitle,governingPair } from './existingClearancePlan';
 export { planSheetGeometry } from './planSheetGeometry';
 export { connectionSheetSvg } from './connectionSheet';
 
@@ -31,7 +33,7 @@ export { connectionSheetSvg } from './connectionSheet';
  * elevation over the typical runway section (bottom left) and the girder schedule with the sheet notes
  * (bottom right).
  */
-const ga=1,gaLayout={iso:{x:70,y:60,w:980,h:600},plan:{x:1800,y:350},split:{x:1120,y:770,bottomX:1700},elevation:{x:830,top:800},section:{x:60,w:1420,bottom:1492},schedule:{x:1724,y:794,width:776,height:520}} as const;
+const ga=1,gaLayout={iso:{x:70,y:60,w:980,h:600},plan:{x:1800,y:350},split:{x:1120,y:770,bottomX:1700},elevation:{x:830,top:800},section:{x:60,w:1420,bottom:1492},schedule:{x:1724,y:794,width:776,height:520},clearance:{x:1140,y:20,w:420,h:740}} as const;
 export const typicalSectionTitle='TYPICAL RUNWAY SECTION';
 /** Grid bubble on the general arrangement: 0.3 in circle, 5/32 in text. */
 const gridBubble=(x:number,y:number,label:string)=>bubble(x,y,label,11);
@@ -56,7 +58,7 @@ function paths(segments: Segment[], project: (p: Point) => XY, cls: string) {
  * the columns broken above the rail and below the bracket, since the building heights are reference
  * geometry; the elevations given are those of the project. A wide crane span is shortened by a break.
  */
-function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeometry>,top:number,o:{newColumns:boolean;columnName:string}){
+function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeometry>,top:number,o:{newColumns:boolean;columnName:string;existing?:ExistingLayout}){
   const p=s.input,d=p.details,dim=(meters:number)=>drawingLength(meters*1000,p.units),elevations=runwayElevations(p),box=gaLayout.section;
   const railTop=m.railBase+(p.aist?.railDepth??p.railHeight)/1000,seat=-m.d/2-(d?.bearing.thickness??0)/1000;
   const vTop=railTop+.3,vBottom=-m.d/2-m.bracketDepth-.3;
@@ -79,7 +81,9 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   const sec=m.section,beyond={building:clip(sec.beyond.building).filter(v=>!hidden(v)),runway:clip(sec.beyond.runway).filter(v=>!hidden(v))};
   const cut={building:clip(sec.cut.building),runway:clip(sec.cut.runway),rail:clip(sec.cut.rail)};
   const all=[...beyond.building,...beyond.runway,...cut.building,...cut.runway,...cut.rail].flat();
-  const uMin=Math.min(...all.map(v=>v[0])),uMax=Math.max(...all.map(v=>v[0]));
+  // The surveyed existing columns beyond, on their lines outboard of grids A and B (u = -z: grid A at the left).
+  const existing=(o.existing?.lines??[]).map(l=>{const sign=l.line==='A'?-1:1,centre=(l.line==='A'?uA:uB)+sign*l.input.offset/1000,half=l.input.d/2000;return {line:l.line,input:l.input,sign,centre,u0:centre-half,u1:centre+half};});
+  const uMin=Math.min(...all.map(v=>v[0]),...existing.map(v=>v.u0)),uMax=Math.max(...all.map(v=>v[0]),...existing.map(v=>v.u1));
   const height=box.bottom-top-150,scale=drawingScale(Math.min(box.w/(uMax-uMin-shift),height/(vTop-vBottom))/1000,p.units,ga),k=scale.pointsPerMm*1000;
   const U=(u:number)=>span&&u>=span.to-1e-9?u-shift:u;
   const SX=(u:number)=>box.x+box.w/2+(U(u)-(uMin+uMax-shift)/2)*k,SY=(v:number)=>top+40+(vTop-v)*k,project=([u,v]:Point):XY=>[SX(u),SY(v)];
@@ -98,11 +102,28 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
     for(const g of groups)svg+=breakLine([SX(g[0])-6,SY(v)],[SX(g[g.length-1])+6,SY(v)]);
   }
   const below=SY(vBottom);
+  // Existing columns dashed and broken where they leave the band, each with its clear distance to the new column.
+  const sep=s.bracingSystem?.separation;
+  for(const e of existing){
+   svg+=`<g data-existing-column="${e.line}">`+[e.u0,e.u1].map(u=>line([SX(u),SY(vTop)],[SX(u),SY(vBottom)],'reference-line')).join('');
+   for(const v of [vTop,vBottom])svg+=breakLine([SX(e.u0)-6,SY(v)],[SX(e.u1)+6,SY(v)]);
+   svg+=line([SX(e.centre),SY(vTop)-26],[SX(e.centre),below+12],'grid-line');
+   const grid=e.line==='A'?uA:uB,face=grid+e.sign*m.column.d/2,near=e.sign<0?e.u1:e.u0,clear=Math.abs(near-face)*1000,yc=SY(vBottom+(vTop-vBottom)*.34);
+   const [x1,x2]=[SX(Math.min(near,face)),SX(Math.max(near,face))];
+   svg+=dimH(x1,x2,yc-4,yc,`${drawingLength(clear,p.units)} CLR.`,e.sign<0?'left':'right');
+   // The separation required and the column's label in the clear space, where it has room.
+   const note=sep?`SEISMIC SEP. ${drawingLength(specifiedSeparation(sep.required,p.units),p.units)} MIN.`:'',label=[e.input.shape?`(E) ${e.input.shape} COLUMN`:'(E) COLUMN','PER SURVEY'];
+   const room=x2-x1-12,lw=Math.max(...label.map(v=>textWidth(v,8.5)));
+   if(note&&textWidth(note,8)<=room)svg+=text((x1+x2)/2,yc+12,note,8,'middle');
+   if(lw+30<=room){const ly=SY(vTop-(vTop-vBottom)*.3),lx0=e.sign<0?x1+22:x2-22-lw;svg+=multiLeader([[e.sign<0?x1:x2,ly-14]],[lx0,ly],label,8.5);}
+   svg+='</g>';
+  }
   for(const [u,label] of [[uA,'A'],[uB,'B']] as const)svg+=line([SX(u),SY(vTop)-34],[SX(u),below+38],'grid-line')+gridBubble(SX(u),below+50,label);
   // Rail centrelines to the crane span and the column grids above the band.
   const dimY=SY(vTop)-18,from=SY(railTop)-4;
   for(const u of [uRA,uRB])svg+=line([SX(u),SY(railTop)+3],[SX(u),from],'grid-line');
   svg+=dimH(SX(uA),SX(uRA),from,dimY,dim(uRA-uA),'left')+spanDim(SX(uRA),SX(uRB),from,dimY,`${dim(uRB-uRA)} CRANE SPAN (RAIL C/L TO C/L)`)+dimH(SX(uRB),SX(uB),from,dimY,dim(uB-uRB),'right');
+  for(const e of existing){const grid=e.line==='A'?uA:uB;svg+=dimH(SX(Math.min(e.centre,grid)),SX(Math.max(e.centre,grid)),from,dimY,dim(Math.abs(e.centre-grid)),e.sign<0?'left':'right');}
   svg+=spanDim(SX(uA),SX(uB),below+4,below+24,`${dim(uB-uA)} GRIDS A-B${o.newColumns?'':' (REF.)'}`);
   // Elevations of the project, stacked so close levels never overlap.
   const ex=SX(uMax)+14;
@@ -146,19 +167,31 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const marks=girderMarks(p),mid=(g:typeof marks[number])=>(g.start+g.end)/2000-m.length/2;
   svg+=viewTitle(gaLayout.iso.x+gaLayout.iso.w/2,gaLayout.iso.y+gaLayout.iso.h+44,'ISOMETRIC VIEW','NOT TO SCALE',ga)+'</g>';
 
-  const planScale=drawingScale(Math.min(1060/(m.length+m.column.bf),500/(m.width+2*m.columnOffset+m.column.d))/1000,p.units,ga),k=planScale.pointsPerMm*1000;
-  const X=(x:number)=>gaLayout.plan.x+x*k,Y=(z:number)=>gaLayout.plan.y+(z+m.width/2)*k;
-  const left=X(-m.length/2),right=X(m.length/2);
+  // The surveyed existing building beside new columns: its column lines outboard of the runway grids, with the new
+  // and existing footings, in plan; the enlarged plan of the least clearance stands left of the runway plan.
+  const eb=newColumns?existingLayout(p):undefined,shown=eb?.steel?eb:undefined,fb=p.columnBase?.footing;
+  const reach=(line:'A'|'B')=>Math.max(m.column.d/2,fb&&eb?fb.L/2000:0,...(eb?.lines.find(v=>v.line===line)?.columns.flatMap(c=>[c.column.u1,c.footing?.u1??0]).map(v=>v/1000)??[]));
+  const zTop=eb?rows[1]-reach('B'):rows[1],zBottom=eb?rows[0]+reach('A'):rows[0];
+  const along=eb?[...eb.lines.flatMap(l=>l.columns.flatMap(c=>[c.column,...(c.footing?[c.footing]:[])])),...eb.footings,...eb.columns].map(b=>[b.x0/1000-m.length/2,b.x1/1000-m.length/2]).flat():[-m.length/2-m.column.bf/2,m.length/2+m.column.bf/2];
+  const xLo=Math.min(...along),xHi=Math.max(...along),cl=gaLayout.clearance,planLeft=shown?cl.x+cl.w+96:0;
+  const planX=shown?(planLeft+2410)/2:gaLayout.plan.x,planW=shown?2410-planLeft:1060;
+  const planScale=drawingScale(Math.min(planW/(eb?xHi-xLo:m.length+m.column.bf),eb?560/(zBottom-zTop):500/(m.width+2*m.columnOffset+m.column.d))/1000,p.units,ga),k=planScale.pointsPerMm*1000;
+  // Centred in the panel from the grid bubbles above to the view title below.
+  const planTop=eb?59+Math.max(0,(770-168-(zBottom-zTop)*k)/2-16):0,xMid=eb?(xLo+xHi)/2:0;
+  const X=(x:number)=>planX+(x-xMid)*k,Y=(z:number)=>eb?planTop+(z-zTop)*k:gaLayout.plan.y+(z+m.width/2)*k;
+  const left=X(-m.length/2),right=X(m.length/2),gTop=Y(zTop),gBottom=Y(zBottom);
   svg+=`<g data-view="plan">`;
   m.supports.forEach((x,i)=>{
-    svg+=line([X(x),Y(rows[1])-20],[X(x),Y(rows[0])+17],'grid-line')+gridBubble(X(x),Y(rows[1])-32,String(i+1));
+    svg+=line([X(x),gTop-20],[X(x),gBottom+17],'grid-line')+gridBubble(X(x),gTop-32,String(i+1));
     for(const [side,z] of rows.entries()){
       svg+=rect(X(x-m.column.bf/2),Y(z-m.column.d/2),m.column.bf*k,m.column.d*k,newColumns?'runway-line':'reference-line');
       const rail=side?-m.width:0,wb=p.details?.bracket;
       if(wb?.enabled){const face=rail+(side?-1:1)*wb.reach/1000,tip=face+(side?1:-1)*wb.seatProjection/1000;svg+=rect(X(x-wb.seatLength/2000),Y(Math.min(face,tip)),wb.seatLength/1000*k,wb.seatProjection/1000*k,'runway-line');}else svg+=rect(X(x-.15),Y(Math.min(z,rail)),.3*k,Math.abs(z-rail)*k,'reference-line');
     }
   });
-  rows.forEach((z,i)=>{svg+=line([left-18,Y(z)],[right+12,Y(z)],'grid-line')+gridBubble(left-30,Y(z),i?'B':'A');});
+  // Grid lines A and B run past the new footings, with their bubbles beyond.
+  const gridLeft=eb?Math.min(left,X(xLo)):left,gridRight=eb?Math.max(right,X(xHi)):right;
+  rows.forEach((z,i)=>{svg+=line([gridLeft-18,Y(z)],[gridRight+12,Y(z)],'grid-line')+gridBubble(gridLeft-30,Y(z),i?'B':'A');});
   for(const [side,z] of [0,-m.width].entries()){
     for(const member of m.members)svg+=rect(X(member.start/1000-m.length/2),Y(z-m.bf/2),(member.end-member.start)/1000*k,m.bf*k,'runway-line');
     const rz=z+(side?-m.railZ:m.railZ),head=(p.details?.rail.headWidth??65)/1000;
@@ -181,7 +214,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   for(const b of adjacent){const labels=['EXISTING RUNWAY CONTINUES',`ADJ. BAY ${dim(b.length/1000)}, FIELD VERIFY`];svg+=`<g data-existing-bay-label="${b.end}">${multiLeader([[b.end==='left'?left-stub/2:right+stub/2,Y(-m.bf/2)]],[inboard(b.end,labels,16),Y(-m.width/2)+26],labels,7.5)}</g>`;}
   // Section cut at mid-bay, both ends outside the grids, arrows looking back at the frame on the grid.
   {const xc=X(m.section.at),label=detailRef(typicalSectionTitle);
-   for(const [y0,y1] of [[Y(rows[1])-8,Y(rows[1])-24],[Y(rows[0])+8,Y(rows[0])+24]]){
+   for(const [y0,y1] of [[gTop-8,gTop-24],[gBottom+8,gBottom+24]]){
     svg+=`<g data-section-cut="${typicalSectionTitle}">${line([xc,y0],[xc,y1],'divider')}${line([xc,y1],[xc-14,y1],'divider')}<path class="leader-arrow" d="M${n(xc-16)},${n(y1)}l5,-2.2v4.4z"/>${text(xc+4,y1+(y1<y0?-3:9),label,8,'start',700)}</g>`;
    }}
   // Strut on each column line and the braced spans marked X; the separation from the existing building.
@@ -197,13 +230,41 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    // The leader runs along the column line and up beside grid line, clear of the labels.
    svg+=multiLeader([[cx-cross,Y(rows[0])-cross]],[x0+8,Y(rows[0])-62],labels,7.5,[[[x0-6,Y(rows[0])-cross]]])+'</g>';
   }
-  const planDim=Y(rows[0])+52;
-  svg+=dimH(left,right,Y(rows[0])+19,planDim,`${dim(m.length)} OVERALL`);
-  svg+=dimV(Y(rows[1]),Y(rows[0]),right+13,right+48,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
+  if(eb){
+   // New footings below the slab and the existing building dashed; each existing column line on its centreline.
+   svg+='<g data-existing-building="plan">';
+   for(const b of eb.footings)for(const z of rows)svg+=rect(X(b.x0/1000-m.length/2),Y(z-(b.u1-b.u0)/2000),(b.x1-b.x0)/1000*k,(b.u1-b.u0)/1000*k,'hidden-line');
+   for(const l of eb.lines){
+    const zl=(u:number)=>l.line==='A'?rows[0]+u/1000:rows[1]-u/1000,yl=Y(zl(l.input.offset));
+    svg+=`<g data-existing-line="${l.line}">`+line([gridLeft-18,yl],[gridRight+12,yl],'grid-line')+text(gridLeft-22,yl+3,'(E) COL. LINE',7.5,'end');
+    for(const c of l.columns)for(const b of [c.column,c.footing])if(b)svg+=rect(X(b.x0/1000-m.length/2),Math.min(Y(zl(b.u0)),Y(zl(b.u1))),(b.x1-b.x0)/1000*k,Math.abs(b.u1-b.u0)/1000*k,'reference-line');
+    svg+='</g>';
+   }
+   // The enlarged plan of the least clearance is keyed by a boundary around it.
+   if(shown){
+    const pair=governingPair(s,eb),l=eb.lines.find(v=>v.line===pair.line)!,e=l.columns[pair.existing];
+    const zl=(u:number)=>pair.line==='A'?rows[0]+u/1000:rows[1]-u/1000,parts=[eb.footings[pair.grid],eb.columns[pair.grid],e.column,...(e.footing?[e.footing]:[])];
+    const bx0=X(Math.min(...parts.map(b=>b.x0))/1000-m.length/2)-5,bx1=X(Math.max(...parts.map(b=>b.x1))/1000-m.length/2)+5;
+    const ys=parts.flatMap(b=>[Y(zl(b.u0)),Y(zl(b.u1))]),by0=Math.min(...ys)-5,by1=Math.max(...ys)+5,last=pair.grid===m.supports.length-1;
+    const ty=Y(zl(l.input.offset))+(pair.line==='A'?-5:11),tag=`SEE ${detailRef(existingClearanceTitle)}`;
+    svg+=`<g data-existing-clearance="plan">${rect(bx0,by0,bx1-bx0,by1-by0,'annotation')}${text(last?bx0-4:bx1+4,ty,tag,8,last?'end':'start',700)}</g>`;
+   }
+   svg+='</g>';
+  }
+  const planDim=gBottom+52;
+  svg+=dimH(left,right,gBottom+19,planDim,`${dim(m.length)} OVERALL`);
+  if(eb){
+   // Grid lines A-B with each existing column line outboard of them, beyond the footings at the last grid.
+   const from=Math.max(right+13,X(xHi)+6),at=from+35,lines=Object.fromEntries(eb.lines.map(l=>[l.line,l.input.offset/1000]));
+   if(lines.B!==undefined)svg+=dimV(Y(rows[1]-lines.B),Y(rows[1]),from,at,dim(Math.abs(lines.B)));
+   svg+=dimV(Y(rows[1]),Y(rows[0]),from,at,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
+   if(lines.A!==undefined)svg+=dimV(Y(rows[0]),Y(rows[0]+lines.A),from,at,dim(Math.abs(lines.A)));
+  }else svg+=dimV(Y(rows[1]),Y(rows[0]),right+13,right+48,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
   svg+=text(X(0),planDim+20,`RAIL C/L SPACING (CRANE SPAN): ${dim(m.width+2*m.railZ)}${p.details?'':' (REF.)'}`,9,'middle');
   const sep=newColumns?s.bracingSystem?.separation:undefined;
   if(sep)svg+=text(X(0),planDim+33,`SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL ${drawingLength(specifiedSeparation(sep.required,p.units),p.units)} MIN. CLEAR OF THE EXISTING BUILDING (ASCE 7 §12.12.3)`,8,'middle');
   svg+=viewTitle(X(0),planDim+56,'RUNWAY PLAN',planScale.label,ga)+'</g>';
+  const clearancePlan=shown?existingClearancePlan(s,shown,gaLayout.clearance,ga):'';
 
   const elevationScale=drawingScale(Math.min(1440/m.length,110/(m.d+(p.aist?.railDepth??p.railHeight)/1000))/1000,p.units,ga),ek=elevationScale.pointsPerMm*1000;
   // The elevation hangs from the top of its panel; its highest annotation is 81 above the girder. With braced new
@@ -216,6 +277,8 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const bracing=braced?bracingOnElevation(s,{EX:x=>EX(x-m.length/2),EY,ek,supports:m.supports.map(x=>x+m.length/2),columnWidth:m.column.bf,girderBottom:bottom,stub:stubLength}):undefined;
   svg+=`<g data-view="elevation">`;
   const bubbleY=top-44;
+  // An existing column continues up to the roof: its break stands clear above the rail top, off the T.O.R. target.
+  const columnBreak=Math.min(top-10,EY(m.railBase+(p.aist?.railDepth??p.railHeight)/1000)-12);
   svg+=text(el,bubbleY-30,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: ${sheetRef('connection')}${p.system==='simple'&&p.details?` / SHARED SUPPORT: ${detailRef(detailTitles.supportEnd(p.spans.length>1))}`:''}`,9);
   m.supports.forEach((x,i)=>{
     // The column is beyond the girder: hidden behind it, ending in breaks where it continues. An existing building
@@ -227,7 +290,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
      const ct=EY(-m.d/2-(p.details?.bearing.thickness??0)/1000+(p.existingColumn!.height-p.existingColumn!.seatElevation)/1000);
      for(let j=1;j<edges.length;j++)svg+=line([edges[j-1],ct],[edges[j],ct],ct>=front&&behind((edges[j-1]+edges[j])/2)?'hidden-line':'runway-line');
      for(const cx of [c0,c1]){if(ct<front)svg+=line([cx,ct],[cx,front],'runway-line');svg+=line([cx,Math.max(ct,front)],[cx,bottom],behind(cx)?'hidden-line':'runway-line');}
-    }else{for(const cx of [c0,c1])svg+=line([cx,top-10],[cx,behind(cx)?front:bottom],'reference-line');svg+=breakLine([c0-5,top-10],[c1+5,top-10]);}
+    }else{for(const cx of [c0,c1])svg+=line([cx,columnBreak],[cx,behind(cx)?front:bottom],'reference-line');svg+=breakLine([c0-5,columnBreak],[c1+5,columnBreak]);}
     if(!bracing)svg+=line([c0,bottom],[c0,stubEnd],newColumns?'runway-line':'reference-line')+line([c1,bottom],[c1,stubEnd],newColumns?'runway-line':'reference-line')+breakLine([c0-5,stubEnd],[c1+5,stubEnd]);
     const wb=p.details?.bracket;
     if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1])svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');}else svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
@@ -266,7 +329,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   svg+=dimH(el,er,below+62,below+82,`${dim(m.length)} OVERALL`);
   svg+=text(el,below+108,`DATUM EL. ${drawingElevation(datum,p.units)} = ${short(datumLabel.toUpperCase(),60)}. T.O.S. = TOP OF W STEEL${p.section.kind==='cap'?`; CAP ABOVE T.O.S.${capDetailed?` / SEE ${detailRef(detailTitles.capSection)}`:''}`:''}. ELEVATIONS FROM ${elevations?{'new column base':'THE NEW COLUMN BASE','surveyed column seat':'THE SURVEYED COLUMN SEAT','entered top of rail':'THE SPECIFIED TOP OF RAIL'}[elevations.source]:'PROJECT DATA (NOT ENTERED)'}.`,8.5);
   svg+=viewTitle(gaLayout.elevation.x,below+150,'RUNWAY GIRDER ELEVATION - GRID A',elevationScale.label,ga)+'</g>';
-  svg+=typicalSection(s,m,below+180,{newColumns,columnName});
+  svg+=typicalSection(s,m,below+180,{newColumns,columnName,existing:newColumns?existingLayout(p):undefined});
+  // Drawn after the typical section so the existing details keep their numbers.
+  svg+=clearancePlan;
 
   svg+=`<g data-view="girder-schedule">`+girderSchedule(s,gaLayout.schedule)+'</g>';
   return svg+titleBlock(s,'S-01','GENERAL ARRANGEMENT')+'</svg>';
@@ -275,14 +340,14 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
 /** Girder schedule and sheet notes; the general notes are on S-00. */
 function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:number;height:number}){
   const p=s.input,u=p.units,len=(mm:number)=>drawingLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
-  const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP';
+  const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP',surveyed=newColumns?existingLayout(p):undefined,separation=s.bracingSystem?.separation;
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
   const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LOCATES AT THE LOWER-NUMBERED GRID, SLIDES AT THE OTHER; SEE ${detailRef(activeEndBearing(p)?bearingBoltsTitle(p):detailTitles.movement)}`;
   const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
     return [mark,String(all.length*2),`${p.section.name}${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
   const notes=[
     'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
-    newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
+    newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${len(specifiedSeparation(separation.required,u))} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
     `ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`,
     `SET RAIL C/L SPACING (CRANE SPAN) TO ${d?len(d.criteria.railGauge):'THE CRANE MANUFACTURER\'S GAUGE'}, EACH RAIL ON ITS GIRDER WEB C/L${d?` WITHIN ${len(d.criteria.alignmentTolerance)}`:''}. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${len(Math.abs(p.railEccentricity))}; IT IS NOT A SETTING DIMENSION.`,
@@ -345,7 +410,7 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
     const number=`S-${String(i+2).padStart(2,'0')}`,title=detailSheetTitle(layout);
     return {number,name:`runway-${layout.topics.map(t=>t.key).join('-')}-sheet-arch-d`,title,details:layout.placed.map(v=>v.view.title),render:()=>detailSheetSvg(s,number,title,layout)};
   });
-  const sheets=[{number:'S-01',name:'runway-plan-sheet-arch-d',title:'GENERAL ARRANGEMENT',details:arrangementDetails,render:()=>planSheetSvg(s,f)},...details];
+  const sheets=[{number:'S-01',name:'runway-plan-sheet-arch-d',title:'GENERAL ARRANGEMENT',details:[...arrangementDetails,...(existingClearanceShown(s)?[existingClearanceTitle]:[])],render:()=>planSheetSvg(s,f)},...details];
   return [{number:'S-00',name:'cover-general-notes-sheet-arch-d',title:coverSheetTitle,render:()=>coverSheetSvg(s,sheets)},...sheets];
 }
 /**

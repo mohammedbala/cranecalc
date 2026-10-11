@@ -21,6 +21,7 @@ import { existingColumnAnalysis,existingColumnChecks,existingColumnSection,valid
 import { bracingSystemAnalysis,bracingSystemChecks,designsBracing } from './newColumnBracing';
 import { columnBaseAnalysis,columnBaseChecks,validateColumnBase } from './columnBase';
 import { longitudinalBracingAnalysis,longitudinalBracingChecks,validateLongitudinalBracing } from './longitudinalBracing';
+import { existingLayoutChecks,validateAdjacentBuilding } from './existingLayout';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
@@ -58,7 +59,7 @@ export function validateProject(input:unknown):string[]{
   if(!p.continuation.source.trim())errors.push('continuation.source: identify the existing adjacent girders and how their spans were verified.');
  }
  p.cranes.forEach((c,i)=>{if(c.wheels[0].offset!==0)errors.push(`cranes.${i}.wheels: first wheel offset must be zero.`);for(let j=0;j<c.wheels.length;j++){const w=c.wheels[j];if(j&&w.offset<=c.wheels[j-1].offset)errors.push(`cranes.${i}.wheels.${j}: offsets must increase.`);const loaded=c.includesImpact?w.loaded/(1+c.impact):w.loaded;if(w.unloaded>loaded)errors.push(`cranes.${i}.wheels.${j}: unloaded load exceeds the loaded static load.`);}if(c.travelStart>=c.travelEnd||c.travelStart<travel.start-c.wheels.at(-1)!.offset||c.travelEnd>travel.end)errors.push(`cranes.${i}.travel: origin range must intersect the runway and end no later than ${travel.end>L?'the far end of the adjacent bay':'its length'}.`);if(!c.loadSource.trim())errors.push(`cranes.${i}.loadSource: identify the manufacturer load schedule.`);});
- return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateColumnBase(p),...validateLongitudinalBracing(p)];
+ return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateColumnBase(p),...validateLongitudinalBracing(p),...validateAdjacentBuilding(p)];
 }
 export function calculate(input:ProjectInput):CalculationSnapshot {
  const p=structuredClone(input),errors=validateProject(p);const snapshot:CalculationSnapshot={revision:fingerprint(p),createdAt:new Date().toISOString(),input:p,errors,warnings:[],properties:null,analysis:null,checks:[],eligible:false,referenceVersion};
@@ -108,6 +109,8 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
     snapshot.checks.push(...longitudinalBracingChecks(p,snapshot.longitudinalBracing));
     if(designsBracing(p)&&column){snapshot.bracingSystem=bracingSystemAnalysis(p,snapshot.supportReactions,snapshot.longitudinalBracing,column,snapshot.existingColumn,snapshot.columnBase);snapshot.checks.push(...bracingSystemChecks(p,snapshot.bracingSystem,column));}
    }
+   // The surveyed existing building beside new columns: clear distances from the new steel and footings.
+   if(snapshot.columnBase)snapshot.checks.push(...existingLayoutChecks(p,snapshot.bracingSystem?.separation));
    if(p.details){
     const detailed=completeRunwayChecks(snapshot);
     if(snapshot.detailResults){

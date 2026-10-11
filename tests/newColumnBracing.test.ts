@@ -20,7 +20,9 @@ describe('rod X-bracing between new freestanding columns',()=>{
   expect(s.checks.filter(c=>c.status==='fail').map(c=>c.id)).toEqual([]);
   for(const id of ['brace-tension','brace-pin','brace-pin-bearing','brace-gusset-rupture','brace-gusset-tearout','brace-gusset-yield','brace-gusset-weld','brace-column-web',
    'brace-strut','brace-strut-slenderness','brace-strut-tension','brace-strut-bolts','brace-strut-bearing','brace-strut-block','brace-strut-tab','brace-seat-weld','brace-collector-bearing',
-   'brace-seismic-basis','brace-seismic-drift','brace-separation','column-torsion','base-uplift','brace-rod-crossing','brace-offset-gusset','brace-rod-torsion'])expect(check(id)?.status,id).toBe('pass');
+   'brace-seismic-basis','brace-seismic-drift','brace-separation','column-torsion','base-uplift','brace-rod-crossing','brace-offset-gusset','brace-rod-torsion','existing-steel-clear','existing-footing-clear'])expect(check(id)?.status,id).toBe('pass');
+  // The existing building's steel is checked against the separation the bracing analysis gives.
+  expect(check('existing-steel-clear')?.demand).toBeCloseTo(s.bracingSystem!.separation!.required,9);
   // Nothing of the new structure is left to others.
   expect(s.checks.some(c=>c.id==='supporting-structure'||c.id==='brace-by-others')).toBe(false);
  });
@@ -132,5 +134,24 @@ describe('rod X-bracing between new freestanding columns',()=>{
   // The isometric draws the rods and strut as new steel.
   expect(set[1].svg.match(/data-view="isometric"[\s\S]*?<\/g>/)![0].length).toBeGreaterThan(0);
   expect(compactReport(s,'')).toContain('06D / Bracing connections, strut and seismic along the runway');
+ });
+ it('shows the surveyed existing building on S-01 with the clearances dimensioned and noted',()=>{
+  for(const units of ['US','SI'] as const){
+   const set=drawingSheetSet({...s,input:{...s.input,units}}),s01=set[1].svg,cover=texts(set[0].svg),t=texts(s01);
+   for(const view of ['data-existing-building="plan"','data-existing-line="A"','data-existing-line="B"','data-existing-clearance="plan"','data-existing-column="A"','data-existing-column="B"','data-view="existing-clearance-plan"'])expect(s01,`${units} ${view}`).toContain(view);
+   expect(detailReferences(set).get('EXISTING BUILDING CLEARANCE / PLAN')).toBe('5/S-01');
+   expect(t).toContain('(E) COL. LINE');expect(t).toContain('(E) W12X40 COL.');expect(t).toContain('SEE 5/S-01');
+   expect(t).toContain('SHOWN DASHED FROM THE SURVEY (FICTITIOUS SURVEY SV-02');expect(t).not.toContain('FRAMING IS NOT SHOWN');
+   expect(cover).toContain('BESIDE THE RUNWAY ARE DASHED (2/S-01, 5/S-01)');expect(cover).not.toContain('THE EXISTING BUILDING IS NOT SHOWN');
+   expect(cover).toContain('THE EXISTING COLUMNS AND FOOTINGS ON S-01 ARE FROM FICTITIOUS SURVEY SV-02');
+   if(units==='US'){
+    expect(t).toContain('4\'-10 13/16" CLR.');expect(t).toContain('0\'-9" CLR.');expect(t).toContain('SEISMIC SEP. 0\'-1 5/8" MIN.');
+    expect(t).toContain('FOOTING CLR. 0\'-9", 0\'-6" MIN.');expect(t).toContain('KEEP ALL RUNWAY STEEL 0\'-1 5/8" MIN. CLEAR OF THE EXISTING BUILDING');
+   }
+  }
+  // Without the survey the arrangement is as before.
+  const q=newColumnDemonstrationProject();delete q.existingColumn!.adjacent;
+  const plain=drawingSheetSet({...s,input:q})[1].svg;
+  expect(plain).not.toContain('data-existing-building');expect(texts(plain)).toContain('THE EXISTING BUILDING FRAMING IS NOT SHOWN');
  });
 });

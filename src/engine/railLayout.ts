@@ -100,3 +100,7 @@ export function railMovements(p:ProjectInput,layout:RailLayout=railLayout(p)){
  });
  return {joints,ends,anchors};
 }
+/** Largest closure of a rail joint, between new pieces or onto an existing rail: what each joint gap and slot takes. */
+export function railJointMovement(m:Pick<ReturnType<typeof railMovements>,'joints'|'ends'>){
+ return Math.max(0,...m.joints.map(v=>v.movement),...m.ends.filter(v=>v.existing).map(v=>v.movement));
+}

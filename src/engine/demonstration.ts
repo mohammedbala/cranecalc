@@ -9,7 +9,7 @@ import { emptyAistInputs,emptyCraneDesign } from './aistLoads';
 import type { ProjectInput } from './types';
 import type { LapConnection,RunwayDetails } from './runwayDetails';
 import {defaultSimpleSupport} from './simpleSupports';
-import {defaultExistingColumn} from './existingColumnInputs';
+import {defaultExistingColumn,defaultExistingLine} from './existingColumnInputs';
 import {defaultBracingDesign,defaultLongitudinalBracing} from './longitudinalBracingInputs';
 import {defaultColumnBase} from './columnBaseInputs';
 import {columnBaseElevation} from './columnBase';
@@ -32,8 +32,11 @@ export function demonstrationDetails():RunwayDetails{return {
  end:{...lap(),rows:4,gauge:2.875*inch,edge:1.25*inch,thickness:.75*inch,weldSize:.4375*inch,weldLength:11.5*inch,projection:1.5*inch},
  bearing:{width:12*inch,length:12.5*inch,thickness:1*inch,stiffenerWidth:5*inch,stiffenerThickness:1*inch,cope:1*inch,weldSize:.3125*inch},
  rail:{name:'Demo R-6 crane rail · idealized plate geometry',headWidth:3*inch,headThickness:1.25*inch,baseWidth:6*inch,baseThickness:.75*inch,webThickness:.75*inch,Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:'Fictitious RP-01 polyurethane crane-rail pad; allowable compression per fictitious supplier rating sheet RP-01',padThickness:.125*inch,padWidth:6*inch,
-  // Keeper: 3/4 in lip over a 2 in body, 1/16 in clear of the rail-base toe, 1/2 in lip overlap; 1/2 in fillets on the outer face and both ends.
-  clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.5*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1.25*inch,jointPlateHeight:3.875*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+  // Keeper: 3/4 in lip over a 2 3/8 in body, 1/16 in clear of the rail-base toe, 1/2 in lip overlap; 3/8 in fillets on the
+  // outer face and both ends. The end fillets (2 in, anchor 1 7/8 in) are over four weld sizes long (AISC 360-16 J2.2b),
+  // and the keeper and its outer fillet fit a 12 in flange. 1/2 in anchor notch: the anchor keeper bears on 1/4 in of
+  // flat notch end beyond the 1/4 in radius corner holes.
+  clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2.375*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.375*inch,anchorNotch:.5*inch,jointGap:.375*inch,jointPlateThickness:1.25*inch,jointPlateHeight:3.875*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
  criteria:{twistLimit:.005,railLateralLimit:400,railGauge:40*foot+.5*inch,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
  fatigueDetails:[
   {id:'F1',name:'Rolled bottom flange at midspan',x:12.5*foot,point:'bottom-left',category:'A',reference:'AISC Table A-3.1, 1.1 · plain rolled base metal'},
@@ -123,10 +126,11 @@ export function cappedDemonstrationProject():ProjectInput {
  // ahead of the front bolts (on a 12 in base plate, so both bolt rows stay put) keep the heads clear of the welds.
  Object.assign(p.details!.endStop!,{setback:6.75*inch,base:{length:12*inch,width:9*inch,thickness:.75*inch},face:{thickness:.75*inch,height:15*inch},stiffener:{thickness:.5*inch,length:8.5*inch,spacing:2.75*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.75*inch,edge:1.5*inch},source:'Fictitious supplier data CAP-CS-02: bumper force, bumper centerline height and contact diameter'});
  p.details!.end.weldSize=.3125*inch;p.details!.end.gauge=2.5*inch;p.details!.bearing.weldSize=.3125*inch;
- // Light crane: the rail bears directly on the cap web, without a pad. Keeper 1/2 in lip over a 1 in body,
- // 3/8 in lip overlap; 5/16 in fillets on the outer face and both ends; 5/16 in anchor notch.
+ // Light crane: the rail bears directly on the cap web, without a pad. Keeper 1/2 in lip over a 1 5/8 in body,
+ // 3/8 in lip overlap; 1/4 in fillets on the outer face and both ends, the end fillets (1 3/8 in, anchor 1 1/8 in)
+ // over four weld sizes long (AISC 360-16 J2.2b); 1/2 in anchor notch, 1/4 in flat bearing beyond its corner holes.
  p.aist!.railPad=false;
- Object.assign(p.details!.rail,{clipWidth:3.875*inch,clipThickness:.5*inch,clipBodyWidth:inch,clipClearance:inch/16,clipProjection:.4375*inch,clipWeld:.3125*inch,anchorNotch:.3125*inch});
+ Object.assign(p.details!.rail,{clipWidth:3.875*inch,clipThickness:.5*inch,clipBodyWidth:1.625*inch,clipClearance:inch/16,clipProjection:.4375*inch,clipWeld:.25*inch,anchorNotch:.5*inch});
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';
  p.details!.fabrication.welding+=' Cap: 5/16 continuous fillet each W top-flange edge; 5-ft minimum development each end. Full cap bearing contact required. Bearing stiffeners CJP to W top flange, bottom fitted.';
  p.notes+=' Separate capped example: 2-ton crane on W24X94 + C15X33.9, centered rail, continuous cap welds and full contact. This is not a substitute section for the 10-ton demonstration.';
@@ -156,7 +160,10 @@ export function newColumnDemonstrationProject():ProjectInput {
  p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,isNew:true,shape,Fy:50*ksi,Fu:65*ksi,height:top,seatElevation:seat,
   strong:{base:'fixed',top:'free'},weak:{base:'fixed',top:'braced'},Lcx:2.1*top,Lcy:top,Lcz:top,Lb:top,longitudinal:'bracing',driftLimit:240,source:'New column designed here',confirmed:true,
   seismic:{enabled:true,sdc:'B',SDS:.2,system:'ordinary',Ie:1,rho:1,source:'Fictitious site data: SDS 0.20, SD1 0.08, Site Class D, Risk Category II, SDC B',
-   building:{drift:1.5*inch,source:'Fictitious original building report: maximum inelastic displacement 1.5 in at the runway level'}}};
+   building:{drift:1.5*inch,source:'Fictitious original building report: maximum inelastic displacement 1.5 in at the runway level'}},
+  // The existing building's W12X40 frame columns stand 6 ft outboard of each runway grid line, on the same grids.
+  adjacent:{enabled:true,A:{...defaultExistingLine,offset:6*foot,footing:{L:4*foot,B:4*foot}},B:{...defaultExistingLine,offset:6*foot,footing:{L:4*foot,B:4*foot}},footingClear:6*inch,
+   source:'Fictitious survey SV-02: existing column faces located at every grid, footings by test pits at grids 1 and 3'}};
  p.columnBase=base;
  p.longitudinalBracing={...p.longitudinalBracing!,height:seat,existing:{W:0,E:0},source:'Fictitious new crane-level rod X-bracing between the new columns at grid lines 2-3; no building wind or seismic on this line',confirmed:true,
   // Clevis rods in the middle span, a W8X24 strut on the column line and the bracket seats welded to the columns.
