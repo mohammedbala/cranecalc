@@ -2,7 +2,7 @@ import {supportColumn} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,electrodeClass,plateInches} from './drawingFormat';
-import {sheetDrawingScale,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,labelColumn,type XY} from './sheetGraphics';
+import {sheetDrawingScale,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,labelColumn,textWidth,type XY} from './sheetGraphics';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {usesExistingBracket} from '../engine/existingBracket';
@@ -71,7 +71,9 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    const x0=Math.min(v.end,v.end+v.dir*L);
    svg+=rect(X(x0),Y(b.reach-W/2),L*k,W*k,'runway-line');
    if(g)for(const row of g.rows){const x=v.end+v.dir*row;holesX.push(x);for(const y of rowsY)svg+=circle(X(x),Y(y),g.hole/2*k,'runway-line')+line([X(x)-2.5,Y(y)],[X(x)+2.5,Y(y)])+line([X(x),Y(y)-2.5],[X(x),Y(y)+2.5]);}
-   if(v.label&&g)svg+=text(X(v.end+v.dir*L/2),tip+60,`${v.label} END`,7,'middle',700);
+   // Each label centered under its plate, on two lines when the pair would run together on one.
+   if(v.label&&g){const one=(L+gap)*k>1.1*(textWidth('SLIDING END',7)+textWidth('LOCATING END',7))/2+6;
+    svg+=one?text(X(v.end+v.dir*L/2),tip+60,`${v.label} END`,7,'middle',700):text(X(v.end+v.dir*L/2),tip+56,v.label,7,'middle',700)+text(X(v.end+v.dir*L/2),tip+64,'END',7,'middle',700);}
   }
   svg+=line([cx,face-b.receiver.flangeThickness*k-14],[cx,tip+8],'grid-line');
   svg+=line([left-10,Y(b.reach)],[right+10,Y(b.reach)],'grid-line');
@@ -86,7 +88,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   }
   // Keys: the transverse section between the rib and the outer hole column, the elevation from the runway side.
   const cut=X(g?(b.ribSpacing/2+b.ribThickness/2+g.rows[1]+gap/2)/2:(b.ribSpacing/2+half)/2);
-  svg+=sectionCut([cut,face-3],[cut,tip+3],[-1,0],detailTitles.weldedBracket,['a']);
+  svg+=sectionCut([cut,face-3],[cut,tip+3],[-1,0],detailTitles.weldedBracket,['a'],'over');
   svg+=sectionCut([left-4,tip+6],[right+4,tip+6],[0,-1],bracketElevationTitle,['b']);
   const plate=plates[plates.length-1],items:{at:XY;labels:string[];weld?:string}[]=[
    {at:[X(b.ribSpacing/2+b.ribThickness/2),Y(b.seatProjection*.1)],labels:['CONT. SEAT-TO-RIB','BOTH SIDES / EACH RIB'],weld:size(b.seatWeld)},
