@@ -6,6 +6,7 @@ import {aiscShapeByName} from '../data/aiscSections';
 import {boltProperties,type BoltGrade} from './connectionStrength';
 import {independentBearings} from './simpleSupports';
 import {defaultCapAngle,type CapAngleInput} from './capAngleInputs';
+import {initialColumnStiffeners,clipMargin} from './columnStiffenerInputs';
 export {capAngleSchema,defaultCapAngle,type CapAngleInput} from './capAngleInputs';
 
 const inch=25.4;
@@ -116,7 +117,7 @@ export interface CapAngleBolt {name:string;group:'cap'|'lap'|'column';axis:'x'|'
  * centerline, y across from the girder web centerline toward the column, z up from the top of the cap. The angle is
  * given as its two legs; slots are listed with each bolt. `station` picks the tie (index into the stations, default
  * the first one at a shared column); the column centerline is then at x = -offsetFromColumn. The column stiffener is
- * included when `stiffener` is true (see capAngleStiffenerRequired in capAngleTie.ts).
+ * included when it is provided (capAngle.stiffener enabled), or when `stiffener` is true (then with its proposed size).
  */
 export function capAngleTieParts(p:ProjectInput,opts:{station?:number;stiffener?:boolean}={}){
  const g=capAngleGeometry(p);if(!g)return undefined;
@@ -145,23 +146,27 @@ export function capAngleTieParts(p:ProjectInput,opts:{station?:number;stiffener?
   holes:[{ply:'tie plate',kind:'short-slot',width:g.lap.slot.width,length:g.lap.slot.length,along:'y'},{ply:'angle long leg',kind:'standard',width:g.lap.hole,length:g.lap.hole,along:'y'}]});
  for(const z of g.column.zs)bolts.push({name:'column bolt',group:'column',axis:'y',head:[0,g.endPlate.y0,z],nut:[0,g.face+(col?.tf??0),z],diameter:g.column.diameter,grade:g.column.grade,
   holes:[{ply:'end plate',kind:'standard',width:g.column.hole,length:g.column.hole,along:'z'},{ply:'shims (finger shims)',kind:'short-slot',width:g.column.hole,length:g.column.hole,along:'z'},{ply:'column flange',kind:'field-drilled',width:g.column.hole,length:g.column.hole,along:'z'}]});
- const st=opts.stiffener&&col?capAngleStiffenerGeometry(g):undefined;
+ const st=col&&(opts.stiffener||g.input.stiffener?.enabled)?capAngleStiffenerGeometry(g):undefined;
  if(st&&col){
-  // On the tie's side of the column web, from the web face to 1/4 in short of the flange tip.
-  const side=Math.sign(offset)||1,web=-offset+side*col.tw/2,tip=-offset+side*(col.width/2-inch/4);
-  boxes.push({name:'column stiffener at the tie level',kind:'stiffener',min:[Math.min(web,tip),g.face+col.tf,g.plate.zc-g.input.stiffener.thickness/2],max:[Math.max(web,tip),g.face+col.tf+st.length,g.plate.zc+g.input.stiffener.thickness/2]});
+  // On the tie's side of the column web, from the web face over the plate width; its corner clip at the web and flange.
+  const side=Math.sign(offset)||1,web=-offset+side*col.tw/2,tip=web+side*st.width;
+  boxes.push({name:'column stiffener at the tie level',kind:'stiffener',min:[Math.min(web,tip),g.face+col.tf,g.plate.zc-st.thickness/2],max:[Math.max(web,tip),g.face+col.tf+st.length,g.plate.zc+st.thickness/2]});
  }
  return {boxes,bolts,welds:[{name:'end plate to tie plate, both faces of the tie plate',size:g.weld,length:g.plate.width,bothSides:true,at:[0,g.endPlate.y0,g.plate.zc] as [number,number,number]}],
   station:at?{bay:at.bay,end:at.end,x:at.x,offsetFromColumn:offset}:undefined,
-  stations:g.stations.map(v=>({bay:v.bay,end:v.end,x:v.x,offsetFromColumn:v.offset})),columnFace:g.face,stiffener:!!st};
+  stations:g.stations.map(v=>({bay:v.bay,end:v.end,x:v.x,offsetFromColumn:v.offset})),columnFace:g.face,
+  stiffener:st?{thickness:st.thickness,width:st.width,length:st.length,clip:st.clip,flangeWeld:st.flangeWeld,webWeld:st.webWeld,provided:st.provided}:undefined};
 }
 /**
- * The column stiffener at the tie level, on the tie's side of the column web: a horizontal plate from the web face to
- * 1/4 in short of the flange tip, corners clipped clear of the web fillet, from the loaded flange to the column's
- * mid-depth (AISC J10.8: at least one-half the column depth).
+ * The column stiffener at the tie level, on the tie's side of the column web: a horizontal plate from the web face,
+ * its corners clipped clear of the web fillet, from the loaded flange to the column's mid-depth (or full depth),
+ * AISC J10.8. Its proportions are the column stiffener input (columnStiffenerInputs.ts); when none is entered, the
+ * starting values for the receiving column and the end plate delivering the force (initialColumnStiffeners).
  */
 export function capAngleStiffenerGeometry(g:CapAngleGeometry){
  const col=g.column.receiver;if(!col)return undefined;
- const clip=Math.max(col.fillet,inch/2),width=col.width/2-col.tw/2-inch/4,length=col.depth/2-col.tf;
- return {width,length,clip,weldFlange:width-clip,weldWeb:length-clip};
+ const receiver={depth:col.depth,width:col.width,flangeThickness:col.tf,webThickness:col.tw};
+ const k=col.shape?col.tf+col.fillet:undefined,s=g.input.stiffener??initialColumnStiffeners(receiver,k,g.endPlate.thickness);
+ const length=s.length==='full'?col.depth-2*col.tf:col.depth/2-col.tf;
+ return {...s,provided:!!g.input.stiffener?.enabled,length,requiredClip:k!==undefined?k-col.tf+clipMargin:undefined,contact:s.width-s.clip,webLength:length-s.clip-(s.length==='full'?s.clip:0)};
 }

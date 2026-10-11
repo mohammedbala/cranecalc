@@ -107,9 +107,11 @@ export function capAngleDesign(p:ProjectInput,g:CapAngleGeometry,f:CapAngleLoads
  const colSpacing=2*cl.gauge;
  const columnP=col?(()=>{const b=ez-col.tw/2;return tStubPrying({T:Tc,t:col.tf,b,a:col.width/2-ez,p:Math.min(3.5*b,colSpacing/2+1.75*b),db:cl.diameter,dPrime:cl.hole,Fu:col.Fu,method});})():undefined;
  // With a stiffener at the tie level the flange also spans to it: the better of the web and stiffener T-stubs (a lower bound).
- const st=c.stiffener,stiffP=col?(()=>{const b=cl.gauge-st.thickness/2;return tStubPrying({T:Tc,t:col.tf,b,a:1.25*b,p:Math.min(col.width/2-col.tw/2,3.5*b),db:cl.diameter,dPrime:cl.hole,Fu:col.Fu,method});})():undefined;
- const stiffenerRequired=!!columnP&&!withinLimit(Tc,columnP.fitting);
- const Qc=endP.q+(columnP&&!stiffenerRequired?columnP.q:stiffP&&stiffenerRequired?Math.min(columnP!.q,stiffP.q):0);
+ // The stiffener is the entered one, or the proposed column stiffener proportions when the flange needs one.
+ const sg=col?capAngleStiffenerGeometry(g):undefined;
+ const stiffP=col&&sg?(()=>{const b=cl.gauge-sg.thickness/2;return tStubPrying({T:Tc,t:col.tf,b,a:1.25*b,p:Math.min(col.width/2-col.tw/2,3.5*b),db:cl.diameter,dPrime:cl.hole,Fu:col.Fu,method});})():undefined;
+ const stiffenerRequired=!!columnP&&!withinLimit(Tc,columnP.fitting),stiffened=!!sg?.provided&&!!stiffP;
+ const Qc=endP.q+(columnP?stiffened?Math.min(columnP.q,stiffP!.q):columnP.q:0);
  const filler=fillerFactor(c.shimMax),colShear=Vv/nCol;
  const colBolt=boltCapacity({grade:cl.grade,diameter:cl.diameter,planes:1,surface:'B',shear:colShear/Math.max(filler,1e-9),tension:Tc+Qc,method});
  // End plate fillets: two lines along the runway, one on each face of the tie plate (gauge t_p).
@@ -117,7 +119,7 @@ export function capAngleDesign(p:ProjectInput,g:CapAngleGeometry,f:CapAngleLoads
  // Shims in push: finger shims slotted around the column bolts.
  const shimArea=(ep.width-(cl.hole+inch/8))*ep.height,shimBearing=A(1.8*m.Fy*shimArea,.75,2);
  // Stiffener (J10.8) when required: the full bolt pull through the plate on the tie's side of the web.
- const sg=col?capAngleStiffenerGeometry(g):undefined;
+
  // ---- Movement along the runway in the angle slots: θ about the bearing over the bolt height, thermal travel, setting tolerance.
  const set=simpleSupportInput(p).settingTolerance,travelRequired=f.rotation*g.boltHeight+f.thermal+set,cyclicTravel=f.cyclicRotation*g.boltHeight+f.thermal+set;
  // ---- Stiffness for the girder lateral/torsional model, pull, in series (per tie).
@@ -143,7 +145,7 @@ export function capAngleDesign(p:ProjectInput,g:CapAngleGeometry,f:CapAngleLoads
   lapTension,lapShear,lapBolt,slip,ksc,mu,plateClear,legClear,bearingPlate,bearingLeg,toeEdge,lapCouple,
   Ag,An,Ae,yieldCap,ruptureCap,compression,K,r,L,Pe1,B1,lapMoment,Mv,Vv,Mvc,Vvc,Mcy,Pc,h1,momentRatio,axial,
   legAg,legAn,legTension,heel,heelP,heelM,blockPlate,blockLeg,
-  Tc,endP,columnP,stiffP,stiffenerRequired,Qc,colBolt,colShear,filler,ez,ezMin,weld,shimArea,shimBearing,sg,
+  Tc,endP,columnP,stiffP,stiffenerRequired,stiffened,Qc,colBolt,colShear,filler,ez,ezMin,weld,shimArea,shimBearing,sg,
   travelRequired,cyclicTravel,set,compliance,stiffness};
 }
 export type CapAngleDesign=ReturnType<typeof capAngleDesign>;
@@ -170,13 +172,19 @@ export function capAngleBraceSystem(p:ProjectInput){
  return {member,cos:1,connectionK:design.stiffness,stiffness:design.stiffness,plies:1 as const,capacity:Math.min(tension,compression.capacity),compliance:design.compliance};
 }
 
+/**
+ * The cap tieback angle as designed in a calculated snapshot: geometry, the loads and the component design at the
+ * factored tie force (the 'brace-member' demand), and whether the column flange needs or has a stiffener at the tie
+ * level. Undefined before the detailed analysis or for another tie.
+ */
+export function capAngleResult(s:CalculationSnapshot){
+ const p=s.input,g=capAngleGeometry(p),F=s.checks.find(c=>c.id==='brace-member')?.demand;
+ if(!g||!s.detailResults||!s.designAnalysis||F===undefined)return undefined;
+ const loads=capAngleLoads(s,F),design=capAngleDesign(p,g,loads);
+ return {g,loads,design,stiffener:{required:design.stiffenerRequired,provided:design.stiffened,geometry:design.sg}};
+}
 const compared=(id:string,group:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds=['cap-angle-basis','aisc-connections']):CheckResult=>({id,group,title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds});
 
-/** The column stiffener hook: whether the column flange needs a stiffener at the tie level, and the force it then carries. */
-export function capAngleStiffenerRequired(s:CalculationSnapshot){
- const c=s.checks.find(v=>v.id==='cap-angle-stiffener-tension');
- return c?{required:c.status!=='not-applicable',force:c.demand??0}:{required:false,force:0};
-}
 
 /**
  * Every check of the cap tieback angle. `force` is the factored tie force (flange restraint plus Appendix 6
@@ -245,26 +253,29 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  add('cap-angle-shim-max',G,'Shims · maximum thickness',c.shimMax,.75*inch,'length','t_{shim}\\le3/4\\,in',`AISC J5.2: fillers up to 3/4 in in bolted connections; above 1/4 in the bolt shear strength is reduced by 1 − 0.4(t − 0.25) (here ${x.filler.toFixed(3)}). Finger shims, 0 to ${len(c.shimMax)}, take up the fit-up between the end plate and the column flange; nominal ${len(g.shim.nominal)}.`);
  add('cap-angle-shim-bearing',G,'Shims · bearing in push',x.F,x.shimBearing,'force','R_n=1.8F_yA_{shim}',`AISC J7: the end plate bears on finger shims ${len(ep.width)} × ${len(ep.height)} less the bolt slots (${format(x.shimArea,'area',u,3)}). Governing case: push.`);
  if(col&&x.columnP){
-  const cp=x.columnP,sp=x.stiffP!;
-  const cap=x.stiffenerRequired?Math.max(cp.fitting,sp.fitting):cp.fitting;
+  const cp=x.columnP,sp=x.stiffP!,sg=x.sg!;
+  const cap=x.stiffened?Math.max(cp.fitting,sp.fitting):cp.fitting,plate=`PL ${len(sg.thickness)} × ${len(sg.width)} × ${len(sg.length)}`;
   add('cap-angle-column-flange',G,'Column flange · bending under the two-bolt pull',x.Tc,cap,'force','T\\le\\frac{\\phi pF_ut_f^2(1+\\delta)}{4b^{\\prime}};\\quad p=\\min(3.5b,\\;s/2+1.75b)',
-   `${pull} The ${colName} as a T-stub flange from the column web (AISC Manual Part 9; yield-line tributary length p per bolt for two bolts ${len(2*cl.gauge)} apart on a continuous flange). Bolts ${len(x.ez)} from the column centerline at the farthest tie (b = ${len(cp.b)}, a = ${len(cp.a)}). ${pryNote(cp,'Flange',col.tf)} ${x.stiffenerRequired?`Unstiffened fitting strength ${force(cp.fitting)} is less than T: a stiffener at the tie level is required (see below); with it the flange also spans to the stiffener (b = ${len(sp.b)}, p = ${len(sp.p)}), and the better of the two T-stubs ${force(cap)} is a lower bound on the two-way plate.`:'No stiffener is required.'}`,['cap-angle-basis','aisc-manual-prying']);
+   `${pull} The ${colName} as a T-stub flange from the column web (AISC Manual Part 9; yield-line tributary length p per bolt for two bolts ${len(2*cl.gauge)} apart on a continuous flange). Bolts ${len(x.ez)} from the column centerline at the farthest tie (b = ${len(cp.b)}, a = ${len(cp.a)}). ${pryNote(cp,'Flange',col.tf)} ${x.stiffened?`With the column stiffener ${plate} at the tie level the flange also spans to it (b = ${len(sp.b)}, p = ${len(sp.p)}, fitting strength ${force(sp.fitting)}); the better of the two T-stubs, ${force(cap)}, is a lower bound on the two-way plate.`:x.stiffenerRequired?`The unstiffened flange is not enough: provide a column stiffener at the tie level (for example ${plate}, the column stiffener starting proportions), on the tie's side of the web.`:'No stiffener is needed at the tie level.'}`,['cap-angle-basis','aisc-manual-prying']);
   const Yt=col.Fy/col.Fu<=.8?1:1.1,Afg=col.width*col.tf,Afn=(col.width-(cl.hole+inch/16))*col.tf;
-  checks.push({...compared('cap-angle-column-holes',G,'Column flange · net area after field drilling (F13.1)',Yt*col.Fy*Afg,col.Fu*Afn,'force','F_uA_{fn}\\ge Y_tF_yA_{fg}',`AISC F13.1: one ${len(cl.hole)} hole in the column flange at any level (the two bolts are one above the other). A_fn = ${format(Afn,'area',u,3)} of A_fg = ${format(Afg,'area',u,3)} (${(100*Afn/Afg).toFixed(1)}%). When this holds the holes do not reduce the column's flexural strength; otherwise the existing column check uses F13-1. The holes are field-drilled: no welding to the existing column.`,['cap-angle-basis','aisc-f13']),...(withinLimit(Yt*col.Fy*Afg,col.Fu*Afn)?{}:{status:'excluded' as const})});
+  checks.push({...compared('cap-angle-column-holes',G,'Column flange · net area after field drilling (F13.1)',Yt*col.Fy*Afg,col.Fu*Afn,'force','F_uA_{fn}\\ge Y_tF_yA_{fg}',`AISC F13.1: one ${len(cl.hole)} hole in the column flange at any level (the two bolts are one above the other). A_fn = ${format(Afn,'area',u,3)} of A_fg = ${format(Afg,'area',u,3)} (${(100*Afn/Afg).toFixed(1)}%). When this holds the holes do not reduce the column's flexural strength; otherwise the existing column check uses F13-1. The holes are field-drilled; the tie is not welded to the column.`,['cap-angle-basis','aisc-f13']),...(withinLimit(Yt*col.Fy*Afg,col.Fu*Afn)?{}:{status:'excluded' as const})});
   add('cap-angle-column-edge',G,'Column bolts · edge distance to the column flange tip',minimumEdge(cl.diameter),col.width/2-x.ez,'length','b_f/2-e_x\\ge e_{min}',`AISC J3.4: the farthest tie's bolts ${len(x.ez)} from the column centerline.`);
   add('cap-angle-column-wrench',G,'Column bolt nuts · clear of the column web fillet',C1c,x.ezMin-col.k1,'length','e_x-k_1\\ge C_1',`AISC Manual Table 7-15 C1 = ${len(C1c)}: the nuts inside the column flange, at the nearest tie ${len(x.ezMin)} from the column centerline, clear the web and its fillet (k₁ = ${len(col.k1)}${col.fillet?'':', no fillet credited'}).`);
-  // Stiffener at the tie level (J10.8), when the column flange needs it. The hook for the column stiffener design.
-  const sg=x.sg!,ts=c.stiffener.thickness,ws=c.stiffener.weld,Fst=2*x.Tc;
-  if(!x.stiffenerRequired)checks.push({id:'cap-angle-stiffener-tension',group:G,title:'Column stiffener at the tie level',status:'not-applicable',equation:'T\\le T_{fit,unstiffened}',note:`Not required: the unstiffened column flange fitting strength ${force(cp.fitting)} exceeds the bolt pull ${force(x.Tc)} (ratio ${(x.Tc/cp.fitting).toFixed(3)}).`,referenceIds:['cap-angle-basis','aisc-j']});
+  // Column stiffener at the tie level (AISC J10.8) with the column stiffener proportions (columnStiffenerInputs.ts):
+  // one plate on the tie's side of the web, designed for the whole pull of both bolts (conservative).
+  if(!sg.provided)checks.push({id:'cap-angle-stiffener',group:G,title:'Column stiffener at the tie level',status:x.stiffenerRequired?'fail':'not-applicable',equation:'2T\\le2T_{fit,unstiffened}',...(x.stiffenerRequired?{demand:x.Tc,capacity:cp.fitting,quantity:'force' as const,utilization:x.Tc/cp.fitting}:{}),
+   note:x.stiffenerRequired?`Required: the unstiffened column flange fitting strength ${force(cp.fitting)} is below the bolt pull ${force(x.Tc)}. Provide the column stiffener at the tie level (enable it under the cap angle inputs).`:`Not needed: the unstiffened column flange fitting strength ${force(cp.fitting)} exceeds the bolt pull ${force(x.Tc)} (ratio ${(x.Tc/cp.fitting).toFixed(3)}).`,referenceIds:['cap-angle-basis','aisc-j']});
   else{
-   add('cap-angle-stiffener-tension',G,'Column stiffener · tension (J10.8, J4.1)',Fst,available(m.Fy*(sg.width-sg.clip)*ts,method,.9,1.67),'force','R_n=F_yA_{st},\\;A_{st}=(b_s-c)t_s',`AISC J10.8: required because the unstiffened flange fitting strength ${force(cp.fitting)} < T = ${force(x.Tc)}. The plate PL ${len(ts)} × ${len(sg.width)} × ${len(sg.length)}, at the tie level on the tie's side of the web, takes the whole pull of both bolts conservatively; corner clip ${len(sg.clip)}.`,['cap-angle-basis','aisc-j']);
-   add('cap-angle-stiffener-width',G,'Column stiffener · width',ep.width/3-col.tw/2,sg.width,'length','b_s\\ge b_{ep}/3-t_w/2','AISC J10.8(1): the end plate delivering the force is the "connection plate".',['aisc-j']);
-   add('cap-angle-stiffener-thickness',G,'Column stiffener · thickness',Math.max(ep.thickness/2,sg.width/16),ts,'length','t_s\\ge\\max(t_{ep}/2,\\;b_s/16)','AISC J10.8(2).',['aisc-j']);
-   add('cap-angle-stiffener-length',G,'Column stiffener · length',(col.depth)/2-col.tf,sg.length,'length','l_s\\ge d/2-t_f','AISC J10.8(3): to the column mid-depth.',['aisc-j']);
-   const weldCap=(L0:number)=>available(.6*m.Fexx*ws/Math.SQRT2*2*L0,method,.75,2);
-   add('cap-angle-stiffener-weld-flange',G,'Column stiffener · fillets to the loaded flange',Fst,weldCap(sg.weldFlange),'force','R_n=0.6F_{EXX}(0.707w)(2l)',`Two ${len(ws)} fillets × ${len(sg.weldFlange)}, sized for the whole pull (J10.8). Field welds to the existing column: verify weldability.`,['aisc-j']);
-   add('cap-angle-stiffener-weld-web',G,'Column stiffener · fillets to the web',Fst,weldCap(sg.weldWeb),'force','R_n=0.6F_{EXX}(0.707w)(2l)',`Two ${len(ws)} fillets × ${len(sg.weldWeb)} transfer the stiffener force to the column web (J10.8).`,['aisc-j']);
-   add('cap-angle-stiffener-weld-min',G,'Column stiffener · minimum fillet',minimumFillet(Math.max(ts,col.tf)),ws,'length','w\\ge w_{min,J2.4}','AISC Table J2.4.',['aisc-j']);
+   const ts=sg.thickness,Fst=2*x.Tc,need=x.stiffenerRequired?`required: the unstiffened flange fitting strength ${force(cp.fitting)} < T = ${force(x.Tc)}`:'provided (not required by the flange bending check)';
+   add('cap-angle-stiffener',G,'Column stiffener at the tie level · tension (J10.8, J4.1)',Fst,available(m.Fy*sg.contact*ts,method,.9,1.67),'force','R_{st}=2T\\le\\phi F_y(b_s-c)t_s',`AISC J10.8 and J4.1: ${plate} at the tie level on the tie's side of the column web, ${need}. It takes the whole pull of both bolts conservatively (not R_u − φR_n), on its clipped flange contact (clip ${len(sg.clip)}).`,['cap-angle-basis','aisc-j']);
+   const lambda=.56*Math.sqrt(p.section.E/m.Fy),prop=Math.max(Math.max(ep.thickness/2,sg.width/16,sg.width/lambda)/ts,(ep.width/3-col.tw/2)/sg.width);
+   add('cap-angle-stiffener-proportions',G,'Column stiffener · width and thickness (J10.8(1), (2); B4.1a)',prop,1,'ratio','\\max\\left(\\frac{\\max(t_{ep}/2,\\,b_s/16,\\,b_s/0.56\\sqrt{E/F_y})}{t_s},\\frac{b_{ep}/3-t_w/2}{b_s}\\right)\\le1','The end plate is the plate delivering the force.',['aisc-j']);
+   add('cap-angle-stiffener-length',G,'Column stiffener · length (J10.8(3))',col.depth/2,sg.length+col.tf,'length','L_s+t_f\\ge d/2',sg.length>col.depth/2?'Full depth between the flanges.':'From the loaded flange to the column mid-depth.',['aisc-j']);
+   const phiW=available(.6*m.Fexx,method,.75,2);
+   add('cap-angle-stiffener-flange-weld',G,'Column stiffener · fillets to the loaded flange (J10.8, J2.4)',Fst/(2*sg.flangeWeld/Math.SQRT2*sg.contact),phiW,'stress','f_w=\\frac{R_{st}}{2(0.707w)(b_s-c)}',`Two ${len(sg.flangeWeld)} fillets × ${len(sg.contact)}, one each face. ${col.isNew?'Shop':'Field'} welds to the ${col.isNew?'new':'existing'} column${col.isNew?'':': identify the steel and set the preheat (Existing column welding)'}.`,['aisc-j']);
+   add('cap-angle-stiffener-web-weld',G,'Column stiffener · fillets to the web (J10.8, J2.4)',Fst/(2*sg.webWeld/Math.SQRT2*sg.webLength),phiW,'stress','f_w=\\frac{R_{st}}{2(0.707w)L_w}',`Two ${len(sg.webWeld)} fillets × ${len(sg.webLength)} deliver the stiffener force to the web.`,['aisc-j']);
+   add('cap-angle-stiffener-weld-min',G,'Column stiffener · minimum fillets (J2.4)',Math.max(minimumFillet(Math.max(ts,col.tf))/sg.flangeWeld,minimumFillet(Math.max(ts,col.tw))/sg.webWeld),1,'ratio','w\\ge w_{min,J2.4}','AISC Table J2.4, thicker part joined.',['aisc-j']);
+   if(sg.requiredClip!==undefined)add('cap-angle-stiffener-fit',G,'Column stiffener · clear of the rolled fillet',sg.requiredClip,sg.clip,'length','c\\ge k-t_f+1/8\\,in',`The corner clip clears the column's web-to-flange fillet; the plate ${len(sg.width)} wide fits inside the flange tip.`,['aisc-j']);
   }
  }else{
   const by=(id:string,title:string)=>checks.push({id,group:G,title,status:'excluded',equation:'',note:`The receiving column is by others: its flange takes the two-bolt pull ${force(x.Tc)} per bolt (strength) at ${len(2*cl.gauge)} spacing, ${len(x.ez)} from the column centerline; provide a stiffener at the tie level where needed.`,referenceIds:['cap-angle-basis']});
@@ -384,7 +395,7 @@ export function capAngleProportions(p:ProjectInput,size:{shape:string;diameter:n
  const gauge=roundUp(Math.max(ka+washerHeight/2,kc+hw.washer.od/2,ta+slotWidth/2+inch/8,s.capTw+wrenchOf(db)),step);
  const pitch=roundUp(slotLength+8/3*db-hole+inch/16,inch/4);
  const edge=Math.max(eMin+.75*db,slotLength/2+eMin-hole/2),length=roundUp(pitch+2*edge,inch/4);
- const lapPitch=roundUp(Math.max(8/3*db,3*db),inch/4),plateWidth=roundUp(lapPitch+2*eMin,inch/4);
+ const lapPitch=roundUp(Math.max(8/3*db,3*db,2.5*inch),inch/4),plateWidth=roundUp(lapPitch+2*eMin,inch/4);
  const lapGauge=roundUp(Math.max(ta+hw.corners/2+(base.mode==='sleeved'?base.sleeveClearance:0)+base.washerThickness+hw.head+hw.corners/2,bh-eMin-inch/4),step);
  const colGauge=roundUp(Math.max(size.plate/2+base.weldSize+wrenchOf(db),size.plate/2+base.weldSize+hw.washer.od/2+inch/16),step);
  const epHeight=roundUp(2*(colGauge+eMin),inch/4);
@@ -392,7 +403,8 @@ export function capAngleProportions(p:ProjectInput,size:{shape:string;diameter:n
   capBolts:{...base.capBolts,diameter:db,gauge,pitch},plateThickness:size.plate,plateWidth,
   lapBolts:{...base.lapBolts,diameter:db,gauge:Math.min(lapGauge,bh-eMin),pitch:lapPitch,edge:roundUp(eMin+slotEdgeIncrement(db,'short'),step)},
   endPlate:{thickness:size.endPlate,height:epHeight,width:plateWidth},columnBolts:{...base.columnBolts,diameter:db,gauge:colGauge},
-  weldSize:Math.max(base.weldSize,minimumFillet(Math.max(size.plate,size.endPlate)))};
+  // Fillets about 0.6 t_p: the root of the pair (A-3.1 item 5.5) governs their fatigue.
+  weldSize:Math.max(base.weldSize,minimumFillet(Math.max(size.plate,size.endPlate)),roundUp(.6*size.plate,inch/16))};
 }
 const wrenchOf=(db:number)=>wrenchClearance(db);
 function aiscChannelKdes(name:string){const c=channelData(name);return c?c.kdes*inch:undefined;}
@@ -426,3 +438,11 @@ export function sizeCapAngle(p:ProjectInput,F:number,target=.9):CapAngleInput{
 }
 /** Shared lookup for other modules (drawings, report): the cap angle inputs of a project, defaults applied. */
 export const capAngleOf=(d:RunwayDetails)=>capAngleInput(d);
+/**
+ * Tie force estimate for template sizing before any analysis: factored (1.6) side thrust of the heaviest crane, all its
+ * wheels on one girder end, doubled for the torsional share of the top flange and the bracing imperfection force.
+ */
+export function capAngleForceEstimate(p:ProjectInput){
+ const H=Math.max(0,...p.cranes.map(c=>c.wheels.reduce((a,w)=>a+w.lateral,0)));
+ return 2*1.6*H;
+}

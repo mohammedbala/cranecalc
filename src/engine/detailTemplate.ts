@@ -9,6 +9,7 @@ import {railSeatDefaults} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 import {keeperGeometry} from './railSeat';
+import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
 
 const inch=25.4,ksi=6.894757293;
 /** Marker for inputs the template cannot know; any string starting with it blocks eligibility. */
@@ -82,6 +83,9 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  if(release){c.gauge=Math.max(c.gauge,release.minimumGauge);tie.width=Math.max(tie.width,up(c.gauge+2*c.edge,.25*inch));}
  // Root fillets run the full column gusset height, which contains the release slots.
  c.weldLength=columnGussetHeight({...p,details});
+ // A capped girder of independent spans takes the cap tieback angle bolted to the channel cap (AISC DG7), sized in
+ // standard increments for the estimated tie force; the bolted end bearings restrain the bottom flange.
+ if(b.kind==='cap'&&simple){tie.arrangement='cap-angle';tie.capAngle=sizeCapAngle({...p,details},capAngleForceEstimate(p));}
  return details;
 }
 

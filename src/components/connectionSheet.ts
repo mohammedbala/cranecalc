@@ -22,6 +22,7 @@ import { railKeeperView } from './railKeeperView';
 import {ribGeometry} from '../engine/bracketRib';
 import {haunchedRibOutline} from './haunchedBracketDrawing';
 import { slidingBoltView } from './slidingBoltSection';
+import {isCapAngleTie} from '../engine/capAngle';
 
 /** Girder bearing, end connection, flange tie and rail keeper details on their own sheet. */
 export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defaultFraming,number='S-02'){
@@ -157,7 +158,9 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
 
  // 3: Plan of an actual flange-to-column tie. The symmetric pair of bars is
  // represented by front/back outlines; arrows identify both end bolt groups.
- if(d.brace.flangeAttachment?.enabled){if(withFlangeTie)views.push({title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,436)});}
+ // The cap tieback angle has its own details (capAngleSheet.ts).
+ if(isCapAngleTie(p)){}
+ else if(d.brace.flangeAttachment?.enabled){if(withFlangeTie)views.push({title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,436)});}
  else if(!capped)views.push({title:detailTitles.tie,render:()=>{
   let svg='<g data-view="tie-connection">';
   // Across the runway (down the sheet) from the web centerline; along the runway from the tie-side bearing stiffener.

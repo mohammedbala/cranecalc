@@ -4,6 +4,7 @@ import {rolledUnderSeat} from './rolledBracketSheet';
 import {bracingOnElevation,bracingTopic,specifiedSeparation} from './bracingSheet';
 import {ribGeometry} from '../engine/bracketRib';
 import {flangeTieTopic} from './flangeTieSheet';
+import {capAngleTopic} from './capAngleSheet';
 import {connectionOptionChecks} from '../engine/connectionOptions';
 import {connectionConceptSheetSvg} from './connectionConceptSheet';
 import {bracketTopic} from './bracketSheet';
@@ -425,10 +426,10 @@ const unescape=(v:string)=>v.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(
  * column brackets, direct flange ties, end stops and new columns. Details are drawn on demand.
  */
 export function detailTopics(s:CalculationSnapshot,f:FramingSettings=defaultFraming):DetailTopic[]{
-  const p=s.input,d=p.details,ties=d?.brace.flangeAttachment?.enabled?flangeTieTopic(s):undefined,bracket=d?.bracket?.enabled?bracketTopic(s):undefined,supports=simpleSupportTopic(s,f);
+  const p=s.input,d=p.details,ties=d?.brace.flangeAttachment?.enabled?flangeTieTopic(s):undefined,bracket=d?.bracket?.enabled?bracketTopic(s):undefined,supports=simpleSupportTopic(s,f),capAngle=capAngleTopic(s);
   return [connectionTopic(s,f,!ties),
     ...(p.section.kind==='cap'&&p.capDesign&&d?[capTopic(s)]:[]),
-    ...(supports?[supports]:[]),...(bracket?[bracket]:[]),...(ties?[ties]:[]),
+    ...(supports?[supports]:[]),...(bracket?[bracket]:[]),...(ties?[ties]:[]),...(capAngle?[capAngle]:[]),
     ...(d&&activeEndStop(p)?[endStopTopic(s)]:[]),
     ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[...(activeColumnCap(p)?[columnCapTopic(s)]:[]),newColumnTopic(s)]:[]),
     ...(s.bracingSystem?[bracingTopic(s)]:[])];

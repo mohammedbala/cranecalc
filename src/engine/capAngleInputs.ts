@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {columnStiffenerSchema} from './columnStiffenerInputs';
 
 const pos=z.number().finite().positive();
 const grade=z.enum(['A325','A490']);
@@ -40,8 +41,10 @@ export const capAngleSchema=z.object({
  shimMax:pos,
  /** Shop fillets, end plate to tie plate, both faces of the tie plate. */
  weldSize:pos,
- /** Column stiffener (continuity plate) at the tie level, provided when the column flange needs it. */
- stiffener:z.object({thickness:pos,weld:pos}),
+ /** Column stiffener (continuity plate) at the tie level, inside the column on the tie's side of the web: the column
+  * stiffener input of the bracket stiffeners (thickness, width, clip, length, fillets). Provide it (enabled) when the
+  * column flange cannot take the bolt pull; the levels and offsets of the bracket pairs do not apply. */
+ stiffener:columnStiffenerSchema.optional(),
  /** Girder web centerline to the column face where no bracket is designed here. */
  columnFace:pos.optional()
 });
@@ -57,4 +60,4 @@ export const defaultCapAngle:CapAngleInput={shape:'L4X4X1/2',length:6.5*inch,set
  lapBolts:{diameter:.625*inch,grade:'A325',gauge:2.5*inch,pitch:3*inch,edge:1.25*inch,surface:'B'},
  endPlate:{thickness:.625*inch,height:6*inch,width:5*inch},
  columnBolts:{diameter:.625*inch,grade:'A325',gauge:2*inch},
- shimMax:.25*inch,weldSize:.25*inch,stiffener:{thickness:.5*inch,weld:.25*inch}};
+ shimMax:.25*inch,weldSize:.25*inch};
