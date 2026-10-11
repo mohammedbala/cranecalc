@@ -9,6 +9,8 @@ const foot=304.8;
  * shorter than 10 ft.
  */
 export const railLayoutCriteria={stock:39*foot,clear:2*foot,minPiece:10*foot} as const;
+/** Cut rail pieces to multiples of 5 in (127 mm), a length round in both unit systems, so the layout does not change with the display units. */
+const railCutStep=127;
 
 export interface RailRun {side:'A'|'B';start:number;end:number;joints:number[];pieces:number[]}
 export interface RailLayout {
@@ -30,7 +32,7 @@ export interface RailLayout {
  * fall between those of runway A.
  */
 export function railLayout(p:ProjectInput):RailLayout{
- const {stock,clear,minPiece}=railLayoutCriteria,L=p.spans.reduce((a,b)=>a+b,0),step=p.units==='US'?25.4:10;
+ const {stock,clear,minPiece}=railLayoutCriteria,L=p.spans.reduce((a,b)=>a+b,0),step=railCutStep;
  const stop=activeEndStop(p),stops=stopEnds(p),railEnd=stop?stopRailEnd(stop):0;
  const existing={left:continues(p,'left'),right:continues(p,'right')};
  const start=existing.left?-clear:stops.includes('left')?railEnd:0,end=existing.right?L+clear:stops.includes('right')?L-railEnd:L;
@@ -43,7 +45,7 @@ export function railLayout(p:ProjectInput):RailLayout{
   const joints:number[]=[];let at=start,length=first;
   for(let guard=0;guard<200&&end-at>length+1e-6;guard++){
    // Split a remainder that would leave a short last piece into two equal pieces.
-   // Cut pieces to whole inches (10 mm); full pieces stay uncut.
+   // Cut pieces to multiples of railCutStep; full pieces stay uncut.
    const cut=(v:number)=>at+Math.floor((v-at+1e-6)/step)*step;
    let target=end-at-length<minPiece?cut(at+(end-at)/2):at+length;
    for(let i=0;i<40;i++){

@@ -11,6 +11,8 @@ export function feetInches(mm: number): string {
 }
 /** SI lengths of a metre or more read to the millimetre, shorter ones to 0.1 mm. */
 export function drawingLength(mm: number, units: ProjectInput['units']) {
+  // Snap floating-point noise first, so equal lengths reached by different sums (a + b vs L - c) print alike.
+  mm = Math.round(mm * 1e6) / 1e6;
   return units === 'US' ? feetInches(mm) : `${Number(mm.toFixed(Math.abs(mm) >= 1000 ? 0 : 1)).toLocaleString('en-US')} mm`;
 }
 /** Elevations: feet and inches, or metres to three decimals in SI. */
