@@ -95,7 +95,9 @@ export class LateralTorsionBeam {
   const locations=[0,p.length,...p.loads.map(l=>l.x),...p.restraints.map(r=>r.x),...(p.fixed??[]).map(r=>r.x)];
   if(locations.some(x=>!Number.isFinite(x)||x<0||x>p.length))throw Error('Lateral/torsion load or restraint is outside the member.');
   if(p.loads.some(l=>![l.lateral,l.torque,l.vertical??0,l.height??0].every(Number.isFinite))||p.restraints.some(r=>!Number.isFinite(r.top)||!Number.isFinite(r.bottom)||r.top<0||r.bottom<0))throw Error('Invalid lateral/torsion force or restraint stiffness.');
-  for(let i=1;i<(p.subdivisions??24);i++)locations.push(p.length*i/(p.subdivisions??24));
+  // Mesh points within 1 mm of a load or restraint node are left out: such a sliver element ruins the conditioning.
+  const anchors=[...locations];
+  for(let i=1;i<(p.subdivisions??24);i++){const x=p.length*i/(p.subdivisions??24);if(anchors.every(a=>Math.abs(a-x)>1))locations.push(x);}
   this.nodes=locations.sort((a,b)=>a-b).filter((x,i,all)=>i===0||x-all[i-1]>1e-6);
   const n=this.nodes.length*4;this.elastic=new BandMatrix(n);this.geometric=new BandMatrix(n);this.force=new Float64Array(n);
   const index=(x:number)=>{const i=this.nodes.findIndex(v=>Math.abs(v-x)<1e-6);if(i<0)throw Error('Missing lateral/torsion node.');return 4*i;};
