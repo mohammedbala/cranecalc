@@ -108,6 +108,6 @@ describe('bolted girder end bearings',()=>{
   expect(cut).toBeDefined();expect(cut).toContain(detailReferences(set).get(detailTitles.slidingBolt));
   expect(texts(set[0].svg).join(' ')).not.toContain('COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN');
   const sk=detailedDrawings(capped).find(v=>v.name==='end-connection-detail')!;expect(sk.title).toContain('Bolted end bearing');
-  expect(compactReport(capped,'')).toContain('04B / Bolted end bearings');
+  expect(compactReport(capped,'')).toMatch(/5\.\d+ \/ Bolted end bearings/);
  },240000);
 });

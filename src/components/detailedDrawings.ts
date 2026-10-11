@@ -26,7 +26,7 @@ import {capChannelProfile as channelOutline} from '../engine/channelProfile';
 export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  const p=s.input,d=p.details;if(!d)return [];
  if(connectionOptionChecks(p).length)return [];
- const f=(v:number)=>plateInches(v,p.units),force=(v:number)=>format(v,'force',p.units,4);
+ const f=(v:number)=>plateInches(v,p.units),force=(v:number)=>format(v,'force',p.units,2);
  // Drawing sheets that carry the matching details, e.g. "S-02" or "S-02, S-03".
  const sheetOf=detailSheetNumbers(s),sheets=(...keys:string[])=>[...new Set(keys.map(sheetOf))].join(', ');
  const output:CadDrawing[]=[];

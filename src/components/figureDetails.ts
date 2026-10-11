@@ -26,7 +26,7 @@ function girder(p:ProjectInput){
  return `${p.section.name}, Fy ${format(p.section.Fy,'stress',p.units,0)}; ${p.spans.length} ${p.system==='continuous'?'continuous':'simple'} span${p.spans.length>1?'s':''} of ${spans.join(' / ')}`;
 }
 function rail(p:ProjectInput){
- const r=p.details?.rail;if(!r)return `Rail ${format(p.railWeight,'lineLoad',p.units,3)}, head ${len(p,p.railHeight)} above the flange`;
+ const r=p.details?.rail;if(!r)return `Rail ${format(p.railWeight,'lineLoad',p.units,2)}, head ${len(p,p.railHeight)} above the flange`;
  return `${r.name.split(' · ')[0]}; keepers ${plate(p,r.clipThickness,r.clipWidth)} with ${fillet(p,r.clipWeld)}; joint bars 2-${plate(p,r.jointPlateThickness,r.jointPlateHeight)}, ${plateInches(r.jointBoltDiameter,p.units)} bolts`;
 }
 function bearing(p:ProjectInput){
