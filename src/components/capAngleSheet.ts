@@ -1,6 +1,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {capAngleGeometry,boltHardware,capAngleStiffenerGeometry,type CapAngleGeometry} from '../engine/capAngle';
 import {capAngleResult} from '../engine/capAngleTie';
+import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
 import {keeperGeometry,railPadThickness} from '../engine/railSeat';
 import {supportColumn} from '../engine/drawingData';
 import {capChannelProfile} from '../engine/channelProfile';
@@ -205,10 +206,12 @@ export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
   ...(shared?['AT A SHARED COLUMN THE TWO TIES SIT SIDE BY SIDE ON THE COLUMN FLANGE, EACH WITH ITS OWN END PLATE.']:[])];
  const checks=s.checks.filter(v=>v.id.startsWith('cap-angle-')&&v.utilization!==undefined&&v.quantity!=='length'&&v.status==='pass');
  const most=(list:typeof checks)=>Math.max(0,...list.map(v=>v.utilization??0));
- const strength=most(checks.filter(v=>!v.id.includes('fatigue')&&v.quantity!=='ratio'||v.id==='cap-angle-plate-movement'||v.id==='cap-angle-heel')),fatigue=most(checks.filter(v=>v.id.includes('fatigue')));
+ // DESIGN checks only (check taxonomy): no detailing rule, and not the F13.1 net-area test (a capacity modifier);
+ // fatigue only for details above their threshold (screened details are not evaluated).
+ const strength=most(checks.filter(v=>{const k=classifyCheck(v);return k.type==='design'&&k.effect!=='fatigue';})),fatigue=most(checks.filter(v=>{const k=classifyCheck(v);return k.effect==='fatigue'&&gateCheck(s,v,k).gate==='evaluated';}));
  return {key:'cap-angle-tie',name:'CAP TIEBACK ANGLES',views:[
   {title:capAngleTitles.section,render:()=>capAngleSection(s)},
   ...(shared?[{title:capAngleTitles.plan,render:()=>capAngleSharedPlan(s)}]:[])
- ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue.toFixed(2)} FATIGUE)`:''}. ${detailRef(capAngleTitles.section)}.`)]};
+ ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue>0?`${fatigue.toFixed(2)} FATIGUE`:'FATIGUE BELOW THRESHOLD'})`:''}. ${detailRef(capAngleTitles.section)}.`)]};
 }
 export const capAngleLabelWidth=(v:string)=>textWidth(labelCaps(v),8.5);
