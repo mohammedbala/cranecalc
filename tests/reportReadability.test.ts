@@ -52,7 +52,7 @@ describe('compact, readable calculation report',()=>{
   expect([...text(parts[1],parts[3]).matchAll(/(\d[\d,]*\.\d+) ?(kip|in|ksi|kip-ft|rad)\b/g)].map(m=>m[0]).filter(v=>digits(v.split(' ')[0])>3)).toEqual([]);
   expect(text(parts[1],parts[3])).toMatch(/\d+\.\d ft/);
   // How each main connection is checked: weld metal, rib flexure and the wheel patch worked with numbers.
-  for(const t of ['0.6F_{EXX}','F11\\text{-}2','l_b=2(d_{rail}+t_f)','A_{pb}=2(b_s-c)t_s','\\frac{P_r}{2P_c}'])expect(html,t).toContain(t);
+  for(const t of ['0.6F_{EXX}','F11\\text{-}2','l_b=2(d_{rail}+t_f','A_{pb}=2(b_s-c)t_s','\\frac{P_r}{2P_c}'])expect(html,t).toContain(t);
  });
  it('prints every check exactly once, each with its equation inline in LaTeX and a code citation',()=>{
   const ids=[...html.matchAll(/data-checks="([^"]*)"/g)].flatMap(m=>m[1].split(' ')),covered=new Set(ids);

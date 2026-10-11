@@ -1,12 +1,14 @@
 import {describe,expect,it} from 'vitest';
 import {writeFileSync} from 'node:fs';
 import {demoFocus005,demoFocus005Before} from '../fixtures/demoFocus005';
+import {withColumnReviewData} from '../fixtures/columnReviewData';
 import {calculate} from '../../src/engine/calculate';
 import {reportHtml} from '../../src/report/reportHtml';
 import {interfaceCsv} from '../../src/engine/detailExports';
 
 // One full calculation of DEMO-FOCUS-005 for this file.
-const s=calculate(demoFocus005());
+// G2's supporting-column records (frame, wind drift, seismic) supplied so the G1 items are tested on an exportable package.
+const s=calculate(withColumnReviewData(demoFocus005()));
 const byId=(id:string)=>s.checks.find(c=>c.id===id);
 if(process.env.G1_DUMP)writeFileSync(process.env.G1_DUMP,JSON.stringify(s.checks.map(c=>({id:c.id,group:c.group,title:c.title,status:c.status,demand:c.demand,capacity:c.capacity,utilization:c.utilization})),null,1));
 
@@ -28,7 +30,11 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
   const csv=interfaceCsv(s);expect(csv).toContain('girder-mounted stop');expect(csv).not.toContain('girder bypass');
  });
  it('leaves the other checks unchanged',()=>{
-  const changed=new Set(['vertical','building-class']);
-  for(const b of demoFocus005Before().checks){if(changed.has(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(a!.utilization,b.id).toBeCloseTo(b.utilization,9);}
+  // G1: vertical (L/1000), building-class. G2 (column review): column-*, brace-drift, cap-angle-column-holes (F13.1 as a
+  // modifier). G3 (girder review): web class and F4 flexure, TR-13 wheel bearing length, cap development and cap welds,
+  // US fatigue constants (relative changes under 0.1 % are within the tolerance below; R_FIL in inches moves two more).
+  const changed=new Set(['vertical','building-class','column-axial','column-flexure','column-interaction','column-drift','brace-drift','cap-angle-column-holes',
+   'compact-web','major','combined','flexure-load-height','wheel-yield','wheel-cripple','cap-development','cap-weld-strength','cap-weld-metal','cap-weld-rupture','cap-weld-fatigue','haunch-colstiff-fatigue-plate','rail-keeper-root']);
+  for(const b of demoFocus005Before().checks){if(changed.has(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
  });
 });

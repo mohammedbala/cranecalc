@@ -40,6 +40,7 @@ describe('DEMO-FOCUS-005 girder after the G3 review fixes',()=>{
  });
  it('E36 basis: girder D/Cs after C17 / C18 (flexure, H1, shear, deflection)',()=>{
   expect(check('major').utilization!).toBeLessThan(.16);expect(check('combined').utilization!).toBeCloseTo(.1754,3);
-  expect(check('shear').utilization!).toBeCloseTo(.0893,3);expect(check('vertical').utilization!).toBeCloseTo(.1355,3);
+  expect(check('shear').utilization!).toBeCloseTo(.0893,3);// Vertical deflection against L/1000: G1 (A3) puts the fixture in AIST Class B (L/600 gave 0.1355).
+  expect(check('vertical').utilization!).toBeCloseTo(.1355*1000/600,3);
  });
 });
