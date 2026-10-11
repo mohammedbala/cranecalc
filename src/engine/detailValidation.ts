@@ -1,5 +1,5 @@
 import {activeEndBearing} from './endBearingInputs';
-import {flangeTieGeometry,flangeTieFamily} from './tieGeometry';
+import {flangeTieGeometry,flangeTieFamily,stiffenerTieGeometry} from './tieGeometry';
 import {validatePlateTie} from './plateTie';
 import {tieArrangement,validateConnectionOptions} from './connectionOptions';
 import type { ProjectInput } from './types';
@@ -67,6 +67,11 @@ export function validateRunwayDetails(p:ProjectInput){
    add(d.bearing.stiffenerWidth>(p.section.bf-p.section.tw)/2,'fitted stiffener outstand must fit inside the flange.');
   }
  }
+ // Paired bars on the bearing stiffener run just under the tied flange. On a capped girder the top bars and their girder
+ // gusset must clear the cap channel's turned-down flange (its web on the W flange, its flanges reaching down past it).
+ {const st=stiffenerTieGeometry(p),s=p.section;
+  if(st&&s.kind==='cap'&&st.sides.includes(1)){const drop=s.capDepth-s.capTw,inner=s.capWidth/2-s.capTf;
+   add(s.d/2-st.topCenter-st.height/2<drop&&st.root<s.capWidth/2&&st.face>inner,'paired tie bars and their girder gusset at the top flange pass through the turned-down cap channel flange: use the direct flange saddle, or a cap channel whose flanges stop above the bars.');}}
  add(r.Fu<r.Fy,'rail Fu must not be less than Fy.');
  add(r.headThickness+r.baseThickness>=(p.aist?.railDepth??0),'rail depth must exceed head plus base thickness.');
  add(r.webThickness>=Math.min(r.headWidth,r.baseWidth),'rail web must fit inside the head and base.');

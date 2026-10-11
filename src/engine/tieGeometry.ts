@@ -136,6 +136,7 @@ export function stiffenerTieGeometry(p:ProjectInput){
  // The column gusset carries the column-end bolt group to the face, plus its longer slotted end edge.
  const columnGussetStart=face-connection-columnGussetExtension(p);
  return {root,start,face,connection,gussetEnd,gussetLength:gussetEnd-root,height:t.width,clear,sides:tieSides(p),columnGussetStart,columnGussetLength:face-columnGussetStart,
-  // Bars and gusset sit the clearance inside each tied flange.
-  topCenter:b.d/2-b.tf-clear-t.width/2,bottomCenter:-b.d/2+b.tf+clear+t.width/2};
+  // Bars and gusset sit the clearance inside each tied flange; on a capped girder the top ones drop below the cap
+  // channel's turned-down flanges, which reach capDepth − capTw below the W top past the W flange tips.
+  topCenter:b.d/2-Math.max(b.tf,b.kind==='cap'?b.capDepth-b.capTw:0)-clear-t.width/2,bottomCenter:-b.d/2+b.tf+clear+t.width/2};
 }
