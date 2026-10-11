@@ -17,6 +17,8 @@ export const longitudinalBracingSchema=z.object({
  /** Building-mounted crane stops on this line deliver the bumper force to the bracing. */
  bumperToBracing:z.boolean(),
  driftLimit:pos,
+ /** Unfactored 10-year wind force along the runway on this braced line, for the TR-13 §5.5 drift check; not entered, the check is unverified. */
+ wind10:nn.optional(),
  source:z.string().max(500),confirmed:z.boolean(),
  /**
   * New freestanding columns: the braced runway spans (1-based), the clevis pin and gusset at each rod end, the

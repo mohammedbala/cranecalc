@@ -7,6 +7,7 @@ import type {SupportReactionSet} from './supportReactions';
 import type {CheckResult,ProjectInput,Section} from './types';
 import {aiscShapeByName} from '../data/aiscSections';
 import {alongSeismic,bracingDesign,bracingLayout,braceCases,designsBracing} from './newColumnBracing';
+import {rodStressArea} from './columnSupport';
 
 const inch=25.4;
 /** Angle about the geometric axis parallel to the connected (longer) leg, from leg rectangles without fillets. */
@@ -65,6 +66,9 @@ export interface LongitudinalBracingResult {
  geometry:{bays:number;bayWidth:number;height:number;tiers:number;spans?:number[]};
  combinations:BracingCombination[];governing:BracingCombination;
  deflection:{value:number;limit:number};foundation:{shear:number;axial:number};
+ /** TR-13 §5.5 (existing buildings): limit basis, the drift under the 10-year wind, and the rod fatigue range per diagonal. */
+ tr13?:{height:number;wind10?:number};
+ rodFatigue?:{force:number;area:number;range:number;cycles:number;allowable:number;threshold:number};
 }
 export function longitudinalBracingAnalysis(p:ProjectInput,reactions:SupportReactionSet,column?:Section):LongitudinalBracingResult{
  const b=p.longitudinalBracing!,Cls=reactions.Cls,Cbs=b.bumperToBracing?Math.max(0,...p.cranes.map(c=>c.design?.bumperForce??0)):0;
@@ -82,8 +86,14 @@ export function longitudinalBracingAnalysis(p:ProjectInput,reactions:SupportReac
  if(designed)for(const k of braceCases(p,reactions,p.method,alongSeismic(p,reactions,column!)))if(k.seismic&&!k.overstrength)combinations.push({id:k.id,equation:k.equation,H:k.H,force:force(k.H)});
  const governing=combinations.reduce((a,c)=>c.force>a.force?c:a);
  // Service: unfactored single-crane traction; axial elongation of the active diagonal in every tier.
- const service=force(Cls),deflection=geometry.tiers*service*length/(member.area*p.section.E)/cos;
- return {Cls,Cbs,length,cos,diagonals,member,geometry,combinations,governing,deflection:{value:deflection,limit:geometry.height/b.driftLimit},
+ const service=force(Cls),elongation=(F:number)=>geometry.tiers*F*length/(member.area*p.section.E)/cos,deflection=elongation(service);
+ // Existing building lines (review B10/B13): TR-13 §5.5 takes the frame criterion, H/400 or 2 in, H from the column
+ // base to the top of the crane girder, under crane traction and under the 10-year wind; threaded rods take the
+ // unfactored traction range on their tensile stress area (AISC Table A-3.1 item 8.5, Cf = 3.9 × 10^8, 7 ksi threshold).
+ const review=!designed&&!!p.aist,c=p.existingColumn,top=c?.enabled?c.seatElevation+(p.details?.bearing.thickness??0)+p.section.d+(p.section.kind==='cap'?p.section.capTw:0):geometry.height+p.section.d;
+ const tr13=review?{height:top,...(b.wind10!==undefined?{wind10:elongation(force(b.wind10))}:{})}:undefined,limit=tr13?Math.min(top/400,2*25.4,b.driftLimit>400?geometry.height/b.driftLimit:Infinity):geometry.height/b.driftLimit;
+ const rodFatigue=review&&b.system==='rod-x'?(()=>{const area=rodStressArea(b.rod.diameter),range=service/area,cycles=p.fatigue.cycles;return {force:service,area,range,cycles,allowable:6900*(.39/cycles)**(1/3),threshold:7*6.894757293};})():undefined;
+ return {Cls,Cbs,length,cos,diagonals,member,geometry,combinations,governing,deflection:{value:deflection,limit},...(tr13?{tr13}:{}),...(rodFatigue?{rodFatigue}:{}),
   foundation:{shear:governing.H/geometry.bays,axial:governing.H/geometry.bays*geometry.height/geometry.bayWidth}};
 }
 
@@ -97,7 +107,16 @@ export function longitudinalBracingChecks(p:ProjectInput,r:LongitudinalBracingRe
   add('compression','Longitudinal bracing · diagonal compression',g.force,r.member.compression,'force','P_n=F_{cr}A_e;\\;\\left(\\frac{L_c}{r}\\right)_{E5}',`AISC E5(a) single angle connected through the longer leg, E7 slender legs. ${b.system==='angle-x'?'Crossing diagonals brace each other: L = half the diagonal.':'Single diagonal: L = full diagonal.'} ${basis}`,g.id);
   add('slenderness','Longitudinal bracing · compression slenderness',r.member.slenderness!,200,'ratio','(L_c/r)_{E5}\\le200','AISC E5: the modified slenderness may not exceed 200.');
  }
- add('drift','Longitudinal bracing · crane-level displacement',r.deflection.value,r.deflection.limit,'length','\\Delta=n_t\\frac{T_sL_d}{AE\\cos\\theta}\\le h/n',`Unfactored single-crane traction, axial elongation of the active diagonals only (connections, columns and foundation flexibility excluded). Limit h/${b.driftLimit}.`);
+ add('drift','Longitudinal bracing · crane-level displacement',r.deflection.value,r.deflection.limit,'length',r.tr13?'\\Delta=n_t\\frac{T_sL_d}{AE\\cos\\theta}\\le\\min(H/400,\\;2\\,in)':'\\Delta=n_t\\frac{T_sL_d}{AE\\cos\\theta}\\le h/n',r.tr13?`Unfactored single-crane traction, axial elongation of the active diagonals only (connections, columns and foundation flexibility excluded). AIST TR-13 §5.5 with the §5.3 criterion: H/400 or 2 in, whichever is less, H = ${format(r.tr13.height,'length',u,3)} from the column base to the top of the crane girder.`:`Unfactored single-crane traction, axial elongation of the active diagonals only (connections, columns and foundation flexibility excluded). Limit h/${b.driftLimit}.`);
+ if(r.tr13){
+  if(r.tr13.wind10!==undefined)add('drift-wind','Longitudinal bracing · displacement under the 10-year wind',r.tr13.wind10,r.deflection.limit,'length','\\Delta_{10}\\le\\min(H/400,\\;2\\,in)',`AIST TR-13 §5.5: the entered 10-year wind force along the runway, ${format(b.wind10!,'force',u,3)}, on the braced line; axial elongation of the active diagonals only.`);
+  else checks.push({id:'brace-drift-wind',group:'Longitudinal bracing',title:'Longitudinal bracing · displacement under the 10-year wind',status:'unverified',equation:'\\Delta_{10}\\le\\min(H/400,\\;2\\,in)',note:`Not established: enter the 10-year wind force along the runway on this braced line (AIST TR-13 §5.5). Limit ${format(r.deflection.limit,'length',u,3)}.`,referenceIds:['tr13-service',...refs]});
+ }
+ if(r.rodFatigue){
+  const f=r.rodFatigue,below=f.range<=f.threshold,stress=(v:number)=>format(v,'stress',u,3);
+  add('rod-fatigue','Longitudinal bracing · threaded rod fatigue (A-3.1 item 8.5)',f.range,Math.max(f.allowable,f.threshold),'stress','\\Delta f=\\frac{T_s}{A_t}\\le F_{SR}=\\left(\\frac{C_f}{n}\\right)^{1/3}\\ge F_{TH}',
+   `AISC 360-16 Table A-3.1 item 8.5 (threaded rods, Cf = 3.9 × 10^8 ksi³, threshold ${stress(f.threshold)}): unfactored single-crane traction ${format(r.Cls,'force',u,3)} gives ${format(f.force,'force',u,3)} in one tension-only rod each time the crane starts or stops (0 to T), on the tensile stress area ${format(f.area,'area',u,3)} of the threaded end and its nut. Stress range Δf = ${stress(f.range)} against F_TH = ${stress(f.threshold)}: ${below?'below the threshold, no cycle limit (constant amplitude).':'above the threshold, so the cycle count matters.'} ${f.cycles.toExponential(2)} cycles (the runway fatigue count) give F_SR = ${stress(f.allowable)}. Tighten the rods and keep them tight; loose tension-only rods take impact.`);
+ }
  // Between new columns the collector, connections, columns and foundation are designed here (Brace connections, Crane-level strut, New column).
  if(!G.spans)checks.push({id:'brace-by-others',group:'Longitudinal bracing',title:'Collector, brace connections, braced-bay columns & foundation',status:'excluded',equation:'',note:`Not checked here: the crane-level strut or collector from each locating support to the braced bay, the brace end connections (gussets, clevises, bolts, welds), and the braced-bay columns, anchors and foundation. Per braced bay under ${g.equation}: base shear ${format(r.foundation.shear,'force',u,3)} and column axial ±${format(r.foundation.axial,'force',u,3)} from overturning, in addition to the columns' other loads.`,referenceIds:refs});
  return checks;

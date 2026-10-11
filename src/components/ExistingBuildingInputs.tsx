@@ -52,6 +52,7 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
    <label className="field"><span>Source of survey and existing loads</span><input value={c.source} placeholder="Original calculations, drawings or new analysis reference" onChange={e=>set({source:e.target.value})}/></label>
    <label className="checkbox-field"><input type="checkbox" checked={c.confirmed} onChange={e=>set({confirmed:e.target.checked})}/>Column dimensions, material and existing load effects are confirmed from the stated source</label>
    <WeldingInputs project={project} set={set} numeric={numeric}/>
+   <ColumnReviewInputs column={c} set={set} numeric={numeric}/>
    </>}
   </>}
  </div>;
@@ -187,7 +188,7 @@ export function LongitudinalBracingInputs({project,update,numeric}:{project:Proj
    {b.system==='rod-x'?<div className="field-grid">{numeric('Rod diameter',b.rod.diameter,v=>set({rod:{...b.rod,diameter:v}}))}{numeric('Rod Fy',b.rod.Fy,v=>set({rod:{...b.rod,Fy:v}}),'stress')}{numeric('Rod Fu',b.rod.Fu,v=>set({rod:{...b.rod,Fu:v}}),'stress')}</div>
    :<div className="field-grid"><label className="field"><span>Angle</span><select value={b.angle.shape} onChange={e=>set({angle:{...b.angle,shape:e.target.value}})}>{aiscAngles.map(a=><option key={a.name} value={a.name}>{a.name}</option>)}</select></label>
     {numeric('Angle Fy',b.angle.Fy,v=>set({angle:{...b.angle,Fy:v}}),'stress')}{numeric('Angle Fu',b.angle.Fu,v=>set({angle:{...b.angle,Fu:v}}),'stress')}{numeric('Bolts in line (3 or more)',b.angle.bolts,v=>set({angle:{...b.angle,bolts:Math.min(12,Math.max(3,Math.round(v)))}}),'ratio')}{numeric('Bolt diameter',b.angle.boltDiameter,v=>set({angle:{...b.angle,boltDiameter:v}}))}</div>}
-   <div className="field-grid">{!designed&&numeric('Existing wind W on this line',b.existing.W,v=>set({existing:{...b.existing,W:v}}),'force')}{!designed&&numeric('Existing seismic E on this line',b.existing.E,v=>set({existing:{...b.existing,E:v}}),'force')}{numeric('Crane-level drift limit h / n',b.driftLimit,v=>set({driftLimit:v}),'ratio')}</div>
+   <div className="field-grid">{!designed&&numeric('Existing wind W on this line',b.existing.W,v=>set({existing:{...b.existing,W:v}}),'force')}{!designed&&numeric('Existing seismic E on this line',b.existing.E,v=>set({existing:{...b.existing,E:v}}),'force')}{numeric('Crane-level drift limit h / n',b.driftLimit,v=>set({driftLimit:v}),'ratio')}{!designed&&numeric('10-year wind force on this line (TR-13 §5.5)',b.wind10??0,v=>set({wind10:v}),'force')}</div>
    <label className="checkbox-field"><input type="checkbox" checked={b.bumperToBracing} onChange={e=>set({bumperToBracing:e.target.checked})}/>The crane stop force on this line reaches this bracing (building-mounted stops, or girder stops through the locating supports)</label>
    <label className="field"><span>Source of bracing survey and existing forces</span><input value={b.source} placeholder="Drawings, survey or wind/seismic analysis reference" onChange={e=>set({source:e.target.value})}/></label>
    <label className="checkbox-field"><input type="checkbox" checked={b.confirmed} onChange={e=>set({confirmed:e.target.checked})}/>Bracing members, geometry and existing forces are confirmed from the stated source</label>
@@ -229,4 +230,31 @@ export function EndBearingInputs({project,update,numeric}:{project:ProjectInput;
   {e?.enabled&&continuous&&<div className="field-grid">{numeric('Sliding allowance each way',move.guideTravel,v=>movement({guideTravel:v}))}{numeric('Temperature rise from erection',move.temperatureRise,v=>movement({temperatureRise:v}),'temperatureChange')}{numeric('Temperature fall from erection',move.temperatureFall,v=>movement({temperatureFall:v}),'temperatureChange')}{numeric('Setting tolerance',move.settingTolerance,v=>movement({settingTolerance:v}))}</div>}
   {e?.enabled&&<div className="field-grid">{numeric('Bolt diameter',e.bolts.diameter,v=>bolts({diameter:v}))}<label className="field"><span>Bolt grade</span><select value={e.bolts.grade} onChange={ev=>bolts({grade:ev.target.value as 'A325'|'A490'})}><option>A325</option><option>A490</option></select></label>{numeric('Bolt gauge across runway',e.bolts.gauge,v=>bolts({gauge:v}))}{numeric('Bolt rows from bearing plate ends',e.bolts.edge,v=>bolts({edge:v}))}{numeric('Plate washer thickness',e.washerThickness,v=>set({washerThickness:v}))}<label className="field"><span>Sliding-end bolts</span><select aria-label="Sliding-end bolts" value={slidingBolts(e).mode} onChange={ev=>set({sliding:ev.target.value as 'sleeved'|'snug-tight'})}><option value="sleeved">Pretensioned against steel sleeves</option><option value="snug-tight">Snug-tight with jam nuts (5 tons or less)</option></select></label>{slidingBolts(e).mode==='sleeved'&&<>{numeric('Sleeve wall thickness',slidingBolts(e).wall,v=>set({sleeveWall:v}))}{numeric('Sleeve length beyond flange',slidingBolts(e).clearance,v=>set({sleeveClearance:v}))}</>}</div>}
  </div>;
+}
+
+/**
+ * Existing column: where the crane longitudinal force leaves the column, the frame type, the TR-13 §5.3 service data
+ * from the frame analysis and the site seismic data for the runway added to the building.
+ */
+function ColumnReviewInputs({column:c,set,numeric}:{column:ExistingColumnInput;set:(patch:Partial<ExistingColumnInput>)=>void;numeric:NumericField}){
+ const sv=c.service??{source:''},z=c.siteSeismic,frame=c.frame;
+ return <>
+  <div className="form-section-title"><span>02b</span>Load path, frame and building data</div>
+  <div className="field-grid">
+   <label className="field"><span>Longitudinal force leaves the column at</span><select value={c.longitudinalExit??''} onChange={e=>set({longitudinalExit:(e.target.value||undefined) as ExistingColumnInput['longitudinalExit']})}><option value="">Not entered (eave strut assumed, flagged)</option><option value="girder-strut">Crane-level strut on the girder line</option><option value="column-strut">Crane-level strut at the column</option><option value="eave-strut">Eave strut at the column top</option></select></label>
+   <label className="field"><span>Frame across the runway</span><select value={frame?.type??''} onChange={e=>set({frame:e.target.value?{type:e.target.value as 'braced'|'sway',source:frame?.source??''}:undefined})}><option value="">Not entered (braced assumed, flagged)</option><option value="braced">Braced (non-sway)</option><option value="sway">Sway (portal) frame</option></select></label>
+   {frame?.type==='sway'&&numeric('Sway amplifier B2 from the frame analysis',frame.B2??1,v=>set({frame:{...frame,B2:v}}),'ratio',undefined,1)}
+  </div>
+  <p className="form-note">AIST TR-13 §5.3 service data from the building frame analysis at this column line: displacement at the top of the crane girder under the 10-year wind, outward rail displacement under the frame's dead load and under its full roof snow load, and the roof snow pressure.</p>
+  <div className="field-grid">{numeric('10-year wind drift at the girder',sv.wind10??0,v=>set({service:{...sv,wind10:v}}))}{numeric('Rail spread under frame dead load',sv.spreadD??0,v=>set({service:{...sv,spreadD:v}}),'length',undefined,-1e6)}{numeric('Rail spread under full roof snow',sv.spreadS??0,v=>set({service:{...sv,spreadS:v}}),'length',undefined,-1e6)}{numeric('Roof snow pressure',sv.roofSnow??0,v=>set({service:{...sv,roofSnow:v}}),'pressure')}</div>
+  <label className="field"><span>Source of the frame data</span><input value={sv.source} onChange={e=>set({service:{...sv,source:e.target.value}})}/></label>
+  <label className="checkbox-field"><input type="checkbox" checked={!!z?.enabled} onChange={e=>set({siteSeismic:{...(z??{SDS:0,sdc:'B',Ie:1,R:3,liftedLoadSecured:false,friction:.6,source:''}),enabled:e.target.checked}})}/>Site seismic data: add TR-13 seismic combinations 5a and 7a to the runway checks</label>
+  {z?.enabled&&<><div className="field-grid">{numeric('SDS',z.SDS,v=>set({siteSeismic:{...z,SDS:v}}),'ratio')}
+   <label className="field"><span>Seismic design category</span><select value={z.sdc} onChange={e=>set({siteSeismic:{...z,sdc:e.target.value as typeof z.sdc}})}>{['A','B','C','D','E','F'].map(v=><option key={v} value={v}>{v}</option>)}</select></label>
+   {numeric('Importance factor Ie',z.Ie,v=>set({siteSeismic:{...z,Ie:v}}),'ratio')}{numeric('Existing lateral system R',z.R,v=>set({siteSeismic:{...z,R:v}}),'ratio')}{numeric('Wheel friction μ',z.friction,v=>set({siteSeismic:{...z,friction:v}}),'ratio')}</div>
+   <label className="checkbox-field"><input type="checkbox" checked={z.liftedLoadSecured} onChange={e=>set({siteSeismic:{...z,liftedLoadSecured:e.target.checked}})}/>Lifted load rigidly secured (include it as seismic mass)</label>
+   <label className="field"><span>Source of the site seismic data</span><input value={z.source} onChange={e=>set({siteSeismic:{...z,source:e.target.value}})}/></label>
+   <div className="field-grid">{numeric('Largest D/C increase of existing lateral elements (IEBC)',z.alteration?.dcrIncrease??0,v=>set({siteSeismic:{...z,alteration:{source:z.alteration?.source??'',dcrIncrease:v}}}),'ratio')}</div>
+   <label className="field"><span>Source of the alteration evaluation</span><input value={z.alteration?.source??''} onChange={e=>set({siteSeismic:{...z,alteration:{dcrIncrease:z.alteration?.dcrIncrease??0,source:e.target.value}}})}/></label></>}
+ </>;
 }
