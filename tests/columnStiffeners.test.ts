@@ -11,6 +11,12 @@ import {columnStiffenerTitle} from '../src/components/columnStiffenerDrawing';
 import {addColumnStiffeners} from '../src/components/columnStiffenerGeometry';
 import {projectSchema} from '../src/engine/types';
 import type {CalculationSnapshot,CheckResult,ProjectInput} from '../src/engine/types';
+import {calculate} from '../src/engine/calculate';
+import {drawingSheetSet} from '../src/components/planSheet';
+import {sheetEntities} from '../src/components/sheetDxf';
+import {textWidth} from '../src/components/sheetGraphics';
+import {annotationClashes} from '../src/components/detailSheet';
+import {cappedTwinRibW14X90,cappedStubW14X90,newW14X90Columns} from './fixtures/columnStiffenerProjects';
 
 const inch=25.4,ksi=6.894757293168,kip=4448.2216152605;
 /** The capped demonstration on a surveyed W14X90 receiving column (d 14.0, bf 14.5, tf 0.71, tw 0.44 in, kdes 1.31 in). */
@@ -192,4 +198,47 @@ describe('column stiffener drawings and model',()=>{
   const welds=group.children.filter(o=>o.userData.part?.weld);expect(welds.length).toBe(2*2*2*2*2);
   expect(welds.every(o=>o.userData.part.weld.location==='field'&&o.userData.part.weld.existingSteel)).toBe(true);
  });
+});
+
+/** Text over text and annotation, grid, steel or hidden lines through text on a sheet, as the plan-check QA counts them. */
+function sheetClashes(svg:string){
+ const content=svg.slice(svg.indexOf('<g data-sheet-content'),svg.indexOf('<g data-title-block')),pt=(q:number[])=>[q[0]*72,1728-q[1]*72];
+ const entities=sheetEntities(content,'US'),out:string[]=[];
+ const boxes=entities.flatMap(e=>{
+  if(e.type!=='text'||e.layer!=='S-ANNO-TEXT')return [];
+  const size=e.height*72/.716,w=textWidth(e.value,size,e.bold),[x,y]=pt(e.at),a=e.align===1?-w/2:e.align===2?-w:0;
+  const b=Math.abs(e.angle)<1?{x0:x+a,x1:x+a+w,y0:y-size*.72,y1:y+size*.21}:Math.abs(e.angle-90)<1?{x0:x-size*.72,x1:x+size*.21,y0:y-a-w,y1:y-a}:{x0:x-size*.21,x1:x+size*.72,y0:y+a,y1:y+a+w};
+  return [{v:e.value,size,b}];
+ });
+ const crosses=(p:number[],q:number[],r:{x0:number;y0:number;x1:number;y1:number})=>{let t0=0,t1=1;const dx=q[0]-p[0],dy=q[1]-p[1];
+  for(const [a,c] of [[-dx,p[0]-r.x0],[dx,r.x1-p[0]],[-dy,p[1]-r.y0],[dy,r.y1-p[1]]]){if(a===0){if(c<0)return false;continue;}const t=c/a;if(a<0){if(t>t1)return false;t0=Math.max(t0,t);}else{if(t<t0)return false;t1=Math.min(t1,t);}}
+  return t1-t0>1e-6;};
+ for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i].b,b=boxes[j].b,m=1.2;if(a.x0<b.x1-m&&b.x0<a.x1-m&&a.y0<b.y1-m&&b.y0<a.y1-m)out.push(`"${boxes[i].v}" x "${boxes[j].v}"`);}
+ for(const e of entities){
+  if((e.type!=='line'&&e.type!=='poly')||!['S-ANNO','S-ANNO-HEAVY','S-GRID','S-STEEL-NEW','S-EXISTING','S-RAIL','S-STEEL-HIDDEN'].includes(e.layer))continue;
+  const q=(e.type==='line'?[e.a,e.b]:e.points).map(pt),segs:number[][][]=[];for(let k=1;k<q.length;k++)segs.push([q[k-1],q[k]]);if(e.type==='poly'&&e.closed)segs.push([q[q.length-1],q[0]]);
+  for(const t of boxes){if(t.v.length<=2&&e.layer!=='S-ANNO'&&e.layer!=='S-GRID')continue;const s=t.size,b={x0:t.b.x0+s*.12,x1:t.b.x1-s*.12,y0:t.b.y0+s*.12,y1:t.b.y1-s*.25};
+   if(segs.some(([a,c])=>crosses(a,c,b)))out.push(`line through "${t.v}"`);}
+ }
+ return out;
+}
+const failing=(s:CalculationSnapshot)=>s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status));
+describe('column stiffener test projects, full calculation and drawing set',()=>{
+ it('makes the capped twin-rib bracket on a W14X90 pass, its drawing set clear in US and SI',()=>{
+  const bare=calculate(cappedTwinRibW14X90(false));expect(bare.errors).toEqual([]);
+  expect(failing(bare).map(c=>c.id)).toEqual(['bracket-column-flange']);expect(failing(bare)[0].utilization).toBeCloseTo(1.376,3);
+  const s=calculate(cappedTwinRibW14X90(true));expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
+  expect(failing(s).map(c=>c.id)).toEqual([]);
+  expect(s.checks.find(c=>c.id==='bracket-column-flange')!.status).toBe('not-applicable');
+  expect(s.checks.filter(c=>c.id.startsWith('bracket-colstiff-')).length).toBe(13);
+  for(const units of ['US','SI'] as const){
+   const v=structuredClone(s);v.input.units=units;const sheets=drawingSheetSet(v);
+   for(const sheet of sheets)expect(sheetClashes(sheet.svg),`${units} ${sheet.number}`).toEqual([]);
+   const all=sheets.map(x=>x.svg).join('');expect(all).toContain(columnStiffenerTitle);expect(all).toContain('INSPECTION');expect(all).toContain('COLUMN STIFFENERS');
+   for(const view of bracketTopic(v)!.views)expect(annotationClashes(view.render().svg),`${units} ${view.title}`).toBe(0);
+  }
+ },600000);
+ it('passes the W12X58 stub on an A36 W14X90 and the new W14X90 columns with stiffeners',()=>{
+  for(const p of [cappedStubW14X90(true),newW14X90Columns(true)]){const s=calculate(p);expect(s.errors).toEqual([]);expect(failing(s).map(c=>c.id),p.title).toEqual([]);}
+ },600000);
 });
