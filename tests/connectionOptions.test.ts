@@ -26,7 +26,7 @@ describe('connection arrangement library and design boundaries',()=>{
   const s=calculate(p);expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);expect(s.detailResults).toBeUndefined();
   expect(s.checks.find(c=>c.id==='option-bracket-model')).toMatchObject({status:'unsupported'});expect(s.checks.find(c=>c.id==='option-bracket-model')?.capacity).toBeUndefined();expect(s.checks.some(c=>c.id==='bracket-rib-flexure')).toBe(false);
  },60000);
- it.each(['flexible-plate','bearing-link','paired-links'] as const)('does not inherit flat-bar stiffness or fatigue for %s',kind=>{
+ it.each(['bearing-link','paired-links'] as const)('does not inherit flat-bar stiffness or fatigue for %s',kind=>{
   const p=cappedDemonstrationProject();p.details!.brace.arrangement=kind;const s=calculate(p);
   expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);expect(s.checks.some(c=>c.id==='brace-member'||c.id==='tie-weld-fatigue')).toBe(false);expect(s.checks.find(c=>c.id==='option-tie-model')).toMatchObject({status:'unsupported'});expect(flangeTieGeometry(p)).toBeUndefined();
   p.scope='analysis';expect(calculate(p).eligible).toBe(false);
@@ -41,9 +41,11 @@ describe('connection arrangement library and design boundaries',()=>{
   b.tipDepth=b.ribDepth/4;p.details!.brace.arrangement='bearing-link';p.details!.brace.referenceDetail={...defaultReferenceTie,eyeDiameter:30,pinDiameter:25.4};expect(validateConnectionOptions(p).join(' ')).toContain('radial material');
  });
  it('validates the selected tie geometry without applying inactive bolt or bearing dimensions',()=>{
+  // The designed flexible plate ignores the inactive link preview dimensions but validates its own bolt group.
   const p=cappedDemonstrationProject();p.details!.brace.arrangement='flexible-plate';p.details!.brace.referenceDetail={...defaultReferenceTie,eyeDiameter:30,pinDiameter:25.4,linkDiameter:60,eyeThickness:3000,forkThickness:3000};
-  p.details!.brace.connection.gauge=1000;expect(validateProject(p)).toEqual([]);
-  p.details!.brace.referenceDetail.plateWidth=p.section.d;expect(validateConnectionOptions(p).join(' ')).toContain('assemblies overlap');
+  expect(validateProject(p)).toEqual([]);
+  p.details!.brace.connection.gauge=1000;expect(validateProject(p).join(' ')).toContain('two bolt lines');
+  p.details!.brace.arrangement='bearing-link';p.details!.brace.referenceDetail={...defaultReferenceTie,eyeDiameter:p.section.d/2};expect(validateConnectionOptions(p).join(' ')).toContain('assemblies overlap');
   p.details!.brace.arrangement='paired-links';p.details!.brace.referenceDetail={...defaultReferenceTie,linkSpacing:114.3};expect(validateConnectionOptions(p).join(' ')).toContain('retaining collars');
   p.details!.brace.referenceDetail.linkSpacing=127;expect(validateConnectionOptions(p)).toEqual([]);
  });

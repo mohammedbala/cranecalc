@@ -1,6 +1,6 @@
 import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
-import {flangeTieGeometry} from './tieGeometry';
+import {flangeTieGeometry,tiePlies} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
 import {createBracketCollector} from './bracketDesign';
@@ -23,24 +23,24 @@ import {activeColumnCap} from './columnCapInputs';
 import {capForkStiffness,createColumnCapCollector} from './columnCap';
 
 export function braceSystem(p:ProjectInput){
- const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875);
+ const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875),plies=tiePlies(p);
  const plate=plateMember(b.width,b.thickness,b.length,p.section.E,m.Fy,m.Fu,b.width-holes,p.method),cos=b.reach/b.length;
  // Each bar buckles out of plane between the innermost bolt rows, fixed in the girder bolt group and
  // pinned at the column end: K = 0.8 (AISC Commentary Table C-A-7.1 recommended value).
  const between=b.length-2*(b.connection.edge+(b.connection.rows-1)*b.connection.pitch),bucklingLength=.8*Math.max(between,b.thickness);
  const member={...plate,bucklingLength,compression:compressionResistance(plate.A,plate.r,bucklingLength,p.section.E,m.Fy,p.method)};
- // Two flat bars in parallel, two end connections in series. The connection
+ // Two flat bars (or one flexible plate in single shear) in parallel, two end connections in series. The connection
  // model includes gusset axial strain and conservative bolt shear deformation;
  // no stiffness from the excluded supporting building is inferred.
- const n=2*b.connection.rows,G=p.section.E/2.6,grip=2*b.thickness+b.gussetThickness;
+ const n=2*b.connection.rows,G=p.section.E/2.6,grip=plies*b.thickness+b.gussetThickness;
  const plateK=p.section.E*b.gussetThickness*(b.connection.gauge+2*b.connection.edge)/b.connectionLength;
- const boltK=n*2*G*bolt.area/grip;
+ const boltK=n*plies*G*bolt.area/grip;
  const weldArea=2*b.connection.weldLength*b.connection.weldSize/Math.sqrt(2);
  const weldK=G*weldArea/(2*b.connection.weldSize);
  const connectionK=1/(1/plateK+1/boltK+1/weldK);
  const localCompliance=flangeTieGeometry(p)?flangeTieResponse(p,1).compliance:0;
- const stiffness=cos*cos/(1/(2*member.stiffness)+2/connectionK+localCompliance);
- return {member,cos,connectionK,stiffness,capacity:2*Math.min(member.tension,member.compression.capacity)*cos};
+ const stiffness=cos*cos/(1/(plies*member.stiffness)+2/connectionK+localCompliance);
+ return {member,cos,connectionK,stiffness,plies,capacity:plies*Math.min(member.tension,member.compression.capacity)*cos};
 }
 const mergeStations=(xs:number[])=>[...xs].sort((a,b)=>a-b).filter((x,i,s)=>!i||x-s[i-1]>1e-6);
 /** Each flange is restrained only at its own brace stations; both flanges are tied at supports. */

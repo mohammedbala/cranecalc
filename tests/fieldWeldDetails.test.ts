@@ -27,7 +27,11 @@ describe('field welds to existing building steel',()=>{
   const drawings=detailedDrawings(s);
   for(const name of ['welded-column-bracket','direct-flange-tie'])expect(drawings.find(d=>d.name===name)?.entities.some(e=>e.type==='text'&&e.text.includes('FIELD WELD')&&e.text.includes('EXISTING COLUMN'))).toBe(true);
  });
- it.each(['flexible-plate','bearing-link','paired-links'] as const)('shows unsized field intent for the reference %s without assigning a capacity',tie=>{
+ it('sizes the column root fillets of the designed flexible plate on a reference arrangement sheet',()=>{
+  const s=snapshot();s.input.details!.bracket!.arrangement='haunched-seat';s.input.details!.brace.arrangement='flexible-plate';
+  const svg=connectionConceptSheetSvg(s);expect(flags(svg)).toBe(2);expect(svg).toContain('BOTH SIDES OF COLUMN GUSSET');expect(svg).not.toContain('SIZE / EXTENT BY CONNECTION DESIGN');expect(svg).not.toMatch(/NaN|Infinity|\[object Object\]/);
+ });
+ it.each(['bearing-link','paired-links'] as const)('shows unsized field intent for the reference %s without assigning a capacity',tie=>{
   const s=snapshot();s.input.details!.bracket!.arrangement='haunched-seat';s.input.details!.brace.arrangement=tie;
   const svg=connectionConceptSheetSvg(s);expect(flags(svg)).toBe(2);expect(svg).toContain('SIZE / EXTENT BY CONNECTION DESIGN');expect(svg).toContain('NOT FOR FABRICATION');expect(svg).not.toMatch(/NaN|Infinity|\[object Object\]/);
  });
