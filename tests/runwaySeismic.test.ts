@@ -89,7 +89,8 @@ describe('Seismic design of new freestanding runway columns',()=>{
   expect(z.QE).toBeCloseTo(.2/1.25*(support.D+support.Cd+props.weight*c.height),6);
   // Fixed-base cantilever with the force at the girder: delta = P h^3 / 3EI, amplified by Cd/Ie.
   const h=seismicHeight(p);expect(z.drift).toBeCloseTo(1.25*z.QE*h**3/(3*section.E*props.Ix),3);
-  expect(z.driftLimit).toBeCloseTo(.025*h,6);
+  // Table 12.12-1, all other structures, Risk Category II: 0.020h.
+  expect(z.driftLimit).toBeCloseTo(.02*h,6);
   // The base takes the overstrength combinations.
   const actions=columnBaseActions(p,s.supportReactions!,'LRFD')[0].actions;
   expect(actions.filter(a=>a.seismic&&!a.id.includes(' along')).map(a=>a.id)).toEqual(['LRFD 6-E Ωo','LRFD 7-E Ωo']);
