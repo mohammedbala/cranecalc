@@ -25,7 +25,7 @@ type Box={x:number;y:number;width:number;height:number};
 /** Size factors of the 6-unit body text for sheets drawn at content scale 2. */
 export const legacyNoteSizes=[1.15,1.05,1,.92,.85,.8,.74,.68];
 /** Detail-sheet notes at content scale 1: body text 8.4 down to 6.6 points (0.12 to 0.09 in). */
-export const detailNoteSizes=[1.4,1.3,1.2,1.15,1.1];
+export const detailNoteSizes=[1.4,1.3,1.2,1.17];
 const styleAt=(k:number,width:number,units:'US'|'SI'):Style=>({width,body:6*k,leading:7.8*k,heading:8*k,caps:capsFor(units)});
 const stackHeight=(blocks:Block[])=>blocks.reduce((a,b)=>a+b.height+2.4,0)-2.4;
 /** Largest size factor at which the blocks fit the box, or undefined when even the smallest does not. */
