@@ -1,11 +1,12 @@
 import type {CalculationSnapshot,CheckResult} from '../engine/types';
 import type {Quantity} from '../engine/units';
+import {sig3} from './reportParts';
 import {capAngleResult,capAngleGroup,capAngleMovementGroup} from '../engine/capAngleTie';
 
 /** The compact report's page builders, passed in so this module adds pages without its own layout. */
 export interface ReportKit {
  page:(title:string,body:string,topics?:string[])=>string;numeric:(checks:CheckResult[])=>string;selected:(groups:string[])=>CheckResult[];
- sec:(name:string,key?:string)=>string;basis:(text:string)=>string;worked:(checks:CheckResult[])=>string;
+ sec:(name:string,key?:string)=>string;basis:(text:string)=>string;worked:(checks:CheckResult[],steps?:string[],also?:string[])=>string;
  table:(headers:string[],rows:(string|number)[][],cls?:string)=>string;f:(v:number|undefined,q?:Quantity)=>string;e:(v:unknown)=>string;sheet:(topic:string)=>string;
 }
 /**
@@ -28,7 +29,7 @@ export function capAngleReportPages(s:CalculationSnapshot,k:ReportKit):string[]{
   ['Column stiffener at the tie',res.stiffener.provided?'provided':res.stiffener.required?'required':'not needed','Tie stiffness k',f(x.stiffness,'stiffness')]]);
  const stiffness=table(['Compliance (pull, in series)','Share'],Object.entries(x.compliance).map(([name,v])=>[e(name.replace(/([A-Z])/g,' $1').toLowerCase()),`${(100*v*x.stiffness).toFixed(1)}%`]));
  return [
-  page(sec('Cap tieback angle','cap-angle'),intro+inputs+basis(`Pull and push F = ${f(x.F,'force')} on each tie, fatigue range ΔF = ${f(loads.range,'force')}.`)+worked(strength)+numeric(strength),['Cap tieback']),
+  page(sec('Cap tieback angle','cap-angle'),intro+inputs+basis(`Pull and push F = ${e(sig3(x.F,'force',p.units))} on each tie, fatigue range ΔF = ${e(sig3(loads.range,'force',p.units))}.`)+worked(strength,[],['cap-angle-cap-bolt','cap-angle-col-bolt'])+numeric(strength),['Cap tieback']),
   page(sec('Cap tieback fatigue & stiffness'),numeric(fatigue)+`<p>The holes in the column-side channel flange at each tie are in the girder fatigue register (CA) under the longitudinal stress range at the top of the channel, Category ${g.cap.sleeved?'B (clamped by pretensioned bolts)':'D (snug-tight bolts)'}. The tie's lateral stiffness ${f(x.stiffness,'stiffness')} is the top-flange restraint of the lateral/torsional model and of the Appendix 6 brace stiffness check:</p>`+stiffness,['Fatigue']),
   page(sec('Cap tieback movement'),numeric(selected([capAngleMovementGroup]))+`<p>Girder end rotation moves the top of the girder along the runway by θ times the height of the cap bolts above the bearing (${f(g.boltHeight)}); at sliding ends the thermal travel adds; the slots in the angle take both. Vertical movement of the girder at the tie (support deflection with impact and end rotation over the tie's distance from the bearing, ${f(loads.vertical)} factored) bends the tie plate about its weak axis between the lap and the end plate.</p>`)
  ];
