@@ -1,6 +1,7 @@
 import {activeEndBearing} from './endBearingInputs';
 import {flangeTieGeometry,flangeTieFamily,stiffenerTieGeometry} from './tieGeometry';
 import {validatePlateTie} from './plateTie';
+import {validateCapAngle} from './capAngleTie';
 import {tieArrangement,validateConnectionOptions} from './connectionOptions';
 import type { ProjectInput } from './types';
 import {validateBracket} from './bracketDesign';
@@ -93,5 +94,5 @@ export function validateRunwayDetails(p:ProjectInput){
   const bolt=boltProperties(c.grade,c.diameter);add(c.weldLength<4*c.weldSize,'fillet weld effective length must be at least four times its leg.');add(c.edge<=bolt.hole/2||Math.min(c.gauge,c.pitch)<=bolt.hole,'bolt holes overlap or cross the plate edge.');
  }catch(e){errors.push(`details: ${e instanceof Error?e.message:String(e)}`);}
  try{const bolt=boltProperties('A325',r.jointBoltDiameter);add(r.jointPlateHeight<=bolt.hole+1.5875||r.jointPitch<=1.5*r.jointBoltDiameter+1.5875||r.jointEdge<=.75*r.jointBoltDiameter+1.5875,'rail-joint slots leave insufficient net material.');}catch(e){errors.push(`details: ${e instanceof Error?e.message:String(e)}`);}
- return [...errors,...validatePlateTie(p),...validateBracket(p),...validateConnectionOptions(p)];
+ return [...errors,...validatePlateTie(p),...validateCapAngle(p),...validateBracket(p),...validateConnectionOptions(p)];
 }

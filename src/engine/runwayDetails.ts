@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {bracketSchema} from './bracketInputs';
 import {angleTieSchema} from './angleTie';
+import {capAngleSchema} from './capAngleInputs';
 import {endStopSchema} from './endStopInputs';
 import {endBearingSchema} from './endBearingInputs';
 import type {RolledBracketResults} from './rolledBracket';
@@ -25,7 +26,9 @@ export const runwayDetailsSchema=z.object({
  /** False while template-generated inputs await the engineer's review. */
  reviewed:z.boolean().optional(),
  // Two identical flat bars, one each side of the gusset, at EACH flange.
- brace:z.object({arrangement:z.enum(['paired-bars','flexible-plate','bearing-link','paired-links','single-angle','double-angle']).optional(),
+ brace:z.object({arrangement:z.enum(['paired-bars','flexible-plate','bearing-link','paired-links','single-angle','double-angle','cap-angle']).optional(),
+  /** Cap tieback angle bolted to the cap channel flange ('cap-angle'). */
+  capAngle:capAngleSchema.optional(),
   singleAngle:angleTieSchema.optional(),doubleAngle:angleTieSchema.optional(),
   referenceDetail:z.object({plateWidth:pos,plateThickness:pos,pinDiameter:pos,eyeDiameter:pos,eyeThickness:pos,linkDiameter:pos,forkThickness:pos,pinSetback:pos,linkSpacing:pos}).optional(),
   flangeAttachment:z.object({enabled:z.boolean(),longitudinalSetback:pos,saddleLength:pos,saddleThickness:pos,webGap:pos,clearance:pos,weldSize:pos,
