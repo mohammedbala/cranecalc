@@ -13,9 +13,12 @@ function hatchRect(x:number,y:number,w:number,h:number,step=4){
  for(let c=step/2;c<w+h;c+=step){const a:XY=[x+Math.max(0,c-h),y+Math.min(h,c)],b:XY=[x+Math.min(w,c),y+Math.max(0,c-w)];if(Math.hypot(b[0]-a[0],b[1]-a[1])>.4)svg+=line(a,b,'hatch');}
  return svg;
 }
-/** AWS A2.4 arrow-side fillet symbol with the size left and the length right of the triangle. */
+/**
+ * AWS A2.4 arrow-side fillet symbol with the size left and the length right of the triangle, flagged as a field
+ * weld: the keepers and anchors are welded with the rail set and aligned in place.
+ */
 function fillet(points:XY[],at:XY,size:string,length:string,labels:string[],via:XY[][]=[]){
- return filletLeader(points,at,size,labels,false,via).replace(/<\/g>$/,'')+text(at[0]+53,at[1]+4,labelCaps(length.replaceAll('"','')),8)+'</g>';
+ return filletLeader(points,at,size,labels,false,via,true).replace(/<\/g>$/,'')+text(at[0]+53,at[1]+4,labelCaps(length.replaceAll('"','')),8)+'</g>';
 }
 /** Vertical dimension from an extension line at yExt to a surface it lands on; the text reads beside a short one. */
 function dimToSurface(yExt:number,ySurface:number,fromX:number,x:number,label:string,side:'left'|'right'){

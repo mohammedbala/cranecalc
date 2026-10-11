@@ -8,7 +8,7 @@ import {runwayElevations,issueStatus,supportColumn,delegatedChecks,unevaluatedSt
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
-import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
+import {drawingLength,drawingElevation,electrodeClass,plateInches} from './drawingFormat';
 import {railPad} from '../engine/railSeat';
 import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
@@ -138,6 +138,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  ].map(v=>v.toUpperCase())));
  // Column 2: criteria.
  const code=codeBasis(p);
+ // New cantilever columns designed for seismic in SDC B to F fall under AISC 341 (§E5 ordinary, §E6 special).
+ const seismic341=(()=>{const z=seismicBasis(p);return z&&!z.integrityOnly?{clause:z.system==='special'?'§E6 SPECIAL CANTILEVER COLUMN SYSTEM':'§E5 ORDINARY CANTILEVER COLUMN SYSTEM'}:undefined;})();
  blocks.push(H('DESIGN CRITERIA · CODES AND STANDARDS'),T(['STANDARD','EDITION / SCOPE'],[
   ['BUILDING CODE',code.building.toUpperCase()],
   // Work on an existing building is an alteration under the existing building code adopted with it.
@@ -149,6 +151,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   // Welding and bolting standards are the editions the cited AISC 360 references.
   ['AWS D1.1/D1.1M',`${code.adopted2022?'2020':'2015'}: STRUCTURAL WELDING CODE - STEEL (CYCLICALLY LOADED), AS REFERENCED BY AISC 360-${code.adopted2022?'22':'16'}`],
   ['RCSC',`${code.adopted2022?'2020':'2014'} SPECIFICATION FOR STRUCTURAL JOINTS, AS REFERENCED BY AISC 360-${code.adopted2022?'22':'16'}`],
+  // ASCE 7 §14.1.2.2.1: a cantilever column system in SDC B to F is designed and detailed to AISC 341; the R = 3
+  // exemption excludes cantilever columns. The crane-level rod bracing (R = 3) stays under AISC 360.
+  ...(seismic341?[['AISC 341',`${code.adopted2022?'2022':'2016'}: SEISMIC PROVISIONS, ${seismic341.clause} (NEW COLUMNS ACROSS THE RUNWAY); CRANE-LEVEL BRACING EXEMPT (R = 3)`],['AWS D1.8/D1.8M',`${code.adopted2022?'2021':'2016'}: STRUCTURAL WELDING CODE - SEISMIC SUPPLEMENT, AS REFERENCED BY AISC 341-${code.adopted2022?'22':'16'}`]]:[]),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['ACI 318','2019: FOOTINGS (CH. 13) AND ANCHORING TO CONCRETE (CH. 17)'],['AISC DESIGN GUIDE 1','2ND ED. (2006): BASE PLATES AND ANCHOR RODS']]:[]),
   ['ASME B30.2','2022: OVERHEAD AND GANTRY CRANES; INSPECTION, TESTING AND OPERATION']
  ],[1.2,2.8]));
@@ -187,7 +192,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
    return [['SEISMIC DATA (NEW COLUMNS)',`RISK CATEGORY ${e.riskCategory??'NOT ENTERED'}, IE ${z.Ie}; SS ${v(e.Ss)}, S1 ${v(e.S1)}; SITE CLASS ${e.siteClass==='default'?'D (DEFAULT, §11.4.3)':e.siteClass??'NOT ENTERED'}; SDS ${z.SDS}, SD1 ${v(e.SD1)}; SEISMIC DESIGN CATEGORY ${z.sdc}`],
     ['SEISMIC (NEW COLUMNS)',`ASCE 7 EQUIVALENT LATERAL FORCE PROCEDURE. ACROSS THE RUNWAY: ${cantileverSystems[z.system].label.toUpperCase()}, R ${z.R}, ΩO ${z.Omega0}, CD ${z.Cd}, REDUNDANCY ${z.rho}; CS ${z.Cs.toFixed(3)}${z.integrityOnly?' (SDC A, §1.4.2)':''}${across!==undefined?`, V = ${f(across)} PER COLUMN`:''}. ALONG THE RUNWAY: CRANE-LEVEL BRACING${designsBracing(p)?`, ${bracedSeismicSystem.label.toUpperCase()}, R ${bracedSeismicSystem.R}, ΩO ${bracedSeismicSystem.Omega0}, CD ${bracedSeismicSystem.Cd}`:''}${along!==undefined?`, V = ${f(along)} PER RUNWAY LINE`:''}. BASE, ANCHORS AND FOOTINGS FOR OVERSTRENGTH`],
     ['WIND (NEW COLUMNS)','NONE: THE RUNWAY STRUCTURE IS INSIDE THE ENCLOSED EXISTING BUILDING']];})(),
-  ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS',`SPREAD FOOTINGS; ${format(p.columnBase.soil.allowable,'pressure',u,u==='SI'?0:3).toUpperCase()} ALLOWABLE BEARING, BASE FRICTION ${p.columnBase.soil.friction}; OVERTURNING AND SLIDING FS 1.5 (DEAD LOAD ONLY)`]]:[]),
+  ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS',`SPREAD FOOTINGS; ${format(p.columnBase.soil.allowable,'pressure',u,u==='SI'?0:3).toUpperCase()} ALLOWABLE BEARING, BASE FRICTION ${p.columnBase.soil.friction}; OVERTURNING AND SLIDING FS 1.5 (DEAD LOAD ONLY RESISTING), 1.0 IN THE ASCE 7 SEISMIC COMBINATIONS`]]:[]),
   ['ELEVATIONS',elevations?`T.O.R. ${drawingElevation(elevations.tor,u)}, T.O.S. ${drawingElevation(elevations.tos,u)} (DATUM ${drawingElevation(elevations.datum,u)})`:'NOT ENTERED']
  ],[1.4,2.6]));
  const r=s.supportReactions;
@@ -208,9 +213,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  blocks.push(H('MATERIALS'),T(['ITEM','SPECIFICATION'],[
   ['RUNWAY GIRDER',p.section.kind==='welded'?`PLATE, Fy = ${ksi(p.section.Fy)}`:`ASTM A992, Fy = ${ksi(p.section.Fy)}`],
   ...(p.capDesign&&p.section.kind==='cap'?[['CAP CHANNEL',`Fy = ${ksi(p.capDesign.Fy)}; ${p.capDesign.materialSource}`]]:[]),
-  ...(d?[['PLATES, BARS, TIES',`Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`ASTM A513 OR A500 GR. C STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`E${Math.round(d.material.Fexx/6.894757293)}XX, AWS D1.1`],['CRANE RAIL',`${d.rail.name}; Fy = ${ksi(d.rail.Fy)}`],...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
+  ...(d?[['PLATES, BARS, TIES',`Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`ASTM A513 OR A500 GR. C STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND BRACKETS AND TIES TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a)`]]:[]),['CRANE RAIL',`${d.rail.name}; Fy = ${ksi(d.rail.Fy)}`],...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
   ...(p.existingColumn?.enabled&&p.existingColumn.isNew?[['NEW COLUMNS',`ASTM A992${p.existingColumn.shape?` ${p.existingColumn.shape}`:''}, Fy = ${ksi(p.existingColumn.Fy)}`]]:[]),
-  ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['BASE PLATES',`ASTM A572 GR. 50, Fy = ${ksi(p.columnBase.plate.Fy)}`],['ANCHOR RODS',`ASTM F1554 GR. ${p.columnBase.anchors.grade.split('-')[1]}, A563 HEAVY HEX NUTS; DG1 HOLES AND PLATE WASHERS`],['CONCRETE / REBAR',`f'c = ${ksi(p.columnBase.concrete.fc)}; ASTM A615 Fy = ${ksi(p.columnBase.footing.fy)}; NON-SHRINK GROUT ASTM C1107`]]:[]),
+  ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['BASE PLATES',`ASTM A572 GR. 50, Fy = ${ksi(p.columnBase.plate.Fy)}`],['ANCHOR RODS',`ASTM F1554 GR. ${p.columnBase.anchors.grade.split('-')[1]}, A563 HEAVY HEX NUTS; DG1 HOLES AND PLATE WASHERS`],['CONCRETE / REBAR',`f'c = ${ksi(p.columnBase.concrete.fc)}; EXPOSURE F0, S0, W1, C1 (ACI 318-19 TABLE 19.3.1.1: INTERIOR FOOTING IN SOIL; CONFIRM THE SULFATE CLASS WITH THE GEOTECHNICAL REPORT); ASTM A615 Fy = ${ksi(p.columnBase.footing.fy)}; NON-SHRINK GROUT ASTM C1107`]]:[]),
   // Only new bracing is furnished; existing bracing is checked and described in the existing building notes.
   ...(designsBracing(p)?(()=>{const g=bracingDesign(p);return [['BRACING STRUT',`ASTM A992 ${g.strut.shape}, Fy = ${ksi(g.strut.Fy)}`],['BRACE GUSSETS',`ASTM A572 GR. 50, Fy = ${ksi(g.gusset.Fy)}, Fu = ${ksi(g.gusset.Fu)}`],['CLEVIS PINS',`STEEL PIN, Fu = ${ksi(g.pin.Fu)} MIN.; FORGED CLEVISES RATED FOR THE ROD STRENGTH`]];})():[]),
   ...(p.longitudinalBracing?.enabled&&p.existingColumn?.isNew?[[p.longitudinalBracing.system==='rod-x'?'BRACING RODS':'BRACING',p.longitudinalBracing.system==='rod-x'?`RODS Fy = ${ksi(p.longitudinalBracing.rod.Fy)}, Fu = ${ksi(p.longitudinalBracing.rod.Fu)}`:`${p.longitudinalBracing.angle.shape}, Fy = ${ksi(p.longitudinalBracing.angle.Fy)}`]]:[])
@@ -229,6 +234,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['BOLTING',`AISC N5.6 TASKS; PRETENSION VERIFICATION PER RCSC; FAYING SURFACE CLASS${d&&(tieRelease(p)||activeEndBearing(p))?'; SLEEVE LENGTHS AND SLOT TRAVEL AT SLEEVED BOLTS':''}`,'O / P'],
   ...(p.existingColumn?.isNew&&p.existingColumn.enabled?[]:[['EXISTING STEEL','FIELD-VERIFY SIZES, CONDITION AND WELDABILITY BEFORE WORK','P']]),
   ...(fieldWelds?[['FIELD WELDS TO EXISTING STEEL','CARBON EQUIVALENT AND PREHEAT PER THE APPROVED WPS; VISUAL AND MT OF EVERY FIELD WELD TO EXISTING STEEL','P']]:[]),
+  ...(d?[['FIELD WELDS',`RAIL KEEPERS AND ANCHORS${p.columnBase?.enabled&&p.existingColumn?.isNew?', ANCHOR ROD PLATE WASHERS':''}: VISUAL OF EVERY WELD; MT AT THE KEEPER WELD ENDS`,'P']]:[]),
+  ...(seismic341?[['SEISMIC (IBC 1705.12.1.1, 1705.13.1.1)','NEW COLUMNS, BASE PLATES AND THEIR WELDS: QUALITY ASSURANCE PER AISC 341 CHAPTER J; CRANE-LEVEL ROD BRACING EXEMPT (R = 3)','O / P']]:[]),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS (IBC 1705.3, 1705.6)','REINFORCEMENT AND ANCHOR ROD PLACEMENT; BEARING SOIL VERIFIED BEFORE CONCRETE','P'],['CONCRETE (IBC 1705.3)','SAMPLING AND TESTING OF FRESH CONCRETE; PLACEMENT','C']]:[]),
   ['RAIL / RUNWAY','ALIGNMENT, GAUGE AND LEVEL SURVEY AFTER ERECTION','P'],
   ...(d?[['PROJECT REQUIREMENTS',d.fabrication.inspection.toUpperCase(),'-']]:[])

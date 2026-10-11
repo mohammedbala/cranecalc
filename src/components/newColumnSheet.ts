@@ -50,7 +50,7 @@ export function newColumnSheetSvg(s:CalculationSnapshot,number='S-08'){return to
 /** New freestanding runway column, its base plate, anchor rods and spread footing, with design data and notes. */
 export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,u=p.units,col=p.existingColumn!,b=p.columnBase!,d=p.details!,br=d.bracket?.enabled?d.bracket:undefined,g=p.section,r=s.columnBase;
- const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'?0:u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
+ const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'||q==='stress'&&u==='SI'?0:u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
  const c=existingColumnSection(p).section,name=col.shape||`BUILT-UP ${size(c.d)} X ${size(c.bf)}`;
  const tb=b.plate.thickness,gr=b.grout,ft=b.footing,hf=ft.thickness,a=b.anchors,hw=anchorHardware(a.diameter),row=b.plate.N/2-a.edge;
  const bt=d.bearing.thickness,seat=col.seatElevation,H=col.height,cap=g.kind==='cap'?g.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,rl=d.rail;
@@ -230,10 +230,10 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   svg+=dimV(Y(ftgTop),Y(head),X(-row-nut/2),dx,dim(a.embedment))+dimV(Y(ftgTop),Y(ftgBot),lx,dx-20,dim(hf));
   svg+=dimH(X(-row),X(row),Y(hw.washerThickness+a.diameter*1.6),Y(stub)-6,dim(2*row));
   const rx=X(ft.L/2+ext*.5)+28,slabZ=(ft.soil>0?b.plate.N/2+12*inch+ft.L/2+ext*.5:ft.L+ext*.5)/2;
-  const items:{at:XY;labels:string[];weld?:string;arrowSide?:boolean;allAround?:boolean}[]=[
+  const items:{at:XY;labels:string[];weld?:string;field?:boolean;arrowSide?:boolean;allAround?:boolean}[]=[
    {at:[X(c.d/2),Y(stub*.8)],labels:[`${name} COLUMN`]},
    {at:[X(row+nut/2),Y(hw.washerThickness+a.diameter/2)],labels:['HVY HEX NUT AND','PL WASHER']},
-   {at:[X(row+hw.washer/2),Y(hw.washerThickness*.4)],weld:size(plateWasherWeld(b).size),arrowSide:true,allAround:true,labels:['PL WASHER TO BASE PL,','EACH ROD']},
+   {at:[X(row+hw.washer/2),Y(hw.washerThickness*.4)],weld:size(plateWasherWeld(b).size),field:true,arrowSide:true,allAround:true,labels:['PL WASHER TO BASE PL,','EACH ROD']},
    {at:[X(b.plate.N/2+inch),Y(-tb-gr/2)],labels:[`${size(gr)} NON-SHRINK GROUT`]},
    ...(ft.slab>0?[{at:[X(slabZ),Y(slabTop-ft.slab/2)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,`${size(inch/2)} ISOLATION JT.`]}]:[]),
    {at:[X(row+nut/2),Y(head+a.diameter/2)],labels:['EMBEDDED HVY HEX NUT,','TACK WELDED TO ROD']},
@@ -270,8 +270,10 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    `FOOTING CONCRETE f'c = ${force(b.concrete.fc,'stress')} AT 28 DAYS, NORMALWEIGHT; REINFORCEMENT ${rebarGrade(b.footing.fy,u)}, ${size(ft.cover)} CLEAR COVER CAST AGAINST EARTH, STRAIGHT BARS EACH WAY.`,
    `${ft.soil>0?`TOP OF FOOTING ${dim(ft.soil)} BELOW THE FLOOR; BACKFILL AND REPLACE THE SLAB OVER IT AFTER THE COLUMN IS ERECTED.`:`SAW CUT AND REMOVE THE EXISTING SLAB TO THE FOOTING OUTLINE, EXCAVATE TO BEARING AND POUR THE FOOTING TO THE TOP OF SLAB WITH A ${size(inch/2)} PREFORMED ISOLATION JOINT AT THE PERIMETER.`} LOCATE UNDERGROUND UTILITIES BEFORE CUTTING OR EXCAVATING.`,
    `BEAR FOOTINGS ON UNDISTURBED SOIL OR COMPACTED FILL APPROVED BY THE GEOTECHNICAL ENGINEER: ${force(b.soil.allowable,'pressure')} ALLOWABLE. BOTTOM OF FOOTING ${dim(ft.soil+hf)} BELOW THE FLOOR${b.soil.frost>0?`, BELOW THE ${dim(b.soil.frost)} FROST DEPTH`:', INTERIOR FOOTING PROTECTED FROM FROST'}.`,
-   ...(s.existingColumn?.seismic?[`SEISMIC: ${s.existingColumn.seismic.basis.system.toUpperCase()} STEEL CANTILEVER COLUMN SYSTEM ACROSS THE RUNWAY (ASCE 7 TABLE 12.2-1). THE BASE PLATES, ANCHOR RODS AND FOOTINGS ARE DESIGNED FOR THE OVERSTRENGTH SEISMIC LOAD (§12.2.5.2)${s.existingColumn.seismic.basis.sdc>='C'?' AND THE ANCHORS FOR ACI 318 §17.10':''}. THE CRANE-LEVEL BRACING CARRIES SEISMIC FORCE ALONG THE RUNWAY.`]:[]),
-   'SPECIAL INSPECTION PER IBC 1705.3 AND THE STATEMENT OF SPECIAL INSPECTIONS: ANCHOR ROD PLACEMENT, REINFORCEMENT, CONCRETE SAMPLING AND PLACEMENT, AND THE COLUMN-TO-PLATE AND BRACKET WELDS.'
+   ...(s.existingColumn?.seismic?(()=>{const z=s.existingColumn!.seismic!.basis,aisc341=!z.integrityOnly;
+    // ASCE 7 §14.1.2.2.1: a cantilever column system in SDC B to F is detailed to AISC 341 (§E5 / §E6).
+    return [`SEISMIC: ${z.system.toUpperCase()} STEEL CANTILEVER COLUMN SYSTEM ACROSS THE RUNWAY (ASCE 7 TABLE 12.2-1${aisc341?`; AISC 341 ${z.system==='special'?'§E6':'§E5'}`:''}). THE COLUMNS${aisc341?'':' ARE DESIGNED FOR THE SEISMIC LOAD;'} ${aisc341?'AND ':''}THE BASE PLATES, ANCHOR RODS AND FOOTINGS ARE DESIGNED FOR THE OVERSTRENGTH SEISMIC LOAD (§12.2.5.2${aisc341?', AISC 341 §E5.4a':''})${z.sdc>='C'?' AND THE ANCHORS FOR ACI 318 §17.10':''}.${aisc341?' MAKE THE COLUMN-TO-BASE-PLATE, BRACKET AND TIE WELDS WITH FILLER METAL MEETING AWS D1.8 CLAUSE 6.3.':''} THE CRANE-LEVEL BRACING CARRIES SEISMIC FORCE ALONG THE RUNWAY.`];})():[]),
+   `SPECIAL INSPECTION PER IBC 1705.3${s.existingColumn?.seismic&&!s.existingColumn.seismic.basis.integrityOnly?', IBC 1705.12.1.1 (AISC 341 CHAPTER J)':''} AND THE STATEMENT OF SPECIAL INSPECTIONS: ANCHOR ROD PLACEMENT, REINFORCEMENT, CONCRETE SAMPLING AND PLACEMENT, THE COLUMN-TO-PLATE AND BRACKET WELDS, AND THE FIELD-WELDED PLATE WASHERS.`
   ];
   return {key:'new-column',name:'NEW COLUMNS & FOOTINGS',views,notes:(t:Style)=>[heading(t,'NEW COLUMN DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.25,1.75]),heading(t,'NEW COLUMN AND FOUNDATION NOTES'),...numbered(t,notes)]};
  }
