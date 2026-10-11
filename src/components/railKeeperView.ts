@@ -165,7 +165,8 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   for(const x of bolts)jv+=rect(x-J(.75*r.jointBoltDiameter),by-J(hole)/2,J(1.5*r.jointBoltDiameter),J(hole),'reference-line')+circle(x,by,J(r.jointBoltDiameter)/2,'runway-line');
   const yd=jb+12,railEnd=jc-J(r.jointGap)/2,pitchFits=textWidth(size(r.jointPitch),9)+6<=J(r.jointPitch);
   jv+=dimChain('h',[jl,bolts[0],bolts[1],railEnd],[jb,jb,jb,jb],yd,[size(r.jointEdge),size(r.jointPitch),size(r.jointEdge)]);
-  jv+=dimH(jl,jl+J(bar),jb+2,yd+(pitchFits?16:26),barLabel);
+  // The overall string stands clear of the chain's extension lines, which run 5 pt past the chain.
+  jv+=dimH(jl,jl+J(bar),jb+2,yd+(pitchFits?22:30),barLabel);
   jv+='</g>';
   const joint=place(jv,0,0);
 

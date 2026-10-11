@@ -209,7 +209,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   }
   // Labels sit on the inboard side of their target so a leader never crosses its own text.
   const inboard=(end:'left'|'right',labels:string[],dx:number)=>{const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),7.5)));return end==='left'?left+dx:right-dx-w;};
-  if(newColumns){const labels=[`NEW ${columnName} COLUMN ON`,`SPREAD FOOTING, TYP. ${2*m.supports.length}`,`SEE ${detailRef('NEW RUNWAY COLUMN / ELEVATION')}`],x0=X(m.supports[1]??m.supports[0]),w=Math.max(...labels.map(v=>textWidth(v,7.5)));svg+=`<g data-new-column="plan">${multiLeader([[x0+m.column.bf/2*k,Y(rows[0]-m.column.d/2)]],[x0+m.column.bf/2*k+16,Y(-m.width/2)-8],labels,7.5,[],w)}</g>`;}
+  // The column callout takes a grid clear of the strut callout, which stands at the first braced span's left grid.
+  if(newColumns){const strutGrid=s.bracingSystem?s.bracingSystem.layout.spans[0]-1:-1,j=strutGrid===1&&m.supports.length>2?2:1;
+   const labels=[`NEW ${columnName} COLUMN ON`,`SPREAD FOOTING, TYP. ${2*m.supports.length}`,`SEE ${detailRef('NEW RUNWAY COLUMN / ELEVATION')}`],x0=X(m.supports[j]??m.supports[0]),w=Math.max(...labels.map(v=>textWidth(v,7.5)));svg+=`<g data-new-column="plan">${multiLeader([[x0+m.column.bf/2*k,Y(rows[0]-m.column.d/2)]],[x0+m.column.bf/2*k+16,Y(-m.width/2)-8],labels,7.5,[],w)}</g>`;}
   if(stop){const first=ends[0],labels=[`END STOP, TYP. ${2*ends.length}`,`SEE ${detailRef('END STOP / ELEVATION')}`];svg+=multiLeader([[first==='left'?left+stopGeom!.front/1000*k:right-stopGeom!.front/1000*k,Y(-m.bf/2)]],[inboard(first,['END STOP, TYP. 4','SEE 1/S-07'],70),Y(-m.width/2)+4],labels,7.5);}
   for(const b of adjacent){const labels=['EXISTING RUNWAY CONTINUES',`ADJ. BAY ${dim(b.length/1000)}, FIELD VERIFY`];svg+=`<g data-existing-bay-label="${b.end}">${multiLeader([[b.end==='left'?left-stub/2:right+stub/2,Y(-m.bf/2)]],[inboard(b.end,labels,16),Y(-m.width/2)+26],labels,7.5)}</g>`;}
   // Section cut at mid-bay, both ends outside the grids, arrows looking back at the frame on the grid.
@@ -316,7 +318,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    // The elbow stays clear of the grid bubble; the second line clears the bay mark below it.
    // Short lines keep the label inside the first bay, clear of the next grid bubble.
    const first=ends[0]==='left',labels=['END STOP',...(ends.length===2?['BOTH ENDS']:[]),`SEE ${detailRef('END STOP / ELEVATION')}`],w=Math.max(textWidth('END STOP',7.5),textWidth('BOTH ENDS',7.5),textWidth('SEE 1/S-07',7.5)),tx=first?el+stopGeom!.back/1000*ek:er-stopGeom!.back/1000*ek;
-   svg+=multiLeader([[tx,EY(m.railBase+sh/2)]],[first?tx+30:tx-30-w,top-25-11*(labels.length-1)],labels,7.5);}
+   // The arrow lands on the stop's face plate, not in the air above its base plate.
+   const fx=first?el+(stopGeom!.faceBack+stop.face.thickness/2)/1000*ek:er-(stopGeom!.faceFront-stop.face.thickness/2)/1000*ek;
+   svg+=multiLeader([[fx,EY(m.railBase+sh*.6)]],[first?tx+30:tx-30-w,top-25-11*(labels.length-1)],labels,7.5);}
   for(const g of marks)svg+=text(EX(mid(g)),top-14,g.mark,9,'middle',700)+text(EX(mid(g)),bottom+17,p.section.name,9,'middle',700);
   const railTop=EY(m.railBase+railDepth);
   // Elevation targets: the T.O.R. label rises and the T.O.S. label drops so close elevations never overlap.
