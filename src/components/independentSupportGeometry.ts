@@ -1,4 +1,4 @@
-import {flangeTieGeometry,tieSides,tieRelease,columnGussetHeight} from '../engine/tieGeometry';
+import {flangeTieGeometry,tieSides,tieRelease,columnGussetHeight,columnGussetExtension} from '../engine/tieGeometry';
 import {tieArrangement} from '../engine/connectionOptions';
 import {buildAlternativeTies} from './alternativeTieGeometry';
 import {filletWeld,stiffenerWelds} from './weldGeometry';
@@ -54,8 +54,8 @@ export function buildIndependentSupports(p:ProjectInput,columnFace:number,materi
     }
    }
    for(const [rootIndex,at] of [z0+conn/2,columnFace-gap-conn/2].entries()){
-    // The column gusset reaches the column flange across the gap at the bar ends.
-    const rootStart=layout&&rootIndex===0?layout.rootStart/1000:at-conn/2,rootEnd=rootIndex===1?columnFace:at+conn/2;
+    // The column gusset reaches the column flange across the gap at the bar ends, and runs past the bolt group by its longer slotted end edge.
+    const rootStart=layout&&rootIndex===0?layout.rootStart/1000:at-conn/2-(rootIndex===1?columnGussetExtension(p)/1000:0),rootEnd=rootIndex===1?columnFace:at+conn/2;
     // The column gusset is as tall as the bars, or taller to contain the vertical release slots.
     const half=rootIndex===1?hg/2:width/2,rootTop=layout&&rootIndex===0?side*(d/2-tf-layout.attachment.saddleThickness/1000):y+side*half;
     const rootBottom=y-side*half,rootY=(rootTop+rootBottom)/2,rootHeight=Math.abs(rootTop-rootBottom);

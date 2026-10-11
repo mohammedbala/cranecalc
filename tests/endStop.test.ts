@@ -8,6 +8,11 @@ import {railKeeperStations} from '../src/engine/simpleSupports';
 import {boltCapacity} from '../src/engine/connectionStrength';
 import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import {sheetsDxf} from '../src/components/sheetDxf';
+import {runwayDesignAnalysis} from '../src/engine/designAnalysis';
+import {sectionProperties} from '../src/engine/section';
+import {girderStrength} from '../src/engine/aiscStrength';
+import {sideReactions} from '../src/engine/bracketForces';
+import {format} from '../src/engine/units';
 
 const inch=25.4,kip=4448.2216152605;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
@@ -44,6 +49,25 @@ describe('girder-mounted runway end stops',()=>{
   const g=demo.checks.find(c=>c.id==='end-stop-girder')!,lrfd8=demo.designAnalysis!.combinations.find(c=>c.id==='LRFD 8')!;
   expect(g.status).toBe('pass');expect(g.utilization).toBeGreaterThan(lrfd8.interaction);
   expect(lrfd8.axial).toBeCloseTo(20*kip,3);
+ });
+ it('applies the crane stop force only with the crane against a stop, for the girder, its stops and its supports alike',()=>{
+  const p=demonstrationProject(),c=p.cranes[0],props=sectionProperties(p.section),stops=new Set(['LRFD 8','LRFD 10-B']),seen:{origin:number;stop?:string;axial:number}[]=[];
+  runwayDesignAnalysis(p,props,girderStrength(p,props),24,20,e=>{if(e.kind==='strength'&&stops.has(e.combination))seen.push({origin:e.cranes[0].origin,stop:e.stop,axial:e.axial});});
+  // Every stop case has the crane at the end of its travel toward the stop it strikes, with the full stop force.
+  expect(seen.length).toBeGreaterThan(0);
+  for(const v of seen){expect(v.stop).toBe(Math.abs(v.origin-c.travelStart)<1e-6?'left':'right');expect([c.travelStart,c.travelEnd].some(o=>Math.abs(v.origin-o)<1e-6)).toBe(true);expect(v.axial).toBeCloseTo(20*kip,3);}
+  expect(new Set(seen.map(v=>v.stop))).toEqual(new Set(['left','right']));
+  // The stop combinations' girder moments are those with the crane at the stop, and the end stop check adds the
+  // bumper couple to them; the locating bearings still take the full stop force.
+  const lrfd8=demo.designAnalysis!.combinations.find(v=>v.id==='LRFD 8')!;
+  expect(lrfd8.positions.every(o=>[c.travelStart,c.travelEnd].some(t=>Math.abs(o-t)<1e-6))).toBe(true);
+  expect(demo.designAnalysis!.axial).toBeCloseTo(20*kip,3);expect(demo.designAnalysis!.governing.axial!.id).toMatch(/LRFD (8|10-B)/);
+  expect(demo.checks.find(v=>v.id==='end-bearing-locating-shear')!.note).toContain(format(20*kip,'force','US',3));
+  // The symmetric runway gives mirror-image least reactions: the stop at grid 4 no longer meets a crane loading RG2.
+  const f=demo.detailResults!.bracketForces!;
+  expect(f[2].minVertical.vertical).toBeCloseTo(f[1].minVertical.vertical,6);expect(f[2].minVertical.vertical/kip).toBeCloseTo(3.47,2);
+  expect(f[2].minVertical.combination).toBe('LRFD 10-B');expect(f[2].minVertical.longitudinal).toBeCloseTo(20*kip,3);
+  expect(sideReactions(f[2].minVertical).left).toBeCloseTo(sideReactions(f[1].minVertical).right!,6);
  });
  it('flags bolts that clash with the bearing stiffeners or the face plate',()=>{
   const p=structuredClone(demo.input),e=p.details!.endStop!;
@@ -84,8 +108,8 @@ describe('girder-mounted runway end stops',()=>{
   // No callout leader crosses another, and none comes within 3 pt of the section cut marker.
   const leaders=[...plan.matchAll(/<g data-multileader="component"[^>]*>(.*?)<\/g>/gs)].map(m=>[...m[1].matchAll(/data-leader-path="true" points="([^"]+)"/g)].flatMap(r=>segments(r[1])));
   const cut=[...(plan.match(/<g data-section-cut="[^"]*">(.*?)<\/g>/s)?.[1]??'').matchAll(/<line[^>]*x1="([^"]+)" y1="([^"]+)" x2="([^"]+)" y2="([^"]+)"/g)].map(m=>[[+m[1],+m[2]],[+m[3],+m[4]]] as Seg);
-  // Bolt, keeper and stiffener weld callouts.
-  expect(leaders.length).toBe(3);expect(cut.length).toBeGreaterThan(0);
+  // Bolt, keeper and stiffener weld callouts, and the leaders to the two short dimensions at the face plate.
+  expect(leaders.length).toBe(5);expect(cut.length).toBeGreaterThan(0);
   for(let i=0;i<leaders.length;i++){
    for(let j=i+1;j<leaders.length;j++)for(const a of leaders[i])for(const b of leaders[j])expect(segmentGap(a,b),`leaders ${i}/${j}`).toBeGreaterThan(3);
    for(const a of leaders[i])for(const b of cut)expect(segmentGap(a,b),`leader ${i} / cut`).toBeGreaterThan(3);
@@ -93,6 +117,47 @@ describe('girder-mounted runway end stops',()=>{
   // The section's gauge dimension text clears the web break below the girder cut.
   const breaks=[...section.matchAll(/<polyline class="annotation" points="([^"]+)"/g)].map(m=>m[1].split(' ').map(v=>+v.split(',')[1])),gauge=[...section.matchAll(/<text x="[^"]+" y="([^"]+)"[^>]*>0&#39;-7&quot;<\/text>/g)].map(m=>+m[1]);
   expect(gauge).toHaveLength(1);expect(gauge[0]-6.5-Math.max(...breaks.at(-1)!)).toBeGreaterThan(6);
+ });
+ it('carries every stop extension line to its feature and leaders the girder end and the short plan dimension',()=>{
+  type L={cls:string;x1:number;y1:number;x2:number;y2:number};
+  const lines=(svg:string):L[]=>[...svg.matchAll(/<line class="([^"]+)" x1="([^"]+)" y1="([^"]+)" x2="([^"]+)" y2="([^"]+)"\/>/g)].map(m=>({cls:m[1],x1:+m[2],y1:+m[3],x2:+m[4],y2:+m[5]}));
+  const rects=(svg:string)=>[...svg.matchAll(/<rect class="runway-line" x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"\/>/g)].map(m=>({x:+m[1],y:+m[2],w:+m[3],h:+m[4]}));
+  const words=(svg:string)=>[...svg.matchAll(/<text x="([^"]+)" y="([^"]+)"[^>]*>([^<]*)<\/text>/g)].map(m=>({x:+m[1],y:+m[2],v:m[3].replace(/&quot;/g,'"').replace(/&#39;/g,"'")}));
+  const near=(a:number,b:number,tol=.01)=>Math.abs(a-b)<=tol;
+  const vertical=(ls:L[],x:number)=>ls.filter(l=>near(l.x1,x)&&near(l.x2,x)).map(l=>({...l,top:Math.min(l.y1,l.y2),bottom:Math.max(l.y1,l.y2)}));
+  const ticks=(ls:L[])=>ls.filter(l=>near(Math.abs(l.x2-l.x1),5)&&near(Math.abs(l.y2-l.y1),6)).map(l=>[(l.x1+l.x2)/2,(l.y1+l.y2)/2]);
+  const leaderStarts=(svg:string)=>[...svg.matchAll(/data-leader-path="true" points="([^ "]+)/g)].map(m=>m[1].split(',').map(Number));
+  for(const s of [demo,{...demo,input:{...demo.input,units:'SI' as const}}]){
+   const [elevation,plan]=endStopTopic(s).views.map(v=>v.render().svg),ls=lines(elevation),all=words(elevation);
+   // Elevation: the face plate is the tallest plate; the base plate sits on the girder below it.
+   const plates=rects(elevation),face=plates.reduce((a,v)=>v.h>a.h?v:a),base=plates.find(v=>near(v.y,face.y+face.h))!,girderTop=base.y+base.h;
+   const tier=(label:string)=>{const t=all.find(v=>v.v.startsWith(label))!,y=t.y-3,dim=ls.find(l=>near(l.y1,y)&&near(l.y2,y)&&l.cls==='annotation')!;return {y,left:Math.min(dim.x1,dim.x2)+3,right:Math.max(dim.x1,dim.x2)};};
+   const back=tier('BACK BOLTS'),front=tier('FRONT BOLTS'),stop=tier('STOP FACE');
+   // Shortest nearest the stop, so no extension line crosses a dimension line; no base plate ordinate.
+   expect(back.y).toBeGreaterThan(front.y);expect(front.y).toBeGreaterThan(stop.y);expect(all.some(v=>v.v.startsWith('BASE PL '))).toBe(false);
+   // Each extension line runs past its dimension line and down to a small gap off its feature.
+   for(const t of [back,front]){const c=vertical(ls,t.right).find(l=>l.cls==='grid-line')!;expect(c.top).toBeLessThan(t.y-3);expect(c.bottom).toBeGreaterThan(girderTop);}
+   const faceLine=vertical(ls,stop.right).find(l=>l.cls==='annotation')!;expect(near(stop.right,face.x+face.w)).toBe(true);
+   expect(faceLine.top).toBeLessThan(stop.y-3);expect(face.y-faceLine.bottom).toBeGreaterThan(.5);expect(face.y-faceLine.bottom).toBeLessThanOrEqual(3);
+   const origin=vertical(ls,back.left).find(l=>l.cls==='annotation'&&l.top<stop.y)!;expect(origin.top).toBeLessThan(stop.y-3);expect(girderTop-origin.bottom).toBeGreaterThan(.5);expect(girderTop-origin.bottom).toBeLessThanOrEqual(3);
+   // The face plate height: its upper extension line starts at the face plate.
+   const upper=ls.filter(l=>near(l.y1,face.y)&&near(l.y2,face.y)&&l.cls==='annotation').map(l=>Math.max(l.x1,l.x2));
+   expect(upper.some(x=>face.x-x>.5&&face.x-x<=3)).toBe(true);
+   // GIRDER END leads to the girder end line, below the girder top.
+   const label=all.find(v=>v.v==='GIRDER END')!,arrow=leaderStarts(elevation).find(p=>near(p[0],back.left));
+   expect(arrow).toBeDefined();expect(arrow![1]).toBeGreaterThan(girderTop);expect(label.x).toBeLessThan(back.left);
+   // Plan: every extension line that meets a dimension line below the girder ends it at a tick, and every segment
+   // between ticks is labelled within it or by a leader.
+   const pl=lines(plan),girderEdge=Math.max(...pl.filter(l=>l.cls==='runway-line').map(l=>Math.max(l.y1,l.y2))),pt=ticks(pl),pw=words(plan),starts=leaderStarts(plan);
+   const dims=pl.filter(l=>l.cls==='annotation'&&near(l.y1,l.y2)&&l.y1>girderEdge+4&&Math.abs(l.x2-l.x1)>3);
+   expect(dims.length).toBeGreaterThanOrEqual(2);
+   for(const d of dims){
+    const y=d.y1,x0=Math.min(d.x1,d.x2),x1=Math.max(d.x1,d.x2),on=pt.filter(t=>near(t[1],y)&&t[0]>=x0-.01&&t[0]<=x1+.01).map(t=>t[0]).sort((a,b)=>a-b);
+    for(const v of pl.filter(l=>near(l.x1,l.x2)&&Math.min(l.y1,l.y2)<y-1&&Math.max(l.y1,l.y2)>y+1&&l.x1>x0+1&&l.x1<x1-1))expect(on.some(x=>near(x,v.x1)),`extension at ${v.x1} through ${y}`).toBe(true);
+    for(let i=0;i+1<on.length;i++){const a=on[i],b=on[i+1];
+     expect(pw.some(t=>t.x>a&&t.x<b&&near(t.y,y-5,1))||starts.some(p=>p[0]>a&&p[0]<b&&near(p[1],y,.5)),`segment ${a}-${b} at ${y}`).toBe(true);}
+   }
+  }
  });
  it('states the stop data without imperial units or false precision on SI sheets',()=>{
   const si={...demo,input:{...demo.input,units:'SI' as const}},t=endStopTopic(si);
