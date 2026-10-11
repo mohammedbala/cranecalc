@@ -22,9 +22,9 @@ const snapshot=(input=project()):CalculationSnapshot=>({input,revision:'angle-re
 const volume=(g:THREE.BufferGeometry)=>{const a=(g.index?g.toNonIndexed():g).getAttribute('position');let total=0;for(let i=0;i<a.count;i+=3)total+=new THREE.Vector3().fromBufferAttribute(a,i).dot(new THREE.Vector3().fromBufferAttribute(a,i+1).cross(new THREE.Vector3().fromBufferAttribute(a,i+2)))/6;return Math.abs(total);};
 
 describe('angle tieback selection and geometry',()=>{
- it('loads pinned catalogue dimensions and keeps all six tieback families available',()=>{
+ it('loads pinned catalogue dimensions and keeps all seven tieback families available',()=>{
   expect(aiscAngles).toHaveLength(137);expect(aiscAngleByName('L3X3X1/4')).toMatchObject({row:537,d:3,b:3,t:.25,weight:4.9});
-  expect(tieOptions.map(o=>o.id)).toEqual(['paired-bars','single-angle','double-angle','flexible-plate','bearing-link','paired-links']);
+  expect(tieOptions.map(o=>o.id)).toEqual(['paired-bars','single-angle','double-angle','flexible-plate','cap-angle','bearing-link','paired-links']);
   expect(angleTie(project().details!)).toMatchObject({depth:expect.closeTo(76.2,8),leg:expect.closeTo(76.2,8),thickness:6.35,paired:false});
  });
  it('round-trips both angle profiles and restores each without changing brackets or loads',()=>{
