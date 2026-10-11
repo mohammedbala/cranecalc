@@ -48,8 +48,11 @@ export function cappedStrength(p:ProjectInput,s:Properties,base:GirderStrength):
  // Web compactness for the bending direction(s) that occur: positive moment only on simple spans; on continuous
  // runways the less favourable of both directions (largest lambda / lambda_p), as for the flexural strength.
  const occurring=p.system==='continuous'?directions:[positive],webCase=occurring.reduce((a,b)=>b.lambda/b.lambdaP>a.lambda/a.lambdaP?b:a);
- const webRatio=webCase.lambda,webLimit=webCase.lambdaP;
- const compact=flangeRatio<=.38*root&&webRatio<=webLimit;
+ // F4 covers compact and noncompact webs (Rpc / Rpt reduce toward My for a noncompact web), so the flexural
+ // checks need compact flanges and a web that is not slender; the limit shown is lambda_p for a compact web,
+ // lambda_r for a noncompact one.
+ const webRatio=webCase.lambda,webLimit=webCase.web==='compact'?webCase.lambdaP:webCase.lambdaR;
+ const compact=flangeRatio<=.38*root&&webCase.web!=='slender';
  const Lu=p.aist?.axialLength||p.spans.reduce((a,b)=>a+b,0),Ly=Math.max(p.unbracedLength,p.aist?.bottomBraceSpacing||Lu),Lz=p.aist?.torsionalLength||Lu;
  const Fex=Math.PI**2*E*s.Ix/(s.A*Lu**2),Fey=Math.PI**2*E*cap.Iy/(s.A*Ly**2);
  const Fez=(Math.PI**2*E*cap.Cw/Lz**2+E/2.6*cap.J)/(s.A*cap.polarRadiusSquared);

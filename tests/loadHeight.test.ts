@@ -13,14 +13,14 @@ const fork:LateralTorsionInput={length:L,E:.8*E,G:.8*G,Iy:s.Iy,J:s.J,Cw:s.Cw,h0:
 const clarkHill=(C1:number,C2:number,z:number)=>C1*Math.PI**2*E*s.Iy/L**2*(Math.sqrt(s.Cw/s.Iy+L*L*G*s.J/(Math.PI**2*E*s.Iy)+(C2*z)**2)-C2*z);
 
 describe('load-height lateral-torsional buckling',()=>{
- it('maps an elastic critical moment to the F2-4 and F5 equivalent unbraced length',()=>{
+ it('maps an elastic critical moment to the F2-4 and F4 / F5 equivalent unbraced length',()=>{
   for(const x of [.5*L,L,2*L,4*L])expect(rolled.length(rolled.mcr(x))/x).toBeCloseTo(1,12);
   // Beyond Lr the available strength is phi times the elastic critical moment.
   const st=girderStrength(p,s);expect(rolled.available(1.5*st.Lr)).toBeCloseTo(.9*rolled.mcr(1.5*st.Lr),3);
   expect(rolled.base).toBe(st.major);
   const q=cappedDemonstrationProject(),qs=sectionProperties(q.section),capped=flexureCurves(q,qs).positive,cs=girderStrength(q,qs),top=cs.capDirections![0];
   expect(capped.length(capped.mcr(L))/L).toBeCloseTo(1,12);
-  const far=2*top.Lr;expect(capped.available(far)).toBeCloseTo(.9*Math.min(top.Rpg*capped.mcr(far),girderStrength({...q,unbracedLength:far},qs).major/.9),3);
+  const far=2*top.Lr;expect(capped.available(far)).toBeCloseTo(.9*Math.min((top.clause==="F5"?top.Rpg:1)*capped.mcr(far),girderStrength({...q,unbracedLength:far},qs).major/.9),3);
   // The table never reports a length whose strength falls below the target.
   for(const f of [1,.8,.5,.2]){const target=f*rolled.base;expect(rolled.available(rolled.lengthFor(target))).toBeGreaterThanOrEqual(target*(1-1e-12));}
   for(const x of [.5*L,L,1.7*L,5*L,60*L])expect(rolled.lowerBound(x)).toBeLessThanOrEqual(rolled.available(x)*(1+1e-12));

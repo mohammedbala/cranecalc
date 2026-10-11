@@ -78,14 +78,14 @@ describe('C23 · web compactness of the singly symmetric capped section (Table B
  });
  it('evaluates both directions on a continuous runway and keeps the less favourable web class',()=>{
   const c={...p,system:'continuous' as const},gc=girderStrength(c,sectionProperties(c.section));
-  expect(gc.webCase!.web).toBe('noncompact');expect(gc.compact).toBe(false);
+  expect(gc.webCase!.web).toBe('noncompact');expect(gc.webLimit).toBeCloseTo(gc.webCase!.lambdaR,9);expect(gc.compact).toBe(true); // F4 covers a noncompact web
  });
 });
 
 describe('D26 · fatigue constants in their AISC 360-16 US form',()=>{
  it('evaluates 1000 (Cf/n)^0.333, 100 (1.5/n)^0.167 >= 8 ksi and the US thresholds exactly',()=>{
   const n=400000;
-  expect(finiteLife(4.4,n)/KSI).toBeCloseTo(1000*(4.4/n)**.333,10);
+  expect(finiteLife(4.4,n)/KSI).toBeCloseTo(1000*(4.4/n)**(1/3),10);expect(finiteLife(25,5e5)/KSI).toBeCloseTo(36.84,2); // Everett permit, p.24
   expect(categoryF(n)/KSI).toBeCloseTo(Math.max(8,100*(1.5/n)**.167),10);
   expect(categoryF(1e12)/KSI).toBeCloseTo(8,12);
   expect(fatigueResistance('C',1e12).FSR/KSI).toBeCloseTo(10,12);expect(fatigueResistance('E1',1e12).FSR/KSI).toBeCloseTo(2.6,12);
