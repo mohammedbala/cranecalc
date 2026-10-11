@@ -146,12 +146,19 @@ export function stiffenerLevelForces(b:BracketInput,groups:ReturnType<typeof col
  * section between the root and the load (ribResponse): bending and its sloping
  * free-edge stress at the critical section, shear at the shallowest loaded section.
  */
+/** The rib response depends only on the bracket geometry: computed once per bracket, not once per load case. */
+const ribCache=new WeakMap<BracketInput,{key:string;g:ReturnType<typeof ribGeometry>;rib:ReturnType<typeof ribResponse>}>();
+function ribResponseOf(b:BracketInput,e:number,E:number,G:number){
+ const key=JSON.stringify([b.ribDepth,b.ribThickness,b.seatProjection,b.tipDepth,b.arrangement,e,E,G]),hit=ribCache.get(b);
+ if(hit&&hit.key===key)return hit;
+ const g=ribGeometry(b),v={key,g,rib:ribResponse(g,e,E,G)};ribCache.set(b,v);return v;
+}
 export function bracketResponse(p:ProjectInput,loads:BracketLoads){
  const b=p.details!.bracket!,m=p.details!.material,E=p.section.E,G=E/2.6;
  const V=loads.reduce((a,v)=>a+v.vertical,0),Mx=loads.reduce((a,v)=>a+v.vertical*v.offset,0);
  const ribs=[V/2-Mx/b.ribSpacing,V/2+Mx/b.ribSpacing];
  // Entire patch at its far transverse edge; no uniform-patch relief.
- const e=b.reach+p.details!.bearing.width/2,g=ribGeometry(b),rib=ribResponse(g,e,E,G);
+ const e=b.reach+p.details!.bearing.width/2,{g,rib}=ribResponseOf(b,e,E,G);
  const R=Math.max(...ribs.map(Math.abs)),M=R*rib.critical.moment,normal=R*rib.critical.bending,shear=R*rib.load.shear;
  const root=parallelWeldGroup({length:b.ribDepth,gauge:b.ribThickness,size:b.rootWeld,Fexx:m.Fexx,method:p.method,vx:0,vy:R,normal:0,mx:R*e,my:0,mz:0});
  // Haunched rib: the sloping free edge meets the root fillets at their bottom ends.

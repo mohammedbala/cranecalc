@@ -1,7 +1,9 @@
 import {cantileverSystems,seismicBasis} from '../engine/runwaySeismic';
 import {codeBasis} from '../engine/drawingData';
 import {adjacentBays} from '../engine/continuation';
-import type {CalculationSnapshot,Crane} from '../engine/types';
+import type {CalculationSnapshot,Crane,ProjectInput} from '../engine/types';
+import {existingWeldingDemand,weldingBasisLabel,weldsToExistingColumn} from '../engine/existingWelding';
+import {existingColumnSection} from '../engine/existingColumn';
 import {format} from '../engine/units';
 import {craneDesignMinimum,craneCombinations} from '../engine/aistLoads';
 import {deflectionCriteria} from '../engine/aistChecks';
@@ -103,6 +105,13 @@ function flow(blocks:Block[],limit:number,overflow=false){
 }
 
 export const coverSheetTitle='COVER, GENERAL NOTES & DESIGN CRITERIA';
+/** The specified field-welding requirements for the existing columns, from the calculation's welding checks. */
+function existingWeldNote(p:ProjectInput){
+ if(!weldsToExistingColumn(p))return [];
+ const w=p.existingColumn!.welding,{t,need}=existingWeldingDemand(p,existingColumnSection(p).section.tf),temp=(v:number)=>format(v,'temperature',p.units,0).toUpperCase();
+ const steel=w&&w.basis!=='not-established'&&w.grade.trim()?`${w.grade.toUpperCase()} (${weldingBasisLabel[w.basis].toUpperCase()}${w.carbonEquivalent!==undefined?`, CARBON EQUIVALENT ${w.carbonEquivalent.toFixed(2)}`:''})`:'TO BE IDENTIFIED BEFORE WELDING';
+ return [`FIELD WELDS TO THE EXISTING COLUMNS: EXISTING STEEL ${steel}. LOW-HYDROGEN PROCESSES ONLY. PREHEAT AND INTERPASS AT LEAST ${temp(Math.max(need,w?.preheat??need))} (AWS D1.1 TABLE 5.8, CATEGORY B, THICKEST PART ${format(t,'length',p.units,3).toUpperCase()}). WELD WITH THE CRANE OUT OF SERVICE AND THE COLUMN UNDER DEAD LOAD ONLY; SEQUENCE THE WELDS TO LIMIT HEAT INPUT.`];
+}
 export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
  const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>drawingLength(mm,u);
  const ksi=(v:number)=>format(v,'stress',u,u==='SI'?0:3),status=issueStatus(s),elevations=runwayElevations(p);
@@ -132,6 +141,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  if(existing)blocks.push(H('EXISTING BUILDING NOTES'),...N([
   'EXISTING CONSTRUCTION IS SHOWN DASHED AND IS BASED ON THE SURVEY AND SOURCES LISTED BELOW. FIELD VERIFY MEMBER SIZES, CONDITION, PLUMBNESS AND ELEVATIONS BEFORE FABRICATION AND REPORT DIFFERENCES TO THE ENGINEER OF RECORD.',
   ...(onExisting?['DO NOT CUT, DRILL OR WELD EXISTING STEEL UNTIL ITS MATERIAL AND WELDABILITY ARE CONFIRMED (MILL DATA OR CHEMICAL ANALYSIS AND CARBON EQUIVALENT PER AWS D1.1). REMOVE COATINGS AND PREHEAT AS REQUIRED BY THE APPROVED WPS.',
+  ...existingWeldNote(p),
   'SHORE OR UNLOAD EXISTING MEMBERS AS REQUIRED BY THE ERECTION PROCEDURE. DO NOT REMOVE EXISTING BRACING WITHOUT A TEMPORARY REPLACEMENT APPROVED BY THE ENGINEER.']:[
    `${surveyed?`THE EXISTING COLUMNS AND FOOTINGS ON S-01 ARE FROM ${surveyed.source||'A SURVEY NOT YET IDENTIFIED'}. CONFIRM THEM AND LOCATE SLABS`:'LOCATE THE EXISTING COLUMNS, FOOTINGS, SLABS'} AND BURIED UTILITIES BY SURVEY BEFORE LAYOUT. KEEP THE NEW FOOTINGS ${surveyed?`${len(surveyed.footingClear)} MIN. `:''}CLEAR OF EXISTING FOOTINGS AND THE NEW STEEL CLEAR OF THE EXISTING BUILDING BY THE SEPARATION SHOWN ON S-01; REPORT CONFLICTS TO THE ENGINEER OF RECORD BEFORE EXCAVATION.`]),
   ...(p.existingColumn?.enabled&&!p.existingColumn.isNew?[`EXISTING COLUMN: ${p.existingColumn.source||'SOURCE NOT ENTERED'}.`]:[]),
