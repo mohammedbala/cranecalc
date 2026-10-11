@@ -21,10 +21,6 @@ const inch=25.4;
 const gap=2,over=4;
 /** Dimension line ticks: horizontal and vertical dimension lines. */
 const tickH=(x:number,y:number)=>line([x-2.5,y+3],[x+2.5,y-3]),tickV=(x:number,y:number)=>line([x-3,y+2.5],[x+3,y-2.5]);
-/** Carries the extension lines of a dimension above its features (dimH stops them short of the line) past the line. */
-const pastAbove=(xs:number[],y:number)=>xs.map(x=>line([x,y+5],[x,y-over])).join('');
-/** Carries the extension lines of a dimension left of its features (dimV stops them short of the line) past the line. */
-const pastLeft=(ys:number[],x:number)=>ys.map(y=>line([x+5,y],[x-over,y])).join('');
 /** Vertical dimension line with its ticks and value (as dimV), for extension lines drawn from their own features. */
 function dimLineV(y1:number,y2:number,x:number,label:string){
  const w=textWidth(label,9),fits=w+6<=Math.abs(y2-y1),far=Math.max(y1,y2);
@@ -130,7 +126,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const hr=hx.corners/2*kk;
   for(const x of [g.backRow,g.frontRow])for(const side of [-1,1]){const c:XY=[X(x),Z(side*gauge/2)],rr=db/2*kk;svg+=hexPlan(c[0],c[1],hx.flats*kk)+line([c[0]-rr-2,c[1]],[c[0]+rr+2,c[1]])+line([c[0],c[1]-rr-2],[c[0],c[1]+rr+2]);}
   // Extension lines start clear of the heads and the base plate edge, and run past the dimension lines.
-  {const xg=X(0)-22,xw=X(0)-40;svg+=dimV(Z(-gauge/2),Z(gauge/2),X(g.backRow)-hr-2,xg,dim(gauge))+pastLeft([Z(-gauge/2),Z(gauge/2)],xg)+dimV(Z(-Wb/2),Z(Wb/2),X(g.back)-2,xw,dim(Wb))+pastLeft([Z(-Wb/2),Z(Wb/2)],xw);}
+  {const xg=X(0)-22,xw=X(0)-40;svg+=dimV(Z(-gauge/2),Z(gauge/2),X(g.backRow)-hr-2,xg,dim(gauge))+dimV(Z(-Wb/2),Z(Wb/2),X(g.back)-2,xw,dim(Wb));}
   // Separate dimensions on one line below the girder, none chained across a part it does not measure, each extension
   // line starting just clear of the feature it locates: the base plate from the girder end, the front bolts to the
   // face plate and the rail end to the stop face. The plates are sized by their callouts. A value too long for its
@@ -173,8 +169,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // C/L height left of the plates; the bumper C/L runs across the face plate to its dimension. Extension lines run
   // past their dimension lines.
   const xH=X(-Wb/2)-52,xC=X(-Wb/2)-30,rb=e.bumperDiameter/2*kk;
-  svg+=dimH(X(-Wb/2),X(Wb/2),Y(tb+H)-2,Y(tb+H)-14,dim(Wb))+pastAbove([X(-Wb/2),X(Wb/2)],Y(tb+H)-14)+dimH(X(-gauge/2),X(gauge/2),wFl+hx.nut*kk+2,cut+26,dim(gauge));
-  svg+=dimV(Y(tb+H),yb,X(-Wb/2)-2,xH,dim(H))+pastLeft([Y(tb+H),yb],xH);
+  svg+=dimH(X(-Wb/2),X(Wb/2),Y(tb+H)-2,Y(tb+H)-14,dim(Wb))+dimH(X(-gauge/2),X(gauge/2),wFl+hx.nut*kk+2,cut+26,dim(gauge));
+  svg+=dimV(Y(tb+H),yb,X(-Wb/2)-2,xH,dim(H));
   // The bumper height shares the base plate extension line of the face plate height.
   svg+=line([bc[0]+rb+6,bc[1]],[xC-over,bc[1]],'grid-line')+dimLineV(bc[1],yb,xC,dim(g.contact));
   const lx=Math.min(X(Math.max(Wb,g.surfaceWidth)/2)+60,420);
