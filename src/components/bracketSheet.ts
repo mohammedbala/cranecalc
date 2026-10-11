@@ -20,6 +20,7 @@ import {simpleSupportInput} from '../engine/simpleSupports';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {ribGeometry} from '../engine/bracketRib';
 import {haunchedRibView,haunchedFaceRibs,haunchedRibCallout,haunchedRibNotes} from './haunchedBracketDrawing';
+import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
 /** Column bracket details on their own sheet. */
 export function bracketSheetSvg(s:CalculationSnapshot,number='S-05'){
  const topic=bracketTopic(s);return topic?topicSheetSvg(s,topic,number,usesExistingBracket(s.input)?'EXISTING BRACKETS / NEW BOLTED SEATS':'WELDED COLUMN BRACKETS'):'';
@@ -36,14 +37,16 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const sc=supportColumn(p),cw=seatColumnWeld(p,s.detailResults?.bracket),collector=designsBracing(p);
  const eb=activeEndBearing(p),g=eb?endBearingGeometry(p,eb):undefined,gap=p.system==='simple'?simpleSupportInput(p).endGap:0;
- const views:DetailView[]=[],rg=ribGeometry(b);
+ const views:DetailView[]=[],rg=ribGeometry(b),cs=stiffenerDrawing(p);
  // Transverse section: true input projection, receiver face, full rib (rectangular, or tapered to the tip depth).
  views.push({title:detailTitles.weldedBracket,render:()=>{
   let svg='';
-  const scale=sheetDrawingScale(Math.min(.25,180/(b.ribDepth+b.seatThickness+d.bearing.thickness)),p.units),k=scale.pointsPerMm;
-  const face=319,tip=face-b.seatProjection*k,seatY=144,rootY=seatY+b.seatThickness*k,bot=rootY+b.ribDepth*k,center=face-b.reach*k;
+  const scale=sheetDrawingScale(Math.min(.25,180/(b.ribDepth+b.seatThickness+d.bearing.thickness),cs?310/(b.seatProjection+b.receiver.depth):1),p.units),k=scale.pointsPerMm;
+  // With column stiffeners the whole column depth is drawn beyond the flange, left of the callouts.
+  const face=cs?Math.min(319,366-b.receiver.depth*k):319,tip=face-b.seatProjection*k,seatY=144,rootY=seatY+b.seatThickness*k,bot=rootY+b.ribDepth*k,center=face-b.reach*k;
   svg+='<g data-view="welded-bracket-side">';
   svg+=rect(face,111,b.receiver.flangeThickness*k,bot-85,sc.isNew?'runway-line':'reference-line');
+  if(cs){const Y=(z:number)=>seatY-z*k;svg+=stiffenerSideEdges(cs.g,{face,k,Y,top:111,bottom:bot+26,cls:sc.isNew?'runway-line':'reference-line'});svg+=multiLeader([lowerEdgeTarget(cs.g,{face,k,Y})],[398,Math.max(bot+16,300)],cs.callout);}
   svg+=rect(tip,seatY,b.seatProjection*k,b.seatThickness*k,'runway-line')+(rg.tapered?'':rect(tip,rootY,b.seatProjection*k,b.ribDepth*k,'runway-line'));
   svg+=rect(center-d.bearing.width*k/2,seatY-d.bearing.thickness*k,d.bearing.width*k,d.bearing.thickness*k,'runway-line');
   svg+=line([center,101],[center,bot+9],'grid-line');
@@ -84,6 +87,8 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    if(v.label&&g){const one=(L+gap)*k>1.1*(textWidth('SLIDING END',7)+textWidth('LOCATING END',7))/2+6;
     svg+=one?text(X(v.end+v.dir*L/2),tip+60,`${v.label} END`,7,'middle',700):text(X(v.end+v.dir*L/2),tip+56,v.label,7,'middle',700)+text(X(v.end+v.dir*L/2),tip+64,'END',7,'middle',700);}
   }
+  // Column stiffeners at the seat: the column broken just beyond the flange, the plates cut.
+  if(cs)svg+=stiffenerPlan(cs.g,{cx,face,k,cls:sc.isNew?'runway-line':'reference-line',stub:10}).svg;
   svg+=line([cx,face-b.receiver.flangeThickness*k-14],[cx,tip+8],'grid-line');
   svg+=line([left-10,Y(b.reach)],[right+10,Y(b.reach)],'grid-line');
   svg+=dimH(left,right,face,87,dim(b.seatLength));
@@ -105,7 +110,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[X(plate.end+plate.dir*L*.8),Y(b.reach-W/2)],labels:[`BEARING PL ${size(d.bearing.thickness)} X ${dim(W)} X ${dim(L)}`,`EACH GIRDER END; SEE ${detailRef(bearingBoltsTitle(p))}`]},
    ...(g&&eb?[{at:[X(plate.end+plate.dir*g.rows[1])+g.hole/2*k,Y(rowsY[1])] as XY,labels:[`${plates.length*4} - ${size(g.hole)} STD. HOLES IN SEAT`,`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[])
   ];
-  svg+=labelColumn(items,right+40,face+10,tip);
+  svg+=labelColumn(items,right+40,cs?face-20:face+10,cs?tip-10:tip);
   return {svg:svg+'</g>',scale:scale.label};
  }});
  views.push({title:bracketElevationTitle,render:()=>{
@@ -116,6 +121,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=rect(cx-b.seatLength*k/2,top,b.seatLength*k,b.seatThickness*k,'runway-line');
   for(const side of [-1,1])svg+=rect(cx+(side*b.ribSpacing-b.ribThickness)*k/2,top+b.seatThickness*k,b.ribThickness*k,b.ribDepth*k,'runway-line');
   svg+=dimH(cx-b.ribSpacing*k/2,cx+b.ribSpacing*k/2,bot,bot+30,dim(b.ribSpacing));
+  if(cs){const Y=(z:number)=>top-z*k;svg+=stiffenerFaceHidden(cs.g,{cx,k,Y});svg+=multiLeader([[cx+(cs.g.tw/2+cs.g.width*.8)*k,Y(cs.g.levels[1].z)-cs.g.t*k/2]],[396,Math.max(520,Y(cs.g.levels[1].z)-50)],['COL. STIFFENERS BEYOND',`(HIDDEN); SEE ${detailRef(columnStiffenerTitle)}`]);}
   if(rg.tapered)svg+=haunchedFaceRibs(rg,b.ribSpacing,{cx,ribTop:top+b.seatThickness*k,bot,k},dim);
   else svg+=dimV(top+b.seatThickness*k,bot,cx-b.ribSpacing*k/2,106,dim(b.ribDepth));
   svg+=multiLeader([[-1,1].map(sign=>cx+sign*b.ribSpacing*k/2).map(x=>[x,top+b.seatThickness*k+b.ribDepth*k*.5] as [number,number])].flat(),[396,472],rg.tapered?haunchedRibCallout(rg,size(b.ribThickness),dim):[`2 RIB PL ${size(b.ribThickness)}`,`${dim(b.ribDepth)} DEEP`,`X ${dim(b.seatProjection)} PROJ.`]);
@@ -133,6 +139,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    sc.isNew?`THE ${sc.name} IS DESIGNED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT${p.columnBase?.enabled?`; BASE PLATE, ANCHOR RODS AND FOOTING: ${detailRef(detailTitles.newColumn)}`:'; ITS BASE AND FOUNDATION ARE BY OTHERS'}.`:p.existingColumn?.enabled?'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. THE EXISTING COLUMN IS CHECKED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT; FRAME, ANCHORS AND FOUNDATIONS ARE BY OTHERS.':'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. LOCAL COLUMN CHECKS DO NOT VERIFY THE COMPLETE FRAME, COLUMN AXIAL/BENDING INTERACTION OR FOUNDATIONS.',
    `THE BRACKET IS DESIGNED FOR EVERY CONCURRENT CASE OF THE BRACKET DESIGN FORCES BELOW, WITH ITS SELF-WEIGHT; RIB FORCE MAY REVERSE UNDER AN OFFSET BEARING. FOR THE LONGITUDINAL FORCE AND H BOTTOM THE CALCULATION CHECKS ${eb?'THE BEARING BOLTS IN BEARING ON THE SEAT AND THE SEAT FOR PRYING; ':''}THE SEAT FILLET AND RIB ROOT FILLETS AS ONE WELD GROUP WITH THE CONCURRENT VERTICAL LOAD, AND THE SEAT FILLET FOR FATIGUE; AND THE COLUMN FLANGE (LOCAL BENDING) AND WEB (LOCAL YIELDING) UNDER THE SEAT${collector?'; WITH THE BRACING, ALSO THE COLLECTOR FORCE THROUGH THE SEAT FILLET':''}.`
   ];
-  return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,notes),...bracketForceBlocks(s,t)]};
+  const stiffView=columnStiffenerView(s);if(stiffView)views.push(stiffView);
+  return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,[...notes,...stiffenerNotes(p)]),...bracketForceBlocks(s,t)]};
  }
 }

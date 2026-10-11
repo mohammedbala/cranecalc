@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {existingBracketSchema} from './existingBracketInputs';
 import {rolledBracketSchema} from './rolledBracketInputs';
 import {taperedHaunchSchema} from './taperedHaunchInputs';
+import {columnStiffenerSchema} from './columnStiffenerInputs';
 const pos=z.number().finite().positive();
 /** Dimensions are calculation inputs in mm, never reference-view preferences. */
 export const bracketSchema=z.object({
@@ -13,6 +14,8 @@ export const bracketSchema=z.object({
  rolled:rolledBracketSchema.optional(),
  /** New built-up tapered I haunch ('tapered-haunch'): plates, stiffeners and welds; reach, seatProjection (its length) and rootWeld (web-to-column fillet) are the bracket fields above. */
  haunch:taperedHaunchSchema.optional(),
+ /** Column stiffeners (continuity plates) in the receiving column at the bracket's force levels; twin-rib, haunched and W-stub brackets. */
+ columnStiffeners:columnStiffenerSchema.optional(),
  enabled:z.boolean(),reach:pos,seatLength:pos,seatProjection:pos,seatThickness:pos,
  ribDepth:pos,ribThickness:pos,ribSpacing:pos,rootWeld:pos,seatWeld:pos,
  deflectionLimit:pos,rotationLimit:pos,

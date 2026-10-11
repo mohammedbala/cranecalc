@@ -10,6 +10,7 @@ import {filletWeld} from './weldGeometry';
 import {buildExistingBrackets} from './existingBracketGeometry';
 import {weldedRibBracket,haunchTipDepth} from '../engine/bracketRib';
 import type {HardwareBuilder} from './connectionDetails';
+import {addColumnStiffeners} from './columnStiffenerGeometry';
 /** bearingWidth: the girder bearing plate width across the runway (m), which places a tapered haunch's top flange flare. */
 export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:number,steel:THREE.Material,edge:THREE.LineBasicMaterial,bearing?:{width:number;length:number;thickness:number},weldMaterial:THREE.Material=steel,hardware?:HardwareBuilder,columnIsNew=false,bearingWidth?:number){
  if(isExistingBracketType(bracketArrangement(b)))return buildExistingBrackets(b,supports,seatTop,steel,edge,bearing,hardware);
@@ -42,6 +43,7 @@ export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:num
    }
   }
  });
+ addColumnStiffeners(group,b,supports,seatTop,steel,edge,weldMaterial,columnIsNew);
  return group;
 }
 /**
@@ -92,6 +94,7 @@ export function buildRolledBrackets(b:BracketInput,supports:number[],seatTop:num
   }
   for(const sx of [-1,1])filletWeld(group,`${id}-web-column-${sx}`,V(x+sx*tw/2,top-k,face),V(x+sx*tw/2,top-d+k,face),V(sx,0,0),V(0,0,-1),r.webWeld*mm,weldMaterial,`${where} fillet, web to the column flange; designed weld group.`,support,column);
  });
+ addColumnStiffeners(group,b,supports,seatTop,steel,edge,weldMaterial,columnIsNew);
  return group;
 }
 /**
@@ -125,5 +128,6 @@ export function buildTaperedHaunches(b:BracketInput,supports:number[],seatTop:nu
    }else w.runs.forEach((r,j)=>filletWeld(group,`${id}-${w.id}-${j}`,P(r.path[0]),P(r.path[1]),D(r.legs[0]),D(r.legs[1]),w.size*mm,weldMaterial,`${w.location==='field'?'Field':'Shop'} fillet, ${w.name.toLowerCase()}; designed size.`,support,execution));
   }
  });
+ addColumnStiffeners(group,b,supports,seatTop,steel,edge,weldMaterial,columnIsNew);
  return group;
 }

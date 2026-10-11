@@ -74,11 +74,12 @@ export function loadPathFigure(p:ProjectInput){
  }else if(bracket){
   g+=R(cx-34,seatY,colX-cx+34,7,true);
   if(kind==='haunched-seat')g+=P(`M${cx-24} ${seatY+7}H${colX}V${seatY+70}L${cx-24} ${seatY+24}Z`,gray,1.5);
+  else if(kind==='tapered-haunch')g+=P(`M${cx-24} ${seatY+7}H${colX}V${seatY+70}L${cx-24} ${seatY+34}Z`,gray,1.5)+P(`M${colX} ${seatY+65}L${cx-24} ${seatY+29}`,'none',2.5)+R(cx-3,seatY+7,6,27,true);
   else if(kind==='rolled-corbel')g+=R(cx-28,seatY+7,colX-cx+28,5,true)+R(cx-28,seatY+52,colX-cx+28,5,true)+P(`M${cx-28} ${seatY+12}V${seatY+52}`)+R(cx-3,seatY+12,6,40,true);
   else if(kind.startsWith('existing'))g+=R(cx-28,seatY+7,colX-cx+28,50,false,true)+T(cx+70,seatY+36,'EXISTING');
   else g+=R(cx-24,seatY+7,colX-cx+24,56,true);
-  g+=T((cx+colX)/2+(kind==='rolled-corbel'?30:-6),seatY+(kind==='haunched-seat'?22:kind==='rolled-corbel'?40:52),{'twin-rib':'TWIN-RIB BRACKET','haunched-seat':'HAUNCHED SEAT','rolled-corbel':'W STUB'}[kind as string]??'','middle',8);
-  g+=P(`M${colX-2} ${seatY+7}V${seatY+(kind==='haunched-seat'?70:56)}`,'none',2.5);
+  g+=T((cx+colX)/2+(kind==='rolled-corbel'?30:-6),seatY+(kind==='haunched-seat'||kind==='tapered-haunch'?22:kind==='rolled-corbel'?40:52),{'twin-rib':'TWIN-RIB BRACKET','haunched-seat':'HAUNCHED SEAT','rolled-corbel':'W STUB','tapered-haunch':'TAPERED I HAUNCH'}[kind as string]??'','middle',8);
+  g+=P(`M${colX-2} ${seatY+7}V${seatY+(kind==='haunched-seat'||kind==='tapered-haunch'?70:56)}`,'none',2.5);
  }else{
   g+=R(cx-34,seatY,68,10,false,true)+T(cx,seatY+24,'SEAT BY OTHERS');
  }
@@ -94,7 +95,7 @@ export function loadPathFigure(p:ProjectInput){
  const tie=!cap&&p.details;
  if(tie)g+=R(cx+28,tf+8,colX-cx-28-10,5,true)+R(colX-10,tf+2,10,16,true)+T((cx+28+colX-10)/2,tf+26,'TOP TIE');
  // Markers in load-path order.
- g+=M(1,cx-34,railTop-6)+M(2,cx-48,tf+36)+M(3,cx+46,seatY-6)+M(4,cap?cx-46:bracket?cx+100:cx+48,cap?seatY+3:bracket?seatY+(kind.startsWith('existing')?14:kind==='haunched-seat'?40:30):seatY+18);
+ g+=M(1,cx-34,railTop-6)+M(2,cx-48,tf+36)+M(3,cx+46,seatY-6)+M(4,cap?cx-46:bracket?cx+100:cx+48,cap?seatY+3:bracket?seatY+(kind.startsWith('existing')?14:kind==='haunched-seat'||kind==='tapered-haunch'?40:30):seatY+18);
  g+=M(5,cap?cx:colX+colW/2,cap?seatY+60:150);
  if(base)g+=M(6,baseX+68,H-24);
  if(tie)g+=M(7,cx+86,tf-4);else if(cap)g+=M(7,cx-48,tf+60);

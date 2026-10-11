@@ -3,6 +3,7 @@ import {format} from '../engine/units';
 import {drawingLength,plateInches} from './drawingFormat';
 import {ribGeometry} from '../engine/bracketRib';
 import {rolledStub} from '../engine/rolledBracketInputs';
+import {haunchGeometry} from '../engine/taperedHaunchInputs';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeColumnCap} from '../engine/columnCapInputs';
@@ -51,6 +52,7 @@ function support(p:ProjectInput){
  const kind=b.arrangement??'twin-rib';
  if(kind==='existing-corbel'||kind==='existing-w-corbel')return `Existing ${existingBracketLabel(b).toLowerCase()} with new seat ${plate(p,b.seatThickness,b.seatProjection,b.seatLength)}`;
  if(kind==='rolled-corbel'){const st=rolledStub(b);return st?`${st.name} stub ${len(p,st.L)} long welded to the column flange${st.seat?`, seat ${plate(p,st.seat.t,st.seat.length)}`:''}${st.stiffener?`, stiffeners 2-PL ${plateInches(st.stiffener.t,p.units)}`:''}`:'Wide-flange stub bracket';}
+ if(kind==='tapered-haunch'){const h=haunchGeometry(b,p.details!.bearing.width);return `Tapered I haunch ${len(p,h.L)} long, ${len(p,h.hr)} to ${len(p,h.ht)} deep: web PL ${plateInches(h.tw,p.units)}, top flange ${plate(p,h.tt,h.bt)}, bottom flange ${plate(p,h.tb,h.bb)}, stiffeners 2-PL ${plateInches(h.stiffener.t,p.units)}; flanges ${h.joint==='cjp'?'CJP':`${fillet(p,h.flangeWeld)}`} and web ${fillet(p,h.webWeld)} to the column`;}
  const g=ribGeometry(b);
  return `${g.tapered?'Haunched':'Twin-rib'} bracket: 2 ribs PL ${plateInches(b.ribThickness,p.units)} × ${g.tapered?`${len(p,g.root)} to ${len(p,g.tip)}`:len(p,b.ribDepth)} at ${len(p,b.ribSpacing)}; seat ${plate(p,b.seatThickness,b.seatProjection,b.seatLength)}; root ${fillet(p,b.rootWeld)}`;
 }
