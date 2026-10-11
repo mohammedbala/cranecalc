@@ -12,6 +12,7 @@ import {endBearingGeometry} from '../engine/endBearing';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {projectStub,stubBoltLayout,stubWeldGroup,usesRolledBracket} from '../engine/rolledBracket';
+import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
 
 /** Elevation of the bracket seen from the runway; also keyed on the plan (same title as the plate brackets). */
 export const rolledElevationTitle='BRACKET ELEVATION / LOOKING AT COLUMN';
@@ -47,13 +48,16 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const stubLabel=`${st.name} X ${dim(st.L)} LONG`,stiffLabel=sf?`2 STIFF. PL ${size(sf.t)} X ${size(sf.width)}`:'';
  const flangeWeld:Item=g.cjp?{at:[0,0],labels:['TOP AND BOTTOM FLANGES',`TO ${sc.name}, ${where}`],groove:true,field:sc.field}:{at:[0,0],labels:['TOP AND BOTTOM FLANGES, BOTH',`FACES, TO ${sc.name}, ${where}`],weld:size(r.flangeWeld),both:true,field:sc.field};
  const webWeld:Item={at:[0,0],labels:['WEB, BOTH SIDES, BETWEEN',`ROLLED FILLETS, ${where}`],weld:size(r.webWeld),both:true,field:sc.field};
- const views:DetailView[]=[];
+ const views:DetailView[]=[],cs=stiffenerDrawing(p),colCls=sc.isNew?'runway-line':'reference-line';
  // Transverse section beyond the flange tip, looking at the stub web: the stub, seat, stiffener edge-on and welds.
  views.push({title:detailTitles.weldedBracket,render:()=>{
-  const scale=sheetDrawingScale(Math.min(.25,175/(st.d+ts+tb),250/st.L),p.units),k=scale.pointsPerMm;
-  const face=319,tip=face-st.L*k,top=150,ft=top+ts*k,bot=ft+st.d*k,center=face-a*k,X=(y:number)=>face-y*k;
+  const scale=sheetDrawingScale(Math.min(cs?.29:.25,175/(st.d+ts+tb),250/st.L,cs?310/(st.L+b.receiver.depth):1),p.units),k=scale.pointsPerMm;
+  // With column stiffeners the whole column depth is drawn beyond the flange, left of the callouts.
+  const face=cs?Math.min(319,366-b.receiver.depth*k):319,tip=face-st.L*k,top=150,ft=top+ts*k,bot=ft+st.d*k,center=face-a*k,X=(y:number)=>face-y*k;
   let svg='<g data-view="rolled-bracket-side">';
-  svg+=rect(face,top-34,b.receiver.flangeThickness*k,bot-top+60,sc.isNew?'runway-line':'reference-line');
+  svg+=rect(face,top-34,b.receiver.flangeThickness*k,bot-top+60,colCls);
+  const Ys=(z:number)=>top-z*k;
+  if(cs)svg+=stiffenerSideEdges(cs.g,{face,k,Y:Ys,top:top-34,bottom:bot+26,cls:colCls});
   if(seat)svg+=rect(X(seat.y1),top,(seat.y1-seat.y0)*k,ts*k,'runway-line');
   svg+=rect(tip,ft,st.L*k,st.d*k,'runway-line')+line([tip,ft+st.tf*k],[face,ft+st.tf*k],'runway-line')+line([tip,bot-st.tf*k],[face,bot-st.tf*k],'runway-line');
   if(sf)svg+=rect(center-sf.t*k/2,ft+st.tf*k,sf.t*k,(st.d-2*st.tf)*k,'runway-line');
@@ -69,9 +73,10 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {...webWeld,at:[face,(ft+bot)/2-st.d*k*.2]},
    {at:[face-st.L*k*.12,(ft+bot)/2-st.d*k*.05],labels:[stubLabel,'ASTM A992']},
    ...(sf?[{at:[center+sf.t*k/2,(ft+bot)/2+st.d*k*.15] as XY,labels:[stiffLabel,'EACH SIDE OF WEB, FITTED TO','TOP FLANGE; SEE ELEVATION']}]:[]),
-   ...(seat?[{at:[X((seat.y0+seat.y1)/2-W*.6),top+ts*k/2] as XY,labels:[`${plate.label} X ${dim(seat.length)}`,`X ${dim(seat.y1-seat.y0)}, ${size(seat.y0)} CLEAR OF COL.`]}]:[])
+   ...(seat?[{at:[X((seat.y0+seat.y1)/2-W*.6),top+ts*k/2] as XY,labels:[`${plate.label} X ${dim(seat.length)}`,`X ${dim(seat.y1-seat.y0)}, ${size(seat.y0)} CLEAR OF COL.`]}]:[]),
+   ...(cs?[{at:lowerEdgeTarget(cs.g,{face,k,Y:Ys}),labels:cs.callout}]:[])
   ];
-  svg+=calloutColumn(items,398,top-40,bot+30);
+  svg+=calloutColumn(items,398,top-40,bot+(cs?60:30));
   return {svg:svg+'</g>',scale:scale.label};
  }});
  // Plan: the bearing plates and their holes on the seat (or flange) at an interior grid, the stub below hidden.
@@ -95,6 +100,8 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    // Labels too wide for a short bearing stagger, the locating end below.
    if(v.label&&eg)svg+=text(X(v.end+v.dir*L/2),tip+60+(v.dir>0&&L*k<textWidth('LOCATING END',7,true)+6?9:0),`${v.label} END`,7,'middle',700);
   }
+  // Column stiffeners at the stub top flange: the column broken just beyond the flange, the plates cut.
+  if(cs)svg+=stiffenerPlan(cs.g,{cx,face,k,cls:colCls,stub:10}).svg;
   svg+=line([cx,face-b.receiver.flangeThickness*k-14],[cx,tip+8],'grid-line');
   svg+=line([left-10,Y(a)],[right+10,Y(a)],'grid-line');
   svg+=dimH(left,right,face-b.receiver.flangeThickness*k,87,dim(plate.length));
@@ -108,7 +115,7 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   // Keys: the transverse section beyond the flange tip, the elevation from the runway side.
   const lay=eb?stubBoltLayout(p,eb):undefined,beyond=(lay?.xs.filter(x=>x>st.bf/2)??[]).sort((u,v)=>u-v)[0];
   const cut=X(beyond!==undefined?(st.bf/2+beyond)/2:Math.min(half,st.bf/2+12));
-  svg+=sectionCut([cut,face-3],[cut,tip+3],[-1,0],detailTitles.weldedBracket,['a']);
+  svg+=sectionCut([cut,face-3],[cut,tip+3],[-1,0],detailTitles.weldedBracket,['a'],cs?'over':'tail');
   svg+=sectionCut([left-4,tip+6],[right+4,tip+6],[0,-1],rolledElevationTitle,['b']);
   const pl=plates[plates.length-1],items:{at:XY;labels:string[]}[]=[
    {at:[right,Y(st.L*.62)],labels:seat?[`${plate.label} X ${dim(seat.length)}`,`${st.name} BELOW (HIDDEN)`]:[`${st.name} TOP FLANGE`,'STUB WEB HIDDEN']},
@@ -116,12 +123,12 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    ...(eg&&eb?[{at:[X(pl.end+pl.dir*eg.rows[1])+eg.hole/2*k,Y(rowsY[1])] as XY,labels:[`${plates.length*4} - ${size(eg.hole)} STD. HOLES IN ${seat?'SEAT':'FLANGE'}`,...(seat&&lay?.xs.some(x=>x<st.bf/2)?[`ALSO THROUGH THE ${st.name} FLANGE WHERE OVER IT`]:[]),`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[]),
    ...(sf?[{at:[X(st.tw/2+sf.width*.7),Y(a+sf.t/2)] as XY,labels:['BEARING STIFFENERS AT','GIRDER C/L (HIDDEN)']}]:[])
   ];
-  svg+=calloutColumn(items,right+40,face+4,tip+20);
+  svg+=calloutColumn(items,right+40,cs?face-20:face+4,tip+20);
   return {svg:svg+'</g>',scale:scale.label};
  }});
  // Elevation from the runway side: the stub end, seat, stiffeners and the column flange beyond.
  views.push({title:rolledElevationTitle,render:()=>{
-  const wide=Math.max(plate.length,b.receiver.width),scale=sheetDrawingScale(Math.min(.24,190/(st.d+ts),280/wide),p.units),k=scale.pointsPerMm,cx=224,top=435;
+  const wide=Math.max(plate.length,b.receiver.width),scale=sheetDrawingScale(Math.min(cs?.29:.24,190/(st.d+ts),280/wide),p.units),k=scale.pointsPerMm,cx=224,top=435;
   const X=(x:number)=>cx+x*k,ft=top+ts*k,bot=ft+st.d*k,fi=ft+st.tf*k,bi=bot-st.tf*k;
   let svg='<g data-view="rolled-bracket-face">';
   svg+=rect(cx-b.receiver.width*k/2,top-26,b.receiver.width*k,bot-top+66,sc.isNew?'runway-line':'reference-line');
@@ -133,13 +140,17 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   }
   svg+=dimH(X(-st.bf/2),X(st.bf/2),bot,bot+18,dim(st.bf));
   if(seat)svg+=dimH(X(-seat.length/2),X(seat.length/2),top,top-38,dim(seat.length));
+  if(cs)svg+=stiffenerFaceHidden(cs.g,{cx,k,Y:(z:number)=>top-z*k});
   const items:Item[]=[
+   ...(cs?[{at:[X(cs.g.tw/2+cs.g.width*.9),top-cs.g.levels[1].z*k-cs.g.t*k/2] as XY,labels:['COL. STIFFENERS BEYOND',`(HIDDEN); SEE ${detailRef(columnStiffenerTitle)}`]}]:[]),
    ...(sf?[{at:[X(-st.tw/2),(fi+bi)/2] as XY,labels:[stiffLabel,`${size(sf.clip)} CORNER CLIPS; FIT TO`,'TOP FLANGE, WELD TO WEB','AND BOTH FLANGES, SHOP'],weld:size(sf.weld),both:true}]:[]),
    ...(seat?[{at:[X(st.bf/2),ft] as XY,labels:['SEAT PL TO EACH FLANGE TIP,','FULL STUB LENGTH, SHOP'],weld:size(seat.weld)}]:[]),
    {at:[X(st.bf/2),bot-st.tf*k/2],labels:[stubLabel,`${size(st.tw)} WEB / ${size(st.tf)} FLANGES`]}
   ];
   svg+=calloutColumn(items,X(Math.max(st.bf,seat?.length??0,b.receiver.width)/2)+40,top-10,bot+20);
-  svg+=text(X(-wide/2),bot+60,'CUT THE STUB SQUARE; KEEP THE ROLLED FILLETS. STIFFENERS UNDER THE GIRDER WEB LINE ONLY.',7.5);
+  // Below the callouts, which can run past the stub at small scales.
+  const stack=top-10+items.reduce((h,v)=>h+(v.weld||v.groove?17:0)+v.labels.length*11+8,0);
+  svg+=text(X(-wide/2),cs?Math.max(bot+60,stack+12):bot+60,'CUT THE STUB SQUARE; KEEP THE ROLLED FILLETS. STIFFENERS UNDER THE GIRDER WEB LINE ONLY.',7.5);
   return {svg:svg+'</g>',scale:scale.label};
  }});
  const tie=flangeTieGeometry(p),ties=tie?`${tie.sides.length===1&&tie.sides[0]>0?'THE TOP FLANGE TIES':'THE FLANGE TIES'} (${detailRef(detailTitles.flangeTie)})`:'THE FLANGE TIES';
@@ -152,7 +163,8 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   sc.isNew?`THE ${sc.name} IS DESIGNED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT${p.columnBase?.enabled?`; BASE PLATE, ANCHOR RODS AND FOOTING: ${detailRef(detailTitles.newColumn)}`:'; ITS BASE AND FOUNDATION ARE BY OTHERS'}.`:p.existingColumn?.enabled?'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. THE EXISTING COLUMN IS CHECKED FOR AXIAL FORCE AND BENDING UNDER ASCE 7 COMBINATIONS IN THE CALCULATION REPORT; FRAME, ANCHORS AND FOUNDATIONS ARE BY OTHERS.':'VERIFY EXISTING COLUMN DIMENSIONS, STEEL GRADE AND WELDABILITY BEFORE FABRICATION. LOCAL COLUMN CHECKS DO NOT VERIFY THE COMPLETE FRAME, COLUMN AXIAL/BENDING INTERACTION OR FOUNDATIONS.',
   `THE BRACKET IS DESIGNED FOR EVERY CONCURRENT CASE OF THE BRACKET DESIGN FORCES BELOW, WITH ITS SELF-WEIGHT: STUB FLEXURE, SHEAR AND TORSION FROM THE OFFSET BEARINGS, WEB YIELDING AND CRIPPLING UNDER THE BEARING${sf?' AND THE STIFFENERS':''}, THE STUB-TO-COLUMN WELDS WITH THE LONGITUDINAL FORCE AND H BOTTOM, THE COLUMN FLANGE AND WEB LOCAL EFFECTS, DEFLECTION AND FATIGUE${collector?'; WITH THE BRACING, ALSO THE COLLECTOR FORCE THROUGH THE STUB WELDS':''}.`
  ];
- return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,notes),...bracketForceBlocks(s,t)]};
+ const stiffView=columnStiffenerView(s);if(stiffView)views.push(stiffView);
+ return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,[...notes,...stiffenerNotes(p)]),...bracketForceBlocks(s,t)]};
 }
 /**
  * The rolled stub under a bearing section along the runway: its top flange under the seat (or the flange as the

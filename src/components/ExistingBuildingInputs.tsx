@@ -1,6 +1,6 @@
 import type {ReactNode} from 'react';
 import {aiscWShapes,aiscShapeByName} from '../data/aiscSections';
-import {defaultAdjacentBuilding,defaultExistingColumn,defaultExistingLine,defaultRunwaySeismic,existingLoadKeys,type AdjacentBuildingInput,type ExistingColumnInput,type ExistingLineInput} from '../engine/existingColumnInputs';
+import {defaultAdjacentBuilding,defaultExistingColumn,defaultExistingLine,defaultExistingWelding,defaultRunwaySeismic,existingLoadKeys,type AdjacentBuildingInput,type ExistingColumnInput,type ExistingLineInput,type ExistingWeldingInput} from '../engine/existingColumnInputs';
 import {cantileverSystems} from '../engine/runwaySeismic';
 import {anchorGrades,barSizes,defaultColumnBase,type ColumnBaseInput} from '../engine/columnBaseInputs';
 import {defaultLongitudinalBracing,type BracingDesignInput,type LongitudinalBracingInput} from '../engine/longitudinalBracingInputs';
@@ -10,6 +10,8 @@ import {defaultEndStop,needsGirderStops,type EndStopInput} from '../engine/endSt
 import {defaultEndBearing,slidingBolts,type EndBearingInput} from '../engine/endBearingInputs';
 import {defaultSimpleSupport} from '../engine/simpleSupports';
 import {ColumnCapInputs} from './ColumnCapInputs';
+import {existingWeldingDemand,weldingBasisLabel,weldsToExistingColumn} from '../engine/existingWelding';
+import {existingColumnSection} from '../engine/existingColumn';
 import type {CalculationSnapshot,ProjectInput} from '../engine/types';
 import {format,type Quantity} from '../engine/units';
 
@@ -47,9 +49,29 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
    {existingLoadKeys.map(k=><div className="field-grid" key={k}>{(['P','Mx','My','V'] as const).map(key=>numeric(`${loadNames[k]} · ${{P:'axial P',Mx:'strong Mx',My:'weak My',V:'shear V'}[key]}`,c.existing[k][key],v=>set({existing:{...c.existing,[k]:{...c.existing[k],[key]:v}}}),key==='Mx'||key==='My'?'moment':'force',undefined,-1e15))}</div>)}
    <label className="field"><span>Source of survey and existing loads</span><input value={c.source} placeholder="Original calculations, drawings or new analysis reference" onChange={e=>set({source:e.target.value})}/></label>
    <label className="checkbox-field"><input type="checkbox" checked={c.confirmed} onChange={e=>set({confirmed:e.target.checked})}/>Column dimensions, material and existing load effects are confirmed from the stated source</label>
+   <WeldingInputs project={project} set={set} numeric={numeric}/>
    </>}
   </>}
  </div>;
+}
+
+/** Field welding of new brackets and tie gussets to the existing column. */
+function WeldingInputs({project,set,numeric}:{project:ProjectInput;set:(patch:Partial<ExistingColumnInput>)=>void;numeric:NumericField}){
+ const c=project.existingColumn!,w=c.welding??defaultExistingWelding,put=(patch:Partial<ExistingWeldingInput>)=>set({welding:{...w,...patch}});
+ if(!weldsToExistingColumn(project))return null;
+ const need=existingWeldingDemand(project,existingColumnSection(project).section.tf);
+ return <>
+  <div className="form-section-title"><span>03</span>Welding to the existing column</div>
+  <p className="form-note">The bracket and tie gussets are field welded to the existing flange. Identify the steel and its carbon equivalent before welding (AISC 360 Appendix 5.2.3, AWS D1.1 Clause 11). The thickest part at the weld is {format(need.t,'length',project.units,3)} ({need.thickest.name}): the AWS D1.1 Category B minimum preheat is {format(need.need,'temperature',project.units,0)}.</p>
+  <div className="field-grid">
+   <label className="field"><span>Base metal identified by</span><select value={w.basis} onChange={e=>put({basis:e.target.value as ExistingWeldingInput['basis']})}>{(Object.keys(weldingBasisLabel) as ExistingWeldingInput['basis'][]).map(k=><option key={k} value={k}>{weldingBasisLabel[k]}</option>)}</select></label>
+   <label className="field"><span>Steel grade</span><input value={w.grade} placeholder="e.g. ASTM A992" onChange={e=>put({grade:e.target.value})}/></label>
+   {numeric('Carbon equivalent (IIW)',w.carbonEquivalent??0,v=>put({carbonEquivalent:v>0?v:undefined}),'ratio','CE = C + Mn/6 + (Cr+Mo+V)/5 + (Ni+Cu)/15; leave 0 until known.')}
+   {numeric('Specified minimum preheat',w.preheat,v=>put({preheat:v}),'temperature')}
+  </div>
+  <label className="field"><span>Source of the material data</span><input value={w.source} placeholder="Mill certificate or laboratory report reference" onChange={e=>put({source:e.target.value})}/></label>
+  <label className="checkbox-field"><input type="checkbox" checked={w.deadLoadOnly} onChange={e=>put({deadLoadOnly:e.target.checked})}/>Weld with the crane out of service and the column under dead load only</label>
+ </>;
 }
 
 /** Seismic design of new freestanding columns as a cantilever column system. */
