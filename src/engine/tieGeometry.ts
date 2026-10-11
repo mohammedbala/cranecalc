@@ -17,7 +17,10 @@ export function tieReceiver(p:ProjectInput){
 }
 
 const inch=25.4;
-/** Practical cutting increment of the column gusset height (1/4 in), and the slot location tolerance kept beyond each slot end (1/16 in). */
+/**
+ * Practical cutting increment of the column gusset (1/4 in), and the slot location tolerance (1/16 in) kept in
+ * every clear distance of the slots: beyond the slot ends, toward the gusset end and between adjacent slots.
+ */
 export const gussetIncrement=inch/4,slotTolerance=inch/16;
 const roundUp=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
 /** Clear gap from the bar ends to the column flange: the column root fillet plus 1/8 in, at least 1/2 in, in 1/4 in steps. */
@@ -33,13 +36,21 @@ export function tieRelease(p:ProjectInput){
  const c=t.connection,hole=boltProperties(c.grade,c.diameter).hole,od=hole+2*r.sleeveWall,width=od+1.5875,slot=width+2*r.travel;
  // Same clear material beyond the slot as a standard hole at the AISC J3.4 minimum edge distance.
  const edge=1.5*c.diameter-hole/2+width/2;
+ // Same clear material between the two slots of a row as standard holes at the AISC J3.3 minimum spacing, plus the
+ // slot location tolerance on their spacing. The bolt gauge sets the slot spacing.
+ const ligament=8/3*c.diameter-hole+slotTolerance,minimumGauge=roundUp(slot+ligament,gussetIncrement);
  // The slot pattern with that edge plus a slot location tolerance beyond each end, rounded up to a cutting increment.
  const height=Math.max(t.width,roundUp(c.gauge+2*r.travel+2*(edge+slotTolerance),gussetIncrement));
- return {...r,hole,od,width,slot,edge,tolerance:slotTolerance,height,sleeveLength:t.gussetThickness+r.clearance,sleeveArea:Math.PI/4*(od**2-hole**2)};
+ // Gusset end toward the girder, from the slot centers: the same edge plus the tolerance, rounded up to a cutting
+ // increment; never shorter than the bar edge distance. The bars keep their own edge distance.
+ const endEdge=Math.max(c.edge,roundUp(edge+slotTolerance,gussetIncrement));
+ return {...r,hole,od,width,slot,edge,ligament,minimumGauge,endEdge,tolerance:slotTolerance,height,sleeveLength:t.gussetThickness+r.clearance,sleeveArea:Math.PI/4*(od**2-hole**2)};
 }
 
 /** Column gusset height: the bar width, or taller to contain the release slots. */
 export const columnGussetHeight=(p:ProjectInput)=>tieRelease(p)?.height??p.details!.brace.width;
+/** Length by which the column gusset runs past the bars' column-end bolt group toward the girder, mm: the slotted gusset's longer end edge. */
+export const columnGussetExtension=(p:ProjectInput)=>{const r=tieRelease(p);return r?r.endEdge-p.details!.brace.connection.edge:0;};
 
 /**
  * Shared fabrication coordinates, mm, across the runway from the web centerline. The flange saddle bypasses
@@ -64,12 +75,15 @@ export function flangeTieGeometry(p:ProjectInput){
  // (inner face and bottom). Where the gusset rises above the bottom of that flange it is the horizontal gap.
  const capFlange=b.kind==='cap'?b.capWidth/2-b.capTf:undefined,dx=(capFlange??0)-gussetEnd,dy=a.saddleThickness-capDrop;
  const capClear=capFlange===undefined?undefined:dy<0?dx:dx>0?Math.hypot(dx,dy):dy;
- return {attachment:a,face,barGap,barEnd,start,connection,rootStart,rootEnd,rootLength,saddleClear,receiver:tieReceiver(p),columnGusset:columnGussetHeight(p),columnGussetLength:connection+barGap,sides:tieSides(p),
+ // The column gusset spans the gap at the bar ends and the column-end bolt group, plus its longer slotted end edge.
+ const extension=columnGussetExtension(p),columnGussetStart=barEnd-connection-extension;
+ return {attachment:a,face,barGap,barEnd,start,connection,rootStart,rootEnd,rootLength,saddleClear,receiver:tieReceiver(p),columnGusset:columnGussetHeight(p),columnGussetStart,columnGussetLength:face-columnGussetStart,sides:tieSides(p),
   // Saddle-to-flange welds: transverse end fillets, each the full saddle width, at the two saddle ends.
   endWeldLength:rootLength,capFlange,capClear,
   topDrop:topClear+t.width/2,bottomDrop:bottomClear+t.width/2,
   topCenter:b.d/2-b.tf-topClear-t.width/2,bottomCenter:-b.d/2+b.tf+bottomClear+t.width/2,
-  gussetEnd,freeLength:t.length-2*connection,
+  // Clear bar length between the girder gusset and the column gusset ends.
+  gussetEnd,freeLength:t.length-2*connection-extension,
   stations:independentBearings(p).map(e=>({...e,tieX:e.center+(e.end==='left'?-1:1)*a.longitudinalSetback}))};
 }
 
@@ -87,7 +101,9 @@ export function stiffenerTieGeometry(p:ProjectInput){
  const root=b.tw/2+d.bearing.stiffenerWidth;
  // A designed bracket fixes the column face; otherwise the bars start clear of the stiffener.
  const face=d.bracket?.enabled?d.bracket.reach:root+clear+t.length,start=face-t.length,gussetEnd=start+connection;
- return {root,start,face,connection,gussetEnd,gussetLength:gussetEnd-root,height:t.width,clear,sides:tieSides(p),
+ // The column gusset carries the column-end bolt group to the face, plus its longer slotted end edge.
+ const columnGussetStart=face-connection-columnGussetExtension(p);
+ return {root,start,face,connection,gussetEnd,gussetLength:gussetEnd-root,height:t.width,clear,sides:tieSides(p),columnGussetStart,columnGussetLength:face-columnGussetStart,
   // Bars and gusset sit the clearance inside each tied flange.
   topCenter:b.d/2-b.tf-clear-t.width/2,bottomCenter:-b.d/2+b.tf+clear+t.width/2};
 }

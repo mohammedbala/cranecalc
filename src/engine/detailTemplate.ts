@@ -6,7 +6,7 @@ import {defaultEndBearing} from './endBearingInputs';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {wrenchClearance} from './endStop';
 import {railSeatDefaults} from './railSeat';
-import {columnGussetHeight,tieBarGap} from './tieGeometry';
+import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 import {keeperGeometry} from './railSeat';
 
@@ -73,8 +73,12 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,setback:stopSetback,base:{...defaultEndStop.base,length:11.5*inch},face:{...defaultEndStop.face,height:up((p.aist?.railDepth??p.railHeight)+(p.aist?.railPad?railSeatDefaults.padThickness:0)+defaultEndStop.bumperHeight-defaultEndStop.base.thickness+defaultEndStop.bumperDiameter/2+.5*inch,inch)},stiffener:{...defaultEndStop.stiffener,length:8.5*inch},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
   reviewed:false
  };
+ // Sleeved slots at the column end: the bolt gauge keeps the required material between the slots of a row, and the
+ // bars contain that gauge and both edge distances, in 1/4 in steps.
+ const tie=details.brace,c=tie.connection,release=tieRelease({...p,details});
+ if(release){c.gauge=Math.max(c.gauge,release.minimumGauge);tie.width=Math.max(tie.width,up(c.gauge+2*c.edge,.25*inch));}
  // Root fillets run the full column gusset height, which contains the release slots.
- details.brace.connection.weldLength=columnGussetHeight({...p,details});
+ c.weldLength=columnGussetHeight({...p,details});
  return details;
 }
 
