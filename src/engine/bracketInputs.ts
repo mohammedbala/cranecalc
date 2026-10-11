@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {existingBracketSchema} from './existingBracketInputs';
 import {rolledBracketSchema} from './rolledBracketInputs';
+import {columnStiffenerSchema} from './columnStiffenerInputs';
 const pos=z.number().finite().positive();
 /** Dimensions are calculation inputs in mm, never reference-view preferences. */
 export const bracketSchema=z.object({
@@ -10,6 +11,8 @@ export const bracketSchema=z.object({
  tipDepth:pos.optional(),corbelShape:z.string().min(1).max(30).optional(),
  /** New rolled wide-flange bracket ('rolled-corbel'): stub steel, welds and bearing stiffeners. */
  rolled:rolledBracketSchema.optional(),
+ /** Column stiffeners (continuity plates) in the receiving column at the bracket's force levels; twin-rib, haunched and W-stub brackets. */
+ columnStiffeners:columnStiffenerSchema.optional(),
  enabled:z.boolean(),reach:pos,seatLength:pos,seatProjection:pos,seatThickness:pos,
  ribDepth:pos,ribThickness:pos,ribSpacing:pos,rootWeld:pos,seatWeld:pos,
  deflectionLimit:pos,rotationLimit:pos,

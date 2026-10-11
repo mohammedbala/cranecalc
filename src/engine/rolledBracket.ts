@@ -18,6 +18,8 @@ import {rolledStub,isRolledBracket,type RolledStub} from './rolledBracketInputs'
 import {simpleSupportInput} from './simpleSupports';
 import {activeEndBearing} from './endBearingInputs';
 import {aiscShapeByName} from '../data/aiscSections';
+import {activeColumnStiffeners} from './columnStiffenerInputs';
+import {columnStiffenerChecks,stiffenedColumnChecks,panelStiffenerNote} from './columnStiffeners';
 
 const inch=25.4,kip=4448.2216152605;
 type Peak={value:number;caseId:string;x:number};
@@ -208,7 +210,9 @@ export function seatWeldStress(st:RolledStub,W:number,uplift:number,F:number,H:n
 export interface RolledBracketResults {
  strength:Record<string,Peak>;service:Record<string,Peak>;
  /** Largest unfactored range per duty bin of each fatigue detail. */
- fatigue:{name:string;cycles:number;flange:number;web:number;webWeld:number;column:number;stiffenerWeld:number;stiffenerToe:number;seat:number;seatWeld:number}[];
+ fatigue:{name:string;cycles:number;flange:number;web:number;webWeld:number;column:number;stiffenerWeld:number;stiffenerToe:number;seat:number;seatWeld:number;
+  /** With column stiffeners: range of the force on one stiffener plate at the stub top and bottom flange levels. */
+  stiffUpper?:number;stiffLower?:number}[];
  /** Governing concurrent actions at each grid. */
  stations:{x:number;caseId:string;vertical:number;seatMoment:number;rootMoment:number;torque:number;longitudinal:number;lateral:number}[];
 }
@@ -227,6 +231,16 @@ export function columnFlangeForces(st:RolledStub,f:StubActions){
  const P=[f.Mx/st.h0+f.N/2,-f.Mx/st.h0+f.N/2],M=[f.Mtop,f.Mbot];
  return {pull:Math.max(0,...P.map((v,i)=>v>0?v+3*Math.abs(M[i])/st.bf:0)),tension:Math.max(0,...P),compression:Math.max(0,...P.map(v=>-v))};
 }
+/**
+ * Concentrated forces on the column at the column stiffener levels, as pair totals: each stub flange force
+ * M/(d-tf) +- N/2 with its in-plane bending M_f as twice the more loaded half-flange resultant, P + 3|M_f|/b_f, in
+ * tension and in compression; and the force on each plate (one half flange), signed, for fatigue ranges.
+ */
+export function stubStiffenerForces(st:RolledStub,f:StubActions){
+ const P=[f.Mx/st.h0+f.N/2,-f.Mx/st.h0+f.N/2],M=[Math.abs(f.Mtop),Math.abs(f.Mbot)],bend=M.map(v=>3*v/st.bf);
+ return {upperT:Math.max(0,P[0]+bend[0]),upperC:Math.max(0,-P[0]+bend[0]),lowerT:Math.max(0,P[1]+bend[1]),lowerC:Math.max(0,-P[1]+bend[1]),
+  plates:{upper:[-1,1].map(s=>P[0]/2+s*1.5*f.Mtop/st.bf),lower:[-1,1].map(s=>P[1]/2+s*1.5*f.Mbot/st.bf)}};
+}
 /** Self-weight of the stub, its stiffeners and the spreader seat, N. */
 export function rolledSelfWeight(p:ProjectInput,st:RolledStub){
  const g=p.section.density*9.80665/1e9,s=st.stiffener,seat=st.seat;
@@ -243,9 +257,9 @@ export function createRolledBracketCollector(p:ProjectInput){
  const d=p.details!,b=d.bracket!,r=st.input,E=p.section.E,G=E/2.6,{a,e,W,lb}=stubBearing(p),g=stubWeldGroup(st),sf=stubStiffener(st,E,r.Fy,a,p.method),Lbr=d.bearing.length;
  const fl=stubFlexure(st,E,r.Fy,2*st.L),Mc=available(fl.Mn,p.method,.9,1.67),Mcy=available(fl.minor,p.method,.9,1.67);
  const ry=Math.sqrt(st.Iy/st.A),Pcc=compressionResistance(st.A,ry,2*st.L,E,r.Fy,p.method).capacity,Pct=available(r.Fy*st.A,p.method,.9,1.67);
- const c=b.receiver,Sc=receiverModulus(c),seat=st.seat;
+ const c=b.receiver,Sc=receiverModulus(c),seat=st.seat,stiff=!!activeColumnStiffeners(b);
  const result:RolledBracketResults={strength:{},service:{},stations:[],
-  fatigue:d.spectrum.map(v=>({name:v.name,cycles:v.cycles,flange:0,web:0,webWeld:0,column:0,stiffenerWeld:0,stiffenerToe:0,seat:0,seatWeld:0}))};
+  fatigue:d.spectrum.map(v=>({name:v.name,cycles:v.cycles,flange:0,web:0,webWeld:0,column:0,stiffenerWeld:0,stiffenerToe:0,seat:0,seatWeld:0,...(stiff?{stiffUpper:0,stiffLower:0}:{})}))};
  const extremes=d.spectrum.map(()=>new Map<string,{min:number;max:number}>());
  const range=(bin:number,id:string,value:number)=>{const x=extremes[bin].get(id)??{min:0,max:0};x.min=Math.min(x.min,value);x.max=Math.max(x.max,value);extremes[bin].set(id,x);return x.max-x.min;};
  const weight=rolledSelfWeight(p,st),factor=p.method==='LRFD'?1.4:1;
@@ -274,6 +288,7 @@ export function createRolledBracketCollector(p:ProjectInput){
    put('column','column',f.V*(e+c.depth/2)/Sc);
    if(sf){f.sides.forEach((s,i)=>put('stiffenerWeld','sw:'+i,Math.sign(s.P)*stiffenerWeldStress(st,sf,Math.abs(s.P),s.x)));put('stiffenerToe','toe',f.V*(e-a)/st.Sx);}
    if(on.strip&&seat){put('seat','seat',6*on.strip.moment/(W*seat.t**2));on.strip.reactions.forEach((v,i)=>put('seatWeld','tw:'+i,Math.max(0,-v)/(seat.weld/Math.SQRT2*W)));}
+   if(stiff){const q=stubStiffenerForces(st,f).plates;for(const level of ['upper','lower'] as const)q[level].forEach((v,i)=>{const key=level==='upper'?'stiffUpper':'stiffLower';out[key]=Math.max(out[key]!,range(bin,`${key}:${i}`,v));});}
    return;
   }
   // Strength: every concurrent set in both lateral senses.
@@ -297,6 +312,7 @@ export function createRolledBracketCollector(p:ProjectInput){
    peak('webBase',2*w.web*r.webWeld/Math.SQRT2/Math.min(st.tw,c.flangeThickness));
    if(g.cjp){const Fyd=available(r.Fy,p.method,.9,1.67),Fvd=available(.6*r.Fy,p.method,.9,1.67);peak('cjp',Math.max(normal/Fyd,1.5*Math.max(Math.abs(f.Qtop),Math.abs(f.Qbot))/(st.bf*st.tf)/Fvd));}
    const col=columnFlangeForces(st,f);peak('pull',col.pull);peak('push',col.compression);peak('couple',Math.max(col.tension,col.compression));
+   if(stiff){const q=stubStiffenerForces(st,f);peak('stiffUpperT',q.upperT);peak('stiffUpperC',q.upperC);peak('stiffLowerT',q.lowerT);peak('stiffLowerC',q.lowerC);}
    if(on.strip&&seat)peak('seatWeld',seatWeldStress(st,W,Math.max(0,...on.strip.reactions.map(v=>-v)),f.F,f.H));
   }
   if(on.strip&&seat){peak('seatNormal',6*on.strip.moment/(W*seat.t**2));peak('seatShear',1.5*on.strip.shear/(W*seat.t));}
@@ -470,7 +486,16 @@ export function rolledBracketChecks(p:ProjectInput,res:RolledBracketResults,serv
   add('fatigue-seat','Spreader seat at the flange-tip fillets · fatigue',miner('seat',n=>Cn(cat,n)),1,'ratio',`D=\\sum_i(\\Delta f_i/F_{SR,${cat===4.4?'C':'D'}})^3\\le1`,`Table A-3.1 item 7.1: the flange tip is a transverse attachment to the seat, a = tf = ${fmt(st.tf)} along the seat stress (${cat===4.4?'under 2 in, Category C':'Category D'}). Range of the seat strip bending stress; Miner sum without endurance-limit credit.`,undefined,fatRefs);
   add('fatigue-seat-weld','Seat fillets · throat fatigue',Math.max(0,...F.map(v=>v.seatWeld)),weldF,'stress','\\Delta f_w\\le\\max[55,690(1.5/n)^{0.167}]','Table A-3.1 item 8.2, Category F: range of the uplift throat stress at a flange tip, all project cycles.',undefined,fatRefs);
  }
- return checks;
+ if(!activeColumnStiffeners(b))return checks;
+ // Column stiffeners at the stub flanges: the stiffened model replaces failing unstiffened J10.1-J10.4 checks.
+ const cap=(id:string)=>checks.find(v=>v.id==='wbracket-'+id&&v.capacity!==undefined)?.capacity;
+ const item=(id:string,label:string)=>{const v=cap(id);return v===undefined?[]:[{id,label,value:v}];};
+ const out=stiffenedColumnChecks(p,checks,['column-flange','column-yield','column-crippling','column-sidesway'].map(v=>'wbracket-'+v)).map(v=>v.id==='wbracket-column-panel'?{...v,note:v.note+panelStiffenerNote}:v);
+ out.push(...columnStiffenerChecks(p,{prefix:'wbracket',refs,demand:{upperT:S.stiffUpperT,upperC:S.stiffUpperC,lowerT:S.stiffLowerT,lowerC:S.stiffLowerC},
+  tension:[...item('column-flange','J10.1 flange local bending'),...item('column-yield','J10.2 web local yielding')],compression:[...item('column-yield','J10.2 web local yielding'),...item('column-crippling','J10.3 web crippling')],sidesway:item('column-sidesway','J10.4 web sidesway buckling')[0],
+  fatigue:F.map(v=>({cycles:v.cycles,upper:v.stiffUpper??0,lower:v.stiffLower??0,column:v.column})),
+  columnStressNote:'Range per duty bin of the column flange stress from V·e_c on the receiving section, as the stub-toe check; other building stress ranges are excluded. Miner sum, no endurance-limit credit.'}));
+ return out;
 }
 /**
  * Crane-level bracing collector at a new column: the girder's locating bearing bolts deliver the bay's longitudinal
