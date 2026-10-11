@@ -41,3 +41,11 @@ export function electrodeClass(Fexx:number,units:ProjectInput['units']){
  const ksi=Math.round(Fexx/6.894757293/10)*10,metric:Record<number,string>={60:'E43XX',70:'E49XX',80:'E55XX',90:'E62XX',100:'E69XX',110:'E76XX'};
  return units==='SI'&&metric[ksi]?`E${ksi}XX (${metric[ksi]})`:`E${ksi}XX`;
 }
+/** Hole diameters to the nearest 1/32 inch (a pin hole is the pin plus 1/32 in, AISC D5.2); SI as other lengths. */
+export function holeInches(mm:number,units:ProjectInput['units']){
+ if(units==='SI')return drawingLength(mm,units);
+ const ticks=Math.round(Math.abs(mm)/25.4*32),inches=Math.floor(ticks/32);
+ let numerator=ticks%32,denominator=32;
+ while(numerator&&numerator%2===0){numerator/=2;denominator/=2;}
+ return `${inches?inches:''}${numerator?`${inches?' ':''}${numerator}/${denominator}`:''}"`;
+}

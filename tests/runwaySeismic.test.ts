@@ -59,7 +59,10 @@ describe('Seismic design of new freestanding runway columns',()=>{
   const axial=s.checks.find(k=>k.id==='column-seismic-axial')!;
   expect(axial.caseId).toContain('Ωo');expect(axial.note).toContain('AISC 341 §E5.4a');expect(axial.referenceIds).toContain('aisc-341');
   const t=[...coverSheetSvg(s,[]).matchAll(/>([^<]+)</g)].map(m=>m[1]).join(' ');
-  for(const v of ['AISC 341','§E5 ORDINARY CANTILEVER COLUMN SYSTEM','AWS D1.8/D1.8M','AWS D1.8 CLAUSE 6.3','SEISMIC (IBC 1705.12.1.1, 1705.13.1.1)','CRANE-LEVEL ROD BRACING EXEMPT'])expect(t).toContain(v);
+  for(const v of ['AISC 341','§E5 ORDINARY CANTILEVER COLUMN SYSTEM','AWS D1.8/D1.8M','AWS D1.8 CLAUSE 6.3','SEISMIC (IBC 1705.12.1.1, 1705.13.1.1)','CRANE-LEVEL ROD BRACING EXEMPT','STATEMENT OF RESPONSIBILITY (IBC 1704.4)','PLATE WASHER WELDS'])expect(t).toContain(v);
+  expect(t).toMatch(/COLUMNS \(AISC 341 §E5\.4A\), BASE PLATES, ANCHORS AND\s+FOOTINGS FOR OVERSTRENGTH/);
+  // The new column's bracket load path is checked here, not delegated.
+  expect(s.checks.find(k=>k.id==='bracket-load-path')?.status).toBe('pass');
   // SDC A takes only the §1.4.2 integrity force: no AISC 341 and no overstrength column cases.
   const a=calculate(seismic({sdc:'A',SDS:.1,SD1:.05}));
   expect(a.existingColumn!.combinations.some(k=>k.id.includes('Ωo')||k.id.includes('§1.4.2'))).toBe(false);

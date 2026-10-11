@@ -10,7 +10,7 @@ import {loadAiscSection,aiscWShapes} from '../src/data/aiscSections';
 import {validateProject} from '../src/engine/calculate';
 import {defaultFraming} from '../src/components/framingSettings';
 import {dimH,dimV} from '../src/components/sheetGraphics';
-import {electrodeClass} from '../src/components/drawingFormat';
+import {electrodeClass,holeInches} from '../src/components/drawingFormat';
 import type {CalculationSnapshot} from '../src/engine/types';
 import {detailRef} from '../src/components/sheetGraphics';
 
@@ -115,5 +115,12 @@ describe('weld filler classification',()=>{
  it('names the electrode by its AWS classification, with the metric classification in SI',()=>{
   expect(electrodeClass(70*6.894757293,'US')).toBe('E70XX');expect(electrodeClass(482.63,'SI')).toBe('E70XX (E49XX)');
   expect(electrodeClass(80*6.894757293,'SI')).toBe('E80XX (E55XX)');
+ });
+});
+
+describe('hole diameters',()=>{
+ it('print to 1/32 in, so a pin hole reads as the pin plus 1/32 in (AISC D5.2)',()=>{
+  expect(holeInches(25.4+25.4/32,'US')).toBe('1 1/32"');expect(holeInches(25.4*15/16,'US')).toBe('15/16"');expect(holeInches(25.4,'US')).toBe('1"');
+  expect(holeInches(26.19,'SI')).toBe('26.2 mm');
  });
 });
