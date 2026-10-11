@@ -38,7 +38,7 @@ const statusText=(status:CheckResult['status'])=>status==='excluded'?'BY OTHERS'
   '03A':['Section'], '03B':['Cap channel'],
   '04':['Connections'], '04A':['Detailing'], '04B':['Column bracket'],
   '04C':['Column bracket'], '04D':['Fatigue'],
-  '04E':['Flange attachment'], '04F':['Fatigue'],
+  '04E':['Flange attachment'], '04F':['Fatigue'], '04H':['Column cap'],
   '05':['Rail details','Fatigue'], '06':['Interfaces','Analysis'],
   '07':['Geometry','Detailing'], '08':['Local forces'], '09':['Connections'],
   '10':['Project'], '11':['Interfaces']
@@ -102,6 +102,11 @@ const statusText=(status:CheckResult['status'])=>status==='excluded'?'BY OTHERS'
  }
  const fatigueExplicit=s.checks.filter(c=>c.group==='Fatigue'&&!c.id.startsWith('detail-fatigue-')&&!c.id.startsWith('detail-full-cycle-')&&!['fatigue','fatigue-peak','end-weld-fatigue'].includes(c.id));
 
+ // Column caps on new runway columns: the girder bears centered on the column (AIST TR-13 §5.9.2).
+ const capChecks=selected(['Column cap']);
+ if(capChecks.length&&r.columnCap){const cg=r.columnCap;
+  pages.push(page('04H / Column caps',`<p>The girders bear centered on the new columns on cap plates welded all around the milled column tops; the bolted end bearings pass through the caps. A girder bearing stiffener line over the column web loads the web directly (J10.2, J10.3); one off the web bears on a cap stiffener between the column flanges. The bearing stiffeners and the bolted bottom flange form a fork at each girder end, used as its top-flange restraint (stiffness ${f(cg.fork.k,'stiffness')}) in the lateral-torsional, twist and rail-head models; there is no top-flange tie.</p>`+table(['Grid','Largest end reaction','Lateral','Longitudinal','Bolt tension','Cap weld peak'],cg.grids.map(v=>[String(v.grid+1),f(Math.max(...v.bearings.map(x=>x.R.value)),'force'),f(v.lateral.value,'force'),f(v.longitudinal.value,'force'),f(v.boltTension.value,'force'),e(v.weld.combination)]),'checks')+numeric(capChecks.filter(c=>c.demand!==undefined))+eq('column-cap-weld')+eq('column-cap-fork-stiffness')+eq('column-cap-plate')));
+ }
  pages.push(page('05 / Rail details & fatigue',numeric(selected(['Rail details']))+table(['Fatigue duty bin','Cycles','Vertical group','Lateral group','Local flange range','Weld range'],r.railFatigueBins.map(b=>[e(b.name),b.cycles.toLocaleString(),f(b.vertical,'force'),f(b.lateral,'force'),f(2*b.flangeStress,'stress'),f(b.weldStress,'stress')]))+`<p>Reference AIST Technical Report 13 §3.10.2.3: unfactored Cds + lift fraction × Cvs + 0.5Css, no impact. The local flange range is a full reversal and the keeper weld range runs from zero (the rail can push a keeper out and lift its lip, never the reverse), each from the duty bin’s wheel groups; no load-sharing credit. Girder detail ranges also include global bending and warping.</p>`+numeric(fatigueExplicit)+`<p>The following fatigue register identifies each entered material point. Automatically generated rail-keeper stations are summarized on page 01 and retained in the complete worksheet.</p>`));
  const stops=selected(['End stops']).filter(c=>c.status!=='not-applicable');
  if(stops.length)pages.push(page('05A / Runway end stops',`<p>Bolted stops at ${stopLocation(p)}, near the girder ends, inboard of the top tie saddle (sheet ${sheet('end-stop')}); the stop holes are Category B fatigue points in the detail register and the heel compression is checked against web local yielding and crippling. The crane bumper force, factored by the AIST stop combinations, acts at the bumper height on the face plate. The front bolts resist the overturning about the heel of the base plate in tension with shear; the base plate and girder flange are checked for no prying. The bumper acts above the girder centroid, so the end couple is added to the girder stop combinations and to the far-support uplift.</p>`+numeric(stops)));

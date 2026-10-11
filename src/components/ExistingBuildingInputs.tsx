@@ -9,6 +9,7 @@ import {aiscAngles} from '../data/aiscAngles';
 import {defaultEndStop,needsGirderStops,type EndStopInput} from '../engine/endStopInputs';
 import {defaultEndBearing,slidingBolts,type EndBearingInput} from '../engine/endBearingInputs';
 import {defaultSimpleSupport} from '../engine/simpleSupports';
+import {ColumnCapInputs} from './ColumnCapInputs';
 import type {CalculationSnapshot,ProjectInput} from '../engine/types';
 import {format,type Quantity} from '../engine/units';
 
@@ -28,12 +29,13 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
   <label className="checkbox-field"><input type="checkbox" checked={!!c?.enabled} onChange={e=>set({enabled:e.target.checked})}/>Check the existing column that receives the runway</label>
   <p className="form-note">The column under the most heavily loaded support is checked for the crane reactions plus the loads it already carries, under ASCE 7 combinations. Frame action, connections to the column, bracing, anchors and foundations remain separate.</p>
   {c?.enabled&&<>
-   <label className="checkbox-field"><input type="checkbox" checked={!!c.isNew} onChange={e=>set(e.target.checked?{isNew:true,strong:{base:'fixed',top:'free'},Lcx:2.1*c.height,existing:structuredClone(defaultExistingColumn.existing),source:'New column designed here',confirmed:true}:{isNew:false,confirmed:false,source:''})}/>New freestanding runway column designed here: fixed base, girder on its bracket, no existing building loads</label>
+   <label className="checkbox-field"><input type="checkbox" checked={!!c.isNew} onChange={e=>set(e.target.checked?{isNew:true,strong:{base:'fixed',top:'free'},Lcx:2.1*c.height,existing:structuredClone(defaultExistingColumn.existing),source:'New column designed here',confirmed:true}:{isNew:false,confirmed:false,source:''})}/>New freestanding runway column designed here: fixed base, girder on its bracket or column cap, no existing building loads</label>
+   {c.isNew&&project.details&&<ColumnCapInputs project={project} update={update} numeric={numeric}/>}
    {bracket&&!c.isNew?<div className="inline-note">Column section, material, eccentricity and flange unbraced length come from the bracket's receiving column under Connections.</div>:<div className="field-grid">
     <label className="field"><span>Column section</span><select value={aiscShapeByName(c.shape)?c.shape:''} onChange={e=>set({shape:e.target.value})}><option value="">Custom plates (no fillet credit)</option>{aiscWShapes.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}</select></label>
     {!aiscShapeByName(c.shape)&&<>{numeric('Depth d',c.d,v=>set({d:v}))}{numeric('Flange width bf',c.bf,v=>set({bf:v}))}{numeric('Flange thickness tf',c.tf,v=>set({tf:v}))}{numeric('Web thickness tw',c.tw,v=>set({tw:v}))}</>}
     {numeric('Yield strength Fy',c.Fy,v=>set({Fy:v}),'stress')}{numeric('Tensile strength Fu',c.Fu,v=>set({Fu:v}),'stress')}</div>}
-   <div className="field-grid">{numeric(c.isNew?'Base to column top':'Base to top lateral support',c.height,v=>set({height:v}))}{numeric('Base to bracket seat',c.seatElevation,v=>set({seatElevation:v}))}{!bracket&&numeric('Column centerline to girder bearing',c.eccentricity,v=>set({eccentricity:v}))}</div>
+   <div className="field-grid">{numeric(c.isNew?'Base to column top':'Base to top lateral support',c.height,v=>set({height:v}))}{numeric(project.columnCap?.enabled?'Base to bearing seat (top of cap)':'Base to bracket seat',c.seatElevation,v=>set({seatElevation:v}))}{!bracket&&numeric('Column centerline to girder bearing',c.eccentricity,v=>set({eccentricity:v}))}</div>
    {support('strong','Strong axis (across runway)')}{support('weak','Weak axis (along runway)')}
    <div className="field-grid">{numeric('Strong-axis effective length Lcx',c.Lcx,v=>set({Lcx:v}),'length','Use K for the actual end conditions; at least 1.0H pinned-braced, 0.8H fixed-braced, 2.1H fixed-free.')}{numeric('Weak-axis effective length Lcy',c.Lcy,v=>set({Lcy:v}))}{numeric('Torsional effective length Lcz',c.Lcz,v=>set({Lcz:v}))}{!bracket&&numeric('Flange unbraced length Lb',c.Lb,v=>set({Lb:v}))}</div>
    <div className="field-grid"><label className="field"><span>Crane longitudinal force</span><select value={c.longitudinal} onChange={e=>set({longitudinal:e.target.value as ExistingColumnInput['longitudinal']})}><option value="bracing">Bracing</option><option value="column">This column</option></select></label>{numeric('Runway drift limit h / n',c.driftLimit,v=>set({driftLimit:v}),'ratio')}</div>

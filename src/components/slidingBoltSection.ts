@@ -2,6 +2,8 @@ import type {CalculationSnapshot} from '../engine/types';
 import {activeEndBearing,endBearingGeometry} from '../engine/endBearing';
 import {slidingBolts} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
+import {capSeat} from '../engine/columnCap';
+import {columnCapTitles} from './columnCapSheet';
 import {format} from '../engine/units';
 import {plateInches} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,line,rect,dimH,breakLine,labelColumn,multiLeader,labelCaps,textWidth,wrappedText,detailRef,detailTitles,bearingBoltsTitle,type XY} from './sheetGraphics';
@@ -19,10 +21,10 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
  const p=s.input,e=activeEndBearing(p),d=p.details;if(!e||!d)return undefined;
  const g=endBearingGeometry(p,e);if(!g.sleeve)return undefined;
  return {title:detailTitles.slidingBolt,render:()=>{
-  const b=p.section,bs=d.bearing,sl=slidingBolts(e),db=e.bolts.diameter,wb=d.bracket?.enabled?d.bracket:undefined,seatT=wb?.seatThickness??bs.thickness;
+  const b=p.section,bs=d.bearing,sl=slidingBolts(e),db=e.bolts.diameter,wb=d.bracket?.enabled?d.bracket:undefined,cs=capSeat(p),seatT=cs?.thickness??wb?.seatThickness??bs.thickness;
   const size=(v:number)=>plateInches(v,p.units),hx=heavyHex(db),washer=hx.washer,sleeve=g.sleeve!;
   // Grip: plate washer, sleeve, bearing plate and seat, from under the head to under the F436 washer.
-  const plies=e.washerThickness+sleeve.length+bs.thickness,grip=wb?`LENGTH ${size(boltLength(db,plies+seatT,p.units))}, GRIP ${size(plies+seatT)}`:`LENGTH TO SUIT SEAT, GRIP = ${size(plies)} + SEAT`;
+  const plies=e.washerThickness+sleeve.length+bs.thickness,grip=wb||cs?`LENGTH ${size(boltLength(db,plies+seatT,p.units))}, GRIP ${size(plies+seatT)}`:`LENGTH TO SUIT SEAT, GRIP = ${size(plies)} + SEAT`;
   const tail=.35*db,half=g.washer.length/2+1.25*inch,stack=hx.head+e.washerThickness+sleeve.length+bs.thickness+seatT+washer.t+hx.nut+tail;
   const sc=drawingScale(Math.min(1.45,222/stack,300/(2*half)),p.units),k=sc.pointsPerMm;
   const cx=240,yBear=150,Y=(h:number)=>yBear-h*k,X=(x:number)=>cx+x*k;
@@ -37,7 +39,7 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
    svg+=breakLine([far,yFlangeTop-5],[far,yFlange+5]);
   }
   // Bearing plate and bracket seat, broken both ends, each with a standard hole.
-  for(const [top,t,cls] of [[yBear,bs.thickness,'runway-line'],[yBearBot,seatT,wb?'runway-line':'reference-line']] as const)for(const side of [-1,1]){
+  for(const [top,t,cls] of [[yBear,bs.thickness,'runway-line'],[yBearBot,seatT,wb||cs?'runway-line':'reference-line']] as const)for(const side of [-1,1]){
    const near=X(side*g.hole/2),far=X(side*(half-.25*inch));
    svg+=line([near,top],[far,top],cls)+line([near,top+t*k],[far,top+t*k],cls)+line([near,top],[near,top+t*k],cls);
    svg+=breakLine([far,top-3],[far,top+t*k+3]);
@@ -67,7 +69,7 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
    {at:at(X(od/2),(ySleeveTop+yBear)/2-4),labels:[`STEEL SLEEVE ${size(od)} OD X ${size(g.hole)} BORE`,`X ${size(sleeve.length)} (FLANGE + ${size(sl.clearance)}), FY ${Fy}`]},
    {at:at(X(half*.7),yFlangeTop+2),labels:[`GIRDER BOTTOM FLANGE, ${size(b.tf)}`,`SLOTTED; SEE ${detailRef(bearingBoltsTitle(p))}`]},
    {at:at(X(half*.75),yBear+bs.thickness*k/2),labels:[`BEARING PL ${size(bs.thickness)}, ${size(g.hole)} STD HOLE`]},
-   {at:at(X(half*.75),yBearBot+seatT*k/2),labels:wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS']},
+   {at:at(X(half*.75),yBearBot+seatT*k/2),labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS']},
    {at:at(X(hx.corners/2),yNut+hx.nut*k/2),labels:['HEAVY HEX NUT, A563 DH, AND F436','WASHER BELOW SEAT: TURN THE NUT']}
   ],labelBottom=yHead+labels.reduce((a,v)=>a+v.labels.length*11+8,-8);
   svg+=labelColumn(labels,lx,yHead,Math.max(yEnd+tail*k,labelBottom));

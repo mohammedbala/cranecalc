@@ -1,6 +1,7 @@
 import {supportColumn} from '../engine/drawingData';
 import {existingBracketLabel} from '../engine/bracketProfiles';
 import {activeEndBearing} from '../engine/endBearingInputs';
+import {activeColumnCap} from '../engine/columnCapInputs';
 import {endBearingView} from './endBearingDetail';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {flangeTieSection} from './flangeTieSheet';
@@ -53,7 +54,9 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
 
  // 1: Actual girder transverse section, fitted stiffeners and bearing plate.
  // Receiving bracket and building-column profile remain dashed reference geometry.
- views.push({title:detailTitles.bearing,render:()=>{
+ // A column cap carries the girder on the column (column cap details); there is no bracket or flange tie.
+ const capped=!!activeColumnCap(p);
+ if(!capped)views.push({title:detailTitles.bearing,render:()=>{
   let svg='<g data-view="bracket-connection">';
   // Depth drawn below the bearing: the bracket designed here, or the reference bracket. The section is
   // drawn up to 240 deep, its callouts placed against the girder and bracket.
@@ -146,7 +149,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  // 3: Plan of an actual flange-to-column tie. The symmetric pair of bars is
  // represented by front/back outlines; arrows identify both end bolt groups.
  if(d.brace.flangeAttachment?.enabled){if(withFlangeTie)views.push({title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,436)});}
- else views.push({title:detailTitles.tie,render:()=>{
+ else if(!capped)views.push({title:detailTitles.tie,render:()=>{
   let svg='<g data-view="tie-connection">';
   // Across the runway (down the sheet) from the web centerline; along the runway from the tie-side bearing stiffener.
   const c=d.brace.connection,t=d.brace,bs=d.bearing,g=stiffenerTieGeometry(p)!,rel=tieRelease(p),hg=columnGussetHeight(p),hole=boltProperties(c.grade,c.diameter).hole;

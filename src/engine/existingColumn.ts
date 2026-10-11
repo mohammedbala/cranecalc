@@ -12,6 +12,8 @@ import {latexNumber} from './math';
 import {cantileverHeightLimit,cantileverSystems,sdcFromSD1,sdcFromSDS,seismicBasis,seismicCombinations,seismicImportance,type SeismicBasis} from './runwaySeismic';
 import {alongSeismic,baseWarping,braceCases,braceShare,designsBracing,girderOffset} from './newColumnBracing';
 import {railTopAboveSteel} from './railSeat';
+import {activeColumnCap} from './columnCapInputs';
+import {capAlongEccentricity} from './columnCap';
 
 /** Recommended design K for the ideal end conditions (AISC 360-16 Commentary Table C-A-7.1). */
 const minimumK={braced:{pinned:1,fixed:.8},free:{pinned:Infinity,fixed:2.1}} as const;
@@ -28,6 +30,8 @@ export function existingColumnSection(p:ProjectInput){
 /** Horizontal distance from the column centerline to the girder bearing. A bracket defines it from its own geometry. */
 export function existingColumnEccentricity(p:ProjectInput){
  const b=p.details?.bracket;
+ // A column cap carries the girder centered over the column: only the rail eccentricity remains.
+ if(activeColumnCap(p))return Math.abs(p.railEccentricity);
  return b?.enabled?b.receiver.depth/2+b.reach+p.details!.bearing.width/2:p.existingColumn!.eccentricity;
 }
 /** Column flange unbraced length: the bracket's receiving-column value when a bracket is enabled. */
@@ -128,6 +132,8 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  // Every support uses the same column; the support giving the largest H1 ratio governs.
  const evaluate=(support:SupportReactionSet['supports'][number],j:number)=>{
  const share=designed?braceShare(p,j):undefined,brace=(id:string)=>designed?.cases.find(v=>v.id===id);
+ // A column cap: the girder end reactions act along the runway off the column centerline (weak axis, top moment).
+ const ex=capAlongEccentricity(p,j),amplifyY=(P:number)=>P<=0?1:alpha*P>=Pey?Infinity:1/(1-alpha*P/Pey);
  const dead=support.D,live=support.Cd+support.Cv+support.Ci+support.L+support.Clv,liveStatic=support.Cd+support.Cv,lateral=support.Css;
  const combinations:ExistingColumnCombination[]=asceCombinations(p.method).map(k=>{
   const f=k.factors,existing=(key:'P'|'Mx'|'My'|'V',abs:boolean)=>existingLoadKeys.reduce((sum,t)=>sum+(abs?Math.abs(f[t]*c.existing[t][key]):f[t]*c.existing[t][key]),0);
@@ -136,7 +142,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
   const P=existing('P',false)+runway+(bc&&share?bc.H*share.vertical:0);
   const Mx=combinedPeak(eccentric.samples,side.samples,'moment',runway*e,f.L*lateral)+existing('Mx',true);
   const V=combinedPeak(eccentric.samples,side.samples,'shear',runway*e,f.L*lateral)+existing('V',true);
-  const My=f.L*longitudinal*alongMoment+existing('My',true);
+  const My=f.L*longitudinal*alongMoment+existing('My',true)+Math.abs(runway)*ex;
   const amplify=(Pe:number)=>P<=0?1:alpha*P>=Pe?Infinity:1/(1-alpha*P/Pe),B1x=amplify(Pex),B1y=amplify(Pey);
   const ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
@@ -147,9 +153,9 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  if(designed&&share)for(const k of designed.cases.filter(v=>v.kind!=='asce'&&!v.overstrength)){
   const runway=k.D*dead+k.live*live+k.Cd*support.Cd+k.Cv*support.Cv,P=runway+k.H*share.vertical;
   const Mx=combinedPeak(eccentric.samples,side.samples,'moment',runway*e,k.side*lateral),V=combinedPeak(eccentric.samples,side.samples,'shear',runway*e,k.side*lateral);
-  const B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx;
+  const My=Math.abs(runway)*ex,B1y=amplifyY(P),B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
-  combinations.push(torsional({id:k.id,equation:k.equation,P,Mx:B1x*Mx,My:0,V,B1x,B1y:1,U},share.locating?k.Hbay*designed.offset:0));
+  combinations.push(torsional({id:k.id,equation:k.equation,P,Mx:B1x*Mx,My:B1y*My,V,B1x,B1y,U},share.locating?k.Hbay*designed.offset:0));
  }
  // ASCE 7 seismic combinations (§12.4.2.3) with the static crane vertical; the side thrust does not act with E.
  // In SDC B to F the cantilever columns are an AISC 341 system (ASCE 7 §14.1.2.2.1): §E5.4a / §E6.4a design them
@@ -158,9 +164,9 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const seismicCases=basis&&sideE?seismicCombinations(p.method,basis).filter(k=>!k.overstrength||!basis.integrityOnly).map(k=>{
   const runway=k.D*dead+k.L*liveStatic,P=runway;
   const Mx=combinedPeak(eccentricE!.samples,sideE.samples,'moment',runway*e,k.E*QE),V=combinedPeak(eccentricE!.samples,sideE.samples,'shear',runway*e,k.E*QE);
-  const B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx;
+  const My=Math.abs(runway)*ex,B1y=amplifyY(P),B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
-  return {id:`${p.method} ${k.id}`,equation:k.equation,P,Mx:B1x*Mx,My:0,V,B1x,B1y:1,U,overstrength:k.overstrength};
+  return {id:`${p.method} ${k.id}`,equation:k.equation,P,Mx:B1x*Mx,My:B1y*My,V,B1x,B1y,U,overstrength:k.overstrength};
  }):[];
  combinations.push(...seismicCases);
  const max=(key:'P'|'Mx'|'My'|'V'|'U')=>combinations.reduce((a,b)=>Math.abs(b[key])>Math.abs(a[key])?b:a);
@@ -201,7 +207,7 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):Chec
  if(!r.capacity.webCompact)checks.push({id:'column-web',group:label,title:`${label} · web slenderness for flexure`,status:'unsupported',equation:'h/t_w\\le3.76\\sqrt{E/F_y}',note:'A noncompact or slender column web needs AISC F4/F5, which this check does not implement.',referenceIds:refs});
  add('axial',`${label} · axial compression`,Math.max(0,g.P.P),r.capacity.Pc,'force','P_n=F_{cr}A_e\\;(E3/E4/E7)',`${crane} Lcx=${format(c.Lcx,'length',u,3)}, Lcy=${format(c.Lcy,'length',u,3)}, Lcz=${format(c.Lcz,'length',u,3)}; weak-axis buckling uses the larger of Lcy and Lb.`,g.P.id);
  add('flexure',`${label} · strong-axis flexure`,Math.abs(g.Mx.Mx),r.capacity.Mcx,'moment','M_{rx}=B_1\\left(|M_{crane}|+\\sum|\\gamma_iM_{x,i}|\\right)',`${r.capacity.flexure}, Lb=${format(existingColumnUnbracedLength(p),'length',u,3)}. B1 = ${g.Mx.B1x.toFixed(3)} with Cm = 1. Strong axis: ${c.strong.base} base, ${c.strong.top} top. ${crane}`,g.Mx.id);
- if(r.crane.longitudinal||existingLoadKeys.some(k=>c.existing[k].My))add('flexure-y',`${label} · weak-axis flexure`,Math.abs(g.My.My),r.capacity.Mcy,'moment','M_{ry}=B_1\\left(|M_{long}|+\\sum|\\gamma_iM_{y,i}|\\right)',`AISC F6. Weak axis: ${c.weak.base} base, ${c.weak.top} top. Crane longitudinal force ${r.crane.longitudinal?'is resisted by this column':'is not applied to this column'}.`,g.My.id);
+ if(r.crane.longitudinal||existingLoadKeys.some(k=>c.existing[k].My)||g.My.My>0)add('flexure-y',`${label} · weak-axis flexure`,Math.abs(g.My.My),r.capacity.Mcy,'moment','M_{ry}=B_1\\left(|M_{long}|+\\sum|\\gamma_iM_{y,i}|\\right)',`AISC F6. Weak axis: ${c.weak.base} base, ${c.weak.top} top. Crane longitudinal force ${r.crane.longitudinal?'is resisted by this column':'is not applied to this column'}.${activeColumnCap(p)?` Column cap: each girder end reaction acts along the runway at 0.8 of its bearing length from the girder end (a continuous girder centered on an interior column has none), all of it at the farthest bearing, as a moment at the column top (${g.My.id}).`:''}`,g.My.id);
  add('shear',`${label} · strong-axis shear`,Math.abs(g.V.V),r.capacity.Vc,'force','V_n=0.6F_yA_wC_{v1}\\;(G2)','Crane side thrust and eccentric reaction couple plus entered existing shears.',g.V.id);
  add('interaction',`${label} · combined axial and flexure (H1)`,g.U.U,1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)\\le1\\;\\text{or}\\;\\frac{P_r}{2P_c}+\\dots',`Governing ASCE 7 combination ${g.U.equation}: Pr=${format(g.U.P,'force',u,3)}, Mrx=${format(g.U.Mx,'moment',u,3)}, Mry=${format(g.U.My,'moment',u,3)}. ${r.combinations.length} combinations with W and E in both directions. Column-alone model: frame action, base flexibility and a direct-analysis stability check are not included; second-order effects use B1 with the entered effective lengths.`,g.U.id);
  add('drift',`${label} · runway-level lateral displacement`,r.drift.value,r.drift.limit,'length','\\Delta_{rail}\\le h_{rail}/n',`Service side thrust and static eccentric reaction of the crane, column alone (${c.strong.top} top). Limit h/${c.driftLimit}; DG7 suggests about h/240 and 2 in for cab-operated cranes and h/100 for pendant cranes. Frame and roof diaphragm flexibility are excluded.`);
