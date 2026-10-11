@@ -3,6 +3,7 @@ import {bracketSchema} from './bracketInputs';
 import {angleTieSchema} from './angleTie';
 import {endStopSchema} from './endStopInputs';
 import {endBearingSchema} from './endBearingInputs';
+import type {RolledBracketResults} from './rolledBracket';
 import type {BracketResults} from './bracketDesign';
 import type {ExistingBracketResults} from './existingBracket';
 import type {SupportForceEnvelope} from './bracketForces';
@@ -64,6 +65,8 @@ export interface FatigueDetailResult {
 export interface RunwayDetailResults {
  bracket?:BracketResults;
  existingBracket?:ExistingBracketResults;
+ /** New rolled wide-flange bracket ('rolled-corbel'). */
+ rolledBracket?:RolledBracketResults;
  /** Factored strength envelope of the girder end forces at each support, for the bracket and its attachments. */
  bracketForces?:SupportForceEnvelope[];
  cap?:{longitudinalFlow:number;fatigueFlows:number[]};

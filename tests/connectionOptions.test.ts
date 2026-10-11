@@ -21,7 +21,7 @@ describe('connection arrangement library and design boundaries',()=>{
   const p=cappedDemonstrationProject(),previous=fingerprint(p);p.details!.bracket!.arrangement='haunched-seat';p.details!.bracket!.tipDepth=127;p.details!.brace.arrangement='bearing-link';p.details!.brace.referenceDetail={...defaultReferenceTie,pinDiameter:31.75};
   const restored=projectSchema.parse(JSON.parse(JSON.stringify(p)));expect(restored.details!.bracket!.tipDepth).toBe(127);expect(restored.details!.brace.referenceDetail!.pinDiameter).toBe(31.75);expect(fingerprint(p)).not.toBe(previous);expect(validateProject(restored)).toEqual([]);
  });
- it.each(['haunched-seat','rolled-corbel'] as const)('does not assign twin-rib resistance to %s',kind=>{
+ it.each(['haunched-seat'] as const)('does not assign twin-rib resistance to %s',kind=>{
   const p=cappedDemonstrationProject();p.details!.bracket!.arrangement=kind;
   const s=calculate(p);expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);expect(s.detailResults).toBeUndefined();
   expect(s.checks.find(c=>c.id==='option-bracket-model')).toMatchObject({status:'unsupported'});expect(s.checks.find(c=>c.id==='option-bracket-model')?.capacity).toBeUndefined();expect(s.checks.some(c=>c.id==='bracket-rib-flexure')).toBe(false);
@@ -33,7 +33,7 @@ describe('connection arrangement library and design boundaries',()=>{
  });
  it('rejects unknown selections, nonexistent shapes and incompatible double links',()=>{
   const p=cappedDemonstrationProject();expect(projectSchema.safeParse({...p,details:{...p.details,brace:{...p.details!.brace,arrangement:'rated-link'}}}).success).toBe(false);
-  p.details!.bracket!.arrangement='rolled-corbel';p.details!.bracket!.corbelShape='W999X999';expect(validateConnectionOptions(p).join(' ')).toContain('valid AISC');
+  p.details!.bracket!.arrangement='rolled-corbel';p.details!.bracket!.corbelShape='W999X999';expect(validateProject(p).join(' ')).toContain('valid AISC');
   p.details!.bracket!.arrangement='twin-rib';p.details!.brace.arrangement='paired-links';p.system='continuous';expect(validateConnectionOptions(p).join(' ')).toContain('separate simple-span');
  });
  it('rejects tapered ribs deeper at the tip and eyes without pin material',()=>{

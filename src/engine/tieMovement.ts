@@ -20,8 +20,8 @@ export function tieMovements(s:CalculationSnapshot){
  // strain over the span, or on a bolted continuous girder over the distance from its locating support.
  const reach=p.system==='simple'?Math.max(...p.spans):Math.max(0,...continuousBearings(p).map(v=>v.distance));
  const thermal=ss?alpha*reach*Math.max(ss.temperatureRise,ss.temperatureFall):0;
- const support=r.bracket?.service.deflection?.value??r.existingBracket?.service.seatDeflection?.value;
- const supportSource=r.bracket?'designed bracket':r.existingBracket?'new seat on the existing bracket (existing support deformation excluded)':undefined;
+ const support=r.bracket?.service.deflection?.value??r.rolledBracket?.service.deflection?.value??r.existingBracket?.service.seatDeflection?.value;
+ const supportSource=r.bracket||r.rolledBracket?'designed bracket':r.existingBracket?'new seat on the existing bracket (existing support deformation excluded)':undefined;
  const cranes=p.cranes.length,impact=Math.max(...p.cranes.map(c=>c.impact));
  return {setback,cyclicLongitudinal:cyclicRotation*depth,longitudinal:rotation*depth+thermal,thermal,cyclicRotation,rotation,
   support,supportSource,cranes,impact,

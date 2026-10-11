@@ -1,4 +1,6 @@
 import type {CalculationSnapshot} from '../engine/types';
+import {bracketSeat} from '../engine/rolledBracketInputs';
+import {rolledUnderSeat} from './rolledBracketSheet';
 import {activeEndBearing,endBearingGeometry} from '../engine/endBearing';
 import {slidingBolts} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
@@ -19,7 +21,7 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
  const p=s.input,e=activeEndBearing(p),d=p.details;if(!e||!d)return undefined;
  const g=endBearingGeometry(p,e);if(!g.sleeve)return undefined;
  return {title:detailTitles.slidingBolt,render:()=>{
-  const b=p.section,bs=d.bearing,sl=slidingBolts(e),db=e.bolts.diameter,wb=d.bracket?.enabled?d.bracket:undefined,seatT=wb?.seatThickness??bs.thickness;
+  const b=p.section,bs=d.bearing,sl=slidingBolts(e),db=e.bolts.diameter,wb=d.bracket?.enabled?d.bracket:undefined,seatT=wb?bracketSeat(wb).thickness:bs.thickness,ws=rolledUnderSeat(p);
   const size=(v:number)=>plateInches(v,p.units),hx=heavyHex(db),washer=hx.washer,sleeve=g.sleeve!;
   // Grip: plate washer, sleeve, bearing plate and seat, from under the head to under the F436 washer.
   const plies=e.washerThickness+sleeve.length+bs.thickness,grip=wb?`LENGTH ${size(boltLength(db,plies+seatT,p.units))}, GRIP ${size(plies+seatT)}`:`LENGTH TO SUIT SEAT, GRIP = ${size(plies)} + SEAT`;
@@ -67,7 +69,7 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
    {at:at(X(od/2),(ySleeveTop+yBear)/2-4),labels:[`STEEL SLEEVE ${size(od)} OD X ${size(g.hole)} BORE`,`X ${size(sleeve.length)} (FLANGE + ${size(sl.clearance)}), FY ${Fy}`]},
    {at:at(X(half*.7),yFlangeTop+2),labels:[`GIRDER BOTTOM FLANGE, ${size(b.tf)}`,`SLOTTED; SEE ${detailRef(bearingBoltsTitle(p))}`]},
    {at:at(X(half*.75),yBear+bs.thickness*k/2),labels:[`BEARING PL ${size(bs.thickness)}, ${size(g.hole)} STD HOLE`]},
-   {at:at(X(half*.75),yBearBot+seatT*k/2),labels:wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS']},
+   {at:at(X(half*.75),yBearBot+seatT*k/2),labels:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,ws?.hasSeat?`HOLES OVER THE ${ws.name} FLANGE: ALSO`:`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`,...(ws?.hasSeat?[`THE ${size(ws.tf)} FLANGE, LENGTH ${size(boltLength(db,plies+seatT+ws.tf,p.units))}, GRIP ${size(plies+seatT+ws.tf)}`]:[])]:['BRACKET SEAT BY OTHERS'])},
    {at:at(X(hx.corners/2),yNut+hx.nut*k/2),labels:['HEAVY HEX NUT, A563 DH, AND F436','WASHER BELOW SEAT: TURN THE NUT']}
   ],labelBottom=yHead+labels.reduce((a,v)=>a+v.labels.length*11+8,-8);
   svg+=labelColumn(labels,lx,yHead,Math.max(yEnd+tail*k,labelBottom));

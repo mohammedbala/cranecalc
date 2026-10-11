@@ -1,7 +1,8 @@
 import {isExistingBracketType,existingBracketProfile} from '../engine/bracketProfiles';
+import {bracketSeat} from '../engine/rolledBracketInputs';
 import * as THREE from 'three';
 import type {CalculationSnapshot} from '../engine/types';
-import {bracketOptions,tieOptions,bracketArrangement,tieArrangement,bracketModelDepth} from '../engine/connectionOptions';
+import {bracketOptions,tieOptions,bracketArrangement,tieArrangement} from '../engine/connectionOptions';
 import {buildWeldedBrackets} from './weldedBracketGeometry';
 import {buildAlternativeTies} from './alternativeTieGeometry';
 import {buildIndependentSupports} from './independentSupportGeometry';
@@ -65,7 +66,7 @@ export function connectionConceptSheetSvg(s:CalculationSnapshot){
  }
  const plan=projection(selected,v=>[v.x,v.z],{x:60,y:405,w:285,h:180},p.units,concept);
  const tieElevation=topAngle?projection(selected,v=>[v.z,-v.y],{x:665,y:405,w:285,h:180},p.units,concept):null;
- const face=b.reach/1000,depth=bracketModelDepth(b)/1000,seat=b.seatThickness/1000;
+ const face=b.reach/1000,depth=bracketSeat(b).depth/1000,seat=bracketSeat(b).thickness/1000;
  const rectangle=(a:XY,z:XY)=>rect(Math.min(a[0],z[0]),Math.min(a[1],z[1]),Math.abs(a[0]-z[0]),Math.abs(a[1]-z[1]),'reference-line');
  const existingSide=rectangle(side.project(new THREE.Vector3(0,.07,face)),side.project(new THREE.Vector3(0,-seat-depth-.07,face+b.receiver.flangeThickness/1000)));
  const existingFront=rectangle(front.project(new THREE.Vector3(-b.receiver.width/2000,.07,face)),front.project(new THREE.Vector3(b.receiver.width/2000,-seat-depth-.07,face)));

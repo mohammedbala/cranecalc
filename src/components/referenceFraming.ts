@@ -1,6 +1,6 @@
 import {isExistingBracketType,existingBracketProfile} from '../engine/bracketProfiles';
+import {bracketSeat} from '../engine/rolledBracketInputs';
 import type {BracketInput} from '../engine/bracketInputs';
-import {bracketModelDepth} from '../engine/connectionOptions';
 import {buildWeldedBrackets} from './weldedBracketGeometry';
 import * as THREE from 'three';
 import { shapeMeters, type ReferenceShape } from '../data/aiscReferenceShapes';
@@ -52,7 +52,7 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
   if(bracket){const r=bracket.receiver;column={name:'Entered receiver I-section',row:0,d:r.depth/25.4,bf:r.width/25.4,tf:r.flangeThickness/25.4,tw:r.webThickness/25.4};}
   const group = new THREE.Group(); group.name = 'reference-support-framing';
   const c = shapeMeters(column), b = shapeMeters(crosshead), plateT = .0254, padH = .2;
-  const seatTop = -girderDepth / 2-(independentBearing?.thickness??continuousBearing?.thickness??0), beamTop = seatTop - (bracket?bracket.seatThickness/1000:plateT), beamBottom = beamTop - (bracket?bracketModelDepth(bracket)/1000:b.d);
+  const seatTop = -girderDepth / 2-(independentBearing?.thickness??continuousBearing?.thickness??0), beamTop = seatTop - (bracket?bracketSeat(bracket).thickness/1000:plateT), beamBottom = beamTop - (bracket?bracketSeat(bracket).depth/1000:b.d);
   if(newColumn)frameStyle='rolled';
   const columnBottom = newColumn?newColumn.bottom:beamBottom - plateT - columnHeight, columnTop = newColumn?newColumn.top:frameStyle==='tapered'?roofBottom+portalDimensions.kneeDepth:roofBottom-plateT, floor = newColumn?newColumn.floor:columnBottom - plateT - padH;
   const columnMid=(columnBottom+columnTop)/2,profile=columnProfile(columnTop-columnBottom,beamTop-columnMid,c.d);
@@ -170,6 +170,6 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
   }
   // New columns and their bases are new work: drawn as designed steel, not reference framing.
   if(newColumn)group.traverse(o=>{if(/^(column|base-plate|footing)-S\d/.test(o.name)||o.userData.part?.family==='Headed anchor rod')o.userData.designedBracket=true;});
-  if(bracket)group.add(buildWeldedBrackets(bracket,supports,seatTop,materials.plate,materials.edge,continuousBearing,materials.weld,hardware));
+  if(bracket)group.add(buildWeldedBrackets(bracket,supports,seatTop,materials.plate,materials.edge,continuousBearing,materials.weld,hardware,!!newColumn));
   return {group,floor,columnBottom,columnTop,columnOffset,columnFace,beamTop,beamBottom,capLength,bracketStart,bracketEnd,seatTop,girderBoltHoles,profile,columnOuter:(y:number)=>columnOffset+profileUpper(profile,y-columnMid)};
 }

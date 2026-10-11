@@ -1,4 +1,5 @@
 import type {CheckResult,ProjectInput} from './types';
+import {bracketSeat} from './rolledBracketInputs';
 import type {ExistingLineInput} from './existingColumnInputs';
 import type {BracingSystemResult} from './newColumnBracing';
 import {girderOffset} from './newColumnBracing';
@@ -48,7 +49,7 @@ export function existingLayout(p:ProjectInput):ExistingLayout|undefined{
  const grids=p.spans.reduce((list,v)=>[...list,list.at(-1)!+v],[0]),length=grids.at(-1)!;
  // The new column's depth runs across the runway; its footing is concentric, L across and B along.
  const columns=grids.map(x=>box(x,0,column.bf,column.d)),footings=grids.map(x=>box(x,0,ft.B,ft.L));
- const brackets=br?grids.map(x=>({x0:x-br.seatLength/2,x1:x+br.seatLength/2,u0:-column.d/2-br.seatProjection,u1:-column.d/2})):[];
+ const brackets=br?grids.map(x=>({x0:x-bracketSeat(br).length/2,x1:x+bracketSeat(br).length/2,u0:-column.d/2-br.seatProjection,u1:-column.d/2})):[];
  const g=girderOffset(p),gw=Math.max(p.section.bf,p.section.kind==='cap'?p.section.capWidth:0),girder={x0:0,x1:length,u0:-g-gw/2,u1:-g+gw/2};
  // Existing columns near enough to matter: within reach of the runway's new footings and steel along it.
  const lines:ExistingLinePlan[]=[];

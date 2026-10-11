@@ -6,6 +6,8 @@ import {cappedMechanics} from './cappedMechanics';
 import {createBracketCollector} from './bracketDesign';
 import {createSupportForceEnvelope,seatOffset,type SupportForceSet} from './bracketForces';
 import {createExistingBracketCollector} from './existingBracket';
+import {createRolledBracketCollector} from './rolledBracket';
+import {bracketSeat} from './rolledBracketInputs';
 import { LateralTorsionBeam } from './lateralTorsion';
 import { beamSystem,momentAt } from './beam';
 import { boltProperties,plateMember,compressionResistance } from './connectionStrength';
@@ -123,6 +125,7 @@ export function longitudinalPaths(p:ProjectInput,supports:number[]){
 export function createDetailCollector(p:ProjectInput,props:Properties,subdivisions:number){
  const bracket=createBracketCollector(p);
  const existingBracket=createExistingBracketCollector(p);
+ const rolledBracket=createRolledBracketCollector(p);
  const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+railTopAboveSteel(p)-cap.shearCenter:railTopAboveSteel(p)+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
@@ -130,7 +133,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  // Bolted end bearings restrain the bottom flange at each support through four bolts into the seat: bolt shear
  // deformation over the flange, bearing plate and seat grip. Otherwise the bottom flange tie is the brace pair.
  const eb=activeEndBearing(p),ebBolt=eb?boltProperties(eb.bolts.grade,eb.bolts.diameter):undefined;
- const ebK=eb&&ebBolt?4*G*ebBolt.area/(p.section.tf+details.bearing.thickness+(details.bracket?.enabled?details.bracket.seatThickness:details.bearing.thickness)):0;
+ const ebK=eb&&ebBolt?4*G*ebBolt.area/(p.section.tf+details.bearing.thickness+(details.bracket?.enabled?bracketSeat(details.bracket).thickness:details.bearing.thickness)):0;
  const bottomK=(x:number)=>ebK&&supports.some(v=>Math.abs(v-x)<=1e-6)?ebK:brace.stiffness;
  const bearings=independentBearings(p),adjacent=adjacentBays(p);
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
@@ -286,12 +289,13 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   // A bay carrying the force away from this support leaves its reactions unchanged: each distinct set once.
   // The seat also takes the locating bearing's longitudinal force and, through the bearing bolts, the bottom-flange
   // lateral force of the girder ends at the grid, at their bearings' mean offset along the runway.
-  if(bracket||existingBracket)for(const x of supports){const distinct=new Set<string>();for(const c of concurrent(x)){
+  if(bracket||existingBracket||rolledBracket)for(const x of supports){const distinct=new Set<string>();for(const c of concurrent(x)){
    const f=supportSet(x,c),loads=f.ends.length?f.ends.map(v=>({vertical:v.vertical,offset:v.offset,length:.4*Lbr})):[{vertical:f.vertical,offset:0}];
    const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:f.longitudinal,bottom:f.bottom,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:0};
    const key=[...loads.map(v=>v.vertical),horizontal.longitudinal].join();if(distinct.has(key))continue;distinct.add(key);
    bracket?.observe(e.kind,f.id,x,loads,bin,horizontal);
    existingBracket?.observe(e.kind,f.id,x,loads,bin);
+   rolledBracket?.observe(e.kind,f.id,x,loads,bin,horizontal);
   }}
   if(e.kind==='strength'){
    for(const [x,r] of reactions){
@@ -376,6 +380,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   result.bracketForces=forces.result();
   if(bracket)result.bracket=bracket.result;
   if(existingBracket)result.existingBracket=existingBracket.result;
+  if(rolledBracket)result.rolledBracket=rolledBracket.result;
   return result;
  };
  return {observe,finish};

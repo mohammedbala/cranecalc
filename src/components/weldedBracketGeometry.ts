@@ -2,13 +2,14 @@ import {isExistingBracketType,existingBracketProfile} from '../engine/bracketPro
 import * as THREE from 'three';
 import type {BracketInput} from '../engine/bracketInputs';
 import type {PartInfo} from './connectionDetails';
-import {aiscShapeByName} from '../data/aiscSections';
 import {bracketArrangement} from '../engine/connectionOptions';
+import {rolledStub} from '../engine/rolledBracketInputs';
 import {filletWeld} from './weldGeometry';
 import {buildExistingBrackets} from './existingBracketGeometry';
 import type {HardwareBuilder} from './connectionDetails';
-export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:number,steel:THREE.Material,edge:THREE.LineBasicMaterial,bearing?:{width:number;length:number;thickness:number},weldMaterial:THREE.Material=steel,hardware?:HardwareBuilder){
+export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:number,steel:THREE.Material,edge:THREE.LineBasicMaterial,bearing?:{width:number;length:number;thickness:number},weldMaterial:THREE.Material=steel,hardware?:HardwareBuilder,columnIsNew=false){
  if(isExistingBracketType(bracketArrangement(b)))return buildExistingBrackets(b,supports,seatTop,steel,edge,bearing,hardware);
+ if(bracketArrangement(b)==='rolled-corbel')return buildRolledBrackets(b,supports,seatTop,steel,edge,bearing,weldMaterial,columnIsNew);
  const group=new THREE.Group(),kind=bracketArrangement(b);group.name='designed-welded-column-brackets';group.userData.designedBracket=kind==='twin-rib';group.userData.bracketArrangement=kind;
  const mm=.001,face=b.reach*mm,tip=face-b.seatProjection*mm,top=seatTop-b.seatThickness*mm;
  const add=(geometry:THREE.BufferGeometry,id:string,family:string,x:number,y:number,z:number,station:number)=>{
@@ -18,19 +19,6 @@ export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:num
  supports.forEach((x,i)=>{
   add(new THREE.BoxGeometry(b.seatLength*mm,b.seatThickness*mm,b.seatProjection*mm),`WB-S${i+1}-seat`,kind==='twin-rib'?'Designed bracket seat':'Bracket seat (reference)',x,seatTop-b.seatThickness*mm/2,(face+tip)/2,x);
   if(bearing)add(new THREE.BoxGeometry(bearing.length,bearing.thickness,bearing.width),`WB-S${i+1}-bearing`,'Girder bearing plate',x,seatTop+bearing.thickness/2,0,x);
-  if(kind==='rolled-corbel'){
-   const shape=aiscShapeByName(b.corbelShape??'W12X40')!;
-   if(!shape)return;
-   const d=shape.d*.0254,bf=shape.bf*.0254,tf=shape.tf*.0254,tw=shape.tw*.0254,L=b.seatProjection*mm;
-   for(const [label,y] of [['top',top-tf/2],['bottom',top-d+tf/2]] as const)add(new THREE.BoxGeometry(bf,tf,L),`WB-S${i+1}-corbel-${label}`,`${shape.name} corbel flange (reference)`,x,y,(face+tip)/2,x);
-   add(new THREE.BoxGeometry(tw,d-2*tf,L),`WB-S${i+1}-corbel-web`,`${shape.name} corbel web (reference)`,x,top-d/2,(face+tip)/2,x);
-   for(const sign of [-1,1]){
-    filletWeld(group,`WB-S${i+1}-corbel-web-root-${sign}`,new THREE.Vector3(x+sign*tw/2,top-tf,face),new THREE.Vector3(x+sign*tw/2,top-d+tf,face),new THREE.Vector3(sign,0,0),new THREE.Vector3(0,0,-1),b.rootWeld*mm,weldMaterial,'Field weld corbel to existing column (reference; weld-group design required).',{x,z:face},{location:'field',existingSteel:true});
-    filletWeld(group,`WB-S${i+1}-corbel-seat-${sign}`,new THREE.Vector3(x+sign*bf/2,top,tip),new THREE.Vector3(x+sign*bf/2,top,face),new THREE.Vector3(sign,0,0),new THREE.Vector3(0,-1,0),b.seatWeld*mm,weldMaterial,'Shop weld seat to corbel (reference; plate and fatigue design required).',{x,z:face},{location:'shop'});
-   }
-   for(const [at,sy] of [[top-tf,-1],[top-d+tf,1]] as const)for(const side of [-1,1])filletWeld(group,`WB-S${i+1}-corbel-flange-root-${sy}-${side}`,new THREE.Vector3(x+side*tw/2,at,face),new THREE.Vector3(x+side*bf/2,at,face),new THREE.Vector3(0,sy,0),new THREE.Vector3(0,0,-1),b.rootWeld*mm,weldMaterial,'Field weld corbel flange to existing column (reference; no assigned capacity).',{x,z:face},{location:'field',existingSteel:true});
-   return;
-  }
   for(const side of [-1,1]){
    const rx=x+side*b.ribSpacing*mm/2;
    if(kind==='haunched-seat'){
@@ -47,6 +35,56 @@ export function buildWeldedBrackets(b:BracketInput,supports:number[],seatTop:num
     add(new THREE.ExtrudeGeometry(seat,{depth:b.seatProjection*mm,bevelEnabled:false}),`WB-S${i+1}-seat-weld-${side}-${sign}`,'Continuous seat-to-rib fillet',rx+sign*b.ribThickness*mm/2,top,tip,x);
    }
   }
+ });
+ return group;
+}
+/**
+ * New rolled wide-flange brackets: the W stub with its top at the seat (or with a spreader seat on it), the bearing
+ * stiffeners under the girder web line and every weld to the designed sizes: the stub to the column (field to an
+ * existing column, shop to a new one), and the seat and stiffener fillets (shop). x along the runway, y up, z from
+ * the girder web line toward the column face.
+ */
+export function buildRolledBrackets(b:BracketInput,supports:number[],seatTop:number,steel:THREE.Material,edge:THREE.LineBasicMaterial,bearing?:{width:number;length:number;thickness:number},weldMaterial:THREE.Material=steel,columnIsNew=false){
+ const group=new THREE.Group();group.name='designed-welded-column-brackets';group.userData.designedBracket=true;group.userData.bracketArrangement='rolled-corbel';
+ const st=rolledStub(b);if(!st)return group;
+ const mm=.001,face=b.reach*mm,r=st.input,seat=st.seat,d=st.d*mm,bf=st.bf*mm,tf=st.tf*mm,tw=st.tw*mm,L=st.L*mm,top=seatTop-(seat?seat.t*mm:0),zc=face-L/2;
+ const column={location:columnIsNew?'shop' as const:'field' as const,existingSteel:!columnIsNew};
+ const description='Designed wide-flange bracket; see Column bracket checks and the bracket details. Receiving building global capacity is separate.';
+ const add=(geometry:THREE.BufferGeometry,id:string,family:string,x:number,y:number,z:number,station:number)=>{
+  const mesh=new THREE.Mesh(geometry,steel);mesh.name=id;mesh.position.set(x,y,z);mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry),edge));
+  mesh.userData.part={id,family,description,support:{x:station,z:face}} satisfies PartInfo;group.add(mesh);return mesh;
+ };
+ const V=(x:number,y:number,z:number)=>new THREE.Vector3(x,y,z);
+ supports.forEach((x,i)=>{
+  const id=`WB-S${i+1}`,support={x,z:face};
+  if(bearing)add(new THREE.BoxGeometry(bearing.length,bearing.thickness,bearing.width),`${id}-bearing`,'Girder bearing plate',x,seatTop+bearing.thickness/2,0,x);
+  if(seat)add(new THREE.BoxGeometry(seat.length*mm,seat.t*mm,(seat.y1-seat.y0)*mm),`${id}-seat`,'Spreader seat plate',x,seatTop-seat.t*mm/2,face-(seat.y0+seat.y1)/2*mm,x);
+  for(const [label,y] of [['top',top-tf/2],['bottom',top-d+tf/2]] as const)add(new THREE.BoxGeometry(bf,tf,L),`${id}-corbel-${label}`,`${st.name} bracket flange`,x,y,zc,x);
+  add(new THREE.BoxGeometry(tw,d-2*tf,L),`${id}-corbel-web`,`${st.name} bracket web`,x,top-d/2,zc,x);
+  const sf=st.stiffener;
+  if(sf)for(const sx of [-1,1]){
+   const w=sf.width*mm,t=sf.t*mm,h=d-2*tf,c=sf.clip*mm,shape=new THREE.Shape();
+   // Plate in the x-y plane with clipped corners at the web, extruded through its thickness along z.
+   shape.moveTo(sx*tw/2,-h/2+c);shape.lineTo(sx*(tw/2+c),-h/2);shape.lineTo(sx*(tw/2+w),-h/2);shape.lineTo(sx*(tw/2+w),h/2);shape.lineTo(sx*(tw/2+c),h/2);shape.lineTo(sx*tw/2,h/2-c);shape.closePath();
+   const geo=new THREE.ExtrudeGeometry(shape,{depth:t,bevelEnabled:false});geo.translate(0,0,-t/2);
+   add(geo,`${id}-stiffener-${sx}`,'Bracket bearing stiffener',x,top-d/2,0,x);
+   for(const fz of [-1,1]){
+    filletWeld(group,`${id}-stiffener-web-${sx}-${fz}`,V(x+sx*tw/2,top-tf-c,fz*t/2),V(x+sx*tw/2,top-d+tf+c,fz*t/2),V(sx,0,0),V(0,0,fz),sf.weld*mm,weldMaterial,'Shop fillet, stiffener to web; designed size.',support,{location:'shop'});
+    for(const [y,up] of [[top-tf,-1],[top-d+tf,1]] as const)filletWeld(group,`${id}-stiffener-flange-${sx}-${fz}-${up}`,V(x+sx*(tw/2+c),y,fz*t/2),V(x+sx*(tw/2+w),y,fz*t/2),V(0,up,0),V(0,0,fz),sf.weld*mm,weldMaterial,'Shop fillet, stiffener to flange; top end also fitted to bear.',support,{location:'shop'});
+   }
+  }
+  if(seat)for(const sx of [-1,1])filletWeld(group,`${id}-seat-weld-${sx}`,V(x+sx*bf/2,top,face-seat.y0*mm),V(x+sx*bf/2,top,face-seat.y1*mm),V(sx,0,0),V(0,-1,0),seat.weld*mm,weldMaterial,'Shop fillet, spreader seat to the flange tip; designed size.',support,{location:'shop'});
+  const k=st.k*mm,k1=st.k1*mm,where=columnIsNew?'Shop':'Field';
+  if(r.flangeJoint==='fillet'){
+   for(const [y,out] of [[top,1],[top-d,-1]] as const){
+    filletWeld(group,`${id}-flange-column-${out}`,V(x-bf/2,y,face),V(x+bf/2,y,face),V(0,out,0),V(0,0,-1),r.flangeWeld*mm,weldMaterial,`${where} fillet, outer face of the flange to the column flange; designed weld group.`,support,column);
+    for(const sx of [-1,1])filletWeld(group,`${id}-flange-column-inner-${out}-${sx}`,V(x+sx*k1,y-out*tf,face),V(x+sx*bf/2,y-out*tf,face),V(0,-out,0),V(0,0,-1),r.flangeWeld*mm,weldMaterial,`${where} fillet, inner face of the flange to the column flange; designed weld group.`,support,column);
+   }
+  }else for(const [y,label] of [[top-tf/2,'top'],[top-d+tf/2,'bottom']] as const){
+   const mesh=new THREE.Mesh(new THREE.BoxGeometry(bf,tf,.001),weldMaterial);mesh.position.set(x,y,face-.0005);mesh.name=`${id}-flange-cjp-${label}`;
+   mesh.userData.part={id:mesh.name,family:'CJP weld indication',description:`${where} CJP groove weld, flange to the column flange. Surface indication only; groove preparation and backing are not modeled.`,support,weld:{kind:'CJP indication',length:st.bf/1000,...column}} satisfies PartInfo;group.add(mesh);
+  }
+  for(const sx of [-1,1])filletWeld(group,`${id}-web-column-${sx}`,V(x+sx*tw/2,top-k,face),V(x+sx*tw/2,top-d+k,face),V(sx,0,0),V(0,0,-1),r.webWeld*mm,weldMaterial,`${where} fillet, web to the column flange; designed weld group.`,support,column);
  });
  return group;
 }

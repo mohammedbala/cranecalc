@@ -8,11 +8,12 @@ import {independentBearings} from './simpleSupports';
 import {validateExistingBracket} from './existingBracket';
 import {isAngleTie,angleTie,topFlangeAngleData,defaultSingleAngle,defaultDoubleAngle} from './angleTie';
 import {keeperGeometry} from './railSeat';
+import {defaultRolledBracket,defaultRolledShape} from './rolledBracketInputs';
 
 export const bracketOptions=[
  {id:'twin-rib',name:'Welded twin-rib seat',status:'Component checks available',basis:'Reference AIST Technical Report 13 §5.9.2',url:'',description:'Two rectangular ribs and a spreader seat welded to the column. Uses the existing gravity-bracket component model; movement and whole-building design remain separate.',required:'Seat and rib strength, eccentric root welds, local column effects, fatigue and service rotation.'},
  {id:'haunched-seat',name:'Welded haunched seat',status:'Project design required',basis:'Reference AIST Technical Report 13 §5.9.2 · bracketed support family',url:'',description:'Two tapered plate ribs under a continuous seat. This is an editable concept within the bracketed-support family, not a reproduced or prequalified standard detail.',required:'Variable-depth rib stability, seat distribution, weld stress concentrations, column effects and fatigue. The rectangular-rib model does not apply.'},
- {id:'rolled-corbel',name:'New wide-flange bracket',status:'Project design required',basis:'Reference AIST Technical Report 13 §5.9.2 · AISC Shapes Database v16.0',url:'https://www.aisc.org/aisc/publications/steel-construction-manual-resources/',description:'A short W-section welded to the column with a spreader seat above. Catalogue dimensions define the model; the section designation does not establish connection capacity.',required:'Cantilever flexure, shear and stability; spreader plate; the complete I-shaped weld group; column local effects and fatigue.'},
+ {id:'rolled-corbel',name:'New wide-flange bracket',status:'Component checks available',basis:'Reference AIST Technical Report 13 §5.9.2 · AISC 360 F2/F3, G2, H3.3, J2, J10 · AISC Shapes Database v16.0',url:'https://www.aisc.org/aisc/publications/steel-construction-manual-resources/',description:'A rolled W-section cantilever stub welded to the column flange (shop-welded to a new column, field-welded to an existing one). The runway bearing plates and their bolts land on its top flange; full-depth bearing stiffeners under the girder web line where required. The top-flange tie connects separately.',required:'Stub flexure, shear, torsion and combined stress; web yielding and crippling under the bearing and J10.8 stiffeners; the I-shaped stub-to-column weld group; column flange and web local effects; deflection and fatigue.'},
  {id:'existing-w-corbel',name:'Existing wide-flange bracket · RFP-style',status:'New seat checks + assessed support',basis:'Great Falls Airport RFP · support arrangement, pp. 1–3',url:'https://flygtf.com/wp-content/uploads/2025/09/RFPbridgecrane082925.pdf#page=3',description:'A short AISC W-section bracket with a new bolted spreader seat. The RFP photograph inspires this support family; it supplies no verified bracket designation or rating. Select the actual surveyed W-section independently of the runway girder.',required:'New seat bending, shear and fatigue; bolt fit and access; concurrent vertical and eccentric actions; documented existing strength, fatigue, contact and serviceability. Separate flange ties require their own applicable design checks.'},
  {id:'existing-corbel',name:'Existing built-up plate I-bracket',status:'New seat checks + assessed support',basis:'Reference AIST Technical Report 13 §5.9.2 · surveyed existing support',url:'',description:'A custom I-section assembled from plates. Enter the measured web, flange, projection and stiffener dimensions. Its geometry and assessment are independent of the catalogue W-bracket option.',required:'New seat bending, shear and fatigue; bolt fit and access; concurrent support actions and documented existing bracket, root-weld, continuity-plate and column assessment.'},
 ] as const;
@@ -30,7 +31,7 @@ export type TieArrangement=typeof tieOptions[number]['id'];
 export function selectBracketArrangement(d:RunwayDetails,kind:BracketArrangement):RunwayDetails{
  const b={...(d.bracket??defaultBracket),enabled:true,arrangement:kind};
  if(kind==='haunched-seat')b.tipDepth??=b.ribDepth/4;
- if(kind==='rolled-corbel')b.corbelShape??='W12X40';
+ if(kind==='rolled-corbel'){b.corbelShape??=defaultRolledShape;b.rolled??={...defaultRolledBracket};}
  if(isExistingBracketType(kind)){
   const key=kind==='existing-w-corbel'?'wideFlange':'existing';
   if(!b[key]){
@@ -55,13 +56,13 @@ export function selectTieArrangement(d:RunwayDetails,kind:TieArrangement):Runway
  else if(kind!=='paired-bars')brace.referenceDetail??={...defaultReferenceTie};
  return {...d,bracket:kind==='paired-bars'?d.bracket:{...(d.bracket??defaultBracket),enabled:true},brace};
 }
-export const bracketModelDepth=(b:BracketInput)=>isExistingBracketType(bracketArrangement(b))?existingBracketProfile(b).depth:bracketArrangement(b)==='rolled-corbel'?(aiscShapeByName(b.corbelShape??'W12X40')?.d??12)*25.4:b.ribDepth;
+export const bracketModelDepth=(b:BracketInput)=>isExistingBracketType(bracketArrangement(b))?existingBracketProfile(b).depth:bracketArrangement(b)==='rolled-corbel'?(aiscShapeByName(b.corbelShape??defaultRolledShape)?.d??14)*25.4:b.ribDepth;
 export function connectionOptionChecks(p:ProjectInput):CheckResult[]{
  const d=p.details;if(!d)return [];
  const checks:CheckResult[]=[];
  const bracket=bracketOptions.find(o=>o.id===bracketArrangement(d.bracket))!;
  const tie=tieOptions.find(o=>o.id===tieArrangement(d))!;
- if(d.bracket?.enabled&&bracket.id!=='twin-rib'&&!isExistingBracketType(bracket.id))checks.push({id:'option-bracket-model',group:'Column bracket',title:`${bracket.name} · design model`,status:'unsupported',equation:'',note:bracket.required+' Preview geometry only; no capacity is assigned and the current twin-rib results are not reused.',referenceIds:['connection-options','tr13-bracket']});
+ if(d.bracket?.enabled&&bracket.id!=='twin-rib'&&bracket.id!=='rolled-corbel'&&!isExistingBracketType(bracket.id))checks.push({id:'option-bracket-model',group:'Column bracket',title:`${bracket.name} · design model`,status:'unsupported',equation:'',note:bracket.required+' Preview geometry only; no capacity is assigned and the current twin-rib results are not reused.',referenceIds:['connection-options','tr13-bracket']});
  if(tie.id!=='paired-bars')checks.push({id:'option-tie-model',group:'Connections',title:`${tie.name} · design model`,status:'unsupported',equation:'',note:(topFlangeAngleData(p)?'Top-flange-only attachment inspired by supplied Figure 14. Check tie plate and angle strength, bolt slip/bearing, prying, slotted-hole and washer detailing, flange/cap weld fatigue, existing column local effects and imposed movement. Lower-flange restraint is not provided by this arrangement.':tie.required)+' No proprietary rating or existing flat-bar stiffness is assigned. Report generation remains blocked.',referenceIds:['connection-options',isAngleTie(tie.id)?'angle-tie-basis':tie.id==='flexible-plate'?'tieback-practice':'bearing-link-practice']});
  return checks;
 }
@@ -73,11 +74,6 @@ export function validateConnectionOptions(p:ProjectInput):string[]{
  const b=d.bracket,errors:string[]=[],kind=bracketArrangement(b),tie=tieArrangement(d),r=referenceTie(d);
  if(b?.enabled&&isExistingBracketType(kind))errors.push(...validateExistingBracket(p));
  if(b?.enabled&&kind==='haunched-seat'&&(b.tipDepth??b.ribDepth/4)>b.ribDepth)errors.push('details.bracket: haunch tip depth cannot exceed the root depth.');
- if(b?.enabled&&kind==='rolled-corbel'){
-  const shape=aiscShapeByName(b.corbelShape??'W12X40');
-  if(!shape)errors.push('details.bracket.corbelShape: select a valid AISC W-section.');
-  else if(shape.bf*25.4>b.seatLength||shape.bf*25.4+2*b.rootWeld>b.receiver.width)errors.push('details.bracket: corbel flanges and root welds must fit on the seat and receiving column.');
- }
  if(tie!=='paired-bars'){
   if(!b?.enabled)errors.push('details.brace: alternative tie previews require an enabled column bracket to locate the receiving face.');
   if(isAngleTie(tie)){

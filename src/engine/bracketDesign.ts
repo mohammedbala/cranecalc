@@ -6,6 +6,7 @@ import {available} from './aiscStrength';
 import {bracketArrangement} from './connectionOptions';
 import {minimumFillet,parallelWeldGroup,transverseFilletFatigue} from './connectionStrength';
 import {designsBracing,bracingDesign} from './newColumnBracing';
+import {validateRolledBracket} from './rolledBracket';
 
 const inch=25.4;
 
@@ -177,6 +178,7 @@ export function createBracketCollector(p:ProjectInput){
 export function validateBracket(p:ProjectInput){
  const b=p.details?.bracket;if(!b?.enabled)return [];
  if(isExistingBracketType(bracketArrangement(b)))return [];
+ if(bracketArrangement(b)==='rolled-corbel')return validateRolledBracket(p);
  const errors:string[]=[],d=p.details!,r=b.receiver;
  const add=(bad:boolean,message:string)=>{if(bad)errors.push('details.bracket: '+message);};
  add(b.reach<=d.bearing.width/2,'bearing patch must lie clear of the column face.');

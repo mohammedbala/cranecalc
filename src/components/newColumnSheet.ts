@@ -1,4 +1,6 @@
 import type {CalculationSnapshot} from '../engine/types';
+import {bracketSeat} from '../engine/rolledBracketInputs';
+import {rolledUnderSeat} from './rolledBracketSheet';
 import {format} from '../engine/units';
 import {existingColumnSection} from '../engine/existingColumn';
 import {anchorHardware,columnBaseElevation} from '../engine/columnBaseInputs';
@@ -49,7 +51,7 @@ function wPlan(cx:number,cy:number,d:number,bf:number,tf:number,tw:number,k:numb
 export function newColumnSheetSvg(s:CalculationSnapshot,number='S-08'){return topicSheetSvg(s,newColumnTopic(s),number,'NEW RUNWAY COLUMNS & FOOTINGS');}
 /** New freestanding runway column, its base plate, anchor rods and spread footing, with design data and notes. */
 export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
- const p=s.input,u=p.units,col=p.existingColumn!,b=p.columnBase!,d=p.details!,br=d.bracket?.enabled?d.bracket:undefined,g=p.section,r=s.columnBase;
+ const p=s.input,u=p.units,col=p.existingColumn!,b=p.columnBase!,d=p.details!,br=d.bracket?.enabled?d.bracket:undefined,bseat=br?bracketSeat(br):undefined,g=p.section,r=s.columnBase;
  const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'||q==='stress'&&u==='SI'?0:u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
  const c=existingColumnSection(p).section,name=col.shape||`BUILT-UP ${size(c.d)} X ${size(c.bf)}`;
  const tb=b.plate.thickness,gr=b.grout,ft=b.footing,hf=ft.thickness,a=b.anchors,hw=anchorHardware(a.diameter),row=b.plate.N/2-a.edge;
@@ -69,7 +71,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  // the base and the bracket so both ends draw at a legible scale; dimensions govern.
  views.push({title:detailTitles.newColumn,rows:2,render:()=>{
   let svg='';
-  const top=Math.max(H,tos+cap+railDepth),bottom=ftgBot-4*inch,upperFrom=seat-(br?br.seatThickness+br.ribDepth:0)-9*inch,lowerTo=Math.max(14*inch,ft.soil+8*inch);
+  const top=Math.max(H,tos+cap+railDepth),bottom=ftgBot-4*inch,upperFrom=seat-(bseat?bseat.thickness+bseat.depth:0)-9*inch,lowerTo=Math.max(14*inch,ft.soil+8*inch);
   const broken=upperFrom-lowerTo>18*inch,gap=broken?22:0,shown=broken?(top-upperFrom)+(lowerTo-bottom):top-bottom;
   const zMin=-ft.L/2-ext*.55,zMax=Math.max(ft.L/2+ext*.55,girderZ+Math.max(g.bf,g.kind==='cap'?g.capWidth:0)/2);
   const k=drawingScale(Math.min((600-gap)/shown,280/(zMax-zMin)),u),kk=k.pointsPerMm,cx=124+(-zMin)*kk,X=(z:number)=>cx+z*kk;
@@ -88,7 +90,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   }else svg+=colPart(0,H);
   svg+=line([X(0),Y(top)-8],[X(0),Y(ftgBot)+6],'grid-line');
   // Bracket seat and ribs on the girder-side flange.
-  if(br){svg+=rect(X(c.d/2),Y(seat),br.seatProjection*kk,br.seatThickness*kk,'runway-line')+rect(X(c.d/2),Y(seat-br.seatThickness),br.seatProjection*kk,br.ribDepth*kk,'runway-line');}
+  if(br&&bseat){const ws=rolledUnderSeat(p),y0=ws?.seat?.y0??0;svg+=rect(X(c.d/2+y0),Y(seat),(br.seatProjection-y0)*kk,bseat.thickness*kk,'runway-line')+rect(X(c.d/2),Y(seat-bseat.thickness),br.seatProjection*kk,bseat.depth*kk,'runway-line');if(ws)for(const off of [ws.tf,ws.d-ws.tf])svg+=line([X(c.d/2),Y(seat-bseat.thickness-off+(ws.seat?0:ws.tf))],[X(c.d/2+br.seatProjection),Y(seat-bseat.thickness-off+(ws.seat?0:ws.tf))],'runway-line');}
   // Bearing plate, girder section with the cap channel, and the rail.
   svg+=rect(X(girderZ-d.bearing.width/2),Y(y0),d.bearing.width*kk,bt*kk,'runway-line');
   svg+=`<path class="runway-line" d="M${n(X(girderZ-g.bf/2))},${n(Y(y0))}H${n(X(girderZ+g.bf/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ+g.tw/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ+g.bf/2))}V${n(Y(tos))}H${n(X(girderZ-g.bf/2))}V${n(Y(tos-g.tf))}H${n(X(girderZ-g.tw/2))}V${n(Y(y0+g.tf))}H${n(X(girderZ-g.bf/2))}Z"/>`;
@@ -144,7 +146,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   const items:{at:XY;labels:string[]}[]=[
    ...ties.map(t=>({at:[X((t.z1+t.z2)/2),Y(t.yc-t.w/2)] as XY,labels:[`${t.side>0?'TOP':'BOTTOM'} FLANGE TIE`,`SEE ${detailRef(detailTitles.flangeTie)}`]})),
    {at:[X(girderZ+g.bf/2),Y(y0+g.tf/2)],labels:[`${g.name}`,'GIRDER, SEE S-01']},
-   ...(br?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-br.seatThickness-br.ribDepth*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef(detailTitles.weldedBracket)}`]}]:[]),
+   ...(br&&bseat?[{at:[X(c.d/2+br.seatProjection*.7),Y(seat-bseat.thickness-bseat.depth*.5)] as XY,labels:['WELDED BRACKET',`SEE ${detailRef(detailTitles.weldedBracket)}`]}]:[]),
    ...strutItems,
    {at:[X(c.d/2),Y(broken?upperFrom+(seat-upperFrom)*.25:H*.5)],labels:[`NEW ${name}`,'COLUMN, ASTM A992']},
    {at:[X(row+hw.washer/2),Y(hw.washerThickness/2)],labels:[`PL ${size(tb)} BASE PL`,`SEE ${detailRef(detailTitles.basePlate)}`]},
