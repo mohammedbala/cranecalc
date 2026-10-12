@@ -176,6 +176,9 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:restrains(flanges.top,x)?topK(x):0,bottom:restrains(flanges.bottom,x)?bottomK(x):0})),
    loads:[],distributedTorque:p.railWeight*p.railEccentricity}).solve();deadTorsion.set(bay,t);}return t;};
  const deadMoment=(x:number)=>{deadVertical??=vertical.evaluate([],deadQ);return momentAt(x,deadVertical.reactions,[],deadQ);};
+ // The dead-load torsion at a station, recovered once per bay and station (stations recur over the crane positions).
+ const deadStations=new Map<string,ReturnType<ReturnType<LateralTorsionBeam['solve']>['at']>>();
+ const deadAt=(bay:number,x:number)=>{const key=`${bay}:${x.toFixed(4)}`;let v=deadStations.get(key);if(!v){v=deadBay(bay).at(x);deadStations.set(key,v);}return v;};
  function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
  const evaluate=(e:RunwayCaseEvent,bin=-1)=>{
   const key=JSON.stringify([e.kind,bin,e.wheels,e.q,e.railTorquePerLength,e.axial,e.horizontalCrane,e.cranes]);
@@ -271,7 +274,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     if(e.kind==='service'){peak('railDisplacement',Math.abs(s.v+z*s.twist),e,x);peak('twist',Math.abs(s.twist),e,x);}
     if(e.kind==='fatigue'){
      // Appendix 3.1 peak: this unfactored fatigue state plus the dead load, components superposed then summed in magnitude.
-     const d=deadBay(bayIndex).at(x-start),Mt=M+deadMoment(x),w=s.warpingCurvature+d.warpingCurvature;
+     const d=deadAt(bayIndex,x-start),Mt=M+deadMoment(x),w=s.warpingCurvature+d.warpingCurvature;
      const f=Math.abs(Mt)/props.Sx+E*Math.abs(s.curvature+d.curvature)*(cap?p.section.capWidth:p.section.bf)/2+Math.abs(Mt*(s.twist+d.twist))/props.Sy+(cap?E*Math.abs(w)*cap.omegaMax:E*Math.abs(w)*props.h0*p.section.bf/4);
      if(f>(result.fatiguePeak?.value??0))result.fatiguePeak={value:f,x,id:e.id,combination:`${e.combination}, ${details.spectrum[bin]?.name??''} + D`};
     }

@@ -43,7 +43,11 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
    // lip in front of the face (9/16 → 3/4 in) and the keeper end fillets stopped 1/2 in (the 5/16 in weld size, up to the grid)
    // short of the rail-side face, so the keeper welds and the flange under them carry a little more.
    'haunch-colstiff-length','haunch-colstiff-web-shear','end-stop-bolt-tension','end-stop-slip','end-stop-base-prying','end-stop-flange-prying','end-stop-stiffener-fit','end-stop-web',
-   'rail-keeper-weld','rail-keeper-fatigue','rail-flange-local']),keeperDetail=/^detail-(fatigue|full-cycle)-RC\d+-(left|right)$/;
+   'rail-keeper-weld','rail-keeper-fatigue','rail-flange-local',
+   // Round 2 fatigue (peer review M7): Miner checks report the equivalent range f_sr,eq against F_SR at n_SR (D/C =
+   // (sum n_i/N_i)^(1/3)), the keeper local range is one-way and the Appendix 3.1 peak uses unfactored loads.
+   'haunch-fatigue-top-flange','haunch-fatigue-bottom-flange','haunch-fatigue-flange-web','haunch-fatigue-stiffener-toe','haunch-fatigue-flare','haunch-fatigue-column',
+   'haunch-colstiff-fatigue-toe','fatigue-peak-detailed']),keeperDetail=/^detail-(fatigue-.+|full-cycle-RC\d+-(left|right))$/;
   for(const b of demoFocus005Before().checks){if(changed.has(b.id)||keeperDetail.test(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
  });
 });

@@ -38,7 +38,7 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   expect(all.capacity!).toBeCloseTo(c.capacity!,9);expect(all.demand!).toBeCloseTo(keeper.range,9);
   expect(c.utilization!**3).toBeCloseTo(keeper.damage,12);
   expect(c.equation).toBe('f_{sr,eq}=\\left(\\frac{\\sum_in_if_{sr,i}^{3}}{n_{SR}}\\right)^{1/3}\\le F_{SR}');
-  expect(c.note).toMatch(/Σn_i\/N_i = (0\.\d{3}|< 0\.001) \(information\)/);
+  expect(c.note).toMatch(/Σn_i\/N_i = (\d+\.\d{2}|< 0\.01) \(information\)/);
   // No damage sum is reported as a D/C any more: every Miner check is a stress comparison.
   expect(s.checks.filter(v=>/\\sum_i\s*n_i\/N_i|\\sum_i\(f_\{sr,i\}/.test(v.equation)).map(v=>v.id)).toEqual([]);
   // The haunch Miner checks on the same basis: D/C = (Σn_i/N_i)^(1/3) of the bins.

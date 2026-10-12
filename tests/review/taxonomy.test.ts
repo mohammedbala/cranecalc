@@ -194,7 +194,7 @@ describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>
   const page=text(section('Fatigue · girder and attachments'));
   expect(page).toMatch(/Governing method: Miner’s rule, D\/C = f sr,eq \/F SR \(bold\); the all-cycle ratio is shown alongside/);
   expect(page).toMatch(/7 details evaluated; 3\d details screened/);
-  expect(page).toMatch(/Rail keeper typical of 136 register points Rail keeper 61, x = 109\.8 ft D 7\.00 ksi 17\.65 ksi 13\.33 ksi 11\.51 ksi 0\.277 0\.65 0\.76 OK/);
+  expect(page).toMatch(/Rail keeper typical of 136 register points Rail keeper 61, x = 109\.8 ft D 7\.00 ksi 17\.65 ksi 13\.33 ksi 11\.51 ksi 0\.28 0\.65 0\.76 OK/);
   const s=clone();s.input.fatigue.method='all-cycle';
   const t=taxonomy(s);expect(t.fatigue.evaluated.find(r=>r.title==='Rail keeper')!.dc!.toFixed(2)).toBe('0.76');
  });

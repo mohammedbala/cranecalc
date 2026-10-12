@@ -34,7 +34,7 @@ export function minerEquivalent(bins:readonly {cycles:number;range:number}[],all
  const range=cycles>0?(bins.reduce((a,b)=>a+b.cycles*Math.max(0,b.range)**m,0)/cycles)**(1/m):0;
  return {range,capacity,cycles,m,damage:capacity>0?(range/capacity)**m:Infinity};
 }
-/** A damage sum as printed for information: three significant figures, "< 0.001" below that. */
-export const damageText=(d:number)=>!Number.isFinite(d)?'—':d<1e-3?'< 0.001':d<10?d.toFixed(3):d.toPrecision(3);
+/** A damage sum as printed for information: two decimals, "< 0.01" below that. */
+export const damageText=(d:number)=>!Number.isFinite(d)?'—':d<.005?'< 0.01':d.toFixed(2);
 /** The LaTeX of the equivalent-range check, slope m (3, or 6 for Category F), with an optional suffix. */
 export const minerEquation=(suffix='',m=3,R=false)=>`f_{sr,eq}=\\left(\\frac{\\sum_in_if_{sr,i}^{${m}}}{n_{SR}}\\right)^{1/${m}}\\le ${R?'R_{FIL}':''}F_{SR}${suffix}`;
