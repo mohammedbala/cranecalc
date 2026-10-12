@@ -74,7 +74,8 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   // A weld root with R_FIL < 1 has no threshold (AISC 360-16 Eq. A-3-5/A-3-6): evaluated, never screened.
   const roots=tax.fatigue.rows.filter(v=>v.category==="C''");
   expect(roots.length).toBeGreaterThan(0);for(const v of roots){expect(v.threshold).toBeUndefined();expect(v.gate).toBe('evaluated');}
-  expect(tax.fatigue.rows.find(v=>/threaded rod/.test(v.title))!.category).toBe('bolt');
+  // Bolts and threaded rods (item 8.2/8.5) carry the 'bolt' category: Rev B's cap bolts (the bracing rods are not in this package).
+  expect(tax.fatigue.rows.filter(v=>v.category==='bolt').length).toBeGreaterThan(0);
   for(const raw of ['Cat. —','Category bolt',"C''",'Category item','threaded r…'])expect(body,raw).not.toContain(raw);
   expect(fatigueTable(tax,'US')).not.toContain('…');
  });

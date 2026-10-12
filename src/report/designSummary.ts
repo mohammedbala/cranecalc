@@ -70,7 +70,8 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
  const rows=defs.map(e=>{
   const el=tax.elements.find(v=>v.key===e.key),lines=el?.shown??[],fat=tax.fatigue.evaluated.filter(r=>r.element===e.key);
   const cands=[...lines.map(l=>({c:l.controlling,dc:l.controlling.utilization??0,label:l.merged?l.title:undefined})),...fat.map(r=>({c:r.governing,dc:r.dc??0,label:`${r.title} · fatigue`}))];
-  if(!cands.length)return undefined;
+  // The longitudinal system left to the building engineer keeps its step in the load path, as a by-others row.
+  if(!cands.length)return e.key==='longitudinal'&&p.existingColumn?.enabled?{e,byOthers:true as const}:undefined;
   const g=cands.reduce((a,b)=>(b.c.status==='fail'?1e9:0)+b.dc>(a.c.status==='fail'?1e9:0)+a.dc?b:a);
   const all=[...tax.entries.values()].filter(t=>t.element===e.key),design=all.filter(t=>t.type==='design'&&t.gate==='evaluated'),fails=all.filter(t=>t.type==='design'&&t.check.status==='fail').length;
   const det=all.filter(t=>t.type==='detailing'&&t.gate==='evaluated').length,shown=lines.length+fat.length;
@@ -79,7 +80,8 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
   return {e,g,counts:`${design.length} design check${design.length===1?'':'s'} in ${shown} body row${shown===1?'':'s'}${reg.length?` (${reg.length} of them at ${registerPoints(reg)} fatigue register points)`:''}${det?`, ${det} detailing rules`:''}${fails?`, ${fails} NG`:''}`};
  }).filter(v=>v!==undefined).sort((a,b)=>a!.e.order-b!.e.order);
  return `<table class="summary-checks"><colgroup><col class="s-el"/><col class="s-check"/><col class="s-eq"/><col class="s-dc"/><col class="s-res"/></colgroup><thead><tr><th>Element · specified detail</th><th>Governing design check · reference</th><th>Equation</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(v=>{
-  const {e,g,counts}=v!,detail=e.component?componentDetail(e.component,p):'';
+  if('byOthers' in v!){const {e}=v!;return `<tr class="excluded"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b><small class="path">${esc(e.path)}</small></td><td colspan="2"><b>By others</b><small>Crane-level strut on the girder line at the locating columns, collector, brace connections and braced bay: building engineer of record (responsibility matrix, section 6.7). The longitudinal forces delivered are in section 3.5.</small></td><td class="num">—</td><td class="res"><b>BY OTHERS</b></td></tr>`;}
+  const {e,g,counts}=v as Exclude<typeof v,{byOthers:true}>,detail=e.component?componentDetail(e.component,p):'';
   return `<tr class="${g.c.status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b>${detail&&e.key!=='service'&&e.key!=='fatigue'?`<small>${esc(detail)}</small>`:''}<small class="path">${esc(e.path)}</small></td><td><b>${esc(g.label??g.c.title)}</b>${g.label?`<small>Controlling: ${esc(g.c.title)}</small>`:''}<small class="ref">${esc(shortReference(g.c))}</small><small>${counts}</small></td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—')}</td><td class="res"><b class="${g.c.status}">${esc(statusLabel(g.c.status))}</b></td></tr>`;
  }).join('')}</tbody></table>`;
 }

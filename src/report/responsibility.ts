@@ -44,9 +44,9 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
   criterion:'IEBC §503.4 / §805.3: demand-capacity ratio of existing lateral elements not more than 10% above that without the alteration (verify against the adopted edition).',forces:weight,party:EOR});
  take('brace-drift-wind',{item:'Longitudinal bracing · displacement under the 10-year wind',needed:'Crane-level displacement of the braced line along the runway under the 10-year wind.',
   criterion:'AIST TR-13 §5.5: H/400 or 2 in, whichever is less.',forces:'—',party:EOR});
- const strut=byId.get('brace-by-others');
+ const strut=byId.get('brace-by-others')??byId.get('column-longitudinal');
  if(strut){const force=sentences(strut.note).find(x=>/\d\s*(kip|kN)\b/.test(x));
-  take('brace-by-others',{item:'Crane-level strut on the girder line, collector, brace connections, braced-bay columns and foundation',
+  take(strut.id,{item:'Crane-level strut on the girder line, collector, brace connections, braced-bay columns and foundation',
    needed:`Design the crane-level strut at each locating column on the girder line${col?.longitudinalExit==='girder-strut'?' (the existing column check relies on it: the longitudinal force leaves the column at the seat with no column torsion or weak-axis bending)':''}, the collector to the braced bay, the brace end connections (gussets, clevises, bolts, welds), the braced-bay columns, anchors and foundation.`,
    criterion:'AISC 360-16 and ACI 318 strength; the strut stiff enough to hold the girder line at the seat.',forces:[longitudinal&&longitudinal.charAt(0).toUpperCase()+longitudinal.slice(1)+'.',force].filter(Boolean).join(' ')||'See section 3.5.',party:EOR});}
  // Any other check left to others.
