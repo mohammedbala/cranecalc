@@ -94,7 +94,7 @@ export function fatigueTable(tax:Taxonomy,units:Units){
  const all=[...F.evaluated,...F.screened].flatMap(r=>r.members),nEv=all.filter(c=>gate(c)==='evaluated').length,nSc=all.filter(c=>gate(c)==='screened').length;
  // Register points of a detail: all of them, and those screened below F_TH on their own range.
  const typical=(r:FatigueRow)=>{if(r.points<=1)return '';const sc=registerPoints(r.members.filter(c=>gate(c)==='screened'));
-  return ` <span class="family">typical of ${r.points} register points${sc?` (${r.points-sc} evaluated, ${sc} below F<sub>TH</sub>)`:''}</span>`;};
+  return `<small>typical of ${r.points} register points${sc?` (${r.points-sc} evaluated, ${sc} below F<sub>TH</sub>)`:''}</small>`;};
  const ratio=(v:number|undefined,governs:boolean)=>v===undefined?'—':governs?`<b>${dcText(v,2)}</b>`:dcText(v,2);
  const row=(r:FatigueRow,i:number)=>{const byMiner=miner&&r.miner!==undefined;
   return `<tr class="${r.governing.status}"><td><span class="step">${i+1}</span> <b>${esc(r.title)}</b>${typical(r)}<small>${esc(r.location)}</small></td><td>${catHtml(r,F.cycles)}</td><td class="num">${r.threshold===undefined?'none':stress(r.threshold,units)}</td><td class="num">${stress(r.capacity,units)}</td><td class="num">${stress(r.range,units)}</td><td class="num">${stress(r.equivalent,units)}</td><td class="num">${r.damage===undefined?'—':damageText(r.damage)}</td><td class="num">${ratio(r.miner,byMiner)}</td><td class="num">${ratio(r.allCycle,!byMiner)}</td><td class="res"><b>${esc(statusLabel(r.governing.status))}</b></td></tr>`;};
