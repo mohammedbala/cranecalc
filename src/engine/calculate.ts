@@ -146,6 +146,9 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
  const optionChecks=connectionOptionChecks(p);
  snapshot.checks.push(...optionChecks);
  if(optionChecks.length)snapshot.warnings.push('Selected bracket / tieback alternatives are arrangement previews. Connection resistance, stiffness, movement and fatigue need a project-specific model or supplier package. Existing detailed connection results are not reused; generation is blocked in either report scope.');
+ // Project option: a check left unverified only for missing data is omitted from this package (listed as not checked,
+ // by others) instead of blocking it. Incomplete or unsupported results still block.
+ if(p.omitUnverified)snapshot.checks=snapshot.checks.map(c=>c.status==='unverified'?{...c,status:'excluded',note:`Not checked here: omitted from this package because its data are not available (to be provided by others). ${c.note}`.trim()}:c);
  const blocking=snapshot.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status));
  // Failed engineering criteria can export; failed numerical verification cannot.
  snapshot.eligible=!blocking&&!snapshot.errors.length&&snapshot.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass');
