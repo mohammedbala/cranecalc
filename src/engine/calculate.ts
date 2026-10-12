@@ -119,7 +119,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
    if(p.details){
     const detailed=completeRunwayChecks(snapshot);
     if(snapshot.detailResults){
-     const replaced=new Set(['torsion','brace','hold-down','connection-end','connection-stiffener','connection-restraint','weld-screen','bolt-spacing','support-yield','support-cripple','web-compression']);
+     const replaced=new Set(['torsion','brace','hold-down','connection-end','connection-stiffener','connection-restraint','weld-screen','bolt-spacing','support-yield','support-cripple','web-compression',...(detailed.some(c=>c.id==='combined')?['combined','combined-bottom']:[])]);
      snapshot.checks=snapshot.checks.filter(c=>!replaced.has(c.id));
     }
     snapshot.checks.push(...detailed);

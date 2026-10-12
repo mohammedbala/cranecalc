@@ -10,6 +10,7 @@ import {deliveredRows} from '../../src/report/deliveredTable';
 import {responsibilityMatrix} from '../../src/report/responsibility';
 import {capTieLine,capAngleGeometry} from '../../src/engine/capAngle';
 import {asceCombinations} from '../../src/engine/asceCombinations';
+import {workedSteps,haunchJ10Worked} from '../../src/report/workedChecks';
 import {demoFocus005RevB} from '../fixtures/demoFocus005RevB';
 
 /**
@@ -69,6 +70,11 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
  it('makes the governing design D/C a meaningful check and lists the stiffeners in the summary',()=>{
   expect(tax.governing!.check.id).not.toMatch(/^haunch-column/);expect(tax.governing!.dc).toBeLessThan(.93);
   expect(page1).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", full depth, one pair at the haunch top flange and bottom flange; 5\/8" fillets to the flanges and 5\/8" to the web, both faces; field welded inside the existing column/);
+  // Worked: the unstiffened J10 at both flanges (R_u = P + 3M_f/b, J10.1 and J10.3) and the J10.6 panel with the net force.
+  const tx=(v:number,q:string)=>`${q}:${v}`,j10=haunchJ10Worked(s,tx as never);
+  expect(j10).toHaveLength(4);expect(j10[0]).toContain('R_u=T+\\frac{3M_f}{b}');expect(j10[1]).toContain('6.25F_{yf}t_f^2');expect(j10[3]).toContain('J10.3');
+  expect(workedSteps(s,check('haunch-column-panel'),tx as never)?.[0]).toContain('\\max(T,\\ C\\cos\\alpha)');
+  expect(text).toMatch(/Worked: unstiffened J10 at the haunch flanges · for information, not governing \(stiffened\)/);
   expect(text).toMatch(/Decision: column stiffeners required/);expect(text).toMatch(/J10\.7 \(unframed beam ends\) do not apply/);
  });
 });
@@ -123,6 +129,9 @@ describe('M6 · the tie design force and the restraint at the tie line',()=>{
   expect(check('brace-member').demand).toBeCloseTo(r.demands.brace+A6.force,6);
   // The analysis force per grid (all girder ends) and per girder end (one tie); the restraint at the tie line lowers H from 4.38 kip.
   expect(r.demands.brace/kip).toBeLessThan(4.38);expect(r.demands.braceEnd!).toBeLessThanOrEqual(r.demands.brace*(1+1e-9));
+  // Worked on the girder page: P_br, then F = H + P_br, against the tie strength.
+  const w=workedSteps(s,check('brace-member'),((v:number,q:string)=>`${q}:${v}`) as never)!;
+  expect(w).toHaveLength(3);expect(w[0]).toContain('P_{br}=\\frac{0.02M_rC_d}{h_o}+0.01P_r');expect(w[1]).toContain(`F=H+P_{br}=force:${r.demands.brace}+force:${A6.force}`);
   const tie=section('Cap tieback angle');
   expect(tie).toMatch(/Tie design force, each tie: F = H \+ P ?br = 4\.\d\d kip \+ 2\.29 kip = 6\.\d\d kip/);
   expect(tie).toMatch(/one girder end alone reaches/);expect(tie).toMatch(/Stiffness: β ?br = .*5\.21 kip\/in/);expect(tie).toMatch(/Fatigue range ΔF = .* full reversal/);
