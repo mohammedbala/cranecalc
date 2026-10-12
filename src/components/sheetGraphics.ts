@@ -253,12 +253,12 @@ export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][
  return svg+labels.map((v,i)=>text(at[0],at[1]+i*11,labelCaps(v),size)).join('')+'</g>';
 }
 /**
- * AWS A2.4 field-weld flag on a staff rising from the arrow/reference-line junction `at`. The pennant always points
- * toward the side the arrow (leader) leaves the reference line: left when the leader joins the reference line's left
- * end, right when it joins the right end.
+ * AWS A2.4 field-weld flag on a staff rising from the arrow/reference-line junction `at`. The pennant points away
+ * from the arrow (leader), along the reference line toward the tail: right when the leader joins the reference
+ * line's left end, left when it joins the right end. `leader` is the side the leader joins.
  */
-export function fieldWeldFlag(at:XY,toward:'left'|'right'){
- const [x,y]=at,s=toward==='left'?-1:1;
+export function fieldWeldFlag(at:XY,leader:'left'|'right'){
+ const [x,y]=at,toward=leader==='left'?'right':'left',s=toward==='left'?-1:1;
  return `<g data-field-weld="true" data-flag-toward="${toward}">${line([x,y],[x,y-15])}<path class="annotation" style="fill:#111" d="M${n(x)},${n(y-15)}l${s*10},3l${-s*10},3Z"/></g>`;
 }
 /** Junction of the arrow and the reference line of a weld symbol laid out at `at` (reference line at[0]-3 to at[0]+92). */

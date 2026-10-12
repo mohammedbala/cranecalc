@@ -8,7 +8,7 @@ import {snapQuarter} from '../src/engine/quarterInch';
 import {demoFocus005RevB} from './fixtures/demoFocus005RevB';
 
 /**
- * US drawings dimension to whole 1/4 in (no dimension to 1/16 in), and every field-weld flag points toward the side
+ * US drawings dimension to whole 1/4 in (no dimension to 1/16 in), and every field-weld flag points away from the side
  * its leader leaves the reference line. One calculate of DEMO-FOCUS-005 rev B and of the capped demonstration.
  */
 const projects={revB:calculate(demoFocus005RevB()),capped:calculate(cappedDemonstrationProject())};
@@ -51,7 +51,7 @@ describe('dimensions on the 1/4 in grid (US)',()=>{
    expect(off).toEqual([]);
    expect(count).toBeGreaterThan(100);
   });
-  it('points every field-weld flag toward the side its leader leaves the reference line',()=>{
+  it('points every field-weld flag away from the side its leader joins the reference line',()=>{
    let flags=0;
    for(const sheet of drawn[name].sheets){
     for(const m of sheet.svg.matchAll(/<g data-multileader="weld"[^>]*data-weld-location="field"[^>]*>/g)){
@@ -61,8 +61,8 @@ describe('dimensions on the 1/4 in grid (US)',()=>{
      const flag=/<g data-field-weld="true" data-flag-toward="(left|right)"><line class="annotation" x1="([-\d.]+)" y1="([-\d.]+)"[^>]*\/><path class="annotation" style="fill:#111" d="M[-\d.]+,[-\d.]+l(-?\d+),3/.exec(group);
      expect(flag,`${sheet.number} field weld without a flag`).not.toBeNull();
      const [,toward,x,y,dx]=flag!;
-     expect(toward,`${sheet.number} flag at ${x},${y}`).toBe(side);
-     expect(Math.sign(Number(dx))).toBe(side==='left'?-1:1);
+     expect(toward,`${sheet.number} flag at ${x},${y}`).toBe(side==='left'?'right':'left');
+     expect(Math.sign(Number(dx))).toBe(side==='left'?1:-1);
      // The staff stands at the junction of the leader and the reference line.
      expect(Math.abs(Number(x)-elbow[0])).toBeLessThan(.01);expect(Math.abs(Number(y)-elbow[1])).toBeLessThan(.01);
      flags++;
@@ -75,7 +75,7 @@ describe('dimensions on the 1/4 in grid (US)',()=>{
      const [sx,sy]=[f.points[0][0],f.points[0][1]+15],leader=polys.find(e=>e.type==='polyline'&&!e.closed&&e.points.length===3&&e.points[1][0]===sx&&e.points[1][1]===sy);
      expect(leader,`${d.number} flag without leader`).toBeDefined();
      const pts=(leader as {points:[number,number][]}).points,side=Math.sign(pts[1][0]-pts[2][0]);
-     expect(Math.sign(f.points[1][0]-f.points[0][0]),d.number).toBe(side);
+     expect(Math.sign(f.points[1][0]-f.points[0][0]),d.number).toBe(-side);
      flags++;
     }
    }

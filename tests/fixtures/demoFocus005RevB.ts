@@ -58,6 +58,10 @@ export function demoFocus005RevB():ProjectInput{
  note('Girder W24X104 + C15X50 → W14X61 + C15X50 (154 → 111 plf; 10.8 kip less runway mass on the building).');
  // Building evaluation data that are not available (frame type, frame service displacements, site seismic, IEBC
  // evaluation, 10-year wind on the braced line) are omitted from this package and listed as by others.
+ // The longitudinal bracing is left out of this package for now: the crane longitudinal force goes to the crane-level
+ // strut on the girder line, and the strut, collector and braced bay are by the building engineer of record.
+ p.longitudinalBracing!.enabled=false;
+ note('Longitudinal bracing section removed from this package; the crane-level strut, collector and braced bay are by the building engineer of record.');
  p.omitUnverified=true;
  note('Checks without data (frame type, 10-year wind drift, rail gauge from frame spread, runway seismic, IEBC alteration) omitted from the report and listed as not checked (by others).');
  // One bumper data source throughout: the corrected supplier schedule (the end stop source still named CAP-CS-02).
