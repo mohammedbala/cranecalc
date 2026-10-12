@@ -169,6 +169,8 @@ export const taxonomyCss=`figure.fatigue-sn{display:block}figure.fatigue-sn>svg{
 function csvNumber(v:number|undefined,q:Quantity,units:Units){
  if(v===undefined||!Number.isFinite(v))return '';
  const d=Number(toDisplay(v,q,units).toPrecision(12)),a=Math.abs(d);if(a<5e-5)return '0';
+ // A US length of whole sixteenths (a size, a tolerance) is exact: 0.375, not 0.38.
+ if(q==='length'&&units==='US'&&Math.abs(d*16-Math.round(d*16))<1e-6)return String(d);
  const decimals=q==='temperature'||q==='temperatureChange'?0:a<.1?Math.min(6,1-Math.floor(Math.log10(a))):a>=100?0:Math.min(2,Math.max(0,2-Math.floor(Math.log10(a))));
  return String(Number(d.toFixed(decimals)));
 }

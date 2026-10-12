@@ -160,7 +160,7 @@ export function tidyNumbers(text:string){
  * R<sub>FIL</sub> and so on, never with the underscore. A sentence ending twice ("accepted..") is closed once.
  */
 export function subscripts(html:string){
- return html.replace(/(?<![\w/.&#-])([A-Za-z])_\{?([A-Za-z]{1,4}|\d)\}?(?![\w])/g,'$1<sub>$2</sub>').replace(/(?<![.\d])\.\.(?=\s|$|<)/g,'.');
+ return html.replace(/(?<![\w/.&#-])([A-Za-z])_\{?([A-Za-z]{1,8}|\d)\}?(?![\w])/g,'$1<sub>$2</sub>').replace(/(?<![.\d])\.\.(?=\s|$|<)/g,'.');
 }
 export const inlineMath=(tex:string)=>katex.renderToString(tex,{throwOnError:false,displayMode:false});
 export const statusLabel=(s:CheckResult['status'])=>({pass:'OK',fail:'NG',excluded:'BY OTHERS','not-applicable':'N/A',unverified:'UNVERIFIED',unsupported:'UNSUPPORTED',incomplete:'INCOMPLETE'} as Record<string,string>)[s]??s.toUpperCase();
