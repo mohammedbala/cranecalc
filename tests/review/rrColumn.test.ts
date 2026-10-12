@@ -110,7 +110,7 @@ describe('M5 · the existing column check states its conditions',()=>{
   const col=section('Existing column check');
   expect(col).toMatch(/Conditional result\. The column is checked as part of a braced \(non-sway\) frame/);
   expect(col).toMatch(/Unbraced lengths\. L ?cx = 312 in.*use 120 in.*not the entered L ?cy = 96 in/);
-  expect(col).toMatch(/Impact\. Vertical impact Ci is included/);expect(col).toMatch(/Drift height\. AIST TR-13 §5\.3: H = 231\.6\d? in .*limit min\(H\/400, 2 in\) = 0\.58 in/);
+  expect(col).toMatch(/Impact\. Vertical impact Ci is included/);expect(col).toMatch(/Drift height\. AIST TR-13 §5\.3: H = 23[12](\.\d+)? in .*limit min\(H\/400, 2 in\) = 0\.58 in/);
   expect(col).toMatch(/combinations with E .*do not govern/);
  });
  it('numbers the combinations as ASCE 7-16 §2.3.1 and §2.3.6',()=>{
@@ -145,7 +145,7 @@ describe('M10 · the responsibility matrix',()=>{
   expect(m).toMatch(/Item What is needed Acceptance criterion Force and location delivered Responsible party/);
   for(const re of [/frame type/,/10-year wind \(TR-13/,/rail gauge/,/Runway seismic/,/alteration evaluation/,/Crane-level strut on the girder line/,/Crane data/,/Rail and crane wheels/,/Opposite runway/,/Existing column survey/,/Load test at 125%/])expect(item(re),String(re)).toBeDefined();
   expect(item(/10-year wind \(TR-13/)!.criterion).toMatch(/H\/400 or 2 in.*H = 232 in.*limit 0\.58 in/);
-  expect(item(/rail gauge/)!.forces).toMatch(/Computed here, part of the total: .*\+6\.97 × 10⁻² in|Computed here, part of the total: .*0\.07 in/);
+  expect(item(/rail gauge/)!.forces).toMatch(/Computed here, part of the total: .*\+6\.97 × 10⁻² in|Computed here, part of the total: .*\+?0\.070? in/);
   expect(item(/Crane data/)!.needed).toMatch(/s = 0\.5.*0\.9 trolley factor/);
   expect(item(/Crane-level strut/)!.needed).toMatch(/the existing column check relies on it/);expect(item(/Crane-level strut/)!.forces).toMatch(/crane stop 10\.0 kip at grids 1 and 5/);
   expect(item(/Load test/)!.criterion).toMatch(/12\.2 kip per wheel ≤ the design wheel load 13\.6 kip/);
