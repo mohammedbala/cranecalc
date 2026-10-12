@@ -112,6 +112,12 @@ export interface RunwayDetailResults {
  /** Strength cases whose girder bay is unstable at the applied load; their response is not recovered. */
  unstableCases?:number;
  normalStress:number;shearStress:number;railDisplacement:number;twist:number;criticalMultiplier:number;
+ /**
+  * Largest elastic normal stress under the unfactored cyclic loads (AISC 360-16 Appendix 3.1): dead load (girder, cap,
+  * rail, entered live load) plus each unfactored fatigue-bin state, the same corner envelope as normalStress, at every
+  * station of every fatigue case. The factored envelope normalStress is never used for the 0.66Fy limit.
+  */
+ fatiguePeak?:{value:number;x:number;id:string;combination:string};
  residual:number;meshChange:number;travelChange:number;cases:number;braceStiffness:number;braceForce:number;
  fatigue:FatigueDetailResult[];interfaces:InterfaceAction[];
  railFatigueBins:{name:string;cycles:number;vertical:number;lateral:number;flangeStress:number;plateStress:number;weldStress:number}[];

@@ -1,9 +1,10 @@
 import type {CalculationSnapshot,CheckResult,ProjectInput} from '../engine/types';
 import {toDisplay,unit,type Quantity} from '../engine/units';
 import {dcText} from '../engine/checkPresentation';
-import {categoryLabel,checkTypeLabel,effectLabel,gateLabel,type BodyLine,type FatigueRow,type Taxonomy,type TaxonEntry} from '../engine/checkTaxonomy';
+import {allCycleRange,categoryLabel,checkTypeLabel,effectLabel,gateLabel,registerPoints,type BodyLine,type FatigueRow,type Taxonomy,type TaxonEntry} from '../engine/checkTaxonomy';
 import {caseLabel,equationCell,fixed2,shortReference,sig3,statusLabel,subscripts,tidyNumbers,value} from './reportParts';
 import {responsibilityMatrix,responsibilityBlock} from './responsibility';
+import {damageText} from '../engine/fatigueConstants';
 
 /**
  * Report blocks driven by the check taxonomy: body rows of the governing DESIGN checks, page-1 open items and counts,
@@ -52,8 +53,9 @@ export function banner(tax:Taxonomy,draft=false){
 }
 /** Counts: design checks evaluated E (shown S), screened R, detailing rules D (F flagged). */
 export function countsLine(tax:Taxonomy){
- const c=tax.counts,reg=[...tax.entries.values()].filter(t=>t.type==='design'&&t.gate==='evaluated'&&t.check.id.startsWith('detail-')).length;
- return `<p class="counts"><b>Design checks evaluated ${c.designEvaluated}</b> (shown ${c.designShown}${reg?`; ${reg} of them fatigue register points`:''}), <b>screened ${c.designScreened}</b>, not applicable ${c.designNotApplicable}; <b>detailing rules ${c.detailing}</b> (${c.detailingFlagged} flagged). Also recorded: ${c.byType.classification} classifications, ${c.byType.verification} analysis verifications, ${c.byType.input} inputs, ${c.byType['load-basis']} load-basis comparisons, ${c.byType['by-others']} by others — ${c.total} results in all (Appendix A and the CSV).</p>`;
+ const c=tax.counts,design=[...tax.entries.values()].filter(t=>t.type==='design'),reg=(gate:string)=>design.filter(t=>t.gate===gate&&/^detail-(fatigue|full-cycle)-/.test(t.check.id)).map(t=>t.check);
+ const ev=reg('evaluated'),sc=reg('screened'),regText=(v:CheckResult[])=>v.length?`; ${v.length} of them at ${registerPoints(v)} fatigue register points`:'';
+ return `<p class="counts">A check is one computed result (one row of Appendix A and of the CSV); a body row shows the governing check of a limit state, a merged group or a fatigue detail; a fatigue register point is one station and flange edge of the girder detail register, with two checks (equivalent range and all-cycle). <b>Design checks evaluated ${c.designEvaluated}</b> (${c.designShown} body rows${regText(ev)}), <b>screened ${c.designScreened}</b>${sc.length?` (${sc.length} of them at ${registerPoints(sc)} register points)`:''}, not applicable ${c.designNotApplicable}; <b>detailing rules ${c.detailing}</b> (${c.detailingFlagged} flagged). Also recorded: ${c.byType.classification} classifications, ${c.byType.verification} analysis verifications, ${c.byType.input} inputs, ${c.byType['load-basis']} load-basis comparisons, ${c.byType['by-others']} by others — ${c.total} results in all (Appendix A and the CSV).</p>`;
 }
 
 /**
@@ -63,14 +65,30 @@ export function countsLine(tax:Taxonomy){
 export function byOthersItems(tax:Taxonomy,s:CalculationSnapshot){return responsibilityMatrix(tax,s);}
 export function byOthersBlock(tax:Taxonomy,s:CalculationSnapshot,compact=false){return responsibilityBlock(tax,s,compact);}
 
-/** The fatigue table: details evaluated, with Miner's sum and the all-cycle bound side by side; screened details counted. */
+/** Category as printed in the fatigue table: "D", "C″ (root, R_FIL = 0.70)" (R_FIL = F_SR / F_SR,C at n_SR), "item 8.5". */
+const catHtml=(r:FatigueRow,n:number)=>{const l=esc(categoryLabel(r.category,r.title));
+ if(r.category!=="C''"||!r.capacity)return l.replace('R_FIL','R<sub>FIL</sub>');
+ return l.replace('R_FIL)',`R<sub>FIL</sub> = ${(r.capacity/allCycleRange('C',n)).toFixed(2)})`);};
+/**
+ * The fatigue table: every evaluated detail at the design cycle count n_SR with the Miner equivalent range f_sr,eq and
+ * the largest range f_sr,max against the same F_SR at n_SR (two D/Cs on one basis, the project method's in bold), the
+ * damage sum for information; the screened details counted. A detail is one row (a family of register points of one
+ * detail and category, or one named check); a check is one computed result of Appendix A.
+ */
 export function fatigueTable(tax:Taxonomy,units:Units){
- const F=tax.fatigue,method=F.method==='miner'?"Miner's sum over the duty bins":'all-cycle bound (largest range at every cycle)';
- const row=(r:FatigueRow,i:number)=>`<tr class="${r.governing.status}"><td><span class="step">${i+1}</span> <b>${esc(r.title)}</b>${r.typicalOf>1?` <span class="family">typical of ${r.typicalOf}</span>`:''}<small>${esc(r.location)}</small></td><td>${esc(categoryLabel(r.category,r.title)).replace('R_FIL','R<sub>FIL</sub>')}</td><td class="num">${stress(r.range,units)}</td><td class="num">${stress(r.threshold,units)}</td><td class="num">${r.miner===undefined?'—':dcText(r.miner,2)}</td><td class="num">${r.allCycle===undefined?'—':dcText(r.allCycle,2)}</td><td class="num"><b>${dcText(r.dc,2,'—')}</b></td><td class="res"><b>${esc(statusLabel(r.governing.status))}</b></td></tr>`;
- const peak=F.peak?`<p>Peak elastic stress (AISC 360-16 Appendix 3.1, ≤ 0.66F<sub>y</sub>): max D/C ${dcText(F.peak.controlling.utilization,2)} (${esc(F.peak.controlling.title)}).</p>`:'';
- return `<p><b>Governing method (project setting): ${method}.</b> ${F.method==='miner'?'The all-cycle bound (the largest range applied to every cycle) is shown alongside for comparison.':'Miner\'s sum is shown alongside for comparison.'} ${F.cycles.toLocaleString('en-US')} live-load cycles. <b>${F.evaluated.length} detail${F.evaluated.length===1?'':'s'} evaluated; ${F.screened.length} screened</b> below the constant-amplitude threshold F<sub>TH</sub> (AISC 360-16 Appendix 3.1: largest live-load stress range less than F<sub>TH</sub>), recorded with their ranges in Appendix A and the CSV.</p>`
-  +(F.evaluated.length?`<table class="checks fatigue-table"><colgroup><col style="width:34%"/><col style="width:6%"/><col style="width:11%"/><col style="width:10%"/><col style="width:9%"/><col style="width:10%"/><col style="width:10%"/><col style="width:10%"/></colgroup><thead><tr><th>Detail · governing location</th><th>Cat.</th><th>f<sub>sr</sub> max</th><th>F<sub>TH</sub></th><th>Σn<sub>i</sub>/N<sub>i</sub></th><th>All-cycle f<sub>sr</sub>/F<sub>SR</sub></th><th>D/C</th><th>Result</th></tr></thead><tbody>${F.evaluated.map((r,i)=>row(r,i)).join('')}</tbody></table>`:'')+peak
-  +(F.screened.length?`<p class="others">Screened below threshold (${F.screened.length} details, ${F.screened.reduce((n,r)=>n+r.typicalOf,0)} checks); closest to F<sub>TH</sub>: ${[...F.screened].filter(r=>r.range!==undefined&&r.threshold).sort((a,b)=>b.range!/b.threshold!-a.range!/a.threshold!).slice(0,4).map(r=>`${esc(r.title)} ${stress(r.range,units)} vs ${stress(r.threshold,units)}`).join('; ')}.</p>`:'');
+ const F=tax.fatigue,miner=F.method==='miner',gate=(c:CheckResult)=>tax.entries.get(c.id)?.gate;
+ const all=[...F.evaluated,...F.screened].flatMap(r=>r.members),nEv=all.filter(c=>gate(c)==='evaluated').length,nSc=all.filter(c=>gate(c)==='screened').length;
+ // Register points of a detail: all of them, and those screened below F_TH on their own range.
+ const typical=(r:FatigueRow)=>{if(r.points<=1)return '';const sc=registerPoints(r.members.filter(c=>gate(c)==='screened'));
+  return `<small>typical of ${r.points} register points${sc?` (${r.points-sc} evaluated, ${sc} below F<sub>TH</sub>)`:''}</small>`;};
+ const ratio=(v:number|undefined,governs:boolean)=>v===undefined?'—':governs?`<b>${dcText(v,2)}</b>`:dcText(v,2);
+ const row=(r:FatigueRow,i:number)=>{const byMiner=miner&&r.miner!==undefined;
+  return `<tr class="${r.governing.status}"><td><span class="step">${i+1}</span> <b>${esc(r.title)}</b>${typical(r)}<small>${esc(r.location)}</small></td><td>${catHtml(r,F.cycles)}</td><td class="num">${r.threshold===undefined?'none':stress(r.threshold,units)}</td><td class="num">${stress(r.capacity,units)}</td><td class="num">${stress(r.range,units)}</td><td class="num">${stress(r.equivalent,units)}</td><td class="num">${r.damage===undefined?'—':damageText(r.damage)}</td><td class="num">${ratio(r.miner,byMiner)}</td><td class="num">${ratio(r.allCycle,!byMiner)}</td><td class="res"><b>${esc(statusLabel(r.governing.status))}</b></td></tr>`;};
+ const peak=F.peak?`<p>Peak stress under the unfactored cyclic loads (AISC 360-16 Appendix 3.1, f<sub>max</sub> ≤ 0.66F<sub>y</sub>): D/C ${dcText(F.peak.controlling.utilization,2)}, ${stress(F.peak.controlling.demand,units)} against ${stress(F.peak.controlling.capacity,units)} (${esc(F.peak.controlling.title)}; dead load plus the unfactored fatigue loading, never a factored stress).</p>`:'';
+ const n=F.cycles.toLocaleString('en-US');
+ return `<p><b>Basis.</b> AISC 360-16 Appendix 3 at the design cycle count n<sub>SR</sub> = ${n} (the sum of the duty bins). Miner’s rule over the duty bins is reported as the equivalent constant-amplitude stress range f<sub>sr,eq</sub> = (Σn<sub>i</sub>f<sub>sr,i</sub><sup>3</sup>/n<sub>SR</sub>)<sup>1/3</sup> against F<sub>SR</sub> at n<sub>SR</sub>; the all-cycle bound compares the largest bin range f<sub>sr,max</sub> with the same F<sub>SR</sub>. F<sub>SR</sub> is taken without the threshold F<sub>TH</sub> (no endurance-limit credit in a variable spectrum), so both ratios are on one basis and f<sub>sr,eq</sub>/F<sub>SR</sub> = (Σn<sub>i</sub>/N<sub>i</sub>)<sup>1/3</sup>; the damage sum Σn<sub>i</sub>/N<sub>i</sub> is listed for information. <b>${miner?'Governing method: Miner’s rule, D/C = f<sub>sr,eq</sub>/F<sub>SR</sub> (bold); the all-cycle ratio is shown alongside.':'Governing method: all-cycle bound, D/C = f<sub>sr,max</sub>/F<sub>SR</sub> (bold); the Miner ratio is shown alongside.'}</b> A detail is one row of the table (a family of register points of the same detail and category, or one named check); a check is one computed result in Appendix A. <b>${F.evaluated.length} detail${F.evaluated.length===1?'':'s'} evaluated; ${F.screened.length} detail${F.screened.length===1?'':'s'} screened</b> below F<sub>TH</sub> (AISC 360-16 Appendix 3.1: largest live-load stress range less than F<sub>TH</sub>; a weld-root detail, Category C″ with R<sub>FIL</sub> &lt; 1 (Eq. A-3-6), has no threshold and is always evaluated). Of their ${all.length} checks, ${nEv} are evaluated and ${nSc} screened: a register point whose own largest range is below F<sub>TH</sub> is screened, also within an evaluated detail. Every check is in Appendix A and the CSV.</p>`
+  +(F.evaluated.length?`<table class="checks fatigue-table"><colgroup><col style="width:27%"/><col style="width:8%"/><col style="width:7%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:9%"/><col style="width:7%"/></colgroup><thead><tr><th>Detail · governing location</th><th>Cat.</th><th>F<sub>TH</sub></th><th>F<sub>SR</sub> at n<sub>SR</sub></th><th>f<sub>sr,max</sub></th><th>f<sub>sr,eq</sub></th><th>Σn<sub>i</sub>/N<sub>i</sub></th><th>Miner f<sub>sr,eq</sub>/F<sub>SR</sub></th><th>All-cycle f<sub>sr,max</sub>/F<sub>SR</sub></th><th>Result</th></tr></thead><tbody>${F.evaluated.map((r,i)=>row(r,i)).join('')}</tbody></table>`:'')+peak
+  +(F.screened.length?`<p class="others">Screened details (${F.screened.length}), closest to F<sub>TH</sub>: ${[...F.screened].filter(r=>r.range!==undefined&&r.threshold).sort((a,b)=>b.range!/b.threshold!-a.range!/a.threshold!).slice(0,4).map(r=>`${esc(r.title)} ${stress(r.range,units)} vs ${stress(r.threshold,units)}`).join('; ')}.</p>`:'');
 }
 
 const margin=(c:CheckResult,units:Units)=>{
@@ -174,52 +192,88 @@ export function checksCsv(s:CalculationSnapshot,tax:Taxonomy,o:{internal?:boolea
 }
 
 /**
- * Fatigue summary plot (S-N, log-log, black and white): for each evaluated detail, numbered as in the fatigue table,
- * its design curve F_SR(n) (Appendix 3 Eq. A-3-1, slope 1/3; Category F Eq. A-3-2, slope 1/6) down to its threshold
- * F_TH, passing through the allowable at the design cycles (Δf / all-cycle ratio, so R_PJP / R_FIL reductions carry
- * over), with the largest stress range (open circle) and the Miner equivalent constant-amplitude range
- * F_SR(N)·D^(1/m) (filled) at the design cycle count N. Screened details are plotted as crosses below their thresholds.
+ * Fatigue summary plot (S-N, log-log, black and white): for each evaluated detail, numbered as in the fatigue table and
+ * drawn with its own marker shape, its duty bins (n_i, f_sr,i) as open markers, the Miner equivalent range f_sr,eq at
+ * the design cycle count n_SR as a filled marker and the largest range there (the all-cycle bound) as a bar; its design
+ * curve F_SR(n) (Appendix 3 Eq. A-3-1, slope 1/3; Category F Eq. A-3-2, slope 1/6) through F_SR at n_SR (so R_FIL
+ * reductions carry over) down to the threshold F_TH (none for a C″ root), labelled at its right end. Details on one
+ * curve share it. Screened details: crosses at n_SR, at their largest range. Full titles in the key below the plot.
  */
 export function fatigueSnPlot(tax:Taxonomy,units:Units){
  const F=tax.fatigue,N=F.cycles,toU=(v:number)=>units==='US'?v/ksi:v,unit=units==='US'?'ksi':'MPa';
- const rows=F.evaluated.filter(r=>r.range!==undefined&&r.allCycle!==undefined&&r.allCycle>0).map((r,i)=>{
-  const m=/^F$/.test(r.category)?6:3,FSR=toU(r.range!/r.allCycle!),TH=toU(r.threshold??0);
-  return {n:F.evaluated.indexOf(r)+1,m,FSR,TH,range:toU(r.range!),eq:r.miner!==undefined?FSR*r.miner**(1/m):undefined,i};
+ const rows=F.evaluated.map((r,i)=>({r,i,n:i+1})).filter(({r})=>r.range!==undefined&&r.capacity!==undefined&&r.capacity>0).map(({r,i,n})=>{
+  const m=/^F$/.test(r.category)?6:3,FSR=toU(r.capacity!),TH=r.threshold===undefined?0:toU(r.threshold);
+  const bins=(r.bins?.length?r.bins:[{cycles:N,range:r.range!}]).filter(b=>b.cycles>0&&b.range>0).map(b=>({n:b.cycles,f:toU(b.range)}));
+  return {n,i,m,FSR,TH,range:toU(r.range!),eq:r.bins?.length&&r.equivalent!==undefined?toU(r.equivalent):undefined,bins,label:categoryLabel(r.category,r.title),title:r.title};
  });
- const scr=F.screened.filter(r=>r.range!==undefined&&r.range>0).map(r=>({range:toU(r.range!),TH:toU(r.threshold??0)}));
+ const scr=F.screened.filter(r=>r.range!==undefined&&r.range>0).map(r=>({range:toU(r.range!)}));
  if(!rows.length&&!scr.length)return '';
- const W=600,H=280,L=50,R=210,T=14,B=36,pw=W-L-R,ph=H-T-B,x0=4,x1=8;
- const vals=rows.length?rows.flatMap(r=>[r.range,r.TH,r.FSR*(N/10**x0)**(1/r.m),...(r.eq?[r.eq]:[])]):scr.map(r=>r.TH);
+ const x0=4,x1=8,W=600,L=50,R=118,T=14,ph=240,pw=W-L-R;
+ // F_SR(n): through F_SR at N with slope 1/m, not below F_TH.
+ const curve=(r:typeof rows[number],n:number)=>Math.max(r.FSR*(N/n)**(1/r.m),r.TH);
+ const vals=rows.length?rows.flatMap(r=>[r.range,curve(r,10**x0),curve(r,10**x1),...r.bins.map(b=>b.f),...(r.eq?[r.eq]:[])]):scr.map(s=>s.range);
  // The axis spans the evaluated details; screened ranges below it are counted in the key, not drawn.
  const y0=Math.floor(Math.log10(Math.min(...vals)*.8)),y1=Math.ceil(Math.log10(Math.max(...vals)*1.2));
  const X=(n:number)=>L+(Math.log10(n)-x0)/(x1-x0)*pw,Y=(v:number)=>T+ph-(Math.log10(v)-y0)/(y1-y0)*ph,clipY=(v:number)=>Math.min(Math.max(v,10**y0),10**y1);
+ // One marker shape per detail (open or filled), centered at (x, y).
+ const shape=(k:number,x:number,y:number,fill:boolean,s=3)=>{
+  const st=`fill="${fill?'#000':'#fff'}" stroke="#000" stroke-width=".8"`,p=(pts:number[][])=>`<polygon points="${pts.map(([a,b])=>`${(x+a*s).toFixed(1)},${(y+b*s).toFixed(1)}`).join(' ')}" ${st}/>`;
+  switch(k%7){
+   case 0:return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${s}" ${st}/>`;
+   case 1:return p([[-.9,-.9],[.9,-.9],[.9,.9],[-.9,.9]]);
+   case 2:return p([[0,-1.15],[1.05,.75],[-1.05,.75]]);
+   case 3:return p([[0,-1.2],[1.2,0],[0,1.2],[-1.2,0]]);
+   case 4:return p([[0,1.15],[1.05,-.75],[-1.05,-.75]]);
+   case 5:return p([[0,-1.1],[1.05,-.34],[.65,.9],[-.65,.9],[-1.05,-.34]]);
+   default:return p([[-1,-.5],[0,-1.1],[1,-.5],[1,.5],[0,1.1],[-1,.5]]);
+  }
+ };
  let g='';
  for(let k=x0;k<=x1;k++){for(const s of [1,2,5])if(k<x1||s===1){const n=s*10**k,x=X(n).toFixed(1);g+=`<line x1="${x}" y1="${T}" x2="${x}" y2="${T+ph}" stroke="#000" stroke-width="${s===1?.4:.15}"/>`;}
   g+=`<text x="${X(10**k).toFixed(1)}" y="${T+ph+11}" font-size="8" text-anchor="middle">10<tspan dy="-3" font-size="6">${k}</tspan></text>`;}
  for(let k=y0;k<=y1;k++){for(const s of [1,2,5])if(k<y1||s===1){const v=s*10**k,y=Y(v).toFixed(1);g+=`<line x1="${L}" y1="${y}" x2="${L+pw}" y2="${y}" stroke="#000" stroke-width="${s===1?.4:.15}"/>`;g+=`<text x="${L-3}" y="${(+y+3).toFixed(1)}" font-size="7.5" text-anchor="end">${+(v.toPrecision(2))}</text>`;}}
  g+=`<rect x="${L}" y="${T}" width="${pw}" height="${ph}" fill="none" stroke="#000" stroke-width=".8"/>`;
- g+=`<text x="${L+pw/2}" y="${H-6}" font-size="8.5" text-anchor="middle">Number of stress-range cycles, n</text><text transform="translate(12 ${T+ph/2}) rotate(-90)" font-size="8.5" text-anchor="middle">Stress range f<tspan font-size="6.5" dy="1.5">sr</tspan><tspan dy="-1.5"> (${unit})</tspan></text>`;
+ g+=`<text x="${L+pw/2}" y="${T+ph+24}" font-size="8.5" text-anchor="middle">Number of stress-range cycles, n</text><text transform="translate(12 ${T+ph/2}) rotate(-90)" font-size="8.5" text-anchor="middle">Stress range f<tspan font-size="6.5" dy="1.5">sr</tspan><tspan dy="-1.5"> (${unit})</tspan></text>`;
  // Design cycle count.
- g+=`<line x1="${X(N).toFixed(1)}" y1="${T}" x2="${X(N).toFixed(1)}" y2="${T+ph}" stroke="#000" stroke-width=".8" stroke-dasharray="5 2 1 2"/><text x="${(X(N)+3).toFixed(1)}" y="${T+9}" font-size="7.5">N = ${N.toLocaleString('en-US')}</text>`;
- const dashes=['','4 2','1.5 1.5','6 2 1.5 2','2 2 6 2','8 3'],labels:{n:number;y:number}[]=[];
- for(const r of rows){
-  // Curve through (N, F_SR(N)) with slope 1/m, down to F_TH.
-  const at=(n:number)=>Math.max(r.FSR*(N/n)**(1/r.m),r.TH),pts:string[]=[];
-  for(let k=0;k<=80;k++){const n=10**(x0+(x1-x0)*k/80);pts.push(`${X(n).toFixed(1)},${Y(clipY(at(n))).toFixed(1)}`);}
-  g+=`<polyline points="${pts.join(' ')}" fill="none" stroke="#000" stroke-width=".9" stroke-dasharray="${dashes[r.i%dashes.length]}"/>`;
-  const x=X(N),yr=Y(clipY(r.range));g+=`<circle cx="${x.toFixed(1)}" cy="${yr.toFixed(1)}" r="3.2" fill="#fff" stroke="#000" stroke-width=".9"/>`;
-  if(r.eq)g+=`<circle cx="${x.toFixed(1)}" cy="${Y(clipY(r.eq)).toFixed(1)}" r="2.6" fill="#000"/>`;
-  labels.push({n:r.n,y:yr});
+ const xN=X(N);
+ g+=`<line x1="${xN.toFixed(1)}" y1="${T}" x2="${xN.toFixed(1)}" y2="${T+ph}" stroke="#000" stroke-width=".7" stroke-dasharray="1.5 1.5"/><text x="${(xN+3).toFixed(1)}" y="${T+9}" font-size="7.5">n<tspan font-size="5.5" dy="1.5">SR</tspan><tspan dy="-1.5"> = ${N.toLocaleString('en-US')}</tspan></text>`;
+ // Curves: one per distinct (category, F_SR at N, F_TH, slope), labelled at the right end.
+ const curves=new Map<string,{r:typeof rows[number];ns:number[];labels:Set<string>}>();
+ for(const r of rows){const key=`${r.m}|${r.FSR.toPrecision(4)}|${r.TH.toPrecision(4)}`,c=curves.get(key)??{r,ns:[],labels:new Set<string>()};c.ns.push(r.n);c.labels.add(r.label);curves.set(key,c);}
+ const ends=[...curves.values()].map(c=>({...c,y:Y(clipY(curve(c.r,10**x1)))})).sort((a,b)=>a.y-b.y);
+ // Solid and dashed alternately in the order of F_SR at n_SR, where the curves are read.
+ const dashed=new Set([...ends].sort((a,b)=>b.r.FSR-a.r.FSR).filter((_,k)=>k%2));
+ let last=-1e9;
+ for(const c of ends){
+  const pts:string[]=[];for(let j=0;j<=80;j++){const n=10**(x0+(x1-x0)*j/80);pts.push(`${X(n).toFixed(1)},${Y(clipY(curve(c.r,n))).toFixed(1)}`);}
+  g+=`<polyline points="${pts.join(' ')}" fill="none" stroke="#000" stroke-width=".9"${dashed.has(c)?' stroke-dasharray="5 2.5"':''}/>`;
+  const ly=Math.max(c.y,last+10);last=ly;const label=[...c.labels].map(l=>l.startsWith('item')?`A-3.1 ${l}`:`Cat. ${l}`).join(', ');
+  g+=`<line x1="${L+pw}" y1="${c.y.toFixed(1)}" x2="${L+pw+5}" y2="${ly.toFixed(1)}" stroke="#000" stroke-width=".4"/><text x="${L+pw+7}" y="${(ly+2.6).toFixed(1)}" font-size="7.5"><tspan font-weight="700">${c.ns.join(', ')}</tspan> ${esc(label).replace('R_FIL','R<tspan font-size="5.5" dy="1.5">FIL</tspan><tspan dy="-1.5"></tspan>')}</text>`;
  }
- // Point labels right of the N line, pushed apart to 9 px and joined to their points by a short leader.
- labels.sort((a,b)=>a.y-b.y);let last=-1e9;for(const l of labels){const ly=Math.max(l.y,last+9);last=ly;const x=X(N);g+=`<line x1="${(x+3.5).toFixed(1)}" y1="${l.y.toFixed(1)}" x2="${(x+12).toFixed(1)}" y2="${ly.toFixed(1)}" stroke="#000" stroke-width=".4"/><text x="${(x+14).toFixed(1)}" y="${(ly+3).toFixed(1)}" font-size="7.5" font-weight="700">${l.n}</text>`;}
- for(const s of scr.filter(v=>v.range>=10**y0)){const x=X(N)-7,y=Y(s.range);g+=`<path d="M${x-2.2},${y-2.2}L${x+2.2},${y+2.2}M${x-2.2},${y+2.2}L${x+2.2},${y-2.2}" stroke="#000" stroke-width=".7"/>`;}
- // Key.
- const kx=L+pw+10;let ky=T+6;const key=(svg:string,label:string)=>{g+=svg.replace(/\{x\}/g,String(kx)).replace(/\{y\}/g,String(ky))+`<text x="${kx+22}" y="${ky+3}" font-size="7.5">${label}</text>`;ky+=12;};
- key(`<circle cx="{x}" cy="{y}" r="3.2" transform="translate(8 0)" fill="#fff" stroke="#000" stroke-width=".9"/>`,'Largest range f<tspan font-size="5.5" dy="1.5">sr</tspan><tspan dy="-1.5"> (all cycles)</tspan>');
- key(`<circle cx="{x}" cy="{y}" r="2.6" transform="translate(8 0)" fill="#000"/>`,'Miner equivalent f<tspan font-size="5.5" dy="1.5">sr</tspan><tspan dy="-1.5"> at N</tspan>');
- key(`<path d="M{x},{y}" transform="translate(6 -2.2)" stroke="#000"/><path d="M${kx+5.8},${ky-2.2}L${kx+10.2},${ky+2.2}M${kx+5.8},${ky+2.2}L${kx+10.2},${ky-2.2}" stroke="#000" stroke-width=".7"/>`,`Screened, below F<tspan font-size="5.5" dy="1.5">TH</tspan><tspan dy="-1.5"> (${scr.length}; ${scr.filter(v=>v.range<10**y0).length} below the axis)</tspan>`);
- ky+=4;
- for(const r of rows){const row=F.evaluated[r.n-1];g+=`<line x1="${kx}" y1="${ky}" x2="${kx+18}" y2="${ky}" stroke="#000" stroke-width=".9" stroke-dasharray="${dashes[r.i%dashes.length]}"/><text x="${kx+22}" y="${ky+3}" font-size="7.5"><tspan font-weight="700">${r.n}</tspan> ${(l=>l.startsWith('item')?`A-3.1 ${l}`:`Cat. ${l}`)(esc(categoryLabel(row.category,row.title)).replace('R_FIL','R<tspan font-size="5.5" dy="1.5">FIL</tspan><tspan dy="-1.5"></tspan>'))} · ${esc(row.title.length>34?row.title.slice(0,33)+'…':row.title)}</text>`;ky+=11;}
- return `<figure class="calculation-figure fatigue-sn"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="S-N summary of the evaluated fatigue details" font-family="Arial, sans-serif">${g}</svg><figcaption><strong>Fatigue summary · stress range against design life</strong><p>Each evaluated detail (numbered as in the table) with its AISC 360-16 Appendix 3 design curve down to the threshold F<sub>TH</sub>. At the design life N, the open circle is the largest live-load stress range (all-cycle bound) and the filled circle the Miner-equivalent constant-amplitude range over the duty bins; a point below its curve passes. Crosses: details screened below their thresholds.</p></figcaption></figure>`;
+ // Screened details: crosses on the n_SR line.
+ for(const s of scr.filter(v=>v.range>=10**y0)){const y=Y(s.range);g+=`<path d="M${(xN-2.2).toFixed(1)},${(y-2.2).toFixed(1)}L${(xN+2.2).toFixed(1)},${(y+2.2).toFixed(1)}M${(xN-2.2).toFixed(1)},${(y+2.2).toFixed(1)}L${(xN+2.2).toFixed(1)},${(y-2.2).toFixed(1)}" stroke="#000" stroke-width=".6"/>`;}
+ // Each detail: open markers at its duty bins, the largest range at n_SR as a bar (all-cycle) and f_sr,eq filled.
+ const tags:{n:number;y:number}[]=[];
+ for(const r of rows){
+  for(const b of r.bins)g+=`<g class="bin" data-detail="${r.n}" data-n="${b.n}" data-f="${b.f.toFixed(3)}">${shape(r.i,X(b.n),Y(clipY(b.f)),false,2.6)}</g>`;
+  if(r.eq!==undefined){const yr=Y(clipY(r.range));g+=`<line class="max" data-detail="${r.n}" x1="${(xN-4.5).toFixed(1)}" y1="${yr.toFixed(1)}" x2="${(xN+4.5).toFixed(1)}" y2="${yr.toFixed(1)}" stroke="#000" stroke-width="1.4"/>`;g+=`<g class="eq" data-detail="${r.n}" data-f="${r.eq.toFixed(3)}">${shape(r.i,xN,Y(clipY(r.eq)),true,2.6)}</g>`;tags.push({n:r.n,y:Y(clipY(r.eq))});}
+  else tags.push({n:r.n,y:Y(clipY(r.range))});
+ }
+ // Detail numbers right of the n_SR line, pushed apart to 9 px, with a short leader.
+ tags.sort((a,b)=>a.y-b.y);last=-1e9;for(const t of tags){const ly=Math.max(t.y,last+9);last=ly;g+=`<line x1="${(xN+4).toFixed(1)}" y1="${t.y.toFixed(1)}" x2="${(xN+11).toFixed(1)}" y2="${ly.toFixed(1)}" stroke="#000" stroke-width=".35"/><text x="${(xN+13).toFixed(1)}" y="${(ly+2.8).toFixed(1)}" font-size="7.5" font-weight="700">${t.n}</text>`;}
+ // Key below the plot: symbols, then every detail with its marker and full title (wrapped, never cut).
+ let ky=T+ph+40;const col=(W-L)/2,kx=(c:number)=>L+c*col;
+ const sym=[[shape(0,kx(0)+6,ky,false,2.6),'Duty bin i at (n<tspan font-size="5.5" dy="1.5">i</tspan><tspan dy="-1.5">, f</tspan><tspan font-size="5.5" dy="1.5">sr,i</tspan><tspan dy="-1.5">)</tspan>'],
+  [shape(0,kx(1)+6,ky,true,2.6),'Miner equivalent f<tspan font-size="5.5" dy="1.5">sr,eq</tspan><tspan dy="-1.5"> at n</tspan><tspan font-size="5.5" dy="1.5">SR</tspan>']] as const;
+ for(const [svg,label] of sym)g+=svg;
+ g+=`<text x="${kx(0)+14}" y="${ky+2.8}" font-size="7.5">${sym[0][1]}</text><text x="${kx(1)+14}" y="${ky+2.8}" font-size="7.5">${sym[1][1]}</text>`;ky+=11;
+ g+=`<line x1="${kx(0)+1.5}" y1="${ky}" x2="${kx(0)+10.5}" y2="${ky}" stroke="#000" stroke-width="1.4"/><text x="${kx(0)+14}" y="${ky+2.8}" font-size="7.5">Largest range f<tspan font-size="5.5" dy="1.5">sr,max</tspan><tspan dy="-1.5"> at n</tspan><tspan font-size="5.5" dy="1.5">SR</tspan><tspan dy="-1.5"> (all-cycle bound)</tspan></text>`;
+ g+=`<path d="M${kx(1)+3.8},${ky-2.2}L${kx(1)+8.2},${ky+2.2}M${kx(1)+3.8},${ky+2.2}L${kx(1)+8.2},${ky-2.2}" stroke="#000" stroke-width=".6"/><text x="${kx(1)+14}" y="${ky+2.8}" font-size="7.5">Screened detail, largest range below F<tspan font-size="5.5" dy="1.5">TH</tspan><tspan dy="-1.5"> (${scr.length}${scr.some(v=>v.range<10**y0)?`; ${scr.filter(v=>v.range<10**y0).length} below the axis`:''})</tspan></text>`;ky+=14;
+ // Detail entries in two columns, each wrapped at about 62 characters.
+ const wrap=(t:string,w=62)=>{const out:string[]=[];let line='';for(const word of t.split(' ')){if(line&&(line+' '+word).length>w){out.push(line);line=word;}else line=line?line+' '+word:word;}if(line)out.push(line);return out;};
+ const entries=rows.map(r=>({r,lines:wrap(r.label.startsWith('item')&&r.title.includes(r.label)?r.title:`${r.title} · ${r.label.startsWith('item')?`A-3.1 ${r.label}`:`Cat. ${r.label}`}`)}));
+ const half=Math.ceil(entries.length/2),colY=[ky,ky];
+ entries.forEach((e,j)=>{const c=j<half?0:1,y=colY[c];g+=shape(e.r.i,kx(c)+6,y,false,2.6)+`<text x="${kx(c)+14}" y="${y+2.8}" font-size="7.5"><tspan font-weight="700">${e.r.n}</tspan> ${e.lines.map((l,k)=>`${k?`<tspan x="${kx(c)+21}" dy="9">`:'<tspan>'}${esc(l).replace('R_FIL','R<tspan font-size="5.5" dy="1.5">FIL</tspan><tspan dy="-1.5"></tspan>')}</tspan>`).join('')}</text>`;colY[c]+=9*e.lines.length+3;});
+ const H=Math.ceil(Math.max(...colY)+4);
+ return `<figure class="calculation-figure fatigue-sn"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="S-N summary of the evaluated fatigue details" font-family="Arial, sans-serif">${g}</svg><figcaption><strong>Fatigue summary · duty bins against the design curves</strong><p>Each evaluated detail (numbered as in the table, one marker shape each) with its AISC 360-16 Appendix 3 design curve through F<sub>SR</sub> at n<sub>SR</sub> down to the threshold F<sub>TH</sub> (none for a C″ weld root), labelled at its right end. Open markers: the duty bins (n<sub>i</sub>, f<sub>sr,i</sub>); a bin below the curve uses n<sub>i</sub>/N<sub>i</sub> of the life. At n<sub>SR</sub>: the Miner equivalent range f<sub>sr,eq</sub> (filled) and the largest range applied to all cycles (bar); a point below its curve passes. Crosses: screened details at their largest range.</p></figcaption></figure>`;
 }

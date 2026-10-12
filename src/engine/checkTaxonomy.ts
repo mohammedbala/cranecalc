@@ -2,6 +2,7 @@ import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import type {FatigueDetailResult} from './runwayDetails';
 import {columnStiffenerGeometry} from './columnStiffeners';
 import {connectionCoordination} from './connectionCoordination';
+import {minerEquivalent} from './fatigueConstants';
 import {caseName} from './caseNames';
 
 /**
@@ -135,16 +136,50 @@ export function categoryLabel(category:string,title=''){
  return c;
 }
 export const thresholdOf=(category:string)=>{const v=categories[normalCategory(category)];return v?v.th*ksi:NaN;};
-export interface FatigueData{range:number;threshold:number;category:string;miner?:number;allCycle?:number;location?:string;source:string}
+/** "Category D", "Category C″ (root, R_FIL)" or "Table A-3.1 item 8.5", for a sentence. */
+export const categoryPhrase=(category:string,title='')=>{const l=categoryLabel(category,title);return l.startsWith('item')?`Table A-3.1 ${l}`:`Category ${l}`;};
+/**
+ * The stress ranges of one fatigue check at the design cycle count n_SR. Miner checks (duty bins): the equivalent
+ * constant-amplitude range f_sr,eq = (Σn_i f_sr,i^3/n_SR)^(1/3) and its ratio to F_SR at n_SR (`miner`, the Miner D/C),
+ * with the damage sum Σn_i/N_i = (f_sr,eq/F_SR)^3 for information; every check: the largest range against F_SR at
+ * n_SR (`allCycle`). F_SR is taken without the threshold (no endurance-limit credit), so both ratios are on one basis.
+ * The threshold F_TH screens a detail whose largest range is below it; a weld-root detail (Category C″, R_FIL < 1)
+ * has none (AISC 360-16 Eq. A-3-5/A-3-6) and is never screened.
+ */
+export interface FatigueData{range:number;threshold?:number;category:string;miner?:number;allCycle?:number;equivalent?:number;damage?:number;capacity?:number;
+ bins?:{cycles:number;range:number}[];location?:string;source:string}
 const haunchKeys:Record<string,string>={'top-flange':'topFlange','bottom-flange':'bottomFlange','flange-web':'flangeWeb','stiffener-toe':'stiffenerToe',flare:'flare',column:'column'};
 const parseCategory=(note:string)=>{
- const m=note.match(/Category\s+([A-F](?:-double-prime|-prime|′′|′|''|')?)/i)??note.match(/\bcategory\s+([A-F]\d?)\b/i);
+ const m=note.match(/Category\s+([A-F](?:-double-prime|-prime|′′|″|′|''|')?)/i)??note.match(/\bcategory\s+([A-F]\d?)\b/i);
  if(!m)return undefined;const c=m[1].toUpperCase();
- if(/-DOUBLE-PRIME$|''$|′′$/.test(c))return `${c[0]}''`;
+ if(/-DOUBLE-PRIME$|''$|′′$|″$/.test(c))return `${c[0]}''`;
  return /-PRIME$|'$|′$/.test(c)?`${c[0]}′`:c;
 };
 /** Total fatigue cycles: the duty spectrum where one is entered, else the project count. */
 export function fatigueCycles(s:CalculationSnapshot){const sp=s.input.details?.spectrum??[];return sp.length?sp.reduce((a,v)=>a+v.cycles,0):s.input.fatigue.cycles;}
+/** Miner equivalent range of duty bins on a curve F_SR(n) = R·allCycleRange(category, n). */
+const minerData=(bins:{cycles:number;range:number}[],category:string,R:number,range:number,n:number)=>{
+ const FSR=(k:number)=>R*allCycleRange(category,k),m=minerEquivalent(bins,FSR),capacity=FSR(n);
+ return {miner:m.range/m.capacity,equivalent:m.range,damage:m.damage,capacity,allCycle:range/capacity,bins};
+};
+/** Duty-bin ranges of a support Miner check, from the haunch, W-stub, welded-bracket or existing-support results. */
+const binKeys:[RegExp,(r:NonNullable<CalculationSnapshot['detailResults']>)=>readonly object[]|undefined,Record<string,string>][]=[
+ [/^haunch-fatigue-(top-flange|bottom-flange|flange-web|stiffener-toe|flare|column)$/,r=>r.taperedHaunch?.fatigue,haunchKeys],
+ [/^haunch-colstiff-fatigue-(toe)$/,r=>r.taperedHaunch?.fatigue,{toe:'column'}],
+ [/^wbracket-fatigue-(flange|web|column|stiffener-toe|seat)$/,r=>r.rolledBracket?.fatigue,{flange:'flange',web:'web',column:'column','stiffener-toe':'stiffenerToe',seat:'seat'}],
+ [/^bracket-fatigue-(rib|seat|column|rib-edge)$/,r=>r.bracket?.fatigue,{rib:'rib',seat:'seat',column:'column','rib-edge':'ribEdge'}],
+ [/^existing-(seat)-fatigue$/,r=>r.existingBracket?.fatigue,{seat:'seatStress'}],
+];
+function minerBins(s:CalculationSnapshot,c:CheckResult):{cycles:number;range:number}[]|undefined{
+ const r=s.detailResults;if(!r)return undefined;
+ if(c.id==='haunch-colstiff-fatigue-plate'&&r.taperedHaunch){const g=columnStiffenerGeometry(s.input);
+  return g?r.taperedHaunch.fatigue.map(v=>({cycles:v.cycles,range:Math.max(v.stiffUpper??0,v.stiffLower??0)/(g.contact*g.t)})):undefined;}
+ // Named Miner checks only: the Category F throat checks of the same supports are all-cycle checks (their demand is the range).
+ if(!/^(haunch|wbracket|bracket)-fatigue-|^haunch-colstiff-fatigue-toe$|^existing-seat-fatigue$/.test(c.id))return undefined;
+ for(const [re,list,keys] of binKeys){const m=c.id.match(re),v=m&&list(r);
+  if(m&&v)return v.map(b=>{const x=b as Record<string,unknown>;return {cycles:Number(x.cycles),range:Math.max(0,Number(x[keys[m[1]]]??0))};});}
+ return undefined;
+}
 /**
  * The largest live-load stress range, threshold and category of a fatigue check, from the register point, the
  * detail results or the check itself. Undefined when it cannot be established; the check is then evaluated.
@@ -153,34 +188,33 @@ export function fatigueData(s:CalculationSnapshot,c:CheckResult):FatigueData|und
  const n=fatigueCycles(s),r=s.detailResults;
  const reg=c.id.match(/^detail-(?:fatigue|full-cycle)-(.+)$/);
  if(reg&&r){const f=r.fatigue.find(v=>v.id===reg[1]) as (FatigueDetailResult&{threshold?:number})|undefined;if(!f)return undefined;
-  const cat=normalCategory(f.category);return {range:f.range,threshold:f.threshold??thresholdOf(cat),category:cat,miner:f.damage,allCycle:f.range/allCycleRange(cat,n),location:`${f.name} at x = ${(f.x/304.8).toFixed(1)} ft`,source:'register'};}
+  const cat=normalCategory(f.category);
+  return {range:f.range,threshold:f.threshold??thresholdOf(cat),category:cat,...minerData(f.bins.map(b=>({cycles:b.cycles,range:b.range})),cat,1,f.range,n),location:`${f.name} at x = ${(f.x/304.8).toFixed(1)} ft`,source:'register'};}
  const note=c.note??'';
  // An explicit threshold in the note (bolts: F_TH = 7 ksi).
  const th=note.match(/F_?TH\s*=\s*(\d+(?:\.\d+)?)\s*(ksi|MPa)/);
  let cat=parseCategory(note);
- const haunch=c.id.match(/^(haunch|wbracket|bracket)-fatigue-(top-flange|bottom-flange|flange-web|stiffener-toe|flare|column)$/);
- if(haunch&&haunch[1]==='haunch'&&r?.taperedHaunch){
-  const key=haunchKeys[haunch[2]],range=Math.max(0,...r.taperedHaunch.fatigue.map(v=>(v as unknown as Record<string,number>)[key]??0));
-  const k=cat??'C';return {range,threshold:thresholdOf(k),category:k,miner:c.utilization,allCycle:range/allCycleRange(k,n),source:'haunch results'};
- }
- const cs=c.id.match(/^haunch-colstiff-fatigue-(plate|toe)$/);
- if(cs&&r?.taperedHaunch){
-  const F=r.taperedHaunch.fatigue;
-  if(cs[1]==='toe'){const range=Math.max(0,...F.map(v=>v.column));return {range,threshold:thresholdOf('C'),category:'C',miner:c.utilization,allCycle:range/allCycleRange('C',n),source:'haunch results'};}
-  const g=columnStiffenerGeometry(s.input);
-  if(g){const range=Math.max(0,...F.map(v=>Math.max(v.stiffUpper??0,v.stiffLower??0)))/(g.contact*g.t),rf=note.match(/R_FIL\s*=\s*(\d+(?:\.\d+)?)/),R=rf?Number(rf[1]):1;
-   return {range,threshold:R*thresholdOf('C'),category:rf?"C''":'C',miner:c.utilization,allCycle:range/(R*allCycleRange('C',n)),source:'haunch results'};}
+ // A weld-root (R_FIL) curve: R from the note, else from the check's allowable against the plain Category C curve.
+ const rfil=note.match(/R_FIL\s*=\s*(\d+(?:\.\d+)?)/),rootR=()=>rfil?Number(rfil[1]):c.capacity!==undefined?Math.min(1,c.capacity/allCycleRange('C',n)):1;
+ // Miner checks of the supports (f_sr,eq against F_SR at n_SR): the duty-bin ranges from the support results, the curve
+ // through the check's own F_SR at n_SR (slope 1/3), so R_FIL and the E′/C″ lower-curve choices carry over.
+ // A result stored before the equivalent-range form (a damage-sum ratio) takes F_SR from its category curve.
+ const bins=minerBins(s,c);
+ if(bins){
+  const range=Math.max(0,...bins.map(v=>v.range)),root=/R_\{FIL\}/.test(c.equation)&&rootR()<1-1e-9,k=root?"C''":cat??'C';
+  const FSR=c.equation.startsWith('f_{sr,eq}')&&c.capacity!==undefined&&c.capacity>0?c.capacity:(root?rootR():1)*allCycleRange(root?'C':k,n);
+  const m=minerEquivalent(bins,k2=>FSR*(n/k2)**(1/3));
+  return {range,threshold:root?undefined:thresholdOf(k),category:k,miner:m.range/m.capacity,equivalent:m.range,damage:m.damage,capacity:FSR,allCycle:range/FSR,bins,source:'support results'};
  }
  if(c.quantity!=='stress'||c.demand===undefined||c.capacity===undefined)return undefined;
- // All-cycle checks: the demand is the largest range. Root cracks (C'', R_FIL): threshold R·F_TH,C with R from the note
- // or from the allowable against the plain Category C curve.
- const rfil=note.match(/R_FIL\s*=\s*(\d+(?:\.\d+)?)/);
- if(cat==="C''"||(!cat&&rfil)){const R=rfil?Number(rfil[1]):c.capacity/allCycleRange('C',n);return {range:c.demand,threshold:R*thresholdOf('C'),category:"C''",allCycle:c.utilization,source:'check'};}
- if(th){const v=Number(th[1])*(th[2]==='ksi'?ksi:1);return {range:c.demand,threshold:v,category:cat??(/bolt/i.test(c.title)?'bolt':'—'),allCycle:c.utilization,source:'check'};}
+ // All-cycle checks: the demand is the largest range. Root cracks (C″, R_FIL < 1): no threshold.
+ if(cat==="C''"||(!cat&&rfil)){const R=rootR();return {range:c.demand,threshold:R<1-1e-9?undefined:thresholdOf('C'),category:R<1-1e-9?"C''":'C',allCycle:c.utilization,capacity:c.capacity,source:'check'};}
+ // Bolts and threaded rods in tension, Table A-3.1 item 8.5 (F_TH = 7 ksi stated in the note).
+ if(th){const v=Number(th[1])*(th[2]==='ksi'?ksi:1);return {range:c.demand,threshold:v,category:cat??(/bolt|rod|item\s*8\.5/i.test(c.title+' '+note)?'bolt':'—'),allCycle:c.utilization,capacity:c.capacity,source:'check'};}
  // No category stated: the one whose all-cycle curve gives the check's allowable.
  if(!cat)cat=Object.keys(categories).filter(k=>k!=='bolt').find(k=>Math.abs(allCycleRange(k,n)/c.capacity!-1)<1.5e-2);
  if(!cat||!categories[normalCategory(cat)])return undefined;
- cat=normalCategory(cat);return {range:c.demand,threshold:thresholdOf(cat),category:cat,allCycle:c.utilization,source:'check'};
+ cat=normalCategory(cat);return {range:c.demand,threshold:thresholdOf(cat),category:cat,allCycle:c.utilization,capacity:c.capacity,source:'check'};
 }
 /** Peak-stress limits (Appendix 3.1, 0.66Fy) accompany the fatigue checks; they are not stress-range checks. */
 const isPeak=(id:string)=>/^fatigue-peak/.test(id);
@@ -219,7 +253,7 @@ export function gateCheck(s:CalculationSnapshot,c:CheckResult,k:Classification=c
   const n=fatigueCycles(s);
   if(n<2e4)return {gate:'screened',reason:`Live-load cycles ${n.toLocaleString('en-US')} < 20,000 (AISC 360-16 Appendix 3.1): fatigue need not be evaluated.`};
   const f=fatigueData(s,c);
-  if(f&&f.range<f.threshold)return {gate:'screened',reason:`Below threshold: largest range ${(f.range/ksi).toFixed(2)} ksi < F_TH ${(f.threshold/ksi).toFixed(2)} ksi (Category ${categoryLabel(f.category)}, AISC 360-16 Appendix 3.1).`};
+  if(f&&f.threshold!==undefined&&f.range<f.threshold)return {gate:'screened',reason:`Below threshold: largest range ${(f.range/ksi).toFixed(2)} ksi < F_TH ${(f.threshold/ksi).toFixed(2)} ksi (${categoryPhrase(f.category,c.title)}, AISC 360-16 Appendix 3.1).`};
  }
  return {gate:'evaluated'};
 }
@@ -232,6 +266,8 @@ export function registerFamily(s:CalculationSnapshot,id:string){
  const m=id.match(/^detail-(?:fatigue|full-cycle)-(.+)$/),f=m&&s.detailResults?.fatigue.find(v=>v.id===m[1]);if(!f)return undefined;
  return `register:${f.id.match(/^[A-Z]+/)?.[0]??f.id}|${f.category}|${familyTitle(f.name)}`;
 }
+/** Distinct fatigue register points (a station and flange edge) among checks; each has an equivalent-range and an all-cycle check. */
+export const registerPoints=(checks:CheckResult[])=>new Set(checks.flatMap(c=>c.id.match(/^detail-(?:fatigue|full-cycle)-(.+)$/)?.[1]??[])).size;
 /** Named fatigue checks of one detail: the haunch (bracket) flanges at their welds to the column, top and bottom. */
 const fatigueDetailKey=(id:string)=>id.replace(/^(haunch|wbracket|bracket)-fatigue-(top|bottom)-flange$/,'$1-fatigue-flanges');
 const fatigueDetailTitle:Record<string,string>={'haunch-fatigue-flanges':'Haunch flanges at the column welds (top and bottom)'};
@@ -275,8 +311,16 @@ export const mergeDefs:MergeDef[]=[
 export interface TaxonEntry{check:CheckResult;type:CheckType;effect?:Effect;owner:boolean;rule:Classification['rule'];gate:Gate;reason?:string;
  element:string;elementLabel:string;repeat?:string;typicalOf:number;governsRepeat:boolean;line?:string;location?:string}
 export interface BodyLine{key:string;title:string;element:string;elementLabel:string;effect:Effect;members:CheckResult[];controlling:CheckResult;also:CheckResult[];merged:boolean;owner:boolean}
+/**
+ * One detail of the fatigue table (a register family or a named check). range: largest bin range f_sr,max; equivalent:
+ * Miner equivalent range f_sr,eq at n_SR; capacity: F_SR at n_SR (R_FIL F_SR for a root); miner = f_sr,eq/F_SR and
+ * allCycle = f_sr,max/F_SR, the two D/Cs on one basis; dc the project method's; damage Σn_i/N_i for information; bins
+ * the duty-bin ranges of the governing point (Miner details only); threshold F_TH (none for a C″ root).
+ */
 export interface FatigueRow{key:string;title:string;element:string;category:string;location:string;range?:number;threshold?:number;miner?:number;allCycle?:number;dc?:number;
- gate:Gate;reason?:string;typicalOf:number;members:CheckResult[];governing:CheckResult}
+ equivalent?:number;damage?:number;capacity?:number;bins?:{cycles:number;range:number}[];
+ /** typicalOf: checks of the detail (two per register point: equivalent range and all-cycle); points: register points. */
+ gate:Gate;reason?:string;typicalOf:number;points:number;members:CheckResult[];governing:CheckResult}
 export interface ElementDef{key:string;label:string;step?:number;match:(c:CheckResult)=>boolean}
 export interface OpenItem{kind:'clash'|'redesign'|'input'|'detailing';check:CheckResult}
 export interface Taxonomy{
@@ -346,14 +390,16 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
  for(const t of fatigueEntries){const k=registerFamily(s,t.check.id)??fatigueDetailKey(t.check.id);families.set(k,[...(families.get(k)??[]),t]);}
  for(const [key,v] of families){
   const members=v.map(t=>t.check),data=members.map(c=>({c,f:fatigueData(s,c)})),worst=data.reduce((a,b)=>(b.f?.range??-1)>(a.f?.range??-1)?b:a,data[0]);
-  const miner=Math.max(...data.map(d=>d.c.id.startsWith('detail-full-cycle-')?-1:d.f?.miner??-1)),allCycle=Math.max(...data.map(d=>d.f?.allCycle??-1));
+  const minerOf=(d:typeof data[number])=>d.c.id.startsWith('detail-full-cycle-')?-1:d.f?.miner??-1,best=data.reduce((a,b)=>minerOf(b)>minerOf(a)?b:a,data[0]);
+  const miner=minerOf(best),allCycle=Math.max(...data.map(d=>d.f?.allCycle??-1));
   const m=miner>=0?miner:undefined,ac=allCycle>=0?allCycle:undefined,dc=method==='miner'?m??ac:ac??m;
   const evaluated=v.some(t=>t.gate==='evaluated'),inGate=members.filter(c=>entries.get(c.id)!.gate===(evaluated?'evaluated':'screened'));
   // The governing member follows the project's method: register Miner points (detail-fatigue-) or all-cycle bounds.
   const byMethod=inGate.filter(c=>method==='miner'?!c.id.startsWith('detail-full-cycle-'):!c.id.startsWith('detail-fatigue-')),gov=pick(byMethod.length?byMethod:inGate.length?inGate:members);
   const t0=entries.get(gov.id)!;
   fatigueRows.push({key,title:key.startsWith('register:')?familyTitle(gov.title):fatigueDetailTitle[key]??gov.title.replace(/\s*·\s*fatigue\b.*$/i,'').replace(/ fatigue$/i,''),element:t0.element,category:worst.f?.category??'—',
-   location:t0.location??(t0.elementLabel),range:worst.f?.range,threshold:worst.f?.threshold,miner:m,allCycle:ac,dc,gate:evaluated?'evaluated':v[0].gate,reason:evaluated?undefined:entries.get(worst.c.id)!.reason??v.find(t=>t.reason)?.reason,typicalOf:key.startsWith('register:')?members.length:1,members,governing:gov});
+   location:t0.location??(t0.elementLabel),range:worst.f?.range,threshold:worst.f?.threshold,miner:m,allCycle:ac,dc,
+   equivalent:m!==undefined?best.f?.equivalent:undefined,damage:m!==undefined?best.f?.damage:undefined,capacity:worst.f?.capacity??best.f?.capacity,bins:m!==undefined?best.f?.bins:undefined,gate:evaluated?'evaluated':v[0].gate,reason:evaluated?undefined:entries.get(worst.c.id)!.reason??v.find(t=>t.reason)?.reason,typicalOf:key.startsWith('register:')?members.length:1,points:key.startsWith('register:')?registerPoints(members):1,members,governing:gov});
  }
  fatigueRows.sort((a,b)=>(a.gate==='evaluated'?0:1)-(b.gate==='evaluated'?0:1)||(b.dc??0)-(a.dc??0));
  const evaluatedFatigue=fatigueRows.filter(r=>r.gate==='evaluated'),screenedFatigue=fatigueRows.filter(r=>r.gate==='screened');

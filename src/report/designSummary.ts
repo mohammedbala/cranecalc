@@ -6,7 +6,7 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {equationCell,governing,shortReference,statusLabel,subscripts} from './reportParts';
 import {loadPathSteps,supportAssemblyFigure} from './hairline/figures';
-import {classifyCheck,type Taxonomy} from '../engine/checkTaxonomy';
+import {classifyCheck,registerPoints,type Taxonomy} from '../engine/checkTaxonomy';
 
 /**
  * The summary at the top of the calculation: the support section with its numbered load path, and the
@@ -74,7 +74,9 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
   const g=cands.reduce((a,b)=>(b.c.status==='fail'?1e9:0)+b.dc>(a.c.status==='fail'?1e9:0)+a.dc?b:a);
   const all=[...tax.entries.values()].filter(t=>t.element===e.key),design=all.filter(t=>t.type==='design'&&t.gate==='evaluated'),fails=all.filter(t=>t.type==='design'&&t.check.status==='fail').length;
   const det=all.filter(t=>t.type==='detailing'&&t.gate==='evaluated').length,shown=lines.length+fat.length;
-  return {e,g,counts:`${design.length} design check${design.length===1?'':'s'} (${shown} shown)${det?`, ${det} detailing rules`:''}${fails?`, ${fails} NG`:''}`};
+  // Counted as on page 2: checks (Appendix A rows), body rows, and register points (two checks each).
+  const reg=design.filter(t=>/^detail-(fatigue|full-cycle)-/.test(t.check.id)).map(t=>t.check);
+  return {e,g,counts:`${design.length} design check${design.length===1?'':'s'} in ${shown} body row${shown===1?'':'s'}${reg.length?` (${reg.length} of them at ${registerPoints(reg)} fatigue register points)`:''}${det?`, ${det} detailing rules`:''}${fails?`, ${fails} NG`:''}`};
  }).filter(v=>v!==undefined).sort((a,b)=>a!.e.order-b!.e.order);
  return `<table class="summary-checks"><colgroup><col class="s-el"/><col class="s-check"/><col class="s-eq"/><col class="s-dc"/><col class="s-res"/></colgroup><thead><tr><th>Element · specified detail</th><th>Governing design check · reference</th><th>Equation</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(v=>{
   const {e,g,counts}=v!,detail=e.component?componentDetail(e.component,p):'';

@@ -1,4 +1,4 @@
-import {finiteLife} from './fatigueConstants';
+import {damageText,finiteLife,minerEquation,minerEquivalent} from './fatigueConstants';
 import type {CheckResult,ProjectInput} from './types';
 import type {BracketResults} from './bracketDesign';
 import {available} from './aiscStrength';
@@ -30,7 +30,7 @@ export function haunchedRibChecks(p:ProjectInput,r:BracketResults,add:Add,common
  add('rib-edge-thickness','Haunched ribs · minimum thickness for the free-edge slenderness',edge.minimumThickness,g.thickness,'length','t\\ge t_{min}=\\frac{\\min(a,b)}{1.47\\sqrt{E/F_y}}\\;\\left(b/t\\le\\frac{250}{\\sqrt{F_y}}\\max\\left(1,\\frac{b}{a}\\right),\\;0.5\\le\\frac{b}{a}\\le2\\right)',
   `Triangular bracket-plate free-edge rule (AISC Manual Part 15 after Salmon and Johnson; Salmon, Buettner and O'Sheridan): b/t ≤ 250/√Fy for b/a ≤ 1 and 250(b/a)/√Fy for 1 < b/a ≤ 2, Fy in ksi. Applied to the trapezoidal rib with b = projection ${f(g.length)} and a = root depth ${f(g.root)} (b/a = ${edge.proportion.toFixed(2)}), the full root depth bounding the edge's vertical extent; the ${f(g.tip)} tip only shortens the free edge.`,undefined,refs);
  // Free edge base metal: a thermally cut plate edge without re-entrant corners, AISC Table A-3.1 item 1.1.
- const damage=r.fatigue.reduce((sum,v)=>{const limit=finiteLife(categoryA,v.cycles);return sum+((v.ribEdge??0)/limit)**3;},0);
- add('fatigue-rib-edge','Haunched rib free edge · fatigue',damage,1,'ratio','\\sum_i(f_{sr,i}/F_{SR,i})^3\\le1\\ \\ \\text{(Cat. A)};\\ \\ f_{sr}=\\frac{\\Delta P(e-x_c)}{S\\cos^2\\alpha}',
-  `AISC Table A-3.1 item 1.1, Category A: plain plate with a thermally cut edge of surface roughness of 1,000 microinches (25 micrometers) or less and no re-entrant corners, as the bracket notes require. Range over each duty bin of the unfactored edge stress at the critical section, ${f(rib.critical.x)} from the column face, without impact; Miner summation with no endurance-limit credit. The root corner, at the root fillet, is checked as the rib root above.`,undefined,['bracket-basis','haunched-bracket','aisc-fatigue']);
+ const edgeEq=minerEquivalent(r.fatigue.map(v=>({cycles:v.cycles,range:v.ribEdge??0})),n=>finiteLife(categoryA,n));
+ add('fatigue-rib-edge','Haunched rib free edge · fatigue',edgeEq.range,edgeEq.capacity,'stress',minerEquation('\\ \\ \\text{(Cat. A)};\\ \\ f_{sr}=\\frac{\\Delta P(e-x_c)}{S\\cos^2\\alpha}'),
+  `AISC Table A-3.1 item 1.1, Category A: plain plate with a thermally cut edge of surface roughness of 1,000 microinches (25 micrometers) or less and no re-entrant corners, as the bracket notes require. Range over each duty bin of the unfactored edge stress at the critical section, ${f(rib.critical.x)} from the column face, without impact; Miner's rule as the equivalent constant-amplitude range at n_SR = ${edgeEq.cycles.toLocaleString('en-US')} cycles with no endurance-limit credit, Σn_i/N_i = ${damageText(edgeEq.damage)} (information). The root corner, at the root fillet, is checked as the rib root above.`,undefined,['bracket-basis','haunched-bracket','aisc-fatigue']);
 }

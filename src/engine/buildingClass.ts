@@ -25,6 +25,24 @@ export function buildingClassBasis(p:ProjectInput){
  const classified=!!p.aist&&di.classConfirmed&&di.buildingCycles>0,entered=di.buildingClass,effective=classified&&severity[implied]>severity[entered]?implied:entered;
  return {basis,stated,counted,fatigue,repetitions:di.buildingCycles,implied,entered,effective,understated:classified&&severity[implied]>severity[entered]};
 }
+/**
+ * One sentence, printed wherever the class is stated: the class and the TR-13 Table 1.1 counting basis behind it, with
+ * the class the other count would give. UNVERIFIED wording of Table 1.1 (see buildingClassBasis).
+ */
+export function classBasisSentence(p:ProjectInput){
+ const b=buildingClassBasis(p),n=(v:number)=>v.toLocaleString('en-US'),[lo,hi]=classCycles[b.implied],range=`${n(lo)} to ${Number.isFinite(hi)?n(hi):'more'} cycles`;
+ const head=`Class ${b.effective}${b.effective!==b.implied?` (the entered class, more severe than the counted Class ${b.implied})`:''}`;
+ if(b.basis==='full-load'){const all=classFromCycles(Math.max(b.repetitions,b.fatigue));
+  return `${head}: TR-13 Table 1.1 classifies the building by its number of load cycles, and the project states that only repetitions of the rated load count, so the owner's ${n(b.repetitions)} full-load repetitions are counted (Class ${b.implied}, ${range})${all!==b.implied?`, where all ${n(Math.max(b.repetitions,b.fatigue))} crane load cycles would give Class ${all}`:''}.`;}
+ const fullOnly=classFromCycles(b.repetitions);
+ return `${head}: TR-13 Table 1.1 classifies the building by its number of load cycles, and no basis limiting the count to full-load repetitions is stated, so all ${n(b.counted)} crane load cycles are counted (Class ${b.implied}, ${range})${fullOnly!==b.implied?`, where the owner's ${n(b.repetitions)} full-load repetitions alone would give Class ${fullOnly}`:''}.`;
+}
+/** The class with its count for an input table: "B: all 400,000 load cycles counted (TR-13 Table 1.1); 30,000 full-load repetitions alone: Class C". */
+export function classShort(p:ProjectInput){
+ const b=buildingClassBasis(p),n=(v:number)=>v.toLocaleString('en-US'),other=classFromCycles(b.basis==='full-load'?Math.max(b.repetitions,b.fatigue):b.repetitions);
+ return b.basis==='full-load'?`${b.effective}: ${n(b.repetitions)} full-load repetitions counted (TR-13 Table 1.1)${other!==b.implied?`; all ${n(Math.max(b.repetitions,b.fatigue))} load cycles: Class ${other}`:''}`
+  :`${b.effective}: all ${n(b.counted)} load cycles counted (TR-13 Table 1.1)${other!==b.implied?`; ${n(b.repetitions)} full-load repetitions alone: Class ${other}`:''}`;
+}
 /** The class that governs the class-dependent provisions. */
 export const effectiveBuildingClass=(p:ProjectInput)=>buildingClassBasis(p).effective;
 export const severeClass=(k:BuildingClass)=>k==='A'||k==='B';
@@ -45,7 +63,7 @@ export function buildingClassCheck(p:ProjectInput):CheckResult{
  const hiEntered=classCycles[b.entered][1],cap=Number.isFinite(hiEntered)?hiEntered:Math.max(b.counted,1);
  return {id:'building-class',group:'Criteria',title:'AIST building classification',status:b.understated?'fail':'pass',demand:b.counted,capacity:cap,quantity:'ratio',utilization:b.counted/cap,
   equation:'n_{SR}\\le N_{max}\\ \\ \\text{(TR-13 Table 1.1)}',referenceIds:['tr13-class','tr13-inspection'],
-  note:`TR-13 Table 1.1 classification basis: ${basisText}, Class ${b.implied} (${n(lo)}–${Number.isFinite(hi)?n(hi):'more'} cycles). ${verdict} ${classConsequences(b.effective)} A count on a class boundary permits the lighter class.`};
+  note:`${classBasisSentence(p)} Basis: ${basisText}, Class ${b.implied} (${n(lo)}–${Number.isFinite(hi)?n(hi):'more'} cycles). ${verdict} ${classConsequences(b.effective)} A count on a class boundary permits the lighter class.`};
 }
 
 /** Stated cycle counts in the free-text duty sources, e.g. "1,000,000 wheel stress fluctuations". */

@@ -20,8 +20,9 @@ describe('notation and fatigue summary plot',()=>{
  it('plots every evaluated fatigue detail against its design curve, numbered as in the table',()=>{
   const t=buildTaxonomy(s,summaryElements(s.input)),svg=fatigueSnPlot(t,'US');
   expect(svg).toMatch(/<figure class="calculation-figure fatigue-sn">/);
-  expect((svg.match(/<polyline /g)??[]).length).toBe(t.fatigue.evaluated.length);
-  expect(svg).toMatch(/N = 400,000/);expect(svg).not.toMatch(/NaN|Infinity|undefined/);
+  // One curve per distinct design curve (details of one category and F_SR share it), each labelled with its details.
+  const curves=(svg.match(/<polyline /g)??[]).length;expect(curves).toBeGreaterThan(0);expect(curves).toBeLessThanOrEqual(t.fatigue.evaluated.length);
+  expect(svg).toMatch(/SR<\/tspan><tspan dy="-1\.5"> = 400,000/);expect(svg).not.toMatch(/NaN|Infinity|undefined/);
   const colours=[...svg.matchAll(/#([0-9a-f]{3,6})\b/gi)].map(m=>m[1].toLowerCase()).filter(c=>!['000','fff','000000','ffffff'].includes(c));
   expect(colours).toEqual([]);
   expect(h.indexOf('<figure class="calculation-figure fatigue-sn"')).toBeGreaterThan(h.indexOf('<table class="checks fatigue-table"'));

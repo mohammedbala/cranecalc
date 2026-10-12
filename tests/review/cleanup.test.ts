@@ -69,7 +69,8 @@ describe('Appendix A, repetition and page flow (P2)',()=>{
  it('groups repeated register points, keeping every result in the CSV',()=>{
   const rows=(appendix.match(/<tr class=/g)??[]).length;
   expect(rows).toBeLessThan(s.checks.length/2);
-  expect(appendix).toMatch(/typical of 136; D\/C 0\.\d\d to 0\.41<small>governs at Rail keeper/);
+  // Round 2 fatigue (M7): the keeper Miner rows report f_sr,eq/F_SR, 0.26 to 0.49 (was the damage sum, to 0.41).
+  expect(appendix).toMatch(/typical of 136; D\/C 0\.\d\d to 0\.49<small>governs at Rail keeper/);
   const ids=[...appendix.matchAll(/data-check="([^"]*)"(?: data-members="([^"]*)")?/g)].flatMap(m=>m[2]?m[2].split(' '):[m[1]]);
   expect(new Set(ids)).toEqual(new Set(s.checks.map(c=>c.id)));
   expect(reportText(appendix)).not.toMatch(/× 10⁻|e-\d/);

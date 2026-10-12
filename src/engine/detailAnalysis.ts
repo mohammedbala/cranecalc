@@ -181,6 +181,18 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),observedSets=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
  const snap=(x:number)=>supports.find(v=>Math.abs(v-x)<1e-6)??x;
  const braceFatigue={min:0,max:0},braceEndFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
+ // Unfactored dead load for the Appendix 3.1 peak and the register peaks: major bending from the girder, cap, rail and
+ // entered live load; torsion of each bay from the eccentric rail weight, with the modeled restraints. Solved once.
+ const deadQ=p.deadLoad+p.railWeight+props.weight+(p.aist?.liveLoad??0),deadTorsion=new Map<number,ReturnType<LateralTorsionBeam['solve']>>();
+ let deadVertical:ReturnType<typeof vertical.evaluate>|undefined;
+ const deadBay=(bay:number)=>{let t=deadTorsion.get(bay);if(!t){const [start,end]=groups[bay];
+  t=new LateralTorsionBeam({length:end-start,E,G,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
+   restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:restrains(flanges.top,x)?topK(x):0,bottom:restrains(flanges.bottom,x)?bottomK(x):0})),
+   loads:[],distributedTorque:p.railWeight*p.railEccentricity}).solve();deadTorsion.set(bay,t);}return t;};
+ const deadMoment=(x:number)=>{deadVertical??=vertical.evaluate([],deadQ);return momentAt(x,deadVertical.reactions,[],deadQ);};
+ // The dead-load torsion at a station, recovered once per bay and station (stations recur over the crane positions).
+ const deadStations=new Map<string,ReturnType<ReturnType<LateralTorsionBeam['solve']>['at']>>();
+ const deadAt=(bay:number,x:number)=>{const key=`${bay}:${x.toFixed(4)}`;let v=deadStations.get(key);if(!v){v=deadBay(bay).at(x);deadStations.set(key,v);}return v;};
  function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
  // Every strength and service case by id, so printed results can name the combination and crane position (caseIndex).
  const registry=new Map<string,RunwayCaseRecord>();
@@ -289,6 +301,15 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
      else result.cap!.fatigueFlows[bin]=Math.max(result.cap!.fatigueFlows[bin],flow);
     }
     if(e.kind==='service'){peak('railDisplacement',Math.abs(s.v+z*s.twist),e,x);peak('twist',Math.abs(s.twist),e,x);}
+    if(e.kind==='fatigue'){
+     // Appendix 3.1 peak: this unfactored fatigue state plus the dead load, components superposed then summed in magnitude,
+     // at each flange's extreme fibre and tips as the factored combined stress (the larger flange governs).
+     const d=deadAt(bayIndex,x-start),Mt=Math.abs(M+deadMoment(x)),w=E*Math.abs(s.warpingCurvature+d.warpingCurvature);
+     const lat=E*Math.abs(s.curvature+d.curvature)*props.Iy+Math.abs((M+deadMoment(x))*(s.twist+d.twist));
+     const at=(k:'top'|'bottom')=>Mt/flangeS[k]+lat*flangeHalf[k]/props.Iy+(cap?w*flangeW[k]:w*props.h0*p.section.bf/4);
+     const f=Math.max(at('top'),at('bottom'));
+     if(f>(result.fatiguePeak?.value??0))result.fatiguePeak={value:f,x,id:e.id,combination:`${e.combination}, ${details.spectrum[bin]?.name??''} + D`};
+    }
    }
    if(e.kind==='fatigue')for(let i=0;i<fatigue.length;i++){
     const f=detailInputs[i];if(f.x<start||f.x>end)continue;
@@ -412,26 +433,25 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   }
  };
  const finish=()=>{
-  const q=p.deadLoad+p.railWeight+props.weight+(p.aist?.liveLoad??0);
-  const dead=vertical.evaluate([],q);
-  const deadBounds=detailInputs.map(f=>Math.abs(momentAt(f.x,dead.reactions,[],q))/props.Sx);
-  for(const [start,end] of groups){
-   const beam=new LateralTorsionBeam({length:end-start,E,G,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
-    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:restrains(flanges.top,x)?topK(x):0,bottom:restrains(flanges.bottom,x)?bottomK(x):0})),
-    loads:[],distributedTorque:p.railWeight*p.railEccentricity});
-   const deadT=beam.solve();
+  const deadBounds=detailInputs.map(f=>Math.abs(deadMoment(f.x))/props.Sx);
+  for(const [bay,[start,end]] of groups.entries()){
+   const deadT=deadBay(bay);
    detailInputs.forEach((f,i)=>{if(f.x>=start&&f.x<=end){const v=deadT.at(f.x-start);deadBounds[i]+=E*Math.abs(v.curvature)*(cap?p.section.capWidth:p.section.bf)/2+E*Math.abs(v.warpingCurvature)*(cap?.omegaMax??props.h0*p.section.bf/4);}});
   }
   // TR13 §3.10.2.3: Cds + liftFraction*Cvs + 0.5Css, without impact or
   // strength factors. Bound each bin by its own wheel-group force envelope.
-  // Full local reversal and independent global/local superposition remain
-  // conservative; no position coincidence, load sharing or endurance credit.
+  // The local keeper bending of the flange is one-way: the rail pushes a keeper outward or lifts its lip (bearing and
+  // hold-down roles, which alternate as the side thrust reverses) but never pulls it inward or presses the lip down,
+  // so the keeper moment about its weld, and the local flange stress at its toe, have one sense and run from zero
+  // (no wheel near the keeper) to the larger role at each passage. That local range is added once per passage to
+  // the global range; its sign at the toe relative to the global stress is not credited, so it is placed on the side
+  // that increases the peak stress. No position coincidence, load sharing or endurance credit.
   for(const bound of result.railFatigueBins){
    const local=railKeeperResponse(p,bound.vertical,bound.lateral);
    bound.flangeStress=local.flangeStress;bound.plateStress=local.plateStress;bound.weldStress=local.weldStress;
   }
   for(const f of fatigue)if(f.id.startsWith('RC'))for(const [i,bin] of f.bins.entries()){
-   const local=result.railFatigueBins[i].flangeStress;bin.minimum-=local;bin.maximum+=local;
+   const local=result.railFatigueBins[i].flangeStress;if(-bin.minimum>bin.maximum)bin.minimum-=local;else bin.maximum+=local;
   }
   if(cap)for(const f of fatigue)if(f.id.startsWith('CE'))for(const bin of f.bins){const traction=Math.max(...p.cranes.map(c=>c.longitudinal))/props.A;bin.minimum-=traction;bin.maximum+=traction;}
   result.braceForce=result.demands.brace;
