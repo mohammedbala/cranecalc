@@ -168,7 +168,7 @@ describe('body and page 1 (items 3-5; A1, C16)',()=>{
   expect(t.governing!.check.id).toBe('rail-twist');
  });
  it('prints the counts line',()=>{
-  expect(text(page1)).toMatch(/Design checks evaluated 414 \(43 body rows; 272 of them at 136 fatigue register points\), screened 419 \(400 of them at 200 register points\), not applicable 4; detailing rules 75 \(16 flagged\)/);
+  expect(text(page1)).toMatch(/Design checks evaluated 414 \(44 body rows; 272 of them at 136 fatigue register points\), screened 419 \(400 of them at 200 register points\), not applicable 4; detailing rules 75 \(16 flagged\)/);
  });
  it('states exactly what remains by others with the forces delivered (D34)',()=>{
   const t=text(page1);

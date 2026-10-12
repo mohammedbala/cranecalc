@@ -90,8 +90,25 @@ export interface RunwayDetailResults {
  /** Column cap on new freestanding columns: per-grid cap, stiffener, bolt and weld demands, and the fork restraint. */
  columnCap?:ColumnCapResults;
  cap?:{longitudinalFlow:number;fatigueFlows:number[]};
- /** Major flexure at the equivalent unbraced length from the load-height elastic critical moment. */
- loadHeight?:{utilization:number;demand:number;capacity:number;length:number;critical:number;id:string;combination:string;x:number};
+ /** Major flexure with the load-height elastic critical moment: Cb = Mcr / Mocr in F2 / F4 / F5 (never above 1), with the
+  * AISC 360-16 Commentary F1 load-height Cb of the same case for comparison. */
+ loadHeight?:{utilization:number;demand:number;capacity:number;length:number;critical:number;id:string;combination:string;x:number;
+  /** Cb = Mcr / Mocr (1 when the eigenvalue does not reduce the strength); Mocr the uniform-moment F2-4 / F4-5 / F5-4 moment at Lb. */
+  cb:number;mocr:number;sign?:number;
+  /** Height of the rail head above the shear center (load height in the eigen model). */
+  height:number;
+  /** Commentary F1: Cb (F1-1) of the case over the unbraced segment, times 1.4^(2y/h); its available strength. */
+  commentary?:{segment:[number,number];mmax:number;quarter:[number,number,number];gradient:number;y:number;h:number;factor:number;cb:number;capacity:number}};
+ /** Combined normal stress at each flange's extreme fibres (top: cap tips; bottom: W bottom flange tips). */
+ flangeNormal?:{top:number;bottom:number};
+ /** Normalized warping function W_no at the tips of each flange. */
+ flangeWarping?:{top:number;bottom:number};
+ /** The terms of each flange's governing combined normal stress: axial P, major M_x, lateral bending M_y = E I_y v'',
+  * theta M_x and the warping stress sigma_ws at that flange's tips. */
+ flangeParts?:{top:{P:number;M:number;My:number;thetaM:number;warping:number};bottom:{P:number;M:number;My:number;thetaM:number;warping:number}};
+ /** H1 at each flange with the governing major-axis strength M_cx (load height included): governing concurrent actions. */
+ interaction?:{mcx:number;top:number;bottom:number;topCase?:import('./types').DesignCaseSummary;bottomCase?:import('./types').DesignCaseSummary;
+  /** H1 of each combination with this M_cx (the larger flange). */ combinations?:{id:string;interaction:number}[]};
  /** Strength cases whose girder bay is unstable at the applied load; their response is not recovered. */
  unstableCases?:number;
  normalStress:number;shearStress:number;railDisplacement:number;twist:number;criticalMultiplier:number;

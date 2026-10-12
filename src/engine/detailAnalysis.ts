@@ -162,7 +162,17 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const fatigue:FatigueDetailResult[]=detailInputs.map(f=>({id:f.id,name:f.name,x:f.x,category:f.category,threshold:fatigueThreshold(f.category),reference:f.reference,bins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,minimum:0,maximum:0,range:0,allowable:0,damage:0})),damage:0,range:0,peak:0}));
  const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,flangeStress:0,plateStress:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
- const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0};
+ const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0,cb:1,mocr:curves.positive.mocr,height:z};
+ // AISC 360-16 Commentary F1 load-height comparison: Cb (F1-1) of the case's moment diagram over the unbraced segment times
+ // 1.4^(2y/h), y the load point from mid-depth (negative above it), h the section depth; extrapolated above the top flange.
+ const depth=p.section.d+(cap?p.section.capTw:0),yLoad=-(railTopAboveSteel(p)+depth/2),f1Factor=1.4**(2*yLoad/depth);
+ const commentary=(moment:(x:number)=>number,xm:number,start:number,end:number,wheelXs:number[],c:typeof curves.positive)=>{
+  const tops=[start,end,...flanges.top.filter(x=>x>start+1e-6&&x<end-1e-6)],a=Math.max(...tops.filter(x=>x<=xm+1e-6)),b=Math.min(...tops.filter(x=>x>=xm-1e-6)),Lseg=b-a;
+  const at=(t:number)=>Math.abs(moment(a+t*Lseg)),points=[...Array.from({length:201},(_,i)=>i/200),...wheelXs.filter(x=>x>=a&&x<=b).map(x=>(x-a)/Lseg)];
+  const mmax=Math.max(...points.map(at)),quarter:[number,number,number]=[at(.25),at(.5),at(.75)],gradient=12.5*mmax/(2.5*mmax+3*quarter[0]+4*quarter[1]+3*quarter[2]);
+  const cb=gradient*f1Factor;
+  return {segment:[a,b] as [number,number],mmax,quarter,gradient,y:yLoad,h:depth,factor:f1Factor,cb,capacity:c.capacity(cb*c.mocr)};
+ };
  const mechanics=cap?{Iy:cap.Iy,topOffset:cap.topOffset,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
  const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),observedSets=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
  const snap=(x:number)=>supports.find(v=>Math.abs(v-x)<1e-6)??x;
@@ -180,6 +190,12 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const deadStations=new Map<string,ReturnType<ReturnType<LateralTorsionBeam['solve']>['at']>>();
  const deadAt=(bay:number,x:number)=>{const key=`${bay}:${x.toFixed(4)}`;let v=deadStations.get(key);if(!v){v=deadBay(bay).at(x);deadStations.set(key,v);}return v;};
  function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
+ // Combined normal stress of each flange: section modulus, half width and normalized warping function at its tips.
+ const flangeNormal=result.flangeNormal={top:0,bottom:0},flangeS={top:cap?cap.Stop:props.Sx,bottom:cap?cap.Sbottom:props.Sx},flangeHalf={top:(cap?p.section.capWidth:p.section.bf)/2,bottom:p.section.bf/2};
+ const flangeW=cap?{top:Math.max(...cap.fibres.filter(v=>v.y>0).map(v=>Math.abs(v.omega))),bottom:Math.max(...cap.fibres.filter(v=>v.y<0).map(v=>Math.abs(v.omega)))}:{top:props.h0*p.section.bf/4,bottom:props.h0*p.section.bf/4};
+ result.flangeWarping=flangeW;
+ const flangeParts:NonNullable<RunwayDetailResults['flangeParts']>=result.flangeParts={top:{P:0,M:0,My:0,thetaM:0,warping:0},bottom:{P:0,M:0,My:0,thetaM:0,warping:0}};
+ function flangePeak(k:'top'|'bottom',value:number,e:RunwayCaseEvent,x:number,v:{P:number;M:number;My:number;thetaM:number;warping:number}){if(value>flangeNormal[k]){flangeNormal[k]=value;flangeParts[k]=v;result.governing[k==='top'?'normalStressTop':'normalStressBottom']={id:e.id,combination:e.combination,x,value};}}
  const evaluate=(e:RunwayCaseEvent,bin=-1)=>{
   const key=JSON.stringify([e.kind,bin,e.wheels,e.q,e.railTorquePerLength,e.axial,e.horizontalCrane,e.cranes]);
   if(seen.has(key))return;seen.add(key);result.cases++;
@@ -218,24 +234,24 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    else{
    result.residual=Math.max(result.residual,r.residual);
    if(strength){
-    // Load-height LTB in the inelastic range: the elastic critical moment of this case (wheels at the rail head,
-    // UDL at rail height, axial load, modeled restraints and moment gradient) is Mcr = lambda M / 0.8 because the
-    // eigen model carries 0.8 stiffness. It enters F2/F5 through the length L_e with Mcr(L_e) = Mcr, never
-    // shorter than Lb, so a case is screened out when it is stable at the multiplier that would just reach the
-    // governing utilization so far.
+    // Load-height LTB: the elastic critical moment of this case (wheels at the rail head, UDL at rail height, axial
+    // load, modeled restraints and moment gradient) is Mcr = lambda M / 0.8 because the eigen model carries 0.8
+    // stiffness. It enters F2 / F4 / F5 as Cb = Mcr / Mocr (AISC 360-16 F1 and Commentary F1), never above 1, and the
+    // strength never exceeds phi Mcr. A case is screened out when it is stable at the multiplier that would just reach
+    // the governing utilization so far.
     let Mx=0,xm=start;for(const st of r.stations){const m=moment(st.x+start);if(Math.abs(m)>Math.abs(Mx)){Mx=m;xm=st.x+start;}}
     const c=Mx>=0?curves.positive:curves.negative,M=Math.abs(Mx);
     if(M>0){
-     const record=(u:number,capacity:number,length:number,critical:number)=>{if(u>loadHeight.utilization)Object.assign(loadHeight,{utilization:u,demand:M,capacity,length,critical,id:e.id,combination:e.combination,x:xm});};
-     record(M/c.base,c.base,p.unbracedLength,Infinity);
-     // This case's multiplier is at least the least one found so far, which bounds its equivalent length.
-     const bound=M/c.lowerBound(Math.max(p.unbracedLength,c.length(result.criticalMultiplier*M/.8)));
-     const threshold=.8*c.mcr(c.lengthFor(M/loadHeight.utilization))/M;
-     if(bound>loadHeight.utilization&&!beam.isStable(threshold)){
+     const record=(u:number,capacity:number,critical:number)=>{if(u>loadHeight.utilization)Object.assign(loadHeight,{utilization:u,demand:M,capacity,length:p.unbracedLength,critical,cb:Number.isFinite(critical)?c.cb(critical):1,mocr:c.mocr,sign:Mx>=0?1:-1,id:e.id,combination:e.combination,x:xm,commentary:commentary(moment,xm,start,end,wheels.map(w=>w.x),c)});};
+     record(M/c.base,c.base,Infinity);
+     // This case's multiplier is at least the least one found so far, which bounds its strength from below.
+     const bound=M/c.capacity(result.criticalMultiplier*M/.8);
+     const threshold=.8*c.criticalFor(M/loadHeight.utilization)/M;
+     if(bound>loadHeight.utilization&&threshold>0&&!beam.isStable(threshold)){
       let lambda=ownMultiplier;
       if(lambda===undefined){let lo=Math.min(result.criticalMultiplier,threshold),hi=threshold;if(!beam.isStable(lo))lo=0;for(let i=0;i<30;i++){const mid=(lo+hi)/2;if(beam.isStable(mid))lo=mid;else hi=mid;}lambda=lo;}
-      const critical=lambda*M/.8,length=Math.max(p.unbracedLength,c.length(critical)),capacity=c.available(length);
-      record(M/capacity,capacity,length,critical);
+      const critical=lambda*M/.8,capacity=c.capacity(critical);
+      record(M/capacity,capacity,critical);
      }
     }
    }
@@ -257,8 +273,14 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
      // Sum component magnitudes for a conservative corner-stress envelope.
      // Whole-section bending + explicit warping replaces force-couple stresses
      // in this supplementary check; no double counting of the old flange model.
-     const normal=Math.abs(e.axial)/props.A+Math.abs(M)/props.Sx+E*Math.abs(s.curvature)*(cap?p.section.capWidth:p.section.bf)/2+Math.abs(M*s.twist)/props.Sy+(cap?E*Math.abs(s.warpingCurvature)*cap.omegaMax:warping);
-     peak('normalStress',normal,e,x);
+     // Each flange at its own extreme fibre (AISC DG7 / DG9): P/A + Mx/Sx of that flange + lateral bending (M_y + theta Mx)
+     // and warping E W_no theta'' at that flange's tips. The larger is the girder's combined normal stress.
+     const P0=Math.abs(e.axial),M0=Math.abs(M),My0=E*Math.abs(s.curvature)*props.Iy,tM0=Math.abs(M*s.twist),w0=E*Math.abs(s.warpingCurvature);
+     const flange=(k:'top'|'bottom')=>P0/props.A+M0/flangeS[k]+(My0+tM0)*flangeHalf[k]/props.Iy+(cap?w0*flangeW[k]:warping);
+     const top=flange('top'),bottom=flange('bottom');
+     peak('normalStress',Math.max(top,bottom),e,x);
+     if(top>flangeNormal.top)flangePeak('top',top,e,x,{P:P0,M:M0,My:My0,thetaM:tM0,warping:cap?w0*flangeW.top:warping});
+     if(bottom>flangeNormal.bottom)flangePeak('bottom',bottom,e,x,{P:P0,M:M0,My:My0,thetaM:tM0,warping:cap?w0*flangeW.bottom:warping});
      const V=e.verticalReactions.reduce((a,v)=>a+(v.x<=x+1e-7?v.r:0),0)-e.wheels.reduce((a,w)=>a+(w.x<=x+1e-7?w.p:0),0)-e.q*x;
      const h=p.section.d-2*p.section.tf;
      const tauWeb=1.5*Math.abs(V)/(h*p.section.tw)+G*p.section.tw*Math.abs(s.twistRate);
@@ -273,9 +295,12 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     }
     if(e.kind==='service'){peak('railDisplacement',Math.abs(s.v+z*s.twist),e,x);peak('twist',Math.abs(s.twist),e,x);}
     if(e.kind==='fatigue'){
-     // Appendix 3.1 peak: this unfactored fatigue state plus the dead load, components superposed then summed in magnitude.
-     const d=deadAt(bayIndex,x-start),Mt=M+deadMoment(x),w=s.warpingCurvature+d.warpingCurvature;
-     const f=Math.abs(Mt)/props.Sx+E*Math.abs(s.curvature+d.curvature)*(cap?p.section.capWidth:p.section.bf)/2+Math.abs(Mt*(s.twist+d.twist))/props.Sy+(cap?E*Math.abs(w)*cap.omegaMax:E*Math.abs(w)*props.h0*p.section.bf/4);
+     // Appendix 3.1 peak: this unfactored fatigue state plus the dead load, components superposed then summed in magnitude,
+     // at each flange's extreme fibre and tips as the factored combined stress (the larger flange governs).
+     const d=deadAt(bayIndex,x-start),Mt=Math.abs(M+deadMoment(x)),w=E*Math.abs(s.warpingCurvature+d.warpingCurvature);
+     const lat=E*Math.abs(s.curvature+d.curvature)*props.Iy+Math.abs((M+deadMoment(x))*(s.twist+d.twist));
+     const at=(k:'top'|'bottom')=>Mt/flangeS[k]+lat*flangeHalf[k]/props.Iy+(cap?w*flangeW[k]:w*props.h0*p.section.bf/4);
+     const f=Math.max(at('top'),at('bottom'));
      if(f>(result.fatiguePeak?.value??0))result.fatiguePeak={value:f,x,id:e.id,combination:`${e.combination}, ${details.spectrum[bin]?.name??''} + D`};
     }
    }
