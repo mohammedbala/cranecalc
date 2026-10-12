@@ -42,11 +42,12 @@ describe('AISC 360-16 J2.2b: fillets shorter than four weld sizes',()=>{
   const old=demonstrationProject();Object.assign(old.details!.rail,{clipBodyWidth:2*inch,clipWeld:.5*inch});
   const before=checks(old),weld=before.find(v=>v.id==='rail-keeper-weld')!,anchor=before.find(v=>v.id==='rail-anchor-weld')!;
   expect(weld.note).toContain('The end fillets are shorter than 4w and taken at the J2.2b effective size L/4');
-  // Taken at the reduced size these welds approach their strength; the 2 1/2 in body with 3/8 in fillets leaves margin.
+  // Taken at the reduced size these welds approach their strength; the 2 1/4 in body with 3/8 in fillets (1 3/4 in end
+  // fillets, stopped 1/2 in short of the rail-side face) leaves margin.
   expect(weld.utilization!).toBeGreaterThan(.9);expect(anchor.utilization!).toBeGreaterThan(.95);
   const now=checks(demonstrationProject());
-  expect(now.find(v=>v.id==='rail-keeper-weld')!.utilization!).toBeLessThan(.7);
-  expect(now.find(v=>v.id==='rail-anchor-weld')!.utilization!).toBeLessThan(.8);
+  expect(now.find(v=>v.id==='rail-keeper-weld')!.utilization!).toBeLessThan(.8);
+  expect(now.find(v=>v.id==='rail-anchor-weld')!.utilization!).toBeLessThan(.9);
   expect(now.find(v=>v.id==='rail-keeper-fatigue')!.utilization!).toBeLessThan(.9);
  });
  it('bears the anchor keeper on the flat notch end beyond the corner hole',()=>{

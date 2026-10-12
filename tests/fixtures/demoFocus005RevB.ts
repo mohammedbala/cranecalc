@@ -41,8 +41,11 @@ export function demoFocus005RevB():ProjectInput{
  note('End-bay bearings centered on the haunch web at grids 1 and 6 (seat moment there 27.9 → 10.5 kip-ft).');
  p.details!.brace!.capAngle!.endPlate.height=5.5*inch;
  note('Haunch top flange 25 in → 25-1/2 in; cap-angle end plate 5-1/4 in → 5-1/2 in high.');
- // Building evaluation data that are not available (frame type, frame service displacements, site seismic, IEBC
- // evaluation, 10-year wind on the braced line) are omitted from this package and listed as by others.
+ // Drawings dimension to whole 1/4 in: keeper length 3 7/8 → 3 3/4 in and lip projection 7/16 → 1/2 in, joint bars
+ // 3 7/8 → 3 3/4 in high, cap-angle lap bolt gauge 2 7/8 → 3 in.
+ Object.assign(p.details!.rail,{clipWidth:3.75*inch,clipProjection:.5*inch,jointPlateHeight:3.75*inch});
+ p.details!.brace.capAngle!.lapBolts.gauge=3*inch;
+ note('Dimensions on the 1/4 in grid: rail keepers 3 7/8 → 3 3/4 in long with a 7/16 → 1/2 in lip projection; joint bars 3 7/8 → 3 3/4 in high; cap-angle lap bolt gauge 2 7/8 → 3 in.');
  // The 0.005 rad rail rotation limit was not an owner or crane-supplier requirement: removed (TR-13 sets none).
  delete p.details!.criteria.twistLimit;
  p.criteriaSource=p.criteriaSource.replace(/[;,]?\s*twist\s*0\.005\s*rad/i,'');
@@ -53,6 +56,8 @@ export function demoFocus005RevB():ProjectInput{
  // proportion; a lighter channel (C15X33.9) fails the rail keeper fatigue. Runway seismic mass 2 × 125 ft × 43 plf = 10.8 kip less.
  p.section=loadCappedSection(p.section,'W14X61','C15X50');p.aist!.netFlangeArea=p.section.bf*p.section.tf;
  note('Girder W24X104 + C15X50 → W14X61 + C15X50 (154 → 111 plf; 10.8 kip less runway mass on the building).');
+ // Building evaluation data that are not available (frame type, frame service displacements, site seismic, IEBC
+ // evaluation, 10-year wind on the braced line) are omitted from this package and listed as by others.
  p.omitUnverified=true;
  note('Checks without data (frame type, 10-year wind drift, rail gauge from frame spread, runway seismic, IEBC alteration) omitted from the report and listed as not checked (by others).');
  return p;

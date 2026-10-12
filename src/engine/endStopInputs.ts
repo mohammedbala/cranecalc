@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import type {ProjectInput} from './types';
 import {runwayEnds} from './continuation';
+import {snapQuarter} from './quarterInch';
 
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
 /**
@@ -75,8 +76,8 @@ export function stopLocation(p:ProjectInput){
  const ends=runwayEnds(p);
  return ends.length===2?'both ends of both runways':`the ${ends[0]} end (grid ${ends[0]==='left'?1:p.spans.length+1}) of both runways; the runway continues beyond the other end`;
 }
-/** Front fillet room in front of the face plate. */
-export const stopLip=(e:EndStopInput)=>e.weldSize+6.35;
+/** Front fillet room in front of the face plate: the weld plus 1/4 in, rounded up to the 1/4 in grid. */
+export const stopLip=(e:EndStopInput)=>snapQuarter(e.weldSize+6.35,'up');
 /** Back and front bolt rows from the girder end: back bolts edge from the base plate back, front bolts frontClear behind the face. */
 export const stopBoltRows=(e:EndStopInput)=>[e.setback+e.bolts.edge,e.setback+e.base.length-stopLip(e)-e.face.thickness-e.bolts.frontClear] as const;
 /** Rail end distance from the runway end: the rail stops railGap short of the stop face. */

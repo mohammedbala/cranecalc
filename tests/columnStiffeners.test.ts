@@ -43,7 +43,8 @@ describe('column stiffener geometry and strength, hand-checked',()=>{
  it('places the pairs at the seat and the rib bottom, half depth, from the W14X90 catalogue fillet',()=>{
   const g=columnStiffenerGeometry(stiffened())!;
   expect(g.K!.k).toBeCloseTo(1.31*inch,9);expect(g.K!.source).toBe('AISC W14X90');
-  expect(g.length).toBeCloseTo(7*inch-.71*inch,9);expect(g.webLength).toBeCloseTo(g.length-.75*inch,9);expect(g.contact).toBeCloseTo(6*inch,9);
+  // Half depth from the loaded flange: d/2 - tf = 6.29 in, cut up to the 1/4 in grid.
+  expect(g.length).toBeCloseTo(6.5*inch,9);expect(g.webLength).toBeCloseTo(g.length-.75*inch,9);expect(g.contact).toBeCloseTo(6*inch,9);
   // Upper pair centered on the 2 in seat; lower pair's bottom face on the 24 in rib bottom.
   expect(g.levels[0].z).toBeCloseTo(-inch,9);expect(g.levels[1].z).toBeCloseTo(-(2+24)*inch+inch/2,9);
   // Clip clear of the rolled fillet: k - tf + 1/8 in = k1 - tw/2 + 1/8 in.
@@ -54,7 +55,7 @@ describe('column stiffener geometry and strength, hand-checked',()=>{
  it('takes the J10.8 column of both plates and a 25tw web strip, bounded by yielding at the clipped contact',()=>{
   const p=stiffened(),g=columnStiffenerGeometry(p)!,Fy=50*ksi,E=29000*ksi,pair=stiffenerPairStrength(g,Fy,E,'LRFD',false);
   const tw=.44,A=2*6.75*1+25*tw*tw,Iy=tw*(25*tw)**3/12+2*6.75/12,Ix=25*tw*tw**3/12+2*(6.75**3/12+6.75*((tw+6.75)/2)**2),r=Math.sqrt(Math.min(Ix,Iy)/A);
-  expect(pair.A).toBeCloseTo(A*inch**2,6);expect(pair.r).toBeCloseTo(r*inch,6);expect(pair.KL).toBeCloseTo(.75*6.29*inch,6);
+  expect(pair.A).toBeCloseTo(A*inch**2,6);expect(pair.r).toBeCloseTo(r*inch,6);expect(pair.KL).toBeCloseTo(.75*6.5*inch,6);
   expect(pair.slender).toBeLessThan(25); // J4.4: Pn = Fy Ag
   expect(pair.column).toBeCloseTo(.9*50*A*kip,0);
   expect(pair.tension).toBeCloseTo(.9*50*12*kip,0);expect(pair.compression).toBeCloseTo(.9*50*12*kip,0);
@@ -186,7 +187,7 @@ describe('column stiffener drawings and model',()=>{
  it('calls out the engine sizes, clips and welds with the field flag on an existing column',()=>{
   const views=render(stiffened()),all=views.map(v=>v.svg).join('');
   expect(views.map(v=>v.title)).toContain(columnStiffenerTitle);
-  expect(all).toContain('2 PAIRS COL. STIFFENERS PL 1&quot; X 6 3/4&quot; X 6 5/16&quot;');
+  expect(all).toContain('2 PAIRS COL. STIFFENERS PL 1&quot; X 6 3/4&quot; X 6 1/2&quot;');
   expect(all).toContain('HALF DEPTH, 3/4&quot; CLIPS, FIELD WELDED');
   const plan=views.find(v=>v.title===columnStiffenerTitle)!.svg;
   expect(plan).toContain('3/4&quot; X 3/4&quot; CORNER CLIPS');expect(plan).toContain('>5/16<');expect((plan.match(/data-weld-location="field"/g)??[]).length).toBe(2);
@@ -198,7 +199,7 @@ describe('column stiffener drawings and model',()=>{
   const b=stiffened().details!.bracket!,group=new THREE.Group(),steel=new THREE.MeshBasicMaterial(),edge=new THREE.LineBasicMaterial();
   addColumnStiffeners(group,b,[0,5],0,steel,edge,steel,false);
   const plate=group.getObjectByName('CS-S1-upper-1')!,box=new THREE.Box3().setFromObject(plate),size=box.getSize(new THREE.Vector3());
-  expect(size.y*1000).toBeCloseTo(inch,3);expect(size.x*1000).toBeCloseTo(6.75*inch,3);expect(size.z*1000).toBeCloseTo(6.29*inch,3);
+  expect(size.y*1000).toBeCloseTo(inch,3);expect(size.x*1000).toBeCloseTo(6.75*inch,3);expect(size.z*1000).toBeCloseTo(6.5*inch,3);
   expect(box.min.z*1000).toBeCloseTo(b.reach+.71*inch,3);expect((box.min.y+box.max.y)/2*1000).toBeCloseTo(-inch,3);
   const welds=group.children.filter(o=>o.userData.part?.weld);expect(welds.length).toBe(2*2*2*2*2);
   expect(welds.every(o=>o.userData.part.weld.location==='field'&&o.userData.part.weld.existingSteel)).toBe(true);

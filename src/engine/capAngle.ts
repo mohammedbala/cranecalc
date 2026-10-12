@@ -1,4 +1,5 @@
 import type {ProjectInput} from './types';
+import {snapQuarter} from './quarterInch';
 import type {RunwayDetails} from './runwayDetails';
 import {aiscAngleByName} from '../data/aiscAngles';
 import {aiscChannelByName} from '../data/aiscChannels';
@@ -110,7 +111,8 @@ export function capAngleGeometry(p:ProjectInput){
  // A plate washer centered on the bolt covers the slot at either extreme of travel.
  const washer={length:slotLength+2*c.travel+inch/2,height:Math.max(2.5*cb.diameter,slotWidth+inch),thickness:c.washerThickness};
  const lapSlot=shortSlot(lb.diameter),shim=c.shimMax/2;
- const yLap=y0+lb.gauge,plateStart=yLap-lb.edge,endPlateFace=face-shim,endPlateBack=endPlateFace-ep.thickness;
+ // The tie plate is cut to the 1/4 in grid, its lap edge distance at least the entered edge.
+ const yLap=y0+lb.gauge,endPlateFace=face-shim,endPlateBack=endPlateFace-ep.thickness,plateStart=endPlateBack-snapQuarter(endPlateBack-(yLap-lb.edge),'up');
  const tp=c.plateThickness,zTie=tp/2;
  const stations=independentBearings(p).map(e=>{
   const girderEnd=e.end==='left'?e.start:e.finish,x=girderEnd+(e.end==='left'?1:-1)*c.setback;

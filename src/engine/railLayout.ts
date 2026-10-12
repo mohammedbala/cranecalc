@@ -1,6 +1,7 @@
 import type {ProjectInput} from './types';
 import {adjacentBays,continues} from './continuation';
 import {activeEndStop,stopEnds,stopRailEnd} from './endStopInputs';
+import {snapQuarter} from './quarterInch';
 import {endGridOverhang} from './simpleSupports';
 
 const foot=304.8;
@@ -78,6 +79,17 @@ export const tightJointGap=25.4/16;
 export const railJointType=(p:ProjectInput):'tight'|'open'=>p.details?.rail.jointType??'tight';
 /** Design gap at a rail joint: the entered gap for open joints, at most 1/16 in for tight joints. */
 export const railJointGap=(p:ProjectInput)=>{const g=p.details?.rail.jointGap??0;return railJointType(p)==='tight'?Math.min(g,tightJointGap):g;};
+/**
+ * Rail joint bars, symmetric about the joint centerline: from each bar end the edge distance (jointEdge), the pitch
+ * and the bolt line to the joint centerline. That last distance is the edge distance to the rail end plus half the
+ * gap, rounded up to the 1/4 in grid so every dimension of the joint is a whole 1/4 in; the rail-end
+ * edge distance is then at least jointEdge.
+ */
+export function railJointBars(p:ProjectInput){
+ const r=p.details!.rail,gap=railJointGap(p),centerEdge=snapQuarter(r.jointEdge+gap/2,'up');
+ const length=2*(r.jointEdge+r.jointPitch+centerEdge);
+ return {gap,centerEdge,railEndEdge:centerEdge-gap/2,outerEdge:r.jointEdge,pitch:r.jointPitch,length,bolts:[r.jointEdge,r.jointEdge+r.jointPitch,length-r.jointEdge-r.jointPitch,length-r.jointEdge]};
+}
 /** Steel coefficient of thermal expansion, per degree C. */
 export const railExpansion=12e-6;
 /**

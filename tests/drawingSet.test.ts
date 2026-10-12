@@ -13,6 +13,7 @@ import {coverSheetSvg} from '../src/components/coverSheet';
 import {format} from '../src/engine/units';
 import type {CalculationSnapshot} from '../src/engine/types';
 import {bracketForceCases,bracketForceCells} from '../src/components/bracketForceTable';
+import {seatColumnWeldLength} from '../src/engine/bracketDesign';
 
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
 const capped=withoutOpenItems(calculate(cappedDemonstrationProject())),demo=calculate(demonstrationProject()),newColumn=calculate(newColumnDemonstrationProject());
@@ -214,7 +215,7 @@ describe('welded bracket, new-column and bracing details',()=>{
    expect(plan).toContain('data-section-cut="COLUMN BRACKET / TRANSVERSE SECTION"');expect(plan).toContain('data-section-cut="BRACKET ELEVATION / LOOKING AT COLUMN"');
    // The transverse section: no stray reference line from the column; the seat fillet with its length in every case.
    expect(side).not.toMatch(/<line class="reference-line"/);
-   expect(texts(side)).toContain(`SEAT PL TO COL. FLANGE, TOP, ${field?'FIELD':'SHOP'}`);expect(texts(side)).toContain(drawingLength(Math.min(s.input.details!.bracket!.seatLength,s.input.details!.bracket!.receiver.width)-12.7,'US'));
+   expect(texts(side)).toContain(`SEAT PL TO COL. FLANGE, TOP, ${field?'FIELD':'SHOP'}`);expect(texts(side)).toContain(drawingLength(seatColumnWeldLength(s.input.details!.bracket!),'US'));
    const notes=texts(view(sheet,'bracket-notes')).join(' ');
    expect(notes).not.toContain('GRAVITY BEARINGS ONLY');expect(notes).not.toContain('SEPARATE COLUMN LOAD PATHS');
    expect(notes).toContain('H TOP DOES NOT ENTER THE BRACKET');expect(notes).toContain('AS ONE WELD GROUP WITH THE CONCURRENT VERTICAL LOAD');

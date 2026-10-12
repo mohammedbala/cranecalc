@@ -25,19 +25,19 @@ export function demonstrationDetails():RunwayDetails{return {
  // rotation and thermal travel; sleeved bolts in vertical slots at the column gusset release support deflection.
  // The 2 3/4 in gauge leaves the required material between the 1 1/2 in slots with the slot location tolerance;
  // the bars hold that gauge and two 1 1/4 in edges. The root fillets run the 5 3/4 in column gusset height.
- brace:{width:5.25*inch,thickness:.375*inch,length:25.5*inch,reach:25.5*inch,gussetThickness:.75*inch,connectionLength:5.5*inch,
+ brace:{width:5.25*inch,thickness:.375*inch,length:25.5*inch,reach:25.5*inch,gussetThickness:.75*inch,connectionLength:5.75*inch,
   connection:{...lap(),diameter:.625*inch,gauge:2.75*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,weldSize:.3125*inch,weldLength:5.75*inch},
-  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.75*inch,webGap:1*inch,clearance:.25*inch,weldSize:.375*inch,columnFace:28*inch},
+  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.75*inch,webGap:.75*inch,clearance:.25*inch,weldSize:.375*inch,columnFace:28*inch},
   release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
  // Cover plates (gauge + two edges) clear the bearing stiffener and its welds at half the bearing length.
- end:{...lap(),rows:4,gauge:2.875*inch,edge:1.25*inch,thickness:.75*inch,weldSize:.4375*inch,weldLength:11.5*inch,projection:1.5*inch},
+ end:{...lap(),rows:4,gauge:2.75*inch,edge:1.25*inch,thickness:.75*inch,weldSize:.4375*inch,weldLength:11.5*inch,projection:1.5*inch},
  bearing:{width:12*inch,length:12.5*inch,thickness:1*inch,stiffenerWidth:5*inch,stiffenerThickness:1*inch,cope:1*inch,weldSize:.3125*inch},
  rail:{name:'Demo R-6 crane rail · idealized plate geometry',headWidth:3*inch,headThickness:1.25*inch,baseWidth:6*inch,baseThickness:.75*inch,webThickness:.75*inch,Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:'Fictitious RP-01 polyurethane crane-rail pad; allowable compression per fictitious supplier rating sheet RP-01',padThickness:.125*inch,padWidth:6*inch,
   // Keeper: 3/4 in lip over a 2 3/8 in body, 1/16 in clear of the rail-base toe, 1/2 in lip overlap; 3/8 in fillets on the
   // outer face and both ends. The end fillets (2 in, anchor 1 7/8 in) are over four weld sizes long (AISC 360-16 J2.2b),
   // and the keeper and its outer fillet fit a 12 in flange. 1/2 in anchor notch: the anchor keeper bears on 1/4 in of
   // flat notch end beyond the 1/4 in radius corner holes.
-  clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2.375*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.375*inch,anchorNotch:.5*inch,jointGap:inch/16,jointPlateThickness:1.25*inch,jointPlateHeight:3.875*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+  clipWidth:3.75*inch,clipThickness:.75*inch,clipBodyWidth:2.25*inch,clipClearance:inch/16,clipProjection:.5*inch,clipWeld:.375*inch,anchorNotch:.5*inch,jointGap:inch/16,jointPlateThickness:1.25*inch,jointPlateHeight:3.75*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
  criteria:{twistLimit:.005,railLateralLimit:400,railGauge:40*foot+.5*inch,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
  fatigueDetails:[
   {id:'F1',name:'Rolled bottom flange at midspan',x:12.5*foot,point:'bottom-left',category:'A',reference:'AISC Table A-3.1, 1.1 · plain rolled base metal'},
@@ -125,7 +125,7 @@ export function cappedDemonstrationProject():ProjectInput {
  // Revised independent ties: shorter, shifted clear of bearing stiffeners,
  // directly attached to flange saddles. No holes or cuts in the cap channel.
  Object.assign(p.details!.brace,{length:18*inch,reach:18*inch,width:5.25*inch,thickness:.3125*inch,gussetThickness:.875*inch,connectionLength:6*inch,
-  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.375*inch,webGap:1*inch,clearance:.25*inch,weldSize:.3125*inch}});
+  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.375*inch,webGap:.875*inch,clearance:.25*inch,weldSize:.3125*inch}});
  Object.assign(p.details!.brace.connection,{diameter:.625*inch,gauge:2.75*inch,pitch:2*inch,edge:1.25*inch,thickness:.3125*inch,weldLength:5.75*inch});
  p.details!.bracket!.seatWeld=.625*inch;
  p.details!.fabrication.bolting='ASTM F3125 Grade A325, sizes as detailed (tie bolts smaller than the other girder bolts), pretensioned to the RCSC Table 8.1 minimum pretension. Standard holes and Class B faying surfaces. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.';
@@ -145,7 +145,7 @@ export function cappedDemonstrationProject():ProjectInput {
  // 3/8 in lip overlap; 1/4 in fillets on the outer face and both ends, the end fillets (1 3/8 in, anchor 1 1/8 in)
  // over four weld sizes long (AISC 360-16 J2.2b); 1/2 in anchor notch, 1/4 in flat bearing beyond its corner holes.
  p.aist!.railPad=false;
- Object.assign(p.details!.rail,{clipWidth:3.875*inch,clipThickness:.5*inch,clipBodyWidth:1.625*inch,clipClearance:inch/16,clipProjection:.4375*inch,clipWeld:.25*inch,anchorNotch:.5*inch});
+ Object.assign(p.details!.rail,{clipWidth:3.75*inch,clipThickness:.5*inch,clipBodyWidth:1.5*inch,clipClearance:inch/16,clipProjection:.5*inch,clipWeld:.25*inch,anchorNotch:.5*inch});
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';
  p.details!.fabrication.welding+=' Cap: continuous fillet each W top-flange edge, size and end development per the cap section and development details. Full cap bearing contact required. Bearing stiffeners CJP to W top flange, bottom fitted.';
  p.notes+=' Separate capped example: 2-ton crane on W24X94 + C15X33.9, centered rail, continuous cap welds and full contact. This is not a substitute section for the 10-ton demonstration.';

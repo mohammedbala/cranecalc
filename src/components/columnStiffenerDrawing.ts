@@ -6,7 +6,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {columnStiffenerGeometry,type ColumnStiffenerGeometry} from '../engine/columnStiffeners';
 import {supportColumn} from '../engine/drawingData';
-import {drawingLength,plateInches} from './drawingFormat';
+import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
 import {sheetDrawingScale,line,rect,text,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,n,type XY} from './sheetGraphics';
 import type {DetailView} from './detailSheet';
 
@@ -16,7 +16,7 @@ const path=(points:XY[],cls:string)=>`<path class="${cls}" d="M${points.map(v=>`
 /** The project's stiffeners with drawing labels. */
 export function stiffenerDrawing(p:Input){
  const g=columnStiffenerGeometry(p);if(!g)return undefined;
- const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units),sc=supportColumn(p);
+ const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units),sc=supportColumn(p);
  const where=sc.isNew?'SHOP':'FIELD',depth=g.full?'FULL DEPTH':'HALF DEPTH';
  const levelNames=g.levels.map(l=>l.name.toUpperCase());
  const plate=`PL ${size(g.t)} X ${size(g.width)} X ${size(g.length)}`;

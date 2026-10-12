@@ -1,5 +1,6 @@
 import type {ProjectInput} from './types';
 import type {RunwayDetails} from './runwayDetails';
+import {snapQuarter} from './quarterInch';
 
 const inch=25.4;
 type Rail=RunwayDetails['rail'];
@@ -46,7 +47,9 @@ export function keeperGeometry(rail:Rail,pad=0){
  const projection=rail.clipProjection,overlap=projection-clearance,weld=rail.clipWeld;
  const toe=rail.baseWidth/2,inner=toe+clearance,outer=inner+bodyWidth,tip=inner-projection;
  const bodyHeight=pad+rail.baseThickness,height=bodyHeight+lip;
- return {length,lip,bodyWidth,clearance,projection,overlap,weld,endWeld:bodyWidth-weld,holdback:weld,toe,inner,outer,tip,bodyHeight,height,pad};
+ // The end fillets stop at least one weld size short of the rail-side face, at the 1/4 in grid.
+ const holdback=snapQuarter(weld,'up');
+ return {length,lip,bodyWidth,clearance,projection,overlap,weld,endWeld:bodyWidth-holdback,holdback,toe,inner,outer,tip,bodyHeight,height,pad};
 }
 export type KeeperGeometry=ReturnType<typeof keeperGeometry>;
 
@@ -59,8 +62,10 @@ export type KeeperGeometry=ReturnType<typeof keeperGeometry>;
  */
 export function anchorGeometry(rail:Rail,pad=0){
  const k=keeperGeometry(rail,pad),notch=rail.anchorNotch??railSeatDefaults.anchorNotch,engagement=notch-k.clearance;
- const endWeld=k.bodyWidth-Math.max(k.weld,engagement+anchorEndClearance),cornerRadius=anchorNotchRadius;
- return {...k,notch,notchLength:k.length+2*anchorEndClearance,cornerRadius,engagement,bearing:notch-Math.max(k.clearance,cornerRadius),endWeld,inner:k.inner-notch,outer:k.outer-notch,tip:k.tip-notch};
+ const endWeld=k.bodyWidth-snapQuarter(Math.max(k.weld,engagement+anchorEndClearance),'up'),cornerRadius=anchorNotchRadius;
+ // The notch is saw-cut to the 1/4 in grid: at least the keeper length and 1/16 in clear of each notch end.
+ const notchLength=snapQuarter(k.length+2*anchorEndClearance,'up');
+ return {...k,notch,notchLength,endClearance:(notchLength-k.length)/2,cornerRadius,engagement,bearing:notch-Math.max(k.clearance,cornerRadius),endWeld,inner:k.inner-notch,outer:k.outer-notch,tip:k.tip-notch};
 }
 export type AnchorGeometry=ReturnType<typeof anchorGeometry>;
 

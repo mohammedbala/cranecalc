@@ -1,10 +1,10 @@
 import type {CalculationSnapshot} from '../engine/types';
-import {railSeat,anchorEndClearance} from '../engine/railSeat';
+import {railSeat} from '../engine/railSeat';
 import {boltProperties} from '../engine/connectionStrength';
-import {railJointType,railJointGap} from '../engine/railLayout';
+import {railJointType,railJointGap,railJointBars} from '../engine/railLayout';
 import {format} from '../engine/units';
-import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,capChannelSection,type XY} from './sheetGraphics';
+import {drawingLength,dimensionLength,plateInches} from './drawingFormat';
+import {refDim,dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,capChannelSection,type XY} from './sheetGraphics';
 import {contentBounds,type DetailView} from './detailSheet';
 
 const path=(pts:XY[],cls:string,close=true)=>`<path class="${cls}" d="${pts.map(([x,y],i)=>`${i?'L':'M'}${n(x)},${n(y)}`).join('')}${close?'Z':''}"/>`;
@@ -19,13 +19,13 @@ function hatchRect(x:number,y:number,w:number,h:number,step=4){
  * weld: the keepers and anchors are welded with the rail set and aligned in place.
  */
 function fillet(points:XY[],at:XY,size:string,length:string,labels:string[],via:XY[][]=[]){
- return filletLeader(points,at,size,labels,false,via,true).replace(/<\/g>$/,'')+text(at[0]+53,at[1]+4,labelCaps(length.replaceAll('"','')),8)+'</g>';
+ return filletLeader(points,at,size,labels,false,via,true).replace(/<\/g>$/,'')+dimText(at[0]+53,at[1]+4,labelCaps(length.replaceAll('"','')),8)+'</g>';
 }
 /** Vertical dimension from an extension line at yExt to a surface it lands on; the text reads beside a short one. */
 function dimToSurface(yExt:number,ySurface:number,fromX:number,x:number,label:string,side:'left'|'right'){
  const w=textWidth(label,9),fits=w+6<=Math.abs(ySurface-yExt),dir=x<fromX?-1:1;
  return line([fromX+dir*2,yExt],[x+dir*5,yExt])+line([x,yExt],[x,ySurface])+[yExt,ySurface].map(y=>line([x-3,y+2.5],[x+3,y-2.5])).join('')
-  +(fits?text(x-6,(yExt+ySurface)/2,label,9,'middle',400,-90):text(side==='left'?x-5:x+5,(yExt+ySurface)/2+3,label,9,side==='left'?'end':'start'));
+  +(fits?dimText(x-6,(yExt+ySurface)/2,label,9,'middle',400,-90):dimText(side==='left'?x-5:x+5,(yExt+ySurface)/2+3,label,9,side==='left'?'end':'start'));
 }
 /**
  * Chained dimension: horizontal ('h', below the extension origins) or vertical ('v', left of them). Each
@@ -38,8 +38,8 @@ function dimChain(dir:'h'|'v',at:number[],from:number[],pos:number,labels:string
  labels.forEach((label,i)=>{
   const a=at[i],b=at[i+1],w=textWidth(label,9),fits=w+6<=Math.abs(b-a),first=i===0;
   // A middle segment too short for its text carries it centred below the chain.
-  if(dir==='h')svg+=fits?text((a+b)/2,pos-4,label,9,'middle'):first||i===labels.length-1?text(first?a-4:b+4,pos+3,label,9,first?'end':'start'):text((a+b)/2,pos+12,label,9,'middle');
-  else svg+=fits?text(pos-5,(a+b)/2,label,9,'middle',400,-90):text(pos-5,(a+b)/2+3,label,9,'end');
+  if(dir==='h')svg+=fits?dimText((a+b)/2,pos-4,label,9,'middle'):first||i===labels.length-1?dimText(first?a-4:b+4,pos+3,label,9,first?'end':'start'):dimText((a+b)/2,pos+12,label,9,'middle');
+  else svg+=fits?dimText(pos-5,(a+b)/2,label,9,'middle',400,-90):dimText(pos-5,(a+b)/2+3,label,9,'end');
  });
  return svg;
 }
@@ -61,7 +61,7 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   // SI sizes read to the millimetre, and those under 10 mm (clearances, small welds) to the half millimetre:
   // no false precision from converted inch sizes.
   const siMm=(v:number)=>`${v.toLocaleString('en-US')} mm`,siValue=(v:number)=>v<10?Math.round(v*2)/2:Math.round(v),si=(v:number)=>siMm(siValue(v));
-  const {pad,keeper:K,anchor:A}=railSeat(p),pt=pad?.thickness??0,size=(v:number)=>u==='SI'?si(v):plateInches(v,u),dim=(v:number)=>u==='SI'?si(v):drawingLength(v,u);
+  const {pad,keeper:K,anchor:A}=railSeat(p),pt=pad?.thickness??0,size=(v:number)=>u==='SI'?si(v):plateInches(v,u),dim=(v:number)=>u==='SI'?si(v):dimensionLength(v,u);
   /**
    * Labels for a dimension string and its overall that add up: each part is rounded down to the drawing
    * resolution (1/16 in, or 1 mm and 0.5 mm in a string with a part under 10 mm) and the units the rounded
@@ -92,7 +92,7 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   // Top of rail to T.O.S., the top of the W as the T.O.R. / T.O.S. elevations on S-00 and S-01 use it: the rail,
   // the pad and, on a capped girder, the channel web.
   const edge=X(recW/2),xd=edge+10;
-  sec+=line([X(r.headWidth/2)+2,0],[xd+5,0])+line([edge+2,wTop],[xd+5,wTop])+line([xd,0],[xd,wTop])+[0,wTop].map(y=>line([xd-3,y+2.5],[xd+3,y-2.5])).join('')+text(xd-6,wTop/2,size(depth+pt+(capped?b.capTw:0)),9,'middle',400,-90)+text(xd+8,3,'T.O.R.',7.5)+text(xd+8,wTop+3,'T.O.S.',7.5);
+  sec+=line([X(r.headWidth/2)+2,0],[xd+5,0])+line([edge+2,wTop],[xd+5,wTop])+line([xd,0],[xd,wTop])+[0,wTop].map(y=>line([xd-3,y+2.5],[xd+3,y-2.5])).join('')+refDim(dimText(xd-6,wTop/2,size(depth+pt+(capped?b.capTw:0)),9,'middle',400,-90))+text(xd+8,3,'T.O.R.',7.5)+text(xd+8,wTop+3,'T.O.S.',7.5);
   // Callouts left of the section, in the order of their targets down the section.
   // The pad product reads as its name, wrapped to the width of the other callouts so a long entry cannot widen
   // the callout column past the cell; the rating source stays in the calculation and S-00 materials.
@@ -126,8 +126,9 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   // Bottom: lip projection past the body and the body width, from the lip tip and the body corners.
   pc+=dimChain('h',[pTip,pIn,pOut],[pLip,pBot,pBot],pBot+12,across.parts);
   // Left: lip thickness and body height under the lip, from the lip corners and the body foot.
-  pc+=dimChain('v',[0,pLip,pBot],[pTip,pTip,pIn],pTip-10,up.parts);
-  pc+=dimV(0,pBot,pOut,pOut+16,up.total);
+  // The body height under the lip is the rail base and pad it fits over: reference sizes from the rail and pad.
+  pc+=refDim(dimChain('v',[0,pLip,pBot],[pTip,pTip,pIn],pTip-10,up.parts));
+  pc+=refDim(dimV(0,pBot,pOut,pOut+16,up.total));
   pc+='</g>';
   const piece=place(pc,0,0);
   const pieceSvg=piece.svg+subTitle(piece.w/2,piece.h+12,'KEEPER K1 / SECTION',ps.label)+text(piece.w/2,piece.h+31,`${size(K.length)} LONG ALONG THE RAIL`,7.2,'middle');
@@ -135,7 +136,7 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   // ---- 3. Plan at the right-hand rail-base toe: a typical keeper and the anchor keeper in its notch.
   const ls=drawingScale(Math.min(.75,74/K.length,92/(r.baseWidth/2-r.headWidth/2+K.clearance+K.bodyWidth+K.weld)),u),lk=ls.pointsPerMm,L=(mm:number)=>mm*lk;
   const yHead=-L(r.baseWidth/2-r.headWidth/2),yTip=-L(K.overlap),yIn=L(K.clearance),yOut=L(K.clearance+K.bodyWidth),w=L(K.weld),len=L(K.length);
-  const xa=0,brk=len+16,xb=brk+16,xEnd=xb+len+L(anchorEndClearance)+14,notch=L(A.notch),nc=L(anchorEndClearance),R=L(A.cornerRadius);
+  const xa=0,brk=len+16,xb=brk+16,xEnd=xb+len+L(A.endClearance)+14,notch=L(A.notch),nc=L(A.endClearance),R=L(A.cornerRadius);
   let pv='<g data-view="keeper-plan">';
   pv+=line([xa-14,yHead],[brk-3,yHead],'rail-line')+line([brk+3,yHead],[xEnd,yHead],'rail-line');
   pv+=line([xa-14,0],[xa,0],'rail-line')+line([xa,0],[xa+len,0],'hidden-line')+line([xa+len,0],[brk-3,0],'rail-line');
@@ -159,19 +160,20 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   const plan=place(pv,0,0),pb=contentBounds(pv),PX=(x:number)=>x-pb.x0,PY=(y:number)=>y-pb.y0;
 
   // ---- 4. Bolted rail joint, elevation; edge distances and pitch on the left half, symmetric about the joint.
-  const hole=boltProperties('A325',r.jointBoltDiameter).hole,tight=railJointType(p)==='tight',gap=railJointGap(p),bar=2*(2*r.jointEdge+r.jointPitch)+gap;
+  const hole=boltProperties('A325',r.jointBoltDiameter).hole,tight=railJointType(p)==='tight',gap=railJointGap(p),jb0=railJointBars(p),bar=jb0.length;
   // The bar length closes the symmetric string of edge distances, pitches and the gap as they read.
-  const barLabel=u==='SI'?siMm(2*(2*siValue(r.jointEdge)+siValue(r.jointPitch))+siValue(gap)):dim(bar);
+  const barLabel=u==='SI'?siMm(2*(siValue(r.jointEdge)+siValue(r.jointPitch)+siValue(jb0.centerEdge))):dim(bar);
   const js=drawingScale(Math.min(.36,150/bar,60/depth),u),jk=js.pointsPerMm,J=(mm:number)=>mm*jk;
   const jc=J(bar/2)+12,jb=J(depth),jl=jc-J(bar/2),web=J(r.headThickness+(depth-r.headThickness-r.baseThickness-r.jointPlateHeight)/2);
   let jv='<g data-view="rail-joint">';
   for(const side of [-1,1]){const end=jc+side*J(gap)/2,far=jc+side*(J(bar/2)+12);
    jv+=line([end,0],[end,jb],'rail-line')+[0,J(r.headThickness),jb-J(r.baseThickness),jb].map(y=>line([end,y],[far,y],'rail-line')).join('');}
   jv+=rect(jl,web,J(bar),J(r.jointPlateHeight),'runway-line');
-  const bolts=[r.jointEdge,r.jointEdge+r.jointPitch,bar-r.jointEdge-r.jointPitch,bar-r.jointEdge].map(v=>jl+J(v)),by=web+J(r.jointPlateHeight)/2;
+  const bolts=jb0.bolts.map(v=>jl+J(v)),by=web+J(r.jointPlateHeight)/2;
   for(const x of bolts)jv+=(tight?circle(x,by,J(hole)/2,'reference-line'):rect(x-J(.75*r.jointBoltDiameter),by-J(hole)/2,J(1.5*r.jointBoltDiameter),J(hole),'reference-line'))+circle(x,by,J(r.jointBoltDiameter)/2,'runway-line');
-  const yd=jb+12,railEnd=jc-J(gap)/2,pitchFits=textWidth(size(r.jointPitch),9)+6<=J(r.jointPitch);
-  jv+=dimChain('h',[jl,bolts[0],bolts[1],railEnd],[jb,jb,jb,jb],yd,[size(r.jointEdge),size(r.jointPitch),size(r.jointEdge)]);
+  const yd=jb+12,pitchFits=textWidth(size(r.jointPitch),9)+6<=J(r.jointPitch);
+  // The string closes on the joint centerline: the rail ends stand half the gap either side of it.
+  jv+=line([jc,jb+2],[jc,yd+5],'grid-line')+dimChain('h',[jl,bolts[0],bolts[1],jc],[jb,jb,jb,jb],yd,[size(r.jointEdge),size(r.jointPitch),size(jb0.centerEdge)]);
   // The overall string stands clear of the chain's extension lines, which run 5 pt past the chain.
   jv+=dimH(jl,jl+J(bar),jb+2,yd+(pitchFits?22:30),barLabel);
   jv+='</g>';

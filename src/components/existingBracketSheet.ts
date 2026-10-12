@@ -6,7 +6,7 @@ import {existingBracket,existingBoltPositions,usesExistingBracket} from '../engi
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {buildExistingBrackets} from './existingBracketGeometry';
 import {projection,dispose} from './connectionConceptSheet';
-import {drawingLength,plateInches} from './drawingFormat';
+import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
 import {line,multiLeader,dimH,dimV,circle,detailRef,detailTitles} from './sheetGraphics';
 import {numbered,heading,paragraph,type Style} from './noteBlocks';
 import {bracketForceBlocks} from './bracketForceTable';
@@ -38,7 +38,7 @@ export function existingBracketTopic(s:CalculationSnapshot):DetailTopic|undefine
   }
  }
  const side=projection(group,v=>[v.z,-v.y],{x:65,y:92,w:285,h:217},p.units),front=projection(group,v=>[v.x,-v.y],{x:687,y:92,w:278,h:217},p.units),plan=projection(group,v=>[v.x,v.z],{x:67,y:409,w:282,h:210},p.units);
- const pt=(x:number,y:number,z:number)=>new THREE.Vector3(x*mm,y*mm,z*mm),dim=(n:number)=>drawingLength(n,p.units),size=(n:number)=>plateInches(n,p.units);
+ const pt=(x:number,y:number,z:number)=>new THREE.Vector3(x*mm,y*mm,z*mm),dim=(n:number)=>dimensionLength(n,p.units),size=(n:number)=>plateInches(n,p.units);
  let svg=`<g data-view="existing-bracket-side">${side.svg}`;
  svg+=multiLeader([side.project(pt(0,d.bearing.thickness+p.section.d/2,0))],[385,100],[p.section.name,'NEW RUNWAY / SEE S-01']);
  svg+=multiLeader([side.project(pt(0,-b.seatThickness/2,b.reach-b.seatProjection/2))],[385,159],[`NEW SPREADER PL ${size(b.seatThickness)}`,'4 RETAINING BOLTS / SEE PLAN']);
@@ -67,7 +67,7 @@ export function existingBracketTopic(s:CalculationSnapshot):DetailTopic|undefine
  dispose(group);material.dispose();edge.dispose();
  return {side:sideView,front:frontView,plan:planView};
  }
- const d=p.details!,b=d.bracket!,dim=(n:number)=>drawingLength(n,p.units);
+ const d=p.details!,b=d.bracket!,dim=(n:number)=>dimensionLength(n,p.units);
  const notes=[
   'DASHED COMPONENTS ARE EXISTING. GEOMETRY MUST BE SURVEYED. REFERENCE ARRANGEMENTS DO NOT ESTABLISH CAPACITY OR FABRICATION DIMENSIONS.',
   `NEW SPREADER: ${dim(b.seatLength)} X ${dim(b.seatProjection)} X ${dim(b.seatThickness)}. NEW PLATE FY ${format(d.material.Fy,'stress',p.units).toUpperCase()}. FULL, LEVEL BEARING CONTACT REQUIRED.`,

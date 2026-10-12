@@ -38,7 +38,12 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
   const changed=new Set(['vertical','building-class','column-axial','column-flexure','column-interaction','column-drift','brace-drift','cap-angle-column-holes',
    'compact-web','major','combined','flexure-load-height','wheel-yield','wheel-cripple','cap-development','cap-weld-strength','cap-weld-metal','cap-weld-rupture','cap-weld-fatigue','haunch-colstiff-fatigue-plate','rail-keeper-root',
    'column-weld-ce','bracket-load-path','cap-angle-channel-flange','cap-angle-nut-seat','cap-angle-nut-fit','cap-angle-endplate-edge','end-bearing-seat-fit',
-   'rail-joint-bearing','rail-joint-plate','rail-joint-block','rail-expansion-gap','rail-joint-slot','rail-end-gap','rail-joint-fatigue','detail-equilibrium']);
-  for(const b of demoFocus005Before().checks){if(changed.has(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
+   'rail-joint-bearing','rail-joint-plate','rail-joint-block','rail-expansion-gap','rail-joint-slot','rail-end-gap','rail-joint-fatigue','detail-equilibrium',
+   // Layout on the 1/4 in drawing grid: column stiffeners cut to it (12.58 → 12 1/2 in) at their levels to the nearest 1/4 in, the end stop base plate
+   // lip in front of the face (9/16 → 3/4 in) and the keeper end fillets stopped 1/2 in (the 5/16 in weld size, up to the grid)
+   // short of the rail-side face, so the keeper welds and the flange under them carry a little more.
+   'haunch-colstiff-length','haunch-colstiff-web-shear','end-stop-bolt-tension','end-stop-slip','end-stop-base-prying','end-stop-flange-prying','end-stop-stiffener-fit','end-stop-web',
+   'rail-keeper-weld','rail-keeper-fatigue','rail-flange-local']),keeperDetail=/^detail-(fatigue|full-cycle)-RC\d+-(left|right)$/;
+  for(const b of demoFocus005Before().checks){if(changed.has(b.id)||keeperDetail.test(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
  });
 });

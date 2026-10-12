@@ -17,7 +17,7 @@ import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
 import {usesTaperedHaunch} from '../engine/taperedHaunch';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
 import {activeColumnCap} from '../engine/columnCapInputs';
-import {drawingLength,drawingElevation,electrodeClass,plateInches} from './drawingFormat';
+import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength} from './drawingFormat';
 import {railPad} from '../engine/railSeat';
 import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
@@ -119,7 +119,7 @@ function existingWeldNote(p:ProjectInput){
  return [`FIELD WELDS TO THE EXISTING COLUMNS: EXISTING STEEL ${steel}. WELD ONLY TO A WPS APPROVED BY THE ENGINEER OF RECORD FOR THAT STEEL; LOW-HYDROGEN PROCESSES ONLY. ${heat.text.toUpperCase()}. WELD WITH THE CRANE OUT OF SERVICE AND THE COLUMN UNDER DEAD LOAD ONLY; SEQUENCE THE WELDS TO LIMIT HEAT INPUT.`];
 }
 export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
- const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>drawingLength(mm,u);
+ const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>dimensionLength(mm,u),tol=(mm:number)=>drawingLength(mm,u);
  const ksi=(v:number)=>format(v,'stress',u,u==='SI'?0:3),status=issueStatus(s),elevations=runwayElevations(p);
  const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} TONNES (${f(N)})`;
  const length=p.spans.reduce((a,b)=>a+b,0),cranes=(()=>{
@@ -157,8 +157,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(unevaluatedStructure(s).length?['ITEMS MARKED BY OTHERS IN THE CALCULATION REPORT (FRAME, CONNECTIONS TO EXISTING MEMBERS, ANCHORS AND FOUNDATIONS NOT CHECKED HERE) SHALL BE VERIFIED BY THE ENGINEER OF RECORD FOR THE REPORTED FORCES.']:[])
  ].map(v=>v.toUpperCase())));
  if(d)blocks.push(H('CRANE RUNWAY INSTALLATION'),...N([
-  `RAIL: ${d.rail.name}. SET THE RAIL C/L ON THE GIRDER WEB C/L WITHIN ${len(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${len(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${len(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION.`,
-  `RAIL GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${len(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS, UNLESS THE CRANE MANUFACTURER REQUIRES LESS. VERIFY WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
+  `RAIL: ${d.rail.name}. SET THE RAIL C/L ON THE GIRDER WEB C/L WITHIN ${tol(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${tol(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${tol(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION.`,
+  `RAIL GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${tol(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS, UNLESS THE CRANE MANUFACTURER REQUIRES LESS. VERIFY WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
   ...(enteredFabricationNote(p,'railAlignment')?[enteredFabricationNote(p,'railAlignment')]:[]),
   ...constructionRequirements(p).filter(v=>v.key==='tolerances').map(v=>v.items.join(' ')),
   ...(constructionRequirements(p).find(v=>v.key==='erection')?.items.slice(1)??[]),
@@ -302,7 +302,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   'CRANE, END TRUCKS, CRANE-MOUNTED BUMPERS, CONDUCTOR BARS AND ELECTRIFICATION: CRANE SUPPLIER.',
   ...(bypass?['BUILDING-MOUNTED CRANE END STOPS AND THEIR SUPPORT FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
-  ...(!d?.bracket?.enabled&&!activeColumnCap(p)?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${len(support.capacity)} MAX.`:'.'}`]:[]),
+  ...(!d?.bracket?.enabled&&!activeColumnCap(p)?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${tol(support.capacity)} MAX.`:'.'}`]:[]),
   ...(p.system==='simple'&&d&&!activeEndBearing(p)?[`COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (${detailRef(detailTitles.movement)}) FOR THE LONGITUDINAL, LATERAL AND UPLIFT FORCES IN THE ${bracketForcesAt(s,'cover','ON THIS SHEET')}.`]:[]),
   ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`)
  ];

@@ -5,8 +5,8 @@ import {columnCapGeometry,type CapBearing} from '../engine/columnCap';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {boltProperties} from '../engine/connectionStrength';
 import {runwayElevations} from '../engine/drawingData';
-import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,textWidth,detailTitles,bearingBoltsTitle,labelColumn,breakLine,capChannelSection,type XY} from './sheetGraphics';
+import {drawingLength,drawingElevation,plateInches,dimensionLength} from './drawingFormat';
+import {dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,textWidth,detailTitles,bearingBoltsTitle,labelColumn,breakLine,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {heavyHex,hexSide} from './heavyHex';
 import {bearingStiffenerProfile} from './bearingStiffenerGeometry';
@@ -38,7 +38,7 @@ export function capArrangements(s:CalculationSnapshot){
 /** Column cap details: the section across the runway, and the elevation with the plan of each arrangement. */
 export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,u=p.units,d=p.details!,b=p.section,bs=d.bearing,eb=activeEndBearing(p)!,g=columnCapGeometry(p),cap=g.cap,col=g.col;
- const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),weld=(v:number)=>plateInches(v,u).replaceAll('"','');
+ const dim=(v:number)=>dimensionLength(v,u),size=(v:number)=>plateInches(v,u),weld=(v:number)=>plateInches(v,u).replaceAll('"','');
  const tc=cap.plate.thickness,bt=bs.thickness,db=eb.bolts.diameter,hx=heavyHex(db),hole=boltProperties(eb.bolts.grade,db).hole,ts=cap.stiffener.thickness,hs=cap.stiffener.height;
  const groups=capArrangements(s),eg=endBearingGeometry(p,eb),views:DetailView[]=[];
  const colName=`NEW ${col.name} COLUMN`,capLabel=`CAP PL ${size(tc)} X ${dim(cap.plate.width)} X ${dim(cap.plate.length)}`;
@@ -156,7 +156,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   if(grid.stiffeners.length){const xs=grid.stiffeners;for(const x of xs)svg+=dimH(cx,X(x),Zp(-col.d/2+col.tf),Zp(-cap.plate.width/2)-14,size(Math.abs(x)),x<0?'left':'right');}
   // A gauge too short for its text reads horizontally beside its dimension line, the cap width beyond that text.
   const xr=X(cap.plate.length/2),xp=X(-cap.plate.length/2),gl=size(g.gauge),gw=textWidth(gl,9),gy1=Zp(-g.gauge/2),gy2=Zp(g.gauge/2),gf=X(Math.min(...rows)),gx=xp-20;
-  svg+=gw+6<=gy2-gy1?dimV(gy1,gy2,gf,gx,gl):line([gf,gy1],[gx-4,gy1])+line([gf,gy2],[gx-4,gy2])+line([gx,gy1],[gx,gy2])+[gy1,gy2].map(y=>line([gx-3,y+2.5],[gx+3,y-2.5])).join('')+text(gx-5,Zp(0)+3,gl,9,'end');
+  svg+=gw+6<=gy2-gy1?dimV(gy1,gy2,gf,gx,gl):line([gf,gy1],[gx-4,gy1])+line([gf,gy2],[gx-4,gy2])+line([gx,gy1],[gx,gy2])+[gy1,gy2].map(y=>line([gx-3,y+2.5],[gx+3,y-2.5])).join('')+dimText(gx-5,Zp(0)+3,gl,9,'end');
   svg+=dimV(Zp(-cap.plate.width/2),Zp(cap.plate.width/2),xp,gw+6<=gy2-gy1?xp-38:gx-gw-16,dim(cap.plate.width));
   // Labels at the right of the elevation, then of the plan.
   const lx=xr+(braced?60:56),locating=bearings.some(v=>v.role==='LOCATING');

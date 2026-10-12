@@ -4,7 +4,7 @@ import {existingColumnSection} from '../engine/existingColumn';
 import {existingLayout,planClear,type ClearancePair,type ExistingLayout,type PlanBox} from '../engine/existingLayout';
 import {specifiedSeparation} from './bracingSheet';
 import {drawingLength} from './drawingFormat';
-import {sheetDrawingScale,bubble,dimH,labelColumn,line,n,rect,text,textWidth,viewTitle,detailRef,detailTitles,type XY} from './sheetGraphics';
+import {refDim,dimText,sheetDrawingScale,bubble,dimH,labelColumn,line,n,rect,text,textWidth,viewTitle,detailRef,detailTitles,type XY} from './sheetGraphics';
 
 export const existingClearanceTitle='EXISTING BUILDING CLEARANCE / PLAN';
 /** The enlarged plan is drawn where an existing column lies within reach of the new runway. */
@@ -63,7 +63,7 @@ export function existingClearancePlan(s:CalculationSnapshot,r:ExistingLayout,box
   const y1=Y(a.u),y2=Y(bb.u),w=textWidth(label,9),fits=w+6<=Math.abs(y2-y1),lo=Math.min(y1,y2),hi=Math.max(y1,y2);
   // A string too short for its text reads horizontally beside its dimension line, clear of the extension lines.
   return line([a.from,y1],[x+5,y1])+line([bb.from,y2],[x+5,y2])+line([x,lo],[x,hi])+[y1,y2].map(y=>line([x-3,y+2.5],[x+3,y-2.5])).join('')
-   +(fits?text(x-6,(y1+y2)/2,label,9,'middle',400,-90):inside!==undefined?text(x-5,inside+3,label,8,'end'):text(x+7,(y1+y2)/2+3,label,8));
+   +(fits?refDim(dimText(x-6,(y1+y2)/2,label,9,'middle',400,-90)):inside!==undefined?refDim(dimText(x-5,inside+3,label,8,'end')):refDim(dimText(x+7,(y1+y2)/2+3,label,8)));
  };
  // Faces that look at each other across the runway, when the two outlines overlap along it.
  const facing=(a:PlanBox,bb:PlanBox):[number,number]|undefined=>Math.max(a.x0,bb.x0)>=Math.min(a.x1,bb.x1)?undefined:bb.u0>=a.u1?[a.u1,bb.u0]:bb.u1<=a.u0?[a.u0,bb.u1]:undefined;
@@ -81,7 +81,7 @@ export function existingClearancePlan(s:CalculationSnapshot,r:ExistingLayout,box
  if(fs)svg+=vdim({u:fs[0],from:X(faceNew.x1)+2},{u:fs[1],from:X(e.column.x1)+2},d2,`${dim(steelClear)} CLR.`,steelInside);
  svg+=vdim({u:0,from:d1+8},{u:ul,from:d1+8},d3,dim(Math.abs(ul)));
  // Along the runway: the existing column from the runway grid where the survey puts it off the grid.
- if(along)svg+=dimH(X(xg),X(ex),outboardY+sg*4,outboardY+sg*22,dim(Math.abs(ex-xg)));
+ if(along)svg+=refDim(dimH(X(xg),X(ex),outboardY+sg*4,outboardY+sg*22,dim(Math.abs(ex-xg))));
  // Callouts on the left, top to bottom in the order of their targets.
  const size=(L:number,B:number)=>Math.abs(L-B)<1?`${dim(L)} SQ.`:`${dim(L)} X ${dim(B)}`;
  const items:{at:XY;labels:string[]}[]=[

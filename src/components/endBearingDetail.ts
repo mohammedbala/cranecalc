@@ -5,7 +5,7 @@ import {weldedRibBracket} from '../engine/bracketRib';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {capSeat} from '../engine/columnCap';
 import {columnCapTitles,girderBearingTitle} from './columnCapSheet';
-import {drawingLength,plateInches} from './drawingFormat';
+import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,bubble,detailRef,detailTitles,labelColumn,sectionCut,wrapToWidth,textWidth,n,type XY} from './sheetGraphics';
 import {heavyHex,hexSide} from './heavyHex';
 import {bracketSeat} from '../engine/rolledBracketInputs';
@@ -27,7 +27,7 @@ function slot(cx:number,cy:number,length:number,width:number,cls:string){const r
 export function endBearingView(s:CalculationSnapshot):ViewRender{
  if(s.input.system==='continuous')return continuousBearingView(s);
  const p=s.input,d=p.details!,e=activeEndBearing(p)!,b=p.section,bs=d.bearing,g=endBearingGeometry(p,e),ss=simpleSupportInput(p);
- const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,gap=ss.endGap,hx=heavyHex(db);
+ const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,gap=ss.endGap,hx=heavyHex(db);
  // On a column cap the bolts pass through the cap plate, the seat.
  const cs=capSeat(p),wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),seatL=cs?.length??(wb?bracketSeat(wb).length:2*bs.length+gap+2*inch),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
  const extent=gap/2+bs.length+2.5*inch,k=drawingScale(Math.min(.36,290/(2*extent),80/(b.tf+2.5*inch+bs.thickness+seatT+1.5*inch),125/Math.max(b.bf,bs.width)),p.units),kk=k.pointsPerMm;
@@ -116,7 +116,7 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
  */
 function continuousBearingView(s:CalculationSnapshot):ViewRender{
  const p=s.input,d=p.details!,e=activeEndBearing(p)!,b=p.section,bs=d.bearing,g=endBearingGeometry(p,e),all=continuousBearings(p);
- const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,hx=heavyHex(db);
+ const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,hx=heavyHex(db);
  const cs=capSeat(p),wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),seatL=cs?.length??(wb?bracketSeat(wb).length:bs.length+2*inch),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
  const locating=all.find(v=>v.role==='LOCATING')!,sliding=all.filter(v=>v.role==='SLIDING'),last=all.length,isEnd=(grid:number)=>grid===1||grid===last;
  const ends=sliding.filter(v=>isEnd(v.grid)),interior=sliding.filter(v=>!isEnd(v.grid)),shown=ends[0]??sliding[0];
