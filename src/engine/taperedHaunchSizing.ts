@@ -85,7 +85,7 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
   const [qa,qb]=[fa,fb].map(f=>haunchColumnForces(g,f,gauge).stiffeners.plates),range=(level:'upper'|'lower')=>Math.max(...[0,1].map(i=>Math.max(Math.abs(qa[level][i]),Math.abs(qb[level][i]),Math.abs(qa[level][i]-qb[level][i]))));
   const column=Math.abs(fa.V)*(e+c.depth/2)/receiverModulus(c);
   const checks=columnStiffenerChecks(p,{prefix:'haunch',refs:['haunch-basis'],demand:{upperT:demand.upperT,upperC:demand.upperC,lowerT:demand.lowerT,lowerC:demand.lowerC},
-   tension:[],compression:[],couple:{gauge:gauge!,flange:Object.fromEntries((['upperT','upperC','lowerT','lowerC'] as const).filter(k=>demand[k]).map(k=>[k,{P:demand[k].P??0,M:demand[k].M??0}])),symbol:{upper:'T',lower:'C'}},
+   couple:{gauge:gauge!,flange:Object.fromEntries((['upperT','upperC','lowerT','lowerC'] as const).filter(k=>demand[k]).map(k=>[k,{P:demand[k].P??0,M:demand[k].M??0}])),symbol:{upper:'T',lower:'C'}},
    fatigue:set.bins.map(v=>({cycles:v.cycles,upper:range('upper')*v.scale,lower:range('lower')*v.scale,column:column*v.scale})),columnStressNote:''});
   for(const v of checks)if(v.utilization!==undefined&&!/-(fit|length|weld-minimum|weld-length|fatigue-toe)$/.test(v.id))put(v.id.replace('haunch-colstiff-','colstiff-'),v.utilization);
  }

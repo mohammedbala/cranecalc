@@ -165,12 +165,17 @@ describe('new rolled wide-flange bracket',()=>{
    expect(web.geometry.boundingBox!.getSize(new THREE.Vector3()).y).toBeCloseTo((st.d-2*st.tf)/1000,7);
   }
  });
- it('designs the capped demonstration on the wide-flange bracket with every check passing',()=>{
+ it('designs the capped demonstration on the wide-flange bracket: every check passes but the unstiffened column web (J10.2)',()=>{
   const s=calculate(rolledProject());expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
-  expect(s.checks.filter(c=>(c.status==='fail'||c.status==='unverified'||c.status==='unsupported')&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
+  // C2: with one force system per stub flange, J10.2 web yielding takes the same R_u = P + 3M_f/b as J10.1 at each flange
+  // level and the 0.44 in W14X90 web is exceeded at both (1.10 at the top flange, 1.03 at the bottom flange): this stub
+  // on this column needs column stiffeners (as cappedStubW14X90(true)). A real result, reported, not hidden.
+  expect(s.checks.filter(c=>(c.status==='fail'||c.status==='unverified'||c.status==='unsupported')&&!reviewOpenItem(c)).map(c=>c.id)).toEqual(['wbracket-column-yield-top','wbracket-column-yield-bottom']);
+  const yt=s.checks.find(c=>c.id==='wbracket-column-yield-top')!,j1=s.checks.find(c=>c.id==='wbracket-column-flange')!;
+  expect(yt.demand).toBe(j1.demand);expect(yt.utilization).toBeCloseTo(1.097,2);expect(yt.note).toContain('a full-depth column stiffener pair at each stub flange level (J10.8) is required');
   expect(s.detailResults?.rolledBracket).toBeDefined();expect(s.detailResults?.bracket).toBeUndefined();expect(s.checks.some(c=>c.id==='bracket-rib-flexure')).toBe(false);
   const ids=s.checks.filter(c=>c.id.startsWith('wbracket-')).map(c=>c.id);
-  for(const id of ['stub-flexure','stub-shear','stub-combined','web-yielding','web-crippling','stiffener-column','stiffener-weld','flange-cjp','web-weld','column-flange','column-yield','seat-flexure','seat-weld','fatigue-flange','fatigue-column','tr13-load','deflection'])expect(ids).toContain('wbracket-'+id);
+  for(const id of ['stub-flexure','stub-shear','stub-combined','web-yielding','web-crippling','stiffener-column','stiffener-weld','flange-cjp','web-weld','column-flange','column-yield-top','column-yield-bottom','column-crippling','seat-flexure','seat-weld','fatigue-flange','fatigue-column','tr13-load','deflection'])expect(ids).toContain('wbracket-'+id);
   for(const id of ['end-bearing-seat-bearing','end-bearing-wrench-stub-web','end-bearing-wrench-stub-tip','end-bearing-wrench-stub-stiffener','end-bearing-seat-fit'])expect(s.checks.find(c=>c.id===id)?.status).toBe('pass');
   // The seat moment from one loaded bay twists the stub: the warping stress of the flanges is the governing stress.
   const combined=s.checks.find(c=>c.id==='wbracket-stub-combined')!;expect(combined.utilization).toBeGreaterThan(.3);

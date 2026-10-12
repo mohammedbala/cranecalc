@@ -80,6 +80,15 @@ const terms:[RegExp,Term[]][]=[
  [/^haunch-colstiff-proportions$/,[['b_p','width of the haunch flange delivering the force'],['t_p','its thickness']]],
  [/^haunch-colstiff-length$/,[['L_s','stiffener length']]],
  [/^haunch-colstiff-fatigue-plate$/,[['P_i','stiffener force of duty bin i (ΔP<sub>i</sub> its range)']]],
+ // W stub at the column face (C2): one force system per stub flange, the same R_u in every J10 limit state at a level.
+ [/^wbracket-column-(flange|yield-top|yield-bottom|crippling|sidesway)$/,[['R_u','equivalent concentrated force of the stub flange at this level, the same in every J10 limit state there'],['T','top flange tension at the column face, M/(d − t_f) + N/2'],['C','bottom flange compression at the column face, M/(d − t_f) − N/2'],['M_f','lateral moment of that flange at the column face (torsion as flange bending, and the lateral force)'],['b','stub flange width'],['k','column flange thickness (no fillet credit)'],['l_b','bearing length of the flange force on the column, the stub flange thickness']]],
+ [/^wbracket-colstiff-(upper|lower|flange-weld|web-weld|web-shear)$/,[['R_{st}','force on one column stiffener plate'],['T','stub top flange tension at the column face'],['C','stub bottom flange compression at the column face'],['M_f','lateral moment of that flange at the column face'],['g','distance between the centroids of the two plates, t_w + b_s'],['b_s','stiffener width'],['c','corner clip'],['t_s','stiffener thickness'],['P_n','nominal strength of the pair as a J10.8 column with a 25t_w web strip']]],
+ [/^wbracket-colstiff-proportions$/,[['b_p','width of the stub flange delivering the force'],['t_p','its thickness']]],
+ [/^(wbracket|bracket)-colstiff-length$/,[['L_s','stiffener length']]],
+ [/^(wbracket|bracket)-colstiff-fatigue-plate$/,[['P_i','stiffener force of duty bin i (ΔP<sub>i</sub> its range)']]],
+ // Welded rib brackets: each plate of a column stiffener pair takes the rib over it.
+ [/^bracket-colstiff-(upper|lower|flange-weld|web-weld|web-shear)$/,[['R_{st}','force on one column stiffener plate: the rib over it, its root couple 1.5Pe/h_r (with half the lateral force at the seat)'],['b_s','stiffener width'],['c','corner clip'],['t_s','stiffener thickness'],['P_n','nominal strength of the pair as a J10.8 column with a 25t_w web strip']]],
+ [/^bracket-colstiff-proportions$/,[['b_p','width of the seat plate or the ribs delivering the force'],['t_p','its thickness']]],
  [/^haunch-slope$/,[['h(0)','depth at the column face'],['h(L)','depth at the tip']]],
  // Bearings and end connections.
  [/^end-bearing-locating-shear$/,[['P','longitudinal force at the girder end'],['H','lateral force at the bottom flange']]],

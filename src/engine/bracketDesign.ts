@@ -389,15 +389,19 @@ function upliftChecks(p:ProjectInput,r:BracketResults,add:Add,ribCapacity:number
  const strip=receiverStrip(p);
  if(strip.m>0)put('upRibTension','uplift-column-flange','Uplift · column flange local bending at the rib bottoms',available(c.Fy*c.flangeThickness**2*strip.length/(4*strip.m),p.method,.9,1.67),'force','T=1.5|P|e/h_r\\le\\phi F_yt_f^2\\frac{N+2m}{4m}',`The reversed couple pulls the column flange at the bottom of each rib over its tension zone N = ${f(strip.N)} at m = ${f(strip.m)} from the web face; the seat pushes on the flange. Flange strip spread at 45° to the web root, as the gravity check.`);
 }
-/** The welded-rib bracket's column-side checks with column stiffeners: the stiffened model replaces failing J10.1-J10.4 checks. */
+/**
+ * The welded-rib bracket's column-side checks with column stiffeners (peer review C2, as the I-shaped brackets): the
+ * pair at the seat and the pair at the rib (haunch root) bottom carry the whole force of their level on each plate,
+ * the more loaded rib's root couple 1.5Pe/h_r over that plate (with half the lateral force at the seat) or half the
+ * weld group's force there, with no unstiffened column strength credited; the unstiffened checks of the column at
+ * those levels (J10.1 to J10.4 and the rib flange strips) are reported for information, not governing.
+ */
 function weldedRibStiffeners(p:ProjectInput,r:BracketResults,checks:CheckResult[]):CheckResult[]{
- const cap=(id:string)=>checks.find(c=>c.id==='bracket-'+id&&c.capacity!==undefined)?.capacity,S=r.strength;
- const item=(id:string,label:string,factor=1)=>{const v=cap(id);return v===undefined?[]:[{id,label,value:factor*v}];};
- const tension=[...item('seat-flange','J10.1 flange local bending under the seat'),...item('column-flange','J10.1 flange local bending at the two ribs',2),...item('seat-web','J10.2 web local yielding under the seat'),...item('column-yield','J10.2 web local yielding at the ribs')];
- const compression=[...item('column-yield','J10.2 web local yielding'),...item('column-crippling','J10.3 web crippling')],sway=item('column-sidesway','J10.4 web sidesway buckling')[0];
- const ids=['seat-flange','seat-web','column-flange','column-yield','column-crippling','column-sidesway','uplift-column-flange'].map(v=>'bracket-'+v);
+ const S=r.strength,one=(k:string)=>S[k]?{...S[k],value:S[k].value/2}:undefined;
+ const ids:Record<string,string>={'bracket-seat-flange':'J10.1','bracket-seat-web':'J10.2','bracket-column-flange':'flange local bending at the ribs','bracket-column-yield':'J10.2','bracket-column-crippling':'J10.3','bracket-column-sidesway':'J10.4','bracket-uplift-column-flange':'flange local bending at the rib bottoms'};
  const out=stiffenedColumnChecks(p,checks,ids).map(c=>c.id==='bracket-column-panel'?{...c,note:c.note+panelStiffenerNote}:c);
- out.push(...columnStiffenerChecks(p,{prefix:'bracket',refs:['bracket-basis','tr13-bracket'],demand:{upperT:S.stiffUpperT,upperC:S.stiffUpperC,lowerT:S.stiffLowerT,lowerC:S.stiffLowerC},tension,compression,sidesway:sway,
+ out.push(...columnStiffenerChecks(p,{prefix:'bracket',refs:['bracket-basis','tr13-bracket'],demand:{upperT:one('stiffUpperT'),upperC:one('stiffUpperC'),lowerT:one('stiffLowerT'),lowerC:one('stiffLowerC')},
+  plate:'each plate takes the rib over it, the more loaded rib\'s root couple 1.5Pe/h_r (with half the lateral force H at the seat), or half the force of the seat and root weld group on the flange above (below) its centroid where larger',
   fatigue:r.fatigue.map(v=>({cycles:v.cycles,upper:v.stiffUpper??0,lower:v.stiffLower??0,column:v.column})),
   columnStressNote:'Range per duty bin of the column flange stress from the whole bracket moment V·e_c on the receiving section, as the rib-toe check; other building stress ranges are excluded. No endurance-limit credit.'}));
  return out;

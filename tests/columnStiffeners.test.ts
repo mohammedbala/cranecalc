@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import {cappedDemonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {selectBracketArrangement} from '../src/engine/connectionOptions';
 import {createBracketCollector,bracketChecks,validateBracket,columnWeldGroup,columnWeldLevels,stiffenerLevelForces,seatFatigueCategory,bracketResponse,seatStrip,seatColumnWeldSizes} from '../src/engine/bracketDesign';
-import {columnStiffenerGeometry,stiffenerPairStrength,requiredStiffenerForce,flangeForceLevels,flangeStiffenerForces,bracketForceLevels} from '../src/engine/columnStiffeners';
+import {columnStiffenerGeometry,stiffenerPairStrength,flangeForceLevels,flangeStiffenerForces,bracketForceLevels,stiffenerGauge} from '../src/engine/columnStiffeners';
 import {createRolledBracketCollector,rolledBracketChecks,stubStiffenerForces,stubActions,projectStub,stubBearing} from '../src/engine/rolledBracket';
 import {receiverK,initialColumnStiffeners} from '../src/engine/columnStiffenerInputs';
 import {bracketTopic} from '../src/components/bracketSheet';
@@ -62,12 +62,6 @@ describe('column stiffener geometry and strength, hand-checked',()=>{
   // Near the column top only 12tw of web counts.
   expect(stiffenerPairStrength(g,Fy,E,'ASD',true).A).toBeCloseTo((2*6.75+12*tw*tw)*inch**2,6);
  });
- it('requires R_u less the least unstiffened strength, and the full force where sidesway governs',()=>{
-  const t=[{id:'a',label:'J10.1',value:250},{id:'b',label:'J10.2',value:180}],c=[{id:'b',label:'J10.2',value:150},{id:'c',label:'J10.3',value:400}];
-  const r=requiredStiffenerForce(300,200,t,c);expect(r.Rt).toBe(120);expect(r.Rc).toBe(50);expect(r.tMin.label).toBe('J10.2');
-  const s=requiredStiffenerForce(300,200,t,c,{id:'d',label:'J10.4',value:100});expect(s.swayGoverns).toBe(true);expect(s.Rc).toBe(200);
-  expect(requiredStiffenerForce(100,100,t,c).Rt).toBe(0);
- });
  it('splits the weld group force at its centroid in equilibrium with the lateral force',()=>{
   const p=w14(),b=p.details!.bracket!,g=columnWeldGroup(b,seatColumnWeldSizes(p)[0]),e=b.reach+p.details!.bearing.width/2;
   for(const f of [{V:100000,Mseat:2e6,F:5000,H:20000,xH:100},{V:-30000,Mseat:0,F:0,H:-8000,xH:0}]){
@@ -89,11 +83,13 @@ describe('column stiffener geometry and strength, hand-checked',()=>{
   // A bracket type without levels gets no stiffener geometry.
   const existing=w14();existing.details=selectBracketArrangement(existing.details!,'existing-corbel');expect(bracketForceLevels(existing.details.bracket!,inch)).toBeUndefined();
  });
- it('gives the W stub flange forces with the in-plane flange bending as twice the more loaded half flange',()=>{
+ it('gives the W stub flange forces with the in-plane flange bending as twice the more loaded half flange, and per plate with the couple',()=>{
   const p=selectBracketArrangement(w14().details!,'rolled-corbel'),q=w14();q.details=p;const st=projectStub(q),{a,e}=stubBearing(q);
   const f=stubActions(st,a,e,[{vertical:100000,offset:150}],{longitudinal:10000,bottom:5000,offset:150}),s=stubStiffenerForces(st,f);
   const P=f.Mx/st.h0+f.N/2;expect(s.upperT).toBeCloseTo(P+3*Math.abs(f.Mtop)/st.bf,6);expect(s.lowerC).toBeCloseTo(f.Mx/st.h0-f.N/2+3*Math.abs(f.Mbot)/st.bf,6);
   expect(s.plates.upper[0]+s.plates.upper[1]).toBeCloseTo(P,6);
+  // With stiffeners 190 mm apart: one plate takes P/2 + |M_f|/g.
+  const c=stubStiffenerForces(st,f,190);expect(c.upperT).toBeCloseTo(P/2+Math.abs(f.Mtop)/190,6);expect(c.plates.upper[0]+c.plates.upper[1]).toBeCloseTo(P,6);
  });
 });
 
@@ -102,13 +98,15 @@ describe('column stiffener checks on the bracket',()=>{
   const bare=bracketChecks(w14(),welded(w14()));
   expect(byId(bare,'bracket-column-flange').status).toBe('fail');expect(bare.some(c=>c.id.includes('colstiff'))).toBe(false);
   const p=stiffened(),r=welded(p),checks=bracketChecks(p,r),flange=byId(checks,'bracket-column-flange');
-  expect(flange.status).toBe('not-applicable');expect(flange.note).toContain('J10.8 column stiffeners');
-  const upper=byId(checks,'bracket-colstiff-upper'),strip=byId(bare,'bracket-column-flange').capacity!;
-  const tension=Math.min(byId(checks,'bracket-seat-flange').capacity!,2*strip,byId(checks,'bracket-seat-web').capacity!,byId(checks,'bracket-column-yield').capacity!);
-  expect(upper.demand).toBeCloseTo(r.strength.stiffUpperT.value-tension,4);expect(upper.status).toBe('pass');
+  // C2: with the stiffeners every unstiffened check at their levels is for information, not governing, with its values.
+  expect(flange.status).toBe('not-applicable');expect(flange.note).toMatch(/^Unstiffened flange local bending at the ribs for information, not governing \(the column is stiffened at this level\): R_u = .* D\/C 1\.\d\d \(exceeded\)/);
+  for(const id of ['seat-flange','seat-web','column-yield','column-crippling'])expect(byId(checks,'bracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d for information, not governing/);
+  // Each plate carries the rib over it, the more loaded rib (half the pair total), with no unstiffened strength credited.
+  const upper=byId(checks,'bracket-colstiff-upper');
+  expect(upper.demand).toBeCloseTo(r.strength.stiffUpperT.value/2,4);expect(upper.status).toBe('pass');expect(upper.note).toContain('no unstiffened column strength credited');
   for(const id of ['upper','lower','proportions','length','flange-weld','web-weld','web-shear','weld-minimum','weld-length','fit','fatigue-plate','fatigue-weld','fatigue-toe'])expect(byId(checks,'bracket-colstiff-'+id)?.status,id).toBe('pass');
-  // The flange fillets carry the stiffener force on four throats over the contact beyond the clip.
-  expect(byId(checks,'bracket-colstiff-flange-weld').demand).toBeCloseTo(upper.demand!/(4*5/16*inch/Math.SQRT2*6*inch),6);
+  // The flange fillets carry one plate's force on its two throats over the contact beyond the clip.
+  expect(byId(checks,'bracket-colstiff-flange-weld').demand).toBeCloseTo(upper.demand!/(2*5/16*inch/Math.SQRT2*6*inch),6);
   expect(byId(checks,'bracket-column-panel').note).toContain('doubler plate (J10.9) is outside this design');
   expect(checks.every(c=>c.referenceIds.length>0)).toBe(true);
  });
@@ -120,6 +118,11 @@ describe('column stiffener checks on the bracket',()=>{
   const bare=run(p);expect(byId(bare,'wbracket-column-flange').status).toBe('fail');
   p.details.bracket!.columnStiffeners={...plates,thickness:.75*inch,flangeWeld:7/16*inch,webWeld:7/16*inch};
   const checks=run(p);expect(byId(checks,'wbracket-column-flange').status).toBe('not-applicable');
+  // C2: J10.1 and J10.2 at the top flange take the same R_u, for information; one plate takes T/2 + M_f/g.
+  for(const id of ['column-flange','column-yield-top','column-yield-bottom','column-crippling'])expect(byId(checks,'wbracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d for information, not governing/);
+  const g=columnStiffenerGeometry(p)!,T=createRolledBracketCollector(p)!;T.observe('strength','s',0,[{vertical:100000,offset:230,length:120}],-1,{longitudinal:8000,bottom:6000,offset:230});
+  const pk=T.result.strength.stiffUpperT;expect(byId(checks,'wbracket-colstiff-upper').demand).toBeCloseTo(Math.max(pk.value,T.result.strength.stiffUpperC.value),6);
+  expect(pk.value).toBeCloseTo(Math.abs(pk.P!)/2+Math.abs(pk.M!)/stiffenerGauge(g),6);
   for(const id of ['upper','lower','proportions','flange-weld','web-weld','fit'])expect(byId(checks,'wbracket-colstiff-'+id).status,id).toBe('pass');
   expect(validateBracket(p)).toEqual([]);
  });

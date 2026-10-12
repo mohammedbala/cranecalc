@@ -26,7 +26,8 @@ import {stubBearing,stubBoltLayout,bearingExtent,endGridFitChecks} from './rolle
 import {endGridCentered} from './simpleSupports';
 import {activeEndBearing} from './endBearingInputs';
 import {activeColumnStiffeners} from './columnStiffenerInputs';
-import {columnStiffenerChecks,panelStiffenerNote,flangeStiffenerForces,coupleStiffenerForces,stiffenerGauge,columnStiffenerGeometry} from './columnStiffeners';
+import {columnStiffenerChecks,panelStiffenerNote,stiffenerGauge,columnStiffenerGeometry} from './columnStiffeners';
+import {flangeColumnForces,flangeLevelStrengths,flangeJ10Checks,coupleStiffenerDemand,type FlangeLevels} from './flangeForceSystem';
 
 const inch=25.4,kip=4448.2216152605;
 type Peak={value:number;caseId:string;x:number;
@@ -294,35 +295,19 @@ export const receiverModulus=(c:{depth:number;width:number;flangeThickness:numbe
  * - The panel (J10.6) takes the net flange force; the couple is self-equilibrated in the stiffener pair.
  */
 export function haunchColumnForces(g:HaunchGeometry,f:HaunchActions,gauge?:number){
- const tension=Math.max(0,f.Tt),compression=Math.max(0,f.C*g.cos);
  // Flange resultants at the column face, tension positive, and their in-plane bending.
- const P:[number,number]=[f.Tt,-f.C*g.cos],M:[number,number]=[f.Mtop,f.Mbot],top=flangeStiffenerForces(P,M,g.btr),bottom=flangeStiffenerForces(P,M,g.bb);
- const stiffeners=gauge?coupleStiffenerForces(P,M,gauge):{upperT:top.upperT,upperC:top.upperC,lowerT:bottom.lowerT,lowerC:bottom.lowerC,plates:{upper:top.plates.upper,lower:bottom.plates.lower}};
- return {tension,compression,pull:top.upperT,push:bottom.lowerC,stiffeners,vertical:Math.max(0,f.C)*Math.sin(g.alpha),
-  /** The flange force system at each level: normal force (tension positive) and lateral moment. */
-  flanges:{upper:{P:P[0],M:M[0]},lower:{P:P[1],M:M[1]}},
+ const col=flangeColumnForces([f.Tt,-f.C*g.cos],[f.Mtop,f.Mbot],[g.btr,g.bb],gauge);
+ return {...col,vertical:Math.max(0,f.C)*Math.sin(g.alpha),
   /** Elevations of the flange force lines below the top of the haunch. */
   topLevel:g.tt/2,bottomLevel:g.hr-g.tbv/2};
 }
-
+/** The haunch's two flange levels at the column face: its top flange is the seat; the sloping bottom flange's vertical cut tb/cos(alpha). */
+export const haunchFlangeLevels=(g:HaunchGeometry):FlangeLevels=>({top:0,bottom:g.hr,lbTop:g.tt,lbBottom:g.tbv});
 /**
- * Unstiffened available strengths of the receiving column at the haunch's two flange levels (AISC J10.1-J10.4): flange
- * local bending under the top flange, web local yielding at both, crippling and sidesway buckling under the bottom
- * flange, with the end-region expressions where the column top is close (or its height is not entered). k = tf (no
- * rolled-fillet credit); lb the flange thickness, the sloping flange's vertical cut tb/cos(alpha) at the bottom.
+ * Unstiffened available strengths of the receiving column at the haunch's two flange levels (AISC J10.1-J10.4,
+ * flangeLevelStrengths): lb the flange thickness, the sloping flange's vertical cut tb/cos(alpha) at the bottom.
  */
-export function haunchColumnStrengths(p:ProjectInput,g:HaunchGeometry){
- const c=p.details!.bracket!.receiver,E=p.section.E,method=p.method;
- const columnEnd=p.existingColumn?.enabled?p.existingColumn.height-p.existingColumn.seatElevation:0,known=!!p.existingColumn?.enabled;
- const topFlangeEnd=!known||columnEnd<10*c.flangeThickness,topWebEnd=!known||!(columnEnd>c.depth),botWebEnd=!known||!(columnEnd+g.hr>c.depth),botCrippleEnd=!known||!(columnEnd+g.hr>=c.depth/2);
- const N=g.tbv,term=botCrippleEnd&&N/c.depth>.2?4*N/c.depth-.2:3*N/c.depth,hcol=c.depth-2*c.flangeThickness,sway=(hcol/c.webThickness)/(c.unbracedLength/c.width);
- return {columnEnd,topFlangeEnd,topWebEnd,botWebEnd,botCrippleEnd,N,hcol,sway,
-  flange:available((topFlangeEnd?.5:1)*6.25*c.Fy*c.flangeThickness**2,method,.9,1.67),
-  yieldTop:available(c.Fy*c.webThickness*((topWebEnd?2.5:5)*c.flangeThickness+g.tt),method,1,1.5),
-  yieldBottom:available(c.Fy*c.webThickness*((botWebEnd?2.5:5)*c.flangeThickness+g.tbv),method,1,1.5),
-  crippling:available((botCrippleEnd?.4:.8)*c.webThickness**2*(1+term*(c.webThickness/c.flangeThickness)**1.5)*Math.sqrt(E*c.Fy*c.flangeThickness/c.webThickness),method,.75,2),
-  sidesway:sway<=1.7?available(3.3e6*c.webThickness**3*c.flangeThickness/hcol**2*.4*sway**3,method,.85,1.76):undefined};
-}
+export const haunchColumnStrengths=(p:ProjectInput,g:HaunchGeometry)=>flangeLevelStrengths(p,haunchFlangeLevels(g));
 
 export interface TaperedHaunchResults {
  strength:Record<string,Peak>;service:Record<string,Peak>;
@@ -604,29 +589,11 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
  // state at that level (J10.1, J10.2 at the top; J10.2, J10.3, J10.4 at the bottom). Where column stiffeners are
  // provided they carry the whole system (J10.8, the moment as a couple between the plates, below) and these
  // unstiffened checks are reported for information, not governing.
- const J=haunchColumnStrengths(p,g),{columnEnd,topFlangeEnd,topWebEnd,botWebEnd,botCrippleEnd,N,hcol,sway}=J;
- const colStiff=!!activeColumnStiffeners(b),hook=colStiff?'':'No column stiffeners are provided: where a J10.1 to J10.4 check fails, a full-depth column stiffener pair at each haunch flange level (J10.8) is required to carry the flange force system.';
- const level=(key:'pull'|'push',sym:string,bw:number,where:string)=>{const pk=S[key];return pk?`${where}: R_u = ${sym} + 3M_f/b = ${fmt(Math.abs(pk.P??0),'force')} + 3 × ${fmt(Math.abs(pk.M??0),'moment')}${u==='US'?' × 12 in/ft':''}/${fmt(bw)} = ${fmt(pk.value,'force')} (${sym} = ${fmt(Math.abs(pk.P??0),'force')}, M_f = ${fmt(Math.abs(pk.M??0),'moment')}, b = ${fmt(bw)}, case ${pk.caseId})`:'';};
- const system=`One force system per haunch flange at the column face: its normal force and its lateral moment M_f from the torque of the unbalanced girder reactions (flange bending, warping fixed at the column) and the longitudinal force, taken as the equivalent concentrated force R_u = P + 3M_f/b (twice the more loaded half flange over the welded flange width) in every J10 limit state at that level.`;
- const topSys=level('pull','T',g.btr,'Top flange'),botSys=level('push','C',g.bb,'Bottom flange (horizontal component C cos α)');
- const j10:{key:'pull'|'push';id:string;title:string;cap:number;eq:string;note:string}[]=[
-  {key:'pull',id:'column-flange',title:'Existing column flange · local bending at the top flange (J10.1)',cap:J.flange,eq:'R_u=T+3M_f/b\\le\\phi R_n=\\phi6.25F_{yf}t_f^2',
-   note:`J10.1 flange local bending, t_f and F_yf of the column flange.${topFlangeEnd?' Within 10tf of the column top, or the column height not entered: half strength.':''} ${topSys}.`},
-  {key:'pull',id:'column-yield-top',title:'Existing column web · local yielding at the top flange (J10.2)',cap:J.yieldTop,eq:`R_u=T+3M_f/b\\le\\phi R_n=\\phi F_{yw}t_w(${topWebEnd?'2.5':'5'}k+l_b)`,
-   note:`J10.2 web local yielding; k = tf of the column (no rolled fillet credit), lb = top flange thickness ${fmt(g.tt)}.${topWebEnd?' End-region expression: the column top is within the column depth, or not entered.':''} ${topSys}.`},
-  {key:'push',id:'column-yield-bottom',title:'Existing column web · local yielding at the bottom flange (J10.2)',cap:J.yieldBottom,eq:`R_u=C+3M_f/b\\le\\phi R_n=\\phi F_{yw}t_w(${botWebEnd?'2.5':'5'}k+l_b)`,
-   note:`J10.2 web local yielding; lb = tb/cos α = ${fmt(g.tbv)} (the flange's vertical cut at the face).${botWebEnd?' End-region expression.':''} ${botSys}.`},
-  {key:'push',id:'column-crippling',title:'Existing column web · crippling at the bottom flange (J10.3)',cap:J.crippling,eq:`R_u=C+3M_f/b\\le\\phi R_n=\\phi${botCrippleEnd?'0.40':'0.80'}t_w^2[1+${botCrippleEnd&&N/c.depth>.2?'(4l_b/d-0.2)':'3(l_b/d)'}(t_w/t_f)^{1.5}]\\sqrt{EF_{yw}t_f/t_w}`,
-   note:`J10.3 web crippling, ${botCrippleEnd?'end-region':'interior'} expression at the bottom flange level, ${fmt(columnEnd+g.hr)} below the column top; lb = ${fmt(N)}. ${botSys}.`},
-  ...(J.sidesway!==undefined?[{key:'push' as const,id:'column-sidesway',title:'Existing column web · sidesway buckling (J10.4)',cap:J.sidesway,eq:'R_u=C+3M_f/b\\le\\phi R_n=\\phi(C_rt_w^3t_f/h^2)[0.4((h/t_w)/(L_b/b_f))^3]',
-   note:`J10.4 unrestrained compression-flange rotation; conservative Cr regardless of column moment; entered largest flange unbraced length. ${botSys}.`}]:[])];
- for(const v of j10){
-  const pk=S[v.key],Ru=pk?.value??0,dc=v.cap>0?Ru/v.cap:Infinity;
-  const clause=v.title.match(/\((J10\.\d)\)/)?.[1]??'J10';
-  if(colStiff)na(v.id,v.title,v.eq,`Unstiffened ${clause} for information, not governing (the column is stiffened at this level): R_u = ${fmt(Ru,'force')} against φR_n = ${fmt(v.cap,'force')}, D/C ${dc.toFixed(2)}${dc>1?' (exceeded)':''}. The full-depth column stiffener pair carries the flange force and its lateral moment M_f (J10.8, column stiffener checks). ${system} ${v.note}`,['haunch-basis','aisc-j']);
-  else add(v.id,v.title,Ru,v.cap,'force',v.eq,`${system} ${v.note}${hook?' '+hook:''}`,pk?.caseId,['haunch-basis','aisc-j']);
- }
- if(J.sidesway===undefined)na('column-sidesway','Existing column web · sidesway buckling (J10.4)','(h/t_w)/(L_b/b_f)>1.7','AISC J10.4(b)(2): not applicable beyond 1.7.',['haunch-basis','aisc-j']);
+ const J=haunchColumnStrengths(p,g),{hcol}=J,colStiff=!!activeColumnStiffeners(b);
+ flangeJ10Checks(p,{S,J,stiffened:colStiff,add,na,referenceIds:['haunch-basis','aisc-j'],text:{column:'Existing column',bracket:'haunch',
+  level:{top:'top flange',bottom:'bottom flange'},where:{top:'Top flange',bottom:'Bottom flange (horizontal component C cos α)'},
+  lb:{top:`top flange thickness ${fmt(g.tt)}`,bottom:`tb/cos α = ${fmt(g.tbv)} (the flange's vertical cut at the face)`},pair:'full-depth',b:[g.btr,g.bb],
+  system:`One force system per haunch flange at the column face: its normal force and its lateral moment M_f from the torque of the unbalanced girder reactions (flange bending, warping fixed at the column) and the longitudinal force, taken as the equivalent concentrated force R_u = P + 3M_f/b (twice the more loaded half flange over the welded flange width) in every J10 limit state at that level.`}});
  const area=2*c.width*c.flangeThickness+hcol*c.webThickness,axialRatio=(method==='LRFD'?1:1.6)*(c.axialDemand+(S.vertical?.value??0))/(c.Fy*area);
  from('panel','column-panel','Existing column web · panel shear with axial force (J10.6)',available(.6*c.Fy*c.depth*c.webThickness*Math.max(0,Math.min(1,1.4-axialRatio)),method,.9,1.67),'force','R_n=0.6F_yd_ct_w\\min(1,1.4-\\alpha P_r/P_y)',`J10.6(a), one-sided bracket: the larger net flange force (T at the top, C cos α at the bottom) is the panel shear; the flange lateral moments are couples across the column flange width (carried by the stiffener plates and the column flanges) and add no panel shear. No inelastic panel-zone credit. Concurrent entered column axial force plus the bracket reaction. Global column strength remains separate.${colStiff?panelStiffenerNote:' Column stiffeners add no panel shear strength; a failure here needs a heavier column (a J10.9 web doubler plate is outside this design).'}`,['haunch-basis','aisc-j']);
  // Applicability and geometry limits of the model (validated; reported for the record).
@@ -665,11 +632,9 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
  if(!colStiff)return checks;
  // Column stiffeners at the haunch flange levels: the full-depth pair carries each flange's whole force system, the
  // lateral moment as a couple between the plates (no unstiffened strength credited); J10.1-J10.4 are not governing.
- const csg=columnStiffenerGeometry(p),gauge=csg?stiffenerGauge(csg):0,part=(k:string)=>S[k]?{P:S[k].P??0,M:S[k].M??0}:undefined;
+ const csg=columnStiffenerGeometry(p),gauge=csg?stiffenerGauge(csg):0;
  const out=[...checks];
- out.push(...columnStiffenerChecks(p,{prefix:'haunch',refs,demand:{upperT:S.stiffUpperT,upperC:S.stiffUpperC,lowerT:S.stiffLowerT,lowerC:S.stiffLowerC},
-  tension:[],compression:[],
-  couple:{gauge,flange:{upperT:part('stiffUpperT'),upperC:part('stiffUpperC'),lowerT:part('stiffLowerT'),lowerC:part('stiffLowerC')},symbol:{upper:'T',lower:'C'}},
+ out.push(...columnStiffenerChecks(p,{prefix:'haunch',refs,...coupleStiffenerDemand(S,gauge,'haunch'),
   fatigue:F.map(v=>({cycles:v.cycles,upper:v.stiffUpper??0,lower:v.stiffLower??0,column:v.column})),
   columnStressNote:'Range per duty bin of the column flange stress from V·e_c on the receiving section, as the haunch weld-toe check; other building stress ranges are excluded. No endurance-limit credit.'}));
  return out;

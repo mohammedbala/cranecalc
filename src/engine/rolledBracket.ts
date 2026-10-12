@@ -23,10 +23,13 @@ import {runwayEnds} from './continuation';
 import {activeEndBearing} from './endBearingInputs';
 import {aiscShapeByName} from '../data/aiscSections';
 import {activeColumnStiffeners} from './columnStiffenerInputs';
-import {columnStiffenerChecks,stiffenedColumnChecks,panelStiffenerNote,flangeStiffenerForces} from './columnStiffeners';
+import {columnStiffenerChecks,panelStiffenerNote,columnStiffenerGeometry,stiffenerGauge} from './columnStiffeners';
+import {flangeColumnForces,flangeLevelStrengths,flangeJ10Checks,coupleStiffenerDemand,type FlangeLevels} from './flangeForceSystem';
 
 const inch=25.4,kip=4448.2216152605;
-type Peak={value:number;caseId:string;x:number};
+type Peak={value:number;caseId:string;x:number;
+ /** The flange force system of the governing set at a column-face level: normal force (tension positive) and lateral moment. */
+ P?:number;M?:number};
 export const usesRolledBracket=(p:ProjectInput)=>!!p.details?.bracket?.enabled&&isRolledBracket(p.details.bracket);
 /** The stub of the project's rolled bracket. */
 export const projectStub=(p:ProjectInput)=>rolledStub(p.details!.bracket!)!;
@@ -247,22 +250,27 @@ const receiverModulus=(c:{depth:number;width:number;flangeThickness:number;webTh
  const I=2*c.width*c.flangeThickness*((c.depth-c.flangeThickness)/2)**2+c.webThickness*(c.depth-2*c.flangeThickness)**3/12;return I/(c.depth/2);
 };
 /**
- * Forces of the stub flanges on the column: the resultant flange forces M/(d-tf) +- N/2 in tension and
- * compression, which the column web takes (J10.2, J10.3, J10.4, J10.6), and for the flange local bending (J10.1)
- * the tension flange force with its in-plane bending from torsion and the longitudinal force, as twice the more
- * loaded half-flange resultant, P + 3M_f/b_f. The flange in-plane moments are self-equilibrated across the column
- * flange (the stub torque reaches the column as weak-axis bending) and add nothing to the web.
+ * Forces of the stub flanges on the column, one force system per flange at the column face (flangeColumnForces): the
+ * flange force M/(d-tf) ± N/2 (top flange tension T, bottom flange compression C) with its lateral moment M_f from
+ * the stub torque (flange bending, warping fixed at the column) and the lateral force. The unstiffened column takes
+ * each system as one equivalent concentrated force, twice the more loaded half flange, R_u = P + 3|M_f|/b_f, in every
+ * J10 limit state at that level: `pull` at the top flange, `push` at the bottom flange. The net flange forces
+ * (`tension`, `compression`) are the panel shear; the lateral moments are couples across the column flange and add
+ * nothing to it. With column stiffeners `gauge` apart, `stiffeners` are the forces on one plate, P/2 ± M_f/g.
  */
-export function columnFlangeForces(st:RolledStub,f:StubActions){
- const P=[f.Mx/st.h0+f.N/2,-f.Mx/st.h0+f.N/2],M=[f.Mtop,f.Mbot];
- return {pull:Math.max(0,...P.map((v,i)=>v>0?v+3*Math.abs(M[i])/st.bf:0)),tension:Math.max(0,...P),compression:Math.max(0,...P.map(v=>-v))};
+export function columnFlangeForces(st:RolledStub,f:StubActions,gauge?:number){
+ return flangeColumnForces([f.Mx/st.h0+f.N/2,-f.Mx/st.h0+f.N/2],[f.Mtop,f.Mbot],[st.bf,st.bf],gauge);
 }
 /**
- * Concentrated forces on the column at the column stiffener levels, as pair totals: each stub flange force
- * M/(d-tf) +- N/2 with its in-plane bending M_f as twice the more loaded half-flange resultant, P + 3|M_f|/b_f, in
- * tension and in compression; and the force on each plate (one half flange), signed, for fatigue ranges.
+ * Concentrated forces on the column at the column stiffener levels: with the stiffener `gauge`, the forces on one plate
+ * of a pair that carries each flange's whole system, P/2 ± M_f/g; without it, the pair totals of twice the more loaded
+ * half flange. Signed plate forces for the fatigue ranges.
  */
-export const stubStiffenerForces=(st:RolledStub,f:StubActions)=>flangeStiffenerForces([f.Mx/st.h0+f.N/2,-f.Mx/st.h0+f.N/2],[f.Mtop,f.Mbot],st.bf);
+export const stubStiffenerForces=(st:RolledStub,f:StubActions,gauge?:number)=>columnFlangeForces(st,f,gauge).stiffeners;
+/** The stub's two flange levels at the column face, below the seat top: its top flange under any spreader seat, l_b its flange thickness. */
+export const stubFlangeLevels=(st:RolledStub):FlangeLevels=>{const top=st.seat?.t??0;return {top,bottom:top+st.d,lbTop:st.tf,lbBottom:st.tf};};
+/** Unstiffened available strengths of the receiving column at the stub's two flange levels (AISC J10.1-J10.4). */
+export const stubColumnStrengths=(p:ProjectInput,st:RolledStub)=>flangeLevelStrengths(p,stubFlangeLevels(st));
 /** Self-weight of the stub, its stiffeners and the spreader seat, N. */
 export function rolledSelfWeight(p:ProjectInput,st:RolledStub){
  const g=p.section.density*9.80665/1e9,s=st.stiffener,seat=st.seat;
@@ -280,6 +288,8 @@ export function createRolledBracketCollector(p:ProjectInput){
  const fl=stubFlexure(st,E,r.Fy,2*st.L),Mc=available(fl.Mn,p.method,.9,1.67),Mcy=available(fl.minor,p.method,.9,1.67);
  const ry=Math.sqrt(st.Iy/st.A),Pcc=compressionResistance(st.A,ry,2*st.L,E,r.Fy,p.method).capacity,Pct=available(r.Fy*st.A,p.method,.9,1.67);
  const c=b.receiver,Sc=receiverModulus(c),seat=st.seat,stiff=!!activeColumnStiffeners(b);
+ // Column stiffeners carry each flange's force system, the lateral moment as a couple between the plates.
+ const csg=stiff?columnStiffenerGeometry(p):undefined,gauge=csg?stiffenerGauge(csg):undefined;
  const result:RolledBracketResults={strength:{},service:{},stations:[],
   fatigue:d.spectrum.map(v=>({name:v.name,cycles:v.cycles,flange:0,web:0,webWeld:0,column:0,stiffenerWeld:0,stiffenerToe:0,seat:0,seatWeld:0,...(stiff?{stiffUpper:0,stiffLower:0}:{})}))};
  const extremes=d.spectrum.map(()=>new Map<string,{min:number;max:number}>());
@@ -310,11 +320,11 @@ export function createRolledBracketCollector(p:ProjectInput){
    put('column','column',f.V*(e+c.depth/2)/Sc);
    if(sf){f.sides.forEach((s,i)=>put('stiffenerWeld','sw:'+i,Math.sign(s.P)*stiffenerWeldStress(st,sf,Math.abs(s.P),s.x)));put('stiffenerToe','toe',f.V*(e-a)/st.Sx);}
    if(on.strip&&seat){put('seat','seat',6*on.strip.moment/(W*seat.t**2));on.strip.reactions.forEach((v,i)=>put('seatWeld','tw:'+i,Math.max(0,-v)/(seat.weld/Math.SQRT2*W)));}
-   if(stiff){const q=stubStiffenerForces(st,f).plates;for(const level of ['upper','lower'] as const)q[level].forEach((v,i)=>{const key=level==='upper'?'stiffUpper':'stiffLower';out[key]=Math.max(out[key]!,range(bin,`${key}:${i}`,v));});}
+   if(stiff){const q=stubStiffenerForces(st,f,gauge).plates;for(const level of ['upper','lower'] as const)q[level].forEach((v,i)=>{const key=level==='upper'?'stiffUpper':'stiffLower';out[key]=Math.max(out[key]!,range(bin,`${key}:${i}`,v));});}
    return;
   }
   // Strength: every concurrent set in both lateral senses.
-  const peak=(key:string,value:number)=>{if(!result.strength[key]||value>result.strength[key].value)result.strength[key]={value,caseId,x};};
+  const peak=(key:string,value:number,sys?:{P:number;M:number})=>{if(!result.strength[key]||value>result.strength[key].value)result.strength[key]={value,caseId,x,...sys};};
   for(const f of sets){
    const tips=flangeTipStresses(st,f),normal=Math.max(...tips.map(Math.abs));
    peak('vertical',Math.abs(f.V));peak('moment',Math.abs(f.Mx));peak('shear',Math.abs(f.V));peak('normal',normal);
@@ -333,8 +343,11 @@ export function createRolledBracketCollector(p:ProjectInput){
    peak('flangeBase',2*w.flange*r.flangeWeld/Math.SQRT2/Math.min(st.tf,c.flangeThickness));
    peak('webBase',2*w.web*r.webWeld/Math.SQRT2/Math.min(st.tw,c.flangeThickness));
    if(g.cjp){const Fyd=available(r.Fy,p.method,.9,1.67),Fvd=available(.6*r.Fy,p.method,.9,1.67);peak('cjp',Math.max(normal/Fyd,1.5*Math.max(Math.abs(f.Qtop),Math.abs(f.Qbot))/(st.bf*st.tf)/Fvd));}
-   const col=columnFlangeForces(st,f);peak('pull',col.pull);peak('push',col.compression);peak('couple',Math.max(col.tension,col.compression));
-   if(stiff){const q=stubStiffenerForces(st,f);peak('stiffUpperT',q.upperT);peak('stiffUpperC',q.upperC);peak('stiffLowerT',q.lowerT);peak('stiffLowerC',q.lowerC);}
+   // One equivalent concentrated force per level for every unstiffened J10 limit state there, with its force system;
+   // the panel takes the net flange force.
+   const col=columnFlangeForces(st,f,gauge),fl=col.flanges;
+   peak('pull',col.pull,fl.upper);peak('push',col.push,fl.lower);peak('tension',col.tension,fl.upper);peak('compression',col.compression,fl.lower);peak('couple',Math.max(col.tension,col.compression));
+   if(stiff){const q=col.stiffeners;peak('stiffUpperT',q.upperT,fl.upper);peak('stiffUpperC',q.upperC,fl.upper);peak('stiffLowerT',q.lowerT,fl.lower);peak('stiffLowerC',q.lowerC,fl.lower);}
    if(on.strip&&seat)peak('seatWeld',seatWeldStress(st,W,Math.max(0,...on.strip.reactions.map(v=>-v)),f.F,f.H));
   }
   if(on.strip&&seat){peak('seatNormal',6*on.strip.moment/(W*seat.t**2));peak('seatShear',1.5*on.strip.shear/(W*seat.t));}
@@ -470,18 +483,18 @@ export function rolledBracketChecks(p:ProjectInput,res:RolledBracketResults,serv
  }
  from('webBase','web-base',`${st.name} web / column flange · connected metal at the fillets`,Math.min(available(.6*Math.min(Fy,c.Fy),p.method,1,1.5),available(.6*Math.min(r.Fu,c.Fu),p.method,.75,2)),'stress','f_{BM}=2f_wt_e/\\min(t_w,t_{cf})','Both web fillets on the thinner of the stub web and the column flange.',['w-bracket-basis','aisc-connections']);
  add('web-weld-minimum','Web fillets · minimum leg (J2.4)',filletMinimum([st.tw,c.flangeThickness]),r.webWeld,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined (the stub web or the column flange).',undefined,['w-bracket-basis','aisc-connections']);
- // Column side: the stub flange forces on the receiving column.
- const columnEnd=p.existingColumn?.enabled?p.existingColumn.height-p.existingColumn.seatElevation:0,flangeEnd=columnEnd<10*c.flangeThickness,webEnd=!(columnEnd>c.depth);
- const forceNote='Resultant stub flange force M/(d−tf) ± N/2; the flange in-plane moments from torsion are self-equilibrated across the column flange.';
- from('pull','column-flange','Column flange · local bending at the stub tension flange',available((flangeEnd?.5:1)*6.25*c.Fy*c.flangeThickness**2,p.method,.9,1.67),'force','P+3M_f/b_f\\le\\phi R_n=\\phi6.25F_{yf}t_f^2\\\ \\text{(J10.1)}',`Stub tension flange force M/(d−tf) + N/2 with its in-plane bending M_f from torsion and the longitudinal force, as twice the more loaded half-flange resultant over the ${fmt(st.bf)} flange.${flangeEnd?' Within 10tf of the column top, or the column height not entered: half strength.':''} No continuity plates.`,['w-bracket-basis','aisc-j']);
- from('couple','column-yield','Column web · local yielding at the stub flanges',available(c.Fy*c.webThickness*((webEnd?2.5:5)*c.flangeThickness+st.tf),p.method,1,1.5),'force',`R_n=F_yt_w(${webEnd?'2.5':'5'}k+l_b)\\\ \\text{(J10.2)}`,`${forceNote} k = tf of the column (no rolled fillet credit), lb = stub flange thickness ${fmt(st.tf)}.${webEnd?' End-region expression: the column top is within the column depth, or not entered.':''}`,['w-bracket-basis','aisc-j']);
- const N=st.tf,term=webEnd&&N/c.depth>.2?4*N/c.depth-.2:3*N/c.depth;
- from('push','column-crippling','Column web · crippling at the stub compression flange',available((webEnd?.4:.8)*c.webThickness**2*(1+term*(c.webThickness/c.flangeThickness)**1.5)*Math.sqrt(E*c.Fy*c.flangeThickness/c.webThickness),p.method,.75,2),'force',`R_n=${webEnd?'0.40':'0.80'}t_w^2[1+\\eta(t_w/t_f)^{1.5}]\\sqrt{EF_yt_f/t_w}\\\ \\text{(J10.3)}`,`${webEnd?'End-region':'Interior'} expression, lb = ${fmt(N)}. Confirmed receiver geometry required.`,['w-bracket-basis','aisc-j']);
- const h=c.depth-2*c.flangeThickness,sway=(h/c.webThickness)/(c.unbracedLength/c.width);
- if(sway<=1.7)from('push','column-sidesway','Column web · sidesway buckling',available(3.3e6*c.webThickness**3*c.flangeThickness/h**2*.4*sway**3,p.method,.85,1.76),'force','R_n=(C_rt_w^3t_f/h^2)[0.4((h/t_w)/(L_b/b_f))^3]','J10.4 unrestrained compression-flange rotation; conservative Cr regardless of column moment; entered largest flange unbraced length.',['w-bracket-basis','aisc-j']);
- else na('column-sidesway','Column web · sidesway buckling','(h/t_w)/(L_b/b_f)>1.7','AISC J10.4(b)(2): not applicable beyond 1.7.');
+ // Column side: one force system per stub flange at the column face, its flange force and lateral moment M_f. The
+ // unstiffened column takes it as one equivalent concentrated force per level, R_u = P + 3M_f/b_f, in EVERY J10 limit
+ // state at that level (J10.1, J10.2 at the top flange; J10.2, J10.3, J10.4 at the bottom flange). Where column
+ // stiffeners are provided they carry the whole system (J10.8, the moment as a couple between the plates, below) and
+ // these unstiffened checks are reported for information, not governing.
+ const J=stubColumnStrengths(p,st),h=J.hcol,colStiff=!!activeColumnStiffeners(b),csg=colStiff?columnStiffenerGeometry(p):undefined;
+ flangeJ10Checks(p,{S,J,stiffened:colStiff,add,na:(id,title,eq,note)=>na(id,title,eq,note),referenceIds:['w-bracket-basis','aisc-j'],text:{column:'Column',bracket:'stub',
+  level:{top:'stub top flange',bottom:'stub bottom flange'},where:{top:'Top flange',bottom:'Bottom flange'},
+  lb:{top:`stub flange thickness ${fmt(st.tf)}`,bottom:`stub flange thickness ${fmt(st.tf)}`},pair:csg?.full===false?'half-depth':'full-depth',b:[st.bf,st.bf],
+  system:`One force system per stub flange at the column face: its normal force M/(d − t_f) ± N/2 and its lateral moment M_f from the stub torque (the seat moment of the girder reactions and the longitudinal force above the shear center, flange bending with warping fixed at the column) and the lateral force, taken as the equivalent concentrated force R_u = P + 3M_f/b (twice the more loaded half flange over the ${fmt(st.bf)} flange width) in every J10 limit state at that level.`}});
  const area=2*c.width*c.flangeThickness+h*c.webThickness,axialRatio=(p.method==='LRFD'?1:1.6)*(c.axialDemand+(S.vertical?.value??0))/(c.Fy*area);
- from('couple','column-panel','Column web · panel shear / axial reduction',available(.6*c.Fy*c.depth*c.webThickness*Math.max(0,Math.min(1,1.4-axialRatio)),p.method,.9,1.67),'force','R_n=0.6F_yd_ct_w\\min(1,1.4-\\alpha P_r/P_y)','J10.6(a), one-sided stub: the flange force is the panel shear; no inelastic panel-zone credit. Concurrent entered column axial force plus the bracket reaction. Global column strength remains separate.',['w-bracket-basis','aisc-j']);
+ from('couple','column-panel','Column web · panel shear / axial reduction',available(.6*c.Fy*c.depth*c.webThickness*Math.max(0,Math.min(1,1.4-axialRatio)),p.method,.9,1.67),'force','R_n=0.6F_yd_ct_w\\min(1,1.4-\\alpha P_r/P_y)',`J10.6(a), one-sided stub: the larger net flange force M/(d − t_f) ± N/2 (T at the top, C at the bottom) is the panel shear; the flange lateral moments are couples across the column flange width (carried by the stiffener plates, where provided, and the column flanges) and add no panel shear. No inelastic panel-zone credit. Concurrent entered column axial force plus the bracket reaction. Global column strength remains separate.${colStiff?panelStiffenerNote:' Column stiffeners add no panel shear strength; a failure here needs a heavier column (a J10.9 web doubler plate is outside this design).'}`,['w-bracket-basis','aisc-j']);
  // Applicability, service and uplift.
  const service=res.service.vertical?.value??0;
  add('tr13-load','AIST column bracket · reaction recommendation',Math.max(service,serviceReaction??0),50*kip,'force',p.units==='SI'?'R<222.411\\,\\mathrm{kN}':'R<50\\,\\mathrm{kip}','Reference AIST Technical Report 13 §5.9.2: unfactored support reaction with all cranes, impact and dead load, as the Detailing column-bracket applicability check.',undefined,['w-bracket-basis','tr13-bracket']);
@@ -513,13 +526,11 @@ export function rolledBracketChecks(p:ProjectInput,res:RolledBracketResults,serv
   miner('fatigue-seat','Spreader seat at the flange-tip fillets · fatigue','seat',cat,cat===4.4?'C':'D',`Table A-3.1 item 7.1: the flange tip is a transverse attachment to the seat, a = tf = ${fmt(st.tf)} along the seat stress (${cat===4.4?'under 2 in, Category C':'Category D'}). Range of the seat strip bending stress.`);
   add('fatigue-seat-weld','Seat fillets · throat fatigue',Math.max(0,...F.map(v=>v.seatWeld)),weldF,'stress','f_{sr}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}','Table A-3.1 item 8.2, Category F: range of the uplift throat stress at a flange tip, all project cycles.',undefined,fatRefs);
  }
- if(!activeColumnStiffeners(b))return checks;
- // Column stiffeners at the stub flanges: the stiffened model replaces failing unstiffened J10.1-J10.4 checks.
- const cap=(id:string)=>checks.find(v=>v.id==='wbracket-'+id&&v.capacity!==undefined)?.capacity;
- const item=(id:string,label:string)=>{const v=cap(id);return v===undefined?[]:[{id,label,value:v}];};
- const out=stiffenedColumnChecks(p,checks,['column-flange','column-yield','column-crippling','column-sidesway'].map(v=>'wbracket-'+v)).map(v=>v.id==='wbracket-column-panel'?{...v,note:v.note+panelStiffenerNote}:v);
- out.push(...columnStiffenerChecks(p,{prefix:'wbracket',refs,demand:{upperT:S.stiffUpperT,upperC:S.stiffUpperC,lowerT:S.stiffLowerT,lowerC:S.stiffLowerC},
-  tension:[...item('column-flange','J10.1 flange local bending'),...item('column-yield','J10.2 web local yielding')],compression:[...item('column-yield','J10.2 web local yielding'),...item('column-crippling','J10.3 web crippling')],sidesway:item('column-sidesway','J10.4 web sidesway buckling')[0],
+ if(!colStiff)return checks;
+ // Column stiffeners at the stub flange levels: the pair carries each flange's whole force system, the lateral moment
+ // as a couple between the plates (no unstiffened strength credited); J10.1-J10.4 are not governing.
+ const out=[...checks];
+ out.push(...columnStiffenerChecks(p,{prefix:'wbracket',refs,...coupleStiffenerDemand(S,csg?stiffenerGauge(csg):0,'stub'),
   fatigue:F.map(v=>({cycles:v.cycles,upper:v.stiffUpper??0,lower:v.stiffLower??0,column:v.column})),
   columnStressNote:'Range per duty bin of the column flange stress from V·e_c on the receiving section, as the stub-toe check; other building stress ranges are excluded. No endurance-limit credit.'}));
  return out;

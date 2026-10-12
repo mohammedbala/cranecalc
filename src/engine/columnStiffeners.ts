@@ -5,9 +5,9 @@ import {categoryF,damageText,finiteLife,minerEquation,minerEquivalent} from './f
  * pull on the column flange at the seat and push at the rib (haunch root) bottom; the W stub pulls and pushes at its
  * flanges. Under a reversed (uplift) set the senses swap, so each pair is designed for tension and compression.
  *
- * AISC 360-16: J10.8 for the stiffeners (required strength R_u - phiR_n of the unstiffened J10.1-J10.4 limit states, or
- * the full force where J10.4 sidesway buckling governs, after the J10.4 Commentary; width, thickness and length
- * limits), J4.1 tension yielding, J4.4 / Chapter E compression with K = 0.75 and the J10.8 web strip, B4.1a case 1,
+ * AISC 360-16: J10.8 for the stiffeners (each pair carries the whole force system of its level, with no unstiffened
+ * column strength credited, peer review C2: the I-shaped brackets' flange force and lateral moment as P/2 ± M_f/g on
+ * one plate, the welded rib brackets' rib over each plate; width, thickness and length limits), J4.1 tension yielding, J4.4 / Chapter E compression with K = 0.75 and the J10.8 web strip, B4.1a case 1,
  * J2.2b and J2.4 fillets; J10.6 panel shear is unchanged by the stiffeners (the J10.9 doubler plate is outside this
  * design); Appendix 3 Table A-3.1 items 5.6, 5.7 and 8.2. Canonical units N, mm, MPa.
  *
@@ -155,26 +155,30 @@ export function columnStiffenerErrors(p:ProjectInput):string[]{
  return errors;
 }
 
-/** Unstiffened available strength of one J10 limit state, from the column-side checks of the bracket. */
-export interface UnstiffenedStrength {id:string;label:string;value:number}
 export interface ColumnStiffenerContext {
- /** Check id prefix ('bracket' or 'wbracket') and reference ids of the bracket. */
+ /** Check id prefix ('bracket', 'wbracket' or 'haunch') and reference ids of the bracket. */
  prefix:string;refs:string[];
- /** Concentrated force peaks at each level: tension (pulling the flange) and compression, pair totals. */
+ /**
+  * The largest force on ONE plate of a pair at each level, in tension (pulling the flange) and compression. The pair
+  * carries the whole force system of its level (J10.8) with no unstiffened column strength credited; the unstiffened
+  * J10.1-J10.4 checks are then for information (stiffenedColumnChecks, flangeJ10Checks).
+  */
  demand:Record<`${StiffenerLevelKey}${'T'|'C'}`,Peak|undefined>;
- tension:UnstiffenedStrength[];compression:UnstiffenedStrength[];sidesway?:UnstiffenedStrength;
  /** Per duty bin: range of the force on one plate at each level, and of the column flange stress at the bracket. */
  fatigue:{cycles:number;upper:number;lower:number;column:number}[];
  /** Stress range in the column flange at the stiffener toes is the bracket moment on the column section. */
  columnStressNote:string;
  /**
-  * Stiffened design of the whole flange force system (tapered haunch): `demand` then holds the largest force on ONE
-  * plate (tension, compression) at each level, F = P/2 ± M_f/g (coupleStiffenerForces), and no unstiffened column
-  * strength is credited. `flange` gives the flange force P and lateral moment M_f of the governing set at each level.
+  * An I-shaped bracket's flange force systems (tapered haunch, W stub): the force on one plate is F = P/2 ± M_f/g
+  * (coupleStiffenerForces); `flange` gives the flange force P and lateral moment M_f of the governing set at each level.
   */
  couple?:{gauge:number;flange:Partial<Record<`${StiffenerLevelKey}${'T'|'C'}`,{P:number;M:number}>>;
   /** Symbol of the flange force at each level (T in tension at the top, C in compression at the bottom). */
-  symbol:Record<StiffenerLevelKey,string>};
+  symbol:Record<StiffenerLevelKey,string>;
+  /** The bracket whose flanges deliver the systems, for the notes ('haunch' unless given). */
+  bracket?:string};
+ /** Otherwise: what the force on one plate is, for the notes (the welded rib brackets: the rib over that plate). */
+ plate?:string;
 }
 /**
  * Pair strength of one level: tension yielding of the plates at their clipped contact (J4.1) and compression as a
@@ -188,18 +192,10 @@ export function stiffenerPairStrength(g:ColumnStiffenerGeometry,Fy:number,E:numb
  const yieldContact=available(Fy*contact,method,.9,1.67);
  return {strip,A,r,KL,slender,column,tension:yieldContact,compression:Math.min(column,yieldContact),contact};
 }
-/** Required stiffener force at one level: R_u less the least unstiffened strength in each sense; the full force where J10.4 governs. */
-export function requiredStiffenerForce(T:number,C:number,tension:UnstiffenedStrength[],compression:UnstiffenedStrength[],sidesway?:UnstiffenedStrength){
- // No unstiffened strength credited where none is reported: the stiffeners take the whole force.
- const none={id:'',label:'no unstiffened strength credited',value:0},least=(v:UnstiffenedStrength[])=>v.reduce((a,w)=>w.value<a.value?w:a,v[0]??none);
- const tMin=least(tension),cMin=least(compression);
- const swayGoverns=!!sidesway&&C>sidesway.value*(1+1e-9);
- return {T,C,tMin,cMin,swayGoverns,Rt:Math.max(0,T-tMin.value),Rc:swayGoverns?C:Math.max(0,C-cMin.value)};
-}
-
 /**
- * The stiffener checks of a bracket, given the concentrated forces at each level and the unstiffened strengths of the
- * column-side checks. The unstiffened J10.1-J10.4 checks are converted by `stiffenedColumnChecks`.
+ * The stiffener checks of a bracket, given the largest force on one plate at each level: the pair carries the whole
+ * force system of its level, with no unstiffened column strength credited (peer review C2). The unstiffened
+ * J10.1-J10.4 checks are reported for information (`stiffenedColumnChecks`, or flangeJ10Checks for the I-shaped brackets).
  */
 export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):CheckResult[]{
  const g=columnStiffenerGeometry(p);if(!g)return [];
@@ -211,16 +207,15 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
  const couple=x.couple,gauge=couple?.gauge??0;
  const levels=g.levels.map(l=>{
   const T=x.demand[`${l.key}T`],C=x.demand[`${l.key}C`];
-  // Stiffened design of the whole flange force system: one plate's force, no unstiffened strength credited.
-  const req=couple?{T:T?.value??0,C:C?.value??0,tMin:{id:'',label:'none credited',value:0},cMin:{id:'',label:'none credited',value:0},swayGoverns:false,Rt:T?.value??0,Rc:C?.value??0}:requiredStiffenerForce(T?.value??0,C?.value??0,x.tension,x.compression,x.sidesway);
+  // Stiffened design of the whole force system of the level: one plate's force, no unstiffened strength credited.
+  const req={T:T?.value??0,C:C?.value??0,Rt:T?.value??0,Rc:C?.value??0};
   // A web strip of 12tw where the column top is closer than 12.5tw above the pair (or not entered).
   const nearTop=!(columnEnd+l.z-12.5*g.tw>0),both=stiffenerPairStrength(g,m.Fy,E,p.method,nearTop);
   // One plate with half the web strip: half the pair.
-  const pair=couple?{...both,tension:both.tension/2,compression:both.compression/2,column:both.column/2}:both;
+  const pair={...both,tension:both.tension/2,compression:both.compression/2,column:both.column/2};
   const rt=pair.tension>0?req.Rt/pair.tension:0,rc=pair.compression>0?req.Rc/pair.compression:0;
   return {l,T,C,req,pair,nearTop,governs:rc>rt?'compression' as const:'tension' as const,R:Math.max(req.Rt,req.Rc),ratio:Math.max(rt,rc)};
  });
- const sense=(v:typeof levels[number])=>`${v.l.name}: tension R_u = ${F(v.req.T)} against φR_n = ${F(v.req.tMin.value)} (${v.req.tMin.label}), R_st = ${F(v.req.Rt)}; compression R_u = ${F(v.req.C)} against ${v.req.swayGoverns?`the J10.4 sidesway strength ${F(x.sidesway!.value)}: the stiffeners take the full force`:`φR_n = ${F(v.req.cMin.value)} (${v.req.cMin.label}), R_st = ${F(v.req.Rc)}`}`;
  const mf=(v:number)=>format(v,'moment',u,3);
  // The flange force system on one plate: R_st = P/2 ± M_f/g, with the numbers of the governing set in each sense.
  const coupleText=(v:typeof levels[number])=>{
@@ -235,12 +230,13 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
   if(couple){
    const sym=couple.symbol[v.l.key];
    add(`${v.l.key}`,`Column stiffeners at the ${v.l.name} · plate force (J10.8, J4.1, J4.4)`,R,cap,'force',`R_{st}=\\frac{${sym}}{2}\\pm\\frac{M_f}{g}\\le\\phi R_n;\\ \\ R_n=F_y(b_s-c)t_s\\ \\text{or}\\ P_n/2`,
-    `Stiffened design (J10.8): the pair of ${plates}, centered ${f(v.l.z)} from the seat top at the ${v.l.name}, carries that flange's whole force system, with no unstiffened column strength credited: the flange force ${sym} shared by the two plates and the flange's lateral moment M_f (torque of the unbalanced girder reactions carried by flange bending, warping fixed at the column) as a couple between them, g = t_w + b_s = ${f(g.tw)} + ${f(g.width)} = ${f(gauge)} apart. ${coupleText(v)}. R_st = ${F(R)} governs (${v.governs}). Tension: J4.1 yielding of one plate at its clipped contact, φR_n = φF_y(b_s − c)t_s = ${F(v.pair.tension)}. Compression: J10.8 column of one plate with half the ${v.nearTop?'12':'25'}tw web strip (${f(v.pair.strip/2)}), L_c = 0.75h = 0.75 × ${f(g.length)} = ${f(v.pair.KL)}, L_c/r = ${v.pair.slender.toFixed(1)} (${v.pair.slender<=25?'J4.4: Pn = FyAg':'Chapter E'}), bounded by yielding at the contact: φP_n/2 = ${F(v.pair.compression)}. The net force ${sym} enters the column web (J10.6 panel check); the couple ±M_f/g passes through the full-depth plates into both column flanges, which carry it over the haunch depth as opposite lateral shears M_f/(d − t_f) = ${F(Math.max(...(['T','C'] as const).map(k=>Math.abs(couple.flange[`${v.l.key}${k}`]?.M??0)))/(g.c.depth-g.tf))} (column torsion between the two flange levels, well within φ0.6F_yb_ft_f = ${F(available(.6*g.c.Fy*g.c.width*g.tf,p.method,.9,1.67))}). Forces: every concurrent case of the bracket design force envelope.`,
+    `Stiffened design (J10.8): the pair of ${plates}, centered ${f(v.l.z)} from the seat top at the ${v.l.name}, carries that flange's whole force system, with no unstiffened column strength credited: the flange force ${sym} shared by the two plates and the flange's lateral moment M_f (torque of the unbalanced girder reactions carried by flange bending, warping fixed at the column) as a couple between them, g = t_w + b_s = ${f(g.tw)} + ${f(g.width)} = ${f(gauge)} apart. ${coupleText(v)}. R_st = ${F(R)} governs (${v.governs}). Tension: J4.1 yielding of one plate at its clipped contact, φR_n = φF_y(b_s − c)t_s = ${F(v.pair.tension)}. Compression: J10.8 column of one plate with half the ${v.nearTop?'12':'25'}tw web strip (${f(v.pair.strip/2)}), L_c = 0.75h = 0.75 × ${f(g.length)} = ${f(v.pair.KL)}, L_c/r = ${v.pair.slender.toFixed(1)} (${v.pair.slender<=25?'J4.4: Pn = FyAg':'Chapter E'}), bounded by yielding at the contact: φP_n/2 = ${F(v.pair.compression)}. The net force ${sym} enters the column web (J10.6 panel check); the couple ±M_f/g passes through the ${g.full?'full-depth plates into both column flanges':'half-depth plates into the loaded column flange and the web'}, ${g.full?'which carry':'and the column carries'} it over the ${couple.bracket??'haunch'} depth as opposite lateral shears M_f/(d − t_f) = ${F(Math.max(...(['T','C'] as const).map(k=>Math.abs(couple.flange[`${v.l.key}${k}`]?.M??0)))/(g.c.depth-g.tf))} (column torsion between the two flange levels, well within φ0.6F_yb_ft_f = ${F(available(.6*g.c.Fy*g.c.width*g.tf,p.method,.9,1.67))}). Forces: every concurrent case of the bracket design force envelope.`,
     (v.governs==='compression'?v.C:v.T)?.caseId);
    continue;
   }
-  add(`${v.l.key}`,`Column stiffeners at the ${v.l.name} · required strength (J10.8, J4.1, J4.4)`,R,cap,'force','R_{st}=R_u-\\min\\phi R_n\\ \\text{(J10.1 to J10.4)}\\le\\phi P_n;\\ \\ P_n=2F_y(b_s-c)t_s\\ \\text{or}\\ F_{cr}A,\\ L_c=0.75h',
-   `${sense(v)}. R_st is the force above the least unstiffened strength φR_n of J10.1 to J10.4 (the whole R_u where J10.4 governs). Pair of ${plates}, centered ${f(v.l.z)} from the seat top at the ${v.l.name}. Tension: J4.1 yielding of both plates at their clipped flange contact, φPt = ${F(v.pair.tension)}. Compression: J10.8 column of both plates and a ${v.nearTop?'12':'25'}tw web strip (${f(v.pair.strip)}), L_c = 0.75h = 0.75 × ${f(g.length)} = ${f(v.pair.KL)}, L_c/r = ${v.pair.slender.toFixed(1)} (${v.pair.slender<=25?'J4.4: Pn = FyAg':'Chapter E'}), bounded by yielding at the contact: φPc = ${F(v.pair.compression)}. ${v.l.key==='upper'?'Tension at the seat under gravity; compression under a reversed (uplift) set.':'Compression under gravity; tension under a reversed (uplift) set.'} Forces: every concurrent case of the bracket design force envelope.`,
+  const sense=(k:'T'|'C')=>{const d=x.demand[`${v.l.key}${k}`];return d&&d.value>0?`${k==='T'?'tension':'compression'} on one plate R_st = ${F(d.value)} (case ${d.caseId})`:'';};
+  add(`${v.l.key}`,`Column stiffeners at the ${v.l.name} · plate force (J10.8, J4.1, J4.4)`,R,cap,'force','R_{st}\\le\\phi R_n;\\ \\ R_n=F_y(b_s-c)t_s\\ \\text{or}\\ P_n/2',
+   `Stiffened design (J10.8): the pair of ${plates}, centered ${f(v.l.z)} from the seat top at the ${v.l.name}, carries the whole force there, with no unstiffened column strength credited: ${x.plate??'the force on one plate'}. ${[sense('T'),sense('C')].filter(Boolean).join('; ')||'no force'}. R_st = ${F(R)} governs (${v.governs}). Tension: J4.1 yielding of one plate at its clipped contact, φR_n = φF_y(b_s − c)t_s = ${F(v.pair.tension)}. Compression: J10.8 column of one plate with half the ${v.nearTop?'12':'25'}tw web strip (${f(v.pair.strip/2)}), L_c = 0.75h = 0.75 × ${f(g.length)} = ${f(v.pair.KL)}, L_c/r = ${v.pair.slender.toFixed(1)} (${v.pair.slender<=25?'J4.4: Pn = FyAg':'Chapter E'}), bounded by yielding at the contact: φP_n/2 = ${F(v.pair.compression)}. ${v.l.key==='upper'?'Tension at the seat under gravity; compression under a reversed (uplift) set.':'Compression under gravity; tension under a reversed (uplift) set.'} Forces: every concurrent case of the bracket design force envelope.`,
    (v.governs==='compression'?v.C:v.T)?.caseId);
  }
  // J10.8 proportions: width with half the web at least a third of the delivering plate width, thickness at least half
@@ -252,8 +248,8 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
   `${g.full?'Full depth, welded to both flanges':'Half depth, from the loaded flange to the column centerline'}: ${f(g.length+g.tf)} from the loaded flange face against d/2 = ${f(g.c.depth/2)}. Full depth is required only by J10.5 (compressive forces on both flanges, which a one-sided bracket does not apply) and J10.7 (unframed ends of beams and girders, not a continuous column); J10.4 stiffeners extend at least half the depth.`);
  // Welds: to the flange for the stiffener force, to the web for the force the stiffener delivers to it (J10.8).
  const Rmax=levels.reduce((a,v)=>v.R>a.R?v:a,levels[0]),phiW=available(.6*m.Fexx,p.method,.75,2),te=(w:number)=>w/Math.SQRT2;
- // A pair force R_st on four throats (two plates, both faces), or one plate's force on its two (stiffened couple design).
- const throats=couple?2:4,one=couple?' on one plate':'';
+ // One plate's force on its two throats (both faces).
+ const throats=2,one=' on one plate';
  const flangeStress=Rmax.R/(throats*te(g.s.flangeWeld)*g.contact),webStress=Rmax.R/(throats*te(g.s.webWeld)*g.webLength);
  add('flange-weld','Column stiffeners · fillet welds to the flange (J10.8, J2.4)',flangeStress,phiW,'stress',`f_w=\\frac{R_{st}}{${throats}(0.707w)(b_s-c)}`,
   `${f(g.s.flangeWeld)} fillets both faces of each plate along ${f(g.contact)} beyond the clip, ${where} welds; the larger stiffener force${one}, ${F(Rmax.R)} at the ${Rmax.l.name}. No directional strength increase.${g.full?' The far-flange fillets are the same size.':''}`);
@@ -261,7 +257,7 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
  add('web-weld','Column stiffeners · fillet welds to the web (J10.8, J2.4)',webStress,phiW,'stress',`f_w=\\frac{R_{st}}{${throats}(0.707w)L_w}`,
   `${f(g.s.webWeld)} fillets both faces of each plate along the web, ${f(g.webLength)} beyond the clip${g.full?'s':''}, ${where} welds: they deliver the whole stiffener force${one} ${F(Rmax.R)} to the web (no share credited to the far flange).`);
  add('web-shear','Column web · shear along the stiffener welds (J4.2)',Rmax.R/(g.webLength*g.tw),webBase,'stress','f_v=\\frac{R_{st}}{L_wt_w}\\le\\min(\\phi0.6F_y,\\,\\phi0.6F_u)',
-  `Column web base metal along the stiffener line, one shear plane of the web thickness ${f(g.tw)} over ${f(g.webLength)}${couple?', with the larger plate force on one face (conservative: the net force of the pair is the flange force)':''}; J4.2 shear yielding (φ = 1.00) and rupture (φ = 0.75).`);
+  `Column web base metal along the stiffener line, one shear plane of the web thickness ${f(g.tw)} over ${f(g.webLength)}${couple?', with the larger plate force on one face (conservative: the net force of the pair is the flange force)':', with the larger plate force on one face'}; J4.2 shear yielding (φ = 1.00) and rupture (φ = 0.75).`);
  const fMin=filletMinimum([g.t,g.tf]),wMin=filletMinimum([g.t,g.tw]);
  add('weld-minimum','Column stiffener fillets · minimum leg (J2.4)',Math.max(fMin/g.s.flangeWeld,wMin/g.s.webWeld),1,'ratio','w\\ge w_{min}',
   `Flange fillets ${f(g.s.flangeWeld)} against ${f(fMin)} (thinner of the plate and the column flange); web fillets ${f(g.s.webWeld)} against ${f(wMin)} (thinner of the plate and the web), AISC 360-16 Table J2.4.`,undefined,refs);
@@ -287,16 +283,17 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
   `Table A-3.1 item 5.7, Category C: column flange (and web) base metal at the toe of the transverse fillets of the stiffeners, which are ${f(g.t)} thick along the column (item 7.1 would also give C, a < 2 in). ${x.columnStressNote} Equivalent constant-amplitude range at n_SR = ${toe.cycles.toLocaleString('en-US')} cycles; Σn_i/N_i = ${damageText(toe.damage)} (information).`,undefined,fatRefs);
  return checks;
 }
-/** Ids of the unstiffened column checks a level of stiffeners takes over, and the note for each kind. */
-export function stiffenedColumnChecks(p:ProjectInput,checks:CheckResult[],ids:string[]):CheckResult[]{
+/**
+ * The unstiffened column checks at the stiffened levels (ids, with the limit state each one is), reported for
+ * information, not governing: the stiffener pairs carry the whole force of each level (columnStiffenerChecks).
+ */
+export function stiffenedColumnChecks(p:ProjectInput,checks:CheckResult[],ids:Record<string,string>):CheckResult[]{
  const g=columnStiffenerGeometry(p);if(!g)return checks;
  const F=(v:number)=>format(v,'force',p.units,3);
  return checks.map(c=>{
-  if(!ids.includes(c.id))return c;
-  if(c.status==='pass')return {...c,note:`${c.note} Column stiffeners are also provided at the ${g.levels.map(l=>l.name).join(' and ')} (J10.8).`};
-  if(c.status!=='fail')return c;
-  const {demand:_d,capacity:_c,utilization:_u,...rest}=c;
-  return {...rest,status:'not-applicable',note:`Unstiffened strength ${F(c.capacity??0)} is below the ${F(c.demand??0)} concentrated force: the J10.8 column stiffeners at the ${g.levels.map(l=>l.name).join(' and ')} take R_u - φR_n (column stiffener checks). ${c.note}`};
+  const state=ids[c.id];if(!state||(c.status!=='pass'&&c.status!=='fail')||c.capacity===undefined)return c;
+  const {demand:_d,capacity:_c,utilization:_u,caseId:_k,...rest}=c,dc=(c.capacity??0)>0?(c.demand??0)/c.capacity!:Infinity;
+  return {...rest,status:'not-applicable',note:`Unstiffened ${state} for information, not governing (the column is stiffened at this level): R_u = ${F(c.demand??0)} against φR_n = ${F(c.capacity??0)}, D/C ${dc.toFixed(2)}${dc>1?' (exceeded)':''}. The column stiffener pairs at the ${g.levels.map(l=>l.name).join(' and ')} carry the whole force there (J10.8, column stiffener checks). ${c.note}`};
  });
 }
 /** Note for the J10.6 panel check where stiffeners are provided. */

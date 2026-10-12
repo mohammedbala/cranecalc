@@ -2,7 +2,8 @@ import type {CalculationSnapshot,CheckResult} from '../engine/types';
 import type {Quantity} from '../engine/units';
 import {girderStrength,concentratedResistance} from '../engine/aiscStrength';
 import {rectangularRibFlexure} from '../engine/bracketDesign';
-import {projectHaunch,haunchStations,haunchWebShear,haunchColumnStrengths} from '../engine/taperedHaunch';
+import {projectHaunch,haunchStations,haunchWebShear} from '../engine/taperedHaunch';
+import {flangeBracket} from './haunchColumn';
 import {braceImperfection} from '../engine/forcesDelivered';
 import {capAngleResult} from '../engine/capAngleTie';
 import {columnStiffenerGeometry,stiffenerGauge} from '../engine/columnStiffeners';
@@ -104,9 +105,10 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
    for(const Fnt of p.units==='US'?table:[...table].reverse()){const R=factor(.75,2)*Fnt*Ab;if(close(R,cap))return [`${lhs}R_n=${fl(.75,2)}F_{nt}A_b=${fl(.75,2)}\\times${tx(Fnt,'stress')}\\times${tx(Ab,'area')}=${tx(R,'force')}\\quad(\\text{${bolt.grade}},\\ d_b=${tx(bolt.diameter,'length')})`,
     T!==undefined?`T_u+q=F/2+q=${tx(F,'force')}/2+${tx(dem-T,'force')}=${tx(dem,'force')}\\le${tx(R,'force')}\\quad D/C=${dcText(c.utilization,2)}`:`T_u+q_{ep}+q_c=${tx(dem,'force')}\\le${tx(R,'force')}\\quad(F=${tx(F,'force')})\\quad D/C=${dcText(c.utilization,2)}`];}}
  }
- // Column stiffener plate at a tapered haunch flange: the flange force shared, its lateral moment as a couple (C2).
- if(/^haunch-colstiff-(upper|lower)$/.test(c.id)&&s.detailResults?.taperedHaunch&&d){
-  const up=c.id.endsWith('upper'),S=s.detailResults.taperedHaunch.strength,T=S[up?'stiffUpperT':'stiffLowerT'],C=S[up?'stiffUpperC':'stiffLowerC'],pk=[T,C].find(v=>v&&close(v.value,c.demand)),g=columnStiffenerGeometry(p);
+ // Column stiffener plate at a tapered haunch or W stub flange: the flange force shared, its lateral moment as a couple (C2).
+ const fb=/^(haunch|wbracket)-(colstiff-(upper|lower)|column-panel)$/.test(c.id)?flangeBracket(s):undefined;
+ if(fb&&c.id===`${fb.prefix}-colstiff-${c.id.endsWith('upper')?'upper':'lower'}`&&d){
+  const up=c.id.endsWith('upper'),S=fb.S,T=S[up?'stiffUpperT':'stiffLowerT'],C=S[up?'stiffUpperC':'stiffLowerC'],pk=[T,C].find(v=>v&&close(v.value,c.demand)),g=columnStiffenerGeometry(p);
   if(pk&&g&&pk.P!==undefined&&pk.M!==undefined){
    const gauge=stiffenerGauge(g),sym=up?'T':'C',P=Math.abs(pk.P),M=Math.abs(pk.M),adds=(pk===T)===(pk.P>0),us=p.units==='US',Fy=d.material.Fy,R=factor(.9,1.67)*Fy*g.contact*g.t;
    const Mg=us?`\\frac{${tx(M,'moment')}\\times12\\,\\mathrm{in/ft}}{${tx(gauge,'length')}}`:`\\frac{${tx(M,'moment')}}{${tx(gauge,'length')}}`;
@@ -114,11 +116,11 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
     close(R,cap)?`${lhs}R_n=${fl(.9,1.67)}F_y(b_s-c)t_s=${fl(.9,1.67)}\\times${tx(Fy,'stress')}\\times(${tx(g.width,'length')}-${tx(g.clip,'length')})\\times${tx(g.t,'length')}=${tx(R,'force')}${check(R,'R_{st}')}`:`${lhs}P_n/2=${tx(cap,'force')}${check(cap,'R_{st}')}`];
   }
  }
- // Existing column panel at the haunch (J10.6): the larger net flange force against the panel shear strength with axial force.
- if(c.id==='haunch-column-panel'&&d?.bracket&&s.detailResults?.taperedHaunch){
-  const S=s.detailResults.taperedHaunch.strength,r=d.bracket.receiver,hcol=r.depth-2*r.flangeThickness,A=2*r.width*r.flangeThickness+hcol*r.webThickness,Pr=r.axialDemand+(S.vertical?.value??0),a=lrfd?1:1.6,ratio=a*Pr/(r.Fy*A),k=Math.max(0,Math.min(1,1.4-ratio)),R=factor(.9,1.67)*.6*r.Fy*r.depth*r.webThickness*k;
+ // Column panel at the haunch or the stub (J10.6): the larger net flange force against the panel shear strength with axial force.
+ if(fb&&c.id===`${fb.prefix}-column-panel`&&d?.bracket){
+  const S=fb.S,r=d.bracket.receiver,hcol=r.depth-2*r.flangeThickness,A=2*r.width*r.flangeThickness+hcol*r.webThickness,Pr=r.axialDemand+(S.vertical?.value??0),a=lrfd?1:1.6,ratio=a*Pr/(r.Fy*A),k=Math.max(0,Math.min(1,1.4-ratio)),R=factor(.9,1.67)*.6*r.Fy*r.depth*r.webThickness*k;
   const T=S.tension?.value??0,C=S.compression?.value??0;
-  if(close(R,cap)&&close(Math.max(T,C),dem))return [`R_u=\\max(T,\\ C\\cos\\alpha)=\\max(${tx(T,'force')},\\ ${tx(C,'force')})=${tx(dem,'force')}\\quad(\\text{net flange force; the }M_f\\text{ couples add no panel shear})`,
+  if(close(R,cap)&&close(Math.max(T,C),dem))return [`R_u=\\max(T,\\ ${fb.bottom})=\\max(${tx(T,'force')},\\ ${tx(C,'force')})=${tx(dem,'force')}\\quad(\\text{net flange force; the }M_f\\text{ couples add no panel shear})`,
    `\\frac{\\alpha P_r}{P_y}=\\frac{${a===1?'':'1.6\\times'}${tx(Pr,'force')}}{${tx(r.Fy,'stress')}\\times${tx(A,'area')}}=${ratio.toFixed(3)}\\ \\Rightarrow\\ \\min(1,\\,1.4-${ratio.toFixed(3)})=${k.toFixed(3)}\\quad(P_r\\ \\text{column axial force with the bracket reaction})`,
    `${lhs}R_n=${fl(.9,1.67)}\\times0.6F_yd_ct_w\\times${k.toFixed(3)}=${fl(.9,1.67)}\\times0.6\\times${tx(r.Fy,'stress')}\\times${tx(r.depth,'length')}\\times${tx(r.webThickness,'length')}\\times${k.toFixed(3)}=${tx(R,'force')}${check(R,'R_u')}`];
  }
@@ -226,21 +228,23 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
 }
 
 /**
- * The unstiffened J10 column checks at the haunch flanges, worked for information (C2): the equivalent concentrated
- * force R_u = P + 3M_f/b of each flange's force system and the J10.1 (top) and J10.3 (bottom) strengths. Where the
- * column is stiffened these are not governing; the stiffener plate check carries the system.
+ * The unstiffened J10 column checks at the flanges of a tapered haunch or a W stub, worked for information (C2): the
+ * equivalent concentrated force R_u = P + 3M_f/b of each flange's force system and the J10.1 (top) and J10.3 (bottom)
+ * strengths. Where the column is stiffened these are not governing; the stiffener plate check carries the system.
  */
-export function haunchJ10Worked(s:CalculationSnapshot,tx:Tx):string[]{
- const p=s.input,d=p.details,h=s.detailResults?.taperedHaunch;if(!d?.bracket?.enabled||!h)return [];
- const S=h.strength,pull=S.pull,push=S.push;if(!pull||!push||pull.P===undefined||push.P===undefined)return [];
- const g=projectHaunch(p),J=haunchColumnStrengths(p,g),r=d.bracket.receiver,us=p.units==='US',lrfd=p.method==='LRFD',fl=(phi:number,omega:number)=>lrfd?n(phi):`1/${n(omega)}`,lhs=lrfd?'\\phi ':'1/\\Omega\\,';
+export function flangeJ10Worked(s:CalculationSnapshot,tx:Tx):string[]{
+ const p=s.input,d=p.details,fb=flangeBracket(s);if(!d?.bracket?.enabled||!fb)return [];
+ const S=fb.S,pull=S.pull,push=S.push;if(!pull||!push||pull.P===undefined||push.P===undefined)return [];
+ const J=fb.J,r=d.bracket.receiver,us=p.units==='US',lrfd=p.method==='LRFD',fl=(phi:number,omega:number)=>lrfd?n(phi):`1/${n(omega)}`,lhs=lrfd?'\\phi ':'1/\\Omega\\,';
  const Ru=(pk:typeof pull,sym:string,b:number)=>`R_u=${sym}+\\frac{3M_f}{b}=${tx(Math.abs(pk.P!),'force')}+\\frac{3\\times${tx(Math.abs(pk.M??0),'moment')}${us?'\\times12\\,\\mathrm{in/ft}':''}}{${tx(b,'length')}}=${tx(pk.value,'force')}`;
  const half=J.topFlangeEnd?.5:1,flange=(lrfd?.9:1/1.67)*half*6.25*r.Fy*r.flangeThickness**2;
- const lines=[`\\text{Top flange (${caseName(s,pull.caseId).replace(/[\\{}#%&_$^~]/g,'')}):}\\ \\ ${Ru(pull,'T',g.btr)}`];
+ const lines=[`\\text{Top flange (${caseName(s,pull.caseId).replace(/[\\{}#%&_$^~]/g,'')}):}\\ \\ ${Ru(pull,'T',fb.b[0])}`];
  if(close(flange,J.flange))lines.push(`\\quad${lhs}R_n=${fl(.9,1.67)}\\times${half<1?'0.5\\times':''}6.25F_{yf}t_f^2=${fl(.9,1.67)}\\times${half<1?'0.5\\times':''}6.25\\times${tx(r.Fy,'stress')}\\times(${tx(r.flangeThickness,'length')})^2=${tx(J.flange,'force')}\\quad D/C=${dcText(pull.value/J.flange,2)}\\quad(\\text{J10.1})`);
- lines.push(`\\text{Bottom flange (${caseName(s,push.caseId).replace(/[\\{}#%&_$^~]/g,'')}):}\\ \\ ${Ru(push,'C\\cos\\alpha',g.bb)}`);
+ lines.push(`\\text{Bottom flange (${caseName(s,push.caseId).replace(/[\\{}#%&_$^~]/g,'')}):}\\ \\ ${Ru(push,fb.bottom,fb.b[1])}`);
  const tw=r.webThickness,tf=r.flangeThickness,end=J.botCrippleEnd,long=end&&J.N/r.depth>.2,term=long?4*J.N/r.depth-.2:3*J.N/r.depth;
  const crip=(lrfd?.75:1/2)*(end?.4:.8)*tw**2*(1+term*(tw/tf)**1.5)*Math.sqrt(p.section.E*r.Fy*tf/tw);
  if(close(crip,J.crippling))lines.push(`\\quad${lhs}R_n=${fl(.75,2)}\\times${end?'0.40':'0.80'}t_w^2\\left[1+${long?'\\left(\\frac{4l_b}{d}-0.2\\right)':'3\\frac{l_b}{d}'}\\left(\\frac{t_w}{t_f}\\right)^{1.5}\\right]\\sqrt{\\frac{EF_{yw}t_f}{t_w}}=${tx(J.crippling,'force')}\\quad D/C=${dcText(push.value/J.crippling,2)}\\quad(\\text{J10.3},\\ l_b=${tx(J.N,'length')},\\ d=${tx(r.depth,'length')})`);
  return lines;
 }
+/** The tapered haunch's J10 worked example; flangeJ10Worked serves the W stub too. */
+export const haunchJ10Worked=flangeJ10Worked;
