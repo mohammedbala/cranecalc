@@ -1,0 +1,29 @@
+/**
+ * ASTM designations for the steels listed in the report and on S-00, from the product form and the specified
+ * strengths (AISC 360-16 A3.1 / Manual Table 2-4 preferred specifications). An entered grade (e.g. from mill
+ * certificates) is used as given.
+ */
+export type ProductForm='w-shape'|'channel'|'angle'|'plate'|'rod'|'rail'|'tube';
+const ksi=(mpa:number)=>mpa/6.894757293168;
+const near=(v:number,t:number)=>Math.abs(v-t)<=1;
+export function astmSpec(form:ProductForm,Fy:number,Fu?:number,entered?:string):string{
+ const g=entered?.match(/ASTM\s+[A-Z]\d+[^,;.]*/i)?.[0];if(g)return g.trim().replace(/^astm/i,'ASTM');
+ const fy=ksi(Fy),fu=Fu!==undefined?ksi(Fu):undefined;
+ if(form==='rail')return 'ASTM A759';
+ if(form==='tube')return near(fy,50)?'ASTM A500 Gr. C':near(fy,46)?'ASTM A500 Gr. C (round 46 ksi)':`ASTM A500 Gr. C (Fy ${fy.toFixed(0)} ksi)`;
+ if(form==='rod'){
+  if(near(fy,36))return 'ASTM A36';if(near(fy,55))return 'ASTM F1554 Gr. 55';if(near(fy,105))return 'ASTM F1554 Gr. 105';
+  return near(fy,50)?'ASTM A572 Gr. 50':`ASTM A36 or as specified (Fy ${fy.toFixed(0)} ksi)`;
+ }
+ if(near(fy,36))return 'ASTM A36';
+ if(form==='w-shape'&&near(fy,50)&&(fu===undefined||near(fu,65)))return 'ASTM A992';
+ if(near(fy,50))return 'ASTM A572 Gr. 50';
+ if(near(fy,42))return 'ASTM A572 Gr. 42';
+ if(near(fy,55))return 'ASTM A572 Gr. 55';
+ if(near(fy,60))return 'ASTM A572 Gr. 60';
+ if(near(fy,65))return 'ASTM A572 Gr. 65';
+ return `ASTM A572 (Fy ${fy.toFixed(0)} ksi)`;
+}
+/** Hardware that has no strength input: bolts, nuts, washers. */
+export const boltSpec=(grade:string|undefined)=>grade==='A490'?'ASTM F3125 Gr. A490':'ASTM F3125 Gr. A325';
+export const nutWasherSpec='ASTM A563 Gr. DH heavy hex nuts; ASTM F436 hardened washers';
