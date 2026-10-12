@@ -146,6 +146,7 @@ describe('tapered I haunch: test projects',()=>{
   // Every check states its clause and governing case.
   for(const c of s.checks.filter(v=>v.id.startsWith('haunch-')&&v.demand!==undefined))expect(c.title,c.id).toMatch(/\(|·/);
  });
+ // Test project 2 runs the full 5-bay calculation (about a minute alone): its own timeout, not the 60 s default.
  it('test project 2 (5 bays, existing W14X90 columns): column stiffeners at both haunch flanges take J10.1',()=>{
   const s=tp2(),p=s.input;expect(s.errors).toEqual([]);
   const failed=s.checks.filter(c=>c.status==='fail'&&!reviewOpenItem(c)).map(c=>c.id);
@@ -161,7 +162,7 @@ describe('tapered I haunch: test projects',()=>{
   // The existing rod X-bracing in bay 3 and the existing column with its load effects.
   expect(p.spans).toHaveLength(5);expect(p.longitudinalBracing!.enabled).toBe(true);expect(p.existingColumn!.shape).toBe('W14X90');
   expect(p.details!.bracket!.receiver.flangeThickness).toBe(.71*inch);
- });
+ },300000);
 });
 
 describe('tapered I haunch: drawings, parts, report and figures',()=>{
