@@ -1,10 +1,10 @@
 import { capChannelProfile } from '../engine/channelProfile';
-import { issueStatus } from '../engine/drawingData';
+import { issueStatus,revisionIdentity } from '../engine/drawingData';
 import {girderSegments} from '../engine/simpleSupports';
 import { detailedDrawings } from './detailedDrawings';
 import type { CalculationSnapshot } from '../engine/types';
 import { validateProject } from '../engine/calculate';
-import { format, toDisplay } from '../engine/units';
+import { format, toDisplay, unit } from '../engine/units';
 import { drawingLength, plateInches,dimensionLength} from './drawingFormat';
 
 export const cadLayers = {
@@ -43,7 +43,7 @@ export class Draft {
     this.line(810, height - 54, 810, height - 12, 'BORDER');
     this.text(28, height - 37, short(s.input.title, 70), 10);
     this.text(28, height - 22, `CRANECALC / ${short(s.input.number || 'UNTITLED', 40)} / ENGINEERING SKETCH`, 8, 'start', 'BORDER');
-    this.text(604, height - 37, `REVISION ${s.revision}`, 9);
+    this.text(604, height - 37, `${revisionIdentity(s).heading} · ${revisionIdentity(s).date}`, 9);
     this.text(604, height - 22, 'DIMENSIONS GOVERN / DO NOT SCALE PRINT', 8, 'start', 'BORDER');
     const failed=s.checks.filter(c=>c.status==='fail').length;
     this.text(824, height - 37, failed?`${failed} FAILED CHECK${failed>1?'S':''} - SEE CALC`:s.input.reportPurpose==='demonstration'?'DEMONSTRATION':s.input.scope==='design'?'DESIGN MODEL':'ANALYSIS ONLY', 9);
@@ -100,8 +100,11 @@ function elevationDrawing(s: CalculationSnapshot): CadDrawing {
   const railY = top - (p.railHeight + (b.kind === 'cap' ? b.capTw : 0)) * k;
   const dimY = bottom + 46, height = Math.max(390, dimY + 118);
   const lc = s.analysis?.demand.governing.moment;
-  const d = new Draft(s, 'runway-elevation', 'Runway elevation - governing supplied-load moment case', 'SK-01', height, 1 / k,
-    `${p.system === 'simple' ? 'Independent simply supported spans' : 'Continuous flexural member'} / rail, wheels and support symbols schematic / ${lc?.id ?? 'No load case'}`);
+  // The wheels as placed for the largest moment under the static wheel loads with impact (unfactored); the factored
+  // design moment of that position is stated in the note.
+  const Mstatic=s.analysis?.demand.moment,Mu=s.designAnalysis?.moment,moment=(v:number)=>`${Number(toDisplay(v,'moment',p.units).toPrecision(3)).toLocaleString('en-US')} ${unit('moment',p.units)}`;
+  const d = new Draft(s, 'runway-elevation', 'Runway elevation - wheel positions for the largest moment', 'SK-01', height, 1 / k,
+    `${p.system === 'simple' ? 'Independent simply supported spans' : 'Continuous girder'}; W = static wheel load with impact, unfactored${Mstatic?`; M = ${moment(Mstatic)} unfactored`:''}${Mu?`, Mu = ${moment(Mu)} factored`:''}`);
   let x = 0;
   for(const member of girderSegments(p)){
     const a=member.start,z=member.end;
@@ -121,8 +124,13 @@ function elevationDrawing(s: CalculationSnapshot): CadDrawing {
   });
   d.dimH(X(0), X(L), dimY + 8, dimY + 29, `OVERALL = ${dimensionLength(L, p.units)}`);
   const points = lc?.points ?? [];
+  // Each wheel's label above its wheel, pushed apart only as far as the text needs and kept centered on the group.
+  const gapX = points.length > 8 ? 30 : 86, labels = points.map(w => X(w.x));
+  for (let i = 1; i < labels.length; i++) labels[i] = Math.max(labels[i], labels[i - 1] + gapX);
+  const shift = labels.length ? (points.reduce((a, w) => a + X(w.x), 0) - labels.reduce((a, v) => a + v, 0)) / labels.length : 0;
+  for (let i = 0; i < labels.length; i++) labels[i] = Math.min(940, Math.max(60, labels[i] + shift));
   points.forEach((w, i) => {
-    const px = X(w.x), labelX = 80 + (i + .5) / points.length * 840;
+    const px = X(w.x), labelX = labels[i];
     d.circle(px, railY - 5, 5, 'LOAD');
     d.poly([[labelX, 84], [px, 108], [px, railY - 12]], false, 'LOAD');
     d.arrow(px, railY - 12, -Math.PI / 2, 'LOAD', 6);

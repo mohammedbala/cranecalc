@@ -204,7 +204,8 @@ export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `END PLATE: SHOP WELD TO THE TIE PLATE. FIELD-DRILL ${sz(g.column.hole)} HOLES IN THE ${tc.isNew?'COLUMN':'EXISTING COLUMN'} FLANGE TO MATCH; NO FIELD WELDING TO THE COLUMN FOR THE TIE. FINGER SHIMS 0 TO ${sz(c.shimMax)} TAKE UP THE FIT-UP; PRETENSION THE COLUMN BOLTS.`,
   ...(res?.stiffener.provided?[`COLUMN STIFFENER AT THE TIE LEVEL, ON THE TIE SIDE OF THE COLUMN WEB: ${tc.isNew?'SHOP':'FIELD'} WELD TO THE COLUMN FLANGE AND WEB (SEE EXISTING COLUMN WELDING).`]:[]),
   ...(shared?['AT A SHARED COLUMN THE TWO TIES SIT SIDE BY SIDE ON THE COLUMN FLANGE, EACH WITH ITS OWN END PLATE.']:[])];
- const checks=s.checks.filter(v=>v.id.startsWith('cap-angle-')&&v.utilization!==undefined&&v.quantity!=='length'&&v.status==='pass');
+ // Every DESIGN check of the tie (slot travel included, a length check), as the calculation reports its largest D/C.
+ const checks=s.checks.filter(v=>v.id.startsWith('cap-angle-')&&v.utilization!==undefined&&v.status==='pass');
  const most=(list:typeof checks)=>Math.max(0,...list.map(v=>v.utilization??0));
  // DESIGN checks only (check taxonomy): no detailing rule, and not the F13.1 net-area test (a capacity modifier);
  // fatigue only for details above their threshold (screened details are not evaluated).

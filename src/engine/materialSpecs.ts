@@ -25,5 +25,6 @@ export function astmSpec(form:ProductForm,Fy:number,Fu?:number,entered?:string):
  return `ASTM A572 (Fy ${fy.toFixed(0)} ksi)`;
 }
 /** Hardware that has no strength input: bolts, nuts, washers. */
-export const boltSpec=(grade:string|undefined)=>grade==='A490'?'ASTM F3125 Gr. A490':'ASTM F3125 Gr. A325';
+/** AISC 360-16 Table J3.2 names the bolt groups Group A (A325) and Group B (A490). */
+export const boltSpec=(grade:string|undefined)=>grade==='A490'?'ASTM F3125 Gr. A490 (Group B)':'ASTM F3125 Gr. A325 (Group A)';
 export const nutWasherSpec='ASTM A563 Gr. DH heavy hex nuts; ASTM F436 hardened washers';

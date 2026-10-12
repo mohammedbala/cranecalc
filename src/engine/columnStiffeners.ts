@@ -18,7 +18,7 @@ import {snapQuarter} from './quarterInch';
 import type {ProjectInput,CheckResult} from './types';
 import type {BracketInput} from './bracketInputs';
 import {available} from './aiscStrength';
-import {compressionResistance,minimumFillet,transverseFilletFatigue} from './connectionStrength';
+import {compressionResistance,filletMinimum,transverseFilletFatigue} from './connectionStrength';
 import {format} from './units';
 import {activeColumnStiffeners,receiverK,clipMargin,type ColumnStiffenerInput} from './columnStiffenerInputs';
 import {rolledStub,isRolledBracket} from './rolledBracketInputs';
@@ -262,9 +262,9 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
   `${f(g.s.webWeld)} fillets both faces of each plate along the web, ${f(g.webLength)} beyond the clip${g.full?'s':''}, ${where} welds: they deliver the whole stiffener force${one} ${F(Rmax.R)} to the web (no share credited to the far flange).`);
  add('web-shear','Column web · shear along the stiffener welds (J4.2)',Rmax.R/(g.webLength*g.tw),webBase,'stress','f_v=\\frac{R_{st}}{L_wt_w}\\le\\min(\\phi0.6F_y,\\,\\phi0.6F_u)',
   `Column web base metal along the stiffener line, one shear plane of the web thickness ${f(g.tw)} over ${f(g.webLength)}${couple?', with the larger plate force on one face (conservative: the net force of the pair is the flange force)':''}; J4.2 shear yielding (φ = 1.00) and rupture (φ = 0.75).`);
- const fMin=minimumFillet(Math.max(g.t,g.tf)),wMin=minimumFillet(Math.max(g.t,g.tw));
+ const fMin=filletMinimum([g.t,g.tf]),wMin=filletMinimum([g.t,g.tw]);
  add('weld-minimum','Column stiffener fillets · minimum leg (J2.4)',Math.max(fMin/g.s.flangeWeld,wMin/g.s.webWeld),1,'ratio','w\\ge w_{min}',
-  `Flange fillets ${f(g.s.flangeWeld)} against ${f(fMin)} (thicker of the plate and the column flange); web fillets ${f(g.s.webWeld)} against ${f(wMin)} (thicker of the plate and the web).`,undefined,refs);
+  `Flange fillets ${f(g.s.flangeWeld)} against ${f(fMin)} (thinner of the plate and the column flange); web fillets ${f(g.s.webWeld)} against ${f(wMin)} (thinner of the plate and the web), AISC 360-16 Table J2.4.`,undefined,refs);
  add('weld-length','Column stiffener fillets · length at least four sizes (J2.2b)',Math.max(4*g.s.flangeWeld/g.contact,4*g.s.webWeld/g.webLength),1,'ratio','l\\ge4w',
   `Flange fillets ${f(g.contact)} long beyond the clip, web fillets ${f(g.webLength)}.`);
  const survey=g.field?'Existing column: the survey verifies the plates clear any existing connection, bracing, girt or attachment on the web and inside either flange at both levels, including anything welded to the far flange; the receiving column is confirmed by survey.':'New column: no other attachment between its flanges at these levels (the crane-level bracing gussets, where designed, are checked for clashes).';

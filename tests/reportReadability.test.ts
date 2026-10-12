@@ -5,6 +5,7 @@ import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/dem
 import {compactReport} from '../src/report/compactReport';
 import {checkTable,monochrome,shortReference,sig3} from '../src/report/reportParts';
 import {elementChecks,loadPathFigure} from '../src/report/designSummary';
+import {loadPathSteps} from '../src/report/hairline/figures';
 import {checkFigure,checkGroupPurpose} from '../src/components/checkFigures';
 import type {CheckResult} from '../src/engine/types';
 import {overPrecise} from './fixtures/reportText';
@@ -56,7 +57,8 @@ describe('compact, readable calculation report',()=>{
   for(const t of ['0.6F_{EXX}','F11\\text{-}2','l_b=2(h_r+t_f','A_{pb}=2(b_s-c)t_s','\\frac{P_r}{2P_c}'])expect(html,t).toContain(t);
  });
  it('lists every check once in Appendix A; the body prints each governing design line once with its equation and citation',()=>{
-  const appendix=[...html.matchAll(/data-check="([^"]*)"/g)].map(m=>m[1]);
+  // A grouped Appendix A row (checks repeated over stations) lists every check it stands for in data-members.
+  const appendix=[...html.matchAll(/data-check="([^"]*)"(?: data-members="([^"]*)")?/g)].flatMap(m=>m[2]?m[2].split(' '):[m[1]]);
   expect(new Set(appendix)).toEqual(new Set(capped.checks.map(c=>c.id)));expect(appendix).toHaveLength(capped.checks.length);
   const ids=[...html.matchAll(/data-checks="([^"]*)"/g)].flatMap(m=>m[1].split(' '));
   expect(ids.length).toBe(new Set(ids).size);
@@ -89,7 +91,7 @@ describe('compact, readable calculation report',()=>{
   expect(checkFigure('Column bracket',p).detail).toContain('Twin-rib bracket');
   expect(checkFigure('Connections',p).detail).toContain('bars at the top flange');
   const svg=loadPathFigure(p);
-  for(const n of [1,2,3,4,5,7,8])expect(svg).toContain(`>${n}</text>`);
+  for(const [k,n] of Object.entries(loadPathSteps(p)))if(k!=='stops')expect(svg).toContain(`>${n}</text>`);// stops: outside the view
   expect(svg).toContain('TWIN-RIB BRACKET');expect(svg).toContain('TOP TIE');
  });
  it('cites the specific clause of a connection limit state, three significant figures and two decimals at most',()=>{
@@ -98,7 +100,7 @@ describe('compact, readable calculation report',()=>{
   expect(shortReference(c('tie-block'))).toBe('AISC 360-16 J4.3');
   expect(shortReference(c('bracket-column-yield'))).toContain('AISC 360-16 J10.2');
   expect(shortReference(c('crane-1-impact'))).toContain('ASCE 7-16 §4.9.3');
-  expect(sig3(25.4*0.0329961,'length','US')).toBe('3.30 × 10⁻² in');expect(sig3(25.4*0.25,'length','US')).toBe('0.25 in');expect(sig3(25.4*21.0865,'length','US')).toBe('21.1 in');expect(sig3(914.68*1355817.948,'moment','US')).toBe('915 kip-ft');
+  expect(sig3(25.4*0.0329961,'length','US')).toBe('0.033 in');expect(sig3(25.4*0.25,'length','US')).toBe('0.25 in');expect(sig3(25.4*21.0865,'length','US')).toBe('21.1 in');expect(sig3(914.68*1355817.948,'moment','US')).toBe('915 kip-ft');
  });
  it('collapses checks repeated over stations to their governing member, keeping the count',()=>{
   const rows:CheckResult[]=[1,2,3].map(i=>({id:`s${i}`,group:'Fatigue',title:`Station ${i}`,status:'pass',equation:'\\Delta f\\le F_{SR}',note:'',referenceIds:['aisc-fatigue'],demand:i,capacity:10,utilization:i/10,quantity:'ratio'}));

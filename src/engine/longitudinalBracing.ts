@@ -1,7 +1,7 @@
 import {available} from './aiscStrength';
 import {aiscAngleByName} from '../data/aiscAngles';
 import {asceCombinations} from './asceCombinations';
-import {format} from './units';
+import {format,noteLength} from './units';
 import {latexNumber} from './math';
 import type {SupportReactionSet} from './supportReactions';
 import type {CheckResult,ProjectInput,Section} from './types';
@@ -23,7 +23,7 @@ export function bracingMember(p:ProjectInput,length:number):BracingMember{
  if(b.system==='rod-x'){
   const Ab=Math.PI*b.rod.diameter**2/4;
   // AISC 360-16 J3.6/Table J3.2 threaded rod Fnt = 0.75Fu (phi 0.75, Omega 2.00); D2 yielding of the rod body.
-  return {area:Ab,tension:Math.min(available(.75*b.rod.Fu*Ab,p.method,.75,2),available(b.rod.Fy*Ab,p.method,.9,1.67)),description:`${format(b.rod.diameter,'length',p.units,3)} diameter rod`};
+  return {area:Ab,tension:Math.min(available(.75*b.rod.Fu*Ab,p.method,.75,2),available(b.rod.Fy*Ab,p.method,.9,1.67)),description:`${noteLength(b.rod.diameter,p.units)} diameter rod`};
  }
  const shape=aiscAngleByName(b.angle.shape)!,Ag=shape.A*inch**2,t=shape.t*inch,g=angleGeometry(shape.d*inch,shape.b*inch,t),Fy=b.angle.Fy;
  // D3: standard hole plus 1/16 in; Table D3.1 case 8 shear lag for single angles (U = 0.80 with 4+ bolts in line, else 0.60).

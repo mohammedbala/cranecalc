@@ -1,3 +1,4 @@
+import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
 import {railPadThickness,keeperGeometry} from '../engine/railSeat';
 import {girderBearingTitle} from './columnCapSheet';
 import {stopEnds,stopLocation} from '../engine/endStopInputs';
@@ -186,7 +187,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
  // 4: Design data and notes.
  {
   const P=Math.max(...craneCombinations(p.method).map(c=>c.bumper))*stopBumperForce(p),check=(id:string)=>s.checks.find(c=>c.id===id);
-  const stops=s.checks.filter(c=>c.group==='End stops'&&c.utilization!==undefined&&(c.quantity!=='length'||c.id.endsWith('prying'))),worst=[...stops].sort((a,b)=>(b.utilization??0)-(a.utilization??0))[0];
+  // The governing DESIGN check of the stop, as the calculation reports it (no classification or detailing rule).
+  const stops=s.checks.filter(c=>{if(c.group!=='End stops'||c.utilization===undefined||c.status==='not-applicable')return false;const k=classifyCheck(c);return k.type==='design'&&gateCheck(s,c,k).gate==='evaluated';}),worst=[...stops].sort((a,b)=>(b.utilization??0)-(a.utilization??0))[0];
   const T=check('end-stop-bolt-tension')?.demand,V=check('end-stop-bolt-shear')?.demand;
   // Where the bumper force leaves the girder: the one locating support of a continuous girder, else the end bay's locating end.
   const fixed=continuousBearings(p).find(v=>v.role==='LOCATING'),locating=fixed&&activeEndBearing(p)?`THE LOCATING BEARING AT GRID ${fixed.grid}`:p.system==='simple'?'THE LOCATING END OF EACH END BAY':'THE LOCATING END CONNECTION';
@@ -197,7 +199,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    ['FRONT BOLT TENSION / BOLT SHEAR',T!==undefined&&V!==undefined?`${force(T)} / ${force(V)}`:'-'],
    // Socket room for the heads beside the stop welds (AISC Manual Table 7-15).
    ['BOLT C/L TO WELD TOE: FACE PL / STIFFENER',`${size(g.toe.face)} / ${size(g.toe.stiffener)}, ${size(wrenchClearance(db))} MIN.`],
-   ['GOVERNING STOP CHECK',worst?`${worst.title.toUpperCase()}: ${(worst.utilization??0).toFixed(2)}`:'-'],
+   ['GOVERNING STOP CHECK',worst?`${worst.title.replace(/\s*\(ratio t_min\/t\)/,'').toUpperCase()}: D/C ${(worst.utilization??0).toFixed(2)}${/prying/.test(worst.id)?' (THICKNESS RATIO)':''}`:'-'],
    ['QUANTITY',`${2*stopEnds(p).length}: ${stopLocation(p).split(';')[0].toUpperCase()}`],
    ['DATA SOURCE',e.source||'NOT ENTERED']
   ];
@@ -208,7 +210,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    `SHOP WELD THE FACE PLATE AND THE STIFFENERS TO THE BASE PLATE, AND EACH STIFFENER TO THE FACE PLATE OVER ITS FULL HEIGHT, WITH CONTINUOUS ${size(e.weldSize).replaceAll('"','')} FILLETS BOTH SIDES. GRIND THE FACE SMOOTH AT THE BUMPER CONTACT.`,
    `TERMINATE THE RAIL ${dim(e.railGap)} CLEAR OF THE STOP FACE. THE FIRST KEEPER PAIR IS AT THE RAIL END; KEEPER SPACING PER ${keeperRef}.`,
    'CONFIRM THE BUMPER FORCE, BUMPER HEIGHT AND CONTACT DIAMETER WITH THE CRANE SUPPLIER BEFORE FABRICATION. STOPS SHALL BE INSTALLED BEFORE THE CRANE IS OPERATED.',
-   `THE GIRDER AXIAL FORCE AND ${locating} INCLUDE THE BUMPER FORCE; THE END COUPLE IS INCLUDED IN THE GIRDER STOP COMBINATIONS (CALCULATION 05A).`
+   `THE GIRDER AXIAL FORCE AND ${locating} INCLUDE THE BUMPER FORCE; THE END COUPLE IS INCLUDED IN THE GIRDER STOP COMBINATIONS (CALCULATION REPORT, RUNWAY END STOPS).`
   ];
   return {key:'end-stop',name:'END STOPS',views,notes:(t:Style)=>[heading(t,'END STOP DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.6,1.4]),heading(t,'END STOP NOTES'),...numbered(t,notes)]};
  }

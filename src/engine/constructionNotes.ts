@@ -1,5 +1,5 @@
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
-import {format} from './units';
+import {format,noteLength} from './units';
 import {existingWeldingDemand,weldsToExistingColumn} from './existingWelding';
 import {existingColumnSection} from './existingColumn';
 import {usesTaperedHaunch} from './taperedHaunch';
@@ -20,6 +20,7 @@ export const awsEdition='2020';
 export const awsCode=`AWS D1.1/D1.1M:${awsEdition}`;
 const inch=25.4;
 
+const inches=noteLength;
 /** The weld metal of the detailed connections: the E70XX (or entered) electrode of every weld check, not the legacy screening value. */
 export const weldElectrode=(p:ProjectInput)=>p.details?.material.Fexx??p.connections.Fexx;
 
@@ -74,13 +75,13 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
  const erection=[
   'Provide temporary lateral and torsional restraint of each girder until its ties are complete. Set bearings level and fit bearing stiffeners before welding.',
   'Runway clearance test before the load test (AIST TR-13 §1.5.6.2): crane unloaded, hook fully up, run the crane the full length of the runway three times, with the trolley at each end of the bridge and at center; check the Fig. 1.1 clearances, including the clearance to the roof trusses deflected under snow.',
-  ...(p.existingColumn?.enabled&&!p.existingColumn.isNew?['Confirm the crane clearance to the existing roof framing, bracing, lights, piping and other obstructions over the full runway, with the roof framing deflected under snow; report any shortfall to the engineer of record before commissioning.']:[]),
-  ...(tight?['Re-tighten the rail joint bolts after 30 and 90 days of crane operation.']:[])];
+  ...(p.existingColumn?.enabled&&!p.existingColumn.isNew?['Confirm the crane clearance to the existing roof framing, bracing, lights, piping and other obstructions over the full runway, with the roof framing deflected under snow; report any shortfall to the engineer of record before commissioning.']:[])];
+ // (Re-tightening of the rail joint bolts after 30 and 90 days is stated once, with the rail joints under bolting.)
  const tolerances=[
   'Runway fabrication and erection tolerances (AIST TR-13 §5.18), unless the crane manufacturer requires less:',
   'column base lines ±1/8 in; seat (bearing) plan position and elevation ±1/8 in;',
   'girder sweep 1/4 in per 50 ft; camber +1/4 in / −0 in per 50 ft; bearing-zone flatness ±1/32 in; girder end depth ±1/16 in; adjacent tops of girder flanges within 1/16 in;',
-  'rail gauge ±1/4 in at 68 °F; rail line and grade 1/4 in per 50 ft, 3/8 in total; rail eccentricity on the girder web not more than 3/4 of the web thickness.',
+  `rail gauge ±1/4 in at 68 °F; rail line and grade 1/4 in per 50 ft, 3/8 in total; rail centerline set on the girder web centerline within ${inches(d.criteria.alignmentTolerance,p.units)}, and the rail eccentricity in service not more than ${inches(Math.min(Math.abs(p.railEccentricity),.75*p.section.tw),p.units)} (the design eccentricity${Math.abs(p.railEccentricity)<=.75*p.section.tw+1e-6?`, within the AIST TR-13 §5.18 limit of 3/4 of the web thickness, ${inches(.75*p.section.tw,p.units)}`:'; the AIST TR-13 §5.18 limit of 3/4 of the web thickness'}).`,
   'Survey both rails unloaded after erection and during commissioning: gauge, elevation and straightness at every support and at midspan; submit the survey.'];
  return [{key:'bolting',title:'Bolting',items:bolting},{key:'welding',title:'Welding',items:welding},{key:'inspection',title:'Inspection',items:inspection},
   {key:'erection',title:'Erection and commissioning',items:erection},{key:'tolerances',title:'Runway tolerances',items:tolerances}];

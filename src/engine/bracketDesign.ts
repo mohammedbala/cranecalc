@@ -6,7 +6,7 @@ import type {ProjectInput,CheckResult} from './types';
 import type {BracketInput} from './bracketInputs';
 import {available} from './aiscStrength';
 import {bracketArrangement} from './connectionOptions';
-import {minimumFillet,parallelWeldGroup,transverseFilletFatigue,boltCapacity} from './connectionStrength';
+import {filletMinimum,minimumFillet,parallelWeldGroup,transverseFilletFatigue,boltCapacity} from './connectionStrength';
 import {designsBracing,bracingDesign} from './newColumnBracing';
 import {validateRolledBracket} from './rolledBracket';
 import {validateTaperedHaunch} from './taperedHaunch';
@@ -309,14 +309,14 @@ export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:n
  if(cwPeaks){
   const governs=cwPeaks.seat.value>=cwPeaks.root.value?cwPeaks.seat:cwPeaks.root;
   add('column-weld','Seat and rib welds to column · with longitudinal and lateral force',governs.value,cw.capacity,'stress','f=\\sqrt{\\left(\\frac{H}{A}+\\frac{M_xv}{I_x}-\\frac{M_yu}{I_y}\\right)^2+\\left(\\frac{F}{A}-\\frac{M_zv}{J}\\right)^2+\\left(\\frac{V}{A}-\\frac{M_zu}{J}\\right)^2}',`Every concurrent case of the bracket design force envelope with its longitudinal force F from the locating bearing bolts (at the girder web line, ${cwf(b.reach)} from the flange) and its bottom-flange lateral force H through the bearing bolts (both senses), at the seat top; V at the far bearing edge with its seat moment and the bracket self-weight. One elastic group on the column flange: the two ${cwf(b.rootWeld)} root fillets of each rib over ${cwf(b.ribDepth)} and the ${cwf(cw.size)} top fillet of the seat, ${cwf(cw.length)} long across the flange (${cw.entered?'entered with the bracing collector':'the smallest standard fillet from the J2.4 minimum that carries these forces'}); throat stresses at the line ends, no directional increase. Peak on the ${governs===cwPeaks.seat?'seat':'rib root'} line.${hr?' At the bottom of each haunched root the shear n tan α of the sloping free edge is added.':''} The seat-line share of the bracket moment is included; the ribs alone are checked for gravity above.`,governs.caseId);
-  add('column-weld-minimum','Seat-to-column fillet · minimum leg',minimumFillet(Math.max(b.seatThickness,c.flangeThickness)),cw.size,'length','w\\ge w_{min}','Thicker of the seat plate and the column flange controls.');
+  add('column-weld-minimum','Seat-to-column fillet · minimum leg',filletMinimum([b.seatThickness,c.flangeThickness]),cw.size,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined (the seat plate or the column flange).');
   // J10.1/J10.2 for the seat's pull on the flange; within 10tf (or d) of the column top the end-region values apply.
   const flangeEnd=columnEnd<10*c.flangeThickness,webEnd=!(columnEnd>c.depth);
   add('seat-flange','Column flange · local bending under the seat pull',cwPeaks.pull.value,available((flangeEnd?.5:1)*6.25*c.Fy*c.flangeThickness**2,p.method,.9,1.67),'force','R_n=6.25F_{yf}t_f^2\\\ \\text{(J10.1)}',`The peak tensile throat stress of the seat line over its whole length, ${cwf(cw.length)}: the seat plate pulls on the column flange like a plate across it.${flangeEnd?' Within 10tf of the column top, or the column height not entered: half strength.':''} Checked apart from the rib tension zones below.`,cwPeaks.pull.caseId);
   add('seat-web','Column web · local yielding under the seat pull',cwPeaks.pull.value,available(c.Fy*c.webThickness*((webEnd?2.5:5)*c.flangeThickness+b.seatThickness),p.method,1,1.5),'force',`R_n=F_yt_w(${webEnd?'2.5':'5'}k+l_b)\\\ \\text{(J10.2)}`,`k = tf (no rolled fillet credit), lb = seat thickness ${cwf(b.seatThickness)}.${webEnd?' End-region expression: the column top is within the column depth of the seat, or not entered.':''}`,cwPeaks.pull.caseId);
  }
  for(const [id,w,t1,t2] of [['root',b.rootWeld,b.ribThickness,c.flangeThickness],['seat',b.seatWeld,b.ribThickness,b.seatThickness]] as const){
-  add(id+'-minimum',`${id==='root'?'Root':'Seat'} weld · minimum leg`,minimumFillet(Math.max(t1,t2)),w,'length','w\\ge w_{min}','Thicker connected part governs minimum fillet.');
+  add(id+'-minimum',`${id==='root'?'Root':'Seat'} weld · minimum leg`,filletMinimum([t1,t2]),w,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined.');
   add(id+'-maximum',`${id==='root'?'Root':'Seat'} weld · plate-edge limit`,w,Math.min(t1,t2)-1.5875,'length','w\\le t-1/16\\,in','No full-throat edge buildup credited.');
  }
  // Conservative end-region factors used at every bracket. No fillet/k credit.

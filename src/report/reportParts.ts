@@ -27,7 +27,7 @@ const codeNames:[RegExp,string][]=[
  [/^AISC Design Guide 7/,'AISC DG7'],[/^DG7 revisions/,'AISC DG7 errata'],[/^AISC Design Guide 1\b/,'AISC DG1'],
  [/^ASCE\/SEI 7-16/,'ASCE 7-16'],[/^ACI 318-19/,'ACI 318-19'],[/^Torsional Analysis of Steel Sections/,'Moore & Mueller (EJ 2002)'],
  [/^Design of Crane Runway Beam with Channel Cap/,'Ellifritt & Lue (EJ 1998)'],[/^Lateral-Torsional Buckling/,'Nayak et al. (EJ 2024)'],
- [/^Fisher & Van de Pas/,'Fisher & Van de Pas (EJ 2002)'],[/^Euler–Bernoulli/,'Beam mechanics'],[/^Project serviceability criteria/,'Owner criteria']
+ [/^New Fatigue Provisions for the Design of Crane Runway Girders/,'Fisher & Van de Pas (EJ 2002)'],[/^Euler–Bernoulli/,'Beam mechanics'],[/^Project serviceability criteria/,'Owner criteria']
 ];
 export const codeName=(title:string)=>codeNames.find(([re])=>re.test(title))?.[1]??title.split(' · ')[0];
 /** Clause-like tokens in a note: §5.9.2, J10.2, F2, Appendix 3, Table A-3.1, Eq. E3-4. */
@@ -48,7 +48,7 @@ const idClauses:[RegExp,string][]=[
  [/(^|-)net$/,'J4.1(b)'],[/gross$/,'J4.1(a)'],[/block$/,'J4.3'],[/shear-rupture$/,'J4.2(b)'],
  [/weld-(minimum|maximum|size)$/,'J2.2b'],[/(^|-)weld(-base)?$/,'J2.4'],
  [/(column-yield|web-yield|web-yielding)$/,'J10.2'],[/(cripple|crippling)$/,'J10.3'],[/sidesway$/,'J10.4'],[/panel$/,'J10.6'],[/column-flange$/,'J10.1'],
- [/(stiffener-bearing|pin-bearing|contact)$/,'J7'],[/(bolt-tension|locating-tension)$/,'J3.7'],[/(bolts?|bolt-shear|locating-shear)$/,'J3.6'],
+ [/(stiffener-bearing|pin-bearing|contact)$/,'J7'],[/cjp$/,'J2.4'],[/stiffener-column$/,'J10.8'],[/(hold-down-model|-uplift)$/,'J3.6'],[/(^bearing-plate|washer-bending|end-stop-face|end-stop-face-outstand)$/,'F11'],[/(bolt-tension|locating-tension)$/,'J3.7'],[/(bolts?|bolt-shear|locating-shear)$/,'J3.6'],
  [/^(tie|rail-joint|end-bearing-(flange|plate|sleeve|seat)|brace-strut)-bearing$/,'J3.10'],[/(plate|gusset)-compression$/,'J4.4'],[/fatigue/,'Appendix 3']
 ];
 const idClause=(id:string)=>idClauses.find(([re])=>re.test(id))?.[1];
@@ -69,57 +69,112 @@ function covers(clause:string,token:string){
  return !!head&&new RegExp(`(^|[^A-Z0-9.])${head.replace('.','\\.')}($|[^0-9])`).test(c);
 }
 /**
- * The code citation of a check, e.g. "AISC 360-16 J10.2, J10.3 · AIST TR-13 §5.9.2": each referenced document by
- * its short name, with the clauses the note names that the register entry covers, else the entry's first clause.
+ * A register entry that records a method of this calculation (a component model, the beam mechanics), not a published
+ * document: it is described in the reference register, never printed as a code citation.
+ */
+export const methodReference=(r:{id:string;edition:string})=>r.id==='mechanics'||/CraneCalc method|component model|app mechanics|Elastic component model|custom arrangement|^\d{4}-\d{2}-\d{2}$/i.test(r.edition);
+/**
+ * The code citation of a check, e.g. "AISC 360-16 J10.2, J10.3 · AIST TR-13 §5.9.2": each referenced document by its
+ * short name with the clause of this limit state: the clause named in the check's title first (its own clause, e.g.
+ * "(G2.1)"), else the clauses its note names that the register entry covers, else the clause of the limit state by its
+ * id. A document whose register entry spans many clauses and names none of this check is cited without a clause list
+ * (AISC 360-16 is then left off when another document is cited); method records are not cited.
  */
 export function shortReference(c:CheckResult){
- const tokens=clauseTokens(c.note),byId=idClause(c.id),used=new Set<string>(),groups=new Map<string,{specific:string[];heads:string[];id?:string}>();
+ const titled=clauseTokens(c.title),tokens=[...titled,...clauseTokens(c.note).filter(t=>!titled.includes(t))],byId=idClause(c.id),used=new Set<string>(),groups=new Map<string,{specific:string[];heads:string[];id?:string;title:boolean}>();
  for(const rid of c.referenceIds){
-  const r=references.find(v=>v.id===rid);if(!r)continue;
-  const name=codeName(r.title),g=groups.get(name)??{specific:[],heads:[]};
-  for(const t of tokens)if(!used.has(t)&&covers(r.clause,t)){used.add(t);g.specific.push(t);}
-  if(byId&&name==='AISC 360-16'&&covers(r.clause,byId))g.id=byId;
+  const r=references.find(v=>v.id===rid);if(!r||methodReference(r))continue;
+  const name=codeName(r.title),g=groups.get(name)??{specific:[],heads:[],title:false};
+  // The title's own clause, when it names one, is the citation of the limit state (J10.1, not the stiffener clause J10.8 of the note).
+  const own=titled.filter(t=>covers(r.clause,t));
+  if(own.length){if(!g.title){g.specific=[];g.title=true;}for(const t of own)if(!g.specific.includes(t)){used.add(t);g.specific.push(t);}}
+  else if(!g.title)for(const t of tokens)if(!used.has(t)&&covers(r.clause,t)){used.add(t);g.specific.push(t);}
+  // The limit state's own AISC section by its id (J3.8 slip, J10.2 web yielding): any AISC 360-16 entry may cite it.
+  if(byId&&name==='AISC 360-16')g.id=byId;
   if(!g.heads.length)g.heads=clauseHeads(r.clause);
   groups.set(name,g);
  }
  // TR-13: the clause that governs this limit state (tr13Clauses), not the first clause of the register entry; none → left off.
  const tr13=tr13Clause(c.id);
- return [...groups].filter(([name])=>!(name==='AIST TR-13'&&tr13==='')).map(([name,g])=>`${name} ${(name==='AIST TR-13'&&tr13?tr13.split(', '):g.specific.length?g.specific:g.id?[g.id]:g.heads).slice(0,4).join(', ')}`.trim()).join(' · ');
+ const cited=[...groups].filter(([name])=>!(name==='AIST TR-13'&&tr13==='')).map(([name,g])=>{
+  const list=name==='AIST TR-13'&&tr13?tr13.split(', '):g.specific.length?g.specific:g.id?[g.id]:g.heads.length<=2?g.heads:[];
+  return {name,list,general:!list.length};
+ });
+ // A thickness for no prying is a Manual Part 9 T-stub check: it is cited there when no AISC 360 clause is named.
+ if(/prying$/.test(c.id)&&!cited.some(v=>/Manual/.test(v.name)))for(const v of cited)if(v.name==='AISC 360-16'&&v.general){v.name='AISC Manual Part 9';v.general=false;}
+ const specific=cited.filter(v=>!v.general);
+ // A broad AISC 360-16 entry with no clause of its own is left off where another document cites the limit state.
+ return cited.filter(v=>!(v.general&&v.name==='AISC 360-16'&&specific.length)).map(v=>`${v.name} ${v.list.slice(0,4).join(', ')}`.trim()).join(' · ');
 }
 const superscript=(n:number)=>String(n).replace(/[-0-9]/g,c=>'⁻⁰¹²³⁴⁵⁶⁷⁸⁹'['-0123456789'.indexOf(c)]);
 /** Mantissa (two decimals) and exponent of a value written as m × 10^e. */
 function scientific(d:number){let e=Math.floor(Math.log10(Math.abs(d))),m=d/10**e;if(Math.abs(Number(m.toFixed(2)))>=10){m/=10;e++;}return {m:m.toFixed(2),e};}
+/** Floating-point noise removed (0.37499999 → 0.375, 0.62500001 → 0.625), so every value rounds half-up on its true value. */
+export const clean=(d:number)=>Number(d.toPrecision(12));
+/** A displayed magnitude this small is zero (solver residue such as 2.02 × 10⁻¹⁷). */
+const zero=5e-5;
 /**
- * A number as printed in the calculation: never more than two decimal places. Three significant figures by default
- * (`fixed` keeps every digit down to two decimals); a value too small for two decimals is written m × 10ⁿ with a
- * two-decimal mantissa, as is a very large one.
+ * A number as printed in the calculation, in ordinary decimal notation: three significant figures, never more than
+ * two decimal places at 0.1 and above, and whole numbers from 100 up (`fixed`: trailing zeros dropped, 68.1 not 68.10). Below 0.1 a value keeps two significant figures (0.038, 0.0049); a
+ * magnitude under 5 × 10⁻⁵ prints 0. Only values of ten million and more are written m × 10ⁿ.
  */
 export function num(d:number,o:{fixed?:boolean;tex?:boolean}={}){
  if(!Number.isFinite(d))return '—';
- const a=Math.abs(d);if(a===0)return '0';
- if(a<.1||a>=1e7){const {m,e}=scientific(d);if(e===-1&&a>=.0995)return d.toFixed(2);return o.tex?`${m}\\times10^{${e}}`:`${m} × 10${superscript(e)}`;}
- const decimals=o.fixed?2:Math.min(2,Math.max(0,2-Math.floor(Math.log10(a))));
- const t=d.toLocaleString('en-US',{minimumFractionDigits:o.fixed?0:decimals,maximumFractionDigits:decimals});
+ d=clean(d);const a=Math.abs(d);if(a<zero)return '0';
+ if(a>=1e7){const {m,e}=scientific(d);return o.tex?`${m}\\times10^{${e}}`:`${m} × 10${superscript(e)}`;}
+ // Three significant figures: two decimals below 10, one below 100, none from 100. Below 0.1, two significant figures.
+ // In an equation a value below 1 keeps three significant figures (t_w = 0.375 in), so the substitution reproduces.
+ const decimals=a<.1?Math.min(6,(o.tex?2:1)-Math.floor(Math.log10(a))):a>=100?0:o.tex&&a<1?3:Math.min(2,Math.max(0,2-Math.floor(Math.log10(a))));
+ const t=d.toLocaleString('en-US',{minimumFractionDigits:o.fixed||(o.tex&&a<1)?0:decimals,maximumFractionDigits:decimals,roundingMode:'halfExpand'} as Intl.NumberFormatOptions);
  return o.tex?t.replace(/,/g,'{,}'):t;
 }
+/** Temperatures print as whole degrees. */
+const wholeDegrees=(q:Quantity)=>q==='temperature'||q==='temperatureChange';
 /** Three significant figures (never more than two decimals), with the project unit. */
 export function sig3(v:number|undefined,q:Quantity,units:ProjectInput['units']){
  if(v===undefined||!Number.isFinite(v))return '—';
- const u=unit(q,units);
- return `${num(toDisplay(v,q,units))}${u?` ${u}`:''}`;
+ const u=unit(q,units),d=toDisplay(v,q,units);
+ return `${wholeDegrees(q)?Math.round(d).toLocaleString('en-US'):num(d)}${u?` ${u}`:''}`;
 }
-/** The value to two decimals at most, every digit kept above that (dimensions, inputs), with the project unit. */
+/**
+ * An inch length that is a whole number of sixteenths, as a fraction: 3/8 in, 6 3/4 in, 480 1/2 in. Undefined for any
+ * other length, which then prints as a decimal.
+ */
+export function inchFraction(inches:number){
+ const ticks=Math.round(Math.abs(inches)*16);
+ if(!ticks||Math.abs(Math.abs(inches)*16-ticks)>1e-6)return undefined;
+ const whole=Math.floor(ticks/16);let n=ticks%16,den=16;while(n&&n%2===0){n/=2;den/=2;}
+ return `${inches<0?'-':''}${whole||!n?whole:''}${n?`${whole?' ':''}${n}/${den}`:''}`;
+}
+/**
+ * The value to two decimals at most, every digit kept above that (dimensions, inputs), with the project unit. A US length
+ * that is a whole number of sixteenths (a plate, bolt or weld size, a setting tolerance) prints as a fraction: 3/8 in,
+ * never 0.37 or 0.38 in. Values of 100 and more print as whole numbers unless they are such a fraction.
+ */
 export function fixed2(v:number|undefined,q:Quantity,units:ProjectInput['units']){
  if(v===undefined||!Number.isFinite(v))return '—';
- const u=unit(q,units);
- return `${num(toDisplay(v,q,units),{fixed:true})}${u?` ${u}`:''}`;
+ const u=unit(q,units),d=toDisplay(v,q,units);
+ if(q==='length'&&units==='US'){const fr=inchFraction(clean(d));if(fr&&!Number.isInteger(clean(d)))return `${fr} in`;}
+ return `${wholeDegrees(q)?Math.round(d).toLocaleString('en-US'):num(d,{fixed:true})}${u?` ${u}`:''}`;
 }
+/** A check value: a US length of whole sixteenths as a fraction (a size or a tolerance), anything else to three significant figures. */
+export const value=(v:number|undefined,q:Quantity,units:ProjectInput['units'])=>{
+ if(q==='length'&&units==='US'&&v!==undefined&&Number.isFinite(v)){const d=clean(toDisplay(v,q,units)),fr=inchFraction(d);if(fr&&Math.abs(d)<100)return `${fr} in`;}
+ return sig3(v,q,units);
+};
 /**
  * Numbers written by the engine into notes and titles, re-printed to the report's two-decimal rule: a decimal with
  * three or more places (1.0000, 116.051, 0.0012413) or in e-notation. Clause numbers (§3.10.2, J10.8) are left alone.
  */
 export function tidyNumbers(text:string){
  return text.replace(/(?<![\w.§-])(-?\d[\d,]*\.\d{3,}(?:e[-+]?\d+)?|-?\d+(?:\.\d+)?e[-+]?\d+)(?!\w|\.\d)/gi,(m)=>num(Number(m.replace(/,/g,'')),{fixed:true}));
+}
+/**
+ * Escaped report text with engineering subscripts as markup: R_FIL, F_TH, W_E, A_fn, t_min (from engine notes) print
+ * R<sub>FIL</sub> and so on, never with the underscore. A sentence ending twice ("accepted..") is closed once.
+ */
+export function subscripts(html:string){
+ return html.replace(/(?<![\w/.&#-])([A-Za-z])_\{?([A-Za-z]{1,8}|\d)\}?(?![\w])/g,'$1<sub>$2</sub>').replace(/(?<![.\d])\.\.(?=\s|$|<)/g,'.');
 }
 export const inlineMath=(tex:string)=>katex.renderToString(tex,{throwOnError:false,displayMode:false});
 export const statusLabel=(s:CheckResult['status'])=>({pass:'OK',fail:'NG',excluded:'BY OTHERS','not-applicable':'N/A',unverified:'UNVERIFIED',unsupported:'UNSUPPORTED',incomplete:'INCOMPLETE'} as Record<string,string>)[s]??s.toUpperCase();
@@ -142,7 +197,7 @@ export function equationLines(tex:string){
 }
 export function equationCell(c:CheckResult){
  if(c.equation){const t=termsFor(c);return equationLines(c.equation).map(inlineMath).join('<br/>')+(t.length?`<small class="where">where ${t.map(([s,m])=>`${inlineMath(s)} ${esc(m)}`).join('; ')}</small>`:'');}
- return `<i>${c.status==='excluded'?'Outside this calculation':c.status==='not-applicable'?'Not applicable':'Recorded input'}: ${esc(tidyNumbers(firstSentence(c.note)))}</i>`;
+ return `<i>${c.status==='excluded'?'Outside this calculation':c.status==='not-applicable'?'Not applicable':'Recorded input'}: ${subscripts(esc(tidyNumbers(firstSentence(c.note))))}</i>`;
 }
 export interface CheckTableContext{units:ProjectInput['units'];rendered:Set<string>}
 /**

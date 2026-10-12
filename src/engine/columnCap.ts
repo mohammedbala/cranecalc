@@ -1,7 +1,7 @@
 import {categoryF} from './fatigueConstants';
 import {available} from './aiscStrength';
 import {aiscShapeByName} from '../data/aiscSections';
-import {boltCapacity,boltProperties,plateBearing,minimumFillet} from './connectionStrength';
+import {boltCapacity,boltProperties,plateBearing,filletMinimum} from './connectionStrength';
 import {activeColumnCap,type ColumnCapInput} from './columnCapInputs';
 import {activeEndBearing,continuousBearings,type EndBearingInput} from './endBearingInputs';
 import {independentBearings} from './simpleSupports';
@@ -269,13 +269,13 @@ export function columnCapChecks(p:ProjectInput,r:ColumnCapResults,ctx:{imperfect
   add('stiffener-weld','Cap stiffener · fillets to the column flanges',q/throat,available(.6*Fexx,method,.75,2),'stress','f_w=\\frac{R/2}{2L_w(0.707w)}\\le\\phi0.6F_{EXX}\\\ \\text{(J2.4)}',`${at}. ${f(s.weld,'length')} fillets both faces at each flange, ${f(Lw,'length')} long below the clip; no directional increase.`,refs,v.R.id);
   add('stiffener-flange','Column flange · shear rupture at the stiffener',2*q/col.tf,available(.6*col.Fu,method,.75,2),'stress','f_v=\\frac{2q}{t_f}\\le\\phi0.6F_u\\\ \\text{(J4.2)}','Both fillets of one flange line act on the flange; the stiffener plate is checked by its own shear yielding.',refs,v.R.id);
   add('stiffener-slenderness','Cap stiffener · width-to-thickness',bc/ts,1.49*Math.sqrt(b.E/m.Fy),'ratio','b/t\\le1.49\\sqrt{E/F_y}\\\ \\text{(B4.1a)}','Plate held on both edges by the flange fillets and on top by the cap: a stiffened element, nonslender under the edge compression.',['aisc-b','column-cap']);
-  add('stiffener-weld-minimum','Cap stiffener · minimum fillet',minimumFillet(Math.max(ts,col.tf)),s.weld,'length','w\\ge w_{min}','Thicker joined part, conservatively.',refs);
+  add('stiffener-weld-minimum','Cap stiffener · minimum fillet',filletMinimum([ts,col.tf]),s.weld,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined.',refs);
  }else for(const [id,title] of [['stiffener-bearing','Cap stiffener · fitted bearing'],['stiffener-weld','Cap stiffener · fillets to the column flanges']] as const)na(id,title,'Every girder bearing stiffener line lies over the column web; no cap stiffeners.');
  // All-around cap weld.
  {const v=r.grids.reduce((a,c)=>c.weld.value>a.weld.value?c:a).weld,throat=cap.weld/Math.SQRT2,wg=capWeldGroup(p),a=v.actions;
   add('weld','Cap plate to column · all-around fillets',v.value/throat,available(.6*Fexx,method,.75,2),'stress','f=\\frac{1}{0.707w}\\sqrt{\\left(\\frac{N}{A}+\\frac{M_xz}{I_x}+\\frac{M_yx}{I_y}\\right)^2+\\left(\\frac{V_x}{A}+\\frac{M_zz}{J}\\right)^2+\\left(\\frac{V_z}{A}+\\frac{M_zx}{J}\\right)^2}',`${f(cap.weld,'length')} fillets on both flange faces and both web faces clear of the root fillets, ${f(wg.A,'length')} of line; elastic method, every component by magnitude at each line end, no directional increase. Governing ${where(v)}: uplift ${f(a.N)}, longitudinal ${f(a.Vx)}, lateral ${f(a.Vz)}, overturning across the runway ${f(a.Mx,'moment')} (fork forces at their heights), along it ${f(a.My,'moment')} (each girder end reaction at 0.8 of its bearing from the girder end), torsion ${f(a.Mz,'moment')}. Compression is carried by bearing on the milled column end and not credited.`,refs,v.id);
   add('weld-base','Column web · base metal at the cap fillets',2*v.value/col.tw,available(.6*col.Fu,method,.75,2),'stress','f_v=\\frac{2q}{t_w}\\le\\phi0.6F_u\\\ \\text{(J4.2)}','Fillets both sides of the web at the peak line force.',refs,v.id);
-  add('weld-minimum','Cap fillet · minimum size',minimumFillet(Math.max(t,col.tf)),cap.weld,'length','w\\ge w_{min}','Thicker joined part, conservatively.',refs);
+  add('weld-minimum','Cap fillet · minimum size',filletMinimum([t,col.tf]),cap.weld,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined.',refs);
  }
  // Bearing bolts through the cap: tension from uplift and the fork couple with the concurrent shear (J3.7).
  {const db=eb.bolts.diameter,bolt=boltProperties(eb.bolts.grade,db),Tg=r.grids.reduce((a,c)=>c.boltTension.value>a.boltTension.value?c:a).boltTension;
@@ -289,9 +289,9 @@ export function columnCapChecks(p:ProjectInput,r:ColumnCapResults,ctx:{imperfect
   // Cap thickness for no prying: the cap bends from its nearest support to each bolt.
   const b_=Math.max(...g.grids.flatMap(v=>v.bolts.map(o=>capSupportDistance(p,v.stiffeners,o.x,o.z)))),pp=Math.min(g.gauge,3.5*b_);
   const tMin=(T_:number,bp:number,pw:number,Fu:number)=>Math.sqrt(4*T_*Math.max(bp,0)/available(pw*Fu,method,.9,1.67));
-  add('prying','Cap plate · thickness for no prying',tMin(T,b_-db/2,pp,m.Fu),t,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`Largest distance from a bolt to the nearest cap support (column web, flange or cap stiffener face) b = ${f(b_,'length')}, p = ${f(pp,'length')}.`,refs,Tg.id);
+  add('prying','Cap plate · thickness for no prying (ratio t_min/t)',tMin(T,b_-db/2,pp,m.Fu),t,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`Largest distance from a bolt to the nearest cap support (column web, flange or cap stiffener face) b = ${f(b_,'length')}, p = ${f(pp,'length')}.`,refs,Tg.id);
   const fb=g.gauge/2-b.tw/2;
-  add('flange-prying','Girder bottom flange · thickness for no prying under the fork',tMin(T,fb-db/2,Math.min(Math.min(...g.bearings.map(v=>v.x1-v.x0-2*g.edge)),3.5*fb),b.Fu),b.tf,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`The bottom flange cantilevers from the web to the bolt line, b = ${f(fb,'length')}, under the bolt tension with the fork couple.`,refs,Tg.id);
+  add('flange-prying','Girder bottom flange · thickness for no prying under the fork (ratio t_min/t)',tMin(T,fb-db/2,Math.min(Math.min(...g.bearings.map(v=>v.x1-v.x0-2*g.edge)),3.5*fb),b.Fu),b.tf,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`The bottom flange cantilevers from the web to the bolt line, b = ${f(fb,'length')}, under the bolt tension with the fork couple.`,refs,Tg.id);
   // Nuts below the cap clear the column web, flanges and cap stiffeners, and the fillets on them.
   const C=Math.max(1.25*inch,1.6*db),wrench=(dist:(o:{x:number;z:number},st:number[])=>number)=>Math.min(Infinity,...g.grids.flatMap(v=>v.bolts.map(o=>dist(o,v.stiffeners))));
   const webClear=wrench(o=>Math.abs(o.x)-col.tw/2-cap.weld),flangeClear=wrench(o=>Math.abs(o.x)<col.bf/2+C?col.d/2-col.tf-cap.weld-Math.abs(o.z):Infinity),stiffClear=wrench((o,st)=>Math.min(Infinity,...st.map(x=>Math.abs(o.x-x)-cap.stiffener.thickness/2-cap.stiffener.weld)));
