@@ -18,7 +18,7 @@ import type { ProjectInput,Properties } from './types';
 import type { FatigueDetailResult,InterfaceAction,RunwayDetailResults } from './runwayDetails';
 import { railKeeperResponse } from './railKeeper';
 import { railTopAboveSteel } from './railSeat';
-import {tractionBays,railKeeperStations,girderSegments,independentBearings} from './simpleSupports';
+import {tractionBays,railKeeperStations,girderSegments,independentBearings,endGridOverhang,endGridCentered} from './simpleSupports';
 import {activeEndStop,craneAtStop,stopBoltRows,stopEnds} from './endStopInputs';
 import {activeEndBearing,locatingSupport} from './endBearingInputs';
 import {craneCombinations} from './aistLoads';
@@ -88,10 +88,13 @@ export function automaticFatigueDetails(p:ProjectInput){
  list.push(...capAngleFatigueDetails(p));
  // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
  const stop=activeEndStop(p);
- if(stop)for(const [end,x0,dir] of ([['left',0,1],['right',L,-1]] as const).filter(([end])=>stopEnds(p).includes(end)))for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:x0+dir*row,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});
+ // The rows are measured from the girder end, past the grid when the end bearing is centered on the support web; a
+ // hole on that overhang is sampled at the grid (the overhang carries no girder moment).
+ const span=(x:number)=>Math.min(L,Math.max(0,x));
+ if(stop)for(const [end,x0,dir] of ([['left',-endGridOverhang(p,'left'),1],['right',L+endGridOverhang(p,'right'),-1]] as const).filter(([end])=>stopEnds(p).includes(end)))for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:span(x0+dir*row),point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});
  // Keeper length along the stress and body width across it (AISC Table A-3.1, 7.2).
  const keeperWidth=d.rail.clipBodyWidth??d.rail.clipThickness,category=d.rail.clipWidth<50?'C':d.rail.clipWidth<=Math.min(12*keeperWidth,100)?'D':keeperWidth<=20?'E':'E1';
- for(const [i,x] of railKeeperStations(p).entries()){
+ for(const [i,x] of railKeeperStations(p).map(span).entries()){
   for(const side of ['left','right'] as const)list.push({id:`RC${i}-${side}`,name:`Rail keeper ${i+1} · ${side}`,x,point:`top-${side}`,category,reference:'AISC Table A-3.1, 7.1 · attachment length/thickness from keeper geometry'});
  }
  if(p.section.kind==='cap'){
@@ -99,12 +102,15 @@ export function automaticFatigueDetails(p:ProjectInput){
   // conservative Category E; evaluated at both ends of each physical segment.
   const positions=list.filter(f=>f.id.startsWith('RC')&&f.id.endsWith('left')).map(f=>f.x);
   for(const [i,x] of positions.entries())for(const side of ['left','right'] as const)list.push({id:`CW${i}-${side}`,name:`Cap weld base metal ${i+1} · ${side}`,x,point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 3.1; continuous longitudinal weld'});
-  const ends=p.system==='continuous'?[0,L]:girderSegments(p).flatMap(m=>[m.start,m.end]);
+  const ends=p.system==='continuous'?[0,L]:girderSegments(p).flatMap(m=>[m.start,m.end]).map(span);
   // The cap ends like a cover plate wider than the flange, with longitudinal welds only: Table A-3.1 item 3.7, E'.
   const capEnd='E1';
   for(const [i,x] of ends.entries())for(const side of ['left','right'] as const)list.push({id:`CE${i}-${side}`,name:`Cap end termination ${i+1} · ${side}`,x,point:`top-${side}`,category:capEnd,reference:'AISC Table A-3.1 item 3.7: end of a welded cover plate wider than the flange, no weld across the end, Category E′'});
  }
- return list;
+ // With the end bearings centered on the support web the end-bay girders run past grids 1 and n+1: a generated
+ // detail on that overhang (cap tieback holes, saddles) is sampled at the grid, where the overhang meets the span.
+ const own=d.fatigueDetails.length;
+ return endGridCentered(p)?list.map((f,k)=>k<own?f:{...f,x:span(f.x)}):list;
 }
 /**
  * Where the girder's longitudinal force reaches the supports. Simple bays: traction at the locating (left) end of
@@ -297,6 +303,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   // girder ends at the grid. The bracket design force envelope tabulates these sets and the bracket checks take them.
   // A continuous girder bears centered on its interior grids. At a runway-end grid its girder end is on the grid and
   // its bearing runs inboard, the reaction at 0.8 of the bearing length from that end as at a simple-span end.
+  // Simple spans take each girder end's own bearing (independentBearings): at a runway-end grid the girder end is on
+  // the grid, or with endGridBearing 'centered' the bearing is centered on the support web (offset 0.3 L_bearing).
   const endBearingOffset=(x:number)=>simple?0:Math.abs(x-supports[0])<1e-6?seatOffset({end:'left',offset:Lbr/2},Lbr):Math.abs(x-supports.at(-1)!)<1e-6?seatOffset({end:'right',offset:-Lbr/2},Lbr):0;
   const supportSet=(x:number,c:ReturnType<typeof concurrent>[number]):SupportForceSet=>{
    const r=reactions.get(x)??{top:0,bottom:0},ends=c.ends??[],at=(v?:{x:number;r:number}[])=>v?.find(w=>Math.abs(w.x-x)<1e-6)?.r??0;

@@ -10,7 +10,7 @@ import {bracketForceBlocks} from './bracketForceTable';
 import {designsBracing} from '../engine/newColumnBracing';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {endBearingGeometry} from '../engine/endBearing';
-import {simpleSupportInput} from '../engine/simpleSupports';
+import {simpleSupportInput,endGridBearingNote} from '../engine/simpleSupports';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {projectStub,stubBoltLayout,stubWeldGroup,usesRolledBracket} from '../engine/rolledBracket';
 import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
@@ -110,7 +110,7 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   if(eg&&eb){
    for(const x of [0,...holesX].sort((u,v)=>u-v))svg+=line([X(x),tip+3],[X(x),tip+12])+text(X(x)+3,tip+14,x?dim(Math.abs(x)):'0',7.5,'end',400,-90);
    svg+=text(left,tip+80,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,7.5);
-   if(p.system==='simple')svg+=text(left,tip+90,`AT A RUNWAY-END GRID: ONE BEARING, ITS GIRDER END ON THE GRID; HOLES ${dim(eg.rows[0])} AND ${dim(eg.rows[1])} FROM IT.`,7.5);
+   if(p.system==='simple')svg+=text(left,tip+90,endGridBearingNote(p,eg.rows,dim),7.5);
    else svg+=text(left,tip+90,`AT A RUNWAY-END GRID THE GIRDER END IS ON THE GRID; HOLES ${dim(eg.rows[0])} AND ${dim(eg.rows[1])} FROM IT.`,7.5);
   }
   // Keys: the transverse section beyond the flange tip, the elevation from the runway side.

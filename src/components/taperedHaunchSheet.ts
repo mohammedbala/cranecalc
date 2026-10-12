@@ -15,6 +15,7 @@ import {usesTaperedHaunch,projectHaunch} from '../engine/taperedHaunch';
 import {taperedHaunchParts} from '../engine/taperedHaunchParts';
 import {grooveLeader} from './rolledBracketSheet';
 import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
+import {endGridBearingNote} from '../engine/simpleSupports';
 
 /** Titles of the haunch's plan and section; its elevation along the runway is the bracket transverse section. */
 export const haunchPlanTitle='TAPERED HAUNCH / TOP FLANGE PLAN';
@@ -168,7 +169,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
    const lay=bolts.filter(h=>Math.abs(h.x-xs.at(-1)!)<1e-3),endEdge=bt/2-xs.at(-1)!,rows=[...new Set(lay.map(h=>h.y))].sort((u,v)=>u-v),tipEdge=L-tep-rows.at(-1)!;
    svg+=text(left,tip+80,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,7.5);
    svg+=text(left,tip+90,`EDGES: FLANGE END ${dim(endEdge)}, TIP ${dim(tipEdge)}${g.endPlate?' (TO END PL)':''}, COLUMN-FACE WELD ${dim(rows[0]-(g.joint==='cjp'?7.9375:g.flangeWeld))}.`,7.5);
-   svg+=text(left,tip+100,`AT A RUNWAY-END GRID: ONE BEARING, ITS GIRDER END ON THE GRID; HOLES ${dim(eb.bolts.edge)} AND ${dim(d.bearing.length-eb.bolts.edge)} FROM IT.`,7.5);
+   svg+=text(left,tip+100,p.system==='simple'?endGridBearingNote(p,[eb.bolts.edge,d.bearing.length-eb.bolts.edge],dim):`AT A RUNWAY-END GRID: ONE BEARING, ITS GIRDER END ON THE GRID; HOLES ${dim(eb.bolts.edge)} AND ${dim(d.bearing.length-eb.bolts.edge)} FROM IT.`,7.5);
   }else svg+=dimH(left,right,tip,tip+20,dim(bt));
   const xl=X(-cw/2)-2;
   svg+=dimVFrom(0,xl,Y(a),left-12,left-34,dim(a))+dimVFrom(0,xl,tip,left-2,left-52,dim(L));

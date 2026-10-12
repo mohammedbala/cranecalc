@@ -22,7 +22,9 @@ export interface SeatEnd {bay:number;end:'left'|'right';offset:number;D:number;L
  * Girder end bearings at each grid with their unfactored reactions. Simple spans: each girder end carries its own
  * span's dead and live load, and the largest single-crane end reaction of its span (one wheel at the bearing, the
  * crane on that span alone) split into empty crane, lifted load and impact. A continuous girder bears off center
- * only at its runway ends. The reaction acts at 0.8 of the bearing length from the girder end (seatOffset).
+ * only at its runway ends. The reaction acts at 0.8 of the bearing length from the girder end (seatOffset): 0.8 L_bearing
+ * from the grid at a simple-span runway end with the girder end on the grid, 0.3 L_bearing with the bearing centered on
+ * the support web (endGridBearing 'centered', review item E35).
  */
 export function seatEnds(p:ProjectInput):SeatEnd[][]{
  const stations=[0];for(const l of p.spans)stations.push(stations.at(-1)!+l);

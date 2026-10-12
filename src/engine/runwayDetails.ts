@@ -12,7 +12,13 @@ import type {SupportForceEnvelope} from './bracketForces';
 import type {ColumnCapResults} from './columnCap';
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
 const material=z.object({Fy:pos,Fu:pos,Fexx:pos});
-export const simpleSupportSchema=z.object({endGap:pos,guideTravel:pos,temperatureRise:nn,temperatureFall:nn,settingTolerance:nn});
+/**
+ * endGridBearing (review item E35): where the girder end bears at a runway-end grid on simple spans. 'on-grid' (the
+ * default when absent): the girder end is on the grid and its bearing runs inboard, the reaction eccentric to the
+ * support web. 'centered': the end-bay girder runs past the grid by half the bearing length and its bearing is
+ * centered on the support web (the haunch or bracket web line at the grid).
+ */
+export const simpleSupportSchema=z.object({endGap:pos,guideTravel:pos,temperatureRise:nn,temperatureFall:nn,settingTolerance:nn,endGridBearing:z.enum(['on-grid','centered']).optional()});
 export const lapConnectionSchema=z.object({
  rows:z.number().int().min(2).max(6),gauge:pos,pitch:pos,edge:pos,thickness:pos,
  diameter:pos,grade:z.enum(['A325','A490']),surface:z.enum(['A','B']),projection:nn,

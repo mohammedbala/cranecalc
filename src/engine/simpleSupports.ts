@@ -3,16 +3,40 @@ import type { RunwayCaseEvent } from './designAnalysis';
 import type { z } from 'zod';
 import type { simpleSupportSchema } from './runwayDetails';
 import { activeEndStop, stopRailEnd, stopEnds } from './endStopInputs';
+import { runwayEnds } from './continuation';
 
 // Internal units: mm, N, degrees C. Left end locates each independent bay
 // longitudinally; right end slides. Neither end provides moment continuity.
 export const defaultSimpleSupport:z.infer<typeof simpleSupportSchema>={endGap:25.4,guideTravel:25.4,temperatureRise:30,temperatureFall:30,settingTolerance:3.175};
 export const simpleSupportInput=(p:ProjectInput)=>p.details?.simpleSupport??defaultSimpleSupport;
+/**
+ * Simple spans with the end-bay bearings centered on the support web at the runway-end grids (review item E35,
+ * details.simpleSupport.endGridBearing = 'centered'). Absent or 'on-grid': the girder end is on the grid.
+ */
+export const endGridCentered=(p:ProjectInput)=>p.system==='simple'&&simpleSupportInput(p).endGridBearing==='centered';
+/**
+ * How far the girder runs past a runway-end grid: half the bearing length when the end bearing is centered on the
+ * support web (the bearing plate ends flush with the girder end), else 0 (the girder end is on the grid). An end
+ * continued by an existing bay is a shared grid, not a runway end.
+ */
+export function endGridOverhang(p:ProjectInput,end:'left'|'right'){
+ return endGridCentered(p)&&runwayEnds(p).includes(end)?(p.details?.bearing.length??254)/2:0;
+}
+/**
+ * Drawing note for the bearing at a runway-end grid of simple spans (hole ordinates from the girder end or from the
+ * grid). `dim` formats a length for the drawing.
+ */
+export function endGridBearingNote(p:ProjectInput,rows:readonly number[],dim:(v:number)=>string){
+ const L=p.details?.bearing.length??254;
+ if(endGridCentered(p))return `AT A RUNWAY-END GRID: ONE BEARING CENTERED ON THE GRID (SUPPORT WEB), THE GIRDER RUNNING ${dim(L/2)} PAST IT; HOLES ${[...new Set(rows.map(r=>dim(Math.abs(r-L/2))))].join(' AND ')} EACH SIDE OF THE GRID.`;
+ return `AT A RUNWAY-END GRID: ONE BEARING, ITS GIRDER END ON THE GRID; HOLES ${dim(rows[0])} AND ${dim(rows[1])} FROM IT.`;
+}
+/** Physical girder pieces: start/end are the girder ends (past the grid by endGridOverhang at a runway end). */
 export function girderSegments(p:ProjectInput){
  const L=p.spans.reduce((a,b)=>a+b,0);
  if(p.system==='continuous')return [{bay:1,start:0,end:L,leftGrid:0,rightGrid:L}];
- const gap=simpleSupportInput(p).endGap;let station=0;
- return p.spans.map((span,i)=>{const leftGrid=station,rightGrid=station+span;station=rightGrid;return {bay:i+1,leftGrid,rightGrid,start:leftGrid+(i?gap/2:0),end:rightGrid-(i<p.spans.length-1?gap/2:0)};});
+ const gap=simpleSupportInput(p).endGap,n=p.spans.length,left=endGridOverhang(p,'left'),right=endGridOverhang(p,'right');let station=0;
+ return p.spans.map((span,i)=>{const leftGrid=station,rightGrid=station+span;station=rightGrid;return {bay:i+1,leftGrid,rightGrid,start:leftGrid+(i?gap/2:-left),end:rightGrid-(i<n-1?gap/2:-right)};});
 }
 export function independentBearings(p:ProjectInput){
  if(p.system!=='simple')return [];

@@ -84,7 +84,7 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
  const outstand=Math.max(0,e.bumperDiameter/2+ecc-s/2-ts/2),pressure=P/e.bumperDiameter**2;
  const shape=aiscShapeByName(b.catalogueId??''),k1=b.tw/2+(shape?shape.kdes*inch-b.tf:0);
  const bearings=p.system==='simple'?independentBearings(p).filter(v=>v.bay===1&&v.end==='left'):[];
- const stiffenerAt=bearings[0]?.center??d.bearing.length/2,stiffenerClear=Math.min(...[g.frontRow,g.backRow].map(x=>Math.abs(x-stiffenerAt)))-d.bearing.stiffenerThickness/2-d.bearing.weldSize;
+ const stiffenerAt=bearings[0]?bearings[0].center-bearings[0].start:d.bearing.length/2,stiffenerClear=Math.min(...[g.frontRow,g.backRow].map(x=>Math.abs(x-stiffenerAt)))-d.bearing.stiffenerThickness/2-d.bearing.weldSize;
  // Nuts under the top flange also clear the top tie saddle at the runway-end support.
  const tie=flangeTieGeometry(p),endTie=tie?.sides.includes(1)?tie.stations.find(v=>v.bay===1&&v.end==='left'):undefined;
  const saddleClear=tie&&endTie?Math.min(...[g.backRow,g.frontRow].map(x=>{const a=tie.attachment,x0=endTie.tieX-a.saddleLength/2-a.weldSize,x1=endTie.tieX+a.saddleLength/2+a.weldSize,z=gauge/2;return Math.hypot(Math.max(x0-x,0,x-x1),Math.max(tie.rootStart-a.weldSize-z,0,z-tie.rootEnd));})):undefined;

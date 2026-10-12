@@ -1,6 +1,7 @@
 import type {ProjectInput} from './types';
 import {adjacentBays,continues} from './continuation';
 import {activeEndStop,stopEnds,stopRailEnd} from './endStopInputs';
+import {endGridOverhang} from './simpleSupports';
 
 const foot=304.8;
 /**
@@ -35,7 +36,9 @@ export function railLayout(p:ProjectInput):RailLayout{
  const {stock,clear,minPiece}=railLayoutCriteria,L=p.spans.reduce((a,b)=>a+b,0),step=railCutStep;
  const stop=activeEndStop(p),stops=stopEnds(p),railEnd=stop?stopRailEnd(stop):0;
  const existing={left:continues(p,'left'),right:continues(p,'right')};
- const start=existing.left?-clear:stops.includes('left')?railEnd:0,end=existing.right?L+clear:stops.includes('right')?L-railEnd:L;
+ // The rail runs to the girder end (railEnd short of it at a stop), past the grid when the end bearing is centered on the support web.
+ const overL=endGridOverhang(p,'left'),overR=endGridOverhang(p,'right');
+ const start=existing.left?-clear:-overL+(stops.includes('left')?railEnd:0),end=existing.right?L+clear:L+overR-(stops.includes('right')?railEnd:0);
  let x=0;const grids=[0,...p.spans.map(s=>x+=s)];
  const girderJoints=p.system==='simple'?grids.filter((g,i)=>(i>0&&i<grids.length-1)||adjacentBays(p).some(b=>b.station===g)):[];
  const steps=new Set<number>([0]);

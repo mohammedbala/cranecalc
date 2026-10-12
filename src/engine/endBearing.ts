@@ -2,14 +2,14 @@ import {seatSettingTolerance} from './fitTolerances';
 import type {CheckResult,DesignAnalysis,ProjectInput} from './types';
 import {available} from './aiscStrength';
 import {boltCapacity,boltProperties,plateBearing} from './connectionStrength';
-import {simpleSupportInput} from './simpleSupports';
+import {simpleSupportInput,endGridCentered} from './simpleSupports';
 import {weldedRibBracket} from './bracketRib';
 import {wrenchClearance} from './endStop';
 import {aiscShapeByName} from '../data/aiscSections';
 import {format} from './units';
 import {snugTightNotPermitted} from './boltingBasis';
 import {latexNumber,withinLimit} from './math';
-import {usesRolledBracket,rolledSeatChecks} from './rolledBracket';
+import {usesRolledBracket,rolledSeatChecks,endGridFitChecks} from './rolledBracket';
 import {usesTaperedHaunch,haunchSeatChecks} from './taperedHaunch';
 import {slidingBolts,continuousBearings,type EndBearingInput} from './endBearingInputs';
 import {activeColumnCap} from './columnCapInputs';
@@ -31,9 +31,11 @@ export function endBearingGeometry(p:ProjectInput,e:EndBearingInput){
  const rows=[e.bolts.edge,bs.length-e.bolts.edge],stiffener=bs.length/2,slot=slotWidth+2*travel;
  // A plate washer centered on the bolt covers the slot at either extreme of travel.
  const washer={length:slotWidth+4*travel+12.7,width:Math.max(2.5*db,slotWidth+25.4),thickness:e.washerThickness};
- // Simple spans: the girder end is at the grid on a runway end, half the gap from it at a shared grid. A
- // continuous girder ends at the runway-end grids and is centered on the interior ones.
- const b=d.bracket?.enabled?d.bracket:undefined,ribs=weldedRibBracket(b)&&b?p.system==='continuous'?[b.ribSpacing/2,bs.length/2-b.ribSpacing/2,bs.length/2+b.ribSpacing/2]:[b.ribSpacing/2,b.ribSpacing/2-gap/2]:[];
+ // Simple spans: the girder end is at the grid on a runway end (or, with endGridBearing 'centered', half the bearing
+ // length past it, the bearing centered on the web), half the gap from it at a shared grid. A continuous girder ends
+ // at the runway-end grids and is centered on the interior ones.
+ const b=d.bracket?.enabled?d.bracket:undefined,centered=b?[bs.length/2-b.ribSpacing/2,bs.length/2+b.ribSpacing/2]:[];
+ const ribs=weldedRibBracket(b)&&b?p.system==='continuous'?[b.ribSpacing/2,...centered]:endGridCentered(p)?[...centered,b.ribSpacing/2-gap/2]:[b.ribSpacing/2,b.ribSpacing/2-gap/2]:[];
  return {rows,stiffener,slot,slotWidth,sleeve,sleeved,hole,washer,travel,ribs,spacing:rows[1]-rows[0]};
 }
 
@@ -103,7 +105,8 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
    compared('end-bearing-seat-bearing','Bracket seat · bolt bearing',V,plateBearing(db,g.hole,wb.seatThickness,m.Fu,Math.max(e.bolts.edge,wb.seatLength/2-g.rows[1]),g.spacing,method).capacity,'force','R_n=\\min(1.2l_ctF_u,2.4dtF_u)','Standard holes in the welded seat plate.'),
    compared('end-bearing-seat-prying','Bracket seat · thickness for no prying',tMin(T,seatB-db/2,seatP,m.Fu),wb.seatThickness,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`Seat cantilevers from the nearer rib: b = ${f(seatB)}.`),
    compared('end-bearing-wrench-rib','Nut clearance below seat · bracket ribs',C,ribClear,'length','|x_{bolt}-x_{rib}|-t_{rib}/2-w\\ge c_{wrench}','Both the runway-end grid and shared interior grids; ribs placed under the bearing stiffeners clear the bolt rows.'),
-   compared('end-bearing-seat-fit','Bearings and bolts fit on the seat',(locates?0:simpleSupportInput(p).endGap/2)+bs.length+seatSettingTolerance,wb.seatLength/2,'length','g/2+L_{bearing}+t_{set}\\le L_{seat}/2',(locates?'A runway-end bearing, and its bolts, lie on the half of the seat under the girder; interior bearings are centered on it.':'Each girder bearing, and its bolts, lie on its half of the shared seat.')+' Includes the 1/8 in bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in).')
+   compared('end-bearing-seat-fit','Bearings and bolts fit on the seat',(locates?0:simpleSupportInput(p).endGap/2)+bs.length+seatSettingTolerance,wb.seatLength/2,'length','g/2+L_{bearing}+t_{set}\\le L_{seat}/2',(locates?'A runway-end bearing, and its bolts, lie on the half of the seat under the girder; interior bearings are centered on it.':'Each girder bearing, and its bolts, lie on its half of the shared seat.')+' Includes the 1/8 in bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in).'),
+   ...endGridFitChecks(p,wb.seatLength/2,'the seat','L_{seat}/2',compared)
   );
  }else if(usesRolledBracket(p))checks.push(...rolledSeatChecks(p,e,g,V,T,C,tMin,compared));
  else if(usesTaperedHaunch(p))checks.push(...haunchSeatChecks(p,e,g,V,T,C,tMin,compared));

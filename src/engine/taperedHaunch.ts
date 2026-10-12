@@ -22,7 +22,8 @@ import {available} from './aiscStrength';
 import {minimumFillet,filletEffectiveSize,compressionResistance,transverseFilletFatigue,plateBearing,boltCapacity,boltProperties} from './connectionStrength';
 import {format} from './units';
 import {haunchGeometry,haunchSection,haunchWeight,isTaperedHaunch,flangeRunout,haunchSlopeLimit,type HaunchGeometry,type HaunchSection} from './taperedHaunchInputs';
-import {stubBearing,stubBoltLayout,bearingExtent} from './rolledBracket';
+import {stubBearing,stubBoltLayout,bearingExtent,endGridFitChecks} from './rolledBracket';
+import {endGridCentered} from './simpleSupports';
 import {activeEndBearing} from './endBearingInputs';
 import {activeColumnStiffeners} from './columnStiffenerInputs';
 import {columnStiffenerChecks,stiffenedColumnChecks,panelStiffenerNote,flangeStiffenerForces} from './columnStiffeners';
@@ -320,6 +321,8 @@ export interface TaperedHaunchResults {
   stiffUpper?:number;stiffLower?:number}[];
  /** Governing concurrent actions at each grid. */
  stations:{x:number;caseId:string;vertical:number;seatMoment:number;rootMoment:number;torque:number;longitudinal:number;lateral:number;flangeTension:number;flangeCompression:number}[];
+ /** Strength envelope at each grid: largest root flange-tip normal stress, haunch torque and seat moment (any case). */
+ grids?:{x:number;normal:number;torque:number;seatMoment:number}[];
 }
 const fatigueKeys=['topFlange','bottomFlange','flangeWeb','stiffenerToe','column','webWeld','flangeWeld','flangeWebWeld','stiffenerWeld','flare'] as const;
 
@@ -389,6 +392,8 @@ export function createTaperedHaunchCollector(p:ProjectInput){
     peak('flangeWebWeld',Math.hypot(q,qd)/(2*te),{y:st.y});
    });
    const tips=haunchTipStresses(g,root,f);peak('normal',Math.max(...tips.map(Math.abs)));
+   {const grids=result.grids??=[];let at=grids.find(v=>v.x===x);if(!at){at={x,normal:0,torque:0,seatMoment:0};grids.push(at);}
+    at.normal=Math.max(at.normal,...tips.map(Math.abs));at.torque=Math.max(at.torque,Math.abs(f.T));at.seatMoment=Math.max(at.seatMoment,Math.abs(f.Mseat));}
    peak('flangeShear',Math.max(1.5*Math.abs(f.Qtop)/(g.btr*g.tt),1.5*Math.abs(f.Qbot)/(g.bb*g.tb)));
    peak('topFlange',Math.max(0,f.Tt)/(g.btr*g.tt)+Math.abs(f.Mtop)/(g.tt*g.btr**2/6));
    peak('bottomFlange',Math.max(0,f.C)/(g.bb*g.tb)+Math.abs(f.Mbot)/(g.tb*g.bb**2/6));
@@ -495,10 +500,11 @@ export function haunchSeatChecks(p:ProjectInput,e:EndBearingInput,geo:{hole:numb
   compared('end-bearing-seat-prying','Haunch top flange · thickness for no prying',tMin(T,bp-db/2,pitch,Fu),g.tt,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`Uplift path: the bolts hold the girder down through the top flange, which cantilevers b = ${f(bp)} from ${bp===bStiff?'the bearing stiffener':'the web fillet'}; p = ${f(pitch)}.`,['haunch-basis','aisc-connections']),
   compared('end-bearing-haunch-edge','Haunch top flange · bolt edge distance',1.5*db,Math.min(plateEdge,tipEdge,lay.rows[0]-face),'length','e\\ge1.5d_b',`Flange end ${f(plateEdge)} beyond the outermost hole along the runway, tip ${f(tipEdge)} beyond the outer row, column-face weld ${f(lay.rows[0]-face)} before the inner row.`,['haunch-basis','aisc-connections']),
   compared('end-bearing-wrench-haunch-column','Nut clearance below the haunch · column face weld',clearance,lay.rows[0]-face,'length','y_{row}-w\\ge c_{wrench}',`Inner bolt row ${f(lay.rows[0])} from the column face, less the ${f(face)} ${g.joint==='cjp'?'CJP reinforcement':'flange fillet'}.`,['haunch-basis','aisc-connections']),
-  compared('end-bearing-wrench-haunch-web','Nut clearance below the top flange · web and flange-to-web fillet',clearance,lay.inner-g.tw/2-g.flangeWebWeld,'length','|x_{bolt}|-t_w/2-w_{fw}\\ge c_{wrench}',`Innermost hole ${f(lay.inner)} from the web plane (a runway-end grid puts the girder end on the grid).`,['haunch-basis','aisc-connections']),
+  compared('end-bearing-wrench-haunch-web','Nut clearance below the top flange · web and flange-to-web fillet',clearance,lay.inner-g.tw/2-g.flangeWebWeld,'length','|x_{bolt}|-t_w/2-w_{fw}\\ge c_{wrench}',`Innermost hole ${f(lay.inner)} from the web plane (${endGridCentered(p)?'a runway-end bearing is centered on the web':'a runway-end grid puts the girder end on the grid'}).`,['haunch-basis','aisc-connections']),
   compared('end-bearing-wrench-haunch-stiffener','Nut clearance below the top flange · bearing stiffeners',clearance,e.bolts.gauge/2-s.t/2-s.weld,'length','g/2-t_s/2-w_s\\ge c_{wrench}',`Stiffeners at the girder web line; bolt rows ${f(e.bolts.gauge/2)} each side.`,['haunch-basis','aisc-connections']),
   compared('end-bearing-wrench-haunch-depth','Nut drop below the top flange · clear web depth at the outer row',nut,drop,'length','h_{clear}(y_{row})\\ge d_b+1\\,in',`Nut, washer and stick-out under the top flange at the outer row, ${f(lay.rows[1])} from the column face, above the sloping bottom flange.`,['haunch-basis','aisc-connections']),
-  compared('end-bearing-seat-fit','Bearings and bolts fit on the haunch top flange',bearingExtent(p)+seatSettingTolerance,g.bt/2,'length',p.system==='simple'?'g/2+L_{bearing}+t_{set}\\le b_t/2':'L_{bearing}+t_{set}\\le b_t/2',(p.system==='simple'?'Each girder bearing, and its bolts, on its own half of the top flange at a shared grid; at a runway-end grid the girder end is on the grid.':'Interior bearings centered on the web; at a runway end the girder end is on the grid, the whole bearing on one side.')+` Includes the ${f(seatSettingTolerance)} bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in).`,['haunch-basis','aisc-connections'])
+  compared('end-bearing-seat-fit','Bearings and bolts fit on the haunch top flange',bearingExtent(p)+seatSettingTolerance,g.bt/2,'length',p.system==='simple'?'g/2+L_{bearing}+t_{set}\\le b_t/2':'L_{bearing}+t_{set}\\le b_t/2',(p.system==='simple'?`Each girder bearing, and its bolts, on its own half of the top flange at a shared grid; at a runway-end grid ${endGridCentered(p)?'the bearing is centered on the web':'the girder end is on the grid'}.`:'Interior bearings centered on the web; at a runway end the girder end is on the grid, the whole bearing on one side.')+` Includes the ${f(seatSettingTolerance)} bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in).`,['haunch-basis','aisc-connections']),
+  ...endGridFitChecks(p,g.bt/2,'the haunch top flange','b_t/2',compared,['haunch-basis','aisc-connections'])
  ];
 }
 
