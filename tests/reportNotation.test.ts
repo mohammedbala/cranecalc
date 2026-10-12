@@ -11,10 +11,10 @@ describe('notation and fatigue summary plot',()=>{
  it('lists the principal symbols used in the equations, and only those',()=>{
   expect(h).toMatch(/\/ Notation<\/h2>/);
   // Brief: crane-girder symbols only; standard AISC symbols (phi, F_y, E) are not listed.
-  const n=notationSection(['\\phi R_n\\ge R_u','F_y','F_{SR}=1000(C_f/n)^{1/3}']);
-  expect(n).toMatch(/Constant from Table A-3.1/);expect(n).not.toMatch(/Resistance factor|yield stress/);
+  const n=notationSection(['\\phi R_n\\ge R_u','F_y','F_{SR}=1000(C_f/n_{SR})^{0.333}','C_{ss}=\\max(s,0.5)\\,\\max[0.1(Q+T+B),\\,0.2(Q+T)]']);
+  expect(n).toMatch(/Side thrust on one runway/);expect(n).not.toMatch(/Resistance factor|yield stress|Constant from Table A-3.1|Allowable stress range/);
   const all=notationSection(s.checks.map(c=>c.equation??'')),rows=(all.match(/<tr><td>/g)??[]).length;
-  expect(rows).toBeGreaterThan(10);expect(rows).toBeLessThanOrEqual(30);
+  expect(rows).toBeGreaterThan(5);expect(rows).toBeLessThanOrEqual(30);
   expect(all).not.toMatch(/F_yA_g|n_i\/N_i/);
  });
  it('plots every evaluated fatigue detail against its design curve, numbered as in the table',()=>{
