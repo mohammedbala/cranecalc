@@ -47,7 +47,9 @@ export const unevaluatedStructure=(s:CalculationSnapshot)=>s.checks.filter(c=>c.
 export function revisionIdentity(s:CalculationSnapshot){
  const list=(s.input.drawing?.revisions??[]).filter(r=>r.rev.trim()),last=list[list.length-1];
  const created=/^\d{4}-\d{2}-\d{2}/.exec(s.createdAt)?.[0]??'';
- return {letter:last?.rev.trim(),date:last?.date.trim()||created,fingerprint:s.revision,label:last?`Rev ${last.rev.trim()}`:`Calc ${s.revision}`,revisions:list};
+ return {letter:last?.rev.trim(),date:last?.date.trim()||created,fingerprint:s.revision,label:last?`Rev ${last.rev.trim()}`:`Calc ${s.revision}`,
+  /** The label in capitals for page headers and title blocks; the fingerprint keeps its lower-case hex. */
+  heading:last?`REV ${last.rev.trim().toUpperCase()}`:`CALC ${s.revision}`,revisions:list};
 }
 export function issueStatus(s:CalculationSnapshot){
  const p=s.input,d=p.drawing,eor=d?.eor,reasons:string[]=[];

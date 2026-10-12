@@ -7,6 +7,13 @@ export const fromDisplay=(v:number,q:Quantity,u:'US'|'SI')=>(v-(q==='temperature
 export function format(v:number|undefined,q:Quantity,u:'US'|'SI',digits=2){if(v===undefined||!Number.isFinite(v))return '—'; const d=toDisplay(v,q,u),magnitude=Math.abs(d),scientific=magnitude>=1e7||(magnitude>0&&magnitude<.5*10**(-digits)); return `${scientific?d.toExponential(3):d.toLocaleString('en-US',{maximumFractionDigits:digits})}${unit(q,u)?` ${unit(q,u)}`:''}`;}
 
 /** Project numbers are already stored in N, mm and MPa. Only change presentation. */
+/** A length as written in a note: whole sixteenths of an inch as a fraction (3/4 in, 1 1/8 in), else 0.01 in; or mm. */
+export function noteLength(mm:number,units:'US'|'SI'){
+ if(units==='SI')return `${Number(mm.toFixed(1))} mm`;
+ const v=mm/25.4,t=Math.round(v*16);
+ if(t&&Math.abs(v*16-t)<1e-6){const w=Math.floor(t/16);let n=t%16,dd=16;while(n&&n%2===0){n/=2;dd/=2;}return `${w?w:''}${n?`${w?' ':''}${n}/${dd}`:''} in`;}
+ return `${Number(v.toFixed(2))} in`;
+}
 export function withSiUnits<T extends {units:'US'|'SI'}>(project:T):T{return project.units==='SI'?project:{...project,units:'SI'};}
 export function withImperialUnits<T extends {units:'US'|'SI'}>(project:T):T{return project.units==='US'?project:{...project,units:'US'};}
 /** AISC catalogue nominal mass is supplied in lb/ft; keep source values intact. */

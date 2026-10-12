@@ -1,5 +1,5 @@
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
-import {format} from './units';
+import {format,noteLength} from './units';
 import {existingWeldingDemand,weldsToExistingColumn} from './existingWelding';
 import {existingColumnSection} from './existingColumn';
 import {usesTaperedHaunch} from './taperedHaunch';
@@ -20,13 +20,7 @@ export const awsEdition='2020';
 export const awsCode=`AWS D1.1/D1.1M:${awsEdition}`;
 const inch=25.4;
 
-/** A length as written in a note: whole sixteenths of an inch as a fraction (1/8 in), else 0.01 in; or mm. */
-function inches(mm:number,units:ProjectInput['units']){
- if(units==='SI')return `${Number(mm.toFixed(1))} mm`;
- const v=mm/inch,t=Math.round(v*16);
- if(t&&Math.abs(v*16-t)<1e-6){const w=Math.floor(t/16);let n=t%16,dd=16;while(n&&n%2===0){n/=2;dd/=2;}return `${w?w:''}${n?`${w?' ':''}${n}/${dd}`:''} in`;}
- return `${v.toFixed(2)} in`;
-}
+const inches=noteLength;
 /** The weld metal of the detailed connections: the E70XX (or entered) electrode of every weld check, not the legacy screening value. */
 export const weldElectrode=(p:ProjectInput)=>p.details?.material.Fexx??p.connections.Fexx;
 

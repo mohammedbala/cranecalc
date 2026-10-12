@@ -43,7 +43,7 @@ export class Draft {
     this.line(810, height - 54, 810, height - 12, 'BORDER');
     this.text(28, height - 37, short(s.input.title, 70), 10);
     this.text(28, height - 22, `CRANECALC / ${short(s.input.number || 'UNTITLED', 40)} / ENGINEERING SKETCH`, 8, 'start', 'BORDER');
-    this.text(604, height - 37, `${revisionIdentity(s).label.toUpperCase()} · ${revisionIdentity(s).date}`, 9);
+    this.text(604, height - 37, `${revisionIdentity(s).heading} · ${revisionIdentity(s).date}`, 9);
     this.text(604, height - 22, 'DIMENSIONS GOVERN / DO NOT SCALE PRINT', 8, 'start', 'BORDER');
     const failed=s.checks.filter(c=>c.status==='fail').length;
     this.text(824, height - 37, failed?`${failed} FAILED CHECK${failed>1?'S':''} - SEE CALC`:s.input.reportPurpose==='demonstration'?'DEMONSTRATION':s.input.scope==='design'?'DESIGN MODEL':'ANALYSIS ONLY', 9);

@@ -187,7 +187,7 @@ describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>
   const page=text(section('Detailing checklist'));
   expect(page).toMatch(/59 detailing rules satisfied/);
   expect(page).not.toMatch(/Bolt spacing/); // a satisfied rule with margin is not listed
-  expect(page).toMatch(/Bearings and bolts fit on the haunch top flange .* Met exactly less than the 1\/8 in setting \/ fit-up tolerance/);
+  expect(page).toMatch(/Bearings and bolts fit on the haunch top flange .* Met exactly: no margin for the 1\/8 in setting \/ fit-up tolerance/);
  });
  it('prints one short fatigue table with both methods side by side and the setting stated',()=>{
   const page=text(section('Fatigue · girder and attachments'));
@@ -198,9 +198,12 @@ describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>
   const t=taxonomy(s);expect(t.fatigue.evaluated.find(r=>r.title==='Rail keeper')!.dc!.toFixed(2)).toBe('0.76');
  });
  it('lists every computed result in Appendix A and the CSV',()=>{
-  const a=section('Appendix A');expect((a.match(/<tr class=/g)??[]).length).toBe(966);
+  // Appendix A groups checks repeated over stations into one row (typical of N; data-members lists them); the CSV keeps every row.
+  const a=section('Appendix A');expect((a.match(/<tr class=/g)??[]).length).toBeLessThan(966/2);
+  const listed=[...a.matchAll(/data-check="([^"]*)"(?: data-members="([^"]*)")?/g)].flatMap(m=>m[2]?m[2].split(' '):[m[1]]);
+  expect(listed).toHaveLength(966);expect(new Set(listed)).toEqual(new Set(base.checks.map(c=>c.id)));
   const csv=checksCsv(base,tax).trim().split('\n');expect(csv).toHaveLength(967);
-  expect(csv[0]).toBe('id,type,effect,element,title,group,location,repeat_group,typical_of,governs_group,body_line,gate,gate_reason,status,demand,capacity,utilization,quantity,units,reference,case,classification_rule');
+  expect(csv[0]).toBe('id,type,effect,element,title,group,location,repeat_group,typical_of,governs_group,body_line,gate,gate_reason,status,demand,capacity,utilization,quantity,units,reference,case,case_name,classification_rule');
   expect(new Set(csv.slice(1).map(r=>r.split(',')[0]))).toEqual(new Set(base.checks.map(c=>c.id)));
   expect(csv.find(r=>r.startsWith('haunch-fatigue-stiffener-weld,'))).toMatch(/,screened,"?Below threshold: largest range 7\.29 ksi < F_TH 8\.00 ksi/);
  });

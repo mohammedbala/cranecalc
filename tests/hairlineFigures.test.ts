@@ -5,6 +5,9 @@ import {selectBracketArrangement,selectTieArrangement} from '../src/engine/conne
 import {defaultColumnCap} from '../src/engine/columnCapInputs';
 import {checkFigure,checkGroupPurpose} from '../src/components/checkFigures';
 import {loadPathFigure} from '../src/report/designSummary';
+import {loadPathSteps} from '../src/report/hairline/figures';
+/** Marker numbers of the summary figure: every caption step but the end stops, which are outside its view. */
+const stepNumbers=(p:ProjectInput)=>Object.entries(loadPathSteps(p)).filter(([k])=>k!=='stops').map(([,n])=>n!).sort((a,b)=>a-b);
 import {Scene} from '../src/report/hairline/scene';
 import type {ProjectInput} from '../src/engine/types';
 
@@ -43,13 +46,15 @@ describe('Hairline isometric report figures',()=>{
   const angle=variant(p=>{p.details=selectTieArrangement(p.details!,'single-angle');});
   expect(checkFigure('Connections',angle).view).toBe('schematic');
  });
- it('numbers the summary assembly 1-8 with the base on a new column, and names the support and tie',()=>{
+ it('numbers the summary assembly without gaps, the base only on a new column, and names the support and tie',()=>{
+  // Steps as the caption lists them (loadPathSteps): rail, girder, bearing, support, column, [base], tie, bracing, [stops].
   const capped=loadPathFigure(cappedDemonstrationProject());
-  expect(markers(capped)).toEqual([1,2,3,4,5,7,8]);
+  expect(markers(capped)).toEqual(stepNumbers(cappedDemonstrationProject()));expect(markers(capped)).toEqual([1,2,3,4,5,6,7]);
   expect(capped).toContain('TWIN-RIB BRACKET');expect(capped).toContain('TOP TIE');expect(capped).toContain('EXISTING W14X90');
   expect(capped).toContain('class="load-path-figure"');expect(coloured(capped)).toEqual([]);
   const nc=newColumnDemonstrationProject();
-  expect(markers(loadPathFigure(nc))).toEqual(nc.columnBase?.enabled?[1,2,3,4,5,6,7,8]:[1,2,3,4,5,7,8]);
+  expect(markers(loadPathFigure(nc))).toEqual(stepNumbers(nc));
+  expect(loadPathSteps(nc).base!==undefined).toBe(!!(nc.existingColumn?.isNew&&nc.columnBase?.enabled));
  });
  it('paints back to front for the view direction and keeps markers inside the figure',()=>{
   // Two plates one behind the other across the runway: the viewer is on the +y side, so the far one paints first.

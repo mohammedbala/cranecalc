@@ -38,8 +38,8 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  dr.rect(cx-bs.width*k/2,y+b.d*k,bs.width*k,bs.thickness*k);dr.hatch(cx-bs.width*k/2,y+b.d*k,bs.width*k,bs.thickness*k);
  dr.dimH(cx-bs.width*k/2,cx+bs.width*k/2,y+b.d*k+bs.thickness*k,400,`SEAT WIDTH ${f(bs.width)}`);
  // The W depth from the top of the W flange; with a cap, the capped depth from the top of the channel web, further out.
- dr.dimV(y,y+b.d*k,right,430,`W d ${f(b.d)}`);
- if(b.kind==='cap'){dr.poly(capChannelProfile(b).outline.map(([x,z])=>[cx+x*k,y-z*k]),true);dr.dimV(y-b.capTw*k,y+b.d*k,right+30,470,`${b.name} capped ${f(b.d+b.capTw)}`);}
+ dr.dimV(y,y+b.d*k,right,430,`${b.kind==='cap'?b.name.split(' + ')[0]:b.name} / d ${f(b.d)}`);
+ if(b.kind==='cap'){dr.poly(capChannelProfile(b).outline.map(([x,z])=>[cx+x*k,y-z*k]),true);dr.dimV(y-b.capTw*k,y+b.d*k,right+30,470,`${b.name} / d ${f(b.d+b.capTw)}`);}
  const notes=[`Bearing plate: ${f(bs.width)} wide x ${f(bs.length)} along girder x ${f(bs.thickness)}`,`Pair fitted stiffeners: outstand ${f(bs.stiffenerWidth)} x ${f(bs.stiffenerThickness)}`,`Web-side corner cope: ${f(bs.cope)}; web fillets: ${f(bs.weldSize)}, four lines`,b.kind==='cap'?`Fit/mill ends; top flange CJP; continuous web fillets`:`Fit/mill ends; continuous web AND flange fillets`,`Top-flange ties at x: ${flangeRestraintStations(p).top.map(f).join(', ')}${capAngleGeometry(p)?' (cap tieback angles, SK-06)':''}`,activeEndBearing(p)?'Bottom flange held by the bolted end bearings (SK-05); no bottom ties':`Bottom-flange ties at x: ${flangeRestraintStations(p).bottom.map(f).join(', ')}`,`Tie stiffness at ${activeEndBearing(p)?'the top flange':'EACH flange'}: ${format(s.detailResults?.braceStiffness??0,'stiffness',p.units,0)}`,`Grid reaction, both girder ends (factored): ${format(s.designAnalysis?.reaction??0,'force',p.units,1)}`,`End rotation clearance: ${f(d.criteria.rotationClearance)}`];
  notes.forEach((n,i)=>dr.text(500,85+29*i,n,10));dr.text(80,55,'SECTION AT SUPPORT; STIFFENERS ALSO AT EACH RESTRAINT',10);output.push(dr.drawing);
  }

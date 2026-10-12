@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { calculate } from '../src/engine/calculate';
 import { exampleProject } from '../src/engine/defaults';
 import type { CalculationSnapshot } from '../src/engine/types';
-import { appendPlanSheet, planSheetGeometry, planSheetSvg, connectionSheetSvg, drawingSheetSet } from '../src/components/planSheet';
+import { appendPlanSheet, planSheetGeometry, planSheetSvg, connectionSheetSvg, drawingSheetSet, drawingSetHtml } from '../src/components/planSheet';
 import { defaultFraming, framingSchema } from '../src/components/framingSettings';
 import { reportHtml } from '../server/report';
 import {feetInches,plateInches,drawingScale} from '../src/components/drawingFormat';
@@ -47,15 +47,20 @@ describe('ARCH D arrangement sheet', () => {
     expect(framingSchema.safeParse({ ...framing, width: -1 }).success).toBe(false);
     expect(() => planSheetGeometry({ ...snapshot.input, spans: [NaN] })).toThrow('Correct project');
   });
-  it('appends two named landscape pages after every report section, including the appendix', () => {
+  it('appends reduced 11 x 17 in copies of the sheets after every report section, including the appendix', () => {
     const html = reportHtml(snapshot), sheetIndex = html.indexOf('<section class="runway-plan-sheet-page">');
     expect(html.match(/<section class="runway-plan-sheet-page">/g)).toHaveLength(drawingSheetSet(snapshot).length);
     expect(html.slice(sheetIndex)).toContain('SHEET S-00');
     expect(sheetIndex).toBeGreaterThan(html.indexOf('Appendix · Reproducible project inputs'));
-    expect(html).toContain('@page runwayArrangement{size:36in 24in;margin:0}');
+    // The calculation carries reduced copies (US tabloid); the full-size ARCH D set is drawingSetHtml.
+    expect(html).toContain('@page runwayArrangement{size:17in 11in;margin:0}');expect(html).toContain('REDUCED COPY OF ARCH D SHEET');
     expect(() => reportHtml({ ...snapshot, eligible: false })).toThrow('eligible');
     const unsafe = structuredClone(snapshot); unsafe.input.title = '<script>alert(1)</script>';
     expect(appendPlanSheet('<html><head></head><body></body></html>', unsafe)).not.toContain('<script>');
+    // The separate drawing set prints every sheet full size on ARCH D.
+    const set = drawingSetHtml(snapshot);
+    expect(set).toContain('@page{size:36in 24in;margin:0}');expect(set.match(/<section class="sheet">/g)).toHaveLength(drawingSheetSet(snapshot).length);
+    unsafe.input.number = '<script>x</script>';expect(drawingSetHtml(unsafe)).not.toContain('<script>x');
   });
   it('formats architectural dimensions with fractional carry and signed datums',()=>{
     expect(feetInches(7620)).toBe(`25'-0"`);

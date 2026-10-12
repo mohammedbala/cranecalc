@@ -484,5 +484,5 @@ export function appendPlanSheet(html:string,s:CalculationSnapshot,f:FramingSetti
 /** The full-size drawing set (ARCH D, 36 × 24 in or 914 × 610 mm), one sheet per page, as its own printable document. */
 export function drawingSetHtml(s:CalculationSnapshot,f:FramingSettings=defaultFraming){
   const css='@page{size:36in 24in;margin:0}html,body{margin:0;padding:0}.sheet{width:36in;height:24in;break-after:page;line-height:0}.sheet:last-child{break-after:auto}.sheet svg{display:block;width:36in;height:24in}';
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${s.input.number||'Crane runway'} drawing set</title><style>${css}</style></head><body>${drawingSheetSet(s,f).map(sheet=>`<section class="sheet">${sheet.svg}</section>`).join('')}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${(s.input.number||'Crane runway').replace(/[&<>"']/g,c=>`&#${c.charCodeAt(0)};`)} drawing set</title><style>${css}</style></head><body>${drawingSheetSet(s,f).map(sheet=>`<section class="sheet">${sheet.svg}</section>`).join('')}</body></html>`;
 }

@@ -21,8 +21,9 @@ export function loadPathSteps(p:ProjectInput):Partial<Record<LoadPathPart,number
 
 const supportName:Record<string,string>={'twin-rib':'TWIN-RIB BRACKET','haunched-seat':'HAUNCHED SEAT','rolled-corbel':'W STUB','tapered-haunch':'TAPERED I HAUNCH','existing':'EXISTING BRACKET','column-cap':'COLUMN CAP','by-others':'SEAT BY OTHERS'};
 /**
- * The summary figure: the support assembly, isometric, with the load path numbered as in the summary table:
- * 1 rail, 2 girder, 3 bearing, 4 support, 5 column, 6 base, 7 lateral restraint, 8 longitudinal force.
+ * The summary figure: the support assembly, isometric, with the load path numbered as in the summary table
+ * (loadPathSteps: rail, girder, bearing, support, column, base on a new column, lateral restraint, longitudinal force,
+ * end stops), numbered without gaps.
  * The near bay's girder is left off so the far girder's end, its bearing and the support read clearly.
  */
 /** The summary figure's scene and render options (the figure and its layout for checks). */

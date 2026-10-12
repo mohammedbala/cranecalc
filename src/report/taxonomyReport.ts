@@ -40,10 +40,7 @@ const kindLabel={clash:'Clash / coordination',redesign:'Redesign flag',input:'Mi
 export function openItemsBlock(tax:Taxonomy,s:CalculationSnapshot){
  const items=tax.openItems;
  const list=items.length?`<table class="open-items"><thead><tr><th>Open item</th><th>Check</th><th>Status</th><th>What is needed</th></tr></thead><tbody>${items.map(o=>`<tr><td><b>${kindLabel[o.kind]}</b></td><td>${esc(o.check.title)}${o.check.utilization!==undefined&&Number.isFinite(o.check.utilization)&&o.check.status==='fail'?` (D/C ${dcText(o.check.utilization,2)})`:''}<small>${esc(o.check.group)}</small></td><td><b>${esc(statusLabel(o.check.status))}</b></td><td>${esc(sentences(o.check.note.replace(/^OPEN ITEM:\s*/,'')).slice(0,2).join(' '))}</td></tr>`).join('')}</tbody></table>`:'';
- // The not-checked list is printed once (section "Not checked in this package"); page 1 names the items and refers to it.
- const others=byOthersItems(tax,s);
- const pointer=others.length?`<p class="by-others-pointer"><b>Not checked in this package (by others):</b> ${others.map(v=>esc(v.title)).join('; ')}. What remains by others and the forces delivered to each item: section @@ref:by-others@@.</p>`:'';
- return `<h2>Open items</h2>${items.length?list:'<p>No open coordination, redesign or input items.</p>'}${pointer}`;
+ return `<h2>Open items</h2>${items.length?list:'<p>No open coordination, redesign or input items.</p>'}${byOthersBlock(tax,s,true)}`;
 }
 /** The pass banner: never "no failed checks" while an open item exists. */
 export function banner(tax:Taxonomy,draft=false){

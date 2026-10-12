@@ -9,12 +9,12 @@ import {reportHtml} from '../server/report';
 describe('static hosting report export',()=>{
  let snapshot:CalculationSnapshot;
  beforeAll(()=>{const p=structuredClone(exampleProject);p.scope='analysis';snapshot=calculate(p);});
- it('retains the calculation, figures and ARCH D sheets in a self-contained printable report',()=>{
+ it('retains the calculation, figures and reduced ARCH D sheets in a self-contained printable report',()=>{
   const html=printableReport(snapshot,defaultFraming,snapshot.revision,'.test-font{color:black}');
   expect(html).toContain(snapshot.revision);
   expect(html).toContain('SUPPLIED-LOAD ANALYSIS REPORT ONLY');
   expect(html).toContain('data-check-figure="Serviceability"');
-  expect(html).toContain('size:36in 24in');
+  expect(html).toContain('size:17in 11in');// reduced copies of the ARCH D sheets
   expect(html).toContain('Print / Save PDF');
   expect(html).toContain('.test-font{color:black}');
   expect(html).toContain('@media print{.print-tools{display:none!important}}');

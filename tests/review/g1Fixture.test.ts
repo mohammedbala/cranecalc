@@ -43,7 +43,9 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
    // lip in front of the face (9/16 → 3/4 in) and the keeper end fillets stopped 1/2 in (the 5/16 in weld size, up to the grid)
    // short of the rail-side face, so the keeper welds and the flange under them carry a little more.
    'haunch-colstiff-length','haunch-colstiff-web-shear','end-stop-bolt-tension','end-stop-slip','end-stop-base-prying','end-stop-flange-prying','end-stop-stiffener-fit','end-stop-web',
-   'rail-keeper-weld','rail-keeper-fatigue','rail-flange-local']),keeperDetail=/^detail-(fatigue|full-cycle)-RC\d+-(left|right)$/;
+   'rail-keeper-weld','rail-keeper-fatigue','rail-flange-local',
+   // Peer review m6: AISC 360-16 Table J2.4 minimum fillet by the thinner part joined (was the thicker part).
+   'haunch-stiffener-weld-minimum','haunch-flange-web-weld-minimum','haunch-web-weld-minimum','cap-angle-endplate-weld-min','stiffener-weld-minimum']),keeperDetail=/^detail-(fatigue|full-cycle)-RC\d+-(left|right)$/;
   for(const b of demoFocus005Before().checks){if(changed.has(b.id)||keeperDetail.test(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
  });
 });
