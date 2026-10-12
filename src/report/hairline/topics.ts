@@ -68,7 +68,7 @@ function serviceability(p:ProjectInput,g:SupportGeometry){
  const sag=(x:number,a:number)=>a*Math.sin(Math.PI*x/L),n=40;
  S.group('deflection',()=>{S.line(Array.from({length:n+1},(_,i)=>{const x=L*i/n;return [x,0,G.z0-sag(x,G.d*.55)] as Vec3;}));
  S.line(Array.from({length:n+1},(_,i)=>{const x=L*i/n;return [x,sag(x,G.bf*1.4),zh] as Vec3;}));});
- S.label('δv',[L/2,0,G.z0-G.d*.55],0,11,'middle',true).label('δh',[L/2,G.bf*1.4,zh],4,10,'start',true);
+ S.label('Δv',[L/2,0,G.z0-G.d*.55],0,11,'middle',true).label('Δh',[L/2,G.bf*1.4,zh],4,10,'start',true);
  return finish(S,[['wheel',-30,-6,[xs[0],0,zh+30]],['deflection',18,14,[L*.62,0,G.z0-sag(L*.62,G.d*.55)]]],{az:14});
 }
 function geometry(p:ProjectInput,g:SupportGeometry){
