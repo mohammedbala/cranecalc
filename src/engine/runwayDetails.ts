@@ -123,4 +123,11 @@ export interface RunwayDetailResults {
  railFatigueBins:{name:string;cycles:number;vertical:number;lateral:number;flangeStress:number;plateStress:number;weldStress:number}[];
  demands:{brace:number;braceFatigue:number;verticalFatigue:number;endLongitudinal:number;railLateral:number;railVertical:number;railFatigueVertical:number;railFatigueLateral:number};
  governing:Record<string,{id:string;combination:string;x:number;value:number}>;
+ /**
+ * The strength and service cases a printed result names (check case ids, governing records, force tables): combination
+ * and crane positions, so the report prints "LRFD 2c, crane at 10'-0\" past grid 2" instead of the case id.
+ */
+ caseIndex?:Record<string,RunwayCaseRecord>;
 }
+/** A strength or service case as the report names it: its combination and the crane positions (first wheel from grid 1). */
+export interface RunwayCaseRecord {combination:string;cranes:{index:number;origin:number;loaded:boolean}[];lateralSign:number;stop?:'left'|'right'}

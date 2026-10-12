@@ -1,12 +1,19 @@
-export type Quantity='length'|'force'|'moment'|'stress'|'area'|'inertia'|'modulus'|'warping'|'lineLoad'|'ratio'|'stiffness'|'temperature'|'temperatureChange'|'density'|'pressure'|'unitWeight'|'subgrade'|'speed';
-const us:Record<Quantity,[number,string]>={speed:[5.08,'ft/min'],length:[25.4,'in'],force:[4448.221615,'kip'],moment:[1355817.948,'kip-ft'],stress:[6.894757293,'ksi'],area:[25.4**2,'in²'],inertia:[25.4**4,'in⁴'],modulus:[25.4**3,'in³'],warping:[25.4**6,'in⁶'],lineLoad:[14.59390294,'kip/ft'],ratio:[1,''],stiffness:[4448.221615/25.4,'kip/in'],temperature:[5/9,'°F'],temperatureChange:[5/9,'°F'],density:[.45359237/.3048**3,'lb/ft³'],pressure:[4.788025898e-5,'psf'],unitWeight:[1.570874638e-7,'pcf'],subgrade:[4.4482216152605/25.4**3,'pci']};
-const si:Record<Quantity,[number,string]>={speed:[1000/60,'m/min'],length:[1,'mm'],force:[1000,'kN'],moment:[1e6,'kN·m'],stress:[1,'MPa'],area:[1,'mm²'],inertia:[1,'mm⁴'],modulus:[1,'mm³'],warping:[1,'mm⁶'],lineLoad:[1,'kN/m'],ratio:[1,''],stiffness:[1000,'kN/mm'],temperature:[1,'°C'],temperatureChange:[1,'°C'],density:[1,'kg/m³'],pressure:[1e-3,'kPa'],unitWeight:[1e-6,'kN/m³'],subgrade:[1e-6,'kN/m³']};
+export type Quantity='acceleration'|'length'|'force'|'moment'|'stress'|'area'|'inertia'|'modulus'|'warping'|'lineLoad'|'ratio'|'stiffness'|'temperature'|'temperatureChange'|'density'|'pressure'|'unitWeight'|'subgrade'|'speed';
+const us:Record<Quantity,[number,string]>={acceleration:[304.8,'ft/s²'],speed:[5.08,'ft/min'],length:[25.4,'in'],force:[4448.221615,'kip'],moment:[1355817.948,'kip-ft'],stress:[6.894757293,'ksi'],area:[25.4**2,'in²'],inertia:[25.4**4,'in⁴'],modulus:[25.4**3,'in³'],warping:[25.4**6,'in⁶'],lineLoad:[14.59390294,'kip/ft'],ratio:[1,''],stiffness:[4448.221615/25.4,'kip/in'],temperature:[5/9,'°F'],temperatureChange:[5/9,'°F'],density:[.45359237/.3048**3,'lb/ft³'],pressure:[4.788025898e-5,'psf'],unitWeight:[1.570874638e-7,'pcf'],subgrade:[4.4482216152605/25.4**3,'pci']};
+const si:Record<Quantity,[number,string]>={acceleration:[1000,'m/s²'],speed:[1000/60,'m/min'],length:[1,'mm'],force:[1000,'kN'],moment:[1e6,'kN·m'],stress:[1,'MPa'],area:[1,'mm²'],inertia:[1,'mm⁴'],modulus:[1,'mm³'],warping:[1,'mm⁶'],lineLoad:[1,'kN/m'],ratio:[1,''],stiffness:[1000,'kN/mm'],temperature:[1,'°C'],temperatureChange:[1,'°C'],density:[1,'kg/m³'],pressure:[1e-3,'kPa'],unitWeight:[1e-6,'kN/m³'],subgrade:[1e-6,'kN/m³']};
 export const unit=(q:Quantity,u:'US'|'SI')=>(u==='US'?us:si)[q][1];
 export const toDisplay=(v:number,q:Quantity,u:'US'|'SI')=>v/(u==='US'?us:si)[q][0]+(q==='temperature'&&u==='US'?32:0);
 export const fromDisplay=(v:number,q:Quantity,u:'US'|'SI')=>(v-(q==='temperature'&&u==='US'?32:0))*(u==='US'?us:si)[q][0];
 export function format(v:number|undefined,q:Quantity,u:'US'|'SI',digits=2){if(v===undefined||!Number.isFinite(v))return '—'; const d=toDisplay(v,q,u),magnitude=Math.abs(d),scientific=magnitude>=1e7||(magnitude>0&&magnitude<.5*10**(-digits)); return `${scientific?d.toExponential(3):d.toLocaleString('en-US',{maximumFractionDigits:digits})}${unit(q,u)?` ${unit(q,u)}`:''}`;}
 
 /** Project numbers are already stored in N, mm and MPa. Only change presentation. */
+/** A length as written in a note: whole sixteenths of an inch as a fraction (3/4 in, 1 1/8 in), else 0.01 in; or mm. */
+export function noteLength(mm:number,units:'US'|'SI'){
+ if(units==='SI')return `${Number(mm.toFixed(1))} mm`;
+ const v=mm/25.4,t=Math.round(v*16);
+ if(t&&Math.abs(v*16-t)<1e-6){const w=Math.floor(t/16);let n=t%16,dd=16;while(n&&n%2===0){n/=2;dd/=2;}return `${w?w:''}${n?`${w?' ':''}${n}/${dd}`:''} in`;}
+ return `${Number(v.toFixed(2))} in`;
+}
 export function withSiUnits<T extends {units:'US'|'SI'}>(project:T):T{return project.units==='SI'?project:{...project,units:'SI'};}
 export function withImperialUnits<T extends {units:'US'|'SI'}>(project:T):T{return project.units==='US'?project:{...project,units:'US'};}
 /** AISC catalogue nominal mass is supplied in lb/ft; keep source values intact. */

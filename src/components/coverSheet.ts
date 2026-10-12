@@ -9,7 +9,7 @@ import {format} from '../engine/units';
 import {craneDesignMinimum,craneCombinations,combinationLabel,combinationOmissions} from '../engine/aistLoads';
 import {deflectionCriteria} from '../engine/aistChecks';
 import {buildingClassBasis} from '../engine/buildingClass';
-import {runwayElevations,issueStatus,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
+import {runwayElevations,issueStatus,revisionIdentity,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
@@ -119,7 +119,7 @@ function existingWeldNote(p:ProjectInput){
  return [`FIELD WELDS TO THE EXISTING COLUMNS: EXISTING STEEL ${steel}. WELD ONLY TO A WPS APPROVED BY THE ENGINEER OF RECORD FOR THAT STEEL; LOW-HYDROGEN PROCESSES ONLY. ${heat.text.toUpperCase()}. WELD WITH THE CRANE OUT OF SERVICE AND THE COLUMN UNDER DEAD LOAD ONLY; SEQUENCE THE WELDS TO LIMIT HEAT INPUT.`];
 }
 export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
- const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>dimensionLength(mm,u),tol=(mm:number)=>drawingLength(mm,u);
+ const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>dimensionLength(mm,u),tol=(mm:number)=>plateInches(mm,u);// tolerances in inches (1/8"), not feet and inches
  const ksi=(v:number)=>format(v,'stress',u,u==='SI'?0:3),status=issueStatus(s),elevations=runwayElevations(p);
  const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} TONNES (${f(N)})`;
  const length=p.spans.reduce((a,b)=>a+b,0),cranes=(()=>{
@@ -180,7 +180,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['EXISTING BUILDING CODE',`${code.entered?'IEBC OF THE SAME EDITION AS THE BUILDING CODE':'NOT ENTERED: IEBC EDITION ADOPTED WITH THE BUILDING CODE'}: ALTERATION; ${p.existingColumn?.isNew?'THE EXISTING STRUCTURE CARRIES NO CRANE LOAD':'EXISTING STRUCTURE EVALUATED FOR THE ADDED CRANE LOADS, SEE EXISTING STRUCTURE EVALUATION'}`],
   ['ASCE/SEI 7',code.asce],
   ['AISC 360',code.aisc+', '+p.method],
-  ['AIST TECH. REPORT 13','GUIDE FOR THE DESIGN AND CONSTRUCTION OF MILL BUILDINGS, COPY DATED FEBRUARY 24, 2020: RUNWAY LOADS AND CRITERIA'],
+  ['AIST TECHNICAL REPORT 13 (2021)','GUIDE FOR THE DESIGN AND CONSTRUCTION OF MILL BUILDINGS: RUNWAY LOADS AND CRITERIA'],
   ['AISC DESIGN GUIDE 7','3RD ED. (2019) WITH 2023 ERRATA'],
   // Welding and bolting standards are the editions the cited AISC 360 references.
   // One AWS D1.1 edition throughout: the 2020 edition, whose clause and table numbers the calculation cites.
@@ -249,11 +249,12 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  // Every detail by number and sheet; references resolve when the set is assembled.
  const details=sheets.flatMap(v=>(v.details??[]).map(t=>[detailRef(t),t]));
  if(details.length)blocks.push(H('DETAIL INDEX'),T(['DETAIL','TITLE'],details,[.7,3.3]));
- const bolt=d?.end.grade==='A490'?'ASTM F3125 GRADE A490 (GROUP 150)':'ASTM F3125 GRADE A325 (GROUP 120)';
+ // AISC 360-16 Table J3.2 bolt groups: Group A (A325) and Group B (A490); 'Group 120 / 150' is AISC 360-22 terminology.
+ const bolt=d?.end.grade==='A490'?'ASTM F3125 GRADE A490 (GROUP B)':'ASTM F3125 GRADE A325 (GROUP A)';
  blocks.push(H('MATERIALS'),T(['ITEM','SPECIFICATION'],[
   ['RUNWAY GIRDER',`${astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu).toUpperCase()}${p.section.kind==='welded'?' PLATE':''}, Fy = ${ksi(p.section.Fy)}`],
   ...(p.capDesign&&p.section.kind==='cap'?[['CAP CHANNEL',`${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource).toUpperCase()}, Fy = ${ksi(p.capDesign.Fy)}; ${p.capDesign.materialSource}`]]:[]),
-  ...(d?[['PLATES, BARS, ANGLES, TIES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['CRANE RAIL',`${astmSpec('rail',d.rail.Fy,d.rail.Fu)} ${d.rail.name}`.toUpperCase()],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`ASTM A513 OR A500 GR. C STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND BRACKETS AND TIES TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),['CRANE RAIL',`${d.rail.name}; Fy = ${ksi(d.rail.Fy)}`],...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
+  ...(d?[['PLATES, BARS, ANGLES, TIES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['CRANE RAIL',`${astmSpec('rail',d.rail.Fy,d.rail.Fu)} ${d.rail.name}`.toUpperCase()],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`${astmSpec('tube',50*6.894757293168).toUpperCase()} STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND BRACKETS AND TIES TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),['CRANE RAIL',`${d.rail.name}; Fy = ${ksi(d.rail.Fy)}`],...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
   ...(usesRolledBracket(p)?(()=>{const w=projectStub(p);return [['COLUMN BRACKETS',`ASTM A992 ${w.name}, Fy = ${ksi(w.input.Fy)}, Fu = ${ksi(w.input.Fu)}; ${w.seat?'SEAT PL AND ':''}STIFFENERS AS PLATES`]];})():[]),
   ...(usesTaperedHaunch(p)&&d?[['COLUMN BRACKETS',`BUILT-UP TAPERED I HAUNCH PLATES, ${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}; ${p.existingColumn?.enabled&&!p.existingColumn.isNew?'FIELD WELDED TO EXISTING COLUMNS: VERIFY WELDABILITY':'SHOP WELDED'}`]]:[]),
   ...(d&&columnStiffenerGeometry(p)?[['COLUMN STIFFENERS',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()} PLATES, Fy = ${ksi(d.material.Fy)}; ${supportColumn(p).field?'FIELD WELDED INSIDE THE EXISTING COLUMNS':'SHOP WELDED INSIDE THE NEW COLUMNS'} AT THE BRACKETS`]]:[]),
@@ -318,7 +319,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  }
  blocks.push(legend(t,p.units));
  blocks.push(H('ABBREVIATIONS'),P('(E) EXISTING · (N) NEW · C/L CENTERLINE · EL. ELEVATION · T.O.S. TOP OF STEEL · T.O.R. TOP OF RAIL · TYP. TYPICAL · U.N.O. UNLESS NOTED OTHERWISE · SC SLIP-CRITICAL · STD STANDARD HOLE · SSL / LSL SHORT / LONG SLOT · CJP COMPLETE JOINT PENETRATION · FW FIELD WELD · REF. REFERENCE (EXISTING OR BY OTHERS)'));
- blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} CALCULATION REVISION ${s.revision}.`));
+ blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} ${revisionIdentity(s).letter?`DRAWINGS AND CALCULATION REPORT REVISION ${revisionIdentity(s).letter!.toUpperCase()}, ${revisionIdentity(s).date}.`:`CALCULATION ${s.revision}.`}`));
  return blocks;};
  // Largest legible text that fits (body 5/32 in down to 0.09 in), with the columns balanced to the
  // shortest height that still fits.

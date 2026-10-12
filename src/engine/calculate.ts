@@ -1,3 +1,5 @@
+import {caseBase,caseIdPattern} from './caseNames';
+import type {RunwayCaseRecord} from './runwayDetails';
 import {packageContentChecks} from './detailTemplate';
 import {connectionCoordination,coordinationChecks} from './connectionCoordination';
 import {constructionNoteChecks} from './constructionNotes';
@@ -127,7 +129,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
    // Bumper selection against the stop design strength, after the end-stop checks.
    snapshot.checks.push(...bumperSelectionChecks(p,snapshot.checks));
   } catch(e) {snapshot.errors.push(e instanceof Error?e.message:'AIST design analysis failed.');}
-  snapshot.warnings.push('Reference: AIST Technical Report 13 (published edition, 2021 printing; provisions transcribed from the February 24, 2020 committee draft and not re-read against the printed guide). The 3D building is reference geometry. Enabled bracket geometry uses project inputs. Existing brackets require surveyed data and a recorded capacity assessment; whole-building adequacy is not established.');
+  snapshot.warnings.push('Reference: AIST Technical Report 13 (2021). The 3D building is reference geometry. Enabled bracket geometry uses project inputs. Existing brackets require surveyed data and a recorded capacity assessment; whole-building adequacy is not established.');
   snapshot.warnings.push('Design combinations are runway-only projections. Roof, wind, seismic and other building actions require a separate design where applicable. The displayed supplied-load diagram envelopes remain separate from factored AIST design demands.');
  }else{
  snapshot.warnings.push('ANALYSIS REPORT ONLY: supplied-load bending and user serviceability criteria. This report does not establish AISC/DG7/TR-13/ASCE compliance or validate strength, fatigue, torsion, bracing or connections.');
@@ -153,5 +155,13 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
  // Failed engineering criteria can export; failed numerical verification cannot.
  snapshot.eligible=!blocking&&!snapshot.errors.length&&snapshot.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass');
  snapshot.checks=snapshot.checks.map(c=>presentCheck(c,p.units));
+ // The analysis cases a printed result names, with their combination and crane positions: the report prints these
+ // names, not the case ids (the CSV keeps the ids).
+ const registry=(snapshot.detailResults as {caseRegistry?:Map<string,RunwayCaseRecord>}|undefined)?.caseRegistry;
+ if(snapshot.detailResults&&registry){
+  const index:Record<string,RunwayCaseRecord>={},text=JSON.stringify([snapshot.checks,snapshot.detailResults,snapshot.designAnalysis?.governing]);
+  for(const m of text.matchAll(caseIdPattern)){const base=caseBase(m[0]),r=registry.get(base);if(r)index[base]=r;}
+  snapshot.detailResults.caseIndex=index;
+ }
  return snapshot;
 }

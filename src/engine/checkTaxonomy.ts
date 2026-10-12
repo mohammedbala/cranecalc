@@ -3,6 +3,7 @@ import type {FatigueDetailResult} from './runwayDetails';
 import {columnStiffenerGeometry} from './columnStiffeners';
 import {connectionCoordination} from './connectionCoordination';
 import {minerEquivalent} from './fatigueConstants';
+import {caseName} from './caseNames';
 
 /**
  * Check taxonomy: what each computed result is, whether it applies, which results repeat or say the same thing, and
@@ -284,7 +285,7 @@ export const mergeDefs:MergeDef[]=[
  {key:'bearing-plate',title:'Bearing plate and contact',re:/^(bearing-plate|bearing-contact|hold-down-model)$/},
  {key:'end-bearing-bolts',effect:'connection',title:'End bearing bolt group (slip, shear, tension, bearing/tearout)',re:/^end-bearing-(locating-slip|locating-shear|locating-tension|flange-bearing|plate-bearing|seat-bearing|sliding)$/},
  {key:'end-bearing-sleeves',effect:'connection',title:'End bearing sleeves and plate washers',re:/^end-bearing-(sleeve|sleeve-bearing|washer-bending)$/},
- {key:'end-bearing-prying',title:'End bearing plies · thickness for no prying',re:/^end-bearing-(flange-prying|seat-prying)$/},
+ {key:'end-bearing-prying',title:'End bearing plies · thickness for no prying (ratio t_min/t)',re:/^end-bearing-(flange-prying|seat-prying)$/},
  {key:'haunch-stiffeners',effect:'local',title:'Haunch bearing stiffeners (column buckling, fitted bearing, welds)',re:/^haunch-stiffener-(column|bearing|weld)$/},
  {key:'haunch-column-welds',effect:'connection',title:'Haunch-to-column welds (flange CJPs, web fillets, connected metal)',re:/^haunch-(top-flange-cjp|bottom-flange-cjp|web-weld|web-base)$/},
  {key:'haunch-web-local',title:'Haunch web local yielding and crippling (J10.2, J10.3)',re:/^haunch-web-(yielding|crippling)$/},
@@ -298,7 +299,7 @@ export const mergeDefs:MergeDef[]=[
  {key:'cap-angle-sleeves',effect:'connection',title:'Cap tie sleeves and plate washers',re:/^cap-angle-(sleeve|sleeve-bearing|washer-bending)$/},
  {key:'end-stop-bolts',effect:'connection',title:'End stop bolt group (tension, shear, slip, bearing/tearout)',re:/^end-stop-(bolt-tension|bolt-shear|slip|bearing-base|bearing-flange)$/},
  {key:'end-stop-welds',effect:'connection',title:'End stop welds',re:/^end-stop-(weld|stiffener-weld)$/},
- {key:'end-stop-prying',title:'End stop plies · thickness for no prying',re:/^end-stop-(base-prying|flange-prying)$/},
+ {key:'end-stop-prying',title:'End stop plies · thickness for no prying (ratio t_min/t)',re:/^end-stop-(base-prying|flange-prying)$/},
  {key:'end-stop-body',title:'End stop body and face plate',re:/^end-stop-(flexure|shear|face|face-outstand)$/},
  {key:'rail-joint',effect:'connection',title:'Rail joint (bars and bolts)',re:/^rail-joint-(bolts|bearing|net|plate|block)$/},
  {key:'rail-keepers',effect:'connection',title:'Rail keepers (lip, shear, welds)',re:/^rail-keeper-(flexure|shear|weld)$/},
@@ -328,6 +329,8 @@ export interface Taxonomy{
  detailing:{evaluated:TaxonEntry[];flagged:{entry:TaxonEntry;reason:string}[];satisfied:number;gated:TaxonEntry[]};
  counts:{total:number;byType:Record<CheckType,number>;designEvaluated:number;designShown:number;designScreened:number;designNotApplicable:number;detailing:number;detailingFlagged:number};
  openItems:OpenItem[];byOthers:TaxonEntry[];governing?:{title:string;dc:number;check:CheckResult;element:string};
+ /** The engineering name of a case id (combination and crane position), for printed tables; ids stay in the CSV. */
+ caseName:(id:string|undefined)=>string;
 }
 const defaultElements:ElementDef[]=[{key:'all',label:'Checks',match:()=>true}];
 const dcOf=(c:CheckResult)=>c.utilization!==undefined&&Number.isFinite(c.utilization)?c.utilization:-1;
@@ -421,7 +424,7 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
   if(c.demand===undefined||c.capacity===undefined||!Number.isFinite(c.capacity))continue;
   const margin=Math.abs(c.capacity-c.demand),limit=Math.abs(c.capacity),u=dcOf(c);
   if(c.quantity==='length'){
-   if(fitRule(c)&&margin<inch/8-1e-6){flagged.push({entry:t,reason:`${margin<1e-6?'Met exactly':'Margin'} less than the 1/8 in setting / fit-up tolerance`});continue;}
+   if(fitRule(c)&&margin<inch/8-1e-6){flagged.push({entry:t,reason:margin<1e-6?'Met exactly: no margin for the 1/8 in setting / fit-up tolerance':'Margin less than the 1/8 in setting / fit-up tolerance'});continue;}
    if(margin<Math.min(inch/8,.1*limit)-1e-6)flagged.push({entry:t,reason:margin<1e-6?'Met exactly at the limit':'Margin less than 1/8 in or 10%'});
   }else if(u>.9)flagged.push({entry:t,reason:u>=1-1e-6?'Met exactly at the limit':`Margin ${((1-u)*100).toFixed(0)}%`});
  }
@@ -438,7 +441,7 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
  const cands=[...bodyLines.map(l=>({title:l.controlling.title,dc:dcOf(l.controlling),check:l.controlling,element:l.elementLabel,fail:l.controlling.status==='fail'})),
   ...evaluatedFatigue.map(r=>({title:`${r.title} · fatigue`,dc:r.dc??-1,check:r.governing,element:entries.get(r.governing.id)!.elementLabel,fail:r.governing.status==='fail'}))];
  const top=cands.reduce<typeof cands[number]|undefined>((a,b)=>!a||(b.fail?1e9:0)+b.dc>(a.fail?1e9:0)+a.dc?b:a,undefined);
- return {entries,lines,shown,elements,
+ return {caseName:(id:string|undefined)=>caseName(s,id),entries,lines,shown,elements,
   fatigue:{method,cycles,rows:fatigueRows,evaluated:evaluatedFatigue,screened:screenedFatigue,peak:lines.find(l=>l.key.startsWith('fatigue-peak'))},
   detailing:{evaluated:detEval,flagged,satisfied:detEval.length-flagged.length,gated},
   counts:{total:entries.size,byType,designEvaluated:designAll.filter(t=>t.gate==='evaluated'&&!['not-applicable','excluded'].includes(t.check.status)).length,designShown:shown.length+evaluatedFatigue.length,

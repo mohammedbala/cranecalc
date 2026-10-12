@@ -48,6 +48,8 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
    // (sum n_i/N_i)^(1/3)), the keeper local range is one-way and the Appendix 3.1 peak uses unfactored loads.
    'haunch-fatigue-top-flange','haunch-fatigue-bottom-flange','haunch-fatigue-flange-web','haunch-fatigue-stiffener-toe','haunch-fatigue-flare','haunch-fatigue-column',
    'haunch-colstiff-fatigue-toe',
+   // Peer review m6: AISC 360-16 Table J2.4 minimum fillet by the thinner part joined (was the thicker part).
+   'haunch-stiffener-weld-minimum','haunch-flange-web-weld-minimum','haunch-web-weld-minimum','cap-angle-endplate-weld-min','stiffener-weld-minimum',
    // Peer review group B: load-height LTB as Cb = Mcr/Mocr (M2), H1 and the normal stress at each flange with that M_cx (m11),
    // one web yielding check over the TR-13 length and J10.3 / J10.4 corrections (m10); the peak stress takes the larger flange.
    'wheel-web-tr13','torsion-normal','fatigue-peak-detailed','sidesway','end-stop-girder']),keeperDetail=/^detail-(fatigue-.+|full-cycle-RC\d+-(left|right))$/;

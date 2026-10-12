@@ -69,7 +69,7 @@ describe('representative runway package',()=>{
   expect(sheets.find(s=>s.number==='SK-05')!.entities.filter(e=>e.type==='circle')).toHaveLength(4);
   const dxf=lineworkDxf(snapshot);expect(dxf.includes('4 A325 bolts, diameter 7/8"')).toBe(true);expect(dxf).toContain(snapshot.revision);
   const csv=interfaceCsv(snapshot);expect(csv).toContain(snapshot.input.units==='US'?'vertical_down_kip':'vertical_down_N');expect(csv).toContain('BUMPER-1');
-  const html=reportHtml(snapshot);expect(html).toContain('FICTITIOUS');expect(html).toContain('OUTSIDE THIS CALCULATION - BY OTHERS');expect(html).toContain('signed');expect(html).toContain('SK-07');expect(html).not.toContain('class="json"');
+  const html=reportHtml(snapshot);expect(html).toContain('FICTITIOUS');expect(html).toContain('not checked in this package are listed, with the forces delivered to them, in section');expect(html).toContain('signed');expect(html).toContain('SK-07');expect(html).not.toContain('class="json"');
   const p=structuredClone(snapshot.input);p.details!.rail.clipThickness*=1.1;expect(fingerprint(p)).not.toBe(snapshot.revision);
  });
 });

@@ -15,7 +15,7 @@ import { beamSystem,momentAt } from './beam';
 import { boltProperties,plateMember,compressionResistance } from './connectionStrength';
 import type { RunwayCaseEvent,RunwayCaseObserver } from './designAnalysis';
 import type { ProjectInput,Properties } from './types';
-import type { FatigueDetailResult,InterfaceAction,RunwayDetailResults } from './runwayDetails';
+import type { FatigueDetailResult,InterfaceAction,RunwayCaseRecord,RunwayDetailResults } from './runwayDetails';
 import { railKeeperResponse } from './railKeeper';
 import { railTopAboveSteel } from './railSeat';
 import {tractionBays,railKeeperStations,girderSegments,independentBearings,endGridOverhang,endGridCentered} from './simpleSupports';
@@ -190,6 +190,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const deadStations=new Map<string,ReturnType<ReturnType<LateralTorsionBeam['solve']>['at']>>();
  const deadAt=(bay:number,x:number)=>{const key=`${bay}:${x.toFixed(4)}`;let v=deadStations.get(key);if(!v){v=deadBay(bay).at(x);deadStations.set(key,v);}return v;};
  function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
+ // Every strength and service case by id, so printed results can name the combination and crane position (caseIndex).
+ const registry=new Map<string,RunwayCaseRecord>();
  // Combined normal stress of each flange: section modulus, half width and normalized warping function at its tips.
  const flangeNormal=result.flangeNormal={top:0,bottom:0},flangeS={top:cap?cap.Stop:props.Sx,bottom:cap?cap.Sbottom:props.Sx},flangeHalf={top:(cap?p.section.capWidth:p.section.bf)/2,bottom:p.section.bf/2};
  const flangeW=cap?{top:Math.max(...cap.fibres.filter(v=>v.y>0).map(v=>Math.abs(v.omega))),bottom:Math.max(...cap.fibres.filter(v=>v.y<0).map(v=>Math.abs(v.omega)))}:{top:props.h0*p.section.bf/4,bottom:props.h0*p.section.bf/4};
@@ -199,6 +201,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const evaluate=(e:RunwayCaseEvent,bin=-1)=>{
   const key=JSON.stringify([e.kind,bin,e.wheels,e.q,e.railTorquePerLength,e.axial,e.horizontalCrane,e.cranes]);
   if(seen.has(key))return;seen.add(key);result.cases++;
+  if(e.kind!=='fatigue'&&!registry.has(e.id))registry.set(e.id,{combination:e.combination,cranes:e.cranes.map(c=>({...c})),lateralSign:e.lateralSign,...(e.stop?{stop:e.stop}:{})});
   const majorLoads=e.wheels.map(w=>({x:w.x,p:w.p}));
   const moment=(x:number)=>momentAt(x,e.verticalReactions,majorLoads,e.q);
   const reactions=new Map<number,{top:number;bottom:number}>();
@@ -458,6 +461,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   if(rolledBracket)result.rolledBracket=rolledBracket.result;
   if(taperedHaunch)result.taperedHaunch=taperedHaunch.result;
   if(capCollector)result.columnCap=capCollector.finish();
+  // Not serialized: calculate() keeps only the cases a printed result names (caseIndex).
+  Object.defineProperty(result,'caseRegistry',{value:registry,enumerable:false});
   return result;
  };
  return {observe,finish};

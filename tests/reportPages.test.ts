@@ -10,7 +10,8 @@ describe('printed calculation pages',()=>{
  it('prints project, revision, issue status, responsibility and page numbers in the page margins',()=>{
   const html=compactReport(s,'');
   expect(html).toContain('@top-left{content:"CRANECALC · DEMO-CAP-002 · ');
-  expect(html).toContain(`@top-right{content:"CALC REV ${s.revision} · DEMONSTRATION - NOT FOR CONSTRUCTION"`);
+  // Without entered revisions the header carries the calculation fingerprint and date.
+  expect(html).toContain(`@top-right{content:"CALC ${s.revision} · ${s.createdAt.slice(0,10)} · DEMONSTRATION - NOT FOR CONSTRUCTION"`);
   expect(html).toContain('@bottom-right{content:"PAGE " counter(page) " OF " counter(pages)');
   expect(html).toContain('@bottom-left{content:"PREPARED CraneCalc demonstration · CHECKED — · EOR —"');
   expect(html).toContain('class="responsibility"');expect(html).toContain('NOT SEALED');
