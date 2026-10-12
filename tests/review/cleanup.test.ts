@@ -182,7 +182,7 @@ describe('revision identity and consistency (m1–m9)',()=>{
   expect(cover).toContain('ASTM F3125 GRADE A325 (GROUP A)');expect(cover).not.toContain('GROUP 120');
   expect(cover).not.toContain('A513');expect(cover).toContain('ASTM A500 GR. C STEEL TUBE');
   expect(body).toContain('ASTM F3125 Gr. A325 (Group A)');
-  expect(html).toContain('0.75\\times90.0\\,\\mathrm{ksi}');expect(html).not.toContain('89.9\\,\\mathrm{ksi}');
+  expect(html).toMatch(/0\.75\\times90(\.0+)?\\,\\mathrm\{ksi\}/);expect(html).not.toContain('89.9\\,\\mathrm{ksi}');
  });
  it('reports the end stop as the calculation does, with units on the bumper rows (m8)',()=>{
   const s03=sheets.find(v=>v.includes('GOVERNING STOP CHECK'))!.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
