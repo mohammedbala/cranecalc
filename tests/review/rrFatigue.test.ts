@@ -87,7 +87,8 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   const ev=reg.filter(c=>tax.entries.get(c.id)!.gate==='evaluated'),sc=reg.filter(c=>tax.entries.get(c.id)!.gate==='screened');
   const pts=(v:typeof reg)=>new Set(v.map(c=>c.id.replace(/^detail-(fatigue|full-cycle)-/,''))).size;
   expect(ev.length).toBe(2*pts(ev));expect(sc.length).toBe(2*pts(sc));expect(pts(ev)+pts(sc)).toBe(points);
-  expect(body).toContain(`Design checks evaluated ${tax.counts.designEvaluated} (${tax.counts.designShown} body rows; ${ev.length} of them at ${pts(ev)} fatigue register points), screened ${tax.counts.designScreened} (${sc.length} of them at ${pts(sc)} register points)`);
+  // With the rail clip model every register point is below F_TH (screened): the evaluated count then names no register points.
+  expect(body).toContain(`Design checks evaluated ${tax.counts.designEvaluated} (${tax.counts.designShown} body rows${ev.length?`; ${ev.length} of them at ${pts(ev)} fatigue register points`:''}), screened ${tax.counts.designScreened} (${sc.length} of them at ${pts(sc)} register points)`);
   expect(body).toContain(`The girder detail register has ${points} points`);expect(body).toContain(`${2*points} checks: ${pts(ev)} points (${ev.length} checks) evaluated, ${pts(sc)} points (${sc.length} checks) screened`);
   // Every fatigue design check is in exactly one table row (a detail), evaluated or screened; checks keep their own gate.
   const F=tax.fatigue,members=[...F.evaluated,...F.screened].flatMap(v=>v.members),gate=(id:string)=>tax.entries.get(id)!.gate;

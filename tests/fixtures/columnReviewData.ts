@@ -1,5 +1,6 @@
 import type {ProjectInput} from '../../src/engine/types';
 import {designsBracing} from '../../src/engine/newColumnBracing';
+import {demonstrationClip} from '../../src/engine/demonstration';
 
 /**
  * Supporting-column data that the structural review (group G2) made required for an existing building column:
@@ -7,7 +8,9 @@ import {designsBracing} from '../../src/engine/newColumnBracing';
  * seismic record and the lateral-system evaluation, and the 10-year wind on the braced line. The app demonstrations
  * carry their own records (demonstration.ts); test-only projects that rebuild the existing column or its bracing
  * (taperedHaunchProjects) and still assert a fully passing, exportable package fill the gaps here. Without them the
- * package carries the open items, as DEMO-FOCUS-005 does. Mutates and returns `p`; entered records are kept.
+ * package carries the open items, as DEMO-FOCUS-005 does. Also the rail clip manufacturer data (the fictitious RC-W6
+ * clip, 5/16 in base welds) where a project file predates the rail clip model. Mutates and returns `p`; entered records
+ * are kept.
  */
 export function withColumnReviewData<T extends ProjectInput>(p:T):T{
  const c=p.existingColumn;
@@ -17,5 +20,6 @@ export function withColumnReviewData<T extends ProjectInput>(p:T):T{
   c.siteSeismic??={enabled:false,SDS:0,sdc:'A',Ie:1,R:3,liftedLoadSecured:false,friction:.6,source:'Test record: seismic design not required',alteration:{dcrIncrease:0,source:'Test record: lateral system evaluation'}};
  }
  const b=p.longitudinalBracing;if(b?.enabled&&!designsBracing(p))b.wind10??=0;
+ if(p.details)p.details.rail.clip??=demonstrationClip(.3125*25.4);
  return p;
 }
