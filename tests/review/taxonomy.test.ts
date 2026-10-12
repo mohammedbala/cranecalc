@@ -211,8 +211,12 @@ describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>
 
 describe('TR-13 basis and clause citations (A5)',()=>{
  const cite=(id:string)=>shortReference(base.checks.find(c=>c.id===id)!);
- it('cites the published edition, not the supplied draft as the basis',()=>{
-  for(const r of references.filter(r=>r.title==='AIST Technical Report 13')){expect(r.edition).toMatch(/Published edition/);expect(r.status).toBe('partial');}
+ it('cites AIST TR-13 as the 2021 edition, keeping the source document in the audit record only',()=>{
+  // Owner decision: the February 24, 2020 document is treated as the 2021 edition; the record keeps that provenance.
+  const tr13=references.filter(r=>/^AIST Technical Report 13/.test(r.title));expect(tr13.length).toBeGreaterThan(10);
+  for(const r of tr13){expect(r.title).toBe('AIST Technical Report 13');expect(r.edition).toBe('2021');expect(r.status).toBe('partial');expect(r.evidence).toMatch(/February 24, 2020/);}
+  const printed=text(html);expect(printed).toContain('AIST Technical Report 13 (2021)');
+  expect(printed).not.toMatch(/UNVERIFIED \(text not read\)|text not read|not re-read|transcribed from|committee draft|ballot draft|February 24, 2020|2021 printing/);
   expect(text(html)).not.toMatch(/supplied source dated February 24, 2020/);
  });
  it('cites the clause that governs each limit state',()=>{

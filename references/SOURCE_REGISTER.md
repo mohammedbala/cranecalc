@@ -19,6 +19,8 @@ Full copyrighted publication text is not bundled in the frontend or redistribute
 
 User-requested display naming: app labels and PDF citations use **AIST Technical Report 13**. This presentation change retains the exact supplied February 24, 2020 file and the provenance recorded above; it does not substitute a different publication or alter calculations/export gates.
 
+User decision, 2026-10-12: the supplied February 24, 2020 TR13 document is treated as the 2021 edition of AIST Technical Report 13. The printed calculation, its reference register and sheet S-00 cite "AIST Technical Report 13 (2021)" with clause numbers and no edition qualifier. The provenance above is unchanged: the text was taken from the February 24, 2020 file, the printed 2021 guide was not read, and the runtime records keep status `partial` with this note in their evidence (shown in the app's reference register, not printed).
+
 ## Detailed rolled-girder package (October 7, 2026)
 
 Primary mechanics publications retained in `tmp/sources` (not redistributed with the app):

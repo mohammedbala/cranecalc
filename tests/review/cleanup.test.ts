@@ -147,6 +147,14 @@ describe('references (P5)',()=>{
   expect(body).toMatch(/Existing column flange · local bending at the top flange \(J10\.1\)[^]*?AISC 360-16 J10\.1/);
   expect(body).not.toMatch(/AISC 360-16 B4, D2, E3, F4|AISC 360-16 J2, J3, J4, J7/);
  });
+ it('cites AIST TR-13 once as the 2021 edition, with no edition qualifier, in the calculation and on S-00 (C1)',()=>{
+  const register=body.slice(body.indexOf('Reference register'),body.indexOf('6.6 / Applicability'));
+  expect(register.match(/AIST Technical Report 13/g)).toHaveLength(1);expect(register).toContain('AIST Technical Report 13 (2021) - ');
+  expect(body).toContain('Basis: AIST Technical Report 13 (2021);');
+  for(const banned of ['UNVERIFIED','text not read','not re-read','transcribed','committee draft','ballot draft','February 24, 2020','2021 printing','Published edition'])expect(text,banned).not.toContain(banned);
+  const cover=sheets[0].replace(/<[^>]+>/g,' ');
+  expect(cover).toContain('AIST TECHNICAL REPORT 13 (2021)');expect(cover).not.toMatch(/FEBRUARY 24|COPY DATED/);
+ });
 });
 
 describe('revision identity and consistency (m1–m9)',()=>{

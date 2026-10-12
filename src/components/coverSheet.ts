@@ -119,7 +119,7 @@ function existingWeldNote(p:ProjectInput){
  return [`FIELD WELDS TO THE EXISTING COLUMNS: EXISTING STEEL ${steel}. WELD ONLY TO A WPS APPROVED BY THE ENGINEER OF RECORD FOR THAT STEEL; LOW-HYDROGEN PROCESSES ONLY. ${heat.text.toUpperCase()}. WELD WITH THE CRANE OUT OF SERVICE AND THE COLUMN UNDER DEAD LOAD ONLY; SEQUENCE THE WELDS TO LIMIT HEAT INPUT.`];
 }
 export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
- const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>dimensionLength(mm,u),tol=(mm:number)=>drawingLength(mm,u);
+ const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>dimensionLength(mm,u),tol=(mm:number)=>plateInches(mm,u);// tolerances in inches (1/8"), not feet and inches
  const ksi=(v:number)=>format(v,'stress',u,u==='SI'?0:3),status=issueStatus(s),elevations=runwayElevations(p);
  const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} TONNES (${f(N)})`;
  const length=p.spans.reduce((a,b)=>a+b,0),cranes=(()=>{
@@ -180,7 +180,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['EXISTING BUILDING CODE',`${code.entered?'IEBC OF THE SAME EDITION AS THE BUILDING CODE':'NOT ENTERED: IEBC EDITION ADOPTED WITH THE BUILDING CODE'}: ALTERATION; ${p.existingColumn?.isNew?'THE EXISTING STRUCTURE CARRIES NO CRANE LOAD':'EXISTING STRUCTURE EVALUATED FOR THE ADDED CRANE LOADS, SEE EXISTING STRUCTURE EVALUATION'}`],
   ['ASCE/SEI 7',code.asce],
   ['AISC 360',code.aisc+', '+p.method],
-  ['AIST TECH. REPORT 13','GUIDE FOR THE DESIGN AND CONSTRUCTION OF MILL BUILDINGS, COPY DATED FEBRUARY 24, 2020: RUNWAY LOADS AND CRITERIA'],
+  ['AIST TECHNICAL REPORT 13 (2021)','GUIDE FOR THE DESIGN AND CONSTRUCTION OF MILL BUILDINGS: RUNWAY LOADS AND CRITERIA'],
   ['AISC DESIGN GUIDE 7','3RD ED. (2019) WITH 2023 ERRATA'],
   // Welding and bolting standards are the editions the cited AISC 360 references.
   // One AWS D1.1 edition throughout: the 2020 edition, whose clause and table numbers the calculation cites.
