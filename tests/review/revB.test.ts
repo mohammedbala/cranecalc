@@ -8,8 +8,7 @@ import {demoFocus005RevB,revBChanges} from '../fixtures/demoFocus005RevB';
 /**
  * DEMO-FOCUS-005 revision B: every open item of the reviewed project is resolved by the revised inputs and the
  * section E changes, and the checks without data are omitted (listed as not checked, by others). One calculate.
- * E36 (girder re-optimisation, recorded, not a test): with the owner rail-rotation limit 0.005 rad, W24X104 + C15X33.9
- * gives 1.08 (and rail keeper fatigue fails), W24X84 + C15X50 1.34, W24X76 + C15X50 1.50: W24X104 + C15X50 (0.94) stays.
+ * E36: without the (removed) rail rotation limit the girder is W14X61 + C15X50, governed by vertical deflection L/1000.
  */
 const p=demoFocus005RevB(),s=calculate(p),check=(id:string)=>s.checks.find(c=>c.id===id)!;
 describe('DEMO-FOCUS-005 rev B',()=>{
