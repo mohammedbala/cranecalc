@@ -3,7 +3,7 @@ import {supportColumn,runwayElevations} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength,referenceLength} from './drawingFormat';
-import {refDim,dimText,sheetDrawingScale,textWidth,wrapToWidth,labelCaps,line,rect,text,circle,n,dimH,dimV,breakLine,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,capChannelSection,type XY} from './sheetGraphics';
+import {refDim,dimText,sheetDrawingScale,textWidth,wrapToWidth,labelCaps,line,rect,text,circle,n,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,capChannelSection,type XY} from './sheetGraphics';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {bracketForceBlocks} from './bracketForceTable';
@@ -62,8 +62,8 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
  // 1. Elevation looking along the runway: the existing column flange, the haunch with its stiffeners edge-on and its
  // tip end plate, the girder end, bearing plate and rail in phantom on the girder web line.
  views.push({title:detailTitles.weldedBracket,render:()=>{
-  // The girder end is drawn with its web broken: 3 in of web above the bottom flange and below the top flange.
-  const sec=p.section,cap=sec.kind==='cap'?sec.capTw:0,web=3*25.4,gap=1.5*25.4,shown=2*sec.tf+2*web+gap,above=tbp+shown+cap+railTopAboveSteel(p);
+  // The girder end is drawn at its full depth (it is short enough to fit; no break).
+  const sec=p.section,cap=sec.kind==='cap'?sec.capTw:0,web=sec.d-2*sec.tf,shown=sec.d,above=tbp+shown+cap+railTopAboveSteel(p);
   // Callouts above the haunch at the left: the stiffeners (their welds are on the section) and the end plate weld,
   // its lines no wider than the weld reference line.
   const stiffLabels=wrapRows(`${stiffLabel} AT GIRDER C/L; SEE ${detailRef(haunchSectionTitle)}`,130),endLabels=wrapped(`END PL ${size(tep)}, ALL AROUND, SHOP`);
@@ -83,9 +83,8 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=poly([[X(a-st.t/2),Y(-tt)],[X(a+st.t/2),Y(-tt)],[X(a+st.t/2),Y(inner(a+st.t/2))],[X(a-st.t/2),Y(inner(a-st.t/2))]]);
   // Bearing plate, and the girder end and rail beyond it in phantom.
   svg+=rect(X(a+W/2),Y(tbp),W*k,tbp*k,'runway-line');
-  const gx=(x:number)=>X(a+x),bf=sec.bf,tf=sec.tf,gw=sec.tw,z0=tbp,zw=z0+tf+web,zg=zw+gap,z1=zg+web+tf;
-  svg+=rect(gx(bf/2),Y(z0+tf),bf*k,tf*k,'reference-line')+rect(gx(gw/2),Y(zw),gw*k,web*k,'reference-line')+rect(gx(gw/2),Y(z1-tf),gw*k,web*k,'reference-line')+rect(gx(bf/2),Y(z1),bf*k,tf*k,'reference-line');
-  for(const z of [zw,zg])svg+=breakLine([gx(bf/2+12),Y(z)],[gx(-bf/2-12),Y(z)]);
+  const gx=(x:number)=>X(a+x),bf=sec.bf,tf=sec.tf,gw=sec.tw,z0=tbp,z1=z0+sec.d;
+  svg+=rect(gx(bf/2),Y(z0+tf),bf*k,tf*k,'reference-line')+rect(gx(gw/2),Y(z1-tf),gw*k,web*k,'reference-line')+rect(gx(bf/2),Y(z1),bf*k,tf*k,'reference-line');
   if(cap)svg+=capChannelSection(sec,(x,z)=>[gx(x),Y(z1+z)],'reference-line');
   const r=d.rail,rz=z1+cap+railTopAboveSteel(p)-p.railHeight;
   svg+=rect(gx(r.baseWidth/2),Y(rz+r.baseThickness),r.baseWidth*k,r.baseThickness*k,'reference-line')+rect(gx(r.webThickness/2),Y(rz+p.railHeight-r.headThickness),r.webThickness*k,(p.railHeight-r.headThickness-r.baseThickness)*k,'reference-line')+rect(gx(r.headWidth/2),Y(rz+p.railHeight),r.headWidth*k,r.headThickness*k,'reference-line');

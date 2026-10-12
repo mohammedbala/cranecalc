@@ -137,15 +137,15 @@ describe('ARCH D arrangement sheet', () => {
     // Grid 3 is the girder's mid-length: the mark moves to mid-span of the bay before it.
     for(const x of marks)expect(x).toBeCloseTo((grids[1]+grids[2])/2,6);
   });
-  it('breaks the existing columns on the girder elevation clear above the top of rail, off the T.O.R. target',()=>{
+  it('breaks each existing column on the girder elevation once, at the foot of its stub below the seat, none above the rail',()=>{
     for(const p of [demonstrationProject(),cappedDemonstrationProject()]){
       const svg=planSheetSvg({...snapshot,input:p}),elevation=svg.split('<g data-view="elevation">')[1].split('<g data-view="typical-section">')[0];
       const tor=Number(/data-elevation-datum="top-of-rail"><line[^>]*y1="([\d.]+)"/.exec(elevation)![1]);
-      // Horizontal break symbols above the rail: one on each column where it continues to the roof.
+      // Horizontal break symbols: a short column piece is not broken at both ends, so only the stub below the seat
+      // carries a break, one on each column; above the girder the column is shown on the typical section.
       const breaks=[...elevation.matchAll(/<polyline class="annotation" points="([^"]+)"\/>/g)].map(m=>m[1].split(' ').map(v=>Number(v.split(',')[1]))).filter(ys=>Math.max(...ys)-Math.min(...ys)<10);
-      const above=breaks.filter(ys=>Math.min(...ys)<tor);
-      expect(above).toHaveLength(p.spans.length+1);
-      for(const ys of above)expect(Math.max(...ys)).toBeLessThan(tor-6);
+      expect(breaks.filter(ys=>Math.min(...ys)<tor)).toHaveLength(0);
+      expect(breaks).toHaveLength(p.spans.length+1);
     }
   });
 

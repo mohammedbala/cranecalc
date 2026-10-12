@@ -13,7 +13,7 @@ import type { CalculationSnapshot } from '../engine/types';
 import { referenceCrossheads } from '../data/aiscReferenceShapes';
 import { bearingStiffenerProfile } from './bearingStiffenerGeometry';
 import { boltProperties } from '../engine/connectionStrength';
-import { defaultFraming, type FramingSettings } from './framingSettings';
+import { defaultFraming, drawnFrameStyle, type FramingSettings } from './framingSettings';
 import { planSheetGeometry } from './planSheetGeometry';
 import { drawingLength, plateInches,dimensionLength} from './drawingFormat';
 import {refDim, sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
@@ -40,7 +40,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  const wb=d?.bracket?.enabled?d.bracket:undefined;
  const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  // A surveyed existing column is named and drawn as surveyed; only an unsurveyed one takes the reference framing style.
- const sc=supportColumn(p),surveyed=!sc.isNew&&!!p.existingColumn?.enabled,tapered=f.frameStyle==='tapered'&&!surveyed;
+ const sc=supportColumn(p),surveyed=!sc.isNew&&!!p.existingColumn?.enabled,tapered=drawnFrameStyle(p,f)==='tapered';
  const colName=sc.isNew?sc.name:surveyed?`EXISTING ${p.existingColumn!.shape||'BUILT-UP'} COLUMN`:tapered?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN',colRef=sc.isNew?columnReference(p):`${colName} (REF.)`;
  const bracket=referenceCrossheads.find(v=>v.name===f.crosshead)!;
  const colAt=(y:number)=>tapered?m().columnDepthAt(y):m().column.d,colLine=sc.isNew?'runway-line':'reference-line';

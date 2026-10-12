@@ -34,18 +34,17 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
   const yFlange=Y(0),yFlangeTop=Y(b.tf),ySleeveTop=Y(sleeve.length),yWasher=ySleeveTop-e.washerThickness*k,yHead=yWasher-hx.head*k;
   const yBearBot=yBear+bs.thickness*k,ySeatBot=yBearBot+seatT*k,yNut=ySeatBot+washer.t*k,yEnd=yNut+hx.nut*k;
   let svg='<g data-view="sliding-bolt">';
-  // Girder bottom flange, broken both ends, with the slot cut through it.
+  // Girder bottom flange with the slot cut through it, and the bearing plate and bracket seat each with a standard
+  // hole: the stacked plies end together each side under one break line across the stack.
   const slot=g.slot/2;
   for(const side of [-1,1]){
    const near=X(side*slot),far=X(side*half);
    svg+=line([near,yFlangeTop],[far,yFlangeTop],'runway-line')+line([near,yFlange],[far,yFlange],'runway-line')+line([near,yFlangeTop],[near,yFlange],'runway-line');
-   svg+=breakLine([far,yFlangeTop-5],[far,yFlange+5]);
+   svg+=breakLine([far,yFlangeTop-5],[far,ySeatBot+5]);
   }
-  // Bearing plate and bracket seat, broken both ends, each with a standard hole.
   for(const [top,t,cls] of [[yBear,bs.thickness,'runway-line'],[yBearBot,seatT,wb||cs?'runway-line':'reference-line']] as const)for(const side of [-1,1]){
-   const near=X(side*g.hole/2),far=X(side*(half-.25*inch));
+   const near=X(side*g.hole/2),far=X(side*half);
    svg+=line([near,top],[far,top],cls)+line([near,top+t*k],[far,top+t*k],cls)+line([near,top],[near,top+t*k],cls);
-   svg+=breakLine([far,top-3],[far,top+t*k+3]);
   }
   // Sleeve walls in the slot, standing on the bearing plate.
   const od=sleeve.od,wall=sl.wall;

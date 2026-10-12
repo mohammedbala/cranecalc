@@ -8,7 +8,7 @@ import { validateProject } from '../engine/calculate';
 import { referenceColumns, referenceCrossheads, shapeMeters } from '../data/aiscReferenceShapes';
 import { buildReferenceFraming,newColumnFraming } from './referenceFraming';
 import { buildReferenceStructure, cloneOppositeRunway } from './referenceStructure';
-import { defaultFraming, framingSchema, type FramingSettings } from './framingSettings';
+import { defaultFraming, drawnFrameStyle, framingSchema, type FramingSettings } from './framingSettings';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 const tieFaceMeters=(p:Parameters<typeof flangeTieGeometry>[0])=>{const f=flangeTieGeometry(p)?.face;return f===undefined?undefined:f/1000;};
 
@@ -56,7 +56,7 @@ function cutLines(group: THREE.Object3D, at: number, keep: (mesh: THREE.Mesh) =>
 
 export function planSheetGeometry(input: ProjectInput, settings: FramingSettings = defaultFraming) {
   if (validateProject(input).length) throw Error('Correct project inputs before drawing the plan sheet.');
-  const f = framingSchema.parse(settings), s = input.section;
+  const parsed = framingSchema.parse(settings), f = {...parsed, frameStyle: drawnFrameStyle(input, parsed)}, s = input.section;
   const length = input.spans.reduce((a, b) => a + b, 0) / 1000;
   const d = s.d / 1000, bf = s.bf / 1000, tf = s.tf / 1000, tw = s.tw / 1000;
   const supports = [-length / 2];
