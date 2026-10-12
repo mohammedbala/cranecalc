@@ -31,7 +31,9 @@ import {columnStiffenerChecks,stiffenedColumnChecks,panelStiffenerNote,flangeSti
 const inch=25.4,kip=4448.2216152605;
 type Peak={value:number;caseId:string;x:number;
  /** Station along the haunch, and the demand and capacity there, where the check scans the taper. */
- y?:number;demand?:number;capacity?:number};
+ y?:number;demand?:number;capacity?:number;
+ /** The quantities of the governing case that the worked example substitutes (seat strip, bearing stiffener). */
+ work?:Record<string,number>};
 export const usesTaperedHaunch=(p:ProjectInput)=>!!p.details?.bracket?.enabled&&isTaperedHaunch(p.details.bracket);
 /** Geometry of the project's haunch. */
 export const projectHaunch=(p:ProjectInput)=>haunchGeometry(p.details!.bracket!,p.details!.bearing.width);
@@ -262,15 +264,15 @@ export function haunchWebBearing(g:HaunchGeometry,E:number,Fy:number,lb:number,m
  */
 export function topFlangeStrip(g:HaunchGeometry,loads:BracketLoads,W:number,bearingThickness:number,bearingLength:number){
  const s=g.stiffener,c=Math.max(0,W/2-s.t/2),xs=g.tw/2+s.width;
- let across=0,along=0;
+ let across=0,along=0,acrossAt={P:0,l:0},alongAt={P:0,x:0,be:0};
  for(const v of loads){
   const l=v.length??0;if(l<=0)continue;
-  const spread=Math.min(l+2*bearingThickness,bearingLength);
-  across=Math.max(across,Math.abs(v.vertical)*c**2/(2*spread*W));
+  const spread=Math.min(l+2*bearingThickness,bearingLength),m=Math.abs(v.vertical)*c**2/(2*spread*W);
+  if(m>across){across=m;acrossAt={P:Math.abs(v.vertical),l:spread};}
   for(const sx of [-1,1]){const lo=sx*(v.offset-l/2),hi=sx*(v.offset+l/2),a=Math.max(Math.min(lo,hi),xs),b=Math.max(lo,hi);if(b<=xs)continue;
-   const P=Math.abs(v.vertical)*(b-a)/l,x=(a+b)/2;along=Math.max(along,P*(x-xs)/(W+2*(a-xs)));}
+   const P=Math.abs(v.vertical)*(b-a)/l,x=(a+b)/2,be=W+2*(a-xs),m2=P*(x-xs)/be;if(m2>along){along=m2;alongAt={P,x,be};}}
  }
- return {across,along,moment:Math.max(across,along),c,xs};
+ return {across,along,moment:Math.max(across,along),c,xs,acrossAt,alongAt};
 }
 /** Plate thickness at the column face and at the bracket: the nearer end of a flange is the column (y = 0). */
 export const receiverModulus=(c:{depth:number;width:number;flangeThickness:number;webThickness:number})=>{
@@ -399,9 +401,9 @@ export function createTaperedHaunchCollector(p:ProjectInput){
    peak('bottomFlange',Math.max(0,f.C)/(g.bb*g.tb)+Math.abs(f.Mbot)/(g.tb*g.bb**2/6));
    if(net)peak('topNet',Math.max(0,stationMoment(f,net.s,g.a)/net.s.h0+f.N/2)/net.An);
    peak('webBearing',Math.max(0,f.V));
-   peak('strip',topFlangeStrip(g,all,W,d.bearing.thickness,Lbr).moment);
+   {const t=topFlangeStrip(g,all,W,d.bearing.thickness,Lbr);peak('strip',t.moment,{work:{c:t.c,xs:t.xs,W,across:t.across,along:t.along,P:t.acrossAt.P,l:t.acrossAt.l,Pa:t.alongAt.P,xa:t.alongAt.x,be:t.alongAt.be}});}
    for(const s of f.sides){const P=Math.abs(s.P),x=stiffenerLoadPoint(g,s.x),Pr1=P/sf.half,Mr=P*Math.abs(x-sf.xc)/available(Fy*sf.Z,method,.9,1.67);
-    peak('stiffener',Pr1>=.2?Pr1+8/9*Mr:Pr1/2+Mr);peak('stiffenerForce',Math.max(0,s.P));peak('stiffenerWeld',haunchStiffenerWeldStress(g,sf,P,x));}
+    peak('stiffener',Pr1>=.2?Pr1+8/9*Mr:Pr1/2+Mr,{work:{P,x,xc:sf.xc,Pc:sf.half,Z:sf.Z}});peak('stiffenerForce',Math.max(0,s.P));peak('stiffenerWeld',haunchStiffenerWeldStress(g,sf,P,x));}
    const w=haunchWeldStress(g,grp,root,f);peak('webWeld',w.web);
    if(grp.cjp){const r=haunchCjpRatios(g,root,f,method,Fy);peak('cjpTop',r.top);peak('cjpBottom',r.bottom);}
    else{peak('flangeWeld',w.flange);peak('flangeBase',2*w.flange*g.flangeWeld/Math.SQRT2/Math.min(g.tt,g.tb,c.flangeThickness));}

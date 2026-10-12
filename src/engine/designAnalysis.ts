@@ -74,7 +74,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  const site=runwaySiteSeismic(p),secured=site?.input.liftedLoadSecured?1:0,lineMass=site?site.mass.line*Math.max(...p.spans):0;
  const combinations:(ReturnType<typeof craneCombinations>[number]&{seismic?:number})[]=[...craneCombinations(p.method,di.concurrency==='full'),...seismicCraneCombinations(p)],records=new Map<string,DesignCaseSummary>();
  for(const c of combinations)records.set(c.id,{id:`${p.method} ${c.id}`,equation:c.equation,moment:0,lateralMoment:0,shear:0,reaction:0,axial:0,interaction:0,positions:[],location:0});
- const result:DesignAnalysis={combinations:[],cases:0,convergence:0,meshConvergence:0,equilibriumError:0,singleVertical:0,serviceRotation:0,deadRotation:abs(supportNodes.map(i=>dead.rotation[i])),singleLateral:0,endRotation:0,serviceReaction:0,fatigueMin:0,fatigueMax:0,wheelLoad:0,wheelNearEndLoad:0,torsion:0,moment:0,shear:0,reaction:0,uplift:0,axial:0,lateralMoment:0,topLateralMoment:0,bottomLateralMoment:0,interaction:0,governing:{}};
+ const result:DesignAnalysis={combinations:[],cases:0,convergence:0,meshConvergence:0,equilibriumError:0,singleVertical:0,serviceRotation:0,deadRotation:abs(supportNodes.map(i=>dead.rotation[i])),singleLateral:0,endRotation:0,serviceReaction:0,fatigueMin:0,fatigueMax:0,wheelLoad:0,wheelNearEndLoad:0,torsion:0,moment:0,shear:0,reaction:0,uplift:0,axial:0,lateralMoment:0,interactionTop:0,interactionBottom:0,topLateralMoment:0,bottomLateralMoment:0,interaction:0,governing:{}};
  const railTM=samples.map(x=>momentAt(x,railT.reactions,[],p.railWeight*verticalLever)),railBM=samples.map(x=>momentAt(x,railB.reactions,[],-p.railWeight*verticalLever));
  const deadAdjacent=adjacentReactions(p,[],q),liveAdjacent=adjacentReactions(p,[],di.liveLoad);
  const deadM=samples.map(x=>momentAt(x,dead.reactions,[],q)),liveM=samples.map(x=>momentAt(x,live.reactions,[],di.liveLoad));
@@ -90,7 +90,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
   }
  }
  const chosen:{index:number;response:typeof responses[number][number]}[]=[];
- function govern(key:'moment'|'shear'|'reaction'|'uplift'|'axial'|'lateralMoment'|'topLateralMoment'|'bottomLateralMoment'|'interaction',value:number,c:DesignCaseSummary){if(value>result[key]){result[key]=value;result.governing[key]={...c,positions:[...c.positions]};}}
+ function govern(key:'moment'|'shear'|'reaction'|'uplift'|'axial'|'lateralMoment'|'topLateralMoment'|'bottomLateralMoment'|'interaction'|'interactionTop'|'interactionBottom',value:number,c:DesignCaseSummary){if(value>(result[key]??0)){result[key]=value;result.governing[key]={...c,positions:[...c.positions]};}}
  function evaluate(){
   // Each subset includes independent empty/loaded crane states. Minimum lifted
   // load is zero conservatively; no invented minimum manufacturer lifted load.
@@ -148,7 +148,9 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
       let M:number,Mt:number,Mb:number;
       if(wheel){M=momentAt(x,vr,vLoads,factors.d*q+factors.live*di.liveLoad);Mt=momentAt(x,tr,tLoads,factors.d*p.railWeight*verticalLever);Mb=momentAt(x,br,bLoads,-factors.d*p.railWeight*verticalLever);}
       else{M=factors.d*deadM[n]+factors.live*liveM[n];Mt=factors.d*railTM[n];Mb=factors.d*railBM[n];chosen.forEach((s,i)=>{const m=s.response.moments;M+=factors.cd*m.vd[n]+f[i]*m.vl[n]+factors.i*m.vi[n];Mt+=verticalLever*(factors.cd*m.td[n]+f[i]*m.tl[n]+factors.i*m.ti[n])+(i===hi?(1+railLever)*(factors.h*m.th[n]*sign+eh*(m.td[n]+secured*m.tl[n])):0);Mb-=verticalLever*(factors.cd*m.bd[n]+f[i]*m.bl[n]+factors.i*m.bi[n])+(i===hi?railLever*(factors.h*m.bh[n]*sign+eh*(m.bd[n]+secured*m.bl[n])):0);});}
-      const My=Math.max(Math.abs(Mt),Math.abs(Mb)),u=Math.max(interaction(axial,M,Mt,{...strength,flangeMinor:strength.topMinor??strength.flangeMinor},p.method).utilization,interaction(axial,M,Mb,{...strength,flangeMinor:strength.bottomMinor??strength.flangeMinor},p.method).utilization);
+      // H1 at each flange with that flange's lateral moment and resistance (AISC DG7); the larger governs.
+      const My=Math.max(Math.abs(Mt),Math.abs(Mb)),uTop=interaction(axial,M,Mt,{...strength,flangeMinor:strength.topMinor??strength.flangeMinor},p.method).utilization,uBottom=interaction(axial,M,Mb,{...strength,flangeMinor:strength.bottomMinor??strength.flangeMinor},p.method).utilization,u=Math.max(uTop,uBottom);
+      govern('interactionTop',uTop,{...c,location:x,moment:M,lateralMoment:Math.abs(Mt)});govern('interactionBottom',uBottom,{...c,location:x,moment:M,lateralMoment:Math.abs(Mb)});
       c.moment=Math.max(c.moment,Math.abs(M));c.lateralMoment=Math.max(c.lateralMoment,My);
       if(u>c.interaction){c.interaction=u;c.location=x;}
       // This interaction is evaluated at each actual concurrent station.
