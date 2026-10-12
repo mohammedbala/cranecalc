@@ -10,10 +10,11 @@ const s=demoFocus005Snapshot(),h=compactReport(s,'');
 describe('notation and fatigue summary plot',()=>{
  it('lists the principal symbols used in the equations, and only those',()=>{
   expect(h).toMatch(/\/ Notation<\/h2>/);
-  const n=notationSection(['\\phi R_n\\ge R_u','F_{SR}=1000(C_f/n)^{1/3}']);
-  expect(n).toMatch(/Resistance factor, LRFD/);expect(n).toMatch(/Constant from Table A-3.1/);expect(n).not.toMatch(/Saint-Venant/);
-  const all=notationSection(s.checks.map(c=>c.equation??''));
-  expect((all.match(/<tr><td>/g)??[]).length).toBeGreaterThan(60);
+  // Brief: crane-girder symbols only; standard AISC symbols (phi, F_y, E) are not listed.
+  const n=notationSection(['\\phi R_n\\ge R_u','F_y','F_{SR}=1000(C_f/n)^{1/3}']);
+  expect(n).toMatch(/Constant from Table A-3.1/);expect(n).not.toMatch(/Resistance factor|yield stress/);
+  const all=notationSection(s.checks.map(c=>c.equation??'')),rows=(all.match(/<tr><td>/g)??[]).length;
+  expect(rows).toBeGreaterThan(10);expect(rows).toBeLessThanOrEqual(30);
   expect(all).not.toMatch(/F_yA_g|n_i\/N_i/);
  });
  it('plots every evaluated fatigue detail against its design curve, numbered as in the table',()=>{
