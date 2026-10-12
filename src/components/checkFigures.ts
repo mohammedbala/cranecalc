@@ -2,6 +2,7 @@ import type {ProjectInput} from '../engine/types';
 import {componentDetail,type Component} from './figureDetails';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {isoTopicFigure} from '../report/hairline/topics';
+import {railSeat} from '../engine/railSeat';
 
 /** Shared explanatory linework for the live worksheet and server-rendered PDF.
  * Black and white: the components a figure is about are drawn heavy with a light gray fill, everything else is
@@ -172,12 +173,12 @@ export function checkFigure(topic:string,p?:ProjectInput):CheckFigure{
    steps=['Lateral force H on the top flange','Ties restrain the flange at the supports (finite stiffness)','Flange buckles between ties: Lb'];detail=['tie'];break;
   case 'Fatigue':title='Stress range at a cyclic detail';drawing=path('M34 18V83H206')+path('M40 54Q50 7 63 54T87 54T111 54T135 54T159 54T183 54',true)+path('M39 31H203M39 77H203',false,true)+arrow(199,31,199,77)+arrow(199,77,199,31)+label(216,57,'Δσ')+label(119,101,'REPEATED CYCLES n')+mark(1,52,12)+mark(2,222,40)+mark(3,62,101);
    steps=['Each wheel passage gives a stress range Δσ at the detail','Detail category: AISC 360 Appendix 3','Cycles n in each duty bin; Miner sum'];detail=['criteria'];break;
-  case 'Detailing':title='Bolt layout and movement allowance';drawing=rect(33,30,174,46,true)+[65,168].map(x=>`<rect x="${x-13}" y="47" width="26" height="12" rx="6" fill="white" stroke="${ink}" stroke-width="1.4"/>`+circle(x,53,4)).join('')+dimension(33,65,20,'edge',true)+dimension(65,168,90,'pitch / travel')+path('M117 44H185',false,true)+mark(1,20,40)+mark(2,200,96);
-   steps=['Edge distance and pitch of each bolt','Slot length for the movement'];detail=['tie'];break;
+  case 'Detailing':title='Sliding end: bolt layout and movement allowance';drawing=rect(33,30,174,46,true)+[65,168].map(x=>`<rect x="${x-13}" y="47" width="26" height="12" rx="6" fill="white" stroke="${ink}" stroke-width="1.4"/>`+circle(x,53,4)).join('')+dimension(33,65,20,'edge',true)+dimension(65,168,90,'pitch / travel')+path('M117 44H185',false,true)+mark(1,20,40)+mark(2,200,96);
+   steps=['Edge distance and pitch of each bolt','Slot length for the movement'];detail=['bearing'];break;
   case 'Connections':case 'Flange attachment':case 'Cap tieback':case 'Cap tieback movement':({title,note,linework:drawing,path:steps,detail}=tie(p,topic==='Flange attachment'));break;
   case 'Column bracket':({title,note,linework:drawing,path:steps,detail}=bracket(p));break;
   case 'Rail details':title='Rail, keeper and local flange';drawing=rect(40,86,160,7,true)+rect(72,82,96,4)+poly('M82 82V76H113V52H104V40H136V52H127V76H158V82Z')+rect(66,74,15,8,true)+rect(159,74,15,8,true)+circle(120,22,13)+arrow(120,0,120,9)+arrow(176,46,140,46)+label(180,49,'H','start')+path('M196 76L176 79')+label(198,74,'KEEPER','start')+mark(1,104,14)+mark(2,30,82)+mark(3,190,36)+mark(4,52,70);
-   steps=['Wheel P on the rail head','Rail base bears on the pad and flange','Side thrust H on the rail head','Keepers and their welds to the flange'];detail=['rail'];break;
+   steps=['Wheel P on the rail head',`Rail base bears on the ${p?.details&&railSeat(p).pad?'pad on the ':''}${p?.section.kind==='cap'?'cap channel':'top flange'}`,'Side thrust H on the rail head',`Keepers and their welds to the ${p?.section.kind==='cap'?'cap channel':'flange'}`];detail=['rail'];break;
   case 'Analysis':title='Equilibrium and refinement';drawing=beam(48,true)+[82,155].map(x=>arrow(x,12,x,45)).join('')+arrow(30,108,30,74)+arrow(210,108,210,74)+[55,82,109,136,163,190].map(x=>circle(x,52,2)).join('')+label(120,92,'ΣR = ΣP')+label(120,110,'refine travel + stations')+mark(1,70,20)+mark(2,44,100)+mark(3,166,72);
    steps=['Wheel loads ΣP','Reactions ΣR: equilibrium','Refine crane travel and mesh until converged'];detail=['girder'];break;
   case 'Longitudinal bracing':title='Crane-level longitudinal bracing';drawing=path('M40 100H200')+path('M60 100V22M180 100V22M60 22H180')+path('M60 100L180 22M60 22L180 100',true)+arrow(14,22,56,22)+label(26,15,'F')+label(120,113,'BRACED BAY · TIERS · DIAGONALS')+mark(1,40,34)+mark(2,148,52)+mark(3,196,92);note='Traction or stop force and building wind/seismic forces resolve into the braced-bay diagonals; columns and foundation take the overturning.';

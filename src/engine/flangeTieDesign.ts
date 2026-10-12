@@ -3,7 +3,7 @@ import type {ProjectInput,CheckResult,CalculationSnapshot} from './types';
 import {flangeTieGeometry,stiffenerTieGeometry,gussetRotation} from './tieGeometry';
 import {format} from './units';
 import {available} from './aiscStrength';
-import {minimumFillet,parallelWeldGroup,transverseFilletFatigue} from './connectionStrength';
+import {filletMinimum,parallelWeldGroup,transverseFilletFatigue} from './connectionStrength';
 import {aiscShapeByName} from '../data/aiscSections';
 /** Elastic local-component bounds. No yield-line redistribution, contact
  * spreading beyond the saddle length, or global receiver stiffness is credited. */
@@ -66,8 +66,8 @@ export function flangeTieChecks(s:CalculationSnapshot,force:number):CheckResult[
  add('weld-fatigue','Flange attachment welds · all-cycle fatigue',Math.max(f.gussetWeld.demand,f.saddleWeld.demand,f.rootWeld),weldF,'f_{sr}\\le F_{SR}\\ \\ \\text{(Cat. F)}','Largest elastic weld throat range (gusset-to-saddle fillets, saddle transverse end fillets, column root fillets) from the full brace-force range, applied to every cycle. The base metal at the toe of the transverse end fillets on the girder flange is in the fatigue register (AISC Table A-3.1 item 7.1).');
  const rootRange=s.detailResults.demands.braceFatigue*(1/(t.gussetThickness*g.columnGusset)+6*g.eccentricity/(g.columnGusset*t.gussetThickness**2));
  add('column-root-fatigue','Column gusset root · normal fatigue',rootRange,Math.min(C,transverseFilletFatigue(t.gussetThickness,c.weldSize,cyc).capacity),single?'f_{sr}=\\Delta F/(t_gb_g)+6\\Delta Fe/(b_gt_g^2)':'f_{sr}=\\Delta F/(t_gb_g)','Column-side paired fillet root; no threshold credit for RFIL below one.'+(single?' Includes the single plate\'s lap couple range.':''));
- const required=minimumFillet(Math.max(a.saddleThickness,t.gussetThickness,p.section.tf));
- add('weld-minimum','Flange attachment · minimum weld',required,a.weldSize,'w\\ge w_{min}','Thickest joined plate.', 'length');
+ const required=filletMinimum([a.saddleThickness,p.section.tf],[t.gussetThickness,a.saddleThickness]);
+ add('weld-minimum','Flange attachment · minimum weld',required,a.weldSize,'w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined, for each joint (saddle to flange, gusset to saddle).', 'length');
  add('weld-maximum','Flange attachment · weld edge limit',a.weldSize,Math.min(a.saddleThickness,t.gussetThickness,p.section.tf)-1.5875,'w\\le t-1/16\\,in','No edge buildup credited.','length');
  const shape=aiscShapeByName(p.section.catalogueId??''),fillet=(shape?shape.kdes*25.4-p.section.tf:0)+a.clearance;
  add('root-clearance','Saddle · rolled-root clearance',fillet,a.webGap,'g_{web}\\ge(k_{des}-t_f)+c','Nominal design fillet bound plus entered clearance; verify actual rolling tolerances.','length');

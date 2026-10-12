@@ -57,8 +57,16 @@ export function transverseFilletFatigue(thickness:number,weld:number,cycles:numb
  const finite=finiteLife(4.4,cycles,reduction);
  return {reduction,capacity:reduction===1?Math.max(fatigueThresholdKsi.C*KSI,finite):finite};
 }
-/** Table J2.4: use the thicker joined part; inches converted to mm. */
-export function minimumFillet(thickerPart:number){return (thickerPart<=6.35?1/8:thickerPart<=12.7?3/16:thickerPart<=19.05?1/4:5/16)*25.4;}
+/**
+ * AISC 360-16 Table J2.4 minimum fillet size by the material thickness of the THINNER part joined (in, converted to mm).
+ * Sizing helpers may pass a thicker part as a conservative starting value; the checks use filletMinimum.
+ */
+export function minimumFillet(thinnerPart:number){return (thinnerPart<=6.35?1/8:thinnerPart<=12.7?3/16:thinnerPart<=19.05?1/4:5/16)*25.4;}
+/**
+ * The Table J2.4 minimum for one fillet size used on several joints: the largest of the joint minimums, each by the
+ * thinner of its two parts. AISC 360-16 Table J2.4 heading: "Material Thickness of Thinner Part Joined".
+ */
+export function filletMinimum(...joints:[number,number][]){return Math.max(...joints.map(([a,b])=>minimumFillet(Math.min(a,b))));}
 /**
  * J2.2b(c): a fillet designed for strength is at least four times its size long, or else its effective size
  * is taken as no more than one quarter of its length.

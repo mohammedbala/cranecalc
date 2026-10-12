@@ -1,3 +1,5 @@
+import {caseBase,caseIdPattern} from './caseNames';
+import type {RunwayCaseRecord} from './runwayDetails';
 import {packageContentChecks} from './detailTemplate';
 import {connectionCoordination,coordinationChecks} from './connectionCoordination';
 import {constructionNoteChecks} from './constructionNotes';
@@ -153,5 +155,13 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
  // Failed engineering criteria can export; failed numerical verification cannot.
  snapshot.eligible=!blocking&&!snapshot.errors.length&&snapshot.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass');
  snapshot.checks=snapshot.checks.map(c=>presentCheck(c,p.units));
+ // The analysis cases a printed result names, with their combination and crane positions: the report prints these
+ // names, not the case ids (the CSV keeps the ids).
+ const registry=(snapshot.detailResults as {caseRegistry?:Map<string,RunwayCaseRecord>}|undefined)?.caseRegistry;
+ if(snapshot.detailResults&&registry){
+  const index:Record<string,RunwayCaseRecord>={},text=JSON.stringify([snapshot.checks,snapshot.detailResults,snapshot.designAnalysis?.governing]);
+  for(const m of text.matchAll(caseIdPattern)){const base=caseBase(m[0]),r=registry.get(base);if(r)index[base]=r;}
+  snapshot.detailResults.caseIndex=index;
+ }
  return snapshot;
 }

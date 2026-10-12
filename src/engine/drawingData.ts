@@ -39,6 +39,16 @@ export const unevaluatedStructure=(s:CalculationSnapshot)=>s.checks.filter(c=>c.
  * A sheet is issued only for a validated project package with an engineer of record, an issue purpose, the
  * adopted code and, where the calculation leaves structure unchecked, a reference to the engineer's evaluation.
  */
+/**
+ * The one revision identity of the calculation and the drawings: the last entered revision (letter and date) when the
+ * project records revisions, else the calculation date. The content fingerprint (s.revision) is printed once, small,
+ * as the calc fingerprint; the letter is what the report header, the drawing title blocks and the file names carry.
+ */
+export function revisionIdentity(s:CalculationSnapshot){
+ const list=(s.input.drawing?.revisions??[]).filter(r=>r.rev.trim()),last=list[list.length-1];
+ const created=/^\d{4}-\d{2}-\d{2}/.exec(s.createdAt)?.[0]??'';
+ return {letter:last?.rev.trim(),date:last?.date.trim()||created,fingerprint:s.revision,label:last?`Rev ${last.rev.trim()}`:`Calc ${s.revision}`,revisions:list};
+}
 export function issueStatus(s:CalculationSnapshot){
  const p=s.input,d=p.drawing,eor=d?.eor,reasons:string[]=[];
  if(p.reportPurpose==='demonstration')return {issued:false,label:'DEMONSTRATION - NOT FOR CONSTRUCTION',reasons:['Fictitious demonstration data']};

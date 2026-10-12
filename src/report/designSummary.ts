@@ -4,16 +4,16 @@ import {stepBadge} from '../components/checkFigures';
 import {dcText} from '../engine/checkPresentation';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
-import {equationCell,governing,shortReference,statusLabel} from './reportParts';
-import {supportAssemblyFigure} from './hairline/figures';
+import {equationCell,governing,shortReference,statusLabel,subscripts} from './reportParts';
+import {loadPathSteps,supportAssemblyFigure} from './hairline/figures';
 import {classifyCheck,type Taxonomy} from '../engine/checkTaxonomy';
 
 /**
  * The summary at the top of the calculation: the support section with its numbered load path, and the
  * governing check of each element along that path.
  */
-const esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-interface Element{key:string;step?:number;label:string;component?:Component;path:string;match:(c:CheckResult)=>boolean}
+const esc=(v:unknown)=>subscripts(String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!)));
+interface Element{key:string;step?:number;order:number;label:string;component?:Component;path:string;match:(c:CheckResult)=>boolean}
 
 function supportLabel(p:ProjectInput){
  if(activeColumnCap(p))return 'Column cap';
@@ -23,26 +23,29 @@ function supportLabel(p:ProjectInput){
 const bearingIds=['bearing-plate','bearing-contact','hold-down-model','stiffener-weld','stiffener-combined-weld','stiffener-bearing','stiffener-column','stiffener-lateral-flexure','stiffener-width','stiffener-thickness','stiffener-weld-minimum','stiffener-weld-maximum','stiffener-fatigue','stiffener-weld-fatigue'];
 /** Elements in load-path order; each check belongs to the first element that claims it. */
 export function summaryElements(p:ProjectInput):Element[]{
- const column=p.existingColumn?.enabled,isNew=column&&p.existingColumn!.isNew,cap=!!activeColumnCap(p);
- return [
-  {key:'rail',step:1,label:'Rail, keepers & joints',component:'rail',path:'Wheel load P and side thrust H at the rail head; the rail bears on the flange, the keepers hold it',match:c=>c.group==='Rail details'||c.id.startsWith('rail-')},
-  {key:'bearing',step:3,label:'Bearings & end connection',component:'bearing',path:`Bearing stiffeners and bearing plate${activeEndBearing(p)?'; bolts carry longitudinal force and uplift':''}`,match:c=>c.group==='End bearings'||bearingIds.includes(c.id)||/^(simple-|rotation-clearance$)/.test(c.id)},
-  {key:'girder',step:2,label:'Runway girder · strength',component:'girder',path:'Bending, shear, torsion and wheel patch between supports',match:c=>['Strength','Local forces','Cap channel'].includes(c.group)},
-  {key:'service',step:2,label:'Runway girder · deflection',path:'Single crane, static: vertical and rail-head lateral movement',match:c=>c.group==='Serviceability'},
-  {key:'fatigue',step:2,label:'Fatigue · girder and attachments',path:'Stress range at every detail, all duty bins',match:c=>c.group==='Fatigue'},
-  {key:'support',step:4,label:supportLabel(p),component:'support',path:cap?'Cap plate, stiffeners and welds into the column':p.details?.bracket?.enabled?'Seat, bracket and its welds into the column':'Reactions reported for the support design by others',match:c=>c.group==='Column bracket'||c.group==='Column cap'},
-  {key:'column',step:5,label:column?(isNew?'New column':'Existing column'):'Supporting structure',component:'column',path:column?(isNew?'Fixed-base cantilever: P, M, V and drift':'Crane reactions with the existing building loads'):'Building frame and foundations by others',match:c=>['Existing column','New column','Supporting structure'].includes(c.group)},
-  {key:'base',step:6,label:'Base plate, anchors & footing',component:'base',path:'Base plate on grout, anchor rods, footing on soil',match:c=>c.group==='New column base'},
-  {key:'tie',step:7,label:cap?'Girder end restraint':'Top-flange tie',component:'tie',path:cap?'Fork of bearing stiffeners and bolted bottom flange':'Lateral flange force through the tie to the column',match:c=>['Flange attachment','Tie movement','Bracing','Cap tieback','Cap tieback movement'].includes(c.group)||(c.group==='Connections'&&c.id.startsWith('tie-'))},
-  {key:'longitudinal',step:8,label:'Longitudinal system',component:'bracing',path:'Traction and stop force through the locating bearing to the strut and bracing',match:c=>['Longitudinal bracing','Brace connections','Crane-level strut'].includes(c.group)},
-  {key:'stops',step:9,label:'End stops',component:'end-stop',path:'Bumper force at the runway ends into the girder',match:c=>c.group==='End stops'},
+ const column=p.existingColumn?.enabled,isNew=column&&p.existingColumn!.isNew,cap=!!activeColumnCap(p),n=loadPathSteps(p);
+ // Numbered as the summary figure's markers, without gaps; girder deflection and fatigue continue the girder (no number).
+ const list:Omit<Element,'order'>[]=[
+  {key:'rail',step:n.rail,label:'Rail, keepers & joints',component:'rail',path:'Wheel load P and side thrust H at the rail head; the rail bears on the flange, the keepers hold it',match:c=>c.group==='Rail details'||c.id.startsWith('rail-')},
+  {key:'bearing',step:n.bearing,label:'Bearings & end connection',component:'bearing',path:`Bearing stiffeners and bearing plate${activeEndBearing(p)?'; bolts carry longitudinal force and uplift':''}`,match:c=>c.group==='End bearings'||bearingIds.includes(c.id)||/^(simple-|rotation-clearance$)/.test(c.id)},
+  {key:'girder',step:n.girder,label:'Runway girder · strength',component:'girder',path:'Bending, shear, torsion and wheel patch between supports',match:c=>['Strength','Local forces','Cap channel'].includes(c.group)},
+  {key:'service',label:'Runway girder · deflection',path:'Single crane, static: vertical and rail-head lateral movement',match:c=>c.group==='Serviceability'},
+  {key:'fatigue',label:'Fatigue · girder and attachments',path:'Stress range at every detail, all duty bins',match:c=>c.group==='Fatigue'},
+  {key:'support',step:n.support,label:supportLabel(p),component:'support',path:cap?'Cap plate, stiffeners and welds into the column':p.details?.bracket?.enabled?'Seat, bracket and its welds into the column':'Reactions reported for the support design by others',match:c=>c.group==='Column bracket'||c.group==='Column cap'},
+  {key:'column',step:n.column,label:column?(isNew?'New column':'Existing column'):'Supporting structure',component:'column',path:column?(isNew?'Fixed-base cantilever: P, M, V and drift':'Crane reactions with the existing building loads'):'Building frame and foundations by others',match:c=>['Existing column','New column','Supporting structure'].includes(c.group)},
+  {key:'base',step:n.base,label:'Base plate, anchors & footing',component:'base',path:'Base plate on grout, anchor rods, footing on soil',match:c=>c.group==='New column base'},
+  {key:'tie',step:n.tie,label:cap?'Girder end restraint':'Top-flange tie',component:'tie',path:cap?'Fork of bearing stiffeners and bolted bottom flange':'Lateral flange force through the tie to the column',match:c=>['Flange attachment','Tie movement','Bracing','Cap tieback','Cap tieback movement'].includes(c.group)||(c.group==='Connections'&&c.id.startsWith('tie-'))},
+  {key:'longitudinal',step:n.longitudinal,label:'Longitudinal system',component:'bracing',path:'Traction and stop force through the locating bearing to the strut and bracing',match:c=>['Longitudinal bracing','Brace connections','Crane-level strut'].includes(c.group)},
+  {key:'stops',step:n.stops,label:'End stops',component:'end-stop',path:'Bumper force at the runway ends into the girder',match:c=>c.group==='End stops'},
   {key:'gates',label:'Loads, analysis & detailing',path:'Load basis, equilibrium, convergence and detailing rules',match:()=>true}
  ];
+ const sub:Record<string,number>={service:.1,fatigue:.2};
+ return list.map(e=>({...e,order:e.key==='service'||e.key==='fatigue'?(n.girder??2)+sub[e.key]:e.step??99}));
 }
 export function elementChecks(s:CalculationSnapshot){
  const elements=summaryElements(s.input),out=new Map(elements.map(e=>[e.key,[] as CheckResult[]]));
  for(const c of s.checks)out.get(elements.find(e=>e.match(c))!.key)!.push(c);
- return elements.map(e=>({element:e,checks:out.get(e.key)!})).filter(v=>v.checks.length).sort((a,b)=>(a.element.step??99)-(b.element.step??99));
+ return elements.map(e=>({element:e,checks:out.get(e.key)!})).filter(v=>v.checks.length).sort((a,b)=>a.element.order-b.element.order);
 }
 
 /**
@@ -72,7 +75,7 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
   const all=[...tax.entries.values()].filter(t=>t.element===e.key),design=all.filter(t=>t.type==='design'&&t.gate==='evaluated'),fails=all.filter(t=>t.type==='design'&&t.check.status==='fail').length;
   const det=all.filter(t=>t.type==='detailing'&&t.gate==='evaluated').length,shown=lines.length+fat.length;
   return {e,g,counts:`${design.length} design check${design.length===1?'':'s'} (${shown} shown)${det?`, ${det} detailing rules`:''}${fails?`, ${fails} NG`:''}`};
- }).filter(v=>v!==undefined).sort((a,b)=>(a!.e.step??99)-(b!.e.step??99));
+ }).filter(v=>v!==undefined).sort((a,b)=>a!.e.order-b!.e.order);
  return `<table class="summary-checks"><colgroup><col class="s-el"/><col class="s-check"/><col class="s-eq"/><col class="s-dc"/><col class="s-res"/></colgroup><thead><tr><th>Element · specified detail</th><th>Governing design check · reference</th><th>Equation</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(v=>{
   const {e,g,counts}=v!,detail=e.component?componentDetail(e.component,p):'';
   return `<tr class="${g.c.status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b>${detail&&e.key!=='service'&&e.key!=='fatigue'?`<small>${esc(detail)}</small>`:''}<small class="path">${esc(e.path)}</small></td><td><b>${esc(g.label??g.c.title)}</b>${g.label?`<small>Controlling: ${esc(g.c.title)}</small>`:''}<small class="ref">${esc(shortReference(g.c))}</small><small>${counts}</small></td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—')}</td><td class="res"><b class="${g.c.status}">${esc(statusLabel(g.c.status))}</b></td></tr>`;

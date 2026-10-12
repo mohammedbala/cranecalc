@@ -1,7 +1,7 @@
 import {finiteLife} from './fatigueConstants';
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import {available} from './aiscStrength';
-import {boltCapacity,boltProperties,elasticBoltGroup,plateBearing,blockShear,parallelWeldGroup,minimumFillet} from './connectionStrength';
+import {boltCapacity,boltProperties,elasticBoltGroup,plateBearing,blockShear,parallelWeldGroup,filletMinimum} from './connectionStrength';
 import {flangeTieGeometry,tieRelease,tieEccentricity,columnGussetExtension} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {railKeeperResponse} from './railKeeper';
@@ -93,7 +93,7 @@ export function plateTieChecks(s:CalculationSnapshot,ctx:{force:number;cos:numbe
  const cb=strength[1],root=parallelWeldGroup({length:g.columnGusset,gauge:tg,size:c.weldSize,Fexx:m.Fexx,method,vx:cb.Vmv,vy:cb.Vv,normal:F,mx:cb.Mv+cb.Vv*g.columnGussetLength,my:Math.abs(F)*e+cb.Mmv+cb.Vmv*g.columnGussetLength,mz:0});
  add('tie-weld','Connections','Column gusset root fillets · tie force with lap couple and movement',root.demand,root.capacity,'stress','f_w=\\sqrt{(V_x/A_w)^2+(V_y/A_w)^2+(N/A_w+M_xy/I_x-M_yx/I_y)^2}',`Two ${fmt(c.weldSize)} fillets × ${fmt(g.columnGusset)}, one each face of the column gusset. The tie force is normal to the welds; the out-of-plane moment F·e + M + V·a (a = ${fmt(g.columnGussetLength)}, the gusset projection) is a couple across the gusset thickness${rel?'':'; the unreleased vertical movement adds in-plane shear and moment'}. All four weld endpoints; no directional increase.`);
  add('tie-weld-size','Connections','Column gusset root fillets · fillet edge limit',c.weldSize,tg-1.5875,'length','w\\le t_g-1/16\\,in','Root fillets along the column gusset edge; full-throat edge buildup is not credited.');
- add('tie-weld-minimum','Connections','Column gusset root fillets · minimum fillet',minimumFillet(Math.max(tg,g.receiver?.flangeThickness??tg)),c.weldSize,'length','w\\ge w_{min}','Thicker joined part (gusset or receiving column flange) controls the minimum fillet leg size.');
+ add('tie-weld-minimum','Connections','Column gusset root fillets · minimum fillet',filletMinimum([tg,g.receiver?.flangeThickness??tg]),c.weldSize,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined (the gusset or the receiving column flange).');
  // Hardware fit: socket clearance (AISC Manual Table 7-15 C1) from the girder-end bolts to the saddle above them, and
  // from the column-end bolts to the column flange and its root fillet toe.
  const C1=wrenchClearance(c.diameter),saddleClear=g.topDrop-c.gauge/2-g.attachment.saddleThickness,columnClear=g.barGap+c.edge-c.weldSize;

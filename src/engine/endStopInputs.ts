@@ -50,7 +50,7 @@ export const needsGirderStops=(p:ProjectInput)=>p.cranes.some(c=>!c.design?.bump
 export function bumperPath(p:ProjectInput,c:ProjectInput['cranes'][number]){
  if(c.design?.bumperBypassesGirder)return {location:'building' as const,label:'Building-mounted stop; girder bypassed',text:'Direct to a building-mounted stop; the girder is bypassed. Stop, building and foundation resistance are outside this calculation.'};
  const designed=!!activeEndStop(p);
- return {location:'girder' as const,label:'Girder-mounted stop',text:`Girder-mounted end stops${designed?` at ${stopLocation(p)} (checked in section 05A)`:' (not designed in this calculation)'}: the bumper force enters the girder and is carried by the girder axial force to its locating supports and on to the longitudinal load path of the building. It is included in the AIST stop combinations of the girder and support checks; building and foundation resistance beyond the checked members are outside this calculation.`};
+ return {location:'girder' as const,label:'Girder-mounted stop',text:`Girder-mounted end stops${designed?` at ${stopLocation(p)} (designed in this calculation)`:' (not designed in this calculation)'}: the bumper force enters the girder and is carried by the girder axial force to its locating supports and on to the longitudinal load path of the building. It is included in the AIST stop combinations of the girder and support checks; building and foundation resistance beyond the checked members are outside this calculation.`};
 }
 /** Active girder-mounted stop input, if the project designs one. */
 export const activeEndStop=(p:ProjectInput)=>p.details?.endStop?.enabled&&needsGirderStops(p)&&runwayEnds(p).length?p.details.endStop:undefined;

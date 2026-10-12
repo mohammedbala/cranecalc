@@ -60,5 +60,12 @@ export function demoFocus005RevB():ProjectInput{
  // evaluation, 10-year wind on the braced line) are omitted from this package and listed as by others.
  p.omitUnverified=true;
  note('Checks without data (frame type, 10-year wind drift, rail gauge from frame spread, runway seismic, IEBC alteration) omitted from the report and listed as not checked (by others).');
+ // One bumper data source throughout: the corrected supplier schedule (the end stop source still named CAP-CS-02).
+ p.details!.endStop!.source='Fictitious supplier schedule DEMO-CS-05 rev B: bumper force, bumper centerline height and contact diameter';
+ note('Bumper data source: the supplier schedule DEMO-CS-05 rev B (was CAP-CS-02).');
+ // One revision identity for the calculation and the drawings (Rev B), with the revision log: Rev A the review issue,
+ // Rev B the changes above.
+ p.drawing={...p.drawing!,revisions:[{rev:'A',date:'2026-10-09',description:'Issued for review',by:'CC'},
+  {rev:'B',date:'2026-10-12',description:'Revised for the review comments; changes in the revision log',by:'CC',changes:[...revBChanges]}]};
  return p;
 }

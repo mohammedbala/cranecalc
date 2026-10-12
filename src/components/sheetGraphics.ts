@@ -1,6 +1,6 @@
 import type { CalculationSnapshot } from '../engine/types';
 import { drawingScale } from './drawingFormat';
-import { issueStatus, supportColumn } from '../engine/drawingData';
+import { issueStatus, revisionIdentity, supportColumn } from '../engine/drawingData';
 import { capChannelProfile } from '../engine/channelProfile';
 /** Replaced with the sheet ordinal and count once the whole set is assembled. */
 export const sheetOrdinalToken='{{SHEET_ORDINAL}}';
@@ -137,7 +137,7 @@ export function sheetStart(s: CalculationSnapshot, number: string, title: string
   <g data-sheet-content="ARCH-D" data-content-scale="${contentScale}" transform="${contentTransform(contentScale)}">`;
 }
 export function titleBlock(s: CalculationSnapshot, number: string, title: string) {
-  const p=s.input,d=p.drawing,top=1548,bottom=1692,date=/^\d{4}-\d{2}-\d{2}/.exec(s.createdAt)?.[0]??'';
+  const p=s.input,d=p.drawing,top=1548,bottom=1692,rev=revisionIdentity(s),date=rev.date;
   const originator=d?.originator||p.engineer||'',checker=d?.checker||'';
   // Close the scaled drawing region: the title band is laid out in PDF points.
   let svg=`</g><g data-title-block="bottom-band">${line([36,top],[2556,top],'divider')}`;
@@ -148,8 +148,8 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   for(const [x,label] of [[66,'REV'],[361,'REVISION DESCRIPTION'],[676,'BY'],[801,'DATE']] as const)svg+=text(x,1564,label,10,'middle',700);
   const revisions=(d?.revisions??[]).filter(r=>r.description.trim()).slice(-4);
   if(revisions.length)revisions.forEach((r,i)=>{const y=1591+i*30;svg+=text(66,y,short(r.rev||'-',4),11,'middle',700)+text(110,y,short(r.description.toUpperCase(),62),11)+text(676,y,short(r.by.toUpperCase(),8),11,'middle')+text(740,y,short(r.date,12),11);});
-  // Output not yet issued under an entered revision is the first preliminary.
-  else svg+=text(66,1591,'P1',11,'middle',700)+text(110,1591,'CURRENT OUTPUT / ENGINEERING REVIEW',11)+text(740,1591,date,11);
+  // Output not yet issued under an entered revision: no revision letter, the calculation it was drawn from.
+  else svg+=text(66,1591,'-',11,'middle',700)+text(110,1591,`PRELIMINARY OUTPUT · CALC ${s.revision}`.toUpperCase(),11)+text(740,1591,date,11);
   svg+='</g><g data-title-panel="originator">';
   svg+=text(1056,1598,'CRANECALC',28,'middle',700)+text(1056,1620,'STRUCTURAL DESIGN WORKSHEET',10,'middle');
   svg+=line([876,1640],[1236,1640])+text(1056,1660,'DIMENSIONS GOVERN / DO NOT SCALE',10,'middle');
@@ -168,7 +168,7 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+='</g><g data-title-panel="sheet">';
   svg+=text(2170,1566,'DRAWING / SHEET NUMBER',10,'start',700)+text(2170,1611,`SHEET ${number}`,29,'start',700)+text(2546,1611,sheetOrdinalToken,12,'end',700);
   svg+=line([2156,1624],[2556,1624])+text(2170,1644,p.units==='SI'?'PAGE SIZE: ARCH D / 914 X 610 MM':'PAGE SIZE: ARCH D / 36 X 24 IN',12,'start',700);
-  svg+=text(2170,1662,`CALC REVISION: ${s.revision}`,11)+text(2170,1681,`DATE: ${date}    SCALE: AS SHOWN`,10);
+  svg+=text(2170,1662,rev.letter?`REVISION: ${rev.letter.toUpperCase()} (SAME AS THE CALCULATION)`:`CALC: ${s.revision}`,11)+text(2170,1681,`DATE: ${date}    SCALE: AS SHOWN`,10);
   svg+='</g></g>';
   const status=issueStatus(s);
   svg+=`<g data-stamp="${status.issued?'seal':'blank'}">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${eor?.firm.trim()?text(2466,1520,short(eor.firm.toUpperCase(),30),8,'middle'):''}${text(2466,1534,status.issued?'SEAL AND SIGNATURE REQUIRED':'NOT SEALED',9,'middle')}</g>`;
