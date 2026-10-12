@@ -38,7 +38,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // Top-flange tie on a direct flange saddle (simple spans): thin bars flex with end rotation and thermal travel,
  // sleeved bolts in vertical slots at the column gusset release support deflection. The column face is a placeholder.
  // The saddle fillets carry the tie force in fatigue across the flange: 3/8 in, as on the demonstration runway.
- const simple=p.system==='simple',weld=.3125*inch,saddleWeld=.375*inch,webGap=1*inch,rootStart=b.tw/2+webGap,saddle={length:3.5*inch,thickness:up(Math.max(1.5*inch,b.tf),.125*inch)};
+ // The saddle starts on the 1/4 in grid from the web centerline, at least 3/4 in and 1/4 in past the rolled fillet clear of the web.
+ const simple=p.system==='simple',weld=.3125*inch,saddleWeld=.375*inch,rootStart=up(Math.max(b.tw/2+.75*inch,k1+.25*inch),.25*inch),webGap=rootStart-b.tw/2,saddle={length:3.5*inch,thickness:up(Math.max(1.5*inch,b.tf),.125*inch)};
  const tieConnection=2.25*inch+2*1.25*inch,tieStart=up(Math.max(rootStart+.5*inch,b.bf/2-tieConnection+.25*inch),.25*inch),tieLength=26*inch;
  const tieSetback=up(saddle.length/2+weld+stiffenerThickness/2+weld+.25*inch,.25*inch),bearingLength=12*inch;
  // Stop bolts clear the runway-end tie saddle and the bearing stiffener with nut clearance.
@@ -51,16 +52,17 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    connection:{rows:2,gauge:2.5*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,diameter:.625*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:weld,weldLength:5*inch},
    ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:saddleWeld,columnFace:tieStart+tieLength+tieBarGap(saddleWeld)}}:{}),
    release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
-  end:{rows:4,gauge:2.875*inch,pitch:3*inch,edge:1.25*inch,thickness:.75*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:.3125*inch,weldLength:11.5*inch},
+  end:{rows:4,gauge:2.75*inch,pitch:3*inch,edge:1.25*inch,thickness:.75*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:.3125*inch,weldLength:11.5*inch},
   bearing:{width:up(b.bf+2*inch,.5*inch),length:bearingLength,thickness:1*inch,stiffenerWidth,stiffenerThickness,cope:up(Math.max(k1-b.tw/2,.75*inch),.125*inch),weldSize:.3125*inch},
   // Proportions of a typical crane rail of the entered depth; replace with the supplier's section. The joint bars fill
-  // 95% of that section's clear web between head and base, to the 1/16 in below.
+  // 95% of that section's clear web between head and base, to the 1/4 in below.
   rail:{name:`${toBeEntered} rail designation and supplier`,headWidth:up(.55*h,1.5875),headThickness:up(.3*h,1.5875),baseWidth:up(h,1.5875),baseThickness:up(.17*h,1.5875),webThickness:up(.12*h,1.5875),Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:`${toBeEntered} rail pad rating source`,
    padThickness:.25*inch,padWidth:up(h,1.5875),
-   // Keeper under 4 in long (AISC Table A-3.1 Category D at the flange), 1/16 in clear of the rail-base toe, lip overlapping 1/2 in.
-   // 5/16 in fillets: the end fillets (1 11/16 in, anchor 1 1/2 in) are over four weld sizes long (AISC 360-16 J2.2b), and the
+   // Keeper 3 3/4 in long, under 100 mm (AISC Table A-3.1 Category D at the flange), 1/16 in clear of the rail-base toe, lip
+   // projecting 1/2 in (overlapping 7/16 in): every keeper dimension a whole 1/4 in. 5/16 in fillets: the end fillets (1 1/2 in,
+   // stopped 1/2 in short of the rail-side face; anchor 1 1/2 in) are over four weld sizes long (AISC 360-16 J2.2b), and the
    // 1/2 in anchor notch leaves 1/4 in of flat notch end beyond its 1/4 in radius corner holes.
-   clipWidth:3.875*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5625*inch,clipWeld:.3125*inch,anchorNotch:.5*inch,jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/1.5875)*1.5875,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+   clipWidth:3.75*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5*inch,clipWeld:.3125*inch,anchorNotch:.5*inch,jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
   criteria:{...(p.details?.criteria.twistLimit?{twistLimit:p.details.criteria.twistLimit}:{}),railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],

@@ -14,6 +14,7 @@ import {categoryF,finiteLife} from './fatigueConstants';
  * Elevations z are from the top of the bearing seat, up positive. In plan, y runs across the column depth from the
  * column centerline toward the bracket (the loaded flange inner face at d/2 - tf) and x along the runway from the web.
  */
+import {snapQuarter} from './quarterInch';
 import type {ProjectInput,CheckResult} from './types';
 import type {BracketInput} from './bracketInputs';
 import {available} from './aiscStrength';
@@ -87,15 +88,17 @@ export function bracketStiffenerGeometry(b:BracketInput|undefined,column?:{enabl
  const c=b.receiver,tf=c.flangeThickness,tw=c.webThickness,h=c.depth-2*tf,K=receiverK(b,column);
  const full=s.length==='full';
  // Plate length across the column depth from the loaded flange inner face: to the far flange, or to the column
- // centerline so that it reaches one-half the member depth from the loaded face (J10.8(3)).
- const length=full?h:c.depth/2-tf,t=s.thickness,width=s.width,clip=s.clip,forces=bracketForceLevels(b,t);
+ // centerline so that it reaches one-half the member depth from the loaded face (J10.8(3)). Cut lengths on the 1/4 in
+ // grid: down between the flanges, up to reach the half depth.
+ const length=full?snapQuarter(h,'down'):snapQuarter(c.depth/2-tf,'up'),t=s.thickness,width=s.width,clip=s.clip,forces=bracketForceLevels(b,t);
  if(!forces)return undefined;
  const offset={upper:s.upperOffset??0,lower:s.lowerOffset??0};
  const fillet=K?Math.max(0,K.k-tf):undefined;
  return {s,c,tf,tw,h,full,length,t,width,clip,K,fillet,requiredClip:fillet===undefined?undefined:fillet+clipMargin,
   /** Flange contact and fillet length beyond the clip, and the web fillet length. */
   contact:width-clip,webLength:length-(full?2:1)*clip,field:!(column?.enabled&&column.isNew),rolled:isRolledBracket(b),bracket:forces.bracket,
-  levels:forces.levels.map(l=>({...l,z:l.base+offset[l.key]})) as StiffenerLevel[]};
+  // Each pair is set at its force level to the nearest 1/4 in, as it is dimensioned from the seat.
+  levels:forces.levels.map(l=>({...l,z:snapQuarter(l.base+offset[l.key])})) as StiffenerLevel[]};
 }
 export type ColumnStiffenerGeometry=NonNullable<ReturnType<typeof columnStiffenerGeometry>>;
 

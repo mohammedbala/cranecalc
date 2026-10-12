@@ -15,8 +15,8 @@ import { bearingStiffenerProfile } from './bearingStiffenerGeometry';
 import { boltProperties } from '../engine/connectionStrength';
 import { defaultFraming, type FramingSettings } from './framingSettings';
 import { planSheetGeometry } from './planSheetGeometry';
-import { drawingLength, plateInches } from './drawingFormat';
-import { sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
+import { drawingLength, plateInches,dimensionLength} from './drawingFormat';
+import {refDim, sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
 import { railKeeperView } from './railKeeperView';
@@ -38,7 +38,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  // Reference framing geometry is computed when a detail is first drawn, not when the set is planned.
  let framing:ReturnType<typeof planSheetGeometry>|undefined;const m=()=>framing??=planSheetGeometry(p,f);
  const wb=d?.bracket?.enabled?d.bracket:undefined;
- const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
+ const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  // A surveyed existing column is named and drawn as surveyed; only an unsurveyed one takes the reference framing style.
  const sc=supportColumn(p),surveyed=!sc.isNew&&!!p.existingColumn?.enabled,tapered=f.frameStyle==='tapered'&&!surveyed;
  const colName=sc.isNew?sc.name:surveyed?`EXISTING ${p.existingColumn!.shape||'BUILT-UP'} COLUMN`:tapered?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN',colRef=sc.isNew?columnReference(p):`${colName} (REF.)`;
@@ -102,7 +102,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   }
   svg+=rect(cx-pw/2,bottom,pw,pt,'runway-line');
   svg+=multiLeader([[cx-m().bf*k/2+8,top]],[40,96],[b.name,'RUNWAY GIRDER']);
-  svg+=dimV(top,bottom,cx-m().bf*k/2,87,dim(b.d));
+  svg+=refDim(dimV(top,bottom,cx-m().bf*k/2,87,drawingLength(b.d,p.units)));
   svg+=multiLeader([[inner+C(110),110]],[lx,100],[colRef]);
   // Capped girders: stiffeners CJP to the W top flange (its own groove callout), fitted at the bottom only.
   const cjp=b.kind==='cap',stiffY=cjp?170:165;

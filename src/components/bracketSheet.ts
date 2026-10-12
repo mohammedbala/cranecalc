@@ -1,7 +1,7 @@
 import {supportColumn} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
-import {drawingLength,electrodeClass,plateInches} from './drawingFormat';
+import {drawingLength,electrodeClass,plateInches,dimensionLength} from './drawingFormat';
 import {sheetDrawingScale,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,labelColumn,textWidth,type XY} from './sheetGraphics';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {format} from '../engine/units';
@@ -34,7 +34,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
  if(usesRolledBracket(s.input))return rolledBracketTopic(s);
  if(usesTaperedHaunch(s.input))return taperedHaunchTopic(s);
  const p=s.input,d=p.details,b=d?.bracket;if(!d||!b?.enabled)return undefined;
- const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
+ const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const sc=supportColumn(p),cw=seatColumnWeld(p,s.detailResults?.bracket),collector=designsBracing(p);
  const eb=activeEndBearing(p),g=eb?endBearingGeometry(p,eb):undefined,gap=p.system==='simple'?simpleSupportInput(p).endGap:0;
  const views:DetailView[]=[],rg=ribGeometry(b),cs=stiffenerDrawing(p);

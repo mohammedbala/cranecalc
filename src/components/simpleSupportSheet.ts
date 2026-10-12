@@ -6,7 +6,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {referenceColumns,shapeMeters} from '../data/aiscReferenceShapes';
 import {defaultFraming,type FramingSettings} from './framingSettings';
-import {drawingLength,plateInches} from './drawingFormat';
+import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,line,rect,text,dimH,multiLeader,filletLeader,bubble,wrappedText,detailRef,detailTitles,columnReference} from './sheetGraphics';
 import {heading,numbered,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
@@ -23,7 +23,7 @@ export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=de
 export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defaultFraming):DetailTopic|undefined{
  // On column caps the girder ends are detailed with the cap.
  const p=s.input,d=p.details;if(p.system!=='simple'||!d||activeColumnCap(p))return undefined;
- const c=simpleSupportInput(p),b=p.section,m={column:shapeMeters(referenceColumns.find(v=>v.name===f.column)!)},bs=d.bearing,dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
+ const c=simpleSupportInput(p),b=p.section,m={column:shapeMeters(referenceColumns.find(v=>v.name===f.column)!)},bs=d.bearing,dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const wb=d.bracket?.enabled?d.bracket:undefined;
  const joint=p.spans.length>1,sides=joint?[-1,1]:[1];
  // The detail is typical: interior grids for adjacent ends, both grids of a single span.

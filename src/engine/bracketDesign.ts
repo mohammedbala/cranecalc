@@ -1,4 +1,5 @@
 import {categoryF,finiteLife} from './fatigueConstants';
+import {snapQuarter} from './quarterInch';
 import {isExistingBracketType,existingBracketProfile} from './bracketProfiles';
 import {format} from './units';
 import type {ProjectInput,CheckResult} from './types';
@@ -49,7 +50,8 @@ export interface BracketResults {
 /** Standard fillet sizes, 3/16 in to 3/4 in. */
 const filletSizes=[3,4,5,6,7,8,10,12].map(v=>v*inch/16);
 /** Seat-to-column fillet length: across the column flange, stopped 1/4 in short of each flange tip. */
-export const seatColumnWeldLength=(b:BracketInput)=>Math.min(b.seatLength,b.receiver.width)-inch/2;
+/** Seat top fillet across the column flange, 1/4 in short of each flange tip, to the 1/4 in below. */
+export const seatColumnWeldLength=(b:BracketInput)=>snapQuarter(Math.min(b.seatLength,b.receiver.width)-inch/2,'down');
 /**
  * Candidate sizes of the top fillet of the seat plate to the column flange. With designed crane-level bracing it
  * is the entered collector fillet; otherwise every standard size from the AISC J2.4 minimum for the thicker part.

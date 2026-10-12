@@ -5,7 +5,7 @@ import { detailedDrawings } from './detailedDrawings';
 import type { CalculationSnapshot } from '../engine/types';
 import { validateProject } from '../engine/calculate';
 import { format, toDisplay } from '../engine/units';
-import { drawingLength, plateInches } from './drawingFormat';
+import { drawingLength, plateInches,dimensionLength} from './drawingFormat';
 
 export const cadLayers = {
   OUTLINE: { color: 7, weight: 35, width: 1.5, dash: '', ink: '#17212b' },
@@ -77,7 +77,8 @@ export class Draft {
     const jx=tx-15,jy=ty-4,sx=tx+41;
     this.poly([[x,y],[jx,jy],[tx+92,jy]],false,'DIMENSION');
     this.arrow(x,y,Math.atan2(jy-y,jx-x));
-    if(field){this.line(jx,jy,jx,jy-15,'DIMENSION');this.poly([[jx,jy-15],[jx+10,jy-12],[jx,jy-9]],true,'DIMENSION');}
+    // The flag points toward the leader, which joins the reference line at its left end.
+    if(field){this.line(jx,jy,jx,jy-15,'DIMENSION');this.poly([[jx,jy-15],[jx-10,jy-12],[jx,jy-9]],true,'DIMENSION');}
     for(const sign of bothSides?[-1,1]:[1])this.poly([[sx,jy],[sx,jy+sign*7],[sx+8,jy]],true,'DIMENSION');
     this.text(sx-6,jy+7,sizeLabel.replaceAll('"',''),8,'end');
     labels.forEach((label,i)=>this.text(tx,ty+17+i*13,label.toUpperCase(),9));
@@ -109,7 +110,7 @@ function elevationDrawing(s: CalculationSnapshot): CadDrawing {
     d.line(X(a),bottom-b.tf*k,X(z),bottom-b.tf*k);
     if(b.kind==='cap'){d.rect(X(a),top-b.capTw*k,(z-a)*k,b.capTw*k,'RAIL');d.line(X(a),top+(b.capDepth-b.capTw)*k,X(z),top+(b.capDepth-b.capTw)*k,'RAIL');}
   }
-  p.spans.forEach((span,i)=>{d.dimH(X(x),X(x+span),bottom+18,dimY,`L${i+1} = ${drawingLength(span,p.units)}`);x+=span;});
+  p.spans.forEach((span,i)=>{d.dimH(X(x),X(x+span),bottom+18,dimY,`L${i+1} = ${dimensionLength(span,p.units)}`);x+=span;});
   d.line(X(0), railY, X(L), railY, 'RAIL');
   const supports = [0, ...p.spans.map((_, i) => p.spans.slice(0, i + 1).reduce((a, v) => a + v, 0))];
   supports.forEach((at, i) => {
@@ -118,7 +119,7 @@ function elevationDrawing(s: CalculationSnapshot): CadDrawing {
     d.line(X(at) - 13, bottom + 20, X(at) + 13, bottom + 20);
     d.text(X(at) + 12, bottom + 13, `S${i + 1}`, 9);
   });
-  d.dimH(X(0), X(L), dimY + 8, dimY + 29, `OVERALL = ${drawingLength(L, p.units)}`);
+  d.dimH(X(0), X(L), dimY + 8, dimY + 29, `OVERALL = ${dimensionLength(L, p.units)}`);
   const points = lc?.points ?? [];
   points.forEach((w, i) => {
     const px = X(w.x), labelX = 80 + (i + .5) / points.length * 840;
@@ -146,7 +147,7 @@ function planDrawing(s: CalculationSnapshot): CadDrawing {
   d.text(80, 63, 'GIRDER C/L - DASH DOT / RAIL C/L - CONTINUOUS', 9);
   let x = 0;
   [0, ...p.spans].forEach((v, i) => { x += v; d.line(X(x), cy - width * k / 2 - 12, X(x), cy + width * k / 2 + 12, 'CENTER'); d.text(X(x), 96, `S${i + 1}`, 9, 'middle'); });
-  x = 0; p.spans.forEach((span, i) => { d.dimH(X(x), X(x + span), cy + width * k / 2 + 12, 234, `L${i + 1} = ${drawingLength(span, p.units)}`); x += span; });
+  x = 0; p.spans.forEach((span, i) => { d.dimH(X(x), X(x + span), cy + width * k / 2 + 12, 234, `L${i + 1} = ${dimensionLength(span, p.units)}`); x += span; });
   if (Math.abs(p.railEccentricity) > 0) d.leader(X(L / 2), railY, 580, 117, `e = ${drawingLength(p.railEccentricity, p.units)}`);
   d.text(80, 283, `${b.kind === 'cap' ? 'Top width' : 'Flange width'} = ${drawingLength(width, p.units)} / rail shown as centerline only`, 10);
   return d.drawing;

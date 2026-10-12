@@ -1,4 +1,5 @@
 import {railPadThickness} from './railSeat';
+import {snapQuarter} from './quarterInch';
 import {runwayEnds} from './continuation';
 import type {CheckResult,DesignAnalysis,ProjectInput,Properties} from './types';
 import {interaction,type GirderStrength} from './aiscStrength';
@@ -32,7 +33,7 @@ export function endStopGeometry(p:ProjectInput,e:EndStopInput){
  // The bumper height is above the top of rail, which stands on the pad where there is one.
  const contact=railDepth+railPadThickness(p)+e.bumperHeight-tb;
  // Stiffeners stop an inch below the top of the face plate, and back at least the whole bumper contact.
- const stiffenerHeight=Math.min(e.face.height,Math.max(e.face.height-inch,.5*e.face.height,contact+e.bumperDiameter/2));
+ const stiffenerHeight=Math.min(e.face.height,snapQuarter(Math.max(e.face.height-inch,.5*e.face.height,contact+e.bumperDiameter/2),'up'));
  // Bolt C/L to the toes of the stop fillets: heads on the base plate sit beside the face plate and stiffener welds.
  const toe={face:e.bolts.frontClear-e.weldSize,stiffener:(e.bolts.gauge-e.stiffener.spacing)/2-e.stiffener.thickness/2-e.weldSize};
  return {lip,back,front,faceBack,faceFront,frontRow,backRow,surfaceWidth,contact,stiffenerHeight,railEnd:stopRailEnd(e),stiffenerEnd:faceBack-e.stiffener.length,toe};

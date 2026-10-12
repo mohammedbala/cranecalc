@@ -48,10 +48,11 @@ describe('rail seat: pad, keepers and anchors',()=>{
  });
  it('locates the keeper clear of the rail-base toe and the anchor keeper in its notch',()=>{
   const p=demonstrationProject(),k=keeperGeometry(p.details!.rail,railPad(p)!.thickness),a=anchorGeometry(p.details!.rail,railPad(p)!.thickness);
-  expect(k.toe/inch).toBeCloseTo(3,10);expect(k.inner/inch).toBeCloseTo(3.0625,10);expect(k.outer/inch).toBeCloseTo(5.4375,10);expect(k.tip/inch).toBeCloseTo(2.5,10);
-  // 2 3/8 in body, 3/8 in fillets: the end fillets are 2 in, over 4w = 1 1/2 in (AISC 360-16 J2.2b).
-  expect(k.overlap/inch).toBeCloseTo(.5,10);expect(k.height/inch).toBeCloseTo(.125+.75+.75,10);expect(k.endWeld/inch).toBeCloseTo(2,10);
-  expect(a.engagement/inch).toBeCloseTo(.4375,10);expect(a.endWeld/inch).toBeCloseTo(1.875,10);expect(a.inner/inch).toBeCloseTo(2.5625,10);
+  expect(k.toe/inch).toBeCloseTo(3,10);expect(k.inner/inch).toBeCloseTo(3.0625,10);expect(k.outer/inch).toBeCloseTo(5.3125,10);expect(k.tip/inch).toBeCloseTo(2.5625,10);
+  // 2 1/4 in body, 3/8 in fillets stopped 1/2 in (the weld size, up to the 1/4 in grid) short of the rail-side face: the
+  // end fillets are 1 3/4 in, over 4w = 1 1/2 in (AISC 360-16 J2.2b).
+  expect(k.overlap/inch).toBeCloseTo(.4375,10);expect(k.height/inch).toBeCloseTo(.125+.75+.75,10);expect(k.holdback/inch).toBeCloseTo(.5,10);expect(k.endWeld/inch).toBeCloseTo(1.75,10);
+  expect(a.engagement/inch).toBeCloseTo(.4375,10);expect(a.endWeld/inch).toBeCloseTo(1.75,10);expect(a.inner/inch).toBeCloseTo(2.5625,10);
   // The keeper end bears on the flat notch end beyond the 1/4 in radius corner hole: 1/2 - 1/4 = 1/4 in.
   expect(a.cornerRadius/inch).toBeCloseTo(.25,10);expect(a.bearing/inch).toBeCloseTo(.25,10);
   expect(validateProject(p)).toEqual([]);expect(validateProject(cappedDemonstrationProject())).toEqual([]);
@@ -92,14 +93,15 @@ describe('rail seat: pad, keepers and anchors',()=>{
  });
  it('draws and specifies the pad, the keeper and its welds, the anchor and the joint dimensions',()=>{
   const us=texts(railKeeperView(snapshot(openJoints(demonstrationProject()))).render().svg);
-  // K1: 9/16 in projection and 2 3/8 in body (2 15/16 in), 3/4 in lip and 7/8 in under it (1 5/8 in); 3/8 in fillets,
-  // 3 7/8 in on the outer face and 2 in on each end.
-  for(const t of ['RAIL PAD 1/8" X 6", CONT.:','ALLOWABLE COMPRESSION 1.45 KSI','6 1/8"','T.O.R.','T.O.S.','OUTER FACE, EACH KEEPER','BOTH ENDS OF EACH KEEPER, STOPPED','KEEPER K1 / SECTION','KEEPERS AND RAIL ANCHOR / PLAN','2 3/8"','9/16"','2 15/16"','3/4"','7/8"','1 5/8"','3/8','2','3 7/8'])expect(us).toContain(t);
+  // K1: 1/2 in projection and 2 1/4 in body (2 3/4 in), 3/4 in lip and 7/8 in under it (1 5/8 in); 3/8 in fillets,
+  // 3 3/4 in on the outer face and 1 3/4 in on each end.
+  for(const t of ['RAIL PAD 1/8" X 6", CONT.:','ALLOWABLE COMPRESSION 1.45 KSI','6 1/8"','T.O.R.','T.O.S.','OUTER FACE, EACH KEEPER','BOTH ENDS OF EACH KEEPER, STOPPED','KEEPER K1 / SECTION','KEEPERS AND RAIL ANCHOR / PLAN','2 1/4"','1/2"','2 3/4"','3/4"','7/8"','1 5/8"','3/8','1 3/4','3 3/4'])expect(us).toContain(t);
   // The pad product name wraps to the callout column's width.
   expect(us.join(' ')).toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');expect(us).not.toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');
   expect(us.join(' ')).toContain('1/16" CLEAR OF RAIL-BASE TOE');expect(us.join(' ')).not.toContain('ROOT FILLETS');
-  // Rail joint: bolt pitch, edge distances to the bar end and the rail end, bar length.
-  expect(us.filter(t=>t==='1 1/2"')).toHaveLength(2);expect(us).toContain('3"');expect(us).toContain('1\'-0 3/8"');
+  // Rail joint: bolt pitch, edge distance to the bar end, the bolt line to the joint centerline (1 1/2 in to the rail
+  // end plus half the 3/8 in gap, up to the 1/4 in grid: 1 3/4 in) and the bar length.
+  expect(us.filter(t=>t==='1 1/2"')).toHaveLength(1);expect(us).toContain('1 3/4"');expect(us).toContain('3"');expect(us).toContain('1\'-0 1/2"');
   const capped=texts(railKeeperView(snapshot(cappedDemonstrationProject())).render().svg);
   expect(capped.some(t=>t.startsWith('RAIL PAD'))).toBe(false);expect(capped).toContain('6 3/8"');
   const si=openJoints(demonstrationProject());si.units='SI';
@@ -109,11 +111,11 @@ describe('rail seat: pad, keepers and anchors',()=>{
  it('specifies the rail fabrication, the anchor notch corner holes and the slotted joint bars',()=>{
   const svg=railKeeperView(snapshot(openJoints(demonstrationProject()))).render().svg,note=texts(svg).join(' ');
   // Joint: the bars are slotted (their net section and block shear are checked so); the rail web is drilled.
-  expect(note).toContain('2 BARS 1 1/4" X 3 7/8" X 1\'-0 3/8", SLOTTED 1 5/16" X 15/16" ALONG THE RAIL');
+  expect(note).toContain('2 BARS 1 1/4" X 3 3/4" X 1\'-0 1/2", SLOTTED 1 5/16" X 15/16" ALONG THE RAIL');
   expect(note).toContain('15/16" DRILLED HOLES IN THE RAIL WEB');
   // Notches with drilled corner holes, and how rail steel is cut.
   expect(note).toContain('K1 IN NOTCHES 1/2" X 4" IN BOTH RAIL-BASE TOES AND THE PAD, 1/2" DRILLED HOLES CENTERED ON THE NOTCH CORNERS');
-  expect(note).toContain('END FILLETS 1 7/8".');
+  expect(note).toContain('END FILLETS 1 3/4".');
   for(const t of ['DRILL HOLES, THEN SAW-CUT OR MILL ENDS AND NOTCHES','NO FLAME CUTTING OR PUNCHING','MT NOTCH CORNERS','CONFIRM NOTCHING WITH THE RAIL SUPPLIER'])expect(note).toContain(t);
   // Each corner hole: two seen quarter arcs beyond the notch end, one hidden under the anchor keeper.
   const plan=svg.slice(svg.indexOf('data-view="keeper-plan"'));
@@ -125,7 +127,7 @@ describe('rail seat: pad, keepers and anchors',()=>{
    return texts(g.slice(0,g.indexOf('</g>'))).map(t=>Number(t.replace(' mm','')));};
   // Text order: overall width, projection and body, lip and body height, overall height.
   const close=(v:number[])=>{expect(v[1]+v[2]).toBe(v[0]);expect(v[3]+v[4]).toBe(v[5]);};
-  const demo=piece(demonstrationProject());expect(demo).toEqual([75,14,61,19,22,41]);close(demo);
+  const demo=piece(demonstrationProject());expect(demo).toEqual([70,13,57,19,22,41]);close(demo);
   close(piece(cappedDemonstrationProject()));
   // Odd entered sizes still close, each part within a millimetre of its true size.
   const odd=demonstrationProject();Object.assign(odd.details!.rail,{clipProjection:.53*inch,clipBodyWidth:2.47*inch,clipThickness:.77*inch,baseThickness:.81*inch});

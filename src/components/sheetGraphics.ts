@@ -29,6 +29,13 @@ export const short = (s: string, limit: number) => s.length > limit ? `${s.slice
 export const line = (a: XY, b: XY, cls = 'annotation') => `<line class="${cls}" x1="${n(a[0])}" y1="${n(a[1])}" x2="${n(b[0])}" y2="${n(b[1])}"/>`;
 export const text = (x: number, y: number, value: string, size = 9, anchor = 'start', weight = 400, angle = 0) =>
   `<text x="${n(x)}" y="${n(y)}" font-size="${size}" text-anchor="${anchor}" font-weight="${weight}"${angle ? ` transform="rotate(${n(angle)} ${n(x)} ${n(y)})"` : ''}>${esc(value)}</text>`;
+/** Text of a dimension (its value), marked so drawing tests can find every dimension string. */
+export const dimText = (x: number, y: number, value: string, size = 9, anchor = 'start', weight = 400, angle = 0) => text(x, y, value, size, anchor, weight, angle).replace(/^<text([^>]*)>/, '<text$1 data-dim="true">');
+/**
+ * A reference dimension: a rolled-shape or material size (section depth, rail on its pad and the cap web) or a size that
+ * follows from dimensioned geometry, printed as it is rather than to the 1/4 in dimension grid.
+ */
+export const refDim = (dimension: string) => dimension.replaceAll('data-dim="true"', 'data-dim="ref"');
 export const rect = (x: number, y: number, w: number, h: number, cls = 'annotation') => `<rect class="${cls}" x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}"/>`;
 /** A closed outline path through the given sheet points. */
 export const outlinePath = (pts: XY[], cls = 'runway-line') => `<path class="${cls}" d="M${pts.map(p => `${n(p[0])},${n(p[1])}`).join('L')}Z"/>`;
@@ -62,14 +69,14 @@ export function dimH(x1: number, x2: number, fromY: number, y: number, label: st
   const ext = y + (y < fromY ? -4 : 5);
   return line([x1, fromY], [x1, ext]) + line([x2, fromY], [x2, ext]) + line([a, y], [b, y])
     + [x1, x2].map(x => line([x - 2.5, y + 3], [x + 2.5, y - 3])).join('')
-    + (fits ? text((x1 + x2) / 2, y - 5, label, 9, 'middle') : outside === 'right' ? text(r + 4, y - 5, label, 9, 'start') : text(l - 4, y - 5, label, 9, 'end'));
+    + (fits ? dimText((x1 + x2) / 2, y - 5, label, 9, 'middle') : outside === 'right' ? dimText(r + 4, y - 5, label, 9, 'start') : dimText(l - 4, y - 5, label, 9, 'end'));
 }
 export function dimV(y1: number, y2: number, fromX: number, x: number, label: string) {
   const w = textWidth(label, 9), fits = w + 6 <= Math.abs(y2 - y1), far = Math.max(y1, y2);
   const ext = x + (x < fromX ? -4 : 5);
   return line([fromX, y1], [ext, y1]) + line([fromX, y2], [ext, y2]) + line([x, Math.min(y1, y2)], [x, fits ? far : far + w + 6])
     + [y1, y2].map(y => line([x - 3, y + 2.5], [x + 3, y - 2.5])).join('')
-    + text(x - 6, fits ? (y1 + y2) / 2 : far + 4 + w / 2, label, 9, 'middle', 400, -90);
+    + dimText(x - 6, fits ? (y1 + y2) / 2 : far + 4 + w / 2, label, 9, 'middle', 400, -90);
 }
 // Arial advance widths per em, for laying out text without a browser.
 const glyphWidths:Record<string,number>={' ':.278,'!':.278,'"':.355,'#':.556,'$':.556,'%':.889,'&':.667,"'":.191,'(':.333,')':.333,'*':.389,'+':.584,',':.278,'-':.333,'.':.278,'/':.278,':':.278,';':.278,'<':.584,'=':.584,'>':.584,'?':.556,'@':1.015,'[':.278,']':.278,'_':.556,'·':.278,'§':.556,'×':.584,'°':.4,
@@ -245,11 +252,17 @@ export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][
  }
  return svg+labels.map((v,i)=>text(at[0],at[1]+i*11,labelCaps(v),size)).join('')+'</g>';
 }
-export function fieldWeldFlag(at:XY){
- // AWS A2.4 supplementary flag at the arrow/reference-line junction.
- const x=at[0]-14,y=at[1]-3;
- return `<g data-field-weld="true">${line([x,y],[x,y-15])}<path class="annotation" style="fill:#111" d="M${x},${y-15}l10,3l-10,3Z"/></g>`;
+/**
+ * AWS A2.4 field-weld flag on a staff rising from the arrow/reference-line junction `at`. The pennant always points
+ * toward the side the arrow (leader) leaves the reference line: left when the leader joins the reference line's left
+ * end, right when it joins the right end.
+ */
+export function fieldWeldFlag(at:XY,toward:'left'|'right'){
+ const [x,y]=at,s=toward==='left'?-1:1;
+ return `<g data-field-weld="true" data-flag-toward="${toward}">${line([x,y],[x,y-15])}<path class="annotation" style="fill:#111" d="M${n(x)},${n(y-15)}l${s*10},3l${-s*10},3Z"/></g>`;
 }
+/** Junction of the arrow and the reference line of a weld symbol laid out at `at` (reference line at[0]-3 to at[0]+92). */
+export const weldJunction=(at:XY,right:boolean):XY=>right?[at[0]+103,at[1]-3]:[at[0]-14,at[1]-3];
 export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[],field=false,allAround=false){
  // AWS-style reference line with the fillet triangle on the arrow side (below).
  // A second triangle denotes both sides only when the template requires it.
@@ -265,8 +278,8 @@ export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],
  const right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+89);
  // Weld-all-around: a circle where the arrow meets the reference line (AWS A2.4).
  // The leader meets the reference line at its elbow, 14 pt beyond the line's end, where a field flag also stands.
- if(allAround)svg+=circle(right?at[0]+103:at[0]-14,y,3);
- return `<g data-multileader="weld"${field?' data-weld-location="field"':''}${allAround?' data-weld-all-around="true"':''}>${svg}${field?fieldWeldFlag(right?[at[0]+117,at[1]]:at):''}</g>`;
+ if(allAround)svg+=circle(weldJunction(at,right)[0],y,3);
+ return `<g data-multileader="weld"${field?' data-weld-location="field"':''}${allAround?' data-weld-all-around="true"':''}>${svg}${field?fieldWeldFlag(weldJunction(at,right),right?'right':'left'):''}</g>`;
 }
 export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[]){return filletLeader(points,at,sizeLabel,labels,bothSides,via,true);}
 

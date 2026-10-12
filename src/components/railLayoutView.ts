@@ -2,7 +2,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {railLayout,railLayoutCriteria,railMovements,railJointMovement,railJointType,railJointGap} from '../engine/railLayout';
 import {railAnchorForce} from '../engine/railKeeper';
 import {format} from '../engine/units';
-import {drawingLength,plateInches} from './drawingFormat';
+import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,line,rect,text,dimH,bubble,wrapToWidth,textWidth,detailRef,detailTitles,labelCaps,n} from './sheetGraphics';
 import type {DetailView} from './detailSheet';
 
@@ -22,7 +22,7 @@ export function movementUpTo(mm:number,u:'US'|'SI'){
 }
 export function railLayoutView(s:CalculationSnapshot):DetailView{
  return {title:detailTitles.railLayout,render:()=>{
-  const p=s.input,r=railLayout(p),{stock,clear}=railLayoutCriteria,dim=(v:number)=>drawingLength(v,p.units),moves=p.details?railMovements(p,r):undefined;
+  const p=s.input,r=railLayout(p),{stock,clear}=railLayoutCriteria,dim=(v:number)=>dimensionLength(v,p.units),moves=p.details?railMovements(p,r):undefined;
   let x=0;const grids=[0,...p.spans.map(v=>x+=v)];
   const lo=Math.min(0,...r.rails.map(v=>v.start)),hi=Math.max(grids.at(-1)!,...r.rails.map(v=>v.end));
   const scale=drawingScale(Math.min(.06,520/(hi-lo)),p.units),k=scale.pointsPerMm,x0=80,X=(v:number)=>x0+(v-lo)*k;

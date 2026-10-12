@@ -15,6 +15,30 @@ export function drawingLength(mm: number, units: ProjectInput['units']) {
   mm = Math.round(mm * 1e6) / 1e6;
   return units === 'US' ? feetInches(mm) : `${Number(mm.toFixed(Math.abs(mm) >= 1000 ? 0 : 1)).toLocaleString('en-US')} mm`;
 }
+export {quarterInch,snapQuarter} from '../engine/quarterInch';
+import {snapQuarter} from '../engine/quarterInch';
+let dimensionAudit:{mm:number;text:string;site:string}[]|undefined;
+/**
+ * Run `draw` and return the dimensions it printed whose length was not already on the 1/4 in grid (US), so tests can
+ * prove the geometry, not the formatter, puts every dimension on the grid.
+ */
+export function auditDimensions<T>(draw:()=>T):{result:T;offGrid:{mm:number;text:string;site:string}[]}{
+ const was=dimensionAudit,found:{mm:number;text:string;site:string}[]=[];dimensionAudit=found;
+ try{return {result:draw(),offGrid:found};}finally{dimensionAudit=was;}
+}
+/**
+ * Dimension strings: US lengths in feet and inches to the nearest 1/4 in (no dimension finer than 1/4 in); SI as
+ * drawingLength. Material sizes (plate thickness, weld size, bolt and hole diameters) use plateInches/holeInches.
+ * The layout geometry is snapped to the grid where it is derived, so the rounding here is only a safety net.
+ */
+export function dimensionLength(mm:number,units:ProjectInput['units']){
+ if(units!=='US')return drawingLength(mm,units);
+ const snapped=snapQuarter(mm),text=feetInches(snapped);
+ if(dimensionAudit&&Math.abs(snapped-mm)>25.4/64)dimensionAudit.push({mm,text,site:(new Error().stack??'').split('\n').slice(2,5).map(v=>v.trim()).join(' < ')});
+ return text;
+}
+/** A reference size that follows from dimensioned geometry (the depth of a taper at a section cut): US to the nearest 1/4 in. */
+export function referenceLength(mm:number,units:ProjectInput['units']){return units==='US'?feetInches(snapQuarter(mm)):drawingLength(mm,units);}
 /** Elevations: feet and inches, or metres to three decimals in SI. */
 export function drawingElevation(mm: number, units: ProjectInput['units']) {
   return units === 'US' ? feetInches(mm) : `${(mm / 1000).toFixed(3)} m`;

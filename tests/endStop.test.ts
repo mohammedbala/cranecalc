@@ -34,7 +34,8 @@ describe('girder-mounted runway end stops',()=>{
   // LRFD stop combination factor 1.0; contact 6 in rail + 1/8 in pad + 6 in bumper - 1 in base plate.
   expect(g.contact).toBeCloseTo(11.125*inch,9);
   const lever=g.frontRow-g.back-e.base.thickness,T=20*kip*(g.contact+e.base.thickness)/(2*lever);
-  expect(lever).toBeCloseTo((12.5-.5625-1-1.75-.5-1)*inch,9);
+  // The base plate lip in front of the face: the 5/16 in fillet plus 1/4 in, 9/16 in, up to the 1/4 in grid.
+  expect(lever).toBeCloseTo((12.5-.75-1-1.75-.5-1)*inch,9);
   expect(checks['end-stop-bolt-tension'].demand).toBeCloseTo(T,3);
   expect(checks['end-stop-bolt-shear'].demand).toBeCloseTo(5*kip,3);
   const bolt=boltCapacity({grade:'A325',diameter:.75*inch,planes:1,surface:'B',shear:5*kip,tension:T,method:'LRFD'});

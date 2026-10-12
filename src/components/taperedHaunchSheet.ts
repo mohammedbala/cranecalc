@@ -2,8 +2,8 @@ import {preheatBasis} from '../engine/constructionNotes';
 import {supportColumn,runwayElevations} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
-import {drawingLength,drawingElevation,electrodeClass,plateInches} from './drawingFormat';
-import {sheetDrawingScale,textWidth,wrapToWidth,labelCaps,line,rect,text,circle,n,dimH,dimV,breakLine,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,capChannelSection,type XY} from './sheetGraphics';
+import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength,referenceLength} from './drawingFormat';
+import {refDim,dimText,sheetDrawingScale,textWidth,wrapToWidth,labelCaps,line,rect,text,circle,n,dimH,dimV,breakLine,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,capChannelSection,type XY} from './sheetGraphics';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {bracketForceBlocks} from './bracketForceTable';
@@ -38,7 +38,7 @@ function calloutColumn(items:Item[],x:number,top:number,bottom:number,sort=true)
  */
 function dimVFrom(y1:number,x1:number,y2:number,x2:number,x:number,label:string,at=(y1+y2)/2){
  const w=textWidth(label,9),lo=Math.min(y1,y2),far=Math.max(y1,y2),fits=at-w/2-3>=lo&&at+w/2+3<=far,ext=(from:number)=>x+(x<from?-4:5);
- return line([x1,y1],[ext(x1),y1])+line([x2,y2],[ext(x2),y2])+line([x,lo],[x,fits?far:far+w+6])+[y1,y2].map(y=>line([x-3,y+2.5],[x+3,y-2.5])).join('')+text(x-6,fits?at:far+4+w/2,label,9,'middle',400,-90);
+ return line([x1,y1],[ext(x1),y1])+line([x2,y2],[ext(x2),y2])+line([x,lo],[x,fits?far:far+w+6])+[y1,y2].map(y=>line([x-3,y+2.5],[x+3,y-2.5])).join('')+dimText(x-6,fits?at:far+4+w/2,label,9,'middle',400,-90);
 }
 /** Rows of a label no wider than `width`, never breaking a dimension (1'-0 9/16", 12.7 mm). */
 const wrapRows=(v:string,width:number,size=8.5)=>wrapToWidth(labelCaps(v).replace(/(\d) (\d+\/\d+|mm\b|m\b)/g,'$1\u00a0$2'),width,size).map(r=>r.replaceAll('\u00a0',' '));
@@ -50,7 +50,7 @@ const poly=(pts:XY[],cls='runway-line')=>`<path class="${cls}" d="M${pts.map(q=>
 export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const p=s.input,d=p.details,b=d?.bracket;if(!d||!b?.enabled||!usesTaperedHaunch(p))return undefined;
  const parts=taperedHaunchParts(p),g=parts.geometry,st=g.stiffener,c=b.receiver;
- const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
+ const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const sc=supportColumn(p),collector=designsBracing(p),eb=activeEndBearing(p),W=d.bearing.width,tbp=d.bearing.thickness,where=sc.isNew?'SHOP':'FIELD';
  const {L,a,hr,ht,tt,tbv,tw,bt,btr,bb}=g,tep=g.endPlate?st.t:0,Lw=L-tep,deg=g.degrees.toFixed(1),f=g.flare;
  const under=(y:number)=>-g.depth(y),inner=(y:number)=>-g.depth(y)+tbv;
@@ -168,7 +168,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
    svg+=dimH(left,right,tip,tip+62,dim(bt));
    const lay=bolts.filter(h=>Math.abs(h.x-xs.at(-1)!)<1e-3),endEdge=bt/2-xs.at(-1)!,rows=[...new Set(lay.map(h=>h.y))].sort((u,v)=>u-v),tipEdge=L-tep-rows.at(-1)!;
    svg+=text(left,tip+80,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,7.5);
-   svg+=text(left,tip+90,`EDGES: FLANGE END ${dim(endEdge)}, TIP ${dim(tipEdge)}${g.endPlate?' (TO END PL)':''}, COLUMN-FACE WELD ${dim(rows[0]-(g.joint==='cjp'?7.9375:g.flangeWeld))}.`,7.5);
+   svg+=text(left,tip+90,`EDGES: FLANGE END ${dim(endEdge)}, TIP ${dim(tipEdge)}${g.endPlate?' (TO END PL)':''}, COLUMN FACE ${dim(rows[0])}.`,7.5);
    svg+=text(left,tip+100,p.system==='simple'?endGridBearingNote(p,[eb.bolts.edge,d.bearing.length-eb.bolts.edge],dim):`AT A RUNWAY-END GRID: ONE BEARING, ITS GIRDER END ON THE GRID; HOLES ${dim(eb.bolts.edge)} AND ${dim(d.bearing.length-eb.bolts.edge)} FROM IT.`,7.5);
   }else svg+=dimH(left,right,tip,tip+20,dim(bt));
   const xl=X(-cw/2)-2;
@@ -200,7 +200,8 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
    svg+=poly([[X(x0+sx*cl),Y(-tt)],[X(x1),Y(-tt)],[X(x1),Y(zb)],[X(x0+sx*cl),Y(zb)],[X(x0),Y(zb+cl)],[X(x0),Y(-tt-cl)]]);}
   svg+=dimH(X(-bt/2),X(bt/2),Y(0)-2,Y(ext)-16,dim(bt));
   svg+=dimH(X(-bb/2),X(bb/2),Y(-hr)+2,Y(-hr-ext)+16,dim(bb));
-  svg+=dimV(Y(0),Y(zu),X(-wide/2)-4,X(-wide/2)-18,dim(h));
+  // The depth at the cut follows from the dimensioned taper: a reference dimension to the nearest 1/4 in.
+  svg+=refDim(dimV(Y(0),Y(zu),X(-wide/2)-4,X(-wide/2)-18,referenceLength(h,p.units)));
   const items:Item[]=[
    {at:[X(c.width/2)+2,Y(ext)+8],labels:[colName,'BEYOND']},
    {at:[X(bt*.42),Y(-tt/2)],labels:[topLabel]},

@@ -24,8 +24,8 @@ describe('end stop stiffeners braced to the face plate',()=>{
  it('checks the stiffener-to-face-plate welds for the shear flow and the bumper reaction by hand',()=>{
   const p=demo.input,e=p.details!.endStop!,g=endStopGeometry(p,e),checks=Object.fromEntries(endStopChecks(p).map(c=>[c.id,c]));
   // Stiffeners reach the top of the 6 in contact, centered 11 1/8 in above the base plate (rail on its 1/8 in pad),
-  // within the 15 in face.
-  expect(g.stiffenerHeight).toBeCloseTo(14.125*inch,9);
+  // within the 15 in face: 14 1/8 in, cut up to the 1/4 in grid.
+  expect(g.stiffenerHeight).toBeCloseTo(14.25*inch,9);
   // Face 10 x 1 and two 3/4 x 9 stiffeners: centroid 3.37 in back, I = 235.6 in^4, Q of the face 28.7 in^3.
   const uc=(10*.5+13.5*5.5)/23.5,I=10/12+10*(uc-.5)**2+2*.75*9**3/12+13.5*(5.5-uc)**2,Q=10*(uc-.5);
   expect(I).toBeCloseTo(235.58,2);
@@ -92,7 +92,7 @@ describe('dimensions and weld callouts of the tie, keeper and bearing details',(
   expect(words).not.toContain('1 1/4" + 2 1/4"');
   expect(texts(section).filter(v=>v==='1 1/4"')).toHaveLength(3);expect(texts(section).filter(v=>v==='1 1/2"')).toHaveLength(1);
   expect(texts(section).filter(v=>v==='2 1/4"')).toHaveLength(2);expect(texts(section)).toContain('2 3/4"');
-  expect(words).toContain('GIRDER GUSSET PL 3/4" X 5 3/4" X 5 1/4"');expect(words).toContain('1/16" FILLER (HIDDEN)');
+  expect(words).toContain('GIRDER GUSSET PL 3/4" X 5 3/4" X 5 1/2"');expect(words).toContain('1/16" FILLER (HIDDEN)');
   // The column gusset spans the bolt group, its 1 1/2 in end edge and the 1/2 in gap to the column flange.
   expect(words).toContain('COLUMN GUSSET PL 3/4" X 5 3/4" X 5 1/2"');expect(words).toContain('2 FL 3/8" X 5 1/4" X 2\'-1 1/2", 1/2" CLR. TO COLUMN;');
   // Tie and girder end located from the stiffener at each girder end of the shared support.
@@ -107,8 +107,8 @@ describe('dimensions and weld callouts of the tie, keeper and bearing details',(
  });
  it('dimensions the keeper, its clearance to the rail base, its lip bearing and length',()=>{
   const t=texts(view(demo,'RAIL KEEPER / GIRDER ATTACHMENT').render().svg);
-  // K1: 2 15/16 overall, 2 3/8 body, 9/16 lip projection, 3/4 lip, 7/8 under the lip, 1 5/8 high, 3 7/8 long.
-  expect(t).toEqual(expect.arrayContaining(['K1 1/16" CLEAR OF RAIL-BASE TOE (1/8" MAX.),','LIP BEARS 1/2"; SHIM, WELD, REMOVE SHIM','2 15/16"','2 3/8"','9/16"','3/4"','7/8"','1 5/8"','3 7/8"','3 7/8" LONG ALONG THE RAIL']));
+  // K1: 2 3/4 overall, 2 1/4 body, 1/2 lip projection, 3/4 lip, 7/8 under the lip, 1 5/8 high, 3 3/4 long.
+  expect(t).toEqual(expect.arrayContaining(['K1 1/16" CLEAR OF RAIL-BASE TOE (1/8" MAX.),','LIP BEARS 7/16"; SHIM, WELD, REMOVE SHIM','2 3/4"','2 1/4"','1/2"','3/4"','7/8"','1 5/8"','3 3/4"','3 3/4" LONG ALONG THE RAIL']));
  });
  it('gives the capped bearing stiffeners a CJP groove callout at the top flange and fits the bottom end only',()=>{
   const s=calculate(cappedDemonstrationProject()),svg=view(s,'GIRDER BEARING / COLUMN BRACKET').render().svg,t=texts(svg).join(' | ');

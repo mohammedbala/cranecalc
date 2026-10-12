@@ -17,8 +17,8 @@ import {packDetailSheets,detailSheetSvg,detailSheetTitle,type DetailTopic} from 
 import type { CalculationSnapshot } from '../engine/types';
 import { defaultFraming, framingSchema, type FramingSettings } from './framingSettings';
 import { planSheetGeometry, type Point, type Segment } from './planSheetGeometry';
-import { drawingLength, drawingElevation } from './drawingFormat';
-import { sheetDrawingScale as drawingScale, n, text, rect, line, bubble, dimH, dimV, short, titleBlock, sheetStart, viewTitle, multiLeader, detailRef, detailTitles, sheetRef, breakLine, textWidth, type XY } from './sheetGraphics';
+import { drawingLength, drawingElevation,dimensionLength} from './drawingFormat';
+import {refDim,dimText, sheetDrawingScale as drawingScale, n, text, rect, line, bubble, dimH, dimV, short, titleBlock, sheetStart, viewTitle, multiLeader, detailRef, detailTitles, sheetRef, breakLine, textWidth, type XY } from './sheetGraphics';
 import { heading, table, numbered, noteStack, type Style } from './noteBlocks';
 import { sheetOrdinalToken, detailNumberToken, sheetNumberToken, bearingBoltsTitle } from './sheetGraphics';
 import { activeEndBearing, continuousBearings } from '../engine/endBearingInputs';
@@ -69,7 +69,7 @@ function paths(segments: Segment[], project: (p: Point) => XY, cls: string) {
  * geometry; the elevations given are those of the project. A wide crane span is shortened by a break.
  */
 function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeometry>,top:number,o:{newColumns:boolean;columnName:string;existing?:ExistingLayout}){
-  const p=s.input,d=p.details,dim=(meters:number)=>drawingLength(meters*1000,p.units),elevations=runwayElevations(p),box=gaLayout.section;
+  const p=s.input,d=p.details,dim=(meters:number)=>dimensionLength(meters*1000,p.units),elevations=runwayElevations(p),box=gaLayout.section;
   const railTop=m.railBase+(p.aist?.railDepth??p.railHeight)/1000,seat=-m.d/2-(d?.bearing.thickness??0)/1000;
   const vTop=railTop+.3,vBottom=-m.d/2-m.bracketDepth-.3;
   const uA=-m.columnOffset,uB=m.width+m.columnOffset,uRA=-m.railZ,uRB=m.width+m.railZ;
@@ -105,7 +105,7 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   const xb=span?(SX(span.from)+SX(span.to))/2:0;
   const spanDim=(x1:number,x2:number,fromY:number,y:number,label:string)=>!span?dimH(x1,x2,fromY,y,label):
     line([x1,fromY],[x1,y+5])+line([x2,fromY],[x2,y+5])+line([x1,y],[xb-5,y])+breakLine([xb-5,y],[xb+5,y])+line([xb+5,y],[x2,y])
-    +[x1,x2].map(x=>line([x-2.5,y+3],[x+2.5,y-3])).join('')+text(xb,y-9,label,9,'middle');
+    +[x1,x2].map(x=>line([x-2.5,y+3],[x+2.5,y-3])).join('')+dimText(xb,y-9,label,9,'middle');
   let svg=`<g data-view="typical-section">`+paths(beyond.building,project,'reference-line')+paths(beyond.runway,project,'runway-line')
     +paths(cut.building,project,'reference-line')+paths(cut.runway,project,'runway-line')+paths(cut.rail,project,'rail-line');
   // Paired break lines where the crane span is shortened, and where the columns leave the band.
@@ -124,7 +124,8 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
    svg+=line([SX(e.centre),SY(vTop)-26],[SX(e.centre),below+12],'grid-line');
    const grid=e.line==='A'?uA:uB,face=grid+e.sign*m.column.d/2,near=e.sign<0?e.u1:e.u0,clear=Math.abs(near-face)*1000,yc=SY(vBottom+(vTop-vBottom)*.34);
    const [x1,x2]=[SX(Math.min(near,face)),SX(Math.max(near,face))];
-   svg+=dimH(x1,x2,yc-4,yc,`${drawingLength(clear,p.units)} CLR.`,e.sign<0?'left':'right');
+   // Clearance to the surveyed existing steel: survey data, printed as surveyed.
+   svg+=refDim(dimH(x1,x2,yc-4,yc,`${drawingLength(clear,p.units)} CLR.`,e.sign<0?'left':'right'));
    // The separation required and the column's label in the clear space, where it has room.
    const note=sep?`SEISMIC SEP. ${drawingLength(specifiedSeparation(sep.required,p.units),p.units)} MIN.`:'',label=[e.input.shape?`(E) ${e.input.shape} COLUMN`:'(E) COLUMN','PER SURVEY'];
    const room=x2-x1-12,lw=Math.max(...label.map(v=>textWidth(v,8.5)));
@@ -159,7 +160,7 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
 }
 
 export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings = defaultFraming): string {
-  const p=s.input,f=framingSchema.parse(settings),m=planSheetGeometry(p,f),dim=(meters:number)=>drawingLength(meters*1000,p.units);
+  const p=s.input,f=framingSchema.parse(settings),m=planSheetGeometry(p,f),dim=(meters:number)=>dimensionLength(meters*1000,p.units);
   const rows=[m.columnOffset,-m.width-m.columnOffset],floor=m.floor,datum=p.drawing?.datumElevation??0;
   const elevations=runwayElevations(p),datumLabel=p.drawing?.datumLabel??'Reference floor',capDetailed=p.section.kind==='cap'&&!!p.capDesign&&!!p.details;
   // New freestanding columns designed here are new work, drawn solid and detailed on S-08.
@@ -386,7 +387,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
 
 /** Girder schedule and sheet notes; the general notes are on S-00. */
 function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:number;height:number}){
-  const p=s.input,u=p.units,len=(mm:number)=>drawingLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
+  const p=s.input,u=p.units,len=(mm:number)=>dimensionLength(mm,u),tol=(mm:number)=>drawingLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
   const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP',surveyed=newColumns?existingLayout(p):undefined,separation=s.bracingSystem?.separation;
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
   const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LOCATES AT THE LOWER-NUMBERED GRID, SLIDES AT THE OTHER; SEE ${detailRef(activeEndBearing(p)?bearingBoltsTitle(p):detailTitles.movement)}`;
@@ -397,7 +398,7 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
     newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${len(specifiedSeparation(separation.required,u))} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
     `ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`,
-    `SET RAIL C/L SPACING (CRANE SPAN) TO ${d?len(d.criteria.railGauge):'THE CRANE MANUFACTURER\'S GAUGE'}, EACH RAIL ON ITS GIRDER WEB C/L${d?` WITHIN ${len(d.criteria.alignmentTolerance)}`:''}. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${len(Math.abs(p.railEccentricity))}; IT IS NOT A SETTING DIMENSION.`,
+    `SET RAIL C/L SPACING (CRANE SPAN) TO ${d?len(d.criteria.railGauge):'THE CRANE MANUFACTURER\'S GAUGE'}, EACH RAIL ON ITS GIRDER WEB C/L${d?` WITHIN ${tol(d.criteria.alignmentTolerance)}`:''}. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${tol(Math.abs(p.railEccentricity))}; IT IS NOT A SETTING DIMENSION.`,
     p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
     ...adjacentBays(p).map(b=>`AT GRID ${b.end==='left'?1:p.spans.length+1} THE EXISTING RUNWAY CONTINUES (${short((p.continuation?.source??'').toUpperCase(),70)}). THE EXISTING ${len(b.length)} GIRDER BEARS ON THE SAME SUPPORT AND STAYS IN PLACE; ITS REACTION IS INCLUDED IN THE SUPPORT DESIGN. FIELD VERIFY ITS SPAN, BEARING, TIE AND RAIL JOINT BEFORE FABRICATION.`)
   ];

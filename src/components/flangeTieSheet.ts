@@ -6,9 +6,9 @@ import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeEndStop} from '../engine/endStopInputs';
 import {boltProperties} from '../engine/connectionStrength';
 import {format} from '../engine/units';
-import {drawingLength,plateInches} from './drawingFormat';
+import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
 import {capChannelProfile} from '../engine/channelProfile';
-import {sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,filletLeader,multiLeader,detailRef,detailTitles,columnReference,breakLine,textWidth,labelCaps,n,sectionCut,capChannelSection,type XY} from './sheetGraphics';
+import {dimText,sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,filletLeader,multiLeader,detailRef,detailTitles,columnReference,breakLine,textWidth,labelCaps,n,sectionCut,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,paragraph,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type ViewRender} from './detailSheet';
 
@@ -18,7 +18,7 @@ const siLength=(mm:number)=>`${(mm>=25?Math.round(mm):Math.round(mm*2)/2).toLoca
 /** Plate, bolt and weld sizes: inch fractions, or SI millimetres. */
 export const tieSize=(mm:number,u:Units)=>u==='US'?plateInches(mm,'US'):siLength(mm);
 /** Dimensions: feet and inches, or SI millimetres. */
-export const tieDim=(mm:number,u:Units)=>u==='US'?drawingLength(mm,'US'):siLength(mm);
+export const tieDim=(mm:number,u:Units)=>u==='US'?dimensionLength(mm,'US'):siLength(mm);
 /** Weld length beside the weld symbol: inches and fractions without the inch mark (AWS A2.4), or millimetres. */
 export function weldLength(mm:number,u:Units){
  if(u==='SI')return siLength(mm);
@@ -34,7 +34,7 @@ export interface Weld {size:string;length:string;both:boolean;field?:boolean}
  */
 export function weldLeader(points:XY[],at:XY,w:Weld,labels:string[],via:XY[][]=[]){
  const svg=filletLeader(points,at,w.size,labels,w.both,via,!!w.field),x=at[0]+41,y=at[1]-3,length=labelCaps(w.length.replaceAll('"',''));
- return svg.slice(0,-4)+text(x+12,y+7,length,8)+(w.both?text(x+12,y-2,length,8):'')+'</g>';
+ return svg.slice(0,-4)+dimText(x+12,y+7,length,8)+(w.both?dimText(x+12,y-2,length,8):'')+'</g>';
 }
 type Callout={at:XY;labels:string[];weld?:Weld};
 const calloutHeight=(v:Callout)=>(v.weld?17:0)+v.labels.length*11;
@@ -69,10 +69,10 @@ function chainH(xs:number[],fromY:number,y:number,labels:string[]){
  for(const x of xs)svg+=line([x,fromY],[x,y+5])+line([x-2.5,y+3],[x+2.5,y-3]);
  labels.forEach((v,i)=>{
   const a=xs[i],b=xs[i+1],w=textWidth(v,9);
-  if(w+6<=b-a)svg+=text((a+b)/2,y-5,v,9,'middle');
-  else if(i===0)svg+=line([a-w-6,y],[a,y])+text(a-4,y-5,v,9,'end');
-  else if(i===labels.length-1)svg+=line([b,y],[b+w+6,y])+text(b+4,y-5,v,9,'start');
-  else svg+=text((a+b)/2,y+12,v,9,'middle');
+  if(w+6<=b-a)svg+=dimText((a+b)/2,y-5,v,9,'middle');
+  else if(i===0)svg+=line([a-w-6,y],[a,y])+dimText(a-4,y-5,v,9,'end');
+  else if(i===labels.length-1)svg+=line([b,y],[b+w+6,y])+dimText(b+4,y-5,v,9,'start');
+  else svg+=dimText((a+b)/2,y+12,v,9,'middle');
  });
  return svg;
 }
@@ -145,7 +145,7 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
  svg+=line([X(g.start),gy1+gap],[X(g.start),overall+5])+line([X(g.barEnd),cy1+gap],[X(g.barEnd),overall+5])+dimH(X(g.start),X(g.barEnd),overall+5,overall,dim(t.length));
  // Vertical bolt gauge in the free length of the bars; the value reads across the bar beside its dimension line.
  {const rowEnd=g.start+c.edge+(c.rows-1)*c.pitch,w=textWidth(sz(c.gauge),9),gx=Math.max(X(g.gussetEnd)+12,(X(g.gussetEnd)+X(g.columnGussetStart)-w)/2-2),ya=Y(drop-c.gauge/2),yb=Y(drop+c.gauge/2),fx=X(rowEnd)+hole*k/2+2;
-  svg+=line([fx,ya],[gx+5,ya])+line([fx,yb],[gx+5,yb])+line([gx,ya],[gx,yb])+[ya,yb].map(v=>line([gx-3,v+2.5],[gx+3,v-2.5])).join('')+text(gx+4,(ya+yb)/2+3,sz(c.gauge),9);}
+  svg+=line([fx,ya],[gx+5,ya])+line([fx,yb],[gx+5,yb])+line([gx,ya],[gx,yb])+[ya,yb].map(v=>line([gx-3,v+2.5],[gx+3,v-2.5])).join('')+dimText(gx+4,(ya+yb)/2+3,sz(c.gauge),9);}
  // Capped girder: the gusset end clears the turned-down channel flange (dimensioned where the gusset rises above it).
  const capItem:Callout[]=[];
  if(cap&&g.capClear!==undefined&&a.saddleThickness<capDrop){
@@ -284,7 +284,7 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `GIRDER FORCE TRANSFERS THROUGH THE GUSSET AND SADDLE DIRECTLY TO THE FLANGE. DO NOT WELD THE GUSSET TO THE WEB. WELD THE SADDLE TO THE FLANGE ONLY WITH THE TWO ${sz(a.weldSize).replaceAll('"','')} TRANSVERSE END FILLETS, ONE ACROSS EACH END, ${dim(g.endWeldLength)} LONG, WITHOUT END RETURNS; DO NOT WELD THE SADDLE EDGES ALONG THE RUNWAY.`,
   col.isNew?`SHOP WELD COLUMN GUSSET TO THE ${col.name}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}.`:`FIELD WELD COLUMN GUSSET TO ${g.receiver?'EXISTING COLUMN':'THE COLUMN'}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}. VERIFY STEEL GRADE, WELDABILITY AND SURFACE CONDITION.`,
   rel?single?`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)} LONG (FY ${stress(d.material.Fy)} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET, THE PLATE ON ONE SLEEVE END AND AN F436 WASHER ON THE OTHER. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. NO FILLER: THE PLATE FLEXES TO TAKE UP THE SLEEVE PROJECTION.`:`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)} LONG (FY ${stress(d.material.Fy)} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. PROVIDE A ${sz(rel.clearance)} FILLER (CLASS B SURFACES) AT THE GIRDER GUSSET SO THE BARS STAY PARALLEL.`:single?'COLUMN END: STANDARD HOLES; THE PLATE ALSO FLEXES WITH SUPPORT DEFLECTION.':'COLUMN END: STANDARD HOLES; THE BARS ALSO FLEX WITH SUPPORT DEFLECTION.',
-  `${single?'THE PLATE FLEXES ABOUT ITS WEAK AXIS':'TIE BARS FLEX OUT OF PLANE'} WITH GIRDER END ROTATION AND, AT SLIDING ENDS, THERMAL TRAVEL; SEE THE TIE MOVEMENT CHECKS.${single?` KEEP ITS CLEAR LENGTH FREE OF ATTACHMENTS AND WELDS. SET THE COLUMN GUSSET IN LINE WITH THE GIRDER GUSSET WITHIN ${sz(25.4/16)} ALONG THE RUNWAY; THE PLATE FLEXURE CHECK INCLUDES THAT OFFSET${rel?' AND HALF THE SLEEVE CLEARANCE':''}.`:''}${support?.capacity!==undefined?` BRACKET BY OTHERS: VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${dim(support.capacity)} MAX.`:''}`,
+  `${single?'THE PLATE FLEXES ABOUT ITS WEAK AXIS':'TIE BARS FLEX OUT OF PLANE'} WITH GIRDER END ROTATION AND, AT SLIDING ENDS, THERMAL TRAVEL; SEE THE TIE MOVEMENT CHECKS.${single?` KEEP ITS CLEAR LENGTH FREE OF ATTACHMENTS AND WELDS. SET THE COLUMN GUSSET IN LINE WITH THE GIRDER GUSSET WITHIN ${sz(25.4/16)} ALONG THE RUNWAY; THE PLATE FLEXURE CHECK INCLUDES THAT OFFSET${rel?' AND HALF THE SLEEVE CLEARANCE':''}.`:''}${support?.capacity!==undefined?` BRACKET BY OTHERS: VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${drawingLength(support.capacity,u)} MAX.`:''}`,
   `GIRDER END: STANDARD HOLES, PRETENSIONED ${c.grade} BOLTS${single?' IN SINGLE SHEAR, HEADS ON THE PLATE':''}, CLASS B FAYING SURFACES. NO HOLES OR CUTS THROUGH THE ${cap?'CAP OR ':''}W FLANGES${drilled.length?` EXCEPT THOSE DETAILED FOR THE ${drilled.join(' AND ')}`:''}.` ];
  // The summary D/C is the largest strength and fatigue ratio. Minimum weld sizes, clearances, edge distances and
  // slenderness are detailing limits: one scores 1.00 whenever the provided size equals the limit, which would read

@@ -2,7 +2,7 @@ import {deflectionCriteria} from '../engine/aistChecks';
 import {effectiveBuildingClass} from '../engine/buildingClass';
 import type {ProjectInput} from '../engine/types';
 import {format} from '../engine/units';
-import {drawingLength,plateInches} from './drawingFormat';
+import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
 import {ribGeometry} from '../engine/bracketRib';
 import {rolledStub} from '../engine/rolledBracketInputs';
 import {haunchGeometry} from '../engine/taperedHaunchInputs';
@@ -19,7 +19,7 @@ import {activeEndStop} from '../engine/endStopInputs';
 export type Component='girder'|'rail'|'bearing'|'tie'|'support'|'column'|'base'|'bracing'|'end-stop'|'crane'|'criteria';
 
 const plate=(p:ProjectInput,...v:number[])=>`PL ${v.map(x=>plateInches(x,p.units)).join(' × ')}`;
-const len=(p:ProjectInput,v:number)=>drawingLength(v,p.units);
+const len=(p:ProjectInput,v:number)=>dimensionLength(v,p.units);
 const bolt=(p:ProjectInput,d:number,grade:string)=>`${plateInches(d,p.units)} ${grade}`;
 const fillet=(p:ProjectInput,w:number)=>`${plateInches(w,p.units)} fillets`;
 

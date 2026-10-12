@@ -11,8 +11,8 @@ import {flangeTieGeometry} from '../engine/tieGeometry';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapGeometry} from '../engine/columnCap';
 import {columnCapTitles} from './columnCapSheet';
-import {drawingLength,drawingElevation,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,capChannelSection,type XY} from './sheetGraphics';
+import {drawingLength,drawingElevation,plateInches,dimensionLength} from './drawingFormat';
+import {dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {ribGeometry,ribDepthAt} from '../engine/bracketRib';
 import {haunchedRibOutline} from './haunchedBracketDrawing';
@@ -60,7 +60,7 @@ export function newColumnSheetSvg(s:CalculationSnapshot,number='S-08'){return to
 /** New freestanding runway column, its base plate, anchor rods and spread footing, with design data and notes. */
 export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,u=p.units,col=p.existingColumn!,b=p.columnBase!,d=p.details!,br=d.bracket?.enabled?d.bracket:undefined,bseat=br?bracketSeat(br):undefined,g=p.section,r=s.columnBase;
- const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'||q==='stress'&&u==='SI'?0:u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
+ const dim=(v:number)=>dimensionLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,q==='pressure'||q==='stress'&&u==='SI'?0:u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
  const c=existingColumnSection(p).section,name=col.shape||`BUILT-UP ${size(c.d)} X ${size(c.bf)}`;
  const tb=b.plate.thickness,gr=b.grout,ft=b.footing,hf=ft.thickness,a=b.anchors,hw=anchorHardware(a.diameter),row=b.plate.N/2-a.edge;
  const bt=d.bearing.thickness,seat=col.seatElevation,H=col.height,cap=g.kind==='cap'?g.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,rl=d.rail;
@@ -252,7 +252,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   // An embedment too short for its text carries the text above the footing, clear of the thickness string below; a
   // rod spacing too short for its text carries it to the left, above the slab and clear of the callout leaders.
   const lx=X(-ft.L/2),dx=x0-10,emb=dim(a.embedment),ew=textWidth(emb,9),ey1=Y(ftgTop),ey2=Y(head);
-  svg+=ew+6<=ey2-ey1?dimV(ey1,ey2,X(-row-nut/2),dx,emb):line([X(-row-nut/2),ey1],[dx-4,ey1])+line([X(-row-nut/2),ey2],[dx-4,ey2])+line([dx,ey1-ew-6],[dx,ey2])+[ey1,ey2].map(y=>line([dx-3,y+2.5],[dx+3,y-2.5])).join('')+text(dx-6,ey1-4-ew/2,emb,9,'middle',400,-90);
+  svg+=ew+6<=ey2-ey1?dimV(ey1,ey2,X(-row-nut/2),dx,emb):line([X(-row-nut/2),ey1],[dx-4,ey1])+line([X(-row-nut/2),ey2],[dx-4,ey2])+line([dx,ey1-ew-6],[dx,ey2])+[ey1,ey2].map(y=>line([dx-3,y+2.5],[dx+3,y-2.5])).join('')+dimText(dx-6,ey1-4-ew/2,emb,9,'middle',400,-90);
   svg+=dimV(Y(ftgTop),Y(ftgBot),lx,dx-20,dim(hf));
   const spacing=dim(2*row),short=textWidth(spacing,9)+6>2*row*kk,sy=short&&ft.slab>0?Math.min(Y(stub)-6,Y(slabTop)-8):Y(stub)-6;
   svg+=dimH(X(-row),X(row),Y(hw.washerThickness+a.diameter*1.6),sy,spacing,short?'left':'right');

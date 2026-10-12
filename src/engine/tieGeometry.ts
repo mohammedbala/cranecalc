@@ -1,4 +1,5 @@
 import type {ProjectInput} from './types';
+import {snapQuarter} from './quarterInch';
 import type {RunwayDetails} from './runwayDetails';
 import {independentBearings} from './simpleSupports';
 import {tieArrangement} from './connectionOptions';
@@ -75,7 +76,9 @@ export function flangeTieGeometry(p:ProjectInput){
  const face=d.bracket?.enabled?d.bracket.reach:a.columnFace;if(!face)return undefined;
  const b=p.section,t=d.brace,c=t.connection;
  const barGap=tieBarGap(c.weldSize),barEnd=face-barGap,start=barEnd-t.length,connection=(c.rows-1)*c.pitch+2*c.edge;
- const rootStart=b.tw/2+a.webGap,rootEnd=b.bf/2,rootLength=rootEnd-rootStart;
+ // The saddle starts webGap clear of the web, on the 1/4 in grid from the web centerline, and is cut to the 1/4 in
+ // grid toward the flange tip, ending at the tip or just inside it.
+ const rootStart=snapQuarter(b.tw/2+a.webGap,'up'),rootLength=snapQuarter(b.bf/2-rootStart,'down'),rootEnd=rootStart+rootLength;
  // The bars clear the saddle and, against the gusset, the toe of the gusset-to-saddle fillets.
  const saddleClear=Math.max(a.clearance,roundUp(a.weldSize+inch/16,inch/8));
  const capDrop=b.kind==='cap'?b.capDepth-b.capTw-b.tf:0;

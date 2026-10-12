@@ -3,7 +3,7 @@ import {girderBearingTitle} from './columnCapSheet';
 import {activeEndStop} from '../engine/endStopInputs';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
-import {sheetDrawingScale as drawingScale,rect,line,text,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,capChannelSection} from './sheetGraphics';
+import {refDim,sheetDrawingScale as drawingScale,rect,line,text,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,capChannelSection} from './sheetGraphics';
 import {tieDim,tieSize} from './flangeTieSheet';
 import {heading,numbered,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type ViewRender} from './detailSheet';
@@ -26,7 +26,7 @@ export function capTopic(s:CalculationSnapshot):DetailTopic{
  svg+=rect(rx-r.headWidth*k/2,ry,r.headWidth*k,r.headThickness*k,'rail-line')+rect(rx-r.webThickness*k/2,ry+r.headThickness*k,r.webThickness*k,(p.aist!.railDepth-r.headThickness-r.baseThickness)*k,'rail-line')+rect(rx-r.baseWidth*k/2,y-(b.capTw+r.baseThickness)*k,r.baseWidth*k,r.baseThickness*k,'rail-line');
  for(const sign of [-1,1]){const wx=cx+sign*b.bf*k/2,w=c.weldSize*k;svg+=`<path class="runway-line" d="M${wx},${y}l${sign*w},0l${-sign*w},${w}Z"/>`;}
  svg+=dimH(cx-b.capWidth*k/2,cx+b.capWidth*k/2,y-b.capTw*k,91,dim(b.capWidth));
- svg+=dimV(y,y+b.d*k,left,72,dim(b.d));
+ svg+=refDim(dimV(y,y+b.d*k,left,72,size(b.d)));
  // Each callout uses its own corridor; one arrow with EACH W FLANGE EDGE avoids crossings.
  svg+=multiLeader([[rx+r.headWidth*k/2,ry+r.headThickness*k/2]],[365,124],[`RAIL / KEEPERS PER ${detailRef(detailTitles.railKeeper)}`]);
  svg+=multiLeader([[cx+b.capWidth*k/2,y-b.capTw*k/2]],[365,168],[`${b.capCatalogueId??b.name} CAP CHANNEL`,`FY = ${stress(p.capDesign!.Fy)}, FU = ${stress(p.capDesign!.Fu)}; SEE S-00`]);

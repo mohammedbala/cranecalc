@@ -6,8 +6,8 @@ import {format} from '../engine/units';
 import {endStopGeometry,stopBumperForce,activeEndStop,wrenchClearance} from '../engine/endStop';
 import {craneCombinations} from '../engine/aistLoads';
 import {boltProperties} from '../engine/connectionStrength';
-import {drawingLength,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,labelCaps,textWidth,n,breakLine,sectionCut,capChannelSection,type XY} from './sheetGraphics';
+import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
+import {refDim,dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,labelCaps,textWidth,n,breakLine,sectionCut,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {flangeTieGeometry} from '../engine/tieGeometry';
@@ -25,7 +25,7 @@ const tickH=(x:number,y:number)=>line([x-2.5,y+3],[x+2.5,y-3]),tickV=(x:number,y
 /** Vertical dimension line with its ticks and value (as dimV), for extension lines drawn from their own features. */
 function dimLineV(y1:number,y2:number,x:number,label:string){
  const w=textWidth(label,9),fits=w+6<=Math.abs(y2-y1),far=Math.max(y1,y2);
- return line([x,Math.min(y1,y2)],[x,fits?far:far+w+6])+tickV(x,y1)+tickV(x,y2)+text(x-6,fits?(y1+y2)/2:far+4+w/2,label,9,'middle',400,-90);
+ return line([x,Math.min(y1,y2)],[x,fits?far:far+w+6])+tickV(x,y1)+tickV(x,y2)+dimText(x-6,fits?(y1+y2)/2:far+4+w/2,label,9,'middle',400,-90);
 }
 
 /** End stop details on their own sheet. */
@@ -33,7 +33,7 @@ export function endStopSheetSvg(s:CalculationSnapshot,number='S-07'){return topi
 /** Bolted runway end stop: elevation, plan and section looking at the face, with design data and notes. */
 export function endStopTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,d=p.details!,e=activeEndStop(p)!,b=p.section,g=endStopGeometry(p,e),r=d.rail,u=p.units;
- const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number)=>{const t=format(v,'force',u,1);return u==='US'?t.toUpperCase():t;};
+ const dim=(v:number)=>dimensionLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number)=>{const t=format(v,'force',u,1);return u==='US'?t.toUpperCase():t;};
  const tb=e.base.thickness,tp=e.face.thickness,H=e.face.height,ts=e.stiffener.thickness,Ls=e.stiffener.length,sp=e.stiffener.spacing,Wb=e.base.width,gauge=e.bolts.gauge,db=e.bolts.diameter;
  const capped=b.kind==='cap',capT=capped?b.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,stiffTop=g.stiffenerHeight;
  // The rail stands on its pad, where there is one, and the first keeper pair is the typical keeper.
@@ -82,7 +82,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // Each label sits outboard of the girder end on its own dimension line, clear of the stop and of the callout
   // leaders. The origin line rises from the top of the girder end and the stop face line from the top of the face
   // plate. The base plate is located on the plan.
-  ordinates.forEach(([x,label],i)=>{const yd=tier(i);svg+=line([X(0)-3,yd],[X(x),yd])+tickH(X(0),yd)+tickH(X(x),yd)+text(X(0)-5,yd+3,`${label} ${dim(x)}`,7.5,'end');});
+  ordinates.forEach(([x,label],i)=>{const yd=tier(i);svg+=line([X(0)-3,yd],[X(x),yd])+tickH(X(0),yd)+tickH(X(x),yd)+dimText(X(0)-5,yd+3,`${label} ${dim(x)}`,7.5,'end');});
   svg+=line([X(0),ys-gap],[X(0),tier(ordinates.length-1)-over])+line([X(g.faceFront),top-gap],[X(g.faceFront),tier(ordinates.length-1)-over]);
   // Face plate height from the top of the base plate, between the girder end and the stop: the upper extension line
   // from the top of the face plate, the lower from the back of the base plate.
@@ -173,10 +173,10 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   svg+=dimH(X(-Wb/2),X(Wb/2),Y(tb+H)-2,Y(tb+H)-14,dim(Wb))+dimH(X(-gauge/2),X(gauge/2),wFl+hx.nut*kk+2,cut+26,dim(gauge));
   svg+=dimV(Y(tb+H),yb,X(-Wb/2)-2,xH,dim(H));
   // The bumper height shares the base plate extension line of the face plate height.
-  svg+=line([bc[0]+rb+6,bc[1]],[xC-over,bc[1]],'grid-line')+dimLineV(bc[1],yb,xC,dim(g.contact));
+  svg+=line([bc[0]+rb+6,bc[1]],[xC-over,bc[1]],'grid-line')+refDim(dimLineV(bc[1],yb,xC,drawingLength(g.contact,u)));
   const lx=Math.min(X(Math.max(Wb,g.surfaceWidth)/2)+60,420);
   svg+=labelColumn([
-   {at:[bc[0]+e.bumperDiameter/2*kk*.7,bc[1]-e.bumperDiameter/2*kk*.7],labels:['CRANE BUMPER (REF.)',`${size(e.bumperDiameter)} CONTACT, ON RAIL C/L`,`C/L ${dim(g.contact)} ABOVE BASE PL`]},
+   {at:[bc[0]+e.bumperDiameter/2*kk*.7,bc[1]-e.bumperDiameter/2*kk*.7],labels:['CRANE BUMPER (REF.)',`${size(e.bumperDiameter)} CONTACT, ON RAIL C/L`,`C/L ${drawingLength(g.contact,u)} ABOVE BASE PL`]},
    {at:[X(sp/2+ts/2),Y(tb+stiffTop*.5)],labels:['STIFFENERS BEYOND (HIDDEN),','WELDED TO FACE PL FULL HEIGHT']},
    {at:[X(gauge/2)+hx.corners/2*kk,wFl+hx.nut/2*kk],labels:[boltLabel,'NUTS BELOW TOP FLANGE','CLEAR OF WEB FILLET']},
    {at:[X(b.tw/2),cut-6],labels:[`${b.name} RUNWAY GIRDER`]}

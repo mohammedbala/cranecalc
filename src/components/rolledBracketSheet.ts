@@ -2,8 +2,8 @@ import {preheatBasis} from '../engine/constructionNotes';
 import {supportColumn} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
-import {drawingLength,electrodeClass,plateInches} from './drawingFormat';
-import {sheetDrawingScale,textWidth,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldWeldFlag,labelCaps,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,type XY} from './sheetGraphics';
+import {drawingLength,electrodeClass,plateInches,dimensionLength} from './drawingFormat';
+import {sheetDrawingScale,textWidth,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldWeldFlag,weldJunction,labelCaps,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,type XY} from './sheetGraphics';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {bracketForceBlocks} from './bracketForceTable';
@@ -25,7 +25,7 @@ type Item={at:XY;labels:string[];weld?:string;both?:boolean;field?:boolean;groov
  */
 export function grooveLeader(points:XY[],at:XY,labels:string[],field=false){
  const y=at[1]-3,x=at[0]+41,right=points.every(p=>p[0]>at[0]+89),tail=right?at[0]-3:at[0]+92,dir=right?-1:1;
- return `<g data-multileader="weld" data-weld="cjp"${field?' data-weld-location="field"':''}>${multiLeader(points,at,[],8,[],89)}${line([at[0]-3,y],[at[0]+92,y])}${line([x,y],[x,y+8])}${line([x,y],[x+8,y+8])}${line([tail,y],[tail+dir*6,y-5])}${line([tail,y],[tail+dir*6,y+5])}${text(tail+dir*8,y+3,'CJP',8,right?'end':'start')}${labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('')}${field?fieldWeldFlag(right?[at[0]+117,at[1]]:at):''}</g>`;
+ return `<g data-multileader="weld" data-weld="cjp"${field?' data-weld-location="field"':''}>${multiLeader(points,at,[],8,[],89)}${line([at[0]-3,y],[at[0]+92,y])}${line([x,y],[x,y+8])}${line([x,y],[x+8,y+8])}${line([tail,y],[tail+dir*6,y-5])}${line([tail,y],[tail+dir*6,y+5])}${text(tail+dir*8,y+3,'CJP',8,right?'end':'start')}${labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('')}${field?fieldWeldFlag(weldJunction(at,right),right?'right':'left'):''}</g>`;
 }
 /** Callouts in a column at x, ordered by target height between top and bottom: plain, fillet or CJP groove. */
 function calloutColumn(items:Item[],x:number,top:number,bottom:number){
@@ -42,7 +42,7 @@ function calloutColumn(items:Item[],x:number,top:number,bottom:number){
 export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const p=s.input,d=p.details,b=d?.bracket;if(!d||!b?.enabled||!usesRolledBracket(p))return undefined;
  const st=projectStub(p),r=st.input,seat=st.seat,sf=st.stiffener,g=stubWeldGroup(st);
- const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
+ const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  const sc=supportColumn(p),collector=designsBracing(p),eb=activeEndBearing(p),eg=eb?endBearingGeometry(p,eb):undefined,gap=p.system==='simple'?simpleSupportInput(p).endGap:0;
  const a=b.reach,W=d.bearing.width,tb=d.bearing.thickness,ts=seat?.t??0,where=sc.isNew?'SHOP':'FIELD';
  const plate=seat?{length:seat.length,label:`SEAT PL ${size(seat.t)}`}:{length:st.bf,label:`${st.name} TOP FLANGE`};

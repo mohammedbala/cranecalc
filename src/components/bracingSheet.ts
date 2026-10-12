@@ -11,8 +11,8 @@ import {capWorkPointDrop,columnCapGeometry} from '../engine/columnCap';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapTitles} from './columnCapSheet';
 import {runwayElevations} from '../engine/drawingData';
-import {drawingLength,holeInches,plateInches} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,type XY} from './sheetGraphics';
+import {drawingLength,holeInches,plateInches,dimensionLength} from './drawingFormat';
+import {refDim,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import type {DetailTopic,DetailView} from './detailSheet';
 
@@ -73,7 +73,7 @@ export const rodCrossingTitle='ROD CROSSING / SECTION AT MID-BAY';
 export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  const p=s.input,u=p.units,r=s.bracingSystem!,g=r.geometry,L=r.layout,b=p.longitudinalBracing!,d=bracingDesign(p),col=p.existingColumn!,base=p.columnBase!;
  const c=existingColumnSection(p).section,colName=col.shape||'BUILT-UP',sg=g.strut,dt=p.details!,br=dt.bracket?.enabled?dt.bracket:undefined,rolled=br?rolledUnderSeat(p)??haunchUnderSeat(p):undefined;
- const dim=(v:number)=>drawingLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
+ const dim=(v:number)=>dimensionLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
  const cr=g.cross,rodName=`${size(b.rod.diameter)} DIA. ROD`,pinName=`${size(g.dp)} DIA. PIN`,gussetName=`PL ${size(g.t)} GUSSET`,boltName=`2 - ${size(d.strut.boltDiameter)} ${d.strut.grade} BOLTS`;
  const grids=(i:number)=>[i,i+1].map(String),spanGrids=L.spans.map(i=>grids(i).join('-')).join(', '),[gridA,gridB]=grids(L.spans[0]);
  const offsetLabel=`${dim(cr.offset)} OFF COLUMN C/L TOWARD GIRDER`;
@@ -314,7 +314,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   svg+=ellipse(0)+ellipse(cr.offset);
   // Planes of the gussets through the rods, up through the strut.
   for(const y of [0,cr.offset])svg+=line([X(y),top-10],[X(y),yr+ry+8],'grid-line');
-  svg+=dimH(X(0),X(cr.offset),yr+ry+2,yr+ry+18,dim(cr.offset),'left')+dimH(X(rd/2),X(cr.offset-rd/2),yr+ry+2,yr+ry+34,dim(cr.clear)+' CLEAR','left');
+  svg+=dimH(X(0),X(cr.offset),yr+ry+2,yr+ry+18,dim(cr.offset),'left')+refDim(dimH(X(rd/2),X(cr.offset-rd/2),yr+ry+2,yr+ry+34,drawingLength(cr.clear,u)+' CLEAR','left'));// The clearance follows from the gusset, strut web and filler thicknesses.
   const items:{at:XY;labels:string[]}[]=[
    {at:[X(wc+sbf/2),top+stf*kk/2],labels:[`${sg.shape} STRUT, CUT AT MID-BAY:`,'WEB BETWEEN THE GUSSET PLANES']},
    {at:[X(cr.offset)+rd/2*kk,yr],labels:[`ROD ${gridB}-${gridA}, IN THE PLANE OF ITS`,`GUSSETS, ${dim(cr.offset)} TOWARD GIRDER`,'RODS NOT CONNECTED']}
@@ -336,7 +336,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   ['ROD STRENGTH = CONNECTION FORCE',`${force(r.develop)}: CLEVIS, ${pinName}, ${gussetName} AND WELDS DEVELOP THE ROD`],
   ['GUSSET WELDS',`${weldLabel} FILLETS BOTH FACES: ${dim(r.outlines.welds.upper.to-r.outlines.welds.upper.from)} TO WEB AT W.P.; ${dim(r.outlines.welds.lower.web)} TO WEB AND ${dim(r.outlines.welds.lower.plate-g.x0)} TO BASE PL`],
   ['STRUT',`${sg.shape}, ${force(r.strutForce.H)} (${r.strutForce.id}); ${boltName} EACH END`],
-  ['ROD CROSSING',`ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}; RODS ${dim(cr.clear)} CLEAR AT MID-BAY`],
+  ['ROD CROSSING',`ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}; RODS ${drawingLength(cr.clear,u)} CLEAR AT MID-BAY`],
   ['COLLECTOR AT EACH COLUMN',capG?`GIRDER LOCATING BOLTS TO THE COLUMN CAP, CAP FILLETS ALL AROUND THE COLUMN: ${force(r.seatForce.F)}`:rolled?`GIRDER LOCATING BOLTS TO ${rolled.seat?'SEAT':'BRACKET FLANGE'}, ${rolled.name} BRACKET WELDS TO FLANGE: ${force(r.seatForce.F)}`:`GIRDER LOCATING BOLTS TO SEAT, ${size(d.seatWeld)} SEAT FILLET TO FLANGE: ${force(r.seatForce.F)}`],
   ...(z?[['SEISMIC ALONG RUNWAY',`R ${z.basis.R}, CS ${z.basis.Cs.toFixed(3)}, QE ${force(z.QE)}; DRIFT ${dim(z.drift)}`]]:[]),
   ...(sep?[['SEISMIC SEPARATION',`${dim(specifiedSeparation(sep.required,u))} MIN. CLEAR TO EXISTING BUILDING (ASCE 7 §12.12.3)`]]:[]),
