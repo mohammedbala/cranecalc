@@ -53,7 +53,7 @@ function capAngleCoordination(p:ProjectInput):CheckResult[]{
  if(worst){
   const nut=nuts[0].parts,seat=g.cap.seat,stiffOut=s.tw/2+bs.stiffenerWidth,nutEnd=Math.min(...nut.map((b:CapAngleBox)=>b.min[1]));
   out.push(check(p,'coord-cap-tie-stiffener','Cap tie bolt hardware clear of the girder bearing stiffeners',coordinationAllowance,worst.clear,
-   'c=\\min_{ties}\\,\\mathrm{dist}(\\text{nut, washer, bolt end};\\;\\text{stiffener}+w)\\ge1/8\\,in',
+   'c\\ge1/8\\,\\mathrm{in}\\ \\ \\text{(tie nut, washer, bolt end to stiffener weld)}',
    `${worst.clear<0?`Interference ${len(-worst.clear)}`:`Clear ${len(worst.clear)}`} at the ${worst.end} end of bay ${worst.bay} (${worst.grid}), governing part: ${worst.part}. The cap bolts are ${len(g.cap.gauge)} below the top of the cap at ${len(g.cap.pitch)} pitch, the tie centered ${len(g.input.setback)} from each girder end; the bearing stiffener pair (${len(bs.stiffenerThickness)} plate, ${len(bs.weldSize)} fillets, outstand to ${len(stiffOut)} from the web centerline) is at the bearing center, ${len(worst.dx)} along the runway from the nearer cap bolt. Inside the channel the ${seat.washer.kind==='beveled'?'F436 1:6 beveled washer':'F436 washer'}, nut and bolt end reach ${len(nutEnd)} from the web centerline (channel flange ${len(seat.thickness)} thick at the bolt line). Required clear distance ${len(coordinationAllowance)}: 1/16 in location tolerance on each part.`,
    ['cap-angle-basis','aisc-connections']));
  }
@@ -62,7 +62,7 @@ function capAngleCoordination(p:ProjectInput):CheckResult[]{
  if(shared.length){
   const gap=Math.min(...shared.map(a=>Math.abs(a.offset)))*2-g.endPlate.width;
   const at=shared.reduce((a,v)=>Math.abs(v.offset)<Math.abs(a.offset)?v:a,shared[0]);
-  out.push(check(p,'coord-cap-tie-adjacent','Adjacent cap ties at a shared column clear of each other',coordinationAllowance,gap,'2\\min|x_{tie}-x_{col}|-b_{ep}\\ge1/8\\,in',
+  out.push(check(p,'coord-cap-tie-adjacent','Adjacent cap ties at a shared column clear of each other',coordinationAllowance,gap,'2e_x-b_{ep}\\ge1/8\\,\\mathrm{in}',
    `The end plates (${len(g.endPlate.width)} wide) of the two girder ends at ${gridName(p,at.station)} are centered ${len(Math.abs(at.offset))} each side of the column centerline: clear ${len(gap)} between them.`,['cap-angle-basis','aisc-connections']));
  }
  return out;
@@ -98,7 +98,7 @@ function railJointCoordination(p:ProjectInput):CheckResult[]{
  const opposite=(side:'A'|'B')=>layout.rails.find(r=>r.side!==side)!.joints;
  const clearOf=(x:number,side:'A'|'B')=>Math.min(...layout.girderJoints.map(g=>Math.abs(x-g)),...opposite(side).flatMap(o=>layout.wheelSteps.map(w=>Math.abs(Math.abs(x-o)-w))),Infinity);
  const worst=joints.map(v=>({...v,clear:clearOf(v.j,v.side)})).reduce((a,v)=>v.clear<a.clear?v:a);
- const r=check(p,'coord-rail-joints','Rail joints staggered and clear of girder joints',railLayoutCriteria.clear,worst.clear,'\\min|x_j-x_{girder\\,joint}|,\\;\\min\\big||x_j-x_{opp}|-s_{wheel}\\big|\\ge2\\,ft',
+ const r=check(p,'coord-rail-joints','Rail joints staggered and clear of girder joints',railLayoutCriteria.clear,worst.clear,'|x_j-x_g|,\\ \\big||x_j-x_j^{\\prime}|-s\\big|\\ge2\\,\\mathrm{ft}',
   `${joints.length} rail joints on the two runways. The closest is on rail ${worst.side} at ${len(worst.j)} from grid 1, ${len(worst.clear)} from the nearest girder joint or opposite-rail joint at a crane wheel spacing.${layout.conflicts.length?` Joints that could not be placed clear: ${layout.conflicts.map(len).join(', ')}.`:''} AIST TR-13 §5.16.1: joints staggered across the runway so the wheels of one end truck do not cross both rails' joints together; rail pieces are cut from ${len(railLayoutCriteria.stock)} mill lengths, none shorter than ${len(railLayoutCriteria.minPiece)}.`,['tr13-rail-joints']);
  return [r];
 }

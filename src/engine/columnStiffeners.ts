@@ -194,14 +194,14 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
  const sense=(v:typeof levels[number])=>`${v.l.name}: tension R_u = ${F(v.req.T)} against φR_n = ${F(v.req.tMin.value)} (${v.req.tMin.label}), R_st = ${F(v.req.Rt)}; compression R_u = ${F(v.req.C)} against ${v.req.swayGoverns?`the J10.4 sidesway strength ${F(x.sidesway!.value)}: the stiffeners take the full force`:`φR_n = ${F(v.req.cMin.value)} (${v.req.cMin.label}), R_st = ${F(v.req.Rc)}`}`;
  for(const v of levels){
   const cap=v.governs==='compression'?v.pair.compression:v.pair.tension,R=v.governs==='compression'?v.req.Rc:v.req.Rt;
-  add(`${v.l.key}`,`Column stiffeners at the ${v.l.name} · required strength (J10.8, J4.1, J4.4)`,R,cap,'force','R_{st}=R_u-\\min\\phi R_{n,J10.1\\text{–}J10.4}\\;(\\text{full }R_u\\text{ if J10.4 governs});\\quad\\phi P_t=\\phi F_y2(b_s-c)t_s;\\;\\phi P_c=\\phi F_{cr}A\\big|_{KL=0.75L,\\,web\\,25t_w}',
-   `${sense(v)}. Pair of ${plates}, centered ${f(v.l.z)} from the seat top at the ${v.l.name}. Tension: J4.1 yielding of both plates at their clipped flange contact, φPt = ${F(v.pair.tension)}. Compression: J10.8 column of both plates and a ${v.nearTop?'12':'25'}tw web strip (${f(v.pair.strip)}), KL = 0.75 × ${f(g.length)} = ${f(v.pair.KL)}, KL/r = ${v.pair.slender.toFixed(1)} (${v.pair.slender<=25?'J4.4: Pn = FyAg':'Chapter E'}), bounded by yielding at the contact: φPc = ${F(v.pair.compression)}. ${v.l.key==='upper'?'Tension at the seat under gravity; compression under a reversed (uplift) set.':'Compression under gravity; tension under a reversed (uplift) set.'} Forces: every concurrent case of the bracket design force envelope.`,
+  add(`${v.l.key}`,`Column stiffeners at the ${v.l.name} · required strength (J10.8, J4.1, J4.4)`,R,cap,'force','R_{st}=R_u-\\min\\phi R_n\\ \\text{(J10.1 to J10.4)}\\le\\phi P_n;\\ \\ P_n=2F_y(b_s-c)t_s\\ \\text{or}\\ F_{cr}A,\\ L_c=0.75h',
+   `${sense(v)}. R_st is the force above the least unstiffened strength φR_n of J10.1 to J10.4 (the whole R_u where J10.4 governs). Pair of ${plates}, centered ${f(v.l.z)} from the seat top at the ${v.l.name}. Tension: J4.1 yielding of both plates at their clipped flange contact, φPt = ${F(v.pair.tension)}. Compression: J10.8 column of both plates and a ${v.nearTop?'12':'25'}tw web strip (${f(v.pair.strip)}), L_c = 0.75h = 0.75 × ${f(g.length)} = ${f(v.pair.KL)}, L_c/r = ${v.pair.slender.toFixed(1)} (${v.pair.slender<=25?'J4.4: Pn = FyAg':'Chapter E'}), bounded by yielding at the contact: φPc = ${F(v.pair.compression)}. ${v.l.key==='upper'?'Tension at the seat under gravity; compression under a reversed (uplift) set.':'Compression under gravity; tension under a reversed (uplift) set.'} Forces: every concurrent case of the bracket design force envelope.`,
    (v.governs==='compression'?v.C:v.T)?.caseId);
  }
  // J10.8 proportions: width with half the web at least a third of the delivering plate width, thickness at least half
  // its thickness and b/16, and the B4.1a case 1 outstand limit where the pair carries compression.
  const props=levels.map(v=>{const bReq=v.l.plate.width/3-g.tw/2,compression=v.req.C>0,tReq=Math.max(v.l.plate.thickness/2,g.width/16,compression?g.width/(.56*Math.sqrt(E/m.Fy)):0);return {v,bReq,tReq,ratio:Math.max(tReq/g.t,bReq/g.width)};}),worst=props.reduce((a,v)=>v.ratio>a.ratio?v:a,props[0]);
- add('proportions','Column stiffeners · width and thickness (J10.8(1), (2); B4.1a)',worst.ratio,1,'ratio','\\max\\left(\\frac{\\max(t_p/2,\\,b_s/16,\\,b_s/0.56\\sqrt{E/F_y})}{t_s},\\frac{b_p/3-t_w/2}{b_s}\\right)\\le1',
+ add('proportions','Column stiffeners · width and thickness (J10.8(1), (2); B4.1a)',worst.ratio,1,'ratio','b_s\\ge\\frac{b_p}{3}-\\frac{t_w}{2};\\ \\ t_s\\ge\\max\\left(\\frac{t_p}{2},\\,\\frac{b_s}{16},\\,\\frac{b_s}{0.56\\sqrt{E/F_y}}\\right)',
   props.map(v=>`${v.v.l.name} (${v.v.l.plate.name} ${f(v.v.l.plate.width)} × ${f(v.v.l.plate.thickness)}): b_s = ${f(g.width)} against ${f(v.bReq)}, t_s = ${f(g.t)} against ${f(v.tReq)}`).join('; ')+`. The outstand limit 0.56√(E/Fy) applies where the pair carries compression.`);
  add('length','Column stiffeners · length (J10.8(3))',g.c.depth/2,g.length+g.tf,'length','L_s+t_f\\ge d/2',
   `${g.full?'Full depth, welded to both flanges':'Half depth, from the loaded flange to the column centerline'}: ${f(g.length+g.tf)} from the loaded flange face against d/2 = ${f(g.c.depth/2)}. Full depth is required only by J10.5 (compressive forces on both flanges, which a one-sided bracket does not apply) and J10.7 (unframed ends of beams and girders, not a continuous column); J10.4 stiffeners extend at least half the depth.`);
@@ -216,7 +216,7 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
  add('web-shear','Column web · shear along the stiffener welds (J4.2)',Rmax.R/(g.webLength*g.tw),webBase,'stress','f_v=\\frac{R_{st}}{L_wt_w}\\le\\min(\\phi0.6F_y,\\,\\phi0.6F_u)',
   `Column web base metal along the stiffener line, one shear plane of the web thickness ${f(g.tw)} over ${f(g.webLength)}; J4.2 shear yielding (φ = 1.00) and rupture (φ = 0.75).`);
  const fMin=minimumFillet(Math.max(g.t,g.tf)),wMin=minimumFillet(Math.max(g.t,g.tw));
- add('weld-minimum','Column stiffener fillets · minimum leg (J2.4)',Math.max(fMin/g.s.flangeWeld,wMin/g.s.webWeld),1,'ratio','w\\ge w_{min,J2.4}',
+ add('weld-minimum','Column stiffener fillets · minimum leg (J2.4)',Math.max(fMin/g.s.flangeWeld,wMin/g.s.webWeld),1,'ratio','w\\ge w_{min}',
   `Flange fillets ${f(g.s.flangeWeld)} against ${f(fMin)} (thicker of the plate and the column flange); web fillets ${f(g.s.webWeld)} against ${f(wMin)} (thicker of the plate and the web).`,undefined,refs);
  add('weld-length','Column stiffener fillets · length at least four sizes (J2.2b)',Math.max(4*g.s.flangeWeld/g.contact,4*g.s.webWeld/g.webLength),1,'ratio','l\\ge4w',
   `Flange fillets ${f(g.contact)} long beyond the clip, web fillets ${f(g.webLength)}.`);
@@ -229,13 +229,13 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
  const plateRange=x.fatigue.map(v=>Math.max(v.upper,v.lower));
  const plate=x.fatigue.reduce((s,v,i)=>s+(plateRange[i]/(g.contact*g.t)/transverseFilletFatigue(g.t,g.s.flangeWeld,v.cycles).capacity)**3,0);
  const R=transverseFilletFatigue(g.t,g.s.flangeWeld,total).reduction;
- add('fatigue-plate','Column stiffener plates at the flange fillets · fatigue (A-3.1 item 5.6)',plate,1,'ratio','D=\\sum_i\\left(\\frac{\\Delta P_i/[(b_s-c)t_s]}{R_{FIL}F_{SR,C}}\\right)^3\\le1',
+ add('fatigue-plate','Column stiffener plates at the flange fillets · fatigue (A-3.1 item 5.6)',plate,1,'ratio','\\sum_i\\left(\\frac{f_{sr,i}}{R_{FIL}F_{SR,i}}\\right)^3\\le1\\ \\ \\text{(Cat. C)};\\ \\ f_{sr,i}=\\frac{\\Delta P_i}{(b_s-c)t_s}',
   `Table A-3.1 item 5.6: each plate is a tension-loaded plate element connected at its end by transverse fillets on opposite sides; toe crack Category C, root crack C'' with R_FIL = ${R.toFixed(3)} (A-3-6M) for t = ${f(g.t)}, w = ${f(g.s.flangeWeld)}. Range per duty bin of the force on one plate at the more loaded level, over its ${f(g.contact)} contact; both levels treated as tension loaded. Miner sum, no endurance-limit credit.`,undefined,fatRefs);
  const throat=Math.max(0,...plateRange.map(v=>Math.max(v/(te2(g.s.flangeWeld)*g.contact),v/(te2(g.s.webWeld)*g.webLength))));
- add('fatigue-weld','Column stiffener fillets · throat fatigue (A-3.1 item 8.2)',throat,weldF,'stress','\\Delta f_w=\\frac{\\Delta P}{2(0.707w)l}\\le\\max[55,690(1.5/n)^{0.167}]',
+ add('fatigue-weld','Column stiffener fillets · throat fatigue (A-3.1 item 8.2)',throat,weldF,'stress','f_{sr}=\\frac{\\Delta P}{2(0.707w)l}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',
   `Table A-3.1 item 8.2, Category F, shear on the throat of the flange and web fillets of one plate; the largest unfactored range over the duty bins assigned to all ${total.toLocaleString('en-US')} project cycles.`,undefined,fatRefs);
  const toe=x.fatigue.reduce((s,v)=>s+(v.column/(finiteLife(4.4,v.cycles)))**3,0);
- add('fatigue-toe','Column flange at the stiffener weld toes · fatigue (A-3.1 item 5.7)',toe,1,'ratio','D=\\sum_i(\\Delta f_i/F_{SR,C})^3\\le1',
+ add('fatigue-toe','Column flange at the stiffener weld toes · fatigue (A-3.1 item 5.7)',toe,1,'ratio','\\sum_i(f_{sr,i}/F_{SR,i})^3\\le1\\ \\ \\text{(Cat. C)}',
   `Table A-3.1 item 5.7, Category C: column flange (and web) base metal at the toe of the transverse fillets of the stiffeners, which are ${f(g.t)} thick along the column (item 7.1 would also give C, a < 2 in). ${x.columnStressNote}`,undefined,fatRefs);
  return checks;
 }

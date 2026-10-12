@@ -84,7 +84,7 @@ export function existingLayoutChecks(p:ProjectInput,separation?:BracingSystemRes
  const lines=r.lines.map(l=>`line ${l.line}: ${l.input.shape||'existing'} columns ${f(l.input.offset)} ${l.input.offset>=0?'outboard of':'inboard of'} grid ${l.line}, ${l.input.spacing>0?`at ${f(l.input.spacing)} from ${f(l.input.start)} past grid 1`:'at each runway grid'}`).join('; ');
  if(r.steel){
   const s=r.steel,required=separation?.required??0;
-  add('existing-steel-clear','Existing building · clear distance from the new runway steel',required,s.clear,separation?'c_{steel}\\ge\\delta_{MT}':'c_{steel}>0',
+  add('existing-steel-clear','Existing building · clear distance from the new runway steel',required,s.clear,separation?'c\\ge\\delta_{MT}':'c>0',
    `Least plan distance from the new columns, brackets and girders to the surveyed existing columns (${lines}): ${f(s.clear)} at ${where(s)}, new ${s.part} to the existing column. ${separation?`ASCE 7 §12.12.3 separation δMT = ${f(separation.required)} (see the seismic separation check), shown on S-01 rounded up.`:'No seismic separation is calculated here (seismic design of the new columns is not enabled); the new steel must stay clear of the existing columns.'} Base plates sit at the floor, where the drift is nil; walls, girts and other framing are field verified.`,['asce-12']);
  }
  const fail=r.unknownFootings;

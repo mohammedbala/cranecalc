@@ -26,11 +26,11 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   for(const end of [false,true]){
    const R=concentratedResistance(p,str,lb,end),P=end?a.wheelNearEndLoad:a.wheelLoad;
    if(c.id==='wheel-yield'&&close(P/R.yielding,c.utilization))return [
-    capTw?`l_b=2(d_{rail}+t_f+t_{w,cap})=2(${tx(p.aist.railDepth,'length')}+${tx(tf,'length')}+${tx(capTw,'length')})=${tx(lb,'length')}`:`l_b=2(d_{rail}+t_f)=2(${tx(p.aist.railDepth,'length')}+${tx(tf,'length')})=${tx(lb,'length')}`,
-    `${lrfd?'\\phi R_n=1.00':'R_n/\\Omega=1/1.50\\times'}F_yt_w(${end?'2.5':'5'}k+l_b)=${lrfd?'1.00':'1/1.50'}\\times${tx(Fy,'stress')}\\times${tx(tw,'length')}\\times(${end?'2.5':'5'}\\times${tx(str.k,'length')}+${tx(lb,'length')})=${tx(R.yielding,'force')}\\ \\ge\\ P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
+    capTw?`l_b=2(h_r+t_f+t_{wc})=2(${tx(p.aist.railDepth,'length')}+${tx(tf,'length')}+${tx(capTw,'length')})=${tx(lb,'length')}`:`l_b=2(h_r+t_f)=2(${tx(p.aist.railDepth,'length')}+${tx(tf,'length')})=${tx(lb,'length')}`,
+    `${lrfd?'\\phi R_n=1.00':'R_n/\\Omega=1/1.50\\times'}F_{yw}t_w(${end?'2.5':'5'}k+l_b)=${lrfd?'1.00':'1/1.50'}\\times${tx(Fy,'stress')}\\times${tx(tw,'length')}\\times(${end?'2.5':'5'}\\times${tx(str.k,'length')}+${tx(lb,'length')})=${tx(R.yielding,'force')}\\ \\ge\\ P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
    if(c.id==='wheel-cripple'&&close(P/R.crippling,c.utilization)){
     const t=end&&lb/depth>.2?`(4l_b/d-0.2)`:`3(l_b/d)`,tv=end&&lb/depth>.2?`(4\\times${n(lb/depth,3)}-0.2)`:`3\\times${n(lb/depth,3)}`;
-    return [`${lrfd?'\\phi R_n=0.75':'R_n/\\Omega=1/2.00\\times'}\\,${end?'0.40':'0.80'}t_w^2\\left[1+${t}(t_w/t_f)^{1.5}\\right]\\sqrt{EF_yt_f/t_w}=${lrfd?'0.75':'1/2.00'}\\times${end?'0.40':'0.80'}\\times${tx(tw,'length')}^2\\left[1+${tv}\\times${n((tw/tf)**1.5,3)}\\right]\\sqrt{${tx(E,'stress')}\\times${tx(Fy,'stress')}\\times${n(tf/tw,3)}}=${tx(R.crippling,'force')}`,
+    return [`${lrfd?'\\phi R_n=0.75\\times':'R_n/\\Omega=1/2.00\\times'}${end?'0.40':'0.80'}t_w^2\\left[1+${t}(t_w/t_f)^{1.5}\\right]\\sqrt{EF_{yw}t_f/t_w}=${lrfd?'0.75':'1/2.00'}\\times${end?'0.40':'0.80'}\\times${tx(tw,'length')}^2\\left[1+${tv}\\times${n((tw/tf)**1.5,3)}\\right]\\sqrt{${tx(E,'stress')}\\times${tx(Fy,'stress')}\\times${n(tf/tw,3)}}=${tx(R.crippling,'force')}`,
      `P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
    }
   }
@@ -69,7 +69,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  if(/^cap-angle-(cap|col)-bolt$/.test(c.id)){
   const res=capAngleResult(s),bolt=c.id==='cap-angle-cap-bolt'?res?.g.input.capBolts:res?.g.input.columnBolts;
   if(res&&bolt){const Ab=Math.PI*bolt.diameter**2/4,F=res.design.F,T=c.id==='cap-angle-cap-bolt'?F/2:undefined;
-   for(const Fnt of bolt.grade==='A490'?[780,113*6.894757293]:[620,90*6.894757293]){const R=factor(.75,2)*Fnt*Ab;if(close(R,cap))return [`${lhs}R_n=${fl(.75,2)}F_{nt}A_b=${fl(.75,2)}\\times${tx(Fnt,'stress')}\\times${tx(Ab,'area')}=${tx(R,'force')}\\quad(${bolt.grade},\\ d_b=${tx(bolt.diameter,'length')})`,
+   for(const Fnt of bolt.grade==='A490'?[780,113*6.894757293]:[620,90*6.894757293]){const R=factor(.75,2)*Fnt*Ab;if(close(R,cap))return [`${lhs}R_n=${fl(.75,2)}F_{nt}A_b=${fl(.75,2)}\\times${tx(Fnt,'stress')}\\times${tx(Ab,'area')}=${tx(R,'force')}\\quad(\\text{${bolt.grade}},\\ d_b=${tx(bolt.diameter,'length')})`,
     T!==undefined?`T_u+q=F/2+q=${tx(F,'force')}/2+${tx(dem-T,'force')}=${tx(dem,'force')}\\le${tx(R,'force')}\\quad D/C=${dcText(c.utilization,2)}`:`T_u+q_{ep}+q_c=${tx(dem,'force')}\\le${tx(R,'force')}\\quad(F=${tx(F,'force')})\\quad D/C=${dcText(c.utilization,2)}`];}}
  }
  // J10.1 flange local bending under a tension flange force.
@@ -85,7 +85,9 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   const forms:{tex:string;sym:string;phi:number;omega:number;k:number;values:number[]}[]=[
    {tex:'0.6F_{EXX}',sym:'F_{EXX}',phi:.75,omega:2,k:.6,values:fexx},{tex:'0.6F_y',sym:'F_y',phi:1,omega:1.5,k:.6,values:fy.map(v=>v[1])},{tex:'0.6F_y',sym:'F_y',phi:.9,omega:1.67,k:.6,values:fy.map(v=>v[1])},
    {tex:'0.6F_u',sym:'F_u',phi:.75,omega:2,k:.6,values:fu.map(v=>v[1])},{tex:'F_y',sym:'F_y',phi:.9,omega:1.67,k:1,values:fy.map(v=>v[1])},{tex:'F_u',sym:'F_u',phi:.75,omega:2,k:1,values:fu.map(v=>v[1])}];
-  if(!/fatigue|peak/.test(c.id))for(const f of forms)for(const v of f.values){const R=factor(f.phi,f.omega)*f.k*v;if(close(R,cap))return [`${lhs}F_n=${fl(f.phi,f.omega)}\\times ${f.tex}=${fl(f.phi,f.omega)}\\times${f.k===1?'':'0.6\\times'}${tx(v,'stress')}=${tx(R,'stress')}${check(R,'f')}`];}
+  // The demand takes the symbol on the left of the check's equation (f_un, f_uv, f_w …), else f.
+  const fsym=c.equation.match(/^(f_\{[A-Za-z]+\}|f_[A-Za-z]|q_w)(?=\s*(=|\\le))/)?.[1]??'f';
+  if(!/fatigue|peak/.test(c.id))for(const f of forms)for(const v of f.values){const R=factor(f.phi,f.omega)*f.k*v;if(close(R,cap))return [`${lhs}F_n=${fl(f.phi,f.omega)}\\times ${f.tex}=${fl(f.phi,f.omega)}\\times${f.k===1?'':'0.6\\times'}${tx(v,'stress')}=${tx(R,'stress')}${check(R,fsym)}`];}
  }
  return undefined;
 }

@@ -44,7 +44,7 @@ export function buildingClassCheck(p:ProjectInput):CheckResult{
   :`Entered Class ${b.entered}${b.entered!==b.implied?` (more severe than the counted Class ${b.implied}; accepted as conservative)`:''}.`;
  const hiEntered=classCycles[b.entered][1],cap=Number.isFinite(hiEntered)?hiEntered:Math.max(b.counted,1);
  return {id:'building-class',group:'Criteria',title:'AIST building classification',status:b.understated?'fail':'pass',demand:b.counted,capacity:cap,quantity:'ratio',utilization:b.counted/cap,
-  equation:'N_{counted}\\le N_{max}(\\text{class})',referenceIds:['tr13-class','tr13-inspection'],
+  equation:'N\\le N_{max}\\ \\ \\text{(TR-13 Table 1.1)}',referenceIds:['tr13-class','tr13-inspection'],
   note:`TR-13 Table 1.1 classification basis: ${basisText}, Class ${b.implied} (${n(lo)}–${Number.isFinite(hi)?n(hi):'more'} cycles). ${verdict} ${classConsequences(b.effective)} A count on a class boundary permits the lighter class.`};
 }
 
@@ -60,7 +60,7 @@ export function fatigueCycleCheck(p:ProjectInput):CheckResult{
  const sources:[string,string|undefined][]=[['fatigue cycle basis (aist.cycleSource)',p.aist?.cycleSource],['cap duty source (capDesign.dutySource)',p.section.kind==='cap'?p.capDesign?.dutySource:undefined],['fatigue detail (fatigue.detail)',p.fatigue.detail]];
  const stated=sources.flatMap(([label,text])=>text?statedCycleCounts(text).map(v=>({label,v})):[]);
  const conflicts=[...stated.filter(s=>s.v!==N),...(p.fatigue.cycles!==N?[{label:'fatigue.cycles',v:p.fatigue.cycles}]:[])];
- return {id:'fatigue-cycles',group:'Criteria',title:'One fatigue cycle count throughout',status:conflicts.length?'fail':'pass',equation:'N_{fatigue}=\\sum n_{bin}=N_{stated}',referenceIds:['tr13-class','criteria'],
+ return {id:'fatigue-cycles',group:'Criteria',title:'One fatigue cycle count throughout',status:conflicts.length?'fail':'pass',equation:'n_{SR}=\\sum n_i=N',referenceIds:['tr13-class','criteria'],
   note:conflicts.length?`The fatigue checks use N = ${n(N)} cycles${p.details?.spectrum.length?` (sum of the ${p.details.spectrum.length} duty bins)`:''}, but ${conflicts.map(c=>`the ${c.label} states ${n(c.v)}`).join('; ')}. Correct the source text or the duty spectrum so one count is used throughout.`
    :`Fatigue checks, duty bins${stated.length?' and the stated duty sources':''} all use N = ${n(N)} cycles.`};
 }

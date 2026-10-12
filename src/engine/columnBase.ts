@@ -291,7 +291,7 @@ export function columnBaseChecks(p:ProjectInput,r:ColumnBaseResult,column?:Exist
  if(column){
   const d=baseDrift(p,column),u=p.units,f=(v:number)=>format(v,'length',u,3);
   checks.push({id:'base-drift',group:'New column base',title:'Runway drift with footing rotation',demand:d.total,capacity:d.limit,quantity:'length',utilization:d.total/d.limit,status:withinLimit(d.total,d.limit)?'pass':'fail',
-   equation:'\\Delta=\\Delta_{col}+\\theta\\,h,\\quad\\theta=\\frac{M}{k_s\\,BL^3/12}\\le h_{rail}/n',substitution:`\\frac{${latexNumber(d.total)}}{${latexNumber(d.limit)}}=${(d.total/d.limit).toFixed(4)}`,
+   equation:'\\Delta=\\Delta_{col}+\\theta\\,h,\\quad\\theta=\\frac{M}{k_s\\,BL^3/12}\\le h/n',substitution:`\\frac{${latexNumber(d.total)}}{${latexNumber(d.limit)}}=${(d.total/d.limit).toFixed(4)}`,
    note:`Column alone ${f(d.column)} plus the footing's rotation ${d.theta.toExponential(3)} rad on the soil (modulus of subgrade reaction ${format(p.columnBase!.soil.subgrade,'subgrade',u,3)}, full contact) times ${f(d.lever)} from the footing base to the rail, under the service side thrust and static eccentric reaction of the drift check.`,referenceIds:['dg7','aci-318']});
  }
  return checks;
