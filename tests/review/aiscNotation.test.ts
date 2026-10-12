@@ -4,7 +4,11 @@ import {calculate} from '../../src/engine/calculate';
 import {presentCheck} from '../../src/engine/checkPresentation';
 import {craneCombinations} from '../../src/engine/aistLoads';
 import {reportHtml} from '../../src/report/reportHtml';
+import {compactReport} from '../../src/report/compactReport';
 import {equationSymbols,entrySymbol,notationGroups,notationSection} from '../../src/report/notation';
+import {notationSymbols,standardSymbols,termsFor} from '../../src/report/equationTerms';
+import {caseLabel} from '../../src/report/reportParts';
+import {categoryLabel} from '../../src/engine/checkTaxonomy';
 import type {CheckResult} from '../../src/engine/types';
 import {demoFocus005RevB} from '../fixtures/demoFocus005RevB';
 
@@ -44,7 +48,7 @@ describe('AISC notation in the calculation report (Rev B)',()=>{
   const all=[...equations,...printed].join(' ');
   for(const academic of ['\\partial','\\omega','\\det','v^{\\prime','Ku-f','\\mathbf'])expect(all,academic).not.toContain(academic);
   const eq=(id:string)=>s.checks.find(c=>c.id===id)!.equation;
-  expect(eq('torsion-normal')).toBe('f_{un}=\\frac{P}{A}+\\frac{M_x}{S_x}+\\frac{M_y+\\theta M_x}{S_y}+\\sigma_w;\\quad\\sigma_w=EW_{no}\\theta^{\\prime\\prime}');
+  expect(eq('torsion-normal')).toBe('f_{un}=\\frac{P}{A}+\\frac{M_x}{S_x}+\\frac{M_y+\\theta M_x}{S_y}+\\sigma_{ws};\\quad\\sigma_{ws}=EW_{no}\\theta^{\\prime\\prime}');
   expect(eq('torsion-shear')).toMatch(/^f_\{uv\}=\\tau_b\+\\tau_t\+\\tau_\{ws\}/);
   expect(eq('fatigue')).toMatch(/^f_\{sr\}=f_\{max\}-f_\{min\}\\le F_\{SR\}=/);
   expect(eq('crane-1-traction')).toContain('0.20\\Sigma P_d');
@@ -52,6 +56,27 @@ describe('AISC notation in the calculation report (Rev B)',()=>{
   // Category F in its US form: F_SR = 100(1.5/n_SR)^0.167 ≥ 8 ksi, never the SI constants.
   const catF=presentCheck(s.checks.find(c=>c.id==='cap-weld-fatigue')!,'US').equation;
   expect(catF).toContain('100(1.5/n_{SR})^{0.167}\\ge8\\,\\mathrm{ksi}');expect(catF).not.toMatch(/690|MPa/);
+ });
+ it('defines every symbol it uses: AISC standard, the notation section, or a definition under the equation',()=>{
+  const known=new Set([...standardSymbols,...notationSymbols()]),undefinedSymbols:string[]=[];
+  for(const c of s.checks){if(!c.equation)continue;
+   const local=new Set(termsFor(c).map(([t])=>entrySymbol(t)));
+   for(const v of equationSymbols(c.equation))if(!known.has(v)&&!local.has(v))undefinedSymbols.push(`${c.id}: ${v}`);}
+  expect(undefinedSymbols).toEqual([]);
+  // The definitions are printed under the equation in the check tables.
+  expect(html).toContain('<small class="where">where ');
+ });
+ it('labels fatigue categories and load combinations the way AISC and ASCE 7 / TR-13 print them',()=>{
+  expect(categoryLabel("C''")).toBe('C″ (root, R_FIL)');expect(categoryLabel("E'")).toBe('E′');
+  expect(categoryLabel('bolt')).toBe('item 8.5');expect(categoryLabel('—','Longitudinal bracing · threaded rod fatigue (A-3.1 item 8.5)')).toBe('item 8.5');
+  expect(caseLabel('LRFD TR-13 4-S−')).toBe('TR-13 LRFD 4 (S, W reversed)');expect(caseLabel('LRFD 3-S-L')).toBe('ASCE 7 LRFD 3 (S, L)');
+  expect(caseLabel('LRFD 10-B')).toBe('LRFD 10 (bumper)');expect(caseLabel('LRFD AIST bumper')).toBe('LRFD TR-13 crane stop');expect(caseLabel('LRFD 2c')).toBe('LRFD 2c');
+  // The calculation pages (the drawing sheets carry their own combination table).
+  const text=compactReport(s,'').replace(/<annotation[\s\S]*?<\/annotation>/g,'');
+  for(const raw of ['TR-13 4-S','AIST bumper','LRFD 6/7','10-T','10-B',"Category bolt",'Cat. —'])expect(text,raw).not.toContain(raw);
+  // M1: the capped girder prints the F4 equation it computes (F4-2 with R_pc M_yc, F_L, L_p, L_r), not the F5 form.
+  expect(printed.some(t=>t.startsWith('M_n=C_b\\left[R_{pc}M_{yc}-(R_{pc}M_{yc}-F_LS_{xc})'))).toBe(true);
+  expect(printed.some(t=>t.startsWith('M_n=\\min(R_{pg}F_{cr}S_{xc}'))).toBe(false);
  });
  it('leaves every result unchanged: id, status and D/C of every check as before the notation work',()=>{
   expect(s.checks.map(c=>c.id)).toEqual(baseline.map(b=>b.id));

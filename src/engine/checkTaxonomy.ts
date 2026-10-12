@@ -123,6 +123,16 @@ export function allCycleRange(category:string,n:number){
  const k=normalCategory(category);if(k==='F')return 690*(1.5/n)**.167;
  const v=categories[k];return v?((v.cf*1e8)/n)**(1/3)*ksi:NaN;
 }
+/**
+ * A fatigue category as AISC 360-16 Table A-3.1 prints it: C″ (root crack, with R_FIL), E′; high-strength bolts and
+ * threaded rods in tension by their item, 8.5. Display only: the category keys stay as stored.
+ */
+export function categoryLabel(category:string,title=''){
+ const c=category.replace(/-double-prime|''|′′/,'″').replace(/-prime|'/,'′');
+ if(c==='C″')return 'C″ (root, R_FIL)';
+ if(c==='bolt'||c==='—'){const item=title.match(/item\s+(\d+\.\d+)/i)?.[1];return item?`item ${item}`:c==='bolt'?'item 8.5':'—';}
+ return c;
+}
 export const thresholdOf=(category:string)=>{const v=categories[normalCategory(category)];return v?v.th*ksi:NaN;};
 export interface FatigueData{range:number;threshold:number;category:string;miner?:number;allCycle?:number;location?:string;source:string}
 const haunchKeys:Record<string,string>={'top-flange':'topFlange','bottom-flange':'bottomFlange','flange-web':'flangeWeb','stiffener-toe':'stiffenerToe',flare:'flare',column:'column'};
@@ -208,7 +218,7 @@ export function gateCheck(s:CalculationSnapshot,c:CheckResult,k:Classification=c
   const n=fatigueCycles(s);
   if(n<2e4)return {gate:'screened',reason:`Live-load cycles ${n.toLocaleString('en-US')} < 20,000 (AISC 360-16 Appendix 3.1): fatigue need not be evaluated.`};
   const f=fatigueData(s,c);
-  if(f&&f.range<f.threshold)return {gate:'screened',reason:`Below threshold: largest range ${(f.range/ksi).toFixed(2)} ksi < F_TH ${(f.threshold/ksi).toFixed(2)} ksi (Category ${f.category}, AISC 360-16 Appendix 3.1).`};
+  if(f&&f.range<f.threshold)return {gate:'screened',reason:`Below threshold: largest range ${(f.range/ksi).toFixed(2)} ksi < F_TH ${(f.threshold/ksi).toFixed(2)} ksi (Category ${categoryLabel(f.category)}, AISC 360-16 Appendix 3.1).`};
  }
  return {gate:'evaluated'};
 }

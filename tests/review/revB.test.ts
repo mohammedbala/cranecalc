@@ -26,7 +26,7 @@ describe('DEMO-FOCUS-005 rev B',()=>{
   expect(check('rail-twist').status).toBe('not-applicable');
  });
  it('omits the checks without data and lists them as not checked',()=>{
-  const omitted=s.checks.filter(c=>c.status==='excluded'&&/omitted from this package/.test(c.note)).map(c=>c.id).sort();
+  const omitted=s.checks.filter(c=>c.status==='excluded'&&/Omitted from this package/.test(c.note)).map(c=>c.id).sort();
   expect(omitted).toEqual(['brace-drift-wind','building-seismic-alteration','building-seismic-runway','column-drift-wind','column-frame','column-rail-gauge']);
   const h=reportHtml(s,undefined,''),p1=h.slice(0,h.indexOf('</section>'));
   expect(p1).not.toMatch(/REVIEW DRAFT|OPEN ITEMS? —/);expect(p1).toMatch(/Not checked in this package/);

@@ -5,6 +5,7 @@ import {rectangularRibFlexure} from '../engine/bracketDesign';
 import {projectHaunch,haunchStations,haunchWebShear} from '../engine/taperedHaunch';
 import {capAngleResult} from '../engine/capAngleTie';
 import {dcText} from '../engine/checkPresentation';
+import {caseLabel} from './reportParts';
 
 /**
  * Worked equations with the numbers substituted, for the checks a reviewer follows by hand. Each is rebuilt from
@@ -30,7 +31,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
     `${lrfd?'\\phi R_n=1.00':'R_n/\\Omega=1/1.50\\times'}F_{yw}t_w(${end?'2.5':'5'}k+l_b)=${lrfd?'1.00':'1/1.50'}\\times${tx(Fy,'stress')}\\times${tx(tw,'length')}\\times(${end?'2.5':'5'}\\times${tx(str.k,'length')}+${tx(lb,'length')})=${tx(R.yielding,'force')}\\ \\ge\\ P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
    if(c.id==='wheel-cripple'&&close(P/R.crippling,c.utilization)){
     const t=end&&lb/depth>.2?`(4l_b/d-0.2)`:`3(l_b/d)`,tv=end&&lb/depth>.2?`(4\\times${n(lb/depth,3)}-0.2)`:`3\\times${n(lb/depth,3)}`;
-    return [`${lrfd?'\\phi R_n=0.75\\times':'R_n/\\Omega=1/2.00\\times'}${end?'0.40':'0.80'}t_w^2\\left[1+${t}(t_w/t_f)^{1.5}\\right]\\sqrt{EF_{yw}t_f/t_w}=${lrfd?'0.75':'1/2.00'}\\times${end?'0.40':'0.80'}\\times${tx(tw,'length')}^2\\left[1+${tv}\\times${n((tw/tf)**1.5,3)}\\right]\\sqrt{${tx(E,'stress')}\\times${tx(Fy,'stress')}\\times${n(tf/tw,3)}}=${tx(R.crippling,'force')}`,
+    return [`${lrfd?'\\phi R_n=0.75\\times':'R_n/\\Omega=1/2.00\\times'}${end?'0.40':'0.80'}t_w^2\\left[1+${t}(t_w/t_f)^{1.5}\\right]\\sqrt{EF_{yw}t_f/t_w}=${lrfd?'0.75':'1/2.00'}\\times${end?'0.40':'0.80'}\\times(${tx(tw,'length')})^2\\left[1+${tv}\\times${n((tw/tf)**1.5,3)}\\right]\\sqrt{${tx(E,'stress')}\\times${tx(Fy,'stress')}\\times${n(tf/tw,3)}}=${tx(R.crippling,'force')}`,
      `P_u=${tx(P,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
    }
   }
@@ -49,7 +50,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   const x=s.existingColumn,k=x.governing.U,C=x.capacity,r=k.P/C.Pc,U=r>=.2?r+8/9*(Math.abs(k.Mx)/C.Mcx+Math.abs(k.My)/C.Mcy):r/2+Math.abs(k.Mx)/C.Mcx+Math.abs(k.My)/C.Mcy;
   if(close(U,c.demand)){
    const terms=`\\frac{${tx(Math.abs(k.Mx),'moment')}}{${tx(C.Mcx,'moment')}}+\\frac{${tx(Math.abs(k.My),'moment')}}{${tx(C.Mcy,'moment')}}`;
-   return [`P_r/P_c=${tx(k.P,'force')}/${tx(C.Pc,'force')}=${n(r,3)}${r>=.2?'\\ge':'<'}0.2\\quad\\text{(${k.id.replace(/[\\{}#%&_$^~]/g,'').replace(/−/g,'-')})}`,
+   return [`P_r/P_c=${tx(k.P,'force')}/${tx(C.Pc,'force')}=${n(r,3)}${r>=.2?'\\ge':'<'}0.2\\quad\\text{(${caseLabel(k.id).replace(/[\\{}#%&_$^~]/g,'').replace(/−/g,'-')})}`,
     r>=.2?`U=\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)=${n(r,3)}+\\frac89\\left(${terms}\\right)=${n(U,3)}\\le1`
      :`U=\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}=${n(r/2,3)}+${terms}=${n(U,3)}\\le1`];
   }
@@ -57,8 +58,8 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  // Welded rib bracket: F11 plastic moment of the rectangular rib.
  if(c.id==='bracket-rib-flexure'&&d?.bracket&&!/Haunched/.test(c.title)){
   const b=d.bracket,Fy=d.material.Fy,E=p.section.E,f=rectangularRibFlexure(b,E,Fy,p.method),t=b.ribThickness,h=b.ribDepth,Mp=Fy*t*h**2/4,S=t*h**2/6,r=f.slenderness*Fy/E,Mltb=(1.52-.274*r)*Fy*S;
-  if(close(f.capacity,cap)&&r>.08&&r<=1.9&&close(f.nominal,Mltb))return [`\\frac{L_bd}{t^2}\\frac{F_y}{E}=${n(f.slenderness,1)}\\times\\frac{${tx(Fy,'stress')}}{${tx(E,'stress')}}=${n(r,3)}\\quad(0.08<\\cdot\\le1.9,\\ L_b=2L,\\ C_b=1)`,`M_n=[1.52-0.274(${n(r,3)})]F_yS_x=${n(1.52-.274*r,3)}\\times${tx(Fy,'stress')}\\times\\frac{${tx(t,'length')}\\times${tx(h,'length')}^2}{6}=${tx(Mltb,'moment')}\\quad(F11\\text{-}2)`,`${lhs}M_n=${fl(.9,1.67)}\\times${tx(Mltb,'moment')}=${tx(cap,'moment')}${check(cap,'M_r')}`];
-  if(close(f.capacity,cap)&&close(f.nominal,Mp))return [`M_n=M_p=F_y\\frac{th^2}{4}=${tx(d.material.Fy,'stress')}\\times\\frac{${tx(b.ribThickness,'length')}\\times${tx(b.ribDepth,'length')}^2}{4}=${tx(Mp,'moment')}\\quad(F11\\text{-}1)`,`${lhs}M_n=${fl(.9,1.67)}\\times${tx(Mp,'moment')}=${tx(cap,'moment')}${check(cap,'M_r')}`];
+  if(close(f.capacity,cap)&&r>.08&&r<=1.9&&close(f.nominal,Mltb))return [`\\frac{L_bd}{t^2}\\frac{F_y}{E}=${n(f.slenderness,1)}\\times\\frac{${tx(Fy,'stress')}}{${tx(E,'stress')}}=${n(r,3)}\\quad(0.08<\\cdot\\le1.9,\\ L_b=2L,\\ C_b=1)`,`M_n=[1.52-0.274(${n(r,3)})]F_yS_x=${n(1.52-.274*r,3)}\\times${tx(Fy,'stress')}\\times\\frac{${tx(t,'length')}\\times(${tx(h,'length')})^2}{6}=${tx(Mltb,'moment')}\\quad(F11\\text{-}2)`,`${lhs}M_n=${fl(.9,1.67)}\\times${tx(Mltb,'moment')}=${tx(cap,'moment')}${check(cap,'M_r')}`];
+  if(close(f.capacity,cap)&&close(f.nominal,Mp))return [`M_n=M_p=F_y\\frac{th^2}{4}=${tx(d.material.Fy,'stress')}\\times\\frac{${tx(b.ribThickness,'length')}\\times(${tx(b.ribDepth,'length')})^2}{4}=${tx(Mp,'moment')}\\quad(F11\\text{-}1)`,`${lhs}M_n=${fl(.9,1.67)}\\times${tx(Mp,'moment')}=${tx(cap,'moment')}${check(cap,'M_r')}`];
  }
  // Tapered I haunch web shear on its governing vertical section.
  if(c.id==='haunch-shear'&&d?.bracket){
@@ -77,7 +78,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  // J10.1 flange local bending under a tension flange force.
  if(/(column-flange|seat-flange)$/.test(c.id)&&d?.bracket&&q==='force'){
   const r=d.bracket.receiver;
-  for(const half of [1,.5]){const R=factor(.9,1.67)*half*6.25*r.Fy*r.flangeThickness**2;if(close(R,cap))return [`${lhs}R_n=${fl(.9,1.67)}\\times${half<1?'0.5\\times':''}6.25F_{yf}t_f^2=${fl(.9,1.67)}\\times${half<1?'0.5\\times':''}6.25\\times${tx(r.Fy,'stress')}\\times${tx(r.flangeThickness,'length')}^2=${tx(R,'force')}${check(R,'R_u')}`];}
+  for(const half of [1,.5]){const R=factor(.9,1.67)*half*6.25*r.Fy*r.flangeThickness**2;if(close(R,cap))return [`${lhs}R_n=${fl(.9,1.67)}\\times${half<1?'0.5\\times':''}6.25F_{yf}t_f^2=${fl(.9,1.67)}\\times${half<1?'0.5\\times':''}6.25\\times${tx(r.Fy,'stress')}\\times(${tx(r.flangeThickness,'length')})^2=${tx(R,'force')}${check(R,'R_u')}`];}
  }
  // Stress limits: weld metal, shear yielding or rupture, yielding of plates and flanges.
  if(q==='stress'){

@@ -70,7 +70,7 @@ export function existingWeldingChecks(p:ProjectInput,columnFlange:number):CheckR
  // approved WPS and the preheat of AWS D1.1 Table 5.8 (the checks above and below).
  const ce=carbonEquivalent(w);
  checks.push({id:'column-weld-ce',group:'Existing column',title:'Existing column · carbon equivalent (information)',status:'pass',...(ce?{demand:ce.value,quantity:'ratio' as const}:{}),
-  equation:'CE=C+\\frac{Mn+Si}{6}+\\frac{Cr+Mo+V}{5}+\\frac{Ni+Cu}{15}',referenceIds:['existing-steel-welding','aws-d11-cyclic','aisc-app5'],
+  equation:'\\mathrm{CE}=\\mathrm{C}+\\frac{\\mathrm{Mn}+\\mathrm{Si}}{6}+\\frac{\\mathrm{Cr}+\\mathrm{Mo}+\\mathrm{V}}{5}+\\frac{\\mathrm{Ni}+\\mathrm{Cu}}{15}',referenceIds:['existing-steel-welding','aws-d11-cyclic','aisc-app5'],
   note:`${ce?`Carbon equivalent ${ce.value.toFixed(2)} ${ce.computed?'by the AWS D1.1 Annex B formula from the entered chemistry':'as entered (formula and chemistry not stated; the Annex B formula includes Si)'}, from ${weldingBasisLabel[w!.basis]}.`:'Carbon equivalent not entered.'} Information only: AWS D1.1 sets no carbon equivalent limit for prequalified A572 Grade 50 / A992 steel; it is used with the Annex B hydrogen-control method where the WPS needs it${ce&&ce.value>.45?' (above 0.45 that method can require more than the Table 5.8 preheat: set it in the WPS)':''}. Required: the base metal confirmed (AISC 360-16 Appendix 5.2.3), a WPS approved for that steel, and the preheat of AWS D1.1 Table 5.8.`});
  const specified=w?.preheat;
  checks.push({id:'column-weld-preheat',group:'Existing column',title:'Existing column · preheat for field welds',status:specified===undefined?'unverified':specified>=need-1e-6?'pass':'fail',demand:need,capacity:specified,quantity:'temperature',

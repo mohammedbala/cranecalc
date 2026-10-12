@@ -3,9 +3,23 @@ import {references,tr13Clause} from '../engine/references';
 import {dcText} from '../engine/checkPresentation';
 import type {CheckResult,ProjectInput} from '../engine/types';
 import {toDisplay,unit,type Quantity} from '../engine/units';
+import {termsFor} from './equationTerms';
 
 /** Building blocks of the printed calculation: check rows with inline equations and short code citations. */
-const esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+/**
+ * Load combination names as printed, by their code numbers: ASCE 7-16 §2.3.1 (LRFD) / §2.4.1 (ASD) combinations with
+ * the variable load and the wind direction, the AIST TR-13 §3.10 forms of them, and the TR-13 runway cases (10 traction,
+ * 10 bumper, …). Only the printed label changes; combination ids stay as computed.
+ */
+export function caseLabel(text:string){
+ return text
+  .replace(/\b(LRFD|ASD) (TR-13 )?(\d)-(Lr|S|R)(?:-(L|W))?([+\u2212-])?(?=$|[\s,;.:)])/g,(_,m:string,tr:string|undefined,n:string,x:string,y:string|undefined,sign:string|undefined)=>
+   `${tr?'TR-13':'ASCE 7'} ${m} ${n} (${[x,y==='W'?'0.5W':y,sign&&sign!=='+'?'W reversed':''].filter(Boolean).join(', ')})`)
+  .replace(/\b(LRFD|ASD) AIST bumper\b/g,'$1 TR-13 crane stop')
+  .replace(/\b(LRFD|ASD) (\d+)-T\b/g,'$1 $2 (traction)').replace(/\b(LRFD|ASD) (\d+)-B\b/g,'$1 $2 (bumper)')
+  .replace(/\b(LRFD|ASD) 6\/7\b/g,'$1 6 and 7');
+}
+const esc=(v:unknown)=>caseLabel(String(v??'')).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 
 /** Short names of the register titles, as a plan reviewer cites them. */
 const codeNames:[RegExp,string][]=[
@@ -174,7 +188,7 @@ export function governing(checks:CheckResult[]){
 }
 /** The equation cell: the check's equation inline, or what an equation-free check rests on. */
 export function equationCell(c:CheckResult){
- if(c.equation)return inlineMath(c.equation);
+ if(c.equation){const t=termsFor(c);return inlineMath(c.equation)+(t.length?`<small class="where">where ${t.map(([s,m])=>`${inlineMath(s)} ${esc(m)}`).join('; ')}</small>`:'');}
  return `<i>${c.status==='excluded'?'Outside this calculation':c.status==='not-applicable'?'Not applicable':'Recorded input'}: ${subscripts(esc(tidyNumbers(firstSentence(c.note))))}</i>`;
 }
 export interface CheckTableContext{units:ProjectInput['units'];rendered:Set<string>}
@@ -191,7 +205,7 @@ export function checkTable(checks:CheckResult[],x:CheckTableContext){
  const q=(c:CheckResult)=>c.quantity??'ratio';
  return `<table class="checks"><colgroup><col class="c-title"/><col class="c-eq"/><col class="c-num"/><col class="c-num"/><col class="c-dc"/><col class="c-res"/></colgroup><thead><tr><th>Check · reference</th><th>Equation</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(({c,n,members})=>`<tr class="${c.status}" data-checks="${esc(members.map(m=>m.id).join(' '))}"><td><b>${esc(tidyNumbers(c.title))}</b>${n>1?` <span class="family">governing of ${n}</span>`:''}<small class="ref">${esc(shortReference(c))}</small>${c.caseId?`<small class="ref">Governing case ${esc(c.caseId)}</small>`:''}</td><td class="eq">${equationCell(c)}</td><td class="num">${sig3(c.demand,q(c),x.units)}</td><td class="num">${sig3(c.capacity,q(c),x.units)}</td><td class="num">${dcText(c.utilization,2,'—')}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`).join('')}</tbody></table>`;
 }
-export const checkTableCss=`table.checks{font-size:9px;margin:6px 0 10px}table.checks col.c-title{width:27%}table.checks col.c-eq{width:37%}table.checks col.c-num{width:11%}table.checks col.c-dc{width:6%}table.checks col.c-res{width:8%}table.checks td{padding:3px 4px;vertical-align:middle}table.checks td.num{text-align:right;white-space:nowrap}table.checks th:nth-child(n+3){text-align:right}table.checks td.res,table.checks th:last-child{text-align:center}table.checks td small.ref{display:block;font-size:7.5px;color:#333;margin-top:1px}table.checks .family{font-size:7.5px;border:1px solid #000;padding:0 3px;white-space:nowrap}table.checks td.eq{font-size:9px;overflow:hidden}table.checks td.eq .katex{font-size:1.02em;white-space:normal}table.checks td.eq i{font-size:8px}table.checks tr.fail td{background:#e6e6e6;font-weight:700}table.checks b.fail{text-decoration:underline}`;
+export const checkTableCss=`table.checks{font-size:9px;margin:6px 0 10px}table.checks col.c-title{width:27%}table.checks col.c-eq{width:37%}table.checks col.c-num{width:11%}table.checks col.c-dc{width:6%}table.checks col.c-res{width:8%}table.checks td{padding:3px 4px;vertical-align:middle}table.checks td.num{text-align:right;white-space:nowrap}table.checks th:nth-child(n+3){text-align:right}table.checks td.res,table.checks th:last-child{text-align:center}table.checks td small.ref{display:block;font-size:7.5px;color:#333;margin-top:1px}table.checks .family{font-size:7.5px;border:1px solid #000;padding:0 3px;white-space:nowrap}table.checks td.eq{font-size:9px;overflow:hidden}table.checks td.eq .katex{font-size:1.02em;white-space:normal}table.checks td.eq i{font-size:8px}table.checks td.eq small.where{display:block;font-size:7px;line-height:1.25;color:#222;margin-top:1px}table.checks td.eq small.where .katex{font-size:1em}table.checks tr.fail td{background:#e6e6e6;font-weight:700}table.checks b.fail{text-decoration:underline}`;
 /** Any hex colour in embedded linework as the gray of equal luminance, so the printed calculation is black and white. */
 export function monochrome(svg:string){
  return svg.replace(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi,(_,h:string)=>{

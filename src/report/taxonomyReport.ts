@@ -1,15 +1,15 @@
 import type {CalculationSnapshot,CheckResult,ProjectInput} from '../engine/types';
 import {toDisplay,unit,type Quantity} from '../engine/units';
 import {dcText} from '../engine/checkPresentation';
-import {checkTypeLabel,effectLabel,gateLabel,type BodyLine,type FatigueRow,type Taxonomy,type TaxonEntry} from '../engine/checkTaxonomy';
-import {equationCell,fixed2,shortReference,sig3,statusLabel,subscripts,tidyNumbers,value} from './reportParts';
+import {categoryLabel,checkTypeLabel,effectLabel,gateLabel,type BodyLine,type FatigueRow,type Taxonomy,type TaxonEntry} from '../engine/checkTaxonomy';
+import {caseLabel,equationCell,fixed2,shortReference,sig3,statusLabel,subscripts,tidyNumbers,value} from './reportParts';
 
 /**
  * Report blocks driven by the check taxonomy: body rows of the governing DESIGN checks, page-1 open items and counts,
  * the fatigue table, the detailing checklist, the input / load-basis / classification tables, the "not checked in
  * this package" list, Appendix A and the CSV of every computed result.
  */
-const esc=(v:unknown)=>subscripts(tidyNumbers(String(v??'')).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!)));
+const esc=(v:unknown)=>subscripts(caseLabel(tidyNumbers(String(v??''))).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!)));
 type Units=ProjectInput['units'];
 const q=(c:CheckResult)=>c.quantity??'ratio';
 const ksi=6.894757293168;
@@ -84,7 +84,7 @@ export function byOthersBlock(tax:Taxonomy,s:CalculationSnapshot,compact=false){
 /** The fatigue table: details evaluated, with Miner's sum and the all-cycle bound side by side; screened details counted. */
 export function fatigueTable(tax:Taxonomy,units:Units){
  const F=tax.fatigue,method=F.method==='miner'?"Miner's sum over the duty bins":'all-cycle bound (largest range at every cycle)';
- const row=(r:FatigueRow,i:number)=>`<tr class="${r.governing.status}"><td><span class="step">${i+1}</span> <b>${esc(r.title)}</b>${r.typicalOf>1?` <span class="family">typical of ${r.typicalOf}</span>`:''}<small>${esc(r.location)}</small></td><td>${esc(r.category)}</td><td class="num">${stress(r.range,units)}</td><td class="num">${stress(r.threshold,units)}</td><td class="num">${r.miner===undefined?'—':dcText(r.miner,2)}</td><td class="num">${r.allCycle===undefined?'—':dcText(r.allCycle,2)}</td><td class="num"><b>${dcText(r.dc,2,'—')}</b></td><td class="res"><b>${esc(statusLabel(r.governing.status))}</b></td></tr>`;
+ const row=(r:FatigueRow,i:number)=>`<tr class="${r.governing.status}"><td><span class="step">${i+1}</span> <b>${esc(r.title)}</b>${r.typicalOf>1?` <span class="family">typical of ${r.typicalOf}</span>`:''}<small>${esc(r.location)}</small></td><td>${esc(categoryLabel(r.category,r.title)).replace('R_FIL','R<sub>FIL</sub>')}</td><td class="num">${stress(r.range,units)}</td><td class="num">${stress(r.threshold,units)}</td><td class="num">${r.miner===undefined?'—':dcText(r.miner,2)}</td><td class="num">${r.allCycle===undefined?'—':dcText(r.allCycle,2)}</td><td class="num"><b>${dcText(r.dc,2,'—')}</b></td><td class="res"><b>${esc(statusLabel(r.governing.status))}</b></td></tr>`;
  const peak=F.peak?`<p>Peak elastic stress (AISC 360-16 Appendix 3.1, ≤ 0.66F<sub>y</sub>): max D/C ${dcText(F.peak.controlling.utilization,2)} (${esc(F.peak.controlling.title)}).</p>`:'';
  return `<p><b>Governing method (project setting): ${method}.</b> ${F.method==='miner'?'The all-cycle bound (the largest range applied to every cycle) is shown alongside for comparison.':'Miner\'s sum is shown alongside for comparison.'} ${F.cycles.toLocaleString('en-US')} live-load cycles. <b>${F.evaluated.length} detail${F.evaluated.length===1?'':'s'} evaluated; ${F.screened.length} screened</b> below the constant-amplitude threshold F<sub>TH</sub> (AISC 360-16 Appendix 3.1: largest live-load stress range less than F<sub>TH</sub>), recorded with their ranges in Appendix A and the CSV.</p>`
   +(F.evaluated.length?`<table class="checks fatigue-table"><colgroup><col style="width:34%"/><col style="width:6%"/><col style="width:11%"/><col style="width:10%"/><col style="width:9%"/><col style="width:10%"/><col style="width:10%"/><col style="width:10%"/></colgroup><thead><tr><th>Detail · governing location</th><th>Cat.</th><th>f<sub>sr</sub> max</th><th>F<sub>TH</sub></th><th>Σn<sub>i</sub>/N<sub>i</sub></th><th>All-cycle f<sub>sr</sub>/F<sub>SR</sub></th><th>D/C</th><th>Result</th></tr></thead><tbody>${F.evaluated.map((r,i)=>row(r,i)).join('')}</tbody></table>`:'')+peak
@@ -236,6 +236,6 @@ export function fatigueSnPlot(tax:Taxonomy,units:Units){
  key(`<circle cx="{x}" cy="{y}" r="2.6" transform="translate(8 0)" fill="#000"/>`,'Miner equivalent f<tspan font-size="5.5" dy="1.5">sr</tspan><tspan dy="-1.5"> at N</tspan>');
  key(`<path d="M{x},{y}" transform="translate(6 -2.2)" stroke="#000"/><path d="M${kx+5.8},${ky-2.2}L${kx+10.2},${ky+2.2}M${kx+5.8},${ky+2.2}L${kx+10.2},${ky-2.2}" stroke="#000" stroke-width=".7"/>`,`Screened, below F<tspan font-size="5.5" dy="1.5">TH</tspan><tspan dy="-1.5"> (${scr.length}; ${scr.filter(v=>v.range<10**y0).length} below the axis)</tspan>`);
  ky+=4;
- for(const r of rows){const row=F.evaluated[r.n-1];g+=`<line x1="${kx}" y1="${ky}" x2="${kx+18}" y2="${ky}" stroke="#000" stroke-width=".9" stroke-dasharray="${dashes[r.i%dashes.length]}"/><text x="${kx+22}" y="${ky+3}" font-size="7.5"><tspan font-weight="700">${r.n}</tspan> Cat. ${esc(row.category)} · ${esc(row.title.length>34?row.title.slice(0,33)+'…':row.title)}</text>`;ky+=11;}
+ for(const r of rows){const row=F.evaluated[r.n-1];g+=`<line x1="${kx}" y1="${ky}" x2="${kx+18}" y2="${ky}" stroke="#000" stroke-width=".9" stroke-dasharray="${dashes[r.i%dashes.length]}"/><text x="${kx+22}" y="${ky+3}" font-size="7.5"><tspan font-weight="700">${r.n}</tspan> ${(l=>l.startsWith('item')?`A-3.1 ${l}`:`Cat. ${l}`)(esc(categoryLabel(row.category,row.title)).replace('R_FIL','R<tspan font-size="5.5" dy="1.5">FIL</tspan><tspan dy="-1.5"></tspan>'))} · ${esc(row.title.length>34?row.title.slice(0,33)+'…':row.title)}</text>`;ky+=11;}
  return `<figure class="calculation-figure fatigue-sn"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="S-N summary of the evaluated fatigue details" font-family="Arial, sans-serif">${g}</svg><figcaption><strong>Fatigue summary · stress range against design life</strong><p>Each evaluated detail (numbered as in the table) with its AISC 360-16 Appendix 3 design curve down to the threshold F<sub>TH</sub>. At the design life N, the open circle is the largest live-load stress range (all-cycle bound) and the filled circle the Miner-equivalent constant-amplitude range over the duty bins; a point below its curve passes. Crosses: details screened below their thresholds.</p></figcaption></figure>`;
 }
