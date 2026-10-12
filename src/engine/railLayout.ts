@@ -71,9 +71,9 @@ export function railLayout(p:ProjectInput):RailLayout{
 /**
  * Bolted rail joints. AIST TR-13 §5.16.1 (the default): tight joints, the rail ends butted with a gap of 1/16 in or
  * less, joints staggered across the runway, joint bolts pretensioned and re-tightened after 30 and 90 days of
- * operation; the rail string moves thermally in keepers that let it slide, from one anchor near mid-runway, and the
- * clearance gap at the end stops takes that movement. 'open' joints keep an expansion gap (jointGap) at every joint
- * with each piece anchored at mid-length (a project choice that must be stated).
+ * operation; the rail string floats in its clips between the end stops, which anchor it, and the clearance gaps at the
+ * stops take its thermal movement. 'open' joints keep an expansion gap (jointGap) at every joint with each piece
+ * anchored at mid-length by an anchor clip pair (a project choice that must be stated).
  */
 export const tightJointGap=25.4/16;
 export const railJointType=(p:ProjectInput):'tight'|'open'=>p.details?.rail.jointType??'tight';
@@ -93,22 +93,17 @@ export function railJointBars(p:ProjectInput){
 /** Steel coefficient of thermal expansion, per degree C. */
 export const railExpansion=12e-6;
 /**
- * Rail anchors: the anchor keeper pair at mid-length of each new rail piece holds the rail along the
- * runway (keepers set in rail-base notches); every other keeper lets it slide. Each piece then moves
- * thermally from its own anchor, so creep cannot accumulate at one joint or at a stop. An anchor that
- * would fall within a keeper length and 3 in of a girder end moves clear of it onto the girder.
+ * Rail anchors. Tight joints: none along the runway; the rail string floats in its clips and is anchored where its end
+ * bears on an end stop (traction, braking and creep go into the stop). Open joints: the anchor clip pair (fixed clips
+ * per manufacturer) at mid-length of each new rail piece holds it along the runway; every other clip lets it float, so
+ * each piece moves thermally from its own anchor and creep cannot accumulate at one joint or at a stop. An anchor that
+ * would fall within a clip length and 3 in of a girder end moves clear of it onto the girder.
  */
 export function railAnchors(p:ProjectInput,layout:RailLayout=railLayout(p)){
- const L=p.spans.reduce((s,v)=>s+v,0),half=(p.details?.rail.clipWidth??0)/2+76.2;
+ if(railJointType(p)==='tight')return layout.rails.map(rail=>({side:rail.side,anchors:[] as {station:number;shifted:boolean}[]}));
+ const L=p.spans.reduce((s,v)=>s+v,0),half=(p.details?.rail.clip?.baseLength??95.25)/2+76.2;
  let x=0;const ends=p.system==='simple'?[0,...p.spans.map(v=>x+=v)]:[0,L];
  const girders=ends.slice(1).map((e,i)=>[ends[i]+half,e-half] as const).filter(([a,b])=>b>a);
- // Tight joints: the rail string is continuous through its joints and is anchored once, at the girder location
- // nearest mid-runway, so it grows toward both end stops.
- if(railJointType(p)==='tight')return layout.rails.map(rail=>{
-  const mid=(Math.max(rail.start,0)+Math.min(rail.end,L))/2,on=girders.map(([a,b])=>Math.min(Math.max(mid,a),b));
-  const at=on.length?on.reduce((best,v)=>Math.abs(v-mid)<Math.abs(best-mid)?v:best):mid;
-  return {side:rail.side,anchors:[{station:at,shifted:Math.abs(at-mid)>1}]};
- });
  return layout.rails.map(rail=>{
   const stations=[rail.start,...rail.joints,rail.end];
   return {side:rail.side,anchors:rail.pieces.map((_,i)=>{
@@ -120,20 +115,22 @@ export function railAnchors(p:ProjectInput,layout:RailLayout=railLayout(p)){
  });
 }
 /**
- * Thermal movement of the anchored rail over the rail temperature swing: at each joint the two pieces
- * close by the expansion of their lengths from their anchors; at a rail end the end piece moves toward
- * the stop. A new piece joined to an existing rail is assumed to meet a rail free over half a mill length.
+ * Thermal movement of the rail over the rail temperature swing. Tight joints: the joints do not open or close; the
+ * string floats between the end stops and may rest against either one, so the whole string's growth can reach each
+ * rail end. Open joints: at each joint the two pieces close by the expansion of their lengths from their anchors; at a
+ * rail end the end piece moves toward the stop. A new piece joined to an existing rail is assumed to meet a rail free
+ * over half a mill length.
  */
 export function railMovements(p:ProjectInput,layout:RailLayout=railLayout(p)){
  const dT=p.details?.rail.temperatureRange??0,grow=(length:number)=>railExpansion*dT*Math.abs(length),anchors=railAnchors(p,layout);
  const joints:{side:'A'|'B';station:number;movement:number}[]=[],ends:{side:'A'|'B';end:'left'|'right';station:number;movement:number;existing:boolean}[]=[];
  if(railJointType(p)==='tight'){
-  // Tight joints do not open or close; the whole string grows from its single anchor toward each rail end.
-  layout.rails.forEach((rail,r)=>{
-   const a=anchors[r].anchors[0].station;
+  // Tight joints do not open or close; the whole string grows toward the stop it is not resting on.
+  layout.rails.forEach(rail=>{
+   const whole=grow(rail.end-rail.start);
    rail.joints.forEach(j=>joints.push({side:rail.side,station:j,movement:0}));
-   ends.push({side:rail.side,end:'left',station:rail.start,movement:grow(a-rail.start)+(layout.existing.left?grow(railLayoutCriteria.stock/2):0),existing:layout.existing.left});
-   ends.push({side:rail.side,end:'right',station:rail.end,movement:grow(rail.end-a)+(layout.existing.right?grow(railLayoutCriteria.stock/2):0),existing:layout.existing.right});
+   ends.push({side:rail.side,end:'left',station:rail.start,movement:whole+(layout.existing.left?grow(railLayoutCriteria.stock/2):0),existing:layout.existing.left});
+   ends.push({side:rail.side,end:'right',station:rail.end,movement:whole+(layout.existing.right?grow(railLayoutCriteria.stock/2):0),existing:layout.existing.right});
   });
   return {joints,ends,anchors};
  }

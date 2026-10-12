@@ -6,9 +6,9 @@ import {tieArrangement,validateConnectionOptions} from './connectionOptions';
 import type { ProjectInput } from './types';
 import {validateBracket} from './bracketDesign';
 import { boltProperties } from './connectionStrength';
-import { keeperGeometry,anchorGeometry,railPad,railPadThickness } from './railSeat';
+import { clipGeometry,railClipInput,railPadThickness } from './railSeat';
 import { flangeRestraintGaps } from './detailAnalysis';
-import {girderSegments,simpleSupportInput,railKeeperStations} from './simpleSupports';
+import {girderSegments,simpleSupportInput,railClipStations} from './simpleSupports';
 export function validateRunwayDetails(p:ProjectInput){
  const d=p.details;if(!d)return [];
  const errors:string[]=[],L=p.spans.reduce((a,b)=>a+b,0),b=d.brace,r=d.rail;
@@ -17,23 +17,18 @@ export function validateRunwayDetails(p:ProjectInput){
   const c=simpleSupportInput(p);
   add(girderSegments(p).some(m=>m.end-m.start<=2*d.bearing.length+2*c.guideTravel),'independent bearing plates and movement allowances must fit within each girder.');
  }
- add(Math.ceil(L/(p.aist?.clipSpacing??L))>200,'detailed model supports at most 200 rail-keeper intervals.');
- if(p.system==='simple')add(girderSegments(p).some(m=>m.end-m.start<d.rail.clipWidth),'rail keepers must fit fully on each independent girder.');
- if(p.system==='simple'&&p.aist&&p.aist.clipSpacing>0&&Math.ceil(L/p.aist.clipSpacing)<=200){const ks=railKeeperStations(p);add(ks.slice(1).some((x,i)=>x-ks[i]>p.aist!.clipSpacing+1e-6),'girder gap plus rail keeper end setbacks exceed the maximum keeper spacing.');}
- // Keepers are welded after the rail is set, on the outer face and both ends; the rail-side face and the
- // clearance gap stay clear of weld. The keeper and its outer fillet stay on the girder surface. Every keeper
- // fillet is a strength weld, so each is at least four weld sizes long (AISC 360-16 J2.2b).
- {const pad=railPadThickness(p),k=keeperGeometry(r,pad),an=anchorGeometry(r,pad),surface=p.section.kind==='cap'?p.section.capWidth/2-p.section.capTf:p.section.bf/2;
-  add(k.overlap<6.35-1e-6,'rail keeper lip must overlap the rail base by at least 1/4 in (lip projection less the keeper clearance).');
-  add(k.length<4*k.weld-1e-6,'rail keeper outer-face fillet must be at least four times the weld size long (AISC 360-16 J2.2b): lengthen the keeper or use a smaller fillet.');
-  add(k.endWeld<4*k.weld-1e-6,'rail keeper end fillets, held one weld size back from the rail-side face, must be at least four times the weld size long (AISC 360-16 J2.2b): widen the keeper body or use a smaller fillet.');
-  // Keepers are set from the rail, which is set on the web C/L within the setting allowance.
-  add(d.criteria.alignmentTolerance+k.outer+k.weld>surface+1e-6,`rail keepers and their outer fillets must fit on the ${p.section.kind==='cap'?'cap channel web between its flanges':'girder top flange'}.`);
-  add(k.tip<=r.webThickness/2+1e-6,'rail keeper lip must stay clear of the rail web.');
-  const pd=railPad(p);if(pd)add(pd.width>r.baseWidth+2*k.clearance+1e-6,'rail pad must fit between the keepers (rail base width plus both keeper clearances).');
-  add(an.bearing<3.175-1e-6,'rail anchor notch must leave the anchor keeper at least 1/8 in of flat notch end to bear on beyond the keeper clearance and the 1/4 in radius corner holes: deepen the notch.');
-  add(an.notch>(r.baseWidth-r.webThickness)/4+1e-6,'rail anchor notch may not exceed one half of the rail-base outstand.');
-  add(an.endWeld<4*k.weld-1e-6,'anchor keeper end fillets, stopped 1/16 in outside the un-notched rail-base toe, must be at least four times the weld size long (AISC 360-16 J2.2b): reduce the notch depth, widen the keeper body or use a smaller fillet.');}
+ add(Math.ceil(L/(p.aist?.clipSpacing??L))>200,'detailed model supports at most 200 rail clip intervals.');
+ const clip=railClipInput(r);
+ if(p.system==='simple')add(girderSegments(p).some(m=>m.end-m.start<clip.baseLength),'rail clips must fit fully on each independent girder.');
+ if(p.system==='simple'&&p.aist&&p.aist.clipSpacing>0&&Math.ceil(L/p.aist.clipSpacing)<=200){const ks=railClipStations(p);add(ks.slice(1).some((x,i)=>x-ks[i]>p.aist!.clipSpacing+1e-6),'girder gap plus rail clip end setbacks exceed the maximum clip spacing.');}
+ // Weld-on clips stand on the girder top plate against the rail-base toes and are welded at both ends of the base:
+ // the clip and its base welds stay on the plate, and each strength fillet is at least four weld sizes long (J2.2b).
+ {const k=clipGeometry(r,railPadThickness(p)),surface=p.section.kind==='cap'?p.section.capWidth/2-p.section.capTf:p.section.bf/2;
+  add(d.criteria.alignmentTolerance+k.outer>surface+1e-6,`rail clips must fit on the ${p.section.kind==='cap'?'cap channel web between its flanges':'girder top flange'} (rail-base half width plus the clip base width and the rail setting tolerance).`);
+  if(k.type==='weld-on'){
+   add(k.weldLength>k.baseWidth+1e-6,'rail clip base welds cannot be longer than the clip base is wide.');
+   add(k.weldLength<4*k.weld-1e-6,'rail clip base welds must be at least four times the weld size long (AISC 360-16 J2.2b).');
+  }}
  // Girder-end cover plates sit between the girder end and the bearing stiffener pair at the bearing centre.
  // A bolted end bearing replaces the girder-end cover plates on independent simple spans.
  const bearingBolts=activeEndBearing(p),webEnd=!bearingBolts;

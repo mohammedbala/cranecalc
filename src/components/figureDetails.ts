@@ -29,7 +29,7 @@ function girder(p:ProjectInput){
 }
 function rail(p:ProjectInput){
  const r=p.details?.rail;if(!r)return `Rail ${format(p.railWeight,'lineLoad',p.units,2)}, head ${len(p,p.railHeight)} above the flange`;
- return `${r.name.split(' · ')[0]}; keepers ${plate(p,r.clipThickness,r.clipWidth)} with ${fillet(p,r.clipWeld)}; joint bars 2-${plate(p,r.jointPlateThickness,r.jointPlateHeight)}, ${plateInches(r.jointBoltDiameter,p.units)} bolts`;
+ return `${r.name.split(' · ')[0]}; ${r.clip?`${r.clip.type} rail clips per manufacturer, base welds ${fillet(p,r.clip.weld)}`:'rail clips per manufacturer'}; joint bars 2-${plate(p,r.jointPlateThickness,r.jointPlateHeight)}, ${plateInches(r.jointBoltDiameter,p.units)} bolts`;
 }
 function bearing(p:ProjectInput){
  const d=p.details;if(!d)return 'Girder bearing on its support';

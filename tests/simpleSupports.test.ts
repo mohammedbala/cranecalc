@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import * as THREE from 'three';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
-import {girderSegments,independentBearings,railKeeperStations,simpleSupportChecks} from '../src/engine/simpleSupports';
+import {girderSegments,independentBearings,railClipStations,simpleSupportChecks} from '../src/engine/simpleSupports';
 import {validateProject,fingerprint} from '../src/engine/calculate';
 import {createDetailCollector} from '../src/engine/detailAnalysis';
 import {createSupportForceEnvelope,sideReactions} from '../src/engine/bracketForces';
@@ -12,14 +12,14 @@ import {simpleSupportSheetSvg} from '../src/components/simpleSupportSheet';
 import type {CalculationSnapshot} from '../src/engine/types';
 
 describe('independent girder ends',()=>{
- it('keeps two bearings on their own members and terminates keepers before every gap',()=>{
+ it('keeps two bearings on their own members and terminates rail clips before every gap',()=>{
   const p=cappedDemonstrationProject();p.spans=[6000,7620,9000];
   const segments=girderSegments(p),bearings=independentBearings(p),gap=p.details!.simpleSupport!.endGap;
   expect(segments[1].start-segments[0].end).toBeCloseTo(gap,8);
   expect(segments[2].start-segments[1].end).toBeCloseTo(gap,8);
   expect(bearings).toHaveLength(6);
   for(const b of bearings){const member=segments[b.bay-1];expect(b.start).toBeGreaterThanOrEqual(member.start);expect(b.finish).toBeLessThanOrEqual(member.end);}
-  const stations=railKeeperStations(p),half=p.details!.rail.clipWidth/2;
+  const stations=railClipStations(p),half=p.details!.rail.clip!.baseLength/2;
   expect(stations.every(x=>segments.some(m=>x-half>=m.start-1e-6&&x+half<=m.end+1e-6))).toBe(true);
   expect(Math.max(...stations.slice(1).map((x,i)=>x-stations[i]))).toBeLessThanOrEqual(p.aist!.clipSpacing+1e-6);
   p.system='continuous';expect(girderSegments(p)).toHaveLength(1);expect(independentBearings(p)).toEqual([]);expect(simpleSupportChecks(p,.01)).toEqual([]);

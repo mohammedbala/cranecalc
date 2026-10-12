@@ -1,20 +1,20 @@
 import type {ProjectInput} from './types';
-import type {RunwayDetails} from './runwayDetails';
-import {snapQuarter} from './quarterInch';
+import type {RunwayDetails,RailClipInput} from './runwayDetails';
 
 const inch=25.4;
 type Rail=RunwayDetails['rail'];
 
-/** Values that earlier project files do not carry: a 1/4 in pad, 1/16 in keeper clearance and a 1/2 in anchor notch. */
-export const railSeatDefaults={padThickness:.25*inch,clipClearance:inch/16,anchorNotch:.5*inch} as const;
-/** Fit-up clearance between an anchor keeper and each end of its rail-base notch. */
-export const anchorEndClearance=inch/16;
+/** Values that earlier project files do not carry: a 1/4 in rail pad. */
+export const railSeatDefaults={padThickness:.25*inch} as const;
+/** Supplier text that marks rail clip data as not yet entered. */
+export const clipNotEntered='TO BE ENTERED:';
 /**
- * Re-entrant corners of the rail-base notch: drilled holes of this radius centered on the corners, the notch
- * then saw-cut or milled to them, so no sharp corner is left in the rail steel and the square keeper corner,
- * one keeper clearance off the notch bottom, stands in the hole. The notch end is flat beyond the hole.
+ * Rail clip of a project that has not entered its manufacturer data (earlier project files, new templates): a weld-on
+ * floating clip of typical base size, so stations, the fatigue register and the drawings can be laid out. Its rated
+ * capacities are placeholders; every rail clip check is unverified until the manufacturer's data are entered.
  */
-export const anchorNotchRadius=inch/4;
+export const defaultRailClip:RailClipInput={type:'weld-on',product:`${clipNotEntered} rail clip manufacturer and series (or equal)`,basis:'allowable',
+ lateral:4448.2216152605,uplift:4448.2216152605,baseLength:3.75*inch,baseWidth:3*inch,baseThickness:.75*inch,weld:.3125*inch,weldLength:3*inch};
 
 /**
  * The rail pad, when the project specifies one (aist.railPad): a continuous strip under the rail base,
@@ -31,59 +31,52 @@ export const railPadThickness=(p:ProjectInput)=>railPad(p)?.thickness??0;
  * Load heights, rail-head levers and T.O.R. elevations use this, never the rail depth alone.
  */
 export const railTopAboveSteel=(p:ProjectInput)=>p.railHeight+railPadThickness(p);
-/** The plate the keepers are welded to: the cap channel web or the W top flange. */
-export const keeperSeatThickness=(p:ProjectInput)=>p.section.kind==='cap'?p.section.capTw:p.section.tf;
+/** The plate the rail clips are welded to: the cap channel web (the top plate of a capped girder) or the W top flange. */
+export const clipSeatThickness=(p:ProjectInput)=>p.section.kind==='cap'?p.section.capTw:p.section.tf;
+/** The rail clip inputs, or the placeholder clip when the project has none. */
+export const railClipInput=(rail:Rail|undefined):RailClipInput=>rail?.clip??defaultRailClip;
+/** True once the manufacturer's clip data are entered (not the placeholder text). */
+export const clipEntered=(rail:Rail|undefined)=>!!rail?.clip&&!rail.clip.product.trim().toUpperCase().startsWith(clipNotEntered);
 
 /**
- * Integral keeper in section, with offsets across the runway from the rail centreline (rail set on its
- * design line). The body stands on the girder `clearance` clear of the rail-base toe; the lip, `lip`
- * thick, projects `projection` past the body face and bears on the rail base over `overlap`. The body
- * height under the lip is the pad plus the rail base. Welds: a fillet on the outer face, full length, and
- * one across each end, stopped one weld size short of the rail-side face. The rail-side face is not
- * welded, so the keeper is welded after the rail is set and the clearance gap stays open.
+ * Rail clip in section, offsets across the runway from the rail centreline (rail on its design line). The clip
+ * base, `baseWidth` across the rail and `baseLength` along it, stands on the girder against the rail-base toe; its
+ * nose bears on the top of the rail base over `overlap` (a drawing value: the clip itself is per manufacturer). The
+ * base is fillet welded at both ends (two welds across the rail, `weldLength` each, `baseLength` apart).
  */
-export function keeperGeometry(rail:Rail,pad=0){
- const length=rail.clipWidth,lip=rail.clipThickness,bodyWidth=rail.clipBodyWidth??rail.clipThickness,clearance=rail.clipClearance??railSeatDefaults.clipClearance;
- const projection=rail.clipProjection,overlap=projection-clearance,weld=rail.clipWeld;
- const toe=rail.baseWidth/2,inner=toe+clearance,outer=inner+bodyWidth,tip=inner-projection;
- const bodyHeight=pad+rail.baseThickness,height=bodyHeight+lip;
- // The end fillets stop at least one weld size short of the rail-side face, at the 1/4 in grid.
- const holdback=snapQuarter(weld,'up');
- return {length,lip,bodyWidth,clearance,projection,overlap,weld,endWeld:bodyWidth-holdback,holdback,toe,inner,outer,tip,bodyHeight,height,pad};
+export function clipGeometry(rail:Rail,pad=0){
+ const c=railClipInput(rail),toe=rail.baseWidth/2,overlap=Math.min(.5*inch,(rail.baseWidth-rail.webThickness)/4);
+ return {...c,toe,inner:toe,outer:toe+c.baseWidth,tip:toe-overlap,overlap,
+  /** Height of the rail-base top above the steel (pad plus base), where the nose bears. */
+  noseHeight:pad+rail.baseThickness,pad,
+  /** Lateral force at mid-height of the rail-base edge, where the rail bears on the clip. */
+  lateralHeight:pad+rail.baseThickness/2};
 }
-export type KeeperGeometry=ReturnType<typeof keeperGeometry>;
+export type ClipGeometry=ReturnType<typeof clipGeometry>;
 
-/**
- * Rail anchor: at mid-length of each rail piece both rail-base toes are notched `notch` deep and the
- * keeper pair there is set into the notches, 1/16 in clear of each notch end, so the rail bears on the
- * keeper ends longitudinally. The anchor keepers are the typical keeper moved toward the rail by the
- * notch depth; their end fillets stop 1/16 in outside the un-notched toe. The keeper end overlaps the notch
- * end over `engagement` and bears on its flat part, from the toe to the corner hole, over `bearing`.
- */
-export function anchorGeometry(rail:Rail,pad=0){
- const k=keeperGeometry(rail,pad),notch=rail.anchorNotch??railSeatDefaults.anchorNotch,engagement=notch-k.clearance;
- const endWeld=k.bodyWidth-snapQuarter(Math.max(k.weld,engagement+anchorEndClearance),'up'),cornerRadius=anchorNotchRadius;
- // The notch is saw-cut to the 1/4 in grid: at least the keeper length and 1/16 in clear of each notch end.
- const notchLength=snapQuarter(k.length+2*anchorEndClearance,'up');
- return {...k,notch,notchLength,endClearance:(notchLength-k.length)/2,cornerRadius,engagement,bearing:notch-Math.max(k.clearance,cornerRadius),endWeld,inner:k.inner-notch,outer:k.outer-notch,tip:k.tip-notch};
-}
-export type AnchorGeometry=ReturnType<typeof anchorGeometry>;
-
-/** Rail inputs with the optional pad, keeper and anchor values filled from their defaults, in input order. */
+/** Rail inputs with the optional pad and clip values filled from their defaults, in input order. */
 export function railInputsWithDefaults(rail:Rail):Rail{
- const {padThickness,padWidth,clipBodyWidth,clipClearance,anchorNotch,jointType,...rest}=rail,out:Record<string,unknown>={};
+ const {padThickness,padWidth,clip,jointType,...rest}=rail,out:Record<string,unknown>={};
  for(const [key,value] of Object.entries(rest)){
   out[key]=value;
-  if(key==='padSource')Object.assign(out,{padThickness:padThickness??railSeatDefaults.padThickness,padWidth:padWidth??rail.baseWidth});
-  if(key==='clipThickness')out.clipBodyWidth=clipBodyWidth??rail.clipThickness;
-  if(key==='clipWeld')Object.assign(out,{clipClearance:clipClearance??railSeatDefaults.clipClearance,anchorNotch:anchorNotch??railSeatDefaults.anchorNotch});
+  if(key==='padSource')Object.assign(out,{padThickness:padThickness??railSeatDefaults.padThickness,padWidth:padWidth??rail.baseWidth,clip:clip??structuredClone(defaultRailClip)});
   // Rail joints: AIST TR-13 §5.16.1 tight joints unless open joints are chosen.
   if(key==='temperatureRange')out.jointType=jointType??'tight';
  }
  return out as Rail;
 }
-/** The keeper and anchor geometry of a project, with its pad. */
+/** The pad and the rail clip of a project. */
 export function railSeat(p:ProjectInput){
- const r=p.details!.rail,pad=railPadThickness(p);
- return {pad:railPad(p),keeper:keeperGeometry(r,pad),anchor:anchorGeometry(r,pad)};
+ const r=p.details!.rail;
+ return {pad:railPad(p),clip:clipGeometry(r,railPadThickness(p)),entered:clipEntered(r)};
+}
+/**
+ * Schematic outline of a rail clip in section for the drawings, [across, up] from the rail centreline and the top of
+ * the steel, on the side `side` (+1 / -1): the base plate from the rail-base toe outward, a body rising beside the rail
+ * base and a nose over its top. Only the base footprint is a design value; the shape is the manufacturer's.
+ */
+export function clipOutline(c:ClipGeometry,side:1|-1):[number,number][]{
+ // Schematic proportions: a base flange lower than the rail base, a body beside the rail base and a nose 5/8 in thick.
+ const nose=.625*inch,top=c.noseHeight+nose,base=Math.min(c.baseThickness,.6*c.noseHeight),body=c.inner+Math.min(c.baseWidth*.4,1.25*inch);
+ return ([[c.inner,0],[c.outer,0],[c.outer,base],[body,base],[body,top],[c.tip,top],[c.tip,c.noseHeight],[c.inner,c.noseHeight]] as [number,number][]).map(([x,z])=>[side*x,z]);
 }

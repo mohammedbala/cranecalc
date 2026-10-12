@@ -11,6 +11,6 @@ export default function CapDesignInputs({value,onChange,numeric}:{value?:CapDesi
   {([
    ['fullLength','Cap runs the full member length'],['continuousWelds','Continuous weld at each W flange edge'],['contactConfirmed','Full bearing contact specified and verified'],['unperforated','Channel and W top flange have no holes'],['topStiffenerCjp','Bearing stiffener CJP weld to top flange']
   ] as const).map(([key,label])=><label className="checkbox-field" key={key}><input type="checkbox" checked={d[key]} onChange={e=>edit(key,e.target.checked)}/>{label}</label>)}
-  <p className="form-note">Live checks include both bending signs, rail-head torsion, cap weld development and fatigue. The cap web alone carries local keeper bending. Reference: AISC Design Guide 7; AIST Technical Report 13.</p>
+  <p className="form-note">Live checks include both bending signs, rail-head torsion, cap weld development and fatigue. The rail clips are welded to the cap web. Reference: AISC Design Guide 7; AIST Technical Report 13.</p>
  </details>;
 }

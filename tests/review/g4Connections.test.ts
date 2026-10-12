@@ -61,12 +61,13 @@ describe('G4 · beveled washer and true flange thickness at the cap bolt line',(
 });
 
 describe('G4 · B14 tight rail joints by default',()=>{
- it('uses TR-13 tight joints with one anchor per rail and the end-stop gap for thermal movement',()=>{
+ it('uses TR-13 tight joints; the floating rail is anchored by the end stops, whose gaps take the thermal movement',()=>{
   expect(p0.details!.rail.jointGap/inch).toBeCloseTo(.375,6);// entered open-joint gap is kept but not used
   expect(railJointType(p0)).toBe('tight');expect(railJointGap(p0)).toBeCloseTo(tightJointGap,9);
   const m=railMovements(p0);expect(m.joints.every(v=>v.movement===0)).toBe(true);
-  expect(railAnchors(p0).every(r=>r.anchors.length===1)).toBe(true);
-  const end=Math.max(...m.ends.map(v=>v.movement));expect(end/inch).toBeGreaterThan(.2);expect(end/inch).toBeLessThan(.4);
+  // Rail clips: no anchor along the runway; the whole string may grow toward either stop.
+  expect(railAnchors(p0).every(r=>r.anchors.length===0)).toBe(true);
+  const end=Math.max(...m.ends.map(v=>v.movement));expect(end/inch).toBeGreaterThan(.45);expect(end/inch).toBeLessThan(.6);
   const open=structuredClone(p0);open.details!.rail.jointType='open';expect(railJointGap(open)).toBeCloseTo(.375*inch,6);
   expect(railAnchors(open).some(r=>r.anchors.length>1)).toBe(true);
  });

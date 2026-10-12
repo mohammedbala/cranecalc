@@ -2,7 +2,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {capAngleGeometry,boltHardware,capAngleStiffenerGeometry,type CapAngleGeometry} from '../engine/capAngle';
 import {capAngleResult} from '../engine/capAngleTie';
 import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
-import {keeperGeometry,railPadThickness} from '../engine/railSeat';
+import {clipGeometry,clipOutline,railPadThickness} from '../engine/railSeat';
 import {supportColumn} from '../engine/drawingData';
 import {capChannelProfile} from '../engine/channelProfile';
 import {sheetDrawingScale as drawingScale,line,rect,text,dimH,dimV,multiLeader,breakLine,textWidth,labelCaps,bubble,n,detailRef,capChannelSection,type XY} from './sheetGraphics';
@@ -32,17 +32,17 @@ function tieColumn(s:CalculationSnapshot,g:CapAngleGeometry){
  return {col,isNew:sc.isNew,cls:sc.isNew?'runway-line':'reference-line',label:sc.isNew?sc.name:col?`EXISTING ${col.shape??'COLUMN'}${col.shape?' COLUMN':''}`:'COLUMN BY OTHERS',tf:col?.tf??19.05};
 }
 
-/** Section at a support looking along the runway: the girder with cap, rail and keeper, the cap angle, tie plate, end plate, shims and column flange. */
+/** Section at a support looking along the runway: the girder with cap, rail and rail clip, the cap angle, tie plate, end plate, shims and column flange. */
 export function capAngleSection(s:CalculationSnapshot):ViewRender{
  const p=s.input,u=p.units,g=capAngleGeometry(p)!,d=p.details!,b=p.section,c=g.input,res=capAngleResult(s);
  const sz=(v:number)=>tieSize(v,u),dim=(v:number)=>tieDim(v,u),tc=tieColumn(s,g);
- const rail=d.rail,pad=railPadThickness(p),keeper=keeperGeometry(rail,pad),railTop=pad+(p.aist?.railDepth??p.railHeight);
+ const rail=d.rail,pad=railPadThickness(p),clip=clipGeometry(rail,pad),railTop=pad+(p.aist?.railDepth??p.railHeight);
  const yL=-rail.baseWidth/2-12.7,brk1=g.toe+25.4,brk2=g.endPlate.y0-19.05,colBack=g.face+tc.tf,hw=boltHardware(g.column.diameter);
  const yR=colBack+hw.washer.t+hw.nut+hw.stick+12.7,broken=brk2-brk1>38.1;
  const span=(broken?brk1-yL+yR-brk2:yR-yL),scale=drawingScale(Math.min(.72,380/span),u),k=scale.pointsPerMm,gap=broken?16:0;
  const x0=40,X=(y:number)=>x0+(!broken||y<=brk1+1e-9?(y-yL)*k:(brk1-yL)*k+gap+(y-brk2)*k),Z=(z:number)=>150-z*k;
  let svg='<g data-view="cap-angle-section">';
- // Girder: W top flange and web (broken), cap channel web and column-side flange; rail, pad and keeper (context).
+ // Girder: W top flange and web (broken), cap channel web and column-side flange; rail, pad and rail clip (context).
  const wTop=-b.capTw,wBot=wTop-b.tf,webEnd=Math.min(-b.capDepth,g.endPlate.z0,-g.dv)-25.4;
  svg+=poly([[X(yL),Z(wTop)],[X(b.bf/2),Z(wTop)],[X(b.bf/2),Z(wBot)],[X(b.tw/2),Z(wBot)],[X(b.tw/2),Z(webEnd)],[X(-b.tw/2),Z(webEnd)],[X(-b.tw/2),Z(wBot)],[X(yL),Z(wBot)]]);
  // The cap channel in true section (2:12 sloped flange, root fillet), broken left of the rail.
@@ -52,7 +52,7 @@ export function capAngleSection(s:CalculationSnapshot):ViewRender{
  const rb=rail.baseWidth/2,rt=rail.webThickness/2,rh=rail.headWidth/2,z1=pad+rail.baseThickness,z3=railTop-rail.headThickness;
  if(pad)svg+=rect(X(-rb),Z(pad),2*rb*k,pad*k,'runway-line');
  svg+=poly([[X(-rb),Z(pad)],[X(rb),Z(pad)],[X(rb),Z(z1)],[X(rt),Z(z1)],[X(rt),Z(z3)],[X(rh),Z(z3)],[X(rh),Z(railTop)],[X(-rh),Z(railTop)],[X(-rh),Z(z3)],[X(-rt),Z(z3)],[X(-rt),Z(z1)],[X(-rb),Z(z1)]]);
- svg+=poly([[X(keeper.inner),Z(0)],[X(keeper.outer),Z(0)],[X(keeper.outer),Z(keeper.height)],[X(keeper.tip),Z(keeper.height)],[X(keeper.tip),Z(keeper.bodyHeight)],[X(keeper.inner),Z(keeper.bodyHeight)]]);
+ svg+=poly(clipOutline(clip,1).map(([y,z]):XY=>[X(y),Z(z)]));
  // Cap angle: short leg on the channel flange, long leg level with the top of the cap.
  svg+=poly([[X(g.y0),Z(0)],[X(g.toe),Z(0)],[X(g.toe),Z(-g.ta)],[X(g.y0+g.ta),Z(-g.ta)],[X(g.y0+g.ta),Z(-g.dv)],[X(g.y0),Z(-g.dv)]]);
  // Cap bolt: plate washer and head outside (the sleeve and slot hidden); F436 washer and nut inside the channel. On a

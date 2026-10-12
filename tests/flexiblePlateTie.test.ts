@@ -25,7 +25,7 @@ export function plateDemonstration(){
  const t=p.details.brace;Object.assign(t,{thickness:.5*inch,gussetThickness:inch,length:25.25*inch,reach:25.25*inch});
  Object.assign(t.connection,{thickness:.5*inch,weldSize:7/16*inch});Object.assign(t.flangeAttachment!,{weldSize:.5*inch,longitudinalSetback:3.75*inch});
  // The rail twist limit of this example is reached with the stiffer paired bars: design for the 3/16 in rail-to-web
- // offset that the keeper float and the setting tolerance permit.
+ // offset that the rail clip play and the setting tolerance permit.
  p.railEccentricity=3/16*inch;
  return p;
 }
@@ -145,7 +145,7 @@ describe('flexible plate tieback design (capped demonstration)',()=>{
   const s=calculate(cappedPlateDemonstration());
   expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
   expect(s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
-  // Capped girder: the keepers stand on the cap web, the saddle under the W flange.
+  // Capped girder: the rail clips stand on the cap web, the saddle under the W flange.
   expect(check(s,'plate-tie-keeper-flange').status).toBe('not-applicable');
   // A designed receiving column: the column flange local and fatigue checks include the lap couple.
   expect(check(s,'flange-tie-column').status).toBe('pass');expect(check(s,'flange-tie-column').note).toContain('lap couple');

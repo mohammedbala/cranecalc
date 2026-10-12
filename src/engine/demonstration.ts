@@ -18,6 +18,15 @@ import {aiscShapeByName} from '../data/aiscSections';
 import {railTopAboveSteel} from './railSeat';
 const inch=25.4,foot=304.8,kip=4448.221615,ksi=6.894757293;
 const lap=():LapConnection=>({rows:2,gauge:3*inch,pitch:3*inch,edge:1.5*inch,thickness:.5*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:2*inch,weldSize:.25*inch,weldLength:6*inch});
+/**
+ * Fictitious rail clip supplier data for the demonstrations (marked as such; no real product or rating): a weld-on,
+ * floating crane rail clip for a 6 in rail, rated 10 kip lateral and 5 kip uplift per clip on an allowable (working
+ * load) basis; base 3 3/4 in along the rail, 3 in across, 3/4 in thick; welded at both ends of the base, 3 in long.
+ */
+export function demonstrationClip(weld:number):NonNullable<RunwayDetails['rail']['clip']>{
+ return {type:'weld-on',product:'Fictitious supplier data RC-W6: weld-on floating crane rail clip for a 6 in rail, or equal',basis:'allowable',
+  lateral:10*kip,uplift:5*kip,baseLength:3.75*inch,baseWidth:3*inch,baseThickness:.75*inch,weld,weldLength:3*inch};
+}
 export function demonstrationDetails():RunwayDetails{return {
  material:{Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi},
  simpleSupport:{...defaultSimpleSupport},
@@ -33,15 +42,13 @@ export function demonstrationDetails():RunwayDetails{return {
  end:{...lap(),rows:4,gauge:2.75*inch,edge:1.25*inch,thickness:.75*inch,weldSize:.4375*inch,weldLength:11.5*inch,projection:1.5*inch},
  bearing:{width:12*inch,length:12.5*inch,thickness:1*inch,stiffenerWidth:5*inch,stiffenerThickness:1*inch,cope:1*inch,weldSize:.3125*inch},
  rail:{name:'Demo R-6 crane rail · idealized plate geometry',headWidth:3*inch,headThickness:1.25*inch,baseWidth:6*inch,baseThickness:.75*inch,webThickness:.75*inch,Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:'Fictitious RP-01 polyurethane crane-rail pad; allowable compression per fictitious supplier rating sheet RP-01',padThickness:.125*inch,padWidth:6*inch,
-  // Keeper: 3/4 in lip over a 2 3/8 in body, 1/16 in clear of the rail-base toe, 1/2 in lip overlap; 3/8 in fillets on the
-  // outer face and both ends. The end fillets (2 in, anchor 1 7/8 in) are over four weld sizes long (AISC 360-16 J2.2b),
-  // and the keeper and its outer fillet fit a 12 in flange. 1/2 in anchor notch: the anchor keeper bears on 1/4 in of
-  // flat notch end beyond the 1/4 in radius corner holes.
-  clipWidth:3.75*inch,clipThickness:.75*inch,clipBodyWidth:2.25*inch,clipClearance:inch/16,clipProjection:.5*inch,clipWeld:.375*inch,anchorNotch:.5*inch,jointGap:inch/16,jointPlateThickness:1.25*inch,jointPlateHeight:3.75*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+  // Rail clips: fictitious supplier data (weld-on floating clips, manufacturer's allowable ratings and base weld), see
+  // demonstrationClip.
+  clip:demonstrationClip(.375*inch),jointGap:inch/16,jointPlateThickness:1.25*inch,jointPlateHeight:3.75*inch,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
  criteria:{twistLimit:.005,railLateralLimit:400,railGauge:40*foot+.5*inch,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
  fatigueDetails:[
   {id:'F1',name:'Rolled bottom flange at midspan',x:12.5*foot,point:'bottom-left',category:'A',reference:'AISC Table A-3.1, 1.1 · plain rolled base metal'},
-  {id:'F2',name:'Top flange at midspan, conservative category D',x:12.5*foot,point:'top-right',category:'D',reference:'AISC Table A-3.1, 7.1 · category D used conservatively at this comparison point; actual keeper stations checked automatically'},
+  {id:'F2',name:'Top flange at midspan, conservative category D',x:12.5*foot,point:'top-right',category:'D',reference:'AISC Table A-3.1, 7.1 · category D used conservatively at this comparison point; actual rail clip stations checked automatically'},
   {id:'F3',name:'Bearing stiffener weld toe, left support',x:0,point:'top-left',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'},
   {id:'F4',name:'Bearing stiffener weld toe, right support',x:25*foot,point:'top-right',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'}
  ],
@@ -76,7 +83,7 @@ export function demonstrationProject():ProjectInput {
  p.details.fatigueDetails[3].name='Bearing stiffener weld toe, support 2';
  for(let bay=1;bay<3;bay++){
   p.details.fatigueDetails.push({id:`FB${bay+1}`,name:`Rolled bottom flange, bay ${bay+1} midspan`,x:(bay*25+12.5)*foot,point:'bottom-left',category:'A',reference:'AISC Table A-3.1, 1.1 · plain rolled base metal'});
-  p.details.fatigueDetails.push({id:`FT${bay+1}`,name:`Top flange, bay ${bay+1} midspan, conservative category D`,x:(bay*25+12.5)*foot,point:'top-right',category:'D',reference:'AISC Table A-3.1, 7.1 · conservative comparison point; keeper stations automatic'});
+  p.details.fatigueDetails.push({id:`FT${bay+1}`,name:`Top flange, bay ${bay+1} midspan, conservative category D`,x:(bay*25+12.5)*foot,point:'top-right',category:'D',reference:'AISC Table A-3.1, 7.1 · conservative comparison point; rail clip stations automatic'});
   p.details.fatigueDetails.push({id:`FS${bay+2}`,name:`Stiffener weld toe, support ${bay+2}`,x:(bay+1)*25*foot,point:'top-right',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'});
  }
  const r=p.details.rail; p.railWeight=(r.headWidth*r.headThickness+r.baseWidth*r.baseThickness+(p.aist.railDepth-r.headThickness-r.baseThickness)*r.webThickness)*7850*9.80665/1e9;
@@ -141,11 +148,10 @@ export function cappedDemonstrationProject():ProjectInput {
  // ahead of the front bolts (on a 12 in base plate, so both bolt rows stay put) keep the heads clear of the welds.
  Object.assign(p.details!.endStop!,{setback:6.75*inch,base:{length:12*inch,width:9*inch,thickness:.75*inch},face:{thickness:.75*inch,height:15*inch},stiffener:{thickness:.5*inch,length:8.5*inch,spacing:2.75*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:6.5*inch,frontClear:1.75*inch,edge:1.5*inch},source:'Fictitious supplier data CAP-CS-02: bumper force, bumper centerline height and contact diameter'});
  p.details!.end.weldSize=.3125*inch;p.details!.end.gauge=2.5*inch;p.details!.bearing.weldSize=.3125*inch;
- // Light crane: the rail bears directly on the cap web, without a pad. Keeper 1/2 in lip over a 1 5/8 in body,
- // 3/8 in lip overlap; 1/4 in fillets on the outer face and both ends, the end fillets (1 3/8 in, anchor 1 1/8 in)
- // over four weld sizes long (AISC 360-16 J2.2b); 1/2 in anchor notch, 1/4 in flat bearing beyond its corner holes.
+ // Light crane: the rail bears directly on the cap web, without a pad. Weld-on clips with a 1/4 in base weld (the
+ // 0.40 in channel web: Table J2.4 minimum 3/16 in).
  p.aist!.railPad=false;
- Object.assign(p.details!.rail,{clipWidth:3.75*inch,clipThickness:.5*inch,clipBodyWidth:1.5*inch,clipClearance:inch/16,clipProjection:.5*inch,clipWeld:.25*inch,anchorNotch:.5*inch});
+ p.details!.rail.clip=demonstrationClip(.25*inch);
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';
  p.details!.fabrication.welding+=' Cap: continuous fillet each W top-flange edge, size and end development per the cap section and development details. Full cap bearing contact required. Bearing stiffeners CJP to W top flange, bottom fitted.';
  p.notes+=' Separate capped example: 2-ton crane on W24X94 + C15X33.9, centered rail, continuous cap welds and full contact. This is not a substitute section for the 10-ton demonstration.';

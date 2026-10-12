@@ -61,7 +61,7 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
  const bolting=[
   runwayBoltingBasis,
   ...(activeEndBearing(p)||capAngleGeometry(p)?['Bolts in slotted sliding plies are pretensioned against steel sleeves so the slotted ply is not clamped; plate washers cover the slots.']:[]),
-  tight?'Rail joints: tight joints, rail ends butted with a gap of 1/16 in or less, staggered across the runway; joint bolts pretensioned in standard holes and re-tightened after 30 and 90 days of crane operation (AIST TR-13 §5.16.1). Thermal movement is taken by keepers that let the rail slide and by the clearance gap at the end stops.'
+  tight?'Rail joints: tight joints, rail ends butted with a gap of 1/16 in or less, staggered across the runway; joint bolts pretensioned in standard holes and re-tightened after 30 and 90 days of crane operation (AIST TR-13 §5.16.1). The rail floats in its clips between the end stops, which anchor it; the clearance gaps at the stops take its thermal movement.'
    :'Rail joints: open joints with the expansion gap shown (project choice); joint bolts re-tightened after 30 and 90 days of crane operation.'];
  const welding=[
   `E70XX low-hydrogen weld metal, ${awsCode}, cyclically loaded provisions (Clause 4 Part C); qualified or prequalified WPS and qualified welders.`,

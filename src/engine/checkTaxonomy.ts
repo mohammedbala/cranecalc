@@ -68,14 +68,14 @@ const idRules:Rule[]=[
  T(/^cap-angle-plate-slenderness$/,'detailing'),T(/(-slenderness|-slope)$/,'classification'),T(/^cap-angle-column-holes$/,'classification'),T(/^end-stop-stiffener$/,'classification'),
  T(/-tr13-load$/,'classification'),T(/^cap-angle-stiffener$/,'detailing'),
  // Fatigue (design)
- D(/^detail-(fatigue|full-cycle)-/,'fatigue'),D(/fatigue|^rail-keeper-root$/,'fatigue'),
+ D(/^detail-(fatigue|full-cycle)-/,'fatigue'),D(/fatigue/,'fatigue'),
  // Movement capacity (design)
  D(/^(rotation-clearance|simple-guide-travel|rail-expansion-gap|rail-joint-slot|end-bearing-travel)$/,'movement'),
  D(/(slot-travel|-deflection|-rotation|-drift(-wind)?|rail-gauge)$/,'movement'),
  D(/^rail-twist$/,'movement',true),D(/^(vertical|lateral|rail-head)$/,'movement'),
  D(/-plate-movement$/,'axial'),
  // Detailing: dimensions, sizes, fit and clearances
- T(/^(minimum-thickness|rail-clips|camber|stiffener-width|stiffener-thickness|simple-joint-gap|rail-end-gap|rail-keeper-float|rail-joint-fit)$/,'detailing'),
+ T(/^(minimum-thickness|rail-clips|camber|stiffener-width|stiffener-thickness|simple-joint-gap|rail-end-gap|rail-joint-fit)$/,'detailing'),
  T(/(-edge|-spacing|-pitch|-ligament|-slot-end|-slot-toe|-weld-min|-weld-minimum|-weld-max|-weld-maximum|-weld-size|-weld-length)$/,'detailing'),
  T(/(-wrench|-wrench-[a-z-]+|-nut-[a-z]+|-washer|-washer-(fit|bottom|stiffener)|-fit|-clear|-shim-max|-sleeve-length|-contact|-width|-proportions|-colstiff-length|-lap-nut-clear)$/,'detailing'),
  T(/^(cap-development-length|cap-rail-footprint|haunch-colstiff-weld-minimum)$/,'detailing'),
@@ -260,8 +260,7 @@ export function gateCheck(s:CalculationSnapshot,c:CheckResult,k:Classification=c
 function firstSentence(v:string){const m=v.match(/^.{10,200}?[.;](\s|$)/);return (m?m[0]:v.slice(0,160)).trim();}
 
 // ---------------------------------------------------------------- repeats and merges
-/** Register points of one detail family (keepers, cap weld base metal, cap ends, holes) share geometry and category. */
-/** Register points of one family: same prefix (RC keepers, CW cap weld, CE cap ends, CA/SH holes), category and detail. */
+/** Register points of one family: same prefix (RC rail clip base welds, CW cap weld, CE cap ends, CA/SH holes), category and detail. */
 export function registerFamily(s:CalculationSnapshot,id:string){
  const m=id.match(/^detail-(?:fatigue|full-cycle)-(.+)$/),f=m&&s.detailResults?.fatigue.find(v=>v.id===m[1]);if(!f)return undefined;
  return `register:${f.id.match(/^[A-Z]+/)?.[0]??f.id}|${f.category}|${familyTitle(f.name)}`;
@@ -303,6 +302,8 @@ export const mergeDefs:MergeDef[]=[
  {key:'end-stop-prying',title:'End stop plies · thickness for no prying (ratio t_min/t)',re:/^end-stop-(base-prying|flange-prying)$/},
  {key:'end-stop-body',title:'End stop body and face plate',re:/^end-stop-(flexure|shear|face|face-outstand)$/},
  {key:'rail-joint',effect:'connection',title:'Rail joint (bars and bolts)',re:/^rail-joint-(bolts|bearing|net|plate|block)$/},
+ {key:'rail-clips',effect:'connection',title:'Rail clips (manufacturer’s lateral and uplift ratings, base welds)',re:/^rail-clip-(lateral|uplift|weld)$/},
+ // Former welded keepers and notched anchors, in calculations made before the rail clip model (stored snapshots).
  {key:'rail-keepers',effect:'connection',title:'Rail keepers (lip, shear, welds)',re:/^rail-keeper-(flexure|shear|weld)$/},
  {key:'rail-anchor',effect:'connection',title:'Rail anchor (welds, notch bearing)',re:/^rail-anchor-(weld|bearing)$/},
  {key:'fatigue-peak',title:'Peak elastic stress (AISC Appendix 3.1, 0.66Fy)',re:/^fatigue-peak(-detailed)?$/},

@@ -55,7 +55,10 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
    'wheel-web-tr13','torsion-normal','fatigue-peak-detailed','sidesway','end-stop-girder']),keeperDetail=/^detail-(fatigue-.+|full-cycle-RC\d+-(left|right))$/,
    // Peer review round 2, group A: one force system at the haunch flanges, carried by the column stiffeners (C2, the
    // unstiffened J10 checks for information); the top restraint at the cap tie line and the tie force derived (M6).
+   // Rail attachment to standard practice: the welded keeper and notched anchor checks are replaced by the rail clip
+   // checks (manufacturer data not entered in this project, so they are unverified); the RC points are rail clip base welds.
+   railKeepers=/^rail-(keeper|anchor)-|^rail-flange-local$/,
    roundA=/^(haunch-column-(flange|yield-top|yield-bottom|crippling|sidesway|panel)|haunch-colstiff-.+|brace-member|cap-angle-.+|end-bearing-.+|stiffener-(combined-weld|fatigue|lateral-flexure|weld-fatigue)|rail-head|rail-twist|torsion-(normal|shear|stability)|detail-equilibrium)$/;
-  for(const b of demoFocus005Before().checks){if(changed.has(b.id)||keeperDetail.test(b.id)||roundA.test(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
+  for(const b of demoFocus005Before().checks){if(changed.has(b.id)||keeperDetail.test(b.id)||roundA.test(b.id)||railKeepers.test(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
  });
 });

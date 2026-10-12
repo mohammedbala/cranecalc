@@ -22,7 +22,7 @@ export const checkGroupPurpose:Record<string,string>={
  Connections:'Transfer lateral and longitudinal forces through members, bolts, plates and welds.',
  'Column bracket':'Carry support reactions and eccentric moments into the receiving column.',
  'Flange attachment':'Transfer flange tie forces through the saddle, local flange and welds.',
- 'Rail details':'Transfer wheel and side forces through the rail, keepers, joints and their attachments.',
+ 'Rail details':'Transfer wheel and side forces through the rail, rail clips, joints and their attachments.',
  Analysis:'Verify equilibrium and numerical convergence before relying on calculated demands.',
  'Existing column':'Check the receiving column for the crane reactions combined with the loads it already carries.',
  'New column':'Design the new freestanding runway column for the crane and runway reactions.',
@@ -177,8 +177,8 @@ export function checkFigure(topic:string,p?:ProjectInput):CheckFigure{
    steps=['Edge distance and pitch of each bolt','Slot length for the movement'];detail=['bearing'];break;
   case 'Connections':case 'Flange attachment':case 'Cap tieback':case 'Cap tieback movement':({title,note,linework:drawing,path:steps,detail}=tie(p,topic==='Flange attachment'));break;
   case 'Column bracket':({title,note,linework:drawing,path:steps,detail}=bracket(p));break;
-  case 'Rail details':title='Rail, keeper and local flange';drawing=rect(40,86,160,7,true)+rect(72,82,96,4)+poly('M82 82V76H113V52H104V40H136V52H127V76H158V82Z')+rect(66,74,15,8,true)+rect(159,74,15,8,true)+circle(120,22,13)+arrow(120,0,120,9)+arrow(176,46,140,46)+label(180,49,'H','start')+path('M196 76L176 79')+label(198,74,'KEEPER','start')+mark(1,104,14)+mark(2,30,82)+mark(3,190,36)+mark(4,52,70);
-   steps=['Wheel P on the rail head',`Rail base bears on the ${p?.details&&railSeat(p).pad?'pad on the ':''}${p?.section.kind==='cap'?'cap channel':'top flange'}`,'Side thrust H on the rail head',`Keepers and their welds to the ${p?.section.kind==='cap'?'cap channel':'flange'}`];detail=['rail'];break;
+  case 'Rail details':title='Rail and rail clips';drawing=rect(40,86,160,7,true)+rect(72,82,96,4)+poly('M82 82V76H113V52H104V40H136V52H127V76H158V82Z')+rect(66,74,15,8,true)+rect(159,74,15,8,true)+circle(120,22,13)+arrow(120,0,120,9)+arrow(176,46,140,46)+label(180,49,'H','start')+path('M196 76L176 79')+label(198,74,'KEEPER','start')+mark(1,104,14)+mark(2,30,82)+mark(3,190,36)+mark(4,52,70);
+   steps=['Wheel P on the rail head',`Rail base bears on the ${p?.details&&railSeat(p).pad?'pad on the ':''}${p?.section.kind==='cap'?'cap channel':'top flange'}`,'Side thrust H on the rail head',`Rail clips and their base welds to the ${p?.section.kind==='cap'?'cap channel':'flange'}`];detail=['rail'];break;
   case 'Analysis':title='Equilibrium and refinement';drawing=beam(48,true)+[82,155].map(x=>arrow(x,12,x,45)).join('')+arrow(30,108,30,74)+arrow(210,108,210,74)+[55,82,109,136,163,190].map(x=>circle(x,52,2)).join('')+label(120,92,'ΣR = ΣP')+label(120,110,'refine travel + stations')+mark(1,70,20)+mark(2,44,100)+mark(3,166,72);
    steps=['Wheel loads ΣP','Reactions ΣR: equilibrium','Refine crane travel and mesh until converged'];detail=['girder'];break;
   case 'Longitudinal bracing':title='Crane-level longitudinal bracing';drawing=path('M40 100H200')+path('M60 100V22M180 100V22M60 22H180')+path('M60 100L180 22M60 22L180 100',true)+arrow(14,22,56,22)+label(26,15,'F')+label(120,113,'BRACED BAY · TIERS · DIAGONALS')+mark(1,40,34)+mark(2,148,52)+mark(3,196,92);note='Traction or stop force and building wind/seismic forces resolve into the braced-bay diagonals; columns and foundation take the overturning.';

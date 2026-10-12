@@ -140,7 +140,7 @@ export function verificationLine(tax:Taxonomy){
 const location=(t:TaxonEntry)=>t.location??'';
 /**
  * Appendix A: every computed result, with its type, element, gate, demand, limit, D/C and reference. A check repeated
- * over many stations or register points (rail keepers, cap weld base metal, holes; Miner and all-cycle separately) is
+ * over many stations or register points (rail clips, cap weld base metal, holes; Miner and all-cycle separately) is
  * one row: its governing instance with "typical of N", the governing location and the range of D/C. Every instance,
  * with its id, is in the CSV.
  */

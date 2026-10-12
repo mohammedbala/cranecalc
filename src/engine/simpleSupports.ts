@@ -1,4 +1,5 @@
 import type { ProjectInput,CheckResult } from './types';
+import {railClipInput} from './railSeat';
 import type { RunwayCaseEvent } from './designAnalysis';
 import type { z } from 'zod';
 import type { simpleSupportSchema } from './runwayDetails';
@@ -46,14 +47,14 @@ export function independentBearings(p:ProjectInput){
   {bay:m.bay,end:'right' as const,station:m.rightGrid,start:m.end-length,finish:m.end,center:m.end-length/2,role:'SLIDING' as const}
  ]);
 }
-/** Keepers terminate on each actual girder, so an attachment cannot weld
+/** Rail clip pairs terminate on each actual girder, so a clip is never welded
  * across a simple-span joint. End stations bound every clear spacing. */
-export function railKeeperStations(p:ProjectInput){
+export function railClipStations(p:ProjectInput){
  const L=p.spans.reduce((a,b)=>a+b,0),spacing=p.aist?.clipSpacing??600,stop=activeEndStop(p),railEnd=stop?stopRailEnd(stop):0;
- // With girder-mounted stops the rail, and so its keepers, stops short of each runway end.
- if(p.system!=='simple'||!p.details){const a=railEnd+(stop?p.details!.rail.clipWidth/2:0),z=L-(a),stations=[];for(let x=a;x<z;x+=spacing)stations.push(x);return [...stations,z];}
+ // With girder-mounted stops the rail, and so its clips, stops short of each runway end.
+ if(p.system!=='simple'||!p.details){const a=railEnd+(stop?railClipInput(p.details!.rail).baseLength/2:0),z=L-(a),stations=[];for(let x=a;x<z;x+=spacing)stations.push(x);return [...stations,z];}
  const ends=stopEnds(p);
- const half=p.details.rail.clipWidth/2,last=p.spans.length;
+ const half=railClipInput(p.details.rail).baseLength/2,last=p.spans.length;
  return girderSegments(p).flatMap(m=>{
   const a=m.start+half+(m.bay===1&&ends.includes('left')?railEnd:0),z=m.end-half-(m.bay===last&&ends.includes('right')?railEnd:0);if(z<a)return [];
   const count=Math.max(1,Math.ceil((z-a)/spacing));

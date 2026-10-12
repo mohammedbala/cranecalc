@@ -1,30 +1,30 @@
 import {describe,it,expect} from 'vitest';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
-import {railPad,railTopAboveSteel,keeperGeometry,anchorGeometry,railInputsWithDefaults,railSeatDefaults} from '../src/engine/railSeat';
-import {railKeeperResponse,railAnchorForce} from '../src/engine/railKeeper';
+import {railPad,railTopAboveSteel,clipGeometry,clipEntered,railInputsWithDefaults,railSeatDefaults,defaultRailClip} from '../src/engine/railSeat';
+import {railClipResponse,railAnchorForce} from '../src/engine/railClip';
 import {railLayout,railAnchors,railMovements,railExpansion,railJointMovement} from '../src/engine/railLayout';
 import {railChecks} from '../src/engine/railChecks';
 import {runwayElevations} from '../src/engine/drawingData';
 import {validateProject} from '../src/engine/calculate';
 import {projectSchema,type CalculationSnapshot,type ProjectInput} from '../src/engine/types';
 import {railKeeperView} from '../src/components/railKeeperView';
-/** The open-joint scheme (expansion gap at every joint, each piece anchored): a project choice; TR-13 tight joints are the default. */
-const openJoints=(p:ProjectInput)=>{p.details!.rail.jointType='open';p.details!.rail.jointGap=.375*25.4;return p;};
 import {railLayoutView,movementUpTo} from '../src/components/railLayoutView';
 import {coverSheetSvg} from '../src/components/coverSheet';
+/** The open-joint scheme (expansion gap at every joint, each piece anchored): a project choice; TR-13 tight joints are the default. */
+const openJoints=(p:ProjectInput)=>{p.details!.rail.jointType='open';p.details!.rail.jointGap=.375*25.4;return p;};
 
 const inch=25.4,kip=4448.221615;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
 const snapshot=(p:ProjectInput)=>({input:p,checks:[],errors:[],warnings:[],eligible:true} as unknown as CalculationSnapshot);
 /** Rail checks on the wheel-group demands of the 10-ton example (scale 1) or the 2-ton capped example (0.2). */
 function checks(p:ProjectInput,scale=1){
- const P=scale*(1.2*8*kip+1.6*(12*kip+.25*20*kip)),H=scale*1.6*2*kip,bins=[{name:'Rated',cycles:1e6,vertical:scale*20*kip,lateral:scale*kip,flangeStress:0,plateStress:0,weldStress:0}];
- for(const b of bins)Object.assign(b,railKeeperResponse(p,b.vertical,b.lateral));
- const detailResults={demands:{railLateral:H,railVertical:P,railFatigueVertical:scale*20*kip,railFatigueLateral:scale*kip},railFatigueBins:bins};
+ const P=scale*(1.2*8*kip+1.6*(12*kip+.25*20*kip)),H=scale*1.6*2*kip,bins=[{name:'Rated',cycles:1e6,vertical:scale*20*kip,lateral:scale*kip,weldStress:0}];
+ for(const b of bins)b.weldStress=railClipResponse(p,b.lateral).weldStress;
+ const detailResults={demands:{railLateral:H,railLateralService:scale*2*kip,railVertical:P,railFatigueVertical:scale*20*kip,railFatigueLateral:scale*kip},railFatigueBins:bins};
  return railChecks({input:p,detailResults} as unknown as CalculationSnapshot);
 }
 
-describe('rail seat: pad, keepers and anchors',()=>{
+describe('rail seat: pad and rail clips',()=>{
  it('adds the rail pad to the top of rail in the elevations and load heights',()=>{
   const p=demonstrationProject(),pad=railPad(p)!;
   expect(pad.thickness).toBeCloseTo(.125*inch,10);expect(pad.width).toBeCloseTo(6*inch,10);
@@ -34,56 +34,76 @@ describe('rail seat: pad, keepers and anchors',()=>{
   const c=cappedDemonstrationProject();expect(railPad(c)).toBeUndefined();
   const ec=runwayElevations(c)!;expect(ec.tor-ec.tos).toBeCloseTo(c.railHeight+(c.section.kind==='cap'?c.section.capTw:0),10);
  });
- it('loads earlier rail inputs, filling the pad, keeper and anchor defaults',()=>{
+ it('loads earlier project files (welded keepers): the placeholder clip lays out the stations, every clip check is unverified',()=>{
   const p=demonstrationProject(),r=p.details!.rail;
-  const {padThickness,padWidth,clipBodyWidth,clipClearance,anchorNotch,...legacy}=r;
-  void padThickness;void padWidth;void clipBodyWidth;void clipClearance;void anchorNotch;
-  p.details!.rail=legacy as typeof r;
-  expect(projectSchema.safeParse(p).success).toBe(true);
-  const k=keeperGeometry(p.details!.rail,railPad(p)!.thickness);
-  expect(railPad(p)!.thickness).toBe(railSeatDefaults.padThickness);expect(k.clearance).toBe(railSeatDefaults.clipClearance);expect(k.bodyWidth).toBe(r.clipThickness);
+  const {padThickness,padWidth,clip,...legacy}=r;void padThickness;void padWidth;void clip;
+  // An earlier file with the keeper fields: they are dropped on load.
+  const old={...legacy,clipWidth:3.75*inch,clipThickness:.75*inch,clipProjection:.5*inch,clipWeld:.375*inch,anchorNotch:.5*inch};
+  p.details!.rail=projectSchema.parse({...p,details:{...p.details,rail:old}}).details!.rail;
+  expect(p.details!.rail).not.toHaveProperty('clipWidth');expect(p.details!.rail.clip).toBeUndefined();
+  expect(railPad(p)!.thickness).toBe(railSeatDefaults.padThickness);expect(clipEntered(p.details!.rail)).toBe(false);
+  expect(clipGeometry(p.details!.rail).baseLength).toBe(defaultRailClip.baseLength);
   const shown=railInputsWithDefaults(p.details!.rail),keys=Object.keys(shown);
-  expect(keys.indexOf('padThickness')).toBe(keys.indexOf('padSource')+1);expect(keys.indexOf('clipBodyWidth')).toBe(keys.indexOf('clipThickness')+1);
-  expect(shown.clipClearance).toBe(inch/16);expect(shown.anchorNotch).toBe(railSeatDefaults.anchorNotch);
+  expect(keys.indexOf('padThickness')).toBe(keys.indexOf('padSource')+1);expect(keys.indexOf('clip')).toBe(keys.indexOf('padWidth')+1);
+  const c=checks(p);
+  for(const id of ['rail-clip-lateral','rail-clip-uplift','rail-clip-weld','rail-clip-weld-fatigue','rail-clip-weld-minimum'])expect(c.find(v=>v.id===id)?.status,id).toBe('unverified');
+  expect(c.find(v=>v.id==='rail-clip-lateral')!.note).toContain('Rail clip manufacturer data are not entered');
  });
- it('locates the keeper clear of the rail-base toe and the anchor keeper in its notch',()=>{
-  const p=demonstrationProject(),k=keeperGeometry(p.details!.rail,railPad(p)!.thickness),a=anchorGeometry(p.details!.rail,railPad(p)!.thickness);
-  expect(k.toe/inch).toBeCloseTo(3,10);expect(k.inner/inch).toBeCloseTo(3.0625,10);expect(k.outer/inch).toBeCloseTo(5.3125,10);expect(k.tip/inch).toBeCloseTo(2.5625,10);
-  // 2 1/4 in body, 3/8 in fillets stopped 1/2 in (the weld size, up to the 1/4 in grid) short of the rail-side face: the
-  // end fillets are 1 3/4 in, over 4w = 1 1/2 in (AISC 360-16 J2.2b).
-  expect(k.overlap/inch).toBeCloseTo(.4375,10);expect(k.height/inch).toBeCloseTo(.125+.75+.75,10);expect(k.holdback/inch).toBeCloseTo(.5,10);expect(k.endWeld/inch).toBeCloseTo(1.75,10);
-  expect(a.engagement/inch).toBeCloseTo(.4375,10);expect(a.endWeld/inch).toBeCloseTo(1.75,10);expect(a.inner/inch).toBeCloseTo(2.5625,10);
-  // The keeper end bears on the flat notch end beyond the 1/4 in radius corner hole: 1/2 - 1/4 = 1/4 in.
-  expect(a.cornerRadius/inch).toBeCloseTo(.25,10);expect(a.bearing/inch).toBeCloseTo(.25,10);
+ it('places the clips against the rail-base toes and fits them on the girder',()=>{
+  const p=demonstrationProject(),k=clipGeometry(p.details!.rail,railPad(p)!.thickness);
+  expect(k.toe/inch).toBeCloseTo(3,10);expect(k.inner/inch).toBeCloseTo(3,10);expect(k.outer/inch).toBeCloseTo(6,10);
+  expect(k.lateralHeight/inch).toBeCloseTo(.125+.375,10);expect(k.noseHeight/inch).toBeCloseTo(.875,10);
   expect(validateProject(p)).toEqual([]);expect(validateProject(cappedDemonstrationProject())).toEqual([]);
+  // A clip base too wide for the flange, and a base weld shorter than 4w (J2.2b), are input errors.
+  const wide=demonstrationProject();wide.details!.rail.clip!.baseWidth=4*inch;expect(validateProject(wide).join(' ')).toContain('rail clips must fit');
+  const short=demonstrationProject();short.details!.rail.clip!.weldLength=1.25*inch;expect(validateProject(short).join(' ')).toContain('four times the weld size');
  });
- it('checks the rail float plus the setting tolerance against the design eccentricity',()=>{
-  const p=demonstrationProject(),float=checks(p).find(c=>c.id==='rail-keeper-float')!;
-  expect(float.demand!/inch).toBeCloseTo(1/16+1/8,10);expect(float.capacity!/inch).toBeCloseTo(.25,10);expect(float.status).toBe('pass');
-  // The former 13/16 in clearance lets the rail float far past the 1/4 in design eccentricity.
-  p.details!.rail.clipClearance=13/16*inch;expect(checks(p).find(c=>c.id==='rail-keeper-float')!.status).toBe('fail');
- });
- it('checks the pad only where one is specified, and the anchor and keeper welds',()=>{
-  const demo=checks(demonstrationProject()),capped=checks(cappedDemonstrationProject(),.2);
-  expect(demo.find(c=>c.id==='rail-pad')).toBeDefined();expect(capped.find(c=>c.id==='rail-pad')).toBeUndefined();
-  for(const c of [demo,capped])for(const id of ['rail-keeper-weld','rail-anchor-weld','rail-anchor-bearing','rail-keeper-flexure','rail-flange-local'])expect(c.find(v=>v.id===id)?.status).toBe('pass');
+ it('checks the manufacturer ratings on their basis, the base welds, their fatigue and minimum size; no keeper checks remain',()=>{
+  const p=demonstrationProject(),c=checks(p),by=(id:string)=>c.find(v=>v.id===id)!;
+  // Allowable ratings against the service side thrust of one wheel group: 2 kip on a 10 kip clip; uplift 2 x 6 / 6 = 2 kip on 5 kip.
+  expect(by('rail-clip-lateral').demand!/kip).toBeCloseTo(2,6);expect(by('rail-clip-lateral').capacity!/kip).toBeCloseTo(10,6);expect(by('rail-clip-lateral').note).toContain('allowable (working-load) basis');
+  expect(by('rail-clip-uplift').demand!/kip).toBeCloseTo(2,6);expect(by('rail-clip-uplift').capacity!/kip).toBeCloseTo(5,6);
+  // LRFD ratings: the factored 3.2 kip.
+  const lrfd=demonstrationProject();lrfd.details!.rail.clip!.basis='LRFD';expect(checks(lrfd).find(v=>v.id==='rail-clip-lateral')!.demand!/kip).toBeCloseTo(3.2,6);
+  // Base welds, 3/8 in x 3 in at each end, 3 in apart... throat stress from the larger role, on phi 0.6 F_EXX.
+  const w=railClipResponse(p,3.2*kip);expect(by('rail-clip-weld').demand).toBeCloseTo(w.weldStress,6);expect(by('rail-clip-weld').capacity).toBeCloseTo(.75*.6*70*6.894757,2);
+  expect(w.A/inch**2).toBeCloseTo(2*.375/Math.SQRT2*3,6);
+  expect(by('rail-clip-weld-fatigue').group).toBe('Fatigue');expect(by('rail-clip-weld-minimum').capacity!/inch).toBeCloseTo(.375,10);
+  for(const v of c.filter(v=>v.id.startsWith('rail-clip')))expect(v.status,v.id).toBe('pass');
+  expect(c.find(v=>/keeper|rail-anchor-|rail-flange-local/.test(v.id))).toBeUndefined();
+  // The pad check only where a pad is specified.
+  expect(by('rail-pad')).toBeDefined();expect(checks(cappedDemonstrationProject(),.2).find(v=>v.id==='rail-pad')).toBeUndefined();
   expect(railAnchorForce(demonstrationProject()).force/kip).toBeCloseTo(1.6*4,6);
  });
- it('defaults to AIST TR-13 tight rail joints: one anchor per rail, no joint movement, pretensioned bolts in standard holes',()=>{
-  const p=demonstrationProject(),layout=railLayout(p),anchors=railAnchors(p,layout),moves=railMovements(p,layout);
+ it('defaults to AIST TR-13 tight rail joints: the floating rail is anchored by the end stops, the whole string grows into a stop gap',()=>{
+  const p=demonstrationProject(),layout=railLayout(p),anchors=railAnchors(p,layout),moves=railMovements(p,layout),dT=p.details!.rail.temperatureRange;
   expect(p.details!.rail.jointType).toBeUndefined();expect(p.details!.rail.jointGap).toBeCloseTo(25.4/16,9);
-  expect(anchors.every(a=>a.anchors.length===1)).toBe(true);expect(moves.joints.every(v=>v.movement===0)).toBe(true);
+  expect(anchors.every(a=>a.anchors.length===0)).toBe(true);expect(moves.joints.every(v=>v.movement===0)).toBe(true);
+  for(const e of moves.ends){const rail=layout.rails.find(r=>r.side===e.side)!;expect(e.movement).toBeCloseTo(railExpansion*dT*(rail.end-rail.start),8);}
+  const anchorage=checks(p).find(v=>v.id==='rail-anchorage')!;expect(anchorage.status).toBe('pass');expect(anchorage.demand!/kip).toBeCloseTo(6.4,4);expect(anchorage.capacity!/kip).toBeCloseTo(20,4);
   const note=texts(railKeeperView(snapshot(p)).render().svg).join(' ');
   expect(note).toContain('TIGHT JOINT (AIST TR-13 §5.16.1)');expect(note).toContain('PRETENSIONED IN 15/16" STANDARD HOLES');expect(note).toContain('RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS');expect(note).not.toContain('SNUG');
-  const plan=texts(railLayoutView(snapshot(p)).render().svg).join(' ');expect(plan).toContain('ONE PER RAIL NEAR MID-RUNWAY');expect(plan).toContain('AT A RAIL END');
+  expect(note).toContain('ANCHORED BY THE END STOPS');expect(note).toContain('NO ANCHOR CLIPS OR RAIL NOTCHES');
+  const plan=texts(railLayoutView(snapshot(p)).render().svg).join(' ');expect(plan).toContain('EACH RAIL STRING IS ANCHORED BY THE END STOPS');expect(plan).toContain('6.4 KIP FACTORED');
+  expect(plan).toContain(`UP TO ${movementUpTo(Math.max(...moves.ends.map(v=>v.movement)),'US')} INTO THE CLEARANCE GAP`);expect(plan).toContain('RAIL CLIP PAIRS (TICKS) AT 2\'-0" O.C. MAX.');
+  expect(railLayoutView(snapshot(p)).render().svg).not.toContain('data-rail-anchor=');
  });
- it('anchors each rail piece at mid-length and closes each joint by the growth from both anchors',()=>{
+ it('open joints: an anchor clip pair at mid-length of each piece, each joint closing by the growth from both anchors',()=>{
   const p=openJoints(demonstrationProject()),layout=railLayout(p),anchors=railAnchors(p,layout),moves=railMovements(p,layout),dT=p.details!.rail.temperatureRange;
   layout.rails.forEach((rail,i)=>{
    const stations=[rail.start,...rail.joints,rail.end];
    expect(anchors[i].anchors.map(a=>a.station)).toEqual(rail.pieces.map((_,j)=>(stations[j]+stations[j+1])/2));
    rail.joints.forEach((j,n)=>expect(moves.joints.find(v=>v.side===rail.side&&v.station===j)!.movement).toBeCloseTo(railExpansion*dT*(rail.pieces[n]+rail.pieces[n+1])/2,8));
   });
+  // Without the manufacturer's anchor rating the anchorage is unverified; with it, checked on the rating basis.
+  expect(checks(p).find(v=>v.id==='rail-anchorage')!.status).toBe('unverified');
+  p.details!.rail.clip!.anchorLongitudinal=8*kip;const a=checks(p).find(v=>v.id==='rail-anchorage')!;expect(a.status).toBe('pass');expect(a.demand!/kip).toBeCloseTo(4,4);
+  const svg=railLayoutView(snapshot(p)).render().svg;expect(svg.match(/data-rail-anchor=/g)).toHaveLength(layout.rails.reduce((n,r)=>n+r.pieces.length,0));
+  const note=texts(svg).join(' ');expect(note).toContain('ANCHOR CLIP PAIR (FIXED CLIPS PER MANUFACTURER');
+  const moved=railJointMovement(railMovements(p));expect(moved).toBeCloseTo(3.94,2);
+  expect(note).toContain(`UP TO ${movementUpTo(moved,'US')} AT A JOINT (OPEN JOINTS, 3/8" GAP)`);
+  const si=openJoints(demonstrationProject());si.units='SI';const metric=texts(railLayoutView(snapshot(si)).render().svg).join(' ');
+  expect(metric).toContain('28.5 kN FACTORED');expect(metric).toContain('UP TO 4 mm AT A JOINT (OPEN JOINTS, 9.5 mm GAP)');
  });
  it('dimensions T.O.R. to T.O.S. at the top of the W on a capped girder, as the S-00 / S-01 elevations',()=>{
   const p=cappedDemonstrationProject(),t=texts(railKeeperView(snapshot(p)).render().svg),el=runwayElevations(p)!;
@@ -91,70 +111,34 @@ describe('rail seat: pad, keepers and anchors',()=>{
   expect(t).toContain('6 3/8"');expect(t).not.toContain('6"');
   expect((el.tor-el.tos)/25.4).toBeCloseTo(6+p.section.capTw/25.4,6);
  });
- it('draws and specifies the pad, the keeper and its welds, the anchor and the joint dimensions',()=>{
-  const us=texts(railKeeperView(snapshot(openJoints(demonstrationProject()))).render().svg);
-  // K1: 1/2 in projection and 2 1/4 in body (2 3/4 in), 3/4 in lip and 7/8 in under it (1 5/8 in); 3/8 in fillets,
-  // 3 3/4 in on the outer face and 1 3/4 in on each end.
-  for(const t of ['RAIL PAD 1/8" X 6", CONT.:','ALLOWABLE COMPRESSION 1.45 KSI','6 1/8"','T.O.R.','T.O.S.','OUTER FACE, EACH KEEPER','BOTH ENDS OF EACH KEEPER, STOPPED','KEEPER K1 / SECTION','KEEPERS AND RAIL ANCHOR / PLAN','2 1/4"','1/2"','2 3/4"','3/4"','7/8"','1 5/8"','3/8','1 3/4','3 3/4'])expect(us).toContain(t);
-  // The pad product name wraps to the callout column's width.
-  expect(us.join(' ')).toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');expect(us).not.toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');
-  expect(us.join(' ')).toContain('1/16" CLEAR OF RAIL-BASE TOE');expect(us.join(' ')).not.toContain('ROOT FILLETS');
-  // Rail joint: bolt pitch, edge distance to the bar end, the bolt line to the joint centerline (1 1/2 in to the rail
-  // end plus half the 3/8 in gap, up to the 1/4 in grid: 1 3/4 in) and the bar length.
+ it('specifies the rail clips in the standard note, with the field-welded base, the pad and the joint',()=>{
+  const svg=railKeeperView(snapshot(openJoints(demonstrationProject()))).render().svg,us=texts(svg),all=us.join(' ');
+  for(const t of ['RAIL PAD 1/8" X 6", CONT.:','ALLOWABLE COMPRESSION 1.45 KSI','6 1/8"','T.O.R.','T.O.S.','RAIL CLIP, EACH SIDE (SCHEMATIC):','EACH END OF CLIP BASE (MIN.)'])expect(us).toContain(t);
+  expect(all).toContain(`RAIL CLIPS: WELD-ON, PER MANUFACTURER (FICTITIOUS SUPPLIER DATA RC-W6`);
+  expect(all).toContain('RATED ≥ 10 KIP LATERAL AND ≥ 5 KIP UPLIFT PER CLIP (ALLOWABLE), IN OPPOSING PAIRS AT 2\'-0" O.C. MAX.');
+  expect(all).toContain('FLOATING; WELD BASE TO GIRDER TOP FLANGE PER MANUFACTURER (MIN. 3/8" FILLET X 3", EACH END OF THE BASE)');
+  // The base weld is a field weld; no keeper, lip, notch or anchor-keeper remains.
+  expect(svg).toContain('data-weld-location="field"');expect(all).not.toMatch(/KEEPER|NOTCH|\bLIP\b|\bK1\b/);
+  expect(all).toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');expect(us).not.toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');
+  // Rail joint: bolt pitch, edge distance to the bar end, the bolt line to the joint centerline and the bar length.
   expect(us.filter(t=>t==='1 1/2"')).toHaveLength(1);expect(us).toContain('1 3/4"');expect(us).toContain('3"');expect(us).toContain('1\'-0 1/2"');
+  expect(all).toContain('2 BARS 1 1/4" X 3 3/4" X 1\'-0 1/2", SLOTTED 1 5/16" X 15/16" ALONG THE RAIL');expect(all).toContain('15/16" DRILLED HOLES IN THE RAIL WEB');
+  expect(all).toContain('DRILL HOLES AND SAW-CUT ENDS; NO FLAME CUTTING OR PUNCHING');
   const capped=texts(railKeeperView(snapshot(cappedDemonstrationProject())).render().svg);
-  expect(capped.some(t=>t.startsWith('RAIL PAD'))).toBe(false);expect(capped).toContain('6 3/8"');
+  expect(capped.some(t=>t.startsWith('RAIL PAD'))).toBe(false);expect(capped).toContain('6 3/8"');expect(capped.join(' ')).toContain('WELD BASE TO CAP CHANNEL PER MANUFACTURER (MIN. 1/4" FILLET');
   const si=openJoints(demonstrationProject());si.units='SI';
   const metric=texts(railKeeperView(snapshot(si)).render().svg).join(' ');
-  expect(metric).not.toMatch(/"|KSI|KIP|\d\.\d{2,} ?mm|\d\.[1-46-9] ?mm/);expect(metric).toContain('10 MPa');expect(metric).toContain('1.5 mm CLEAR');
- });
- it('specifies the rail fabrication, the anchor notch corner holes and the slotted joint bars',()=>{
-  const svg=railKeeperView(snapshot(openJoints(demonstrationProject()))).render().svg,note=texts(svg).join(' ');
-  // Joint: the bars are slotted (their net section and block shear are checked so); the rail web is drilled.
-  expect(note).toContain('2 BARS 1 1/4" X 3 3/4" X 1\'-0 1/2", SLOTTED 1 5/16" X 15/16" ALONG THE RAIL');
-  expect(note).toContain('15/16" DRILLED HOLES IN THE RAIL WEB');
-  // Notches with drilled corner holes, and how rail steel is cut.
-  expect(note).toContain('K1 IN NOTCHES 1/2" X 4" IN BOTH RAIL-BASE TOES AND THE PAD, 1/2" DRILLED HOLES CENTERED ON THE NOTCH CORNERS');
-  expect(note).toContain('END FILLETS 1 3/4".');
-  for(const t of ['DRILL HOLES, THEN SAW-CUT OR MILL ENDS AND NOTCHES','NO FLAME CUTTING OR PUNCHING','MT NOTCH CORNERS','CONFIRM NOTCHING WITH THE RAIL SUPPLIER'])expect(note).toContain(t);
-  // Each corner hole: two seen quarter arcs beyond the notch end, one hidden under the anchor keeper.
-  const plan=svg.slice(svg.indexOf('data-view="keeper-plan"'));
-  expect(plan.match(/<path class="rail-line" d="M[^"]*A/g)).toHaveLength(4);expect(plan.match(/<path class="hidden-line" d="M[^"]*A/g)).toHaveLength(2);
- });
- it('closes the keeper K1 dimension strings in SI',()=>{
-  // The 10-ton keeper read 14.5 + 51 = 65 and 19 + 22 = 41.5 mm at half-millimetre rounding.
-  const piece=(p:ProjectInput)=>{p.units='SI';const svg=railKeeperView(snapshot(p)).render().svg,g=svg.slice(svg.indexOf('data-view="keeper-piece"'));
-   return texts(g.slice(0,g.indexOf('</g>'))).map(t=>Number(t.replace(' mm','')));};
-  // Text order: overall width, projection and body, lip and body height, overall height.
-  const close=(v:number[])=>{expect(v[1]+v[2]).toBe(v[0]);expect(v[3]+v[4]).toBe(v[5]);};
-  const demo=piece(demonstrationProject());expect(demo).toEqual([70,13,57,19,22,41]);close(demo);
-  close(piece(cappedDemonstrationProject()));
-  // Odd entered sizes still close, each part within a millimetre of its true size.
-  const odd=demonstrationProject();Object.assign(odd.details!.rail,{clipProjection:.53*inch,clipBodyWidth:2.47*inch,clipThickness:.77*inch,baseThickness:.81*inch});
-  const v=piece(odd);close(v);
-  [.53,2.47,.77].forEach((x,i)=>expect(Math.abs(v[[1,2,3][i]]-x*inch)).toBeLessThan(1));
- });
- it('marks the rail anchors on the joint layout and states the longitudinal restraint',()=>{
-  const p=openJoints(demonstrationProject()),svg=railLayoutView(snapshot(p)).render().svg,layout=railLayout(p);
-  expect(svg.match(/data-rail-anchor=/g)).toHaveLength(layout.rails.reduce((n,r)=>n+r.pieces.length,0));
-  const note=texts(svg).join(' ');
-  expect(note).toContain('RAIL ANCHORS');expect(note).toContain('6.4 KIP FACTORED');expect(note).toContain('CREEP');
-  expect(note).toContain('SAW-CUT THE SHORTER PIECES SHOWN, NO FLAME CUTTING');
-  // The computed joint closure (3.94 mm, the thermal check's movement), rounded up, with the gap it closes.
-  const moved=railJointMovement(railMovements(p));expect(moved).toBeCloseTo(3.94,2);
-  expect(note).toContain(`UP TO ${movementUpTo(moved,'US')} AT A JOINT (OPEN JOINTS, 3/8" GAP)`);expect(movementUpTo(moved,'US')).toBe('5/32"');
-  const si=openJoints(demonstrationProject());si.units='SI';const metric=texts(railLayoutView(snapshot(si)).render().svg).join(' ');
-  expect(metric).toContain('28.5 kN FACTORED');expect(metric).toContain('UP TO 4 mm AT A JOINT (OPEN JOINTS, 9.5 mm GAP)');
+  expect(metric).not.toMatch(/"|KSI|KIP|\d\.\d{2,} ?mm|\d\.[1-46-9] ?mm/);expect(metric).toContain('10 MPa');expect(metric).toContain('44 kN LATERAL');
  });
  it('states a movement limit rounded up',()=>{
   expect(movementUpTo(3.175,'US')).toBe('1/8"');expect(movementUpTo(3.2,'US')).toBe('5/32"');expect(movementUpTo(25.4,'US')).toBe('1"');
   expect(movementUpTo(30,'US')).toBe('1 3/16"');expect(movementUpTo(.1,'US')).toBe('1/32"');
   expect(movementUpTo(3.94,'SI')).toBe('4 mm');expect(movementUpTo(4,'SI')).toBe('4 mm');expect(movementUpTo(.2,'SI')).toBe('1 mm');
  });
- it('lists the rail pad under MATERIALS when the project has one',()=>{
-  const sheets=[{number:'S-02',title:'DETAILS',details:['RAIL KEEPER / GIRDER ATTACHMENT']}];
+ it('lists the rail pad and the rail clips under MATERIALS',()=>{
+  const sheets=[{number:'S-02',title:'DETAILS',details:['RAIL CLIP / SECTION']}];
   const demo=texts(coverSheetSvg(snapshot(demonstrationProject()),sheets)).join(' ');
-  expect(demo).toContain('RAIL PAD');expect(demo).toMatch(/1\/8" THICK X 6" WIDE, CONTINUOUS UNDER THE RAIL/);
+  expect(demo).toContain('RAIL PAD');expect(demo).toMatch(/1\/8" THICK X 6" WIDE, CONTINUOUS UNDER THE RAIL/);expect(demo).toContain('RAIL CLIPS');
   expect(texts(coverSheetSvg(snapshot(cappedDemonstrationProject()),sheets))).not.toContain('RAIL PAD');
  });
 });

@@ -84,7 +84,7 @@ describe('continuous girder bearings, ties and end connection',()=>{
  });
 });
 
-describe('dimensions and weld callouts of the tie, keeper and bearing details',()=>{
+describe('dimensions and weld callouts of the tie, rail clip and bearing details',()=>{
  it('chains the girder-end bolts, dimensions the bolt gauge and gussets and draws the release filler',()=>{
   const t=flangeTieTopic(demo)!,section=t.views[0].render().svg,words=texts(section).join(' | ');
   // Each bar end's hole chain closes with its edge distance: edge, pitch, edge at the girder and column ends. The
@@ -105,10 +105,11 @@ describe('dimensions and weld callouts of the tie, keeper and bearing details',(
   // The summary gives the largest strength and fatigue ratios, not the detailing limits.
   expect(notes).toMatch(/TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT \(MAX\. D\/C 0\.\d\d STRENGTH, 0\.\d\d FATIGUE\)\./);
  });
- it('dimensions the keeper, its clearance to the rail base, its lip bearing and length',()=>{
-  const t=texts(view(demo,'RAIL KEEPER / GIRDER ATTACHMENT').render().svg);
-  // K1: 2 3/4 overall, 2 1/4 body, 1/2 lip projection, 3/4 lip, 7/8 under the lip, 1 5/8 high, 3 3/4 long.
-  expect(t).toEqual(expect.arrayContaining(['K1 1/16" CLEAR OF RAIL-BASE TOE (1/8" MAX.),','LIP BEARS 7/16"; SHIM, WELD, REMOVE SHIM','2 3/4"','2 1/4"','1/2"','3/4"','7/8"','1 5/8"','3 3/4"','3 3/4" LONG ALONG THE RAIL']));
+ it('specifies the rail clips by type, rating, spacing and base weld, without keeper plate dimensions',()=>{
+  const t=texts(view(demo,'RAIL CLIP / SECTION').render().svg),all=t.join(' ');
+  expect(t).toEqual(expect.arrayContaining(['RAIL CLIP, EACH SIDE (SCHEMATIC):','EACH END OF CLIP BASE (MIN.)']));
+  expect(all).toMatch(/RAIL CLIPS: WELD-ON, PER MANUFACTURER \(.*\), RATED ≥ [\d.]+ KIP LATERAL/);expect(all).toContain('IN OPPOSING PAIRS AT 2\'-0" O.C. MAX.');
+  expect(all).not.toMatch(/\bK1\b|LIP BEARS|KEEPER/);
  });
  it('gives the capped bearing stiffeners a CJP groove callout at the top flange and fits the bottom end only',()=>{
   const s=calculate(cappedDemonstrationProject()),svg=view(s,'GIRDER BEARING / COLUMN BRACKET').render().svg,t=texts(svg).join(' | ');

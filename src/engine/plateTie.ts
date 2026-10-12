@@ -4,9 +4,10 @@ import {available} from './aiscStrength';
 import {boltCapacity,boltProperties,elasticBoltGroup,plateBearing,blockShear,parallelWeldGroup,filletMinimum} from './connectionStrength';
 import {flangeTieGeometry,tieRelease,tieEccentricity,columnGussetExtension} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
-import {railKeeperResponse} from './railKeeper';
+import {railClipResponse} from './railClip';
+import {railClipInput} from './railSeat';
 import {tieMovements} from './tieMovement';
-import {railKeeperStations} from './simpleSupports';
+import {railClipStations} from './simpleSupports';
 import {wrenchClearance} from './endStop';
 import {tieArrangement} from './connectionOptions';
 import {format} from './units';
@@ -18,7 +19,7 @@ import {latexNumber,withinLimit} from './math';
  * and of the column gusset. It carries the flange lateral force axially and flexes about its weak axis with the
  * girder end rotation and thermal travel; sleeved bolts in vertical slots of the column gusset release support
  * deflection. Geometry, saddle, gussets and release are the direct flange-tie family (tieGeometry.ts); this module
- * adds the plate member, its single-shear lap connections, bolt tension with prying, hardware fit and the keeper
+ * adds the plate member, its single-shear lap connections, bolt tension with prying, hardware fit and the rail clip
  * interaction at the saddle. Imposed movement and gusset/saddle checks are in tieMovement.ts and flangeTieDesign.ts.
  */
 export const isPlateTie=(p:ProjectInput)=>tieArrangement(p.details)==='flexible-plate';
@@ -97,7 +98,7 @@ export function plateTieChecks(s:CalculationSnapshot,ctx:{force:number;cos:numbe
  // Hardware fit: socket clearance (AISC Manual Table 7-15 C1) from the girder-end bolts to the saddle above them, and
  // from the column-end bolts to the column flange and its root fillet toe.
  const C1=wrenchClearance(c.diameter),saddleClear=g.topDrop-c.gauge/2-g.attachment.saddleThickness,columnClear=g.barGap+c.edge-c.weldSize;
- add('plate-tie-wrench','Detailing','Flexible plate bolts · tightening clearance',C1,Math.min(saddleClear,columnClear),'length','C_1\\le\\text{clearance to the saddle and the column}',`AISC Manual Table 7-15 socket clearance C1 = ${fmt(C1)}: top girder-end bolt row ${fmt(saddleClear)} below the saddle; column-end bolt row ${fmt(columnClear)} from the toe of the column root fillet. Nothing of the tie is above the girder top flange: rail, keepers and the top flange surface are untouched.`);
+ add('plate-tie-wrench','Detailing','Flexible plate bolts · tightening clearance',C1,Math.min(saddleClear,columnClear),'length','C_1\\le\\text{clearance to the saddle and the column}',`AISC Manual Table 7-15 socket clearance C1 = ${fmt(C1)}: top girder-end bolt row ${fmt(saddleClear)} below the saddle; column-end bolt row ${fmt(columnClear)} from the toe of the column root fillet. Nothing of the tie is above the girder top flange: rail, rail clips and the top flange surface are untouched.`);
  // Fatigue of the pretensioned bolts in tension (AISC A-3.4): 20% of the service tension range including prying, on the
  // tensile stress area, against the bolt-tension curve (C_f = 3.9 × 10^8 ksi³) without threshold credit.
  const cycles=d.spectrum.reduce((a,v)=>a+v.cycles,0),fatigueEnds=ends.map(v=>({...v,...lapBolts(p,range,mv.cyclicLongitudinal,rel?0:mv.cyclicVertical,v.arm)})),fb=worst(fatigueEnds,v=>v.tension);
@@ -108,24 +109,24 @@ export function plateTieChecks(s:CalculationSnapshot,ctx:{force:number;cos:numbe
 }
 
 /**
- * Girder-side attachment against the rail and its keepers. Every tie part (saddle, end fillets, gussets, plate and
- * bolts) is below the tied flange, so nothing reaches the rail, keepers or top flange surface. Where a rail keeper
- * stands over the saddle (keeper length, its end fillets and a spread through the flange thickness), the flange strip
- * there carries both transverse local bending stresses: the saddle strip stress from the tie force and the keeper
+ * Girder-side attachment against the rail and its clips. Every tie part (saddle, end fillets, gussets, plate and
+ * bolts) is below the tied flange, so nothing reaches the rail, clips or top flange surface. Where a rail clip
+ * stands over the saddle (clip base length, its end fillets and a spread through the flange thickness), the flange strip
+ * there carries both transverse local bending stresses: the saddle strip stress from the tie force and the rail clip
  * strip stress under the factored wheel group, added by magnitude.
  */
 export function keeperInteraction(s:CalculationSnapshot,force:number):CheckResult{
  const p=s.input,d=p.details!,g=flangeTieGeometry(p)!,r=s.detailResults!,a=g.attachment,tf=p.section.tf;
- const reach=d.rail.clipWidth/2+d.rail.clipWeld+tf,keepers=railKeeperStations(p),stations=g.sides.includes(1)?g.stations:[];
- const half=a.saddleLength/2+a.weldSize,hits=stations.filter(v=>keepers.some(k=>Math.abs(k-v.tieX)<=reach+half+1e-6));
- const base={id:'plate-tie-keeper-flange',group:'Flange attachment',title:'Top flange at saddle and rail keeper · combined local bending',equation:'f=f_{saddle}+f_{keeper}\\le\\phi F_y',referenceIds:['aisc-connections','flange-saddle-mechanics','flexible-plate-basis']};
- const clear='All tie parts are below the tied flange: the rail, keepers and top flange surface are untouched.';
- if(p.section.kind==='cap')return {...base,status:'not-applicable',note:`${clear} The keepers stand on the cap channel web and the saddle is welded under the W flange, so their local bending is in separate plates.`};
- if(!hits.length)return {...base,status:'not-applicable',note:`${clear} No rail keeper (with its end fillets and a ${format(tf,'length',p.units,3)} spread through the flange) stands over a top saddle and its end fillets.`};
- const saddle=flangeTieResponse(p,force).flange,keeper=railKeeperResponse(p,r.demands.railVertical,r.demands.railLateral).flangeStress,capacity=available(p.section.Fy,p.method,.9,1.67);
+ const clip=railClipInput(d.rail),reach=clip.baseLength/2+clip.weld+tf,clips=railClipStations(p),stations=g.sides.includes(1)?g.stations:[];
+ const half=a.saddleLength/2+a.weldSize,hits=stations.filter(v=>clips.some(k=>Math.abs(k-v.tieX)<=reach+half+1e-6));
+ const base={id:'plate-tie-keeper-flange',group:'Flange attachment',title:'Top flange at saddle and rail clip · combined local bending',equation:'f=f_{saddle}+f_{clip}\\le\\phi F_y',referenceIds:['aisc-connections','flange-saddle-mechanics','flexible-plate-basis']};
+ const clear='All tie parts are below the tied flange: the rail, clips and top flange surface are untouched.';
+ if(p.section.kind==='cap')return {...base,status:'not-applicable',note:`${clear} The clips stand on the cap channel web and the saddle is welded under the W flange, so their local bending is in separate plates.`};
+ if(!hits.length)return {...base,status:'not-applicable',note:`${clear} No rail clip (with its end fillets and a ${format(tf,'length',p.units,3)} spread through the flange) stands over a top saddle and its end fillets.`};
+ const saddle=flangeTieResponse(p,force).flange,keeper=railClipResponse(p,r.demands.railLateral).flangeStress,capacity=available(p.section.Fy,p.method,.9,1.67);
  const ratio=(saddle+keeper)/capacity;
  return {...base,demand:saddle+keeper,capacity,quantity:'stress',utilization:ratio,status:withinLimit(saddle+keeper,capacity)?'pass':'fail',substitution:`\\frac{${latexNumber(saddle+keeper)}}{${latexNumber(capacity)}}=${ratio.toFixed(4)}`,
-  note:`${clear} At ${hits.length} tie${hits.length>1?'s':''} a rail keeper stands over the saddle (keeper ends, fillets and a ${format(tf,'length',p.units,3)} spread through the flange): the saddle strip stress ${format(saddle,'stress',p.units,3)} (full tie force) and the keeper strip stress ${format(keeper,'stress',p.units,3)} (factored wheel group) are added by magnitude on the same flange strip, though their peaks lie at the web root and at the keeper weld. Fatigue: the saddle toes (SA) and keepers (RC) are separate register details, each with its own local range on the global range.`};
+  note:`${clear} At ${hits.length} tie${hits.length>1?'s':''} a rail clip stands over the saddle (clip base, fillets and a ${format(tf,'length',p.units,3)} spread through the flange): the saddle strip stress ${format(saddle,'stress',p.units,3)} (full tie force) and the clip strip stress ${format(keeper,'stress',p.units,3)} (factored wheel group) are added by magnitude on the same flange strip, though their peaks lie at the web root and at the clip weld. Fatigue: the saddle toes (SA) and clips (RC) are separate register details, each with its own local range on the global range.`};
 }
 
 /** Geometry and fit of the flexible plate tieback beyond the shared direct flange-tie validation. */

@@ -175,8 +175,8 @@ function railDetails(p:ProjectInput,g:SupportGeometry){
  const zh=railRun(S,g,0,L,0,'context',rz),xk=[L*.25,L*.8];for(const x of xk)keepers(S,g,x,0,'focus',rz);
  const R=Math.min(170,G.d*.3),xw=L*.5;wheel(S,g,xw,R,0,zh,'ghost');S.arrow([xw,0,zh+2*R+G.d*.6],[xw,0,zh+2*R+10],'P');
  const zr=zh-r.headThickness/2;S.arrow([xw+R*1.8,r.baseWidth*2.2,zr],[xw+R*1.8,r.headWidth/2+12,zr],'H');
- // Markers on their parts: 2 on the rail base between the keepers, clear of the H arrow, 4 on the near keeper (the one marker names it).
- return finish(S,[['rail/head',-28,-6,[xw,0,zh]],['rail/base',4,36,[L*.42,r.baseWidth/2,rz+r.baseThickness/2]],['load/H',22,-12,[xw+R*1.8,r.baseWidth*1.6,zr]],['rail/keeper',24,10,[xk[1],r.baseWidth/2+24,rz+r.baseThickness+8]]],{az:36});
+ // Markers on their parts: 2 on the rail base between the clips, clear of the H arrow, 4 on the near clip (the one marker names it).
+ return finish(S,[['rail/head',-28,-6,[xw,0,zh]],['rail/base',4,36,[L*.42,r.baseWidth/2,rz+r.baseThickness/2]],['load/H',22,-12,[xw+R*1.8,r.baseWidth*1.6,zr]],['rail/clip',24,10,[xk[1],r.baseWidth/2+24,rz+r.baseThickness+8]]],{az:36});
 }
 function endBearings(p:ProjectInput,g:SupportGeometry){
  const S=new Scene(),G=g.girder,e=p.details?.endBearing,y=0,gap=g.simple?Math.max(g.gap,25):0,L=G.d*.75,bl=g.bearing.length,bw=g.bearing.width;

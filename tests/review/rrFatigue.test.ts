@@ -11,7 +11,7 @@ import {demoFocus005RevB} from '../fixtures/demoFocus005RevB';
 
 /**
  * Peer review M7 and the fatigue figure (P4) on DEMO-FOCUS-005 Rev B: Miner results as an equivalent constant-amplitude
- * range against F_SR at the design cycle count (the all-cycle basis), the one-way keeper flange range, the 0.66Fy peak
+ * range against F_SR at the design cycle count (the all-cycle basis), the rail clip base weld points (girder range, no local addition), the 0.66Fy peak
  * on unfactored loads, AISC category labels, one count definition, the class and cycle-basis statements and the S-N
  * plot of the duty bins. One calculate of Rev B.
  */
@@ -28,7 +28,7 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   expect(s.checks.filter(c=>['fail','unverified','incomplete','unsupported'].includes(c.status)).map(c=>c.id)).toEqual([]);
  });
  it('reports Miner as f_sr,eq = (Σn_i f_sr,i³/N)^(1/3) against F_SR at N, the all-cycle basis (item 1)',()=>{
-  // The governing rail keeper register point.
+  // The governing rail clip base weld register point.
   const keeper=r.fatigue.filter(f=>f.id.startsWith('RC')).reduce((a,b)=>b.damage>a.damage?b:a);
   const c=check(`detail-fatigue-${keeper.id}`),all=check(`detail-full-cycle-${keeper.id}`);
   const N=keeper.bins.reduce((a,b)=>a+b.cycles,0),feq=Math.cbrt(keeper.bins.reduce((a,b)=>a+b.cycles*b.range**3,0)/N),FSR=1000*KSI*Math.cbrt(Cf[keeper.category]/N);
@@ -45,23 +45,25 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   const top=check('haunch-fatigue-top-flange'),F=r.taperedHaunch!.fatigue,n=F.reduce((a,v)=>a+v.cycles,0);
   expect(top.demand!).toBeCloseTo(Math.cbrt(F.reduce((a,v)=>a+v.cycles*Math.max(0,v.topFlange)**3,0)/n),9);
   expect(top.capacity!).toBeCloseTo(1000*KSI*Math.cbrt(4.4/n),9);
-  // The table carries f_sr,eq, F_SR, Σn_i/N_i and both ratios; the rail keeper row's D/C is the Miner ratio.
-  const row=tax.fatigue.evaluated.find(v=>v.title==='Rail keeper')!;
+  // The table carries f_sr,eq, F_SR, Σn_i/N_i and both ratios; the rail clip base weld row's D/C is the Miner ratio.
+  const row=[...tax.fatigue.evaluated,...tax.fatigue.screened].find(v=>v.title==='Rail clip base weld')!;
   expect(row.miner!).toBeCloseTo(c.utilization!,9);expect(row.dc).toBe(row.miner);expect(row.equivalent!).toBeCloseTo(feq,9);expect(row.capacity!).toBeCloseTo(FSR,9);
   const table=fatigueTable(tax,'US');
   expect(table).toContain('<th>f<sub>sr,eq</sub></th>');expect(table).toContain('<th>Σn<sub>i</sub>/N<sub>i</sub></th>');expect(table).toContain('<th>F<sub>SR</sub> at n<sub>SR</sub></th>');
  });
- it('takes the keeper local flange range one-way, added once to the global range (item 2)',()=>{
-  // RC (keeper toe) and CW (cap weld base metal) points share station and flange edge: their bin ranges differ by the local range.
+ it('takes the girder range at each rail clip station; the clip forces load the clip base welds (item 2)',()=>{
+  // RC (clip base weld on the cap web) and CW (cap weld base metal) points share station and flange edge: with weld-on
+  // rail clips no local keeper bending is added, so their bin ranges are equal; the categories differ (D and B).
   for(const rc of r.fatigue.filter(f=>f.id.startsWith('RC'))){
    const cw=r.fatigue.find(f=>f.id===rc.id.replace(/^RC/,'CW'))!;
-   rc.bins.forEach((b,i)=>expect(b.range-cw.bins[i].range).toBeCloseTo(r.railFatigueBins[i].flangeStress,6));
+   rc.bins.forEach((b,i)=>expect(b.range).toBeCloseTo(cw.bins[i].range,6));expect(rc.category).toBe('D');
   }
-  const keeper=tax.fatigue.evaluated.find(v=>v.title==='Rail keeper')!;
-  // Reviewer's one-way estimate: 9.83 ksi largest range, about 0.56 all-cycle (17.65 ksi Category D at 400,000).
-  expect(keeper.range!/KSI).toBeGreaterThan(9.5);expect(keeper.range!/KSI).toBeLessThan(10.2);
-  expect(keeper.allCycle!).toBeGreaterThan(.53);expect(keeper.allCycle!).toBeLessThan(.58);
-  expect(check(`detail-fatigue-RC0-left`).note).toMatch(/one-way/);expect(body).not.toMatch(/full reversal/i);
+  const clip=[...tax.fatigue.evaluated,...tax.fatigue.screened].find(v=>v.title==='Rail clip base weld')!;
+  // 4.89 ksi largest range (was 9.83 ksi with the keeper local range), 0.28 all-cycle (17.65 ksi Category D at 400,000).
+  expect(clip.range!/KSI).toBeCloseTo(4.89,2);expect(clip.allCycle!).toBeCloseTo(.277,3);
+  // The clip weld throat: one-signed, Category F.
+  const w=check('rail-clip-weld-fatigue');expect(w.demand).toBeCloseTo(Math.max(...r.railFatigueBins.map(b=>b.weldStress)),9);expect(w.note).toMatch(/one-signed/);
+  expect(body).not.toMatch(/full reversal/i);
  });
  it('checks the Appendix 3.1 peak stress on unfactored loads, never the factored stress (item 5)',()=>{
   const c=check('fatigue-peak-detailed'),peak=Math.max(r.fatiguePeak!.value,...r.fatigue.map(f=>f.peak));
@@ -95,9 +97,10 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   expect(nSc).toBe(tax.counts.designScreened);expect(nEv+nSc).toBe(members.length);
   expect(body).toContain(`${F.evaluated.length} details evaluated; ${F.screened.length} details screened`);
   expect(body).toContain(`Of their ${members.length} checks, ${nEv} are evaluated and ${nSc} screened`);
-  const keeper=F.evaluated.find(v=>v.title==='Rail keeper')!;expect(keeper.points*2).toBe(keeper.members.length);
+  const keeper=[...F.evaluated,...F.screened].find(v=>v.title==='Rail clip base weld')!;expect(keeper.points*2).toBe(keeper.members.length);
   const kSc=pts(keeper.members.filter(c=>gate(c.id)==='screened'));
-  expect(body).toMatch(new RegExp(`Rail keeper typical of ${keeper.points} register points \\(${keeper.points-kSc} evaluated, ${kSc} below F TH \\)`));
+  // Every clip station is below F_TH of Category D: the detail is screened and listed with its largest range.
+  expect(kSc).toBe(keeper.points);expect(body).toContain('Rail clip base weld 4.89 ksi vs 7.00 ksi');
   expect(body).not.toMatch(/points at \d+ locations/);
  });
  it('states the cycle basis as modelled and the Class B basis where the class is printed (items 6, 7)',()=>{

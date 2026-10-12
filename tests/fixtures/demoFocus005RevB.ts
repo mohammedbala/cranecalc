@@ -1,6 +1,7 @@
 import type {ProjectInput} from '../../src/engine/types';
 import {demoFocus005} from './demoFocus005';
 import {loadCappedSection} from '../../src/data/aiscChannels';
+import {demonstrationClip} from '../../src/engine/demonstration';
 
 const inch=25.4,kip=4448.2216152605,ftPerMin=5.08;
 /**
@@ -41,11 +42,16 @@ export function demoFocus005RevB():ProjectInput{
  note('End-bay bearings centered on the haunch web at grids 1 and 6 (seat moment there 27.9 → 10.5 kip-ft).');
  p.details!.brace!.capAngle!.endPlate.height=5.5*inch;
  note('Haunch top flange 25 in → 25-1/2 in; cap-angle end plate 5-1/4 in → 5-1/2 in high.');
- // Drawings dimension to whole 1/4 in: keeper length 3 7/8 → 3 3/4 in and lip projection 7/16 → 1/2 in, joint bars
- // 3 7/8 → 3 3/4 in high, cap-angle lap bolt gauge 2 7/8 → 3 in.
- Object.assign(p.details!.rail,{clipWidth:3.75*inch,clipProjection:.5*inch,jointPlateHeight:3.75*inch});
+ // Drawings dimension to whole 1/4 in: joint bars 3 7/8 → 3 3/4 in high, cap-angle lap bolt gauge 2 7/8 → 3 in.
+ p.details!.rail.jointPlateHeight=3.75*inch;
  p.details!.brace.capAngle!.lapBolts.gauge=3*inch;
- note('Dimensions on the 1/4 in grid: rail keepers 3 7/8 → 3 3/4 in long with a 7/16 → 1/2 in lip projection; joint bars 3 7/8 → 3 3/4 in high; cap-angle lap bolt gauge 2 7/8 → 3 in.');
+ note('Dimensions on the 1/4 in grid: joint bars 3 7/8 → 3 3/4 in high; cap-angle lap bolt gauge 2 7/8 → 3 in.');
+ // Rail attachment to standard practice (AISC DG7; rail clip manufacturers): the welded keeper plates with lips, end
+ // fillets, rail-base notches and notched anchor keepers are replaced by proprietary weld-on floating rail clips in
+ // opposing pairs at 24 in, fictitious supplier data (rated 10 kip lateral, 5 kip uplift per clip, allowable), base
+ // welded to the cap channel with 5/16 in fillets 3 in long at each end; the rail is anchored by the end stops.
+ p.details!.rail.clip=demonstrationClip(.3125*inch);
+ note('Rail keepers (welded plates with lips, end fillets, notched anchor keepers) replaced by weld-on floating rail clips per manufacturer (fictitious supplier data RC-W6: 10 kip lateral, 5 kip uplift per clip, allowable) in opposing pairs at 24 in, base welded 5/16 in x 3 in each end; rail anchored by the end stops.');
  // The 0.005 rad rail rotation limit was not an owner or crane-supplier requirement: removed (TR-13 sets none).
  delete p.details!.criteria.twistLimit;
  p.criteriaSource=p.criteriaSource.replace(/[;,]?\s*twist\s*0\.005\s*rad/i,'');
@@ -53,7 +59,7 @@ export function demoFocus005RevB():ProjectInput{
  note('Rail rotation limit 0.005 rad removed (not an owner or crane-supplier requirement; the rotation is reported, not checked).');
  // E36 · girder re-optimised once the rail rotation limit is gone: W24X104 + C15X50 (154 plf) → W14X61 + C15X50 (111 plf),
  // governed by the Class B vertical deflection L/1000 (0.75). W12X53 + C15X50 fails it (1.09) and the singly symmetric
- // proportion; a lighter channel (C15X33.9) fails the rail keeper fatigue. Runway seismic mass 2 × 125 ft × 43 plf = 10.8 kip less.
+ // proportion; a lighter channel (C15X33.9) failed the (former) rail keeper fatigue. Runway seismic mass 2 × 125 ft × 43 plf = 10.8 kip less.
  p.section=loadCappedSection(p.section,'W14X61','C15X50');p.aist!.netFlangeArea=p.section.bf*p.section.tf;
  note('Girder W24X104 + C15X50 → W14X61 + C15X50 (154 → 111 plf; 10.8 kip less runway mass on the building).');
  // Building evaluation data that are not available (frame type, frame service displacements, site seismic, IEBC

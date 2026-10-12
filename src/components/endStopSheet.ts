@@ -1,5 +1,5 @@
 import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
-import {railPadThickness,keeperGeometry} from '../engine/railSeat';
+import {railPadThickness,clipGeometry} from '../engine/railSeat';
 import {girderBearingTitle} from './columnCapSheet';
 import {stopEnds,stopLocation} from '../engine/endStopInputs';
 import type {CalculationSnapshot} from '../engine/types';
@@ -37,8 +37,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
  const dim=(v:number)=>dimensionLength(v,u),size=(v:number)=>plateInches(v,u),force=(v:number)=>{const t=format(v,'force',u,1);return u==='US'?t.toUpperCase():t;};
  const tb=e.base.thickness,tp=e.face.thickness,H=e.face.height,ts=e.stiffener.thickness,Ls=e.stiffener.length,sp=e.stiffener.spacing,Wb=e.base.width,gauge=e.bolts.gauge,db=e.bolts.diameter;
  const capped=b.kind==='cap',capT=capped?b.capTw:0,railDepth=p.aist?.railDepth??p.railHeight,stiffTop=g.stiffenerHeight;
- // The rail stands on its pad, where there is one, and the first keeper pair is the typical keeper.
- const pad=railPadThickness(p),kg=keeperGeometry(r,pad);
+ // The rail stands on its pad, where there is one, and the first rail clip pair is the typical clip (schematic).
+ const pad=railPadThickness(p),cg=clipGeometry(r,pad),kg={length:cg.baseLength,height:cg.noseHeight+12.7,tip:cg.tip,outer:cg.outer};
  const shown=Math.max(g.railEnd+8*inch,d.bearing.length+4*inch),depthShown=capT+b.tf+6*inch;
  const boltLabel=`4 - ${size(db)} ${e.bolts.grade} PRETENSIONED (SC)`,hole=boltProperties(e.bolts.grade,db).hole,hx=heavyHex(db);
  const keeperRef=detailRef(detailTitles.railKeeper),views:DetailView[]=[];
@@ -70,7 +70,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    svg+=line([X(x),tier(i)-over],[X(x),wFl+hx.nut*kk+3],'grid-line');
    svg+=hexSide(X(x),Y(tb),hx.corners*kk,hx.head*kk,-1)+hexSide(X(x),wFl,hx.corners*kk,hx.nut*kk,1);
   }
-  // Rail from its end, with the first keeper pair.
+  // Rail from its end, with the first rail clip pair.
   const railTop=Y(pad+railDepth);
   svg+=line([X(g.railEnd),Y(pad)],[X(g.railEnd),railTop],'rail-line');
   for(const z of [0,r.baseThickness,railDepth-r.headThickness,railDepth])svg+=line([X(g.railEnd),Y(pad+z)],[right,Y(pad+z)],'rail-line');
@@ -120,7 +120,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const rz=p.railEccentricity;
   svg+=line([X(g.railEnd)-6,Z(rz)],[right+10,Z(rz)],'grid-line')+text(right+14,Z(rz)+11,'RAIL C/L',7.5);
   svg+=rect(X(g.railEnd),Z(rz-r.baseWidth/2),(shown-g.railEnd)*kk,r.baseWidth*kk,'rail-line')+rect(X(g.railEnd),Z(rz-r.headWidth/2),(shown-g.railEnd)*kk,r.headWidth*kk,'rail-line');
-  // Keepers seen from above: the lip from its tip over the rail base to the body's outer face.
+  // Rail clips seen from above: from the nose over the rail base to the outer edge of the base.
   const keeper=g.railEnd+12.7;for(const side of [-1,1]){const a=Z(rz+side*kg.tip),b2=Z(rz+side*kg.outer);svg+=rect(X(keeper),Math.min(a,b2),kg.length*kk,Math.abs(b2-a),'runway-line');}
   svg+=rect(X(g.back),Z(-Wb/2),e.base.length*kk,Wb*kk,'runway-line')+rect(X(g.faceBack),Z(-Wb/2),tp*kk,Wb*kk,'runway-line');
   for(const side of [-1,1])svg+=rect(X(g.stiffenerEnd),Z(side*sp/2-ts/2),Ls*kk,ts*kk,'runway-line');
@@ -140,8 +140,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // Front bolt C/L to the back of the face plate: the head clears the face plate fillet toe by the socket clearance.
   svg+=short(X(g.frontRow),Z(gauge/2)+hx.flats/2*kk,X(g.faceBack),Z(Wb/2),dim(e.bolts.frontClear),-1);
   svg+=short(X(g.faceFront),Z(Wb/2),X(g.railEnd),Z(rz+r.baseWidth/2),dim(e.railGap),1);
-  svg+=multiLeader([[X(keeper)+kg.length*kk,Z(rz-kg.outer)]],[X(shown)+44,Z(-width/2)-14],['FIRST KEEPER PAIR',`SPACING PER ${keeperRef}`]);
-  // Bolt callout above the girder at the back of the stop, clear of the section cut and the keeper callout.
+  svg+=multiLeader([[X(keeper)+kg.length*kk,Z(rz-kg.outer)]],[X(shown)+44,Z(-width/2)-14],['FIRST RAIL CLIP PAIR',`SPACING PER ${keeperRef}`]);
+  // Bolt callout above the girder at the back of the stop, clear of the section cut and the rail clip callout.
   {const labels=[boltLabel,'HEADS ON BASE PL'],w=Math.max(...labels.map(v=>textWidth(labelCaps(v),8.5))),c:XY=[X(g.backRow),Z(-gauge/2)];
    svg+=multiLeader([[c[0]-hr*.25,c[1]-hx.flats/2*kk]],[c[0]-24-w,Z(-width/2)-26],labels);}
   // Both stiffeners to the face plate, each side of each stiffener.
@@ -208,7 +208,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    `DRILL ${size(hole)} STANDARD HOLES THROUGH ${capped?'THE CAP CHANNEL WEB AND ':''}THE TOP FLANGE ONLY AT THE LOCATIONS SHOWN, ${dim(g.backRow)} AND ${dim(g.frontRow)} FROM THE GIRDER END. NO OTHER HOLES IN THE TOP FLANGE.`,
    `BOLTS: ASTM F3125 GRADE ${e.bolts.grade} HEAVY HEX, PRETENSIONED, CLASS B FAYING SURFACES (SLIP-CRITICAL); HEADS ON THE BASE PLATE, A563 DH NUTS BELOW THE FLANGE, F436 WASHER UNDER THE TURNED ELEMENT. BOLT CENTERS ARE ${size(wrenchClearance(db))} MIN. CLEAR OF THE STOP WELD TOES FOR THE SOCKET (AISC MANUAL TABLE 7-15). VERIFY NUT CLEARANCE BELOW THE FLANGE AT THE BEARING STIFFENERS${flangeTieGeometry(p)?' AND THE TOP TIE SADDLE':''} BEFORE DRILLING.`,
    `SHOP WELD THE FACE PLATE AND THE STIFFENERS TO THE BASE PLATE, AND EACH STIFFENER TO THE FACE PLATE OVER ITS FULL HEIGHT, WITH CONTINUOUS ${size(e.weldSize).replaceAll('"','')} FILLETS BOTH SIDES. GRIND THE FACE SMOOTH AT THE BUMPER CONTACT.`,
-   `TERMINATE THE RAIL ${dim(e.railGap)} CLEAR OF THE STOP FACE. THE FIRST KEEPER PAIR IS AT THE RAIL END; KEEPER SPACING PER ${keeperRef}.`,
+   `TERMINATE THE RAIL ${dim(e.railGap)} CLEAR OF THE STOP FACE. THE FIRST RAIL CLIP PAIR IS AT THE RAIL END; CLIP SPACING PER ${keeperRef}. THE RAIL END BEARS ON THE STOP FACE ONLY AFTER CREEP: THE STOPS ANCHOR THE FLOATING RAIL.`,
    'CONFIRM THE BUMPER FORCE, BUMPER HEIGHT AND CONTACT DIAMETER WITH THE CRANE SUPPLIER BEFORE FABRICATION. STOPS SHALL BE INSTALLED BEFORE THE CRANE IS OPERATED.',
    `THE GIRDER AXIAL FORCE AND ${locating} INCLUDE THE BUMPER FORCE; THE END COUPLE IS INCLUDED IN THE GIRDER STOP COMBINATIONS (CALCULATION REPORT, RUNWAY END STOPS).`
   ];

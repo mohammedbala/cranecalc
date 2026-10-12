@@ -16,9 +16,9 @@ import { boltProperties,plateMember,compressionResistance } from './connectionSt
 import type { RunwayCaseEvent,RunwayCaseObserver } from './designAnalysis';
 import type { ProjectInput,Properties } from './types';
 import type { FatigueDetailResult,InterfaceAction,RunwayCaseRecord,RunwayDetailResults } from './runwayDetails';
-import { railKeeperResponse } from './railKeeper';
-import { railTopAboveSteel } from './railSeat';
-import {tractionBays,railKeeperStations,girderSegments,independentBearings,endGridOverhang,endGridCentered} from './simpleSupports';
+import { railClipResponse } from './railClip';
+import { railTopAboveSteel,railClipInput } from './railSeat';
+import {tractionBays,railClipStations,girderSegments,independentBearings,endGridOverhang,endGridCentered} from './simpleSupports';
 import {activeEndStop,craneAtStop,stopBoltRows,stopEnds} from './endStopInputs';
 import {activeEndBearing,locatingSupport} from './endBearingInputs';
 import {craneCombinations} from './aistLoads';
@@ -93,10 +93,15 @@ export function automaticFatigueDetails(p:ProjectInput){
  // hole on that overhang is sampled at the grid (the overhang carries no girder moment).
  const span=(x:number)=>Math.min(L,Math.max(0,x));
  if(stop)for(const [end,x0,dir] of ([['left',-endGridOverhang(p,'left'),1],['right',L+endGridOverhang(p,'right'),-1]] as const).filter(([end])=>stopEnds(p).includes(end)))for(const [r,row] of stopBoltRows(stop).entries())for(const side of ['left','right'] as const)list.push({id:`SH-${end}${r}-${side}`,name:`End stop holes, ${end} runway end, ${r?'front':'back'} row · ${side}`,x:span(x0+dir*row),point:`top-${side}`,category:'B',reference:'AISC Table A-3.1 item 2.2 · net section at pretensioned bolts; flange tip stress bounds the hole line'});
- // Keeper length along the stress and body width across it (AISC Table A-3.1, 7.2).
- const keeperWidth=d.rail.clipBodyWidth??d.rail.clipThickness,category=d.rail.clipWidth<50?'C':d.rail.clipWidth<=Math.min(12*keeperWidth,100)?'D':keeperWidth<=20?'E':'E1';
- for(const [i,x] of railKeeperStations(p).map(span).entries()){
-  for(const side of ['left','right'] as const)list.push({id:`RC${i}-${side}`,name:`Rail keeper ${i+1} · ${side}`,x,point:`top-${side}`,category,reference:'AISC Table A-3.1, 7.1 · attachment length/thickness from keeper geometry'});
+ // Rail clip base welded to the top plate (the cap channel web or the W top flange) by fillets at both ends of the base,
+ // across the runway: a short attachment, AISC Table A-3.1 item 7.1, by its length a along the stress (the base length)
+ // and thickness b (the base thickness). Bolted clamp plates: holes through the top plate, item 2.2.
+ const clip=railClipInput(d.rail),bolted=clip.type==='bolted',a=clip.baseLength,tb=clip.baseThickness;
+ const category=bolted?'B':a<2*inch?'C':a<=Math.min(12*tb,4*inch)?'D':tb<=.8*inch?'E':'E1';
+ const clipReference=bolted?'AISC Table A-3.1 item 2.2 · holes for pretensioned clamp-plate bolts through the top plate'
+  :`AISC Table A-3.1 item 7.1, Category ${category==='E1'?'E′':category}: rail clip base ${(a/inch).toFixed(2)} in long, ${(tb/inch).toFixed(2)} in thick, welded across the runway at both ends`;
+ for(const [i,x] of railClipStations(p).map(span).entries()){
+  for(const side of ['left','right'] as const)list.push({id:`RC${i}-${side}`,name:`Rail clip base weld ${i+1} · ${side}`,x,point:`top-${side}`,category,reference:clipReference});
  }
  if(p.section.kind==='cap'){
   // Continuous longitudinal welds: Category B base metal. End terminations:
@@ -161,7 +166,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
  const detailInputs=automaticFatigueDetails(p);
  const fatigue:FatigueDetailResult[]=detailInputs.map(f=>({id:f.id,name:f.name,x:f.x,category:f.category,threshold:fatigueThreshold(f.category),reference:f.reference,bins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,minimum:0,maximum:0,range:0,allowable:0,damage:0})),damage:0,range:0,peak:0}));
- const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,flangeStress:0,plateStress:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
+ const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
  const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0,cb:1,mocr:curves.positive.mocr,height:z};
  // AISC 360-16 Commentary F1 load-height comparison: Cb (F1-1) of the case's moment diagram over the unbraced segment times
@@ -411,6 +416,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const window=Math.max(p.aist!.clipSpacing,2*(p.aist!.railDepth+p.section.tf));
    for(const w of e.wheels){const group=e.wheels.filter(v=>v.x>=w.x-1e-6&&v.x<=w.x+window+1e-6);result.demands.railLateral=Math.max(result.demands.railLateral,group.reduce((n,v)=>n+Math.abs(v.h),0));result.demands.railVertical=Math.max(result.demands.railVertical,group.reduce((n,v)=>n+v.p,0));}
   }
+  if(e.kind==='service'){
+   // Service side thrust (unfactored, single crane) of the same wheel group: for clips rated on an allowable basis.
+   const window=Math.max(p.aist!.clipSpacing,2*(p.aist!.railDepth+p.section.tf));
+   for(const w of e.wheels){const H=e.wheels.filter(v=>v.x>=w.x-1e-6&&v.x<=w.x+window+1e-6).reduce((n,v)=>n+Math.abs(v.h),0);result.demands.railLateralService=Math.max(result.demands.railLateralService??0,H);}
+  }
   if(e.kind==='fatigue'){
    const window=Math.max(p.aist!.clipSpacing,2*(p.aist!.railDepth+p.section.tf));
    for(const w of e.wheels){
@@ -440,19 +450,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   }
   // TR13 §3.10.2.3: Cds + liftFraction*Cvs + 0.5Css, without impact or
   // strength factors. Bound each bin by its own wheel-group force envelope.
-  // The local keeper bending of the flange is one-way: the rail pushes a keeper outward or lifts its lip (bearing and
-  // hold-down roles, which alternate as the side thrust reverses) but never pulls it inward or presses the lip down,
-  // so the keeper moment about its weld, and the local flange stress at its toe, have one sense and run from zero
-  // (no wheel near the keeper) to the larger role at each passage. That local range is added once per passage to
-  // the global range; its sign at the toe relative to the global stress is not credited, so it is placed on the side
-  // that increases the peak stress. No position coincidence, load sharing or endurance credit.
-  for(const bound of result.railFatigueBins){
-   const local=railKeeperResponse(p,bound.vertical,bound.lateral);
-   bound.flangeStress=local.flangeStress;bound.plateStress=local.plateStress;bound.weldStress=local.weldStress;
-  }
-  for(const f of fatigue)if(f.id.startsWith('RC'))for(const [i,bin] of f.bins.entries()){
-   const local=result.railFatigueBins[i].flangeStress;if(-bin.minimum>bin.maximum)bin.minimum-=local;else bin.maximum+=local;
-  }
+  // The clip base welds of each bin: the clip force is one-way (the rail pushes the bearing clip outward and lifts the
+  // hold-down clip's nose, never the reverse), so the weld stress runs from zero to the bin value at each passage. The
+  // clip forces act across the runway and load the clip welds, not the girder top plate along its span: the RC register
+  // points carry the girder's own stress range at the clip station (A-3.1 item 7.1), without a local addition.
+  for(const bound of result.railFatigueBins)bound.weldStress=railClipResponse(p,bound.lateral).weldStress;
   if(cap)for(const f of fatigue)if(f.id.startsWith('CE'))for(const bin of f.bins){const traction=Math.max(...p.cranes.map(c=>c.longitudinal))/props.A;bin.minimum-=traction;bin.maximum+=traction;}
   result.braceForce=result.demands.brace;
   result.demands.braceFatigue=braceFatigue.max-braceFatigue.min;

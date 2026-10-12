@@ -16,10 +16,10 @@ describe('field welds to existing building steel',()=>{
   const s=snapshot(),before=JSON.stringify(s.input),bracket=bracketSheetSvg(s),tie=flangeTieSheetSvg(s),generic=connectionSheetSvg(snapshot(demonstrationProject()));
   // The bracket section flags the seat and rib root welds to the existing column, and the column stiffeners' flange
   // and web fillets inside it; the tie sheet flags the column root in the transverse section and in the plan. The
-  // connection sheet flags its column attachment and the rail keeper and anchor fillets, welded with the rail set in place.
-  expect(flags(bracket)).toBe(4);expect(flags(tie)).toBe(2);expect(flags(generic)).toBe(3);
-  const keeper=generic.slice(generic.indexOf('data-view="rail-section"'));
-  expect((keeper.match(/data-weld-location="field"/g)??[]).length).toBeGreaterThanOrEqual(2);
+  // connection sheet flags its column attachment and the rail clip base welds, welded with the rail set and aligned.
+  expect(flags(bracket)).toBe(4);expect(flags(tie)).toBe(2);expect(flags(generic)).toBe(2);
+  const clip=generic.slice(generic.indexOf('data-view="rail-section"'));
+  expect((clip.match(/data-weld-location="field"/g)??[]).length).toBeGreaterThanOrEqual(1);
   for(const svg of [bracket,tie,generic])expect(svg).toContain('EXISTING');
   expect(bracket).toContain('SHOP WELD THE SEAT TO THE RIBS');expect(bracket).toContain('FIELD WELD TO EXISTING COLUMN');expect(tie).toContain('EXISTING COLUMN, EACH GUSSET');
   expect(tie).toContain('TIE LOCAL AND MOVEMENT CHECKS: SEE CALCULATION REPORT.');expect(tie).not.toMatch(/NaN|Infinity/);

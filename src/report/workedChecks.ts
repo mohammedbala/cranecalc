@@ -18,7 +18,8 @@ import {activeEndStop} from '../engine/endStopInputs';
 import {endStopGeometry,stopBumperForce} from '../engine/endStop';
 import {craneCombinations} from '../engine/aistLoads';
 import {simpleSupportInput} from '../engine/simpleSupports';
-import {railKeeperResponse,railAnchorResponse,railAnchorForce} from '../engine/railKeeper';
+import {railClipResponse} from '../engine/railClip';
+import {clipGeometry,railPadThickness} from '../engine/railSeat';
 
 
 /**
@@ -178,30 +179,24 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
    if(close(t,dem))return [`T=\\frac{P(e+t_b)}{2d}=\\frac{${tx(P,'force')}\\times(${tx(g.contact,'length')}+${tx(tb,'length')})}{2\\times${tx(lever,'length')}}=${tx(T,'force')}\\ \\text{per front bolt}`,
     `t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}=\\sqrt{\\frac{4\\times${tx(T,'force')}\\times(${tx(b,'length')}-${tx(db,'length')}/2)}{${fl(.9,1.67)}\\times${tx(pp,'length')}\\times${tx(Fu,'stress')}}}=${tx(t,'length')}\\ \\le\\ t=${tx(cap,'length')}\\quad D/C=${dcText(c.utilization,2)}`];}
  }
- // Rail lateral flexure between keepers, with phi.
+ // Rail lateral flexure between clip pairs, with phi.
  if(c.id==='rail-flexure'&&d&&s.detailResults&&p.aist){
   const r=d.rail,depth=p.aist.railDepth,webDepth=depth-r.headThickness-r.baseThickness,Iy=(r.headThickness*r.headWidth**3+r.baseThickness*r.baseWidth**3+webDepth*r.webThickness**3)/12,Sy=Iy/(Math.max(r.headWidth,r.baseWidth)/2),H=s.detailResults.demands.railLateral,sp=p.aist.clipSpacing,R=factor(.9,1.67)*r.Fy*Sy;
   if(close(R,cap)&&close(H*sp/4,dem))return [`M_r=\\frac{Hs}{4}=\\frac{${tx(H,'force')}\\times${tx(sp,'length')}}{4}=${tx(dem,'moment')};\\quad S_y=${tx(Sy,'modulus')}\\ \\text{(rail head, web and base)}`,
    `${lhs}M_n=${fl(.9,1.67)}F_yS_y=${fl(.9,1.67)}\\times${tx(r.Fy,'stress')}\\times${tx(Sy,'modulus')}=${tx(R,'moment')}${check(R,'M_r')}`];
  }
- // Rail keeper and anchor keeper fillet welds: elastic weld group at its J2.2b effective sizes.
- if((c.id==='rail-keeper-weld'||c.id==='rail-anchor-weld')&&d&&s.detailResults&&p.aist){
-  const P=s.detailResults.demands.railVertical,H=s.detailResults.demands.railLateral,anchor=c.id==='rail-anchor-weld',F=anchor?railAnchorForce(p).force:0;
-  const k=anchor?railAnchorResponse(p,P,H,F):undefined,base=railKeeperResponse(p,P,H,k?.geometry),g=base.group,R=factor(.75,2)*.6*d.material.Fexx;
-  if(close(R,cap)){
-   // The governing role and sense, and the line end where the resultant peaks.
-   let best={f:0,role:base.roles[0],sense:1,px:0,py:0,fx:0,fy:0,fz:0};
-   const geo=k?.geometry,xF=geo?geo.bodyWidth+geo.clearance-geo.notch+geo.bearing/2:0,hF=geo?geo.pad+d.rail.baseThickness/2:0;
-   for(const role of base.roles)for(const sense of anchor?[-1,1]:[1])for(const {line:l} of g.lines)for(const [px,py] of [[l[0],l[1]],[l[2],l[3]]]){
-    const vy=sense*F,mz=sense*F*(xF-g.x),mx=sense*F*hF,fx=role.lateral/g.A-mz*(py-g.y)/g.J,fy=vy/g.A+mz*(px-g.x)/g.J,fz=role.uplift/g.A+role.moment*(px-g.x)/g.Iy+(g.Ix>0?mx*(py-g.y)/g.Ix:0),f=Math.hypot(fx,fy,fz);
-    if(f>best.f)best={f,role,sense,px,py,fx,fy,fz};}
-   if(close(best.f,dem)){const lines=g.lines.map(l=>`${tx(l.length,'length')}\\times${tx(l.throat,'length')}`).join('+');
-    return [`A_{we}=\\Sigma Lt_e=${lines}=${tx(g.A,'area')};\\quad I_y=${tx(g.Iy,'inertia')}${anchor?`,\\ I_x=${tx(g.Ix,'inertia')},\\ J=${tx(g.J,'inertia')}`:''}\\quad(t_e=0.707w,\\ w\\ \\text{at its J2.2b effective size})`,
-     `\\text{${best.role.role} keeper: }H=${tx(best.role.lateral,'force')},\\ T=${tx(best.role.uplift,'force')},\\ M=${tx(best.role.moment,'moment')}${anchor?`;\\ F=${tx(F,'force')}\\ \\text{along the rail}`:''}`,
-     anchor?`f_w=\\sqrt{f_x^2+f_y^2+f_z^2}=\\sqrt{(${tx(Math.abs(best.fx),'stress')})^2+(${tx(Math.abs(best.fy),'stress')})^2+(${tx(Math.abs(best.fz),'stress')})^2}=${tx(best.f,'stress')}`
-      :`f_w=\\sqrt{\\left(\\frac{H}{A_{we}}\\right)^2+\\left(\\frac{T}{A_{we}}+\\frac{Mx}{I_y}\\right)^2}=\\sqrt{(${tx(Math.abs(best.fx),'stress')})^2+(${tx(Math.abs(best.fz),'stress')})^2}=${tx(best.f,'stress')}`,
-     `\\quad\\le\\ ${lhs}F_n=${fl(.75,2)}\\times0.6F_{EXX}=${fl(.75,2)}\\times0.6\\times${tx(d.material.Fexx,'stress')}=${tx(R,'stress')}\\quad D/C=${dcText(c.utilization,2)}`];}
-  }
+ // Rail clips: the manufacturer's ratings against the clip forces, and the base welds (J2.4, elastic).
+ if(c.id==='rail-clip-uplift'&&d&&p.aist){
+  const r=d.rail,depth=p.aist.railDepth,Hc=dem*r.baseWidth/depth;
+  return [`T_c=\\frac{H_ch_r}{b_r}=\\frac{${tx(Hc,'force')}\\times${tx(depth,'length')}}{${tx(r.baseWidth,'length')}}=${tx(dem,'force')}\\ \\le\\ R_t=${tx(cap,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
+ }
+ if(c.id==='rail-clip-weld'&&d&&s.detailResults&&p.aist){
+  const H=s.detailResults.demands.railLateral,k=clipGeometry(d.rail,railPadThickness(p)),w=railClipResponse(p,H,k),R=factor(.75,2)*.6*d.material.Fexx;
+  const best=w.roles.reduce((x,v)=>v.weldStress>x.weldStress?v:x);
+  if(close(R,cap)&&close(best.weldStress,dem))return [`A_w=2t_el_w=2\\times${tx(w.throat,'length')}\\times${tx(k.weldLength,'length')}=${tx(w.A,'area')}\\quad(t_e=0.707w)`,
+   best.role==='bearing'?`\\text{bearing clip: }V=H=${tx(H,'force')},\\ M=Vh_c=${tx(H,'force')}\\times${tx(k.lateralHeight,'length')}=${tx(best.moment,'moment')}`
+    :`\\text{hold-down clip: }T=\\frac{Hh_r}{b_r}=${tx(best.uplift,'force')},\\ M=Te_c=${tx(best.uplift,'force')}\\times${tx(w.upliftArm,'length')}=${tx(best.moment,'moment')}`,
+   `f_w=\\frac{1}{2t_el_w}\\sqrt{V^2+\\left(T+\\frac{6M}{l_w}\\right)^2}=${tx(best.weldStress,'stress')}\\ \\le\\ ${lhs}F_n=${fl(.75,2)}\\times0.6\\times${tx(d.material.Fexx,'stress')}=${tx(R,'stress')}\\quad D/C=${dcText(c.utilization,2)}`];
  }
  // Vertical deflection (m3): every criterion stated, the governing one used; two equal wheels about midspan.
  if(c.id==='vertical'&&p.system==='simple'&&s.properties&&p.cranes.length===1&&p.cranes[0].wheels.length===2){

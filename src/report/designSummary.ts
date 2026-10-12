@@ -26,7 +26,7 @@ export function summaryElements(p:ProjectInput):Element[]{
  const column=p.existingColumn?.enabled,isNew=column&&p.existingColumn!.isNew,cap=!!activeColumnCap(p),n=loadPathSteps(p);
  // Numbered as the summary figure's markers, without gaps; girder deflection and fatigue continue the girder (no number).
  const list:Omit<Element,'order'>[]=[
-  {key:'rail',step:n.rail,label:'Rail, keepers & joints',component:'rail',path:'Wheel load P and side thrust H at the rail head; the rail bears on the flange, the keepers hold it',match:c=>c.group==='Rail details'||c.id.startsWith('rail-')},
+  {key:'rail',step:n.rail,label:'Rail, clips & joints',component:'rail',path:'Wheel load P and side thrust H at the rail head; the rail bears on the flange, the rail clips hold it',match:c=>c.group==='Rail details'||c.id.startsWith('rail-')},
   {key:'bearing',step:n.bearing,label:'Bearings & end connection',component:'bearing',path:`Bearing stiffeners and bearing plate${activeEndBearing(p)?'; bolts carry longitudinal force and uplift':''}`,match:c=>c.group==='End bearings'||bearingIds.includes(c.id)||/^(simple-|rotation-clearance$)/.test(c.id)},
   {key:'girder',step:n.girder,label:'Runway girder · strength',component:'girder',path:'Bending, shear, torsion and wheel patch between supports',match:c=>['Strength','Local forces','Cap channel'].includes(c.group)},
   {key:'service',label:'Runway girder · deflection',path:'Single crane, static: vertical and rail-head lateral movement',match:c=>c.group==='Serviceability'},

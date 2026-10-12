@@ -4,7 +4,7 @@ import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/dem
 import {endStopChecks,endStopGeometry,stopBumperForce,wrenchClearance} from '../src/engine/endStop';
 import {defaultEndStop} from '../src/engine/endStopInputs';
 import {endStopTopic,endStopSheetSvg} from '../src/components/endStopSheet';
-import {railKeeperStations} from '../src/engine/simpleSupports';
+import {railClipStations} from '../src/engine/simpleSupports';
 import {boltCapacity} from '../src/engine/connectionStrength';
 import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import {sheetsDxf} from '../src/components/sheetDxf';
@@ -175,10 +175,10 @@ describe('girder-mounted runway end stops',()=>{
   expect(validateProject(bypass)).toEqual([]);
   expect(endStopChecks(bypass).map(c=>c.status)).toEqual(['not-applicable']);
  });
- it('starts the rail keepers beyond the stops at both runway ends',()=>{
-  const p=demo.input,g=endStopGeometry(p,p.details!.endStop!),stations=railKeeperStations(p),L=p.spans.reduce((a,b)=>a+b,0),half=p.details!.rail.clipWidth/2;
+ it('starts the rail clips beyond the stops at both runway ends',()=>{
+  const p=demo.input,g=endStopGeometry(p,p.details!.endStop!),stations=railClipStations(p),L=p.spans.reduce((a,b)=>a+b,0),half=p.details!.rail.clip!.baseLength/2;
   expect(Math.min(...stations)).toBeCloseTo(g.railEnd+half,6);expect(Math.max(...stations)).toBeCloseTo(L-g.railEnd-half,6);
-  const off=structuredClone(p);off.cranes[0].design!.bumperBypassesGirder=true;expect(Math.min(...railKeeperStations(off))).toBeCloseTo(half,6);
+  const off=structuredClone(p);off.cranes[0].design!.bumperBypassesGirder=true;expect(Math.min(...railClipStations(off))).toBeCloseTo(half,6);
  });
  it('draws the end stop details and references them from S-01, the cover and the cap details',()=>{
   const set=drawingSheetSet(demo),s07=set.find(v=>v.svg.includes('data-view="end-stop-elevation"'))!;

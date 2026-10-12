@@ -60,7 +60,7 @@ describe('representative runway package',()=>{
   const p=demonstrationProject();p.reportPurpose='project';delete p.details;
   const s=calculate(p);expect(s.eligible).toBe(false);expect(s.checks.some(c=>c.note.includes('manufacturer')&&c.status==='incomplete')).toBe(true);
   const p2=demonstrationProject();p2.unbracedLength=1000;expect(validateProject(p2).join()).toContain('top (compression) flange restraint spacing');
-  p2.unbracedLength=p2.spans[0];const spacing=p2.aist!.clipSpacing;p2.aist!.clipSpacing=.1;expect(validateProject(p2).join()).toContain('200 rail-keeper');p2.aist!.clipSpacing=spacing;p2.details!.spectrum[0].cycles++;expect(validateProject(p2).join()).toContain('sum');
+  p2.unbracedLength=p2.spans[0];const spacing=p2.aist!.clipSpacing;p2.aist!.clipSpacing=.1;expect(validateProject(p2).join()).toContain('200 rail clip');p2.aist!.clipSpacing=spacing;p2.details!.spectrum[0].cycles++;expect(validateProject(p2).join()).toContain('sum');
   p2.details!.spectrum[0].cycles--;p2.cranes[0].design!.bumperBypassesGirder=false;p2.details!.endStop!.enabled=false;expect(validateProject(p2).join()).toContain('design the girder-mounted runway end stops');
  });
  it('derives all detail sheets and export records from the current snapshot',()=>{
@@ -70,6 +70,6 @@ describe('representative runway package',()=>{
   const dxf=lineworkDxf(snapshot);expect(dxf.includes('4 A325 bolts, diameter 7/8"')).toBe(true);expect(dxf).toContain(snapshot.revision);
   const csv=interfaceCsv(snapshot);expect(csv).toContain(snapshot.input.units==='US'?'vertical_down_kip':'vertical_down_N');expect(csv).toContain('BUMPER-1');
   const html=reportHtml(snapshot);expect(html).toContain('FICTITIOUS');expect(html).toContain('not checked in this package are listed, with the forces delivered to them, in section');expect(html).toContain('signed');expect(html).toContain('SK-07');expect(html).not.toContain('class="json"');
-  const p=structuredClone(snapshot.input);p.details!.rail.clipThickness*=1.1;expect(fingerprint(p)).not.toBe(snapshot.revision);
+  const p=structuredClone(snapshot.input);p.details!.rail.clip!.baseWidth*=1.1;expect(fingerprint(p)).not.toBe(snapshot.revision);
  });
 });

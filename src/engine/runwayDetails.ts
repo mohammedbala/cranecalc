@@ -24,6 +24,17 @@ export const lapConnectionSchema=z.object({
  diameter:pos,grade:z.enum(['A325','A490']),surface:z.enum(['A','B']),projection:nn,
  weldSize:pos,weldLength:pos
 });
+/**
+ * Proprietary crane rail clips, specified by the engineer of record from the manufacturer's data ("or equal"): weld-on
+ * clips (welded to the girder top plate) or bolted clamp plates, floating (the rail moves along the runway for thermal
+ * movement). lateral / uplift: the manufacturer's rated horizontal and uplift capacity of one clip, on the stated basis
+ * ('allowable': a working load compared with service forces; 'LRFD': a design strength compared with factored forces).
+ * The base is fillet welded at both ends (two welds across the rail, weldLength each) per the manufacturer, with the size
+ * weld. anchorLongitudinal: rated longitudinal resistance of one anchor clip pair (fixed clips), used with open joints.
+ */
+export const railClipSchema=z.object({type:z.enum(['weld-on','bolted']),product:z.string().min(1).max(200),basis:z.enum(['allowable','LRFD']),
+ lateral:pos,uplift:pos,baseLength:pos,baseWidth:pos,baseThickness:pos,weld:pos,weldLength:pos,anchorLongitudinal:pos.optional()});
+export type RailClipInput=z.infer<typeof railClipSchema>;
 export const runwayDetailsSchema=z.object({
  bracket:bracketSchema.optional(),
  material,
@@ -45,17 +56,16 @@ export const runwayDetailsSchema=z.object({
   release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
  end:lapConnectionSchema,
  bearing:z.object({width:pos,length:pos,thickness:pos,stiffenerWidth:pos,stiffenerThickness:pos,cope:nn,weldSize:pos}),
- // Keeper: a lip clipThickness thick projecting clipProjection past a body clipBodyWidth wide (default the lip
- // thickness), clipClearance clear of the rail-base toe, clipWidth long along the rail, fillet welded clipWeld on
- // its outer face and both ends. The pad (when aist.railPad) lies under the rail; anchorNotch is the depth of the
- // rail-base notch that the anchor keepers engage at mid-length of each rail piece. Later fields are optional so
- // earlier project files load with the defaults in railSeat.ts.
+ // Rail: the pad (when aist.railPad) lies under the rail. clip: the proprietary rail clips (AISC DG7, crane rail clip
+ // manufacturers), entered from the manufacturer's data; absent in earlier project files (then every clip check is
+ // unverified). Later fields are optional so earlier project files load with the defaults in railSeat.ts.
  rail:z.object({name:z.string().min(1).max(100),headWidth:pos,headThickness:pos,baseWidth:pos,baseThickness:pos,webThickness:pos,Fy:pos,Fu:pos,padAllowable:pos,padSource:z.string().min(1).max(300),
   padThickness:pos.optional(),padWidth:pos.optional(),
-  clipWidth:pos,clipThickness:pos,clipProjection:pos,clipWeld:pos,clipBodyWidth:pos.optional(),clipClearance:pos.optional(),anchorNotch:pos.optional(),
+  clip:railClipSchema.optional(),
   jointGap:nn,jointPlateThickness:pos,jointPlateHeight:pos,jointBoltDiameter:pos,jointPitch:pos,jointEdge:pos,temperatureRange:nn,
-  // Bolted rail joints: 'tight' (default, AIST TR-13 §5.16.1: gap 1/16 in or less, the rail string slides in the keepers and
-  // the end-stop gap takes the thermal movement) or 'open' (expansion gap jointGap, each piece anchored at mid-length).
+  // Bolted rail joints: 'tight' (default, AIST TR-13 §5.16.1: gap 1/16 in or less, the rail string floats in its clips between
+  // the end stops, whose rail-end gaps take the thermal movement) or 'open' (expansion gap jointGap, each piece anchored at
+  // mid-length by an anchor clip pair).
   jointType:z.enum(['tight','open']).optional()}),
  criteria:z.object({twistLimit:pos.optional(),railLateralLimit:pos,railGauge:pos,alignmentTolerance:pos,levelTolerance:pos,rotationClearance:pos,temperatureMaximum:z.number().finite(),corrosionProtected:z.boolean()}),
  fatigueDetails:z.array(z.object({id:z.string().min(1).max(40),name:z.string().min(1).max(120),x:nn,point:z.enum(['top-left','top-right','bottom-left','bottom-right']),category:z.enum(['A','B','B1','C','D','E','E1']),reference:z.string().min(1).max(300)})).min(1).max(16),
@@ -120,8 +130,11 @@ export interface RunwayDetailResults {
  fatiguePeak?:{value:number;x:number;id:string;combination:string};
  residual:number;meshChange:number;travelChange:number;cases:number;braceStiffness:number;braceForce:number;
  fatigue:FatigueDetailResult[];interfaces:InterfaceAction[];
- railFatigueBins:{name:string;cycles:number;vertical:number;lateral:number;flangeStress:number;plateStress:number;weldStress:number}[];
+ /** Wheel-group forces of each duty bin at the rail (unfactored) and the clip base weld throat stress they cause. */
+ railFatigueBins:{name:string;cycles:number;vertical:number;lateral:number;weldStress:number}[];
  demands:{brace:number;braceFatigue:number;verticalFatigue:number;endLongitudinal:number;railLateral:number;railVertical:number;railFatigueVertical:number;railFatigueLateral:number;
+  /** Service (unfactored, single crane) side thrust of the wheel group at one clip station. */
+  railLateralService?:number;
   /** Top-flange restraint force of one girder end (strength) and its range over the duty bins: the force on one tie. `brace` is all the girder ends at a grid. */
   braceEnd?:number;braceEndFatigue?:number};
  governing:Record<string,{id:string;combination:string;x:number;value:number}>;

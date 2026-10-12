@@ -25,7 +25,7 @@ import {haunchedRibOutline} from './haunchedBracketDrawing';
 import { slidingBoltView } from './slidingBoltSection';
 import {isCapAngleTie} from '../engine/capAngle';
 
-/** Girder bearing, end connection, flange tie and rail keeper details on their own sheet. */
+/** Girder bearing, end connection, flange tie and rail clip details on their own sheet. */
 export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defaultFraming,number='S-02'){
  return topicSheetSvg(s,connectionTopic(s,f),number,'BRACKETS & CONNECTIONS');
 }
@@ -225,7 +225,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   return {svg:svg+'</g>',scale:scale.label};
  }});
 
- // 4: Rail keepers, pad and anchor on the cap web or the bare W top flange; the bolted rail joint.
+ // 4: Rail clips and pad on the cap web or the bare W top flange; the bolted rail joint; the rail layout.
  views.push(railKeeperView(s));
  views.push(railLayoutView(s));
  return topic;

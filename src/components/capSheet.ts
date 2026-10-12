@@ -28,7 +28,7 @@ export function capTopic(s:CalculationSnapshot):DetailTopic{
  svg+=dimH(cx-b.capWidth*k/2,cx+b.capWidth*k/2,y-b.capTw*k,91,dim(b.capWidth));
  svg+=refDim(dimV(y,y+b.d*k,left,72,size(b.d)));
  // Each callout uses its own corridor; one arrow with EACH W FLANGE EDGE avoids crossings.
- svg+=multiLeader([[rx+r.headWidth*k/2,ry+r.headThickness*k/2]],[365,124],[`RAIL / KEEPERS PER ${detailRef(detailTitles.railKeeper)}`]);
+ svg+=multiLeader([[rx+r.headWidth*k/2,ry+r.headThickness*k/2]],[365,124],[`RAIL / RAIL CLIPS PER ${detailRef(detailTitles.railKeeper)}`]);
  svg+=multiLeader([[cx+b.capWidth*k/2,y-b.capTw*k/2]],[365,168],[`${b.capCatalogueId??b.name} CAP CHANNEL`,`FY = ${stress(p.capDesign!.Fy)}, FU = ${stress(p.capDesign!.Fu)}; SEE S-00`]);
  svg+=filletLeader([[right,y]],[365,225],size(c.weldSize),['CONTINUOUS, EACH W FLANGE EDGE',`FULL MEMBER LENGTH; ${detailRef(detailTitles.capDevelopment)}`],false,[[[right+20,y+17],[338,210]]]);
  svg+=multiLeader([[cx+b.tw*k/2,y+b.d*k*.60]],[365,322],[`${b.catalogueId} RUNWAY GIRDER`]);
@@ -58,7 +58,7 @@ export function capTopic(s:CalculationSnapshot):DetailTopic{
  const notes=[
   `PROVIDE ${size(c.weldSize)} CONTINUOUS FILLETS AT BOTH W TOP-FLANGE EDGES. WELD METAL ${stress(c.Fexx)}. NO WELD STRENGTH INCREASE FOR DIRECTION IS CREDITED.`,
   'STRAIGHTEN AND FIT CHANNEL BEFORE WELDING. VERIFY FULL CONTACT ALONG THE W TOP FLANGE. DO NOT FORCE A GAPPED CAP INTO SERVICE; REFER FIT-UP DISCREPANCIES TO THE ENGINEER.',
-  `CHANNEL AND W TOP FLANGE SHALL BE UNPERFORATED${activeEndStop(p)?` EXCEPT THE END STOP BOLT HOLES (${detailRef(detailTitles.endStopPlan)})`:''}. DO NOT ADD TEMPORARY ATTACHMENTS OR CHANGE KEEPER WELDS WITHOUT FATIGUE REVIEW.`,
+  `CHANNEL AND W TOP FLANGE SHALL BE UNPERFORATED${activeEndStop(p)?` EXCEPT THE END STOP BOLT HOLES (${detailRef(detailTitles.endStopPlan)})`:''}. DO NOT ADD TEMPORARY ATTACHMENTS OR CHANGE RAIL CLIP WELDS WITHOUT FATIGUE REVIEW.`,
   `BEARING STIFFENERS: CJP WELD TO W TOP FLANGE; FIT BOTTOM END. CONTINUOUS WEB WELDS AS DETAILED ON ${detailRef(girderBearingTitle(p))}. INSPECT CJP WELDS PER PROJECT SPECIFICATION.`,
   `CRANE SERVICE CLASS: CMAA ${c.cmaaClass}. CAP CHANNEL DETAILS ARE NOT APPLICABLE TO CMAA E/F SERVICE. REFERENCE AIST TECHNICAL REPORT 13 AND AISC DESIGN GUIDE 7.`,
  ];

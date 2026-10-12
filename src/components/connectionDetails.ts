@@ -85,7 +85,7 @@ export function buildRunwayDetails(o: RunwayDetailsOptions) {
       if(side===1)stiffenerWelds(group,`stiffener-S${i+1}-${dir}`,x,o.depth,o.flangeT,o.webT,stiffenerW,thickness,cope,o.bearingStiffener?.weld??.004,!!o.bearingStiffener?.topCjp,o.weld,{x:support,z:0});
     }
   });
-  // The checked capped template uses welded sliding keepers. Do not show bolts
+  // Weld-on rail clips (schematic; the clip is per manufacturer). Do not show bolts
   // or holes penetrating a channel that the design requires to be unperforated.
   if(o.weldedKeeper){
     const k=o.weldedKeeper,stations=Math.max(1,Math.min(80,Math.ceil(o.length/k.spacing)));
@@ -93,11 +93,13 @@ export function buildRunwayDetails(o: RunwayDetailsOptions) {
     for(const [i,x] of locations.entries()){
       clipLocations.push(x);
       for(const side of [-1,1]){
-        const root=o.railZ+side*(k.baseWidth/2+k.projection/2),height=k.baseThickness+k.thickness;
-        const keeper=box(`rail-clip-${i+1}-${side}`,k.width,height,k.thickness,x,o.railBase+height/2,root+side*k.thickness/2);
-        keeper.userData.part={id:keeper.name,family:'Welded rail keeper',description:'Integral sliding keeper; channel remains unperforated. Entered keeper dimensions and continuous root fillets. This generic keeper is not a proprietary rail-clip product.'} satisfies PartInfo;
-        box(`rail-keeper-toe-${i+1}-${side}`,k.width,k.thickness,k.projection,x,o.railBase+k.baseThickness+k.thickness/2,root-side*k.projection/2);
-        for(const edge of [0,1])filletWeld(group,`rail-keeper-weld-${i+1}-${side}-${edge}`,new THREE.Vector3(x-k.width/2,o.railBase,root+side*edge*k.thickness),new THREE.Vector3(x+k.width/2,o.railBase,root+side*edge*k.thickness),new THREE.Vector3(0,1,0),new THREE.Vector3(0,0,side*(edge?1:-1)),k.weld,o.weld,'Continuous rail-keeper root fillet; entered leg and keeper width. Rail itself is not welded to the cap.');
+        // Clip body across the rail from the rail-base toe (k.thickness wide), up to a 1/2 in nose over the rail base.
+        const toe=o.railZ+side*k.baseWidth/2,nose=.0127,height=k.baseThickness+nose;
+        const keeper=box(`rail-clip-${i+1}-${side}`,k.width,height,k.thickness,x,o.railBase+height/2,toe+side*k.thickness/2);
+        keeper.userData.part={id:keeper.name,family:'Weld-on rail clip',description:'Proprietary floating rail clip, schematic: base size as entered, clip per the manufacturer; base welded to the top plate at both ends. Channel remains unperforated.'} satisfies PartInfo;
+        box(`rail-clip-nose-${i+1}-${side}`,k.width,nose,k.projection,x,o.railBase+k.baseThickness+nose/2,toe-side*k.projection/2);
+        // Base welds across the rail at both ends of the clip base.
+        for(const end of [-1,1])filletWeld(group,`rail-clip-weld-${i+1}-${side}-${end<0?0:1}`,new THREE.Vector3(x+end*k.width/2,o.railBase,toe),new THREE.Vector3(x+end*k.width/2,o.railBase,toe+side*k.thickness),new THREE.Vector3(0,1,0),new THREE.Vector3(end,0,0),k.weld,o.weld,'Rail clip base fillet weld per the manufacturer, field welded with the rail set and aligned. The rail itself is not welded to the girder.',undefined,{location:'field'});
       }
     }
     return {group,railHoles,clipLocations};

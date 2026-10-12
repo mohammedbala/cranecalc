@@ -20,7 +20,8 @@ import { aiscShapeSource, referenceColumns, referenceCrossheads } from '../data/
 import { buildReferenceFraming,newColumnFraming } from './referenceFraming';
 import { buildRunwayDetails, createHardwareBuilder, holeRimGeometry, type Hole, type PartInfo } from './connectionDetails';
 import { buildReferenceStructure, cloneOppositeRunway } from './referenceStructure';
-import {railKeeperStations} from '../engine/simpleSupports';
+import {railClipStations} from '../engine/simpleSupports';
+import {railClipInput} from '../engine/railSeat';
 import {independentBearingSettings,buildIndependentSupports} from './independentSupportGeometry';
 import type { FrameStyle } from './metalBuildingGeometry';
 import { defaultFraming, type FramingSettings } from './framingSettings';
@@ -92,7 +93,7 @@ export default function RunwayViewer({input,snapshot,expanded=false,framing,setF
   if(reference){group.add(reference.group);floor=reference.floor;}
   else for(const x of supports){box(.22,supportHeight,Math.max(.24,bf*.9),x,floor+supportHeight/2,0,support);box(.35,.035,Math.max(.38,bf*1.3),x,floor+.0175,0,support);}
   const cr=input.details?.rail;
-  const runwayDetails=hardware?buildRunwayDetails({bearingStiffener:input.details?{width:input.details.bearing.stiffenerWidth/1000,thickness:input.details.bearing.stiffenerThickness/1000,cope:input.details.bearing.cope/1000,weld:input.details.bearing.weldSize/1000,topCjp:s.kind==='cap'&&!!input.capDesign?.topStiffenerCjp}:undefined,keeperStations:cr?railKeeperStations(input).map(x=>x/1000-length/2):undefined,omitStiffeners:input.system==='simple',supports,length,depth:d,width:bf,flangeT:tf,webT:tw,railBase,railZ,railBearingWidth:s.kind==='cap'?s.capWidth/1000:bf,railBearingT:s.kind==='cap'?s.capTw/1000:tf,weldedKeeper:cr?{width:cr.clipWidth/1000,thickness:cr.clipThickness/1000,projection:cr.clipProjection/1000,weld:cr.clipWeld/1000,baseWidth:cr.baseWidth/1000,baseThickness:cr.baseThickness/1000,spacing:input.aist!.clipSpacing/1000}:undefined,hardware,plate:plateMaterial,weld:weldMaterial,edge:framingEdges}):null;
+  const runwayDetails=hardware?buildRunwayDetails({bearingStiffener:input.details?{width:input.details.bearing.stiffenerWidth/1000,thickness:input.details.bearing.stiffenerThickness/1000,cope:input.details.bearing.cope/1000,weld:input.details.bearing.weldSize/1000,topCjp:s.kind==='cap'&&!!input.capDesign?.topStiffenerCjp}:undefined,keeperStations:cr?railClipStations(input).map(x=>x/1000-length/2):undefined,omitStiffeners:input.system==='simple',supports,length,depth:d,width:bf,flangeT:tf,webT:tw,railBase,railZ,railBearingWidth:s.kind==='cap'?s.capWidth/1000:bf,railBearingT:s.kind==='cap'?s.capTw/1000:tf,weldedKeeper:cr?{width:railClipInput(cr).baseLength/1000,thickness:railClipInput(cr).baseWidth/1000,projection:Math.min(12.7,(cr.baseWidth-cr.webThickness)/4)/1000,weld:railClipInput(cr).weld/1000,baseWidth:cr.baseWidth/1000,baseThickness:cr.baseThickness/1000,spacing:input.aist!.clipSpacing/1000}:undefined,hardware,plate:plateMaterial,weld:weldMaterial,edge:framingEdges}):null;
   if(runwayDetails)group.add(runwayDetails.group);
   if(input.system==='simple')group.add(buildIndependentSupports(input,reference?.columnFace??.65,plateMaterial,framingEdges,hardware,true,weldMaterial));
   else if(tieArrangement(input.details)!=='paired-bars')group.add(buildAlternativeTies(input,reference?.columnFace??.65,plateMaterial,framingEdges,weldMaterial,hardware));
@@ -252,7 +253,7 @@ export default function RunwayViewer({input,snapshot,expanded=false,framing,setF
   const far=focus.startsWith('far-'),localFocus=far?focus.slice(4):focus;
   if(far!==p.id.startsWith('F-')||p.id.startsWith('B'))return false;
   const id=far?p.id.slice(2):p.id;
-  if(localFocus==='rail'){const station=Math.floor(clipCount/2)+1;return id.startsWith(`RC-${station}-`)||id.startsWith(`rail-clip-${station}-`)||id.startsWith(`rail-keeper-weld-${station}-`);}
+  if(localFocus==='rail'){const station=Math.floor(clipCount/2)+1;return id.startsWith(`RC-${station}-`)||id.startsWith(`rail-clip-${station}-`)||id.startsWith(`rail-clip-weld-${station}-`);}
   if(!focus)return false;
   const station=Number(localFocus.split('-')[1])+1,support=`S${station}`,bayEnd=/^bay-(\d+)-(left|right)-/.exec(id);
   const atSupport=id.startsWith(`${support}-`)||id.includes(`-${support}-`)||id.endsWith(`-${support}`)||!!(bayEnd&&Number(bayEnd[1])+(bayEnd[2]==='right'?1:0)===station);

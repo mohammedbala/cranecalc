@@ -5,10 +5,9 @@ import {defaultSimpleSupport} from './simpleSupports';
 import {defaultEndBearing} from './endBearingInputs';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {wrenchClearance} from './endStop';
-import {railSeatDefaults} from './railSeat';
+import {railSeatDefaults,defaultRailClip} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
-import {keeperGeometry} from './railSeat';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
 /** Template sizing of the tapered I haunch for the project's reactions. */
 export {sizeTaperedHaunch} from './taperedHaunchSizing';
@@ -33,7 +32,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  const register=[
   ...mids.map((m,i)=>({id:`FB${i+1}`,name:`Bottom flange, bay ${i+1} midspan`,x:m,point:'bottom-left' as const,category:'A' as const,reference:'AISC 360 Table A-3.1, 1.1 · plain rolled base metal'})),
   ...grids.map((g,i)=>({id:`FS${i+1}`,name:`Bearing stiffener weld toe, grid ${i+1}`,x:Math.min(g,L),point:'top-right' as const,category:'C' as const,reference:'AISC 360 Table A-3.1, 5.7 · transverse stiffener weld toe'})),
-  {id:'FT1',name:'Top flange at longest-bay midspan, category D',x:mids[p.spans.indexOf(longest)],point:'top-right' as const,category:'D' as const,reference:'AISC 360 Table A-3.1 · conservative top-flange comparison point; keeper stations are checked automatically'}
+  {id:'FT1',name:'Top flange at longest-bay midspan, category D',x:mids[p.spans.indexOf(longest)],point:'top-right' as const,category:'D' as const,reference:'AISC 360 Table A-3.1 · conservative top-flange comparison point; rail clip stations are checked automatically'}
  ].slice(0,16);
  // Top-flange tie on a direct flange saddle (simple spans): thin bars flex with end rotation and thermal travel,
  // sleeved bolts in vertical slots at the column gusset release support deflection. The column face is a placeholder.
@@ -58,11 +57,10 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   // 95% of that section's clear web between head and base, to the 1/4 in below.
   rail:{name:`${toBeEntered} rail designation and supplier`,headWidth:up(.55*h,1.5875),headThickness:up(.3*h,1.5875),baseWidth:up(h,1.5875),baseThickness:up(.17*h,1.5875),webThickness:up(.12*h,1.5875),Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:`${toBeEntered} rail pad rating source`,
    padThickness:.25*inch,padWidth:up(h,1.5875),
-   // Keeper 3 3/4 in long, under 100 mm (AISC Table A-3.1 Category D at the flange), 1/16 in clear of the rail-base toe, lip
-   // projecting 1/2 in (overlapping 7/16 in): every keeper dimension a whole 1/4 in. 5/16 in fillets: the end fillets (1 1/2 in,
-   // stopped 1/2 in short of the rail-side face; anchor 1 1/2 in) are over four weld sizes long (AISC 360-16 J2.2b), and the
-   // 1/2 in anchor notch leaves 1/4 in of flat notch end beyond its 1/4 in radius corner holes.
-   clipWidth:3.75*inch,clipThickness:.75*inch,clipBodyWidth:2*inch,clipClearance:inch/16,clipProjection:.5*inch,clipWeld:.3125*inch,anchorNotch:.5*inch,jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+   // Rail clips: the manufacturer's data are entered by the engineer; until then the placeholder clip (weld-on, 3 3/4 in
+   // base, 5/16 in base welds) lays out the stations and every clip check is unverified.
+   clip:{...structuredClone(defaultRailClip),product:`${toBeEntered} rail clip manufacturer and series (or equal), rated lateral and uplift capacity per clip`},
+   jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
   criteria:{...(p.details?.criteria.twistLimit?{twistLimit:p.details.criteria.twistLimit}:{}),railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],
@@ -100,8 +98,8 @@ export function startDetailedDesign(p:ProjectInput):ProjectInput{
  q.aist??={...emptyAistInputs,railDepth:q.railHeight,bottomBraceSpacing:longest,axialLength:longest,torsionalLength:longest,clipSpacing:24*inch};
  if(!q.aist.railDepth)q.aist.railDepth=q.railHeight;
  q.details=neutralDetails(q);
- // Design for at least the rail setting allowance the drawings permit plus the float the keepers allow.
- q.railEccentricity=Math.sign(q.railEccentricity||1)*Math.max(Math.abs(q.railEccentricity),q.details.criteria.alignmentTolerance+keeperGeometry(q.details.rail).clearance);
+ // Design for at least the rail setting allowance the drawings permit plus 1/16 in of lateral play at the rail clips.
+ q.railEccentricity=Math.sign(q.railEccentricity||1)*Math.max(Math.abs(q.railEccentricity),q.details.criteria.alignmentTolerance+inch/16);
  q.aist.bearingLength||=q.details.bearing.length;
  // Net flange area: the gross flange (no holes) unless entered, and never more than the current section's flange,
  // so a value left from another section does not block validation.
@@ -117,7 +115,7 @@ function packageText(p:ProjectInput):[string,string|undefined][]{
  return [['Project title',p.title],['Project number',p.number],['Notes',p.notes],['Criteria source',p.criteriaSource],['Drawing originator',p.drawing?.originator],['Datum description',p.drawing?.datumLabel],
   ...p.cranes.flatMap((c,i)=>[[`Crane ${i+1} name`,c.name],[`Crane ${i+1} load source`,c.loadSource],[`Crane ${i+1} service`,c.operatingClass],[`Crane ${i+1} side-thrust distribution source`,c.design?.distributionSource]] as [string,string|undefined][]),
   ['AIST fatigue reference',p.aist?.fatigueReference],['AIST cycle source',p.aist?.cycleSource],['Fatigue detail',p.fatigue.detail],['Cap fit-up note',p.capDesign?.fitupNote],
-  ['Rail designation',d?.rail.name],['Rail pad source',d?.rail.padSource],...Object.entries(d?.fabrication??{}).map(([k,v])=>[`Fabrication ${k}`,v] as [string,string]),
+  ['Rail designation',d?.rail.name],['Rail pad source',d?.rail.padSource],['Rail clip manufacturer',d?.rail.clip?.product],...Object.entries(d?.fabrication??{}).map(([k,v])=>[`Fabrication ${k}`,v] as [string,string]),
   ...(d?.fatigueDetails??[]).map(f=>[`Fatigue point ${f.id}`,`${f.name} ${f.reference}`] as [string,string]),
   ['Cap material source',p.capDesign?.materialSource],['Cap duty source',p.capDesign?.dutySource],['Existing column source',p.existingColumn?.source],['Bracing source',p.longitudinalBracing?.source],['End stop source',d?.endStop?.source],['Bracket receiver source',d?.bracket?.receiver.source]];
 }

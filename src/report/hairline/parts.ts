@@ -108,9 +108,9 @@ export function railRun(S:Scene,g:SupportGeometry,x0:number,x1:number,y:number,r
  S.group('rail/base',()=>S.box(a,y-r.baseWidth/2,zb,b,y+r.baseWidth/2,zb+r.baseThickness,role)).group('rail/web',()=>S.box(a,y-r.webThickness/2,zb+r.baseThickness,b,y+r.webThickness/2,zh-r.headThickness,role)).group('rail/head',()=>S.box(a,y-r.headWidth/2,zh-r.headThickness,b,y+r.headWidth/2,zh,role));
  return zh;
 }
-/** A keeper pair (clip plates either side of the rail base) at x. */
+/** A rail clip pair (schematic clips either side of the rail base) at x. */
 export function keepers(S:Scene,g:SupportGeometry,x:number,y:number,role:Role,zb=g.rail.z){
- const r=g.rail,was=S.tag('rail/keeper');for(const side of [-1,1])S.box(x-60,side>0?y+r.baseWidth/2+2:y-r.baseWidth/2-45,zb,x+60,side>0?y+r.baseWidth/2+45:y-r.baseWidth/2-2,zb+r.baseThickness+8,role);
+ const r=g.rail,was=S.tag('rail/clip');for(const side of [-1,1])S.box(x-60,side>0?y+r.baseWidth/2+2:y-r.baseWidth/2-45,zb,x+60,side>0?y+r.baseWidth/2+45:y-r.baseWidth/2-2,zb+r.baseThickness+8,role);
  S.tag(was);return S;
 }
 /** The girder ends at the support: W (with its cap channel), bearing stiffeners and bearing plates. */
@@ -128,13 +128,13 @@ export function girders(S:Scene,g:SupportGeometry,role:Role,stiffenerRole:Role=r
  }
  return S;
 }
-/** The rail and two keepers each side near the support, along the shown length. */
+/** The rail and two rail clips each side near the support, along the shown length. */
 export function rail(S:Scene,g:SupportGeometry,role:Role,keeperRole:Role=role,far=g.show,near=0){
  const r=g.rail,y=g.reach,a=-far-g.gap/2,b=-g.gap/2,zb=r.z,zh=r.z+r.height;
  // The rail over the near bay, when shown, is a ghost like that girder.
  const was=S.tag('ghost');if(near>0)S.box(b+g.gap,y-r.baseWidth/2,zb,near+g.gap/2,y+r.baseWidth/2,zh,'ghost');S.tag(was);
  S.group('rail/base',()=>S.box(a,y-r.baseWidth/2,zb,b,y+r.baseWidth/2,zb+r.baseThickness,role)).group('rail/web',()=>S.box(a,y-r.webThickness/2,zb+r.baseThickness,b,y+r.webThickness/2,zh-r.headThickness,role)).group('rail/head',()=>S.box(a,y-r.headWidth/2,zh-r.headThickness,b,y+r.headWidth/2,zh,role));
- const k=S.tag('rail/keeper');for(const x of [-far*.55])for(const side of [-1,1])S.box(x-40,side>0?y+r.baseWidth/2+2:y-r.baseWidth/2-30,zb,x+40,side>0?y+r.baseWidth/2+30:y-r.baseWidth/2-2,zb+r.baseThickness+6,keeperRole);
+ const k=S.tag('rail/clip');for(const x of [-far*.55])for(const side of [-1,1])S.box(x-40,side>0?y+r.baseWidth/2+2:y-r.baseWidth/2-30,zb,x+40,side>0?y+r.baseWidth/2+30:y-r.baseWidth/2-2,zb+r.baseThickness+6,keeperRole);
  S.tag(k);return S;
 }
 /** A crane wheel on the rail head at x, as a disc across the runway. */
