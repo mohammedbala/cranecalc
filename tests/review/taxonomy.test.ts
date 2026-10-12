@@ -171,10 +171,13 @@ describe('body and page 1 (items 3-5; A1, C16)',()=>{
  });
  it('states exactly what remains by others with the forces delivered (D34)',()=>{
   const t=text(page1);
-  expect(t).toMatch(/Bracket and tie column-side load path Nothing beyond the building frame: the haunch, its welds into the column/);
-  expect(t).toMatch(/Tie force to the column 3\.66 kip factored/);
-  expect(t).toMatch(/base shear 10 kip and column axial ±7\.2 kip/);
-  expect(t).toMatch(/vertical 35\.6 kip/);
+  // Peer review M10/C4: page 1 lists each item with its responsible party (the responsibility matrix in section 6.7 gives
+  // what is needed, the criterion and the forces) and the per-grid concurrent force sets delivered to the columns.
+  expect(t).toMatch(/Not checked in this package: responsibility matrix/);
+  expect(t).toMatch(/Collector, brace connections|Crane-level strut on the girder line/);expect(t).toMatch(/Building engineer of record/);
+  expect(t).toMatch(/Forces delivered to the building columns/);expect(t).toMatch(/LRFD 2c 35\.6 kip/);
+  const m=text(html.slice(html.indexOf('/ Not checked in this package · responsibility matrix</h2>')));
+  expect(m).toMatch(/base shear 10 kip and column axial ±7\.2 kip/);expect(m).toMatch(/Acceptance criterion/);
  });
 });
 

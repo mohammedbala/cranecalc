@@ -43,7 +43,8 @@ describe('G4 on the full DEMO-FOCUS-005 calculation',()=>{
   const seat=check('cap-angle-nut-seat');expect(before.get('cap-angle-nut-seat')!.demand!/inch).toBeCloseTo(1.44+1.375/2,3);expect(seat.demand!/inch).toBeCloseTo(1.44+(1.5*.625+.125)/Math.sqrt(3),4);
   expect(check('cap-angle-nut-fit').demand!/inch).toBeCloseTo(5/16+.609375+.25,4);
   expect(check('cap-angle-channel-flange').capacity!).toBeLessThan(before.get('cap-angle-channel-flange')!.capacity!);
-  expect(check('rail-twist').utilization!).toBeCloseTo(.9807,3);
+  // 0.9807, then 0.9761 with the top restraint at the cap tie line (peer review M6).
+  expect(check('rail-twist').utilization!).toBeCloseTo(.9761,3);
  });
  it('D30: no snug-tight allowance in the report',()=>{expect(html).not.toMatch(/permitted only for cranes of 5 tons/);expect(html).toMatch(/Snug-tight bolts are not permitted/);});
 });

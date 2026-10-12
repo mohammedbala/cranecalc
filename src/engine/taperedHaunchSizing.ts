@@ -21,10 +21,10 @@ import {supportReactions} from './supportReactions';
 import {minimumFillet} from './connectionStrength';
 import {simpleSupportInput} from './simpleSupports';
 import {seatOffset} from './bracketForces';
-import {haunchGeometry,isTaperedHaunch,selectTaperedHaunch,type TaperedHaunchInput} from './taperedHaunchInputs';
+import {haunchGeometry,isTaperedHaunch,selectTaperedHaunch,haunchSlopeLimit,type TaperedHaunchInput} from './taperedHaunchInputs';
 import {haunchStations,haunchActions,haunchWebShear,haunchStiffener,haunchStiffenerWeldStress,haunchWeldGroup,haunchWeldStress,haunchCjpRatios,topFlangeStrip,stationMoment,haunchTipStresses,haunchColumnForces,haunchColumnStrengths,haunchService,stiffenerLoadPoint,receiverModulus} from './taperedHaunch';
 import {activeColumnStiffeners,initialColumnStiffeners,receiverK} from './columnStiffenerInputs';
-import {columnStiffenerChecks} from './columnStiffeners';
+import {columnStiffenerChecks,columnStiffenerGeometry,stiffenerGauge} from './columnStiffeners';
 
 const inch=25.4,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
 
@@ -51,8 +51,9 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
  const d=p.details!,b=d.bracket!,c=b.receiver,g=haunchGeometry(b,d.bearing.width),E=p.section.E,Fy=d.material.Fy,m=p.method,W=d.bearing.width,e=b.reach+W/2;
  const stations=haunchStations(g,E,Fy,e,W,24),root=stations[0].s,sf=haunchStiffener(g,E,Fy,m),grp=haunchWeldGroup(g),phiW=available(.6*d.material.Fexx,m,.75,2),phiFy=available(Fy,m,.9,1.67);
  const ratios:Record<string,number>={},column:Record<string,number>={};const put=(k:string,v:number)=>{ratios[k]=Math.max(ratios[k]??0,v);},info=(k:string,v:number)=>{column[k]=Math.max(column[k]??0,v);};
- const J=haunchColumnStrengths(p,g),cs=activeColumnStiffeners(b),demand:Record<string,{value:number;caseId:string;x:number}>={};
- const peak=(k:string,v:number)=>{if(!demand[k]||v>demand[k].value)demand[k]={value:v,caseId:'sizing',x:0};};
+ const J=haunchColumnStrengths(p,g),cs=activeColumnStiffeners(b),demand:Record<string,{value:number;caseId:string;x:number;P?:number;M?:number}>={};
+ const csg=cs?columnStiffenerGeometry(p):undefined,gauge=csg?stiffenerGauge(csg):undefined;
+ const peak=(k:string,v:number,sys?:{P:number;M:number})=>{if(!demand[k]||v>demand[k].value)demand[k]={value:v,caseId:'sizing',x:0,...sys};};
  for(const v of set.strength)for(const H of [v.H,-v.H]){
   const f=haunchActions(g,root,e,v.loads,{longitudinal:v.F,bottom:H,offset:set.offset});
   for(const st of stations){const M=stationMoment(f,st.s,g.a),fl=M>=0?st.pos:st.neg;put('flexure',Math.abs(M)/available(fl.Mn,m,.9,1.67));put('shear',Math.abs(f.V)/haunchWebShear(g,st.s,E,Fy,m).capacity);
@@ -64,9 +65,11 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
   put('webWeld',haunchWeldStress(g,grp,root,f).web/phiW);
   if(grp.cjp){const r=haunchCjpRatios(g,root,f,m,Fy);put('cjp',Math.max(r.top,r.bottom));}
   // The receiving column under the two flange forces, unstiffened, and the stiffener forces at both levels.
-  const col=haunchColumnForces(g,f);
-  info('J10',Math.max(col.pull/J.flange,col.tension/J.yieldTop,col.compression/Math.min(J.yieldBottom,J.crippling),J.sidesway?col.compression/J.sidesway:0));
-  for(const [k,v] of Object.entries({upperT:col.stiffeners.upperT,upperC:col.stiffeners.upperC,lowerT:col.stiffeners.lowerT,lowerC:col.stiffeners.lowerC}))peak(k,v);
+  // One force system per flange: the same equivalent concentrated force in every unstiffened J10 limit state at a
+  // level; the stiffener pair (where provided) carries it with the lateral moment as a couple between the plates.
+  const col=haunchColumnForces(g,f,gauge),fl=col.flanges;
+  info('J10',Math.max(col.pull/Math.min(J.flange,J.yieldTop),col.push/Math.min(J.yieldBottom,J.crippling),J.sidesway?col.push/J.sidesway:0));
+  for(const [k,v,sys] of [['upperT',col.stiffeners.upperT,fl.upper],['upperC',col.stiffeners.upperC,fl.upper],['lowerT',col.stiffeners.lowerT,fl.lower],['lowerC',col.stiffeners.lowerC,fl.lower]] as const)peak(k,v,sys);
  }
  // Fatigue: the crane reaction without impact on one girder end, then the other (the warping stress reverses), each
  // duty bin scaled by its lift; the Category C Miner sum as an equivalent stress ratio D^(1/3). Fillet throats
@@ -79,10 +82,10 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
  // Column stiffeners: their own checks (J10.8, J4, Appendix 3) under the sizing peaks and the per-bin ranges of the
  // force on one plate (either girder end loaded), without the geometric checks a selection sets once.
  if(cs){
-  const [qa,qb]=[fa,fb].map(f=>haunchColumnForces(g,f).stiffeners.plates),range=(level:'upper'|'lower')=>Math.max(...[0,1].map(i=>Math.max(Math.abs(qa[level][i]),Math.abs(qb[level][i]),Math.abs(qa[level][i]-qb[level][i]))));
-  const column=Math.abs(fa.V)*(e+c.depth/2)/receiverModulus(c),item=(id:string,label:string,value?:number)=>value===undefined?[]:[{id,label,value}];
+  const [qa,qb]=[fa,fb].map(f=>haunchColumnForces(g,f,gauge).stiffeners.plates),range=(level:'upper'|'lower')=>Math.max(...[0,1].map(i=>Math.max(Math.abs(qa[level][i]),Math.abs(qb[level][i]),Math.abs(qa[level][i]-qb[level][i]))));
+  const column=Math.abs(fa.V)*(e+c.depth/2)/receiverModulus(c);
   const checks=columnStiffenerChecks(p,{prefix:'haunch',refs:['haunch-basis'],demand:{upperT:demand.upperT,upperC:demand.upperC,lowerT:demand.lowerT,lowerC:demand.lowerC},
-   tension:[...item('flange','J10.1',J.flange),...item('yield','J10.2',J.yieldTop)],compression:[...item('yield','J10.2',J.yieldBottom),...item('crippling','J10.3',J.crippling)],sidesway:item('sidesway','J10.4',J.sidesway)[0],
+   tension:[],compression:[],couple:{gauge:gauge!,flange:Object.fromEntries((['upperT','upperC','lowerT','lowerC'] as const).filter(k=>demand[k]).map(k=>[k,{P:demand[k].P??0,M:demand[k].M??0}])),symbol:{upper:'T',lower:'C'}},
    fatigue:set.bins.map(v=>({cycles:v.cycles,upper:range('upper')*v.scale,lower:range('lower')*v.scale,column:column*v.scale})),columnStressNote:''});
   for(const v of checks)if(v.utilization!==undefined&&!/-(fit|length|weld-minimum|weld-length|fatigue-toe)$/.test(v.id))put(v.id.replace('haunch-colstiff-','colstiff-'),v.utilization);
  }
@@ -107,14 +110,18 @@ export function sizeTaperedHaunch(p:ProjectInput,target=.9):ProjectInput{
  const q=structuredClone(p),d=q.details!,b=d.bracket;
  if(!b?.enabled||!isTaperedHaunch(b))return q;
  if(!b.haunch)Object.assign(b,selectTaperedHaunch(d,b,q.system));
- const h=b.haunch!,grow=(patch:Partial<TaperedHaunchInput>)=>Object.assign(h,patch),deeper=()=>grow({rootDepth:h.rootDepth+inch,tipDepth:Math.max(h.tipDepth,up((h.rootDepth+inch)/2,inch))});
+ // Deeper, never past the model's 45° bottom flange slope (the tip follows the root at half its depth): at the
+ // limit the sizing stops and the checks report what remains.
+ let atSlopeLimit=false;
+ const h=b.haunch!,grow=(patch:Partial<TaperedHaunchInput>)=>Object.assign(h,patch),deeper=()=>{const rootDepth=h.rootDepth+inch,tipDepth=Math.max(h.tipDepth,up(rootDepth/2,inch));
+  if(Math.atan((rootDepth-tipDepth)/b.seatProjection)*180/Math.PI>haunchSlopeLimit+1e-9){atSlopeLimit=true;return;}grow({rootDepth,tipDepth});};
  for(let i=0;i<160;i++){
   const r=haunchSizingRatios(q),[key,worst]=Object.entries(r).sort((x,y)=>y[1]-x[1])[0],column=(r as unknown as {column:Record<string,number>}).column;
   // Column stiffeners where the unstiffened column (J10.1-J10.4) does not take the flange forces.
   if(!activeColumnStiffeners(b)&&(column.J10??0)>target){
    b.columnStiffeners=initialColumnStiffeners(b.receiver,receiverK(b,q.existingColumn)?.k,Math.max(h.topThickness,h.bottomThickness));continue;
   }
-  if(worst<=target)break;
+  if(worst<=target||atSlopeLimit)break;
   const thick=Math.max(h.topThickness,h.bottomThickness)>=2*inch;
   if(key.startsWith('colstiff-')){
    const s=b.columnStiffeners!,thicker=()=>{if(s.thickness<inch-1e-6)s.thickness+=inch/8;else deeper();};

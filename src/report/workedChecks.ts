@@ -4,6 +4,7 @@ import {girderStrength,concentratedResistance} from '../engine/aiscStrength';
 import {rectangularRibFlexure} from '../engine/bracketDesign';
 import {projectHaunch,haunchStations,haunchWebShear} from '../engine/taperedHaunch';
 import {capAngleResult} from '../engine/capAngleTie';
+import {columnStiffenerGeometry,stiffenerGauge} from '../engine/columnStiffeners';
 import {dcText} from '../engine/checkPresentation';
 import {caseLabel} from './reportParts';
 
@@ -72,6 +73,16 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   if(res&&bolt){const Ab=Math.PI*bolt.diameter**2/4,F=res.design.F,T=c.id==='cap-angle-cap-bolt'?F/2:undefined;
    for(const Fnt of bolt.grade==='A490'?[780,113*6.894757293]:[620,90*6.894757293]){const R=factor(.75,2)*Fnt*Ab;if(close(R,cap))return [`${lhs}R_n=${fl(.75,2)}F_{nt}A_b=${fl(.75,2)}\\times${tx(Fnt,'stress')}\\times${tx(Ab,'area')}=${tx(R,'force')}\\quad(\\text{${bolt.grade}},\\ d_b=${tx(bolt.diameter,'length')})`,
     T!==undefined?`T_u+q=F/2+q=${tx(F,'force')}/2+${tx(dem-T,'force')}=${tx(dem,'force')}\\le${tx(R,'force')}\\quad D/C=${dcText(c.utilization,2)}`:`T_u+q_{ep}+q_c=${tx(dem,'force')}\\le${tx(R,'force')}\\quad(F=${tx(F,'force')})\\quad D/C=${dcText(c.utilization,2)}`];}}
+ }
+ // Column stiffener plate at a tapered haunch flange: the flange force shared, its lateral moment as a couple (C2).
+ if(/^haunch-colstiff-(upper|lower)$/.test(c.id)&&s.detailResults?.taperedHaunch&&d){
+  const up=c.id.endsWith('upper'),S=s.detailResults.taperedHaunch.strength,T=S[up?'stiffUpperT':'stiffLowerT'],C=S[up?'stiffUpperC':'stiffLowerC'],pk=[T,C].find(v=>v&&close(v.value,c.demand)),g=columnStiffenerGeometry(p);
+  if(pk&&g&&pk.P!==undefined&&pk.M!==undefined){
+   const gauge=stiffenerGauge(g),sym=up?'T':'C',P=Math.abs(pk.P),M=Math.abs(pk.M),adds=(pk===T)===(pk.P>0),us=p.units==='US',Fy=d.material.Fy,R=factor(.9,1.67)*Fy*g.contact*g.t;
+   const Mg=us?`\\frac{${tx(M,'moment')}\\times12\\,\\mathrm{in/ft}}{${tx(gauge,'length')}}`:`\\frac{${tx(M,'moment')}}{${tx(gauge,'length')}}`;
+   return [`g=t_w+b_s=${tx(g.tw,'length')}+${tx(g.width,'length')}=${tx(gauge,'length')};\\quad R_{st}=${adds?`\\frac{${sym}}{2}+\\frac{M_f}{g}=\\frac{${tx(P,'force')}}{2}+${Mg}`:`\\frac{M_f}{g}-\\frac{${sym}}{2}=${Mg}-\\frac{${tx(P,'force')}}{2}`}=${tx(pk.value,'force')}`,
+    close(R,cap)?`${lhs}R_n=${fl(.9,1.67)}F_y(b_s-c)t_s=${fl(.9,1.67)}\\times${tx(Fy,'stress')}\\times(${tx(g.width,'length')}-${tx(g.clip,'length')})\\times${tx(g.t,'length')}=${tx(R,'force')}${check(R,'R_{st}')}`:`${lhs}P_n/2=${tx(cap,'force')}${check(cap,'R_{st}')}`];
+  }
  }
  // J10.1 flange local bending under a tension flange force.
  if(/(column-flange|seat-flange)$/.test(c.id)&&d?.bracket&&q==='force'){

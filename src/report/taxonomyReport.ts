@@ -2,6 +2,7 @@ import type {CalculationSnapshot,CheckResult,ProjectInput} from '../engine/types
 import {dcText} from '../engine/checkPresentation';
 import {categoryLabel,checkTypeLabel,effectLabel,gateLabel,type BodyLine,type FatigueRow,type Taxonomy,type TaxonEntry} from '../engine/checkTaxonomy';
 import {caseLabel,equationCell,shortReference,sig3,statusLabel,tidyNumbers} from './reportParts';
+import {responsibilityMatrix,responsibilityBlock} from './responsibility';
 
 /**
  * Report blocks driven by the check taxonomy: body rows of the governing DESIGN checks, page-1 open items and counts,
@@ -54,28 +55,12 @@ export function countsLine(tax:Taxonomy){
  return `<p class="counts"><b>Design checks evaluated ${c.designEvaluated}</b> (shown ${c.designShown}${reg?`; ${reg} of them fatigue register points`:''}), <b>screened ${c.designScreened}</b>, not applicable ${c.designNotApplicable}; <b>detailing rules ${c.detailing}</b> (${c.detailingFlagged} flagged). Also recorded: ${c.byType.classification} classifications, ${c.byType.verification} analysis verifications, ${c.byType.input} inputs, ${c.byType['load-basis']} load-basis comparisons, ${c.byType['by-others']} by others — ${c.total} results in all (Appendix A and the CSV).</p>`;
 }
 
-/** What remains by others, exactly, with the forces delivered to it. */
-export function byOthersItems(tax:Taxonomy,s:CalculationSnapshot){
- const u=s.input.units,r=s.detailResults,f=(v:number|undefined)=>sig3(v,'force',u),m=(v:number|undefined)=>sig3(v,'moment',u);
- const env=(k:'vertical'|'top'|'bottom'|'longitudinal'|'torque')=>r?.interfaces.length?Math.max(...r.interfaces.map(v=>Math.abs(v[k]))):undefined;
- const covered=(re:RegExp)=>[...tax.entries.values()].filter(t=>re.test(t.check.id)&&t.type!=='by-others'&&t.check.status!=='not-applicable').length;
- return tax.byOthers.map(t=>{
-  const id=t.check.id;
-  if(id==='bracket-load-path'){
-   const n=covered(/^(haunch-|cap-angle-(col-bolt|endplate|column))/);
-   return {title:'Bracket and tie column-side load path',remains:`Nothing beyond the building frame: the haunch, its welds into the column, the column local effects (J10) and the tie's column bolts, end plate and column flange are checked in this package (${n} checks). The column member and frame are listed separately.`,forces:`Tie force to the column ${f(r?.braceForce)} factored; seat reaction ${f(env('vertical'))}, seat moment ${m(env('torque'))}.`};
-  }
-  if(id==='supporting-structure')return {title:'Existing frame, connections and foundations',remains:'Building frame, roof and wall framing, the column-to-foundation connections, anchors and foundations for the crane reactions combined with the building loads (ASCE 7 combinations); the checked column member is not included here.',
-   forces:`Per support, factored AIST envelope: vertical ${f(env('vertical'))}, lateral top ${f(env('top'))} / bottom ${f(env('bottom'))}, longitudinal ${f(env('longitudinal'))}, seat moment ${m(env('torque'))} (section “Forces delivered to the building”; unfactored by load type in “Support reactions”).`};
-  const force=sentences(t.check.note).find(x=>/\d\s*(kip|kN)\b/.test(x));
-  const rest=firstSentence(t.check.note.replace(/^Not checked here:\s*/,''));
-  return {title:t.check.title,remains:rest.charAt(0).toUpperCase()+rest.slice(1),forces:force?.trim()??'See “Forces delivered to the building”.'};
- });
-}
-export function byOthersBlock(tax:Taxonomy,s:CalculationSnapshot,compact=false){
- const items=byOthersItems(tax,s);if(!items.length)return '';
- return `<h3>Not checked in this package (by others)</h3><table class="by-others"><thead><tr><th>Item</th><th>What remains by others</th><th>Forces delivered</th></tr></thead><tbody>${items.map(v=>`<tr><td><b>${esc(v.title)}</b></td><td>${esc(compact?firstSentence(v.remains):v.remains)}</td><td>${esc(v.forces)}</td></tr>`).join('')}</tbody></table>`;
-}
+/**
+ * What this package leaves to others: the responsibility matrix (item, what is needed, acceptance criterion, force
+ * and location delivered, responsible party), compact on page 1 and complete in section 6.7 (responsibility.ts).
+ */
+export function byOthersItems(tax:Taxonomy,s:CalculationSnapshot){return responsibilityMatrix(tax,s);}
+export function byOthersBlock(tax:Taxonomy,s:CalculationSnapshot,compact=false){return responsibilityBlock(tax,s,compact);}
 
 /** The fatigue table: details evaluated, with Miner's sum and the all-cycle bound side by side; screened details counted. */
 export function fatigueTable(tax:Taxonomy,units:Units){

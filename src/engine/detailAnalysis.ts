@@ -26,6 +26,7 @@ import {runwayEnds} from './continuation';
 import {activeColumnCap} from './columnCapInputs';
 import {capForkStiffness,createColumnCapCollector} from './columnCap';
 import {capAngleBraceSystem,capAngleFatigueDetails} from './capAngleTie';
+import {capTieLine} from './capAngle';
 
 export function braceSystem(p:ProjectInput){
  // The cap tieback angle: its tie plate member and the series stiffness of its plate, legs, bolts, shims and column flange.
@@ -163,10 +164,13 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,flangeStress:0,plateStress:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
  const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0};
- const mechanics=cap?{Iy:cap.Iy,topOffset:cap.topOffset,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
+ // The top restraint acts where the tie acts on the girder: the cap tieback's tie plate line above the cap (M6), else
+ // the W top flange; the bottom restraint (end bearing bolts or bottom tie) at the W bottom flange.
+ const tieLine=capTieLine(p),topRestraint=cap?(tieLine!==undefined?tieLine-cap.shearCenter:cap.topOffset):undefined;
+ const mechanics=cap?{Iy:cap.Iy,topOffset:topRestraint,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
  const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),observedSets=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
  const snap=(x:number)=>supports.find(v=>Math.abs(v-x)<1e-6)??x;
- const braceFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
+ const braceFatigue={min:0,max:0},braceEndFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
  function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
  const evaluate=(e:RunwayCaseEvent,bin=-1)=>{
   const key=JSON.stringify([e.kind,bin,e.wheels,e.q,e.railTorquePerLength,e.axial,e.horizontalCrane,e.cranes]);
@@ -331,12 +335,15 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    taperedHaunch?.observe(e.kind,f.id,x,loads,bin,horizontal);
   }}
   if(e.kind==='strength'){
+   // Top-flange restraint force of each girder end (the force on its own tie) and of all girder ends at a grid.
+   for(const a of endActions)if(!a.existing&&Math.abs(a.top)>(result.demands.braceEnd??0)){result.demands.braceEnd=Math.abs(a.top);result.governing.braceEnd={id:e.id,combination:e.combination,x:a.x,value:Math.abs(a.top)};}
    for(const [x,r] of reactions){
+    if(Math.max(Math.abs(r.top),Math.abs(r.bottom))>result.demands.brace)result.governing.brace={id:e.id,combination:e.combination,x,value:Math.max(Math.abs(r.top),Math.abs(r.bottom))};
     result.demands.brace=Math.max(result.demands.brace,Math.abs(r.top),Math.abs(r.bottom));
     const support=supports.indexOf(x);
     for(const c of concurrent(x)){
      const {id,sign,couple,ends}=c;
-     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple,top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*cap.topOffset+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
+     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple,top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*topRestraint!+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);else if(endBearingOffset(x))item.seatMoment=item.vertical*Math.sign(endBearingOffset(x))*Lbr/2;
      if(support>=0)forces.add(support,supportSet(x,c));
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
@@ -366,6 +373,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     const bound=result.railFatigueBins[bin];bound.vertical=Math.max(bound.vertical,P);bound.lateral=Math.max(bound.lateral,H);
    }
    for(const r of reactions.values()){braceFatigue.min=Math.min(braceFatigue.min,r.top,r.bottom);braceFatigue.max=Math.max(braceFatigue.max,r.top,r.bottom);}
+   for(const a of endActions)if(!a.existing){braceEndFatigue.min=Math.min(braceEndFatigue.min,a.top);braceEndFatigue.max=Math.max(braceEndFatigue.max,a.top);}
    for(const r of e.verticalReactions){verticalFatigue.min=Math.min(verticalFatigue.min,r.r);verticalFatigue.max=Math.max(verticalFatigue.max,r.r);}
   }
  };
@@ -403,6 +411,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   if(cap)for(const f of fatigue)if(f.id.startsWith('CE'))for(const bin of f.bins){const traction=Math.max(...p.cranes.map(c=>c.longitudinal))/props.A;bin.minimum-=traction;bin.maximum+=traction;}
   result.braceForce=result.demands.brace;
   result.demands.braceFatigue=braceFatigue.max-braceFatigue.min;
+  if(p.system==='simple')result.demands.braceEndFatigue=braceEndFatigue.max-braceEndFatigue.min;
   result.demands.verticalFatigue=verticalFatigue.max-verticalFatigue.min;
   if(flangeTieGeometry(p)){const localRange=flangeTieResponse(p,result.demands.braceFatigue).flange;for(const f of fatigue)if(f.id.startsWith('SA'))for(const b of f.bins){b.minimum-=localRange/2;b.maximum+=localRange/2;}}
 

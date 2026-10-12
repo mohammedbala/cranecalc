@@ -18,9 +18,11 @@ describe('ASCE 7 combinations for the supporting column',()=>{
   const lrfd=asceCombinations('LRFD'),asd=asceCombinations('ASD');
   expect(lrfd).toHaveLength(25);expect(asd).toHaveLength(24);
   expect(lrfd.find(c=>c.id==='2-S')!.factors).toMatchObject({D:1.2,L:1.6,S:.5,W:0});
-  expect(lrfd.find(c=>c.id==='6−')!.factors).toMatchObject({D:.9,W:-1});
-  expect(asd.find(c=>c.id==='6a-S+')!.factors).toMatchObject({D:1,L:.75,W:.45,S:.75});
-  expect(asd.find(c=>c.id==='8+')!.factors).toMatchObject({D:.6,E:.7});
+  // ASCE 7-16 numbering: LRFD 5 = 0.9D + 1.0W (§2.3.1), 6 and 7 with E (§2.3.6); ASD 6 with W, 8 to 10 with E (§2.4.5).
+  expect(lrfd.find(c=>c.id==='5−')!.factors).toMatchObject({D:.9,W:-1});
+  expect(lrfd.find(c=>c.id==='6+')!.factors).toMatchObject({D:1.2,E:1,L:1,S:.2});
+  expect(asd.find(c=>c.id==='6-S+')!.factors).toMatchObject({D:1,L:.75,W:.45,S:.75});
+  expect(asd.find(c=>c.id==='10+')!.factors).toMatchObject({D:.6,E:.7});
  });
 });
 describe('existing column member check',()=>{

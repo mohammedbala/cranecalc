@@ -56,10 +56,11 @@ const idRules:Rule[]=[
  T(/^crane-\d+-(statics|data|bumper-selection)/,'input'),T(/^(building-class|fatigue-cycles)$/,'input'),
  T(/^cap-(catalogue|compression-components|material|duty|fitup|unperforated|stiffener-cjp)$/,'input'),
  T(/^column-(basis|weld-base-metal|weld-ce|weld-preheat|weld-load|frame|longitudinal-path)$/,'input'),
- T(/^(brace-basis|bracket-receiver|haunch-stiffener-required|building-seismic-runway)$/,'input'),
+ // The bracket and tie load-path statement is a scope record; it is by others only when excluded (status rule above).
+ T(/^(brace-basis|bracket-receiver|bracket-load-path|haunch-stiffener-required|building-seismic-runway)$/,'input'),
  T(/-(basis|receiver|survey)$/,'input'),
  // By others
- T(/^(supporting-structure|brace-by-others|bracket-load-path)$/,'by-others'),T(/-by-others$/,'by-others'),
+ T(/^(supporting-structure|brace-by-others)$/,'by-others'),T(/-by-others$/,'by-others'),
  // Classification: section/element slenderness, applicability tests feeding a strength check, F13.1 capacity modifier
  T(/^(compact-flange|compact-web|cap-proportion|flange-net|column-brackets|hook-bolts)$/,'classification'),
  T(/^cap-angle-plate-slenderness$/,'detailing'),T(/(-slenderness|-slope)$/,'classification'),T(/^cap-angle-column-holes$/,'classification'),T(/^end-stop-stiffener$/,'classification'),

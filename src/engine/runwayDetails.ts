@@ -98,6 +98,8 @@ export interface RunwayDetailResults {
  residual:number;meshChange:number;travelChange:number;cases:number;braceStiffness:number;braceForce:number;
  fatigue:FatigueDetailResult[];interfaces:InterfaceAction[];
  railFatigueBins:{name:string;cycles:number;vertical:number;lateral:number;flangeStress:number;plateStress:number;weldStress:number}[];
- demands:{brace:number;braceFatigue:number;verticalFatigue:number;endLongitudinal:number;railLateral:number;railVertical:number;railFatigueVertical:number;railFatigueLateral:number};
+ demands:{brace:number;braceFatigue:number;verticalFatigue:number;endLongitudinal:number;railLateral:number;railVertical:number;railFatigueVertical:number;railFatigueLateral:number;
+  /** Top-flange restraint force of one girder end (strength) and its range over the duty bins: the force on one tie. `brace` is all the girder ends at a grid. */
+  braceEnd?:number;braceEndFatigue?:number};
  governing:Record<string,{id:string;combination:string;x:number;value:number}>;
 }

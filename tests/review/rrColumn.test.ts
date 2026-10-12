@@ -1,0 +1,149 @@
+import {describe,expect,it} from 'vitest';
+import {calculate} from '../../src/engine/calculate';
+import {buildTaxonomy} from '../../src/engine/checkTaxonomy';
+import {summaryElements} from '../../src/report/designSummary';
+import {compactReport} from '../../src/report/compactReport';
+import {coverSheetSvg} from '../../src/components/coverSheet';
+import {columnStiffenerGeometry,stiffenerGauge} from '../../src/engine/columnStiffeners';
+import {deliveredForces,braceImperfection} from '../../src/engine/forcesDelivered';
+import {deliveredRows} from '../../src/report/deliveredTable';
+import {responsibilityMatrix} from '../../src/report/responsibility';
+import {capTieLine,capAngleGeometry} from '../../src/engine/capAngle';
+import {asceCombinations} from '../../src/engine/asceCombinations';
+import {demoFocus005RevB} from '../fixtures/demoFocus005RevB';
+
+/**
+ * Peer review round 2, group A (column side and hand-off) on DEMO-FOCUS-005 Rev B: C2 one force system at the haunch
+ * flanges with the column stiffeners carrying it, C4 the forces delivered to the building per grid, M5 the existing
+ * column check's stated conditions, M6 the tie design force and the restraint at the tie line, M10 the
+ * responsibility matrix. One calculate.
+ */
+const kip=4448.2216152605,kft=kip*304.8,inch=25.4,ksi=6.894757293168;
+const p=demoFocus005RevB(),s=calculate(p),check=(id:string)=>s.checks.find(c=>c.id===id)!;
+const tax=buildTaxonomy(s,summaryElements(s.input)),html=compactReport(s,'');
+const plain=(h:string)=>h.replace(/<annotation[\s\S]*?<\/annotation>/g,'').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g,' ');
+const text=plain(html),page1=plain(html.slice(0,html.indexOf('</section>')));
+const section=(title:string)=>{const i=html.indexOf(`/ ${title}</h2>`);expect(i,title).toBeGreaterThan(0);return plain(html.slice(i,html.indexOf('</section>',i)));};
+const ru=(note:string)=>Number(note.match(/R_u = ([\d.,]+) kip/)![1].replace(/,/g,''));
+
+describe('Rev B stays clean',()=>{
+ it('has no failing, unverified or open checks',()=>{
+  expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
+  expect(s.checks.filter(c=>['fail','unverified','incomplete','unsupported'].includes(c.status)).map(c=>c.id)).toEqual([]);
+  expect(tax.openItems).toEqual([]);
+ });
+});
+
+describe('C2 · one force system for each haunch flange at the column face',()=>{
+ const S=s.detailResults!.taperedHaunch!.strength;
+ it('takes the same equivalent concentrated force in every unstiffened J10 limit state at a level, for information',()=>{
+  const top=['haunch-column-flange','haunch-column-yield-top'].map(check),bottom=['haunch-column-yield-bottom','haunch-column-crippling'].map(check);
+  for(const c of [...top,...bottom]){expect(c.status,c.id).toBe('not-applicable');expect(c.note).toMatch(/^Unstiffened J10\.\d for information, not governing \(the column is stiffened at this level\): R_u = /);}
+  // One R_u per level: T + 3M_f/b at the top, C cos α + 3M_f/b at the bottom; before, J10.1 used 132 kip and J10.2 used T = 44.3 kip.
+  expect(ru(top[0].note)).toBe(ru(top[1].note));expect(ru(bottom[0].note)).toBe(ru(bottom[1].note));
+  expect(ru(top[0].note)).toBeCloseTo(S.pull.value/kip,0);expect(S.pull.value/kip).toBeCloseTo(132.4,0);
+  expect(S.push.value/kip).toBeCloseTo(121.2,0);
+  // The flange force system: T = 44.3 kip with M_f = 34.3 kip-ft (DG9 flange bending of the torque), R_u = T + 3M_f/b.
+  const b=14*inch;expect(Math.abs(S.pull.P!)/kip).toBeCloseTo(44.3,1);expect(Math.abs(S.pull.M!)/kft).toBeCloseTo(34.25,1);
+  expect(S.pull.value).toBeCloseTo(Math.abs(S.pull.P!)+3*Math.abs(S.pull.M!)/b,3);
+  // J10.2 is exceeded unstiffened (1.32): stiffeners are required. J10.1 cites J10.1, not J10.8.
+  expect(check('haunch-column-yield-top').note).toMatch(/^Unstiffened J10\.2 for information, not governing \(the column is stiffened at this level\): R_u = 132(\.\d+)? kip against φR_n = 100(\.\d+)? kip, D\/C 1\.32 \(exceeded\)\./);
+  expect(check('haunch-column-flange').note).toMatch(/^Unstiffened J10\.1 for information/);
+  // The panel takes the net flange force; the couples add none.
+  expect(check('haunch-column-panel').demand).toBeCloseTo(Math.max(S.tension.value,S.compression.value),6);
+ });
+ it('designs the full-depth stiffener pair for T/2 ± M_f/g on one plate, no unstiffened strength credited',()=>{
+  const g=columnStiffenerGeometry(p)!,gauge=stiffenerGauge(g);
+  expect(gauge/inch).toBeCloseTo(.44+6.75,2);expect(g.full).toBe(true);expect(g.field).toBe(true);
+  const up=check('haunch-colstiff-upper'),low=check('haunch-colstiff-lower');
+  expect(up.equation).toContain('R_{st}=\\frac{T}{2}\\pm\\frac{M_f}{g}');expect(low.equation).toContain('\\frac{C}{2}\\pm\\frac{M_f}{g}');
+  const T=S.stiffUpperT;expect(up.demand).toBeCloseTo(Math.abs(T.P!)/2+Math.abs(T.M!)/gauge,3);
+  expect(up.demand!/kip).toBeCloseTo(79.3,0);expect(low.demand!/kip).toBeCloseTo(72.1,0);
+  // One plate in tension: J4.1 yielding at the clipped contact, 0.90 Fy (b_s − c) t_s = 0.9(50)(6.0)(0.75) = 202.5 kip.
+  expect(up.capacity!/kip).toBeCloseTo(.9*50*6*.75,1);expect(up.status).toBe('pass');expect(low.status).toBe('pass');
+  // Welds on one plate (two throats) and the web shear along them carry the larger plate force.
+  expect(check('haunch-colstiff-flange-weld').demand).toBeCloseTo(up.demand!/(2*g.s.flangeWeld/Math.SQRT2*g.contact),3);
+  expect(check('haunch-colstiff-web-shear').demand).toBeCloseTo(up.demand!/(g.webLength*g.tw),3);
+  for(const id of ['proportions','length','flange-weld','web-weld','web-shear','fatigue-plate','fatigue-weld'])expect(check('haunch-colstiff-'+id).status,id).toBe('pass');
+ });
+ it('makes the governing design D/C a meaningful check and lists the stiffeners in the summary',()=>{
+  expect(tax.governing!.check.id).not.toMatch(/^haunch-column/);expect(tax.governing!.dc).toBeLessThan(.93);
+  expect(page1).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", full depth, one pair at the haunch top flange and bottom flange; 5\/8" fillets to the flanges and 5\/8" to the web, both faces; field welded inside the existing column/);
+  expect(text).toMatch(/Decision: column stiffeners required/);expect(text).toMatch(/J10\.7 \(unframed beam ends\) do not apply/);
+ });
+});
+
+describe('C4 · forces delivered to the building columns',()=>{
+ const d=deliveredForces(s)!;
+ it('gives per-grid concurrent sets with the strong-axis V·e and the weak-axis seat moment, not the girder torque',()=>{
+  expect(d.grids.map(g=>g.grid)).toEqual([1,2,3,4,5,6]);expect(d.e!/inch).toBeCloseTo(33,6);
+  const maxV=d.grids[2].sets.find(x=>x.label.startsWith('max V'))!;
+  expect(maxV.V/kip).toBeCloseTo(26.5,1);expect(maxV.Mx!/kft).toBeCloseTo(26.5*33/12,0);expect(Math.abs(maxV.My)/kft).toBeCloseTo(18.5,1);
+  // The girder torque about its shear center (2.11 kip-ft before) is not the seat moment.
+  const torque=Math.max(...s.detailResults!.interfaces.map(v=>Math.abs(v.torque)));
+  expect(Math.abs(maxV.My)).toBeGreaterThan(5*torque);
+  // The crane stop force reaches grids 1 and 5 only; traction 1.6 × 2.0 = 3.2 kip reaches grids 1 to 5, none at the sliding grid 6.
+  expect(d.stopGrids).toEqual([1,5]);expect(d.stop/kip).toBeCloseTo(10,3);expect(d.tractionGrids).toEqual([1,2,3,4,5]);expect(d.traction/kip).toBeCloseTo(3.2,3);
+  expect(d.grids[5].sets.every(x=>Math.abs(x.F)<1)).toBe(true);
+ });
+ it('delivers the tie design force at the tie line, and prints the same rows on page 1, in section 3.5 and on S-00',()=>{
+  expect(Math.max(...d.grids.flatMap(g=>g.sets.map(x=>x.Htie)))).toBeCloseTo(d.tie.design,6);
+  expect(d.tie.design).toBeCloseTo(check('brace-member').demand!,6);
+  const rows=deliveredRows(s),line=(r:string[])=>r.slice(3).join(' ');
+  const s35=section('Forces delivered to the building'),cover=[...coverSheetSvg(s,[]).matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1]).join(' ');
+  for(const r of rows){expect(page1).toContain(line(r));expect(s35).toContain(line(r));for(const v of r.slice(3))expect(cover).toContain(v.toUpperCase().replace(/&/g,'&amp;'));}
+  expect(page1).not.toMatch(/seat moment 2\.11/);expect(s35).toMatch(/not the girder torque about its shear center/);
+  expect(s35).toMatch(/El\. 118'-0"/);expect(s35).toMatch(/reaches grids 1 and 5 only/);
+ });
+});
+
+describe('M5 · the existing column check states its conditions',()=>{
+ it('is conditional on a braced frame next to its D/C and in the matrix',()=>{
+  const c=check('column-interaction');expect(c.title).toMatch(/braced frame assumed/);expect(c.note).toMatch(/^Conditional on a braced \(non-sway\) frame/);
+  expect(page1).toMatch(/combined axial and flexure \(H1\), braced frame assumed/);
+  const col=section('Existing column check');
+  expect(col).toMatch(/Conditional result\. The column is checked as part of a braced \(non-sway\) frame/);
+  expect(col).toMatch(/Unbraced lengths\. L ?cx = 312 in.*use 120 in.*not the entered L ?cy = 96 in/);
+  expect(col).toMatch(/Impact\. Vertical impact Ci is included/);expect(col).toMatch(/Drift height\. AIST TR-13 §5\.3: H = 231\.6\d? in .*limit min\(H\/400, 2 in\) = 0\.58 in/);
+  expect(col).toMatch(/combinations with E .*do not govern/);
+ });
+ it('numbers the combinations as ASCE 7-16 §2.3.1 and §2.3.6',()=>{
+  const k=(id:string)=>asceCombinations('LRFD').find(v=>v.id===id)!.equation;
+  expect(k('5+')).toBe('0.9D + 1.0W');expect(k('6+')).toBe('1.2D + 1.0E + L + 0.2S');expect(k('7+')).toBe('0.9D + 1.0E');
+  expect(s.existingColumn!.combinations.some(v=>v.id==='LRFD 6+'&&v.equation.includes('E'))).toBe(true);
+ });
+});
+
+describe('M6 · the tie design force and the restraint at the tie line',()=>{
+ it('models the top restraint at the tie plate line and derives F = H + P_br on the page',()=>{
+  const g=capAngleGeometry(p)!;expect(capTieLine(p)!/inch).toBeCloseTo(13.9+.716+.375/2,2);expect(g.plate.zc/inch).toBeCloseTo(.1875,4);
+  const A6=braceImperfection(p,s.designAnalysis!,s.properties!),r=s.detailResults!;
+  // P_br = 0.02(122.3 × 12)/13.42 + 0.01(10.0) = 2.19 + 0.10 = 2.29 kip; stiffness 5.21 kip/in required.
+  expect(A6.force/kip).toBeCloseTo(2.29,2);expect(A6.stiffness/(kip/inch)).toBeCloseTo(5.21,2);
+  expect(check('brace-member').demand).toBeCloseTo(r.demands.brace+A6.force,6);
+  // The analysis force per grid (all girder ends) and per girder end (one tie); the restraint at the tie line lowers H from 4.38 kip.
+  expect(r.demands.brace/kip).toBeLessThan(4.38);expect(r.demands.braceEnd!).toBeLessThanOrEqual(r.demands.brace*(1+1e-9));
+  const tie=section('Cap tieback angle');
+  expect(tie).toMatch(/Tie design force, each tie: F = H \+ P ?br = 4\.\d\d kip \+ 2\.29 kip = 6\.\d\d kip/);
+  expect(tie).toMatch(/one girder end alone reaches/);expect(tie).toMatch(/Stiffness: β ?br = .*5\.21 kip\/in/);expect(tie).toMatch(/Fatigue range ΔF = .* full reversal/);
+ });
+});
+
+describe('M10 · the responsibility matrix',()=>{
+ const rows=responsibilityMatrix(tax,s),item=(re:RegExp)=>rows.find(r=>re.test(r.item));
+ it('gives item, need, acceptance criterion, forces and location, responsible party for every item left to others',()=>{
+  const m=section('Not checked in this package · responsibility matrix');
+  expect(m).toMatch(/Item What is needed Acceptance criterion Force and location delivered Responsible party/);
+  for(const re of [/frame type/,/10-year wind \(TR-13/,/rail gauge/,/Runway seismic/,/alteration evaluation/,/Crane-level strut on the girder line/,/Crane data/,/Rail and crane wheels/,/Opposite runway/,/Existing column survey/,/Load test at 125%/])expect(item(re),String(re)).toBeDefined();
+  expect(item(/10-year wind \(TR-13/)!.criterion).toMatch(/H\/400 or 2 in.*H = 232 in.*limit 0\.58 in/);
+  expect(item(/rail gauge/)!.forces).toMatch(/Computed here, part of the total: .*\+6\.97 × 10⁻² in|Computed here, part of the total: .*0\.07 in/);
+  expect(item(/Crane data/)!.needed).toMatch(/s = 0\.5.*0\.9 trolley factor/);
+  expect(item(/Crane-level strut/)!.needed).toMatch(/the existing column check relies on it/);expect(item(/Crane-level strut/)!.forces).toMatch(/crane stop 10\.0 kip at grids 1 and 5/);
+  expect(item(/Load test/)!.criterion).toMatch(/12\.2 kip per wheel ≤ the design wheel load 13\.6 kip/);
+  // No by-others row for what this package checks.
+  expect(rows.some(r=>/column-side load path|load paths to the column/.test(r.item))).toBe(false);
+  expect(tax.byOthers.some(t=>t.check.id==='bracket-load-path')).toBe(false);
+  for(const r of rows)for(const k of ['item','needed','criterion','forces','party'] as const)expect(r[k].length,`${r.item} ${k}`).toBeGreaterThan(0);
+  expect(page1).toMatch(/Not checked in this package: responsibility matrix/);
+ });
+});

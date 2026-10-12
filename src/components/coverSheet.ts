@@ -28,6 +28,7 @@ import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newCol
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
 import {capAngleGeometry} from '../engine/capAngle';
 import {capAngleTitles} from './capAngleSheet';
+import {deliveredRows,deliveredHeaders,deliveredNote} from '../report/deliveredTable';
 
 /** A sheet of the set as the cover indexes it, with the titles of its details in drawing order. */
 export interface SheetEntry {number:string;title:string;details?:readonly string[];}
@@ -241,6 +242,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  blocks.push(H(`LOAD COMBINATIONS · RUNWAY GIRDER (${p.method})`),{...T(['NO.','COMBINATION','NO.','COMBINATION'],Array.from({length:Math.ceil(combos.length/2)},(_,i)=>{const a=combos[i],b=combos[i+Math.ceil(combos.length/2)];return [a.id,plain(a.equation),b?.id??'',b?plain(b.equation):''];}),[.45,1.55,.45,1.55]),keep:true},
   P(`AIST TECHNICAL REPORT 13 WITH ASCE 7 §2.${p.method==='LRFD'?'3':'4'}. Cd CRANE DEAD, Cv VERTICAL, Css SIDE THRUST, Cls LONGITUDINAL, Ci IMPACT, Cbs BUMPER; SUFFIX m MULTIPLE CRANES, s ONE CRANE, min MINIMUM LIFTED LOAD. D DEAD, L LIVE.${p.aist?.concurrency==='full'?' C1: ALL CRANE LOADS CONCURRENT AS L.':''}`));
  if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, PER SUPPORT'),T(['STATION','D','Cd','Cv','Ci','Css','Cls·e/L'],r.supports.map(v=>[len(v.x),f(v.D),f(v.Cd),f(v.Cv),f(v.Ci),f(v.Css),'±'+f(v.Clv)]),[1.25,1,1,1,1,1,1.05]),P(`Cd CRANE EMPTY, Cv LIFTED, Ci IMPACT${p.cranes.length>1?' (ALL CRANES, ANY ARRANGEMENT)':''}, Css SIDE THRUST AT RAIL HEAD (ONE CRANE). RUNWAY LONGITUDINAL FORCE Cls = ${f(r.Cls)} AT THE RAIL HEAD; Cls·e/L IS ITS END COUPLE AT THE BEARINGS OF THE BAY THAT CARRIES IT. ALL CRANE COMPONENTS ARE LIVE LOAD L (ASCE 7 §4.9).${adjacentBays(p).map(b=>` AT ${len(b.station)} THE REACTIONS INCLUDE THE EXISTING ADJACENT ${len(b.length)} BAY (SAME GIRDER, RAIL AND DEAD LOAD ASSUMED).`).join('')} FACTORED: ${bracketForcesAt(s,'cover')}.`));
+ // The forces delivered to the building columns: the same concurrent sets as the calculation (page 1 and section 3.5).
+ const delivered=deliveredRows(s);
+ if(delivered.length)blocks.push(H(`FORCES DELIVERED TO THE BUILDING COLUMNS · FACTORED ${p.method}, CONCURRENT SETS PER GRID`),{...T(deliveredHeaders.map(v=>v.toUpperCase()),delivered,[.4,1.05,1.05,.65,.85,.8,.65,.65,.7]),keep:true},P(deliveredNote(s)));
  // Without bracket or support details the cover carries the factored bracket design forces.
  if(d&&s.detailResults&&!bracketForceTopic(s))blocks.push(...bracketForceBlocks(s,t));
  // Column 3: index, materials, inspection.

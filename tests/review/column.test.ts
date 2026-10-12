@@ -120,7 +120,7 @@ describe('B13 tension-only rod bracing fatigue',()=>{
 describe('D33 TR-13 supporting-structure combinations on the column',()=>{
  it('runs 1.2Cdm with 1.6S (TR-13 3a) next to ASCE 7 combination 3 with the crane dead load at 1.0',()=>{
   const k=tr13SupportCombinations('LRFD').find(v=>v.id==='TR-13 3-S-L')!;
-  expect(k.cd).toBe(1.2);expect(k.equation).toBe('1.2D + 1.2Cdm + 1.6S + (Cvm + Css + Cls + L)');
+  expect(k.cd).toBe(1.2);expect(k.equation).toBe('1.2D + 1.2Cdm + 1.6S + (Cvm + Ci + Css + Cls + L)');
   const r=column(demoFocus005()),P=(f:(id:string)=>boolean)=>Math.max(...r.combinations.filter(v=>f(v.id)).map(v=>v.P));
   expect(P(id=>id.includes('TR-13'))/kip).toBeCloseTo(89.27,1);expect(P(id=>!id.includes('TR-13'))/kip).toBeCloseTo(87.99,1);
  });

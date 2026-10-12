@@ -134,6 +134,12 @@ export function capAngleGeometry(p:ProjectInput){
   boltHeight:s.d+s.capTw-cb.gauge,capTop:s.d/2+s.capTw};
 }
 export type CapAngleGeometry=NonNullable<ReturnType<typeof capAngleGeometry>>;
+/**
+ * Height of the cap tieback's force line above the bottom of the W (mm): the tie plate centerline, lapped on the
+ * angle's long leg at the top of the cap. By statics the tie's pull or push acts on the girder along this line, above
+ * the cap bolts that fasten the angle to the channel flange; it is the top restraint of the lateral/torsional model.
+ */
+export function capTieLine(p:ProjectInput){const g=capAngleGeometry(p);return g?p.section.d+p.section.capTw+g.plate.zc:undefined;}
 
 /** An axis-aligned plate or block, mm: x along the runway from the tie centerline, y across from the girder web
  * centerline toward the column, z up from the top of the cap. */

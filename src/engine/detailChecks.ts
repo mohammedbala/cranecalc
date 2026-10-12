@@ -1,3 +1,4 @@
+import {braceImperfection} from './forcesDelivered';
 import {categoryF} from './fatigueConstants';
 import {format} from './units';
 import {flangeTieChecks,stiffenerTieChecks} from './flangeTieDesign';
@@ -124,7 +125,8 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const twistLimit=d.criteria.twistLimit,twistAt=r.governing.twist?` Governing ${r.governing.twist.combination} at x = ${format(r.governing.twist.x,'length',p.units,3)}.`:'';
  if(twistLimit)add('rail-twist','Serviceability','Rail rotation · owner criterion',r.twist,twistLimit,'ratio','\\theta\\le\\theta_{max}\\ \\ \\text{(owner)}',`Rail rotation from the lateral / warping torsion analysis against the twist limit entered by the owner or crane supplier (${p.criteriaSource||'source not stated'}). AIST TR-13 gives no rail twist limit. Distinct from girder lateral bending deflection.${twistAt}`,['criteria']);
  else checks.push({id:'rail-twist',group:'Serviceability',title:'Rail rotation · owner criterion not entered',status:'not-applicable',demand:r.twist,quantity:'ratio',equation:'\\theta',referenceIds:['criteria'],note:`Informational: rail rotation ${r.twist.toExponential(3)} rad from the lateral / warping torsion analysis.${twistAt} AIST TR-13 sets no rail twist limit and none was entered by the owner or crane supplier, so no rotation check is made.`});
- const brace=braceSystem(p),Cd=p.system==='continuous'?2:1,spacing=Math.min(p.lateralBraceSpacing,p.aist.bottomBraceSpacing),imperfection=.02*a.moment*Cd/props.h0+.01*a.axial,requiredK=(p.method==='LRFD'?1/.75:2)*(10*a.moment*Cd/props.h0+8*a.axial)/spacing;
+ // Appendix 6 brace force and stiffness (forcesDelivered.braceImperfection: the same numbers the report derives).
+ const brace=braceSystem(p),A6=braceImperfection(p,a,props),imperfection=A6.force,requiredK=A6.stiffness;
  const plate=isPlateTie(p),capAngle=isCapAngleTie(p);
  const cap=activeColumnCap(p),capR=r.columnCap;
  if(cap&&capR){

@@ -112,7 +112,7 @@ export interface SupportCombination extends AsceCombination {cd:number;}
 export function tr13SupportCombinations(method:ProjectInput['method']):SupportCombination[]{
  return asceCombinations(method).filter(k=>k.factors.D>0).map(k=>{
   const D=k.factors.D,cd=D<1?1:D;
-  const equation=k.equation.replace(/^([0-9.]*)D/,m=>`${m} + ${cd===1?'':cd}Cdm`).replace(/(^| )([0-9.]*)L(?=$|[ ,])/,'$1$2(Cvm + Css + Cls + L)');
+  const equation=k.equation.replace(/^([0-9.]*)D/,m=>`${m} + ${cd===1?'':cd}Cdm`).replace(/(^| )([0-9.]*)L(?=$|[ ,])/,'$1$2(Cvm + Ci + Css + Cls + L)');
   return {id:`TR-13 ${k.id}`,equation,factors:{...k.factors},cd};
  });
 }
