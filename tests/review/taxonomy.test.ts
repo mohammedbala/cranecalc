@@ -58,9 +58,10 @@ describe('classification (item 1)',()=>{
 describe('gates (item 2; C19, C20, C21)',()=>{
  const gate=(s:CalculationSnapshot,id:string)=>gateCheck(s,s.checks.find(c=>c.id===id)!).gate;
  it('screens fatigue details whose largest range is below F_TH, and keeps the rest',()=>{
-  expect(tax.fatigue.evaluated.map(r=>r.title)).toEqual(['Column stiffener fillets · throat fatigue (A-3.1 item 8.2)','Rail keeper','Column stiffener plates at the flange fillets','Haunch flanges at the column welds (top and bottom)','Existing column flange at the haunch weld toes']);
+  // A weld root (Category C″, R_FIL < 1) has no threshold (AISC 360-16 Eq. A-3-5/A-3-6): always evaluated.
+  expect(tax.fatigue.evaluated.map(r=>r.title)).toEqual(['Column stiffener fillets · throat fatigue (A-3.1 item 8.2)','Rail keeper','Column stiffener plates at the flange fillets','Haunch flanges at the column welds (top and bottom)','Keeper body · end-weld root','Existing column flange at the haunch weld toes','Tie plate at the end plate fillets · root']);
   const r=(t:string)=>tax.fatigue.rows.find(v=>v.title===t)!,ksi=(v?:number)=>Number((v!/6.894757293168).toFixed(2));
-  expect([ksi(r('Rail keeper').range),r('Rail keeper').category,r('Rail keeper').miner!.toFixed(2),r('Rail keeper').allCycle!.toFixed(2)]).toEqual([13.33,'D','0.28','0.76']);
+  expect([ksi(r('Rail keeper').range),r('Rail keeper').category,r('Rail keeper').miner!.toFixed(2),r('Rail keeper').allCycle!.toFixed(2)]).toEqual([13.33,'D','0.65','0.76']);
   expect([ksi(r('Haunch flanges at the column welds (top and bottom)').range),ksi(r('Existing column flange at the haunch weld toes').range),ksi(r('Column stiffener fillets · throat fatigue (A-3.1 item 8.2)').range)]).toEqual([15.94,3.76,10.52]);
   for(const id of ['fatigue','stiffener-fatigue','cap-weld-fatigue','rail-keeper-fatigue','haunch-fatigue-stiffener-weld','cap-angle-plate-fatigue','detail-fatigue-CE3-left','detail-full-cycle-SH-left1-left','detail-fatigue-CA3-L'])expect(gate(base,id)).toBe('screened');
   expect(tax.fatigue.screened.length).toBeGreaterThan(25);
@@ -103,7 +104,7 @@ describe('gates (item 2; C19, C20, C21)',()=>{
 
 describe('body and page 1 (items 3-5; A1, C16)',()=>{
  it('shows about 35-40 design checks',()=>{
-  expect(tax.counts.designShown).toBeGreaterThanOrEqual(35);expect(tax.counts.designShown).toBeLessThanOrEqual(42);
+  expect(tax.counts.designShown).toBeGreaterThanOrEqual(35);expect(tax.counts.designShown).toBeLessThanOrEqual(44);
   const rows=(html.match(/<tr class="[a-z-]+" data-checks=/g)??[]).length;
   expect(rows+tax.fatigue.evaluated.length).toBe(tax.counts.designShown);
  });
@@ -167,7 +168,7 @@ describe('body and page 1 (items 3-5; A1, C16)',()=>{
   expect(t.governing!.check.id).toBe('rail-twist');
  });
  it('prints the counts line',()=>{
-  expect(text(page1)).toMatch(/Design checks evaluated 412 \(shown 41; 272 of them fatigue register points\), screened 421 , not applicable 4; detailing rules 75 \(16 flagged\)/);
+  expect(text(page1)).toMatch(/Design checks evaluated 414 \(43 body rows; 272 of them at 136 fatigue register points\), screened 419 \(400 of them at 200 register points\), not applicable 4; detailing rules 75 \(16 flagged\)/);
  });
  it('states exactly what remains by others with the forces delivered (D34)',()=>{
   const t=text(page1);
@@ -191,9 +192,9 @@ describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>
  });
  it('prints one short fatigue table with both methods side by side and the setting stated',()=>{
   const page=text(section('Fatigue · girder and attachments'));
-  expect(page).toMatch(/Governing method \(project setting\): Miner's sum over the duty bins/);
-  expect(page).toMatch(/5 details evaluated; 3\d screened/);
-  expect(page).toMatch(/Rail keeper typical of 272 Rail keeper 61, x = 109\.8 ft D 13\.33 ksi 7\.00 ksi 0\.28 0\.76 0\.28/);
+  expect(page).toMatch(/Governing method: Miner’s rule, D\/C = f sr,eq \/F SR \(bold\); the all-cycle ratio is shown alongside/);
+  expect(page).toMatch(/7 details evaluated; 3\d details screened/);
+  expect(page).toMatch(/Rail keeper typical of 136 register points Rail keeper 61, x = 109\.8 ft D 7\.00 ksi 17\.65 ksi 13\.33 ksi 11\.51 ksi 0\.277 0\.65 0\.76 OK/);
   const s=clone();s.input.fatigue.method='all-cycle';
   const t=taxonomy(s);expect(t.fatigue.evaluated.find(r=>r.title==='Rail keeper')!.dc!.toFixed(2)).toBe('0.76');
  });

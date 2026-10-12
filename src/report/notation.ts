@@ -25,7 +25,8 @@ export const notationGroups:[string,Entry[]][]=[
   ['\\Delta_v','Vertical deflection, one crane, static wheel loads'],['\\Delta_h','Lateral deflection of the top flange, one crane'],['t_{set}','Setting tolerance (TR-13 §5.18)']]],
  ['Fatigue (unfactored duty-bin loads)',[
   ['f_{max}','Largest stress under the unfactored fatigue loads'],['f_{min}','Smallest stress under the unfactored fatigue loads'],
-  ['f_{sr,i}','Stress range of duty bin i; F<sub>SR,i</sub> is the allowable range at its n<sub>i</sub> cycles']]]
+  ['f_{sr,i}','Stress range of duty bin i; F<sub>SR,i</sub> is the allowable range at its n<sub>i</sub> cycles'],
+  ['f_{sr,eq}','Equivalent constant-amplitude stress range of the duty bins at n<sub>SR</sub> = Σn<sub>i</sub> cycles (Miner’s rule): its ratio to F<sub>SR</sub> at n<sub>SR</sub> is the fatigue D/C; Σn<sub>i</sub>/N<sub>i</sub> = (f<sub>sr,eq</sub>/F<sub>SR</sub>)<sup>3</sup> is given for information']]]
 ];
 const greek='alpha|beta|gamma|delta|Delta|epsilon|varepsilon|eta|theta|Theta|kappa|lambda|mu|nu|rho|sigma|tau|phi|Phi|psi|omega|Omega|xi|zeta';
 const operators='frac|tfrac|dfrac|sqrt|left|right|bigl|bigr|big|Big|max|min|le|ge|leq|geq|quad|qquad|times|cdot|sum|Sigma|tan|arctan|cos|sin|tanh|int|det|ldots|dots|notin|Rightarrow|begin|end|cases|aligned|circ|pm|mp|in|textstyle|displaystyle|mathbf|boldsymbol';
