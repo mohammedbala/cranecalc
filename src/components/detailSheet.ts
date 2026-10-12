@@ -178,7 +178,7 @@ export function detailSheetSvg(s:CalculationSnapshot,number:string,title:string,
   // Clear of the cell edges and of the title: centered, but no farther than 70 above the title.
   const height=b.y1-b.y0;
   const dy=height>bottom-top?bottom-b.y1:Math.max((top+bottom)/2-(b.y0+b.y1)/2,bottom-70-b.y1),dx=ax-(b.x0+b.x1)/2;
-  if(height>bottom-top+10||b.x1-b.x0>w-16)fits=false;
+  if(height>bottom-top+10||b.x1-b.x0>w-16){fits=false;svg+=`<g data-overflow-cell="${esc(p.view.title)}" data-overflow-size="${n(b.x1-b.x0)}x${n(height)} in ${n(w-16)}x${n(bottom-top+10)}"/>`;}
   svg+=`<g data-detail-cell="${p.col+1},${p.row+1},${p.rows}" data-cell-height="${n(h)}" transform="translate(${n(dx)} ${n(dy)})">${r.svg}</g>${viewTitle(ax,ay,p.view.title,r.scale)}`;
  }
  // Subjects without drawable details state why.

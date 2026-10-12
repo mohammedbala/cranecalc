@@ -138,3 +138,9 @@ describe('break lines',()=>{
   for(const d of engineeringSketches(s))expect(d.entities.filter(e=>e.type==='polyline'&&!e.closed&&zigzag(e.points)).length,d.number).toBe(0);
  },900000);
 });
+
+describe('detail cells',()=>{
+ it('fits every Rev B detail in its cell (no overflow marker on any sheet)',()=>{
+  for(const v of sheets)expect(v.svg.match(/data-overflow[-a-z]*="[^"]*"/g)??[],v.number).toEqual([]);
+ });
+});
