@@ -1,5 +1,6 @@
 import type {ProjectInput} from '../../src/engine/types';
 import {demoFocus005} from './demoFocus005';
+import {loadCappedSection} from '../../src/data/aiscChannels';
 
 const inch=25.4,kip=4448.2216152605,ftPerMin=5.08;
 /**
@@ -44,6 +45,11 @@ export function demoFocus005RevB():ProjectInput{
  p.criteriaSource=p.criteriaSource.replace(/[;,]?\s*twist\s*0\.005\s*rad/i,'');
  p.criteriaSource=p.criteriaSource.replace('AIST Class C','AIST Class B');
  note('Rail rotation limit 0.005 rad removed (not an owner or crane-supplier requirement; the rotation is reported, not checked).');
+ // E36 · girder re-optimised once the rail rotation limit is gone: W24X104 + C15X50 (154 plf) → W14X61 + C15X50 (111 plf),
+ // governed by the Class B vertical deflection L/1000 (0.75). W12X53 + C15X50 fails it (1.09) and the singly symmetric
+ // proportion; a lighter channel (C15X33.9) fails the rail keeper fatigue. Runway seismic mass 2 × 125 ft × 43 plf = 10.8 kip less.
+ p.section=loadCappedSection(p.section,'W14X61','C15X50');p.aist!.netFlangeArea=p.section.bf*p.section.tf;
+ note('Girder W24X104 + C15X50 → W14X61 + C15X50 (154 → 111 plf; 10.8 kip less runway mass on the building).');
  p.omitUnverified=true;
  note('Checks without data (frame type, 10-year wind drift, rail gauge from frame spread, runway seismic, IEBC alteration) omitted from the report and listed as not checked (by others).');
  return p;
