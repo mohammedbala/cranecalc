@@ -64,8 +64,9 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
   const seatTop = -girderDepth / 2-(independentBearing?.thickness??continuousBearing?.thickness??0), beamTop = seatTop - (bracket?bracketSeat(bracket).thickness/1000:plateT), beamBottom = beamTop - (bracket?bracketSeat(bracket).depth/1000:b.d);
   if(newColumn)frameStyle='rolled';
   const columnBottom = newColumn?newColumn.bottom:beamBottom - plateT - columnHeight, columnTop = newColumn?newColumn.top:frameStyle==='tapered'?roofBottom+portalDimensions.kneeDepth:roofBottom-plateT, floor = newColumn?newColumn.floor:columnBottom - plateT - padH;
-  const columnMid=(columnBottom+columnTop)/2,profile=columnProfile(columnTop-columnBottom,beamTop-columnMid,c.d);
-  if(bracket){const a=beamBottom-columnMid-.05,z=beamTop-columnMid+.05+(isExistingBracketType(bracket.arrangement)?existingBracketProfile(bracket).continuityAbove/1000:0);profile.splice(1,1,{s:a,lower:-c.d/2,upper:c.d/2},{s:z,lower:-c.d/2,upper:c.d/2});}
+  // A rolled (or new, or surveyed) column is prismatic: its outer flange stays at the constant depth c.d.
+  const columnMid=(columnBottom+columnTop)/2,half=(columnTop-columnBottom)/2,profile=frameStyle==='tapered'?columnProfile(columnTop-columnBottom,beamTop-columnMid,c.d):[{s:-half,lower:-c.d/2,upper:c.d/2},{s:half,lower:-c.d/2,upper:c.d/2}];
+  if(bracket&&frameStyle==='tapered'){const a=beamBottom-columnMid-.05,z=beamTop-columnMid+.05+(isExistingBracketType(bracket.arrangement)?existingBracketProfile(bracket).continuityAbove/1000:0);profile.splice(1,1,{s:a,lower:-c.d/2,upper:c.d/2},{s:z,lower:-c.d/2,upper:c.d/2});}
   const columnOffset = capped?0:(bracket?bracket.reach/1000+c.d/2:tieFace!==undefined?tieFace+c.d/2:Math.max(.9, girderWidth / 2 + c.d / 2 + .35)), columnFace = columnOffset - c.d / 2;
   const seatWidth = Math.max(girderWidth + .24, .42), bracketStart = bracket?columnFace-bracket.seatProjection/1000:-seatWidth / 2 - .07, bracketEnd = columnFace - (bracket?0:plateT);
   const capLength = bracketEnd - bracketStart, bracketMid = (bracketStart + bracketEnd) / 2;

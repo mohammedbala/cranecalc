@@ -108,8 +108,8 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
     +[x1,x2].map(x=>line([x-2.5,y+3],[x+2.5,y-3])).join('')+dimText(xb,y-9,label,9,'middle');
   let svg=`<g data-view="typical-section">`+paths(beyond.building,project,'reference-line')+paths(beyond.runway,project,'runway-line')
     +paths(cut.building,project,'reference-line')+paths(cut.runway,project,'runway-line')+paths(cut.rail,project,'rail-line');
-  // Paired break lines where the crane span is shortened, and where the columns leave the band.
-  if(span)for(const dx of [-3,3])svg+=breakLine([xb+dx,SY(vTop)],[xb+dx,SY(vBottom)]);
+  // One break line where the crane span is shortened (it crosses no member), and where the columns leave the band.
+  if(span)svg+=breakLine([xb,SY(vTop)],[xb,SY(vBottom)]);
   for(const v of [vTop,vBottom]){
     const us=all.filter(q=>Math.abs(q[1]-v)<1e-6).map(q=>q[0]).sort((a,b)=>a-b),groups:number[][]=[];
     for(const u of us){const g=groups.at(-1);if(g&&u-g[g.length-1]<.8)g.push(u);else groups.push([u]);}
@@ -311,12 +311,11 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const bracing=braced?bracingOnElevation(s,{EX:x=>EX(x-m.length/2),EY,ek,supports:m.supports.map(x=>x+m.length/2),columnWidth:m.column.bf,girderBottom:bottom,stub:stubLength,columnTop:capGeo?bottom+(p.details!.bearing.thickness+capGeo.cap.plate.thickness)/1000*ek:undefined}):undefined;
   svg+=`<g data-view="elevation">`;
   const bubbleY=top-44;
-  // An existing column continues up to the roof: its break stands clear above the rail top, off the T.O.R. target.
-  const columnBreak=Math.min(top-10,EY(m.railBase+(p.aist?.railDepth??p.railHeight)/1000)-12);
   svg+=text(el,bubbleY-30,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: ${sheetRef('connection')}${p.system==='simple'&&p.details?` / SHARED SUPPORT: ${detailRef(capGeo?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}`:''}`,9);
   m.supports.forEach((x,i)=>{
-    // The column is beyond the girder: hidden behind it, ending in breaks where it continues. An existing building
-    // column continues up to the roof; a new column ends at its top, at or below the top of the girder.
+    // The column is beyond the girder. A new column ends at its top, at or below the top of the girder. An existing
+    // building column is drawn only below the seat, a stub broken once at its foot: above the girder it continues to
+    // the roof (shown on the typical section), and a short piece broken at both ends would only add break lines.
     const c0=EX(x-m.column.bf/2),c1=EX(x+m.column.bf/2),front=EY(m.railBase),stubEnd=bottom+stubLength;
     // Past a runway end the column is in view.
     const behind=(x:number)=>x>el+.5&&x<er-.5,edges=[c0,...[el,er].filter(v=>v>c0&&v<c1),c1];
@@ -328,7 +327,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
      const ct=EY(-m.d/2-(p.details?.bearing.thickness??0)/1000+(p.existingColumn!.height-p.existingColumn!.seatElevation)/1000);
      for(let j=1;j<edges.length;j++)svg+=line([edges[j-1],ct],[edges[j],ct],ct>=front&&behind((edges[j-1]+edges[j])/2)?'hidden-line':'runway-line');
      for(const cx of [c0,c1]){if(ct<front)svg+=line([cx,ct],[cx,front],'runway-line');svg+=line([cx,Math.max(ct,front)],[cx,bottom],behind(cx)?'hidden-line':'runway-line');}
-    }else{for(const cx of [c0,c1])svg+=line([cx,columnBreak],[cx,behind(cx)?front:bottom],'reference-line');svg+=breakLine([c0-5,columnBreak],[c1+5,columnBreak]);}
+    }
     if(!bracing)svg+=line([c0,capBottom],[c0,stubEnd],newColumns?'runway-line':'reference-line')+line([c1,capBottom],[c1,stubEnd],newColumns?'runway-line':'reference-line')+breakLine([c0-5,stubEnd],[c1+5,stubEnd]);
     const wb=p.details?.bracket;
     const ws=wb?.enabled?rolledUnderSeat(p):undefined;

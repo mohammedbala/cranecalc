@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { referenceColumns, referenceCrossheads } from '../data/aiscReferenceShapes';
+import type { ProjectInput } from '../engine/types';
 
 // Viewer-only reference dimensions. They travel with the generated drawing but
 // never enter the girder calculation or claim a supporting-building design.
@@ -19,6 +20,14 @@ export const defaultFraming: FramingSettings = {
   shown: true, labels: true, column: 'W14X90', crosshead: 'W12X40', height: 3048,
   full: true, width: 9144, roofClearance: 2438.4, frameStyle: 'tapered', roofSlope: 2,
 };
+/**
+ * Frame style the drawings use. The tapered metal-building frame is an illustrative default for an unsurveyed
+ * building; an entered existing column (a surveyed rolled W section) or a new column is prismatic, so with one the
+ * building columns are drawn at their constant depth and the frame as rolled members.
+ */
+export function drawnFrameStyle(p:Pick<ProjectInput,'existingColumn'>,f:FramingSettings):FramingSettings['frameStyle']{
+  return p.existingColumn?.enabled?'rolled':f.frameStyle;
+}
 export const demonstrationFraming:FramingSettings={...defaultFraming,width:12192};
 export function initialFraming(): FramingSettings {
   try {
