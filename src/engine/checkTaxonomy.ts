@@ -82,6 +82,8 @@ const idRules:Rule[]=[
  T(/^cap-angle-plate-slenderness$/,'detailing'),
  // Design: strength and serviceability, by effect
  D(/^(cap-weld-(strength|metal|rupture)|rail-joint-plate|end-stop-bearing-(base|flange)|cap-development(-full-force)?)$/,'connection'),
+ // Rail clips: the manufacturer's lateral and uplift ratings; the rail anchorage (end stops or anchor clip pair).
+ D(/^(rail-clip-(lateral|uplift)|rail-anchorage)$/,'connection'),
  D(/^(axial|column-axial|brace-tension|brace-rod)$|-(plate-yield|plate-rupture|plate-compression|leg-tension|tension)$/,'axial'),
  D(/^(shear|torsion-shear|column-shear|haunch-shear|haunch-flange-shear)$|-(shear|shear-rupture|web-shear)$/,'shear'),
  D(/^(wheel-yield|wheel-cripple|wheel-web-tr13|sidesway|rail-web|rail-flange-local|haunch-seat-strip|stiffener-lateral-flexure)$/,'local'),

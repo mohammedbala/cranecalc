@@ -105,7 +105,8 @@ export function validateConnectionOptions(p:ProjectInput):string[]{
     const headDepth=top.shimThickness+top.thickness+top.washerThickness+top.boltDiameter*.81;
     add(top.shimThickness+top.leg*.65-top.boltDiameter<headDepth+3.175,'lap bolt hardware must clear the column bolt heads. Increase angle leg size.');
     add(top.columnEnd<=top.edge||top.boltZ-top.holeDiameter/2<=top.edge,'column angle lap bolts must lie outside the girder flange/cap edge.');
-    const clip=clipGeometry(d.rail),railEdge=Math.abs(p.railEccentricity)+clip.outer+clip.weld;
+    // The clip base welds run across the rail at the ends of the base: the clip envelope ends at the base's outer edge.
+    const clip=clipGeometry(d.rail),railEdge=Math.abs(p.railEccentricity)+clip.outer;
     add(top.edge-top.lap<railEdge+6.35,'tie-plate overlap must clear the rail and rail clip/weld envelope. Reduce overlap or use a wider top element.');
     add(top.weldSize>=Math.min(top.plateThickness,p.section.kind==='cap'?p.section.capTw:p.section.tf),'reference flange weld must be smaller than the connected plate thicknesses.');
     add(xs.some(({e,x})=>x-top.width/2-top.weldSize<e.start-1e-6||x+top.width/2+top.weldSize>e.finish+1e-6),'top tie plate and welds must stay within their own girder end.');

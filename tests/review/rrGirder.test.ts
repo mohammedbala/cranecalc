@@ -140,7 +140,7 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
   worked(/^1\.5T_b=1\.5\\times/);// sleeves
   worked(/^\\alpha L\\Delta T\+d\\theta\+t_\{set\}=/);// sliding end travel
   worked(/^t_\{min\}=\\sqrt\{\\frac\{4Tb\^\\prime\}\{\\phi pF_u\}\}=/);// end stop prying
-  worked(/^f_w=\\sqrt\{f_x\^2\+f_y\^2\+f_z\^2\}=/);// rail anchor weld
+  worked(/^f_w=\\frac\{1\}\{2t_el_w\}/);// rail clip base weld
   // The sleeve line reproduces.
   const sl=numbers(line(/^1\.5T_b=1\.5\\times/));near(sl[1]*sl[2],sl[3]);near(sl[4]*sl[5]*sl[6],sl[7]);
   const lh=s.detailResults!.loadHeight!;expect(lh.demand/kipft).toBeGreaterThan(100);expect(ksi).toBeGreaterThan(6);

@@ -22,6 +22,7 @@ function completedProject(){
  base.drawing={originator:'J. Doe',checker:'',datumElevation:100*foot,datumLabel:'Finished floor',railElevation:20*foot};
  const p=startDetailedDesign(base);
  Object.assign(p.details!.rail,{...demo.details!.rail,name:'ASCE 60 lb rail per supplier',padSource:'Pad supplier rating sheet PR-10'});
+ p.details!.rail.clip={...p.details!.rail.clip!,product:'Weld-on floating rail clip, supplier rating sheet RC-10, or equal'};
  p.details!.endStop!.source='Supplier bumper data WL-2026-114';p.details!.criteria.railGauge=demo.details!.criteria.railGauge;
  p.aist={...demo.aist!,netFlangeArea:p.section.bf*p.section.tf,fatigueReference:'AISC Table A-3.1; detail register in package',cycleSource:'Owner duty: 1,000,000 wheel-induced stress fluctuations'};
  return p;

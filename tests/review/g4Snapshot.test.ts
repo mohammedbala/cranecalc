@@ -23,7 +23,8 @@ describe('G4 on the full DEMO-FOCUS-005 calculation',()=>{
   const n=check('construction-notes');expect(n.status).toBe('fail');expect(n.note).toMatch(/snug-tight in sliding slots/);expect(n.note).toMatch(/demonstration tolerances/);
   expect(check('rail-joint-tight').status).toBe('pass');expect(check('rail-expansion-gap').status).toBe('not-applicable');expect(check('rail-joint-slot').status).toBe('not-applicable');
   expect(before.get('rail-expansion-gap')!.status).toBe('pass');
-  const end=check('rail-end-gap');expect(end.demand!/inch).toBeCloseTo(.388,2);expect(before.get('rail-end-gap')!.demand!/inch).toBeCloseTo(.209,2);
+  // Rail clips: the floating string may rest on either stop, so its whole growth reaches one stop gap (was half).
+  const end=check('rail-end-gap');expect(end.demand!/inch).toBeCloseTo(.651,2);expect(before.get('rail-end-gap')!.demand!/inch).toBeCloseTo(.209,2);
   expect(html).toMatch(/Runway clearance test before the load test \(AIST TR-13 §1\.5\.6\.2\)/);expect(html).toMatch(/AWS D1\.1\/D1\.1M:2020 Table 5\.8, Category B, minimum 50 °F/);
   expect(html).toMatch(/100% UT of all CJP groove welds/);expect(html).toMatch(/RUNWAY CLEARANCE TEST/);expect(html).not.toMatch(/D1\.1M 2015:/);
  });

@@ -14,7 +14,7 @@ export const clipNotEntered='TO BE ENTERED:';
  * capacities are placeholders; every rail clip check is unverified until the manufacturer's data are entered.
  */
 export const defaultRailClip:RailClipInput={type:'weld-on',product:`${clipNotEntered} rail clip manufacturer and series (or equal)`,basis:'allowable',
- lateral:4448.2216152605,uplift:4448.2216152605,baseLength:3.75*inch,baseWidth:3*inch,baseThickness:.75*inch,weld:.3125*inch,weldLength:3*inch};
+ lateral:4448.2216152605,uplift:4448.2216152605,baseLength:3.75*inch,baseWidth:2.5*inch,baseThickness:.75*inch,weld:.3125*inch,weldLength:2.5*inch};
 
 /**
  * The rail pad, when the project specifies one (aist.railPad): a continuous strip under the rail base,

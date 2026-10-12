@@ -51,7 +51,7 @@ describe('rail seat: pad and rail clips',()=>{
  });
  it('places the clips against the rail-base toes and fits them on the girder',()=>{
   const p=demonstrationProject(),k=clipGeometry(p.details!.rail,railPad(p)!.thickness);
-  expect(k.toe/inch).toBeCloseTo(3,10);expect(k.inner/inch).toBeCloseTo(3,10);expect(k.outer/inch).toBeCloseTo(6,10);
+  expect(k.toe/inch).toBeCloseTo(3,10);expect(k.inner/inch).toBeCloseTo(3,10);expect(k.outer/inch).toBeCloseTo(5.5,10);
   expect(k.lateralHeight/inch).toBeCloseTo(.125+.375,10);expect(k.noseHeight/inch).toBeCloseTo(.875,10);
   expect(validateProject(p)).toEqual([]);expect(validateProject(cappedDemonstrationProject())).toEqual([]);
   // A clip base too wide for the flange, and a base weld shorter than 4w (J2.2b), are input errors.
@@ -65,9 +65,9 @@ describe('rail seat: pad and rail clips',()=>{
   expect(by('rail-clip-uplift').demand!/kip).toBeCloseTo(2,6);expect(by('rail-clip-uplift').capacity!/kip).toBeCloseTo(5,6);
   // LRFD ratings: the factored 3.2 kip.
   const lrfd=demonstrationProject();lrfd.details!.rail.clip!.basis='LRFD';expect(checks(lrfd).find(v=>v.id==='rail-clip-lateral')!.demand!/kip).toBeCloseTo(3.2,6);
-  // Base welds, 3/8 in x 3 in at each end, 3 in apart... throat stress from the larger role, on phi 0.6 F_EXX.
+  // Base welds, 3/8 in x 2 1/2 in across each end of the base: throat stress from the larger role, on phi 0.6 F_EXX.
   const w=railClipResponse(p,3.2*kip);expect(by('rail-clip-weld').demand).toBeCloseTo(w.weldStress,6);expect(by('rail-clip-weld').capacity).toBeCloseTo(.75*.6*70*6.894757,2);
-  expect(w.A/inch**2).toBeCloseTo(2*.375/Math.SQRT2*3,6);
+  expect(w.A/inch**2).toBeCloseTo(2*.375/Math.SQRT2*2.5,6);
   expect(by('rail-clip-weld-fatigue').group).toBe('Fatigue');expect(by('rail-clip-weld-minimum').capacity!/inch).toBeCloseTo(.375,10);
   for(const v of c.filter(v=>v.id.startsWith('rail-clip')))expect(v.status,v.id).toBe('pass');
   expect(c.find(v=>/keeper|rail-anchor-|rail-flange-local/.test(v.id))).toBeUndefined();
@@ -116,7 +116,7 @@ describe('rail seat: pad and rail clips',()=>{
   for(const t of ['RAIL PAD 1/8" X 6", CONT.:','ALLOWABLE COMPRESSION 1.45 KSI','6 1/8"','T.O.R.','T.O.S.','RAIL CLIP, EACH SIDE (SCHEMATIC):','EACH END OF CLIP BASE (MIN.)'])expect(us).toContain(t);
   expect(all).toContain(`RAIL CLIPS: WELD-ON, PER MANUFACTURER (FICTITIOUS SUPPLIER DATA RC-W6`);
   expect(all).toContain('RATED ≥ 10 KIP LATERAL AND ≥ 5 KIP UPLIFT PER CLIP (ALLOWABLE), IN OPPOSING PAIRS AT 2\'-0" O.C. MAX.');
-  expect(all).toContain('FLOATING; WELD BASE TO GIRDER TOP FLANGE PER MANUFACTURER (MIN. 3/8" FILLET X 3", EACH END OF THE BASE)');
+  expect(all).toContain('FLOATING; WELD BASE TO GIRDER TOP FLANGE PER MANUFACTURER (MIN. 3/8" FILLET X 2 1/2", EACH END OF THE BASE)');
   // The base weld is a field weld; no keeper, lip, notch or anchor-keeper remains.
   expect(svg).toContain('data-weld-location="field"');expect(all).not.toMatch(/KEEPER|NOTCH|\bLIP\b|\bK1\b/);
   expect(all).toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');expect(us).not.toContain('FICTITIOUS RP-01 POLYURETHANE CRANE-RAIL PAD');

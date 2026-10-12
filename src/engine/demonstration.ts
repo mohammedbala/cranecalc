@@ -21,11 +21,13 @@ const lap=():LapConnection=>({rows:2,gauge:3*inch,pitch:3*inch,edge:1.5*inch,thi
 /**
  * Fictitious rail clip supplier data for the demonstrations (marked as such; no real product or rating): a weld-on,
  * floating crane rail clip for a 6 in rail, rated 10 kip lateral and 5 kip uplift per clip on an allowable (working
- * load) basis; base 3 3/4 in along the rail, 3 in across, 3/4 in thick; welded at both ends of the base, 3 in long.
+ * load) basis; base 3 3/4 in along the rail, 2 1/2 in across, 3/4 in thick; welded across both ends of the base. The
+ * light series (RC-W6L, for the 2-ton capped example) is 2 in across, rated 6 kip lateral and 3 kip uplift.
  */
-export function demonstrationClip(weld:number):NonNullable<RunwayDetails['rail']['clip']>{
- return {type:'weld-on',product:'Fictitious supplier data RC-W6: weld-on floating crane rail clip for a 6 in rail, or equal',basis:'allowable',
-  lateral:10*kip,uplift:5*kip,baseLength:3.75*inch,baseWidth:3*inch,baseThickness:.75*inch,weld,weldLength:3*inch};
+export function demonstrationClip(weld:number,light=false):NonNullable<RunwayDetails['rail']['clip']>{
+ const across=(light?2:2.5)*inch;
+ return {type:'weld-on',product:`Fictitious supplier data ${light?'RC-W6L':'RC-W6'}: weld-on floating crane rail clip for a 6 in rail, or equal`,basis:'allowable',
+  lateral:(light?6:10)*kip,uplift:(light?3:5)*kip,baseLength:3.75*inch,baseWidth:across,baseThickness:.75*inch,weld,weldLength:across};
 }
 export function demonstrationDetails():RunwayDetails{return {
  material:{Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi},
@@ -151,7 +153,7 @@ export function cappedDemonstrationProject():ProjectInput {
  // Light crane: the rail bears directly on the cap web, without a pad. Weld-on clips with a 1/4 in base weld (the
  // 0.40 in channel web: Table J2.4 minimum 3/16 in).
  p.aist!.railPad=false;
- p.details!.rail.clip=demonstrationClip(.25*inch);
+ p.details!.rail.clip=demonstrationClip(.25*inch,true);
  p.details!.fabrication.steel='W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50. Fictitious rail specification per R-6 schedule.';
  p.details!.fabrication.welding+=' Cap: continuous fillet each W top-flange edge, size and end development per the cap section and development details. Full cap bearing contact required. Bearing stiffeners CJP to W top flange, bottom fitted.';
  p.notes+=' Separate capped example: 2-ton crane on W24X94 + C15X33.9, centered rail, continuous cap welds and full contact. This is not a substitute section for the 10-ton demonstration.';

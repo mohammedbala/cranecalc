@@ -49,9 +49,9 @@ export function demoFocus005RevB():ProjectInput{
  // Rail attachment to standard practice (AISC DG7; rail clip manufacturers): the welded keeper plates with lips, end
  // fillets, rail-base notches and notched anchor keepers are replaced by proprietary weld-on floating rail clips in
  // opposing pairs at 24 in, fictitious supplier data (rated 10 kip lateral, 5 kip uplift per clip, allowable), base
- // welded to the cap channel with 5/16 in fillets 3 in long at each end; the rail is anchored by the end stops.
+ // welded to the cap channel with 5/16 in fillets 2 1/2 in long across each end; the rail is anchored by the end stops.
  p.details!.rail.clip=demonstrationClip(.3125*inch);
- note('Rail keepers (welded plates with lips, end fillets, notched anchor keepers) replaced by weld-on floating rail clips per manufacturer (fictitious supplier data RC-W6: 10 kip lateral, 5 kip uplift per clip, allowable) in opposing pairs at 24 in, base welded 5/16 in x 3 in each end; rail anchored by the end stops.');
+ note('Rail keepers (welded plates with lips, end fillets, notched anchor keepers) replaced by weld-on floating rail clips per manufacturer (fictitious supplier data RC-W6: 10 kip lateral, 5 kip uplift per clip, allowable) in opposing pairs at 24 in, base welded 5/16 in x 2 1/2 in each end; rail anchored by the end stops.');
  // The 0.005 rad rail rotation limit was not an owner or crane-supplier requirement: removed (TR-13 sets none).
  delete p.details!.criteria.twistLimit;
  p.criteriaSource=p.criteriaSource.replace(/[;,]?\s*twist\s*0\.005\s*rad/i,'');
