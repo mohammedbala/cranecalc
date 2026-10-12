@@ -30,7 +30,7 @@ describe('representative runway package',()=>{
   const props=sectionProperties(p.section),st=girderStrength(p,props),curve=flexureCurves(p,props).positive;
   // Cb from the buckling analysis multiplies the F2-2 / F2-3 moment; the strength never exceeds phi Mcr.
   expect(lh.cb).toBeCloseTo(lh.critical/curve.mcr(p.unbracedLength),9);
-  expect(lh.capacity).toBeCloseTo(Math.min(st.major,.9*lh.cb*st.ltb,.9*lh.critical),3);
+  expect(lh.capacity).toBeCloseTo(Math.min(st.major,.9*lh.cb*st.ltb!,.9*lh.critical),3);
   expect(check.utilization!).toBeGreaterThan(lh.demand/st.major);
   // The Commentary F1 load-height Cb of the same case is recorded for comparison.
   expect(lh.commentary!.factor).toBeLessThan(1);expect(lh.commentary!.gradient).toBeGreaterThanOrEqual(1);

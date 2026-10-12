@@ -325,7 +325,7 @@ const statusText=statusLabel;
   const c=check(id),v=fp[k],S=k==='top'?cmech.Stop:cmech.Sbottom,half=k==='top'?p.section.capWidth/2:p.section.bf/2,f=v.P/prop.A+v.M/S+(v.My+v.thetaM)*half/prop.Iy+v.warping;
   if(!c||!same(f,c.demand))continue;
   steps.push(`\\text{Normal stress, ${label}:}\\ \\ f_{un}=\\frac{P}{A}+\\frac{M_x}{S_{x${k==='top'?'c':'t'}}}+\\frac{(M_y+\\theta M_x)b}{2I_y}+EW_{no}\\theta^{\\prime\\prime}=\\frac{${tx4(v.P,'force')}}{${tx4(prop.A,'area')}}+\\frac{${tx4(v.M,'moment')}}{${tx4(S,'modulus')}}+\\frac{${tx4(v.My+v.thetaM,'moment')}\\times${tx4(2*half,'length')}}{2\\times${tx4(prop.Iy,'inertia')}}+${tx4(v.warping,'stress')}`,
-   `\\quad=${tx4(f,'stress')}\\ \\le\\ \\phi F_y=${tx4(c.capacity!,'stress')}\\quad D/C=${dcText(c.utilization,2)}\\quad(b=${k==='top'?'b_{cap}':'b_f'};\\ W_{no}=${fw?tx4(fw[k],'area'):'—'})`);
+   `\\quad=${tx4(f,'stress')}\\ \\le\\ \\phi F_y=${tx4(c.capacity!,'stress')}\\quad D/C=${dcText(c.utilization,2)}\\quad(b=${k==='top'?'\\text{cap width}':'b_f'};\\ W_{no}=${fw?tx4(fw[k],'area'):'—'})`);
  }
  // The wheel patch on the web (J10.2, J10.3), sidesway web buckling (J10.4) and the fitted bearing stiffeners.
  for(const id of ['wheel-yield','wheel-cripple','sidesway','stiffener-bearing']){const c=s.checks.find(v=>v.id===id);const w=c&&workedSteps(s,c,tx4);if(w)steps.push(`\\text{${c!.title.replace(/[\\{}#%&_$^~]/g,'')}:}`,...w);}

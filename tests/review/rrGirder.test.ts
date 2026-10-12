@@ -38,7 +38,7 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
   const lh=s.detailResults!.loadHeight!,c=check('flexure-load-height'),props=sectionProperties(p.section),st=girderStrength(p,props),curve=flexureCurves(p,props).positive;
   expect(c.capacity).toBeCloseTo(lh.capacity,6);
   expect(lh.mocr).toBeCloseTo(curve.mcr(p.unbracedLength),6);expect(lh.cb).toBeCloseTo(lh.critical/lh.mocr,9);
-  expect(lh.capacity).toBeCloseTo(Math.min(st.major,.9*lh.cb*st.ltb,.9*lh.critical),6);
+  expect(lh.capacity).toBeCloseTo(Math.min(st.major,.9*lh.cb*st.ltb!,.9*lh.critical),6);
   // The reviewer's Commentary F1 bound (D/C about 0.42): the eigenvalue Cb and the Commentary Cb agree within 10 %.
   const cm=lh.commentary!;expect(cm.factor).toBeCloseTo(1.4**(2*cm.y/cm.h),9);
   expect(Math.abs(cm.cb/lh.cb-1)).toBeLessThan(.1);expect(lh.demand/cm.capacity).toBeGreaterThan(.38);expect(lh.demand/cm.capacity).toBeLessThan(.46);

@@ -60,7 +60,7 @@ export function flexureCurves(p:ProjectInput,s:Properties):{positive:FlexureCurv
   const lowerBound=(L:number)=>{const t=nodes(),k=Math.ceil(Math.log(Math.max(L,Lb)/Lb)/Math.log(1.03)-1e-9);return k<t.length?t[Math.max(0,k)].A:available(L);};
   // AISC 360-16 F1 / Commentary F1: Cb = M_cr / M_ocr from an elastic buckling analysis that includes the moment gradient
   // and the load height; it multiplies the F2-2 / F4-2 / F5-3 LTB moment (F2-3 / F4-3 / F5-4: Cb F_cr), capped at 1 here.
-  const phi=p.method==='LRFD'?.9:1/1.67,top=pick(base),ltb=(sign>0?base.ltb:base.ltbReverse??base.ltb),mocr=mcr(Lb);
+  const phi=p.method==='LRFD'?.9:1/1.67,top=pick(base),ltb=(sign>0?base.ltb:'ltbReverse' in base?base.ltbReverse:base.ltb)??Infinity,mocr=mcr(Lb);
   const cb=(M:number)=>Math.max(0,Math.min(1,M/mocr));
   const capacity=(M:number)=>Math.min(top,Number.isFinite(ltb)?phi*cb(M)*ltb:Infinity,phi*M);
   const criticalFor=(target:number)=>Math.max(target/phi,Number.isFinite(ltb)?target/phi/ltb*mocr:0);

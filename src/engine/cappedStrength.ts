@@ -32,15 +32,15 @@ export function cappedStrength(p:ProjectInput,s:Properties,base:GirderStrength):
    const Rpc=R(Myc),Rpt=R(Myt),FL=ratio>=.7?.7*Fy:Math.max(.5*Fy,Fy*ratio),cfy=Rpc*Myc,j=J/(f.Sc*h0);
    const Lp=1.1*rt*root,Lr=1.95*rt*E/FL*Math.sqrt(j+Math.sqrt(j*j+6.76*(FL/E)**2));
    // F4-2 (inelastic) or F4-3 (elastic) with Cb = 1; F4-1 caps it at Rpc Myc.
-   const ltbNominal=Lb<=Lp?Infinity:Lb<=Lr?cfy-(cfy-FL*f.Sc)*(Lb-Lp)/(Lr-Lp):Math.PI**2*E/(Lb/rt)**2*Math.sqrt(1+.078*j*(Lb/rt)**2)*f.Sc;
-   const ltb=Math.min(cfy,ltbNominal);
+   const ltbNominal=Lb<=Lp?undefined:Lb<=Lr?cfy-(cfy-FL*f.Sc)*(Lb-Lp)/(Lr-Lp):Math.PI**2*E/(Lb/rt)**2*Math.sqrt(1+.078*j*(Lb/rt)**2)*f.Sc;
+   const ltb=Math.min(cfy,ltbNominal??Infinity);
    const tfy=f.St>=f.Sc?Infinity:Rpt*Myt;
    return {clause:'F4' as const,web,lambda,lambdaP,lambdaR,hc:f.hc,hp:f.hp,Mp,My,j,rt,Lp,Lr,Rpg:Rpc,Rpt,Sc:f.Sc,Mn:Math.min(cfy,ltb,tfy),ltb:ltbNominal};
   }
   const Lp=1.1*rt*root,Lr=Math.PI*rt*Math.sqrt(E/(.7*Fy));
   const aw=Math.min(10,f.hc*tw/f.A),Rpg=Math.min(1,1-aw/(1200+300*aw)*(f.hc/tw-5.7*root));
   const Fcr=Lb<=Lp?Fy:Lb<=Lr?Fy*(1-.3*(Lb-Lp)/(Lr-Lp)):Math.PI**2*E/(Lb/rt)**2;
-  return {clause:'F5' as const,web,lambda,lambdaP,lambdaR,hc:f.hc,hp:f.hp,Mp,My,j:0,rt,Lp,Lr,Rpg,Rpt:1,Sc:f.Sc,Mn:Math.min(Rpg*Math.min(Fy,Fcr)*f.Sc,Fy*f.St),ltb:Lb<=Lp?Infinity:Rpg*Fcr*f.Sc};
+  return {clause:'F5' as const,web,lambda,lambdaP,lambdaR,hc:f.hc,hp:f.hp,Mp,My,j:0,rt,Lp,Lr,Rpg,Rpt:1,Sc:f.Sc,Mn:Math.min(Rpg*Math.min(Fy,Fcr)*f.Sc,Fy*f.St),ltb:Lb<=Lp?undefined:Rpg*Fcr*f.Sc};
  });
  // Positive (sagging) moment puts the cap and W top flange in compression; negative moment the
  // W bottom flange. Simple spans see only positive moment; continuous runways envelope both signs,
