@@ -16,7 +16,7 @@ import {designsBracing} from '../engine/newColumnBracing';
 import {seatColumnWeld} from '../engine/bracketDesign';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {endBearingGeometry} from '../engine/endBearing';
-import {simpleSupportInput} from '../engine/simpleSupports';
+import {simpleSupportInput,endGridBearingNote} from '../engine/simpleSupports';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {ribGeometry} from '../engine/bracketRib';
 import {haunchedRibView,haunchedFaceRibs,haunchedRibCallout,haunchedRibNotes} from './haunchedBracketDrawing';
@@ -98,7 +98,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   if(g&&eb){
    for(const x of [0,...holesX].sort((a,c)=>a-c))svg+=line([X(x),tip+3],[X(x),tip+12])+text(X(x)+3,tip+14,x?dim(Math.abs(x)):'0',7.5,'end',400,-90);
    svg+=text(left,tip+76,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,7.5);
-   svg+=text(left,tip+86,`AT A RUNWAY-END GRID: ${p.system==='simple'?'ONE BEARING, ITS GIRDER END ON THE GRID':'THE GIRDER END ON THE GRID, ITS BEARING INBOARD'}; HOLES ${dim(g.rows[0])} AND ${dim(g.rows[1])} FROM IT.`,7.5);
+   svg+=text(left,tip+86,p.system==='simple'?endGridBearingNote(p,g.rows,dim):`AT A RUNWAY-END GRID: THE GIRDER END ON THE GRID, ITS BEARING INBOARD; HOLES ${dim(g.rows[0])} AND ${dim(g.rows[1])} FROM IT.`,7.5);
   }
   // Keys: the transverse section between the rib and the outer hole column, the elevation from the runway side.
   const cut=X(g?(b.ribSpacing/2+b.ribThickness/2+g.rows[1]+gap/2)/2:(b.ribSpacing/2+half)/2);

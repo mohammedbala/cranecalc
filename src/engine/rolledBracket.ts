@@ -18,7 +18,8 @@ import {available} from './aiscStrength';
 import {minimumFillet,filletEffectiveSize,compressionResistance,transverseFilletFatigue,plateBearing,boltCapacity} from './connectionStrength';
 import {format} from './units';
 import {rolledStub,isRolledBracket,type RolledStub} from './rolledBracketInputs';
-import {simpleSupportInput} from './simpleSupports';
+import {simpleSupportInput,endGridCentered} from './simpleSupports';
+import {runwayEnds} from './continuation';
 import {activeEndBearing} from './endBearingInputs';
 import {aiscShapeByName} from '../data/aiscSections';
 import {activeColumnStiffeners} from './columnStiffenerInputs';
@@ -41,21 +42,43 @@ export function stubBearing(p:ProjectInput){
 export const stubTop=(st:RolledStub)=>st.d/2+(st.seat?.t??0);
 /**
  * Bolts of the bolted end bearings: |x| from the web plane of every hole (simple spans: girder ends half the gap from
- * a shared grid and on the grid at a runway end; a continuous girder centered on interior grids and ending on the
- * runway-end grids), the two rows from the column face, and the bearing plate extent from the grid.
+ * a shared grid and, at a runway end, on the grid or with the bearing centered on the web (endGridBearing
+ * 'centered'); a continuous girder centered on interior grids and ending on the runway-end grids), the two rows from
+ * the column face, and the bearing plate extent from the grid.
  */
 export function stubBoltLayout(p:ProjectInput,e:EndBearingInput){
  const d=p.details!,b=d.bracket!,L=d.bearing.length,rows=[e.bolts.edge,L-e.bolts.edge];
- const gap=p.system==='simple'?simpleSupportInput(p).endGap:0;
- const xs=p.system==='simple'?[...rows,...rows.map(r=>gap/2+r)]:[...rows,...rows.map(r=>Math.abs(r-L/2))];
- const extent=p.system==='simple'?gap/2+L:L;
- return {inner:Math.min(...xs),outer:Math.max(...xs),xs,rows:[b.reach-e.bolts.gauge/2,b.reach+e.bolts.gauge/2],extent};
+ const gap=p.system==='simple'?simpleSupportInput(p).endGap:0,centered=rows.map(r=>Math.abs(r-L/2));
+ const xs=p.system==='simple'?[...(endGridCentered(p)?centered:rows),...rows.map(r=>gap/2+r)]:[...rows,...centered];
+ return {inner:Math.min(...xs),outer:Math.max(...xs),xs,rows:[b.reach-e.bolts.gauge/2,b.reach+e.bolts.gauge/2],extent:bearingExtent(p)};
 }
-/** Extent of the bearing plates from the grid along the runway (both simple-span ends at a shared grid; one at a runway end). */
+/**
+ * Extent of the bearing plates from the grid along the runway, the larger of a shared grid (both simple-span ends,
+ * half the gap plus the bearing length) and a runway-end grid (the bearing length with the girder end on the grid;
+ * half of it with the bearing centered on the web). A single simple span keeps the shared-grid value unless centered.
+ */
 export function bearingExtent(p:ProjectInput){
- const L=p.details!.bearing.length;return p.system==='simple'?simpleSupportInput(p).endGap/2+L:L;
+ const L=p.details!.bearing.length;
+ if(p.system!=='simple')return L;
+ const shared=simpleSupportInput(p).endGap/2+L;
+ return endGridCentered(p)&&p.spans.length===1&&runwayEnds(p).length===2?L/2:shared;
+}
+/** Extent of the runway-end bearing from the grid: half the bearing length when centered on the web, else its length. */
+export function endGridBearingExtent(p:ProjectInput){
+ const L=p.details!.bearing.length;return endGridCentered(p)?L/2:L;
 }
 
+/**
+ * Fit of a runway-end bearing centered on the support web (endGridBearing 'centered'): half the bearing length plus
+ * the setting tolerance each side of the web, within half the seat length along the runway. None otherwise.
+ */
+export function endGridFitChecks(p:ProjectInput,half:number,seat:string,symbol:string,
+ compared:(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds?:string[])=>CheckResult,referenceIds?:string[]):CheckResult[]{
+ if(!endGridCentered(p)||!runwayEnds(p).length)return [];
+ const f=(v:number)=>format(v,'length',p.units,3),L=p.details!.bearing.length;
+ return [compared('end-bearing-seat-fit-end',`Runway-end bearing centered on the web · fits on ${seat}`,endGridBearingExtent(p)+seatSettingTolerance,half,'length',`L_{bearing}/2+t_{set}\\le ${symbol}`,
+  `End-bay bearings centered on the support web at the runway-end grids: the ${f(L)} bearing and its bolts extend ${f(L/2)} each side of the web, plus the ${f(seatSettingTolerance)} bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in). The girder runs ${f(L/2)} past the grid.`,referenceIds)];
+}
 /** Stub actions at the column face under one concurrent force set. */
 export interface StubActions {
  V:number;Mseat:number;e:number;F:number;H:number;xH:number;top:number;
@@ -372,7 +395,8 @@ export function rolledSeatChecks(p:ProjectInput,e:EndBearingInput,g:{hole:number
   compared('end-bearing-seat-prying',`${plate.name} · thickness for no prying`,tMin(T,bp-db/2,pitch,plate.Fu),plate.t,'length','t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}',`The plate cantilevers b = ${f(bp)} from ${bp===bTip?'the flange tip':bp===bStiff?'the bearing stiffener':'the stub web'}.`),
   compared('end-bearing-stub-edge',`${plate.name} · bolt edge distance`,1.5*db,Math.min(plateEdge,tipEdge,...(seat?[lay.rows[0]-seat.y0]:[]),...(seat&&onFlange.length?[st.bf/2-Math.max(...onFlange)]:[])),'length','e\\ge1.5d_b',`${seat?'Seat':'Flange'} end ${f(plateEdge)} beyond the outermost hole, stub tip ${f(tipEdge)} beyond the outer row${seat?`, seat end ${f(lay.rows[0]-seat.y0)} at the column${onFlange.length?`, flange tip ${f(st.bf/2-Math.max(...onFlange))} beyond the holes through the flange`:''}`:''}.`),
   compared('end-bearing-wrench-stub-column','Nut clearance below the bracket · column face weld',clearance,lay.rows[0]-columnWeld,'length','y_{row}-w\\ge c_{wrench}',`Inner bolt row ${f(lay.rows[0])} from the column face${columnWeld?`, less the ${f(columnWeld)} flange fillet`:''}.`),
-  compared('end-bearing-seat-fit',`Bearings and bolts fit on the ${seat?'spreader seat':'stub flange'}`,bearingExtent(p)+seatSettingTolerance,plate.half,'length',p.system==='simple'?'g/2+L_{bearing}+t_{set}\\le L/2':'L_{bearing}+t_{set}\\le L/2',(p.system==='simple'?'Each girder bearing, and its bolts, on its own half at a shared grid; at a runway-end grid the girder end is on the grid.':'Interior bearings centered on the stub web; at a runway end the girder end is on the grid, the whole bearing on one side.')+' Includes the 1/8 in bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in).')
+  compared('end-bearing-seat-fit',`Bearings and bolts fit on the ${seat?'spreader seat':'stub flange'}`,bearingExtent(p)+seatSettingTolerance,plate.half,'length',p.system==='simple'?'g/2+L_{bearing}+t_{set}\\le L/2':'L_{bearing}+t_{set}\\le L/2',(p.system==='simple'?`Each girder bearing, and its bolts, on its own half at a shared grid; at a runway-end grid ${endGridCentered(p)?'the bearing is centered on the web':'the girder end is on the grid'}.`:'Interior bearings centered on the stub web; at a runway end the girder end is on the grid, the whole bearing on one side.')+' Includes the 1/8 in bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in).'),
+  ...endGridFitChecks(p,plate.half,seat?'the spreader seat':'the stub flange','L/2',compared)
  ];
  if(onFlange.length)checks.push(compared('end-bearing-wrench-stub-web','Nut clearance below the stub flange · web and rolled fillet',clearance,Math.min(...onFlange)-st.k1,'length','|x_{bolt}|-k_1\\ge c_{wrench}',`Innermost hole through the flange ${f(Math.min(...onFlange))} from the web plane (a runway-end grid puts the girder end on the grid); k1 = ${f(st.k1)} to the toe of the design fillet.`));
  if(offFlange.length&&seat)checks.push(compared('end-bearing-wrench-stub-tip','Nut clearance below the seat · flange tip and seat fillet',clearance,Math.min(...offFlange)-st.bf/2-seat.weld,'length','|x_{bolt}|-b_f/2-w\\ge c_{wrench}',`Holes beyond the flange pass through the seat only; the nearest is ${f(Math.min(...offFlange))} from the web plane.`));

@@ -26,6 +26,7 @@ import { connectionTopic } from './connectionSheet';
 import { coverSheetSvg, coverSheetTitle } from './coverSheet';
 import { endStopTopic } from './endStopSheet';
 import { activeEndStop, stopEnds } from '../engine/endStopInputs';
+import { endGridOverhang } from '../engine/simpleSupports';
 import { adjacentBays } from '../engine/continuation';
 import { endStopGeometry } from '../engine/endStop';
 import { existingLayout,type ExistingLayout } from '../engine/existingLayout';
@@ -167,7 +168,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   // Rail and stop geometry in mm from each runway end when girder-mounted stops are designed.
   const stop=activeEndStop(p),stopGeom=stop?endStopGeometry(p,stop):undefined,railEnd=stopGeom?.railEnd??0;
   // Ends with stops stop the rail short; an end continued by an existing bay runs on with dashed existing steel.
-  const ends=stopEnds(p),stopIdx=ends.map(e=>e==='left'?0:1),railInset=(end:'left'|'right')=>ends.includes(end)?railEnd/1000:0;
+  const ends=stopEnds(p),stopIdx=ends.map(e=>e==='left'?0:1),railInset=(end:'left'|'right')=>(ends.includes(end)?railEnd/1000:0)-endGridOverhang(p,end)/1000;
   const adjacent=adjacentBays(p),stub=24;
   const gridSegments:Segment[]=[...m.supports.map(x=>[[x,floor,rows[1]-.9],[x,floor,rows[0]+.9]] as Segment),...rows.map(z=>[[-m.length/2-2.4,floor,z],[m.length/2+.9,floor,z]] as Segment)];
   const isoFit=fit([...m.referenceLines,...m.runwayLines,...gridSegments],([x,y,z])=>[(x-z)*Math.sqrt(3)/2,(x+z)/2-y],gaLayout.iso,p.units),iso=isoFit.project;

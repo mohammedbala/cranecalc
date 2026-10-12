@@ -9,7 +9,7 @@
 import type {ProjectInput} from './types';
 import {haunchGeometry,type HaunchGeometry} from './taperedHaunchInputs';
 import {activeEndBearing} from './endBearingInputs';
-import {simpleSupportInput} from './simpleSupports';
+import {simpleSupportInput,endGridCentered} from './simpleSupports';
 import {boltProperties} from './connectionStrength';
 
 export type XYZ=[number,number,number];
@@ -88,15 +88,17 @@ export function taperedHaunchParts(p:ProjectInput){
  const {L,a,hr,bt,btr}=g,f=g.flare;
  const {plates,welds}=haunchPlatesAndWelds(g,field);
  // Bearing bolt holes through the top flange and the girder bearing plates: an interior grid (both girder ends of
- // simple spans, or a continuous girder's centered bearing) and a runway-end grid (the girder end on the grid).
+ // simple spans, or a continuous girder's centered bearing) and a runway-end grid (the girder end on the grid, or with
+ // endGridBearing 'centered' the bearing centered on the web, the girder running half its length past the grid).
  const e=activeEndBearing(p),Lb=d.bearing.length,W=d.bearing.width,tb=d.bearing.thickness,bolts:HaunchBolt[]=[],bearings:HaunchBearing[]=[];
  const gap=p.system==='simple'?simpleSupportInput(p).endGap:0;
  const interior=p.system==='simple'?[{x0:gap/2,dir:1},{x0:-gap/2,dir:-1}]:[{x0:-Lb/2,dir:1}];
  for(const v of interior)bearings.push({grid:'interior',x0:Math.min(v.x0,v.x0+v.dir*Lb),x1:Math.max(v.x0,v.x0+v.dir*Lb),y0:a-W/2,y1:a+W/2,thickness:tb});
- bearings.push({grid:'runway-end',x0:0,x1:Lb,y0:a-W/2,y1:a+W/2,thickness:tb});
+ const end0=endGridCentered(p)?-Lb/2:0;
+ bearings.push({grid:'runway-end',x0:end0,x1:end0+Lb,y0:a-W/2,y1:a+W/2,thickness:tb});
  if(e){const rows=[e.bolts.edge,Lb-e.bolts.edge],ys=[a-e.bolts.gauge/2,a+e.bolts.gauge/2],hole=boltProperties(e.bolts.grade,e.bolts.diameter).hole;
   for(const v of interior)for(const r of rows)for(const y of ys)bolts.push({grid:'interior',x:v.x0+v.dir*r,y,diameter:e.bolts.diameter,hole});
-  for(const r of rows)for(const y of ys)bolts.push({grid:'runway-end',x:r,y,diameter:e.bolts.diameter,hole});}
+  for(const r of rows)for(const y of ys)bolts.push({grid:'runway-end',x:end0+r,y,diameter:e.bolts.diameter,hole});}
  return {geometry:g,plates,welds,bolts,bearings,
   /** Key dimensions: projection, reach (girder web line), root and tip depth, slope, top flange flare. */
   dims:{L,reach:a,rootDepth:hr,tipDepth:g.ht,slopeDegrees:g.degrees,flare:f?{start:f.y0,end:f.y1,radius:f.radius,rootWidth:btr,seatWidth:bt}:undefined}};

@@ -36,7 +36,9 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  const criticalStations=[...stations];
  if(p.details){
   criticalStations.push(...p.details.fatigueDetails.map(f=>f.x));
-  criticalStations.push(...railKeeperStations(p),...girderSegments(p).flatMap(m=>[m.start,m.end]));
+  // A girder end or keeper past a runway-end grid (bearing centered on the support web) is outside the spans: the
+  // model samples the grids, where that overhang meets the span.
+  criticalStations.push(...[...railKeeperStations(p),...girderSegments(p).flatMap(m=>[m.start,m.end])].map(x=>Math.min(L,Math.max(0,x))));
  }
  const samples=[...new Set([...v0.x,...t0.x,...b0.x])].sort((a,b)=>a-b);
  const supportNodes=v0.x.flatMap((x,i)=>stations.some(s=>Math.abs(s-x)<1e-6)?[i]:[]);

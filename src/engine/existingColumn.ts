@@ -110,7 +110,8 @@ export interface ExistingColumnResult {
  capacity:{Pc:number;Pt:number;Mcx:number;Mcy:number;Vc:number;flexure:string;webCompact:boolean};
  combinations:ExistingColumnCombination[];governing:Record<'P'|'Mx'|'My'|'V'|'U',ExistingColumnCombination>;
  /** Governing H1 ratio at every support; the result above is for the worst. */
- bySupport:{x:number;U:number}[];
+ /** Governing H1 ratio at each support, the weak-axis moment there, and H1 with the torsion warping stress where the column twists. */
+ bySupport:{x:number;U:number;My?:number;Ut?:number}[];
  drift:{value:number;limit:number};
  /** Braced new columns: the largest H1 ratio with the warping stress from the eccentric longitudinal force, and the flange shear. */
  torsion?:{U:number;shear:number;shearCapacity:number;T:number;stress:number;a:number;offset:number;station:number;case:ExistingColumnCombination};
@@ -289,7 +290,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
    gauge:{crane:gc,...(spread?{frame:spread.value,snowFactor:spread.factor}:{}),total:gc+(spread?.value??0)},combinations:{asce:asceCombinations(p.method).length,tr13:tr13.length,bumper:Math.max(...all.map(v=>v.counts.bumper))}};
  }
  const {gaugeCrane:_g,seatGov:_s,girderTop:_t,counts:_c,...governingSupport}=worst;
- return {source,eccentricity:e,railElevation:ht,capacity,...governingSupport,bySupport:all.map(v=>({x:v.station,U:v.governing.U.U})),torsion,support};
+ return {source,eccentricity:e,railElevation:ht,capacity,...governingSupport,bySupport:all.map(v=>{const t=v.combinations.filter(k=>k.Ut!==undefined);return {x:v.station,U:v.governing.U.U,My:Math.abs(v.governing.My.My),...(t.length?{Ut:Math.max(...t.map(k=>k.Ut!))}:{})};}),torsion,support};
 }
 
 export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):CheckResult[]{
