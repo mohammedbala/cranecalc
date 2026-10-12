@@ -86,7 +86,7 @@ const idRules:Rule[]=[
  D(/-(web-yielding|web-crippling|column-yield-top|column-yield-bottom|column-crippling|column-sidesway|column-flange|column-panel|channel-flange|leg-prying|endplate-prying|web|base-prying|flange-prying|seat-prying)$/,'local'),
  D(/^(stiffener-column|stiffener-bearing)$|-stiffener-(column|bearing)$|-colstiff-(upper|lower)$/,'local'),
  D(/^(brace-member|brace-stiffness|torsion-stability|flexure-load-height|end-stop-girder|end-stop-uplift)$/,'stability'),
- D(/^(major|minor|combined|torsion-normal|column-flexure|column-flexure-y|column-interaction|column-torsion|rail-flexure|bearing-plate|cap-angle-heel|building-seismic-alteration)$/,'flexure'),
+ D(/^(major|minor|combined|combined-bottom|torsion-normal|torsion-normal-bottom|column-flexure|column-flexure-y|column-interaction|column-torsion|rail-flexure|bearing-plate|cap-angle-heel|building-seismic-alteration)$/,'flexure'),
  D(/-(flexure|interaction|combined|bottom-flange|top-flange|top-flange-net|face|face-outstand|bending|heel)$/,'flexure'),
  D(/(weld|cjp|-web-base|slip|bolts?|bolt-shear|bolt-tension|bearing|block|-net|sleeve|anchor-bearing|hold-down-model|-uplift|locating-[a-z]+|sliding|cap-development|col-bolt|cap-bolt|shim-bearing)$/,'connection'),
 ];
@@ -235,16 +235,16 @@ export function registerFamily(s:CalculationSnapshot,id:string){
 const fatigueDetailKey=(id:string)=>id.replace(/^(haunch|wbracket|bracket)-fatigue-(top|bottom)-flange$/,'$1-fatigue-flanges');
 const fatigueDetailTitle:Record<string,string>={'haunch-fatigue-flanges':'Haunch flanges at the column welds (top and bottom)'};
 const familyTitle=(name:string)=>name.replace(/\s+\d+\b/,'').replace(/,\s*bay \d+.*?(?=·|$)/,'').replace(/\s*·\s*(left|right|channel flange (left|right))\b/,'').replace(/\s*·\s*all-cycle bound$/,'').replace(/\s+(front|back) row/,'').trim();
-interface MergeDef{key:string;title:string;re:RegExp;prefer?:RegExp;effect?:Effect}
+interface MergeDef{key:string;title:string;re:RegExp;prefer?:RegExp;effect?:Effect;/** Always shown in the body, governing or not (the member's flexural strength). */always?:boolean}
 /**
  * Redundant checks reported as one line, the controlling limit state named: one combined-action check and one LTB
  * check per member, one line per bolt group, stiffener set and weld group, one line for the rail joint.
  */
 export const mergeDefs:MergeDef[]=[
- {key:'girder-combined',title:'Combined axial, major and flange lateral flexure (AISC H1 with the DG7 flange lateral moment)',re:/^(combined|minor|torsion-normal)$/,prefer:/^combined$/},
- {key:'girder-ltb',effect:'flexure',title:'Major flexure and lateral-torsional buckling (load height)',re:/^(major|flexure-load-height|torsion-stability)$/,prefer:/^flexure-load-height$/},
+ {key:'girder-combined',title:'Combined actions at each flange: AISC H1 with the DG7 flange lateral moment, and normal stress with warping (top and bottom flange)',re:/^(combined|combined-bottom|minor|torsion-normal|torsion-normal-bottom)$/},
+ {key:'girder-ltb',effect:'flexure',title:'Major flexure and lateral-torsional buckling with load height (AISC F2 / F4, Cb from the elastic buckling analysis)',re:/^(major|flexure-load-height|torsion-stability)$/,prefer:/^flexure-load-height$/,always:true},
  {key:'girder-shear',title:'Web shear including Saint-Venant and warping shear',re:/^(shear|torsion-shear)$/,prefer:/^shear$/},
- {key:'wheel-local',title:'Web local yielding and crippling under the wheel',re:/^(wheel-yield|wheel-cripple|wheel-web-tr13)$/},
+ {key:'wheel-local',title:'Web local yielding and crippling under the wheel (TR-13 §5.8.6 bearing length, J10.2, J10.3)',re:/^(wheel-yield|wheel-cripple|wheel-web-tr13)$/},
  {key:'girder-stiffeners',effect:'local',title:'Girder bearing stiffeners (column buckling, fitted bearing, welds)',re:/^(stiffener-column|stiffener-bearing|stiffener-weld|stiffener-combined-weld|stiffener-lateral-flexure)$/},
  {key:'bearing-plate',title:'Bearing plate and contact',re:/^(bearing-plate|bearing-contact|hold-down-model)$/},
  {key:'end-bearing-bolts',effect:'connection',title:'End bearing bolt group (slip, shear, tension, bearing/tearout)',re:/^end-bearing-(locating-slip|locating-shear|locating-tension|flange-bearing|plate-bearing|seat-bearing|sliding)$/},
@@ -363,7 +363,7 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
   const v=bodyLines.filter(l=>l.element===e.key);if(!v.length&&!evaluatedFatigue.some(r=>r.element===e.key))continue;
   const sel=new Set<BodyLine>();
   for(const eff of new Set(v.map(l=>bodyEffect(l.effect)))){const w=v.filter(l=>bodyEffect(l.effect)===eff);sel.add(w.reduce((a,b)=>rank(b)>rank(a)?b:a,w[0]));}
-  for(const l of v)if(dcOf(l.controlling)>=.5||l.also.length||l.controlling.status==='fail')sel.add(l);
+  for(const l of v)if(dcOf(l.controlling)>=.5||l.also.length||l.controlling.status==='fail'||mergeDefs.some(m=>m.always&&l.key===`${m.key}@${l.element}`))sel.add(l);
   const list=v.filter(l=>sel.has(l)),rest=v.filter(l=>!sel.has(l)),restChecks=rest.flatMap(l=>l.members);
   shown.push(...list);
   elements.push({key:e.key,label:e.label,step:e.step,shown:list,others:{count:restChecks.length,max:restChecks.length?Math.max(...restChecks.map(dcOf)):undefined}});

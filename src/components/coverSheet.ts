@@ -6,7 +6,7 @@ import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot,Crane,ProjectInput} from '../engine/types';
 import {weldingBasisLabel,weldsToExistingColumn} from '../engine/existingWelding';
 import {format} from '../engine/units';
-import {craneDesignMinimum,craneCombinations} from '../engine/aistLoads';
+import {craneDesignMinimum,craneCombinations,combinationLabel,combinationOmissions} from '../engine/aistLoads';
 import {deflectionCriteria} from '../engine/aistChecks';
 import {buildingClassBasis} from '../engine/buildingClass';
 import {runwayElevations,issueStatus,revisionIdentity,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
@@ -236,10 +236,11 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  ],[1.4,2.6]));
  const r=s.supportReactions;
  // The combinations the runway girder is designed for, as the calculation applies them.
- const combos=craneCombinations(p.method,p.aist?.concurrency==='full'),plain=(v:string)=>v.replace(/C_\{([^}]*)\}/g,'C$1').replace(/C_([a-z]+)/g,'C$1');
+ // The combinations as the calculation lists them: TR-13 case labels, without the cases that equal or are bounded by another.
+ const omitted=combinationOmissions(p.method),combos=craneCombinations(p.method,p.aist?.concurrency==='full').filter(c=>!omitted.some(o=>o.id===c.id)),plain=(v:string)=>v.replace(/C_\{([^}]*)\}/g,'C$1').replace(/C_([a-z]+)/g,'C$1');
  // The table keeps with its key below it.
- blocks.push(H(`LOAD COMBINATIONS · RUNWAY GIRDER (${p.method})`),{...T(['NO.','COMBINATION','NO.','COMBINATION'],Array.from({length:Math.ceil(combos.length/2)},(_,i)=>{const a=combos[i],b=combos[i+Math.ceil(combos.length/2)];return [a.id,plain(a.equation),b?.id??'',b?plain(b.equation):''];}),[.45,1.55,.45,1.55]),keep:true},
-  P(`AIST TECHNICAL REPORT 13 WITH ASCE 7 §2.${p.method==='LRFD'?'3':'4'}. Cd CRANE DEAD, Cv VERTICAL, Css SIDE THRUST, Cls LONGITUDINAL, Ci IMPACT, Cbs BUMPER; SUFFIX m MULTIPLE CRANES, s ONE CRANE, min MINIMUM LIFTED LOAD. D DEAD, L LIVE.${p.aist?.concurrency==='full'?' C1: ALL CRANE LOADS CONCURRENT AS L.':''}`));
+ blocks.push(H(`LOAD COMBINATIONS · RUNWAY GIRDER (${p.method})`),{...T(['NO.','COMBINATION','NO.','COMBINATION'],Array.from({length:Math.ceil(combos.length/2)},(_,i)=>{const a=combos[i],b=combos[i+Math.ceil(combos.length/2)];return [combinationLabel(a.id),plain(a.equation),b?combinationLabel(b.id):'',b?plain(b.equation):''];}),[.45,1.55,.45,1.55]),keep:true},
+  P(`AIST TECHNICAL REPORT 13 WITH ASCE 7 §2.${p.method==='LRFD'?'3':'4'}. Cd CRANE DEAD, Cv VERTICAL, Css SIDE THRUST, Cls LONGITUDINAL, Ci IMPACT, Cbs BUMPER; SUFFIX m MULTIPLE CRANES, s ONE CRANE, min MINIMUM LIFTED LOAD. D DEAD, L LIVE. IMPACT AND SIDE THRUST ARE IN SEPARATE COMBINATIONS (${p.method==='LRFD'?'2b AND 2c':'2a AND 2b'}; AISC DG7 3RD ED. WITH ERRATA 2/16/2023). ALSO EVALUATED: ${omitted.map(o=>combinationLabel(o.id)).join(', ')} (EQUAL TO OR BOUNDED BY THE CASES LISTED).${p.aist?.concurrency==='full'?' C1: ALL CRANE LOADS CONCURRENT AS L.':''}`));
  if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, PER SUPPORT'),T(['STATION','D','Cd','Cv','Ci','Css','Cls·e/L'],r.supports.map(v=>[len(v.x),f(v.D),f(v.Cd),f(v.Cv),f(v.Ci),f(v.Css),'±'+f(v.Clv)]),[1.25,1,1,1,1,1,1.05]),P(`Cd CRANE EMPTY, Cv LIFTED, Ci IMPACT${p.cranes.length>1?' (ALL CRANES, ANY ARRANGEMENT)':''}, Css SIDE THRUST AT RAIL HEAD (ONE CRANE). RUNWAY LONGITUDINAL FORCE Cls = ${f(r.Cls)} AT THE RAIL HEAD; Cls·e/L IS ITS END COUPLE AT THE BEARINGS OF THE BAY THAT CARRIES IT. ALL CRANE COMPONENTS ARE LIVE LOAD L (ASCE 7 §4.9).${adjacentBays(p).map(b=>` AT ${len(b.station)} THE REACTIONS INCLUDE THE EXISTING ADJACENT ${len(b.length)} BAY (SAME GIRDER, RAIL AND DEAD LOAD ASSUMED).`).join('')} FACTORED: ${bracketForcesAt(s,'cover')}.`));
  // Without bracket or support details the cover carries the factored bracket design forces.
  if(d&&s.detailResults&&!bracketForceTopic(s))blocks.push(...bracketForceBlocks(s,t));

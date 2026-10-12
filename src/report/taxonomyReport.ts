@@ -113,9 +113,11 @@ export function inputsTable(tax:Taxonomy,units:Units){
 }
 /** Supplied load against the code minimum, with the value that governs. */
 export function loadBasisTable(tax:Taxonomy,units:Units){
- const v=[...tax.entries.values()].filter(t=>t.type==='load-basis');if(!v.length)return '';
+ // Rows that compare something (demand = code minimum, capacity = value used); 1.00 / 1.00 inclusion records are left out.
+ const v=[...tax.entries.values()].filter(t=>t.type==='load-basis'&&!(q(t.check)==='ratio'&&t.check.demand===1&&t.check.capacity===1));if(!v.length)return '';
  return `<h3>Load basis: supplied value against the code minimum</h3><table class="load-basis"><colgroup><col style="width:30%"/><col style="width:14%"/><col style="width:14%"/><col style="width:14%"/><col style="width:28%"/></colgroup><thead><tr><th>Load</th><th>Supplied / used</th><th>Code minimum</th><th>Governs</th><th>Basis</th></tr></thead><tbody>${v.map(t=>{const c=t.check,has=c.demand!==undefined&&c.capacity!==undefined;
-  const gov=!has?'—':c.demand!>=c.capacity!-1e-9?'Supplied / used':'Code minimum';
+  // The value used is the greater of the two: when it exceeds the code minimum the supplier value governs.
+  const gov=!has?'—':c.capacity!>c.demand!+1e-9*Math.max(1,Math.abs(c.demand!))?'Supplier':'Code minimum';
   return `<tr><td><b>${esc(c.title)}</b></td><td class="num">${has?value(c.capacity,q(c),units):'—'}</td><td class="num">${has?value(c.demand,q(c),units):'—'}</td><td>${esc(gov)}</td><td>${esc(shortReference(c))}</td></tr>`;}).join('')}</tbody></table>`;
 }
 /** Section and element classification, feeding the strength checks (not checks themselves). */

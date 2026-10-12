@@ -87,6 +87,7 @@ export const references:ReferenceRecord[] = [
  aist('tr13-detail','§5.9.2 brackets; §5.13 minimum thickness; §5.14 bolted connections; §5.16 crane rails; §5.16.1 rail joints; §5.7 fatigue','Bracket support below 50 kip, minimum thickness, cyclic slip-critical bolts, paired rail clips and pad spacing.'),
  steel('aisc-b','B4.1 · Tables B4.1a/b','Compactness and clear web depth.'),
  steel('aisc-e','E3, E4, E7 · Appendix 8.2','Axial buckling, effective plate widths, conservative B1 amplification.'),
+ steel('aisc-f4','F1 (Cb, F1-1); F4.1–F4.4 (F4-1, F4-2, F4-3, F4-5, F4-6, F4-9a, F4-15); Commentary F1 (load height, Cb·1.4^(2y/h))','Singly symmetric I-shaped members with a compact or noncompact web: compression flange yielding, lateral-torsional buckling with Cb, tension flange yielding. A rational elastic critical moment from a buckling analysis enters as Cb = Mcr/Mocr; the Commentary F1 load-height modification of Cb is the comparison.'),
  steel('aisc-f2','F1/F2 · F2-1–F2-8','Compact doubly symmetric I-section yielding/LTB; phi=0.90, Omega=1.67, Cb=1.0. Cap/noncompact girders remain outside implemented branch.'),
  steel('aisc-f6','F6 · F6-1–F6-4','Minor-axis strength; DG7 flange-only rail force-couple resistance.'),
  steel('aisc-f13','F13.1 · F13-1; B4.3','Tension flange net-section rupture; actual minimum net flange area across both flanges, not illustrative viewer holes.'),

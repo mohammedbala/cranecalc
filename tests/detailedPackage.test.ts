@@ -24,13 +24,16 @@ describe('representative runway package',()=>{
   expect(snapshot.detailResults!.fatigue.length).toBeGreaterThan(20);
   expect(snapshot.detailResults!.travelChange).toBeLessThan(.01);expect(snapshot.detailResults!.meshChange).toBeLessThan(.01);
  });
- it('reduces F2 flexure for wheels at the rail head through the equivalent unbraced length',()=>{
+ it('reduces F2 flexure for wheels at the rail head through Cb = Mcr/Mocr (AISC F1, Commentary F1)',()=>{
   const lh=snapshot.detailResults!.loadHeight!,p=snapshot.input,check=snapshot.checks.find(c=>c.id==='flexure-load-height')!;
-  expect(lh.length).toBeGreaterThan(p.unbracedLength);expect(check.status).toBe('pass');
-  const props=sectionProperties(p.section);
-  expect(lh.capacity).toBeCloseTo(girderStrength({...p,unbracedLength:lh.length},props).major,3);
-  expect(check.utilization!).toBeGreaterThan(lh.demand/girderStrength(p,props).major);
-  expect(flexureCurves(p,props).positive.length(lh.critical)).toBeCloseTo(lh.length,6);
+  expect(check.status).toBe('pass');expect(lh.cb).toBeLessThan(1);
+  const props=sectionProperties(p.section),st=girderStrength(p,props),curve=flexureCurves(p,props).positive;
+  // Cb from the buckling analysis multiplies the F2-2 / F2-3 moment; the strength never exceeds phi Mcr.
+  expect(lh.cb).toBeCloseTo(lh.critical/curve.mcr(p.unbracedLength),9);
+  expect(lh.capacity).toBeCloseTo(Math.min(st.major,.9*lh.cb*st.ltb!,.9*lh.critical),3);
+  expect(check.utilization!).toBeGreaterThan(lh.demand/st.major);
+  // The Commentary F1 load-height Cb of the same case is recorded for comparison.
+  expect(lh.commentary!.factor).toBeLessThan(1);expect(lh.commentary!.gradient).toBeGreaterThanOrEqual(1);
  });
  it('retains true fatigue-cycle and root-weld behavior without an endurance loophole',()=>{
   expect(fatigueSpectrumBin('C',10,1e6).damage).toBeGreaterThan(0);

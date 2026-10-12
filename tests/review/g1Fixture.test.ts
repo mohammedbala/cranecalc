@@ -45,7 +45,10 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
    'haunch-colstiff-length','haunch-colstiff-web-shear','end-stop-bolt-tension','end-stop-slip','end-stop-base-prying','end-stop-flange-prying','end-stop-stiffener-fit','end-stop-web',
    'rail-keeper-weld','rail-keeper-fatigue','rail-flange-local',
    // Peer review m6: AISC 360-16 Table J2.4 minimum fillet by the thinner part joined (was the thicker part).
-   'haunch-stiffener-weld-minimum','haunch-flange-web-weld-minimum','haunch-web-weld-minimum','cap-angle-endplate-weld-min','stiffener-weld-minimum']),keeperDetail=/^detail-(fatigue|full-cycle)-RC\d+-(left|right)$/;
+   'haunch-stiffener-weld-minimum','haunch-flange-web-weld-minimum','haunch-web-weld-minimum','cap-angle-endplate-weld-min','stiffener-weld-minimum',
+   // Peer review group B: load-height LTB as Cb = Mcr/Mocr (M2), H1 and the normal stress at each flange with that M_cx (m11),
+   // one web yielding check over the TR-13 length and J10.3 / J10.4 corrections (m10); the peak stress takes the larger flange.
+   'wheel-web-tr13','torsion-normal','fatigue-peak-detailed','sidesway','end-stop-girder']),keeperDetail=/^detail-(fatigue|full-cycle)-RC\d+-(left|right)$/;
   for(const b of demoFocus005Before().checks){if(changed.has(b.id)||keeperDetail.test(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
  });
 });

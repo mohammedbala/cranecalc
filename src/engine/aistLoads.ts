@@ -30,6 +30,34 @@ export function craneDesignMinimum(c:Crane){
  return {aist,asce,share,impact:Math.max(aist.impact,asce.impact),totalSide,runwaySide:totalSide*share,traction:Math.max(aist.traction,asce.longitudinal)};
 }
 export interface CraneCombination {id:string;equation:string;d:number;cd:number;cv:number;h:number;l:number;i:number;live:number;bumper:number;single?:boolean;minimumLift?:boolean;}
+/** The printed name of a crane combination id: 6/7 → 6 and 7, 10-T → 10 (traction), 10-B → 10 (bumper). */
+export function combinationLabel(id:string){
+ return id.replace(/^(\d+)-T$/,'$1 (traction)').replace(/^(\d+)-B$/,'$1 (bumper)').replace(/^6\/7$/,'6 and 7');
+}
+/**
+ * Traceability of each crane combination: the AIST TR-13 §3.10 case it is (AISC DG7 3rd ed. gives the same LRFD cases,
+ * 2b on p. 55 and 2c on p. 56 as corrected by the DG7 errata of February 16, 2023) and the ASCE 7-16 combination it
+ * is built on. Case numbers as transcribed from the TR-13 2020 committee draft (UNVERIFIED against the printed edition).
+ * TR-13 numbers the cases after the ASCE 7 combinations they extend (1a, 2a-2c, 3a, 4a, 7a) and adds the crane cases.
+ */
+export function combinationBasis(method:ProjectInput['method'],id:string):{tr13:string;asce:string}{
+ const lrfd:Record<string,string>={'1':'§2.3.1 (1)','1a':'§2.3.1 (1)','2':'§2.3.1 (2)','2a':'§2.3.1 (2)','2b':'§2.3.1 (2)','2c':'§2.3.1 (2)','3a':'§2.3.1 (3)','4a':'§2.3.1 (4)',
+  '6/7':'§2.3.1 (5), §2.3.6 (7)','7a':'§2.3.1 (5), §2.3.6 (7)','8':'crane stop, 1.2D','9':'crane case, 0.9D','10-T':'crane case, 0.9D','10-B':'crane stop, 0.9D','C1':'§2.3.1 (2)','5a':'§2.3.6 (6)'};
+ const asd:Record<string,string>={'1':'§2.4.1 (1)','1a':'§2.4.1 (1)','2':'§2.4.1 (2)','2a':'§2.4.1 (2)','2b':'§2.4.1 (2)','4a':'§2.4.1 (4)','4b':'§2.4.1 (4)','5a':'§2.4.1 (1)','6a1':'§2.4.1 (6)',
+  '7':'§2.4.1 (7)','8':'§2.4.1 (7)','9':'crane stop, 1.0D','10':'crane case, 0.6D','11-T':'crane case, 0.6D','11-B':'crane stop, 0.6D','C1':'§2.4.1 (2)'};
+ return {tr13:id==='C1'?'—':combinationLabel(id),asce:(method==='LRFD'?lrfd:asd)[id]??'—'};
+}
+/**
+ * Combinations evaluated but not listed in the report: in the runway-only projection (no roof live, snow, rain, wind or
+ * seismic load on the girder) they equal another case with no crane on the runway, or are bounded by one. Every crane
+ * state, including no crane, is evaluated in each combination, so dropping them from the print loses nothing.
+ */
+export function combinationOmissions(method:ProjectInput['method']):{id:string;reason:string}[]{
+ return method==='LRFD'?[{id:'1',reason:'1a with no crane on the runway'},{id:'2',reason:'2a with no crane on the runway'},{id:'6/7',reason:'7a with no crane on the runway'},
+  {id:'3a',reason:'bounded by 2a (1.0L ≤ 1.6L; no roof live, snow or rain load on the girder)'},{id:'4a',reason:'bounded by 2a (no wind on the girder; 2a adds the side thrust and traction)'}]
+  :[{id:'1',reason:'1a with no crane on the runway'},{id:'2',reason:'2a with no crane on the runway'},{id:'5a',reason:'equal to 1a'},{id:'7',reason:'8 with no crane on the runway'},
+  {id:'6a1',reason:'bounded by 4a (4a adds the side thrust and traction)'}];
+}
 // TR13 February 24, 2020 ballot draft §§3.10.2.1/2.2. These are the
 // runway-only projections: roof, wind, seismic, fluid, soil and thermal loads
 // require a separate building/load-path design. L is the entered runway UDL.

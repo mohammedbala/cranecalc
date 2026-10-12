@@ -187,8 +187,16 @@ export function governing(checks:CheckResult[]){
  return checks.reduce((a,b)=>rank(b)>rank(a)?b:a,checks[0]);
 }
 /** The equation cell: the check's equation inline, or what an equation-free check rests on. */
+/** A long equation broken at its top-level ";\\quad" separators, one line each, so it stays inside the table column. */
+export function equationLines(tex:string){
+ if(tex.length<70||/\\begin\{/.test(tex))return [tex];
+ const out:string[]=[];let depth=0,last=0;
+ for(let i=0;i<tex.length;i++){const ch=tex[i];if(ch==='{')depth++;else if(ch==='}')depth--;
+  else if(depth===0&&tex.startsWith(';\\quad',i)){out.push(tex.slice(last,i));last=i+6;i+=5;}}
+ out.push(tex.slice(last));return out.map(v=>v.trim()).filter(Boolean);
+}
 export function equationCell(c:CheckResult){
- if(c.equation){const t=termsFor(c);return inlineMath(c.equation)+(t.length?`<small class="where">where ${t.map(([s,m])=>`${inlineMath(s)} ${esc(m)}`).join('; ')}</small>`:'');}
+ if(c.equation){const t=termsFor(c);return equationLines(c.equation).map(inlineMath).join('<br/>')+(t.length?`<small class="where">where ${t.map(([s,m])=>`${inlineMath(s)} ${esc(m)}`).join('; ')}</small>`:'');}
  return `<i>${c.status==='excluded'?'Outside this calculation':c.status==='not-applicable'?'Not applicable':'Recorded input'}: ${subscripts(esc(tidyNumbers(firstSentence(c.note))))}</i>`;
 }
 export interface CheckTableContext{units:ProjectInput['units'];rendered:Set<string>}
