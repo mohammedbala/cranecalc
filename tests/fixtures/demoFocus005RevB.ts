@@ -36,6 +36,9 @@ export function demoFocus005RevB():ProjectInput{
  note('Rail joints entered as tight joints, 1/16 in maximum gap.');
  // D31 (section E) · haunch top flange widened for the 1/8 in bearing setting tolerance; cap-angle end plate taller.
  p.details!.bracket!.haunch!.topWidth=25.5*inch;
+ // E35 · end-bay bearings centered on the haunch web at the runway-end grids (girder runs 6 in past the grid).
+ p.details!.simpleSupport!.endGridBearing='centered';
+ note('End-bay bearings centered on the haunch web at grids 1 and 6 (seat moment there 27.9 → 10.5 kip-ft).');
  p.details!.brace!.capAngle!.endPlate.height=5.5*inch;
  note('Haunch top flange 25 in → 25-1/2 in; cap-angle end plate 5-1/4 in → 5-1/2 in high.');
  // Building evaluation data that are not available (frame type, frame service displacements, site seismic, IEBC
