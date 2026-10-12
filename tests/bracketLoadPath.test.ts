@@ -133,7 +133,9 @@ describe('bracket seat to column flange',()=>{
   c.observe('strength','gravity',0,[{vertical:60000,offset:0}],-1,{longitudinal:18000,bottom:2000,offset:0});
   let checks=bracketChecks(p,c.result);
   const get=(id:string)=>checks.find(v=>v.id==='bracket-'+id)!;
-  for(const id of ['column-weld','column-weld-minimum','seat-flange','seat-web','fatigue-columnWeld'])expect(get(id).status,id).toBe('pass');
+  for(const id of ['column-weld','column-weld-minimum','fatigue-columnWeld'])expect(get(id).status,id).toBe('pass');
+  // The demonstration's column stiffeners carry the seat-level force (C2): J10.1 and J10.2 under the seat are for information.
+  for(const id of ['seat-flange','seat-web']){expect(get(id).status,id).toBe('not-applicable');expect(get(id).note,id).toMatch(/^Unstiffened J10\.\d for information, not governing \(the column is stiffened at this level\): R_u = .* D\/C 0\.\d\d\./);}
   expect(get('column-weld').caseId).toBe('gravity');expect(get('load-path').note).toContain('top fillet across the flange');
   // A force the minimum fillet cannot carry selects a larger one.
   c.observe('strength','stop',0,[{vertical:60000,offset:0}],-1,{longitudinal:900000,bottom:0,offset:0});

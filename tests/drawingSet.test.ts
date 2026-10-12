@@ -219,7 +219,9 @@ describe('welded bracket, new-column and bracing details',()=>{
    const notes=texts(view(sheet,'bracket-notes')).join(' ');
    expect(notes).not.toContain('GRAVITY BEARINGS ONLY');expect(notes).not.toContain('SEPARATE COLUMN LOAD PATHS');
    expect(notes).toContain('H TOP DOES NOT ENTER THE BRACKET');expect(notes).toContain('AS ONE WELD GROUP WITH THE CONCURRENT VERTICAL LOAD');
-   for(const id of ['bracket-column-weld','bracket-seat-flange','bracket-seat-web','bracket-fatigue-columnWeld'])expect(s.checks.find(c=>c.id===id)?.status,id).toBe('pass');
+   for(const id of ['bracket-column-weld','bracket-fatigue-columnWeld'])expect(s.checks.find(c=>c.id===id)?.status,id).toBe('pass');
+   // Under the seat: design checks on the unstiffened new column; for information where column stiffeners carry the level (C2).
+   for(const id of ['bracket-seat-flange','bracket-seat-web'])expect(s.checks.find(c=>c.id===id)?.status,id).toBe(s.input.details!.bracket!.columnStiffeners?.enabled?'not-applicable':'pass');
   }
  },120000);
  it('fills the new-column and bracing sheet and draws the strut, gussets, rod crossing and section keys',()=>{
