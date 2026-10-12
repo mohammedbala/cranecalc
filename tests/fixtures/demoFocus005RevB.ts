@@ -39,6 +39,11 @@ export function demoFocus005RevB():ProjectInput{
  note('Haunch top flange 25 in → 25-1/2 in; cap-angle end plate 5-1/4 in → 5-1/2 in high.');
  // Building evaluation data that are not available (frame type, frame service displacements, site seismic, IEBC
  // evaluation, 10-year wind on the braced line) are omitted from this package and listed as by others.
+ // The 0.005 rad rail rotation limit was not an owner or crane-supplier requirement: removed (TR-13 sets none).
+ delete p.details!.criteria.twistLimit;
+ p.criteriaSource=p.criteriaSource.replace(/[;,]?\s*twist\s*0\.005\s*rad/i,'');
+ p.criteriaSource=p.criteriaSource.replace('AIST Class C','AIST Class B');
+ note('Rail rotation limit 0.005 rad removed (not an owner or crane-supplier requirement; the rotation is reported, not checked).');
  p.omitUnverified=true;
  note('Checks without data (frame type, 10-year wind drift, rail gauge from frame spread, runway seismic, IEBC alteration) omitted from the report and listed as not checked (by others).');
  return p;
