@@ -64,7 +64,7 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
  const a=s.designAnalysis;
  if(a&&p.cranes.length){const c=p.cranes[0],max=Math.max(...c.wheels.map(w=>w.loaded)),empty=Math.max(...c.wheels.map(w=>w.unloaded)),lrfd=p.method==='LRFD',test=(lrfd?1.2:1)*empty+(lrfd?1.6:1)*1.25*(max-empty);
   rows.push({item:'Load test at 125% of the rated load (S-00)',needed:'Load test the crane and runway per ASME B30.2 and the crane supplier before service.',
-   criterion:`${lrfd?`1.2P_e + 1.6(1.25)(P − P_e) = 1.2 × ${f(empty)} + 1.6 × 1.25 × ${f(max-empty)}`:`P_e + 1.25(P − P_e)`} = ${f(test)} per wheel ${test<=a.wheelLoad*(1+1e-9)?`≤ the design wheel load ${f(a.wheelLoad)} with impact: the runway checks cover the test`:`> the design wheel load ${f(a.wheelLoad)}: limit the test load`}.`,forces:'—',party:'Owner and crane supplier (perform); engineer of record (witness)'});}
+   criterion:`${lrfd?`1.2 × empty-crane wheel load + 1.6 × 1.25 × (loaded − empty) = 1.2 × ${f(empty)} + 1.6 × 1.25 × ${f(max-empty)}`:`empty-crane wheel load + 1.25 × (loaded − empty)`} = ${f(test)} per wheel ${test<=a.wheelLoad*(1+1e-9)?`≤ the design wheel load ${f(a.wheelLoad)} with impact: the runway checks cover the test`:`> the design wheel load ${f(a.wheelLoad)}: limit the test load`}.`,forces:'—',party:'Owner and crane supplier (perform); engineer of record (witness)'});}
  return rows;
 }
 

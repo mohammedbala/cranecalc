@@ -42,8 +42,9 @@ describe('DEMO-FOCUS-005 girder after the G3 review fixes',()=>{
   expect(check('cap-weld-fatigue').capacity!/6.894757293168361).toBeCloseTo(Math.max(8,100*(1.5/demoFocus005().fatigue.cycles)**.167),8);
  });
  it('E36 basis: girder D/Cs after C17 / C18 (flexure, H1, shear, deflection)',()=>{
+  // Round 2 group A (M6): the top restraint at the cap tie line lowers H1 to 0.2524 / 0.2512 (0.2529 / 0.2517 at the W top flange).
   // Peer review M2 / m11: H1 at each flange with the load-height M_cx (0.1754 at the more stressed flange with the Cb = 1 M_cx).
-  expect(check('major').utilization!).toBeLessThan(.16);expect(check('combined').utilization!).toBeCloseTo(.2529,3);expect(check('combined-bottom').utilization!).toBeCloseTo(.2517,3);
+  expect(check('major').utilization!).toBeLessThan(.16);expect(check('combined').utilization!).toBeCloseTo(.2524,3);expect(check('combined-bottom').utilization!).toBeCloseTo(.2512,3);
   expect(check('shear').utilization!).toBeCloseTo(.0893,3);// Vertical deflection against L/1000: G1 (A3) puts the fixture in AIST Class B (L/600 gave 0.1355).
   expect(check('vertical').utilization!).toBeCloseTo(.1355*1000/600,3);
  });

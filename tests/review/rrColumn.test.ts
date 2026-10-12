@@ -134,7 +134,7 @@ describe('M6 · the tie design force and the restraint at the tie line',()=>{
   expect(w).toHaveLength(3);expect(w[0]).toContain('P_{br}=\\frac{0.02M_rC_d}{h_o}+0.01P_r');expect(w[1]).toContain(`F=H+P_{br}=force:${r.demands.brace}+force:${A6.force}`);
   const tie=section('Cap tieback angle');
   expect(tie).toMatch(/Tie design force, each tie: F = H \+ P ?br = 4\.\d\d kip \+ 2\.29 kip = 6\.\d\d kip/);
-  expect(tie).toMatch(/one girder end alone reaches/);expect(tie).toMatch(/Stiffness: β ?br = .*5\.21 kip\/in/);expect(tie).toMatch(/Fatigue range ΔF = .* full reversal/);
+  expect(tie).toMatch(/one girder end alone reaches/);expect(tie).toMatch(/Stiffness: β ?br = .*5\.21 kip\/in/);expect(tie).toMatch(/Fatigue range ΔF = .* from the largest pull to the largest push/);
  });
 });
 

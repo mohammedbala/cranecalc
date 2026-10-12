@@ -19,7 +19,7 @@ export function tieForceDerivation(s:CalculationSnapshot,F:number,range:number){
   `The restraint acts at the tie line, the tie plate centerline${tie!==undefined?` ${L(tie)} above the bottom of the W`:''}, where the tie's pull or push acts on the girder by statics (not at the cap bolts or the W top flange). `+
   `P<sub>br</sub> = 0.02M<sub>r</sub>C<sub>d</sub>/h<sub>o</sub> + 0.01P<sub>r</sub> = 0.02 × ${M(a.moment)}${u==='US'?' × 12 in/ft':''} × ${b.Cd}/${L(s.properties!.h0)} + 0.01 × ${f(a.axial)} = ${f(b.flexure)} + ${f(b.axial)} = ${f(b.force)} (AISC 360-16 Appendix 6.3.2a point bracing for the girder's largest moment M<sub>r</sub>, and 6.2.2 for its axial force P<sub>r</sub>). `+
   `Stiffness: β<sub>br</sub> = (${phi})(10M<sub>r</sub>C<sub>d</sub>/(L<sub>br</sub>h<sub>o</sub>) + 8P<sub>r</sub>/L<sub>br</sub>) = ${k(b.stiffness)} with L<sub>br</sub> = ${L(b.Lbr)}, against the tie stiffness β = ${k(r.braceStiffness)}, its elements in series (compliance shares with the tie fatigue checks). `+
-  `Fatigue range ΔF = ${f(range)}: the largest range of the restraint force over the duty bins (unfactored, without impact); the side thrust reverses, so the range is the full reversal of the force (one girder end: ${f(r.demands.braceEndFatigue)}).`;
+  `Fatigue range ΔF = ${f(range)}: the largest range of the restraint force over the duty bins (unfactored, without impact); the side thrust acts both ways, so the range runs from the largest pull to the largest push (one girder end: ${f(r.demands.braceEndFatigue)}).`;
 }
 
 /** The compact report's page builders, passed in so this module adds pages without its own layout. */
