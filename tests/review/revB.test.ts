@@ -23,7 +23,8 @@ describe('DEMO-FOCUS-005 rev B',()=>{
   for(const id of ['building-class','fatigue-cycles','crane-1-statics-runway','crane-1-statics-lifted','crane-1-statics-total','crane-1-bumper-decel','crane-1-bumper-energy','crane-1-bumper-stop','construction-notes','end-bearing-seat-fit','cap-angle-endplate-edge'])expect(check(id)?.status,id).toBe('pass');
   expect(s.checks.some(c=>c.id==='crane-1-data'||c.id==='crane-1-bumper-selection'),'supplier data complete').toBe(false);
   expect(s.checks.some(c=>c.id==='column-torsion'&&c.status!=='not-applicable'&&(c.utilization??0)>0)).toBe(false);
-  expect(check('rail-twist').utilization!).toBeLessThan(1);
+  // No rail rotation limit: the rotation is reported for information, not checked.
+  expect(check('rail-twist').status).toBe('not-applicable');
  });
  it('omits the checks without data and lists them as not checked',()=>{
   const omitted=s.checks.filter(c=>c.status==='excluded'&&/omitted from this package/.test(c.note)).map(c=>c.id).sort();
