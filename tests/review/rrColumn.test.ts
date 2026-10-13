@@ -39,7 +39,7 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
  const S=s.detailResults!.taperedHaunch!.strength;
  it('takes the same equivalent concentrated force in every unstiffened J10 limit state at a level, for information',()=>{
   const top=['haunch-column-flange','haunch-column-yield-top'].map(check),bottom=['haunch-column-yield-bottom','haunch-column-crippling'].map(check);
-  for(const c of [...top,...bottom]){expect(c.status,c.id).toBe('not-applicable');expect(c.note).toMatch(/^Unstiffened J10\.\d for information, not governing \(the column is stiffened at this level\): R_u = /);}
+  for(const c of [...top,...bottom]){expect(c.status,c.id).toBe('not-applicable');expect(c.note).toMatch(/^Unstiffened J10\.\d, not governing \(the column is stiffened at this level\): R_u = /);}
   // One R_u per level: T + 3M_f/b at the top, C cos α + 3M_f/b at the bottom; before, J10.1 used 132 kip and J10.2 used T = 44.3 kip.
   expect(ru(top[0].note)).toBe(ru(top[1].note));expect(ru(bottom[0].note)).toBe(ru(bottom[1].note));
   expect(ru(top[0].note)).toBeCloseTo(S.pull.value/kip,0);expect(S.pull.value/kip).toBeCloseTo(132.4,0);
@@ -48,8 +48,8 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   const b=14*inch;expect(Math.abs(S.pull.P!)/kip).toBeCloseTo(44.3,1);expect(Math.abs(S.pull.M!)/kft).toBeCloseTo(34.25,1);
   expect(S.pull.value).toBeCloseTo(Math.abs(S.pull.P!)+3*Math.abs(S.pull.M!)/b,3);
   // J10.2 is exceeded unstiffened (1.32): stiffeners are required. J10.1 cites J10.1, not J10.8.
-  expect(check('haunch-column-yield-top').note).toMatch(/^Unstiffened J10\.2 for information, not governing \(the column is stiffened at this level\): R_u = 132(\.\d+)? kip against φR_n = 100(\.\d+)? kip, D\/C 1\.32 \(exceeded\)\./);
-  expect(check('haunch-column-flange').note).toMatch(/^Unstiffened J10\.1 for information/);
+  expect(check('haunch-column-yield-top').note).toMatch(/^Unstiffened J10\.2, not governing \(the column is stiffened at this level\): R_u = 132(\.\d+)? kip against φR_n = 100(\.\d+)? kip, D\/C 1\.32 \(exceeded\)\./);
+  expect(check('haunch-column-flange').note).toMatch(/^Unstiffened J10\.1, not governing/);
   // The panel takes the net flange force; the couples add none.
   expect(check('haunch-column-panel').demand).toBeCloseTo(Math.max(S.tension.value,S.compression.value),6);
  });

@@ -36,5 +36,7 @@ export function minerEquivalent(bins:readonly {cycles:number;range:number}[],all
 }
 /** A damage sum as printed for information: two decimals, "< 0.01" below that. */
 export const damageText=(d:number)=>!Number.isFinite(d)?'—':d<.005?'< 0.01':d.toFixed(2);
+/** The damage sum as a phrase for a note: "Σn_i/N_i = 0.06", "Σn_i/N_i < 0.01". */
+export const damageSum=(d:number)=>{const t=damageText(d);return t.startsWith('<')?`Σn_i/N_i ${t}`:`Σn_i/N_i = ${t}`;};
 /** The LaTeX of the equivalent-range check, slope m (3, or 6 for Category F), with an optional suffix. */
 export const minerEquation=(suffix='',m=3,R=false)=>`f_{sr,eq}=\\left(\\frac{\\sum_in_if_{sr,i}^{${m}}}{n_{SR}}\\right)^{1/${m}}\\le ${R?'R_{FIL}':''}F_{SR}${suffix}`;

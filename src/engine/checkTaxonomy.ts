@@ -244,7 +244,7 @@ export function gateCheck(s:CalculationSnapshot,c:CheckResult,k:Classification=c
  // J10.8 stiffener proportions only where J10.1–J10.4 require the stiffeners.
  const j108=c.id.match(/^(.+?)-(stiffener-proportions|colstiff-proportions|colstiff-length)$/);
  if(j108&&!j10Required(s,j108[1],j108[2]!=='stiffener-proportions'))
-  return {gate:'advisory',reason:'AISC J10.8 proportions apply to stiffeners required by J10.1–J10.4; these are not required (the unstiffened web carries the force), so the proportions are advisory.'};
+  return {gate:'advisory',reason:'AISC J10.8 proportions apply to stiffeners required by J10.1–J10.4; the unstiffened web carries this force, so the stiffeners are detailing only.'};
  // J2.2b maximum fillet: fillets along edges of material only, not T-joints.
  if(/-weld-max(imum)?$/.test(c.id)&&(/T-joint/i.test(c.note)||/^((haunch|wbracket|bracket)-)?(stiffener|flange-web|web)-weld-max(imum)?$/.test(c.id)))
   return {gate:'not-applicable',reason:'AISC J2.2b maximum fillet size applies to fillets along edges of material; this fillet is in a T-joint.'};
@@ -428,9 +428,9 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
   if(c.demand===undefined||c.capacity===undefined||!Number.isFinite(c.capacity))continue;
   const margin=Math.abs(c.capacity-c.demand),limit=Math.abs(c.capacity),u=dcOf(c);
   if(c.quantity==='length'){
-   if(fitRule(c)&&margin<inch/8-1e-6){flagged.push({entry:t,reason:margin<1e-6?'Met exactly: no margin for the 1/8 in setting / fit-up tolerance':'Margin less than the 1/8 in setting / fit-up tolerance'});continue;}
-   if(margin<Math.min(inch/8,.1*limit)-1e-6)flagged.push({entry:t,reason:margin<1e-6?'Met exactly at the limit':'Margin less than 1/8 in or 10%'});
-  }else if(u>.9)flagged.push({entry:t,reason:u>=1-1e-6?'Met exactly at the limit':`Margin ${((1-u)*100).toFixed(0)}%`});
+   if(fitRule(c)&&margin<inch/8-1e-6){flagged.push({entry:t,reason:margin<1e-6?'At limit':'Margin < 1/8 in'});continue;}
+   if(margin<Math.min(inch/8,.1*limit)-1e-6)flagged.push({entry:t,reason:margin<1e-6?'At limit':inch/8<=.1*limit?'Margin < 1/8 in':'Margin < 10%'});
+  }else if(u>.9)flagged.push({entry:t,reason:u>=1-1e-6?'At limit':`Margin ${((1-u)*100).toFixed(0)}%`});
  }
  // Open items: clashes, redesign flags, missing or inconsistent input, failed detailing; then by others.
  const order={clash:0,redesign:1,input:2,detailing:3};

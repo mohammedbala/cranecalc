@@ -89,9 +89,9 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
   return best;
  };
  const vb=byBay(v=>Math.max(Math.abs(v.deflectionMax),Math.abs(v.deflectionMin)),p.verticalLimit,d.deflection),lb=byBay(v=>Math.max(Math.abs(v.lateralDeflectionMax),Math.abs(v.lateralDeflectionMin)),p.lateralLimit,d.lateralDeflection);
- const bayNote=(g:{bay:number})=>g.bay<0?'Shortest-span limit used conservatively.':`Governing bay ${g.bay+1}; every bay is checked against its own span.`;
+ const bayNote=(g:{bay:number})=>g.bay<0?'Shortest-span limit used for every bay.':`Governing bay ${g.bay+1}; every bay is checked against its own span.`;
  snapshot.checks=[
- check('equilibrium','Analysis','Force equilibrium',a.equilibriumError,1e-7,'ratio','\\frac{|\\Sigma R-\\Sigma P-wL|}{\\Sigma P+wL}','Residual of every computed crane response and dead-load model.'),
+ check('equilibrium','Analysis','Force equilibrium',a.equilibriumError,1e-7,'ratio','\\frac{|\\Sigma R-\\Sigma P-wL|}{\\Sigma P+wL}','Residual of every crane response and dead-load model.'),
  check('convergence','Analysis','Moving-load refinement',a.convergence,0.01,'ratio','\\max|D_{2n}/D_n-1|\\ \\ \\text{(crane positions)}','Governing envelope demands must change by no more than 1% on travel-grid refinement. Sampled envelopes are not an exact analytical global optimization.'),
  check('mesh','Analysis','Spatial sampling refinement',a.meshConvergence,0.01,'ratio','\\max|D_{2n}/D_n-1|\\ \\ \\text{(stations)}','Governing demands must change by no more than 1% when doubling spatial sampling. Point-load moments and nodal deflections use exact elastic element solutions.'),
  check('vertical','Serviceability','Vertical crane-load deflection',vb.demand,vb.limit,'length','\\Delta_v\\le L/n_v',`User criterion: ${p.criteriaSource}. Crane static wheel loads only; impact and dead load excluded. ${bayNote(vb)}`,d.governing.deflection?.id,['mechanics','criteria']),
@@ -111,7 +111,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
    if(p.existingColumn?.enabled){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn));}
    if(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled){snapshot.columnBase=columnBaseAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...columnBaseChecks(p,snapshot.columnBase,snapshot.existingColumn));}
    // Drawings print elevations from project data only.
-   if(p.details&&!runwayElevations(p))snapshot.checks.push({id:'drawing-elevation',group:'Detailing',title:'Runway elevation for drawings',status:'incomplete',equation:'',note:'Enter the top-of-rail elevation above the datum under Project, or check the existing column with its surveyed seat elevation. Drawing elevations are never taken from the 3D reference model.',referenceIds:['criteria']});
+   if(p.details&&!runwayElevations(p))snapshot.checks.push({id:'drawing-elevation',group:'Detailing',title:'Runway elevation for drawings',status:'incomplete',equation:'',note:'Enter the top-of-rail elevation above the datum under Project, or check the existing column with its surveyed seat elevation. Drawing elevations are not taken from the 3D reference model.',referenceIds:['criteria']});
    if(snapshot.longitudinalBracing){
     snapshot.checks.push(...longitudinalBracingChecks(p,snapshot.longitudinalBracing));
     if(designsBracing(p)&&column){snapshot.bracingSystem=bracingSystemAnalysis(p,snapshot.supportReactions,snapshot.longitudinalBracing,column,snapshot.existingColumn,snapshot.columnBase);snapshot.checks.push(...bracingSystemChecks(p,snapshot.bracingSystem,column));}
@@ -129,13 +129,13 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
    // Bumper selection against the stop design strength, after the end-stop checks.
    snapshot.checks.push(...bumperSelectionChecks(p,snapshot.checks));
   } catch(e) {snapshot.errors.push(e instanceof Error?e.message:'AIST design analysis failed.');}
-  snapshot.warnings.push('Reference: AIST Technical Report 13 (2021). The 3D building is reference geometry. Enabled bracket geometry uses project inputs. Existing brackets require surveyed data and a recorded capacity assessment; whole-building adequacy is not established.');
+  snapshot.warnings.push('Reference: AIST Technical Report 13 (2021). The 3D building is reference geometry. Enabled bracket geometry uses project inputs. Existing brackets require surveyed data and a capacity assessment; whole-building adequacy is not established.');
   snapshot.warnings.push('Design combinations are runway-only projections. Roof, wind, seismic and other building actions require a separate design where applicable. The displayed supplied-load diagram envelopes remain separate from factored AIST design demands.');
  }else{
  snapshot.warnings.push('ANALYSIS REPORT ONLY: supplied-load bending and user serviceability criteria. This report does not establish AISC/DG7/TR-13/ASCE compliance or validate strength, fatigue, torsion, bracing or connections.');
  }
  if(d.uplift>1)snapshot.warnings.push('Uplift occurs in a governing position. The linear model assumes supports can resist uplift; hold-down design is required.');
- if(p.section.kind==='cap')snapshot.warnings.push(p.section.capCatalogueId?'Capped design uses catalog transformed bending properties, conservative F5 resistance for both moment signs, E4/E7 compression, integrated open-section warping and J of the two separate components without overlap credit. Full bearing contact and continuous attachment are required; cap distortion from fit-up gaps is outside the model.':'Cap-channel properties use idealized rectangular plates and full composite action. Warping constant and attachment adequacy are not established.');
+ if(p.section.kind==='cap')snapshot.warnings.push(p.section.capCatalogueId?'Capped design uses catalog transformed bending properties, F5 resistance for both moment signs, E4/E7 compression, integrated open-section warping and J of the two separate components without overlap credit. Full bearing contact and continuous attachment are required; cap distortion from fit-up gaps is outside the model.':'Cap-channel properties use idealized rectangular plates and full composite action. Warping constant and attachment adequacy are not established.');
  if(p.reportPurpose==='demonstration')snapshot.warnings.push('DEMONSTRATION: geometry, supplier data and duty assumptions are fictitious. Calculations are executed normally; this report demonstrates software capabilities and is not a site-specific construction design.');
  else if(p.cranes.some(c=>/illustrative|example|fictitious|fictional|\bdemo\b/i.test(c.loadSource)))snapshot.warnings.push('Illustrative crane data are in use. Replace with the actual manufacturer schedule.');
  if(p.scope==='analysis')snapshot.warnings.push('Envelopes use each crane’s loaded wheel schedule. Unloaded schedules are retained but are not evaluated as separate operating or fatigue cases.');

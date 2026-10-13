@@ -89,15 +89,15 @@ export const hasUplift=(v:SupportForceEnvelope)=>Math.min(leastBearing(v.minBear
  */
 export function bracketForceCells(f:SupportForceSet,mirrored:boolean,u:'US'|'SI'){
  const dp=u==='SI'?1:2,shown=(v:number,q:'force'|'moment')=>Math.abs(toDisplay(v,q,u))>=.5*10**-dp;
- const value=(v:number,q:'force'|'moment',sign='')=>{const d=Math.abs(toDisplay(v,q,u));return `${sign||(v<0&&shown(v,q)?'-':'')}${d.toLocaleString('en-US',{maximumFractionDigits:dp})} ${unit(q,u)}`;};
+ const value=(v:number,q:'force'|'moment',sign='')=>{const d=Math.abs(toDisplay(v,q,u));return `${sign||(v<0&&shown(v,q)?'\u2212':'')}${d.toLocaleString('en-US',{maximumFractionDigits:dp})} ${unit(q,u)}`;};
  const side=sideReactions(f),dash='—';
  const top=shown(f.top,'force'),bottom=shown(f.bottom,'force');
  return {
   vertical:value(f.vertical,'force'),left:side.left===undefined?dash:value(side.left,'force'),right:side.right===undefined?dash:value(side.right,'force'),
   moment:mirrored&&shown(f.moment,'moment')?value(f.moment,'moment','±'):value(f.moment,'moment'),
-  longitudinal:shown(f.longitudinal,'force')?value(f.longitudinal,'force',f.longitudinal>0?'+':'-'):dash,
+  longitudinal:shown(f.longitudinal,'force')?value(f.longitudinal,'force',f.longitudinal>0?'+':'\u2212'):dash,
   top:top?value(f.top,'force','±'):dash,
-  bottom:!bottom?dash:value(f.bottom,'force',!top?'±':Math.sign(f.bottom)===Math.sign(f.top)?'+':'-')
+  bottom:!bottom?dash:value(f.bottom,'force',!top?'±':Math.sign(f.bottom)===Math.sign(f.top)?'±':'∓')
  };
 }
 const combination=(f:SupportForceSet)=>f.combination.replace(/^(LRFD|ASD) /,'');

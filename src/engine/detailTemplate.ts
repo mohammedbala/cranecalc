@@ -32,7 +32,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  const register=[
   ...mids.map((m,i)=>({id:`FB${i+1}`,name:`Bottom flange, bay ${i+1} midspan`,x:m,point:'bottom-left' as const,category:'A' as const,reference:'AISC 360 Table A-3.1, 1.1 · plain rolled base metal'})),
   ...grids.map((g,i)=>({id:`FS${i+1}`,name:`Bearing stiffener weld toe, grid ${i+1}`,x:Math.min(g,L),point:'top-right' as const,category:'C' as const,reference:'AISC 360 Table A-3.1, 5.7 · transverse stiffener weld toe'})),
-  {id:'FT1',name:'Top flange at longest-bay midspan, category D',x:mids[p.spans.indexOf(longest)],point:'top-right' as const,category:'D' as const,reference:'AISC 360 Table A-3.1 · conservative top-flange comparison point; rail clip stations are checked automatically'}
+  {id:'FT1',name:'Top flange at longest-bay midspan, category D',x:mids[p.spans.indexOf(longest)],point:'top-right' as const,category:'D' as const,reference:'AISC 360 Table A-3.1 · top-flange comparison point; rail clip stations are checked automatically'}
  ].slice(0,16);
  // Top-flange tie on a direct flange saddle (simple spans): thin bars flex with end rotation and thermal travel,
  // sleeved bolts in vertical slots at the column gusset release support deflection. The column face is a placeholder.
@@ -68,7 +68,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    steel:'Runway girder per the section shown; plates, bars and stiffeners ASTM A572 Grade 50 unless noted.',
    bolting:'ASTM F3125 Grade A325, pretensioned, Class B faying surfaces, standard holes unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts pretensioned against steel sleeves. Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.',
    welding:'E70XX low-hydrogen electrodes per AWS D1.1/D1.1M:2020, cyclically loaded provisions. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts and stops.',
-   inspection:'Visual inspection of all welds; AWS D1.1:2020 cyclically loaded acceptance criteria; magnetic particle testing of fillets at fatigue-sensitive attachments; 100% ultrasonic testing of CJP welds; bolt pretension verification per RCSC.',
+   inspection:'Visual inspection of all welds; AWS D1.1/D1.1M:2020 cyclically loaded acceptance criteria; magnetic particle testing of fillets at fatigue-sensitive attachments; 100% ultrasonic testing of CJP welds; bolt pretension verification per RCSC.',
    erection:'Set and level the bearings, install the end bearings and flange ties, then set the rails. Provide temporary restraint until the permanent ties are complete.',
    railAlignment:'Set the rails to the specified gauge, alignment and level tolerances and survey them after erection, before the load test.'
   },

@@ -42,7 +42,7 @@ export function validateColumnBase(p:ProjectInput):string[]{
  // Plate washers over the oversized holes must clear the plate edge and the column flange fillet welds.
  const hw=anchorHardware(a.diameter),row=pl.N/2-a.edge;
  add(a.edge<hw.washer/2,`anchors.edge: the ${format(hw.washer,'length',p.units,3)} plate washer must stay on the base plate; the rod is ${format(a.edge,'length',p.units,3)} from the edge.`);
- add(row-hw.washer/2<section.d/2+pl.weld,`plate.N: the plate washers clash with the column flange welds; the rod rows must be at least ${format(section.d/2+pl.weld+hw.washer/2,'length',p.units,3)} from the column centerline (now ${format(row,'length',p.units,3)}).`);
+ add(row-hw.washer/2<section.d/2+pl.weld,`plate.N: the plate washers clash with the column flange welds; the rod rows must be at least ${format(section.d/2+pl.weld+hw.washer/2,'length',p.units,3)} from the column centerline (provided ${format(row,'length',p.units,3)}).`);
  add(a.perRow>2&&a.gauge/(a.perRow-1)<Math.max(4*a.diameter,hw.washer),'anchors.gauge: rods in a row need at least four diameters and a washer width between them.');
  add(f.L<pl.N||f.B<pl.B,'footing: the footing must be larger than the base plate.');
  add(a.embedment+f.cover+2*barDiameter[f.bar]>f.thickness+1e-6,'anchors.embedment: the anchor heads must stay above both layers of bottom bars and their cover.');

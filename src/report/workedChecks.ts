@@ -169,7 +169,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  }
  if(c.id==='simple-guide-travel'&&s.designAnalysis){
   const sp=simpleSupportInput(p),L=Math.max(...p.spans),dT=Math.max(sp.temperatureRise,sp.temperatureFall),th=s.designAnalysis.endRotation,thermal=12e-6*L*dT,rot=p.section.d*th;
-  if(close(thermal+rot+sp.settingTolerance,dem))return [`\\alpha L\\Delta T+d\\theta+t_{set}=${p.units==='US'?'6.67\\times10^{-6}/{}^\\circ\\mathrm{F}':'12\\times10^{-6}/{}^\\circ\\mathrm{C}'}\\times${tx(L,'length')}\\times${tx(dT,'temperatureChange')}+${tx(p.section.d,'length')}\\times${th.toFixed(5)}+${tx(sp.settingTolerance,'length')}`,
+  if(close(thermal+rot+sp.settingTolerance,dem))return [`\\alpha L\\Delta T+d\\theta+t_{set}=${p.units==='US'?'6.67\\times10^{-6}\\,\\text{/°F}':'12\\times10^{-6}\\,\\text{/°C}'}\\times${tx(L,'length')}\\times${tx(dT,'temperatureChange')}+${tx(p.section.d,'length')}\\times${th.toFixed(5)}+${tx(sp.settingTolerance,'length')}`,
    `\\quad=${tx(thermal,'length')}+${tx(rot,'length')}+${tx(sp.settingTolerance,'length')}=${tx(dem,'length')}\\ \\le\\ u=${tx(cap,'length')}\\quad D/C=${dcText(c.utilization,2)}`];
  }
  // End stop plies: AISC Manual Part 9 thickness for no prying under the front bolt tension.

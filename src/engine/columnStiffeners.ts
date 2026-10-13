@@ -1,4 +1,4 @@
-import {categoryF,damageText,finiteLife,minerEquation,minerEquivalent} from './fatigueConstants';
+import {categoryF,damageSum,damageText,finiteLife,minerEquation,minerEquivalent} from './fatigueConstants';
 /**
  * Column stiffeners (continuity plates) in the receiving column at a welded column bracket: a pair of plates, one each
  * side of the column web, at each concentrated force level of the bracket. The welded twin-rib and haunched brackets
@@ -257,7 +257,7 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
  add('web-weld','Column stiffeners · fillet welds to the web (J10.8, J2.4)',webStress,phiW,'stress',`f_w=\\frac{R_{st}}{${throats}(0.707w)L_w}`,
   `${f(g.s.webWeld)} fillets both faces of each plate along the web, ${f(g.webLength)} beyond the clip${g.full?'s':''}, ${where} welds: they deliver the whole stiffener force${one} ${F(Rmax.R)} to the web (no share credited to the far flange).`);
  add('web-shear','Column web · shear along the stiffener welds (J4.2)',Rmax.R/(g.webLength*g.tw),webBase,'stress','f_v=\\frac{R_{st}}{L_wt_w}\\le\\min(\\phi0.6F_y,\\,\\phi0.6F_u)',
-  `Column web base metal along the stiffener line, one shear plane of the web thickness ${f(g.tw)} over ${f(g.webLength)}${couple?', with the larger plate force on one face (conservative: the net force of the pair is the flange force)':', with the larger plate force on one face'}; J4.2 shear yielding (φ = 1.00) and rupture (φ = 0.75).`);
+  `Column web base metal along the stiffener line, one shear plane of the web thickness ${f(g.tw)} over ${f(g.webLength)}${couple?', with the larger plate force on one face (the net force of the pair is the flange force)':', with the larger plate force on one face'}; J4.2 shear yielding (φ = 1.00) and rupture (φ = 0.75).`);
  const fMin=filletMinimum([g.t,g.tf]),wMin=filletMinimum([g.t,g.tw]);
  add('weld-minimum','Column stiffener fillets · minimum leg (J2.4)',Math.max(fMin/g.s.flangeWeld,wMin/g.s.webWeld),1,'ratio','w\\ge w_{min}',
   `Flange fillets ${f(g.s.flangeWeld)} against ${f(fMin)} (thinner of the plate and the column flange); web fillets ${f(g.s.webWeld)} against ${f(wMin)} (thinner of the plate and the web), AISC 360-16 Table J2.4.`,undefined,refs);
@@ -274,13 +274,13 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
  const R=transverseFilletFatigue(g.t,g.s.flangeWeld,total).reduction;
  const plate=minerEquivalent(x.fatigue.map((v,i)=>({cycles:v.cycles,range:plateRange[i]/(g.contact*g.t)})),n=>finiteLife(4.4,n,R));
  add('fatigue-plate','Column stiffener plates at the flange fillets · fatigue (A-3.1 item 5.6)',plate.range,plate.capacity,'stress',minerEquation(`\\ \\ \\text{(Cat. C}${R<1?'^{\\prime\\prime}':''}\\text{)};\\ \\ f_{sr,i}=\\frac{\\Delta P_i}{(b_s-c)t_s}`,3,R<1),
-  `Table A-3.1 item 5.6: each plate is a tension-loaded plate element connected at its end by transverse fillets on opposite sides; toe crack Category C, root crack Category C″ with R_FIL = ${R.toFixed(3)} (Eq. A-3-6) for t = ${f(g.t)}, w = ${f(g.s.flangeWeld)}. Range per duty bin of the force on one plate at the more loaded level, over its ${f(g.contact)} contact; both levels treated as tension loaded. Miner's rule over the duty bins as the equivalent constant-amplitude range at n_SR = ${plate.cycles.toLocaleString('en-US')} cycles, no endurance-limit credit; Σn_i/N_i = ${damageText(plate.damage)} (information).`,undefined,fatRefs);
+  `Table A-3.1 item 5.6: each plate is a tension-loaded plate element connected at its end by transverse fillets on opposite sides; toe crack Category C, root crack Category C″ with R_FIL = ${R.toFixed(3)} (Eq. A-3-6) for t = ${f(g.t)}, w = ${f(g.s.flangeWeld)}. Range per duty bin of the force on one plate at the more loaded level, over its ${f(g.contact)} contact; both levels treated as tension loaded. Miner's rule over the duty bins as the equivalent constant-amplitude range at n_SR = ${plate.cycles.toLocaleString('en-US')} cycles, no endurance-limit credit; ${damageSum(plate.damage)}.`,undefined,fatRefs);
  const throat=Math.max(0,...plateRange.map(v=>Math.max(v/(te2(g.s.flangeWeld)*g.contact),v/(te2(g.s.webWeld)*g.webLength))));
  add('fatigue-weld','Column stiffener fillets · throat fatigue (A-3.1 item 8.2)',throat,weldF,'stress','f_{sr}=\\frac{\\Delta P}{2(0.707w)l}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',
   `Table A-3.1 item 8.2, Category F, shear on the throat of the flange and web fillets of one plate; the largest unfactored range over the duty bins assigned to all ${total.toLocaleString('en-US')} project cycles.`,undefined,fatRefs);
  const toe=minerEquivalent(x.fatigue.map(v=>({cycles:v.cycles,range:v.column})),n=>finiteLife(4.4,n));
  add('fatigue-toe','Column flange at the stiffener weld toes · fatigue (A-3.1 item 5.7)',toe.range,toe.capacity,'stress',minerEquation('\\ \\ \\text{(Cat. C)}'),
-  `Table A-3.1 item 5.7, Category C: column flange (and web) base metal at the toe of the transverse fillets of the stiffeners, which are ${f(g.t)} thick along the column (item 7.1 would also give C, a < 2 in). ${x.columnStressNote} Equivalent constant-amplitude range at n_SR = ${toe.cycles.toLocaleString('en-US')} cycles; Σn_i/N_i = ${damageText(toe.damage)} (information).`,undefined,fatRefs);
+  `Table A-3.1 item 5.7, Category C: column flange (and web) base metal at the toe of the transverse fillets of the stiffeners, which are ${f(g.t)} thick along the column (item 7.1 would also give C, a < 2 in). ${x.columnStressNote} Equivalent constant-amplitude range at n_SR = ${toe.cycles.toLocaleString('en-US')} cycles; ${damageSum(toe.damage)}.`,undefined,fatRefs);
  return checks;
 }
 /**
@@ -293,7 +293,7 @@ export function stiffenedColumnChecks(p:ProjectInput,checks:CheckResult[],ids:Re
  return checks.map(c=>{
   const state=ids[c.id];if(!state||(c.status!=='pass'&&c.status!=='fail')||c.capacity===undefined)return c;
   const {demand:_d,capacity:_c,utilization:_u,caseId:_k,...rest}=c,dc=(c.capacity??0)>0?(c.demand??0)/c.capacity!:Infinity;
-  return {...rest,status:'not-applicable',note:`Unstiffened ${state} for information, not governing (the column is stiffened at this level): R_u = ${F(c.demand??0)} against φR_n = ${F(c.capacity??0)}, D/C ${dc.toFixed(2)}${dc>1?' (exceeded)':''}. The column stiffener pairs at the ${g.levels.map(l=>l.name).join(' and ')} carry the whole force there (J10.8, column stiffener checks). ${c.note}`};
+  return {...rest,status:'not-applicable',note:`Unstiffened ${state}, not governing (the column is stiffened at this level): R_u = ${F(c.demand??0)} against φR_n = ${F(c.capacity??0)}, D/C ${dc.toFixed(2)}${dc>1?' (exceeded)':''}. The column stiffener pairs at the ${g.levels.map(l=>l.name).join(' and ')} carry the whole force there (J10.8, column stiffener checks). ${c.note}`};
  });
 }
 /** Note for the J10.6 panel check where stiffeners are provided. */

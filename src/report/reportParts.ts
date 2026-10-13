@@ -23,7 +23,7 @@ const esc=(v:unknown)=>caseLabel(String(v??'')).replace(/[&<>"']/g,c=>({'&':'&am
 
 /** Short names of the register titles, as a plan reviewer cites them. */
 const codeNames:[RegExp,string][]=[
- [/^ANSI\/AISC 360-16/,'AISC 360-16'],[/^AWS D1\.1/,'AWS D1.1:2020'],[/^ANSI\/AISC 341-16/,'AISC 341-16'],[/^AIST Technical Report 13/,'AIST TR-13'],
+ [/^ANSI\/AISC 360-16/,'AISC 360-16'],[/^AWS D1\.1/,'AWS D1.1/D1.1M:2020'],[/^ANSI\/AISC 341-16/,'AISC 341-16'],[/^AIST Technical Report 13/,'AIST TR-13'],
  [/^AISC Design Guide 7/,'AISC DG7'],[/^DG7 revisions/,'AISC DG7 errata'],[/^AISC Design Guide 1\b/,'AISC DG1'],
  [/^ASCE\/SEI 7-16/,'ASCE 7-16'],[/^ACI 318-19/,'ACI 318-19'],[/^Torsional Analysis of Steel Sections/,'Moore & Mueller (EJ 2002)'],
  [/^Design of Crane Runway Beam with Channel Cap/,'Ellifritt & Lue (EJ 1998)'],[/^Lateral-Torsional Buckling/,'Nayak et al. (EJ 2024)'],
@@ -74,7 +74,7 @@ function covers(clause:string,token:string){
  */
 export const methodReference=(r:{id:string;edition:string})=>r.id==='mechanics'||/CraneCalc method|component model|app mechanics|Elastic component model|custom arrangement|^\d{4}-\d{2}-\d{2}$/i.test(r.edition);
 /**
- * The code citation of a check, e.g. "AISC 360-16 J10.2, J10.3 · AIST TR-13 §5.9.2": each referenced document by its
+ * The code citation of a check, e.g. "AISC 360-16 J10.2, J10.3; AIST TR-13 §5.9.2": each referenced document by its
  * short name with the clause of this limit state: the clause named in the check's title first (its own clause, e.g.
  * "(G2.1)"), else the clauses its note names that the register entry covers, else the clause of the limit state by its
  * id. A document whose register entry spans many clauses and names none of this check is cited without a clause list
@@ -104,7 +104,8 @@ export function shortReference(c:CheckResult){
  if(/prying$/.test(c.id)&&!cited.some(v=>/Manual/.test(v.name)))for(const v of cited)if(v.name==='AISC 360-16'&&v.general){v.name='AISC Manual Part 9';v.general=false;}
  const specific=cited.filter(v=>!v.general);
  // A broad AISC 360-16 entry with no clause of its own is left off where another document cites the limit state.
- return cited.filter(v=>!(v.general&&v.name==='AISC 360-16'&&specific.length)).map(v=>`${v.name} ${v.list.slice(0,4).join(', ')}`.trim()).join(' · ');
+ // Documents separated by semicolons: "AISC 360-16 H1; AISC DG7 §11.2".
+ return cited.filter(v=>!(v.general&&v.name==='AISC 360-16'&&specific.length)).map(v=>`${v.name} ${v.list.slice(0,4).join(', ')}`.trim()).join('; ');
 }
 const superscript=(n:number)=>String(n).replace(/[-0-9]/g,c=>'⁻⁰¹²³⁴⁵⁶⁷⁸⁹'['-0123456789'.indexOf(c)]);
 /** Mantissa (two decimals) and exponent of a value written as m × 10^e. */
@@ -116,7 +117,8 @@ const zero=5e-5;
 /**
  * A number as printed in the calculation, in ordinary decimal notation: three significant figures, never more than
  * two decimal places at 0.1 and above, and whole numbers from 100 up (`fixed`: trailing zeros dropped, 68.1 not 68.10). Below 0.1 a value keeps two significant figures (0.038, 0.0049); a
- * magnitude under 5 × 10⁻⁵ prints 0. Only values of ten million and more are written m × 10ⁿ.
+ * magnitude under 5 × 10⁻⁵ prints 0. Only values of ten million and more are written m × 10ⁿ. Negative values take the minus
+ * sign − (U+2212) in text.
  */
 export function num(d:number,o:{fixed?:boolean;tex?:boolean}={}){
  if(!Number.isFinite(d))return '—';
@@ -126,7 +128,8 @@ export function num(d:number,o:{fixed?:boolean;tex?:boolean}={}){
  // In an equation a value below 1 keeps three significant figures (t_w = 0.375 in), so the substitution reproduces.
  const decimals=a<.1?Math.min(6,(o.tex?2:1)-Math.floor(Math.log10(a))):a>=100?0:o.tex&&a<1?3:Math.min(2,Math.max(0,2-Math.floor(Math.log10(a))));
  const t=d.toLocaleString('en-US',{minimumFractionDigits:o.fixed||(o.tex&&a<1)?0:decimals,maximumFractionDigits:decimals,roundingMode:'halfExpand'} as Intl.NumberFormatOptions);
- return o.tex?t.replace(/,/g,'{,}'):t;
+ // Text takes the true minus sign (U+2212), with no space; TeX sets its own.
+ return o.tex?t.replace(/,/g,'{,}'):t.replace(/^-/,'\u2212');
 }
 /** Temperatures print as whole degrees. */
 const wholeDegrees=(q:Quantity)=>q==='temperature'||q==='temperatureChange';
@@ -134,6 +137,8 @@ const wholeDegrees=(q:Quantity)=>q==='temperature'||q==='temperatureChange';
 export function sig3(v:number|undefined,q:Quantity,units:ProjectInput['units']){
  if(v===undefined||!Number.isFinite(v))return '—';
  const u=unit(q,units),d=toDisplay(v,q,units);
+ // A stress below 0.005 ksi (0.05 MPa) is a trace, printed as such, not 0.000061 ksi.
+ const trace=units==='US'?.005:.05;if(q==='stress'&&d!==0&&Math.abs(d)<trace)return `< ${units==='US'?'0.01':'0.1'} ${u}`;
  return `${wholeDegrees(q)?Math.round(d).toLocaleString('en-US'):num(d)}${u?` ${u}`:''}`;
 }
 /**
@@ -144,7 +149,7 @@ export function inchFraction(inches:number){
  const ticks=Math.round(Math.abs(inches)*16);
  if(!ticks||Math.abs(Math.abs(inches)*16-ticks)>1e-6)return undefined;
  const whole=Math.floor(ticks/16);let n=ticks%16,den=16;while(n&&n%2===0){n/=2;den/=2;}
- return `${inches<0?'-':''}${whole||!n?whole:''}${n?`${whole?' ':''}${n}/${den}`:''}`;
+ return `${inches<0?'\u2212':''}${whole||!n?whole:''}${n?`${whole?' ':''}${n}/${den}`:''}`;
 }
 /**
  * The value to two decimals at most, every digit kept above that (dimensions, inputs), with the project unit. A US length
@@ -157,17 +162,27 @@ export function fixed2(v:number|undefined,q:Quantity,units:ProjectInput['units']
  if(q==='length'&&units==='US'){const fr=inchFraction(clean(d));if(fr&&!Number.isInteger(clean(d)))return `${fr} in`;}
  return `${wholeDegrees(q)?Math.round(d).toLocaleString('en-US'):num(d,{fixed:true})}${u?` ${u}`:''}`;
 }
-/** A check value: a US length of whole sixteenths as a fraction (a size or a tolerance), anything else to three significant figures. */
-export const value=(v:number|undefined,q:Quantity,units:ProjectInput['units'])=>{
- if(q==='length'&&units==='US'&&v!==undefined&&Number.isFinite(v)){const d=clean(toDisplay(v,q,units)),fr=inchFraction(d);if(fr&&Math.abs(d)<100)return `${fr} in`;}
+/** A US length that prints as a fraction: a whole number of sixteenths under 100 in. */
+const sixteenths=(v:number|undefined,q:Quantity,units:ProjectInput['units'])=>q==='length'&&units==='US'&&v!==undefined&&Number.isFinite(v)&&Math.abs(clean(toDisplay(v,q,units)))<100&&!!inchFraction(clean(toDisplay(v,q,units)));
+/**
+ * A check value: a US length of whole sixteenths as a fraction (a size or a tolerance), anything else to three
+ * significant figures. `pair` is the other side of the comparison: when it is a computed length (not whole
+ * sixteenths), this value prints as a decimal too, so a computed demand is never set against a fraction (0.15 in
+ * against 0.75 in, not 3/4 in).
+ */
+export const value=(v:number|undefined,q:Quantity,units:ProjectInput['units'],pair?:number)=>{
+ if(sixteenths(v,q,units)&&(pair===undefined||!Number.isFinite(pair)||sixteenths(pair,q,units)))return `${inchFraction(clean(toDisplay(v!,q,units)))} in`;
  return sig3(v,q,units);
 };
 /**
- * Numbers written by the engine into notes and titles, re-printed to the report's two-decimal rule: a decimal with
- * three or more places (1.0000, 116.051, 0.0012413) or in e-notation. Clause numbers (§3.10.2, J10.8) are left alone.
+ * Numbers written by the engine into notes and titles, re-printed to the report's three-figure rule: a decimal with
+ * three or more places (1.0000, 116.051, 0.0012413), in e-notation, or of 10 and more with two places (121.23 → 121,
+ * 12.41 → 12.4). Clause numbers (§3.10.2, J10.8) are left alone; a hyphen used as a minus becomes −.
  */
 export function tidyNumbers(text:string){
- return text.replace(/(?<![\w.§-])(-?\d[\d,]*\.\d{3,}(?:e[-+]?\d+)?|-?\d+(?:\.\d+)?e[-+]?\d+)(?!\w|\.\d)/gi,(m)=>num(Number(m.replace(/,/g,'')),{fixed:true}));
+ return text.replace(/(?<![\w.§-])(-?\d[\d,]*\.\d{3,}(?:e[-+]?\d+)?|-?\d+(?:\.\d+)?e[-+]?\d+|-?\d[\d,]+\.\d{2})(?!\w|\.\d)/gi,(m)=>num(Number(m.replace(/,/g,'')),{fixed:true}))
+  // A hyphen before a number after a space, "(" or "=" is a minus sign: "-3.20 kip" → "−3.20 kip".
+  .replace(/(^|[\s(=])-(?=\d)/g,'$1\u2212');
 }
 /**
  * Escaped report text with engineering subscripts as markup: R_FIL, F_TH, W_E, A_fn, t_min (from engine notes) print
@@ -176,8 +191,11 @@ export function tidyNumbers(text:string){
 export function subscripts(html:string){
  return html.replace(/(?<![\w/.&#-])([A-Za-z])_\{?([A-Za-z]{1,8}|\d)\}?(?![\w])/g,'$1<sub>$2</sub>').replace(/(?<![.\d])\.\.(?=\s|$|<)/g,'.');
 }
+/** A check title as printed: "Existing column, axial compression", the element and test joined by a comma, not "·". */
+export const checkTitle=(t:string)=>t.replace(/\s+·\s+/g,', ');
 export const inlineMath=(tex:string)=>katex.renderToString(tex,{throwOnError:false,displayMode:false});
-export const statusLabel=(s:CheckResult['status'])=>({pass:'OK',fail:'NG',excluded:'BY OTHERS','not-applicable':'N/A',unverified:'UNVERIFIED',unsupported:'UNSUPPORTED',incomplete:'INCOMPLETE'} as Record<string,string>)[s]??s.toUpperCase();
+/** One status word per state, as printed in every table: OK, NG, N/A, By others (sentence case for the words). */
+export const statusLabel=(s:CheckResult['status'])=>({pass:'OK',fail:'NG',excluded:'By others','not-applicable':'N/A',unverified:'Unverified',unsupported:'Unsupported',incomplete:'Incomplete'} as Record<string,string>)[s]??s;
 /** The first sentence (20 to 180 characters), ended at a stop outside parentheses, so a parenthetical stays whole. */
 const firstSentence=(v:string)=>{
  let depth=0;
@@ -218,7 +236,7 @@ export function checkTable(checks:CheckResult[],x:CheckTableContext){
  const rows=[...families.values()].flatMap(v=>v.length>=3?[{c:governing(v),n:v.length,members:v}]:v.map(c=>({c,n:1,members:[c]})));
  for(const c of checks)x.rendered.add(c.id);
  const q=(c:CheckResult)=>c.quantity??'ratio';
- return `<table class="checks"><colgroup><col class="c-title"/><col class="c-eq"/><col class="c-num"/><col class="c-num"/><col class="c-dc"/><col class="c-res"/></colgroup><thead><tr><th>Check · reference</th><th>Equation</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(({c,n,members})=>`<tr class="${c.status}" data-checks="${esc(members.map(m=>m.id).join(' '))}"><td><b>${esc(tidyNumbers(c.title))}</b>${n>1?` <span class="family">governing of ${n}</span>`:''}<small class="ref">${esc(shortReference(c))}</small>${c.caseId?`<small class="ref">Governing case ${esc(c.caseId)}</small>`:''}</td><td class="eq">${equationCell(c)}</td><td class="num">${sig3(c.demand,q(c),x.units)}</td><td class="num">${sig3(c.capacity,q(c),x.units)}</td><td class="num">${dcText(c.utilization,2,'—')}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`).join('')}</tbody></table>`;
+ return `<table class="checks"><colgroup><col class="c-title"/><col class="c-eq"/><col class="c-num"/><col class="c-num"/><col class="c-dc"/><col class="c-res"/></colgroup><thead><tr><th>Check</th><th>Equation</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(({c,n,members})=>`<tr class="${c.status}" data-checks="${esc(members.map(m=>m.id).join(' '))}"><td><b>${esc(checkTitle(tidyNumbers(c.title)))}</b>${n>1?` <span class="family">governing of ${n}</span>`:''}<small class="ref">${esc(shortReference(c))}</small>${c.caseId?`<small class="ref">Governing case ${esc(c.caseId)}</small>`:''}</td><td class="eq">${equationCell(c)}</td><td class="num">${sig3(c.demand,q(c),x.units)}</td><td class="num">${sig3(c.capacity,q(c),x.units)}</td><td class="num">${dcText(c.utilization,2,'—')}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`).join('')}</tbody></table>`;
 }
 export const checkTableCss=`table.checks{font-size:9px;margin:6px 0 10px}table.checks col.c-title{width:27%}table.checks col.c-eq{width:37%}table.checks col.c-num{width:11%}table.checks col.c-dc{width:6%}table.checks col.c-res{width:8%}table.checks td{padding:3px 4px;vertical-align:middle}table.checks td.num{text-align:right;white-space:nowrap}table.checks th:nth-child(n+3){text-align:right}table.checks td.res,table.checks th:last-child{text-align:center}table.checks td small.ref{display:block;font-size:7.5px;color:#333;margin-top:1px}table.checks .family{font-size:7.5px;border:1px solid #000;padding:0 3px;white-space:nowrap}table.checks td.eq{font-size:9px;overflow:hidden}table.checks td.eq .katex{font-size:1.02em;white-space:normal}table.checks td.eq i{font-size:8px}table.checks td.eq small.where{display:block;font-size:7px;line-height:1.25;color:#222;margin-top:1px}table.checks td.eq small.where .katex{font-size:1em}table.checks tr.fail td{background:#e6e6e6;font-weight:700}table.checks b.fail{text-decoration:underline}`;
 /** Any hex color in embedded linework as the gray of equal luminance, so the printed calculation is black and white. */

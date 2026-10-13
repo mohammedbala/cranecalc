@@ -26,7 +26,7 @@ export const notationGroups:[string,Entry[]][]=[
  ['Fatigue (unfactored duty-bin loads)',[
   ['f_{max}','Largest stress under the unfactored fatigue loads'],['f_{min}','Smallest stress under the unfactored fatigue loads'],
   ['f_{sr,i}','Stress range of duty bin i; F<sub>SR,i</sub> is the allowable range at its n<sub>i</sub> cycles'],
-  ['f_{sr,eq}','Equivalent constant-amplitude stress range of the duty bins at n<sub>SR</sub> = Σn<sub>i</sub> cycles (Miner’s rule): its ratio to F<sub>SR</sub> at n<sub>SR</sub> is the fatigue D/C; Σn<sub>i</sub>/N<sub>i</sub> = (f<sub>sr,eq</sub>/F<sub>SR</sub>)<sup>3</sup> is given for information']]]
+  ['f_{sr,eq}','Equivalent constant-amplitude stress range at n<sub>SR</sub> = Σn<sub>i</sub> (Miner’s rule)']]]
 ];
 const greek='alpha|beta|gamma|delta|Delta|epsilon|varepsilon|eta|theta|Theta|kappa|lambda|mu|nu|rho|sigma|tau|phi|Phi|psi|omega|Omega|xi|zeta';
 const operators='frac|tfrac|dfrac|sqrt|left|right|bigl|bigr|big|Big|max|min|le|ge|leq|geq|quad|qquad|times|cdot|sum|Sigma|tan|arctan|cos|sin|tanh|int|det|ldots|dots|notin|Rightarrow|begin|end|cases|aligned|circ|pm|mp|in|textstyle|displaystyle|mathbf|boldsymbol';
@@ -55,8 +55,7 @@ export const entrySymbol=(tex:string)=>[...equationSymbols(tex)][0]??tex;
 export function notationSection(equations:string[]){
  const used=new Set<string>();for(const e of equations)for(const v of equationSymbols(e))used.add(v);
  const rows=notationGroups.map(([g,list])=>[g,list.filter(([t])=>used.has(entrySymbol(t)))] as const).filter(([,l])=>l.length);
- const total=rows.reduce((n,[,l])=>n+l.length,0);
- return `<p>Symbols specific to crane runway girders and to this calculation (${total}). Other symbols have their AISC 360-16, AISC Manual and AISC Design Guide 9 meanings (torsion: θ, W<sub>no</sub>, S<sub>w</sub>, σ<sub>ws</sub>, τ<sub>t</sub>, τ<sub>ws</sub>); a symbol local to one check is defined under its equation.</p>`
+ return `<p>Crane runway symbols. Other symbols follow AISC 360-16, the AISC Manual and AISC DG9; symbols used in one check only are defined under that check.</p>`
   +`<table class="notation"><colgroup><col style="width:12%"/><col style="width:38%"/><col style="width:12%"/><col style="width:38%"/></colgroup><tbody>${rows.map(([g,l])=>{
    const half=Math.ceil(l.length/2),cells=Array.from({length:half},(_,i)=>[l[i],l[i+half]]);
    return `<tr class="group"><th colspan="4">${g}</th></tr>`+cells.map(([a,b])=>`<tr><td>${inlineMath(a[0])}</td><td>${a[1]}</td><td>${b?inlineMath(b[0]):''}</td><td>${b?b[1]:''}</td></tr>`).join('');

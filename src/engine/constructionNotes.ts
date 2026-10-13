@@ -65,7 +65,7 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
    :'Rail joints: open joints with the expansion gap shown (project choice); joint bolts re-tightened after 30 and 90 days of crane operation.'];
  const welding=[
   `E70XX low-hydrogen weld metal, ${awsCode}, cyclically loaded provisions (Clause 4 Part C); qualified or prequalified WPS and qualified welders.`,
-  ...(existing?[`Field welds to the existing column: base metal confirmed before welding (AISC 360-16 Appendix 5.2.3: mill certificates or chemical analysis), a WPS approved by the engineer of record for that steel, ${heat?heat.text:'preheat per AWS D1.1 Table 5.8'}; weld with the crane out of service (${awsCode} Clause 11). The carbon equivalent is recorded for information; it is not a code limit for prequalified A572 Grade 50 / A992 steel.`]:[])];
+  ...(existing?[`Field welds to the existing column: base metal confirmed before welding (AISC 360-16 Appendix 5.2.3: mill certificates or chemical analysis), a WPS approved by the engineer of record for that steel, ${heat?heat.text:'preheat per AWS D1.1 Table 5.8'}; weld with the crane out of service (${awsCode} Clause 11).`]:[])];
  const inspection=[
   'Visual inspection of every weld (AISC 360-16 N5.4) and of every bolted joint; verify pretension and faying surfaces per the RCSC Specification (N5.6).',
   `Runway girder welds${existing?' and the welds to the existing column':''}: ${awsCode} Clause 8 acceptance criteria for cyclically loaded nontubular connections (AIST TR-13 §5.17).`,
@@ -121,8 +121,8 @@ export function enteredFabricationNote(p:ProjectInput,field:keyof NonNullable<Pr
 export function constructionNoteChecks(s:CalculationSnapshot):CheckResult[]{
  const p=s.input;if(!p.details)return [];
  const bad=supersededFabricationNotes(p);
- return [{id:'construction-notes',group:'Coordination',title:'Entered fabrication notes consistent with the bolting, rail-joint, tolerance and inspection requirements',
+ return [{id:'construction-notes',group:'Coordination',title:'Fabrication notes consistent with the bolting, rail-joint, tolerance and inspection requirements',
   status:bad.length?'fail':'pass',equation:'',referenceIds:['tr13-bolting','tr13-rail-joints','tr13-tolerances','aws-d11-cyclic'],
   note:bad.length?`OPEN ITEM: ${bad.length} entered fabrication note${bad.length>1?'s contradict':' contradicts'} the requirements and ${bad.length>1?'are':'is'} superseded on the drawings and in the report: ${bad.map(v=>`${v.field}: "${v.sentence}" (${v.reason})`).join('; ')}. Correct the project fabrication notes.`
-   :'The entered fabrication notes agree with the generated bolting, rail-joint, tolerance and inspection requirements.'}];
+   :'The project fabrication notes agree with the bolting, rail-joint, tolerance and inspection requirements of this calculation.'}];
 }

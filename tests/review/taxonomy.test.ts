@@ -191,7 +191,7 @@ describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>
   const page=text(section('Detailing checklist'));
   expect(page).toMatch(/59 detailing rules satisfied/);
   expect(page).not.toMatch(/Bolt spacing/); // a satisfied rule with margin is not listed
-  expect(page).toMatch(/Bearings and bolts fit on the haunch top flange .* Met exactly: no margin for the 1\/8 in setting \/ fit-up tolerance/);
+  expect(page).toMatch(/Bearings and bolts fit on the haunch top flange .* At limit/);
  });
  it('prints one short fatigue table with both methods side by side and the setting stated',()=>{
   const page=text(section('Fatigue · girder and attachments'));
@@ -224,7 +224,7 @@ describe('TR-13 basis and clause citations (A5)',()=>{
   expect(text(html)).not.toMatch(/supplied source dated February 24, 2020/);
  });
  it('cites the clause that governs each limit state',()=>{
-  expect(cite('vertical')).toMatch(/AIST TR-13 §5\.8\.7( ·|$)/);
+  expect(cite('vertical')).toMatch(/AIST TR-13 §5\.8\.7(;|$)/);
   expect(cite('compact-web')).toMatch(/AIST TR-13 §5\.8\b/);expect(cite('shear')).toMatch(/AIST TR-13 §5\.8\b/);
   expect(cite('wheel-yield')).toMatch(/AIST TR-13 §5\.8\.6/);
   expect(cite('end-bearing-sleeve')).toMatch(/AIST TR-13 §5\.14/);

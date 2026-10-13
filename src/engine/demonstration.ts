@@ -50,7 +50,7 @@ export function demonstrationDetails():RunwayDetails{return {
  criteria:{twistLimit:.005,railLateralLimit:400,railGauge:40*foot+.5*inch,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
  fatigueDetails:[
   {id:'F1',name:'Rolled bottom flange at midspan',x:12.5*foot,point:'bottom-left',category:'A',reference:'AISC Table A-3.1, 1.1 · plain rolled base metal'},
-  {id:'F2',name:'Top flange at midspan, conservative category D',x:12.5*foot,point:'top-right',category:'D',reference:'AISC Table A-3.1, 7.1 · category D used conservatively at this comparison point; actual rail clip stations checked automatically'},
+  {id:'F2',name:'Top flange at midspan, category D',x:12.5*foot,point:'top-right',category:'D',reference:'AISC Table A-3.1, 7.1 · category D at this comparison point; actual rail clip stations checked automatically'},
   {id:'F3',name:'Bearing stiffener weld toe, left support',x:0,point:'top-left',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'},
   {id:'F4',name:'Bearing stiffener weld toe, right support',x:25*foot,point:'top-right',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'}
  ],
@@ -85,7 +85,7 @@ export function demonstrationProject():ProjectInput {
  p.details.fatigueDetails[3].name='Bearing stiffener weld toe, support 2';
  for(let bay=1;bay<3;bay++){
   p.details.fatigueDetails.push({id:`FB${bay+1}`,name:`Rolled bottom flange, bay ${bay+1} midspan`,x:(bay*25+12.5)*foot,point:'bottom-left',category:'A',reference:'AISC Table A-3.1, 1.1 · plain rolled base metal'});
-  p.details.fatigueDetails.push({id:`FT${bay+1}`,name:`Top flange, bay ${bay+1} midspan, conservative category D`,x:(bay*25+12.5)*foot,point:'top-right',category:'D',reference:'AISC Table A-3.1, 7.1 · conservative comparison point; rail clip stations automatic'});
+  p.details.fatigueDetails.push({id:`FT${bay+1}`,name:`Top flange, bay ${bay+1} midspan, category D`,x:(bay*25+12.5)*foot,point:'top-right',category:'D',reference:'AISC Table A-3.1, 7.1 · comparison point; rail clip stations automatic'});
   p.details.fatigueDetails.push({id:`FS${bay+2}`,name:`Stiffener weld toe, support ${bay+2}`,x:(bay+1)*25*foot,point:'top-right',category:'C',reference:'AISC Table A-3.1, 5.8 · transverse stiffener weld toe'});
  }
  const r=p.details.rail; p.railWeight=(r.headWidth*r.headThickness+r.baseWidth*r.baseThickness+(p.aist.railDepth-r.headThickness-r.baseThickness)*r.webThickness)*7850*9.80665/1e9;

@@ -100,7 +100,7 @@ describe('G4 · C22 carbon equivalent, D27 electrode, D30 bolting, D31 tolerance
  it('reports the carbon equivalent as information, with the Annex B formula including Si',()=>{
   const ce=existingWeldingChecks(p0,existingColumnSection(p0).section.tf).find(v=>v.id==='column-weld-ce')!;
   expect(ce.status).toBe('pass');expect(ce.capacity).toBeUndefined();expect(ce.utilization).toBeUndefined();expect(ce.demand).toBeCloseTo(.42,9);
-  expect(ce.equation).toContain('\\mathrm{Mn}+\\mathrm{Si}');expect(ce.note).toMatch(/Information only/);
+  expect(ce.equation).toContain('\\mathrm{Mn}+\\mathrm{Si}');expect(ce.note).toMatch(/sets no carbon equivalent limit/);
   expect(carbonEquivalent({basis:'mill-certificates',grade:'',preheat:0,deadLoadOnly:true,source:'',chemistry:{C:.2,Mn:1.2,Si:.3,Cu:.3}})!.value).toBeCloseTo(.2+1.5/6+.3/15,9);
  });
  it('takes the weld metal from the detailed connections (E70XX, 70 ksi)',()=>{
