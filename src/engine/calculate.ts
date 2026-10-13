@@ -37,13 +37,13 @@ export function validateProject(input:unknown):string[]{
  if(s.Fu<s.Fy)errors.push('section.Fu: ultimate strength cannot be less than yield strength.');
  if(s.E<10*s.Fy)errors.push('section.E: modulus is inconsistent with a steel material.');
  if(s.kind==='cap'&&(s.capWidth<s.bf+2*s.capTf||s.capDepth<=s.capTw||s.capDepth>=s.d))errors.push('section.cap: channel legs must clear the beam flanges and have valid depth.');
- if(s.kind==='rolled'&&(!s.propertySource.trim()||Math.min(s.Ix,s.Iy,s.A,s.Sx,s.Sy,s.Zx,s.Zy,s.J,s.Cw)<1))errors.push('section: rolled sections require supplied positive catalogue properties and their source.');
- if((s.catalogueId||s.capCatalogueId)&&!(s.kind==='cap'?matchesCappedSection(s):!s.capCatalogueId&&matchesAiscSection(s)))errors.push('section: selected AISC catalogue dimensions, properties and source must match the database.');
+ if(s.kind==='rolled'&&(!s.propertySource.trim()||Math.min(s.Ix,s.Iy,s.A,s.Sx,s.Sy,s.Zx,s.Zy,s.J,s.Cw)<1))errors.push('section: rolled sections require supplied positive catalog properties and their source.');
+ if((s.catalogueId||s.capCatalogueId)&&!(s.kind==='cap'?matchesCappedSection(s):!s.capCatalogueId&&matchesAiscSection(s)))errors.push('section: selected AISC catalog dimensions, properties and source must match the database.');
  if(s.kind==='rolled'&&!s.catalogueId){
   const rectangularArea=2*s.bf*s.tf+(s.d-2*s.tf)*s.tw;
-  if(s.A<rectangularArea*0.98||s.A>rectangularArea*1.25)errors.push('section.A: catalogue area is inconsistent with supplied dimensions.');
-  if(Math.abs(s.Sx-s.Ix/(s.d/2))/s.Sx>0.02||Math.abs(s.Sy-s.Iy/(s.bf/2))/s.Sy>0.02)errors.push('section: catalogue elastic moduli are inconsistent with inertia and dimensions.');
-  if(s.Zx<s.Sx||s.Zx>1.6*s.Sx||s.Zy<s.Sy||s.Zy>1.6*s.Sy)errors.push('section: catalogue plastic moduli are inconsistent with a rolled I-section.');
+  if(s.A<rectangularArea*0.98||s.A>rectangularArea*1.25)errors.push('section.A: catalog area is inconsistent with supplied dimensions.');
+  if(Math.abs(s.Sx-s.Ix/(s.d/2))/s.Sx>0.02||Math.abs(s.Sy-s.Iy/(s.bf/2))/s.Sy>0.02)errors.push('section: catalog elastic moduli are inconsistent with inertia and dimensions.');
+  if(s.Zx<s.Sx||s.Zx>1.6*s.Sx||s.Zy<s.Sy||s.Zy>1.6*s.Sy)errors.push('section: catalog plastic moduli are inconsistent with a rolled I-section.');
  }
  if(s.density<7000||s.density>8500)errors.push(`section.density: expected a steel density between ${p.units==='US'?'437 and 531 lb/ft³':'7000 and 8500 kg/m³'}.`);
  if(p.unbracedLength>L)errors.push('unbracedLength: cannot exceed the runway length.');
@@ -105,7 +105,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
    const craneInput=craneInputChecks(p);snapshot.checks.push(...craneInput);snapshot.warnings.push(...craneInputWarnings(craneInput));
    // Unfactored reactions by load type for the building that carries the runway.
    snapshot.supportReactions=supportReactions(p,props);
-   // Bracing between new columns is analysed first: its forces load the braced columns and their bases.
+   // Bracing between new columns is analyzed first: its forces load the braced columns and their bases.
    const column=p.existingColumn?.enabled?existingColumnSection(p).section:undefined;
    if(p.longitudinalBracing?.enabled)snapshot.longitudinalBracing=longitudinalBracingAnalysis(p,snapshot.supportReactions,column);
    if(p.existingColumn?.enabled){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn));}
@@ -135,7 +135,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
  snapshot.warnings.push('ANALYSIS REPORT ONLY: supplied-load bending and user serviceability criteria. This report does not establish AISC/DG7/TR-13/ASCE compliance or validate strength, fatigue, torsion, bracing or connections.');
  }
  if(d.uplift>1)snapshot.warnings.push('Uplift occurs in a governing position. The linear model assumes supports can resist uplift; hold-down design is required.');
- if(p.section.kind==='cap')snapshot.warnings.push(p.section.capCatalogueId?'Capped design uses catalogue transformed bending properties, conservative F5 resistance for both moment signs, E4/E7 compression, integrated open-section warping and J of the two separate components without overlap credit. Full bearing contact and continuous attachment are required; cap distortion from fit-up gaps is outside the model.':'Cap-channel properties use idealized rectangular plates and full composite action. Warping constant and attachment adequacy are not established.');
+ if(p.section.kind==='cap')snapshot.warnings.push(p.section.capCatalogueId?'Capped design uses catalog transformed bending properties, conservative F5 resistance for both moment signs, E4/E7 compression, integrated open-section warping and J of the two separate components without overlap credit. Full bearing contact and continuous attachment are required; cap distortion from fit-up gaps is outside the model.':'Cap-channel properties use idealized rectangular plates and full composite action. Warping constant and attachment adequacy are not established.');
  if(p.reportPurpose==='demonstration')snapshot.warnings.push('DEMONSTRATION: geometry, supplier data and duty assumptions are fictitious. Calculations are executed normally; this report demonstrates software capabilities and is not a site-specific construction design.');
  else if(p.cranes.some(c=>/illustrative|example|fictitious|fictional|\bdemo\b/i.test(c.loadSource)))snapshot.warnings.push('Illustrative crane data are in use. Replace with the actual manufacturer schedule.');
  if(p.scope==='analysis')snapshot.warnings.push('Envelopes use each crane’s loaded wheel schedule. Unloaded schedules are retained but are not evaluated as separate operating or fatigue cases.');

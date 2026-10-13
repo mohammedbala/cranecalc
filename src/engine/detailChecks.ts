@@ -93,7 +93,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  // of the existing pair-of-flat-bars / rectangular-rib model.
  if(connectionOptionChecks(p).length)return [];
  const checks:CheckResult[]=[];
- if((p.section.kind!=='rolled'&&!capReady(p))||!p.section.catalogueId){checks.push({id:'detail-applicability',group:'Strength',title:'Detailed runway model applicability',status:'unsupported',equation:'',referenceIds:['vlasov'],note:'Requires a catalogue rolled W or a capped W with complete channel material, service-class and continuous-attachment inputs.'});return checks;}
+ if((p.section.kind!=='rolled'&&!capReady(p))||!p.section.catalogueId){checks.push({id:'detail-applicability',group:'Strength',title:'Detailed runway model applicability',status:'unsupported',equation:'',referenceIds:['vlasov'],note:'Requires a catalog rolled W or a capped W with complete channel material, service-class and continuous-attachment inputs.'});return checks;}
  if(!p.aist||!p.aist.runwayOnly||!p.connections.enabled)return [];
  const designFy=p.section.kind==='cap'?Math.min(p.section.Fy,p.capDesign!.Fy):p.section.Fy;
  const strength=girderStrength(p,props),steps=p.cranes.length===1?40:p.cranes.length===2?12:6;

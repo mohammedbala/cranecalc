@@ -14,7 +14,7 @@
  * World space is x/y on the ground and z up; the camera turns the ground by an
  * azimuth, then squashes y by sin(el) and lifts z by cos(el). There is no
  * perspective and no hidden-line removal: plates are filled with the ground
- * colour and painted back to front, so a nearer one simply covers.
+ * color and painted back to front, so a nearer one simply covers.
  */
 
 export type Vec2 = [number, number];
@@ -77,7 +77,7 @@ export function unproj(C: Camera, sx: number, sy: number, z: number): [number, n
   return [X * c + Y * s, -X * s + Y * c];
 }
 
-/** Sets the camera's offset so the bounding box of `pts` is centred on (cx, cy). */
+/** Sets the camera's offset so the bounding box of `pts` is centered on (cx, cy). */
 export function fit(C: Camera, pts: readonly Vec3[], cx: number, cy: number) {
   C.ox = 0; C.oy = 0;
   const P = proj(C);

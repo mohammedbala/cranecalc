@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type {PartInfo} from './connectionDetails';
 
 /** Equal-leg triangular fillet in the two exposed surface directions. Dimensions
- * are actual inputs in metres; no visual enlargement or inferred weld sizes. */
+ * are actual inputs in meters; no visual enlargement or inferred weld sizes. */
 export function filletWeld(parent:THREE.Group,id:string,start:THREE.Vector3,end:THREE.Vector3,u:THREE.Vector3,v:THREE.Vector3,size:number,material:THREE.Material,description:string,support?:PartInfo['support'],execution?:Pick<NonNullable<PartInfo['weld']>,'location'|'existingSteel'>){
  const along=end.clone().sub(start),length=along.length();if(size<=0||length<=0)return;
  const a=u.clone().normalize().multiplyScalar(size),b=v.clone().normalize().multiplyScalar(size);

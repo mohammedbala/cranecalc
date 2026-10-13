@@ -18,7 +18,7 @@ export function loadAiscSection(section: Section, name: string): Section {
   return { ...base, ...dimensions, kind:'rolled', name:shape.name, catalogueId:shape.name,
     propertySource:`AISC Shapes Database v16.0 · Database v16.0 row ${shape.row} · US nominal values · ${aiscShapeSource}` };
 }
-// Verify catalogue provenance against the pinned data after import and again
+// Verify catalog provenance against the pinned data after import and again
 // on the report server. A supplied section can still use its own documented source.
 export function matchesAiscSection(section: Section): boolean {
   if (!section.catalogueId || !aiscShapeByName(section.catalogueId)) return false;

@@ -29,7 +29,7 @@ export function validateRunwayDetails(p:ProjectInput){
    add(k.weldLength>k.baseWidth+1e-6,'rail clip base welds cannot be longer than the clip base is wide.');
    add(k.weldLength<4*k.weld-1e-6,'rail clip base welds must be at least four times the weld size long (AISC 360-16 J2.2b).');
   }}
- // Girder-end cover plates sit between the girder end and the bearing stiffener pair at the bearing centre.
+ // Girder-end cover plates sit between the girder end and the bearing stiffener pair at the bearing center.
  // A bolted end bearing replaces the girder-end cover plates on independent simple spans.
  const bearingBolts=activeEndBearing(p),webEnd=!bearingBolts;
  if(bearingBolts)try{boltProperties(bearingBolts.bolts.grade,bearingBolts.bolts.diameter);}catch(e){errors.push(`details: ${e instanceof Error?e.message:String(e)}`);}

@@ -96,7 +96,7 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   const cut={building:clip(sec.cut.building),runway:clip(sec.cut.runway),rail:clip(sec.cut.rail)};
   const all=[...beyond.building,...beyond.runway,...cut.building,...cut.runway,...cut.rail].flat();
   // The surveyed existing columns beyond, on their lines outboard of grids A and B (u = -z: grid A at the left).
-  const existing=(o.existing?.lines??[]).map(l=>{const sign=l.line==='A'?-1:1,centre=(l.line==='A'?uA:uB)+sign*l.input.offset/1000,half=l.input.d/2000;return {line:l.line,input:l.input,sign,centre,u0:centre-half,u1:centre+half};});
+  const existing=(o.existing?.lines??[]).map(l=>{const sign=l.line==='A'?-1:1,center=(l.line==='A'?uA:uB)+sign*l.input.offset/1000,half=l.input.d/2000;return {line:l.line,input:l.input,sign,center,u0:center-half,u1:center+half};});
   const uMin=Math.min(...all.map(v=>v[0]),...existing.map(v=>v.u0)),uMax=Math.max(...all.map(v=>v[0]),...existing.map(v=>v.u1));
   const height=box.bottom-top-150,scale=drawingScale(Math.min(box.w/(uMax-uMin-shift),height/(vTop-vBottom))/1000,p.units,ga),k=scale.pointsPerMm*1000;
   const U=(u:number)=>span&&u>=span.to-1e-9?u-shift:u;
@@ -121,7 +121,7 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   for(const e of existing){
    svg+=`<g data-existing-column="${e.line}">`+[e.u0,e.u1].map(u=>line([SX(u),SY(vTop)],[SX(u),SY(vBottom)],'reference-line')).join('');
    for(const v of [vTop,vBottom])svg+=breakLine([SX(e.u0)-6,SY(v)],[SX(e.u1)+6,SY(v)]);
-   svg+=line([SX(e.centre),SY(vTop)-26],[SX(e.centre),below+12],'grid-line');
+   svg+=line([SX(e.center),SY(vTop)-26],[SX(e.center),below+12],'grid-line');
    const grid=e.line==='A'?uA:uB,face=grid+e.sign*m.column.d/2,near=e.sign<0?e.u1:e.u0,clear=Math.abs(near-face)*1000,yc=SY(vBottom+(vTop-vBottom)*.34);
    const [x1,x2]=[SX(Math.min(near,face)),SX(Math.max(near,face))];
    // Clearance to the surveyed existing steel: survey data, printed as surveyed.
@@ -134,12 +134,12 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
    svg+='</g>';
   }
   for(const [u,label] of [[uA,'A'],[uB,'B']] as const)svg+=line([SX(u),SY(vTop)-34],[SX(u),below+38],'grid-line')+gridBubble(SX(u),below+50,label);
-  // Rail centrelines to the crane span and the column grids above the band.
+  // Rail centerlines to the crane span and the column grids above the band.
   const dimY=SY(vTop)-18,from=SY(railTop)-4;
   for(const u of [uRA,uRB])svg+=line([SX(u),SY(railTop)+3],[SX(u),from],'grid-line');
   // Girders on column caps sit on the grids: no grid-to-rail dimension.
   svg+=(Math.abs(uRA-uA)>1e-3?dimH(SX(uA),SX(uRA),from,dimY,dim(uRA-uA),'left'):'')+spanDim(SX(uRA),SX(uRB),from,dimY,`${dim(uRB-uRA)} CRANE SPAN (RAIL C/L TO C/L)`)+(Math.abs(uB-uRB)>1e-3?dimH(SX(uRB),SX(uB),from,dimY,dim(uB-uRB),'right'):'');
-  for(const e of existing){const grid=e.line==='A'?uA:uB;svg+=dimH(SX(Math.min(e.centre,grid)),SX(Math.max(e.centre,grid)),from,dimY,dim(Math.abs(e.centre-grid)),e.sign<0?'left':'right');}
+  for(const e of existing){const grid=e.line==='A'?uA:uB;svg+=dimH(SX(Math.min(e.center,grid)),SX(Math.max(e.center,grid)),from,dimY,dim(Math.abs(e.center-grid)),e.sign<0?'left':'right');}
   svg+=spanDim(SX(uA),SX(uB),below+4,below+24,`${dim(uB-uA)} GRIDS A-B${o.newColumns?'':' (REF.)'}`);
   // Elevations of the project, stacked so close levels never overlap.
   const ex=SX(uMax)+14;
@@ -201,7 +201,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const xLo=Math.min(...along),xHi=Math.max(...along),cl=gaLayout.clearance,planLeft=shown?cl.x+cl.w+96:0;
   const planX=shown?(planLeft+2410)/2:gaLayout.plan.x,planW=shown?2410-planLeft:1060;
   const planScale=drawingScale(Math.min(planW/(eb?xHi-xLo:m.length+m.column.bf),eb?560/(zBottom-zTop):500/(m.width+2*m.columnOffset+m.column.d))/1000,p.units,ga),k=planScale.pointsPerMm*1000;
-  // Centred in the panel from the grid bubbles above to the view title below.
+  // Centered in the panel from the grid bubbles above to the view title below.
   const planTop=eb?59+Math.max(0,(770-168-(zBottom-zTop)*k)/2-16):0,xMid=eb?(xLo+xHi)/2:0;
   const X=(x:number)=>planX+(x-xMid)*k,Y=(z:number)=>eb?planTop+(z-zTop)*k:gaLayout.plan.y+(z+m.width/2)*k;
   const left=X(-m.length/2),right=X(m.length/2),gTop=Y(zTop),gBottom=Y(zBottom);
@@ -264,7 +264,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    svg+=multiLeader([[cx-cross,Y(rows[0])-cross]],[x0+8,ly],labels,7.5,[[[x0-6,Y(rows[0])-cross]]])+'</g>';
   }
   if(eb){
-   // New footings below the slab and the existing building dashed; each existing column line on its centreline.
+   // New footings below the slab and the existing building dashed; each existing column line on its centerline.
    svg+='<g data-existing-building="plan">';
    for(const b of eb.footings)for(const z of rows)svg+=rect(X(b.x0/1000-m.length/2),Y(z-(b.u1-b.u0)/2000),(b.x1-b.x0)/1000*k,(b.u1-b.u0)/1000*k,'hidden-line');
    for(const l of eb.lines){

@@ -22,11 +22,11 @@ import {capAngleGeometry} from './capAngle';
 const inch=25.4;
 const minimumK={braced:{pinned:1,fixed:.8},free:{pinned:Infinity,fixed:2.1}} as const;
 
-/** The bracket's surveyed receiving column governs when a bracket is enabled, then a catalogue shape, then entered plates. */
+/** The bracket's surveyed receiving column governs when a bracket is enabled, then a catalog shape, then entered plates. */
 export function existingColumnSection(p:ProjectInput){
  const c=p.existingColumn!,receiver=p.details?.bracket?.enabled?p.details.bracket.receiver:undefined;
  const base:Section={...p.section,kind:'welded',name:'Existing column',catalogueId:undefined,capCatalogueId:undefined,propertySource:'Existing column plates',d:c.d,bf:c.bf,tf:c.tf,tw:c.tw,Fy:c.Fy,Fu:c.Fu};
- // A new column's bracket is welded to the catalogue shape it is designed as.
+ // A new column's bracket is welded to the catalog shape it is designed as.
  if(receiver&&!(c.isNew&&aiscShapeByName(c.shape??'')))return {source:'bracket receiving column (surveyed plates)',section:{...base,d:receiver.depth,bf:receiver.width,tf:receiver.flangeThickness,tw:receiver.webThickness,Fy:receiver.Fy,Fu:receiver.Fu,propertySource:receiver.source||'Bracket receiving column'}};
  if(c.shape&&aiscShapeByName(c.shape)){const s=loadAiscSection({...base,kind:'rolled'},c.shape);return {source:`AISC ${c.shape}`,section:{...s,Fy:c.Fy,Fu:c.Fu}};}
  return {source:'entered plates (no fillet credit)',section:base};

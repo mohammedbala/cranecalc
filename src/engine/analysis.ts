@@ -20,7 +20,7 @@ export function movingAnalysis(p:ProjectInput,props:Properties,subdivisions=20):
  function run(steps:number){
   const envelope:EnvelopePoint[]=zeroV.x.map(x=>({x,momentMax:-Infinity,momentMin:Infinity,lateralMax:-Infinity,lateralMin:Infinity,shearMax:-Infinity,shearMin:Infinity,deflectionMax:-Infinity,deflectionMin:Infinity,lateralDeflectionMax:-Infinity,lateralDeflectionMin:Infinity}));
   const demand:Demand={moment:0,lateralMoment:0,shear:0,reaction:0,uplift:0,deflection:0,lateralDeflection:0,stressRange:0,longitudinal:p.cranes.reduce((s,c)=>s+c.longitudinal,0),governing:{},reactions:[]};
-  // Uniform travel samples, axle crossings of every support, maximum-moment positions and neighbouring
+  // Uniform travel samples, axle crossings of every support, maximum-moment positions and neighboring
   // cranes at closest approach.
   const supports=[0];for(const span of p.spans)supports.push(supports.at(-1)!+span);
   const responses=cranePositions(p,steps,supports).map((list,k)=>list.map(slot=>({...craneResponse(p.cranes[k],slot.origin),slot})));

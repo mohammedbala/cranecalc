@@ -91,7 +91,7 @@ export function detailSheetTitle(layout:DetailSheetLayout){
  return textWidth(title,16,true)<=560?title:'STRUCTURAL DETAILS';
 }
 
-/** Cell edges between occupied cells and their neighbours, and the notes column edge. */
+/** Cell edges between occupied cells and their neighbors, and the notes column edge. */
 function gridLines(placed:Placed[],h:number,rows:number){
  const {cols,cell:{w},notes}=detailGrid,owner=new Map<string,number>();
  placed.forEach((p,i)=>{for(let r=0;r<p.rows;r++)owner.set(`${p.row+r},${p.col}`,i);});

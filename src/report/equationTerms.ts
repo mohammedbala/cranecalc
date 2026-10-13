@@ -117,15 +117,26 @@ export const standardSymbols=new Set(`A A_{b} A_{e} A_{g} A_{n} A_{nt} A_{nv} A_
 export function notationSymbols(){
  return new Set([...notationGroups.flatMap(([,l])=>l.map(([t])=>entrySymbol(t))),'C_{dm}','C_{ds}','C_{vm}','C_{vs}','C_{vs,min}','F_{SR,i}','E']);
 }
+/**
+ * Does the equation use this defined term? Whole symbols only: a one-symbol term (e, b, L, q_{ep}) must be one of the
+ * equation's symbols, never a letter inside \\le, T_b or \\mathrm{sleeve}; a compound term (\\Delta M) needs every symbol
+ * and the term itself in the equation; a term that is not a symbol (\\mathrm{CE}) must appear as written.
+ */
+function usesTerm(equation:string,used:Set<string>,tex:string){
+ const own=[...equationSymbols(tex)];
+ if(!own.length){const at=equation.indexOf(tex);return at>=0&&!/[A-Za-z]/.test(equation[at+tex.length]??'');}
+ if(own.length===1)return used.has(own[0]);
+ const flat=(v:string)=>v.replace(/\s+/g,'');
+ return own.every(v=>used.has(v))&&new RegExp(`${flat(tex).replace(/[\\^$.*+?()[\]{}|]/g,'\\$&')}(?![A-Za-z])`).test(flat(equation));
+}
 /** The definitions to print under a check's equation: local symbols the equation uses. */
 export function termsFor(c:CheckResult):Term[]{
  if(!c.equation)return [];
  const used=equationSymbols(c.equation),seen=new Set<string>(),out:Term[]=[];
  // Keyed by the definition's TeX: x_j and x_j′, h(0) and h(L) are separate entries.
  for(const [re,list] of terms)if(re.test(c.id))for(const [tex,meaning] of list){
-  const key=entrySymbol(tex);
   if(seen.has(tex))continue;
-  if(used.has(key)||(key===tex&&c.equation.includes(tex))){seen.add(tex);out.push([tex,meaning]);}
+  if(usesTerm(c.equation,used,tex)){seen.add(tex);out.push([tex,meaning]);}
  }
  return out;
 }

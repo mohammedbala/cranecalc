@@ -42,7 +42,7 @@ export function cranePositions(p:ProjectInput,steps:number,stations:number[]):Cr
  const result=sets.map((s,k)=>[...s].sort((a,b)=>a-b).map(origin=>(aligned[k].has(origin)?{origin,station:true}:{origin}) as CranePosition));
  for(let k=1;k<p.cranes.length;k++){
   const g=gap(k),offsets=[...p.cranes[k-1].wheels.map(w=>w.offset),...p.cranes[k].wheels.map(w=>g+w.offset)];
-  // Two neighbouring cranes at closest approach act as one train: its maximum-moment positions.
+  // Two neighboring cranes at closest approach act as one train: its maximum-moment positions.
   const train=new Set<number>();
   for(const v of maximumMomentOrigins(offsets,[...loaded(k-1),...loaded(k)],spans))if(within(k-1,v)&&within(k,v+g)&&!sets[k-1].has(v))train.add(v);
   for(const v of train)result[k-1].push({origin:v,before:v+g});

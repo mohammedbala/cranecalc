@@ -9,7 +9,7 @@ export function feetInches(mm: number): string {
   const fraction = numerator ? ` ${numerator}/${denominator}` : '';
   return `${mm < 0 && ticks ? '-' : ''}${feet}'-${inches}${fraction}"`;
 }
-/** SI lengths of a metre or more read to the millimetre, shorter ones to 0.1 mm. */
+/** SI lengths of a meter or more read to the millimeter, shorter ones to 0.1 mm. */
 export function drawingLength(mm: number, units: ProjectInput['units']) {
   // Snap floating-point noise first, so equal lengths reached by different sums (a + b vs L - c) print alike.
   mm = Math.round(mm * 1e6) / 1e6;
@@ -39,7 +39,7 @@ export function dimensionLength(mm:number,units:ProjectInput['units']){
 }
 /** A reference size that follows from dimensioned geometry (the depth of a taper at a section cut): US to the nearest 1/4 in. */
 export function referenceLength(mm:number,units:ProjectInput['units']){return units==='US'?feetInches(snapQuarter(mm)):drawingLength(mm,units);}
-/** Elevations: feet and inches, or metres to three decimals in SI. */
+/** Elevations: feet and inches, or meters to three decimals in SI. */
 export function drawingElevation(mm: number, units: ProjectInput['units']) {
   return units === 'US' ? feetInches(mm) : `${(mm / 1000).toFixed(3)} m`;
 }

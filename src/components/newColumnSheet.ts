@@ -40,7 +40,7 @@ function earth(x1:number,x2:number,y:number){
  let svg='';for(let x=x1+3;x<x2-6;x+=11)for(let j=0;j<3;j++)svg+=line([x+j*2,y+.6],[x+j*2-3.2,y+4],'hatch');
  return `<g data-hatch="earth">${svg}</g>`;
 }
-/** Elevation datum: triangle on the extension line and the label beside it, spread to clear its neighbours. */
+/** Elevation datum: triangle on the extension line and the label beside it, spread to clear its neighbors. */
 function elevationMarks(marks:{y:number;label:string}[],x:number,side:'left'|'right',from:(y:number)=>number){
  const sorted=[...marks].sort((a,b)=>a.y-b.y),placed:number[]=[];
  for(const [i,m] of sorted.entries())placed.push(Math.max(m.y,i?placed[i-1]+10:-Infinity));

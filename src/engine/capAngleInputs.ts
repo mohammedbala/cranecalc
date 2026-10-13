@@ -4,7 +4,7 @@ import {columnStiffenerSchema} from './columnStiffenerInputs';
 const pos=z.number().finite().positive();
 const grade=z.enum(['A325','A490']);
 /**
- * Cap tieback angle (AISC DG7 top-flange tie "top flange connected directly to column"): a catalogue angle bolted
+ * Cap tieback angle (AISC DG7 top-flange tie "top flange connected directly to column"): a catalog angle bolted
  * through the column-side flange of the cap channel, its long leg level with the top of the cap and pointing to the
  * column; a tie plate lapped on that leg and shop welded to a vertical end plate, which is bolted through shims to
  * the column flange, one bolt above and one below the tie plate. Canonical units mm, N, MPa.

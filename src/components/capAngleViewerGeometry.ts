@@ -6,7 +6,7 @@ import {filletWeld} from './weldGeometry';
 
 const family:Record<string,string>={'angle-leg':'Cap tieback angle','tie-plate':'Cap tieback tie plate','end-plate':'Cap tieback end plate',shim:'Finger shims','plate-washer':'Plate washer',stiffener:'Column stiffener at the tie level'};
 const description:Record<string,string>={
- 'angle-leg':'Catalogue angle bolted through the column-side cap channel flange in horizontal slots, its long leg level with the top of the cap; the girder slides along the runway.',
+ 'angle-leg':'Catalog angle bolted through the column-side cap channel flange in horizontal slots, its long leg level with the top of the cap; the girder slides along the runway.',
  'tie-plate':'Tie plate lapped on the angle with two slip-critical bolts in short slots across the runway; shop welded to the end plate.',
  'end-plate':'End plate bolted through finger shims to the column flange, one bolt above and one below the tie plate, in field-drilled holes.',
  shim:'Finger shims (nominal pack shown) between the end plate and the column flange.',
@@ -16,7 +16,7 @@ const description:Record<string,string>={
 /**
  * The cap tieback angles in the 3D viewer, one at each girder end, from the engine's tie geometry (capAngleTieParts:
  * x along the runway from the tie centerline, y from the web toward the column, z up from the top of the cap). Viewer
- * frame, metres: x along the runway from its middle, y up from the girder mid-depth, z across toward the column face.
+ * frame, meters: x along the runway from its middle, y up from the girder mid-depth, z across toward the column face.
  * The plates and shop welds are shown; the bolts, and their holes in the cap channel and column flanges, are in the
  * drawings and checks, not in this model (so the viewer's hardware scan does not cover them).
  */

@@ -13,13 +13,13 @@ import {heading,numbered,paragraph,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type ViewRender} from './detailSheet';
 
 type Units=CalculationSnapshot['input']['units'];
-/** SI drawing values to the millimetre, or the half millimetre under 25 mm: no soft-converted decimals. */
+/** SI drawing values to the millimeter, or the half millimeter under 25 mm: no soft-converted decimals. */
 const siLength=(mm:number)=>`${(mm>=25?Math.round(mm):Math.round(mm*2)/2).toLocaleString('en-US')} mm`;
-/** Plate, bolt and weld sizes: inch fractions, or SI millimetres. */
+/** Plate, bolt and weld sizes: inch fractions, or SI millimeters. */
 export const tieSize=(mm:number,u:Units)=>u==='US'?plateInches(mm,'US'):siLength(mm);
-/** Dimensions: feet and inches, or SI millimetres. */
+/** Dimensions: feet and inches, or SI millimeters. */
 export const tieDim=(mm:number,u:Units)=>u==='US'?dimensionLength(mm,'US'):siLength(mm);
-/** Weld length beside the weld symbol: inches and fractions without the inch mark (AWS A2.4), or millimetres. */
+/** Weld length beside the weld symbol: inches and fractions without the inch mark (AWS A2.4), or millimeters. */
 export function weldLength(mm:number,u:Units){
  if(u==='SI')return siLength(mm);
  const ticks=Math.round(mm/25.4*16),whole=Math.floor(ticks/16);let a=ticks%16,d=16;

@@ -53,6 +53,8 @@ const e=(v:unknown)=>subscripts(caseLabel(tidyNumbers(String(v??''))).replace(/[
 /** The first letter capitalized. */
 const sentenceCase=(v:string)=>v.charAt(0).toUpperCase()+v.slice(1);
 /** A CSS string literal for paged-media margin boxes; markup characters are also escaped for the style element. */
+/** "DEMONSTRATION, NOT FOR CONSTRUCTION" → "Demonstration, not for construction" (running header). */
+const headerCase=(v:string)=>v.charAt(0).toUpperCase()+v.slice(1).toLowerCase();
 const cssText=(v:string)=>`"${v.replace(/[\\"]/g,c=>`\\${c}`).replace(/[\n\r]/g,' ').replace(/</g,'\\3c ').replace(/>/g,'\\3e ')}"`;
 export function compactReport(s:CalculationSnapshot,fonts:string,detailed=false){
  const p=s.input,d=p.details!,a=s.designAnalysis!,r=s.detailResults!,prop=s.properties!,demo=p.reportPurpose==='demonstration',sheet=detailSheetNumbers(s);
@@ -752,7 +754,7 @@ ${checkFigureCss}
 ${checkTableCss}
 ${taxonomyCss}${notationCss}${deliveredCss}
 ${summaryCss}
- @page{size:Letter;margin:16mm 12mm 16mm;@top-left{content:${cssText(`CRANECALC · ${p.number||'NO PROJECT NUMBER'} · ${p.title}`.slice(0,90))};${margin};vertical-align:bottom}@top-right{content:${cssText(`${rev.heading}${rev.date?` · ${rev.date}`:''} · ${status.label}`)};${margin};vertical-align:bottom}@bottom-left{content:${cssText(`PREPARED ${dw?.originator.trim()||'—'} · CHECKED ${dw?.checker.trim()||'—'} · EOR ${eor?.name.trim()||'—'}`)};${margin};vertical-align:top}@bottom-right{content:"PAGE " counter(page) " OF " counter(pages);${margin};vertical-align:top}}
+ @page{size:Letter;margin:16mm 12mm 16mm;@top-left{content:${cssText(`${p.number||'No project number'} · ${p.title.replace(new RegExp(`\\s*·\\s*${rev.label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}$`,'i'),'')}`.slice(0,90))};${margin};vertical-align:bottom}@top-right{content:${cssText(`${rev.label}${rev.date?` · ${rev.date}`:''} · ${headerCase(status.label.replace(/ - /g,', '))}`)};${margin};vertical-align:bottom}@bottom-left{content:${cssText(`Prepared: ${dw?.originator.trim()||'—'}\u2003Checked: ${dw?.checker.trim()||'—'}\u2003EOR: ${eor?.name.trim()||'—'}`)};${margin};vertical-align:top}@bottom-center{content:${cssText(`Calc ID ${rev.fingerprint}`)};${margin};vertical-align:top}@bottom-right{content:"Page " counter(page) " of " counter(pages);${margin};vertical-align:top}}
 *{box-sizing:border-box}body{font:10px/1.35 Arial,sans-serif;color:#000;background:#fff;margin:0}h1{font-size:20px;margin:4px 0 2px}h2{font-size:14px;border-bottom:1.5px solid #000;padding:0 0 4px;margin:14px 0 6px}h3{font-size:11px;margin:10px 0 4px}p{margin:4px 0}
 .subtitle{font-size:10px;margin:0 0 6px}.summary-page h2{margin-top:8px}.demo-note{font-size:9px;border-left:3px solid #000;padding:2px 6px}.figure-note{font-size:8.5px}.by-others{font-size:9px}
 .responsibility{font-size:9px;margin:4px 0 6px}.responsibility th{width:16%;background:#eee}.responsibility td{width:22%}.responsibility .seal{width:24%;height:70px;border:1px solid #000;text-align:center;vertical-align:middle;font-size:8px}.responsibility .seal span{display:block;margin-top:18px}.blank{display:inline-block;width:90%;border-bottom:1px solid #000;height:10px}

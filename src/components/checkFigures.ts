@@ -61,7 +61,7 @@ const hatch=(x0:number,x1:number,y:number)=>path(Array.from({length:Math.floor((
 function section(p:ProjectInput|undefined,x=72,y=31,focus=false,capped=p?.section.kind==='cap'){
  return rect(x,y,60,6,focus)+rect(x+27,y+6,6,45,focus)+rect(x,y+51,60,6,focus)+(capped?path(`M${x-5} ${y+14}V${y-6}H${x+65}V${y+14}`,true):'');
 }
-/** Rail on a top flange whose upper face is at y, centred at x. */
+/** Rail on a top flange whose upper face is at y, centered at x. */
 const railOn=(x:number,y:number,focus=false)=>poly(`M${x-14} ${y}V${y-3}H${x-3}V${y-13}H${x-8}V${y-18}H${x+8}V${y-13}H${x+3}V${y-3}H${x+14}V${y}Z`,focus);
 function geometry(p?:ProjectInput){
  const n=Math.max(1,Math.min(6,p?.spans.length??3)),step=192/n,gap=p?.system==='simple'?2:0;

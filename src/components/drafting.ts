@@ -167,7 +167,7 @@ function sectionDrawing(s: CalculationSnapshot): CadDrawing {
   const k = Math.min(205 / (b.d + ct), 270 / Math.max(b.bf, cw)), x = 350, y = 92 + ct * k;
   const bf = b.bf * k, tf = b.tf * k, tw = b.tw * k, h = b.d * k;
   const d = new Draft(s, 'girder-section', 'Girder cross-section - idealized plate geometry', 'SK-03', 430, 1 / k,
-    `${short(b.name, 45)} / ${b.kind === 'rolled' ? 'Fillets omitted; catalogue properties supplied separately' : 'Rectangular plates; fillets excluded'} / rail alignment shown in SK-02`);
+    `${short(b.name, 45)} / ${b.kind === 'rolled' ? 'Fillets omitted; catalog properties supplied separately' : 'Rectangular plates; fillets excluded'} / rail alignment shown in SK-02`);
   d.hatch(x - bf / 2, y, bf, tf); d.hatch(x - tw / 2, y + tf, tw, h - 2 * tf); d.hatch(x - bf / 2, y + h - tf, bf, tf);
   d.poly([[x - bf / 2, y], [x + bf / 2, y], [x + bf / 2, y + tf], [x + tw / 2, y + tf], [x + tw / 2, y + h - tf], [x + bf / 2, y + h - tf], [x + bf / 2, y + h], [x - bf / 2, y + h], [x - bf / 2, y + h - tf], [x - tw / 2, y + h - tf], [x - tw / 2, y + tf], [x - bf / 2, y + tf]], true);
   if (b.kind === 'cap') {

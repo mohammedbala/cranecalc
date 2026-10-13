@@ -20,7 +20,7 @@ export function buildAngleTies(p:ProjectInput,columnFace:number,steel:THREE.Mate
  const upper=depth/2-tf-capDrop-rise/2-.0254,lower=-depth/2+tf+rise/2+.0254;
  const start=bf/2+a.setback*mm,finish=columnFace-a.setback*mm,lap=a.lap*mm,g=a.gussetThickness*mm,h=a.depth*mm;
  if(!a.shape||finish<=start)return group;
- const note='Custom angle tieback reference. No assigned member, weld, fatigue, stiffness or movement capacity. Nominal catalogue geometry omits rolled fillets.';
+ const note='Custom angle tieback reference. No assigned member, weld, fatigue, stiffness or movement capacity. Nominal catalog geometry omits rolled fillets.';
  const add=(geometry:THREE.BufferGeometry,id:string,family:string,x:number,y:number,z:number,station:number)=>{
   const mesh=new THREE.Mesh(geometry,steel);mesh.name=id;mesh.position.set(x,y,z);mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry),edge));
   mesh.userData.part={id,family,description:`${a.paired?'2 - ':''}${a.shape!.name}. ${note}${/Column/.test(family)?' Field attachment to existing column; root weld size and extent require design.':''}`,support:{x:station,z:0}} satisfies PartInfo;group.add(mesh);return mesh;

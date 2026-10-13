@@ -87,7 +87,7 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   compared('end-bearing-plate-edge','Bearing plate · bolt edge distance',1.5*db,Math.min((bs.width-gauge)/2,e.bolts.edge),'length','e\\ge1.5d_b','Standard holes in the bearing plate.'),
   compared('end-bearing-end-edge','Girder end · bolt edge distance',1.5*db-g.hole/2+g.slot/2,e.bolts.edge,'length','e\\ge1.5d_b-d_h/2+L_{slot}/2','The slot extends toward the girder end at the sliding end.'),
   compared('end-bearing-spacing','Bolt spacing',8/3*db,Math.min(gauge,g.spacing),'length','s\\ge(8/3)d_b','Between rows and across the gauge.'),
-  compared('end-bearing-wrench-web','Nut clearance above flange · web fillet',C,gauge/2-k1,'length','g/2-k_1\\ge C_1',shape?'k₁ from the catalogue fillet.':'No fillet credited for a custom section.'),
+  compared('end-bearing-wrench-web','Nut clearance above flange · web fillet',C,gauge/2-k1,'length','g/2-k_1\\ge C_1',shape?'k₁ from the catalog fillet.':'No fillet credited for a custom section.'),
   compared('end-bearing-wrench-stiffener','Nut clearance above flange · bearing stiffener',C,stiffClear,'length','|x_b-x_{st}|-t_{st}/2-w\\ge C_1','Bolt rows at the bearing plate ends clear the stiffeners at mid-bearing.'),
   compared('end-bearing-washer-fit','Plate washers fit on the flange',g.washer.width/2,gauge/2-k1,'length','w_w/2\\le g/2-k_1','Washers bear flat outside the web fillet.'),
   compared('end-bearing-washer-stiffener','Plate washers clear the bearing stiffener',g.washer.length/2,stiffClear,'length','b/2\\le|x_b-x_{st}|-t_{st}/2-w','Washer length covers the slot at either extreme of travel.')

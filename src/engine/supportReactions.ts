@@ -42,7 +42,7 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
  const responses=p.cranes.map((c,k)=>{
   const m=craneDesignMinimum(c),impact=Math.max(c.impact,m.impact);
   const side=c.wheels.reduce((s,w)=>s+w.lateral,0),sideFactor=side>0?Math.max(1,m.runwaySide/side):1;
-  // Each wheel directly over each support gives the exact reaction maxima for point loads; neighbouring
+  // Each wheel directly over each support gives the exact reaction maxima for point loads; neighboring
   // cranes are also placed at closest approach.
   return positions[k].flatMap(position=>{const origin=position.origin;
    const all=c.wheels.map(w=>({x:origin+w.offset,unloaded:w.unloaded,static:w.loaded/(c.includesImpact?1+c.impact:1),lateral:w.lateral*sideFactor})),wheels=all.filter(w=>w.x>=0&&w.x<=L);

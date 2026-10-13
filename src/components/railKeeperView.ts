@@ -37,7 +37,7 @@ function dimChain(dir:'h'|'v',at:number[],from:number[],pos:number,labels:string
  svg+=at.map(v=>dir==='h'?line([v-2.5,pos+3],[v+2.5,pos-3]):line([pos-3,v+2.5],[pos+3,v-2.5])).join('');
  labels.forEach((label,i)=>{
   const a=at[i],b=at[i+1],w=textWidth(label,9),fits=w+6<=Math.abs(b-a),first=i===0;
-  // A middle segment too short for its text carries it centred below the chain.
+  // A middle segment too short for its text carries it centered below the chain.
   if(dir==='h')svg+=fits?dimText((a+b)/2,pos-4,label,9,'middle'):first||i===labels.length-1?dimText(first?a-4:b+4,pos+3,label,9,first?'end':'start'):dimText((a+b)/2,pos+12,label,9,'middle');
   else svg+=fits?dimText(pos-5,(a+b)/2,label,9,'middle',400,-90):dimText(pos-5,(a+b)/2+3,label,9,'end');
  });
@@ -57,7 +57,7 @@ const labelWidth=(labels:string[])=>Math.max(0,...labels.map(v=>textWidth(labelC
 export function railKeeperView(s:CalculationSnapshot):DetailView{
  return {title:detailTitles.railKeeper,render:()=>{
   const p=s.input,b=p.section,d=p.details!,r=d.rail,u=p.units,depth=p.aist!.railDepth,capped=b.kind==='cap';
-  // SI sizes read to the millimetre, and those under 10 mm (clearances, small welds) to the half millimetre:
+  // SI sizes read to the millimeter, and those under 10 mm (clearances, small welds) to the half millimeter:
   // no false precision from converted inch sizes.
   const siMm=(v:number)=>`${v.toLocaleString('en-US')} mm`,siValue=(v:number)=>v<10?Math.round(v*2)/2:Math.round(v),si=(v:number)=>siMm(siValue(v));
   const {pad,clip:C,entered}=railSeat(p),pt=pad?.thickness??0,size=(v:number)=>u==='SI'?si(v):plateInches(v,u),dim=(v:number)=>u==='SI'?si(v):dimensionLength(v,u);

@@ -6,9 +6,9 @@ import type {Section} from './types';
 
 /** Thin-wall sectorial model of a fully bearing, continuously connected cap.
  * In the overlap the flange and channel web form one median-line plate. Vertical
- * zero-area offsets join the plate centrelines; they add no fictitious stiffness.
+ * zero-area offsets join the plate centerlines; they add no fictitious stiffness.
  * Fillets are omitted. J conservatively omits the positive overlap contribution
- * in Ellifritt/Lue Eq.15. Catalogue transformed properties govern major bending.
+ * in Ellifritt/Lue Eq.15. Catalog transformed properties govern major bending.
  */
 export function cappedMechanics(s:Section){
  const elastic=cappedElasticProperties(s);if(!elastic)return null;
@@ -18,9 +18,9 @@ export function cappedMechanics(s:Section){
  for(const sign of [-1,1])branch(0,sign*s.bf/2,s.tf/2,s.tf,'beam');
  const wt=branch(0,0,s.d-s.tf/2,s.tw,'beam');
  const combinedY=s.d+(s.capTw-s.tf)/2,webY=s.d+s.capTw/2;
- const centre=branch(wt,0,combinedY,0,'link');
+ const center=branch(wt,0,combinedY,0,'link');
  for(const sign of [-1,1]){
-  const overlap=branch(centre,sign*s.bf/2,combinedY,s.tf+s.capTw,'beam');
+  const overlap=branch(center,sign*s.bf/2,combinedY,s.tf+s.capTw,'beam');
   const step=branch(overlap,sign*s.bf/2,webY,0,'link');
   const corner=branch(step,sign*(s.capWidth-s.capTf)/2,webY,s.capTw,'channel');
   branch(corner,sign*(s.capWidth-s.capTf)/2,s.d+s.capTw-s.capDepth,s.capTf,'channel');

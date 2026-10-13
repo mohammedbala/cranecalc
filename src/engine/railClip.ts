@@ -6,7 +6,7 @@ import {clipGeometry,railPadThickness,type ClipGeometry} from './railSeat';
 /**
  * Forces on one rail clip and the throat stress of its base welds. The clips stand in opposing pairs; the side thrust
  * H of the wheel group at a clip station (every wheel within one clip spacing, see detailAnalysis) is taken by ONE
- * clip on the side the rail is pushed toward: no sharing with the neighbouring clips is credited. This is the
+ * clip on the side the rail is pushed toward: no sharing with the neighboring clips is credited. This is the
  * conservative bound (any distribution of the thrust over several clips gives a smaller force per clip), so it needs
  * no further justification. Each clip is checked in both roles, because
  * the side thrust reverses:

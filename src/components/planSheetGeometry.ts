@@ -65,7 +65,7 @@ export function planSheetGeometry(input: ProjectInput, settings: FramingSettings
   const material = new THREE.MeshBasicMaterial(), edge = new THREE.LineBasicMaterial();
   const materials = { column: material, beam: material, plate: material, foundation: material, brace: material, crane: material, edge };
   const railBase = d / 2 + (s.kind === 'cap' ? s.capTw / 1000 : 0), railH = Math.max(.025, input.railHeight / 1000);
-  // Runway centres follow the project rail gauge when detailed inputs exist; otherwise the reference building width.
+  // Runway centers follow the project rail gauge when detailed inputs exist; otherwise the reference building width.
   // The rail is set on the girder web C/L; the rail eccentricity is a design allowance for setting and
   // wear, not a setting offset, so girders are at the crane span.
   const railZ = 0, width = input.details ? input.details.criteria.railGauge / 1000 : f.width / 1000;

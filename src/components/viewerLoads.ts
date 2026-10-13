@@ -18,7 +18,7 @@ export const loadViewNotes:Record<Exclude<LoadView,'off'>,string>={
 };
 
 /** Presentation of the existing moving-analysis case, not a new design combination.
- * Coordinates use the viewer's metres, while forces and positions retain N/mm.
+ * Coordinates use the viewer's meters, while forces and positions retain N/mm.
  * Recompute reactions for THIS case: demand.reactions belongs to peak reaction.
  */
 export function viewerLoads(snapshot:CalculationSnapshot|null,governing:string):ViewerLoad[]{
