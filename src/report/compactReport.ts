@@ -501,7 +501,7 @@ const statusText=statusLabel;
     `C_b=\\frac{M_{cr}}{F_{cr}S_{xc}}=\\frac{${tx3(lh.critical,'moment')}}{${tx3(lh.mocr,'moment')}}=${lh.cb.toFixed(3)}\\quad(\\text{moment gradient and load height})`],
    result:`\\phi_bM_n=${phiB}\\times\\min(${tx3(cap,'moment')},\\ ${lh.cb.toFixed(3)}\\times${tx3(mnLtb,'moment')})=${tx3(lh.capacity,'moment')}\\ \\ge\\ M_u=${tx3(lh.demand,'moment')}\\quad D/C=${dcText(lhCheck.utilization,2)}`,
    note:cm?math(`\\text{Cross-check, AISC Commentary F1: }C_b=\\frac{12.5M_{max}}{2.5M_{max}+3M_A+4M_B+3M_C}=\\frac{12.5\\times${tx3(cm.mmax,'moment')}}{2.5\\times${tx3(cm.mmax,'moment')}+3\\times${tx3(cm.quarter[0],'moment')}+4\\times${tx3(cm.quarter[1],'moment')}+3\\times${tx3(cm.quarter[2],'moment')}}=${cm.gradient.toFixed(3)}`)
-    +html(`With the load-height factor 1.4<sup>2y/h</sup> = ${cm.factor.toFixed(3)} (y = ${e(q3(cm.y))}, h = ${e(q3(cm.h))}): C<sub>b</sub> = ${cm.cb.toFixed(3)}, φ<sub>b</sub>M<sub>n</sub> = ${e(q3(cm.capacity,'moment'))}, D/C = ${dcText(lh.demand/cm.capacity,2)}, against ${dcText(lhCheck.utilization,2)} from the analysis.`):undefined});
+    +html(`With the load-height factor 1.4<sup>2y/h</sup> = ${cm.factor.toFixed(3)} (y = ${e(q3(cm.y))}, the rail head from mid-depth; h = ${e(q3(cm.h))}, the overall depth): C<sub>b</sub> = ${cm.cb.toFixed(3)}, φ<sub>b</sub>M<sub>n</sub> = ${e(q3(cm.capacity,'moment'))}, D/C = ${dcText(lh.demand/cm.capacity,2)}, against ${dcText(lhCheck.utilization,2)} from the analysis.`):undefined});
  }
  function Fy0(){return p.section.Fy*prop.Zx;}
  if(shearCheck?.capacity){
