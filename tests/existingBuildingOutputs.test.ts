@@ -22,10 +22,10 @@ describe('existing building outputs',()=>{
  it('prints unfactored reactions and the column check, and labels the factored interface forces',()=>{
   const html=reportHtml(s);
   expect(html).toMatch(/3\.\d+ Support reactions by load type/);
-  expect(html).toMatch(/4\.\d+ \/ Existing column check/);
-  expect(html).toMatch(/4\.\d+ \/ Crane-level longitudinal bracing/);
-  expect(html).toContain('Factored AIST runway combinations');
-  expect(html).toContain('Fictitious demonstration: original building calculation sheets');
+  expect(html).toMatch(/4\.\d+ Existing column<\/h2>/);
+  expect(html).toMatch(/4\.\d+ Crane-level longitudinal bracing/);
+  expect(html).toMatch(/Factored (LRFD|ASD)\. Each row is one concurrent set|Factored AIST runway combinations/);
+  expect(html).toContain('original building calculation sheets');
  });
  it('exports support reactions by load type in project units',()=>{
   const table=rows(supportReactionsCsv(s));

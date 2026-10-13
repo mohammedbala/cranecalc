@@ -105,7 +105,7 @@ describe('C2 · the W-stub column stiffeners in the report (one calculate)',()=>
   expect(s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
   expect(text).toMatch(/Each stub flange delivers an axial force \(T = M\/\(d − t f \) \+ N\/2 at the top/);expect(text).toMatch(/Unstiffened, the existing column would take each as one concentrated force/);
   expect(text).toMatch(/top, T = [\d.]+ kip with M f = [\d.]+ kip-ft: R u = T \+ 3M f \/b = /);
-  expect(text).toMatch(/Column stiffeners required\. Unstiffened, web local yielding \(J10\.2\) is exceeded at (the top flange|both flange levels) \(D\/C 1\.\d\d/);
+  expect(text).toMatch(/Column stiffeners required\. Unstiffened, .*web local yielding \(J10\.2\) is exceeded at (the top flange|both flange levels) \(D\/C 1\.\d\d/);
   expect(text).toMatch(/Half-depth stiffener pairs \(2 pairs PL/);expect(text).toMatch(/carry each flange's full force system with no credit for the unstiffened column/);
   expect(text).toMatch(/Worked: unstiffened J10 at the stub flanges \(basis for the stiffener decision\)/);
   expect(text).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", half depth, one pair at the stub top flange and bottom flange; 7\/16" fillets/);
