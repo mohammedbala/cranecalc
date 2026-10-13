@@ -20,7 +20,7 @@ describe('ASTM designations on every material listing',()=>{
   const rows=[...t.matchAll(/<tr>(.*?)<\/tr>/g)].map(m=>text(m[1])).filter(r=>!/Element Specification/.test(r));
   expect(rows.length).toBeGreaterThanOrEqual(9);
   for(const r of rows)expect(r,r).toMatch(/ASTM|AWS A5/);
-  expect(text(t)).toMatch(/W24X104 \+ C15X50 ASTM A992/);expect(text(t)).toMatch(/Crane rail .* ASTM A759/);expect(text(t)).toMatch(/Bracing rods \(existing\) ASTM A36/);
+  expect(text(t)).toMatch(/W24X104 \+ C15X50 ASTM A992/);expect(text(t)).toMatch(/Crane rail, .* ASTM A759/);expect(text(t)).toMatch(/Bracing rods \(existing\) ASTM A36/);
   const svg=coverSheetSvg(s,[]),i=svg.indexOf('>MATERIALS<'),j=svg.indexOf('MATERIAL NOTES');
   const cells=text(svg.slice(i,j));
   for(const item of ['RUNWAY GIRDER','CAP CHANNEL','PLATES, BARS, ANGLES, TIES','CRANE RAIL','BOLTS','COLUMN BRACKETS','COLUMN STIFFENERS'])expect(cells).toContain(item);

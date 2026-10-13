@@ -67,10 +67,10 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
   const b2=all.find(c=>c.id==='2b')!,c2=all.find(c=>c.id==='2c')!;expect(b2.h).toBe(1.6);expect(b2.i).toBe(0);expect(c2.i).toBe(1.6);expect(c2.h).toBe(0);
   const text=report.replace(/<annotation[\s\S]*?<\/annotation>/g,'');
   expect(text).toMatch(/Impact and side thrust are in different combinations/);expect(text).toMatch(/errata of February 16, 2023/);
-  const table=text.slice(text.indexOf('TR-13 case'),text.indexOf('Also evaluated, not listed'));
+  const table=text.slice(text.indexOf('TR-13 case'),text.indexOf('Not listed, bounded by the cases shown'));
   for(const c of all.filter(c=>!omitted.includes(c.id)))expect(table,c.id).toContain(`LRFD ${combinationLabel(c.id)}`);
   for(const id of ['1','2','3a','4a'])expect(table).not.toMatch(new RegExp(`>LRFD ${id}<`));
-  expect(text).toMatch(/Also evaluated, not listed: LRFD 1 \(1a with no crane on the runway\)/);
+  expect(text).toMatch(/Not listed, bounded by the cases shown: LRFD 1, 2, 6 and 7 \(no crane on the runway\); LRFD 3a \(bounded by 2a: /);
   expect(text).toMatch(/One crane runs on this runway/);
   // S-00 lists the same cases with the same labels.
   const s00=html.slice(html.indexOf('LOAD COMBINATIONS · RUNWAY GIRDER'),html.indexOf('SUPPORT REACTIONS · UNFACTORED'));
@@ -81,7 +81,7 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
 
  it('M4: one load basis table, code minimum against the supplier value, the governing source named, no 1.00 / 1.00 rows',()=>{
   const text=report.replace(/<annotation[\s\S]*?<\/annotation>/g,'');
-  const t=text.slice(text.indexOf('Crane design loads: code minimum against the supplier value'),text.indexOf('2.3 / Dead loads'));
+  const t=text.slice(text.indexOf('Crane design loads: code minimum against the supplier value'),text.indexOf('2.3 Dead loads'));
   expect(t).toMatch(/Vertical impact I.*?<b>25%<\/b> · Supplier/s);
   expect(t).toMatch(/Side thrust C<sub>ss<\/sub>, this runway.*?<b>2\.00 kip<\/b> · Supplier/s);
   expect(t).toMatch(/1\.00 kip at each of 2 wheels/);

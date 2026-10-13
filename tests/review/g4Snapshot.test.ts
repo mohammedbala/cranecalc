@@ -47,5 +47,5 @@ describe('G4 on the full DEMO-FOCUS-005 calculation',()=>{
   // 0.9807, then 0.9761 with the top restraint at the cap tie line (peer review M6).
   expect(check('rail-twist').utilization!).toBeCloseTo(.9761,3);
  });
- it('D30: no snug-tight allowance in the report',()=>{expect(html).not.toMatch(/permitted only for cranes of 5 tons/);expect(html).toMatch(/Snug-tight bolts are not permitted/);});
+ it('D30: no snug-tight allowance in the report',()=>{expect(html).not.toMatch(/permitted only for cranes of 5 tons/);expect(html).toMatch(/All runway bolts are pretensioned \(AIST TR-13 §5\.14|runway bolted connections are pretensioned high-strength bolts/);});
 });

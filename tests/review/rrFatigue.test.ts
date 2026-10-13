@@ -88,16 +88,17 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   const pts=(v:typeof reg)=>new Set(v.map(c=>c.id.replace(/^detail-(fatigue|full-cycle)-/,''))).size;
   expect(ev.length).toBe(2*pts(ev));expect(sc.length).toBe(2*pts(sc));expect(pts(ev)+pts(sc)).toBe(points);
   // With the rail clip model every register point is below F_TH (screened): the evaluated count then names no register points.
-  expect(body).toContain(`Design checks evaluated ${tax.counts.designEvaluated} (${tax.counts.designShown} body rows${ev.length?`; ${ev.length} of them at ${pts(ev)} fatigue register points`:''}), screened ${tax.counts.designScreened} (${sc.length} of them at ${pts(sc)} register points)`);
-  expect(body).toContain(`The girder detail register has ${points} points`);expect(body).toContain(`${2*points} checks: ${pts(ev)} points (${ev.length} checks) evaluated, ${pts(sc)} points (${sc.length} checks) screened`);
+  // One count line under the summary, without bookkeeping of body rows or register points.
+  expect(body).toContain(`${tax.counts.designEvaluated} design checks evaluated, ${tax.counts.designScreened} screened below the fatigue threshold`);
+  expect(body).not.toMatch(/body rows?|register points?/);
+  expect(body).toContain(`Girder details at ${new Set(r.fatigue.map(v=>v.x.toFixed(0))).size} stations (both flange edges): ${pts(ev)?`${pts(ev)} of ${points} locations evaluated`:'all below F'}`);
   // Every fatigue design check is in exactly one table row (a detail), evaluated or screened; checks keep their own gate.
   const F=tax.fatigue,members=[...F.evaluated,...F.screened].flatMap(v=>v.members),gate=(id:string)=>tax.entries.get(id)!.gate;
   const fatigueChecks=[...tax.entries.values()].filter(t=>t.type==='design'&&t.effect==='fatigue'&&!/^fatigue-peak/.test(t.check.id)&&t.check.status!=='not-applicable');
   expect(members.length).toBe(fatigueChecks.length);
   const nEv=members.filter(c=>gate(c.id)==='evaluated').length,nSc=members.filter(c=>gate(c.id)==='screened').length;
   expect(nSc).toBe(tax.counts.designScreened);expect(nEv+nSc).toBe(members.length);
-  expect(body).toContain(`${F.evaluated.length} details evaluated; ${F.screened.length} details screened`);
-  expect(body).toContain(`Of their ${members.length} checks, ${nEv} are evaluated and ${nSc} screened`);
+  expect(body).not.toMatch(/details evaluated; \d+ details screened|Of their \d+ checks/);
   const keeper=[...F.evaluated,...F.screened].find(v=>v.title==='Rail clip base weld')!;expect(keeper.points*2).toBe(keeper.members.length);
   const kSc=pts(keeper.members.filter(c=>gate(c.id)==='screened'));
   // Every clip station is below F_TH of Category D: the detail is screened and listed with its largest range.
@@ -105,7 +106,8 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   expect(body).not.toMatch(/points at \d+ locations/);
  });
  it('states the cycle basis as modelled and the Class B basis where the class is printed (items 6, 7)',()=>{
-  expect(body).toMatch(/The 400,000 fluctuations include the loaded and the empty return passages .*an empty passage \(C d = 3\.50 kip per wheel\) is counted at a loaded bin’s range, the lightest being 4\.50 kip per wheel \(Light lifts\)/);
+  expect(body).toMatch(/Design life: 400,000 cycles \(Class B, section 1\.4\), loaded and empty passes included/);
+  expect(body).toMatch(/Each cycle takes the full range of its bin, so empty passes are counted at no less than the Light lifts range \(4\.50 kip per wheel\)/);
   const sentence=classBasisSentence(p);
   expect(sentence).toBe('Class B: TR-13 Table 1.1 classifies the building by its number of load cycles, and no basis limiting the count to full-load repetitions is stated, so all 400,000 crane load cycles are counted (Class B, 100,000 to 500,000 cycles), where the owner\'s 30,000 full-load repetitions alone would give Class C.');
   expect(check('building-class').note.startsWith(sentence)).toBe(true);
