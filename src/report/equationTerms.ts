@@ -67,6 +67,8 @@ const terms:[RegExp,Term[]][]=[
  [/^haunch-(combined|bottom-flange|top-flange|top-flange-net|interaction)$/,[['f','flange stress'],['P','axial force along the haunch'],['C','sloping bottom flange force'],['T','top flange force'],['A_f','flange area'],['M_f','flange bending from torsion and the longitudinal force']]],
  [/^haunch-seat-strip$/,[['m_u','required moment per unit width of the top flange'],['P','bearing force'],['c','flange cantilever from the stiffener face'],['l','bearing patch length'],['W','bearing width'],['x','load position from the web plane'],['x_s','stiffener tip'],['b_e','bearing width spread at 45° to the stiffener tip']]],
  [/^haunch-stiffener-(column|weld)$/,[['e','eccentricity of the reaction from the stiffener centroid']]],
+ [/^haunch-stiffener-(proportions|bearing)$/,[['b_{s,top}','stiffener outstand under the top flange (the wing, where wider than on the bottom flange)']]],
+ [/^haunch-stiffener-bracket$/,[['d_s','stiffener depth at the web face between the corner clips'],['M_u','reaction times its distance from the web face'],['V_u','reaction on one stiffener']]],
  [/^haunch-stiffener-weld$/,[['M','moment of the reaction about the weld group centroid'],['c_x','distance of the critical point from the centroid, along the stiffener'],['c_y','distance across it']]],
  [/^haunch-flange-web-weld$/,[['R','bearing force over the web between the stiffener clips']]],
  [/^haunch-(top|bottom)-flange-cjp$/,[['f','flange normal stress'],['V_f','lateral shear in the flange'],['A_f','flange area'],['\\alpha','bottom flange slope']]],

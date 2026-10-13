@@ -61,7 +61,8 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
   put('topFlange',(Math.max(0,f.Tt)/(g.btr*g.tt)+Math.abs(f.Mtop)/(g.tt*g.btr**2/6))/phiFy);
   put('bottomFlange',(Math.max(0,f.C)/(g.bb*g.tb)+Math.abs(f.Mbot)/(g.tb*g.bb**2/6))/phiFy);
   put('strip',topFlangeStrip(g,v.loads,W,d.bearing.thickness,d.bearing.length).moment/available(Fy*g.tt**2/4,m,.9,1.67));
-  for(const s of f.sides){const P=Math.abs(s.P);if(!P)continue;const x=stiffenerLoadPoint(g,s.x),Pr=P/sf.half,Mr=P*Math.abs(x-sf.xc)/available(Fy*sf.Z,m,.9,1.67);put('stiffener',Pr>=.2?Pr+8/9*Mr:Pr/2+Mr);put('stiffenerWeld',haunchStiffenerWeldStress(g,sf,P,x)/phiW);}
+  for(const s of f.sides){const P=Math.abs(s.P);if(!P)continue;const x=stiffenerLoadPoint(g,s.x),Pr=P/sf.half,Mr=P*Math.abs(x-sf.xc)/available(Fy*sf.Z,m,.9,1.67),u=Math.max(0,x-g.tw/2);
+   put('stiffener',x<=sf.tip+1e-6?Pr:Pr>=.2?Pr+8/9*Mr:Pr/2+Mr);put('stiffenerBracket',(P*u/sf.Mc)**2+(P/sf.Vc)**2);put('stiffenerWeld',haunchStiffenerWeldStress(g,sf,P,x)/phiW);}
   put('webWeld',haunchWeldStress(g,grp,root,f).web/phiW);
   if(grp.cjp){const r=haunchCjpRatios(g,root,f,m,Fy);put('cjp',Math.max(r.top,r.bottom));}
   // The receiving column under the two flange forces, unstiffened, and the stiffener forces at both levels.
@@ -134,17 +135,19 @@ export function sizeTaperedHaunch(p:ProjectInput,target=.9):ProjectInput{
   }
   else if(key==='shear')grow({webThickness:h.webThickness+inch/16});
   else if(key==='strip')grow({topThickness:h.topThickness+inch/8});
-  else if(key==='stiffener'||key==='stiffenerWeld'||key==='stiffenerFatigue'){h.stiffener.thickness+=h.stiffener.thickness<inch/2?inch/16:inch/8;if(key!=='stiffener')h.stiffener.weld+=inch/16;
-   // An end plate is as thick as the stiffeners: lengthen the haunch so the bearing plate still lies wholly on it.
-   const need=b.reach+d.bearing.width/2+(h.endPlate?h.stiffener.thickness:0);if(b.seatProjection<need-1e-6)b.seatProjection=Math.ceil(need/(inch/4)-1e-9)*inch/4;}
+  else if(key==='stiffener'||key==='stiffenerBracket'||key==='stiffenerWeld'||key==='stiffenerFatigue'){h.stiffener.thickness+=h.stiffener.thickness<inch/2?inch/16:inch/8;if(key!=='stiffener')h.stiffener.weld+=inch/16;
+}
   else if(key==='flangeWeb')grow({flangeWebWeld:h.flangeWebWeld+inch/16});
   else if(key==='webWeld'){if(b.rootWeld+inch/16<=h.webThickness-inch/16)b.rootWeld+=inch/16;else grow({webThickness:h.webThickness+inch/16});}
   else if(key==='deflection'||thick)deeper();
   else if(key==='fatigueTop'||key==='topFlange')grow({topThickness:h.topThickness+inch/8});
   else if(key==='fatigueBottom'||key==='bottomFlange')grow({bottomThickness:h.bottomThickness+inch/8});
   else grow({topThickness:h.topThickness+inch/8,bottomThickness:h.bottomThickness+inch/8});
-  // Keep the J10.8 stiffener thickness, the fillet minimums and the web slenderness with the plates.
-  h.stiffener.thickness=Math.max(h.stiffener.thickness,up(h.topThickness/2,inch/8));
+  // Keep the J10.8 stiffener thickness (and a wing's outstand within 0.56 sqrt(E/Fy) t), the fillet minimums and the
+  // web slenderness with the plates.
+  h.stiffener.thickness=Math.max(h.stiffener.thickness,up(h.topThickness/2,inch/8),up(Math.max(h.stiffener.width,h.stiffener.topWidth??0)/(.56*Math.sqrt(q.section.E/d.material.Fy)),inch/8));
+  // An end plate is as thick as the stiffeners: lengthen the haunch so the bearing plate still lies wholly on it.
+  const need=b.reach+d.bearing.width/2+(h.endPlate?h.stiffener.thickness:0);if(b.seatProjection<need-1e-6)b.seatProjection=up(need,inch/4);
   h.stiffener.weld=Math.max(h.stiffener.weld,minimumFillet(Math.max(h.stiffener.thickness,h.webThickness,h.bottomThickness)));
   h.flangeWebWeld=Math.max(h.flangeWebWeld,minimumFillet(Math.max(h.webThickness,h.topThickness,h.bottomThickness)));
   b.rootWeld=Math.max(b.rootWeld,minimumFillet(Math.max(h.webThickness,b.receiver.flangeThickness)));

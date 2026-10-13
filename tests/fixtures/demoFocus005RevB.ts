@@ -1,3 +1,4 @@
+import {wing} from '../../src/engine/taperedHaunchInputs';
 import type {ProjectInput} from '../../src/engine/types';
 import {demoFocus005} from './demoFocus005';
 import {loadCappedSection} from '../../src/data/aiscChannels';
@@ -40,6 +41,9 @@ export function demoFocus005RevB():ProjectInput{
  note('Rail joints entered as tight joints, 1/16 in maximum gap.');
  // D31 (section E) · haunch top flange widened for the 1/8 in bearing setting tolerance; cap-angle end plate taller.
  p.details!.bracket!.haunch!.topWidth=25.5*inch;
+ // Haunch bearing stiffeners with wings to the seat edge: the girder reactions bear on them instead of bending the top
+ // flange outstand; 1 in plates for the 12 1/4 in wing outstand (b/t at most 0.56 sqrt(E/Fy), AISC Manual Part 10).
+ {const h=p.details!.bracket!.haunch!;h.stiffener={...h.stiffener,thickness:inch,...wing(h.topWidth,h.bottomWidth,h.webThickness)};}
  // E35 · end-bay bearings centered on the haunch web at the runway-end grids (girder runs 6 in past the grid).
  p.details!.simpleSupport!.endGridBearing='centered';
  note('End-bay bearings centered on the haunch web at grids 1 and 6 (seat moment there 27.9 → 10.5 kip-ft).');

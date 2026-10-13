@@ -29,7 +29,8 @@ export default function TaperedHaunchInputs({value,onChange,numeric,units='US'}:
    {h.flangeJoint==='fillet'&&numeric('Flange-to-column fillet',h.flangeWeld,flangeWeld=>edit({flangeWeld}))}
    {numeric('Flange-to-web fillet (both sides)',h.flangeWebWeld,flangeWebWeld=>edit({flangeWebWeld}))}
    {numeric('Bearing stiffener thickness',h.stiffener.thickness,thickness=>stiffener({thickness}))}
-   {numeric('Bearing stiffener outstand from web',h.stiffener.width,width=>stiffener({width}))}
+   {numeric('Bearing stiffener outstand on bottom flange',h.stiffener.width,width=>stiffener({width}))}
+   {numeric('Stiffener wing outstand under seat (0: no wing)',h.stiffener.topWidth??0,topWidth=>stiffener({topWidth:topWidth>h.stiffener.width?topWidth:undefined}))}
    {numeric('Bearing stiffener fillet',h.stiffener.weld,weld=>stiffener({weld}))}
   </div>
   {check('Tip end plate closing the haunch',!!h.endPlate,endPlate=>edit({endPlate}))}

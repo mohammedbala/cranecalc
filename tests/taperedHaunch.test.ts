@@ -171,7 +171,7 @@ describe('tapered I haunch: drawings, parts, report and figures',()=>{
   expect(topic.views.map(v=>v.title)).toEqual([detailTitles.weldedBracket,haunchPlanTitle,haunchSectionTitle]);
   const svg=topic.views.map(v=>v.render().svg).join('').replaceAll('&quot;','"').replaceAll('&#39;',"'").replaceAll('&amp;','&');
   const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
-  for(const t of [dim(h.L),dim(h.a),dim(h.hr),dim(h.ht),dim(h.bt),dim(h.btr),dim(h.bb),`WEB PL ${size(h.tw)}`,`TOP FL. PL ${size(h.tt)} X ${dim(h.bt)}`,`BOTTOM FL. PL ${size(h.tb)} X ${dim(h.bb)}`,`2 STIFF. PL ${size(st.t)} X ${size(st.width)}`,size(h.webWeld).replaceAll('"',''),size(h.flangeWebWeld).replaceAll('"','')])expect(svg,t).toContain(t);
+  for(const t of [dim(h.L),dim(h.a),dim(h.hr),dim(h.ht),dim(h.bt),dim(h.btr),dim(h.bb),`WEB PL ${size(h.tw)}`,`TOP FL. PL ${size(h.tt)} X ${dim(h.bt)}`,`BOTTOM FL. PL ${size(h.tb)} X ${dim(h.bb)}`,...(st.wing?[`2 WING STIFF. PL ${size(st.t)} X ${size(st.top)}`,`TAPERED TO ${size(st.width)}`]:[`2 STIFF. PL ${size(st.t)} X ${size(st.width)}`]),size(h.webWeld).replaceAll('"',''),size(h.flangeWebWeld).replaceAll('"','')])expect(svg,t).toContain(t);
   expect(svg).toContain('data-weld="cjp"');expect(svg).toContain('data-weld-location="field"');
   const bolts=taperedHaunchParts(p).bolts.filter(b=>b.grid==='interior').length;expect(svg).toContain(`${bolts} - `);
   // The bracket sheet as issued, notes included, in US and SI.

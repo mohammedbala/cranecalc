@@ -48,7 +48,7 @@ const idClauses:[RegExp,string][]=[
  [/(^|-)net$/,'J4.1(b)'],[/gross$/,'J4.1(a)'],[/block$/,'J4.3'],[/shear-rupture$/,'J4.2(b)'],
  [/weld-(minimum|maximum|size)$/,'J2.2b'],[/(^|-)weld(-base)?$/,'J2.4'],
  [/(column-yield|web-yield|web-yielding)$/,'J10.2'],[/(cripple|crippling)$/,'J10.3'],[/sidesway$/,'J10.4'],[/panel$/,'J10.6'],[/column-flange$/,'J10.1'],
- [/(stiffener-bearing|pin-bearing|contact)$/,'J7'],[/cjp$/,'J2.4'],[/stiffener-column$/,'J10.8'],[/(hold-down-model|-uplift)$/,'J3.6'],[/(^bearing-plate|washer-bending|end-stop-face|end-stop-face-outstand)$/,'F11'],[/(bolt-tension|locating-tension)$/,'J3.7'],[/(bolts?|bolt-shear|locating-shear)$/,'J3.6'],
+ [/(stiffener-bearing|pin-bearing|contact)$/,'J7'],[/cjp$/,'J2.4'],[/stiffener-column$/,'J10.8'],[/stiffener-bracket$/,'F11.1, J4.2'],[/(hold-down-model|-uplift)$/,'J3.6'],[/(^bearing-plate|washer-bending|end-stop-face|end-stop-face-outstand)$/,'F11'],[/(bolt-tension|locating-tension)$/,'J3.7'],[/(bolts?|bolt-shear|locating-shear)$/,'J3.6'],
  [/^(tie|rail-joint|end-bearing-(flange|plate|sleeve|seat)|brace-strut)-bearing$/,'J3.10'],[/(plate|gusset)-compression$/,'J4.4'],[/fatigue/,'Appendix 3']
 ];
 const idClause=(id:string)=>idClauses.find(([re])=>re.test(id))?.[1];

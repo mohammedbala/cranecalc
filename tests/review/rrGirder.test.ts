@@ -135,7 +135,8 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
  it('M9: every element shows a worked example of its governing or near-limit checks',()=>{
   const worked=(re:RegExp)=>expect(tex.some(t=>re.test(t)),String(re)).toBe(true);
   worked(/^m_u=\\frac\{Pc\^2\}\{2lW\}=|^m_u=\\frac\{P\(x-x_s\)\}\{b_e\}=/);// haunch seat strip
-  worked(/^P_c=\\phi P_n\/2=/);// haunch bearing stiffener column
+  worked(/^P_c=\\phi P_n\/2=|^\\frac\{P_r\}\{P_c\}=/);// haunch bearing stiffener column (eccentric, or axial on a wing)
+  worked(/^d_s=h_s-2c=/);// haunch stiffener as a stiffened seat
   worked(/^\\theta h_b\+\\alpha L\\Delta T\+t_\{set\}=/);// tie slots
   worked(/^1\.5T_b=1\.5\\times/);// sleeves
   worked(/^\\alpha L\\Delta T\+d\\theta\+t_\{set\}=/);// sliding end travel

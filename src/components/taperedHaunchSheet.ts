@@ -55,7 +55,8 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const under=(y:number)=>-g.depth(y),inner=(y:number)=>-g.depth(y)+tbv;
  const colName=sc.isNew?sc.name:`EXISTING ${p.existingColumn?.enabled&&p.existingColumn.shape?p.existingColumn.shape+' ':''}COLUMN`;
  const topLabel=`TOP FL. PL ${size(tt)} X ${dim(bt)}${f?` (${dim(btr)} AT COLUMN)`:''}`,webLabel=`WEB PL ${size(tw)}`,botLabel=`BOTTOM FL. PL ${size(g.tb)} X ${dim(bb)}`;
- const stiffLabel=`2 STIFF. PL ${size(st.t)} X ${size(st.width)}`;
+ // A wing stiffener is cut wider under the seat than on the bottom flange.
+ const stiffLabel=st.wing?`2 WING STIFF. PL ${size(st.t)} X ${size(st.top)} TAPERED TO ${size(st.width)} AT THE BOTTOM FLANGE`:`2 STIFF. PL ${size(st.t)} X ${size(st.width)}`;
  // The CJP tail names the welds note: steel backing removed, root back-gouged and rewelded.
  const flangeWeld=(target:XY,which:string):Item=>g.joint==='cjp'?{at:target,labels:[`${which} FLANGE TO COLUMN`,`FLANGE, ${where}`],groove:true,tail:`CJP, HAUNCH NOTE ${weldsNote()}`,field:sc.field}:{at:target,labels:[`${which} FLANGE, BOTH FACES,`,`TO COLUMN FLANGE, ${where}`],weld:size(g.flangeWeld),both:true,field:sc.field};
  const views:DetailView[]=[],cs=stiffenerDrawing(p),colCls=sc.isNew?'runway-line':'reference-line';
@@ -154,7 +155,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=poly(outline);
   for(const sx of [-1,1])svg+=line([X(sx*tw/2),0],[X(sx*tw/2),Y(Lw)],'hidden-line');
   if(bb<bt-1e-6)for(const sx of [-1,1])svg+=line([X(sx*bb/2),Y(f?f.y0:0)],[X(sx*bb/2),tip],'hidden-line');
-  for(const sx of [-1,1]){const x0=sx*tw/2,x1=sx*(tw/2+st.width);svg+=line([X(x0),Y(a-st.t/2)],[X(x1),Y(a-st.t/2)],'hidden-line')+line([X(x0),Y(a+st.t/2)],[X(x1),Y(a+st.t/2)],'hidden-line')+line([X(x1),Y(a-st.t/2)],[X(x1),Y(a+st.t/2)],'hidden-line');}
+  for(const sx of [-1,1]){const x0=sx*tw/2,x1=sx*(tw/2+st.top);svg+=line([X(x0),Y(a-st.t/2)],[X(x1),Y(a-st.t/2)],'hidden-line')+line([X(x0),Y(a+st.t/2)],[X(x1),Y(a+st.t/2)],'hidden-line')+line([X(x1),Y(a-st.t/2)],[X(x1),Y(a+st.t/2)],'hidden-line');}
   if(g.endPlate)svg+=line([X(-Math.min(bt,bb)/2),Y(Lw)],[X(Math.min(bt,bb)/2),Y(Lw)],'hidden-line');
   const plates=parts.bearings.filter(v=>v.grid==='interior'),bolts=parts.bolts.filter(v=>v.grid==='interior');
   for(const v of plates)svg+=rect(X(v.x0),Y(v.y0),(v.x1-v.x0)*k,(v.y1-v.y0)*k,'runway-line');
@@ -200,8 +201,8 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   // Beyond the cut the underside of the bottom flange is seen sloping down to the root.
   svg+=rect(X(-bb/2),Y(zu),bb*k,(hr+zu)*k,'runway-line');
   svg+=rect(X(-bt/2),Y(0),bt*k,tt*k,'runway-line')+rect(X(-tw/2),Y(-tt),tw*k,(zb+tt)*-k,'runway-line')+rect(X(-bb/2),Y(zb),bb*k,tbv*k,'runway-line');
-  for(const sx of [-1,1]){const x0=sx*tw/2,x1=sx*(tw/2+st.width),cl=st.clip;
-   svg+=poly([[X(x0+sx*cl),Y(-tt)],[X(x1),Y(-tt)],[X(x1),Y(zb)],[X(x0+sx*cl),Y(zb)],[X(x0),Y(zb+cl)],[X(x0),Y(-tt-cl)]]);}
+  for(const sx of [-1,1]){const x0=sx*tw/2,x1=sx*(tw/2+st.width),xt=sx*(tw/2+st.top),cl=st.clip;
+   svg+=poly([[X(x0+sx*cl),Y(-tt)],[X(xt),Y(-tt)],[X(x1),Y(zb)],[X(x0+sx*cl),Y(zb)],[X(x0),Y(zb+cl)],[X(x0),Y(-tt-cl)]]);}
   svg+=dimH(X(-bt/2),X(bt/2),Y(0)-2,Y(ext)-16,dim(bt));
   svg+=dimH(X(-bb/2),X(bb/2),Y(-hr)+2,Y(-hr-ext)+16,dim(bb));
   // The depth at the cut follows from the dimensioned taper: a reference dimension to the nearest 1/4 in.
@@ -210,7 +211,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[X(c.width/2)+2,Y(ext)+8],labels:[colName,'BEYOND']},
    {at:[X(bt*.42),Y(-tt/2)],labels:[topLabel]},
    {at:[X(tw/2),Y(-tt)],labels:['FLANGES TO WEB, BOTH SIDES, SHOP'],weld:size(g.flangeWebWeld),both:true},
-   {at:[X(tw/2+st.width*.55),Y((zb-tt)/2)],labels:[`${stiffLabel}, ${size(st.clip)} CLIPS,`,'TO WEB AND BOTH FLANGES, SHOP'],weld:size(st.weld),both:true},
+   {at:[X(tw/2+st.width*.55),Y((zb-tt)/2)],labels:st.wing?wrapRows(`${stiffLabel}, ${size(st.clip)} CLIPS, TO WEB AND BOTH FLANGES, SHOP`,150):[`${stiffLabel}, ${size(st.clip)} CLIPS,`,'TO WEB AND BOTH FLANGES, SHOP'],weld:size(st.weld),both:true},
    {at:[X(-tw/2),Y((zb-tt)/2+(zb+tt)*.15)],labels:[webLabel]},
    {at:[X(bb*.4),Y(zb+tbv/2)],labels:[botLabel,`SLOPE ${deg}°; ITS UNDERSIDE BEYOND`]},
    ...(cs?[{at:[X(-(cs.g.tw/2+cs.g.width*.8)),Y(cs.g.levels[1].z)+cs.g.t*k/2] as XY,labels:['COL. STIFFENERS BEYOND',`(HIDDEN); SEE ${detailRef(columnStiffenerTitle)}`]}]:[])

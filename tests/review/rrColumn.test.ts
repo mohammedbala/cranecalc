@@ -44,8 +44,9 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   expect(ru(top[0].note)).toBe(ru(top[1].note));expect(ru(bottom[0].note)).toBe(ru(bottom[1].note));
   expect(ru(top[0].note)).toBeCloseTo(S.pull.value/kip,0);expect(S.pull.value/kip).toBeCloseTo(132.4,0);
   expect(S.push.value/kip).toBeCloseTo(121.2,0);
-  // The flange force system: T = 44.3 kip with M_f = 34.3 kip-ft (DG9 flange bending of the torque), R_u = T + 3M_f/b.
-  const b=14*inch;expect(Math.abs(S.pull.P!)/kip).toBeCloseTo(44.3,1);expect(Math.abs(S.pull.M!)/kft).toBeCloseTo(34.25,1);
+  // The flange force system: T = 44.4 kip (with the wing stiffeners' weight) with M_f = 34.3 kip-ft (DG9 flange bending
+  // of the torque), R_u = T + 3M_f/b.
+  const b=14*inch;expect(Math.abs(S.pull.P!)/kip).toBeCloseTo(44.45,1);expect(Math.abs(S.pull.M!)/kft).toBeCloseTo(34.25,1);
   expect(S.pull.value).toBeCloseTo(Math.abs(S.pull.P!)+3*Math.abs(S.pull.M!)/b,3);
   // J10.2 is exceeded unstiffened (1.32): stiffeners are required. J10.1 cites J10.1, not J10.8.
   expect(check('haunch-column-yield-top').note).toMatch(/^Unstiffened J10\.2, not governing \(the column is stiffened at this level\): R_u = 132(\.\d+)? kip against φR_n = 100(\.\d+)? kip, D\/C 1\.32 \(exceeded\)\./);

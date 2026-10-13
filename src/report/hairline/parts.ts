@@ -75,7 +75,8 @@ export function bracket(S:Scene,p:ProjectInput,g:SupportGeometry,role:Role){
   const f=h.flare,top:Vec2[]=f?[[-h.btr/2,0],[h.btr/2,0],[h.btr/2,f.y0],[h.bt/2,f.y1],[h.bt/2,h.L],[-h.bt/2,h.L],[-h.bt/2,f.y1],[-h.btr/2,f.y0]]:[[-h.bt/2,0],[h.bt/2,0],[h.bt/2,h.L],[-h.bt/2,h.L]];
   S.group('bracket/top-flange',()=>S.prism(2,top,-h.tt,0,role));
   S.group('bracket/bottom-flange',()=>S.prism(0,[[0,-h.hr],[h.L,-h.ht],[h.L,-h.ht+h.tbv],[0,-h.hr+h.tbv]],-h.bb/2,h.bb/2,role));
-  S.group('bracket/stiffener',()=>{for(const side of [-1,1])S.box(side*h.tw/2,h.a-st.t/2,inner(h.a),side*(h.tw/2+st.width),h.a+st.t/2,-h.tt,role);});
+  // The stiffeners in the plane y = a: with wings, wider under the seat than on the bottom flange.
+  S.group('bracket/stiffener',()=>{for(const side of [-1,1])S.prism(1,[[side*h.tw/2,inner(h.a)],[side*(h.tw/2+st.width),inner(h.a)],[side*(h.tw/2+st.top),-h.tt],[side*h.tw/2,-h.tt]],h.a-st.t/2,h.a+st.t/2,role);});
   rootWelds(S,0,h.tw,inner(0),-h.tt,Math.max(h.webWeld,10)*1.5,role);
   if(tep)S.group('bracket/end-plate',()=>S.box(-h.bb/2,Lw,inner(h.L),h.bb/2,h.L,-h.tt,role));
   return S;

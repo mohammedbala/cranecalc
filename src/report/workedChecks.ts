@@ -150,9 +150,19 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  if(c.id==='haunch-stiffener-column'&&d?.bracket){
   const w=s.detailResults?.taperedHaunch?.strength.stiffener?.work,g=projectHaunch(p),Fy=d.material.Fy,st=haunchStiffener(g,p.section.E,Fy,p.method);
   if(w){const Pr=w.P/w.Pc,e=Math.abs(w.x-w.xc),Mr=w.P*e/(factor(.9,1.67)*Fy*w.Z),U=Pr>=.2?Pr+8/9*Mr:Pr/2+Mr;
+   const column=`A=2b_st_s+${st.interior?25:12}t_w\\,t_w=2\\times${tx(st.width,'length')}\\times${tx(st.t,'length')}+${tx(st.strip,'length')}\\times${tx(g.tw,'length')}=${tx(st.A,'area')};\\quad L_c/r=${tx(st.KL,'length')}/${tx(st.r,'length')}=${st.slender.toFixed(1)}\\ ${st.slender<=25?'\\le25\\ (\\text{J4.4}):\\ \\phi P_n=0.90F_yA':'(\\text{E3})'}=${tx(st.column,'force')}`;
+   // The governing reaction bears on the stiffener (within its top tip): the column is axial.
+   if(w.bears&&close(Pr,dem))return [column,`\\frac{P_r}{P_c}=\\frac{${tx(w.P,'force')}}{${tx(w.Pc,'force')}}=${Pr.toFixed(3)}\\le1\\quad(P_c=\\phi P_n/2,\\ \\text{one stiffener; the reaction bears on it at }x=${tx(w.x,'length')})\\quad D/C=${dcText(c.utilization,2)}`];
    if(close(U,dem))return [`A=2b_st_s+${st.interior?25:12}t_w\\,t_w=2\\times${tx(st.width,'length')}\\times${tx(st.t,'length')}+${tx(st.strip,'length')}\\times${tx(g.tw,'length')}=${tx(st.A,'area')};\\quad L_c/r=${tx(st.KL,'length')}/${tx(st.r,'length')}=${st.slender.toFixed(1)}\\ ${st.slender<=25?'\\le25\\ (\\text{J4.4}):\\ \\phi P_n=0.90F_yA':'(\\text{E3})'}=${tx(st.column,'force')}`,
     `P_c=\\phi P_n/2=${tx(w.Pc,'force')}\\ \\text{(one stiffener)};\\quad e=|x-x_c|=|${tx(w.x,'length')}-${tx(w.xc,'length')}|=${tx(e,'length')};\\quad Z=t_sb_s^2/4=${tx(w.Z,'modulus')}`,
     `${Pr>=.2?'\\frac{P_r}{P_c}+\\frac89\\frac{P_re}{\\phi_bF_yZ}':'\\frac{P_r}{2P_c}+\\frac{P_re}{\\phi_bF_yZ}'}=${Pr>=.2?`\\frac{${tx(w.P,'force')}}{${tx(w.Pc,'force')}}+\\frac89`:`\\frac{${tx(w.P,'force')}}{2\\times${tx(w.Pc,'force')}}+`}\\frac{${tx(w.P,'force')}\\times${tx(e,'length')}}{${fl(.9,1.67)}\\times${tx(Fy,'stress')}\\times${tx(w.Z,'modulus')}}=${U.toFixed(3)}\\le1\\quad D/C=${dcText(c.utilization,2)}`];}
+ }
+ if(c.id==='haunch-stiffener-bracket'&&d?.bracket){
+  const w=s.detailResults?.taperedHaunch?.strength.stiffenerBracket?.work,g=projectHaunch(p),Fy=d.material.Fy,st=haunchStiffener(g,p.section.E,Fy,p.method);
+  if(w){const M=w.P*w.u,U=(M/w.Mc)**2+(w.P/w.Vc)**2;
+   if(close(U,dem))return [`d_s=h_s-2c=${tx(st.height,'length')}-2\\times${tx(st.clip,'length')}=${tx(st.depth,'length')};\\quad \\phi M_n=${fl(.9,1.67)}F_yt_s\\frac{d_s^2}{4}=${fl(.9,1.67)}\\times${tx(Fy,'stress')}\\times${tx(st.t,'length')}\\times\\frac{(${tx(st.depth,'length')})^2}{4}=${tx(w.Mc,'moment')};\\quad \\phi V_n=${fl(1,1.5)}\\times0.6F_yt_sd_s=${tx(w.Vc,'force')}`,
+    `M_u=Pu=P(x-t_w/2)=${tx(w.P,'force')}\\times${tx(w.u,'length')}=${tx(M,'moment')};\\quad V_u=P=${tx(w.P,'force')}`,
+    `\\left(\\frac{M_u}{\\phi M_n}\\right)^2+\\left(\\frac{V_u}{\\phi V_n}\\right)^2=\\left(\\frac{${tx(M,'moment')}}{${tx(w.Mc,'moment')}}\\right)^2+\\left(\\frac{${tx(w.P,'force')}}{${tx(w.Vc,'force')}}\\right)^2=${U.toFixed(3)}\\le1\\quad D/C=${dcText(c.utilization,2)}`];}
  }
  // Sleeves under the bolt installation load: 1.5T_b against the sleeve yield strength, phi = 1.0.
  if((c.id==='cap-angle-sleeve'||c.id==='end-bearing-sleeve')&&d){

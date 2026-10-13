@@ -7,7 +7,9 @@ const pos=z.number().finite().positive(),inch=25.4;
  * New built-up tapered I haunch welded to the column flange ('tapered-haunch'): one vertical tapered web plate in
  * the plane of the grid, a horizontal top flange that is the seat of both girder bearings, a sloping bottom flange
  * from the bottom of the root to the bottom of the tip, a pair of full-depth bearing stiffeners under the girder web
- * line and an optional tip end plate. The bracket reach (column face to the runway centerline), the projection
+ * line and an optional tip end plate. Where the seat is wider than the bottom flange, each stiffener carries a wing:
+ * it widens from its outstand on the bottom flange to the seat edge under the top flange, with a straight sloped free
+ * edge, so the girder reactions bear on the stiffeners instead of bending the top flange outstand. The bracket reach (column face to the runway centerline), the projection
  * (seatProjection = L) and the web-to-column fillet (rootWeld) are the bracket's own inputs. Canonical mm, MPa.
  *
  * Both flanges are welded to the column flange at a width that fits it with the weld run-out. Two girder bearings
@@ -25,8 +27,11 @@ export const taperedHaunchSchema=z.object({
  rootWidth:pos.optional(),
  /** Sloping bottom flange: width along the runway and thickness normal to its plane. */
  bottomWidth:pos,bottomThickness:pos,
- /** Pair of full-depth bearing stiffeners at the girder web line: thickness, outstand from the web face, fillet. */
- stiffener:z.object({thickness:pos,width:pos,weld:pos}),
+ /**
+  * Pair of full-depth bearing stiffeners at the girder web line: thickness, outstand from the web face on the bottom
+  * flange, fillet; topWidth, the outstand under the top flange where it is wider (a wing plate with a sloped free edge).
+  */
+ stiffener:z.object({thickness:pos,width:pos,weld:pos,topWidth:pos.optional()}),
  /** Flanges to the column flange: CJP groove welds, or a fillet on each face. */
  flangeJoint:z.enum(['cjp','fillet']),
  /** Fillet leg of the flange-to-column fillets (fillet joint only). */
@@ -51,14 +56,22 @@ type Bracket={arrangement?:string;haunch?:TaperedHaunchInput;reach:number;seatPr
  * Starting sizes from the bracket's projection and the receiving column flange: both flanges welded as wide as the
  * column flange less the CJP run-out (in 1/4 in), the top flange flared to the seat width that holds the bearings,
  * root depth max(12 in, 0.6 L) and tip depth half of it (whole inches), a 3/8 in web, 1 in flanges, stiffeners 1/4 in
- * inside the narrower welded flange. `sizeTaperedHaunch` grows the plates for the project's reactions.
+ * inside the narrower welded flange, winged to 1/4 in inside the seat edge where the seat is wider. `sizeTaperedHaunch`
+ * grows the plates for the project's reactions.
  */
 export function defaultTaperedHaunch(b:{seatProjection:number;receiver:{width:number}},seatWidth=0):TaperedHaunchInput{
  const L=b.seatProjection,width=Math.max(6*inch,floorTo(b.receiver.width-2*inch/4,inch/4)),root=ceilTo(Math.max(12*inch,.6*L),inch);
- const tw=3/8*inch,tf=inch,ts=ceilTo(Math.max(tf/2,3/8*inch),inch/8);
+ const tw=3/8*inch,tf=inch,w=wing(Math.max(width,ceilTo(seatWidth,inch/4)),width,tw);
+ // A wing's outstand within 0.56 sqrt(E/Fy) t at Fy = 50 ksi (stiffened seat); the sizing rechecks with the project's steel.
+ const ts=ceilTo(Math.max(tf/2,3/8*inch,(w.topWidth??0)/(.56*Math.sqrt(29000/50))),inch/8);
  return {rootDepth:root,tipDepth:ceilTo(Math.max(root/2,6*inch),inch),webThickness:tw,topWidth:Math.max(width,ceilTo(seatWidth,inch/4)),rootWidth:width,topThickness:tf,bottomWidth:width,bottomThickness:tf,
-  stiffener:{thickness:ts,width:floorTo((width-tw)/2-inch/4,inch/8),weld:minimumFillet(Math.max(ts,tw,tf))},
+  stiffener:{thickness:ts,width:floorTo((width-tw)/2-inch/4,inch/8),weld:minimumFillet(Math.max(ts,tw,tf)),...w},
   flangeJoint:'cjp',flangeWeld:5/16*inch,flangeWebWeld:Math.max(minimumFillet(Math.max(tf,tw)),inch/4),endPlate:true};
+}
+/** A stiffener wing to 1/4 in inside the seat edge, where the seat is wider than the bottom flange (1/8 in steps). */
+export function wing(seat:number,bottom:number,tw:number){
+ const width=floorTo((bottom-tw)/2-inch/4,inch/8),top=floorTo((seat-tw)/2-inch/4,inch/8);
+ return top>width+1e-6?{topWidth:top}:{};
 }
 /** The haunch inputs of a bracket, defaulted from its geometry where none are entered. */
 export const haunchInput=(b:{haunch?:TaperedHaunchInput;seatProjection:number;receiver:{width:number}}):TaperedHaunchInput=>b.haunch??defaultTaperedHaunch(b);
@@ -87,8 +100,10 @@ export function haunchGeometry(b:Bracket,W=0){
   /** Length of the sloping bottom flange. */
   bottomLength:L/cos,
   stiffener:{t:st.thickness,width:st.width,weld:st.weld,clip,y:a,
+   /** Outstand under the top flange (the wing reaches the seat where it exceeds the bottom outstand `width`). */
+   top:Math.max(st.width,st.topWidth??0),wing:(st.topWidth??0)>st.width+1e-6,
    /** Height between the flanges at the stiffener and the fitted length on each flange beyond the clip. */
-   height:depth(a)-h.topThickness-tbv,flangeLength:st.width-clip}};
+   height:depth(a)-h.topThickness-tbv,flangeLength:st.width-clip,topLength:Math.max(st.width,st.topWidth??0)-clip}};
 }
 export type HaunchGeometry=ReturnType<typeof haunchGeometry>;
 
@@ -134,7 +149,7 @@ export type HaunchSection=ReturnType<typeof haunchSection>;
 export function haunchWeight(g:HaunchGeometry,density:number){
  const f=g.flare,flareArea=f?(g.bt-g.btr)*(f.y1-f.y0)/2+(g.bt-g.btr)*(g.L-f.y1):0;
  const web=(g.clear(0)+g.clear(g.L))/2*g.L*g.tw,flanges=(g.btr*g.L+flareArea)*g.tt+g.bb*g.tb*g.bottomLength,s=g.stiffener;
- const stiffeners=2*s.width*s.height*s.t,end=g.endPlate?Math.max(g.bt,g.bb)*g.ht*s.t:0;
+ const stiffeners=2*(s.width+s.top)/2*s.height*s.t,end=g.endPlate?Math.max(g.bt,g.bb)*g.ht*s.t:0;
  return (web+flanges+stiffeners+end)*density*9.80665/1e9;
 }
 

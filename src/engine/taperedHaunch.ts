@@ -215,7 +215,10 @@ export function haunchCjpRatios(g:HaunchGeometry,root:HaunchSection,f:HaunchActi
 /**
  * Paired full-depth bearing stiffeners at the girder web line, J10.8: two plates with a web strip of 25tw (12tw
  * within 12.5tw of the tip or the column face) as a column of effective length 0.75h (J4.4 when KL/r <= 25, else
- * E3). Each stiffener with half the strip takes the reactions on its own flange outstand.
+ * E3), on the bottom outstand. Each stiffener with half the strip takes the reactions on its own flange outstand.
+ * A reaction on the stiffener (x within its top tip) bears on it: the column is axial and the plate, welded to the
+ * web, carries P at its distance from the web face as a stiffened seat (bracket section h - 2c at the web face, with
+ * the eccentric weld group). A wing widens the top to the seat edge so the reactions bear on it.
  */
 export function haunchStiffener(g:HaunchGeometry,E:number,Fy:number,method:ProjectInput['method']){
  const s=g.stiffener,tw=g.tw,a=g.a,h=s.height;
@@ -223,9 +226,13 @@ export function haunchStiffener(g:HaunchGeometry,E:number,Fy:number,method:Proje
  const Ix=strip*tw**3/12+2*(s.t*s.width**3/12+s.width*s.t*((tw+s.width)/2)**2),Iy=tw*strip**3/12+2*s.width*s.t**3/12;
  const r=Math.sqrt(Math.min(Ix,Iy)/A),KL=.75*h,slender=KL/r;
  const column=slender<=25?available(Fy*A,method,.9,1.67):compressionResistance(A,r,KL,E,Fy,method).capacity;
- const A1=s.width*s.t+strip*tw/2,xc=(s.width*s.t*(tw/2+s.width/2)+strip*tw/2*tw/4)/A1,bearingArea=(s.width-s.clip)*s.t;
+ const A1=s.width*s.t+strip*tw/2,xc=(s.width*s.t*(tw/2+s.width/2)+strip*tw/2*tw/4)/A1,bearingArea=(s.top-s.clip)*s.t;
+ // The plate at the web face as a bracket (between the corner clips): plastic flexure (F11.1) and shear yielding (J4.2).
+ const depth=h-2*s.clip,Mc=available(Fy*s.t*depth**2/4,method,.9,1.67),Vc=available(.6*Fy*s.t*depth,method,1,1.5);
  return {...s,interior,strip,A,r,KL,slender,column,half:column/2,xc,Z:s.t*s.width**2/4,bearing:available(1.8*Fy*bearingArea,method,.75,2),bearingArea,
-  weldLength:h-2*s.clip,flangeWeldLength:s.width-s.clip};
+  /** x of the stiffener's top tip from the web plane: reactions inside it bear on the stiffener. */
+  tip:tw/2+s.top,depth,Mc,Vc,
+  weldLength:h-2*s.clip,flangeWeldLength:s.width-s.clip,topWeldLength:s.top-s.clip};
 }
 export type HaunchStiffener=ReturnType<typeof haunchStiffener>;
 /**
@@ -235,12 +242,13 @@ export type HaunchStiffener=ReturnType<typeof haunchStiffener>;
  */
 export const stiffenerLoadPoint=(_g:HaunchGeometry,x:number)=>x;
 /**
- * Fillets of one stiffener (both faces): the vertical line on the web and the line on the sloping bottom flange,
- * elastic, under the stiffener reaction P at x from the web plane. Peak throat stress.
+ * Fillets of one stiffener (both faces): the vertical line on the web and the line on the sloping bottom flange
+ * (and, with a wing, the line under the top flange), elastic, under the stiffener reaction P at x from the web plane.
+ * Peak throat stress.
  */
 export function haunchStiffenerWeldStress(g:HaunchGeometry,s:HaunchStiffener,P:number,x:number){
  const te=s.weld/Math.SQRT2,Lw=s.weldLength,Lf=s.flangeWeldLength;
- const lines:{a:[number,number];b:[number,number]}[]=[{a:[0,-Lw/2],b:[0,Lw/2]},{a:[s.clip,-s.height/2],b:[s.clip+Lf,-s.height/2]}];
+ const lines:{a:[number,number];b:[number,number]}[]=[{a:[0,-Lw/2],b:[0,Lw/2]},{a:[s.clip,-s.height/2],b:[s.clip+Lf,-s.height/2]},...(s.wing?[{a:[s.clip,s.height/2] as [number,number],b:[s.top,s.height/2] as [number,number]}]:[])];
  const len=(l:typeof lines[number])=>Math.hypot(l.b[0]-l.a[0],l.b[1]-l.a[1]),A=lines.reduce((t,l)=>t+2*te*len(l),0);
  const uc=lines.reduce((t,l)=>t+2*te*len(l)*(l.a[0]+l.b[0])/2,0)/A,vc=lines.reduce((t,l)=>t+2*te*len(l)*(l.a[1]+l.b[1])/2,0)/A;
  const J=lines.reduce((t,l)=>t+2*te*len(l)*(((l.a[0]+l.b[0])/2-uc)**2+((l.a[1]+l.b[1])/2-vc)**2+len(l)**2/12),0);
@@ -263,11 +271,11 @@ export function haunchWebBearing(g:HaunchGeometry,E:number,Fy:number,lb:number,m
  *   presses uniformly over the bearing plate width W and the flange strips cantilever both ways from the stiffener
  *   faces under the girder web line: m = P c^2 / (2 l W), c = W/2 - t_s/2; the flange alone, no credit for the
  *   bearing plate or the girder flange bending with it;
- * - along the runway: the part of a patch beyond the stiffener tip cantilevers from it over the bearing width
- *   widened at 45° from the nearest load.
+ * - along the runway: the part of a patch beyond the stiffener's top tip (its wing, where it has one) cantilevers
+ *   from it over the bearing width widened at 45° from the nearest load.
  */
 export function topFlangeStrip(g:HaunchGeometry,loads:BracketLoads,W:number,bearingThickness:number,bearingLength:number){
- const s=g.stiffener,c=Math.max(0,W/2-s.t/2),xs=g.tw/2+s.width;
+ const s=g.stiffener,c=Math.max(0,W/2-s.t/2),xs=g.tw/2+s.top;
  let across=0,along=0,acrossAt={P:0,l:0},alongAt={P:0,x:0,be:0};
  for(const v of loads){
   const l=v.length??0;if(l<=0)continue;
@@ -401,8 +409,9 @@ export function createTaperedHaunchCollector(p:ProjectInput){
    if(net)peak('topNet',Math.max(0,stationMoment(f,net.s,g.a)/net.s.h0+f.N/2)/net.An);
    peak('webBearing',Math.max(0,f.V));
    {const t=topFlangeStrip(g,all,W,d.bearing.thickness,Lbr);peak('strip',t.moment,{work:{c:t.c,xs:t.xs,W,across:t.across,along:t.along,P:t.acrossAt.P,l:t.acrossAt.l,Pa:t.alongAt.P,xa:t.alongAt.x,be:t.alongAt.be}});}
-   for(const s of f.sides){const P=Math.abs(s.P),x=stiffenerLoadPoint(g,s.x),Pr1=P/sf.half,Mr=P*Math.abs(x-sf.xc)/available(Fy*sf.Z,method,.9,1.67);
-    peak('stiffener',Pr1>=.2?Pr1+8/9*Mr:Pr1/2+Mr,{work:{P,x,xc:sf.xc,Pc:sf.half,Z:sf.Z}});peak('stiffenerForce',Math.max(0,s.P));peak('stiffenerWeld',haunchStiffenerWeldStress(g,sf,P,x));}
+   for(const s of f.sides){const P=Math.abs(s.P),x=stiffenerLoadPoint(g,s.x),bears=x<=sf.tip+1e-6,Pr1=P/sf.half,Mr=P*Math.abs(x-sf.xc)/available(Fy*sf.Z,method,.9,1.67),u=Math.max(0,x-g.tw/2);
+    peak('stiffener',bears?Pr1:Pr1>=.2?Pr1+8/9*Mr:Pr1/2+Mr,{work:{P,x,xc:sf.xc,Pc:sf.half,Z:sf.Z,bears:bears?1:0}});
+    peak('stiffenerBracket',(P*u/sf.Mc)**2+(P/sf.Vc)**2,{work:{P,u,Mc:sf.Mc,Vc:sf.Vc}});peak('stiffenerForce',Math.max(0,s.P));peak('stiffenerWeld',haunchStiffenerWeldStress(g,sf,P,x));}
    const w=haunchWeldStress(g,grp,root,f);peak('webWeld',w.web);
    if(grp.cjp){const r=haunchCjpRatios(g,root,f,method,Fy);peak('cjpTop',r.top);peak('cjpBottom',r.bottom);}
    else{peak('flangeWeld',w.flange);peak('flangeBase',2*w.flange*g.flangeWeld/Math.SQRT2/Math.min(g.tt,g.tb,c.flangeThickness));}
@@ -476,6 +485,8 @@ export function validateTaperedHaunch(p:ProjectInput):string[]{
  const s=g.stiffener;
  add(s.width>(Math.min(g.btr,g.bb)-g.tw)/2+1e-6,'bearing stiffeners must lie within the welded flange widths.');
  add(s.width<=s.clip+4*s.weld,'bearing stiffeners are too narrow for their corner clip and fillet.');
+ if(s.wing){add(g.tw/2+s.top>g.topWidthAt(g.a)/2+1e-6,'the stiffener wings must end within the top flange (seat) width.');
+  add(s.top-s.width>s.height,'the stiffener wing free edge is flatter than 45°: shorten the wing or deepen the haunch at the stiffeners.');}
  add(s.weld>=s.t,'stiffener fillet must be smaller than the stiffener thickness.');
  add(s.height<2*s.clip+4*s.weld,`the haunch is too shallow at the stiffeners for their clips and fillets (${f(s.height)} between the flanges).`);
  add(b.reach-s.t/2<inch||b.reach+s.t/2>tip-inch,'bearing stiffeners must lie on the haunch at the girder web line.');
@@ -554,12 +565,13 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
   else from('webBearing',id,`${name} web · ${title}`,cap,'force',eq,`${webNote}${end&&id==='web-crippling'?' Within d/2 of the tip: end case.':''} Bearing stiffeners are also provided.`,['haunch-basis','aisc-j']);
  }
  checks.push({id:'haunch-stiffener-required',group:'Column bracket',title:'Haunch bearing stiffeners · J10.8',status:'pass',equation:'R_u>\\phi R_n\\ \\text{(J10.2, J10.3)}\\Rightarrow\\text{stiffeners}',caseId:S.webBearing?.caseId,referenceIds:['haunch-basis','aisc-j'],
-  note:`${required?`Required: the ${fmt(Rweb,'force')} bearing force exceeds the unstiffened web strength.`:`Provided; the unstiffened haunch web alone carries the ${format(Rweb,'force',u,1)} haunch reaction R_h (girder end reactions with the haunch self-weight).`} The girder reactions on the top flange outstands bear on them. A pair of ${fmt(stiff.t)} plates, ${fmt(stiff.width)} outstand, ${fmt(stiff.height)} between the flanges at the girder web line, ${fmt(stiff.clip)} corner clips, fitted to bear on the top flange and welded to the web and both flanges (the bottom edge cut to the ${deg}° slope).`});
- const minT=Math.max(g.tt/2,stiff.width/16,stiff.width/(.56*Math.sqrt(E/Fy)));
- add('stiffener-proportions','Bearing stiffeners · width and thickness (J10.8)',Math.max(minT/stiff.t,(g.btr/3-g.tw/2)/stiff.width),1,'ratio','b_s\\ge\\frac{b_f}{3}-\\frac{t_w}{2};\\ \\ t_s\\ge\\max\\left(\\frac{t_f}{2},\\,\\frac{b_s}{16},\\,\\frac{b_s}{0.56\\sqrt{E/F_y}}\\right)',`t = ${fmt(stiff.t)} against ${fmt(minT)}; b_s = ${fmt(stiff.width)} against ${fmt(g.btr/3-g.tw/2)} for the ${fmt(g.btr)} welded top flange width${g.flare?' (the flared seat beyond is carried by flange bending: top flange strip check)':''}.`,undefined,['haunch-basis','aisc-j']);
- from('stiffener','stiffener-column','Bearing stiffeners · column with load eccentricity (J10.8, J4.4/E3, H1)',1,'ratio','\\frac{P_r}{P_c}+\\frac89\\frac{P_re}{\\phi_bF_yZ}\\le1\\ (\\text{H1-1a, }P_r/P_c\\ge0.2);\\ \\frac{P_r}{2P_c}+\\frac{P_re}{\\phi_bF_yZ}\\le1\\ (\\text{H1-1b})',`Each stiffener with half of a ${stiff.interior?'25':'12'}tw web strip (${fmt(stiff.strip)}) takes the reactions on its flange outstand, P at x from the web plane (a reaction beyond the ${fmt(g.tw/2+stiff.width)} stiffener tip reaches the stiffener through the top flange outstand with its cantilever moment, so e is measured to the reaction); pair L_c = 0.75h = ${fmt(stiff.KL)}, L_c/r = ${stiff.slender.toFixed(1)} (${stiff.slender<=25?'J4.4: Pn = FyAg':'E3'}), φPn of the pair ${fmt(stiff.column,'force')}. The eccentricity e = x − x_c from the centroid x_c = ${fmt(stiff.xc)} bends the plate in its plane, Z = t b²/4; P_c = φP_n/2 for one stiffener.`,['haunch-basis','aisc-j','aisc-e','aisc-h']);
- from('stiffenerForce','stiffener-bearing','Bearing stiffeners · fitted bearing (J7)',stiff.bearing,'force','R_n=1.8F_yA_{pb},\\;A_{pb}=(b_s-c)t_s',`One stiffener: contact beyond the ${fmt(stiff.clip)} corner clip.`,['haunch-basis','aisc-connections']);
- from('stiffenerWeld','stiffener-weld','Bearing stiffeners · welds to the web and bottom flange',available(.6*m.Fexx,method,.75,2),'stress','f_w=\\sqrt{\\left(\\frac{Mc_y}{I_p}\\right)^2+\\left(\\frac{P}{A_{we}}-\\frac{Mc_x}{I_p}\\right)^2};\\ \\ M=Pe',`${fmt(stiff.weld)} fillets both faces of each stiffener, ${fmt(stiff.weldLength)} on the web and ${fmt(stiff.flangeWeldLength)} on the bottom flange, elastic group under the stiffener reaction at its eccentricity; no directional increase. The top is fitted to bear and also welded.`,['haunch-basis','aisc-connections']);
+  note:`${required?`Required: the ${fmt(Rweb,'force')} bearing force exceeds the unstiffened web strength.`:`Provided; the unstiffened haunch web alone carries the ${format(Rweb,'force',u,1)} haunch reaction R_h (girder end reactions with the haunch self-weight).`} The girder reactions on the top flange outstands bear on them. A pair of ${fmt(stiff.t)} plates, ${stiff.wing?`wing plates ${fmt(stiff.top)} outstand under the seat tapering to ${fmt(stiff.width)} on the bottom flange (a straight sloped free edge), so the girder reactions bear on them`:`${fmt(stiff.width)} outstand`}, ${fmt(stiff.height)} between the flanges at the girder web line, ${fmt(stiff.clip)} corner clips, fitted to bear on the top flange and welded to the web and both flanges (the bottom edge cut to the ${deg}° slope).`});
+ const minT=Math.max(g.tt/2,stiff.width/16,stiff.top/(.56*Math.sqrt(E/Fy)));
+ add('stiffener-proportions','Bearing stiffeners · width and thickness (J10.8)',Math.max(minT/stiff.t,(g.btr/3-g.tw/2)/stiff.width),1,'ratio','b_s\\ge\\frac{b_f}{3}-\\frac{t_w}{2};\\ \\ t_s\\ge\\max\\left(\\frac{t_f}{2},\\,\\frac{b_s}{16},\\,\\frac{b_{s,top}}{0.56\\sqrt{E/F_y}}\\right)',`t = ${fmt(stiff.t)} against ${fmt(minT)}; b_s = ${fmt(stiff.width)} against ${fmt(g.btr/3-g.tw/2)} for the ${fmt(g.btr)} welded top flange width${stiff.wing?`; the ${fmt(stiff.top)} wing outstand under the seat as a stiffened-seat plate, b/t at most 0.56√(E/Fy) (AISC Manual Part 10)`:g.flare?' (the flared seat beyond is carried by flange bending: top flange strip check)':''}.`,undefined,['haunch-basis','aisc-j']);
+ from('stiffener','stiffener-column',(S.stiffener?.work?.bears??0)>0?'Bearing stiffeners · column, reactions bearing on the stiffeners (J10.8, J4.4/E3)':'Bearing stiffeners · column with load eccentricity (J10.8, J4.4/E3, H1)',1,'ratio',(S.stiffener?.work?.bears??0)>0?'\\frac{P_r}{P_c}\\le1,\\ P_c=\\phi P_n/2':'\\frac{P_r}{P_c}+\\frac89\\frac{P_re}{\\phi_bF_yZ}\\le1\\ (\\text{H1-1a, }P_r/P_c\\ge0.2);\\ \\frac{P_r}{2P_c}+\\frac{P_re}{\\phi_bF_yZ}\\le1\\ (\\text{H1-1b})',`Each stiffener with half of a ${stiff.interior?'25':'12'}tw web strip (${fmt(stiff.strip)}) takes the reactions on its flange outstand, P at x from the web plane. ${(S.stiffener?.work?.bears??0)>0?`The governing reaction bears on the stiffener (x within its ${fmt(stiff.tip)} top tip${stiff.wing?', the wing':''}): the column is axial and the plate carries P at its distance from the web face as a stiffened seat (bracket check and weld group).`:`A reaction beyond the ${fmt(stiff.tip)} top tip reaches the stiffener through the top flange outstand with its cantilever moment, so e = x − x_c from the centroid x_c = ${fmt(stiff.xc)} bends the plate in its plane, Z = t b²/4.`} Pair L_c = 0.75h = ${fmt(stiff.KL)}, L_c/r = ${stiff.slender.toFixed(1)} (${stiff.slender<=25?'J4.4: Pn = FyAg':'E3'}), φPn of the pair ${fmt(stiff.column,'force')} on the ${fmt(stiff.width)} bottom outstand; P_c = φP_n/2 for one stiffener.`,['haunch-basis','aisc-j','aisc-e','aisc-h']);
+ from('stiffenerBracket','stiffener-bracket','Bearing stiffeners · plate at the web face, flexure and shear (stiffened seat)',1,'ratio','\\left(\\frac{M_u}{\\phi M_n}\\right)^2+\\left(\\frac{V_u}{\\phi V_n}\\right)^2\\le1;\\ M_n=F_yt_s\\frac{d_s^2}{4},\\ V_n=0.6F_yt_sd_s',`Each stiffener welded to the web carries its reaction P at u = x − t_w/2 from the web face: M_u = Pu and V_u = P on the plate section at the web face between the corner clips, d_s = ${fmt(stiff.depth)} (plastic flexure, AISC F11.1; shear yielding, J4.2; interaction as AISC Manual Eq. 10-5). φM_n = ${fmt(stiff.Mc,'moment')}, φV_n = ${fmt(stiff.Vc,'force')}.`,['haunch-basis','aisc-connections']);
+ from('stiffenerForce','stiffener-bearing','Bearing stiffeners · fitted bearing (J7)',stiff.bearing,'force','R_n=1.8F_yA_{pb},\\;A_{pb}=(b_{s,top}-c)t_s',`One stiffener: contact under the top flange over its ${fmt(stiff.top)} top outstand${stiff.wing?' (the wing)':''} beyond the ${fmt(stiff.clip)} corner clip.`,['haunch-basis','aisc-connections']);
+ from('stiffenerWeld','stiffener-weld',stiff.wing?'Bearing stiffeners · welds to the web and both flanges':'Bearing stiffeners · welds to the web and bottom flange',available(.6*m.Fexx,method,.75,2),'stress','f_w=\\sqrt{\\left(\\frac{Mc_y}{I_p}\\right)^2+\\left(\\frac{P}{A_{we}}-\\frac{Mc_x}{I_p}\\right)^2};\\ \\ M=Pe',`${fmt(stiff.weld)} fillets both faces of each stiffener, ${fmt(stiff.weldLength)} on the web and ${fmt(stiff.flangeWeldLength)} on the bottom flange${stiff.wing?` and ${fmt(stiff.topWeldLength)} under the top flange (the wing)`:''}, elastic group under the stiffener reaction at its eccentricity; no directional increase. The top is fitted to bear and also welded.`,['haunch-basis','aisc-connections']);
  add('stiffener-weld-minimum','Stiffener fillets · minimum leg (J2.4)',filletMinimum([stiff.t,g.tw],[stiff.t,g.tb]),stiff.weld,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined, for the stiffener-to-web and stiffener-to-flange joints.',undefined,['haunch-basis','aisc-connections']);
  // Flange-to-web fillets.
  const te=g.flangeWebWeld/Math.SQRT2,fw=S.flangeWebWeld;

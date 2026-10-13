@@ -47,11 +47,12 @@ export function haunchPlatesAndWelds(g:HaunchGeometry,field:boolean){
  const n=Math.hypot(1,s);
  plates.push({id:'bottom-flange',name:'Sloping bottom flange',thickness:g.tb,normal:[0,-s/n,1/n],size:{width:bb,length:g.bottomLength},
   outline:[[-bb/2,0,under(0)],[bb/2,0,under(0)],[bb/2,L,under(L)],[-bb/2,L,under(L)]]});
- // Bearing stiffeners in the plane y = a, one each side of the web, corner clips at the web.
+ // Bearing stiffeners in the plane y = a, one each side of the web, corner clips at the web; a wing widens the top
+ // to the seat edge with a straight free edge down to the bottom outstand.
  const zb=inner(a),c=st.clip;
- for(const sx of [-1,1]){const x0=sx*tw/2,x1=sx*(tw/2+st.width);
-  plates.push({id:sx<0?'stiffener-left':'stiffener-right',name:'Bearing stiffener',thickness:st.t,normal:[0,1,0],size:{width:st.width,length:st.height},
-   outline:[[x0+sx*c,a-st.t/2,zTop],[x1,a-st.t/2,zTop],[x1,a-st.t/2,zb],[x0+sx*c,a-st.t/2,zb],[x0,a-st.t/2,zb+c],[x0,a-st.t/2,zTop-c]]});}
+ for(const sx of [-1,1]){const x0=sx*tw/2,x1=sx*(tw/2+st.width),xt=sx*(tw/2+st.top);
+  plates.push({id:sx<0?'stiffener-left':'stiffener-right',name:st.wing?'Bearing stiffener with wing':'Bearing stiffener',thickness:st.t,normal:[0,1,0],size:{width:st.top,length:st.height},
+   outline:[[x0+sx*c,a-st.t/2,zTop],[xt,a-st.t/2,zTop],[x1,a-st.t/2,zb],[x0+sx*c,a-st.t/2,zb],[x0,a-st.t/2,zb+c],[x0,a-st.t/2,zTop-c]]});}
  if(g.endPlate){const w=Math.min(bt,bb);plates.push({id:'end-plate',name:'Tip end plate',thickness:tep,normal:[0,1,0],size:{width:w,length:zTop-inner(Lw)},
   outline:[[-w/2,Lw,zTop],[w/2,Lw,zTop],[w/2,Lw,inner(Lw)],[-w/2,Lw,inner(Lw)]]});}
  // Welds.
@@ -70,10 +71,10 @@ export function haunchPlatesAndWelds(g:HaunchGeometry,field:boolean){
  welds.push({id:'web-column',kind:'fillet',size:g.webWeld,location:where,sides:2,path:[[0,0,zTop-wf],[0,0,inner(0)+wf]],name:'Web to column flange, both sides',runs:[-1,1].map(sx=>({path:[[sx*tw/2,0,zTop-wf],[sx*tw/2,0,inner(0)+wf]] as [XYZ,XYZ],legs:[[sx,0,0],[0,1,0]] as [XYZ,XYZ]}))});
  welds.push({id:'top-flange-web',kind:'fillet',size:wf,location:'shop',sides:2,path:[[0,0,zTop],[0,Lw,zTop]],name:'Top flange to web, both sides',runs:[-1,1].map(sx=>({path:[[sx*tw/2,0,zTop],[sx*tw/2,Lw,zTop]] as [XYZ,XYZ],legs:[[sx,0,0],[0,0,-1]] as [XYZ,XYZ]}))});
  welds.push({id:'bottom-flange-web',kind:'fillet',size:wf,location:'shop',sides:2,path:[[0,0,inner(0)],[0,Lw,inner(Lw)]],name:'Bottom flange to web, both sides',runs:[-1,1].map(sx=>({path:[[sx*tw/2,0,inner(0)],[sx*tw/2,Lw,inner(Lw)]] as [XYZ,XYZ],legs:[[sx,0,0],[0,0,1]] as [XYZ,XYZ]}))});
- for(const sx of [-1,1]){const xa=sx*(tw/2+c),xb=sx*(tw/2+st.width);
+ for(const sx of [-1,1]){const xa=sx*(tw/2+c),xb=sx*(tw/2+st.width),xt=sx*(tw/2+st.top);
   welds.push({id:`stiffener-web-${sx}`,kind:'fillet',size:st.weld,location:'shop',sides:2,path:[[sx*tw/2,a,zTop-c],[sx*tw/2,a,zb+c]],name:'Stiffener to web, both faces',runs:[-1,1].map(fy=>({path:[[sx*tw/2,a+fy*st.t/2,zTop-c],[sx*tw/2,a+fy*st.t/2,zb+c]] as [XYZ,XYZ],legs:[[0,fy,0],[sx,0,0]] as [XYZ,XYZ]}))});
   welds.push({id:`stiffener-bottom-${sx}`,kind:'fillet',size:st.weld,location:'shop',sides:2,path:[[xa,a,zb],[xb,a,zb]],name:'Stiffener to bottom flange, both faces',runs:[-1,1].map(fy=>({path:[[xa,a+fy*st.t/2,zb],[xb,a+fy*st.t/2,zb]] as [XYZ,XYZ],legs:[[0,fy,0],[0,0,1]] as [XYZ,XYZ]}))});
-  welds.push({id:`stiffener-top-${sx}`,kind:'fillet',size:st.weld,location:'shop',sides:2,path:[[xa,a,zTop],[xb,a,zTop]],name:'Stiffener fitted to bear on the top flange and welded, both faces',runs:[-1,1].map(fy=>({path:[[xa,a+fy*st.t/2,zTop],[xb,a+fy*st.t/2,zTop]] as [XYZ,XYZ],legs:[[0,fy,0],[0,0,-1]] as [XYZ,XYZ]}))});
+  welds.push({id:`stiffener-top-${sx}`,kind:'fillet',size:st.weld,location:'shop',sides:2,path:[[xa,a,zTop],[xt,a,zTop]],name:'Stiffener fitted to bear on the top flange and welded, both faces',runs:[-1,1].map(fy=>({path:[[xa,a+fy*st.t/2,zTop],[xt,a+fy*st.t/2,zTop]] as [XYZ,XYZ],legs:[[0,fy,0],[0,0,-1]] as [XYZ,XYZ]}))});
  }
  if(g.endPlate){const w=Math.min(bt,bb);
   welds.push({id:'end-plate-web',kind:'fillet',size:st.weld,location:'shop',sides:2,path:[[0,Lw,zTop],[0,Lw,inner(Lw)]],name:'End plate to web, both sides',runs:[-1,1].map(sx=>({path:[[sx*tw/2,Lw,zTop],[sx*tw/2,Lw,inner(Lw)]] as [XYZ,XYZ],legs:[[0,-1,0],[sx,0,0]] as [XYZ,XYZ]}))});
