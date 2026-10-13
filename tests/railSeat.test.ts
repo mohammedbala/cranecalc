@@ -100,7 +100,8 @@ describe('rail seat: pad and rail clips',()=>{
   p.details!.rail.clip!.anchorLongitudinal=8*kip;const a=checks(p).find(v=>v.id==='rail-anchorage')!;expect(a.status).toBe('pass');expect(a.demand!/kip).toBeCloseTo(4,4);
   const svg=railLayoutView(snapshot(p)).render().svg;expect(svg.match(/data-rail-anchor=/g)).toHaveLength(layout.rails.reduce((n,r)=>n+r.pieces.length,0));
   const note=texts(svg).join(' ');expect(note).toContain('ANCHOR CLIP PAIR (FIXED CLIPS PER MANUFACTURER');
-  const moved=railJointMovement(railMovements(p));expect(moved).toBeCloseTo(3.94,2);
+  // The rail ends clear the stop base plates, so the end pieces are a little shorter than the stop-face layout gave (3.94 mm).
+  const moved=railJointMovement(railMovements(p));expect(moved).toBeCloseTo(3.93,2);
   expect(note).toContain(`UP TO ${movementUpTo(moved,'US')} AT A JOINT (OPEN JOINTS, 3/8" GAP)`);
   const si=openJoints(demonstrationProject());si.units='SI';const metric=texts(railLayoutView(snapshot(si)).render().svg).join(' ');
   expect(metric).toContain('28.5 kN FACTORED');expect(metric).toContain('UP TO 4 mm AT A JOINT (OPEN JOINTS, 9.5 mm GAP)');

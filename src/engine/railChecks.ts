@@ -7,7 +7,7 @@ import { latexNumber,withinLimit } from './math';
 import { railClipResponse,railAnchorForce } from './railClip';
 import { railSeat,clipSeatThickness } from './railSeat';
 import { railMovements,railJointMovement,railJointType,railJointGap,tightJointGap,railJointBars } from './railLayout';
-import { activeEndStop,stopEnds } from './endStopInputs';
+import { activeEndStop,stopEnds,stopRailClear } from './endStopInputs';
 import { stopBumperForce } from './endStop';
 import { format } from './units';
 export function railChecks(s:CalculationSnapshot):CheckResult[]{
@@ -82,7 +82,8 @@ export function railChecks(s:CalculationSnapshot):CheckResult[]{
  check('rail-joint-slot','Rail-joint slot travel',movement,1.5*r.jointBoltDiameter-joint.hole,'length','l_{slot}-d_h\\ge\\Delta L','Slots length 1.5 bolt diameters; rail-joint bolts do not establish the girder longitudinal restraint. The whole joint closure is taken in one slot; slot-end bearing under thermal movement is avoided.','Detailing');
  }
  const stop=activeEndStop(p),stopped=moves.ends.filter(v=>!v.existing&&stopEnds(p).includes(v.end));
- if(stop&&stopped.length)check('rail-end-gap','Rail end clear of the end stop',Math.max(...stopped.map(v=>v.movement))+d.criteria.alignmentTolerance,stop.railGap,'length','\\alpha\\Delta TL+t_{set}\\le g',tight?'Tight joints: the rail string floats in its clips between the end stops and may rest against either stop, so the growth of the whole string over the temperature swing must fit in the clearance gap at the other stop (AIST TR-13 §5.16.1); the rail end then stays clear of that stop face.':'The anchored end piece grows toward the stop by its length beyond its anchor; the rail end must stay clear of the stop face so the bumper force reaches the stop, not the rail.','Detailing');
+ // The gap g is clear to the nearest steel of the stop: the front edge of its base plate, which projects in front of the face plate.
+ if(stop&&stopped.length)check('rail-end-gap','Rail end clear of the end stop',Math.max(...stopped.map(v=>v.movement))+d.criteria.alignmentTolerance,stopRailClear(stop),'length','\\alpha\\Delta TL+t_{set}\\le g',`${tight?'Tight joints: the rail string floats in its clips between the end stops and may rest against either stop, so the growth of the whole string over the temperature swing must fit in the clearance gap at the other stop (AIST TR-13 §5.16.1).':'The anchored end piece grows toward the stop by its length beyond its anchor.'} The gap g is measured from the rail end to the nearest steel of the stop, the front edge of its base plate (in front of the face plate), so the rail end stays clear of all stop steel and the bumper force reaches the stop, not the rail.`,'Detailing');
  check('rail-joint-fit','Joint bar fit between head and base',r.jointPlateHeight,webDepth,'length','h_j\\le h_r-t_h-t_b','Both joint bars fit within the clear rail web depth.','Detailing');
  // Rail anchorage: crane traction and braking, and rail creep. Tight joints: the rail string floats in its clips and
  // bears on an end stop, which is designed for the larger bumper force. Open joints: one anchor clip pair per piece.

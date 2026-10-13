@@ -11,7 +11,7 @@ import {independentBearings} from './simpleSupports';
 import {aiscShapeByName} from '../data/aiscSections';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
-import {needsGirderStops,stopLip,stopRailEnd,stopBoltRows,type EndStopInput} from './endStopInputs';
+import {needsGirderStops,stopLip,stopRailEnd,stopRailClear,stopBoltRows,type EndStopInput} from './endStopInputs';
 import {flangeTieGeometry} from './tieGeometry';
 export {endStopSchema,defaultEndStop,needsGirderStops,activeEndStop,stopRailEnd,type EndStopInput} from './endStopInputs';
 const inch=25.4;
@@ -36,7 +36,7 @@ export function endStopGeometry(p:ProjectInput,e:EndStopInput){
  const stiffenerHeight=Math.min(e.face.height,snapQuarter(Math.max(e.face.height-inch,.5*e.face.height,contact+e.bumperDiameter/2),'up'));
  // Bolt C/L to the toes of the stop fillets: heads on the base plate sit beside the face plate and stiffener welds.
  const toe={face:e.bolts.frontClear-e.weldSize,stiffener:(e.bolts.gauge-e.stiffener.spacing)/2-e.stiffener.thickness/2-e.weldSize};
- return {lip,back,front,faceBack,faceFront,frontRow,backRow,surfaceWidth,contact,stiffenerHeight,railEnd:stopRailEnd(e),stiffenerEnd:faceBack-e.stiffener.length,toe};
+ return {lip,back,front,faceBack,faceFront,frontRow,backRow,surfaceWidth,contact,stiffenerHeight,railEnd:stopRailEnd(e),railClear:stopRailClear(e),stiffenerEnd:faceBack-e.stiffener.length,toe};
 }
 /**
  * Socket tightening clearance C1 from the bolt center to an obstruction (AISC Manual Table 7-15): 1 1/4 in for
