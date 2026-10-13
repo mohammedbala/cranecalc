@@ -195,7 +195,8 @@ const statusText=statusLabel;
  };
  /** The revision log: each entered revision with its date and the changes it made. */
  const revisionLog=()=>{
-  const list=rev.revisions;if(!list.length)return '';
+  // A single issue with no listed changes needs no log: the revision table already records it.
+  const list=rev.revisions;if(!list.length||(list.length===1&&!list[0].changes?.length))return '';
   return `<h3>Revision log</h3>${list.map(v=>`<p class="revision"><b>Rev ${e(v.rev)}</b> · ${e(v.date)} · ${e(v.description)}${v.by.trim()?` (${e(v.by)})`:''}</p>${v.changes?.length?`<ul class="changes">${v.changes.map(c=>`<li>${e(c)}</li>`).join('')}</ul>`:''}`).join('')}`;
  };
 
