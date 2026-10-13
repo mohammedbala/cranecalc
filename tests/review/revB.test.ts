@@ -32,4 +32,23 @@ describe('DEMO-FOCUS-005 rev B',()=>{
   expect(p1).not.toMatch(/REVIEW DRAFT|OPEN ITEMS? —/);expect(p1).toMatch(/Items by others and the forces delivered to them: section \d\.\d/);
   expect(h.slice(h.indexOf('Items by others and forces delivered</h2>'))).toMatch(/frame type and second-order effects/);
  });
+ it('reads as a calculation: own section numbers, explained values, prose models',()=>{
+  const h=reportHtml(s,undefined,''),t=h.replace(/<span class="katex-mathml">[\s\S]*?<\/span>/g,'').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/\s+/g,' ');
+  const num=(title:string)=>h.match(new RegExp(`<h2>(\\d\\.\\d+) ${title}</h2>`))![1];
+  // Items by others point to the sections of this report (the existing column was "section 4.8" after the bracing went).
+  const others=t.slice(t.indexOf(' Items by others and forces delivered '));
+  expect(others).toContain(`existing column member is checked in section ${num('Existing column')} `);
+  expect(others).toContain(`Unfactored reactions by load type: section ${num('Support reactions by load type')}.`);
+  expect(h).not.toMatch(/@@ref:/);
+  // The crane line, the statics notes and the scope state what their numbers are.
+  expect(t).toMatch(/2 wheels per runway; per wheel 7\.5 kip maximum, 1 kip side thrust/);
+  expect(t).toMatch(/This runway's 2 maximum static wheel loads sum to 15 kip, against at most W − 7\.4 kip = 15\.1 kip/);
+  expect(t).toMatch(/give 22\.4 kip, 0\.1 kip from the crane weight W = 22\.5 kip/);
+  expect(t).toMatch(/for Demo crane CR-5 \(5 US tons\)\. This calculation designs/);
+  // A ratio just inside its limit does not print as equal to it.
+  expect(t).toMatch(/singly symmetric proportioning .{0,80}? 0\.896 0\.90 OK/);
+  // Component models in sentences; the beam model is described under "Vertical"; no software artefacts.
+  expect(t).toMatch(/Component models\. The cap tieback is a DG7 top-flange tie connected directly to the column/);
+  expect(t).not.toMatch(/Direct stiffness; equilibrium|appended to supplied PDF|catalog W \+ inverted|Channel ASTM/);
+ });
 });

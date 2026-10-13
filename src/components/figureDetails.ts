@@ -80,7 +80,7 @@ function endStop(p:ProjectInput){
  return `Bolted stop: base ${plate(p,s.base.thickness,s.base.width,s.base.length)}, face PL ${plateInches(s.face.thickness,p.units)}, stiffeners PL ${plateInches(s.stiffener.thickness,p.units)}, ${bolt(p,s.bolts.diameter,s.bolts.grade)} bolts`;
 }
 function crane(p:ProjectInput){
- return p.cranes.map(c=>{const max=Math.max(...c.wheels.map(w=>w.loaded));return `${c.name}: ${c.wheels.length} wheels, max ${format(max,'force',p.units,1)}, side ${format(Math.max(...c.wheels.map(w=>w.lateral)),'force',p.units,2)}`;}).join('; ');
+ return p.cranes.map(c=>{const max=Math.max(...c.wheels.map(w=>w.loaded));return `${c.name}: ${c.wheels.length} wheels per runway; per wheel ${format(max,'force',p.units,1)} maximum, ${format(Math.max(...c.wheels.map(w=>w.lateral)),'force',p.units,2)} side thrust`;}).join('; ');
 }
 /** Fatigue duty: the building class and the design cycle count. */
 const duty=(p:ProjectInput)=>`Class ${p.aist?effectiveBuildingClass(p):'-'}, ${p.fatigue.cycles.toLocaleString()} cycles`;

@@ -30,7 +30,9 @@ export type Section = ProjectInput['section'];
 export type Crane = ProjectInput['cranes'][number];
 // 'excluded': required but outside this calculation (shown as BY OTHERS); never a pass, does not block export.
 export type Status = 'pass'|'fail'|'not-applicable'|'incomplete'|'unsupported'|'unverified'|'excluded';
-export interface ReferenceRecord { id:string; title:string; edition:string; clause:string; url:string; status:'verified'|'partial'|'unverified'; evidence:string; }
+export interface ReferenceRecord { id:string; title:string; edition:string; clause:string; url:string; status:'verified'|'partial'|'unverified'; evidence:string;
+ /** For a calculation method: the model in one sentence, for the report's analysis section. */
+ method?:string; }
 export interface CheckResult { id:string; group:string; title:string; status:Status; demand?:number; capacity?:number; utilization?:number; quantity?:'length'|'force'|'moment'|'stress'|'ratio'|'stiffness'|'pressure'|'temperature'|'acceleration'; equation:string; substitution?:string; referenceIds:string[]; note:string; caseId?:string; }
 export interface Properties { A:number; Ix:number; Iy:number; Sx:number; Sy:number; Zx:number; Zy:number; J:number; Cw:number; cy:number; h0:number; weight:number; }
 export interface PointLoad { x:number; vertical:number; lateral:number; crane:string; }
