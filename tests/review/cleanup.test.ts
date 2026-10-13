@@ -127,7 +127,8 @@ describe('figures (P4)',()=>{
   expect(body).not.toContain('Pad rating');
   expect(body).toContain('Sliding end: bolt layout and movement allowance');
   expect(body).toMatch(/RUNWAY ELEVATION - WHEEL POSITIONS FOR THE LARGEST MOMENT|Runway elevation - wheel positions for the largest moment/i);
-  expect(body).toMatch(/\+2 MORE SPANS/);
+  // The overlapping arrangement thumbnail is gone (editorial review): SK-01 shows the spans.
+  expect(body).not.toMatch(/\+2 MORE SPANS/);
  });
  it('binds the drawing sheets as reduced 11 × 17 copies; the full-size set is separate',()=>{
   expect(html).toContain('@page runwayArrangement{size:17in 11in;margin:0}');
