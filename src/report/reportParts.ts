@@ -166,9 +166,9 @@ export function fixed2(v:number|undefined,q:Quantity,units:ProjectInput['units']
 const sixteenths=(v:number|undefined,q:Quantity,units:ProjectInput['units'])=>q==='length'&&units==='US'&&v!==undefined&&Number.isFinite(v)&&Math.abs(clean(toDisplay(v,q,units)))<100&&!!inchFraction(clean(toDisplay(v,q,units)));
 /**
  * A check value: a US length of whole sixteenths as a fraction (a size or a tolerance), anything else to three
- * significant figures. `pair` is the other side of the comparison: when it is a computed length (not whole
- * sixteenths), this value prints as a decimal too, so a computed demand is never set against a fraction (0.15 in
- * against 0.75 in, not 3/4 in).
+ * significant figures. `pair` (for a limit) is the demand it is compared with: when that is a computed length (not
+ * whole sixteenths), the limit prints as a decimal too, so a computed demand is never set against a fraction (0.15 in
+ * against 0.75 in, not 3/4 in). Specified sizes keep their fractions.
  */
 export const value=(v:number|undefined,q:Quantity,units:ProjectInput['units'],pair?:number)=>{
  if(sixteenths(v,q,units)&&(pair===undefined||!Number.isFinite(pair)||sixteenths(pair,q,units)))return `${inchFraction(clean(toDisplay(v!,q,units)))} in`;

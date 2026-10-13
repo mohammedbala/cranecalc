@@ -56,7 +56,7 @@ const idRules:Rule[]=[
  T(/^crane-\d+-(split|impact|side|traction|bumper)$/,'load-basis'),T(/^(load-basis|design-scope)$/,'load-basis'),
  // Inputs and input consistency (crane statics, cycle count, class), survey and material records
  T(/^crane-\d+-(statics|data|bumper-selection)/,'input'),T(/^(building-class|fatigue-cycles)$/,'input'),
- T(/^cap-(catalog|compression-components|material|duty|fitup|unperforated|stiffener-cjp)$/,'input'),
+ T(/^cap-(catalogue|compression-components|material|duty|fitup|unperforated|stiffener-cjp)$/,'input'),
  T(/^column-(basis|weld-base-metal|weld-ce|weld-preheat|weld-load|frame|longitudinal-path)$/,'input'),
  // The bracket and tie load-path statement is a scope record; it is by others only when excluded (status rule above).
  T(/^(brace-basis|bracket-receiver|bracket-load-path|haunch-stiffener-required|building-seismic-runway)$/,'input'),

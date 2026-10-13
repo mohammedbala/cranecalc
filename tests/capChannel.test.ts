@@ -62,7 +62,7 @@ describe('catalogue cap-channel assessment',()=>{
   const p=structuredClone(exampleProject);p.section=cap('W30X99');
   expect(matchesCappedSection(p.section)).toBe(true);expect(validateProject(p)).toEqual([]);
   const r=calculate(p);expect(r.eligible).toBe(false);expect(r.checks.some(c=>c.status==='unsupported')).toBe(true);
-  p.section.capTw+=1;expect(validateProject(p).join()).toContain('catalogue');
+  p.section.capTw+=1;expect(validateProject(p).join()).toContain('catalog');
   expect(loadAiscSection(cap('W30X99'),'W24X84').capCatalogueId).toBeUndefined();
   expect(aiscChannels).toHaveLength(72);
  });

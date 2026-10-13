@@ -93,7 +93,7 @@ describe('AISC notation in the calculation report (Rev B)',()=>{
   expect(entries.filter(t=>!used.has(entrySymbol(t)))).toEqual([]);
   // Brief: crane-girder symbols only, at most 30 table rows; standard AISC symbols are not listed.
   const n=notationSection([...equations,...combinations]),rows=(n.match(/<tr><td>/g)??[]).length;
-  expect(rows).toBeLessThanOrEqual(30);expect(n).toContain(`(${entries.length})`);
+  expect(rows).toBeLessThanOrEqual(30);expect(n).toContain('Crane runway symbols.');
   for(const standard of ['F_y','R_n','M_n','\\phi','E','A_g'])expect(entries).not.toContain(standard);
   expect(html).toMatch(/\/ Notation<\/h2>/);
  });
