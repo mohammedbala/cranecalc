@@ -5,19 +5,20 @@ import {codeBasis} from '../engine/drawingData';
 import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot,Crane,ProjectInput} from '../engine/types';
 import {weldingBasisLabel,weldsToExistingColumn} from '../engine/existingWelding';
-import {format} from '../engine/units';
+import {format,toDisplay,unit} from '../engine/units';
 import {craneDesignMinimum,craneCombinations,combinationLabel,combinationOmissions} from '../engine/aistLoads';
 import {deflectionCriteria} from '../engine/aistChecks';
 import {buildingClassBasis} from '../engine/buildingClass';
 import {runwayElevations,issueStatus,revisionIdentity,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
+import {railJointType} from '../engine/railLayout';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
 import {usesTaperedHaunch} from '../engine/taperedHaunch';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
 import {activeColumnCap} from '../engine/columnCapInputs';
-import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength} from './drawingFormat';
+import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength,specGrade} from './drawingFormat';
 import {railPad} from '../engine/railSeat';
 import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
@@ -27,6 +28,7 @@ import {tieRelease,stiffenerTieGeometry,flangeTieGeometry} from '../engine/tieGe
 import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newColumnBracing';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
 import {deliveredRows,deliveredHeaders,deliveredNote} from '../report/deliveredTable';
+import {sig3} from '../report/reportParts';
 
 /** A sheet of the set as the cover indexes it, with the titles of its details in drawing order. */
 export interface SheetEntry {number:string;title:string;details?:readonly string[];render?:()=>string}
@@ -34,10 +36,10 @@ export interface SheetEntry {number:string;title:string;details?:readonly string
 const abbreviationList:[RegExp,string][]=[
  [/\(E\)/,'(E) EXISTING'],[/\(N\)/,'(N) NEW'],[/\bBOT\./,'BOT. BOTTOM'],[/\bBRG\./,'BRG. BEARING'],[/\bC\/L\b/,'C/L CENTERLINE'],
  [/\bCJP\b/,'CJP COMPLETE JOINT PENETRATION'],[/\bCLR\./,'CLR. CLEAR'],[/\bCOL\./,'COL. COLUMN'],[/\bCOMB\./,'COMB. LOAD COMBINATION'],
- [/\bCONT\./,'CONT. CONTINUOUS'],[/\bEA\./,'EA. EACH'],[/\bED\./,'ED. EDITION'],[/\bEL\./,'EL. ELEVATION'],[/\bFIG\./,'FIG. FIGURE'],
+ [/\bCONT\./,'CONT. CONTINUOUS'],[/\bD\/C\b/,'D/C DEMAND / CAPACITY RATIO'],[/\bEA\./,'EA. EACH'],[/\bED\./,'ED. EDITION'],[/\bEL\./,'EL. ELEVATION'],[/\bFIG\./,'FIG. FIGURE'],
  [/\bFL\./,'FL. FLANGE'],[/\bFREQ\./,'FREQ. FREQUENCY'],[/\bFW\b/,'FW FIELD WELD'],[/\bGR\./,'GR. GRADE'],[/\bHORIZ\./,'HORIZ. HORIZONTAL'],
  [/\bLONG\.(?!\w)/,'LONG. LONGITUDINAL'],[/\bLSL\b/,'LSL LONG-SLOTTED HOLE'],[/\bMAX\./,'MAX. MAXIMUM'],[/\bMIN\./,'MIN. MINIMUM'],
- [/\bMT\b/,'MT MAGNETIC PARTICLE TESTING'],[/\bNDT\b/,'NDT NONDESTRUCTIVE TESTING'],[/\bO\.C\./,'O.C. ON CENTER'],[/\bPL\b/,'PL PLATE'],
+ [/\bMT\b/,'MT MAGNETIC PARTICLE TESTING'],[/\bNDT\b/,'NDT NONDESTRUCTIVE TESTING'],[/\bO\.C\./,'O.C. ON CENTER'],[/\bOD\b/,'OD OUTSIDE DIAMETER'],[/\bPL\b/,'PL PLATE'],[/\bQTY\b/,'QTY QUANTITY'],
  [/\bREF\./,'REF. REFERENCE (EXISTING OR BY OTHERS)'],[/\bSC\b/,'SC SLIP-CRITICAL'],[/\bSSL\b/,'SSL SHORT-SLOTTED HOLE'],[/\bSTD\b/,'STD STANDARD HOLE'],
  [/\bSTIFF\./,'STIFF. STIFFENER'],[/\bT\.O\.(?= )/,'T.O. TOP OF'],[/\bT\.O\.R\./,'T.O.R. TOP OF RAIL'],[/\bT\.O\.S\./,'T.O.S. TOP OF STEEL'],
  [/\bTHRU\b/,'THRU THROUGH'],[/\bTYP\./,'TYP. TYPICAL'],[/\bU\.N\.O\./,'U.N.O. UNLESS NOTED OTHERWISE'],[/\bUT\b/,'UT ULTRASONIC TESTING'],
@@ -129,7 +131,7 @@ export const coverSheetTitle='COVER, GENERAL NOTES & DESIGN CRITERIA';
 function existingWeldNote(p:ProjectInput){
  if(!weldsToExistingColumn(p))return [];
  const w=p.existingColumn!.welding,heat=preheatBasis(p)!;
- const steel=w&&w.basis!=='not-established'&&w.grade.trim()?`${w.grade.toUpperCase()} (${weldingBasisLabel[w.basis].toUpperCase()})`:'TO BE IDENTIFIED BEFORE WELDING';
+ const steel=w&&w.basis!=='not-established'&&w.grade.trim()?`${specGrade(w.grade.toUpperCase())} (${weldingBasisLabel[w.basis].toUpperCase()})`:'TO BE IDENTIFIED BEFORE WELDING';
  // One thickness basis with the calculation and the bracket sheet: the thickest part at the weld (preheatBasis).
  return [`FIELD WELDS TO THE EXISTING COLUMNS: EXISTING STEEL ${steel}. WELD ONLY TO A WPS APPROVED BY THE ENGINEER OF RECORD FOR THAT STEEL; LOW-HYDROGEN PROCESSES ONLY. ${heat.text.toUpperCase()}. WELD WITH THE CRANE OUT OF SERVICE AND THE COLUMN UNDER DEAD LOAD ONLY; SEQUENCE THE WELDS TO LIMIT HEAT INPUT.`];
 }
@@ -144,7 +146,7 @@ export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
   return [...counts].map(([k,n])=>n===1?k:`${['','','two','three'][n]??n} ${k.endsWith('crane')?`${k}s`:`× ${k}`}`).join(' and ');})();
 const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  const supports=isNew?`new freestanding ${p.existingColumn!.shape||'built-up'} runway columns${d?.bracket?.enabled?' with welded brackets':activeColumnCap(p)?' with column caps, the girders bearing directly on the columns':''}${p.columnBase?.enabled?', base plates, anchor rods and spread footings':''}`:d?.bracket?.enabled?(usesExistingBracket(p)?'existing column brackets with new bolted seats':'new brackets welded to the existing building columns'):p.aist?.supportType==='column'?'independent runway columns':'the building columns';
- const scope=`Furnish and install one crane runway line, ${len(length)} long in ${p.spans.length} ${p.system==='continuous'?'continuous':'simple'} span${p.spans.length>1?'s':''}, for ${cranes}: ${p.section.name}${p.section.kind==='cap'?' capped':''} runway girders, rail, rail attachments, end stops and connections, supported on ${supports}.${isNew?' The new columns carry only the crane and runway; the existing building carries no crane load.':p.existingColumn?.enabled?' The existing column receiving the runway is checked for the added crane reactions.':''}${p.longitudinalBracing?.enabled?(designsBracing(p)?' The new crane-level rod X-bracing, its strut, gussets, pins and the braced columns and footings are designed for crane traction, stop and seismic forces along the runway.':` The ${isNew?'new':'existing'} crane-level longitudinal bracing is checked for crane traction and stop forces.`):''} The opposite runway is identical unless noted.`;
+ const scope=`Furnish and install one crane runway, two identical girder lines (grid B opposite hand to grid A), each ${len(length)} long in ${p.spans.length} ${p.system==='continuous'?'continuous':'simple'} span${p.spans.length>1?'s':''}, for ${cranes}: ${p.section.name}${p.section.kind==='cap'?' capped':''} runway girders, rail, rail attachments, end stops and connections, supported on ${supports}.${isNew?' The new columns carry only the crane and runway; the existing building carries no crane load.':p.existingColumn?.enabled?' The existing column receiving the runway is checked for the added crane reactions.':''}${p.longitudinalBracing?.enabled?(designsBracing(p)?' The new crane-level rod X-bracing, its strut, gussets, pins and the braced columns and footings are designed for crane traction, stop and seismic forces along the runway.':` The ${isNew?'new':'existing'} crane-level longitudinal bracing is checked for crane traction and stop forces.`):''}`;
  const build=(t:Style)=>{
  const written:string[]=[],H=(v:string)=>{written.push(v);return heading(t,v);},N=(v:string[])=>{written.push(...v);return numbered(t,v);},P=(v:string)=>{written.push(v);return paragraph(t,v);},T=(h:string[],r:string[][],w:number[])=>{written.push(...h,...r.flat());return table(t,h,r,w);};
  const blocks:Block[]=[];
@@ -248,13 +250,20 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['ELEVATIONS',elevations?`T.O.R. ${drawingElevation(elevations.tor,u)}, T.O.S. ${drawingElevation(elevations.tos,u)} (DATUM ${drawingElevation(elevations.datum,u)})`:'NOT ENTERED']
  ],[1.4,2.6]));
  const r=s.supportReactions;
+ // The runway seismic combinations are evaluated by the engineer of record: their item in the existing structure evaluation.
+ const runwaySeismic=unevaluatedStructure(s).findIndex(c=>c.id==='building-seismic-runway')+1;
  // The combinations the runway girder is designed for, as the calculation applies them.
  // The combinations as the calculation lists them: TR-13 case labels, without the cases that equal or are bounded by another.
  const omitted=combinationOmissions(p.method),combos=craneCombinations(p.method,p.aist?.concurrency==='full').filter(c=>!omitted.some(o=>o.id===c.id)),plain=(v:string)=>v.replace(/C_\{([^}]*)\}/g,'C$1').replace(/C_([a-z]+)/g,'C$1');
  // The table keeps with its key below it.
  blocks.push(H(`LOAD COMBINATIONS · RUNWAY GIRDER (${p.method})`),{...T(['NO.','COMBINATION','NO.','COMBINATION'],Array.from({length:Math.ceil(combos.length/2)},(_,i)=>{const a=combos[i],b=combos[i+Math.ceil(combos.length/2)];return [combinationLabel(a.id),plain(a.equation),b?combinationLabel(b.id):'',b?plain(b.equation):''];}),[.6,1.4,.6,1.4]),keep:true},
-  P(`AIST TECHNICAL REPORT 13 WITH ASCE 7 §2.${p.method==='LRFD'?'3':'4'}. Cd CRANE DEAD, Cv VERTICAL, Css SIDE THRUST, Cls LONGITUDINAL, Ci IMPACT, Cbs BUMPER; SUFFIX m MULTIPLE CRANES, s ONE CRANE, min MINIMUM LIFTED LOAD. D DEAD, L LIVE. IMPACT AND SIDE THRUST ARE IN SEPARATE COMBINATIONS (${p.method==='LRFD'?'2b AND 2c':'2a AND 2b'}; AISC DG7 3RD ED. WITH ERRATA 2/16/2023). ALSO EVALUATED: ${omitted.map(o=>combinationLabel(o.id)).join(', ')} (EQUAL TO OR BOUNDED BY THE CASES LISTED).${p.aist?.concurrency==='full'?' C1: ALL CRANE LOADS CONCURRENT AS L.':''}`));
- if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, PER SUPPORT'),T(['STATION','D','Cd','Cv','Ci','Css','Cls·e/L'],r.supports.map(v=>[len(v.x),f(v.D),f(v.Cd),f(v.Cv),f(v.Ci),f(v.Css),'±'+f(v.Clv)]),[1.25,1,1,1,1,1,1.05]),P(`Cd CRANE EMPTY, Cv LIFTED, Ci IMPACT${p.cranes.length>1?' (ALL CRANES, ANY ARRANGEMENT)':''}, Css SIDE THRUST AT RAIL HEAD (ONE CRANE). RUNWAY LONGITUDINAL FORCE Cls = ${f(r.Cls)} AT THE RAIL HEAD; Cls·e/L IS ITS END COUPLE AT THE BEARINGS OF THE BAY THAT CARRIES IT. ALL CRANE COMPONENTS ARE LIVE LOAD L (ASCE 7 §4.9).${adjacentBays(p).map(b=>` AT ${len(b.station)} THE REACTIONS INCLUDE THE EXISTING ADJACENT ${len(b.length)} BAY (SAME GIRDER, RAIL AND DEAD LOAD ASSUMED).`).join('')} FACTORED: ${bracketForcesAt(s,'cover')}.`));
+  P(`AIST TECHNICAL REPORT 13 WITH ASCE 7 §2.${p.method==='LRFD'?'3':'4'}. Cd CRANE DEAD, Cv VERTICAL, Css SIDE THRUST, Cls LONGITUDINAL, Ci IMPACT, Cbs BUMPER; SUFFIX m MULTIPLE CRANES, s ONE CRANE, min MINIMUM LIFTED LOAD. D DEAD, L LIVE. IMPACT AND SIDE THRUST ARE IN SEPARATE COMBINATIONS (${p.method==='LRFD'?'2b AND 2c':'2a AND 2b'}; AISC DG7 3RD ED. WITH ERRATA 2/16/2023). ALSO EVALUATED: ${omitted.map(o=>combinationLabel(o.id)).join(', ')} (EQUAL TO OR BOUNDED BY THE CASES LISTED).${p.aist?.concurrency==='full'?' C1: ALL CRANE LOADS CONCURRENT AS L.':''}${runwaySeismic>0&&combos.some(c=>c.id==='7a')?` 7A IS EVALUATED HERE WITHOUT THE SEISMIC LOAD E; 5A AND 7A WITH E ARE BY THE ENGINEER OF RECORD (EXISTING STRUCTURE EVALUATION, ITEM ${runwaySeismic}).`:''}`));
+ // Supports by grid, as every other table on the set, with the station; the traction couple's lever is the rail head height
+ // above the bearing, hr (e is the column eccentricity of the delivered forces).
+ // Forces to three significant figures, as the forces delivered to the columns below and the force table on S-02.
+ const f3=(v:number)=>Math.abs(toDisplay(v,'force',u))<.1?`${Math.abs(toDisplay(v,'force',u)).toFixed(2)} ${unit('force',u)}`:sig3(v,'force',u);
+ const gridAt=(x:number)=>{let at=0;const i=[0,...p.spans.map(v=>at+=v)].findIndex(g=>Math.abs(g-x)<1);return i<0?len(x):`${i+1} (${len(x)})`;};
+ if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, PER SUPPORT'),T(['GRID (STATION)','D','Cd','Cv','Ci','Css','Cls·hr/L'],r.supports.map(v=>[gridAt(v.x),...[v.D,v.Cd,v.Cv,v.Ci,v.Css].map(f3),'±'+f3(v.Clv)]),[1.4,1,1,1,1,1,1.05]),P(`Cd CRANE EMPTY, Cv LIFTED, Ci IMPACT${p.cranes.length>1?' (ALL CRANES, ANY ARRANGEMENT)':''}, Css SIDE THRUST AT RAIL HEAD (ONE CRANE). RUNWAY LONGITUDINAL FORCE Cls = ${f(r.Cls)} AT THE RAIL HEAD; Cls·hr/L IS ITS END COUPLE AT THE BEARINGS OF THE BAY THAT CARRIES IT, hr THE HEIGHT OF THE RAIL HEAD ABOVE THE BEARING AND L THE SPAN. ALL CRANE COMPONENTS ARE LIVE LOAD L (ASCE 7 §4.9).${adjacentBays(p).map(b=>` AT ${len(b.station)} THE REACTIONS INCLUDE THE EXISTING ADJACENT ${len(b.length)} BAY (SAME GIRDER, RAIL AND DEAD LOAD ASSUMED).`).join('')} FACTORED: ${bracketForcesAt(s,'cover')}.`));
  // The forces delivered to the building columns: the same concurrent sets as the calculation (page 1 and section 3.5).
  const delivered=deliveredRows(s);
  if(delivered.length)blocks.push(H(`FORCES DELIVERED TO THE BUILDING COLUMNS · FACTORED ${p.method}, CONCURRENT SETS PER GRID`),{...T(deliveredHeaders.map(v=>v.toUpperCase()),delivered,[.4,1.05,1.05,.65,.85,.8,.65,.65,.7]),keep:true},P(deliveredNote(s)));
@@ -268,10 +277,14 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  // AISC 360-16 Table J3.2 bolt groups: Group A (A325) and Group B (A490); 'Group 120 / 150' is AISC 360-22 terminology.
  const bolt=d?.end.grade==='A490'?'ASTM F3125 GRADE A490 (GROUP B)':'ASTM F3125 GRADE A325 (GROUP A)';
  const materialsFrom=written.length;
- blocks.push(H('MATERIALS'),T(['ITEM','SPECIFICATION'],[
+ // Bolts in slotted sliding plies (end bearings, cap tiebacks) bear against sleeves: those plies are not clamped.
+ const sleeved=!!d&&constructionRequirements(p).find(v=>v.key==='bolting')!.items.some(v=>/against steel sleeves/i.test(v));
+ // ASTM grades in one form (GR.), as the abbreviation list and the calculation give them.
+ const gradeRows=(rows:string[][])=>rows.map(r=>r.map(specGrade));
+ blocks.push(H('MATERIALS'),T(['ITEM','SPECIFICATION'],gradeRows([
   ['RUNWAY GIRDER',`${astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu).toUpperCase()}${p.section.kind==='welded'?' PLATE':''}, Fy = ${ksi(p.section.Fy)}`],
   ...(p.capDesign&&p.section.kind==='cap'?[['CAP CHANNEL',`${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource).toUpperCase()}, Fy = ${ksi(p.capDesign.Fy)}`]]:[]),
-  ...(d?[['PLATES, BARS, ANGLES, TIES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['CRANE RAIL',`${astmSpec('rail',d.rail.Fy,d.rail.Fu)} ${d.rail.name.split(" · ")[0]}, Fy = ${ksi(d.rail.Fy)}`.toUpperCase()],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`${astmSpec('tube',50*6.894757293168).toUpperCase()} STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND BRACKETS AND TIES TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[]),...(d.rail.clip?[['RAIL CLIPS',`${d.rail.clip.product.toUpperCase()}${new RegExp(`${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}.*FLOATING`,'i').test(d.rail.clip.product)?'':`; ${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}, FLOATING`}, PER MANUFACTURER; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
+  ...(d?[['PLATES, BARS, ANGLES, TIES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['CRANE RAIL',`${astmSpec('rail',d.rail.Fy,d.rail.Fu)} ${d.rail.name.split(" · ")[0]}, Fy = ${ksi(d.rail.Fy)}`.toUpperCase()],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface} FAYING SURFACES AT CLAMPED PLIES${sleeved?'; BOLTS IN SLOTTED SLIDING PLIES PRETENSIONED AGAINST STEEL SLEEVES, THE SLOTTED PLY NOT CLAMPED (MATERIAL NOTE 1)':''}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`${astmSpec('tube',50*6.894757293168).toUpperCase()} STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND BRACKETS AND TIES TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[]),...(d.rail.clip?[['RAIL CLIPS',`${d.rail.clip.product.toUpperCase()}${new RegExp(`${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}.*FLOATING`,'i').test(d.rail.clip.product)?'':`; ${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}, FLOATING`}, PER MANUFACTURER; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
   ...(usesRolledBracket(p)?(()=>{const w=projectStub(p);return [['COLUMN BRACKETS',`ASTM A992 ${w.name}, Fy = ${ksi(w.input.Fy)}, Fu = ${ksi(w.input.Fu)}; ${w.seat?'SEAT PL AND ':''}STIFFENERS AS PLATES`]];})():[]),
   ...(usesTaperedHaunch(p)&&d?[['COLUMN BRACKETS',`BUILT-UP TAPERED I HAUNCH PLATES, ${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}; ${p.existingColumn?.enabled&&!p.existingColumn.isNew?'FIELD WELDED TO EXISTING COLUMNS: VERIFY WELDABILITY':'SHOP WELDED'}`]]:[]),
   ...(d&&columnStiffenerGeometry(p)?[['COLUMN STIFFENERS',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()} PLATES, Fy = ${ksi(d.material.Fy)}; ${supportColumn(p).field?'FIELD WELDED INSIDE THE EXISTING COLUMNS':'SHOP WELDED INSIDE THE NEW COLUMNS'} AT THE BRACKETS`]]:[]),
@@ -280,7 +293,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   // Only new bracing is furnished; existing bracing is checked and described in the existing building notes.
   ...(designsBracing(p)?(()=>{const g=bracingDesign(p);return [['BRACING STRUT',`ASTM A992 ${g.strut.shape}, Fy = ${ksi(g.strut.Fy)}`],['BRACE GUSSETS',`ASTM A572 GR. 50, Fy = ${ksi(g.gusset.Fy)}, Fu = ${ksi(g.gusset.Fu)}`],['CLEVIS PINS',`ASTM A36 MIN. STEEL PIN (ASTM A108 / A434 AS SPECIFIED), Fu = ${ksi(g.pin.Fu)} MIN.; FORGED CLEVISES RATED FOR THE ROD STRENGTH`]];})():[]),
   ...(p.longitudinalBracing?.enabled&&p.existingColumn?.isNew?[[p.longitudinalBracing.system==='rod-x'?'BRACING RODS':'BRACING',p.longitudinalBracing.system==='rod-x'?`${astmSpec('rod',p.longitudinalBracing.rod.Fy,p.longitudinalBracing.rod.Fu).toUpperCase()} RODS, Fy = ${ksi(p.longitudinalBracing.rod.Fy)}, Fu = ${ksi(p.longitudinalBracing.rod.Fu)}`:`${astmSpec('angle',p.longitudinalBracing.angle.Fy,p.longitudinalBracing.angle.Fu).toUpperCase()} ${p.longitudinalBracing.angle.shape}, Fy = ${ksi(p.longitudinalBracing.angle.Fy)}`]]:[])
- ],[1.2,2.8]));
+ ]),[1.2,2.8]));
  // Numbered under their own heading, so one carried to the next column still reads in context.
  // Bolting and welding requirements are generated from the calculation; entered notes that contradict them are dropped
  // here and reported as an open item in the calculation.
@@ -290,8 +303,14 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  if(d){
   const steel=addedSentences(enteredFabricationNote(p,'steel'),written.slice(materialsFrom),true).join(' ');
   const welding=items('welding').filter(v=>!(existing&&onExisting&&existingWeldNote(p).length&&/^Field welds to the existing column/.test(v)));
+  // The rail joints and the rail anchorage are stated in full once, on their details; the bolting note points there.
+  const bolting=items('bolting').map(v=>/^Rail joints:/.test(v)?`Rail joints: ${railJointType(p)==='tight'?'tight':'open'} joints, bolts pretensioned and re-tightened per ${detailRef(detailTitles.railJoint)}; rail anchorage per ${detailRef(detailTitles.railLayout)}.`:v);
+  // An entered sentence whose words the bolting statements on this sheet (this note, the general notes and the
+  // materials table) already hold, taken together, repeats them and is left out.
+  const boltingSaid=[...items('bolting'),...written.filter(v=>/\b(BOLTS?|PRETENSION(ED)?|SLIP-CRITICAL)\b/i.test(v))];
+  const enteredBolting=addedSentences(enteredFabricationNote(p,'bolting'),[...written,...items('bolting')]).filter(v=>addedSentences(v,boltingSaid,true).length);
   blocks.push(H('MATERIAL NOTES'),...N([...(steel?[`STEEL: ${steel}`.toUpperCase()]:[]),
-   `BOLTING: ${[...items('bolting'),...addedSentences(enteredFabricationNote(p,'bolting'),[...written,...items('bolting')])].join(' ')}`.toUpperCase(),
+   `BOLTING: ${[...bolting,...enteredBolting].join(' ')}`.toUpperCase(),
    `WELDING: ${[...welding,...addedSentences(enteredFabricationNote(p,'welding'),[...written,...items('welding')])].join(' ')}`.toUpperCase()]));
  }
  // AISC 360 Chapter N assigns steel tasks to observe (O) or perform (P); IBC Table 1705.3 rates concrete
@@ -311,7 +330,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(p.existingColumn?.isNew&&p.existingColumn.enabled?[]:[['EXISTING STEEL','FIELD-VERIFY SIZES, CONDITION AND WELDABILITY BEFORE WORK','P']]),
   ...(fieldWelds?[['FIELD WELDS TO EXISTING STEEL',`BASE METAL CONFIRMED, WPS APPROVED, PREHEAT ${(preheatBasis(p)?format(preheatBasis(p)!.governing,'temperature',u,0).toUpperCase()+' MIN.':'PER THE APPROVED WPS')}; VISUAL AND MT OF EVERY FIELD WELD TO EXISTING STEEL${columnStiffenerGeometry(p)?', INCLUDING THE COLUMN STIFFENER WELDS':''}`,'P']]:[]),
   ...(d&&columnStiffenerGeometry(p)?[['COLUMN STIFFENERS',`FIT-UP AT THE BRACKET FORCE LEVELS WITH THE CORNER CLIPS CLEAR OF THE COLUMN FILLETS${supportColumn(p).field?' (SURVEY THE COLUMN AT BOTH LEVELS FIRST)':''}; VISUAL OF EVERY STIFFENER WELD, MT OF THE FLANGE FILLETS`,'P']]:[]),
-  ...(d?[['FIELD WELDS',`RAIL CLIP BASE WELDS${p.columnBase?.enabled&&p.existingColumn?.isNew?', ANCHOR ROD PLATE WASHERS':''}: VISUAL OF EVERY WELD`,'P']]:[]),
+  // The rail clip base welds are cyclic attachments on the girder top plate: MT at their terminations, as the NDT row.
+  ...(d?[['FIELD WELDS',`RAIL CLIP BASE WELDS${p.columnBase?.enabled&&p.existingColumn?.isNew?', ANCHOR ROD PLATE WASHERS':''}: VISUAL OF EVERY WELD${d.rail.clip?.type==='bolted'?'':`; MT AT THE RAIL CLIP WELD TERMINATIONS (CYCLIC ATTACHMENTS ON THE ${p.section.kind==='cap'?'CAP CHANNEL':'GIRDER TOP FLANGE'}, NDT ABOVE)`}`,'P']]:[]),
   ...(seismic341?[['SEISMIC (IBC 1705.12.1.1, 1705.13.1.1)','NEW COLUMNS, BASE PLATES AND THEIR WELDS: QUALITY ASSURANCE PER AISC 341 CHAPTER J; CRANE-LEVEL ROD BRACING EXEMPT (R = 3)','O / P']]:[]),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS (IBC 1705.3, 1705.6)','REINFORCEMENT AND ANCHOR ROD PLACEMENT; BEARING SOIL VERIFIED BEFORE CONCRETE','P'],['CONCRETE (IBC 1705.3)','SAMPLING AND TESTING OF FRESH CONCRETE; PLACEMENT','C']]:[]),
   ['RAIL / RUNWAY','ALIGNMENT, GAUGE AND LEVEL SURVEY AFTER ERECTION','P']
@@ -366,5 +386,6 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  const foot=Math.max(...placed.map(v=>v.y+v.b.height))+10;
  for(const x of columns.slice(1))if(placed.some(v=>v.x===x))svg+=line([x-18,top-6],[x-18,foot],'divider');
  svg+=`</g>`;
- return svg+titleBlock(s,'S-00','COVER, GENERAL NOTES & DESIGN CRITERIA')+'</svg>';
+ // No scaled view on the cover.
+ return svg+titleBlock(s,'S-00','COVER, GENERAL NOTES & DESIGN CRITERIA','NONE')+'</svg>';
 }

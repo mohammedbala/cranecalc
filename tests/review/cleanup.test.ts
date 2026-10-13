@@ -182,7 +182,7 @@ describe('revision identity and consistency (m1–m9)',()=>{
  });
  it('uses AISC 360-16 bolt groups and the Table J3.2 F_nt (m7)',()=>{
   const cover=sheets[0];
-  expect(cover).toContain('ASTM F3125 GRADE A325 (GROUP A)');expect(cover).not.toContain('GROUP 120');
+  expect(cover).toContain('ASTM F3125 GR. A325 (GROUP A)');expect(cover).not.toContain('GROUP 120');
   expect(cover).not.toContain('A513');expect(cover).toContain('ASTM A500 GR. C STEEL TUBE');
   expect(body).toContain('ASTM F3125 Gr. A325 (Group A)');
   expect(html).toMatch(/0\.75\\times90(\.0+)?\\,\\mathrm\{ksi\}/);expect(html).not.toContain('89.9\\,\\mathrm{ksi}');

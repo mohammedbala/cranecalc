@@ -23,7 +23,7 @@ describe('field welding to the existing column',()=>{
   expect(w.every(c=>c.group==='Existing column'&&c.referenceIds.includes('existing-steel-welding'))).toBe(true);
   expect(w.find(c=>c.id==='column-weld-preheat')!.note).toContain('150 °F minimum');
   const cover=drawingSheetSet(s).find(v=>v.number==='S-00')!.svg.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
-  expect(cover).toContain('PREHEAT AND INTERPASS TEMPERATURE AT LEAST 150 °F');expect(cover).toContain('ASTM A572 GRADE 50 (MILL CERTIFICATES)');expect(cover).toContain('AWS D1.1/D1.1M:2020 TABLE 5.8, CATEGORY B, MINIMUM 150 °F');
+  expect(cover).toContain('PREHEAT AND INTERPASS TEMPERATURE AT LEAST 150 °F');expect(cover).toContain('ASTM A572 GR. 50 (MILL CERTIFICATES)');expect(cover).toContain('AWS D1.1/D1.1M:2020 TABLE 5.8, CATEGORY B, MINIMUM 150 °F');
  },240000);
  it('reports missing data as unverified and a high carbon equivalent or low preheat as failing',()=>{
   const p=cappedDemonstrationProject(),tf=existingColumnSection(p).section.tf;

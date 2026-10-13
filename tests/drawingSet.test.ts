@@ -113,7 +113,8 @@ describe('drawings agree with the calculation',()=>{
  },120000);
  it('tabulates the calculated support reactions and crane data on the cover',()=>{
   const p=capped.input,cover=texts(cappedSet[0].svg).join(' | '),r=capped.supportReactions!;
-  for(const v of r.supports)for(const value of [v.D,v.Cd,v.Cv,v.Ci,v.Css])expect(cover).toContain(format(value,'force',p.units,2).toUpperCase());
+  // To three significant figures, as the forces delivered to the columns.
+  for(const v of r.supports)for(const value of [v.D,v.Cd,v.Cv,v.Ci,v.Css])expect(cover).toContain(sig3(value,'force',p.units).toUpperCase());
   expect(cover).toContain(drawingLength(p.details!.criteria.railGauge,p.units));
   for(const c of p.cranes)expect(cover).toContain(`CRANE DATA · ${c.name.toUpperCase()}`);
   expect(cover).toContain('DEMONSTRATION - NOT FOR CONSTRUCTION');

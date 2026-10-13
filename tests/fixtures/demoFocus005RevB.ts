@@ -75,6 +75,10 @@ export function demoFocus005RevB():ProjectInput{
  // One bumper data source throughout: the corrected supplier schedule (the end stop source still named CAP-CS-02).
  p.details!.endStop!.source='Fictitious supplier schedule DEMO-CS-05 rev B: bumper force, bumper centerline height and contact diameter';
  note('Bumper data source: the supplier schedule DEMO-CS-05 rev B (was CAP-CS-02).');
+ // The runway is on grid lines A and B: the existing column source and the building evaluation cover both lines (the
+ // same frames), not line B alone.
+ p.existingColumn!.source=p.existingColumn!.source.replace(/column line B$/,'column lines A and B (the same frames)');
+ p.drawing!.existingEvaluation=p.drawing!.existingEvaluation!.replace('column line B frame,','column line A and B frames,');
  // One revision identity for the calculation and the drawings (Rev B), with the revision log: Rev A the review issue,
  // Rev B the changes above.
  p.drawing={...p.drawing!,revisions:[{rev:'A',date:'2026-10-09',description:'Issued for review',by:'CC'},

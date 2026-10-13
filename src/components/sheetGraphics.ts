@@ -137,7 +137,8 @@ export function sheetStart(s: CalculationSnapshot, number: string, title: string
   ${rect(36,36,2520,1656,'divider')}
   <g data-sheet-content="ARCH-D" data-content-scale="${contentScale}" transform="${contentTransform(contentScale)}">`;
 }
-export function titleBlock(s: CalculationSnapshot, number: string, title: string) {
+/** Title block; `scale` is AS SHOWN for sheets of scaled details, NONE for a sheet of notes and tables. */
+export function titleBlock(s: CalculationSnapshot, number: string, title: string, scale = 'AS SHOWN') {
   const p=s.input,d=p.drawing,top=1548,bottom=1692,rev=revisionIdentity(s),date=rev.date;
   const originator=d?.originator||p.engineer||'',checker=d?.checker||'';
   // Close the scaled drawing region: the title band is laid out in PDF points.
@@ -169,7 +170,7 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+='</g><g data-title-panel="sheet">';
   svg+=text(2170,1566,'DRAWING / SHEET NUMBER',10,'start',700)+text(2170,1611,`SHEET ${number}`,29,'start',700)+text(2546,1611,sheetOrdinalToken,12,'end',700);
   svg+=line([2156,1624],[2556,1624])+text(2170,1644,p.units==='SI'?'PAGE SIZE: ARCH D / 914 X 610 MM':'PAGE SIZE: ARCH D / 36 X 24 IN',12,'start',700);
-  svg+=text(2170,1662,rev.letter?`REVISION: ${rev.letter.toUpperCase()} (SAME AS THE CALCULATION)`:`CALC: ${s.revision}`,11)+text(2170,1681,`DATE: ${date}    SCALE: AS SHOWN`,10);
+  svg+=text(2170,1662,rev.letter?`REVISION: ${rev.letter.toUpperCase()} (SAME AS THE CALCULATION)`:`CALC: ${s.revision}`,11)+text(2170,1681,`DATE: ${date}    SCALE: ${scale}`,10);
   svg+='</g></g>';
   const status=issueStatus(s);
   svg+=`<g data-stamp="${status.issued?'seal':'blank'}">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${eor?.firm.trim()?text(2466,1520,short(eor.firm.toUpperCase(),30),8,'middle'):''}${text(2466,1534,status.issued?'SEAL AND SIGNATURE REQUIRED':'NOT SEALED',9,'middle')}</g>`;
