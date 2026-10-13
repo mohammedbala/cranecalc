@@ -1,4 +1,4 @@
-import {damageText,finiteLife,minerEquation,minerEquivalent} from './fatigueConstants';
+import {damageSum,damageText,finiteLife,minerEquation,minerEquivalent} from './fatigueConstants';
 import type {CheckResult,ProjectInput} from './types';
 import type {BracketResults} from './bracketDesign';
 import {available} from './aiscStrength';
@@ -32,5 +32,5 @@ export function haunchedRibChecks(p:ProjectInput,r:BracketResults,add:Add,common
  // Free edge base metal: a thermally cut plate edge without re-entrant corners, AISC Table A-3.1 item 1.1.
  const edgeEq=minerEquivalent(r.fatigue.map(v=>({cycles:v.cycles,range:v.ribEdge??0})),n=>finiteLife(categoryA,n));
  add('fatigue-rib-edge','Haunched rib free edge · fatigue',edgeEq.range,edgeEq.capacity,'stress',minerEquation('\\ \\ \\text{(Cat. A)};\\ \\ f_{sr}=\\frac{\\Delta P(e-x_c)}{S\\cos^2\\alpha}'),
-  `AISC Table A-3.1 item 1.1, Category A: plain plate with a thermally cut edge of surface roughness of 1,000 microinches (25 micrometers) or less and no re-entrant corners, as the bracket notes require. Range over each duty bin of the unfactored edge stress at the critical section, ${f(rib.critical.x)} from the column face, without impact; Miner's rule as the equivalent constant-amplitude range at n_SR = ${edgeEq.cycles.toLocaleString('en-US')} cycles with no endurance-limit credit, Σn_i/N_i = ${damageText(edgeEq.damage)} (information). The root corner, at the root fillet, is checked as the rib root above.`,undefined,['bracket-basis','haunched-bracket','aisc-fatigue']);
+  `AISC Table A-3.1 item 1.1, Category A: plain plate with a thermally cut edge of surface roughness of 1,000 microinches (25 micrometers) or less and no re-entrant corners, as the bracket notes require. Range over each duty bin of the unfactored edge stress at the critical section, ${f(rib.critical.x)} from the column face, without impact; Miner's rule as the equivalent constant-amplitude range at n_SR = ${edgeEq.cycles.toLocaleString('en-US')} cycles with no endurance-limit credit, ${damageSum(edgeEq.damage)}. The root corner, at the root fillet, is checked as the rib root above.`,undefined,['bracket-basis','haunched-bracket','aisc-fatigue']);
 }

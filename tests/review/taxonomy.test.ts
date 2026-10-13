@@ -200,7 +200,7 @@ describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>
   const page=text(section('Runway girder fatigue'));
   expect(page).toMatch(/Miner’s rule, no threshold credit\)\. The largest bin range applied to all cycles, f sr,max \/F SR ?, is shown for comparison/);
   expect(page).toMatch(/Screened details \(\d+\), closest to F TH/);expect(page).not.toMatch(/details evaluated; \d+ details screened/);
-  expect(page).toMatch(/Rail keeper 136 locations Rail keeper 61, x = 109\.8 ft D 7\.00 ksi 17\.65 ksi 13\.33 ksi 11\.51 ksi 0\.28 0\.65 0\.76 OK/);
+  expect(page).toMatch(/Rail keeper 136 locations Rail keeper 61, x = 109\.8 ft D 7 ksi 17\.7 ksi 13\.3 ksi 11\.5 ksi 0\.28 0\.65 0\.76 OK/);
   const s=clone();s.input.fatigue.method='all-cycle';
   const t=taxonomy(s);expect(t.fatigue.evaluated.find(r=>r.title==='Rail keeper')!.dc!.toFixed(2)).toBe('0.76');
  });
@@ -227,7 +227,7 @@ describe('TR-13 basis and clause citations (A5)',()=>{
   expect(text(html)).not.toMatch(/supplied source dated February 24, 2020/);
  });
  it('cites the clause that governs each limit state',()=>{
-  expect(cite('vertical')).toMatch(/AIST TR-13 §5\.8\.7( ·|$)/);
+  expect(cite('vertical')).toMatch(/AIST TR-13 §5\.8\.7(;|$)/);
   expect(cite('compact-web')).toMatch(/AIST TR-13 §5\.8\b/);expect(cite('shear')).toMatch(/AIST TR-13 §5\.8\b/);
   expect(cite('wheel-yield')).toMatch(/AIST TR-13 §5\.8\.6/);
   expect(cite('end-bearing-sleeve')).toMatch(/AIST TR-13 §5\.14/);

@@ -57,9 +57,9 @@ export function buildingClassCheck(p:ProjectInput):CheckResult{
  const di=p.aist??emptyAistInputs,b=buildingClassBasis(p),n=(v:number)=>v.toLocaleString('en-US'),[lo,hi]=classCycles[b.implied];
  if(!di.classConfirmed||!di.buildingCycles)return {id:'building-class',group:'Criteria',title:'AIST building classification',status:'incomplete',equation:'',referenceIds:['tr13-class'],note:'Enter owner building load repetitions and confirm the selected A–D building class. These classes differ from CMAA crane service classes and from fatigue stress fluctuations.'};
  const basisText=b.basis==='full-load'?`only repetitions of the rated (full) load count: N = ${n(b.repetitions)} owner full-load repetitions`
-  :`every crane load cycle counts${b.stated?'':' (no classification basis stated; the conservative default)'}: N = max(${n(b.repetitions)} owner full-load repetitions, ${n(b.fatigue)} fatigue cycles) = ${n(b.counted)}`;
+  :`every crane load cycle counts${b.stated?'':' (no classification basis stated)'}: N = max(${n(b.repetitions)} owner full-load repetitions, ${n(b.fatigue)} fatigue cycles) = ${n(b.counted)}`;
  const verdict=b.understated?`The entered Class ${b.entered} is lighter than the counted Class ${b.implied}: classify the building as Class ${b.implied}, or state that Table 1.1 counts only full-load repetitions for this building. The design uses Class ${b.effective}.`
-  :`Entered Class ${b.entered}${b.entered!==b.implied?` (more severe than the counted Class ${b.implied}; accepted as conservative)`:''}.`;
+  :`Specified Class ${b.entered}${b.entered!==b.implied?` (more severe than the counted Class ${b.implied})`:''}.`;
  const hiEntered=classCycles[b.entered][1],cap=Number.isFinite(hiEntered)?hiEntered:Math.max(b.counted,1);
  return {id:'building-class',group:'Criteria',title:'AIST building classification',status:b.understated?'fail':'pass',demand:b.counted,capacity:cap,quantity:'ratio',utilization:b.counted/cap,
   equation:'n_{SR}\\le N_{max}\\ \\ \\text{(TR-13 Table 1.1)}',referenceIds:['tr13-class','tr13-inspection'],

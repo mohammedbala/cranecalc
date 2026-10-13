@@ -41,7 +41,9 @@ export class Draft {
     this.line(12, height - 54, 988, height - 54, 'BORDER');
     this.line(590, height - 54, 590, height - 12, 'BORDER');
     this.line(810, height - 54, 810, height - 12, 'BORDER');
-    this.text(28, height - 37, short(s.input.title, 70), 10);
+    // The revision is in its own box: a title ending "· Rev B" does not repeat it.
+    const rev = revisionIdentity(s), ownTitle = s.input.title.replace(new RegExp(`\\s*·\\s*${rev.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'), '');
+    this.text(28, height - 37, short(ownTitle, 70), 10);
     this.text(28, height - 22, `CRANECALC / ${short(s.input.number || 'UNTITLED', 40)} / ENGINEERING SKETCH`, 8, 'start', 'BORDER');
     this.text(604, height - 37, `${revisionIdentity(s).heading} · ${revisionIdentity(s).date}`, 9);
     this.text(604, height - 22, 'DIMENSIONS GOVERN / DO NOT SCALE PRINT', 8, 'start', 'BORDER');

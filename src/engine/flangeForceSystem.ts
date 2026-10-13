@@ -101,11 +101,11 @@ export function flangeJ10Checks(p:ProjectInput,x:{S:Record<string,FlangePeak|und
   {key:'push',id:'column-crippling',title:`${t.column} web · crippling at the ${t.level.bottom} (J10.3)`,cap:J.crippling,eq:`R_u=C+3M_f/b\\le\\phi R_n=\\phi${botCrippleEnd?'0.40':'0.80'}t_w^2[1+${botCrippleEnd&&N/c.depth>.2?'(4l_b/d-0.2)':'3(l_b/d)'}(t_w/t_f)^{1.5}]\\sqrt{EF_{yw}t_f/t_w}`,
    note:`J10.3 web crippling, ${botCrippleEnd?'end-region':'interior'} expression at the bottom flange level, ${fmt(columnEnd+J.levels.bottom)} below the column top; lb = ${fmt(N)}. ${botSys}.`},
   ...(J.sidesway!==undefined?[{key:'push' as const,id:'column-sidesway',title:`${t.column} web · sidesway buckling (J10.4)`,cap:J.sidesway,eq:'R_u=C+3M_f/b\\le\\phi R_n=\\phi(C_rt_w^3t_f/h^2)[0.4((h/t_w)/(L_b/b_f))^3]',
-   note:`J10.4 unrestrained compression-flange rotation; conservative Cr regardless of column moment; entered largest flange unbraced length. ${botSys}.`}]:[])];
+   note:`J10.4 unrestrained compression-flange rotation; Cr regardless of column moment; largest flange unbraced length. ${botSys}.`}]:[])];
  for(const v of j10){
   const pk=S[v.key],Ru=pk?.value??0,dc=v.cap>0?Ru/v.cap:Infinity;
   const clause=v.title.match(/\((J10\.\d)\)/)?.[1]??'J10';
-  if(x.stiffened)x.na(v.id,v.title,v.eq,`Unstiffened ${clause} for information, not governing (the column is stiffened at this level): R_u = ${fmt(Ru,'force')} against φR_n = ${fmt(v.cap,'force')}, D/C ${dc.toFixed(2)}${dc>1?' (exceeded)':''}. The ${t.pair} column stiffener pair carries the flange force and its lateral moment M_f (J10.8, column stiffener checks). ${t.system} ${v.note}`,x.referenceIds);
+  if(x.stiffened)x.na(v.id,v.title,v.eq,`Unstiffened ${clause}, not governing (the column is stiffened at this level): R_u = ${fmt(Ru,'force')} against φR_n = ${fmt(v.cap,'force')}, D/C ${dc.toFixed(2)}${dc>1?' (exceeded)':''}. The ${t.pair} column stiffener pair carries the flange force and its lateral moment M_f (J10.8, column stiffener checks). ${t.system} ${v.note}`,x.referenceIds);
   else x.add(v.id,v.title,Ru,v.cap,'force',v.eq,`${t.system} ${v.note}${hook?' '+hook:''}`,pk?.caseId,x.referenceIds);
  }
  if(J.sidesway===undefined)x.na('column-sidesway',`${t.column} web · sidesway buckling (J10.4)`,'(h/t_w)/(L_b/b_f)>1.7','AISC J10.4(b)(2): not applicable beyond 1.7.',x.referenceIds);

@@ -169,7 +169,7 @@ describe('DEMO-FOCUS-005 full calculation (one run)',()=>{
   expect(c('column-torsion').status).toBe('fail');
   expect(c('brace-rod-fatigue').status).toBe('pass');
   for(const id of ['column-longitudinal-path','column-frame','column-drift-wind','column-rail-gauge','brace-drift-wind','building-seismic-runway','building-seismic-alteration'])expect(c(id).status).toBe('unverified');
-  const f13=c('cap-angle-column-holes');expect(f13.status).toBe('not-applicable');expect(f13.note).toContain('test MET');expect(c('column-flexure').note).toContain('tension flange rupture does not apply');expect(f13.utilization).toBeUndefined();
+  const f13=c('cap-angle-column-holes');expect(f13.status).toBe('not-applicable');expect(f13.note).toContain('F13.1 satisfied');expect(c('column-flexure').note).toContain('tension flange rupture does not apply');expect(f13.utilization).toBeUndefined();
   expect(before('cap-angle-column-holes')!.utilization).toBeCloseTo(.8112,3);
   expect(snap.eligible).toBe(false);
  },900000);

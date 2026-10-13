@@ -16,7 +16,7 @@ describe('Independent beam benchmarks',()=>{
 describe('Section properties, units and validation',()=>{
  it('integrates a symmetrical welded I-section independently',()=>{const s=project().section;s.kind='welded';delete s.catalogueId;s.d=500;s.bf=200;s.tf=20;s.tw=10;const v=sectionProperties(s);expect(v.A).toBe(12600);expect(v.Ix).toBeCloseTo(2*(200*20**3/12+4000*240**2)+10*460**3/12,4);expect(v.cy).toBe(250);expect(v.Sx).toBe(v.Ix/250);});
  it('preserves every unit quantity through conversion',()=>{for(const q of ['length','force','moment','stress','area','inertia','modulus','warping','lineLoad','ratio'] as const)expect(fromDisplay(toDisplay(123456.78,q,'US'),q,'US')).toBeCloseTo(123456.78,7);});
- it('rejects invalid geometry, unloaded loads and incomplete properties',()=>{const p=project();p.section.d=1;p.cranes[0].wheels[0].unloaded=1e9;expect(validateProject(p).length).toBeGreaterThan(1);p.section.kind='rolled';expect(validateProject(p).some(x=>x.includes('catalogue'))).toBe(true);});
+ it('rejects invalid geometry, unloaded loads and incomplete properties',()=>{const p=project();p.section.d=1;p.cranes[0].wheels[0].unloaded=1e9;expect(validateProject(p).length).toBeGreaterThan(1);p.section.kind='rolled';expect(validateProject(p).some(x=>x.includes('catalog'))).toBe(true);});
  it('rejects imported NaN, negative forces and unknown schema versions',()=>{const p=project();p.section.Fy=NaN;expect(validateProject(p).length).toBeGreaterThan(0);expect(validateProject({...project(),schemaVersion:2}).length).toBeGreaterThan(0);});
 });
 describe('Moving-load analysis and report gates',()=>{

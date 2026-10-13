@@ -38,7 +38,7 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   expect(all.capacity!).toBeCloseTo(c.capacity!,9);expect(all.demand!).toBeCloseTo(keeper.range,9);
   expect(c.utilization!**3).toBeCloseTo(keeper.damage,12);
   expect(c.equation).toBe('f_{sr,eq}=\\left(\\frac{\\sum_in_if_{sr,i}^{3}}{n_{SR}}\\right)^{1/3}\\le F_{SR}');
-  expect(c.note).toMatch(/Σn_i\/N_i = (\d+\.\d{2}|< 0\.01) \(information\)/);
+  expect(c.note).toMatch(/Σn_i\/N_i (= \d+\.\d{2}|< 0\.01)\./);expect(c.note).not.toContain('(information)');
   // No damage sum is reported as a D/C any more: every Miner check is a stress comparison.
   expect(s.checks.filter(v=>/\\sum_i\s*n_i\/N_i|\\sum_i\(f_\{sr,i\}/.test(v.equation)).map(v=>v.id)).toEqual([]);
   // The haunch Miner checks on the same basis: D/C = (Σn_i/N_i)^(1/3) of the bins.
@@ -102,7 +102,7 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   const keeper=[...F.evaluated,...F.screened].find(v=>v.title==='Rail clip base weld')!;expect(keeper.points*2).toBe(keeper.members.length);
   const kSc=pts(keeper.members.filter(c=>gate(c.id)==='screened'));
   // Every clip station is below F_TH of Category D: the detail is screened and listed with its largest range.
-  expect(kSc).toBe(keeper.points);expect(body).toContain('Rail clip base weld 4.89 ksi vs 7.00 ksi');
+  expect(kSc).toBe(keeper.points);expect(body).toContain('Rail clip base weld 4.89 ksi vs 7 ksi');
   expect(body).not.toMatch(/points at \d+ locations/);
  });
  it('states the cycle basis as modelled and the Class B basis where the class is printed (items 6, 7)',()=>{

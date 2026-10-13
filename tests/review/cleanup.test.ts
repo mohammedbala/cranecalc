@@ -78,8 +78,8 @@ describe('Appendix A, repetition and page flow (P2)',()=>{
  });
  it('prints the bolting basis and the re-tightening once',()=>{
   // The not-checked list on page 1 and in its section belongs to the responsibility-matrix work, not this clean-up.
-  expect(body.match(/AISC 360-10 J1\.10 list was removed/g)).toHaveLength(1);
-  const calc=body.slice(0,body.indexOf('Reference register'));// the register quotes the TR-13 clause
+  expect(body).not.toMatch(/J1\.10 list was removed/);
+  const calc=body.slice(0,body.indexOf('Appendix B References'));// the register quotes the TR-13 clause
   expect(calc.match(/30 and 90 days/g)).toHaveLength(1);
  });
  it('starts parts without forced page breaks and keeps headings with what follows',()=>{
@@ -100,7 +100,7 @@ describe('units, rounding and sizes (P3)',()=>{
   expect(fixed2(9.525,'length','US')).toBe('3/8 in');expect(fixed2(15.875,'length','US')).toBe('5/8 in');expect(fixed2(7.9375,'length','US')).toBe('5/16 in');
   for(const v of ['0.37 in','0.63 in','0.31 in'])expect(body,v).not.toContain(v);
   expect(body).toContain('A 3/8 in × 4 1/4 in tie plate');
-  expect(body).toMatch(/Lap bolts · edge distances[^O]*\d\/\d+ in/);
+  expect(body).toMatch(/Lap bolts[,·] edge distances[^O]*\d\/\d+ in/);
  });
  it('writes engineering subscripts and temperatures in the project units',()=>{
   expect(body).not.toMatch(/\b[A-Z]_[A-Za-z]/);
@@ -147,7 +147,7 @@ describe('references (P5)',()=>{
   expect(body).not.toMatch(/Fisher & Van de Pas \(EJ 2002\) §11\.2/);
   expect(body).not.toMatch(/Beam mechanics/);
   expect(body).not.toMatch(/Combined normal stress including warping · AISC 360-16 H3 · Moore & Mueller \(EJ 2002\) · Nayak/);
-  expect(body).toMatch(/Existing column flange · local bending at the top flange \(J10\.1\)[^]*?AISC 360-16 J10\.1/);
+  expect(body).toMatch(/Existing column flange[,·] local bending at the top flange \(J10\.1\)[^]*?AISC 360-16 J10\.1/);
   expect(body).not.toMatch(/AISC 360-16 B4, D2, E3, F4|AISC 360-16 J2, J3, J4, J7/);
  });
  it('cites AIST TR-13 once as the 2021 edition, with no edition qualifier, in the calculation and on S-00 (C1)',()=>{

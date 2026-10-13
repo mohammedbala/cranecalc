@@ -14,7 +14,7 @@ export {sheetEntities,sheetLayers} from './svgEntities';
 const round=(v:number)=>Number(v.toFixed(5));
 // AutoCAD text: drafting symbols as %% codes or plain ASCII, anything else as \U+XXXX;
 // a literal "%%" would read as a control code.
-const symbols:Record<string,string>={'·':'-','×':'X','°':'%%d','±':'%%p','Ø':'%%c','⌀':'%%c','§':'SEC. ','–':'-','—':'-','≤':'<=','≥':'>=','’':"'",'‘':"'",'“':'"','”':'"','′':"'",'″':'"'};
+const symbols:Record<string,string>={'·':'-','\u2212':'-','×':'X','°':'%%d','±':'%%p','Ø':'%%c','⌀':'%%c','§':'SEC. ','–':'-','—':'-','≤':'<=','≥':'>=','’':"'",'‘':"'",'“':'"','”':'"','′':"'",'″':'"'};
 const dxfText=(t:string)=>t.replace(/[\r\n\u0000-\u001f]/g,' ').replace(/%%/g,'%%%').replace(/[^\x20-\x7e]/g,c=>symbols[c]??`\\U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}`);
 
 /** One AC1015 DXF holding the given sheets side by side (2 in / 50 mm apart). */

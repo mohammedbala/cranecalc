@@ -64,7 +64,7 @@ describe('C2 · one force system per W-stub flange at the column face',()=>{
  it('with column stiffeners: J10.1-J10.4 for information, the plates carry P/2 ± M_f/g with no unstiffened strength credited',()=>{
   const p=cappedStubW14X90(true),{r,checks}=stubRun(p),S=r.strength,g=columnStiffenerGeometry(p)!,gauge=stiffenerGauge(g);
   for(const id of ['column-flange','column-yield-top','column-yield-bottom','column-crippling']){const c=byId(checks,'wbracket-'+id);
-   expect(c.status,id).toBe('not-applicable');expect(c.note).toMatch(/^Unstiffened J10\.\d for information, not governing \(the column is stiffened at this level\): R_u = /);expect(c.note).toContain('half-depth column stiffener pair');}
+   expect(c.status,id).toBe('not-applicable');expect(c.note).toMatch(/^Unstiffened J10\.\d, not governing \(the column is stiffened at this level\): R_u = /);expect(c.note).toContain('half-depth column stiffener pair');}
   // The same R_u in the notes at each level.
   expect(ru(byId(checks,'wbracket-column-flange').note)).toBe(ru(byId(checks,'wbracket-column-yield-top').note));
   expect(ru(byId(checks,'wbracket-column-yield-bottom').note)).toBe(ru(byId(checks,'wbracket-column-crippling').note));
@@ -90,8 +90,8 @@ describe('C2 · one force system per W-stub flange at the column face',()=>{
   c.observe('fatigue','bin',0,[{vertical:30000,offset:250,length:120}],0);c.observe('service','v',0,[{vertical:40000,offset:0}],-1);
   const checks=bracketChecks(p,c.result),S=c.result.strength;
   expect(byId(checks,'bracket-colstiff-upper').demand).toBeCloseTo(S.stiffUpperT.value/2,6);expect(byId(checks,'bracket-colstiff-lower').demand).toBeCloseTo(S.stiffLowerC.value/2,6);
-  for(const id of ['seat-flange','seat-web','column-yield','column-crippling'])expect(byId(checks,'bracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d for information, not governing/);
-  expect(byId(checks,'bracket-column-flange').note).toMatch(/^Unstiffened flange local bending at the ribs for information/);
+  for(const id of ['seat-flange','seat-web','column-yield','column-crippling'])expect(byId(checks,'bracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d, not governing/);
+  expect(byId(checks,'bracket-column-flange').note).toMatch(/^Unstiffened flange local bending at the ribs, not governing/);
  });
 });
 

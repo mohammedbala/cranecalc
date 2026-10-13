@@ -16,7 +16,7 @@ import {activeEndStop} from '../engine/endStopInputs';
  * The specified detail of each runway component, in words, from the project inputs: what a figure or a summary
  * row refers to. Sizes print as on the drawings (fractions of an inch, or mm).
  */
-export type Component='girder'|'rail'|'bearing'|'tie'|'support'|'column'|'base'|'bracing'|'end-stop'|'crane'|'criteria';
+export type Component='girder'|'rail'|'bearing'|'tie'|'support'|'column'|'base'|'bracing'|'end-stop'|'crane'|'criteria'|'duty'|'limits';
 
 const plate=(p:ProjectInput,...v:number[])=>`PL ${v.map(x=>plateInches(x,p.units)).join(' × ')}`;
 const len=(p:ProjectInput,v:number)=>dimensionLength(v,p.units);
@@ -82,14 +82,15 @@ function endStop(p:ProjectInput){
 function crane(p:ProjectInput){
  return p.cranes.map(c=>{const max=Math.max(...c.wheels.map(w=>w.loaded));return `${c.name}: ${c.wheels.length} wheels, max ${format(max,'force',p.units,1)}, side ${format(Math.max(...c.wheels.map(w=>w.lateral)),'force',p.units,2)}`;}).join('; ');
 }
-function criteria(p:ProjectInput){
- const d=p.details;
- return `Class ${p.aist?effectiveBuildingClass(p):'-'}; ${p.fatigue.cycles.toLocaleString()} cycles; vertical L/${p.aist?deflectionCriteria(p).nv:p.verticalLimit}, lateral L/${d?.criteria.railLateralLimit??p.lateralLimit}`;
-}
+/** Fatigue duty: the building class and the design cycle count. */
+const duty=(p:ProjectInput)=>`Class ${p.aist?effectiveBuildingClass(p):'-'}, ${p.fatigue.cycles.toLocaleString()} cycles`;
+/** Deflection limits: vertical and rail-head lateral. */
+const limits=(p:ProjectInput)=>`Vertical L/${p.aist?deflectionCriteria(p).nv:p.verticalLimit}, lateral L/${p.details?.criteria.railLateralLimit??p.lateralLimit}`;
+function criteria(p:ProjectInput){return `${duty(p)}; ${limits(p).replace(/^V/,'v')}`;}
 export function componentDetail(kind:Component,p:ProjectInput):string{
  switch(kind){
   case 'girder':return girder(p);case 'rail':return rail(p);case 'bearing':return bearing(p);case 'tie':return tie(p);
   case 'support':return support(p);case 'column':return column(p);case 'base':return base(p);case 'bracing':return bracing(p);
-  case 'end-stop':return endStop(p);case 'crane':return crane(p);case 'criteria':return criteria(p);
+  case 'end-stop':return endStop(p);case 'crane':return crane(p);case 'criteria':return criteria(p);case 'duty':return duty(p);case 'limits':return limits(p);
  }
 }

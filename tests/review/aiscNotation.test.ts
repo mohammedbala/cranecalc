@@ -55,7 +55,7 @@ describe('AISC notation in the calculation report (Rev B)',()=>{
   expect(eq('fatigue')).toMatch(/^f_\{sr\}=f_\{max\}-f_\{min\}\\le F_\{SR\}=/);
   expect(eq('crane-1-traction')).toContain('0.20\\Sigma P_d');
   // m3 (peer review): the governing limit with every criterion stated.
-  expect(eq('vertical')).toMatch(/^\\begin\{gathered\}\\Delta_v\\le L\/1000=\\text\{0\.30 in\}/);
+  expect(eq('vertical')).toBe('\\Delta_v\\le L/1000=\\text{0.30 in}');
   // Category F in its US form: F_SR = 100(1.5/n_SR)^0.167 ≥ 8 ksi, never the SI constants.
   const catF=presentCheck(s.checks.find(c=>c.id==='cap-weld-fatigue')!,'US').equation;
   expect(catF).toContain('100(1.5/n_{SR})^{0.167}\\ge8\\,\\mathrm{ksi}');expect(catF).not.toMatch(/690|MPa/);
@@ -93,7 +93,7 @@ describe('AISC notation in the calculation report (Rev B)',()=>{
   expect(entries.filter(t=>!used.has(entrySymbol(t)))).toEqual([]);
   // Brief: crane-girder symbols only, at most 30 table rows; standard AISC symbols are not listed.
   const n=notationSection([...equations,...combinations]),rows=(n.match(/<tr><td>/g)??[]).length;
-  expect(rows).toBeLessThanOrEqual(30);expect(n).toContain(`(${entries.length})`);
+  expect(rows).toBeLessThanOrEqual(30);expect(n).toContain('Crane runway symbols.');
   for(const standard of ['F_y','R_n','M_n','\\phi','E','A_g'])expect(entries).not.toContain(standard);
   expect(html).toMatch(/\d\.\d Notation<\/h2>/);
  });

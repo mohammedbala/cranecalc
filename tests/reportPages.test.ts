@@ -12,7 +12,7 @@ describe('printed calculation pages',()=>{
   expect(html).toContain('@top-left{content:"DEMO-CAP-002 · ');
   // Without entered revisions the header carries the calculation fingerprint and date.
   expect(html).toContain(`@top-right{content:"Calc ${s.revision} · ${s.createdAt.slice(0,10)} · Demonstration, not for construction"`);
-  expect(html).toContain('@bottom-right{content:"Page " counter(page) " of " counter(pages)');expect(html).toContain(`@bottom-center{content:"Calc ID ${s.revision}"`);
+  expect(html).toContain(`@bottom-right{content:"Calc ID ${s.revision}\u2003Page " counter(page) " of " counter(pages)`);expect(html).not.toContain('@bottom-center');
   expect(html).toContain('@bottom-left{content:"Prepared: CraneCalc demonstration\u2003Checked: —\u2003EOR: —"');
   expect(html).toContain('class="responsibility"');expect(html).toContain('NOT SEALED');
  },240000);

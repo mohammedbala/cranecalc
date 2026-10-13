@@ -99,8 +99,8 @@ describe('column stiffener checks on the bracket',()=>{
   expect(byId(bare,'bracket-column-flange').status).toBe('fail');expect(bare.some(c=>c.id.includes('colstiff'))).toBe(false);
   const p=stiffened(),r=welded(p),checks=bracketChecks(p,r),flange=byId(checks,'bracket-column-flange');
   // C2: with the stiffeners every unstiffened check at their levels is for information, not governing, with its values.
-  expect(flange.status).toBe('not-applicable');expect(flange.note).toMatch(/^Unstiffened flange local bending at the ribs for information, not governing \(the column is stiffened at this level\): R_u = .* D\/C 1\.\d\d \(exceeded\)/);
-  for(const id of ['seat-flange','seat-web','column-yield','column-crippling'])expect(byId(checks,'bracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d for information, not governing/);
+  expect(flange.status).toBe('not-applicable');expect(flange.note).toMatch(/^Unstiffened flange local bending at the ribs, not governing \(the column is stiffened at this level\): R_u = .* D\/C 1\.\d\d \(exceeded\)/);
+  for(const id of ['seat-flange','seat-web','column-yield','column-crippling'])expect(byId(checks,'bracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d, not governing/);
   // Each plate carries the rib over it, the more loaded rib (half the pair total), with no unstiffened strength credited.
   const upper=byId(checks,'bracket-colstiff-upper');
   expect(upper.demand).toBeCloseTo(r.strength.stiffUpperT.value/2,4);expect(upper.status).toBe('pass');expect(upper.note).toContain('no unstiffened column strength credited');
@@ -119,7 +119,7 @@ describe('column stiffener checks on the bracket',()=>{
   p.details.bracket!.columnStiffeners={...plates,thickness:.75*inch,flangeWeld:7/16*inch,webWeld:7/16*inch};
   const checks=run(p);expect(byId(checks,'wbracket-column-flange').status).toBe('not-applicable');
   // C2: J10.1 and J10.2 at the top flange take the same R_u, for information; one plate takes T/2 + M_f/g.
-  for(const id of ['column-flange','column-yield-top','column-yield-bottom','column-crippling'])expect(byId(checks,'wbracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d for information, not governing/);
+  for(const id of ['column-flange','column-yield-top','column-yield-bottom','column-crippling'])expect(byId(checks,'wbracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d, not governing/);
   const g=columnStiffenerGeometry(p)!,T=createRolledBracketCollector(p)!;T.observe('strength','s',0,[{vertical:100000,offset:230,length:120}],-1,{longitudinal:8000,bottom:6000,offset:230});
   const pk=T.result.strength.stiffUpperT;expect(byId(checks,'wbracket-colstiff-upper').demand).toBeCloseTo(Math.max(pk.value,T.result.strength.stiffUpperC.value),6);
   expect(pk.value).toBeCloseTo(Math.abs(pk.P!)/2+Math.abs(pk.M!)/stiffenerGauge(g),6);
