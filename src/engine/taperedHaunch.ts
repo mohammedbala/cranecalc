@@ -629,7 +629,7 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
  throat('webWeld','fatigue-web-weld','Web-to-column fillets · throat fatigue','the web-to-column fillets');
  if(!grp.cjp)throat('flangeWeld','fatigue-flange-weld','Flange-to-column fillets · throat fatigue','the flange-to-column fillets');
  throat('flangeWebWeld','fatigue-flange-web-weld','Flange-to-web fillets · throat fatigue','the flange-to-web fillets (shear flow VQ/I)');
- throat('stiffenerWeld','fatigue-stiffener-weld','Stiffener fillets · throat fatigue','the stiffener-to-web and bottom-flange fillets');
+ throat('stiffenerWeld','fatigue-stiffener-weld','Bearing stiffener fillets · throat fatigue','the stiffener-to-web and bottom-flange fillets');
  if(!colStiff)return checks;
  // Column stiffeners at the haunch flange levels: the full-depth pair carries each flange's whole force system, the
  // lateral moment as a couple between the plates (no unstiffened strength credited); J10.1-J10.4 are not governing.

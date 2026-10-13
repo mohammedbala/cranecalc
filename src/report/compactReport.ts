@@ -570,7 +570,8 @@ const statusText=statusLabel;
  const railMemberHtml=railMember.length?`<h3>Rail</h3>`+basis(`factored wheel forces at the rail: vertical ${q3(r.demands.railVertical,'force')}, lateral ${q3(r.demands.railLateral,'force')} (sections ${ref('wheels')}–${ref('horizontal')} with the combination factors), between clip pairs at ${q3(di?.clipSpacing)}.`)+worked(railMember,[],['rail-flexure'])+numeric(railMember):'';
 
  // The bracket as a member: everything but its welds, the receiving column's local checks, column stiffeners and fatigue.
- const bracketMember=(c:CheckResult)=>!/(weld|cjp|column|colstiff|fatigue|web-base|root-base|root-min|root-max|seat-min|seat-max|seat-flange|seat-web)/.test(c.id);
+ // The bearing stiffeners' column check is a member check; the existing column's checks are not.
+ const bracketMember=(c:CheckResult)=>!/(weld|cjp|(?<!stiffener-)column|colstiff|fatigue|web-base|root-base|root-min|root-max|seat-min|seat-max|seat-flange|seat-web)/.test(c.id);
  const bracketGov=(r.bracketForces??[]).map(v=>v.maxVertical).filter(v=>v).sort((x,y)=>y!.vertical-x!.vertical)[0];
  const bracketGovSet=(r.bracketForces??[]).filter(v=>v.maxVertical).sort((x,y)=>y.maxVertical.vertical-x.maxVertical.vertical)[0];
  const bracketBasis=basis(`section ${ref('forces')} envelope, every concurrent case; governing ${bracketGovSet?`grid ${bracketGovSet.grid}, `:''}${e(caseName(s,bracketGov?.id).split(',')[0])}, ΣR<sub>u</sub> = ${q3(bracketGov?.vertical,'force')}, M<sub>y,seat</sub> = ${q3(Math.abs(bracketGov?.moment??0),'moment')}; ${supportWord} self-weight × ${lrfd?'1.4 (LRFD 1)':'1.0'}.`);
