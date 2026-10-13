@@ -41,6 +41,8 @@ describe('rail joint layout',()=>{
   // The tie plan and end bearing details draw these at a larger scale.
   expect(titles).not.toContain(detailTitles.supportTies);expect(titles).not.toContain(detailTitles.movement);
   expect(titles).toHaveLength(12);
+  // The rail joint elevation, drawn in the rail clip cell, is numbered as its own detail, after the rail clip section.
+  expect(refs.get(detailTitles.railJoint)).toBe(`${Number(refs.get(detailTitles.railKeeper)!.split('/')[0])+1}/S-02`);
   const t=texts(s02.svg).join(' ');
   expect(t).toContain('19\'-6"');expect(t).toContain('39\'-0"');
   expect(t).toContain('RAIL PIECES 39\'-0" MAX.');

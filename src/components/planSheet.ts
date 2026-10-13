@@ -421,9 +421,17 @@ const arrangementDetails=['ISOMETRIC VIEW','RUNWAY PLAN','RUNWAY GIRDER ELEVATIO
 export function resolveSheetSet(sheets:DrawingSheet[]):DrawingSheet[]{
   const details=new Map<string,string>(),topics=new Map<string,string>();
   for(const sheet of sheets)for(const [,key] of sheet.svg.matchAll(/<g data-topic="([^"]*)"\/>/g))if(!topics.has(unescape(key)))topics.set(unescape(key),sheet.number);
+  // A sub-detail drawn inside a cell (subdetailTitle) precedes the cell's own title in the drawing; it takes the number
+  // after that title.
+  const titled=/<g (data-view-title="below" data-detail-title|data-subdetail-title)="([^"]*)">([\s\S]*?)<\/g>/g;
   const numbered=sheets.map((sheet,i)=>{
-    let k=0,svg=sheet.svg.replace(sheetOrdinalToken,`${i+1} OF ${sheets.length}`);
-    svg=svg.replace(/<g data-view-title="below" data-detail-title="([^"]*)">([\s\S]*?)<\/g>/g,(all,title:string)=>{k++;const key=unescape(title);if(!details.has(key))details.set(key,`${k}/${sheet.number}`);return all.replace(detailNumberToken,String(k)).replace(sheetNumberToken,sheet.number);});
+    let svg=sheet.svg.replace(sheetOrdinalToken,`${i+1} OF ${sheets.length}`);
+    const kinds=[...svg.matchAll(titled)].map(m=>m[1]==='data-subdetail-title'),numbers:number[]=[];
+    let k=0,pending:number[]=[];
+    kinds.forEach((sub,j)=>{if(sub){pending.push(j);return;}numbers[j]=++k;for(const q of pending)numbers[q]=++k;pending=[];});
+    for(const q of pending)numbers[q]=++k;
+    let j=0;
+    svg=svg.replace(titled,(all,_kind:string,title:string)=>{const no=numbers[j++],key=unescape(title);if(!details.has(key))details.set(key,`${no}/${sheet.number}`);return all.replace(detailNumberToken,String(no)).replace(sheetNumberToken,sheet.number);});
     return {...sheet,svg};
   });
   return numbered.map(sheet=>({...sheet,svg:sheet.svg.replace(/\{\{REF:([^}]*)\}\}/g,(_,token:string)=>{const title=decodeURIComponent(token);return details.get(title)??`${title} (NOT IN SET)`;})
@@ -433,7 +441,7 @@ export function resolveSheetSet(sheets:DrawingSheet[]):DrawingSheet[]{
 /** Detail references of an assembled set by detail title, e.g. "GIRDER BEARING / COLUMN BRACKET" to "1/S-02". */
 export function detailReferences(sheets:DrawingSheet[]){
   const refs=new Map<string,string>();
-  for(const sheet of sheets)for(const [,title,number] of sheet.svg.matchAll(/<g data-view-title="below" data-detail-title="([^"]*)">(?:(?!<\/g>)[\s\S])*?font-weight="700">(\d+)<\/text>/g))if(!refs.has(unescape(title)))refs.set(unescape(title),`${number}/${sheet.number}`);
+  for(const sheet of sheets)for(const [,title,number] of sheet.svg.matchAll(/<g (?:data-view-title="below" data-detail-title|data-subdetail-title)="([^"]*)">(?:(?!<\/g>)[\s\S])*?font-weight="700">(\d+)<\/text>/g))if(!refs.has(unescape(title)))refs.set(unescape(title),`${number}/${sheet.number}`);
   return refs;
 }
 const unescape=(v:string)=>v.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
@@ -459,7 +467,7 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
   const once=(draw:()=>string)=>{let v:string|undefined;return ()=>v??=draw();};
   const details=packDetailSheets(detailTopics(s,f),p.units).map((layout,i)=>{
     const number=`S-${String(i+2).padStart(2,'0')}`,title=detailSheetTitle(layout);
-    return {number,name:`runway-${layout.topics.map(t=>t.key).join('-')}-sheet-arch-d`,title,details:layout.placed.map(v=>v.view.title),render:once(()=>detailSheetSvg(s,number,title,layout))};
+    return {number,name:`runway-${layout.topics.map(t=>t.key).join('-')}-sheet-arch-d`,title,details:layout.placed.flatMap(v=>[v.view.title,...(v.view.subdetails??[])]),render:once(()=>detailSheetSvg(s,number,title,layout))};
   });
   const sheets=[{number:'S-01',name:'runway-plan-sheet-arch-d',title:'GENERAL ARRANGEMENT',details:[...arrangementDetails,...(existingClearanceShown(s)?[existingClearanceTitle]:[])],render:once(()=>planSheetSvg(s,f))},...details];
   return [{number:'S-00',name:'cover-general-notes-sheet-arch-d',title:coverSheetTitle,render:()=>coverSheetSvg(s,sheets)},...sheets];

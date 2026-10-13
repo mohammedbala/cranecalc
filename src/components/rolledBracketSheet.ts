@@ -23,9 +23,10 @@ type Item={at:XY;labels:string[];weld?:string;both?:boolean;field?:boolean;groov
  * AWS A2.4 single-bevel groove symbol, CJP in the tail, laid out like the fillet callouts (the bevel opens away from
  * the reference line on the arrow side); a field flag stands at the reference-line junction for a field weld.
  */
-export function grooveLeader(points:XY[],at:XY,labels:string[],field=false){
+/** CJP groove weld symbol; the tail carries `tailText` (CJP, and a note reference where the joint needs one). */
+export function grooveLeader(points:XY[],at:XY,labels:string[],field=false,tailText='CJP'){
  const y=at[1]-3,x=at[0]+41,right=points.every(p=>p[0]>at[0]+89),tail=right?at[0]-3:at[0]+92,dir=right?-1:1;
- return `<g data-multileader="weld" data-weld="cjp"${field?' data-weld-location="field"':''}>${multiLeader(points,at,[],8,[],89)}${line([at[0]-3,y],[at[0]+92,y])}${line([x,y],[x,y+8])}${line([x,y],[x+8,y+8])}${line([tail,y],[tail+dir*6,y-5])}${line([tail,y],[tail+dir*6,y+5])}${text(tail+dir*8,y+3,'CJP',8,right?'end':'start')}${labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('')}${field?fieldWeldFlag(weldJunction(at,right),right?'right':'left'):''}</g>`;
+ return `<g data-multileader="weld" data-weld="cjp"${field?' data-weld-location="field"':''}>${multiLeader(points,at,[],8,[],89)}${line([at[0]-3,y],[at[0]+92,y])}${line([x,y],[x,y+8])}${line([x,y],[x+8,y+8])}${line([tail,y],[tail+dir*6,y-5])}${line([tail,y],[tail+dir*6,y+5])}${text(tail+dir*8,y+3,labelCaps(tailText),8,right?'end':'start')}${labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('')}${field?fieldWeldFlag(weldJunction(at,right),right?'right':'left'):''}</g>`;
 }
 /** Callouts in a column at x, ordered by target height between top and bottom: plain, fillet or CJP groove. */
 function calloutColumn(items:Item[],x:number,top:number,bottom:number){
