@@ -85,7 +85,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(-b.bf/2)+4,Y(yt)],labels:[`${b.name} RUNWAY GIRDER,`,'CENTERED ON THE COLUMN']},
    {at:stiffPts[0],labels:[`2 PL ${size(bs.stiffenerThickness)} X ${size(bs.stiffenerWidth)} FULL-DEPTH`,`FITTED BEARING STIFFENERS,`,`${size(bs.cope)} WEB-SIDE CORNER COPES`]},
    {at:[X(-bs.width/2)+3,Y(bt*.5)],labels:[`BEARING PL ${size(bt)} X ${dim(bs.width)}`,`X ${dim(bs.length)}`]},
-   {at:[X(-g.gauge/2-hx.corners/2),Y(-tc)+(hx.washer.t+hx.nut*.5)*kk],labels:[`4 - ${size(db)} DIA. ${eb.bolts.grade} EACH GIRDER`,`END, ${size(hole)} STD. HOLES IN CAP;`,`SEE ${detailRef(bearingBoltsTitle(p))}`]}
+   {at:[X(-g.gauge/2-hx.corners/2),Y(-tc)+(hx.washer.t+hx.nut*.5)*kk],labels:[`4 - ${size(db)} DIA. ${eb.bolts.grade} EACH GIRDER`,`END, ${size(hole)} STD HOLES IN CAP;`,`SEE ${detailRef(bearingBoltsTitle(p))}`]}
   ];
   const right:Item[]=[
    {at:[X(b.tw/2),Y(yb+b.tf+web*.7)],labels:['TYP. BOTH STIFFENERS',cjp?'CONT. WEB FILLETS, CJP TO TOP FL.':'CONT. WEB & FLANGE FILLETS',cjp?'FIT BOTTOM END':'FIT / MILL STIFFENER ENDS'],weld:size(bs.weldSize)},
@@ -170,7 +170,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   ];
   svg+=labelColumn(items,lx,Y(yt)-6,Y(cb)+10);
   const pitems:{at:XY;labels:string[]}[]=[
-   {at:[holes.at(-1)![0]+hole/2*kk*.7,holes.at(-1)![1]+hole/2*kk*.7],labels:[`${grid.bolts.length} - ${size(hole)} STD. HOLES`,`FOR ${size(db)} DIA. ${eb.bolts.grade} BEARING BOLTS`]},
+   {at:[holes.at(-1)![0]+hole/2*kk*.7,holes.at(-1)![1]+hole/2*kk*.7],labels:[`${grid.bolts.length} - ${size(hole)} STD HOLES`,`FOR ${size(db)} DIA. ${eb.bolts.grade} BEARING BOLTS`]},
    {at:[X(col.bf/2),Zp(col.d/2-col.tf/2)],labels:[`${col.name} BELOW (HIDDEN)`]},
    ...(stiff?[{at:[X(grid.stiffeners.at(-1)!),Zp(-col.d/4)] as XY,labels:['CAP STIFFENER BELOW']}]:[]),
    {at:[cx,Zp(0)],labels:['GIRDER WEB C/L = COLUMN C/L;','CAP CENTERED ON GRID']}

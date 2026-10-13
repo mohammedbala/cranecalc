@@ -1,5 +1,5 @@
 import type {ProjectInput} from './types';
-import {snapQuarter} from './quarterInch';
+import {snapQuarter,sleeveLength} from './quarterInch';
 import type {RunwayDetails} from './runwayDetails';
 import {aiscAngleByName} from '../data/aiscAngles';
 import {aiscChannelByName} from '../data/aiscChannels';
@@ -107,7 +107,7 @@ export function capAngleGeometry(p:ProjectInput){
  // bolts are pretensioned against sleeves, else for the bolt.
  const sleeved=c.mode==='sleeved',sleeveOd=capBolt.hole+2*c.sleeveWall;
  const slotWidth=sleeved?sleeveOd+inch/16:capBolt.hole,slotLength=slotWidth+2*c.travel;
- const sleeve=sleeved?{od:sleeveOd,bore:capBolt.hole,length:ta+c.sleeveClearance,area:Math.PI/4*(sleeveOd**2-capBolt.hole**2)}:undefined;
+ const sleeve=sleeved?{od:sleeveOd,bore:capBolt.hole,length:sleeveLength(ta+c.sleeveClearance),area:Math.PI/4*(sleeveOd**2-capBolt.hole**2)}:undefined;
  // A plate washer centered on the bolt covers the slot at either extreme of travel.
  const washer={length:slotLength+2*c.travel+inch/2,height:Math.max(2.5*cb.diameter,slotWidth+inch),thickness:c.washerThickness};
  const lapSlot=shortSlot(lb.diameter),shim=c.shimMax/2;

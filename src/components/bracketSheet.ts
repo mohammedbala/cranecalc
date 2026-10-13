@@ -17,10 +17,10 @@ import {seatColumnWeld} from '../engine/bracketDesign';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {endBearingGeometry} from '../engine/endBearing';
 import {simpleSupportInput,endGridBearingNote} from '../engine/simpleSupports';
-import {flangeTieGeometry} from '../engine/tieGeometry';
 import {ribGeometry} from '../engine/bracketRib';
 import {haunchedRibView,haunchedFaceRibs,haunchedRibCallout,haunchedRibNotes} from './haunchedBracketDrawing';
 import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
+import {topFlangeRestraint} from './tieNames';
 /** Column bracket details on their own sheet. */
 export function bracketSheetSvg(s:CalculationSnapshot,number='S-05'){
  const topic=bracketTopic(s);return topic?topicSheetSvg(s,topic,number,usesExistingBracket(s.input)?'EXISTING BRACKETS / NEW BOLTED SEATS':'WELDED COLUMN BRACKETS'):'';
@@ -108,7 +108,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[X(b.ribSpacing/2+b.ribThickness/2),Y(b.seatProjection*.1)],labels:['CONT. SEAT-TO-RIB','BOTH SIDES / EACH RIB'],weld:size(b.seatWeld)},
    {at:[right,Y(b.seatProjection*.3)],labels:[`SEAT PL ${size(b.seatThickness)}`,`${dim(b.seatLength)} X ${dim(b.seatProjection)}`]},
    {at:[X(plate.end+plate.dir*L*.8),Y(b.reach-W/2)],labels:[`BEARING PL ${size(d.bearing.thickness)} X ${dim(W)} X ${dim(L)}`,`EACH GIRDER END; SEE ${detailRef(bearingBoltsTitle(p))}`]},
-   ...(g&&eb?[{at:[X(plate.end+plate.dir*g.rows[1])+g.hole/2*k,Y(rowsY[1])] as XY,labels:[`${plates.length*4} - ${size(g.hole)} STD. HOLES IN SEAT`,`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[])
+   ...(g&&eb?[{at:[X(plate.end+plate.dir*g.rows[1])+g.hole/2*k,Y(rowsY[1])] as XY,labels:[`${plates.length*4} - ${size(g.hole)} STD HOLES IN SEAT`,`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[])
   ];
   svg+=labelColumn(items,right+40,cs?face-20:face+10,cs?tip-10:tip);
   return {svg:svg+'</g>',scale:scale.label};
@@ -129,7 +129,7 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   return {svg:svg+'</g>',scale:scale.label};
  }});
  {
-  const tie=flangeTieGeometry(p),ties=tie?`${tie.sides.length===1&&tie.sides[0]>0?'THE TOP FLANGE TIES':'THE FLANGE TIES'} (${detailRef(detailTitles.flangeTie)})`:'THE FLANGE TIES';
+  const ties=topFlangeRestraint(p);
   const notes=[
    `${rg.tapered?`TWO HAUNCHED RIB PLATES, ${dim(rg.root)} DEEP AT THE COLUMN TAPERING STRAIGHT TO ${dim(rg.tip)} AT THE SEAT EDGE, AND A SEAT PLATE`:'TWO RECTANGULAR RIBS AND A SEAT PLATE'}. THE RIBS CARRY THE GRAVITY BEARINGS; NO CREDIT FOR BOLTS, KNEE PLATES OR COMPOSITE RIB/SEAT ACTION. ${sc.field?'FIELD':'SHOP'} WELD THE SEAT TO THE COLUMN FLANGE WITH A ${size(cw.size)} TOP FILLET ${dim(cw.length)} LONG: ${eb?'THE BEARING BOLTS BRING THE GIRDER\'S LONGITUDINAL FORCE (LOCATING END) AND H BOTTOM INTO THE SEAT, AND THE FILLET DELIVERS THEM TO THE COLUMN':'IT DELIVERS THE GIRDER\'S LONGITUDINAL FORCE AND H BOTTOM FROM THE BEARING TO THE COLUMN'}${collector?` AND THE STRUT (${detailRef(detailTitles.strutPlan)})`:''}.`,
    `PLATES: ${format(d.material.Fy,'stress',p.units,p.units==='SI'?0:3)} MIN. YIELD. WELDS: ${electrodeClass(d.material.Fexx,p.units)} ELECTRODE. CONTINUOUS FILLETS AS SHOWN.`,

@@ -29,9 +29,11 @@ export function demoFocus005RevB():ProjectInput{
  note('Crane-level longitudinal strut on the girder line at the locating columns (removes the column torsion and weak-axis bending from the longitudinal force).');
  // B14/B15/D30/D32 · fabrication notes consistent with the generated requirements.
  const fab=p.details!.fabrication!;
- fab.bolting='ASTM F3125 Grade A325, sizes as detailed, pretensioned to the RCSC Table 8.1 minimum pretension; slip-critical Class B faying surfaces where cyclic (AIST TR-13 §5.14). Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joint bolts pretensioned in standard holes at tight joints; re-tighten after 30 and 90 days of crane operation.';
+ // The sleeved bolts and the rail joints are stated by the generated bolting requirements (the sleeved bolts here are
+ // the sliding bearing and cap tieback bolts, not column-end tie bolts).
+ fab.bolting='ASTM F3125 Grade A325, sizes as detailed, pretensioned to the RCSC Table 8.1 minimum pretension; slip-critical Class B faying surfaces where cyclic (AIST TR-13 §5.14).';
  fab.inspection='Visual inspection of all welds and bolt installations; verify pretension and faying-surface preparation. AWS D1.1 cyclically loaded acceptance criteria; 100% UT of all CJP groove welds; MT at attachment terminations and repaired welds (AIST TR-13 §5.17). Record baseline rail and connection condition before commissioning.';
- fab.railAlignment='Survey both rails unloaded and during commissioning; gauge, line, grade and eccentricity within the AIST TR-13 §5.18 tolerances listed in the construction notes, and the crane supplier requirements.';
+ fab.railAlignment='Survey both rails unloaded after erection and during commissioning; submit the survey.';
  note('Fabrication notes rewritten: pretensioned bolts at tight rail joints, UT of CJP welds, TR-13 §5.18 tolerances.');
  p.details!.rail.jointType='tight';p.details!.rail.jointGap=inch/16;
  note('Rail joints entered as tight joints, 1/16 in maximum gap.');

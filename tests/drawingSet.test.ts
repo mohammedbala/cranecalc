@@ -105,7 +105,9 @@ describe('drawings agree with the calculation',()=>{
    expect(schedule.slice(i,i+12)).toContain(String(all.length*2));
    expect(schedule.slice(i,i+12)).toContain(drawingLength(all[0].length,p.units));
   }
-  expect(schedule.join(' ')).toContain(`(CRANE SPAN) TO ${drawingLength(p.details!.criteria.railGauge,p.units)}`);
+  // The rail gauge and setting are the S-00 crane runway installation note (S-01 no longer repeats them).
+  expect(texts(cappedSet[0].svg).join(' ')).toContain(`GAUGE (CRANE SPAN) ${drawingLength(p.details!.criteria.railGauge,p.units)}`);
+  expect(schedule.join(' ')).not.toContain('(CRANE SPAN) TO');
  },120000);
  it('tabulates the calculated support reactions and crane data on the cover',()=>{
   const p=capped.input,cover=texts(cappedSet[0].svg).join(' | '),r=capped.supportReactions!;
@@ -196,7 +198,8 @@ describe('drawings agree with the calculation',()=>{
   // The bracket is checked for the same concurrent sets, so its governing rows mirror too.
   const st=capped.detailResults!.bracket!.stations;expect(st[3].vertical).toBeCloseTo(st[0].vertical,6);expect(st[3].leftRib).toBeCloseTo(st[0].rightRib,6);
   // The supports and the cover refer to the table instead of repeating it.
-  expect(texts(cappedSet[2].svg).join(' ')).toContain('FACTORED FORCES: BRACKET DESIGN FORCES ON S-02.');
+  // The table is on the same sheet as the support notes.
+  expect(texts(cappedSet[2].svg).join(' ')).toContain('FACTORED FORCES: BRACKET DESIGN FORCES ON THIS SHEET.');
   expect(texts(demoSet[0].svg).join(' ')).toContain('BRACKET DESIGN FORCES ON S-02');
  },120000);
 });
@@ -210,7 +213,7 @@ describe('welded bracket, new-column and bracing details',()=>{
    const sheet=sheetWith(set,'welded-bracket-plan').svg,plan=view(sheet,'welded-bracket-plan'),side=view(sheet,'welded-bracket-side'),eb=s.input.details!.endBearing!;
    // Two bearing plates, each with four standard holes at the end bearing gauge, as ordinates from the grid.
    expect(plan.match(/<circle class="runway-line"/g)).toHaveLength(8);
-   expect(texts(plan).join(' ')).toContain(`8 - 13/16" STD. HOLES IN SEAT`);expect(texts(plan)).toContain('0\'-2 1/2"');expect(texts(plan)).toContain('0\'-10 1/2"');
+   expect(texts(plan).join(' ')).toContain(`8 - 13/16" STD HOLES IN SEAT`);expect(texts(plan)).toContain('0\'-2 1/2"');expect(texts(plan)).toContain('0\'-10 1/2"');
    expect(texts(plan).join(' ')).toContain(`ROWS AT ${drawingLength(eb.bolts.gauge,'US')} GAUGE ON THE GIRDER C/L`);
    expect(plan).toContain('data-section-cut="COLUMN BRACKET / TRANSVERSE SECTION"');expect(plan).toContain('data-section-cut="BRACKET ELEVATION / LOOKING AT COLUMN"');
    // The transverse section: no stray reference line from the column; the seat fillet with its length in every case.

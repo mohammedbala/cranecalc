@@ -14,6 +14,7 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
 import {isCapAngleTie} from '../engine/capAngle';
+import {topFlangeRestraint} from './tieNames';
 
 /** Independent girder support details on their own sheet. */
 export function simpleSupportSheetSvg(s:CalculationSnapshot,f:FramingSettings=defaultFraming,number='S-04'){
@@ -118,7 +119,7 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  const forces=bracketForcesAt(s,'support','ABOVE');
  const bearingRef=activeEndBearing(p)?detailRef(detailTitles.endBearing):'';
  const notes=bearingRef?[
-  `${usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}`:'BRACKET BY OTHERS'}. BOLTED END BEARINGS TRANSFER LONGITUDINAL FORCE AND UPLIFT (${bearingRef}); FLANGE TIES TRANSFER LATERAL FORCE. FACTORED FORCES: ${forces}.`,
+  `${usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}`:'BRACKET BY OTHERS'}. BOLTED END BEARINGS TRANSFER LONGITUDINAL FORCE AND UPLIFT (${bearingRef}); ${topFlangeRestraint(p).replace(/^THE /,'')} TRANSFER LATERAL FORCE. FACTORED FORCES: ${forces}.`,
   'THE END OF EACH BAY AT ITS LOWER-NUMBERED GRID LOCATES LONGITUDINALLY. FULL CRANE TRACTION IS ASSIGNED TO EACH OCCUPIED BAY IN SEPARATE BOUNDING CASES; DO NOT ADD THESE CASES.',
   `GIRDER ANALYSIS SPANS ARE GRID-TO-GRID; BEARINGS ARE INSET AS SHOWN. LOCATING ENDS: STANDARD HOLES, PRETENSIONED. SLIDING ENDS: SLOTS, ${slidingPhrase(activeEndBearing(p)!)} (${bearingRef}).`,
   'REFERENCE AIST TECHNICAL REPORT 13 §5.8.1. GIRDER AND CAP ENDS REMAIN SEPARATE. RAIL JOINTS ARE DETAILED INDEPENDENTLY.'

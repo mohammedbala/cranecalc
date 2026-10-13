@@ -3,7 +3,8 @@ import {girderBearingTitle} from './columnCapSheet';
 import {activeEndStop} from '../engine/endStopInputs';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
-import {refDim,sheetDrawingScale as drawingScale,rect,line,text,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,capChannelSection} from './sheetGraphics';
+import {refDim,sheetDrawingScale as drawingScale,rect,line,text,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,capAngleTitles,sectionCut,capChannelSection} from './sheetGraphics';
+import {capAngleGeometry} from '../engine/capAngle';
 import {tieDim,tieSize} from './flangeTieSheet';
 import {heading,numbered,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type ViewRender} from './detailSheet';
@@ -55,10 +56,11 @@ export function capTopic(s:CalculationSnapshot):DetailTopic{
  svg+=text(906,398,'CONTINUOUS WELDS EXTEND THROUGH DEVELOPMENT REGIONS',8.5,'middle');
  return {svg:svg+'</g>',scale:es.label};
  };
+ const holes=[...(activeEndStop(p)?[`THE END STOP BOLT HOLES (${detailRef(detailTitles.endStopPlan)})`]:[]),...(capAngleGeometry(p)?[`THE CAP TIEBACK BOLT HOLES IN THE COLUMN-SIDE CHANNEL FLANGE (${detailRef(capAngleTitles.section)})`]:[])];
  const notes=[
   `PROVIDE ${size(c.weldSize)} CONTINUOUS FILLETS AT BOTH W TOP-FLANGE EDGES. WELD METAL ${stress(c.Fexx)}. NO WELD STRENGTH INCREASE FOR DIRECTION IS CREDITED.`,
   'STRAIGHTEN AND FIT CHANNEL BEFORE WELDING. VERIFY FULL CONTACT ALONG THE W TOP FLANGE. DO NOT FORCE A GAPPED CAP INTO SERVICE; REFER FIT-UP DISCREPANCIES TO THE ENGINEER.',
-  `CHANNEL AND W TOP FLANGE SHALL BE UNPERFORATED${activeEndStop(p)?` EXCEPT THE END STOP BOLT HOLES (${detailRef(detailTitles.endStopPlan)})`:''}. DO NOT ADD TEMPORARY ATTACHMENTS OR CHANGE RAIL CLIP WELDS WITHOUT FATIGUE REVIEW.`,
+  `CHANNEL AND W TOP FLANGE SHALL BE UNPERFORATED${holes.length?` EXCEPT ${holes.join(' AND ')}`:''}. DO NOT ADD TEMPORARY ATTACHMENTS OR CHANGE RAIL CLIP WELDS WITHOUT FATIGUE REVIEW.`,
   `BEARING STIFFENERS: CJP WELD TO W TOP FLANGE; FIT BOTTOM END. CONTINUOUS WEB WELDS AS DETAILED ON ${detailRef(girderBearingTitle(p))}. INSPECT CJP WELDS PER PROJECT SPECIFICATION.`,
   `CRANE SERVICE CLASS: CMAA ${c.cmaaClass}. CAP CHANNEL DETAILS ARE NOT APPLICABLE TO CMAA E/F SERVICE. REFERENCE AIST TECHNICAL REPORT 13 AND AISC DESIGN GUIDE 7.`,
  ];

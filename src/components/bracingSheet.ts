@@ -211,7 +211,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(c.bf/2+inch),Y(lower?weld!.web*.6:upper.to-.4*(upper.to-upper.from))],labels:[`SHOP, ${welds}`,`${gussetName}, A572 GR. 50`],weld:weldLabel},
    {at:[P[0]+dir[0]*1.8*g.dp*kk,P[1]+dir[1]*1.8*g.dp*kk+.6*g.dp*kk],labels:[`FORGED CLEVIS, ${pinName}`,`${dim(lower?g.bottom.s:g.top.s)} FROM W.P. ALONG ROD;`,`RATED TO DEVELOP THE ROD`]},
    {at:[end[0]-dir[0]*14,end[1]-dir[1]*14],labels:[rodName,`ASTM F1554 GR. 36`]},
-   ...(lower?[]:[{at:[X(sg.bolts[1]),Y(0)] as XY,labels:[boltName,'STD. HOLES, SNUG-TIGHT']},{at:[X(sg.tabEnd+6*inch),Y(sg.d/2)] as XY,labels:[`${sg.shape} STRUT, COPE`,`FLANGES ${dim(sg.cope)}`]}])
+   ...(lower?[]:[{at:[X(sg.bolts[1]),Y(0)] as XY,labels:[boltName,'STD HOLES, SNUG-TIGHT']},{at:[X(sg.tabEnd+6*inch),Y(sg.d/2)] as XY,labels:[`${sg.shape} STRUT, COPE`,`FLANGES ${dim(sg.cope)}`]}])
   ];
   svg+=labelColumn(items,X(xMax)+40,Y(zTop),Y(zBot));
   const wp=lower?'W.P. AT T/BASE PL':capG?`W.P. ${dim(capG.drop)} BELOW CAP`:'W.P. AT BRG. SEAT',ww=textWidth(wp,8);

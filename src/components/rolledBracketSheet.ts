@@ -11,9 +11,9 @@ import {designsBracing} from '../engine/newColumnBracing';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {endBearingGeometry} from '../engine/endBearing';
 import {simpleSupportInput,endGridBearingNote} from '../engine/simpleSupports';
-import {flangeTieGeometry} from '../engine/tieGeometry';
 import {projectStub,stubBoltLayout,stubWeldGroup,usesRolledBracket} from '../engine/rolledBracket';
 import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
+import {topFlangeRestraint} from './tieNames';
 
 /** Elevation of the bracket seen from the runway; also keyed on the plan (same title as the plate brackets). */
 export const rolledElevationTitle='BRACKET ELEVATION / LOOKING AT COLUMN';
@@ -121,7 +121,7 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const pl=plates[plates.length-1],items:{at:XY;labels:string[]}[]=[
    {at:[right,Y(st.L*.62)],labels:seat?[`${plate.label} X ${dim(seat.length)}`,`${st.name} BELOW (HIDDEN)`]:[`${st.name} TOP FLANGE`,'STUB WEB HIDDEN']},
    {at:[X(pl.end+pl.dir*L*.8),Y(a-W/2)],labels:[`BEARING PL ${size(tb)} X ${dim(W)} X ${dim(L)}`,`EACH GIRDER END; SEE ${detailRef(bearingBoltsTitle(p))}`]},
-   ...(eg&&eb?[{at:[X(pl.end+pl.dir*eg.rows[1])+eg.hole/2*k,Y(rowsY[1])] as XY,labels:[`${plates.length*4} - ${size(eg.hole)} STD. HOLES IN ${seat?'SEAT':'FLANGE'}`,...(seat&&lay?.xs.some(x=>x<st.bf/2)?[`ALSO THROUGH THE ${st.name} FLANGE WHERE OVER IT`]:[]),`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[]),
+   ...(eg&&eb?[{at:[X(pl.end+pl.dir*eg.rows[1])+eg.hole/2*k,Y(rowsY[1])] as XY,labels:[`${plates.length*4} - ${size(eg.hole)} STD HOLES IN ${seat?'SEAT':'FLANGE'}`,...(seat&&lay?.xs.some(x=>x<st.bf/2)?[`ALSO THROUGH THE ${st.name} FLANGE WHERE OVER IT`]:[]),`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[]),
    ...(sf?[{at:[X(st.tw/2+sf.width*.7),Y(a+sf.t/2)] as XY,labels:['BEARING STIFFENERS AT','GIRDER C/L (HIDDEN)']}]:[])
   ];
   svg+=calloutColumn(items,right+40,cs?face-20:face+4,tip+20);
@@ -154,7 +154,7 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=text(X(-wide/2),cs?Math.max(bot+60,stack+12):bot+60,'CUT THE STUB SQUARE; KEEP THE ROLLED FILLETS. STIFFENERS UNDER THE GIRDER WEB LINE ONLY.',7.5);
   return {svg:svg+'</g>',scale:scale.label};
  }});
- const tie=flangeTieGeometry(p),ties=tie?`${tie.sides.length===1&&tie.sides[0]>0?'THE TOP FLANGE TIES':'THE FLANGE TIES'} (${detailRef(detailTitles.flangeTie)})`:'THE FLANGE TIES';
+ const ties=topFlangeRestraint(p);
  const notes=[
   `A ROLLED ${st.name} STUB ${dim(st.L)} LONG, ASTM A992 (${format(r.Fy,'stress',p.units,p.units==='SI'?0:3)} MIN. YIELD), ${where} WELDED TO THE COLUMN FLANGE: ${g.cjp?'CJP GROOVE WELDS AT BOTH FLANGES':`${size(r.flangeWeld)} FILLETS ON BOTH FACES OF BOTH FLANGES`} AND ${size(r.webWeld)} FILLETS BOTH SIDES OF THE WEB.${seat?` THE BEARINGS LAND ON A ${size(seat.t)} SPREADER SEAT PL SHOP WELDED ALONG BOTH FLANGE TIPS WITH ${size(seat.weld)} FILLETS.`:' THE BEARINGS LAND DIRECTLY ON ITS TOP FLANGE.'}`,
   ...(sf?[`BEARING STIFFENERS: A PAIR OF ${size(sf.t)} PLATES UNDER THE GIRDER WEB LINE, ${size(sf.width)} OUTSTAND, ${size(sf.clip)} CORNER CLIPS, FITTED TO BEAR ON THE TOP FLANGE AND SHOP WELDED TO THE WEB AND BOTH FLANGES WITH ${size(sf.weld)} FILLETS BOTH SIDES.`]:[]),

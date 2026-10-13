@@ -74,17 +74,31 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
   'Record the baseline rail and connection condition before commissioning.'];
  const erection=[
   'Provide temporary lateral and torsional restraint of each girder until its ties are complete. Set bearings level and fit bearing stiffeners before welding.',
-  'Runway clearance test before the load test (AIST TR-13 §1.5.6.2): crane unloaded, hook fully up, run the crane the full length of the runway three times, with the trolley at each end of the bridge and at center; check the Fig. 1.1 clearances, including the clearance to the roof trusses deflected under snow.',
-  ...(p.existingColumn?.enabled&&!p.existingColumn.isNew?['Confirm the crane clearance to the existing roof framing, bracing, lights, piping and other obstructions over the full runway, with the roof framing deflected under snow; report any shortfall to the engineer of record before commissioning.']:[])];
+  // One clearance note: in an existing building the test also covers the existing framing and services.
+  `Runway clearance test before the load test (AIST TR-13 §1.5.6.2): crane unloaded, hook fully up, run the crane the full length of the runway three times, with the trolley at each end of the bridge and at center; check the Fig. 1.1 clearances${p.existingColumn?.enabled&&!p.existingColumn.isNew?' to the existing roof framing, bracing, lights, piping and other obstructions, with the roof framing deflected under snow; report any shortfall to the engineer of record before commissioning.':', including the clearance to the roof trusses deflected under snow.'}`];
  // (Re-tightening of the rail joint bolts after 30 and 90 days is stated once, with the rail joints under bolting.)
  const tolerances=[
   'Runway fabrication and erection tolerances (AIST TR-13 §5.18), unless the crane manufacturer requires less:',
   'column base lines ±1/8 in; seat (bearing) plan position and elevation ±1/8 in;',
   'girder sweep 1/4 in per 50 ft; camber +1/4 in / −0 in per 50 ft; bearing-zone flatness ±1/32 in; girder end depth ±1/16 in; adjacent tops of girder flanges within 1/16 in;',
-  `rail gauge ±1/4 in at 68 °F; rail line and grade 1/4 in per 50 ft, 3/8 in total; rail centerline set on the girder web centerline within ${inches(d.criteria.alignmentTolerance,p.units)}, and the rail eccentricity in service not more than ${inches(Math.min(Math.abs(p.railEccentricity),.75*p.section.tw),p.units)} (the design eccentricity${Math.abs(p.railEccentricity)<=.75*p.section.tw+1e-6?`, within the AIST TR-13 §5.18 limit of 3/4 of the web thickness, ${inches(.75*p.section.tw,p.units)}`:'; the AIST TR-13 §5.18 limit of 3/4 of the web thickness'}).`,
-  'Survey both rails unloaded after erection and during commissioning: gauge, elevation and straightness at every support and at midspan; submit the survey.'];
+  'rail gauge ±1/4 in at 68 °F; rail line and grade 1/4 in per 50 ft, 3/8 in total;',
+  `rail centerline set on the girder web centerline within ${inches(d.criteria.alignmentTolerance,p.units)}, and the rail eccentricity in service not more than ${inches(Math.min(Math.abs(p.railEccentricity),.75*p.section.tw),p.units)} (the design eccentricity${Math.abs(p.railEccentricity)<=.75*p.section.tw+1e-6?`, within the AIST TR-13 §5.18 limit of 3/4 of the web thickness, ${inches(.75*p.section.tw,p.units)}`:'; the AIST TR-13 §5.18 limit of 3/4 of the web thickness'}).`,
+  'Survey both rails unloaded after erection, before the load test and during commissioning: gauge, line, elevation and straightness at every support and at midspan; submit the survey.'];
  return [{key:'bolting',title:'Bolting',items:bolting},{key:'welding',title:'Welding',items:welding},{key:'inspection',title:'Inspection',items:inspection},
   {key:'erection',title:'Erection and commissioning',items:erection},{key:'tolerances',title:'Runway tolerances',items:tolerances}];
+}
+
+const stem=(w:string)=>w.replace(/(ed|ing|s)$/,'');
+const noteWords=(v:string)=>new Set((v.toLowerCase().match(/[a-z0-9.§]+/g)??[]).filter(w=>w.length>2&&!['the','and','are','for','with','after','before','where','that','this','per','its'].includes(w)).map(stem));
+const sentencesOf=(v:string)=>v.split(/(?<=[.;:])\s+(?=[A-Z])/).map(t=>t.trim()).filter(Boolean);
+/**
+ * Entered sentences that add to what is already written: a sentence is left out when one written sentence already
+ * holds most of its words (a note says a thing once).
+ */
+export function addedSentences(text:string,written:string[],together=false){
+ // together: the written text is one statement (a materials table), its words read as a whole
+ const said=together?[noteWords(written.join(' '))]:written.flatMap(sentencesOf).map(noteWords);
+ return sentencesOf(text).filter(v=>{const w=[...noteWords(v)];return w.length&&said.every(g=>w.filter(x=>g.has(x)).length/w.length<.6);});
 }
 
 /**

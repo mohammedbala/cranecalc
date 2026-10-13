@@ -13,6 +13,7 @@ import {usesRolledBracket,rolledSeatChecks,endGridFitChecks} from './rolledBrack
 import {usesTaperedHaunch,haunchSeatChecks} from './taperedHaunch';
 import {slidingBolts,continuousBearings,type EndBearingInput} from './endBearingInputs';
 import {activeColumnCap} from './columnCapInputs';
+import {sleeveLength} from './quarterInch';
 export {endBearingSchema,defaultEndBearing,activeEndBearing,slidingBolts,continuousBearings,locatingSupport,type EndBearingInput} from './endBearingInputs';
 
 const inch=25.4;
@@ -26,7 +27,8 @@ export function endBearingGeometry(p:ProjectInput,e:EndBearingInput){
  const d=p.details!,bs=d.bearing,travel=simpleSupportInput(p).guideTravel,gap=p.system==='continuous'?0:simpleSupportInput(p).endGap,db=e.bolts.diameter,hole=boltProperties(e.bolts.grade,db).hole;
  const sl=slidingBolts(e),sleeved=sl.mode==='sleeved';
  // Sleeved bolts: the slot clears a steel sleeve one bore plus two walls in diameter, which the bolt is pretensioned against.
- const sleeve=sleeved?{od:hole+2*sl.wall,length:p.section.tf+sl.clearance,area:Math.PI/4*((hole+2*sl.wall)**2-hole**2)}:undefined;
+ // The sleeve is cut to a 1/16 in length at least the flange plus the clearance (the length the drawings print).
+ const sleeve=sleeved?{od:hole+2*sl.wall,length:sleeveLength(p.section.tf+sl.clearance),area:Math.PI/4*((hole+2*sl.wall)**2-hole**2)}:undefined;
  const slotWidth=sleeve?sleeve.od+1.5875:hole;
  const rows=[e.bolts.edge,bs.length-e.bolts.edge],stiffener=bs.length/2,slot=slotWidth+2*travel;
  // A plate washer centered on the bolt covers the slot at either extreme of travel.

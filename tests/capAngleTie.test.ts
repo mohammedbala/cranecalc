@@ -224,7 +224,7 @@ describe('cap tieback angle: the calculated demonstration',()=>{
   expect(us.views.map(v=>v.title)).toEqual([capAngleTitles.section,capAngleTitles.plan]);
   const a=texts(us.views[0].render().svg);
   for(const t of ['END PL 5/8" X 5" X 6"','FINGER SHIMS 0 TO 1/4"','2 - 5/8" A325 BOLTS, PRETENSIONED,','2" EACH SIDE OF TIE PL; FIELD-','DRILL 11/16" HOLES IN COLUMN FLANGE',
-   '2 - 5/8" A325 BOLTS 2 1/4" BELOW TOP;','1 1/4" X 2" HORIZ. SLOTS, SLEEVED','L4X4X1/2 X 0\'-6 1/2" CAP ANGLE, LONG','TIE PL 1/2" X 5" X 0\'-10 1/2" WITH',
+   '2 - 5/8" A325 BOLTS 2 1/4" BELOW TOP;','1 1/4" X 2" HORIZ. SLOTS, SLEEVED','L4X4X1/2 X 0\'-6 1/2" CAP ANGLE,','ONE LEG LEVEL WITH TOP OF CAP','TIE PL 1/2" X 5" X 0\'-10 1/2" WITH',
    '2 - 5/8" A325 SC BOLTS, CLASS B,','11/16" X 7/8" SHORT SLOTS IN TIE PL,','1 1/4" TO TIE PL END','EXISTING W14X90 COLUMN (DASHED)','2 1/2"','7 3/4"','1\'-8"','5/16'])expect(a,t).toContain(t);
   const b=texts(us.views[1].render().svg);
   for(const t of ['0\'-3 1/2"','0\'-4"','2" SLOTS ALONG RUNWAY (HIDDEN),','3/8" TRAVEL EACH WAY','TIE PL 1/2" X 5"','EXISTING W14X90 COLUMN FLANGE (DASHED)'])expect(b,t).toContain(t);

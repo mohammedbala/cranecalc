@@ -6,7 +6,7 @@ import {filletWeld} from './weldGeometry';
 
 const family:Record<string,string>={'angle-leg':'Cap tieback angle','tie-plate':'Cap tieback tie plate','end-plate':'Cap tieback end plate',shim:'Finger shims','plate-washer':'Plate washer',stiffener:'Column stiffener at the tie level'};
 const description:Record<string,string>={
- 'angle-leg':'Catalog angle bolted through the column-side cap channel flange in horizontal slots, its long leg level with the top of the cap; the girder slides along the runway.',
+ 'angle-leg':'Catalog angle bolted through the column-side cap channel flange in horizontal slots, its horizontal leg level with the top of the cap; the girder slides along the runway.',
  'tie-plate':'Tie plate lapped on the angle with two slip-critical bolts in short slots across the runway; shop welded to the end plate.',
  'end-plate':'End plate bolted through finger shims to the column flange, one bolt above and one below the tie plate, in field-drilled holes.',
  shim:'Finger shims (nominal pack shown) between the end plate and the column flange.',

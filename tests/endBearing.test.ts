@@ -61,13 +61,13 @@ describe('bolted girder end bearings',()=>{
  it('sections a headed sliding bolt with its grip, keyed on the bearing plan',()=>{
   const bolt=slidingBoltView(capped)!.render().svg,t=texts(bolt).join(' | ');
   // An F3125 bolt is headed: head on the plate washer, nut and F436 washer below the seat as the turned element.
-  expect(t).toContain('3/4" HEAVY HEX BOLT, ASTM F3125 GR A325,');expect(t).toContain('HEAD ON PL WASHER');
+  expect(t).toContain('3/4" HEAVY HEX BOLT, ASTM F3125 GR. A325,');expect(t).toContain('HEAD ON PL WASHER');
   expect(t).toContain('HEAVY HEX NUT, A563 DH, AND F436');expect(t).not.toContain('EACH END OF BOLT');
   // Grip: 5/16 plate washer + 15/16 sleeve + 1 in bearing plate + 2 in seat; the length adds 1 in and one F436 washer, to the next 1/4 in.
   expect(t).toContain('LENGTH 5 1/2", GRIP 4 1/4"');
-  // The 1/16 in clearance under the plate washer is a leader note, not a stretched dimension.
+  // The 1/16 in minimum clearance under the plate washer (the sleeve is cut to a 1/16 in length) is a leader note.
   const notes=[...bolt.matchAll(/<g data-multileader="component"[^>]*>(.*?)<\/g>/gs)].map(m=>texts(m[1]).join(' '));
-  expect(notes).toContain('1/16" CLR.');
+  expect(notes).toContain('1/16" MIN. CLR.');
   // On a seat by others the grip is stated without the seat.
   const others=structuredClone(capped.input);others.details!.bracket!.enabled=false;
   expect(texts(slidingBoltView({...capped,input:others})!.render().svg).join(' ')).toContain('LENGTH TO SUIT SEAT, GRIP = 2 1/4" + SEAT');

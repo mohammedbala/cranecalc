@@ -35,7 +35,8 @@ export const dimText = (x: number, y: number, value: string, size = 9, anchor = 
  * A reference dimension: a rolled-shape or material size (section depth, rail on its pad and the cap web) or a size that
  * follows from dimensioned geometry, printed as it is rather than to the 1/4 in dimension grid.
  */
-export const refDim = (dimension: string) => dimension.replaceAll('data-dim="true"', 'data-dim="ref"');
+/** A reference dimension (a rolled-section depth, a size that follows from others): marked, and its value in parentheses. */
+export const refDim = (dimension: string) => dimension.replaceAll('data-dim="true"', 'data-dim="ref"').replace(/(<text\b[^>]*>)([^<]+)(<\/text>)/, (_, a: string, v: string, b: string) => `${a}(${v})${b}`);
 export const rect = (x: number, y: number, w: number, h: number, cls = 'annotation') => `<rect class="${cls}" x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}"/>`;
 /** A closed outline path through the given sheet points. */
 export const outlinePath = (pts: XY[], cls = 'runway-line') => `<path class="${cls}" d="M${pts.map(p => `${n(p[0])},${n(p[1])}`).join('L')}Z"/>`;
@@ -185,6 +186,8 @@ export const detailNumberToken='{{DETAIL_NO}}',sheetNumberToken='{{SHEET_NO}}';
 export const detailRef=(title:string)=>`{{REF:${encodeURIComponent(title)}}}`;
 /** Reference to the sheet that carries a group of details (see detailSheet.ts); resolved to "S-xx". */
 export const sheetRef=(topic:string)=>`{{SHEET:${encodeURIComponent(topic)}}}`;
+/** Titles of the cap tieback angle details (capAngleSheet). */
+export const capAngleTitles={section:'CAP TIEBACK ANGLE / SECTION AT SUPPORT',plan:'CAP TIEBACK ANGLES / PLAN AT SHARED COLUMN'} as const;
 /** Detail titles referenced from other details; each is drawn by exactly one detail in the set. */
 export const detailTitles={
  bearing:'GIRDER BEARING / COLUMN BRACKET',endBearing:'GIRDER END BEARINGS / LOCATING AND SLIDING',supportBearings:'GIRDER BEARINGS / LOCATING AND SLIDING',endTemplate:'GIRDER WEB / END CONNECTION',

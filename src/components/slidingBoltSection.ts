@@ -62,13 +62,13 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
   // Slot in the flange: the sleeve slides the travel each way inside it.
   svg+=dimH(X(-slot),X(slot),yWasher-2,slotDim,`SLOT ${size(g.slotWidth)} X ${size(g.slot)}`);
   // The plate washer stands clear of the flange by the sleeve projection: a leader note for the small clearance.
-  {const label=`${size(sl.clearance)} CLR.`,w=textWidth(labelCaps(label),8.5);
+  {const label=`${size(sl.clearance)} MIN. CLR.`,w=textWidth(labelCaps(label),8.5);
    svg+=multiLeader([[X(-g.washer.length/2)+4,(ySleeveTop+yFlangeTop)/2]],[X(-half)-18-w,yWasher-8],[label]);}
   const lx=X(half)+44,at=(x:number,y:number):XY=>[x,y],Fy=format(d.material.Fy,'stress',p.units,0);
   const labels=[
-   {at:at(X(hx.corners/2),yHead+hx.head*k/2),labels:[`${size(db)} HEAVY HEX BOLT, ASTM F3125 GR ${e.bolts.grade},`,'HEAD ON PL WASHER',grip]},
+   {at:at(X(hx.corners/2),yHead+hx.head*k/2),labels:[`${size(db)} HEAVY HEX BOLT, ASTM F3125 GR. ${e.bolts.grade},`,'HEAD ON PL WASHER',grip]},
    {at:at(X(g.washer.length/2)-3,yWasher+e.washerThickness*k/2),labels:[`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]},
-   {at:at(X(od/2),(ySleeveTop+yBear)/2-4),labels:[`STEEL SLEEVE ${size(od)} OD X ${size(g.hole)} BORE`,`X ${size(sleeve.length)} (FLANGE + ${size(sl.clearance)}), FY ${Fy}`]},
+   {at:at(X(od/2),(ySleeveTop+yBear)/2-4),labels:[`STEEL SLEEVE ${size(od)} OD X ${size(g.hole)} BORE`,`X ${size(sleeve.length)} (FLANGE + ${size(sl.clearance)} MIN.), FY ${Fy}`]},
    {at:at(X(half*.7),yFlangeTop+2),labels:[`GIRDER BOTTOM FLANGE, ${size(b.tf)}`,`SLOTTED; SEE ${detailRef(bearingBoltsTitle(p))}`]},
    {at:at(X(half*.75),yBear+bs.thickness*k/2),labels:[`BEARING PL ${size(bs.thickness)}, ${size(g.hole)} STD HOLE`]},
    {at:at(X(half*.75),yBearBot+seatT*k/2),labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,ws?.hasSeat?`HOLES OVER THE ${ws.name} FLANGE: ALSO`:`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`,...(ws?.hasSeat?[`THE ${size(ws.tf)} FLANGE, LENGTH ${size(boltLength(db,plies+seatT+ws.tf,p.units))}, GRIP ${size(plies+seatT+ws.tf)}`]:[])]:['BRACKET SEAT BY OTHERS'])},

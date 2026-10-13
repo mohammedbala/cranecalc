@@ -12,7 +12,7 @@ import {projectHaunch,haunchStations} from '../engine/taperedHaunch';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {connectionCoordination} from '../engine/connectionCoordination';
-import {constructionRequirements,enteredFabricationNote,supersededFabricationNotes,weldElectrode} from '../engine/constructionNotes';
+import {addedSentences,constructionRequirements,enteredFabricationNote,supersededFabricationNotes,weldElectrode} from '../engine/constructionNotes';
 import {simpleSupportInput,endGridCentered} from '../engine/simpleSupports';
 import {railSeat} from '../engine/railSeat';
 import {railJointType} from '../engine/railLayout';
@@ -778,12 +778,8 @@ table{width:100%;border-collapse:collapse;table-layout:fixed;margin:6px 0;font-s
  */
 function fabricationHtml(p:CalculationSnapshot['input'],e:(v:string)=>string){
  const d=p.details!,req=constructionRequirements(p),bad=supersededFabricationNotes(p);
- const stem=(w:string)=>w.replace(/(ed|ing|s)$/,'');
- const words=(v:string)=>new Set((v.toLowerCase().match(/[a-z0-9.§]+/g)??[]).filter(w=>w.length>2&&!['the','and','are','for','with','after','before','where','that','this','per','its'].includes(w)).map(stem));
- /** Entered sentences not already said by the generated items (most of their words found there). */
- const extra=(text:string,generated:string[])=>{const g=words(generated.join(' '));return text.split(/(?<=[.;])\s+(?=[A-Z])/).map(v=>v.trim()).filter(Boolean).filter(v=>{const w=[...words(v)];return w.length&&w.filter(x=>g.has(x)).length/w.length<.6;});};
  const fields:Record<string,keyof typeof d.fabrication|undefined>={bolting:'bolting',welding:'welding',inspection:'inspection',erection:'erection',tolerances:'railAlignment'};
- const sections=req.map(r=>{const field=fields[r.key],entered=field?extra(enteredFabricationNote(p,field),r.items):[];
+ const sections=req.map(r=>{const field=fields[r.key],entered=field?addedSentences(enteredFabricationNote(p,field),r.items):[];
   return `<h3>${e(r.title)}</h3>${[...r.items,...entered].map(v=>`<p>${e(v)}</p>`).join('')}`;}).join('');
  const steel=enteredFabricationNote(p,'steel');
  return (steel.trim()?`<h3>Materials</h3><p>${e(steel)} Grades and properties: section @@ref:inputs@@.</p>`:'')+sections+(bad.length?`<p class="notice"><b>SUPERSEDED ENTERED NOTES (open item, Coordination):</b> ${e(bad.map(v=>`${fieldName[v.field]??v.field}: "${v.sentence}" (${v.reason})`).join('; '))}</p>`:'');

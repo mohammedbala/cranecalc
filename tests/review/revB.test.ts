@@ -4,6 +4,7 @@ import {reportHtml} from '../../src/report/reportHtml';
 import {buildTaxonomy} from '../../src/engine/checkTaxonomy';
 import {summaryElements} from '../../src/report/designSummary';
 import {demoFocus005RevB,revBChanges} from '../fixtures/demoFocus005RevB';
+import {drawingSheetSet} from '../../src/components/planSheet';
 
 /**
  * DEMO-FOCUS-005 revision B: every open item of the reviewed project is resolved by the revised inputs and the
@@ -51,4 +52,29 @@ describe('DEMO-FOCUS-005 rev B',()=>{
   expect(t).toMatch(/Component models\. The cap tieback is a DG7 top-flange tie connected directly to the column/);
   expect(t).not.toMatch(/Direct stiffness; equilibrium|appended to supplied PDF|catalog W \+ inverted|Channel ASTM/);
  });
+ it('drawings say each thing once, use what they list and agree with one another',()=>{
+  const sheets=drawingSheetSet(s),t=(n:string)=>[...sheets.find(v=>v.number===n)!.svg.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g)].map(m=>m[1].replace(/<[^>]+>/g,'').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&')).join(' ');
+  const s0=t('S-00'),s1=t('S-01'),s2=t('S-02'),s3=t('S-03'),all=[s0,s1,s2,s3].join(' ');
+  expect(all).not.toMatch(/NOT IN SET|\{\{/);
+  // Abbreviations: only those the set uses.
+  const abbr=s0.slice(s0.indexOf('ABBREVIATIONS'),s0.indexOf('ISSUE',s0.indexOf('ABBREVIATIONS')));
+  expect(abbr).toMatch(/CJP COMPLETE JOINT PENETRATION/);expect(abbr).toMatch(/O\.C\. ON CENTER/);
+  expect(abbr).not.toMatch(/\(E\) EXISTING|\(N\) NEW|SSL|LSL|FW FIELD WELD/);
+  // S-00 states each requirement once: one crane rail row, no steel note repeating the materials table, rail joints
+  // and survey once, no concrete key without concrete, no remark in the rail name, no wrong sleeved-bolt sentence.
+  expect(s0.match(/CRANE RAIL ASTM/g)?.length).toBe(1);expect(s0).not.toMatch(/IDEALIZED PLATE GEOMETRY|STEEL: W GIRDER|CONCRETE AND SOILS|COLUMN-END TIE BOLTS/);
+  expect(s0.match(/RAIL JOINTS: TIGHT JOINTS/g)?.length).toBe(1);expect(s0.match(/SURVEY BOTH RAILS/g)?.length).toBe(1);
+  expect(s0).not.toMatch(/CAP TIEBACK ANGLES \(1\/S-03\): FIELD-DRILL/);// the tieback installation is on S-03
+  expect(s1).not.toMatch(/0'-0 1\/8"|SET RAIL C\/L SPACING/);// rail setting is S-00's note
+  // The lateral restraint is named as detailed, and the cap's holes are listed where the tieback drills them.
+  expect(s2).toMatch(/CAP TIEBACK ANGLES \(1\/S-03\) TRANSFER LATERAL FORCE/);expect(s2).not.toMatch(/FLANGE TIES/);
+  expect(s2).toMatch(/UNPERFORATED EXCEPT THE END STOP BOLT HOLES \(4\/S-03\) AND THE CAP TIEBACK BOLT HOLES/);
+  expect(s3).not.toMatch(/NO OTHER HOLES, CUTS OR WELDS IN THE CAP/);expect(s3).toMatch(/ONE LEG LEVEL WITH TOP OF CAP/);
+  expect(s2).not.toMatch(/PLATES AS THE BRACKET PLATES|FLANGE \+ 1\/16"\)|STD\. HOLES/);
+  // The sleeve is cut to a 1/16 in length: the 0.645 in flange plus at least 1/16 in, the same on both details.
+  expect(s2).toMatch(/STEEL SLEEVES 1 7\/16" OD X 3\/4"/);expect(s2).toMatch(/X 3\/4" \(FLANGE \+ 1\/16" MIN\.\)/);
+  // Reference dimensions (section depth, rail over steel) read in parentheses; the S-00 legend explains them.
+  expect(s2).toMatch(/\(1'-1 7\/8"\)/);expect(s2).toMatch(/\(6 11\/16"\)/);expect(s0).toMatch(/REFERENCE DIMENSION/);
+ },120000);
 });
+

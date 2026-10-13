@@ -1,4 +1,3 @@
-import {preheatBasis} from '../engine/constructionNotes';
 import {supportColumn,runwayElevations} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
@@ -9,13 +8,13 @@ import {format} from '../engine/units';
 import {bracketForceBlocks} from './bracketForceTable';
 import {designsBracing} from '../engine/newColumnBracing';
 import {activeEndBearing} from '../engine/endBearingInputs';
-import {flangeTieGeometry} from '../engine/tieGeometry';
 import {railTopAboveSteel} from '../engine/railSeat';
 import {usesTaperedHaunch,projectHaunch} from '../engine/taperedHaunch';
 import {taperedHaunchParts} from '../engine/taperedHaunchParts';
 import {grooveLeader} from './rolledBracketSheet';
 import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
 import {endGridBearingNote} from '../engine/simpleSupports';
+import {topFlangeRestraint} from './tieNames';
 
 /** Titles of the haunch's plan and section; its elevation along the runway is the bracket transverse section. */
 export const haunchPlanTitle='TAPERED HAUNCH / TOP FLANGE PLAN';
@@ -181,7 +180,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const pl=plates[plates.length-1],last=bolts.filter(h=>Math.abs(h.x-(xs.at(-1)??0))<1e-3).sort((u,v)=>v.y-u.y)[0],items:Item[]=[
    {at:[right,Y(f?(f.y1+L)/2:L*.62)],labels:[topLabel,...(f?[`45° FLARE STARTS ${dim(f.y0)} FROM`,`THE COLUMN FACE, ${size(f.radius)} RADIUS,`,'GRIND SMOOTH']:[]),'WEB, STIFFENERS HIDDEN']},
    {at:[X(pl.x1)-((pl.x1-pl.x0)*k)*.2,Y(pl.y0)],labels:[`BEARING PL ${size(tbp)} X ${dim(W)} X ${dim(d.bearing.length)}`,`EACH GIRDER END; SEE ${detailRef(eb?bearingBoltsTitle(p):detailTitles.bearing)}`]},
-   ...(eb&&last?[{at:[X(last.x)+last.hole/2*k,Y(last.y)] as XY,labels:[`${bolts.length} - ${size(last.hole)} STD. HOLES IN THE TOP FL.`,`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[])
+   ...(eb&&last?[{at:[X(last.x)+last.hole/2*k,Y(last.y)] as XY,labels:[`${bolts.length} - ${size(last.hole)} STD HOLES IN THE TOP FL.`,`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[])
   ];
   svg+=calloutColumn(items,right+40,4,tip+20);
   return {svg:svg+'</g>',scale:scale.label};
@@ -216,18 +215,15 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=calloutColumn(items,X(wide/2)+40,Y(0)-14,Y(-hr)+16);
   return {svg:svg+'</g>',scale:scale.label};
  }});
- const tie=flangeTieGeometry(p),ties=tie?`${tie.sides.length===1&&tie.sides[0]>0?'THE TOP FLANGE TIES':'THE FLANGE TIES'} (${detailRef(detailTitles.flangeTie)})`:'THE FLANGE TIES';
+ const ties=topFlangeRestraint(p);
  const Fy=format(d.material.Fy,'stress',p.units,p.units==='SI'?0:3);
  const notes=[
   `A BUILT-UP TAPERED I HAUNCH ${dim(L)} LONG, ${dim(hr)} DEEP AT THE COLUMN TAPERING TO ${dim(ht)} AT THE TIP (BOTTOM FLANGE AT ${deg}°): ${webLabel}, ${topLabel}, ${botLabel}, ${stiffLabel} AT THE GIRDER C/L${g.endPlate?`, END PL ${size(tep)}`:''}. PLATES ${Fy} MIN. YIELD.`,
   `${where} WELD THE HAUNCH TO THE ${colName} FLANGE: ${g.joint==='cjp'?'CJP GROOVE WELDS AT BOTH FLANGES':`${size(g.flangeWeld)} FILLETS ON BOTH FACES OF BOTH FLANGES`} AND ${size(g.webWeld)} FILLETS BOTH SIDES OF THE WEB. SHOP: ${size(g.flangeWebWeld)} FLANGE-TO-WEB FILLETS BOTH SIDES, CONTINUOUS; STIFFENERS FITTED TO BEAR ON THE TOP FLANGE AND WELDED TO THE WEB AND BOTH FLANGES WITH ${size(st.weld)} FILLETS BOTH SIDES.`,
   `WELDS: ${electrodeClass(d.material.Fexx,p.units)} LOW-HYDROGEN ELECTRODE${g.joint==='cjp'?', MATCHING FILLER FOR THE CJP WELDS WITH STEEL BACKING REMOVED, ROOT BACKGOUGED AND REWELDED, UT PER S-00':''}. CONTINUOUS WELDS AS SHOWN; NO INTERMITTENT WELDS.${f?` CUT THE TOP FLANGE FLARE WITH A ${size(f.radius)} RADIUS AT THE RE-ENTRANT CORNERS AND GRIND SMOOTH.`:''}`,
   ...(sc.isNew?[`SHOP WELD THE HAUNCH TO THE ${sc.name} BEFORE ERECTION; INSPECT STARTS, STOPS AND TOES.`]:[
-   'WELDING TO EXISTING STEEL: VERIFY THE WELDABILITY OF THE EXISTING COLUMN BY MILL CERTIFICATES OR COUPON TESTS (CHEMISTRY AND CARBON EQUIVALENT) BEFORE FABRICATION.',
-   // Same thickness basis as the calculation and S-00: the thickest part at the weld (preheatBasis).
-   preheatBasis(p)?`${preheatBasis(p)!.text.toUpperCase()}.`:`PREHEAT AND INTERPASS TEMPERATURE PER AWS D1.1:2020 TABLE 5.8 FOR THE THICKEST PART AT THE WELD.`,
-   'REMOVE PAINT, COATINGS, MILL SCALE AND RUST FROM THE EXISTING COLUMN FLANGE AT THE WELDS; CLEAN TO BRIGHT METAL.',
-   'WELD WITH THE COLUMN CARRYING DEAD LOAD ONLY (NO CRANE IN SERVICE ON THIS COLUMN LINE), PER AWS D1.1 CLAUSE 11, STRENGTHENING AND REPAIR OF EXISTING STRUCTURES.'
+   // The base metal, WPS, preheat and load condition are stated once, in the existing building notes on S-00.
+   'WELDING TO THE EXISTING COLUMN: BASE METAL CONFIRMATION, APPROVED WPS, PREHEAT AND LOAD CONDITION PER THE EXISTING BUILDING NOTES ON S-00. REMOVE PAINT, COATINGS, MILL SCALE AND RUST FROM THE COLUMN FLANGE AT THE WELDS; CLEAN TO BRIGHT METAL.'
   ]),
   `KEEP GIRDER ENDS AND BEARINGS INDEPENDENT. DO NOT WELD THE SLIDING BEARING TO THE GIRDER. ${eb?`THE BEARING BOLTS LOCATE, GUIDE AND HOLD DOWN THE GIRDER THROUGH THE HAUNCH TOP FLANGE (${detailRef(bearingBoltsTitle(p))}); DRILL TO MATCH (${detailRef(haunchPlanTitle)}). `:''}ONLY ${ties} CONNECT TO THE COLUMN SEPARATELY.`,
   `THE HAUNCH IS DESIGNED FOR EVERY CONCURRENT CASE OF THE BRACKET DESIGN FORCES BELOW, WITH ITS SELF-WEIGHT: FLEXURE AND SHEAR ON THE SECTIONS OF THE TAPER, TORSION FROM THE OFFSET BEARINGS, THE STIFFENERS, THE WELD GROUP ON THE COLUMN FACE, FATIGUE AND DEFLECTION${collector?'; WITH THE BRACING, ALSO THE COLLECTOR FORCE THROUGH ITS WELDS':''}. THE ${sc.isNew?'':'EXISTING '}COLUMN FLANGE AND WEB LOCAL CHECKS (J10) ARE IN THE CALCULATION${cs?', WITH THE COLUMN STIFFENERS AT BOTH HAUNCH FLANGE LEVELS':', WITHOUT COLUMN STIFFENERS'}.`

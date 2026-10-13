@@ -243,7 +243,7 @@ function capAngleSketch(s:CalculationSnapshot):CadDrawing|undefined{
   `${f(g.cap.slotWidth)} × ${f(g.cap.slotLength)} horizontal slots in the angle; ${g.cap.sleeved?`pretensioned against ${f(g.cap.sleeve!.od)} OD sleeves`:'PRETENSIONED BOLTS REQUIRED (see calc)'}`,
   `Plate washers ${f(g.cap.washer.thickness)} × ${f(g.cap.washer.height)} × ${f(g.cap.washer.length)} over the slots`,
   `${seat.washer.kind==='beveled'?`F436 1:6 beveled washers (${f(seat.washer.width)} sq.)`:'F436 washers'} under the nuts; flange ${f(seat.thickness)} at the bolt line`,
-  `Tie plate ${f(g.plate.thickness)} × ${f(g.plate.width)} × ${f(g.plate.length)} lapped on the long leg`,
+  `Tie plate ${f(g.plate.thickness)} × ${f(g.plate.width)} × ${f(g.plate.length)} lapped on the horizontal leg`,
   `Lap bolts: 2 - ${f(lap.diameter)} ${lap.grade} slip-critical Class ${lap.surface}, short slots`,
   `End plate ${f(ep.thickness)} × ${f(ep.width)} × ${f(ep.height)}; ${f(g.weld)} fillets both faces`,
   `Column bolts: 2 - ${f(cl.diameter)} ${cl.grade}, ${f(2*cl.gauge)} apart, field-drilled holes`,

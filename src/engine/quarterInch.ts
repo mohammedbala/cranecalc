@@ -11,3 +11,6 @@ export function snapQuarter(mm:number,mode:SnapMode='nearest'){
  const q=mm/quarterInch,f=mode==='up'?Math.ceil(q-1e-6):mode==='down'?Math.floor(q+1e-6):Math.round(q);
  return f*quarterInch;
 }
+
+/** A sleeve length to fabricate: the least length (ply plus clearance) rounded up to 1/16 in. */
+export const sleeveLength=(least:number)=>Math.ceil(least/1.5875-1e-6)*1.5875;

@@ -202,7 +202,7 @@
 {"id":"end-bearing-sliding","status":"pass","utilization":0.08801318901858639},
 {"id":"end-bearing-flange-prying","status":"pass","utilization":0},
 {"id":"end-bearing-sleeve","status":"pass","utilization":0.7605484214070423},
-{"id":"end-bearing-sleeve-length","status":"pass","utilization":0.5000000000000004},
+{"id":"end-bearing-sleeve-length","status":"pass","utilization":0.29761904761904784},
 {"id":"end-bearing-sleeve-bearing","status":"pass","utilization":0.0333879377337054},
 {"id":"end-bearing-washer-bending","status":"pass","utilization":0},
 {"id":"end-bearing-washer","status":"pass","utilization":1},

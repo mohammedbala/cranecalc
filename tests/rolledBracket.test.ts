@@ -146,7 +146,7 @@ describe('new rolled wide-flange bracket',()=>{
    // Text content in reading order, the wrapped note lines joined.
    const plain=svg.replace(/<[^>]+>/g,' ').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g,' ');
    if(units==='US'){
-    for(const text of ['W12X65 X 2\'-4" LONG','2 STIFF. PL 1/2" X 5 1/2"','SEAT PL 1 1/2" X 2\'-2"','9/16" CLEAR OF COL.','8 - 13/16" STD. HOLES IN SEAT','CJP GROOVE WELDS AT BOTH FLANGES','5/16" FILLETS BOTH SIDES OF THE WEB','3/8" FILLETS','FIELD WELD THE STUB'])expect(plain).toContain(text);
+    for(const text of ['W12X65 X 2\'-4" LONG','2 STIFF. PL 1/2" X 5 1/2"','SEAT PL 1 1/2" X 2\'-2"','9/16" CLEAR OF COL.','8 - 13/16" STD HOLES IN SEAT','CJP GROOVE WELDS AT BOTH FLANGES','5/16" FILLETS BOTH SIDES OF THE WEB','3/8" FILLETS','FIELD WELD THE STUB'])expect(plain).toContain(text);
    }
   }
   const p=rolledProject(newColumnDemonstrationProject),svg=bracketSheetSvg(snapshot(p));

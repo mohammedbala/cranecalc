@@ -5,13 +5,13 @@ import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
 import {clipGeometry,clipOutline,railPadThickness} from '../engine/railSeat';
 import {supportColumn} from '../engine/drawingData';
 import {capChannelProfile} from '../engine/channelProfile';
-import {sheetDrawingScale as drawingScale,line,rect,text,dimH,dimV,multiLeader,breakLine,textWidth,labelCaps,bubble,n,detailRef,capChannelSection,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,line,rect,text,dimH,dimV,multiLeader,breakLine,textWidth,labelCaps,bubble,n,detailRef,capChannelSection,capAngleTitles,type XY} from './sheetGraphics';
 import {tieSize,tieDim,weldLength,weldLeader,type Weld} from './flangeTieSheet';
 import {heading,numbered,paragraph,type Style} from './noteBlocks';
 import type {DetailTopic,ViewRender} from './detailSheet';
 
 /** Detail titles of the cap tieback angle; each is drawn by one detail. */
-export const capAngleTitles={section:'CAP TIEBACK ANGLE / SECTION AT SUPPORT',plan:'CAP TIEBACK ANGLES / PLAN AT SHARED COLUMN'} as const;
+export {capAngleTitles};
 type Callout={at:XY;labels:string[];weld?:Weld;points?:XY[]};
 const calloutHeight=(v:Callout)=>(v.weld?17:0)+v.labels.length*11;
 /** A column of callouts from `top`, ordered by target height so the leaders do not cross. */
@@ -122,7 +122,7 @@ export function capAngleSection(s:CalculationSnapshot):ViewRender{
  const lowRight=callouts(belowRight,cx,Math.max(lower+14,Z(g.plate.zc)+(stiff?72:34)));svg+=lowRight.svg;
  const below=Math.max(Z(webEnd),Z(lapBottom))+18,bx=X(-b.tw/2)-4,rightStart=Math.max(bx+60,X(headEnd)+14);
  const leftCol:Callout[]=[
-  {at:[X(g.y0+g.ta/2),Z(-g.dv)],labels:[`${c.shape} X ${dim(c.length)} CAP ANGLE, LONG`,`LEG LEVEL WITH TOP OF CAP`]},
+  {at:[X(g.y0+g.ta/2),Z(-g.dv)],labels:[`${c.shape} X ${dim(c.length)} CAP ANGLE,`,`${g.dv===g.bh?'ONE LEG':'LONG LEG'} LEVEL WITH TOP OF CAP`]},
   {at:[X(headEnd-ch.head/2),Z(zc-ch.corners/2)],labels:[`2 - ${sz(cb.diameter)} ${cb.grade} BOLTS ${sz(cb.gauge)} BELOW TOP;`,`${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZ. SLOTS, ${cb.sleeved?'SLEEVED':'SNUG-TIGHT'}`]}];
  const rightCol:Callout[]=[
   {at:[X(yl),Z(lapBottom)],points:[[X(yl),Z(lapBottom)],[X((g.toe+ep.y0)/2),Z(0)]],labels:[`TIE PL ${sz(tp)} X ${sz(g.plate.width)} X ${dim(g.plate.length)} WITH`,`2 - ${sz(g.lap.diameter)} ${g.lap.grade} SC BOLTS, CLASS ${g.lap.surface},`,`${sz(g.lap.slot.width)} X ${sz(g.lap.slot.length)} SHORT SLOTS IN TIE PL,`,`${sz(g.lap.edge)} TO TIE PL END`]}];
@@ -199,7 +199,7 @@ export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `CAP TIEBACK ANGLES (AISC DG7, TOP FLANGE CONNECTED DIRECTLY TO THE COLUMN): ONE AT EACH GIRDER END, ${dim(c.setback)} FROM THE GIRDER END TO ITS CENTERLINE, ON THE COLUMN-SIDE CHANNEL FLANGE. THE BOTTOM FLANGE IS RESTRAINED BY THE BOLTED END BEARINGS.`,
   cb.sleeved?`CAP BOLTS: PRETENSION AGAINST STEEL SLEEVES ${sz(cb.sleeve!.od)} OD X ${sz(cb.sleeve!.length)} LONG THROUGH ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} X ${sz(cb.washer.height)} X ${sz(cb.washer.length)} PLATE WASHERS. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE ANGLE IS NOT CLAMPED: THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`
    :`CAP BOLTS: SNUG-TIGHT WITH JAM NUTS IN ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} PLATE WASHERS (NOT PERMITTED: PRETENSIONED BOLTS REQUIRED, AIST TR-13 §5.14; SEE CALCULATION). THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`,
-  `DRILL STANDARD HOLES IN THE CAP CHANNEL FLANGE ONLY AT THE TIE; NO OTHER HOLES, CUTS OR WELDS IN THE CAP OR GIRDER.${beveledCapWasher(p.section)?' F436 1:6 BEVELED WASHERS UNDER THE CAP BOLT NUTS ON THE SLOPED INSIDE FACE OF THE CHANNEL FLANGE.':''} INSTALL AND TENSION THE CAP BOLTS BEFORE THE TIE PLATE AND LAP BOLTS.`,
+  `DRILL STANDARD HOLES IN THE CAP CHANNEL FLANGE AT THE TIE ONLY; DO NOT WELD THE TIE TO THE CAP OR GIRDER.${beveledCapWasher(p.section)?' F436 1:6 BEVELED WASHERS UNDER THE CAP BOLT NUTS ON THE SLOPED INSIDE FACE OF THE CHANNEL FLANGE.':''} INSTALL AND TENSION THE CAP BOLTS BEFORE THE TIE PLATE AND LAP BOLTS.`,
   `LAP BOLTS: PRETENSIONED, SLIP-CRITICAL, CLASS ${g.lap.surface} FAYING SURFACES, IN SHORT SLOTS ACROSS THE RUNWAY IN THE TIE PLATE FOR FIT-UP; F436 WASHERS OVER THE SLOTS.`,
   `END PLATE: SHOP WELD TO THE TIE PLATE. FIELD-DRILL ${sz(g.column.hole)} HOLES IN THE ${tc.isNew?'COLUMN':'EXISTING COLUMN'} FLANGE TO MATCH; NO FIELD WELDING TO THE COLUMN FOR THE TIE. FINGER SHIMS 0 TO ${sz(c.shimMax)} TAKE UP THE FIT-UP; PRETENSION THE COLUMN BOLTS.`,
   ...(res?.stiffener.provided?[`COLUMN STIFFENER AT THE TIE LEVEL, ON THE TIE SIDE OF THE COLUMN WEB: ${tc.isNew?'SHOP':'FIELD'} WELD TO THE COLUMN FLANGE AND WEB (SEE EXISTING COLUMN WELDING).`]:[]),
@@ -213,6 +213,6 @@ export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
  return {key:'cap-angle-tie',name:'CAP TIEBACK ANGLES',views:[
   {title:capAngleTitles.section,render:()=>capAngleSection(s)},
   ...(shared?[{title:capAngleTitles.plan,render:()=>capAngleSharedPlan(s)}]:[])
- ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue>0?`${fatigue.toFixed(2)} FATIGUE`:'FATIGUE BELOW THRESHOLD'})`:''}. ${detailRef(capAngleTitles.section)}.`)]};
+ ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue>0?`${fatigue.toFixed(2)} FATIGUE`:'FATIGUE BELOW THRESHOLD'})`:''}.`)]};
 }
 export const capAngleLabelWidth=(v:string)=>textWidth(labelCaps(v),8.5);
