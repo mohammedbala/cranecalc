@@ -125,6 +125,8 @@ export interface ExistingColumnResult {
 }
 export interface ColumnSupportResult {
  exit:'girder-strut'|'column-strut'|'eave-strut';exitEntered:boolean;offset:number;girderTop:number;
+ /** Crane-level strut on the girder line: the column's own stiffness there (k_y, K_θ, k_c), the strut stiffness specified (ratio·k_c) and the share of the force the column keeps. */
+ strut?:{kY:number;Ktheta:number;kc:number;ratio:number;required:number;share:number};
  seat:{grid:number;moment:number;case:string}[];traction:number;bumper:number;bumperGrids:number[];
  frame:{type:'braced'|'sway';entered:boolean;B2?:number};
  f13?:{holds:boolean;Afn:number;Afg:number;Yt:number;demand:number;capacity:number;Mn:number};
@@ -172,7 +174,15 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const alongM=review?columnResponse(c.height,E*props.Iy,c.weak,[{x:hs,moment:1}],[hs]):undefined,alongF=review?columnResponse(c.height,E*props.Iy,c.weak,[{x:hs,force:1}],[hs]):undefined;
  const locating=new Set(review&&bracingPath?locatingGrids(p):[]),stops=bumperAtGrids(p),offset=girderOffset(p),Cls=reactions.Cls;
  // Torsion per unit torque: twist held at the base and at a braced top (warping free), or the fixed-base cantilever.
- const unitTorsion=review&&exit!=='girder-strut'?(c.weak.top==='braced'?pinnedTorsion(section,1,hs,c.height):{...baseWarping(section,1,hs),shear:section.tf/props.J+1.5/(props.h0*section.bf*section.tf)}):undefined;
+ const unitTorsion=review?(c.weak.top==='braced'?pinnedTorsion(section,1,hs,c.height):{...baseWarping(section,1,hs),shear:section.tf/props.J+1.5/(props.h0*section.bf*section.tf)}):undefined;
+ // A crane-level strut on the girder line shares the longitudinal force with the column in proportion to their
+ // stiffnesses there: the column's k_c is its weak-axis translation at the seat in series with its twist over the
+ // girder offset (k_y and K_θ/e²). The strut is specified at least 10 k_c, so the column keeps at most 1/11 of the force,
+ // as weak-axis bending and torsion, and is checked for that share.
+ const strut=review&&exit==='girder-strut'&&alongF&&unitTorsion?(()=>{
+  const G=E/2.6,a=Math.sqrt(E*props.Cw/(G*props.J)),kY=1/alongF.displacement(hs),Ktheta=c.weak.top==='braced'?1/(pinnedTorsion(section,1,hs,c.height).twist||Infinity):G*props.J/(hs-a*Math.tanh(hs/a)),offset=girderOffset(p);
+  const kc=1/(1/kY+offset**2/Ktheta);return {kY,Ktheta,kc,ratio:10,required:10*kc,share:1/11};
+ })():undefined,keep=exit==='girder-strut'?strut?.share??0:1;
  const frame=c.frame,sway=review&&frame?.type==='sway'&&frame.B2!==undefined?frame.B2:undefined;
  const site=review?runwaySiteSeismic(p):undefined,tr13=review&&p.aist?tr13SupportCombinations(p.method):[];
  const nonSway=['D','L','Lr','S','R'] as const;
@@ -185,9 +195,9 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const dead=support.D,live=support.Cd+support.Cv+support.Ci+support.L+support.Clv,liveStatic=support.Cd+support.Cv,lateral=support.Css;
  const seat=ends?.[j]??[],seatCase=(fD:number,fL:number,fCd:number,fCv:number)=>seat.length?seatMoment(seat,{D:fD,L:fL,Cd:fCd,Cv:fCv}):0;
  // Weak-axis moment from the seat moment and the longitudinal force F at the seat (the eave-strut path only), and the torque F·offset.
- const reviewMy=(Mseat:number,F:number)=>alongM&&alongF?combinedPeak(alongM.samples,alongF.samples,'moment',Mseat,exit==='eave-strut'?F:0):0;
+ const reviewMy=(Mseat:number,F:number)=>alongM&&alongF?combinedPeak(alongM.samples,alongF.samples,'moment',Mseat,exit==='eave-strut'?F:exit==='girder-strut'?keep*F:0):0;
  const reviewRow=(row:ExistingColumnCombination,F:number):ExistingColumnCombination=>{
-  if(!unitTorsion||!F)return row;const T=F*offset,w=unitTorsion.stress*T,ratio=row.P>=0?row.P/capacity.Pc:-row.P/capacity.Pt;
+  if(!unitTorsion||!F||!keep)return row;const T=keep*F*offset,w=unitTorsion.stress*T,ratio=row.P>=0?row.P/capacity.Pc:-row.P/capacity.Pt;
   return {...row,warping:w,Ut:row.U+(ratio>=.2?8/9:1)*w/fy,torque:T};
  };
  const asceRow=(k:{id:string;equation:string;factors:Record<typeof existingLoadKeys[number],number>},cd?:number)=>{
@@ -286,7 +296,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
    // TR-13 §5.3: for the gauge check only, snow of 30 psf or less may be reduced 50%, more than 30 psf 25%.
    const factor=sv.roofSnow!<=30*4.788025898e-5?.5:.75;return {value:2*(sv.spreadD!+factor*sv.spreadS!),factor};})():undefined;
   const gc=Math.max(...all.map(v=>Math.abs(v.gaugeCrane)))*Math.sign(all.reduce((a,v)=>Math.abs(v.gaugeCrane)>Math.abs(a)?v.gaugeCrane:a,0)||1);
-  support={exit,exitEntered:c.longitudinalExit!==undefined,offset,girderTop:worst.girderTop,
+  support={exit,exitEntered:c.longitudinalExit!==undefined,offset,girderTop:worst.girderTop,...(strut?{strut}:{}),
    seat:all.map((v,i)=>({grid:i+1,moment:v.seatGov,case:p.method==='LRFD'?'1.2D + 1.6(Cd + Cv + Ci)':'D + Cd + Cv + Ci'})),traction:bracingPath?Cls:0,bumper:bracingPath?stops.Cbs:0,bumperGrids:bracingPath?[...stops.grids].map(j=>j+1):[],
    frame:{type:frame?.type??'braced',entered:!!frame,...(frame?.B2!==undefined?{B2:frame.B2}:{})},...(f13?{f13}:{}),driftLimit:worst.drift.limit,...(sv?.wind10!==undefined?{wind10:sv.wind10}:{}),
    gauge:{crane:gc,...(spread?{frame:spread.value,snowFactor:spread.factor}:{}),total:gc+(spread?.value??0)},combinations:{asce:asceCombinations(p.method).length,tr13:tr13.length,bumper:Math.max(...all.map(v=>v.counts.bumper))}};
@@ -326,7 +336,7 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):Chec
  if(r.torsion&&r.support){
   const t=r.torsion,fm=(v:number)=>format(v,'moment',u,3),fs=(v:number)=>format(v,'stress',u,3),z=r.support;
   checks.push({...mk('torsion',`${label} · torsion from the longitudinal force offset (TR-13 §5.9.2)`,Math.max(t.U,t.shear/t.shearCapacity),1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}+\\frac{\\sigma_{ws}}{\\phi F_y}\\right)\\le1;\\;\\tau_t+\\tau_{ws}\\le\\phi0.6F_y',
-   `Each girder's longitudinal force reaches its locating column at the seat on the girder line, ${format(t.offset,'length',u,3)} from the column centerline, while ${z.exit==='column-strut'?'the crane-level strut holds the column at its centerline':'the eave strut holds the column at its top'}: torque T = ${fm(t.T)} at the seat (${t.case.id}, support x=${format(t.station,'length',u,3)}). Twist held at the base and ${c.weak.top==='braced'?'at the braced top, warping free (AISC Design Guide 9, exact two-segment solution)':'nowhere above: fixed-base cantilever bound'}, a = ${format(t.a,'length',u,3)}: warping stress ${fs(t.stress)} at the flange tips added to H1 as flange lateral bending; flange shear (Saint-Venant plus warping) ${fs(t.shear)} against ${fs(t.shearCapacity)}. ${Math.max(t.U,t.shear/t.shearCapacity)>1?'Not adequate: provide a crane-level strut on the girder line (or a torsion-resisting detail) so the longitudinal force does not twist the column.':'A crane-level strut on the girder line would remove this torsion.'}`,t.case.id),referenceIds:['tr13-column-path','aisc-h3','existing-column']});
+   `Each girder's longitudinal force reaches its locating column at the seat on the girder line, ${format(t.offset,'length',u,3)} from the column centerline, while ${z.exit==='girder-strut'&&z.strut?`the crane-level strut on the girder line takes it in proportion to its stiffness: with the strut at least ${z.strut.ratio} k_c = ${format(z.strut.required,'stiffness',u,3)} (the column's own stiffness there k_c = (1/k_y + e²/K_θ)⁻¹ = ${format(z.strut.kc,'stiffness',u,3)}: weak-axis k_y = ${format(z.strut.kY,'stiffness',u,3)} in series with the twist K_θ/e² = ${format(z.strut.Ktheta/z.offset**2,'stiffness',u,3)}) the column keeps at most 1/${Math.round(1/z.strut.share)} of it, as weak-axis bending (in H1) and torsion`:z.exit==='column-strut'?'the crane-level strut holds the column at its centerline':'the eave strut holds the column at its top'}: torque T = ${fm(t.T)} at the seat (${t.case.id}, support x=${format(t.station,'length',u,3)}). Twist held at the base and ${c.weak.top==='braced'?'at the braced top, warping free (AISC Design Guide 9, exact two-segment solution)':'nowhere above: fixed-base cantilever bound'}, a = ${format(t.a,'length',u,3)}: warping stress ${fs(t.stress)} at the flange tips added to H1 as flange lateral bending; flange shear (Saint-Venant plus warping) ${fs(t.shear)} against ${fs(t.shearCapacity)}. ${Math.max(t.U,t.shear/t.shearCapacity)>1?'Not adequate: provide a crane-level strut on the girder line (or a torsion-resisting detail) so the longitudinal force does not twist the column.':z.exit==='girder-strut'?'The strut stiffness and strength (the full force) are by the building engineer of record.':'A crane-level strut on the girder line would remove this torsion.'}`,t.case.id),referenceIds:['tr13-column-path','aisc-h3','existing-column']});
  }
  else if(r.torsion){
   const t=r.torsion,fm=(v:number)=>format(v,'moment',u,3),fs=(v:number)=>format(v,'stress',u,3);
@@ -348,7 +358,7 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):Chec
 function columnSupportChecks(p:ProjectInput,r:ExistingColumnResult,label:string,refs:string[]):CheckResult[]{
  const c=p.existingColumn!,z=r.support!,u=p.units,out:CheckResult[]=[],len=(v:number)=>format(v,'length',u,3),force=(v:number)=>format(v,'force',u,3),moment=(v:number)=>format(v,'moment',u,3);
  const lrfd=p.method==='LRFD',seat=z.seat.filter(v=>v.moment>0),seatMax=seat.reduce((a,v)=>v.moment>a.moment?v:a,{grid:0,moment:0,case:''});
- const exitText={'girder-strut':'a crane-level strut on the girder line: no column bending or torsion from it','column-strut':'a crane-level strut at the column centerline: no weak-axis bending from it, torsion from the girder offset','eave-strut':'the eave strut at the column top: weak-axis bending from the seat to the top, and torsion from the girder offset'}[z.exit];
+ const exitText={'girder-strut':`a crane-level strut on the girder line, at least ${z.strut?.ratio??10} times the column's own stiffness there${z.strut?` (k_s ≥ ${format(z.strut.required,'stiffness',u,3)})`:''}: the column keeps at most 1/${z.strut?Math.round(1/z.strut.share):11} of the force, checked as weak-axis bending and torsion`,'column-strut':'a crane-level strut at the column centerline: no weak-axis bending from it, torsion from the girder offset','eave-strut':'the eave strut at the column top: weak-axis bending from the seat to the top, and torsion from the girder offset'}[z.exit];
  if(c.longitudinal==='bracing')out.push({id:'column-longitudinal-path',group:label,title:`${label} · longitudinal force path and seat moment (weak axis)`,status:z.exitEntered?'pass':'unverified',equation:'M_{ry}=\\max_z|M_s\\,m_M(z)+F\\,m_F(z)|',referenceIds:['tr13-column-path',...refs],
   note:`${z.exitEntered?'The':'Not given; assumed: the'} crane longitudinal force leaves the column through ${exitText}. ${z.exitEntered?'':'Enter where it leaves (crane-level strut on the girder line or at the column, or the eave strut). '}Longitudinal force at each locating seat (grids ${z.traction?locatingLabel(p):'none'}): traction ${force(z.traction)} unfactored (${lrfd?'1.6':'1.0'} in the combinations with L)${z.bumper?`; crane stop ${force(z.bumper)} at grid${z.bumperGrids.length>1?'s':''} ${z.bumperGrids.join(', ')} (TR-13 ${lrfd?'1.2(D + Cds) + Cvs + 1.0Cbs':'D + Cds + Cvs + 0.67Cbs'})`:''}. Seat moment of the girder reactions about the haunch web (one girder end loaded by the crane at a time, so unbalanced at shared grids): ${seatMax.grid?`largest ${moment(seatMax.moment)} at grid ${seatMax.grid} under ${seatMax.case}; ${seat.map(v=>`grid ${v.grid} ${moment(v.moment)}`).join(', ')}`:'none (no bracket seat)'}. Both act as weak-axis loads at the seat, ${len(c.seatElevation)} above the base (${c.weak.base} base, ${c.weak.top} top), with B1 on the weak axis, and enter AISC H1.`});
  // B9: frame type and sway amplification.

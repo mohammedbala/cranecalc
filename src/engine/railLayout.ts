@@ -77,6 +77,8 @@ export function railLayout(p:ProjectInput):RailLayout{
  */
 export const tightJointGap=25.4/16;
 export const railJointType=(p:ProjectInput):'tight'|'open'=>p.details?.rail.jointType??'tight';
+/** Tight joints: the rail string floats in its clips between the girder-mounted end stops and may bear on either. */
+export const railBearsOnStops=(p:ProjectInput)=>railJointType(p)==='tight'&&stopEnds(p).length>0;
 /** Design gap at a rail joint: the entered gap for open joints, at most 1/16 in for tight joints. */
 export const railJointGap=(p:ProjectInput)=>{const g=p.details?.rail.jointGap??0;return railJointType(p)==='tight'?Math.min(g,tightJointGap):g;};
 /**

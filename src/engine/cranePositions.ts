@@ -1,4 +1,5 @@
 import type {ProjectInput} from './types';
+import {craneTravel,stopContacts} from './craneTravel';
 
 /**
  * Crane origins sampled for the moving-load search. `after` marks a crane placed at closest approach
@@ -29,11 +30,13 @@ function maximumMomentOrigins(offsets:number[],loads:number[],spans:[number,numb
 export function cranePositions(p:ProjectInput,steps:number,stations:number[]):CranePosition[][]{
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const spans=p.spans.map((_,i)=>[supports[i],supports[i+1]] as [number,number]);
- const within=(k:number,o:number)=>o>=p.cranes[k].travelStart-1e-9&&o<=p.cranes[k].travelEnd+1e-9;
+ const travel=p.cranes.map((_,k)=>craneTravel(p,k)),within=(k:number,o:number)=>o>=travel[k].start-1e-9&&o<=travel[k].end+1e-9;
  const loaded=(k:number)=>p.cranes[k].wheels.map(w=>w.loaded);
  const aligned=p.cranes.map(()=>new Set<number>());
  const sets=p.cranes.map((c,k)=>{
-  const o=new Set<number>(Array.from({length:steps+1},(_,i)=>c.travelStart+(c.travelEnd-c.travelStart)*i/steps));
+  const {start,end}=travel[k],o=new Set<number>(Array.from({length:steps+1},(_,i)=>start+(end-start)*i/steps));
+  // The crane at each stop it strikes: the stop combinations act there alone.
+  for(const v of stopContacts(p,k))o.add(v.origin);
   for(const v of maximumMomentOrigins(c.wheels.map(w=>w.offset),loaded(k),spans))if(within(k,v))o.add(v);
   for(const x of stations)for(const w of c.wheels){const v=x-w.offset;if(within(k,v)&&!o.has(v)){o.add(v);aligned[k].add(v);}}
   return o;

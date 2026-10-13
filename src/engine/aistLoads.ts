@@ -42,10 +42,10 @@ export function combinationLabel(id:string){
  */
 export function combinationBasis(method:ProjectInput['method'],id:string):{tr13:string;asce:string}{
  const lrfd:Record<string,string>={'1':'§2.3.1 (1)','1a':'§2.3.1 (1)','2':'§2.3.1 (2)','2a':'§2.3.1 (2)','2b':'§2.3.1 (2)','2c':'§2.3.1 (2)','3a':'§2.3.1 (3)','4a':'§2.3.1 (4)',
-  '6/7':'§2.3.1 (5), §2.3.6 (7)','7a':'§2.3.1 (5), §2.3.6 (7)','8':'crane stop, 1.2D','9':'crane case, 0.9D','10-T':'crane case, 0.9D','10-B':'crane stop, 0.9D','C1':'§2.3.1 (2)','5a':'§2.3.6 (6)'};
+  '6/7':'§2.3.1 (5), §2.3.6 (7)','7a':'§2.3.1 (5), §2.3.6 (7)','8':'crane stop, 1.2D','9':'crane case, 0.9D','10-T':'crane case, 0.9D','10-B':'crane stop, 0.9D','C1':'§2.3.1 (2), §4.9','A2b':'§2.3.1 (2), §4.9','A2c':'§2.3.1 (2), §4.9','5a':'§2.3.6 (6)'};
  const asd:Record<string,string>={'1':'§2.4.1 (1)','1a':'§2.4.1 (1)','2':'§2.4.1 (2)','2a':'§2.4.1 (2)','2b':'§2.4.1 (2)','4a':'§2.4.1 (4)','4b':'§2.4.1 (4)','5a':'§2.4.1 (1)','6a1':'§2.4.1 (6)',
   '7':'§2.4.1 (7)','8':'§2.4.1 (7)','9':'crane stop, 1.0D','10':'crane case, 0.6D','11-T':'crane case, 0.6D','11-B':'crane stop, 0.6D','C1':'§2.4.1 (2)'};
- return {tr13:id==='C1'?'—':combinationLabel(id),asce:(method==='LRFD'?lrfd:asd)[id]??'—'};
+ return {tr13:id==='C1'?'—':/^A2[bc]$/.test(id)?`${id.slice(1)} with C_d as L`:combinationLabel(id),asce:(method==='LRFD'?lrfd:asd)[id]??'—'};
 }
 /**
  * Combinations evaluated but not listed in the report: in the runway-only projection (no roof live, snow, rain, wind or
@@ -62,20 +62,27 @@ export function combinationOmissions(method:ProjectInput['method']):{id:string;r
 // runway-only projections: roof, wind, seismic, fluid, soil and thermal loads
 // require a separate building/load-path design. L is the entered runway UDL.
 /**
- * AIST TR-13 crane combinations. With `concurrent`, the plain ASCE 7 reading is added: every crane load is
- * live load, so impact acts with side thrust and with every crane present (no single-crane restriction).
+ * AIST TR-13 crane combinations and their ASCE 7 reading. ASCE 7-16 §4.9 makes every crane load, the crane weight C_d
+ * included, a live load: LRFD A2b and A2c repeat 2b and 2c with C_d factored 1.6 as L, so the runway envelope covers
+ * both readings (in ASD every crane load is factored 1.0 either way). With `concurrent`, the fully concurrent reading is
+ * added: impact with side thrust and with every crane present (no single-crane restriction).
  */
 export function craneCombinations(method:ProjectInput['method'],concurrent=false):CraneCombination[]{
- const all=tr13Combinations(method);
+ const all=[...tr13Combinations(method),...(method==='LRFD'?asceRunwayCombinations:[])];
  if(!concurrent)return all;
  return [...all,...(method==='LRFD'?[
   // ASCE 7 2.3.1 combination 2, with all crane loads as L.
-  {id:'C1',equation:'1.2(D+C_d)+1.6(C_v+C_i+C_{ss}+C_{ls}+L)',d:1.2,cd:1.2,cv:1.6,h:1.6,l:1.6,i:1.6,live:1.6,bumper:0}
+  {id:'C1',equation:'1.2D+1.6(C_d+C_v+C_i+C_{ss}+C_{ls}+L)',d:1.2,cd:1.6,cv:1.6,h:1.6,l:1.6,i:1.6,live:1.6,bumper:0}
  ]:[
   // ASCE 7 2.4.1 combination 2, with all crane loads as L.
   {id:'C1',equation:'D+C_d+C_v+C_i+C_{ss}+C_{ls}+L',d:1,cd:1,cv:1,h:1,l:1,i:1,live:1,bumper:0}
  ])];
 }
+// ASCE 7-16 §2.3.1 combination 2 with every crane load as L (§4.9), impact and side thrust apart as in TR-13 2b / 2c.
+const asceRunwayCombinations:CraneCombination[]=[
+ {id:'A2b',equation:'1.2D+1.6(C_{dm}+C_{vm}+C_{ss}+C_{ls}+L)',d:1.2,cd:1.6,cv:1.6,h:1.6,l:1.6,i:0,live:1.6,bumper:0},
+ {id:'A2c',equation:'1.2D+1.6(C_{ds}+C_{vs}+C_i+C_{ls}+L)',d:1.2,cd:1.6,cv:1.6,h:0,l:1.6,i:1.6,live:1.6,bumper:0,single:true}
+];
 function tr13Combinations(method:ProjectInput['method']):CraneCombination[]{
  if(method==='LRFD')return [
   {id:'1',equation:'1.4D',d:1.4,cd:0,cv:0,h:0,l:0,i:0,live:0,bumper:0},

@@ -1,4 +1,5 @@
 import {finiteLife,fatigueCoefficient,fatigueThreshold,KSI} from './fatigueConstants';
+import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
 import {flangeTieGeometry,tiePlies} from './tieGeometry';
@@ -19,7 +20,10 @@ import type { FatigueDetailResult,InterfaceAction,RunwayCaseRecord,RunwayDetailR
 import { railClipResponse } from './railClip';
 import { railTopAboveSteel,railClipInput } from './railSeat';
 import {tractionBays,railClipStations,girderSegments,independentBearings,endGridOverhang,endGridCentered} from './simpleSupports';
-import {activeEndStop,craneAtStop,stopBoltRows,stopEnds} from './endStopInputs';
+import {activeEndStop,stopBoltRows,stopEnds} from './endStopInputs';
+import {craneAtStop} from './craneTravel';
+import {railBearsOnStops} from './railLayout';
+import {restraintClearances,secantStiffness} from './restraintClearance';
 import {activeEndBearing,locatingSupport} from './endBearingInputs';
 import {craneCombinations} from './aistLoads';
 import {runwayEnds} from './continuation';
@@ -122,21 +126,24 @@ export function automaticFatigueDetails(p:ProjectInput){
  * Where the girder's longitudinal force reaches the supports. Simple bays: traction at the locating (left) end of
  * each occupied bay, either way; the crane stop force (AIST stop combinations) only with the crane against a stop
  * (craneAtStop), on the end bay that carries that stop, toward the stop: bay 1 for the stop at the left runway end,
- * the last bay for the one at the right end, which that bay delivers to its own locating end. A continuous girder
- * with bolted bearings locates at one support; otherwise the runway ends take it.
+ * the last bay for the one at the right end, which that bay delivers to its own locating end. A floating rail string
+ * between girder-mounted stops (tight joints) carries traction either way: no rail-seat friction is relied on, so it
+ * reaches the girder under the driven wheels (the occupied bays) or, once the string has crept against a stop,
+ * through that stop into its end bay, toward the stop, wherever the crane is (`rail`). A continuous girder with
+ * bolted bearings locates at one support; otherwise the runway ends take it.
  */
 export function longitudinalPaths(p:ProjectInput,supports:number[]){
  const stops=new Set(craneCombinations(p.method).filter(c=>c.bumper>0).map(c=>`${p.method} ${c.id}`));
  const ends=stopEnds(p).length?stopEnds(p):runwayEnds(p),stopBays=[...(ends.includes('left')?[{bay:1,sign:-1}]:[]),...(ends.includes('right')?[{bay:p.spans.length,sign:1}]:[])];
- const L=supports.at(-1)!,locating=p.system==='continuous'&&activeEndBearing(p)?supports[locatingSupport(p)]:undefined;
+ const L=supports.at(-1)!,locating=p.system==='continuous'&&activeEndBearing(p)?supports[locatingSupport(p)]:undefined,railString=railBearsOnStops(p);
  // The stop the crane is against, toward which its stop force acts.
  const struckBy=(e:RunwayCaseEvent)=>{const crane=e.cranes.find(c=>c.index===e.horizontalCrane),end=e.stop??(crane&&craneAtStop(p,crane.index,crane.origin));return stopBays.filter(v=>v.sign===(end==='left'?-1:end==='right'?1:0));};
  return {
-  actions(e:RunwayCaseEvent):{bay:number;sign:number}[]{
+  actions(e:RunwayCaseEvent):{bay:number;sign:number;rail?:boolean}[]{
    const stop=stops.has(e.combination);
    if(p.system!=='simple')return stop?struckBy(e).map(v=>({bay:-1,sign:v.sign})):[{bay:-1,sign:-1},{bay:-1,sign:1}];
    const occupied=tractionBays(p,e);
-   if(!stop)return occupied.flatMap(bay=>[-1,1].map(sign=>({bay,sign})));
+   if(!stop){const local=occupied.flatMap(bay=>[-1,1].map(sign=>({bay,sign})));return railString?[...local,...stopBays.filter(v=>!local.some(w=>w.bay===v.bay&&w.sign===v.sign)).map(v=>({...v,rail:true}))]:local;}
    const struck=struckBy(e).filter(v=>occupied.includes(v.bay));
    return struck.length?struck:[{bay:-1,sign:1}];
   },
@@ -144,7 +151,12 @@ export function longitudinalPaths(p:ProjectInput,supports:number[]){
   stopBays
  };
 }
-export function createDetailCollector(p:ProjectInput,props:Properties,subdivisions:number){
+/**
+ * `braceForce`: the Appendix 6 brace force P_br of the design envelope (braceImperfection); restraints with play enter
+ * the buckling eigenvalue at their secant stiffness with the play taken up at that force. Without it, the stiffness
+ * after contact throughout.
+ */
+export function createDetailCollector(p:ProjectInput,props:Properties,subdivisions:number,braceForce?:number){
  const bracket=createBracketCollector(p);
  const existingBracket=createExistingBracketCollector(p);
  const rolledBracket=createRolledBracketCollector(p);
@@ -162,6 +174,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const bottomK=(x:number)=>ebK&&supports.some(v=>Math.abs(v-x)<=1e-6)?ebK:brace.stiffness;
  // On a column cap no tie reaches the top flange: the bearing stiffeners and the bolted bottom flange form a fork.
  const forkK=columnCap&&eb?capForkStiffness(p).k:0,topK=(x:number)=>forkK&&supports.some(v=>Math.abs(v-x)<=1e-6)?forkK:brace.stiffness;
+ // Play in the support restraints: the top tie at the supports and the sliding bearing (right) end of each simple bay.
+ // Girder-end hardware on the seats (bearing plate and stiffeners at each girder end, end stops at the runway ends).
+ const steel=newSteelTakeoff(p),endHardware=(bay:number,end:'left'|'right')=>steel.perEnd+(bay===0&&end==='left'&&steel.stops.includes('left')||bay===p.spans.length-1&&end==='right'&&steel.stops.includes('right')?steel.stopEach:0);
+ const gridHardware=(x:number)=>steel.grid[supports.findIndex(v=>Math.abs(v-x)<1e-6)]??0;
+ const clearance=restraintClearances(p),gapped=clearance.top.gap>0||clearance.bottom.gap>0,atSupport=(x:number)=>!forkK&&supports.some(v=>Math.abs(v-x)<=1e-6),gapK=(k:number,gap:number,P:number)=>gap>0?secantStiffness(k,gap,P):k;
  const bearings=independentBearings(p),adjacent=adjacentBays(p);
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
  const detailInputs=automaticFatigueDetails(p);
@@ -188,7 +205,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const braceFatigue={min:0,max:0},braceEndFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
  // Unfactored dead load for the Appendix 3.1 peak and the register peaks: major bending from the girder, cap, rail and
  // entered live load; torsion of each bay from the eccentric rail weight, with the modeled restraints. Solved once.
- const deadQ=p.deadLoad+p.railWeight+props.weight+(p.aist?.liveLoad??0),deadTorsion=new Map<number,ReturnType<LateralTorsionBeam['solve']>>();
+ const deadQ=girderDeadLoad(p,props.weight)+(p.aist?.liveLoad??0),deadTorsion=new Map<number,ReturnType<LateralTorsionBeam['solve']>>();
  let deadVertical:ReturnType<typeof vertical.evaluate>|undefined;
  const deadBay=(bay:number)=>{let t=deadTorsion.get(bay);if(!t){const [start,end]=groups[bay];
   t=new LateralTorsionBeam({length:end-start,E,G,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
@@ -225,17 +242,25 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const bayKey=JSON.stringify([e.kind,bin,bayIndex,wheels.map(w=>[w.x,w.p,w.h]),e.q,e.railTorquePerLength,strength?e.axial:0,strength?totalH:0]);
    let restraintForces=bayStates.get(bayKey),r:ReturnType<LateralTorsionBeam['solve']>|undefined;
    if(!restraintForces){
-   const beam=new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
+   // Restraints with play (restraintClearances) enter the buckling eigenvalue of the strength cases at their secant
+   // stiffness, the play taken up at the Appendix 6 brace force of the design envelope (AISC 360-16 Appendix 6.3.1b,
+   // as the brace stiffness check). The stresses use the stiffness after contact: in a bay restrained at its ends the
+   // play only moves it as a rigid body (the rail-head check adds that movement; clearanceEffects bounds the twist
+   // between its ends).
+   const brScale=strength&&gapped?braceForce??0:0;
+   const restraintsAt=(secant:boolean)=>stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?gapK(topK(x),secant&&atSupport(x)?clearance.top.gap:0,brScale)*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?gapK(bottomK(x),secant&&ebK&&Math.abs(x-end)<1e-6?clearance.bottom.gap:0,brScale)*stiffnessFactor:0}));
+   const beamWith=(restraints:ReturnType<typeof restraintsAt>)=>new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
     loads:wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),
-    restraints:stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?topK(x)*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?bottomK(x)*stiffnessFactor:0})),
+    restraints,
     axial:strength?e.axial:0,moment:strength?x=>moment(x+start):undefined,
     distributedTorque:e.railTorquePerLength,
     // Apply the full UDL at rail height for the stability test conservatively.
     distributedVertical:strength?e.q:0,distributedHeight:z
    });
+   const beam=beamWith(restraintsAt(false)),stability=strength&&brScale>0?beamWith(restraintsAt(true)):beam;
    let ownMultiplier:number|undefined;
-   if(strength&&!beam.isStable(result.criticalMultiplier)){
-    const critical=beam.criticalMultiplier(result.criticalMultiplier);
+   if(strength&&!stability.isStable(result.criticalMultiplier)){
+    const critical=stability.criticalMultiplier(result.criticalMultiplier);
     if(critical.value<result.criticalMultiplier){result.criticalMultiplier=critical.value;result.governing.criticalMultiplier={id:e.id,combination:e.combination,x:start,value:critical.value};ownMultiplier=critical.value;}
    }
    const geometry=strength?(p.method==='LRFD'?1:1.6):0;
@@ -259,9 +284,9 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
      // This case's multiplier is at least the least one found so far, which bounds its strength from below.
      const bound=M/c.capacity(result.criticalMultiplier*M/.8);
      const threshold=.8*c.criticalFor(M/loadHeight.utilization)/M;
-     if(bound>loadHeight.utilization&&threshold>0&&!beam.isStable(threshold)){
+     if(bound>loadHeight.utilization&&threshold>0&&!stability.isStable(threshold)){
       let lambda=ownMultiplier;
-      if(lambda===undefined){let lo=Math.min(result.criticalMultiplier,threshold),hi=threshold;if(!beam.isStable(lo))lo=0;for(let i=0;i<30;i++){const mid=(lo+hi)/2;if(beam.isStable(mid))lo=mid;else hi=mid;}lambda=lo;}
+      if(lambda===undefined){let lo=Math.min(result.criticalMultiplier,threshold),hi=threshold;if(!stability.isStable(lo))lo=0;for(let i=0;i<30;i++){const mid=(lo+hi)/2;if(stability.isStable(mid))lo=mid;else hi=mid;}lambda=lo;}
       const critical=lambda*M/.8,capacity=c.capacity(critical);
       record(M/capacity,capacity,critical);
      }
@@ -272,7 +297,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    }
    if(p.system==='simple')for(const [endName,x] of [['left',start],['right',end]] as const){
     const lateral=restraintForces.find(re=>Math.abs(re.x-(x-start))<1e-6)!;
-    const vertical=e.q*(end-start)/2+wheels.reduce((sum,w)=>sum+w.p*(endName==='left'?(end-w.x):(w.x-start))/(end-start),0);
+    const vertical=e.q*(end-start)/2+wheels.reduce((sum,w)=>sum+w.p*(endName==='left'?(end-w.x):(w.x-start))/(end-start),0)+(e.deadFactor??0)*endHardware(bayIndex,endName);
     const bearing=bearings.find(v=>v.bay===bayIndex+1&&v.end===endName)!;
     endActions.push({x,bay:bayIndex+1,end:endName,vertical,top:lateral?.top??0,bottom:lateral?.bottom??0,longitudinal:0,offset:bearing.center-x});
    }
@@ -344,9 +369,9 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const here=splits.map(s=>({tag:s.tag,ends:s.ends.filter(v=>Math.abs(v.x-x)<1e-6)})),out:{id:string;sign:number;couple:number;ends?:typeof endActions}[]=[];
    for(const [i,s] of here.entries()){
     if(i&&s.ends.every((v,j)=>v.vertical===here[0].ends[j].vertical))continue;
-    for(const {bay,sign} of actions){
+    for(const {bay,sign,rail} of actions){
      const couple=(v:{bay:number;end:'left'|'right';existing?:boolean})=>v.bay===bay&&!v.existing?(v.end==='left'?-1:1)*sign*(e.longitudinalCouple??0)/p.spans[v.bay-1]:0;
-     out.push({id:simple?`${e.id}-T${bay}${s.tag}`:e.id,sign,couple:s.ends.reduce((a,v)=>a+couple(v),0),ends:simple?s.ends.map(v=>({...v,vertical:v.vertical+couple(v),longitudinal:v.bay===bay&&v.end==='left'?sign*e.axial:0})):undefined});
+     out.push({id:simple?`${e.id}-${rail?'R':'T'}${bay}${s.tag}`:e.id,sign,couple:s.ends.reduce((a,v)=>a+couple(v),0),ends:simple?s.ends.map(v=>({...v,vertical:v.vertical+couple(v),longitudinal:v.bay===bay&&v.end==='left'?sign*e.axial:0})):undefined});
     }
    }
    return out;
@@ -363,7 +388,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const endBearingOffset=(x:number)=>simple?0:Math.abs(x-supports[0])<1e-6?seatOffset({end:'left',offset:Lbr/2},Lbr):Math.abs(x-supports.at(-1)!)<1e-6?seatOffset({end:'right',offset:-Lbr/2},Lbr):0;
   const supportSet=(x:number,c:ReturnType<typeof concurrent>[number]):SupportForceSet=>{
    const r=reactions.get(x)??{top:0,bottom:0},ends=c.ends??[],at=(v?:{x:number;r:number}[])=>v?.find(w=>Math.abs(w.x-x)<1e-6)?.r??0;
-   const vertical=c.ends?ends.reduce((a,v)=>a+v.vertical,0):at(e.verticalReactions)+at(e.adjacentReactions)+c.couple;
+   const vertical=c.ends?ends.reduce((a,v)=>a+v.vertical,0):at(e.verticalReactions)+at(e.adjacentReactions)+c.couple+(e.deadFactor??0)*gridHardware(x);
    return {id:c.id,combination:e.combination,vertical,moment:c.ends?ends.reduce((a,v)=>a+v.vertical*seatOffset(v,Lbr),0):vertical*endBearingOffset(x),
     longitudinal:delivered(x,c),top:r.top,bottom:r.bottom,ends:ends.map(v=>({bay:v.bay,end:v.end,vertical:v.vertical,offset:seatOffset(v,Lbr),...(v.existing?{existing:true}:{})}))};
   };
@@ -394,7 +419,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     const support=supports.indexOf(x);
     for(const c of concurrent(x)){
      const {id,sign,couple,ends}=c;
-     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple,top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*topRestraint!+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
+     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple+(e.deadFactor??0)*gridHardware(x),top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*topRestraint!+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);else if(endBearingOffset(x))item.seatMoment=item.vertical*Math.sign(endBearingOffset(x))*Lbr/2;
      if(support>=0)forces.add(support,supportSet(x,c));
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){

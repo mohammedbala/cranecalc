@@ -1,3 +1,4 @@
+import {railBearsOnStops} from '../engine/railLayout';
 import type {CalculationSnapshot} from '../engine/types';
 import {deliveredForces,type DeliveredForces,type DeliveredSet} from '../engine/forcesDelivered';
 import {drawingElevation} from '../components/drawingFormat';
@@ -37,8 +38,8 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
   `My,seat: moment of the unbalanced end reactions about the grid (column weak axis).`,
   `H tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the tie line${d.elevation?el(d.elevation.tie):''}; design value ${f(d.tie.design)}.`,
   `H seat: bottom-flange restraint force at the bearing bolts, ∓ opposite in sign to H tie.`,
-  `F: longitudinal force at the locating bearing, + toward the next grid.${d.stopGrids.length?` Stop force ${f(d.stop)} at ${grids(d.stopGrids)} only.`:''}`,
-  `V excludes the ${support} self-weight.`].join(separator);
+  `F: longitudinal force at the locating bearing, + toward the next grid.${d.stopGrids.length?` Stop force ${f(d.stop)} at ${grids(d.stopGrids)} only.`:''}${railBearsOnStops(s.input)?' Traction reaches the bay under the crane, or through the floating rail string an end bay at its stop.':''}`,
+  `V includes the bearing hardware on the seat; the ${support} and other support steel, D_s = ${f(Math.max(0,...(s.supportReactions?.supports??[]).map(v=>v.Ds)))} per grid (dead), goes straight into the column.`].join(separator);
 }
 
 export function deliveredTableHtml(s:CalculationSnapshot,compact=false){

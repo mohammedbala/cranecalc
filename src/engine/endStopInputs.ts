@@ -56,21 +56,6 @@ export function bumperPath(p:ProjectInput,c:ProjectInput['cranes'][number]){
 export const activeEndStop=(p:ProjectInput)=>p.details?.endStop?.enabled&&needsGirderStops(p)&&runwayEnds(p).length?p.details.endStop:undefined;
 /** Modeled ends that carry a girder-mounted stop: true runway ends, not ends continued by an existing bay. */
 export const stopEnds=(p:ProjectInput)=>activeEndStop(p)?runwayEnds(p):[];
-/**
- * The runway end whose crane stop a crane is against at `origin`, or undefined: the crane stop force acts only
- * there. A crane is at a stop at the end of its entered travel toward a runway end that carries one (girder-mounted,
- * else building-mounted), its wheels at their closest approach to that stop, with a wheel on the end span. Cranes
- * are ordered along the runway: only the first reaches the left stop and only the last the right one; another
- * crane's travel limit toward that end is set by the crane beyond it, a crane-to-crane bumper case, not the stop.
- */
-export function craneAtStop(p:ProjectInput,crane:number,origin:number):'left'|'right'|undefined{
- const c=p.cranes[crane];if(!c)return undefined;
- const ends=stopEnds(p).length?stopEnds(p):runwayEnds(p),L=p.spans.reduce((a,b)=>a+b,0),tol=1e-6*Math.max(1,Math.abs(c.travelEnd-c.travelStart));
- const on=(a:number,b:number)=>c.wheels.some(w=>origin+w.offset>=a-1e-6&&origin+w.offset<=b+1e-6);
- if(crane===0&&ends.includes('left')&&Math.abs(origin-c.travelStart)<=tol&&on(0,p.spans[0]))return 'left';
- if(crane===p.cranes.length-1&&ends.includes('right')&&Math.abs(origin-c.travelEnd)<=tol&&on(L-p.spans.at(-1)!,L))return 'right';
- return undefined;
-}
 /** Where the stops go, for notes: both ends, or the one true end with its grid. */
 export function stopLocation(p:ProjectInput){
  const ends=runwayEnds(p);

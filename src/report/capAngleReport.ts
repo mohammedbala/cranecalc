@@ -2,8 +2,10 @@ import type {CalculationSnapshot,CheckResult} from '../engine/types';
 import type {Quantity} from '../engine/units';
 import {sig3} from './reportParts';
 import {capAngleResult,capAngleGroup,capAngleMovementGroup} from '../engine/capAngleTie';
-import {deliveredForces} from '../engine/forcesDelivered';
+import {braceImperfection,deliveredForces} from '../engine/forcesDelivered';
 import {capTieLine} from '../engine/capAngle';
+import {clearanceEffects,secantStiffness} from '../engine/restraintClearance';
+import {railTopAboveSteel} from '../engine/railSeat';
 
 /**
  * The tie design force on the page (M6): the top-flange restraint force of the analysis (all girder ends at a grid,
@@ -20,6 +22,22 @@ export function tieForceDerivation(s:CalculationSnapshot,F:number,range:number){
   `Required brace stiffness ${k(b.stiffness)} vs ${k(r.braceStiffness)} provided. Fatigue range ΔF = ${f(range)}.`;
 }
 
+/**
+ * How the play of the girder restraints is represented (restraintClearances): buckling at the secant stiffness, stresses
+ * after contact with the rigid-body and differential-twist bounds, and the rail-head movement with the take-up.
+ */
+export function playParagraph(s:CalculationSnapshot,f:(v:number|undefined,q?:Quantity)=>string){
+ const p=s.input,a=s.designAnalysis,props=s.properties,r=s.detailResults;if(!a||!props||!r)return '';
+ const sec=p.section,play=clearanceEffects(p,props,capTieLine(p),(sec.kind==='cap'?sec.d+sec.capTw:sec.d)+railTopAboveSteel(p));if(!play.any)return '';
+ const P=braceImperfection(p,a,props).force,k=r.braceStiffness,ks=secantStiffness(k,play.gt,P);
+ const top=play.top.source==='cap-angle'?`the angle is not clamped: it slides on its sleeves between the channel flange and the plate washers, so a reversal of the tie force first takes up g<sub>t</sub> = L<sub>sleeve</sub> − t<sub>a</sub> = ${f(play.gt)}`:play.top.source==='gusset-slot'?`the sleeves bear across the column gusset slots after g<sub>t</sub> = ${f(play.gt)}`:'the top tie is clamped (g<sub>t</sub> = 0)';
+ const bottom=play.gb>0?`the sliding bearing bears across its slot after g<sub>b</sub> = ${f(play.gb)} (${f(play.gb/2)} each way when centered); the locating bearing is clamped by its pretensioned bolts`:'the bottom flange restraint is clamped (g<sub>b</sub> = 0)';
+ return `<h3>Play at the restraints</h3><p>The stiffnesses above act after contact. At the top ${top}; at the bottom ${bottom}. The analysis represents the play as follows. `+
+  `<b>Buckling:</b> each restraint with play enters the eigenvalue analysis (load-height lateral-torsional buckling and torsional stability) at its secant stiffness, the play taken up at the Appendix 6 brace force P<sub>br</sub> = ${f(P,'force')}: k<sub>sec</sub> = (1/k + g/P<sub>br</sub>)<sup>−1</sup>${play.gt>0?` = ${f(ks,'stiffness')} for the tie, which the brace stiffness check also uses`:''}. `+
+  `<b>Stresses:</b> each bay is restrained only at its ends, so the play moves it as a rigid body; ends that take up differently twist the bay uniformly by at most Δθ = (g<sub>t</sub> + g<sub>b</sub>)/h<sub>r</sub> = ${play.theta.toExponential(2)} rad (h<sub>r</sub> = ${f(play.hr)} from the tie line to the bottom flange), a St Venant torque GJΔθ/L = ${f(play.torque,'moment')} with shear stress ${f(play.tau,'stress')} and no warping stress (φ″ = 0). `+
+  `<b>Movement:</b> the rail-head movement check adds the rigid-body take-up g<sub>t</sub> + Δθ(y<sub>r</sub> − y<sub>t</sub>) = ${f(play.rail)}. `+
+  `<b>Cyclic:</b> each reversal of side thrust slides the restraint across its play under pretensioned bolts that are not themselves cycled; the tie fatigue range is the full force reversal, and the play is reinspected with the rail ends at each periodic crane inspection.</p>`;
+}
 /** The compact report's page builders, passed in so this module adds pages without its own layout; `extra` holds the tie's rows from other tables (classification, fatigue details, the tie member). */
 export interface ReportKit {
  extra?:{classification?:string;fatigue?:string;checks?:CheckResult[]};
@@ -51,7 +69,7 @@ export function capAngleReportPages(s:CalculationSnapshot,k:ReportKit):string[]{
  return [
   page(sec('Cap tieback','cap-angle','cap-angle-movement'),intro+inputs+(x2.classification??'')+basis(tieForceDerivation(s,x.F,loads.range))
    +`<h3>Strength</h3>`+worked(strengthAll,[],['cap-angle-cap-bolt','cap-angle-col-bolt'])+numeric(strengthAll)
-   +`<h3>Stiffness and fatigue</h3><p>The tie stiffness ${f(x.stiffness,'stiffness')} is the top-flange restraint of the lateral-torsional model and of the Appendix 6 brace stiffness check. The bolt holes in the channel flange at each tie are Category ${g.cap.sleeved?'B details (pretensioned bolts)':'D details (snug-tight bolts)'}, screened in Appendix A.</p>`+stiffness+numeric(fatigue)+(x2.fatigue??'')
+   +`<h3>Stiffness and fatigue</h3><p>The tie stiffness ${f(x.stiffness,'stiffness')} is the top-flange restraint of the lateral-torsional model and of the Appendix 6 brace stiffness check. The bolt holes in the channel flange at each tie are Category ${g.cap.sleeved?'B details (pretensioned bolts)':'D details (snug-tight bolts)'}, screened in Appendix A.</p>`+stiffness+playParagraph(s,f)+numeric(fatigue)+(x2.fatigue??'')
    +`<h3>Movement</h3>`+worked(moves,[],['cap-angle-slot-travel','cap-angle-sleeve'])+numeric(moves)+`<p>End rotation moves the girder top along the runway by θ·h<sub>b</sub> (h<sub>b</sub> = ${f(g.boltHeight)}); at sliding ends thermal travel adds to it. The angle slots take both. Vertical girder movement at the tie (${f(loads.vertical)}, factored) bends the tie plate about its weak axis.</p>`,['Cap tieback'])
  ];
 }

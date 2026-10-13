@@ -1,4 +1,5 @@
 import {finiteLife,KSI} from './fatigueConstants';
+import {girderDeadLoad} from './newSteel';
 import {format} from './units';
 import type { CalculationSnapshot, CheckResult, DesignAnalysis, ProjectInput } from './types';
 import { emptyAistInputs, emptyCraneDesign, craneDesignMinimum, minimumSideShare } from './aistLoads';
@@ -157,7 +158,7 @@ export function aistChecks(s:CalculationSnapshot):CheckResult[]{
  else if(!di.fatigueReference.trim()||!di.cycleSource.trim()||!p.fatigue.detail.trim()||/^(select|owner to confirm|replace)\b/i.test(p.fatigue.detail.trim()))wait('fatigue','Fatigue','Girder detail fatigue stress range',`Calculated provisional range ${format(range,'stress',p.units,3)} at ${di.fatiguePoint}, x=${format(p.fatigue.location,'length',p.units,3)}; category ${p.fatigue.category} FSR=${format(F.FSR,'stress',p.units,3)}. Enter the actual A-3.1 detail item, fabrication description and owner stress-fluctuation basis. Detailed checks add the warping and attachment stresses.`,['aisc-fatigue','tr13-load']);
  else compare('fatigue','Fatigue','Girder detail fatigue stress range',range,F.FSR,'stress','f_{sr}=f_{max}-f_{min}\\le F_{SR}=6900(C_f/n_{SR})^{0.333}\\ge F_{TH}',`Cds+Cvs+0.5Css, no impact/factors. ${p.cranes.length>1?di.fatigueCranes==='single'?'One crane at a time (TR-13 / DG7 single-crane basis). ':'Every arrangement of the cranes present. ':''}Empty, loaded, absent and reversed lateral cases at the selected flange edge; constant-amplitude envelope. Cf=${F.Cf}, FTH=${format(F.Fth,'stress',p.units,3)}, category ${p.fatigue.category}; detail ${di.fatigueReference}: ${p.fatigue.detail}. Cycles are stress fluctuations, not crane traversals: ${di.cycleSource}. Owner must account for all wheel-induced fluctuations and variable-amplitude damage. This checks one selected detail; local weld/connection fatigue is separate.`,['aisc-fatigue','tr13-load']);
  const verticalSign=di.fatiguePoint.startsWith('top')?-1:1,edgeSign=di.fatiguePoint.endsWith('left')?-1:1;
- const verticalSystem=beamSystem(p.spans,p.section.E*props.Ix,p.system),deadQ=p.deadLoad+p.railWeight+props.weight;
+ const verticalSystem=beamSystem(p.spans,p.section.E*props.Ix,p.system),deadQ=girderDeadLoad(p,props.weight);
  const deadResponse=verticalSystem.evaluate([],deadQ),md=momentAt(p.fatigue.location,deadResponse.reactions,[],deadQ);
  const liveResponse=verticalSystem.evaluate([],di.liveLoad),ml=momentAt(p.fatigue.location,liveResponse.reactions,[],di.liveLoad);
  const flangeI=p.section.tf*p.section.bf**3/12,railQ=-verticalSign*p.railWeight*p.railEccentricity/props.h0;

@@ -1,10 +1,11 @@
 import { cranePositions, pairs } from './cranePositions';
+import {girderDeadLoad} from './newSteel';
 import { beamSystem, momentAt, type BeamResult } from './beam';
 import { adjacentReactions } from './continuation';
 import type { Analysis, Crane, Demand, EnvelopePoint, LoadCase, PointLoad, ProjectInput, Properties } from './types';
 const absMax=(a:number[])=>Math.max(0,...a.map(Math.abs));
 export function movingAnalysis(p:ProjectInput,props:Properties,subdivisions=20):Analysis {
- const length=p.spans.reduce((a,b)=>a+b,0),q=p.deadLoad+p.railWeight+props.weight;
+ const length=p.spans.reduce((a,b)=>a+b,0),q=girderDeadLoad(p,props.weight);
  const vertical=beamSystem(p.spans,p.section.E*props.Ix,p.system,undefined,subdivisions),lateral=beamSystem(p.spans,p.section.E*props.Iy,p.system,p.lateralBraceSpacing,subdivisions);
  const dead=vertical.evaluate([],q),zeroV=vertical.evaluate([]),zeroH=lateral.evaluate([]);
  const deadAdjacent=adjacentReactions(p,[],q);

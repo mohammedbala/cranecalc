@@ -1,4 +1,5 @@
 import { cranePositions, pairs } from './cranePositions';
+import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import { beamSystem, type BeamResult } from './beam';
 import { craneDesignMinimum, emptyAistInputs } from './aistLoads';
 import type { ProjectInput, Properties } from './types';
@@ -19,6 +20,8 @@ import { railTopAboveSteel } from './railSeat';
  */
 export interface SupportReaction {
  x:number; D:number; L:number; Cd:number; Cv:number; Ci:number; Css:number;
+ /** Part of D that is support steel (haunch or bracket, column stiffeners, cap tiebacks): straight into the column, not on the seat. */
+ Ds:number;
  /** Vertical reaction from Cls at the rail head about the bearing, Cls*e/L, of either sign. */
  Clv:number;
  /** Least crane vertical reaction (negative is uplift), crane loads only. */
@@ -37,7 +40,9 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
  const at=(r:BeamResult)=>stations.map(x=>r.reactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0);
  // An adjacent existing simple-span girder bearing on a modeled end support adds its own reaction there.
  const plus=(a:number[],b:number[])=>a.map((v,j)=>v+b[j]);
- const D=plus(at(vertical.evaluate([],p.deadLoad+p.railWeight+props.weight)),adjacentReactions(p,[],p.deadLoad+p.railWeight+props.weight)),Live=plus(at(vertical.evaluate([],di.liveLoad)),adjacentReactions(p,[],di.liveLoad));
+ // D: the girder, rail and attachments, the girder-end hardware on the seat and the support steel into the column
+ // (newSteelTakeoff); Ds is the support steel part.
+ const steel=newSteelTakeoff(p),D=plus(plus(at(vertical.evaluate([],girderDeadLoad(p,props.weight))),adjacentReactions(p,[],p.deadLoad+p.railWeight+props.weight)),stations.map((_,j)=>(steel.grid[j]??0)+(steel.support[j]??0))),Live=plus(at(vertical.evaluate([],di.liveLoad)),adjacentReactions(p,[],di.liveLoad));
  const positions=cranePositions(p,steps,stations);
  const responses=p.cranes.map((c,k)=>{
   const m=craneDesignMinimum(c),impact=Math.max(c.impact,m.impact);
@@ -56,7 +61,7 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
     Css:plus(at(lateral.evaluate(wheels.map(w=>({x:w.x,p:w.lateral})))).map(Math.abs),beyond(w=>w.lateral))}];
   });
  });
- const supports:SupportReaction[]=stations.map((x,j)=>({x,D:D[j],L:Live[j],Cd:0,Cv:0,Ci:0,Clv:0,Css:Math.max(0,...responses.flat().map(r=>r.Css[j])),craneMinimum:0,cranes:[]}));
+ const supports:SupportReaction[]=stations.map((x,j)=>({x,D:D[j],Ds:steel.support[j]??0,L:Live[j],Cd:0,Cv:0,Ci:0,Clv:0,Css:Math.max(0,...responses.flat().map(r=>r.Css[j])),craneMinimum:0,cranes:[]}));
  const best=stations.map(()=>-Infinity);
  const chosen:{index:number;r:typeof responses[number][number]}[]=[];
  function record(){

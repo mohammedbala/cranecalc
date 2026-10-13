@@ -17,11 +17,11 @@ export function demoFocus005RevB():ProjectInput{
  // with the trolley at its 0.19 S hook approach; rated bridge speed, bumper stroke and efficiency.
  const c=p.cranes[0];
  c.wheels=c.wheels.map(w=>({...w,loaded:7.5*kip,unloaded:3.5*kip}));
- c.loadSource='Fictitious supplier schedule DEMO-CS-05 rev B: 7.5 kip max / 3.5 kip empty per wheel on the near runway, 3.7 kip minimum on the far runway; bridge speed 100 ft/min; bumper stroke 4 in, efficiency 0.5.';
+ c.loadSource='Fictitious supplier schedule DEMO-CS-05 rev B: 7.5 kip max / 3.5 kip empty per wheel on the near runway, 3.7 kip minimum on the far runway; bridge speed 100 ft/min; bumper stroke 4 in, efficiency 0.5; end-truck bumper face 15 in beyond the end-wheel centerline.';
  c.operatingClass='Fictitious CMAA C crane; AIST Class B building (400,000 cycles counted)';
  // One driven wheel per runway: the driven-wheel load is the 7.5 kip maximum wheel load (was the old 10 kip wheel).
- Object.assign(c.design!,{drivenWheelLoad:7.5*kip,bridgeSpeed:100*ftPerMin,minWheelLoad:3.7*kip,belowHookWeight:0,bumperStroke:4*inch,bumperEfficiency:.5});
- note('Crane schedule corrected for statics: 7.5 kip max, 3.5 kip empty, 3.7 kip minimum per wheel (was 10 / 4 kip); bridge speed 100 ft/min, bumper stroke 4 in, efficiency 0.5 entered.');
+ Object.assign(c.design!,{drivenWheelLoad:7.5*kip,bridgeSpeed:100*ftPerMin,minWheelLoad:3.7*kip,belowHookWeight:0,bumperStroke:4*inch,bumperEfficiency:.5,bumperOverhang:15*inch});
+ note('Crane schedule corrected for statics: 7.5 kip max, 3.5 kip empty, 3.7 kip minimum per wheel (was 10 / 4 kip); bridge speed 100 ft/min, bumper stroke 4 in, efficiency 0.5 and the 15 in end-truck bumper overhang entered.');
  // A3 · Class B by the counted 400,000 cycles; one cycle count throughout.
  p.aist!.buildingClass='B';
  p.capDesign!.dutySource='Fictitious supplier confirms CMAA C, 5-US-ton crane; 400,000 wheel stress fluctuations (three duty bins)';

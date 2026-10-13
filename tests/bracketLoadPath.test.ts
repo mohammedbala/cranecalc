@@ -7,7 +7,7 @@ import {createSupportForceEnvelope,type SupportForceSet} from '../src/engine/bra
 import {minimumFillet} from '../src/engine/connectionStrength';
 import {bracingDesign} from '../src/engine/newColumnBracing';
 import {locatingSupport} from '../src/engine/endBearingInputs';
-import {craneAtStop} from '../src/engine/endStopInputs';
+import {craneAtStop,craneTravel,stopContacts} from '../src/engine/craneTravel';
 import type {RunwayCaseEvent} from '../src/engine/designAnalysis';
 import type {ProjectInput} from '../src/engine/types';
 
@@ -24,35 +24,51 @@ describe('longitudinal force at the supports',()=>{
   // The stop force exists only with the crane against a stop, at the end of its travel: anywhere else on the
   // runway, even on an end bay, no stop is struck and no longitudinal force reaches a support.
   for(const origin of [30*foot,2*foot,62*foot])expect(envelope(p,[event(p,'off','LRFD 8',origin,F)]).map(v=>v.longitudinal.longitudinal)).toEqual([0,0,0,0]);
-  expect([craneAtStop(p,0,c.travelStart),craneAtStop(p,0,c.travelEnd),craneAtStop(p,0,2*foot)]).toEqual(['left','right',undefined]);
+  // Without the end-truck geometry the stop contacts are the entered travel limits kept on the runway (the demo crane
+  // travels from 10 ft before grid 1, its second wheel at grid 1, to its first wheel at the far end): every wheel on it.
+  const [l,r]=stopContacts(p,0).map(v=>v.origin);
+  expect([l,r]).toEqual([0,65*foot]);
+  expect([craneAtStop(p,0,l),craneAtStop(p,0,r),craneAtStop(p,0,c.travelStart),craneAtStop(p,0,c.travelEnd),craneAtStop(p,0,2*foot)]).toEqual(['left','right',undefined,undefined,undefined]);
   // Two cranes, the second cloned with full travel as the UI adds one: the first reaches only the left stop and the
   // second only the right; each one's travel limit toward the other crane is that crane, not a stop.
   const two=cappedDemonstrationProject();two.cranes.push(structuredClone(two.cranes[0]));
-  const [a,b]=two.cranes;
-  expect([craneAtStop(two,0,a.travelStart),craneAtStop(two,0,a.travelEnd),craneAtStop(two,1,b.travelStart),craneAtStop(two,1,b.travelEnd)]).toEqual(['left',undefined,undefined,'right']);
+  expect([stopContacts(two,0).map(v=>v.end),stopContacts(two,1).map(v=>v.end)]).toEqual([['left'],['right']]);
+  expect([craneAtStop(two,0,l),craneAtStop(two,0,r),craneAtStop(two,1,l),craneAtStop(two,1,r)]).toEqual(['left',undefined,undefined,'right']);
+  // With the end-truck geometry the crane stops with its end wheel the bumper overhang less the stroke from the stop
+  // face, its travel running to those contacts.
+  const g=cappedDemonstrationProject();Object.assign(g.cranes[0].design!,{bumperOverhang:15*inch,bumperStroke:4*inch});
+  const [gl,gr]=stopContacts(g,0);
+  expect([gl.basis,gr.basis]).toEqual(['geometry','geometry']);
+  expect(gl.wheel).toBeCloseTo(gl.face!+11*inch,6);expect(gr.wheel).toBeCloseTo(gr.face!-11*inch,6);expect(gr.origin).toBeCloseTo(gr.wheel-10*foot,6);
+  expect(gl.wheel).toBeGreaterThan(gl.railEnd!);expect(craneTravel(g,0)).toEqual({start:gl.origin,end:gr.origin});
   // At the left stop it pushes RG1 toward grid 1, delivered at its locating end; its far end lifts.
-  const left=envelope(p,[event(p,'left','LRFD 8',c.travelStart,F)]);
+  const left=envelope(p,[event(p,'left','LRFD 8',l,F)]);
   expect(left.map(v=>v.longitudinal.longitudinal)).toEqual([-F,0,0,0]);expect(left[0].reversible.longitudinal).toBe(false);
   const couple=F*1000/(25*foot),stop=left[1].minBearing.ends.find(v=>v.bay===1)!;
-  const still=envelope(p,[{...event(p,'left','LRFD 8',c.travelStart,F),axial:0,longitudinalCouple:0}])[1].minBearing.ends.find(v=>v.bay===1)!;
+  const still=envelope(p,[{...event(p,'left','LRFD 8',l,F),axial:0,longitudinalCouple:0}])[1].minBearing.ends.find(v=>v.bay===1)!;
   expect(stop.vertical).toBeCloseTo(still.vertical-couple,6);
   // At the right stop it pushes RG3 toward grid 4; RG3 locates at grid 3. The event names the stop it strikes.
-  const right=envelope(p,[event(p,'right','LRFD 8',c.travelEnd,F)]);
+  const right=envelope(p,[event(p,'right','LRFD 8',r,F)]);
   expect(right.map(v=>v.longitudinal.longitudinal)).toEqual([0,0,F,0]);
-  expect(envelope(p,[{...event(p,'named','LRFD 8',c.travelEnd,F),stop:'right'}]).map(v=>v.longitudinal.longitudinal)).toEqual([0,0,F,0]);
-  // Traction reaches the occupied bay's locating end in either direction.
+  expect(envelope(p,[{...event(p,'named','LRFD 8',r,F),stop:'right'}]).map(v=>v.longitudinal.longitudinal)).toEqual([0,0,F,0]);
+  // Traction reaches the occupied bay's locating end in either direction and, through the floating rail string bearing
+  // on a stop, either end bay toward its stop with the crane on bay 2: grid 1 for RG1, grid 3 for RG3.
   const traction=envelope(p,[event(p,'drive','LRFD 2b',30*foot,F/10)]);
-  expect(traction.map(v=>Math.abs(v.longitudinal.longitudinal))).toEqual([0,F/10,0,0]);expect(traction[1].reversible.longitudinal).toBe(true);
+  expect(traction.map(v=>Math.abs(v.longitudinal.longitudinal))).toEqual([F/10,F/10,F/10,0]);expect(traction[1].reversible.longitudinal).toBe(true);
+  expect([traction[0].longitudinal.longitudinal,traction[2].longitudinal.longitudinal]).toEqual([-F/10,F/10]);expect(traction[0].reversible.longitudinal).toBe(false);
+  // Open joints anchor each rail piece to its own girder: traction stays in the occupied bay.
+  const open=cappedDemonstrationProject();open.details!.rail.jointType='open';
+  expect(envelope(open,[event(open,'drive','LRFD 2b',30*foot,F/10)]).map(v=>Math.abs(v.longitudinal.longitudinal))).toEqual([0,F/10,0,0]);
  });
  it('delivers a continuous girder\'s longitudinal force at its locating support',()=>{
   const p=demonstrationProject();p.system='continuous';p.details!.brace.flangeAttachment!.enabled=false;
   const stations=[0,1,2,3].map(i=>i*25*foot),at=stations[locatingSupport(p)];
   expect(longitudinalPaths(p,stations).continuousAt(at)).toBe(true);expect(longitudinalPaths(p,stations).continuousAt(0)).toBe(false);
-  const f=envelope(p,[event(p,'drive','LRFD 2b',30*foot,4000),event(p,'stop','LRFD 8',p.cranes[0].travelStart,20000)]);
+  const f=envelope(p,[event(p,'drive','LRFD 2b',30*foot,4000),event(p,'stop','LRFD 8',stopContacts(p,0)[0].origin,20000)]);
   expect(f.map(v=>Math.abs(v.longitudinal.longitudinal))).toEqual(stations.map(x=>x===at?20000:0));
   // Toward the stop the crane is against: the left one here, the right one at the other end of its travel.
   expect(f[locatingSupport(p)].longitudinal.longitudinal).toBe(-20000);
-  expect(envelope(p,[event(p,'stop','LRFD 8',p.cranes[0].travelEnd,20000)])[locatingSupport(p)].longitudinal.longitudinal).toBe(20000);
+  expect(envelope(p,[event(p,'stop','LRFD 8',stopContacts(p,0)[1].origin,20000)])[locatingSupport(p)].longitudinal.longitudinal).toBe(20000);
  });
 });
 
@@ -78,7 +94,7 @@ describe('bracket design force envelope',()=>{
   const p=cappedDemonstrationProject(),c=p.cranes[0],F=17793,b=p.details!.bracket!,Lbr=p.details!.bearing.length;
   const collector=createDetailCollector(p,sectionProperties(p.section),20);
   // The crane against the right stop: one concurrent set at each support, so every criterion there is that set.
-  collector.observe(event(p,'stop','LRFD 8',c.travelEnd,F));
+  collector.observe(event(p,'stop','LRFD 8',stopContacts(p,0)[1].origin,F));
   const r=collector.finish(),forces=r.bracketForces!;
   for(const v of forces)for(const k of ['maxVertical','maxMoment','minVertical','minBearing','top','bottom'] as const)expect(v[k]).toEqual(v.longitudinal);
   expect(forces[2].longitudinal.longitudinal).toBe(F);expect(forces[2].forward).toEqual(forces[2].longitudinal);expect(forces[2].backward).toBeUndefined();

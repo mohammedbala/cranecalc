@@ -1,4 +1,5 @@
 import {craneDesignMinimum} from './aistLoads';
+import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import {asceCombinations,type AsceCombination} from './asceCombinations';
 import {seatOffset} from './bracketForces';
 import {independentBearings} from './simpleSupports';
@@ -6,6 +7,7 @@ import {stopEnds} from './endStopInputs';
 import {sectionProperties} from './section';
 import type {CraneCombination} from './aistLoads';
 import type {ProjectInput,Section} from './types';
+import type {SupportReactionSet} from './supportReactions';
 
 /**
  * Supporting-column actions that the girder analysis does not hand to the column (structural review items B7–B11,
@@ -28,7 +30,7 @@ export interface SeatEnd {bay:number;end:'left'|'right';offset:number;D:number;L
  */
 export function seatEnds(p:ProjectInput):SeatEnd[][]{
  const stations=[0];for(const l of p.spans)stations.push(stations.at(-1)!+l);
- const q=p.deadLoad+p.railWeight+sectionProperties(p.section).weight,live=p.aist?.liveLoad??0,Lbr=p.details?.bearing.length??254;
+ const q=girderDeadLoad(p,sectionProperties(p.section).weight),live=p.aist?.liveLoad??0,Lbr=p.details?.bearing.length??254;
  // Largest end reaction of a span of length Lb from one crane on it alone.
  const crane=(Lb:number)=>{
   let best={Cd:0,Cv:0,Ci:0};
@@ -144,10 +146,11 @@ export function runwaySiteSeismic(p:ProjectInput){
  * wheel loads without a crane design), and the rated load only when it is rigidly secured.
  */
 export function runwayMass(p:ProjectInput,secured=false){
- const length=p.spans.reduce((a,b)=>a+b,0),line=sectionProperties(p.section).weight+p.railWeight+p.deadLoad;
+ // Both runway lines: girders, rails and every new attachment and support steel (newSteelTakeoff), with the entered additional dead load.
+ const length=p.spans.reduce((a,b)=>a+b,0),steel=newSteelTakeoff(p),line=girderDeadLoad(p,sectionProperties(p.section).weight);
  const d=p.cranes[0].design,crane=d&&d.bridgeWeight+d.trolleyWeight>0?d.bridgeWeight+d.trolleyWeight:2*Math.max(...p.cranes.map(c=>c.wheels.reduce((a,w)=>a+w.unloaded,0)));
  const lifted=secured&&d?d.ratedLoad:0;
- return {runways:2*length*line,line,crane,lifted,total:2*length*line+crane+lifted};
+ const runways=steel.total+2*length*p.deadLoad;return {runways,line,crane,lifted,steel,total:runways+crane+lifted};
 }
 export interface SeismicCraneCombination extends CraneCombination {seismic:number;}
 /** TR-13 5a and 7a with the runway seismic force, added to the runway combinations when site seismic data is given. */
@@ -160,4 +163,19 @@ export function seismicCraneCombinations(p:ProjectInput):SeismicCraneCombination
   {id:'5a-E',equation:'D+C_{dm}+0.7E+C_{vs}+L',d:1,cd:1,cv:1,h:0,l:0,i:0,live:1,bumper:0,single:true,seismic:.7},
   {id:'7a-E',equation:'0.6D+C_{dm}+0.7E',d:.6,cd:1,cv:0,h:0,l:0,i:0,live:0,bumper:0,single:true,seismic:.7}
  ];
+}
+/**
+ * Seismic coefficient C_s up to which the runway's own seismic forces (TR-13 combinations 5a and 7a) are carried by the
+ * girder, bearings, ties and supports checked for the crane forces: across, the side thrust (1.6 C_ss, or C_ss in ASD
+ * against 0.7E) at each grid against C_s times the dead and empty-crane reaction there; along, the traction (1.6 C_ls)
+ * at a locating bearing against C_s times the longest bay's dead load and the empty crane on it. The crane forces act
+ * at the rail head, above the masses, so they also bound the tie and torsion effects. Vertical seismic, 0.2S_DS·D, is
+ * well inside the lifted-load factors.
+ */
+export function runwaySeismicBound(p:ProjectInput,r:SupportReactionSet){
+ const lrfd=p.method==='LRFD',gamma=lrfd?1.6:1/.7,props=sectionProperties(p.section);
+ const across=Math.min(...r.supports.map(v=>gamma*v.Css/Math.max(v.D+v.Cd,1e-9)));
+ const crane=Math.max(0,...p.cranes.map(c=>c.wheels.reduce((a,w)=>a+w.unloaded,0)));
+ const along=gamma*r.Cls/(girderDeadLoad(p,props.weight)*Math.max(...p.spans)+crane);
+ return {across,along,bound:Math.min(across,along),gamma};
 }

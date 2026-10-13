@@ -1,4 +1,5 @@
 import {available,girderStrength} from './aiscStrength';
+import {girderDeadLoad} from './newSteel';
 import {usesRolledBracket,rolledCollectorWeld} from './rolledBracket';
 import {usesTaperedHaunch,haunchCollectorWeld} from './taperedHaunch';
 import {aiscShapeByName,loadAiscSection} from '../data/aiscSections';
@@ -68,7 +69,7 @@ export function alongSeismic(p:ProjectInput,reactions:SupportReactionSet,column:
  const runway=reactions.supports.reduce((a,v)=>a+v.D,0),crane=p.cranes.reduce((a,k)=>a+k.wheels.reduce((b,w)=>b+w.unloaded,0),0);
  const columns=reactions.supports.length*sectionProperties(column).weight*c.height,strut=strutProperties(p).weight*p.spans.reduce((a,b)=>a+b,0);
  // One girder with every crane on it reaches its locating column.
- const bayWeight=Math.max(...p.spans)*(p.deadLoad+p.railWeight+sectionProperties(p.section).weight)+crane,weight=runway+crane+columns+strut;
+ const bayWeight=Math.max(...p.spans)*girderDeadLoad(p,sectionProperties(p.section).weight)+crane,weight=runway+crane+columns+strut;
  return {basis:{SDS:cross.SDS,sdc:cross.sdc,R:s.R,Omega0:cross.integrityOnly?1:s.Omega0,Cd:s.Cd,Ie:cross.Ie,rho:1,Cs,integrityOnly:cross.integrityOnly},permitted:(s.allowed as readonly string[]).includes(cross.sdc),
   weight,QE:Cs*weight,bayWeight,QEbay:Cs*bayWeight,parts:{runway,crane,columns,strut},overstrength:!cross.integrityOnly&&cross.sdc>='C'};
 }

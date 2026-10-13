@@ -30,7 +30,7 @@ export function CraneAistInputs({crane,index,onChange,numeric}:{crane:Crane;inde
  <div className="field-grid">{field('rated bridge speed','bridgeSpeed','speed')}{field('minimum wheel load (each wheel, empty crane, trolley at the far end)','minWheelLoad')}{field('below-hook lifting devices','belowHookWeight')}</div>
  <p className="form-note">TR-13 §1.5.6.1 crane data. Wheel loads are checked for statics: this runway's maximum plus the other runway's minimum equals bridge + trolley + rated load + below-hook items.</p>
  {field('manufacturer full-speed bumper force','bumperForce')}
- <div className="field-grid">{field('bumper stroke','bumperStroke','length')}{field('bumper efficiency (0–1)','bumperEfficiency','ratio')}</div>
+ <div className="field-grid">{field('bumper stroke','bumperStroke','length')}{field('bumper efficiency (0–1)','bumperEfficiency','ratio')}{field('end-truck bumper overhang (end-wheel centerline to bumper face)','bumperOverhang','length')}</div>
  <label className="checkbox-field"><input type="checkbox" checked={d.bumperBypassesGirder} onChange={e=>onChange({bumperBypassesGirder:e.target.checked})}/>Stop load follows a designed path that bypasses this girder</label>
  <label className="checkbox-field"><input type="checkbox" checked={d.guideRollers} onChange={e=>onChange({guideRollers:e.target.checked})}/>Guide rollers · manufacturer-specific analysis required</label>
  </details>;

@@ -18,6 +18,7 @@ import { validateRunwayDetails } from './detailValidation';
 import { completeRunwayChecks } from './detailChecks';
 import { compressionFlangeGap } from './detailAnalysis';
 import { travelLimits } from './continuation';
+import {craneTravel,stopContacts} from './craneTravel';
 import { supportReactions } from './supportReactions';
 import { runwayElevations } from './drawingData';
 import { existingColumnAnalysis,existingColumnChecks,existingColumnSection,validateExistingColumn } from './existingColumn';
@@ -63,7 +64,10 @@ export function validateProject(input:unknown):string[]{
   if(p.system!=='simple')errors.push('continuation: model a continuous girder to its true runway ends; adjacent existing bays apply to simple spans only.');
   if(!p.continuation.source.trim())errors.push('continuation.source: identify the existing adjacent girders and how their spans were verified.');
  }
- p.cranes.forEach((c,i)=>{if(c.wheels[0].offset!==0)errors.push(`cranes.${i}.wheels: first wheel offset must be zero.`);for(let j=0;j<c.wheels.length;j++){const w=c.wheels[j];if(j&&w.offset<=c.wheels[j-1].offset)errors.push(`cranes.${i}.wheels.${j}: offsets must increase.`);const loaded=c.includesImpact?w.loaded/(1+c.impact):w.loaded;if(w.unloaded>loaded)errors.push(`cranes.${i}.wheels.${j}: unloaded load exceeds the loaded static load.`);}if(c.travelStart>=c.travelEnd||c.travelStart<travel.start-c.wheels.at(-1)!.offset||c.travelEnd>travel.end)errors.push(`cranes.${i}.travel: origin range must intersect the runway and end no later than ${travel.end>L?'the far end of the adjacent bay':'its length'}.`);if(!c.loadSource.trim())errors.push(`cranes.${i}.loadSource: identify the manufacturer load schedule.`);});
+ p.cranes.forEach((c,i)=>{if(c.wheels[0].offset!==0)errors.push(`cranes.${i}.wheels: first wheel offset must be zero.`);for(let j=0;j<c.wheels.length;j++){const w=c.wheels[j];if(j&&w.offset<=c.wheels[j-1].offset)errors.push(`cranes.${i}.wheels.${j}: offsets must increase.`);const loaded=c.includesImpact?w.loaded/(1+c.impact):w.loaded;if(w.unloaded>loaded)errors.push(`cranes.${i}.wheels.${j}: unloaded load exceeds the loaded static load.`);}if(c.travelStart>=c.travelEnd||c.travelStart<travel.start-c.wheels.at(-1)!.offset||c.travelEnd>travel.end)errors.push(`cranes.${i}.travel: origin range must intersect the runway and end no later than ${travel.end>L?'the far end of the adjacent bay':'its length'}.`);if(!c.loadSource.trim())errors.push(`cranes.${i}.loadSource: identify the manufacturer load schedule.`);
+  // At stop contact (bumper overhang less stroke from the stop face) the end wheel must still stand on the rail.
+  for(const v of stopContacts(p,i))if(v.railEnd!==undefined&&(v.end==='left'?v.wheel<v.railEnd:v.wheel>v.railEnd))errors.push(`cranes.${i}.design.bumperOverhang: at the ${v.end} stop the bumper overhang less the stroke leaves the end wheel off the rail; check the end-truck geometry and the stop and rail-end layout.`);
+  const reach=craneTravel(p,i);if(reach.start>=reach.end)errors.push(`cranes.${i}.design.bumperOverhang: the stop contacts leave the crane no travel between the stops.`);});
  return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateColumnBase(p),...validateLongitudinalBracing(p),...validateAdjacentBuilding(p),...validateColumnCap(p)];
 }
 export function calculate(input:ProjectInput):CalculationSnapshot {

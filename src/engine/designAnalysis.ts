@@ -1,4 +1,5 @@
 import {cranePositions,pairs} from './cranePositions';
+import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import { beamSystem, momentAt, type BeamResult } from './beam';
 import { craneCombinations, emptyAistInputs, craneDesignMinimum } from './aistLoads';
 import { interaction, type GirderStrength } from './aiscStrength';
@@ -7,7 +8,7 @@ import {cappedElasticProperties} from './capChannel';
 import {railClipStations,girderSegments} from './simpleSupports';
 import {adjacentReactions} from './continuation';
 import {railTopAboveSteel} from './railSeat';
-import {craneAtStop} from './endStopInputs';
+import {craneAtStop} from './craneTravel';
 import {runwaySiteSeismic,seismicCraneCombinations} from './columnSupport';
 
 const abs=(xs:number[])=>Math.max(0,...xs.map(Math.abs));
@@ -20,12 +21,14 @@ export interface RunwayCaseEvent {
  adjacentReactions?:{x:number;r:number}[];
  /** Strength cases: the longitudinal force times its height above the girder bearing (traction at the rail head, bumper above it). */
  longitudinalCouple?:number;
+ /** Strength cases: the dead-load factor, for the girder-end hardware on the seats (newSteelTakeoff), which is not in verticalReactions. */
+ deadFactor?:number;
  /** Crane stop combinations: the runway end whose stop the crane is against (craneAtStop). */
  stop?:'left'|'right';
 }
 export type RunwayCaseObserver=(event:RunwayCaseEvent)=>void;
 export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:GirderStrength,steps:number,mesh:number,observe?:RunwayCaseObserver):DesignAnalysis {
- const di=p.aist??emptyAistInputs,L=p.spans.reduce((a,b)=>a+b,0),q=p.deadLoad+p.railWeight+props.weight;
+ const di=p.aist??emptyAistInputs,L=p.spans.reduce((a,b)=>a+b,0),q=girderDeadLoad(p,props.weight),endSteel=newSteelTakeoff(p).grid;
  const vertical=beamSystem(p.spans,p.section.E*props.Ix,p.system,undefined,mesh);
  const cap=cappedElasticProperties(p.section),flangeI=p.section.tf*p.section.bf**3/12,topI=cap?.topI??flangeI;
  const top=beamSystem(p.spans,p.section.E*topI,p.system,p.lateralBraceSpacing,mesh);
@@ -95,7 +98,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
   // Each subset includes independent empty/loaded crane states. Minimum lifted
   // load is zero conservatively; no invented minimum manufacturer lifted load.
   if(chosen.length){
-   const serviceR=dead.reactions.map((r,j)=>r.r+deadAdjacent[j]+chosen.reduce((sum,s)=>sum+s.response.vd.reactions[j].r+s.response.vl.reactions[j].r+s.response.vi.reactions[j].r+s.response.adjacent.vd[j]+s.response.adjacent.vl[j]+s.response.adjacent.vi[j],0));
+   const serviceR=dead.reactions.map((r,j)=>r.r+(endSteel[j]??0)+deadAdjacent[j]+chosen.reduce((sum,s)=>sum+s.response.vd.reactions[j].r+s.response.vl.reactions[j].r+s.response.vi.reactions[j].r+s.response.adjacent.vd[j]+s.response.adjacent.vl[j]+s.response.adjacent.vi[j],0));
    result.serviceReaction=Math.max(result.serviceReaction,...serviceR);
   }
   for(let loadMask=0;loadMask<2**chosen.length;loadMask++){
@@ -142,7 +145,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
      const ar=dead.reactions.map((r,j)=>({x:r.x,r:factors.d*deadAdjacent[j]+factors.live*liveAdjacent[j]+chosen.reduce((sum,s,i)=>sum+factors.cd*s.response.adjacent.vd[j]+f[i]*s.response.adjacent.vl[j]+factors.i*s.response.adjacent.vi[j],0)}));
      const tr=t0.reactions.map((r,j)=>({x:r.x,r:factors.d*railT.reactions[j].r+chosen.reduce((sum,s,i)=>sum+verticalLever*(factors.cd*s.response.td.reactions[j].r+f[i]*s.response.tl.reactions[j].r+factors.i*s.response.ti.reactions[j].r)+(i===hi?(1+railLever)*(factors.h*s.response.th.reactions[j].r*sign+eh*(s.response.td.reactions[j].r+secured*s.response.tl.reactions[j].r)):0),0)}));
      const br=b0.reactions.map((r,j)=>({x:r.x,r:factors.d*railB.reactions[j].r+chosen.reduce((sum,s,i)=>sum-verticalLever*(factors.cd*s.response.bd.reactions[j].r+f[i]*s.response.bl.reactions[j].r+factors.i*s.response.bi.reactions[j].r)+(i===hi?-railLever*(factors.h*s.response.bh.reactions[j].r*sign+eh*(s.response.bd.reactions[j].r+secured*s.response.bl.reactions[j].r)):0),0)}));
-     observe?.({kind:'strength',adjacentReactions:ar,longitudinalCouple,...(stop?{stop}:{}),id:`D-${result.cases}`,combination:record.id,cranes:chosen.map((s,i)=>({index:s.index,origin:s.response.origin,loaded:full[i]})),horizontalCrane:chosen[hi]?.index??-1,lateralSign:sign,wheels,q:factors.d*q+factors.live*di.liveLoad,railTorquePerLength:factors.d*p.railWeight*p.railEccentricity,axial,verticalReactions:vr});
+     observe?.({kind:'strength',adjacentReactions:ar,longitudinalCouple,deadFactor:factors.d,...(stop?{stop}:{}),id:`D-${result.cases}`,combination:record.id,cranes:chosen.map((s,i)=>({index:s.index,origin:s.response.origin,loaded:full[i]})),horizontalCrane:chosen[hi]?.index??-1,lateralSign:sign,wheels,q:factors.d*q+factors.live*di.liveLoad,railTorquePerLength:factors.d*p.railWeight*p.railEccentricity,axial,verticalReactions:vr});
      for(let j=0;j<dead.rotation.length;j++)result.endRotation=Math.max(result.endRotation,Math.abs(factors.d*dead.rotation[j]+factors.live*live.rotation[j]+chosen.reduce((sum,s,i)=>sum+factors.cd*s.response.vd.rotation[j]+f[i]*s.response.vl.rotation[j]+factors.i*s.response.vi.rotation[j],0)));
      const vLoads=wheels.map(w=>({x:w.x,p:w.p})),tLoads=wheels.map(w=>({x:w.x,p:verticalLever*w.p+(1+railLever)*w.h})),bLoads=wheels.map(w=>({x:w.x,p:-verticalLever*w.p-railLever*w.h}));
      for(let n=0;n<samples.length+wheels.length;n++){
@@ -165,7 +168,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
      for(const x of stations)for(const side of [-1e-5,1e-5]){const station=x+side;if(station<0||station>L)continue;const V=vr.reduce((sum,r)=>sum+(r.x<=station?r.r:0),0)-wheels.reduce((sum,w)=>sum+(w.x<=station?w.p:0),0)-(factors.d*q+factors.live*di.liveLoad)*station;if(Math.abs(V)>c.shear){c.shear=Math.abs(V);shearAt=x;}}
      // Support reactions include an adjacent existing girder bearing on a modeled end support.
      // The couple can load either end of the bay that carries the force: bound both signs at every support.
-     const sr=vr.map((r,j)=>r.r+ar[j].r),shift=stations.map((_,j)=>longitudinalCouple/Math.min(...[p.spans[j-1],p.spans[j]].filter(v=>v>0)));c.reaction=Math.max(0,...sr.map((r,j)=>r+shift[j]));const reactionAt=vr[sr.reduce((k,r,j)=>r+shift[j]>sr[k]+shift[k]?j:k,0)]?.x??0;
+     const sr=vr.map((r,j)=>r.r+ar[j].r+factors.d*(endSteel[j]??0)),shift=stations.map((_,j)=>longitudinalCouple/Math.min(...[p.spans[j-1],p.spans[j]].filter(v=>v>0)));c.reaction=Math.max(0,...sr.map((r,j)=>r+shift[j]));const reactionAt=vr[sr.reduce((k,r,j)=>r+shift[j]>sr[k]+shift[k]?j:k,0)]?.x??0;
      govern('shear',c.shear,{...c,location:shearAt});govern('reaction',c.reaction,{...c,location:reactionAt});govern('uplift',Math.max(0,...sr.map((r,j)=>-(r-shift[j]))),c);govern('axial',axial,c);
      for(const w of wheels){result.wheelLoad=Math.max(result.wheelLoad,w.p);if(p.system==='simple'?stations.some(x=>Math.abs(w.x-x)<=p.section.d):Math.min(w.x,L-w.x)<=p.section.d)result.wheelNearEndLoad=Math.max(result.wheelNearEndLoad,w.p);result.torsion=Math.max(result.torsion,Math.abs(w.p*p.railEccentricity+w.h*(railTopAboveSteel(p)+flangeY)));}
      record.moment=Math.max(record.moment,c.moment);record.lateralMoment=Math.max(record.lateralMoment,c.lateralMoment);record.shear=Math.max(record.shear,c.shear);record.reaction=Math.max(record.reaction,c.reaction);record.axial=Math.max(record.axial,axial);if(c.interaction>=record.interaction){record.interaction=c.interaction;record.positions=c.positions;record.location=c.location;}
