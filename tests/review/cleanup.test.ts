@@ -183,7 +183,7 @@ describe('revision identity and consistency (m1–m9)',()=>{
  it('uses AISC 360-16 bolt groups and the Table J3.2 F_nt (m7)',()=>{
   const cover=sheets[0];
   expect(cover).toContain('ASTM F3125 GRADE A325 (GROUP A)');expect(cover).not.toContain('GROUP 120');
-  expect(cover).not.toContain('A513');expect(cover).toContain('ASTM A500 GR. C STEEL TUBE');
+  expect(cover).not.toContain('A513');expect(cover).toContain('ASTM A1085 STEEL TUBE');
   expect(body).toContain('ASTM F3125 Gr. A325 (Group A)');
   expect(html).toMatch(/0\.75\\times90(\.0+)?\\,\\mathrm\{ksi\}/);expect(html).not.toContain('89.9\\,\\mathrm{ksi}');
  });
@@ -193,7 +193,7 @@ describe('revision identity and consistency (m1–m9)',()=>{
   expect(s03).toContain('MAX. D/C 0.78 STRENGTH');
   expect(sheets.join('')).not.toContain('CAP-CS-02');
   expect(body).toMatch(/Bumper, deceleration at 50% speed Peak deceleration at 50% of the rated speed 2\.08 ft\/s² against 16 ft\/s²[^]*?2\.08 ft\/s²/);
-  expect(body).toMatch(/Energy at 100% speed 0\.31 kip-ft/);
+  expect(body).toMatch(/Energy at 100% speed W ?E ?v ?²\/2g = 0\.31 kip-ft \(W ?E = 7\.\d+ kip\)/);
  });
  it('takes the minimum fillet by the thinner part joined (m6)',()=>{
   expect(filletMinimum([3/8*inch,0.71*inch])).toBeCloseTo(3/16*inch,9);

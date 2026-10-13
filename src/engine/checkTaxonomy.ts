@@ -280,7 +280,7 @@ interface MergeDef{key:string;title:string;re:RegExp;prefer?:RegExp;effect?:Effe
  */
 export const mergeDefs:MergeDef[]=[
  {key:'girder-combined',title:'Combined actions at each flange: AISC H1 with the DG7 flange lateral moment, and normal stress with warping (top and bottom flange)',re:/^(combined|combined-bottom|minor|torsion-normal|torsion-normal-bottom)$/},
- {key:'girder-ltb',effect:'flexure',title:'Major flexure and lateral-torsional buckling with load height (AISC F2 / F4, Cb from the elastic buckling analysis)',re:/^(major|flexure-load-height|torsion-stability)$/,prefer:/^flexure-load-height$/,always:true},
+ {key:'girder-ltb',effect:'flexure',title:'Major flexure and lateral-torsional buckling with load height (AISC Chapter F, Cb from the elastic buckling analysis)',re:/^(major|flexure-load-height|torsion-stability)$/,prefer:/^flexure-load-height$/,always:true},
  {key:'girder-shear',title:'Web shear including Saint-Venant and warping shear',re:/^(shear|torsion-shear)$/,prefer:/^shear$/},
  {key:'wheel-local',title:'Web local yielding and crippling under the wheel (TR-13 §5.8.6 bearing length, J10.2, J10.3)',re:/^(wheel-yield|wheel-cripple|wheel-web-tr13)$/},
  {key:'girder-stiffeners',effect:'local',title:'Girder bearing stiffeners (column buckling, fitted bearing, welds)',re:/^(stiffener-column|stiffener-bearing|stiffener-weld|stiffener-combined-weld|stiffener-lateral-flexure)$/},

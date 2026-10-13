@@ -134,7 +134,9 @@ export function sizeTaperedHaunch(p:ProjectInput,target=.9):ProjectInput{
   }
   else if(key==='shear')grow({webThickness:h.webThickness+inch/16});
   else if(key==='strip')grow({topThickness:h.topThickness+inch/8});
-  else if(key==='stiffener'||key==='stiffenerWeld'||key==='stiffenerFatigue'){h.stiffener.thickness+=h.stiffener.thickness<inch/2?inch/16:inch/8;if(key!=='stiffener')h.stiffener.weld+=inch/16;}
+  else if(key==='stiffener'||key==='stiffenerWeld'||key==='stiffenerFatigue'){h.stiffener.thickness+=h.stiffener.thickness<inch/2?inch/16:inch/8;if(key!=='stiffener')h.stiffener.weld+=inch/16;
+   // An end plate is as thick as the stiffeners: lengthen the haunch so the bearing plate still lies wholly on it.
+   const need=b.reach+d.bearing.width/2+(h.endPlate?h.stiffener.thickness:0);if(b.seatProjection<need-1e-6)b.seatProjection=Math.ceil(need/(inch/4)-1e-9)*inch/4;}
   else if(key==='flangeWeb')grow({flangeWebWeld:h.flangeWebWeld+inch/16});
   else if(key==='webWeld'){if(b.rootWeld+inch/16<=h.webThickness-inch/16)b.rootWeld+=inch/16;else grow({webThickness:h.webThickness+inch/16});}
   else if(key==='deflection'||thick)deeper();

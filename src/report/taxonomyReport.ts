@@ -66,7 +66,7 @@ export function openItemsBlock(tax:Taxonomy,s:CalculationSnapshot){
 const governingTitle=(t:string)=>(/fatigue/i.test(t.replace(/\s*·\s*fatigue$/i,''))?t.replace(/\s*·\s*fatigue$/i,''):t).replace(/\s*·\s*/g,', ');
 /** The pass banner: never "no failed checks" while an open item exists. */
 export function banner(tax:Taxonomy,draft=false){
- const n=tax.openItems.length,g=tax.governing,gov=g?` Governing D/C = ${dcText(g.dc,2)}: ${esc(governingTitle(g.title))} (${esc(g.element)}).`:'';
+ const n=tax.openItems.length,g=tax.governing,gov=g?` Governing D/C = ${dcText(g.dc,2)} (${esc(g.element)}): ${esc(governingTitle(g.title))}.`:'';
  const head=draft?'<b>REVIEW DRAFT — NOT FOR ISSUE.</b> Open items include missing input (unverified); the calculation cannot be issued until they are resolved.<br/>':'';
  if(n){const kinds=[...new Set(tax.openItems.map(o=>kindLabel[o.kind].toLowerCase()))];return `<div class="banner fail">${head}<b>${n} OPEN ITEM${n>1?'S':''} — REVIEW REQUIRED, DO NOT ISSUE FOR CONSTRUCTION</b><br/>${esc(kinds.join('; '))}: listed below.${gov}</div>`;}
  return `<div class="banner"><b>All design checks satisfied.</b>${gov}</div>`;
@@ -112,7 +112,7 @@ export function fatigueTable(tax:Taxonomy,units:Units,o:{basis?:boolean}={}){
  const basis=o.basis===false?'':`<p><b>Basis.</b> AISC 360-16 Appendix 3 at n<sub>SR</sub> = ${n}, the total of the duty bins. ${miner?`D/C = f<sub>sr,eq</sub>/F<sub>SR</sub>, with f<sub>sr,eq</sub> = (Σn<sub>i</sub>f<sub>sr,i</sub><sup>3</sup>/n<sub>SR</sub>)<sup>1/3</sup> (Miner’s rule, no threshold credit). The largest bin range applied to all cycles, f<sub>sr,max</sub>/F<sub>SR</sub>, is shown for comparison; where a detail has no Miner ratio (—) it is the design ratio. The design ratio is in bold.`:`D/C = f<sub>sr,max</sub>/F<sub>SR</sub>, the largest bin range applied to all cycles; the Miner ratio f<sub>sr,eq</sub>/F<sub>SR</sub> is shown for comparison. The design ratio is in bold.`} Details whose largest range is below F<sub>TH</sub> are screened (Appendix A); a weld root, Category C″ with R<sub>FIL</sub> &lt; 1 (Eq. A-3-6), has no threshold.</p>`;
  return basis
   +(F.evaluated.length?`<table class="checks fatigue-table"><colgroup><col style="width:27%"/><col style="width:8%"/><col style="width:7%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:9%"/><col style="width:7%"/></colgroup><thead><tr><th>Detail and location</th><th>Cat.</th><th>F<sub>TH</sub></th><th>F<sub>SR</sub> at n<sub>SR</sub></th><th>f<sub>sr,max</sub></th><th>f<sub>sr,eq</sub></th><th>Σn<sub>i</sub>/N<sub>i</sub></th><th>Miner f<sub>sr,eq</sub>/F<sub>SR</sub></th><th>All-cycle f<sub>sr,max</sub>/F<sub>SR</sub></th><th>Result</th></tr></thead><tbody>${F.evaluated.map((r,i)=>row(r,i)).join('')}</tbody></table>`:'')+peak
-  +(F.screened.length?`<p class="others">Screened details (${F.screened.length}), closest to F<sub>TH</sub>: ${[...F.screened].filter(r=>r.range!==undefined&&r.threshold).sort((a,b)=>b.range!/b.threshold!-a.range!/a.threshold!).slice(0,4).map(r=>`${esc(checkTitle(r.title))} ${stress(r.range,units)} vs ${stress(r.threshold,units)}`).join('; ')}.</p>`:'');
+  +(F.screened.length?`<p class="others">Screened details (${F.screened.length}), closest to F<sub>TH</sub>: ${[...F.screened].filter(r=>r.range!==undefined&&r.threshold).sort((a,b)=>b.range!/b.threshold!-a.range!/a.threshold!).filter((r,i,a)=>a.findIndex(o=>Math.abs(o.range!-r.range!)<=1e-6*Math.max(1,r.range!)&&o.threshold===r.threshold)===i).slice(0,4).map(r=>`${esc(checkTitle(r.title))} ${stress(r.range,units)} vs ${stress(r.threshold,units)}`).join('; ')}.</p>`:'');
 }
 
 const margin=(c:CheckResult,units:Units)=>{
@@ -175,7 +175,7 @@ export function verificationLine(tax:Taxonomy){
  const bad=v.filter(t=>t.check.status!=='pass'),eq=v.filter(t=>/equilibrium|residual/i.test(`${t.check.id} ${t.check.title}`)),fine=v.filter(t=>!eq.includes(t));
  const util=(w:TaxonEntry[])=>Math.max(0,...w.map(t=>t.check.utilization??0)),pct=(x:number)=>`${+(x*100).toFixed(2)}%`;
  const change=Math.max(0,...fine.map(t=>t.check.demand??0)),tol=Math.max(0,...fine.map(t=>t.check.capacity??0));
- const parts=[eq.length?`equilibrium residuals are within ${pct(util(eq))} of their tolerances`:'',fine.length?`halving the travel step, station spacing and warping mesh changes the governing results by less than ${pct(tol)} (largest ${pct(change)})`:''].filter(Boolean);
+ const parts=[eq.length?`the largest equilibrium residual is ${pct(util(eq))} of its tolerance`:'',fine.length?`halving the travel step, station spacing and warping mesh changes the governing results by less than ${pct(tol)} (largest ${pct(change)})`:''].filter(Boolean);
  return `<p class="verified"><b>Verification:</b> ${parts.join('; ')}${bad.length?`; <b>${bad.length} NOT MET</b>`:''}. Values: Appendix A.</p>`;
 }
 

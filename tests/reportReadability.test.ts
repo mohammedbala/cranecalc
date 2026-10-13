@@ -45,7 +45,7 @@ describe('compact, readable calculation report',()=>{
   // Each check group states its loads and governing case, and the girder flexure and shear are worked with numbers.
   expect(html.match(/<p class="basis">/g)!.length).toBeGreaterThan(12);
   const girder=html.slice(at('Runway girder, strength and stability'),at('Runway girder serviceability'));
-  expect(girder).toContain('class="basis"');expect(girder).toContain('class="worked"');expect(girder).toContain('LRFD 2c');
+  expect(girder).toContain('class="basis"');expect(girder).toMatch(/class="(worked|hand-calc)"/);expect(girder).toContain('LRFD 2c');
   expect(girder.match(/<span class="katex-display">/g)!.length).toBeGreaterThanOrEqual(3);
   expect(html).not.toContain('@@ref');expect(html).not.toMatch(/sections? —/);
   // Loads and analysis results to three significant figures, positions to 0.1 ft.

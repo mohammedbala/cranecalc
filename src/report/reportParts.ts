@@ -24,7 +24,7 @@ const esc=(v:unknown)=>caseLabel(String(v??'')).replace(/[&<>"']/g,c=>({'&':'&am
 /** Short names of the register titles, as a plan reviewer cites them. */
 const codeNames:[RegExp,string][]=[
  [/^ANSI\/AISC 360-16/,'AISC 360-16'],[/^AWS D1\.1/,'AWS D1.1/D1.1M:2020'],[/^ANSI\/AISC 341-16/,'AISC 341-16'],[/^AIST Technical Report 13/,'AIST TR-13'],
- [/^AISC Design Guide 7/,'AISC DG7'],[/^DG7 revisions/,'AISC DG7 errata'],[/^AISC Design Guide 1\b/,'AISC DG1'],
+ [/^AISC Design Guide 7/,'AISC DG7'],[/^RCSC Specification/,'RCSC Specification'],[/^DG7 revisions/,'AISC DG7 errata'],[/^AISC Design Guide 1\b/,'AISC DG1'],
  [/^ASCE\/SEI 7-16/,'ASCE 7-16'],[/^ACI 318-19/,'ACI 318-19'],[/^Torsional Analysis of Steel Sections/,'Moore & Mueller (EJ 2002)'],
  [/^Design of Crane Runway Beam with Channel Cap/,'Ellifritt & Lue (EJ 1998)'],[/^Lateral-Torsional Buckling/,'Nayak et al. (EJ 2024)'],
  [/^New Fatigue Provisions for the Design of Crane Runway Girders/,'Fisher & Van de Pas (EJ 2002)'],[/^Euler–Bernoulli/,'Beam mechanics'],[/^Project serviceability criteria/,'Owner criteria']

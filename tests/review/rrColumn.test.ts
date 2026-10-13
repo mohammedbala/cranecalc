@@ -69,14 +69,14 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
  });
  it('makes the governing design D/C a meaningful check and lists the stiffeners in the summary',()=>{
   expect(tax.governing!.check.id).not.toMatch(/^haunch-column/);expect(tax.governing!.dc).toBeLessThan(.93);
-  expect(page1).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", full depth, one pair at the haunch top flange and bottom flange; 5\/8" fillets to the flanges and 5\/8" to the web, both faces; field welded inside the existing column/);
+  expect(page1).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", full depth, one pair at each haunch flange; 5\/8" fillets to the flanges and 5\/8" to the web, both faces; field welded inside the existing column/);
   // Worked: the unstiffened J10 at both flanges (R_u = P + 3M_f/b, J10.1 and J10.3) and the J10.6 panel with the net force.
   const tx=(v:number,q:string)=>`${q}:${v}`,j10=haunchJ10Worked(s,tx as never);
   // Each flange: the case name, the equation and its substitution on separate lines (none runs past the margin), then the strength.
   expect(j10).toHaveLength(8);expect(j10[0]).toMatch(/^\\text\{Top flange \(/);expect(j10[1]).toBe('R_u=T+\\frac{3M_f}{b}');expect(j10[2]).toMatch(/^\\quad=/);expect(j10[3]).toContain('6.25F_{yf}t_f^2');expect(j10[4]).toMatch(/^\\text\{Bottom flange \(/);expect(j10[7]).toContain('J10.3');
   expect(workedSteps(s,check('haunch-column-panel'),tx as never)?.[0]).toContain('\\max(T,\\ C\\cos\\alpha)');
   expect(text).toMatch(/Worked: unstiffened J10 at the haunch flanges \(basis for the stiffener decision\)/);
-  expect(text).toMatch(/Column stiffeners required\. Unstiffened, web local yielding \(J10\.2\) is exceeded at both flange levels \(D\/C 1\.32 top, 1\.20 bottom\)/);expect(text).toMatch(/J10\.5 and J10\.7 do not apply/);
+  expect(text).toMatch(/Column stiffeners required\. Unstiffened, web local yielding \(J10\.2\) is exceeded at both flange levels \(D\/C 1\.32 top, 1\.20 bottom; k = t ?f ?, no rolled-fillet credit for the existing column; with the catalog k ?des = 1\.31 in, D\/C 0\.\d\d top, 0\.\d\d bottom\)/);expect(text).toMatch(/J10\.5 and J10\.7 do not apply/);
  });
 });
 
@@ -111,7 +111,7 @@ describe('M5 · the existing column check states its conditions',()=>{
   expect(page1).toMatch(/combined axial and flexure \(H1\), braced frame assumed/);
   const col=section('Existing column');
   expect(col).toMatch(/Braced frame assumed \(pinned base, braced top, B1 only\)\. If the frame is a sway frame, repeat with B2 from the frame analysis/);
-  expect(col).toMatch(/L ?cx = 312 in, base to the braced top\. Weak-axis, torsional and lateral-torsional buckling use 120 in: the girts at 96 in brace the outer flange only/);
+  expect(col).toMatch(/L ?cx = 312 in, base to the braced top\. Weak-axis, torsional and lateral-torsional buckling use 120 in, the surveyed unbraced length of the inner flange, which receives the bracket \(the girts at 96 in brace the outer flange only\)/);
   expect(col).toMatch(/Impact C ?i is included in the column load/);expect(col).toMatch(/Drift \(AIST TR-13 §5\.3\): H = 23[12](\.\d+)? in .*limit min\(H\/400, 2 in\) = 0\.58 in/);
   expect(col).toMatch(/Frame action, base fixity, anchors and foundations are by others \(section 6\.7\)/);expect(col).not.toMatch(/verified separately/);
   expect(col).toMatch(/combinations with E .*do not govern/);

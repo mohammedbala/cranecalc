@@ -135,6 +135,8 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
      const axial=traction+bumper+quake+(eq?eq*site!.Cs*lineMass:0),longitudinalCouple=traction*railTop+bumper*bumperLever+quake*railTop;
      const record=records.get(factors.id)!;
      const c:DesignCaseSummary={id:record.id,equation:record.equation,moment:0,lateralMoment:0,shear:0,reaction:0,interaction:0,positions:chosen.map(s=>s.response.origin),axial,location:0};
+     // The section of the largest shear and the grid of the largest reaction, for the governing-action table.
+     let shearAt=0;
      const wheels=chosen.flatMap((s,i)=>s.response.wheels.map(w=>({x:w.x,p:factors.cd*w.unloaded+f[i]*(w.static-w.unloaded)+factors.i*w.static*s.response.impact,h:i===hi?factors.h*w.lateral*sign+eh*(w.unloaded+secured*(w.static-w.unloaded)):0})));
      const vr=dead.reactions.map((r,j)=>({x:r.x,r:factors.d*r.r+factors.live*live.reactions[j].r+chosen.reduce((sum,s,i)=>sum+factors.cd*s.response.vd.reactions[j].r+f[i]*s.response.vl.reactions[j].r+factors.i*s.response.vi.reactions[j].r,0)}));
      const ar=dead.reactions.map((r,j)=>({x:r.x,r:factors.d*deadAdjacent[j]+factors.live*liveAdjacent[j]+chosen.reduce((sum,s,i)=>sum+factors.cd*s.response.adjacent.vd[j]+f[i]*s.response.adjacent.vl[j]+factors.i*s.response.adjacent.vi[j],0)}));
@@ -157,14 +159,14 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
       govern('interaction',u,{...c,location:x,moment:M,lateralMoment:My});
       govern('moment',Math.abs(M),{...c,location:x,moment:M,lateralMoment:My});govern('lateralMoment',My,{...c,location:x,moment:M,lateralMoment:My});
       govern('topLateralMoment',Math.abs(Mt),{...c,location:x});govern('bottomLateralMoment',Math.abs(Mb),{...c,location:x});
-      if(wheel)for(const side of [-1e-5,1e-5]){const station=x+side;if(station<0||station>L)continue;const V=vr.reduce((sum,r)=>sum+(r.x<=station?r.r:0),0)-wheels.reduce((sum,w)=>sum+(w.x<=station?w.p:0),0)-(factors.d*q+factors.live*di.liveLoad)*station;c.shear=Math.max(c.shear,Math.abs(V));}
+      if(wheel)for(const side of [-1e-5,1e-5]){const station=x+side;if(station<0||station>L)continue;const V=vr.reduce((sum,r)=>sum+(r.x<=station?r.r:0),0)-wheels.reduce((sum,w)=>sum+(w.x<=station?w.p:0),0)-(factors.d*q+factors.live*di.liveLoad)*station;if(Math.abs(V)>c.shear){c.shear=Math.abs(V);shearAt=x;}}
      }
      // Include UDL end shear, also for the no-crane state.
-     for(const x of stations)for(const side of [-1e-5,1e-5]){const station=x+side;if(station<0||station>L)continue;const V=vr.reduce((sum,r)=>sum+(r.x<=station?r.r:0),0)-wheels.reduce((sum,w)=>sum+(w.x<=station?w.p:0),0)-(factors.d*q+factors.live*di.liveLoad)*station;c.shear=Math.max(c.shear,Math.abs(V));}
+     for(const x of stations)for(const side of [-1e-5,1e-5]){const station=x+side;if(station<0||station>L)continue;const V=vr.reduce((sum,r)=>sum+(r.x<=station?r.r:0),0)-wheels.reduce((sum,w)=>sum+(w.x<=station?w.p:0),0)-(factors.d*q+factors.live*di.liveLoad)*station;if(Math.abs(V)>c.shear){c.shear=Math.abs(V);shearAt=x;}}
      // Support reactions include an adjacent existing girder bearing on a modeled end support.
      // The couple can load either end of the bay that carries the force: bound both signs at every support.
-     const sr=vr.map((r,j)=>r.r+ar[j].r),shift=stations.map((_,j)=>longitudinalCouple/Math.min(...[p.spans[j-1],p.spans[j]].filter(v=>v>0)));c.reaction=Math.max(0,...sr.map((r,j)=>r+shift[j]));
-     govern('shear',c.shear,c);govern('reaction',c.reaction,c);govern('uplift',Math.max(0,...sr.map((r,j)=>-(r-shift[j]))),c);govern('axial',axial,c);
+     const sr=vr.map((r,j)=>r.r+ar[j].r),shift=stations.map((_,j)=>longitudinalCouple/Math.min(...[p.spans[j-1],p.spans[j]].filter(v=>v>0)));c.reaction=Math.max(0,...sr.map((r,j)=>r+shift[j]));const reactionAt=vr[sr.reduce((k,r,j)=>r+shift[j]>sr[k]+shift[k]?j:k,0)]?.x??0;
+     govern('shear',c.shear,{...c,location:shearAt});govern('reaction',c.reaction,{...c,location:reactionAt});govern('uplift',Math.max(0,...sr.map((r,j)=>-(r-shift[j]))),c);govern('axial',axial,c);
      for(const w of wheels){result.wheelLoad=Math.max(result.wheelLoad,w.p);if(p.system==='simple'?stations.some(x=>Math.abs(w.x-x)<=p.section.d):Math.min(w.x,L-w.x)<=p.section.d)result.wheelNearEndLoad=Math.max(result.wheelNearEndLoad,w.p);result.torsion=Math.max(result.torsion,Math.abs(w.p*p.railEccentricity+w.h*(railTopAboveSteel(p)+flangeY)));}
      record.moment=Math.max(record.moment,c.moment);record.lateralMoment=Math.max(record.lateralMoment,c.lateralMoment);record.shear=Math.max(record.shear,c.shear);record.reaction=Math.max(record.reaction,c.reaction);record.axial=Math.max(record.axial,axial);if(c.interaction>=record.interaction){record.interaction=c.interaction;record.positions=c.positions;record.location=c.location;}
     }

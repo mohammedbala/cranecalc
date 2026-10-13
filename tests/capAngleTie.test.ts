@@ -245,6 +245,6 @@ describe('cap tieback angle: the calculated demonstration',()=>{
    const f=checkFigure(topic,p);expect(f.view,topic).toBe('isometric');expect(f.path).toHaveLength(6);expect(markers(f.svg)).toEqual([1,2,3,4,5,6]);
    expect(f.svg).toContain('CAP ANGLE TIE');expect(f.svg).not.toMatch(/NaN|undefined|Infinity/);
   }
-  const summary=loadPathFigure(p);expect(summary).toContain('TOP TIE');expect(summary).not.toMatch(/NaN|undefined/);
+  const summary=loadPathFigure(p);expect(summary).toContain('CAP TIEBACK');expect(summary).not.toMatch(/NaN|undefined/);
  });
 });

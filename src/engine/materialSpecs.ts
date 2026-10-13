@@ -1,7 +1,8 @@
 /**
  * ASTM designations for the steels listed in the report and on S-00, from the product form and the specified
  * strengths (AISC 360-16 A3.1 / Manual Table 2-4 preferred specifications). An entered grade (e.g. from mill
- * certificates) is used as given.
+ * certificates) is used as given. Tube at 50 ksi is ASTM A1085, which has Fy = 50 ksi for round and rectangular
+ * sections alike (A500 Gr. C round is 46 ksi).
  */
 export type ProductForm='w-shape'|'channel'|'angle'|'plate'|'rod'|'rail'|'tube';
 const ksi=(mpa:number)=>mpa/6.894757293168;
@@ -10,7 +11,7 @@ export function astmSpec(form:ProductForm,Fy:number,Fu?:number,entered?:string):
  const g=entered?.match(/ASTM\s+[A-Z]\d+[^,;.]*/i)?.[0];if(g)return g.trim().replace(/^astm/i,'ASTM');
  const fy=ksi(Fy),fu=Fu!==undefined?ksi(Fu):undefined;
  if(form==='rail')return 'ASTM A759';
- if(form==='tube')return near(fy,50)?'ASTM A500 Gr. C':near(fy,46)?'ASTM A500 Gr. C (round 46 ksi)':`ASTM A500 Gr. C (Fy ${fy.toFixed(0)} ksi)`;
+ if(form==='tube')return near(fy,50)?'ASTM A1085':near(fy,46)?'ASTM A500 Gr. C (round 46 ksi)':`ASTM A500 Gr. C (Fy ${fy.toFixed(0)} ksi)`;
  if(form==='rod'){
   if(near(fy,36))return 'ASTM A36';if(near(fy,55))return 'ASTM F1554 Gr. 55';if(near(fy,105))return 'ASTM F1554 Gr. 105';
   return near(fy,50)?'ASTM A572 Gr. 50':`ASTM A36 or as specified (Fy ${fy.toFixed(0)} ksi)`;

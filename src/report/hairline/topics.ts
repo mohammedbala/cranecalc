@@ -258,7 +258,7 @@ function supportingStructure(p:ProjectInput,g:SupportGeometry){
  column(S,g,'focus',-g.seat.thickness-G.d*1.6,top+G.d*.3);bracket(S,p,g,'context');
  const h={...g,simple:true};girders(S,h,'context','context','context',G.d*.9);
  const xb=-g.gap/2-g.bearing.length/2;
- S.arrow([xb,g.reach,top+G.d*.8],[xb,g.reach,top+10],'V').arrow([xb,g.reach+G.bf*2.5,top-G.tf],[xb,g.reach+G.bf/2+10,top-G.tf],'H').arrow([-g.gap/2-G.d*1.6,g.reach,G.z0+G.d*.3],[-g.gap/2-G.d*.95,g.reach,G.z0+G.d*.3],'N');
+ S.arrow([xb,g.reach,top+G.d*.8],[xb,g.reach,top+10],'V').arrow([xb,g.reach+G.bf*2.5,top-G.tf],[xb,g.reach+G.bf/2+10,top-G.tf],'H').arrow([-g.gap/2-G.d*1.6,g.reach,G.z0+G.d*.3],[-g.gap/2-G.d*.95,g.reach,G.z0+G.d*.3],'F');
  S.label('CONCURRENT ACTIONS',[0,-g.column.d,-g.seat.thickness-G.d*1.6],0,12,'middle');
  return finish(S,[['load/V',22,-14,[xb,g.reach,top]],['load/H',16,16,[xb,g.reach+G.bf*1.6,top-G.tf]],['column',26,6,[g.column.bf/2,-g.column.tf,-g.seat.thickness-G.d*.9]]],{az:50});
 }

@@ -33,7 +33,7 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
  const grids=(v:number[])=>v.length>1?`grids ${v.slice(0,-1).join(', ')} and ${v.at(-1)}`:`grid ${v[0]}`;
  const support=s.detailResults?.taperedHaunch?'haunch':s.input.details?.bracket?.enabled?'bracket':'support';
  return [`Factored ${s.input.method}. Each row is one concurrent set; do not combine rows.`,
-  `V: girder reactions on the seat${d.elevation?el(d.elevation.seat):''}, at e = ${len(d.e)} from the column centerline. Mx = V·e (column strong axis).`,
+  `V: girder reactions on the seat${d.elevation?el(d.elevation.seat):''}, at e = ${len(d.e)} from the column centerline${d.web!==undefined&&d.e!==undefined&&d.e-d.web>1e-3?` (the far edge of the bearing plate, a conservative reaction position; the girder web is at ${len(d.web)})`:''}. Mx = V·e (column strong axis).`,
   `My,seat: moment of the unbalanced end reactions about the grid (column weak axis).`,
   `H tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the tie line${d.elevation?el(d.elevation.tie):''}; design value ${f(d.tie.design)}.`,
   `H seat: bottom-flange restraint force at the bearing bolts, ∓ opposite in sign to H tie.`,

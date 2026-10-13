@@ -16,7 +16,7 @@ export function tieForceDerivation(s:CalculationSnapshot,F:number,range:number){
  const b=d.brace;
  return `tie design force F = H + P<sub>br</sub> = ${f(r.demands.brace)} + ${f(b.force)} = <b>${f(F)}</b>, pull or push. `+
   `H: largest top-flange restraint force at a grid${gv?` (${gv.combination}, ${grid(gv.x)})`:''}${(r.demands.braceEnd??0)>r.demands.brace?`; one girder end alone ${f(r.demands.braceEnd)}`:''}. `+
-  `P<sub>br</sub>: AISC 360-16 Appendix 6.3.2a with M<sub>r</sub> = ${M(a.moment)}, plus 6.2.2 with P<sub>r</sub> = ${f(a.axial)}. `+
+  `P<sub>br</sub>: AISC 360-16 Appendix 6.3.1b with M<sub>r</sub> = ${M(a.moment)}, plus 6.2.2 with P<sub>r</sub> = ${f(a.axial)}. `+
   `Required brace stiffness ${k(b.stiffness)} vs ${k(r.braceStiffness)} provided. Fatigue range ΔF = ${f(range)}.`;
 }
 

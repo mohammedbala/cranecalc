@@ -52,7 +52,10 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
    'haunch-stiffener-weld-minimum','haunch-flange-web-weld-minimum','haunch-web-weld-minimum','cap-angle-endplate-weld-min','stiffener-weld-minimum',
    // Peer review group B: load-height LTB as Cb = Mcr/Mocr (M2), H1 and the normal stress at each flange with that M_cx (m11),
    // one web yielding check over the TR-13 length and J10.3 / J10.4 corrections (m10); the peak stress takes the larger flange.
-   'wheel-web-tr13','torsion-normal','fatigue-peak-detailed','sidesway','end-stop-girder']),keeperDetail=/^detail-(fatigue-.+|full-cycle-RC\d+-(left|right))$/,
+   'wheel-web-tr13','torsion-normal','fatigue-peak-detailed','sidesway','end-stop-girder',
+   // Final review of the Lyda sample: a girder reaction beyond the haunch bearing stiffener tip loads the stiffener at its
+   // full eccentricity (the flange outstand's cantilever moment enters it); the original 10 kip wheels exceed it.
+   'haunch-stiffener-column','haunch-stiffener-weld','haunch-fatigue-stiffener-weld']),keeperDetail=/^detail-(fatigue-.+|full-cycle-RC\d+-(left|right))$/,
    // Peer review round 2, group A: one force system at the haunch flanges, carried by the column stiffeners (C2, the
    // unstiffened J10 checks for information); the top restraint at the cap tie line and the tie force derived (M6).
    // Rail attachment to standard practice: the welded keeper and notched anchor checks are replaced by the rail clip

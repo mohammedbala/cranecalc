@@ -108,7 +108,7 @@ describe('C2 · the W-stub column stiffeners in the report (one calculate)',()=>
   expect(text).toMatch(/Column stiffeners required\. Unstiffened, .*web local yielding \(J10\.2\) is exceeded at (the top flange|both flange levels) \(D\/C 1\.\d\d/);
   expect(text).toMatch(/Half-depth stiffener pairs \(2 pairs PL/);expect(text).toMatch(/carry each flange's full force system with no credit for the unstiffened column/);
   expect(text).toMatch(/Worked: unstiffened J10 at the stub flanges \(basis for the stiffener decision\)/);
-  expect(text).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", half depth, one pair at the stub top flange and bottom flange; 7\/16" fillets/);
+  expect(text).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", half depth, one pair at each stub flange; 7\/16" fillets/);
   // The J10 table: the same R_u at a level, stiffened, not governing.
   const top=check('wbracket-column-flange'),yt=check('wbracket-column-yield-top');expect(ru(top.note)).toBe(ru(yt.note));
   expect(text).toMatch(/Top flange J10\.1 flange local bending (\d+) kip [\d.]+ kip [\d.]+ (OK|Exceeded) Top flange J10\.2 web local yielding \1 kip/);

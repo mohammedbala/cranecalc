@@ -111,7 +111,7 @@ describe('body and page 1 (items 3-5; A1, C16)',()=>{
  });
  it('takes the page-1 governing D/C from a design check: rail rotation 0.98 with the owner twist limit, rod bracing 0.86 without',()=>{
   expect(tax.governing!.check.id).toBe('rail-twist');expect(tax.governing!.dc.toFixed(2)).toBe('0.98');
-  expect(text(page1)).toMatch(/Governing D\/C = 0\.98: Rail rotation/);
+  expect(text(page1)).toMatch(/Governing D\/C = 0\.98 \([^)]+\): Rail rotation/);
   const t=taxonomy(noTwist());expect(t.governing!.check.id).toBe('brace-tension');expect(t.governing!.dc.toFixed(2)).toBe('0.86');
   // Never a detailing minimum (lap-bolt edge distance 1.00) or the cap-end full-force rule (0.97).
   for(const v of [tax,t])expect(['cap-angle-lap-edge','cap-development','cap-angle-column-holes']).not.toContain(v.governing!.check.id);

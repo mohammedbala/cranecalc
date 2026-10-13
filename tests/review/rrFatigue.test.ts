@@ -91,7 +91,9 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   // One count line under the summary, without bookkeeping of body rows or register points.
   expect(body).toContain(`${tax.counts.designEvaluated} design checks evaluated, ${tax.counts.designScreened} screened below the fatigue threshold`);
   expect(body).not.toMatch(/body rows?|register points?/);
-  expect(body).toContain(`Girder details at ${new Set(r.fatigue.map(v=>v.x.toFixed(0))).size} stations (both flange edges): ${pts(ev)?`${pts(ev)} of ${points} locations evaluated`:'all below F'}`);
+  // All screened: one sentence names the stations (no second "all below F_TH" line).
+  const stations=new Set(r.fatigue.map(v=>v.x.toFixed(0))).size;
+  expect(body).toContain(pts(ev)?`Girder details at ${stations} stations (both flange edges): ${pts(ev)} of ${points} locations evaluated`:`every girder detail, at ${stations} stations on both flange edges, is screened`);
   // Every fatigue design check is in exactly one table row (a detail), evaluated or screened; checks keep their own gate.
   const F=tax.fatigue,members=[...F.evaluated,...F.screened].flatMap(v=>v.members),gate=(id:string)=>tax.entries.get(id)!.gate;
   const fatigueChecks=[...tax.entries.values()].filter(t=>t.type==='design'&&t.effect==='fatigue'&&!/^fatigue-peak/.test(t.check.id)&&t.check.status!=='not-applicable');

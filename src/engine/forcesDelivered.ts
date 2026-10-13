@@ -29,7 +29,7 @@ export interface DeliveredGrid {grid:number;x:number;sets:DeliveredSet[]}
 
 /**
  * AISC 360-16 Appendix 6 stability bracing force that a top-flange tie adds to the restraint force of the analysis:
- * point bracing of the beam, P_br = 0.02M_rC_d/h_o (6.3.2a), and of the axial force, 0.01P_r (6.2.2), with the
+ * point bracing of the beam, P_br = 0.02M_rC_d/h_o (6.3.1b), and of the axial force, 0.01P_r (6.2.2), with the
  * girder's largest factored moment and axial force; and the required brace stiffness (LRFD φ = 0.75, ASD Ω = 2.00)
  * over the restraint spacing L_br. The flange restraint force of the lateral/torsional analysis is added to P_br.
  */
@@ -72,6 +72,8 @@ export function deliveredForces(s:CalculationSnapshot){
  const stop=Math.max(0,...grids.flatMap(g=>g.sets.filter(x=>stops.has(x.combination)).map(x=>Math.abs(x.F))));
  const analysis=Math.max(0,...grids.flatMap(g=>g.sets.map(x=>Math.abs(x.top))));
  return {grids,e,brace,
+  /** The girder web line from the column centerline (bracket); e is taken at the far bearing edge beyond it. */
+  web:b?.enabled?b.receiver.depth/2+b.reach:undefined,
   /** The tie design force: the largest concurrent top-flange restraint force (all girder ends at a grid) plus the brace force. */
   tie:{analysis,design:r.demands.brace+brace.force,perEnd:r.demands.braceEnd},
   /** Elevations above the floor datum: seat (top of the bracket), the tie line; undefined without elevations. */

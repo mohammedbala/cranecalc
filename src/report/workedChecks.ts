@@ -127,7 +127,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  // Top-flange tie design force (M6): the restraint force of the analysis plus the Appendix 6 brace force.
  if(c.id==='brace-member'&&s.detailResults&&s.designAnalysis&&s.properties){
   const a=s.designAnalysis,b=braceImperfection(p,a,s.properties),H=s.detailResults.demands.brace,h0=s.properties.h0,us=p.units==='US';
-  if(close(H+b.force,dem))return [`P_{br}=\\frac{0.02M_rC_d}{h_o}+0.01P_r=\\frac{0.02\\times${tx(a.moment,'moment')}${us?'\\times12\\,\\mathrm{in/ft}':''}\\times${b.Cd}}{${tx(h0,'length')}}+0.01\\times${tx(a.axial,'force')}=${tx(b.flexure,'force')}+${tx(b.axial,'force')}=${tx(b.force,'force')}\\quad(\\text{App. 6.3.2a, 6.2.2})`,
+  if(close(H+b.force,dem))return [`P_{br}=\\frac{0.02M_rC_d}{h_o}+0.01P_r=\\frac{0.02\\times${tx(a.moment,'moment')}${us?'\\times12\\,\\mathrm{in/ft}':''}\\times${b.Cd}}{${tx(h0,'length')}}+0.01\\times${tx(a.axial,'force')}=${tx(b.flexure,'force')}+${tx(b.axial,'force')}=${tx(b.force,'force')}\\quad(\\text{App. 6.3.1b, 6.2.2})`,
    `F=H+P_{br}=${tx(H,'force')}+${tx(b.force,'force')}=${tx(dem,'force')}\\quad(H\\ \\text{largest top-flange restraint force at a grid, at the tie line})`,
    `${lhs}R_n=${tx(cap,'force')}${check(cap,'F')}`];
  }
@@ -140,10 +140,10 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  // Haunch top flange as the seat of the bearings (strip method).
  if(c.id==='haunch-seat-strip'&&d?.bracket){
   const w=s.detailResults?.taperedHaunch?.strength.strip?.work,g=projectHaunch(p),Fy=d.material.Fy,tf=g.tt,R=factor(.9,1.67)*Fy*tf**2/4;
-  if(w&&close(R,cap)){const across=w.across>=w.along;
+  if(w&&close(R,cap)){const across=w.across>=w.along,us=p.units==='US';
    const m=across?w.P*w.c**2/(2*w.l*w.W):w.Pa*(w.xa-w.xs)/w.be;
-   if(close(m,dem))return [across?`m_u=\\frac{Pc^2}{2lW}=\\frac{${tx(w.P,'force')}\\times(${tx(w.c,'length')})^2}{2\\times${tx(w.l,'length')}\\times${tx(w.W,'length')}}=${tx(m,'force')}\\ \\text{per unit width}\\quad(c=W/2-t_s/2;\\ l\\ \\text{the patch spread at 45° through the bearing plate})`
-     :`m_u=\\frac{P(x-x_s)}{b_e}=\\frac{${tx(w.Pa,'force')}\\times(${tx(w.xa,'length')}-${tx(w.xs,'length')})}{${tx(w.be,'length')}}=${tx(m,'force')}\\ \\text{per unit width}\\quad(\\text{beyond the stiffener tip }x_s)`,
+   if(close(m,dem))return [across?`m_u=\\frac{Pc^2}{2lW}=\\frac{${tx(w.P,'force')}\\times(${tx(w.c,'length')})^2}{2\\times${tx(w.l,'length')}\\times${tx(w.W,'length')}}=${tx(m,'force')}${us?'\\text{-in/in}':'\\cdot\\mathrm{m/m}'}\\quad(c=W/2-t_s/2;\\ l\\ \\text{the patch spread at 45° through the bearing plate})`
+     :`m_u=\\frac{P(x-x_s)}{b_e}=\\frac{${tx(w.Pa,'force')}\\times(${tx(w.xa,'length')}-${tx(w.xs,'length')})}{${tx(w.be,'length')}}=${tx(m,'force')}${us?'\\text{-in/in}':'\\cdot\\mathrm{m/m}'}\\quad(\\text{beyond the stiffener tip }x_s)`,
     `${lhs}M_n=${fl(.9,1.67)}\\times\\frac{F_yt_f^2}{4}=${fl(.9,1.67)}\\times\\frac{${tx(Fy,'stress')}\\times(${tx(tf,'length')})^2}{4}=${tx(R,'force')}${check(R,'m_u')}`];}
  }
  // Haunch bearing stiffener as a column with the reaction eccentric (J10.8, J4.4 / E3, H1).
