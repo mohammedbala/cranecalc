@@ -13,6 +13,7 @@ import {coverSheetSvg} from '../src/components/coverSheet';
 import {format} from '../src/engine/units';
 import type {CalculationSnapshot} from '../src/engine/types';
 import {bracketForceCases,bracketForceCells} from '../src/components/bracketForceTable';
+import {sig3} from '../src/report/reportParts';
 import {seatColumnWeldLength} from '../src/engine/bracketDesign';
 
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
@@ -51,8 +52,9 @@ describe('issued drawing set',()=>{
     // Every sheet reference names a sheet of this set, and every detail reference a detail drawn on it.
     for(const ref of words.match(/\b(?:S|SK)-\d\d\b/g)??[])expect(numbers.has(ref),`${name} ${sheet.number} refers to ${ref}`).toBe(true);
     for(const ref of words.match(/\b\d+\/S-\d\d\b/g)??[])expect(refs.has(ref),`${name} ${sheet.number} refers to detail ${ref}`).toBe(true);
-    const details=[...sheet.svg.matchAll(/data-detail-title="[^"]*">(?:(?!<\/g>)[\s\S])*?font-weight="700">(\d+)<\/text>/g)].map(m=>Number(m[1]));
-    expect(details).toEqual(details.map((_,i)=>i+1));
+    // Details numbered 1..n in drawing order; a sub-detail in a cell (the rail joint) takes the number after its cell.
+    const details=[...sheet.svg.matchAll(/data-(?:sub)?detail-title="[^"]*">(?:(?!<\/g>)[\s\S])*?font-weight="700">(\d+)<\/text>/g)].map(m=>Number(m[1]));
+    expect([...details].sort((a,b)=>a-b)).toEqual(details.map((_,i)=>i+1));
    }
   }
  },300000);
@@ -111,7 +113,8 @@ describe('drawings agree with the calculation',()=>{
  },120000);
  it('tabulates the calculated support reactions and crane data on the cover',()=>{
   const p=capped.input,cover=texts(cappedSet[0].svg).join(' | '),r=capped.supportReactions!;
-  for(const v of r.supports)for(const value of [v.D,v.Cd,v.Cv,v.Ci,v.Css])expect(cover).toContain(format(value,'force',p.units,2).toUpperCase());
+  // To three significant figures, as the forces delivered to the columns.
+  for(const v of r.supports)for(const value of [v.D,v.Cd,v.Cv,v.Ci,v.Css])expect(cover).toContain(sig3(value,'force',p.units).toUpperCase());
   expect(cover).toContain(drawingLength(p.details!.criteria.railGauge,p.units));
   for(const c of p.cranes)expect(cover).toContain(`CRANE DATA · ${c.name.toUpperCase()}`);
   expect(cover).toContain('DEMONSTRATION - NOT FOR CONSTRUCTION');
@@ -157,7 +160,8 @@ describe('drawings agree with the calculation',()=>{
   for(const [s,set,at] of [[demo,demoSet,'S-02'],[capped,cappedSet,'S-02'],[newColumn,newColumnSet,'S-03']] as const){
    const holding=set.filter(v=>texts(v.svg).includes(title));
    expect(holding.map(v=>v.number)).toEqual([at]);
-   const cells=texts(holding[0].svg),f=s.detailResults!.bracketForces!,kip=(v:number)=>format(v,'force','US',2).toUpperCase();
+   // Values to three significant figures (two decimals below 0.1), as the forces delivered to the columns on S-00.
+   const kipN=4448.2216152605,cells=texts(holding[0].svg),f=s.detailResults!.bracketForces!,kip=(v:number)=>(Math.abs(v)<.1*kipN?`${(Math.abs(v)/kipN).toFixed(2)} kip`:sig3(Math.abs(v),'force','US')).toUpperCase();
    expect(cells.filter(v=>v===title)).toHaveLength(1);expect(f).toHaveLength(4);
    // Mirror images: equal reactions, opposite end moments, and both signs at the interior grids.
    const V=f.map(v=>v.maxVertical.vertical),M=f.map(v=>v.maxMoment.moment);
@@ -166,10 +170,11 @@ describe('drawings agree with the calculation',()=>{
    for(const v of f)expect(cells).toContain(kip(v.maxVertical.vertical));
    // An interior grid reaches its largest reaction from either side, but the two cases differ in their
    // longitudinal force: both are listed, each with its own sign of seat moment.
-   const kipft=(v:number)=>format(v,'moment','US',2).toUpperCase().replace(/^-/,'\u2212');
+   const kipft=(v:number)=>sig3(v,'moment','US').toUpperCase();
    expect(Math.abs(f[1].mirror.vertical!.longitudinal-f[1].maxVertical.longitudinal)).toBeGreaterThan(1);expect(cells).toContain(kipft(f[1].maxVertical.moment));expect(cells).toContain(kipft(f[1].mirror.vertical!.moment));
-   // One table, every row a whole concurrent case: all its reactions, seat moment, longitudinal and lateral forces.
-   expect(cells).toEqual(expect.arrayContaining(['GRID','CASE','COMB.','V','LEFT V','RIGHT V','SEAT M','LONG.','H TOP','H BOT.']));
+   // One table, every row a whole concurrent case: all its reactions, seat moment, longitudinal and lateral forces, under
+   // the labels of the forces delivered to the columns on S-00.
+   expect(cells).toEqual(expect.arrayContaining(['GRID','CASE','COMB.','V','LEFT V','RIGHT V','MY,SEAT','F','H TIE']));expect(cells).not.toContain('SEAT M');
    const cases=bracketForceCases(s);
    for(const g of cases)for(const c of g.cases)for(const value of Object.values(bracketForceCells(c.force,c.mirrored,'US')))if(value!=='—')expect(cells).toContain(value.toUpperCase());
    const stopRow=cases[2].cases.find(c=>c.label.includes('MAX LONG.'))!;
@@ -193,7 +198,7 @@ describe('drawings agree with the calculation',()=>{
    // H TOP and H BOTTOM of one case act together, opposite: a couple, signed relative to each other.
    expect(Math.sign(f[0].top.top)).toBe(-Math.sign(f[0].top.bottom));
    expect(cells).toContain(`±${kip(Math.abs(f[0].top.top))}`);expect(cells).toContain(`∓${kip(Math.abs(f[0].top.bottom))}`);
-   expect(cells.join(' ')).toContain('H BOT. IS SIGNED RELATIVE TO H TOP');expect(cells.join(' ')).not.toContain('ITS OWN MAXIMUM');
+   expect(cells.join(' ')).toMatch(/H (SEAT|BOT\.) IS SIGNED RELATIVE TO H TIE/);expect(cells.join(' ')).not.toContain('ITS OWN MAXIMUM');
   }
   // The bracket is checked for the same concurrent sets, so its governing rows mirror too.
   const st=capped.detailResults!.bracket!.stations;expect(st[3].vertical).toBeCloseTo(st[0].vertical,6);expect(st[3].leftRib).toBeCloseTo(st[0].rightRib,6);

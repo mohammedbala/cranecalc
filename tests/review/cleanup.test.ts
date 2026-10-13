@@ -182,7 +182,7 @@ describe('revision identity and consistency (m1–m9)',()=>{
  });
  it('uses AISC 360-16 bolt groups and the Table J3.2 F_nt (m7)',()=>{
   const cover=sheets[0];
-  expect(cover).toContain('ASTM F3125 GRADE A325 (GROUP A)');expect(cover).not.toContain('GROUP 120');
+  expect(cover).toContain('ASTM F3125 GR. A325 (GROUP A)');expect(cover).not.toContain('GROUP 120');
   expect(cover).not.toContain('A513');expect(cover).toContain('ASTM A1085 STEEL TUBE');
   expect(body).toContain('ASTM F3125 Gr. A325 (Group A)');
   expect(html).toMatch(/0\.75\\times90(\.0+)?\\,\\mathrm\{ksi\}/);expect(html).not.toContain('89.9\\,\\mathrm{ksi}');
@@ -190,7 +190,8 @@ describe('revision identity and consistency (m1–m9)',()=>{
  it('reports the end stop as the calculation does, with units on the bumper rows (m8)',()=>{
   const s03=sheets.find(v=>v.includes('GOVERNING STOP CHECK'))!.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
   expect(s03).toMatch(/GOVERNING STOP CHECK GIRDER TOP FLANGE · THICKNESS FOR NO PRYING: D\/C 0\.68 \(THICKNESS RATIO\)/);
-  expect(s03).toContain('MAX. D/C 0.78 STRENGTH');
+  // The 0.78 of the cap tieback is its slot travel (a movement check), not strength; the sleeves govern strength.
+  expect(s03).toContain('MAX. D/C 0.77 STRENGTH, 0.78 SLOT TRAVEL, 0.23 FATIGUE');
   expect(sheets.join('')).not.toContain('CAP-CS-02');
   expect(body).toMatch(/Bumper, deceleration at 50% speed Peak deceleration at 50% of the rated speed 2\.08 ft\/s² against 16 ft\/s²[^]*?2\.08 ft\/s²/);
   expect(body).toMatch(/Energy at 100% speed W ?E ?v ?²\/2g = 0\.31 kip-ft \(W ?E = 7\.\d+ kip\)/);

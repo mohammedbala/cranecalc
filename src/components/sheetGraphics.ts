@@ -137,7 +137,8 @@ export function sheetStart(s: CalculationSnapshot, number: string, title: string
   ${rect(36,36,2520,1656,'divider')}
   <g data-sheet-content="ARCH-D" data-content-scale="${contentScale}" transform="${contentTransform(contentScale)}">`;
 }
-export function titleBlock(s: CalculationSnapshot, number: string, title: string) {
+/** Title block; `scale` is AS SHOWN for sheets of scaled details, NONE for a sheet of notes and tables. */
+export function titleBlock(s: CalculationSnapshot, number: string, title: string, scale = 'AS SHOWN') {
   const p=s.input,d=p.drawing,top=1548,bottom=1692,rev=revisionIdentity(s),date=rev.date;
   const originator=d?.originator||p.engineer||'',checker=d?.checker||'';
   // Close the scaled drawing region: the title band is laid out in PDF points.
@@ -169,7 +170,7 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+='</g><g data-title-panel="sheet">';
   svg+=text(2170,1566,'DRAWING / SHEET NUMBER',10,'start',700)+text(2170,1611,`SHEET ${number}`,29,'start',700)+text(2546,1611,sheetOrdinalToken,12,'end',700);
   svg+=line([2156,1624],[2556,1624])+text(2170,1644,p.units==='SI'?'PAGE SIZE: ARCH D / 914 X 610 MM':'PAGE SIZE: ARCH D / 36 X 24 IN',12,'start',700);
-  svg+=text(2170,1662,rev.letter?`REVISION: ${rev.letter.toUpperCase()} (SAME AS THE CALCULATION)`:`CALC: ${s.revision}`,11)+text(2170,1681,`DATE: ${date}    SCALE: AS SHOWN`,10);
+  svg+=text(2170,1662,rev.letter?`REVISION: ${rev.letter.toUpperCase()} (SAME AS THE CALCULATION)`:`CALC: ${s.revision}`,11)+text(2170,1681,`DATE: ${date}    SCALE: ${scale}`,10);
   svg+='</g></g>';
   const status=issueStatus(s);
   svg+=`<g data-stamp="${status.issued?'seal':'blank'}">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${eor?.firm.trim()?text(2466,1520,short(eor.firm.toUpperCase(),30),8,'middle'):''}${text(2466,1534,status.issued?'SEAL AND SIGNATURE REQUIRED':'NOT SEALED',9,'middle')}</g>`;
@@ -192,9 +193,9 @@ export const capAngleTitles={section:'CAP TIEBACK ANGLE / SECTION AT SUPPORT',pl
 export const detailTitles={
  bearing:'GIRDER BEARING / COLUMN BRACKET',endBearing:'GIRDER END BEARINGS / LOCATING AND SLIDING',supportBearings:'GIRDER BEARINGS / LOCATING AND SLIDING',endTemplate:'GIRDER WEB / END CONNECTION',
  tie:'FLANGE TIE / COLUMN CONNECTION',flangeTie:'DIRECT FLANGE TIE / TOP TRANSVERSE SECTION',tiePlan:'TIE AND STIFFENER LOCATIONS / PLAN',
- railKeeper:'RAIL CLIP / SECTION',railLayout:'RAIL LAYOUT / PLAN',slidingBolt:'SLIDING BEARING BOLT / SECTION',capSection:'CAPPED GIRDER SECTION',capDevelopment:'CAP END DEVELOPMENT',
+ railKeeper:'RAIL CLIP / SECTION',railJoint:'RAIL JOINT / ELEVATION',railLayout:'RAIL LAYOUT / PLAN',slidingBolt:'SLIDING BEARING BOLT / SECTION',capSection:'CAPPED GIRDER SECTION',capDevelopment:'CAP END DEVELOPMENT',
  supportEnd:(joint:boolean)=>joint?'ADJACENT GIRDER ENDS AT COLUMN':'GIRDER END AT COLUMN',supportTies:'INDEPENDENT FLANGE TIES / PLAN',movement:'BEARING MOVEMENT REQUIREMENTS',
- weldedBracket:'COLUMN BRACKET / TRANSVERSE SECTION',existingBracket:'BRACKET / TRANSVERSE SECTION',
+ weldedBracket:'COLUMN BRACKET / TRANSVERSE SECTION',existingBracket:'BRACKET / TRANSVERSE SECTION',haunchPlan:'TAPERED HAUNCH / TOP FLANGE PLAN',haunchSection:'TAPERED HAUNCH / SECTION AT STIFFENERS',
  endStop:'END STOP / ELEVATION',endStopPlan:'END STOP / PLAN',endStopSection:'END STOP / SECTION AT FACE',saddle:'SADDLE / LONGITUDINAL SECTION',newColumn:'NEW RUNWAY COLUMN / ELEVATION',basePlate:'BASE PLATE / PLAN',footing:'FOOTING / SECTION',
  bracedBay:'BRACED BAY / ELEVATION',braceTop:'BRACE AND STRUT AT WORK POINT',braceBase:'BRACE AT COLUMN BASE',strutPlan:'STRUT AND GUSSETS AT WORK POINT / PLAN'
 } as const;
@@ -227,7 +228,8 @@ export const bearingBoltsTitle=(p:CalculationSnapshot['input'])=>p.system==='con
 export function columnReference(p:CalculationSnapshot['input']){
  const c=supportColumn(p);return c.detailed?`${c.name} / ${detailRef(detailTitles.newColumn)}`:c.reference;
 }
-const resolvedLength=(v:string)=>v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00').replace(/\{\{SHEET:[^}]*\}\}/g,'S-00');
+// The detail and sheet number tokens of a detail title (a sub-detail title drawn inside a cell) measure as they resolve.
+const resolvedLength=(v:string)=>v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00').replace(/\{\{SHEET:[^}]*\}\}/g,'S-00').replace(/\{\{DETAIL_NO\}\}/g,'00').replace(/\{\{SHEET_NO\}\}/g,'S-00');
 /**
  * Detail title: numbered bubble (detail over sheet), underlined title and
  * scale. Numbers are assigned in drawing order when the set is assembled.
@@ -236,6 +238,13 @@ const resolvedLength=(v:string)=>v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00').repla
 export function viewTitle(cx:number,y:number,title:string,scale:string,contentScale:number=sheetFormat.contentScale){
  const k=1/contentScale,size=13.5*k,w=textWidth(title,size,true),r=15*k,bx=cx-w/2-r-7*k;
  return `<g data-view-title="below" data-detail-title="${esc(title)}">${circle(bx,y,r,'divider')}${line([bx-r,y],[bx+r,y],'annotation')}${text(bx,y-3.6*k,detailNumberToken,11.5*k,'middle',700)}${text(bx,y+9.4*k,sheetNumberToken,7*k,'middle')}${text(cx,y-4*k,title,size,'middle',700)}${line([bx+r,y],[cx+w/2+5*k,y],'divider')}${text(cx,y+12*k,scale,9*k,'middle')}</g>`;
+}
+/**
+ * Title of a further detail drawn inside another detail's cell, as viewTitle (smaller by contentScale), numbered by the
+ * set right after the detail whose cell holds it (resolveSheetSet).
+ */
+export function subdetailTitle(cx:number,y:number,title:string,scale:string,contentScale:number){
+ return viewTitle(cx,y,title,scale,contentScale).replace(/^<g data-view-title="below" data-detail-title=/,'<g data-subdetail-title=');
 }
 // Drawing labels are upper case; SI unit symbols (mm, kN, MPa) keep their case.
 const siSymbol=/^\(?(k?N|MPa|GPa|mm|m|kN·m|kN-m|N\/mm|kN\/m)[),.;:]*$/;

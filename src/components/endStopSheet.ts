@@ -94,10 +94,10 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   svg+=labelColumn([
    {at:[X(g.faceFront),Y(tb+H*.85)],labels:[`PL ${size(tp)} X ${size(Wb)} X ${dim(H)} FACE`]},
    {at:[bc[0]+br*kk*.7,bc[1]-br*kk*.7],labels:['CRANE BUMPER (REF.), BY CRANE SUPPLIER',`C/L ${dim(e.bumperHeight)} ABOVE T.O.R.`]},
-   {at:[X(g.faceBack-Ls*.35),Y(tb+inch+(stiffTop-inch)*.65)],labels:[`2 PL ${size(ts)} STIFFENERS AT ${dim(sp)} CTRS`,`${dim(Ls)} AT BASE, ${dim(stiffTop)} HIGH AT FACE`]},
+   {at:[X(g.faceBack-Ls*.35),Y(tb+inch+(stiffTop-inch)*.65)],labels:[`2 PL ${size(ts)} STIFFENERS AT ${dim(sp)} O.C.`,`${dim(Ls)} AT BASE, ${dim(stiffTop)} HIGH AT FACE`]},
    // Stiffeners brace the face plate: welded to it over their full height.
    {at:[X(g.faceBack),Y(tb+stiffTop*.3)],labels:['STIFFENERS TO FACE PL,','BOTH SIDES, FULL HEIGHT'],weld:size(e.weldSize)},
-   {at:[X(g.railEnd),Y(railDepth*.6)],labels:[`RAIL ENDS ${dim(e.railGap)} CLEAR OF FACE`]},
+   {at:[X(g.railEnd),Y(railDepth*.6)],labels:[`RAIL ENDS ${dim(g.railClear)} CLEAR OF BASE PL`]},
    {at:[X(g.faceFront)+1,yb],labels:['FACE PL AND STIFFENERS TO','BASE PL, BOTH SIDES'],weld:size(e.weldSize)},
    {at:[X(g.front),yb+tb*kk/2],labels:[`PL ${size(tb)} X ${size(Wb)} X ${dim(e.base.length)} BASE`]},
    {at:[X(g.frontRow)+hx.corners/2*kk,wFl+hx.nut/2*kk],labels:[boltLabel,`${size(hole)} STD HOLES THRU ${capped?'CAP AND ':''}FLANGE`,'HEADS UP, NUTS BELOW TOP FLANGE']},
@@ -131,7 +131,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   {const xg=X(0)-22,xw=X(0)-40;svg+=dimV(Z(-gauge/2),Z(gauge/2),X(g.backRow)-hr-2,xg,dim(gauge))+dimV(Z(-Wb/2),Z(Wb/2),X(g.back)-2,xw,dim(Wb));}
   // Separate dimensions on one line below the girder, none chained across a part it does not measure, each extension
   // line starting just clear of the feature it locates: the base plate from the girder end, the front bolts to the
-  // face plate and the rail end to the stop face. The plates are sized by their callouts. A value too long for its
+  // face plate and the rail end to the nearest stop steel, the base plate edge in front of the face. The plates are
+  // sized by their callouts. A value too long for its
   // dimension is led off below it, clear of the extension lines.
   const edge=Z(width/2)+2,zd=Z(width/2)+16,from=(x:number,z:number)=>z+2<edge?line([x,z+2],[x,edge]):'';
   const short=(x1:number,z1:number,x2:number,z2:number,label:string,side:-1|1)=>{const w=textWidth(label,9),mid=(x1+x2)/2;
@@ -139,7 +140,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   svg+=dimH(X(0),X(g.back),edge,zd,dim(e.setback))+from(X(g.back),Z(Wb/2));
   // Front bolt C/L to the back of the face plate: the head clears the face plate fillet toe by the socket clearance.
   svg+=short(X(g.frontRow),Z(gauge/2)+hx.flats/2*kk,X(g.faceBack),Z(Wb/2),dim(e.bolts.frontClear),-1);
-  svg+=short(X(g.faceFront),Z(Wb/2),X(g.railEnd),Z(rz+r.baseWidth/2),dim(e.railGap),1);
+  svg+=short(X(g.front),Z(Wb/2),X(g.railEnd),Z(rz+r.baseWidth/2),dim(g.railClear),1);
   svg+=multiLeader([[X(keeper)+kg.length*kk,Z(rz-kg.outer)]],[X(shown)+44,Z(-width/2)-14],['FIRST RAIL CLIP PAIR',`SPACING PER ${keeperRef}`]);
   // Bolt callout above the girder at the back of the stop, clear of the section cut and the rail clip callout.
   {const labels=[boltLabel,'HEADS ON BASE PL'],w=Math.max(...labels.map(v=>textWidth(labelCaps(v),8.5))),c:XY=[X(g.backRow),Z(-gauge/2)];
@@ -147,8 +148,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // Both stiffeners to the face plate, each side of each stiffener.
   svg+=filletLeader([[X(g.faceBack)-1,Z(sp/2+ts/2)+1]],[X(shown)+44,Math.max(Z(width/2)-4,Z(-width/2)+50)],size(e.weldSize),['TYP. BOTH STIFFENERS TO FACE PL','FULL HEIGHT'],true,[[[X(g.faceFront)+6,Z(width/2)-6]]]);
   svg+=text(X(0)-4,zd+30,'GIRDER END',8,'start',700);
-  // Section between the stop face and the rail end, looking at the face.
-  {const xs=X((g.faceFront+g.railEnd)/2);svg+=sectionCut([xs,Z(-width/2)-4],[xs,Z(width/2)+4],[-1,0],detailTitles.endStopSection,['a']);}
+  // Section between the base plate edge and the rail end, looking at the face.
+  {const xs=X((g.front+g.railEnd)/2);svg+=sectionCut([xs,Z(-width/2)-4],[xs,Z(width/2)+4],[-1,0],detailTitles.endStopSection,['a']);}
   return {svg:svg+'</g>',scale:k.label};
  }});
  // 3: Section between the rail end and the stop, looking at the face.
@@ -206,9 +207,9 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const notes=[
    stopEnds(p).length===2?'PROVIDE ONE STOP AT EACH END OF EACH RUNWAY, CENTERED ON THE GIRDER. THE STOP AT THE OPPOSITE END IS THE MIRROR IMAGE.':`PROVIDE ONE STOP AT ${stopLocation(p).split(';')[0].toUpperCase()}, CENTERED ON THE GIRDER. THE RUNWAY CONTINUES BEYOND THE OTHER MODELED END; NO STOP THERE.`,
    `DRILL ${size(hole)} STANDARD HOLES THROUGH ${capped?'THE CAP CHANNEL WEB AND ':''}THE TOP FLANGE ONLY AT THE LOCATIONS SHOWN, ${dim(g.backRow)} AND ${dim(g.frontRow)} FROM THE GIRDER END. NO OTHER HOLES IN THE TOP FLANGE.`,
-   `BOLTS: ASTM F3125 GRADE ${e.bolts.grade} HEAVY HEX, PRETENSIONED, CLASS B FAYING SURFACES (SLIP-CRITICAL); HEADS ON THE BASE PLATE, A563 DH NUTS BELOW THE FLANGE, F436 WASHER UNDER THE TURNED ELEMENT. BOLT CENTERS ARE ${size(wrenchClearance(db))} MIN. CLEAR OF THE STOP WELD TOES FOR THE SOCKET (AISC MANUAL TABLE 7-15). VERIFY NUT CLEARANCE BELOW THE FLANGE AT THE BEARING STIFFENERS${flangeTieGeometry(p)?' AND THE TOP TIE SADDLE':''} BEFORE DRILLING.`,
-   `SHOP WELD THE FACE PLATE AND THE STIFFENERS TO THE BASE PLATE, AND EACH STIFFENER TO THE FACE PLATE OVER ITS FULL HEIGHT, WITH CONTINUOUS ${size(e.weldSize).replaceAll('"','')} FILLETS BOTH SIDES. GRIND THE FACE SMOOTH AT THE BUMPER CONTACT.`,
-   `TERMINATE THE RAIL ${dim(e.railGap)} CLEAR OF THE STOP FACE. THE FIRST RAIL CLIP PAIR IS AT THE RAIL END; CLIP SPACING PER ${keeperRef}. THE RAIL END BEARS ON THE STOP FACE ONLY AFTER CREEP: THE STOPS ANCHOR THE FLOATING RAIL.`,
+   `BOLTS: ASTM F3125 GR. ${e.bolts.grade} HEAVY HEX, PRETENSIONED, CLASS B FAYING SURFACES (SLIP-CRITICAL); HEADS ON THE BASE PLATE, A563 DH NUTS BELOW THE FLANGE, F436 WASHER UNDER THE TURNED ELEMENT. BOLT CENTERS ARE ${size(wrenchClearance(db))} MIN. CLEAR OF THE STOP WELD TOES FOR THE SOCKET (AISC MANUAL TABLE 7-15). VERIFY NUT CLEARANCE BELOW THE FLANGE AT THE BEARING STIFFENERS${flangeTieGeometry(p)?' AND THE TOP TIE SADDLE':''} BEFORE DRILLING.`,
+   `SHOP WELD THE FACE PLATE AND THE STIFFENERS TO THE BASE PLATE, AND EACH STIFFENER TO THE FACE PLATE OVER ITS FULL HEIGHT, WITH CONTINUOUS ${size(e.weldSize)} FILLETS BOTH SIDES. GRIND THE FACE SMOOTH AT THE BUMPER CONTACT.`,
+   `TERMINATE THE RAIL ${dim(g.railClear)} CLEAR OF THE STOP BASE PLATE EDGE (${dim(g.railEnd-g.faceFront)} CLEAR OF THE STOP FACE), ${dim(g.railEnd)} FROM THE GIRDER END. THE FIRST RAIL CLIP PAIR IS AT THE RAIL END; CLIP SPACING PER ${keeperRef}. THE RAIL END BEARS ON THE STOP ONLY AFTER CREEP: THE STOPS ANCHOR THE FLOATING RAIL.`,
    'CONFIRM THE BUMPER FORCE, BUMPER HEIGHT AND CONTACT DIAMETER WITH THE CRANE SUPPLIER BEFORE FABRICATION. STOPS SHALL BE INSTALLED BEFORE THE CRANE IS OPERATED.',
    `THE GIRDER AXIAL FORCE AND ${locating} INCLUDE THE BUMPER FORCE; THE END COUPLE IS INCLUDED IN THE GIRDER STOP COMBINATIONS (CALCULATION REPORT, RUNWAY END STOPS).`
   ];

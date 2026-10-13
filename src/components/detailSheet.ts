@@ -12,7 +12,8 @@ import {heading,numbered,noteFit,noteStack,detailNoteSizes,type Block,type Style
 
 /** A drawn detail in its own layout coordinates with its printed scale; the composer measures and places it. */
 export interface ViewRender {svg:string;scale:string}
-export interface DetailView {title:string;rows?:1|2;render:()=>ViewRender}
+/** A detail drawn in one cell; `subdetails` are the titles of further numbered details drawn inside it (subdetailTitle), numbered after it. */
+export interface DetailView {title:string;rows?:1|2;subdetails?:readonly string[];render:()=>ViewRender}
 /** A group of related details (one subject, such as the end stops) with its notes and tables. */
 export interface DetailTopic {key:string;name:string;views:DetailView[];notes?:(t:Style)=>Block[];message?:string[]}
 

@@ -17,7 +17,7 @@ import {packDetailSheets,detailSheetSvg,detailSheetTitle,type DetailTopic} from 
 import type { CalculationSnapshot } from '../engine/types';
 import { defaultFraming, framingSchema, type FramingSettings } from './framingSettings';
 import { planSheetGeometry, type Point, type Segment } from './planSheetGeometry';
-import { drawingLength, drawingElevation,dimensionLength,plateInches} from './drawingFormat';
+import { drawingLength, drawingElevation,dimensionLength,plateInches,specGrade} from './drawingFormat';
 import {refDim,dimText, sheetDrawingScale as drawingScale, n, text, rect, line, bubble, dimH, dimV, short, titleBlock, sheetStart, viewTitle, multiLeader, detailRef, detailTitles, sheetRef, breakLine, textWidth, type XY } from './sheetGraphics';
 import { heading, table, numbered, noteStack, type Style } from './noteBlocks';
 import { sheetOrdinalToken, detailNumberToken, sheetNumberToken, bearingBoltsTitle } from './sheetGraphics';
@@ -391,10 +391,10 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
   const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LOCATES AT THE LOWER-NUMBERED GRID, SLIDES AT THE OTHER; SEE ${detailRef(activeEndBearing(p)?bearingBoltsTitle(p):detailTitles.movement)}`;
   const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
-    return [mark,String(all.length*2),`${p.section.name}; ${p.section.kind==='cap'&&p.capDesign?`W ${astmSpec('w-shape',p.section.Fy,p.section.Fu)}, CAP ${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource)}`:astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu)}`.toUpperCase()+`${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
+    return [mark,String(all.length*2),specGrade(`${p.section.name}; ${p.section.kind==='cap'&&p.capDesign?`W ${astmSpec('w-shape',p.section.Fy,p.section.Fu)}, CAP ${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource)}`:astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu)}`.toUpperCase())+`${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
   const notes=[
     'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
-    newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${len(specifiedSeparation(separation.required,u))} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS, COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
+    newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${len(specifiedSeparation(separation.required,u))} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS ARE SHOWN AS CENTERLINES (DASH-DOT); COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
     `ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`,
     // With the detailed set the rail setting is the S-00 crane runway installation note.
@@ -421,9 +421,17 @@ const arrangementDetails=['ISOMETRIC VIEW','RUNWAY PLAN','RUNWAY GIRDER ELEVATIO
 export function resolveSheetSet(sheets:DrawingSheet[]):DrawingSheet[]{
   const details=new Map<string,string>(),topics=new Map<string,string>();
   for(const sheet of sheets)for(const [,key] of sheet.svg.matchAll(/<g data-topic="([^"]*)"\/>/g))if(!topics.has(unescape(key)))topics.set(unescape(key),sheet.number);
+  // A sub-detail drawn inside a cell (subdetailTitle) precedes the cell's own title in the drawing; it takes the number
+  // after that title.
+  const titled=/<g (data-view-title="below" data-detail-title|data-subdetail-title)="([^"]*)">([\s\S]*?)<\/g>/g;
   const numbered=sheets.map((sheet,i)=>{
-    let k=0,svg=sheet.svg.replace(sheetOrdinalToken,`${i+1} OF ${sheets.length}`);
-    svg=svg.replace(/<g data-view-title="below" data-detail-title="([^"]*)">([\s\S]*?)<\/g>/g,(all,title:string)=>{k++;const key=unescape(title);if(!details.has(key))details.set(key,`${k}/${sheet.number}`);return all.replace(detailNumberToken,String(k)).replace(sheetNumberToken,sheet.number);});
+    let svg=sheet.svg.replace(sheetOrdinalToken,`${i+1} OF ${sheets.length}`);
+    const kinds=[...svg.matchAll(titled)].map(m=>m[1]==='data-subdetail-title'),numbers:number[]=[];
+    let k=0,pending:number[]=[];
+    kinds.forEach((sub,j)=>{if(sub){pending.push(j);return;}numbers[j]=++k;for(const q of pending)numbers[q]=++k;pending=[];});
+    for(const q of pending)numbers[q]=++k;
+    let j=0;
+    svg=svg.replace(titled,(all,_kind:string,title:string)=>{const no=numbers[j++],key=unescape(title);if(!details.has(key))details.set(key,`${no}/${sheet.number}`);return all.replace(detailNumberToken,String(no)).replace(sheetNumberToken,sheet.number);});
     return {...sheet,svg};
   });
   return numbered.map(sheet=>({...sheet,svg:sheet.svg.replace(/\{\{REF:([^}]*)\}\}/g,(_,token:string)=>{const title=decodeURIComponent(token);return details.get(title)??`${title} (NOT IN SET)`;})
@@ -433,7 +441,7 @@ export function resolveSheetSet(sheets:DrawingSheet[]):DrawingSheet[]{
 /** Detail references of an assembled set by detail title, e.g. "GIRDER BEARING / COLUMN BRACKET" to "1/S-02". */
 export function detailReferences(sheets:DrawingSheet[]){
   const refs=new Map<string,string>();
-  for(const sheet of sheets)for(const [,title,number] of sheet.svg.matchAll(/<g data-view-title="below" data-detail-title="([^"]*)">(?:(?!<\/g>)[\s\S])*?font-weight="700">(\d+)<\/text>/g))if(!refs.has(unescape(title)))refs.set(unescape(title),`${number}/${sheet.number}`);
+  for(const sheet of sheets)for(const [,title,number] of sheet.svg.matchAll(/<g (?:data-view-title="below" data-detail-title|data-subdetail-title)="([^"]*)">(?:(?!<\/g>)[\s\S])*?font-weight="700">(\d+)<\/text>/g))if(!refs.has(unescape(title)))refs.set(unescape(title),`${number}/${sheet.number}`);
   return refs;
 }
 const unescape=(v:string)=>v.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
@@ -459,7 +467,7 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
   const once=(draw:()=>string)=>{let v:string|undefined;return ()=>v??=draw();};
   const details=packDetailSheets(detailTopics(s,f),p.units).map((layout,i)=>{
     const number=`S-${String(i+2).padStart(2,'0')}`,title=detailSheetTitle(layout);
-    return {number,name:`runway-${layout.topics.map(t=>t.key).join('-')}-sheet-arch-d`,title,details:layout.placed.map(v=>v.view.title),render:once(()=>detailSheetSvg(s,number,title,layout))};
+    return {number,name:`runway-${layout.topics.map(t=>t.key).join('-')}-sheet-arch-d`,title,details:layout.placed.flatMap(v=>[v.view.title,...(v.view.subdetails??[])]),render:once(()=>detailSheetSvg(s,number,title,layout))};
   });
   const sheets=[{number:'S-01',name:'runway-plan-sheet-arch-d',title:'GENERAL ARRANGEMENT',details:[...arrangementDetails,...(existingClearanceShown(s)?[existingClearanceTitle]:[])],render:once(()=>planSheetSvg(s,f))},...details];
   return [{number:'S-00',name:'cover-general-notes-sheet-arch-d',title:coverSheetTitle,render:()=>coverSheetSvg(s,sheets)},...sheets];

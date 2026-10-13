@@ -33,9 +33,13 @@ function tieColumn(s:CalculationSnapshot,g:CapAngleGeometry){
 }
 
 /** Section at a support looking along the runway: the girder with cap, rail and rail clip, the cap angle, tie plate, end plate, shims and column flange. */
+/** Whether two girder ends share a column, so the plan of the ties at it is drawn (and dimensions the bolt pitches). */
+const sharedColumn=(g:CapAngleGeometry)=>g.stations.some(v=>g.stations.some(o=>o!==v&&Math.abs(o.station-v.station)<1e-6));
 export function capAngleSection(s:CalculationSnapshot):ViewRender{
  const p=s.input,u=p.units,g=capAngleGeometry(p)!,d=p.details!,b=p.section,c=g.input,res=capAngleResult(s);
  const sz=(v:number)=>tieSize(v,u),dim=(v:number)=>tieDim(v,u),tc=tieColumn(s,g);
+ // The bolt pitches along the runway are dimensioned on the plan; without a plan the callouts give them.
+ const pitch=(v:number)=>sharedColumn(g)?'':` AT ${sz(v)}`;
  const rail=d.rail,pad=railPadThickness(p),clip=clipGeometry(rail,pad),railTop=pad+(p.aist?.railDepth??p.railHeight);
  const yL=-rail.baseWidth/2-12.7,colBack=g.face+tc.tf,hw=boltHardware(g.column.diameter);
  // The tie plate is short and dimensioned across its length: drawn whole, never broken.
@@ -113,19 +117,24 @@ export function capAngleSection(s:CalculationSnapshot):ViewRender{
  const above:Callout[]=[{at:[X((g.shim.y0+g.shim.y1)/2),Z(ep.z1)+4],labels:[`FINGER SHIMS 0 TO ${sz(c.shimMax)}`]},
   {at:[X(ep.y0+ep.thickness/2),Z(ep.z1)+3],labels:[`END PL ${sz(ep.thickness)} X ${sz(ep.width)} X ${sz(ep.height)}`]},
   {at:[X(colBack),Z(fz1)+10],labels:[`${tc.label}${tc.isNew?'':' (DASHED)'}`]}];
+ // The end plate weld symbol tops the column-side group: its leader passes above the column callout leaders and over
+ // the end plate, then drops to the top fillet left of the bolt heads, clear of the gauge dimension between the bolts.
  const weldItem:Callout={at:[X(ep.y0-w/3),Z(tp+w/3)],weld:{size:sz(w),length:weldLength(g.plate.width,u),both:true},labels:['END PL TO TIE PL (SHOP)']};
  const belowRight:Callout[]=[
   {at:[X(colBack+hw.washer.t+hw.nut/2),lower],labels:[`2 - ${sz(cl.diameter)} ${cl.grade} BOLTS, PRETENSIONED,`,`${sz(cl.gauge)} EACH SIDE OF TIE PL; FIELD-`,`DRILL ${sz(cl.hole)} HOLES IN COLUMN FLANGE`]}];
- svg+=callouts(above,cx,Math.min(upper-14,Z(ep.z1)+10)-columnHeight(above)+11).svg;
+ const aboveTop=Math.min(upper-14,Z(ep.z1)+10)-columnHeight(above)+11;
+ svg+=callouts(above,cx,aboveTop).svg;
  if(stiff)svg+=weldLeader([[X(colBack+12),Z(g.plate.zc-stiff.thickness/2)]],[cx,Z(g.plate.zc)+40],{size:sz(stiff.flangeWeld),length:weldLength(stiff.contact,u),both:true,field:!tc.isNew},[`STIFFENER PL ${sz(stiff.thickness)} X ${sz(stiff.width)} X ${sz(stiff.length)}`]);
- svg+=weldLeader([weldItem.at],[cx,Z(g.plate.zc)+3],weldItem.weld!,weldItem.labels);
- const lowRight=callouts(belowRight,cx,Math.max(lower+14,Z(g.plate.zc)+(stiff?72:34)));svg+=lowRight.svg;
+ // Down past the upper bolt head on its far side, then in under it to the fillet.
+ const headLeft=X(ep.y0-hw.washer.t-hw.head)-8,headBottom=Z(cl.zs[0]-hw.corners/2)+3;
+ svg+=weldLeader([weldItem.at],[cx,aboveTop-calloutHeight(weldItem)-8+3],weldItem.weld!,weldItem.labels,[[[headLeft,headBottom],[headLeft,Z(ep.z1)-8]]]);
+ const lowRight=callouts(belowRight,cx,stiff?Math.max(lower+14,Z(g.plate.zc)+72):lower+14);svg+=lowRight.svg;
  const below=Math.max(Z(webEnd),Z(lapBottom))+18,bx=X(-b.tw/2)-4,rightStart=Math.max(bx+60,X(headEnd)+14);
  const leftCol:Callout[]=[
   {at:[X(g.y0+g.ta/2),Z(-g.dv)],labels:[`${c.shape} X ${dim(c.length)} CAP ANGLE,`,`${g.dv===g.bh?'ONE LEG':'LONG LEG'} LEVEL WITH TOP OF CAP`]},
-  {at:[X(headEnd-ch.head/2),Z(zc-ch.corners/2)],labels:[`2 - ${sz(cb.diameter)} ${cb.grade} BOLTS ${sz(cb.gauge)} BELOW TOP;`,`${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZ. SLOTS, ${cb.sleeved?'SLEEVED':'SNUG-TIGHT'}`]}];
+  {at:[X(headEnd-ch.head/2),Z(zc-ch.corners/2)],labels:[`2 - ${sz(cb.diameter)} ${cb.grade} BOLTS${pitch(cb.pitch)} ${sz(cb.gauge)} BELOW TOP;`,`${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZ. SLOTS, ${cb.sleeved?'SLEEVED':'SNUG-TIGHT'}`]}];
  const rightCol:Callout[]=[
-  {at:[X(yl),Z(lapBottom)],points:[[X(yl),Z(lapBottom)],[X((g.toe+ep.y0)/2),Z(0)]],labels:[`TIE PL ${sz(tp)} X ${sz(g.plate.width)} X ${dim(g.plate.length)} WITH`,`2 - ${sz(g.lap.diameter)} ${g.lap.grade} SC BOLTS, CLASS ${g.lap.surface},`,`${sz(g.lap.slot.width)} X ${sz(g.lap.slot.length)} SHORT SLOTS IN TIE PL,`,`${sz(g.lap.edge)} TO TIE PL END`]}];
+  {at:[X(yl),Z(lapBottom)],points:[[X(yl),Z(lapBottom)],[X((g.toe+ep.y0)/2),Z(0)]],labels:[`TIE PL ${sz(tp)} X ${sz(g.plate.width)} X ${dim(g.plate.length)} WITH`,`2 - ${sz(g.lap.diameter)} ${g.lap.grade} SC BOLTS${pitch(g.lap.pitch)}, CLASS ${g.lap.surface},`,`${sz(g.lap.slot.width)} X ${sz(g.lap.slot.length)} SHORT SLOTS IN TIE PL,`,`${sz(g.lap.edge)} TO TIE PL END`]}];
  svg+=callouts(leftCol,bx-textWidth(labelCaps(leftCol[1].labels[0]),8.5)+40,below).svg;
  // The cap-side column ends clear of the leaders that rise to the column flange.
  const rightWidth=Math.max(...rightCol.flatMap(v=>v.labels.map(l=>textWidth(labelCaps(l),8.5))));
@@ -178,6 +187,11 @@ export function capAngleSharedPlan(s:CalculationSnapshot):ViewRender{
  // Below the column: the end plate width of the left tie.
  const left=pair.reduce((a,v)=>v.x<a.x?v:a,pair[0]),right=pair.reduce((a,v)=>v.x>a.x?v:a,pair[0]),by=Y(yBot)+12;
  svg+=line([X(left.x-ep.width/2),Y(g.shim.y1)+2],[X(left.x-ep.width/2),by+5])+line([X(left.x+ep.width/2),Y(g.shim.y1)+2],[X(left.x+ep.width/2),by+5])+dimH(X(left.x-ep.width/2),X(left.x+ep.width/2),by+5,by,sz(ep.width),'left');
+ // Bolt pitches along the runway on the left tie, each just past its bolts in the open plate: the cap bolts (slots
+ // hidden in the short leg) below the leg, the lap bolts below the angle toe on the tie plate.
+ {const capY=Y(g.y0+g.ta)+2,lapY=Y(g.lap.y+g.lap.slot.length/2)+2,lapDim=Math.max(Y(g.toe)+16,lapY+16);
+  svg+=dimH(X(left.x-g.cap.pitch/2),X(left.x+g.cap.pitch/2),capY,Math.min(capY+16,Y(g.plate.start)-7),sz(g.cap.pitch));
+  svg+=dimH(X(left.x-g.lap.pitch/2),X(left.x+g.lap.pitch/2),lapY,lapDim,sz(g.lap.pitch));}
  const items:Callout[]=[
   {at:[X(right.x+g.cap.pitch/2+g.cap.slotLength/2),Y(g.y0+g.ta/2)],labels:[`${sz(g.cap.slotLength)} SLOTS ALONG RUNWAY (HIDDEN),`,`${sz(c.travel)} TRAVEL EACH WAY`]},
   {at:[X(right.x+c.length/2),Y((g.lap.y+g.toe)/2)],labels:[`${c.shape} X ${dim(c.length)}, EACH GIRDER END`]},
@@ -194,25 +208,28 @@ export function capAngleSharedPlan(s:CalculationSnapshot):ViewRender{
 export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const p=s.input,g=capAngleGeometry(p);if(!g)return undefined;
  const u=p.units,c=g.input,sz=(v:number)=>tieSize(v,u),dim=(v:number)=>tieDim(v,u),tc=tieColumn(s,g),res=capAngleResult(s),cb=g.cap;
- const shared=g.stations.some(v=>g.stations.some(o=>o!==v&&Math.abs(o.station-v.station)<1e-6));
+ const shared=sharedColumn(g);
  const notes=[
   `CAP TIEBACK ANGLES (AISC DG7, TOP FLANGE CONNECTED DIRECTLY TO THE COLUMN): ONE AT EACH GIRDER END, ${dim(c.setback)} FROM THE GIRDER END TO ITS CENTERLINE, ON THE COLUMN-SIDE CHANNEL FLANGE. THE BOTTOM FLANGE IS RESTRAINED BY THE BOLTED END BEARINGS.`,
-  cb.sleeved?`CAP BOLTS: PRETENSION AGAINST STEEL SLEEVES ${sz(cb.sleeve!.od)} OD X ${sz(cb.sleeve!.length)} LONG THROUGH ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} X ${sz(cb.washer.height)} X ${sz(cb.washer.length)} PLATE WASHERS. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE ANGLE IS NOT CLAMPED: THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`
+  cb.sleeved?`CAP BOLTS: PRETENSION AGAINST STEEL SLEEVES ${sz(cb.sleeve!.od)} OD X ${sz(cb.sleeve!.bore)} BORE X ${sz(cb.sleeve!.length)} LONG THROUGH ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} X ${sz(cb.washer.height)} X ${sz(cb.washer.length)} PLATE WASHERS. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE ANGLE IS NOT CLAMPED: THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`
    :`CAP BOLTS: SNUG-TIGHT WITH JAM NUTS IN ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} PLATE WASHERS (NOT PERMITTED: PRETENSIONED BOLTS REQUIRED, AIST TR-13 §5.14; SEE CALCULATION). THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`,
   `DRILL STANDARD HOLES IN THE CAP CHANNEL FLANGE AT THE TIE ONLY; DO NOT WELD THE TIE TO THE CAP OR GIRDER.${beveledCapWasher(p.section)?' F436 1:6 BEVELED WASHERS UNDER THE CAP BOLT NUTS ON THE SLOPED INSIDE FACE OF THE CHANNEL FLANGE.':''} INSTALL AND TENSION THE CAP BOLTS BEFORE THE TIE PLATE AND LAP BOLTS.`,
   `LAP BOLTS: PRETENSIONED, SLIP-CRITICAL, CLASS ${g.lap.surface} FAYING SURFACES, IN SHORT SLOTS ACROSS THE RUNWAY IN THE TIE PLATE FOR FIT-UP; F436 WASHERS OVER THE SLOTS.`,
   `END PLATE: SHOP WELD TO THE TIE PLATE. FIELD-DRILL ${sz(g.column.hole)} HOLES IN THE ${tc.isNew?'COLUMN':'EXISTING COLUMN'} FLANGE TO MATCH; NO FIELD WELDING TO THE COLUMN FOR THE TIE. FINGER SHIMS 0 TO ${sz(c.shimMax)} TAKE UP THE FIT-UP; PRETENSION THE COLUMN BOLTS.`,
   ...(res?.stiffener.provided?[`COLUMN STIFFENER AT THE TIE LEVEL, ON THE TIE SIDE OF THE COLUMN WEB: ${tc.isNew?'SHOP':'FIELD'} WELD TO THE COLUMN FLANGE AND WEB (SEE EXISTING COLUMN WELDING).`]:[]),
   ...(shared?['AT A SHARED COLUMN THE TWO TIES SIT SIDE BY SIDE ON THE COLUMN FLANGE, EACH WITH ITS OWN END PLATE.']:[])];
- // Every DESIGN check of the tie (slot travel included, a length check), as the calculation reports its largest D/C.
+ // Every DESIGN check of the tie, as the calculation reports its largest D/C, by its kind (check taxonomy): strength,
+ // movement capacity (slot travel, a length check) and fatigue each labelled as what it is.
  const checks=s.checks.filter(v=>v.id.startsWith('cap-angle-')&&v.utilization!==undefined&&v.status==='pass');
  const most=(list:typeof checks)=>Math.max(0,...list.map(v=>v.utilization??0));
- // DESIGN checks only (check taxonomy): no detailing rule, and not the F13.1 net-area test (a capacity modifier);
- // fatigue only for details above their threshold (screened details are not evaluated).
- const strength=most(checks.filter(v=>{const k=classifyCheck(v);return k.type==='design'&&k.effect!=='fatigue';})),fatigue=most(checks.filter(v=>{const k=classifyCheck(v);return k.effect==='fatigue'&&gateCheck(s,v,k).gate==='evaluated';}));
+ // DESIGN checks only: no detailing rule, and not the F13.1 net-area test (a capacity modifier); fatigue only for
+ // details above their threshold (screened details are not evaluated).
+ const design=(v:typeof checks[number])=>{const k=classifyCheck(v);return k.type==='design'?k.effect:undefined;};
+ const strength=most(checks.filter(v=>{const e=design(v);return e!==undefined&&e!=='fatigue'&&e!=='movement';})),fatigue=most(checks.filter(v=>{const k=classifyCheck(v);return k.effect==='fatigue'&&gateCheck(s,v,k).gate==='evaluated';}));
+ const moving=checks.filter(v=>design(v)==='movement'),movement=most(moving),travel=moving.length&&moving.every(v=>/slot-travel$/.test(v.id))?'SLOT TRAVEL':'MOVEMENT';
  return {key:'cap-angle-tie',name:'CAP TIEBACK ANGLES',views:[
   {title:capAngleTitles.section,render:()=>capAngleSection(s)},
   ...(shared?[{title:capAngleTitles.plan,render:()=>capAngleSharedPlan(s)}]:[])
- ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue>0?`${fatigue.toFixed(2)} FATIGUE`:'FATIGUE BELOW THRESHOLD'})`:''}.`)]};
+ ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${movement>0?`${movement.toFixed(2)} ${travel}, `:''}${fatigue>0?`${fatigue.toFixed(2)} FATIGUE`:'FATIGUE BELOW THRESHOLD'})`:''}.`)]};
 }
 export const capAngleLabelWidth=(v:string)=>textWidth(labelCaps(v),8.5);

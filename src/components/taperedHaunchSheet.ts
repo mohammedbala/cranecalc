@@ -17,16 +17,16 @@ import {endGridBearingNote} from '../engine/simpleSupports';
 import {topFlangeRestraint} from './tieNames';
 
 /** Titles of the haunch's plan and section; its elevation along the runway is the bracket transverse section. */
-export const haunchPlanTitle='TAPERED HAUNCH / TOP FLANGE PLAN';
-export const haunchSectionTitle='TAPERED HAUNCH / SECTION AT STIFFENERS';
-type Item={at:XY;labels:string[];weld?:string;both?:boolean;field?:boolean;groove?:boolean;allAround?:boolean};
+export const haunchPlanTitle=detailTitles.haunchPlan;
+export const haunchSectionTitle=detailTitles.haunchSection;
+type Item={at:XY;labels:string[];weld?:string;both?:boolean;field?:boolean;groove?:boolean;tail?:string;allAround?:boolean};
 /** Callouts in a column at x, ordered by target height (or as given) between top and bottom: plain, fillet or CJP groove. */
 function calloutColumn(items:Item[],x:number,top:number,bottom:number,sort=true){
  const sorted=sort?[...items].sort((a,b)=>a.at[1]-b.at[1]):items,height=(v:Item)=>(v.weld||v.groove?17:0)+v.labels.length*11;
  const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
  let y=top,svg='';
  for(const v of sorted){
-  svg+=v.groove?grooveLeader([v.at],[x,y+3],v.labels,v.field):v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,!!v.both,[],!!v.field,!!v.allAround):multiLeader([v.at],[x,y],v.labels);
+  svg+=v.groove?grooveLeader([v.at],[x,y+3],v.labels,v.field,v.tail):v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,!!v.both,[],!!v.field,!!v.allAround):multiLeader([v.at],[x,y],v.labels);
   y+=height(v)+gap;
  }
  return svg;
@@ -56,10 +56,13 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const colName=sc.isNew?sc.name:`EXISTING ${p.existingColumn?.enabled&&p.existingColumn.shape?p.existingColumn.shape+' ':''}COLUMN`;
  const topLabel=`TOP FL. PL ${size(tt)} X ${dim(bt)}${f?` (${dim(btr)} AT COLUMN)`:''}`,webLabel=`WEB PL ${size(tw)}`,botLabel=`BOTTOM FL. PL ${size(g.tb)} X ${dim(bb)}`;
  const stiffLabel=`2 STIFF. PL ${size(st.t)} X ${size(st.width)}`;
- const flangeWeld=(target:XY,which:string):Item=>g.joint==='cjp'?{at:target,labels:[`${which} FLANGE TO COLUMN`,`FLANGE, ${where}`],groove:true,field:sc.field}:{at:target,labels:[`${which} FLANGE, BOTH FACES,`,`TO COLUMN FLANGE, ${where}`],weld:size(g.flangeWeld),both:true,field:sc.field};
+ // The CJP tail names the welds note: steel backing removed, root back-gouged and rewelded.
+ const flangeWeld=(target:XY,which:string):Item=>g.joint==='cjp'?{at:target,labels:[`${which} FLANGE TO COLUMN`,`FLANGE, ${where}`],groove:true,tail:`CJP, HAUNCH NOTE ${weldsNote()}`,field:sc.field}:{at:target,labels:[`${which} FLANGE, BOTH FACES,`,`TO COLUMN FLANGE, ${where}`],weld:size(g.flangeWeld),both:true,field:sc.field};
  const views:DetailView[]=[],cs=stiffenerDrawing(p),colCls=sc.isNew?'runway-line':'reference-line';
+ // Number of the haunch WELDS note (see notes below): the CJP symbols refer to it.
+ const weldsNote=()=>notes.findIndex(v=>v.startsWith('WELDS:'))+1;
  // 1. Elevation looking along the runway: the existing column flange, the haunch with its stiffeners edge-on and its
- // tip end plate, the girder end, bearing plate and rail in phantom on the girder web line.
+ // tip end plate, the girder end, bearing plate and rail (reference, dashed) on the girder web line.
  views.push({title:detailTitles.weldedBracket,render:()=>{
   // The girder end is drawn at its full depth (it is short enough to fit; no break).
   const sec=p.section,cap=sec.kind==='cap'?sec.capTw:0,web=sec.d-2*sec.tf,shown=sec.d,above=tbp+shown+cap+railTopAboveSteel(p);
@@ -80,7 +83,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   if(g.endPlate)svg+=poly([[X(L),Y(-tt)],[X(Lw),Y(-tt)],[X(Lw),Y(inner(Lw))],[X(L),Y(inner(L))]]);
   else svg+=line([X(L),Y(-tt)],[X(L),Y(inner(L))],'runway-line');
   svg+=poly([[X(a-st.t/2),Y(-tt)],[X(a+st.t/2),Y(-tt)],[X(a+st.t/2),Y(inner(a+st.t/2))],[X(a-st.t/2),Y(inner(a-st.t/2))]]);
-  // Bearing plate, and the girder end and rail beyond it in phantom.
+  // Bearing plate, and the girder end and rail beyond it, dashed for reference.
   svg+=rect(X(a+W/2),Y(tbp),W*k,tbp*k,'runway-line');
   const gx=(x:number)=>X(a+x),bf=sec.bf,tf=sec.tf,gw=sec.tw,z0=tbp,z1=z0+sec.d;
   svg+=rect(gx(bf/2),Y(z0+tf),bf*k,tf*k,'reference-line')+rect(gx(gw/2),Y(z1-tf),gw*k,web*k,'reference-line')+rect(gx(bf/2),Y(z1),bf*k,tf*k,'reference-line');
@@ -116,7 +119,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[0,Y((-tt+inner(0))/2)],labels:['WEB TO COLUMN FLANGE,',`BOTH SIDES, ${where}`],weld:size(g.webWeld),both:true,field:sc.field},
    flangeWeld([0,Y(-hr+tbv/2)],'BOTTOM'),
    {at:[X(a-W*.3),Y(tbp)],labels:[`BEARING PL ${size(tbp)} X ${dim(W)}`,`EACH GIRDER END; ${detailRef(eb?bearingBoltsTitle(p):detailTitles.bearing)}`]},
-   {at:[gx(-sec.bf/2),Y(z0+tf/2)],labels:['RUNWAY GIRDER, RAIL (PHANTOM)']},
+   {at:[gx(-sec.bf/2),Y(z0+tf/2)],labels:['RUNWAY GIRDER AND RAIL (REF.)']},
    ...(cs?[{at:lowerEdgeTarget(cs.g,{face:0,k,Y}),labels:cs.callout.flatMap(v=>wrapRows(v,230))}]:[])
   ];
   svg+=calloutColumn(right,(cs?c.depth*k:tc)+46,topY-6,botY+(cs?60:24));
@@ -240,7 +243,7 @@ export function haunchUnderSeat(p:CalculationSnapshot['input']){
  if(!usesTaperedHaunch(p))return undefined;
  const g=projectHaunch(p);
  return {g,name:'TAPERED HAUNCH',tf:g.tt,tw:g.tw,bf:g.btr,d:g.hr,L:g.L,seat:undefined,hasSeat:false,
-  label:[`HAUNCH TOP FLANGE ${plateInches(g.tt,p.units)}`,`SEE ${detailRef(detailTitles.weldedBracket)}`],
+  label:[`HAUNCH TOP FLANGE ${plateInches(g.tt,p.units)}`,`SEE ${detailRef(detailTitles.haunchPlan)}`],
   drop:(_x:number)=>0,
   draw:(X:(x:number)=>number,y:number,kk:number,x0:number,x1:number,depth:number)=>g.tw/2>x0&&-g.tw/2<x1?rect(X(-g.tw/2),y,g.tw*kk,depth*kk,'runway-line'):''};
 }

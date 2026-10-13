@@ -14,7 +14,7 @@ export const endStopSchema=z.object({
  enabled:z.boolean(),
  /** Crane bumper centerline above top of rail, and its contact diameter (crane supplier). */
  bumperHeight:nn,bumperDiameter:pos,
- /** Girder end to back edge of the base plate; clear gap from rail end to the stop face. */
+ /** Girder end to back edge of the base plate; clear gap from the rail end to the nearest stop steel (the base plate edge). */
  setback:nn,railGap:pos,
  base:z.object({length:pos,width:pos,thickness:pos}),
  /** Face plate height above the base plate. */
@@ -80,5 +80,12 @@ export function stopLocation(p:ProjectInput){
 export const stopLip=(e:EndStopInput)=>snapQuarter(e.weldSize+6.35,'up');
 /** Back and front bolt rows from the girder end: back bolts edge from the base plate back, front bolts frontClear behind the face. */
 export const stopBoltRows=(e:EndStopInput)=>[e.setback+e.bolts.edge,e.setback+e.base.length-stopLip(e)-e.face.thickness-e.bolts.frontClear] as const;
-/** Rail end distance from the runway end: the rail stops railGap short of the stop face. */
-export const stopRailEnd=(e:EndStopInput)=>e.setback+e.base.length-stopLip(e)+e.railGap;
+/**
+ * Nearest stop steel to the rail end, from the runway end: the front edge of the base plate, which projects the lip
+ * in front of the face plate (the face plate where there is no lip).
+ */
+export const stopNose=(e:EndStopInput)=>Math.max(e.setback+e.base.length-stopLip(e),e.setback+e.base.length);
+/** Rail end distance from the runway end: the rail stops railGap short of the nearest stop steel (stopNose). */
+export const stopRailEnd=(e:EndStopInput)=>stopNose(e)+e.railGap;
+/** Clear gap from the rail end to the nearest stop steel (base plate edge or face plate). */
+export const stopRailClear=(e:EndStopInput)=>stopRailEnd(e)-stopNose(e);

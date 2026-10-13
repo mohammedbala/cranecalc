@@ -40,6 +40,12 @@ export function dimensionLength(mm:number,units:ProjectInput['units']){
 /** A reference size that follows from dimensioned geometry (the depth of a taper at a section cut): US to the nearest 1/4 in. */
 export function referenceLength(mm:number,units:ProjectInput['units']){return units==='US'?feetInches(snapQuarter(mm)):drawingLength(mm,units);}
 /** Elevations: feet and inches, or meters to three decimals in SI. */
+/** ASTM grades read one way on the sheets, as the abbreviation list gives them: "ASTM A572 GR. 50", "ASTM F3125 GR. A325". */
+export const specGrade=(v:string)=>v.replace(/\b(ASTM [A-Z]+\d+) GRADE\b/gi,'$1 GR.');
+/** An elevation as it prints (US to the 1/16 in, SI to the millimeter), in mm: reference dimensions between elevations use it. */
+export function printedElevation(mm: number, units: ProjectInput['units']) {
+  return units === 'US' ? Math.round(mm / 25.4 * 16) / 16 * 25.4 : Math.round(mm);
+}
 export function drawingElevation(mm: number, units: ProjectInput['units']) {
   return units === 'US' ? feetInches(mm) : `${(mm / 1000).toFixed(3)} m`;
 }

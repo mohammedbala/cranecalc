@@ -74,7 +74,8 @@ describe('DEMO-FOCUS-005 rev B',()=>{
   // The sleeve is cut to a 1/16 in length: the 0.645 in flange plus at least 1/16 in, the same on both details.
   expect(s2).toMatch(/STEEL SLEEVES 1 7\/16" OD X 3\/4"/);expect(s2).toMatch(/X 3\/4" \(FLANGE \+ 1\/16" MIN\.\)/);
   // Reference dimensions (section depth, rail over steel) read in parentheses; the S-00 legend explains them.
-  expect(s2).toMatch(/\(1'-1 7\/8"\)/);expect(s2).toMatch(/\(6 11\/16"\)/);expect(s0).toMatch(/REFERENCE DIMENSION/);
+  expect(s2).toMatch(/\(1'-1 7\/8"\)/);// T.O.R. 119'-9 5/8" - T.O.S. 119'-2 7/8": the rail over steel is the difference of the printed elevations.
+  expect(s2).toMatch(/\(6 3\/4"\)/);expect(s0).toMatch(/REFERENCE DIMENSION/);
  },120000);
 });
 

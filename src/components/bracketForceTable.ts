@@ -2,11 +2,13 @@ import type {CalculationSnapshot} from '../engine/types';
 import {leastBearing,sideReactions,type SupportForceEnvelope,type SupportForceSet} from '../engine/bracketForces';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeColumnCap} from '../engine/columnCapInputs';
-import {craneCombinations} from '../engine/aistLoads';
+import {craneCombinations,combinationLabel} from '../engine/aistLoads';
 import {toDisplay,unit} from '../engine/units';
 import {heading,paragraph,table,type Block,type Style} from './noteBlocks';
 import {sheetRef} from './sheetGraphics';
 import {topFlangeRestraint} from './tieNames';
+import {sig3} from '../report/reportParts';
+import {deliveredRows} from '../report/deliveredTable';
 
 /**
  * Details whose notes carry the bracket design force table: the bracket details, else the independent
@@ -84,13 +86,14 @@ export function bracketForceCases(s:CalculationSnapshot){
 }
 export const hasUplift=(v:SupportForceEnvelope)=>Math.min(leastBearing(v.minBearing),(v.minVertical??v.minBearing).vertical)<-1;
 /**
- * Signed values of one table row, each to the table precision (a dash for a horizontal force that rounds to zero):
- * SI forces to 0.1 kN and moments to 0.1 kN·m, US to 0.01 kip and kip-ft. H TOP is ± (it reverses with the side thrust and with
- * the rail eccentricity), H BOTTOM signed relative to it, LONG. + toward the higher-numbered grid.
+ * Signed values of one table row, to three significant figures (two decimals below 0.1) as the forces delivered to the
+ * columns on S-00 print, a dash for a horizontal force that rounds to zero at 0.01 kip (0.1 kN). H TOP (H TIE) is ±
+ * (it reverses with the side thrust and with the rail eccentricity), H BOTTOM (H SEAT) signed relative to it, LONG. (F)
+ * + toward the higher-numbered grid.
  */
 export function bracketForceCells(f:SupportForceSet,mirrored:boolean,u:'US'|'SI'){
  const dp=u==='SI'?1:2,shown=(v:number,q:'force'|'moment')=>Math.abs(toDisplay(v,q,u))>=.5*10**-dp;
- const value=(v:number,q:'force'|'moment',sign='')=>{const d=Math.abs(toDisplay(v,q,u));return `${sign||(v<0&&shown(v,q)?'\u2212':'')}${d.toLocaleString('en-US',{maximumFractionDigits:dp})} ${unit(q,u)}`;};
+ const value=(v:number,q:'force'|'moment',sign='')=>{const d=Math.abs(toDisplay(v,q,u));return `${sign||(v<0&&shown(v,q)?'\u2212':'')}${d<.1?`${d.toFixed(2)} ${unit(q,u)}`:sig3(Math.abs(v),q,u)}`;};
  const side=sideReactions(f),dash='—';
  const top=shown(f.top,'force'),bottom=shown(f.bottom,'force');
  return {
@@ -109,19 +112,29 @@ export function bracketForceBlocks(s:CalculationSnapshot,t:Style):Block[]{
  if(!grids.length)return [title,paragraph(t,'PENDING CALCULATION.')];
  // A continuous girder's runway-end bearings sit inboard of their grids: a seat moment column when any acts.
  const moments=!simple&&grids.some(g=>g.cases.some(c=>Math.abs(c.force.moment)>=1));
+ const bolted=activeEndBearing(p);
+ // The labels of the forces delivered to the columns on S-00 (and the calculation): M_y,seat, F, H tie, H seat. A column
+ // cap has neither seat nor tie: its lateral forces stay at the top and bottom flanges.
+ const L=cap?{M:'SEAT M',F:'LONG.',top:'H TOP',bottom:'H BOT.'}:{M:'MY,SEAT',F:'F',top:'H TIE',bottom:bolted?'H SEAT':'H BOT.'};
+ const caseLabel=(v:string)=>cap?v:v.replace(/\bLONG\./g,'F').replace(/\bH BOT\./g,L.bottom);
  const rows=grids.flatMap(({grid,cases})=>cases.map((c,i)=>{
-  const v=bracketForceCells(c.force,c.mirrored,u),head=[i?'':String(grid),c.label,combination(c.force),v.vertical];
+  const v=bracketForceCells(c.force,c.mirrored,u),head=[i?'':String(grid),caseLabel(c.label),combination(c.force),v.vertical];
   return simple?[...head,v.left,v.right,v.moment,v.longitudinal,v.top,v.bottom]:[...head,...(moments?[v.moment]:[]),v.longitudinal,v.top,v.bottom];
  }));
  const stops=new Set(craneCombinations(p.method).filter(c=>c.bumper>0).map(c=>`${p.method} ${c.id}`));
- const envelopes=grids.map(g=>g.envelope),uplift=envelopes.some(hasUplift),bolted=activeEndBearing(p);
+ const envelopes=grids.map(g=>g.envelope),uplift=envelopes.some(hasUplift);
+ // The TR-13 traction and bumper cases of combination 10 print as 10-T and 10-B in the narrow column.
+ const tenths=[...new Set(grids.flatMap(g=>g.cases.map(c=>combination(c.force))).filter(v=>/^\d+-[TB]$/.test(v)))].sort();
+ const ten=tenths.length?` COMB. ${tenths.join(' / ')}: COMBINATION${tenths.length>1?'S':''} ${tenths.map(v=>combinationLabel(v).toUpperCase()).join(' / ')} ON S-00.`:'';
+ // The S-00 tie force adds the Appendix 6 brace force to this restraint force.
+ const braced=!cap&&deliveredRows(s).length?` H TIE HERE EXCLUDES THE APPENDIX 6 BRACE FORCE THAT THE S-00 H TIE ADDS.`:'';
  const locating=envelopes.filter(v=>Math.abs(v.longitudinal.longitudinal)>=1).map(v=>v.grid),stop=envelopes.filter(v=>Math.abs(v.longitudinal.longitudinal)>=1&&stops.has(v.longitudinal.combination)).map(v=>v.grid);
  const list=(g:number[])=>g.length>1?`GRIDS ${g.slice(0,-1).join(', ')} AND ${g.at(-1)}`:`GRID ${g[0]}`;
  const interior=simple&&grids.some(g=>g.cases.some(c=>c.label.includes('END V'))),mirrored=grids.some(g=>g.cases.some(c=>c.mirrored));
  return [title,
   // Column widths in proportion to the widest values, so each value stays on one line.
-  simple?table(t,['GRID','CASE','COMB.','V','LEFT V','RIGHT V','SEAT M','LONG.','H TOP','H BOT.'],rows,[.65,1.89,.81,1,1,1,1.38,1,1.01,.95]):table(t,['GRID','CASE','COMB.','V',...(moments?['SEAT M']:[]),'LONG.','H TOP','H BOT.'],rows,[.65,1.89,.81,1,...(moments?[1.38]:[]),1,1.01,.95]),
+  simple?table(t,['GRID','CASE','COMB.','V','LEFT V','RIGHT V',L.M,L.F,L.top,L.bottom],rows,[.65,1.89,.81,1,1,1,1.38,1,1.01,.95]):table(t,['GRID','CASE','COMB.','V',...(moments?[L.M]:[]),L.F,L.top,L.bottom],rows,[.65,1.89,.81,1,...(moments?[1.38]:[]),1,1.01,.95]),
   // One note, as short as the two tables it replaced, so the notes column keeps its text size.
-  paragraph(t,`${p.method} FACTORED, AIST TR-13 COMBINATION NUMBERS PER S-00; ENVELOPE OF ALL CRANE POSITIONS. EACH ROW IS ONE CONCURRENT CASE, ITS FORCES ACTING TOGETHER; DO NOT COMBINE ROWS. V: GIRDER REACTIONS ON THE ${cap?'CAP, DOWNWARD POSITIVE':'SEAT, DOWNWARD POSITIVE, BRACKET SELF-WEIGHT EXCLUDED'}${simple?`; LEFT / RIGHT V: GIRDER END ON THE LOWER / HIGHER GRID SIDE. SEAT M = ΣV × e ABOUT THE GRID, e TO EACH REACTION AT 0.8 OF THE BEARING LENGTH FROM ITS GIRDER END${mirrored?'; ±: ALSO WITH LEFT AND RIGHT V EXCHANGED':''}`:moments?'; CONTINUOUS GIRDER BEARING CENTERED ON INTERIOR GRIDS; AT A RUNWAY-END GRID IT RUNS INBOARD FROM THE GIRDER END ON THE GRID. SEAT M = V × e ABOUT THE GRID, e TO THE REACTION AT 0.8 OF THE BEARING LENGTH FROM THE GIRDER END':'; CONTINUOUS GIRDER BEARING CENTERED ON THE GRID'}. MIN V: LEAST TOTAL V${interior?'; END V: LEAST GIRDER END REACTION':''}${uplift?'; NEGATIVE IS UPLIFT':'; NO UPLIFT'}. LONG.: ${simple?'AT THE LOCATING BEARING OF EACH BAY, AT ITS LOWER-NUMBERED GRID; NONE AT A SLIDING END':locating.length?`AT THE LOCATING SUPPORT, ${list(locating)}`:'NONE'}. ${simple||moments?'SEAT M AND LONG.':'LONG.'} + TOWARD THE HIGHER-NUMBERED GRID. TRACTION ACTS EITHER WAY (BOTH SENSES LISTED WHERE IT GOVERNS); THE CRANE STOP FORCE ACTS ONLY WITH THE CRANE AT THE STOP, AT THE END OF ITS TRAVEL, TOWARD THE STOP${simple&&stop.length?`, AT ${list(stop)}`:''}. H TOP / H BOT.: LATERAL FORCE OF ${simple?'ALL GIRDER ENDS AT THE GRID':'THE GIRDER'} ${cap?'AT THE TOP FLANGE, CARRIED DOWN THE BEARING STIFFENERS (FORK) / AT THE BOTTOM FLANGE; BOTH THROUGH THE BEARING BOLTS INTO THE CAP':`AT ${topFlangeRestraint(p,false)} / ${bolted?'THROUGH THE BEARING BOLTS INTO THE SEAT':'AT THE BOTTOM FLANGE TIES'}`}, ± TOGETHER; H BOT. IS SIGNED RELATIVE TO H TOP: - OPPOSITE (A COUPLE), + THE SAME WAY.`)
+  paragraph(t,`${p.method} FACTORED, AIST TR-13 COMBINATION NUMBERS PER S-00; ENVELOPE OF ALL CRANE POSITIONS. EACH ROW IS ONE CONCURRENT CASE, ITS FORCES ACTING TOGETHER; DO NOT COMBINE ROWS. V: GIRDER REACTIONS ON THE ${cap?'CAP, DOWNWARD POSITIVE':'SEAT, DOWNWARD POSITIVE, BRACKET SELF-WEIGHT EXCLUDED'}${simple?`; LEFT / RIGHT V: GIRDER END ON THE LOWER / HIGHER GRID SIDE. ${L.M} = ΣV × a ABOUT THE GRID, a = ARM TO EACH REACTION, AT 0.8 OF THE BEARING LENGTH FROM ITS GIRDER END${mirrored?'; ±: ALSO WITH LEFT AND RIGHT V EXCHANGED':''}`:moments?`; CONTINUOUS GIRDER BEARING CENTERED ON INTERIOR GRIDS; AT A RUNWAY-END GRID IT RUNS INBOARD FROM THE GIRDER END ON THE GRID. ${L.M} = V × a ABOUT THE GRID, a = ARM TO THE REACTION, AT 0.8 OF THE BEARING LENGTH FROM THE GIRDER END`:'; CONTINUOUS GIRDER BEARING CENTERED ON THE GRID'}. MIN V: LEAST TOTAL V${interior?'; END V: LEAST GIRDER END REACTION':''}${uplift?'; NEGATIVE IS UPLIFT':'; NO UPLIFT'}. ${L.F}:${L.F==='F'?' LONGITUDINAL FORCE':''} ${simple?'AT THE LOCATING BEARING OF EACH BAY, AT ITS LOWER-NUMBERED GRID; NONE AT A SLIDING END':locating.length?`AT THE LOCATING SUPPORT, ${list(locating)}`:'NONE'}. ${simple||moments?`${L.M} AND ${L.F}`:L.F} + TOWARD THE HIGHER-NUMBERED GRID. TRACTION ACTS EITHER WAY (BOTH SENSES LISTED WHERE IT GOVERNS); THE CRANE STOP FORCE ACTS ONLY WITH THE CRANE AT THE STOP, AT THE END OF ITS TRAVEL, TOWARD THE STOP${simple&&stop.length?`, AT ${list(stop)}`:''}. ${L.top} / ${L.bottom}: LATERAL FORCE OF ${simple?'ALL GIRDER ENDS AT THE GRID':'THE GIRDER'} ${cap?'AT THE TOP FLANGE, CARRIED DOWN THE BEARING STIFFENERS (FORK) / AT THE BOTTOM FLANGE; BOTH THROUGH THE BEARING BOLTS INTO THE CAP':`AT ${topFlangeRestraint(p,false)} / ${bolted?'THROUGH THE BEARING BOLTS INTO THE SEAT':'AT THE BOTTOM FLANGE TIES'}`}, ± TOGETHER; ${L.bottom} IS SIGNED RELATIVE TO ${L.top}: − OPPOSITE (A COUPLE), + THE SAME WAY.${braced}${ten}`)
  ];
 }
