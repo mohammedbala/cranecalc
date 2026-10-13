@@ -54,7 +54,7 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
   const cb=numbers(line(/^C_b=\\frac\{M_\{cr\}\}\{F_\{cr\}S_\{xc\}\}=/));near(cb[0]/cb[1],cb[2],2e-3);
   const mn=numbers(line(/^\\phi_bM_n=0\.90\\times\\min\(/));near(mn[0]*Math.min(mn[1],mn[2]*mn[3]),mn[4]);near(mn[4],c.capacity!/kipft);
   const mcr=numbers(line(/^M_\{cr\}=\\lambda M_u\/0\.8=/));near(mcr[1]*mcr[2]/mcr[3],mcr[4]);
-  const f1=numbers(line(/^\\text\{AISC Commentary F1, for comparison: \}/));near(f1[5]*f1[6]/(f1[7]*f1[8]+f1[9]*f1[10]+f1[11]*f1[12]+f1[13]*f1[14]),f1[15]);near(f1[15],cm.gradient,2e-3);
+  const f1=numbers(line(/^\\text\{Cross-check, AISC Commentary F1: \}/));near(f1[5]*f1[6]/(f1[7]*f1[8]+f1[9]*f1[10]+f1[11]*f1[12]+f1[13]*f1[14]),f1[15]);near(f1[15],cm.gradient,2e-3);
  });
 
  it('M3: every printed combination maps to its TR-13 case and ASCE 7-16 basis; impact and side thrust are separate; no raw ids',()=>{
@@ -101,7 +101,7 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
   // Each flange with its own section modulus and warping function at its tips.
   const W=s.detailResults!.flangeWarping!;expect(W.bottom).toBeGreaterThan(W.top);
   // The worked H1 lines reproduce: P/(2Pc) + Mrx/Mcx + Mf/Mcf.
-  for(const [re,c] of [[/^\\text\{H1, top flange/,top],[/^\\text\{H1, bottom flange/,bottom]] as const){const n=numbers(line(re));near(n[1]/(n[2]*n[3])+n[4]/n[5]+n[6]/n[7],n[8],3e-3);near(n[8],c.utilization!,2e-3);}
+  for(const [re,c] of [[/^\\text\{Top flange \(/,top],[/^\\text\{Bottom flange \(/,bottom]] as const){const n=numbers(line(re));near(n[1]/(n[2]*n[3])+n[4]/n[5]+n[6]/n[7],n[8],3e-3);near(n[8],c.utilization!,2e-3);}
  });
 
  it('m10: one wheel web yielding capacity over the TR-13 length (no k term), J10-7 sidesway with Cr = 960,000 ksi',()=>{
