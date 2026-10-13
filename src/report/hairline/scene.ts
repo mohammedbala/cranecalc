@@ -2,9 +2,9 @@ import {Cam,fit,hull,poly,proj,r2,type Projector,type Vec2,type Vec3} from './is
 
 /**
  * Report figures in the Hairline manner: orthographic 2:1 isometric line drawings, plates filled with the paper
- * colour and painted back to front, hairline strokes that do not scale. Solids are convex extrusions along a world
+ * color and painted back to front, hairline strokes that do not scale. Solids are convex extrusions along a world
  * axis (plates, flanges, webs, tapered ribs, bolts), so each is drawn as its front faces and its silhouette.
- * World axes: x along the runway, y across it (away from the column face), z up; millimetres.
+ * World axes: x along the runway, y across it (away from the column face), z up; millimeters.
  * The palette is Hairline's light theme in neutral grays, so the printed calculation stays black and white.
  */
 export const tone={plate:'#ffffff',hi:'#000',edge:'#8f8f8f',mid:'#bdbdbd',lo:'#e4e4e4',focus:'#ececec',focusSide:'#dedede'};

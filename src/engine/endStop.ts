@@ -134,7 +134,7 @@ export function endStopChecks(p:ProjectInput,ctx?:EndStopContext):CheckResult[]{
   // Heads on the base plate are held (or turned) by a socket beside the stop welds: clearance to the weld toes.
   compared('end-stop-wrench-stiffener','Head clearance · stiffener weld toes',C,g.toe.stiffener,'length','\\frac{g-s-t_s}{2}-w\\ge C_1',`Both bolt rows: bolt C/L to the toe of the ${f(e.weldSize)} stiffener-to-base fillet, ${f((gauge-s)/2-ts/2)} to the stiffener face less the weld leg. AISC Manual Table 7-15 tightening clearance C₁ = ${f(C)} for the socket on the heavy hex head or nut.`),
   compared('end-stop-wrench-face','Head clearance · face plate weld toe',C,g.toe.face,'length','c_f-w\\ge C_1',`Front bolts: C/L ${f(e.bolts.frontClear)} behind the face plate, less the ${f(e.weldSize)} face-plate-to-base fillet behind it.`),
-  compared('end-stop-wrench-web','Nut clearance under flange · web fillet',C,gauge/2-k1,'length','g/2-k_1\\ge C_1',shape?'k₁ from the catalogue fillet.':'No fillet credited for a custom section.'),
+  compared('end-stop-wrench-web','Nut clearance under flange · web fillet',C,gauge/2-k1,'length','g/2-k_1\\ge C_1',shape?'k₁ from the catalog fillet.':'No fillet credited for a custom section.'),
   compared('end-stop-wrench-bearing','Nut clearance under flange · bearing stiffener',C,stiffenerClear,'length','|x_b-x_{st}|-t_{st}/2-w\\ge C_1','Nuts under the top flange clear the end bearing stiffeners and their fillets.'),
   ...(saddleClear===undefined?[]:[compared('end-stop-wrench-saddle','Nut clearance under flange · top tie saddle',C,saddleClear,'length','\\text{bolt to saddle}\\ge C_1','Plan distance from each bolt to the top tie saddle and its fillets at the runway-end support.')])
  ];

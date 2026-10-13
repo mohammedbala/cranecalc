@@ -9,7 +9,7 @@ export {sheetEntities,sheetLayers} from './svgEntities';
  * The issued ARCH D sheets as one AutoCAD 2000 (AC1015) DXF: every sheet at
  * full paper size in model space, side by side in sheet order, so the CAD
  * linework is the same drawing that is printed. Lengths are paper inches (US)
- * or millimetres (SI); plot at 1:1.
+ * or millimeters (SI); plot at 1:1.
  */
 const round=(v:number)=>Number(v.toFixed(5));
 // AutoCAD text: drafting symbols as %% codes or plain ASCII, anything else as \U+XXXX;
@@ -28,9 +28,9 @@ export function sheetsDxf(sheets:{svg:string}[],units:Units){
  const table=(name:string,h:string,count:number,extra:(string|number)[]=[])=>put(0,'TABLE',2,name,5,h,330,0,100,'AcDbSymbolTable',70,count,...extra);
  const record=(type:string,owner:string,subclass:string,...pairs:(string|number)[])=>put(0,type,5,next(),330,owner,100,'AcDbSymbolTableRecord',100,subclass,...pairs);
  put(0,'SECTION',2,'CLASSES',0,'ENDSEC',0,'SECTION',2,'TABLES');
- const centre=[(sheets.length*(sheetW+gap)-gap)/2,sheetH/2];
+ const center=[(sheets.length*(sheetW+gap)-gap)/2,sheetH/2];
  table('VPORT',H.vportTable,1);
- record('VPORT',H.vportTable,'AcDbViewportTableRecord',2,'*Active',70,0,10,0,20,0,11,1,21,1,12,round(centre[0]),22,round(centre[1]),13,0,23,0,14,.5,24,.5,15,.5,25,.5,16,0,26,0,36,1,17,0,27,0,37,0,40,round(sheetH*1.1),41,round(Math.max(1.5,(sheets.length*(sheetW+gap))/(sheetH*1.1))),42,50,43,0,44,0,50,0,51,0,71,0,72,1000,73,1,74,3,75,0,76,0,77,0,78,0,281,0,65,0,146,0);
+ record('VPORT',H.vportTable,'AcDbViewportTableRecord',2,'*Active',70,0,10,0,20,0,11,1,21,1,12,round(center[0]),22,round(center[1]),13,0,23,0,14,.5,24,.5,15,.5,25,.5,16,0,26,0,36,1,17,0,27,0,37,0,40,round(sheetH*1.1),41,round(Math.max(1.5,(sheets.length*(sheetW+gap))/(sheetH*1.1))),42,50,43,0,44,0,50,0,51,0,71,0,72,1000,73,1,74,3,75,0,76,0,77,0,78,0,281,0,65,0,146,0);
  put(0,'ENDTAB');
  const dash=units==='US'?{DASHED:[.125,-.0625],HIDDEN:[.0625,-.03125],CENTER:[.25,-.0625,.0625,-.0625]}:{DASHED:[3,-1.5],HIDDEN:[1.5,-.75],CENTER:[6,-1.5,1.5,-1.5]};
  table('LTYPE',H.ltypeTable,6);
@@ -73,7 +73,7 @@ export function sheetsDxf(sheets:{svg:string}[],units:Units){
  put(0,'DICTIONARY',5,H.layouts,330,H.root,100,'AcDbDictionary',281,1,3,'Model',350,H.modelLayout,3,'Layout1',350,H.paperLayout);
  put(0,'ACDBDICTIONARYWDFLT',5,H.plotStyles,330,H.root,100,'AcDbDictionary',281,1,3,'Normal',350,H.placeholder,100,'AcDbDictionaryWithDefault',340,H.placeholder);
  put(0,'ACDBPLACEHOLDER',5,H.placeholder,330,H.plotStyles);
- // Plot settings: ARCH D landscape, 1:1, millimetre paper units as AutoCAD stores them.
+ // Plot settings: ARCH D landscape, 1:1, millimeter paper units as AutoCAD stores them.
  for(const [h,name,owner,flags,tab] of [[H.modelLayout,'Model',H.model,1024,0],[H.paperLayout,'Layout1',H.paper,0,1]] as const)
   put(0,'LAYOUT',5,h,330,H.layouts,100,'AcDbPlotSettings',1,'',4,'ARCH_D_(36.00_x_24.00_Inches)',6,'',40,0,41,0,42,0,43,0,44,914.4,45,609.6,46,0,47,0,48,0,49,0,140,0,141,0,142,1,143,1,70,flags,72,units==='US'?0:1,73,1,74,5,7,'',75,16,76,0,77,2,78,300,147,1,148,0,149,0,
    100,'AcDbLayout',1,name,70,1,71,tab,10,0,20,0,11,units==='US'?36:914.4,21,units==='US'?24:609.6,12,0,22,0,32,0,14,1e20,24,1e20,34,1e20,15,-1e20,25,-1e20,35,-1e20,146,0,13,0,23,0,33,0,16,1,26,0,36,0,17,0,27,1,37,0,76,1,330,owner);

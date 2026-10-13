@@ -236,11 +236,14 @@ export function flangeJ10Worked(s:CalculationSnapshot,tx:Tx):string[]{
  const p=s.input,d=p.details,fb=flangeBracket(s);if(!d?.bracket?.enabled||!fb)return [];
  const S=fb.S,pull=S.pull,push=S.push;if(!pull||!push||pull.P===undefined||push.P===undefined)return [];
  const J=fb.J,r=d.bracket.receiver,us=p.units==='US',lrfd=p.method==='LRFD',fl=(phi:number,omega:number)=>lrfd?n(phi):`1/${n(omega)}`,lhs=lrfd?'\\phi ':'1/\\Omega\\,';
- const Ru=(pk:typeof pull,sym:string,b:number)=>`R_u=${sym}+\\frac{3M_f}{b}=${tx(Math.abs(pk.P!),'force')}+\\frac{3\\times${tx(Math.abs(pk.M??0),'moment')}${us?'\\times12\\,\\mathrm{in/ft}':''}}{${tx(b,'length')}}=${tx(pk.value,'force')}`;
+ // The equation on its own line and the substitution below it, broken at "=", so neither runs past the page margin.
+ const Ru=(pk:typeof pull,sym:string,b:number)=>[`R_u=${sym}+\\frac{3M_f}{b}`,`\\quad=${tx(Math.abs(pk.P!),'force')}+\\frac{3\\times${tx(Math.abs(pk.M??0),'moment')}${us?'\\times12\\,\\mathrm{in/ft}':''}}{${tx(b,'length')}}=${tx(pk.value,'force')}`];
  const half=J.topFlangeEnd?.5:1,flange=(lrfd?.9:1/1.67)*half*6.25*r.Fy*r.flangeThickness**2;
- const lines=[`\\text{Top flange (${caseName(s,pull.caseId).replace(/[\\{}#%&_$^~]/g,'')}):}\\ \\ ${Ru(pull,'T',fb.b[0])}`];
+ // The case name heads each flange on a line of its own.
+ const head=(name:string,caseId:string|undefined)=>`\\text{${name} (${caseName(s,caseId).replace(/[\\{}#%&_$^~]/g,'')}):}`;
+ const lines=[head('Top flange',pull.caseId),...Ru(pull,'T',fb.b[0])];
  if(close(flange,J.flange))lines.push(`\\quad${lhs}R_n=${fl(.9,1.67)}\\times${half<1?'0.5\\times':''}6.25F_{yf}t_f^2=${fl(.9,1.67)}\\times${half<1?'0.5\\times':''}6.25\\times${tx(r.Fy,'stress')}\\times(${tx(r.flangeThickness,'length')})^2=${tx(J.flange,'force')}\\quad D/C=${dcText(pull.value/J.flange,2)}\\quad(\\text{J10.1})`);
- lines.push(`\\text{Bottom flange (${caseName(s,push.caseId).replace(/[\\{}#%&_$^~]/g,'')}):}\\ \\ ${Ru(push,fb.bottom,fb.b[1])}`);
+ lines.push(head('Bottom flange',push.caseId),...Ru(push,fb.bottom,fb.b[1]));
  const tw=r.webThickness,tf=r.flangeThickness,end=J.botCrippleEnd,long=end&&J.N/r.depth>.2,term=long?4*J.N/r.depth-.2:3*J.N/r.depth;
  const crip=(lrfd?.75:1/2)*(end?.4:.8)*tw**2*(1+term*(tw/tf)**1.5)*Math.sqrt(p.section.E*r.Fy*tf/tw);
  if(close(crip,J.crippling))lines.push(`\\quad${lhs}R_n=${fl(.75,2)}\\times${end?'0.40':'0.80'}t_w^2\\left[1+${long?'\\left(\\frac{4l_b}{d}-0.2\\right)':'3\\frac{l_b}{d}'}\\left(\\frac{t_w}{t_f}\\right)^{1.5}\\right]\\sqrt{\\frac{EF_{yw}t_f}{t_w}}=${tx(J.crippling,'force')}\\quad D/C=${dcText(push.value/J.crippling,2)}\\quad(\\text{J10.3},\\ l_b=${tx(J.N,'length')},\\ d=${tx(r.depth,'length')})`);

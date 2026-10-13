@@ -13,7 +13,7 @@ export const caseBase=(id:string)=>caseParts(id).base;
 /** Case ids in printed text: D-123, D-123-T2-J, S-0-25144.809375-1, S-0-19812--1-T-1-J. */
 export const caseIdPattern=/\b[DS]-\d+(?:--?\d+(?:\.\d+)?)*(?:-T-?\d+)?(?:-J)?(?!\w|\.\d)/g;
 
-/** Inches to the nearest inch as feet and inches (10'-0"), or metres in SI. */
+/** Inches to the nearest inch as feet and inches (10'-0"), or meters in SI. */
 function distance(mm:number,units:'US'|'SI'){
  if(units==='SI')return `${(Math.abs(mm)/1000).toFixed(2)} m`;
  const inches=Math.round(Math.abs(mm)/25.4);return `${Math.floor(inches/12)}'-${inches%12}"`;

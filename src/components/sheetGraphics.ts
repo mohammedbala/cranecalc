@@ -41,7 +41,7 @@ export const rect = (x: number, y: number, w: number, h: number, cls = 'annotati
 export const outlinePath = (pts: XY[], cls = 'runway-line') => `<path class="${cls}" d="M${pts.map(p => `${n(p[0])},${n(p[1])}`).join('L')}Z"/>`;
 /**
  * A capped girder's channel drawn in true section (2:12 sloped flanges, root fillets): `map` takes the channel's
- * local mm coordinates (x across from the channel centreline, y up from the underside of the web, i.e. the W top
+ * local mm coordinates (x across from the channel centerline, y up from the underside of the web, i.e. the W top
  * flange) to sheet points.
  */
 export function capChannelSection(s: Parameters<typeof capChannelProfile>[0], map: (x: number, y: number) => XY, cls = 'runway-line') {
@@ -60,7 +60,7 @@ export function leader(at: XY, end: XY, label: string, size = 9) {
 }
 // A dimension too short for its text carries the text beyond the far extension line on an extended
 // dimension line, as drafted by hand, instead of writing it across the extension lines. `clear` is a
-// neighbouring extension line the carried text is also kept beyond.
+// neighboring extension line the carried text is also kept beyond.
 export function dimH(x1: number, x2: number, fromY: number, y: number, label: string, outside: 'left' | 'right' = 'right', clear?: number) {
   const w = textWidth(label, 9), fits = w + 6 <= Math.abs(x2 - x1), lo = Math.min(x1, x2), hi = Math.max(x1, x2);
   const l = Math.min(lo, clear ?? lo), r = Math.max(hi, clear ?? hi);
@@ -220,7 +220,7 @@ export function sectionCut(a:XY,b:XY,look:XY,title:string,ends:('a'|'b')[]=['a',
 }
 /** Bolted bearing detail: girder ends of simple spans, or every support of a continuous girder. */
 export const bearingBoltsTitle=(p:CalculationSnapshot['input'])=>p.system==='continuous'?detailTitles.supportBearings:detailTitles.endBearing;
-/** The supporting column as labelled on the details, referring to its own details when it is designed here. */
+/** The supporting column as labeled on the details, referring to its own details when it is designed here. */
 export function columnReference(p:CalculationSnapshot['input']){
  const c=supportColumn(p);return c.detailed?`${c.name} / ${detailRef(detailTitles.newColumn)}`:c.reference;
 }
@@ -294,7 +294,7 @@ export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boo
  // Leader from a target to its label's elbow; labels left of their targets land on the right.
  const route=(v:typeof items[number],y:number):[XY,XY]=>{const w=v.weld?89:Math.max(0,...v.labels.map(l=>textWidth(labelCaps(l),8.5))),ly=(v.weld?y+3:y)-3;return [v.at,v.at[0]>x+w?[x+w+14,ly]:[x-14,ly]];};
  const crosses=([a,b]:[XY,XY],[c,d]:[XY,XY])=>{const o=(p:XY,q:XY,r:XY)=>Math.sign((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]));return o(a,b,c)*o(a,b,d)<0&&o(c,d,a)*o(c,d,b)<0;};
- // Ordering by target height alone can cross leaders whose targets differ in depth; swap such neighbours.
+ // Ordering by target height alone can cross leaders whose targets differ in depth; swap such neighbors.
  for(let pass=0;pass<sorted.length;pass++){
   let swapped=false;const ys=slots();
   for(let i=0;i+1<sorted.length;i++)if(crosses(route(sorted[i],ys[i]),route(sorted[i+1],ys[i+1]))){[sorted[i],sorted[i+1]]=[sorted[i+1],sorted[i]];swapped=true;break;}

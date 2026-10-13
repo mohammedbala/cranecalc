@@ -37,7 +37,7 @@ export function railChecks(s:CalculationSnapshot):CheckResult[]{
  const allowable=k.basis==='allowable',Hs=a.demands.railLateralService??H/1.6,Hc=allowable?Hs:p.method==='LRFD'?H:1.6*H,depth6=depth/r.baseWidth;
  const basisNote=allowable?`The manufacturer rates the clip on an allowable (working-load) basis: compared with the service side thrust ${force(Hs)} (unfactored, one crane), not the factored ${force(H)}.`
   :`The manufacturer rates the clip as an LRFD design strength: compared with the factored side thrust${p.method==='LRFD'?'':' (1.6 times the ASD force)'}.`;
- const share='The side thrust of the wheel group at a clip station (every wheel within one clip spacing) is taken by one clip on the side the rail is pushed toward; no sharing with the neighbouring clips is credited.';
+ const share='The side thrust of the wheel group at a clip station (every wheel within one clip spacing) is taken by one clip on the side the rail is pushed toward; no sharing with the neighboring clips is credited.';
  const bolted=k.type==='bolted';
  clipCheck('rail-clip-lateral','Rail clip · rated lateral capacity',Hc,k.lateral,'force','H_c\\le R_c',`${share} ${basisNote} R_c is the manufacturer's rated lateral capacity of one ${k.type} clip (${k.product}); an "or equal" clip must have at least this rating.`);
  clipCheck('rail-clip-uplift','Rail clip · rated uplift capacity',Hc*depth6,k.uplift,'force','T_c=H_ch_r/b_r\\le R_t',`The side thrust at the rail head overturns the rail about the far base toe; the clip there holds the base down. The wheel load that stabilizes the rail is not credited. Same force basis as the lateral rating. R_t is the manufacturer's rated uplift capacity of one clip.`);

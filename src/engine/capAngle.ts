@@ -72,7 +72,7 @@ export function tensileArea(db:number){
 
 /**
  * The receiving column flange at the tie: the designed bracket's receiving column, else the surveyed existing column.
- * The web fillet k1 comes from the catalogue shape with these plates, else no fillet is credited.
+ * The web fillet k1 comes from the catalog shape with these plates, else no fillet is credited.
  */
 export function capAngleColumn(p:ProjectInput){
  const b=p.details?.bracket,c=p.existingColumn?.enabled?p.existingColumn:undefined;
@@ -80,7 +80,7 @@ export function capAngleColumn(p:ProjectInput){
  if(b?.enabled){const r=b.receiver;plates={depth:r.depth,width:r.width,tf:r.flangeThickness,tw:r.webThickness,Fy:r.Fy,Fu:r.Fu,source:'bracket receiving column'};}
  else if(c){const w=aiscShapeByName(c.shape??'');plates=w?{depth:w.d*inch,width:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch,Fy:c.Fy,Fu:c.Fu,source:`existing ${c.shape}`}:{depth:c.d,width:c.bf,tf:c.tf,tw:c.tw,Fy:c.Fy,Fu:c.Fu,source:'existing column'};}
  if(!plates)return undefined;
- // The catalogue shape with these plates (the surveyed existing shape first) gives the web fillet.
+ // The catalog shape with these plates (the surveyed existing shape first) gives the web fillet.
  const same=(name?:string)=>{const w=name?aiscShapeByName(name):undefined;return w&&[w.d*inch-plates!.depth,w.bf*inch-plates!.width,w.tf*inch-plates!.tf,w.tw*inch-plates!.tw].every(v=>Math.abs(v)<.5)?w:undefined;};
  const shape=same(c?.shape);
  const fillet=shape?shape.kdes*inch-shape.tf*inch:0;

@@ -16,7 +16,7 @@ import {haunchGeometry,isTaperedHaunch} from '../../engine/taperedHaunchInputs';
 /**
  * The runway parts at one support, to the project's sizes, for the report's isometric figures. World: x along the
  * runway (the grid at x = 0), y across it from the column face (y = 0) toward the runway, z up from the top of the
- * support seat (the underside of the girder bearing plates). Millimetres.
+ * support seat (the underside of the girder bearing plates). Millimeters.
  */
 const inch=25.4;
 export interface SupportGeometry{

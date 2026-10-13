@@ -31,7 +31,8 @@ app.post('/api/report',async(req,res)=>{
   // Reports contain only server-rendered, escaped input. No external assets or requests are allowed.
   await page.route('**/*',route=>route.abort());
   await page.setContent(reportHtml(snapshot,framing.data,{reviewDraft:draft}),{waitUntil:'load'});await page.evaluate(()=>document.fonts.ready);
-  const pdf=await page.pdf({format:'Letter',preferCSSPageSize:true,printBackground:true,displayHeaderFooter:true,headerTemplate:'<div></div>',footerTemplate:`<div style="font-size:8px;color:#8c9b7e;width:100%;padding:0 55px;display:flex;justify-content:space-between"><span>CraneCalc · ${snapshot.input.reportPurpose==='demonstration'?'FICTITIOUS DEMONSTRATION':snapshot.input.scope==='analysis'?'ANALYSIS ONLY':'AIST DESIGN WORKSHEET'} · ${revisionIdentity(snapshot).label}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,margin:{top:'19mm',bottom:'20mm',left:'15mm',right:'15mm'}});
+  // The report's CSS @page margin boxes print the running header and the footer (page numbers, calc ID): no browser footer.
+  const pdf=await page.pdf({format:'Letter',preferCSSPageSize:true,printBackground:true,displayHeaderFooter:false});
   res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`attachment; filename="${(snapshot.input.number||'cranecalc').replace(/[^\w.-]+/g,'-')}-${revisionIdentity(snapshot).label.replace(/\s+/g,'-')}.pdf"`);res.setHeader('X-Calculation-Revision',snapshot.revision);res.send(pdf);
  }catch(error){console.error(error);res.status(500).json({error:'Report generation failed. Verify the local Chromium runtime with: npx playwright install chromium.'});}finally{
   // The response is complete; release the render lock before browser teardown.

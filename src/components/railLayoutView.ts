@@ -15,7 +15,7 @@ import type {DetailView} from './detailSheet';
  */
 /** A factored force to 0.1 kip or 0.1 kN. */
 const labelForce=(N:number,u:'US'|'SI')=>labelCaps(format(N,'force',u,1));
-/** A movement stated as a limit, rounded up: to the next 1/32 in, or the next millimetre. */
+/** A movement stated as a limit, rounded up: to the next 1/32 in, or the next millimeter. */
 export function movementUpTo(mm:number,u:'US'|'SI'){
  if(u==='SI')return `${Math.max(1,Math.ceil(mm-1e-6))} mm`;
  let num=Math.max(1,Math.ceil(mm/25.4*32-1e-6)),den=32;const whole=Math.floor(num/den);num%=den;

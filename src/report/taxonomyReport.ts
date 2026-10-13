@@ -12,12 +12,27 @@ import {damageText} from '../engine/fatigueConstants';
  * this package" list, Appendix A and the CSV of every computed result.
  */
 const esc=(v:unknown)=>subscripts(caseLabel(tidyNumbers(String(v??''))).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!)));
+/**
+ * Text for an SVG <text> element: escaped like esc(), with engineering subscripts (R_FIL, F_TH, n_SR) as shifted <tspan>s.
+ * HTML markup such as <sub> must never reach an inline SVG: the HTML parser closes the <svg> at it and spills the rest.
+ */
+const svgEsc=(v:unknown)=>caseLabel(tidyNumbers(String(v??''))).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
+ .replace(/(?<![\w/.&#-])([A-Za-z])_\{?([A-Za-z]{1,8}|\d)\}?(?![\w])/g,'$1<tspan font-size="5.5" baseline-shift="-1.5">$2</tspan>');
 type Units=ProjectInput['units'];
 const q=(c:CheckResult)=>c.quantity??'ratio';
 const ksi=6.894757293168;
 const stress=(v:number|undefined,u:Units)=>v===undefined||!Number.isFinite(v)?'—':u==='US'?`${(v/ksi).toFixed(2)} ksi`:`${v.toFixed(1)} MPa`;
-/** Sentences split at a stop followed by a capital, so decimals (1.0Cbs, 7.2 kip) stay whole. */
-const sentences=(v:string)=>v.split(/(?<=[.;])\s+(?=[A-Z])/).map(t=>t.trim()).filter(Boolean);
+/**
+ * Sentences split at a stop followed by a capital, so decimals (1.0Cbs, 7.2 kip) stay whole, and only outside
+ * parentheses and brackets, so a parenthetical "(Fictitious …; E70XX welds)" is never cut open.
+ */
+const sentences=(v:string)=>{
+ const out:string[]=[];let depth=0,start=0;
+ for(let i=0;i<v.length;i++){const ch=v[i];
+  if(ch==='('||ch==='[')depth++;else if((ch===')'||ch===']')&&depth>0)depth--;
+  else if(depth===0&&(ch==='.'||ch===';')&&/^\s+[A-Z]/.test(v.slice(i+1,i+8))){out.push(v.slice(start,i+1));start=i+1;}}
+ out.push(v.slice(start));return out.map(t=>t.trim()).filter(Boolean);
+};
 const firstSentence=(v:string)=>sentences(v)[0]??'';
 
 /** One body row per line: the controlling limit state with its equation, demand, limit and D/C; merged lines name it. */
@@ -196,7 +211,7 @@ export function checksCsv(s:CalculationSnapshot,tax:Taxonomy,o:{internal?:boolea
  * drawn with its own marker shape, its duty bins (n_i, f_sr,i) as open markers, the Miner equivalent range f_sr,eq at
  * the design cycle count n_SR as a filled marker and the largest range there (the all-cycle bound) as a bar; its design
  * curve F_SR(n) (Appendix 3 Eq. A-3-1, slope 1/3; Category F Eq. A-3-2, slope 1/6) through F_SR at n_SR (so R_FIL
- * reductions carry over) down to the threshold F_TH (none for a C″ root), labelled at its right end. Details on one
+ * reductions carry over) down to the threshold F_TH (none for a C″ root), labeled at its right end. Details on one
  * curve share it. Screened details: crosses at n_SR, at their largest range. Full titles in the key below the plot.
  */
 export function fatigueSnPlot(tax:Taxonomy,units:Units){
@@ -236,8 +251,8 @@ export function fatigueSnPlot(tax:Taxonomy,units:Units){
  g+=`<text x="${L+pw/2}" y="${T+ph+24}" font-size="8.5" text-anchor="middle">Number of stress-range cycles, n</text><text transform="translate(12 ${T+ph/2}) rotate(-90)" font-size="8.5" text-anchor="middle">Stress range f<tspan font-size="6.5" dy="1.5">sr</tspan><tspan dy="-1.5"> (${unit})</tspan></text>`;
  // Design cycle count.
  const xN=X(N);
- g+=`<line x1="${xN.toFixed(1)}" y1="${T}" x2="${xN.toFixed(1)}" y2="${T+ph}" stroke="#000" stroke-width=".7" stroke-dasharray="1.5 1.5"/><text x="${(xN+3).toFixed(1)}" y="${T+9}" font-size="7.5">n<tspan font-size="5.5" dy="1.5">SR</tspan><tspan dy="-1.5"> = ${N.toLocaleString('en-US')}</tspan></text>`;
- // Curves: one per distinct (category, F_SR at N, F_TH, slope), labelled at the right end.
+ g+=`<line x1="${xN.toFixed(1)}" y1="${T}" x2="${xN.toFixed(1)}" y2="${T+ph}" stroke="#000" stroke-width=".7" stroke-dasharray="1.5 1.5"/><text x="${xN.toFixed(1)}" y="${T-3}" font-size="7.5" text-anchor="middle">n<tspan font-size="5.5" dy="1.5">SR</tspan><tspan dy="-1.5"> = ${N.toLocaleString('en-US')}</tspan></text>`;
+ // Curves: one per distinct (category, F_SR at N, F_TH, slope), labeled at the right end.
  const curves=new Map<string,{r:typeof rows[number];ns:number[];labels:Set<string>}>();
  for(const r of rows){const key=`${r.m}|${r.FSR.toPrecision(4)}|${r.TH.toPrecision(4)}`,c=curves.get(key)??{r,ns:[],labels:new Set<string>()};c.ns.push(r.n);c.labels.add(r.label);curves.set(key,c);}
  const ends=[...curves.values()].map(c=>({...c,y:Y(clipY(curve(c.r,10**x1)))})).sort((a,b)=>a.y-b.y);
@@ -247,8 +262,8 @@ export function fatigueSnPlot(tax:Taxonomy,units:Units){
  for(const c of ends){
   const pts:string[]=[];for(let j=0;j<=80;j++){const n=10**(x0+(x1-x0)*j/80);pts.push(`${X(n).toFixed(1)},${Y(clipY(curve(c.r,n))).toFixed(1)}`);}
   g+=`<polyline points="${pts.join(' ')}" fill="none" stroke="#000" stroke-width=".9"${dashed.has(c)?' stroke-dasharray="5 2.5"':''}/>`;
-  const ly=Math.max(c.y,last+10);last=ly;const label=[...c.labels].map(l=>l.startsWith('item')?`A-3.1 ${l}`:`Cat. ${l}`).join(', ');
-  g+=`<line x1="${L+pw}" y1="${c.y.toFixed(1)}" x2="${L+pw+5}" y2="${ly.toFixed(1)}" stroke="#000" stroke-width=".4"/><text x="${L+pw+7}" y="${(ly+2.6).toFixed(1)}" font-size="7.5"><tspan font-weight="700">${c.ns.join(', ')}</tspan> ${esc(label).replace('R_FIL','R<tspan font-size="5.5" dy="1.5">FIL</tspan><tspan dy="-1.5"></tspan>')}</text>`;
+  const ly=Math.max(c.y,last+10);last=ly;const label=[...c.labels].map(l=>l.startsWith('item')?`A-3.1 ${l}`:`Cat. ${l.replace(/ \(root, R_FIL\)$/,' root')}`).join(', ');
+  g+=`<line x1="${L+pw}" y1="${c.y.toFixed(1)}" x2="${L+pw+5}" y2="${ly.toFixed(1)}" stroke="#000" stroke-width=".4"/><text x="${L+pw+7}" y="${(ly+2.6).toFixed(1)}" font-size="7.5"><tspan font-weight="700">${c.ns.join(', ')}</tspan> ${svgEsc(label)}</text>`;
  }
  // Screened details: crosses on the n_SR line.
  for(const s of scr.filter(v=>v.range>=10**y0)){const y=Y(s.range);g+=`<path d="M${(xN-2.2).toFixed(1)},${(y-2.2).toFixed(1)}L${(xN+2.2).toFixed(1)},${(y+2.2).toFixed(1)}M${(xN-2.2).toFixed(1)},${(y+2.2).toFixed(1)}L${(xN+2.2).toFixed(1)},${(y-2.2).toFixed(1)}" stroke="#000" stroke-width=".6"/>`;}
@@ -273,7 +288,7 @@ export function fatigueSnPlot(tax:Taxonomy,units:Units){
  const wrap=(t:string,w=62)=>{const out:string[]=[];let line='';for(const word of t.split(' ')){if(line&&(line+' '+word).length>w){out.push(line);line=word;}else line=line?line+' '+word:word;}if(line)out.push(line);return out;};
  const entries=rows.map(r=>({r,lines:wrap(r.label.startsWith('item')&&r.title.includes(r.label)?r.title:`${r.title} · ${r.label.startsWith('item')?`A-3.1 ${r.label}`:`Cat. ${r.label}`}`)}));
  const half=Math.ceil(entries.length/2),colY=[ky,ky];
- entries.forEach((e,j)=>{const c=j<half?0:1,y=colY[c];g+=shape(e.r.i,kx(c)+6,y,false,2.6)+`<text x="${kx(c)+14}" y="${y+2.8}" font-size="7.5"><tspan font-weight="700">${e.r.n}</tspan> ${e.lines.map((l,k)=>`${k?`<tspan x="${kx(c)+21}" dy="9">`:'<tspan>'}${esc(l).replace('R_FIL','R<tspan font-size="5.5" dy="1.5">FIL</tspan><tspan dy="-1.5"></tspan>')}</tspan>`).join('')}</text>`;colY[c]+=9*e.lines.length+3;});
+ entries.forEach((e,j)=>{const c=j<half?0:1,y=colY[c];g+=shape(e.r.i,kx(c)+6,y,false,2.6)+`<text x="${kx(c)+14}" y="${y+2.8}" font-size="7.5"><tspan font-weight="700">${e.r.n}</tspan> ${e.lines.map((l,k)=>`${k?`<tspan x="${kx(c)+21}" dy="9">`:'<tspan>'}${svgEsc(l)}</tspan>`).join('')}</text>`;colY[c]+=9*e.lines.length+3;});
  const H=Math.ceil(Math.max(...colY)+4);
- return `<figure class="calculation-figure fatigue-sn"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="S-N summary of the evaluated fatigue details" font-family="Arial, sans-serif">${g}</svg><figcaption><strong>Fatigue summary · duty bins against the design curves</strong><p>Each evaluated detail (numbered as in the table, one marker shape each) with its AISC 360-16 Appendix 3 design curve through F<sub>SR</sub> at n<sub>SR</sub> down to the threshold F<sub>TH</sub> (none for a C″ weld root), labelled at its right end. Open markers: the duty bins (n<sub>i</sub>, f<sub>sr,i</sub>); a bin below the curve uses n<sub>i</sub>/N<sub>i</sub> of the life. At n<sub>SR</sub>: the Miner equivalent range f<sub>sr,eq</sub> (filled) and the largest range applied to all cycles (bar); a point below its curve passes. Crosses: screened details at their largest range.</p></figcaption></figure>`;
+ return `<figure class="calculation-figure fatigue-sn"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="S-N summary of the evaluated fatigue details" font-family="Arial, sans-serif">${g}</svg><figcaption><strong>Fatigue design curves and duty bins</strong><p>Design curves (AISC 360-16 Appendix 3) of the evaluated details, numbered as in the table, each through F<sub>SR</sub> at n<sub>SR</sub> down to F<sub>TH</sub> (none for a C″ weld root). Open markers: duty-bin ranges (n<sub>i</sub>, f<sub>sr,i</sub>). Filled: f<sub>sr,eq</sub> at n<sub>SR</sub>. Bar: f<sub>sr,max</sub> at n<sub>SR</sub>. ×: screened details at their largest range. Points below their curve pass.</p></figcaption></figure>`;
 }

@@ -72,7 +72,8 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   expect(page1).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", full depth, one pair at the haunch top flange and bottom flange; 5\/8" fillets to the flanges and 5\/8" to the web, both faces; field welded inside the existing column/);
   // Worked: the unstiffened J10 at both flanges (R_u = P + 3M_f/b, J10.1 and J10.3) and the J10.6 panel with the net force.
   const tx=(v:number,q:string)=>`${q}:${v}`,j10=haunchJ10Worked(s,tx as never);
-  expect(j10).toHaveLength(4);expect(j10[0]).toContain('R_u=T+\\frac{3M_f}{b}');expect(j10[1]).toContain('6.25F_{yf}t_f^2');expect(j10[3]).toContain('J10.3');
+  // Each flange: the case name, the equation and its substitution on separate lines (none runs past the margin), then the strength.
+  expect(j10).toHaveLength(8);expect(j10[0]).toMatch(/^\\text\{Top flange \(/);expect(j10[1]).toBe('R_u=T+\\frac{3M_f}{b}');expect(j10[2]).toMatch(/^\\quad=/);expect(j10[3]).toContain('6.25F_{yf}t_f^2');expect(j10[4]).toMatch(/^\\text\{Bottom flange \(/);expect(j10[7]).toContain('J10.3');
   expect(workedSteps(s,check('haunch-column-panel'),tx as never)?.[0]).toContain('\\max(T,\\ C\\cos\\alpha)');
   expect(text).toMatch(/Worked: unstiffened J10 at the haunch flanges · for information, not governing \(stiffened\)/);
   expect(text).toMatch(/Decision: column stiffeners required/);expect(text).toMatch(/J10\.7 \(unframed beam ends\) do not apply/);

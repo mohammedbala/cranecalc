@@ -5,7 +5,7 @@ import type {Section} from './types';
  * True section outline of a rolled AISC channel (C / MC shape) as the cap sits on a crane girder:
  * web horizontal on top of the W flange, flanges (legs) turned down.
  *
- * Local coordinates in mm: x across the girder (0 on the channel centreline, outer leg faces at x = ±d/2),
+ * Local coordinates in mm: x across the girder (0 on the channel centerline, outer leg faces at x = ±d/2),
  * y up with y = 0 on the underside of the channel web (the face bearing on the W top flange); the back
  * of the web is at y = tw and the leg toes at y = tw - bf.
  *
@@ -16,7 +16,7 @@ import type {Section} from './types';
  *   mid-projection of the flange beyond the web, so the flange is tf + (bf - tw)/12 thick at the web face
  *   and tf - (bf - tw)/12 at the toe. The outer face is square to the web.
  * - The web-to-flange fillet radius is not tabulated. It is taken so that the fillet's tangent point on the
- *   web lies at k (the tabulated k_des, outer flange face to web toe of fillet); with no k (a non-catalogue
+ *   web lies at k (the tabulated k_des, outer flange face to web toe of fillet); with no k (a non-catalog
  *   cap) or a k that does not reach past the flange root, the radius is taken as tw.
  * - The small rounding at the flange toe is ignored (toe drawn square).
  */
@@ -95,13 +95,13 @@ export function fittedChannelSlope(dims:Omit<ChannelDims,'slope'>,xBar:number){
  return (lo+hi)/2;
 }
 
-/** Profile of a catalogued AISC channel (inch table values), with its slope (2:12 for C, fitted to x̄ for MC). */
+/** Profile of a cataloged AISC channel (inch table values), with its slope (2:12 for C, fitted to x̄ for MC). */
 export function aiscChannelProfile(c:{name:string;d:number;bf:number;tw:number;tf:number;kdes:number;x:number},arcSegments=6){
  const dims={d:c.d*25.4,bf:c.bf*25.4,tw:c.tw*25.4,tf:c.tf*25.4,k:c.kdes*25.4};
  return channelProfile({...dims,slope:c.name.startsWith('MC')?fittedChannelSlope(dims,c.x*25.4):channelFlangeSlope},arcSegments);
 }
 
-/** Profile of a capped section's channel (capWidth = d, capDepth = bf, capTw = tw, capTf = tf), with k_des from the AISC table when catalogued. */
+/** Profile of a capped section's channel (capWidth = d, capDepth = bf, capTw = tw, capTf = tf), with k_des from the AISC table when cataloged. */
 export function capChannelProfile(s:Pick<Section,'capWidth'|'capDepth'|'capTw'|'capTf'|'capCatalogueId'>,arcSegments=6){
  const c=s.capCatalogueId?aiscChannelByName(s.capCatalogueId):undefined;
  const dims={d:s.capWidth,bf:s.capDepth,tw:s.capTw,tf:s.capTf,k:c?c.kdes*25.4:undefined};

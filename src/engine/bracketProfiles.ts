@@ -11,7 +11,7 @@ export function selectExistingWideFlange(b:BracketInput,shape:string):BracketInp
  return {...b,wideFlange:{...current,shape,surveyConfirmed:false,conditionConfirmed:false,
   rating:{...defaultExistingBracket.rating,method:current.rating.method}}};
 }
-/** Catalogue geometry is derived, so imports cannot silently substitute custom
+/** Catalog geometry is derived, so imports cannot silently substitute custom
  * dimensions while retaining a W-shape designation. Custom plate inputs stay
  * separate and are restored when that bracket type is reselected. */
 export function existingBracketProfile(b?:BracketInput){

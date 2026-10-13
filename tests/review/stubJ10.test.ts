@@ -114,7 +114,7 @@ describe('C2 · the W-stub column stiffeners in the report (one calculate)',()=>
   expect(text).toMatch(/Top flange J10\.1 flange local bending (\d+) kip [\d.]+ kip [\d.]+ stiffened, not governing Top flange J10\.2 web local yielding \1 kip/);
   // Worked examples: R_u = T + 3M_f/b with J10.1 and J10.3; the plate force T/2 + M_f/g; the panel with the net force.
   const tx=(v:number,q:string)=>`${q}:${v}`,j10=flangeJ10Worked(s,tx as never);
-  expect(j10).toHaveLength(4);expect(j10[0]).toContain('R_u=T+\\frac{3M_f}{b}');expect(j10[1]).toContain('6.25F_{yf}t_f^2');expect(j10[2]).toContain('R_u=C+\\frac{3M_f}{b}');expect(j10[3]).toContain('J10.3');
+  expect(j10).toHaveLength(8);expect(j10[1]).toBe('R_u=T+\\frac{3M_f}{b}');expect(j10[3]).toContain('6.25F_{yf}t_f^2');expect(j10[5]).toBe('R_u=C+\\frac{3M_f}{b}');expect(j10[7]).toContain('J10.3');
   expect(workedSteps(s,check('wbracket-colstiff-upper'),tx as never)?.[0]).toMatch(/R_\{st\}=\\frac\{T\}\{2\}\+\\frac\{M_f\}\{g\}/);
   expect(workedSteps(s,check('wbracket-column-panel'),tx as never)?.[0]).toContain('\\max(T,\\ C)');
  });

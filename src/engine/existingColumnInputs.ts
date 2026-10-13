@@ -34,7 +34,7 @@ export type AdjacentBuildingInput=z.infer<typeof adjacentBuildingSchema>;
 /**
  * A surveyed existing building column that receives a runway support. The
  * column section is the bracket's receiving column when a bracket is
- * enabled, otherwise the catalogue shape, otherwise the entered plates.
+ * enabled, otherwise the catalog shape, otherwise the entered plates.
  * Elevations are measured from the column base. Canonical units mm, N, MPa.
  */
 /**

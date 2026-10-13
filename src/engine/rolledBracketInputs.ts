@@ -33,7 +33,7 @@ export const isRolledBracket=(b?:{arrangement?:string;enabled?:boolean})=>b?.arr
 export const rolledInput=(b:Bracket):RolledBracketInput=>({...defaultRolledBracket,...b.rolled});
 const floorTo=(v:number,step:number)=>Math.floor(v/step+1e-9)*step,ceilTo=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
 /**
- * Catalogue geometry of the rolled stub in mm: depth, flange and web, the design fillet toe k (kdes) and its
+ * Catalog geometry of the rolled stub in mm: depth, flange and web, the design fillet toe k (kdes) and its
  * offset from the web centerline k1, and the bearing stiffener plates (outstand to 1/4 in inside the flange tip,
  * corners clipped clear of the rolled fillet). L is the stub length from the column face.
  */

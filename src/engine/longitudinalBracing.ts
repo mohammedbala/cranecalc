@@ -62,7 +62,7 @@ export function validateLongitudinalBracing(p:ProjectInput):string[]{
 export interface BracingCombination {id:string;equation:string;H:number;force:number;}
 export interface LongitudinalBracingResult {
  Cls:number;Cbs:number;length:number;cos:number;diagonals:number;member:BracingMember;
- /** Bays, width, work point height and tiers as analysed: from the runway spans and column seat for new columns. */
+ /** Bays, width, work point height and tiers as analyzed: from the runway spans and column seat for new columns. */
  geometry:{bays:number;bayWidth:number;height:number;tiers:number;spans?:number[]};
  combinations:BracingCombination[];governing:BracingCombination;
  deflection:{value:number;limit:number};foundation:{shear:number;axial:number};

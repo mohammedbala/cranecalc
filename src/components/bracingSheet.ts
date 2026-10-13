@@ -357,7 +357,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
 export const specifiedSeparation=(required:number,units:'US'|'SI')=>{const q=units==='US'?inch/8:5;return Math.ceil(required/q-1e-9)*q;};
 
 /**
- * The bracing on the general arrangement's girder elevation (sheet units; model metres from the girder mid-depth,
+ * The bracing on the general arrangement's girder elevation (sheet units; model meters from the girder mid-depth,
  * x from grid 1): the column stubs run on `stub` below the girder to a break, with the strut at the work point and
  * the rods leaving the upper gussets into the break. The whole braced bay is drawn on the bracing details.
  */

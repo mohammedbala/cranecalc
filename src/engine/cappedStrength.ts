@@ -48,7 +48,7 @@ export function cappedStrength(p:ProjectInput,s:Properties,base:GirderStrength):
  const [positive,negative]=directions,governing=p.system==='continuous'?directions.reduce((a,b)=>a.Mn<b.Mn?a:b):positive;
  const flangeRatio=Math.max(bf/(2*tf),(capDepth-capTw)/capTf,(capWidth-bf)/(2*capTw));
  // Web compactness for the bending direction(s) that occur: positive moment only on simple spans; on continuous
- // runways the less favourable of both directions (largest lambda / lambda_p), as for the flexural strength.
+ // runways the less favorable of both directions (largest lambda / lambda_p), as for the flexural strength.
  const occurring=p.system==='continuous'?directions:[positive],webCase=occurring.reduce((a,b)=>b.lambda/b.lambdaP>a.lambda/a.lambdaP?b:a);
  // F4 covers compact and noncompact webs (Rpc / Rpt reduce toward My for a noncompact web), so the flexural
  // checks need compact flanges and a web that is not slender; the limit shown is lambda_p for a compact web,

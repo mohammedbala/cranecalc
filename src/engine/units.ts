@@ -16,7 +16,7 @@ export function noteLength(mm:number,units:'US'|'SI'){
 }
 export function withSiUnits<T extends {units:'US'|'SI'}>(project:T):T{return project.units==='SI'?project:{...project,units:'SI'};}
 export function withImperialUnits<T extends {units:'US'|'SI'}>(project:T):T{return project.units==='US'?project:{...project,units:'US'};}
-/** AISC catalogue nominal mass is supplied in lb/ft; keep source values intact. */
+/** AISC catalog nominal mass is supplied in lb/ft; keep source values intact. */
 export function formatSectionMass(lbPerFoot:number,units:'US'|'SI'){
  const value=units==='SI'?lbPerFoot*.45359237/.3048:lbPerFoot;
  return `${value.toLocaleString('en-US',{maximumFractionDigits:2})} ${units==='SI'?'kg/m':'lb/ft'}`;

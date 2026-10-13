@@ -38,7 +38,7 @@ export function existingClearancePlan(s:CalculationSnapshot,r:ExistingLayout,box
  const labelW=124,dimsW=gap1+86,noteH=34,titleH=44;
  const scale=sheetDrawingScale(Math.min((box.w-labelW-dimsW)/(x1-x0),(box.h-noteH-titleH-80)/(u1-u0)),u,contentScale),k=scale.pointsPerMm;
  const gx=box.x+labelW+((box.w-labelW-dimsW)-(x1-x0)*k)/2,X=(x:number)=>gx+(x-x0)*k;
- // Centred in the box from the upper bubble to the view title.
+ // Centered in the box from the upper bubble to the view title.
  const along=Math.abs(((e.column.x0+e.column.x1)/2)-xg)>=1,across=(u1-u0)*k,height=32+across+22+(along?18:0)+noteH+titleH;
  const top=box.y+32+Math.max(0,(box.h-height)/2),Y=(v:number)=>sg>0?top+(v-u0)*k:top+(u1-v)*k;
  const ys=(v:PlanBox):[number,number]=>[Math.min(Y(v.u0),Y(v.u1)),Math.max(Y(v.u0),Y(v.u1))];

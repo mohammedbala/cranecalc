@@ -18,7 +18,7 @@ export const defaultRailClip:RailClipInput={type:'weld-on',product:`${clipNotEnt
 
 /**
  * The rail pad, when the project specifies one (aist.railPad): a continuous strip under the rail base,
- * centred on the rail, with its rated allowable compression and product basis.
+ * centered on the rail, with its rated allowable compression and product basis.
  */
 export function railPad(p:ProjectInput){
  if(!p.aist?.railPad)return undefined;
@@ -39,7 +39,7 @@ export const railClipInput=(rail:Rail|undefined):RailClipInput=>rail?.clip??defa
 export const clipEntered=(rail:Rail|undefined)=>!!rail?.clip&&!rail.clip.product.trim().toUpperCase().startsWith(clipNotEntered);
 
 /**
- * Rail clip in section, offsets across the runway from the rail centreline (rail on its design line). The clip
+ * Rail clip in section, offsets across the runway from the rail centerline (rail on its design line). The clip
  * base, `baseWidth` across the rail and `baseLength` along it, stands on the girder against the rail-base toe; its
  * nose bears on the top of the rail base over `overlap` (a drawing value: the clip itself is per manufacturer). The
  * base is fillet welded at both ends (two welds across the rail, `weldLength` each, `baseLength` apart).
@@ -71,7 +71,7 @@ export function railSeat(p:ProjectInput){
  return {pad:railPad(p),clip:clipGeometry(r,railPadThickness(p)),entered:clipEntered(r)};
 }
 /**
- * Schematic outline of a rail clip in section for the drawings, [across, up] from the rail centreline and the top of
+ * Schematic outline of a rail clip in section for the drawings, [across, up] from the rail centerline and the top of
  * the steel, on the side `side` (+1 / -1): the base plate from the rail-base toe outward, a body rising beside the rail
  * base and a nose over its top. Only the base footprint is a design value; the shape is the manufacturer's.
  */

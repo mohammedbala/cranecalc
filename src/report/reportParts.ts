@@ -178,7 +178,14 @@ export function subscripts(html:string){
 }
 export const inlineMath=(tex:string)=>katex.renderToString(tex,{throwOnError:false,displayMode:false});
 export const statusLabel=(s:CheckResult['status'])=>({pass:'OK',fail:'NG',excluded:'BY OTHERS','not-applicable':'N/A',unverified:'UNVERIFIED',unsupported:'UNSUPPORTED',incomplete:'INCOMPLETE'} as Record<string,string>)[s]??s.toUpperCase();
-const firstSentence=(v:string)=>{const m=v.match(/^.{20,180}?[.;](\s|$)/);return (m?m[0]:v.slice(0,160)).trim();};
+/** The first sentence (20 to 180 characters), ended at a stop outside parentheses, so a parenthetical stays whole. */
+const firstSentence=(v:string)=>{
+ let depth=0;
+ for(let i=0;i<Math.min(v.length,181);i++){const ch=v[i];
+  if(ch==='('||ch==='[')depth++;else if((ch===')'||ch===']')&&depth>0)depth--;
+  else if(depth===0&&i>=19&&(ch==='.'||ch===';')&&(i+1===v.length||/\s/.test(v[i+1])))return v.slice(0,i+1).trim();}
+ return v.slice(0,160).trim();
+};
 /** Checks repeating one equation, group and references over many stations or details. */
 const familyKey=(c:CheckResult)=>c.equation?`${c.group}|${c.equation}|${c.referenceIds.join(',')}`:c.id;
 /** The governing member: a failure first, then the largest finite demand/capacity. */
@@ -214,7 +221,7 @@ export function checkTable(checks:CheckResult[],x:CheckTableContext){
  return `<table class="checks"><colgroup><col class="c-title"/><col class="c-eq"/><col class="c-num"/><col class="c-num"/><col class="c-dc"/><col class="c-res"/></colgroup><thead><tr><th>Check · reference</th><th>Equation</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(({c,n,members})=>`<tr class="${c.status}" data-checks="${esc(members.map(m=>m.id).join(' '))}"><td><b>${esc(tidyNumbers(c.title))}</b>${n>1?` <span class="family">governing of ${n}</span>`:''}<small class="ref">${esc(shortReference(c))}</small>${c.caseId?`<small class="ref">Governing case ${esc(c.caseId)}</small>`:''}</td><td class="eq">${equationCell(c)}</td><td class="num">${sig3(c.demand,q(c),x.units)}</td><td class="num">${sig3(c.capacity,q(c),x.units)}</td><td class="num">${dcText(c.utilization,2,'—')}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`).join('')}</tbody></table>`;
 }
 export const checkTableCss=`table.checks{font-size:9px;margin:6px 0 10px}table.checks col.c-title{width:27%}table.checks col.c-eq{width:37%}table.checks col.c-num{width:11%}table.checks col.c-dc{width:6%}table.checks col.c-res{width:8%}table.checks td{padding:3px 4px;vertical-align:middle}table.checks td.num{text-align:right;white-space:nowrap}table.checks th:nth-child(n+3){text-align:right}table.checks td.res,table.checks th:last-child{text-align:center}table.checks td small.ref{display:block;font-size:7.5px;color:#333;margin-top:1px}table.checks .family{font-size:7.5px;border:1px solid #000;padding:0 3px;white-space:nowrap}table.checks td.eq{font-size:9px;overflow:hidden}table.checks td.eq .katex{font-size:1.02em;white-space:normal}table.checks td.eq i{font-size:8px}table.checks td.eq small.where{display:block;font-size:7px;line-height:1.25;color:#222;margin-top:1px}table.checks td.eq small.where .katex{font-size:1em}table.checks tr.fail td{background:#e6e6e6;font-weight:700}table.checks b.fail{text-decoration:underline}`;
-/** Any hex colour in embedded linework as the gray of equal luminance, so the printed calculation is black and white. */
+/** Any hex color in embedded linework as the gray of equal luminance, so the printed calculation is black and white. */
 export function monochrome(svg:string){
  return svg.replace(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi,(_,h:string)=>{
   const v=h.length===3?h.split('').map(c=>parseInt(c+c,16)):[0,2,4].map(i=>parseInt(h.slice(i,i+2),16));
