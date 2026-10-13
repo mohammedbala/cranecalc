@@ -51,12 +51,12 @@ export function demoFocus005RevB():ProjectInput{
  // opposing pairs at 24 in, fictitious supplier data (rated 10 kip lateral, 5 kip uplift per clip, allowable), base
  // welded to the cap channel with 5/16 in fillets 2 1/2 in long across each end; the rail is anchored by the end stops.
  p.details!.rail.clip=demonstrationClip(.3125*inch);
- note('Rail keepers (welded plates with lips, end fillets, notched anchor keepers) replaced by weld-on floating rail clips per manufacturer (fictitious supplier data RC-W6: 10 kip lateral, 5 kip uplift per clip, allowable) in opposing pairs at 24 in, base welded 5/16 in x 2 1/2 in each end; rail anchored by the end stops.');
+ note('Welded rail keepers replaced by weld-on floating rail clips (RC-W6), opposing pairs at 24 in; rail anchored at the end stops.');
  // The 0.005 rad rail rotation limit was not an owner or crane-supplier requirement: removed (TR-13 sets none).
  delete p.details!.criteria.twistLimit;
  p.criteriaSource=p.criteriaSource.replace(/[;,]?\s*twist\s*0\.005\s*rad/i,'');
  p.criteriaSource=p.criteriaSource.replace('AIST Class C','AIST Class B');
- note('Rail rotation limit 0.005 rad removed (not an owner or crane-supplier requirement; the rotation is reported, not checked).');
+ note('Rail rotation limit 0.005 rad removed (no owner or supplier requirement).');
  // E36 · girder re-optimised once the rail rotation limit is gone: W24X104 + C15X50 (154 plf) → W14X61 + C15X50 (111 plf),
  // governed by the Class B vertical deflection L/1000 (0.75). W12X53 + C15X50 fails it (1.09) and the singly symmetric
  // proportion; a lighter channel (C15X33.9) failed the (former) rail keeper fatigue. Runway seismic mass 2 × 125 ft × 43 plf = 10.8 kip less.
@@ -69,13 +69,13 @@ export function demoFocus005RevB():ProjectInput{
  p.longitudinalBracing!.enabled=false;
  note('Longitudinal bracing section removed from this package; the crane-level strut, collector and braced bay are by the building engineer of record.');
  p.omitUnverified=true;
- note('Checks without data (frame type, 10-year wind drift, rail gauge from frame spread, runway seismic, IEBC alteration) omitted from the report and listed as not checked (by others).');
+ note('Frame type, 10-year wind drift, rail gauge spread, runway seismic and IEBC evaluation moved to items by others (section 6.7).');
  // One bumper data source throughout: the corrected supplier schedule (the end stop source still named CAP-CS-02).
  p.details!.endStop!.source='Fictitious supplier schedule DEMO-CS-05 rev B: bumper force, bumper centerline height and contact diameter';
  note('Bumper data source: the supplier schedule DEMO-CS-05 rev B (was CAP-CS-02).');
  // One revision identity for the calculation and the drawings (Rev B), with the revision log: Rev A the review issue,
  // Rev B the changes above.
  p.drawing={...p.drawing!,revisions:[{rev:'A',date:'2026-10-09',description:'Issued for review',by:'CC'},
-  {rev:'B',date:'2026-10-12',description:'Revised for the review comments; changes in the revision log',by:'CC',changes:[...revBChanges]}]};
+  {rev:'B',date:'2026-10-12',description:'Revised for Rev A review comments',by:'CC',changes:[...revBChanges]}]};
  return p;
 }

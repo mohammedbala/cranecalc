@@ -14,6 +14,8 @@ import {caseLabel,sig3,tidyNumbers} from './reportParts';
 export interface ResponsibilityRow {item:string;needed:string;criterion:string;forces:string;party:string;check?:CheckResult}
 const EOR='Building engineer of record';
 const esc=(v:unknown)=>caseLabel(tidyNumbers(String(v??''))).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+/** An item name as a heading: separators as commas, "and" for "&". */
+const itemName=(v:string)=>v.replace(/\s*&\s*/g,' and ').replace(/\s+·\s+/g,', ');
 const sentences=(v:string)=>v.split(/(?<=[.;])\s+(?=[A-Z])/).map(t=>t.trim()).filter(Boolean);
 const list=(v:number[])=>v.length>2?`${v.slice(0,-1).join(', ')} and ${v.at(-1)}`:v.join(' and ');
 const gridList=(v:number[])=>v.length?`grid${v.length>1?'s':''} ${v.length>2&&v.every((g,i)=>!i||g===v[i-1]+1)?`${v[0]}–${v.at(-1)}`:list(v)}`:'';
@@ -35,13 +37,13 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
  take('column-drift-wind',{item:'Existing column · drift under the 10-year wind (TR-13 §5.3)',needed:'Frame displacement at the top of the crane girder under the 10-year wind, from the frame analysis.',
   criterion:`AIST TR-13 §5.3: H/400 or 2 in, whichever is less${z?`; H = ${len(z.girderTop)} (column base to the top of the girder), limit ${len(z.driftLimit)}`:''}.`,forces:'—',party:EOR});
  const gauge=byId.get('column-rail-gauge');
- if(gauge)take('column-rail-gauge',{item:gauge.title,needed:'Outward displacement of each column at the rail under D and under the roof snow (snow of 30 psf or less reduced 50%, more 25%), from the frame analysis.',
-  criterion:'AIST TR-13 §5.3: gauge change +1 in / −1/2 in.',forces:z?`Computed here, part of the total: runway dead load and the static crane on the bracket, column alone, both runways alike: ${z.gauge.crane>=0?'+':'−'}${len(Math.abs(z.gauge.crane))} (D/C ${(Math.abs(z.gauge.crane)/(z.gauge.crane>=0?25.4:12.7)).toFixed(2)} of the limit); the frame spread is added by others.`:'—',party:EOR});
+ if(gauge)take('column-rail-gauge',{item:gauge.title,needed:'Outward displacement of each column at the rail under D and under the roof snow (snow reduced 50% if ≤ 30 psf, else 25%), from the frame analysis.',
+  criterion:'AIST TR-13 §5.3: gauge change +1 in / −1/2 in.',forces:z?`Column alone, runway dead load plus static crane: ${z.gauge.crane>=0?'+':'−'}${len(Math.abs(z.gauge.crane))} (${Math.round(100*Math.abs(z.gauge.crane)/(z.gauge.crane>=0?25.4:12.7))}% of the limit). Frame spread: by others.`:'—',party:EOR});
  const mass=col?.enabled&&!col.isNew?runwayMass(p,!!col.siteSeismic?.liftedLoadSecured):undefined,weight=mass?`Seismic weight added at the runway level ${f(mass.total)}: ${f(mass.runways)} of girders, rails and runway dead load for the two runways, the crane ${f(mass.crane)}.`:'—';
  take('building-seismic-runway',{item:'Runway seismic · seismic design category, TR-13 combinations 5a and 7a',needed:'SDS, the seismic design category, Ie and the existing lateral system\'s R with their source, or a record that seismic design of the runway is not required at the site (ASCE 7 §1.4.2 for SDC A).',
   criterion:'ASCE 7-16 Chapter 12; AIST TR-13 §3.10 combinations 5a and 7a on the girder, bearings, ties and bracket.',forces:weight,party:`${EOR} (site seismic data)`});
  take('building-seismic-alteration',{item:'Existing lateral system · alteration evaluation (IEBC)',needed:'Evaluate the existing lateral force-resisting system for the added runway mass and crane forces.',
-  criterion:'IEBC §503.4 / §805.3: demand-capacity ratio of existing lateral elements not more than 10% above that without the alteration (verify against the adopted edition).',forces:weight,party:EOR});
+  criterion:'IEBC §503.4 / §805.3: demand-capacity ratio of existing lateral elements not more than 10% above that without the alteration (verify against the adopted edition).',forces:rows.some(r=>r.forces===weight)&&weight!=='—'?'Seismic weight as above.':weight,party:EOR});
  take('brace-drift-wind',{item:'Longitudinal bracing · displacement under the 10-year wind',needed:'Crane-level displacement of the braced line along the runway under the 10-year wind.',
   criterion:'AIST TR-13 §5.5: H/400 or 2 in, whichever is less.',forces:'—',party:EOR});
  const strut=byId.get('brace-by-others')??byId.get('column-longitudinal');
@@ -59,7 +61,7 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
  if(p.details?.rail)rows.push({item:'Rail and crane wheels',needed:`Confirm that the ${p.details.rail.name.split(' · ')[0]} suits the crane wheels (tread width, flange clearance, wheel load) and the rail joints and rail clips specified.`,criterion:'Crane supplier wheel and rail requirements.',forces:'—',party:'Crane supplier'});
  rows.push({item:'Opposite runway',needed:'Build the opposite runway identical to this one, opposite hand (S-00, S-01): girders, bearings, haunches, column stiffeners, ties and end stops; survey its column line as this one.',criterion:'This calculation applies where the opposite columns, seat elevation and frame match those used here; otherwise a separate check.',forces:'As this runway (section 3.5).',party:'Engineer of record for the runway; contractor survey'});
  if(col?.enabled&&!col.isNew){const r=p.details?.bracket?.receiver;
-  rows.push({item:'Existing column survey',needed:`Field-verify every receiving column before fabrication: ${col.shape??'section'}${r?` d = ${len(r.depth)}, bf = ${len(r.width)}, tf = ${len(r.flangeThickness)}, tw = ${len(r.webThickness)}`:''}, plumb, and nothing attached inside the flanges at the haunch and column stiffener levels; base metal per the mill certificates.`,
+  rows.push({item:'Existing column survey',needed:`Field-verify every existing column before fabrication: ${col.shape??'section'}${r?` d = ${len(r.depth)}, bf = ${len(r.width)}, tf = ${len(r.flangeThickness)}, tw = ${len(r.webThickness)}`:''}, plumb, and nothing attached inside the flanges at the haunch and column stiffener levels; base metal per the mill certificates.`,
    criterion:'Surveyed dimensions within the ASTM A6 tolerances of the values used here; any difference to the engineer of record before fabrication.',forces:'—',party:'Contractor (survey), reviewed by the engineer of record'});}
  const a=s.designAnalysis;
  if(a&&p.cranes.length){const c=p.cranes[0],max=Math.max(...c.wheels.map(w=>w.loaded)),empty=Math.max(...c.wheels.map(w=>w.unloaded)),lrfd=p.method==='LRFD',test=(lrfd?1.2:1)*empty+(lrfd?1.6:1)*1.25*(max-empty);
@@ -74,5 +76,5 @@ export function responsibilityBlock(tax:Taxonomy,s:CalculationSnapshot,compact=f
   // Page 1: item and responsible party, two items to a row.
  if(compact){const half=Math.ceil(rows.length/2),cell=(v?:ResponsibilityRow)=>v?`<td><b>${esc(v.item)}</b></td><td>${esc(v.party)}</td>`:'<td></td><td></td>';
   return `<h3>Not checked in this package: responsibility matrix</h3><table class="by-others compact"><thead><tr><th>Item</th><th>Responsible party</th><th>Item</th><th>Responsible party</th></tr></thead><tbody>${rows.slice(0,half).map((v,i)=>`<tr>${cell(v)}${cell(rows[half+i])}</tr>`).join('')}</tbody></table><p class="counts">What is needed, the acceptance criterion and the force and location delivered to each item: responsibility matrix, section 6.7.</p>`;}
- return `<table class="by-others matrix"><thead><tr><th>Item</th><th>What is needed</th><th>Acceptance criterion</th><th>Force and location delivered</th><th>Responsible party</th></tr></thead><tbody>${rows.map(v=>`<tr><td><b>${esc(v.item)}</b></td><td>${esc(v.needed)}</td><td>${esc(v.criterion)}</td><td>${esc(v.forces)}</td><td>${esc(v.party)}</td></tr>`).join('')}</tbody></table>`;
+ return `<table class="by-others matrix"><thead><tr><th>Item</th><th>What is needed</th><th>Acceptance criterion</th><th>Force and location delivered</th><th>Responsible party</th></tr></thead><tbody>${rows.map(v=>`<tr><td><b>${esc(itemName(v.item))}</b></td><td>${esc(v.needed)}</td><td>${esc(v.criterion)}</td><td>${esc(v.forces)}</td><td>${esc(v.party)}</td></tr>`).join('')}</tbody></table>`;
 }
