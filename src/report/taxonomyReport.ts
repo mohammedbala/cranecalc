@@ -122,7 +122,7 @@ const margin=(c:CheckResult,units:Units)=>{
  const m=Math.abs(c.capacity-c.demand);return sig3(m<1e-6?0:m,'length',units);
 };
 /** The flag of a detailing rule in two phrases: at the limit, or less margin than the 1/8 in (or 10%) setting tolerance. */
-const flagText=(c:CheckResult,reason:string)=>c.status!=='pass'?reason:/exactly|at the limit/i.test(reason)?'At limit':/^Margin \d+%$/.test(reason)?reason:'Margin < 1/8 in';
+const flagText=(c:CheckResult,reason:string)=>c.status!=='pass'?reason:/exactly|at (the )?limit/i.test(reason)?'At limit':/^Margin (\d+%|< (1\/8 in|10%))$/.test(reason)?reason:'Margin < 1/8 in';
 /** The detailing checklist: failures and rules met with less than 1/8 in (or 10%) margin; everything else in one line. */
 export function detailingChecklist(tax:Taxonomy,units:Units){
  const D=tax.detailing,flags=D.flagged;

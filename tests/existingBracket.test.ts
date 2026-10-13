@@ -69,7 +69,7 @@ describe('existing bracket assessment and new seat',()=>{
   // Exercise the report template without bypassing eligibility or inventing a
   // site assessment. The UI/server export gate still rejects this snapshot.
   const html=compactReport(s,'');
-  expect(html).toMatch(/4\.\d+ \/ Existing brackets and new bolted seats/);
+  expect(html).toMatch(/4\.\d+ Existing brackets and new bolted seats/);
   expect(html).toMatch(/5\.\d+ \/ Existing support and seat fatigue/);
   expect(html).toContain('not calculated here');
   expect(html).toContain('unverified');

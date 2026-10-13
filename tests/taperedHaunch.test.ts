@@ -204,7 +204,7 @@ describe('tapered I haunch: drawings, parts, report and figures',()=>{
  it('reports pages 04B-04D without NaN in US and SI',()=>{
   for(const s of [tp1(),{...tp2(),input:{...tp2().input,units:'SI' as const}}]){
    const html=compactReport(s,'');expect(overPrecise(html)).toEqual([]);
-   for(const t of ['Tapered I haunch · inputs &amp; actions','Tapered I haunch · member checks','Tapered I haunch · welds, fatigue &amp; column local effects'])expect(html.includes(t),t).toBe(true);
+   for(const t of ['Tapered haunch, inputs and actions','Tapered haunch, member checks','Tapered haunch welds, fatigue and column local effects'])expect(html.includes(t),t).toBe(true);
    const pages=html.slice(html.indexOf('Tapered I haunch · inputs'),html.indexOf('Tapered I haunch · welds')+20000);expect(pages.match(/.{80}(NaN|undefined|Infinity).{40}/)?.[0]).toBeUndefined();
   }
  });

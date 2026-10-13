@@ -103,15 +103,15 @@ describe('C2 · the W-stub column stiffeners in the report (one calculate)',()=>
   expect(s.errors).toEqual([]);
   // Open review items of the demonstration crane data aside, nothing fails.
   expect(s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
-  expect(text).toMatch(/Stub flange forces on the existing column\. Each stub flange delivers one force system at the column face/);
+  expect(text).toMatch(/Each stub flange delivers an axial force \(T = M\/\(d − t f \) \+ N\/2 at the top/);expect(text).toMatch(/Unstiffened, the existing column would take each as one concentrated force/);
   expect(text).toMatch(/top, T = [\d.]+ kip with M f = [\d.]+ kip-ft: R u = T \+ 3M f \/b = /);
-  expect(text).toMatch(/Decision: column stiffeners required\. With this force system .*web local yielding \(J10\.2\) at the top flange, D\/C 1\.\d\d/);
-  expect(text).toMatch(/A half-depth column stiffener pair at each stub flange level is therefore provided and designed by AISC J10\.8/);
-  expect(text).toMatch(/Worked: unstiffened J10 at the stub flanges · for information, not governing \(stiffened\)/);
+  expect(text).toMatch(/Column stiffeners required\. Unstiffened, web local yielding \(J10\.2\) is exceeded at (the top flange|both flange levels) \(D\/C 1\.\d\d/);
+  expect(text).toMatch(/Half-depth stiffener pairs \(2 pairs PL/);expect(text).toMatch(/carry each flange's full force system with no credit for the unstiffened column/);
+  expect(text).toMatch(/Worked: unstiffened J10 at the stub flanges \(basis for the stiffener decision\)/);
   expect(text).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", half depth, one pair at the stub top flange and bottom flange; 7\/16" fillets/);
   // The J10 table: the same R_u at a level, stiffened, not governing.
   const top=check('wbracket-column-flange'),yt=check('wbracket-column-yield-top');expect(ru(top.note)).toBe(ru(yt.note));
-  expect(text).toMatch(/Top flange J10\.1 flange local bending (\d+) kip [\d.]+ kip [\d.]+ stiffened, not governing Top flange J10\.2 web local yielding \1 kip/);
+  expect(text).toMatch(/Top flange J10\.1 flange local bending (\d+) kip [\d.]+ kip [\d.]+ (OK|Exceeded) Top flange J10\.2 web local yielding \1 kip/);
   // Worked examples: R_u = T + 3M_f/b with J10.1 and J10.3; the plate force T/2 + M_f/g; the panel with the net force.
   const tx=(v:number,q:string)=>`${q}:${v}`,j10=flangeJ10Worked(s,tx as never);
   expect(j10).toHaveLength(8);expect(j10[1]).toBe('R_u=T+\\frac{3M_f}{b}');expect(j10[3]).toContain('6.25F_{yf}t_f^2');expect(j10[5]).toBe('R_u=C+\\frac{3M_f}{b}');expect(j10[7]).toContain('J10.3');

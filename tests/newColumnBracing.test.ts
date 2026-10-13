@@ -134,7 +134,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
   expect(all).not.toContain('NOT IN SET');
   // The isometric draws the rods and strut as new steel.
   expect(set[1].svg.match(/data-view="isometric"[\s\S]*?<\/g>/)![0].length).toBeGreaterThan(0);
-  expect(compactReport(s,'')).toMatch(/5\.\d+ \/ Bracing connections, strut and seismic along the runway/);
+  expect(compactReport(s,'')).toMatch(/5\.\d+ Bracing connections, strut and seismic along the runway/);
  });
  it('shows the surveyed existing building on S-01 with the clearances dimensioned and noted',()=>{
   for(const units of ['US','SI'] as const){

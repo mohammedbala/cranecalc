@@ -126,9 +126,9 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
 
  it('m3: the deflection checks state every criterion and the governing one',()=>{
   const v=check('vertical');expect(v.equation).toMatch(/L\/1000=\\text\{0\.30 in\}/);
-  expect(v.equation).toMatch(/owner \}L\/600/);expect(v.equation).toMatch(/AIST Class B \}L\/1000/);expect(v.equation).toMatch(/CMAA C \}L\/600/);
+  expect(v.note).toMatch(/owner L\/600/);expect(v.note).toMatch(/AIST class B: L\/1000/);expect(v.note).toMatch(/CMAA C: L\/600/);expect(v.note).toMatch(/governing adopted limit L\/1000/);
   expect(v.capacity).toBeCloseTo(300*inch/1000,6);
-  const l=check('lateral');expect(l.equation).toMatch(/L\/400=\\text\{0\.75 in\}/);expect(l.equation).toMatch(/AIST \}L\/400/);
+  const l=check('lateral');expect(l.equation).toMatch(/L\/400=\\text\{0\.75 in\}/);expect(l.note).toMatch(/AIST L\/400/);
   expect(line(/^\\Delta_v\\le L\/n_v,\\ n_v=\\max\(600,\\,1000,\\,600\)=1000/)).toBeDefined();
  });
 

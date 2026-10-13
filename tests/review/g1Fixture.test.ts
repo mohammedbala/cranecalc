@@ -19,7 +19,7 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
   expect(s.warnings.some(w=>w.startsWith('CRANE INPUT'))).toBe(true);
   const html=reportHtml(s);
   expect(html).toContain('Maximum load on one runway');expect(html).toContain('Bumper selection');
-  expect(html).not.toContain('Direct to building-mounted stop; girder bypass');expect(html).toContain('Girder-mounted end stops at');
+  expect(html).not.toContain('Direct to building-mounted stop; girder bypass');expect(html).toMatch(/Bumper force C<sub>bs<\/sub> = [\d.]+ kip at each runway end, carried by girder axial force to the locating bearings/);
  },900000);
  it('applies the Class B consequences: vertical deflection L/1000',()=>{
   const before=demoFocus005Before().checks.find(c=>c.id==='vertical')!,after=byId('vertical')!;

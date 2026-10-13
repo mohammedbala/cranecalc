@@ -179,6 +179,6 @@ describe('new rolled wide-flange bracket',()=>{
   for(const id of ['end-bearing-seat-bearing','end-bearing-wrench-stub-web','end-bearing-wrench-stub-tip','end-bearing-wrench-stub-stiffener','end-bearing-seat-fit'])expect(s.checks.find(c=>c.id===id)?.status).toBe('pass');
   // The seat moment from one loaded bay twists the stub: the warping stress of the flanges is the governing stress.
   const combined=s.checks.find(c=>c.id==='wbracket-stub-combined')!;expect(combined.utilization).toBeGreaterThan(.3);
-  const report=compactReport(s,'');expect(report).toContain('Wide-flange bracket · inputs');expect(report).toContain('Stub actions at the governing case of each grid');expect(report).not.toMatch(/NaN|undefined/);
+  const report=compactReport(s,'');expect(report).toContain('Wide-flange bracket, inputs');expect(report).toContain('Stub actions at the governing case of each grid');expect(report).not.toMatch(/NaN|undefined/);
  },180000);
 });

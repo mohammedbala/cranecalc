@@ -129,7 +129,7 @@ describe('E35 full calculation with the end-bay bearings centered (one run)',()=
   expect(end.normal/ksi).toBeLessThan(12);expect(end.torque/kft).toBeLessThan(12.5);
   expect(c('haunch-combined').demand!/ksi).toBeLessThan(before('haunch-combined').demand!/ksi);
   expect(c('column-interaction').status).toBe('pass');
-  expect(reportHtml(s)).toContain('End-bay bearings centered on the support web at the runway-end grids');
+  expect(reportHtml(s)).toMatch(/At the runway-end grids each end-bay girder runs [^.]* past the grid so that its bearing plate, stiffeners and reaction sit over the haunch web/);
   const svg=drawingSheetSet(s).map(v=>v.svg).join('');
   expect(svg).toContain('ONE BEARING CENTERED ON THE GRID (SUPPORT WEB)');
  },900000);
