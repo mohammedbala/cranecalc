@@ -190,7 +190,8 @@ describe('revision identity and consistency (m1–m9)',()=>{
  it('reports the end stop as the calculation does, with units on the bumper rows (m8)',()=>{
   const s03=sheets.find(v=>v.includes('GOVERNING STOP CHECK'))!.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
   expect(s03).toMatch(/GOVERNING STOP CHECK GIRDER TOP FLANGE · THICKNESS FOR NO PRYING: D\/C 0\.68 \(THICKNESS RATIO\)/);
-  expect(s03).toContain('MAX. D/C 0.78 STRENGTH');
+  // The 0.78 of the cap tieback is its slot travel (a movement check), not strength; the sleeves govern strength.
+  expect(s03).toContain('MAX. D/C 0.77 STRENGTH, 0.78 SLOT TRAVEL, 0.23 FATIGUE');
   expect(sheets.join('')).not.toContain('CAP-CS-02');
   expect(body).toMatch(/Bumper, deceleration at 50% speed Peak deceleration at 50% of the rated speed 2\.08 ft\/s² against 16 ft\/s²[^]*?2\.08 ft\/s²/);
   expect(body).toMatch(/Energy at 100% speed 0\.31 kip-ft/);
