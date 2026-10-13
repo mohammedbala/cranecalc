@@ -45,7 +45,7 @@ describe('narrative generated from the design (C3, M11)',()=>{
   for(const banned of ['Enter channel','set the project fatigue method','alternative scenarios must not be added','refinement gates','exporting does not make','railAlignment:','bolting:','Project notes','..'])
    expect(body,banned).not.toContain(banned);
   expect(body).not.toMatch(/Fictitious full-bearing fit-up:/);
-  expect(body).toContain('Fit-up: Straighten and fit cap before continuous welding');
+  expect(body).toContain('Cap fit-up Straighten and fit cap before continuous welding');
  });
 });
 
@@ -71,7 +71,7 @@ describe('Appendix A, repetition and page flow (P2)',()=>{
   expect(rows).toBeLessThan(s.checks.length/2);
   // Round 2 fatigue (M7): the register Miner rows report f_sr,eq/F_SR; the rail clip base weld points up to 0.23 (the
   // girder range at Category D, without the former keeper local range: was 0.49).
-  expect(appendix).toMatch(/typical of 136; D\/C 0\.\d\d to 0\.23<small>governs at Rail clip base weld/);
+  expect(appendix).toMatch(/136 locations; D\/C 0\.\d\d to 0\.23<small>governs at Rail clip base weld/);
   const ids=[...appendix.matchAll(/data-check="([^"]*)"(?: data-members="([^"]*)")?/g)].flatMap(m=>m[2]?m[2].split(' '):[m[1]]);
   expect(new Set(ids)).toEqual(new Set(s.checks.map(c=>c.id)));
   expect(reportText(appendix)).not.toMatch(/× 10⁻|e-\d/);
@@ -115,8 +115,8 @@ describe('figures (P4)',()=>{
   const marks=[...fig.matchAll(/font-weight="700" fill="#000">(\d+)<\/text>/g)].map(m=>Number(m[1])).sort((a,b)=>a-b);
   expect(marks).toEqual([1,2,3,4,5,6,7]);
   const caption=reportText(html.slice(html.indexOf('<p class="figure-note">'),html.indexOf('</p>',html.indexOf('<p class="figure-note">'))));
-  expect(caption).toMatch(/1 rail; 2 girder; 3 bearing; 4 tapered I haunch \(the column stiffeners at its flanges are drawn with it\); 5 existing column; 6 cap tieback angle and top tie; 7 longitudinal force F/);
-  expect(caption).toMatch(/8 The end stops are at the runway ends, outside this view/);
+  expect(caption).toMatch(/1 rail; 2 girder; 3 bearing; 4 tapered haunch with column stiffeners; 5 existing column; 6 cap tieback; 7 longitudinal force F to the crane-level strut/);
+  expect(caption).toMatch(/8 end stops \(runway ends, not shown\)/);
   const table=html.slice(html.indexOf('<table class="summary-checks">'),html.indexOf('</table>',html.indexOf('<table class="summary-checks">')));
   const badges=[...table.matchAll(/class="step"[^>]*>(\d+)</g)].map(m=>Number(m[1]));
   expect(badges).toEqual([1,2,3,4,5,6,7,8]);
@@ -138,10 +138,10 @@ describe('figures (P4)',()=>{
 
 describe('references (P5)',()=>{
  it('lists each document once with its real title and cites each check by its own clause',()=>{
-  const register=body.slice(body.indexOf('Reference register'),body.indexOf('6.6 / Applicability'));
+  const register=reportText(html.slice(html.indexOf('Appendix B References'),html.indexOf('<section class="runway-plan-sheet-page"')));
   expect(register.match(/AISC Design Guide 7/g)).toHaveLength(1);
-  expect(register).toContain('AISC Design Guide 7 · Industrial Building Design (Fisher) (Third edition · 2019');
-  expect(register).toContain('New Fatigue Provisions for the Design of Crane Runway Girders (Fisher & Van de Pas · AISC Engineering Journal 39(2) · 2002)');
+  expect(register).toContain('AISC Design Guide 7 · Industrial Building Design (Fisher) (Third edition, 2019');
+  expect(register).toContain('New Fatigue Provisions for the Design of Crane Runway Girders (Fisher & Van de Pas, AISC Engineering Journal 39(2), 2002)');
   for(const banned of ['Capped runway girders','Euler–Bernoulli','Crane runway fatigue','DG7 §11.2 and §14.5'])expect(register,banned).not.toContain(banned);
   expect(body).not.toMatch(/Fisher & Van de Pas \(EJ 2002\) §11\.2/);
   expect(body).not.toMatch(/Beam mechanics/);
@@ -150,8 +150,8 @@ describe('references (P5)',()=>{
   expect(body).not.toMatch(/AISC 360-16 B4, D2, E3, F4|AISC 360-16 J2, J3, J4, J7/);
  });
  it('cites AIST TR-13 once as the 2021 edition, with no edition qualifier, in the calculation and on S-00 (C1)',()=>{
-  const register=body.slice(body.indexOf('Reference register'),body.indexOf('6.6 / Applicability'));
-  expect(register.match(/AIST Technical Report 13/g)).toHaveLength(1);expect(register).toContain('AIST Technical Report 13 (2021) - ');
+  const register=reportText(html.slice(html.indexOf('Appendix B References'),html.indexOf('<section class="runway-plan-sheet-page"')));
+  expect(register.match(/AIST Technical Report 13/g)).toHaveLength(1);expect(register).toContain('AIST Technical Report 13 (2021): §1.4');
   expect(body).toContain('Basis: AIST Technical Report 13 (2021);');
   for(const banned of ['UNVERIFIED','text not read','not re-read','transcribed','committee draft','ballot draft','February 24, 2020','2021 printing','Published edition'])expect(text,banned).not.toContain(banned);
   const cover=sheets[0].replace(/<[^>]+>/g,' ');
@@ -162,22 +162,22 @@ describe('references (P5)',()=>{
 describe('revision identity and consistency (m1–m9)',()=>{
  it('carries one revision letter on the calculation and the drawings, with the revision log',()=>{
   expect(html).toContain('<title>DEMO-FOCUS-005 Rev B · crane runway calculation</title>');
-  expect(body).toMatch(/Crane runway girder calculation · Rev B · 2026-10-12/);
-  expect(body.match(/calc fingerprint/g)).toHaveLength(1);
+  expect(body).toMatch(/Crane runway girder calculation · Rev B, 2026-10-12/);
+  expect(html.match(new RegExp(`Calc ID ${s.revision}`,'g'))).toHaveLength(1);expect(body).not.toMatch(/calc fingerprint/);
   expect(text).toContain('Revision log');
   for(const c of revBChanges)expect(text).toContain(reportText(c.replace(/&/g,'&amp;')).trim().slice(0,40));
   for(const svg of sheets){expect(svg).toContain('REVISION: B');expect(svg).not.toContain('CURRENT OUTPUT');expect(svg).not.toMatch(/>P1</);}
  });
  it('names each reaction once (m2) and states the deflection limit that governs (m3)',()=>{
-  expect(body).toMatch(/grid reaction ΣR u 26\.5 kip \(both girder ends\)/);
-  expect(body).toMatch(/used conservatively for one girder end/);
+  expect(body).toMatch(/ΣR u = 26\.5 kip per grid/);
+  expect(body).toMatch(/the full grid reaction, used for one girder end/);
   expect(body).not.toContain('1.4 LRFD / 1.0 ASD');
-  expect(body).toContain('vertical L/1000 governs (owner L/600, AIST Class B L/1000, CMAA C L/600) = 0.30 in on 300 in');
+  expect(body).toContain('vertical L/1000 = 0.30 in (AIST Class B governs); lateral L/400');
  });
  it('specifies the rail eccentricity the design uses (m4) and one preheat (m5)',()=>{
   expect(body).toContain('rail eccentricity in service not more than 1/4 in (the design eccentricity');
   expect(body).not.toContain('not more than 3/4 of the web thickness.');
-  expect(body).toMatch(/Existing column · preheat for field welds Preheat and interpass temperature 150 °F minimum \(project requirement on the drawings\), above the AWS D1\.1\/D1\.1M:2020 Table 5\.8 prequalified minimum of 50 °F[^]*?150 °F OK/);
+  expect(body).toMatch(/Existing column, preheat for field welds Preheat and interpass temperature 150 °F minimum \(project requirement on the drawings\), above the AWS D1\.1(\/D1\.1M)?:2020 Table 5\.8 prequalified minimum of 50 °F[^]*?150 °F/);
  });
  it('uses AISC 360-16 bolt groups and the Table J3.2 F_nt (m7)',()=>{
   const cover=sheets[0];
@@ -191,7 +191,7 @@ describe('revision identity and consistency (m1–m9)',()=>{
   expect(s03).toMatch(/GOVERNING STOP CHECK GIRDER TOP FLANGE · THICKNESS FOR NO PRYING: D\/C 0\.68 \(THICKNESS RATIO\)/);
   expect(s03).toContain('MAX. D/C 0.78 STRENGTH');
   expect(sheets.join('')).not.toContain('CAP-CS-02');
-  expect(body).toMatch(/Bumper · deceleration at 50% speed Peak deceleration at 50% of the rated speed 2\.08 ft\/s² against 16 ft\/s²[^]*?2\.08 ft\/s² OK/);
+  expect(body).toMatch(/Bumper, deceleration at 50% speed Peak deceleration at 50% of the rated speed 2\.08 ft\/s² against 16 ft\/s²[^]*?2\.08 ft\/s²/);
   expect(body).toMatch(/Energy at 100% speed 0\.31 kip-ft/);
  });
  it('takes the minimum fillet by the thinner part joined (m6)',()=>{

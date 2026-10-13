@@ -35,15 +35,16 @@ const sentences=(v:string)=>{
  out.push(v.slice(start));return out.map(t=>t.trim()).filter(Boolean);
 };
 const firstSentence=(v:string)=>sentences(v)[0]??'';
+const sentence=(v:string)=>v.charAt(0).toUpperCase()+v.slice(1);
 
 /** One body row per line: the controlling limit state with its equation, demand, limit and D/C; merged lines name it. */
 export function bodyTable(lines:BodyLine[],tax:Taxonomy,units:Units){
  if(!lines.length)return '';
  return `<table class="checks body-checks"><colgroup><col class="c-title"/><col class="c-eq"/><col class="c-num"/><col class="c-num"/><col class="c-dc"/><col class="c-res"/></colgroup><thead><tr><th>Check · reference</th><th>Equation</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th></tr></thead><tbody>${lines.map(l=>{
   const c=l.controlling,t=tax.entries.get(c.id)!;
-  const head=l.merged?`<b>${esc(l.title)}</b><small class="ctrl">Controlling: ${esc(c.title)}${l.also.length?`; also ${l.also.map(a=>`${esc(a.title)} ${dcText(a.utilization,2)}`).join('; ')}`:''} · ${l.members.length} limit states</small>`:`<b>${esc(c.title)}</b>`;
+  const head=l.merged?`<b>${esc(l.title)}</b><small class="ctrl">Controlling: ${esc(c.title.replace(/\s*·\s*/g,', '))}${l.also.length?`; also ${l.also.map(a=>`${esc(a.title.replace(/\s*·\s*/g,', '))} (${dcText(a.utilization,2)})`).join('; ')}`:''}</small>`:`<b>${esc(c.title)}</b>`;
   const typical=t.typicalOf>1?` <span class="family">typical of ${t.typicalOf}</span>`:'';
-  return `<tr class="${c.status}" data-checks="${esc(l.members.map(m=>m.id).join(' '))}"><td>${head}${typical}${l.owner?' <span class="family">owner criterion</span>':''}<small class="ref">${esc(shortReference(c))}</small>${c.caseId?`<small class="ref">Governing case: ${esc(tax.caseName(c.caseId))}</small>`:''}</td><td class="eq">${equationCell(c)}</td><td class="num">${value(c.demand,q(c),units)}</td><td class="num">${value(c.capacity,q(c),units,c.demand)}</td><td class="num">${dcText(c.utilization,2,'—')}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`;
+  return `<tr class="${c.status}" data-checks="${esc(l.members.map(m=>m.id).join(' '))}"${l.key.startsWith('top:')?' data-top="1"':''}><td>${head}${typical}${l.owner?' <span class="family">owner criterion</span>':''}<small class="ref">${esc(shortReference(c))}</small>${c.caseId?`<small class="ref">Governing case: ${esc(tax.caseName(c.caseId))}</small>`:''}</td><td class="eq">${equationCell(c)}</td><td class="num">${value(c.demand,q(c),units)}</td><td class="num">${value(c.capacity,q(c),units,c.demand)}</td><td class="num">${dcText(c.utilization,2,'—')}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`;
  }).join('')}</tbody></table>`;
 }
 /** "N other limit states checked, max D/C x.xx (Appendix A)". */
@@ -54,24 +55,26 @@ export const othersLine=(checks:CheckResult[])=>{
 };
 
 const kindLabel={clash:'Clash / coordination',redesign:'Redesign flag',input:'Missing or inconsistent input',detailing:'Detailing rule not met'} as const;
-/** Page 1, first: every open item (clashes, redesign flags, missing input) and the by-others list. */
+/** Page 1: every open item (clashes, redesign flags, missing input), when there are any, and where the items by others are. */
 export function openItemsBlock(tax:Taxonomy,s:CalculationSnapshot){
  const items=tax.openItems;
  const list=items.length?`<table class="open-items"><thead><tr><th>Open item</th><th>Check</th><th>Status</th><th>What is needed</th></tr></thead><tbody>${items.map(o=>`<tr><td><b>${kindLabel[o.kind]}</b></td><td>${esc(o.check.title)}${o.check.utilization!==undefined&&Number.isFinite(o.check.utilization)&&o.check.status==='fail'?` (D/C ${dcText(o.check.utilization,2)})`:''}<small>${esc(o.check.group)}</small></td><td><b>${esc(statusLabel(o.check.status))}</b></td><td>${esc(sentences(o.check.note.replace(/^OPEN ITEM:\s*/,'')).slice(0,2).join(' '))}</td></tr>`).join('')}</tbody></table>`:'';
- return `<h2>Open items</h2>${items.length?list:'<p>No open coordination, redesign or input items.</p>'}${byOthersBlock(tax,s,true)}`;
+ const others=responsibilityMatrix(tax,s).length?`<p>Items by others and the forces delivered to them: section @@ref:by-others@@.</p>`:'';
+ return `${items.length?`<h2>Open items</h2>${list}`:''}${others}`;
 }
+/** The governing check as the banner names it: its title without separators and without a repeated "fatigue". */
+const governingTitle=(t:string)=>(/fatigue/i.test(t.replace(/\s*·\s*fatigue$/i,''))?t.replace(/\s*·\s*fatigue$/i,''):t).replace(/\s*·\s*/g,', ');
 /** The pass banner: never "no failed checks" while an open item exists. */
 export function banner(tax:Taxonomy,draft=false){
- const n=tax.openItems.length,g=tax.governing;
+ const n=tax.openItems.length,g=tax.governing,gov=g?` Governing D/C = ${dcText(g.dc,2)}: ${esc(governingTitle(g.title))} (${esc(g.element)}).`:'';
  const head=draft?'<b>REVIEW DRAFT — NOT FOR ISSUE.</b> Open items include missing input (unverified); the calculation cannot be issued until they are resolved.<br/>':'';
- if(n){const kinds=[...new Set(tax.openItems.map(o=>kindLabel[o.kind].toLowerCase()))];return `<div class="banner fail">${head}<b>${n} OPEN ITEM${n>1?'S':''} — REVIEW REQUIRED, DO NOT ISSUE FOR CONSTRUCTION</b><br/>${esc(kinds.join('; '))}: listed below.${g?` Governing design D/C ${dcText(g.dc,2)}: ${esc(g.title)} (${esc(g.element)}).`:''}</div>`;}
- return `<div class="banner"><b>ALL DESIGN CHECKS SATISFIED</b> — no open items.${g?` Governing design D/C ${dcText(g.dc,2)}: ${esc(g.title)} (${esc(g.element)}).`:''}</div>`;
+ if(n){const kinds=[...new Set(tax.openItems.map(o=>kindLabel[o.kind].toLowerCase()))];return `<div class="banner fail">${head}<b>${n} OPEN ITEM${n>1?'S':''} — REVIEW REQUIRED, DO NOT ISSUE FOR CONSTRUCTION</b><br/>${esc(kinds.join('; '))}: listed below.${gov}</div>`;}
+ return `<div class="banner"><b>All design checks satisfied.</b>${gov}</div>`;
 }
-/** Counts: design checks evaluated E (shown S), screened R, detailing rules D (F flagged). */
+/** The count of results under the summary: design checks evaluated, screened and not applicable; detailing rules and those with small margin. */
 export function countsLine(tax:Taxonomy){
- const c=tax.counts,design=[...tax.entries.values()].filter(t=>t.type==='design'),reg=(gate:string)=>design.filter(t=>t.gate===gate&&/^detail-(fatigue|full-cycle)-/.test(t.check.id)).map(t=>t.check);
- const ev=reg('evaluated'),sc=reg('screened'),regText=(v:CheckResult[])=>v.length?`; ${v.length} of them at ${registerPoints(v)} fatigue register points`:'';
- return `<p class="counts">A check is one computed result (one row of Appendix A and of the CSV); a body row shows the governing check of a limit state, a merged group or a fatigue detail; a fatigue register point is one station and flange edge of the girder detail register, with two checks (equivalent range and all-cycle). <b>Design checks evaluated ${c.designEvaluated}</b> (${c.designShown} body rows${regText(ev)}), <b>screened ${c.designScreened}</b>${sc.length?` (${sc.length} of them at ${registerPoints(sc)} register points)`:''}, not applicable ${c.designNotApplicable}; <b>detailing rules ${c.detailing}</b> (${c.detailingFlagged} flagged). Also recorded: ${c.byType.classification} classifications, ${c.byType.verification} analysis verifications, ${c.byType.input} inputs, ${c.byType['load-basis']} load-basis comparisons, ${c.byType['by-others']} by others — ${c.total} results in all (Appendix A and the CSV).</p>`;
+ const c=tax.counts;
+ return `<p class="counts">${c.designEvaluated} design checks evaluated${c.designScreened?`, ${c.designScreened} screened below the fatigue threshold`:''}${c.designNotApplicable?`, ${c.designNotApplicable} N/A`:''}; ${c.detailing} detailing rules${c.detailingFlagged?` (${c.detailingFlagged} with small margin, section @@ref:detailing-checklist@@)`:''}. All results: Appendix A.</p>`;
 }
 
 /**
@@ -85,25 +88,30 @@ export function byOthersBlock(tax:Taxonomy,s:CalculationSnapshot,compact=false){
 const catHtml=(r:FatigueRow,n:number)=>{const l=esc(categoryLabel(r.category,r.title));
  if(r.category!=="C''"||!r.capacity)return l.replace('R_FIL','R<sub>FIL</sub>');
  return l.replace('R_FIL)',`R<sub>FIL</sub> = ${(r.capacity/allCycleRange('C',n)).toFixed(2)})`);};
+/** The taxonomy with only the fatigue details of the named elements (for a section's own fatigue table and S-N plot). */
+export function fatigueOf(tax:Taxonomy,elements:(key:string)=>boolean):Taxonomy{
+ return {...tax,fatigue:{...tax.fatigue,evaluated:tax.fatigue.evaluated.filter(r=>elements(r.element)),screened:tax.fatigue.screened.filter(r=>elements(r.element))}};
+}
 /**
  * The fatigue table: every evaluated detail at the design cycle count n_SR with the Miner equivalent range f_sr,eq and
- * the largest range f_sr,max against the same F_SR at n_SR (two D/Cs on one basis, the project method's in bold), the
- * damage sum for information; the screened details counted. A detail is one row (a family of register points of one
- * detail and category, or one named check); a check is one computed result of Appendix A.
+ * the largest range f_sr,max against the same F_SR at n_SR (two D/Cs on one basis, the design ratio in bold), and the
+ * damage sum; then the screened details closest to F_TH. `basis` false: the table alone (a second fatigue table
+ * after the section that states the basis).
  */
-export function fatigueTable(tax:Taxonomy,units:Units){
+export function fatigueTable(tax:Taxonomy,units:Units,o:{basis?:boolean}={}){
  const F=tax.fatigue,miner=F.method==='miner',gate=(c:CheckResult)=>tax.entries.get(c.id)?.gate;
- const all=[...F.evaluated,...F.screened].flatMap(r=>r.members),nEv=all.filter(c=>gate(c)==='evaluated').length,nSc=all.filter(c=>gate(c)==='screened').length;
  // Register points of a detail: all of them, and those screened below F_TH on their own range.
  const typical=(r:FatigueRow)=>{if(r.points<=1)return '';const sc=registerPoints(r.members.filter(c=>gate(c)==='screened'));
-  return `<small>typical of ${r.points} register points${sc?` (${r.points-sc} evaluated, ${sc} below F<sub>TH</sub>)`:''}</small>`;};
+  return `<small>${r.points} locations${sc?` (${r.points-sc} evaluated, ${sc} below F<sub>TH</sub>)`:''}</small>`;};
  const ratio=(v:number|undefined,governs:boolean)=>v===undefined?'—':governs?`<b>${dcText(v,2)}</b>`:dcText(v,2);
  const row=(r:FatigueRow,i:number)=>{const byMiner=miner&&r.miner!==undefined;
   return `<tr class="${r.governing.status}"><td><span class="step">${i+1}</span> <b>${esc(r.title)}</b>${typical(r)}<small>${esc(r.location)}</small></td><td>${catHtml(r,F.cycles)}</td><td class="num">${r.threshold===undefined?'none':stress(r.threshold,units)}</td><td class="num">${stress(r.capacity,units)}</td><td class="num">${stress(r.range,units)}</td><td class="num">${stress(r.equivalent,units)}</td><td class="num">${r.damage===undefined?'—':damageText(r.damage)}</td><td class="num">${ratio(r.miner,byMiner)}</td><td class="num">${ratio(r.allCycle,!byMiner)}</td><td class="res"><b>${esc(statusLabel(r.governing.status))}</b></td></tr>`;};
- const peak=F.peak?`<p>Peak stress under the unfactored cyclic loads (AISC 360-16 Appendix 3.1, f<sub>max</sub> ≤ 0.66F<sub>y</sub>): D/C ${dcText(F.peak.controlling.utilization,2)}, ${stress(F.peak.controlling.demand,units)} against ${stress(F.peak.controlling.capacity,units)} (${esc(F.peak.controlling.title)}; dead load plus the unfactored fatigue loading).</p>`:'';
+ const pk=F.peak?.controlling;
+ const peak=pk&&o.basis!==false?`<p>Peak stress under dead load plus the unfactored cyclic load: f<sub>max</sub> = ${sig3(pk.demand,'stress',units)} ≤ 0.66F<sub>y</sub> = ${sig3(pk.capacity,'stress',units)} (AISC 360-16 Appendix 3.1), D/C ${dcText(pk.utilization,2)}.</p>`:'';
  const n=F.cycles.toLocaleString('en-US');
- return `<p><b>Basis.</b> AISC 360-16 Appendix 3 at the design cycle count n<sub>SR</sub> = ${n} (the sum of the duty bins). Miner’s rule over the duty bins is reported as the equivalent constant-amplitude stress range f<sub>sr,eq</sub> = (Σn<sub>i</sub>f<sub>sr,i</sub><sup>3</sup>/n<sub>SR</sub>)<sup>1/3</sup> against F<sub>SR</sub> at n<sub>SR</sub>; the all-cycle bound compares the largest bin range f<sub>sr,max</sub> with the same F<sub>SR</sub>. F<sub>SR</sub> is taken without the threshold F<sub>TH</sub> (no endurance-limit credit in a variable spectrum), so both ratios are on one basis and f<sub>sr,eq</sub>/F<sub>SR</sub> = (Σn<sub>i</sub>/N<sub>i</sub>)<sup>1/3</sup>; the damage sum Σn<sub>i</sub>/N<sub>i</sub> is listed for information. <b>${miner?'Governing method: Miner’s rule, D/C = f<sub>sr,eq</sub>/F<sub>SR</sub> (bold); the all-cycle ratio is shown alongside.':'Governing method: all-cycle bound, D/C = f<sub>sr,max</sub>/F<sub>SR</sub> (bold); the Miner ratio is shown alongside.'}</b> A detail is one row of the table (a family of register points of the same detail and category, or one named check); a check is one computed result in Appendix A. <b>${F.evaluated.length} detail${F.evaluated.length===1?'':'s'} evaluated; ${F.screened.length} detail${F.screened.length===1?'':'s'} screened</b> below F<sub>TH</sub> (AISC 360-16 Appendix 3.1: largest live-load stress range less than F<sub>TH</sub>; a weld-root detail, Category C″ with R<sub>FIL</sub> &lt; 1 (Eq. A-3-6), has no threshold and is always evaluated). Of their ${all.length} checks, ${nEv} are evaluated and ${nSc} screened: a register point whose own largest range is below F<sub>TH</sub> is screened, also within an evaluated detail. Every check is in Appendix A and the CSV.</p>`
-  +(F.evaluated.length?`<table class="checks fatigue-table"><colgroup><col style="width:27%"/><col style="width:8%"/><col style="width:7%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:9%"/><col style="width:7%"/></colgroup><thead><tr><th>Detail · governing location</th><th>Cat.</th><th>F<sub>TH</sub></th><th>F<sub>SR</sub> at n<sub>SR</sub></th><th>f<sub>sr,max</sub></th><th>f<sub>sr,eq</sub></th><th>Σn<sub>i</sub>/N<sub>i</sub></th><th>Miner f<sub>sr,eq</sub>/F<sub>SR</sub></th><th>All-cycle f<sub>sr,max</sub>/F<sub>SR</sub></th><th>Result</th></tr></thead><tbody>${F.evaluated.map((r,i)=>row(r,i)).join('')}</tbody></table>`:'')+peak
+ const basis=o.basis===false?'':`<p><b>Basis.</b> AISC 360-16 Appendix 3 at n<sub>SR</sub> = ${n}, the total of the duty bins. ${miner?`D/C = f<sub>sr,eq</sub>/F<sub>SR</sub>, with f<sub>sr,eq</sub> = (Σn<sub>i</sub>f<sub>sr,i</sub><sup>3</sup>/n<sub>SR</sub>)<sup>1/3</sup> (Miner’s rule, no threshold credit). The largest bin range applied to all cycles, f<sub>sr,max</sub>/F<sub>SR</sub>, is shown for comparison; where a detail has no Miner ratio (—) it is the design ratio. The design ratio is in bold.`:`D/C = f<sub>sr,max</sub>/F<sub>SR</sub>, the largest bin range applied to all cycles; the Miner ratio f<sub>sr,eq</sub>/F<sub>SR</sub> is shown for comparison. The design ratio is in bold.`} Details whose largest range is below F<sub>TH</sub> are screened (Appendix A); a weld root, Category C″ with R<sub>FIL</sub> &lt; 1 (Eq. A-3-6), has no threshold.</p>`;
+ return basis
+  +(F.evaluated.length?`<table class="checks fatigue-table"><colgroup><col style="width:27%"/><col style="width:8%"/><col style="width:7%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:8%"/><col style="width:9%"/><col style="width:7%"/></colgroup><thead><tr><th>Detail and location</th><th>Cat.</th><th>F<sub>TH</sub></th><th>F<sub>SR</sub> at n<sub>SR</sub></th><th>f<sub>sr,max</sub></th><th>f<sub>sr,eq</sub></th><th>Σn<sub>i</sub>/N<sub>i</sub></th><th>Miner f<sub>sr,eq</sub>/F<sub>SR</sub></th><th>All-cycle f<sub>sr,max</sub>/F<sub>SR</sub></th><th>Result</th></tr></thead><tbody>${F.evaluated.map((r,i)=>row(r,i)).join('')}</tbody></table>`:'')+peak
   +(F.screened.length?`<p class="others">Screened details (${F.screened.length}), closest to F<sub>TH</sub>: ${[...F.screened].filter(r=>r.range!==undefined&&r.threshold).sort((a,b)=>b.range!/b.threshold!-a.range!/a.threshold!).slice(0,4).map(r=>`${esc(r.title)} ${stress(r.range,units)} vs ${stress(r.threshold,units)}`).join('; ')}.</p>`:'');
 }
 
@@ -113,22 +121,27 @@ const margin=(c:CheckResult,units:Units)=>{
  // A margin is computed: decimals with the unit (0.025 in, 0.063 in, 0 in), never a fraction.
  const m=Math.abs(c.capacity-c.demand);return sig3(m<1e-6?0:m,'length',units);
 };
+/** The flag of a detailing rule in two phrases: at the limit, or less margin than the 1/8 in (or 10%) setting tolerance. */
+const flagText=(c:CheckResult,reason:string)=>c.status!=='pass'?reason:/exactly|at the limit/i.test(reason)?'At limit':/^Margin \d+%$/.test(reason)?reason:'Margin < 1/8 in';
 /** The detailing checklist: failures and rules met with less than 1/8 in (or 10%) margin; everything else in one line. */
 export function detailingChecklist(tax:Taxonomy,units:Units){
  const D=tax.detailing,flags=D.flagged;
- const rows=flags.map(({entry:t,reason})=>{const c=t.check;return `<tr class="${c.status}"><td><b>${esc(c.title)}</b><small>${esc(t.elementLabel)} · ${esc(shortReference(c))}</small></td><td class="num">${value(c.demand,q(c),units)}</td><td class="num">${value(c.capacity,q(c),units,c.demand)}</td><td class="num">${margin(c,units)}</td><td>${esc(reason)}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`;}).join('');
- const gated=D.gated.filter(t=>t.gate==='advisory'||t.gate==='not-applicable');
- return `<p>Detailing rules are pass/fail: they never set the governing D/C. Listed: rules not met and rules met with less than 1/8 in or 10% margin (fit rules: less than the 1/8 in setting and fit-up tolerance).</p>`
-  +(flags.length?`<table class="checks detailing-list"><colgroup><col style="width:36%"/><col style="width:11%"/><col style="width:11%"/><col style="width:9%"/><col style="width:25%"/><col style="width:8%"/></colgroup><thead><tr><th>Rule · element · reference</th><th>Required / provided</th><th>Limit</th><th>Margin</th><th>Flag</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table>`:'')
-  +`<p class="others"><b>${D.satisfied} detailing rules satisfied</b> with more margin (Appendix A).${gated.length?` Not applicable or advisory: ${gated.map(t=>`${esc(t.check.title)} — ${esc(gateLabel[t.gate].toLowerCase())}`).join('; ')}.`:''}</p>`;
+ const rows=flags.map(({entry:t,reason})=>{const c=t.check;return `<tr class="${c.status}"><td><b>${esc(c.title)}</b><small>${esc(t.elementLabel)}; ${esc(shortReference(c))}</small></td><td class="num">${value(c.demand,q(c),units)}</td><td class="num">${value(c.capacity,q(c),units,c.demand)}</td><td class="num">${margin(c,units)}</td><td>${esc(flagText(c,reason))}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`;}).join('');
+ const gated=D.gated.filter(t=>t.gate==='advisory'||t.gate==='not-applicable'),names=(v:TaxonEntry[])=>v.map(t=>esc(t.check.title.replace(/\s*·\s*/g,', '))).join('; ');
+ const na=gated.filter(t=>t.gate==='not-applicable'),adv=gated.filter(t=>t.gate==='advisory');
+ return `<p>Detailing rules not met, or met with less than 1/8 in or 10% margin.</p>`
+  +(flags.length?`<table class="checks detailing-list"><colgroup><col style="width:36%"/><col style="width:11%"/><col style="width:11%"/><col style="width:9%"/><col style="width:25%"/><col style="width:8%"/></colgroup><thead><tr><th>Rule</th><th>Provided</th><th>Limit (min./max.)</th><th>Margin</th><th>Flag</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table>`:'')
+  +`<p class="others">Other ${D.satisfied} rules: OK (Appendix A).${na.length?` N/A: ${names(na)}.`:''}${adv.length?` Advisory: ${names(adv)}.`:''}</p>`;
 }
 
 /** The value of a recorded input: a specified temperature (preheat) as specified, else the recorded quantity. */
 const inputValue=(c:CheckResult,units:Units)=>{const v=c.quantity==='temperature'&&c.capacity!==undefined?c.capacity:c.demand;return v!==undefined?value(v,q(c),units):'—';};
-/** Recorded inputs with their source (survey, mill certificate, supplier). */
-export function inputsTable(tax:Taxonomy,units:Units){
- const v=[...tax.entries.values()].filter(t=>t.type==='input');if(!v.length)return '';
- return `<h3>Recorded inputs and assumptions</h3><table class="assumptions"><colgroup><col style="width:28%"/><col style="width:52%"/><col style="width:10%"/><col style="width:10%"/></colgroup><thead><tr><th>Input</th><th>Basis and source</th><th>Value</th><th>Status</th></tr></thead><tbody>${v.map(t=>{const c=t.check;return `<tr class="${c.status}"><td><b>${esc(c.title)}</b></td><td>${esc(firstSentence(c.note))}</td><td class="num">${inputValue(c,units)}</td><td><b>${esc(statusLabel(c.status))}</b></td></tr>`;}).join('')}</tbody></table>`;
+/** Design assumptions and confirmed inputs with their source (survey, mill certificate, supplier); `only` picks the rows of one section. */
+export function inputsTable(tax:Taxonomy,units:Units,o:{only?:(c:CheckResult)=>boolean;title?:string;crane?:string}={}){
+ const v=[...tax.entries.values()].filter(t=>t.type==='input'&&(!o.only||o.only(t.check)));if(!v.length)return '';
+ // A failed or unconfirmed input says so; a confirmed one needs no status.
+ const open=(c:CheckResult)=>c.status!=='pass'&&c.status!=='not-applicable'?` <b>${esc(statusLabel(c.status))}</b>`:'';
+ return `<h3>${esc(o.title??'Design assumptions and confirmed inputs')}</h3><table class="assumptions"><colgroup><col style="width:30%"/><col style="width:56%"/><col style="width:14%"/></colgroup><thead><tr><th>Item</th><th>Basis and source</th><th>Value</th></tr></thead><tbody>${v.map(t=>{const c=t.check;return `<tr class="${c.status}"><td><b>${esc(sentence(o.crane&&c.title.startsWith(`${o.crane} · `)?c.title.slice(o.crane.length+3):c.title).replace(/\s*·\s*/g,', '))}</b></td><td>${esc(firstSentence(c.note))}</td><td class="num">${inputValue(c,units)}${open(c)}</td></tr>`;}).join('')}</tbody></table>`;
 }
 /** Supplied load against the code minimum, with the value that governs. */
 export function loadBasisTable(tax:Taxonomy,units:Units){
@@ -139,32 +152,46 @@ export function loadBasisTable(tax:Taxonomy,units:Units){
   const gov=!has?'—':c.capacity!>c.demand!+1e-9*Math.max(1,Math.abs(c.demand!))?'Supplier':'Code minimum';
   return `<tr><td><b>${esc(c.title)}</b></td><td class="num">${has?value(c.capacity,q(c),units,c.demand):'—'}</td><td class="num">${has?value(c.demand,q(c),units):'—'}</td><td>${esc(gov)}</td><td>${esc(shortReference(c))}</td></tr>`;}).join('')}</tbody></table>`;
 }
-/** Section and element classification, feeding the strength checks (not checks themselves). */
-export function classificationTable(tax:Taxonomy,units:Units){
- const v=[...tax.entries.values()].filter(t=>t.type==='classification');if(!v.length)return '';
- const result=(t:TaxonEntry)=>{const c=t.check;if(t.gate==='modifier')return c.status==='fail'||(c.utilization??0)>1?'F13.1 not met: F13-1 applies':'F13.1 met: no reduction';if(c.status==='not-applicable')return 'Not applicable';
-  if(/compact/i.test(c.title))return c.status==='pass'?'Compact':'Noncompact / slender';return statusLabel(c.status);};
- return `<h3>Section and element classification (feeds the strength checks)</h3><table class="classification"><colgroup><col style="width:34%"/><col style="width:16%"/><col style="width:12%"/><col style="width:12%"/><col style="width:26%"/></colgroup><thead><tr><th>Element · test</th><th>Element</th><th>Ratio</th><th>Limit</th><th>Classification</th></tr></thead><tbody>${v.map(t=>{const c=t.check;return `<tr><td><b>${esc(c.title)}</b><small>${esc(shortReference(c))}</small></td><td>${esc(t.elementLabel)}</td><td class="num">${t.gate==='modifier'?'—':sig3(c.demand,q(c),units)}</td><td class="num">${t.gate==='modifier'?'—':sig3(c.capacity,q(c),units)}</td><td>${esc(result(t))}</td></tr>`;}).join('')}</tbody></table>`;
+/**
+ * Section and element classification, feeding the strength checks (not checks themselves); `elements` picks the rows
+ * of one section. A row that repeats a design check of its element (same demand and limit) is left out.
+ */
+export function classificationTable(tax:Taxonomy,units:Units,elements?:(key:string)=>boolean){
+ const near=(x?:number,y?:number)=>x!==undefined&&y!==undefined&&Math.abs(x-y)<=5e-3*Math.max(Math.abs(y),1e-9);
+ // A repeat: a design check of the same element, or another classification of a member element (the project-level
+ // "Loads, analysis and detailing" row gives way to the member's own) with the same demand and limit.
+ const same=(a:TaxonEntry,b:TaxonEntry)=>a!==b&&near(a.check.demand,b.check.demand)&&near(a.check.capacity,b.check.capacity);
+ const all=[...tax.entries.values()],repeat=(t:TaxonEntry)=>all.some(d=>same(t,d)&&((d.type==='design'&&d.element===t.element)||(d.type==='classification'&&t.element==='gates'&&d.element!=='gates')));
+ const v=all.filter(t=>t.type==='classification'&&(!elements||elements(t.element))&&!repeat(t));if(!v.length)return '';
+ const result=(t:TaxonEntry)=>{const c=t.check;if(t.gate==='modifier')return c.status==='fail'||(c.utilization??0)>1?'F13.1 not met: F13-1 applies':'F13.1 met: no reduction';if(c.status==='not-applicable')return 'N/A';
+  if(/compact/i.test(c.title))return c.status==='pass'?'Compact':'Noncompact / slender';return c.status==='pass'?'OK':'NG';};
+ return `<h3>Section classification</h3><table class="classification"><colgroup><col style="width:34%"/><col style="width:16%"/><col style="width:12%"/><col style="width:12%"/><col style="width:26%"/></colgroup><thead><tr><th>Check</th><th>Member</th><th>Ratio</th><th>Limit</th><th>Classification</th></tr></thead><tbody>${v.map(t=>{const c=t.check;return `<tr><td><b>${esc(c.title)}</b><small>${esc(shortReference(c))}</small></td><td>${esc(t.elementLabel)}</td><td class="num">${t.gate==='modifier'?'—':sig3(c.demand,q(c),units)}</td><td class="num">${t.gate==='modifier'?'—':sig3(c.capacity,q(c),units)}</td><td>${esc(result(t))}</td></tr>`;}).join('')}</tbody></table>`;
 }
-/** "Analysis verified: N criteria, max ratio x". */
+/** The analysis verification in one sentence: equilibrium residuals and the refinement of the travel step, stations and mesh. */
 export function verificationLine(tax:Taxonomy){
  const v=[...tax.entries.values()].filter(t=>t.type==='verification');if(!v.length)return '';
- const max=Math.max(...v.map(t=>t.check.utilization??0)),bad=v.filter(t=>t.check.status!=='pass');
- return `<p class="verified"><b>Analysis verified: ${v.length} criteria, max ratio ${dcText(max,2)}${bad.length?`; ${bad.length} NOT MET`:''}.</b> Equilibrium residuals and moving-load / station refinement (${v.map(t=>esc(t.check.title)).join(', ')}); every value in Appendix A.</p>`;
+ const bad=v.filter(t=>t.check.status!=='pass'),eq=v.filter(t=>/equilibrium|residual/i.test(`${t.check.id} ${t.check.title}`)),fine=v.filter(t=>!eq.includes(t));
+ const util=(w:TaxonEntry[])=>Math.max(0,...w.map(t=>t.check.utilization??0)),pct=(x:number)=>`${+(x*100).toFixed(2)}%`;
+ const change=Math.max(0,...fine.map(t=>t.check.demand??0)),tol=Math.max(0,...fine.map(t=>t.check.capacity??0));
+ const parts=[eq.length?`equilibrium residuals are within ${pct(util(eq))} of their tolerances`:'',fine.length?`halving the travel step, station spacing and warping mesh changes the governing results by less than ${pct(tol)} (largest ${pct(change)})`:''].filter(Boolean);
+ return `<p class="verified"><b>Verification:</b> ${parts.join('; ')}${bad.length?`; <b>${bad.length} NOT MET</b>`:''}. Values: Appendix A.</p>`;
 }
 
-const location=(t:TaxonEntry)=>t.location??'';
 /**
- * Appendix A: every computed result, with its type, element, gate, demand, limit, D/C and reference. A check repeated
- * over many stations or register points (rail clips, cap weld base metal, holes; Miner and all-cycle separately) is
- * one row: its governing instance with "typical of N", the governing location and the range of D/C. Every instance,
- * with its id, is in the CSV.
+ * Appendix A: the check results, with type, element, status, demand, limit, D/C and reference, in the order of the
+ * report (girder, rail, bearings, support, column, tie, end stops), then the inputs and the analysis verification. A
+ * check repeated over many stations or locations (rail clips, cap weld base metal, holes; Miner and all-cycle
+ * separately) is one row: its governing instance, the number of locations and the range of D/C. Every instance, with
+ * its id, is in the CSV; rows that compare nothing (inclusion records, inputs without a value) are in the CSV only.
  */
 export function appendixA(tax:Taxonomy,units:Units){
- const order:Record<string,number>={design:0,detailing:1,classification:2,input:3,'load-basis':4,verification:5,'by-others':6};
+ const typeOrder:Record<string,number>={design:0,detailing:0,classification:0,input:1,'load-basis':1,verification:2,'by-others':3};
+ const elementOrder=['girder','service','fatigue','rail','bearing','support','column','base','tie','longitudinal','stops','gates'],el=(t:TaxonEntry)=>{const i=elementOrder.indexOf(t.element);return i<0?elementOrder.length:i;};
  // Grouped: register points of one detail family, and one check repeated at stations (the same title but for numbers and sides).
  const same=(t:TaxonEntry)=>t.check.title.replace(/\d+(\.\d+)?/g,'#').replace(/\s*·\s*(left|right)\b/g,'');
- const all=[...tax.entries.values()],groupOf=(t:TaxonEntry)=>t.repeat?`${t.repeat}|${t.repeat.startsWith('register:')?'':same(t)}|${/^detail-full-cycle-/.test(t.check.id)?'all-cycle':'miner'}`:undefined;
+ const has=(v?:number)=>v!==undefined&&Number.isFinite(v);
+ const empty=(t:TaxonEntry)=>{const c=t.check;return (t.type==='load-basis'&&(c.quantity??'ratio')==='ratio'&&c.demand===1&&c.capacity===1)||(t.type==='input'&&!has(c.demand)&&!has(c.capacity));};
+ const recorded=[...tax.entries.values()].filter(empty),all=[...tax.entries.values()].filter(t=>!empty(t)),groupOf=(t:TaxonEntry)=>t.repeat?`${t.repeat}|${t.repeat.startsWith('register:')?'':same(t)}|${/^detail-full-cycle-/.test(t.check.id)?'all-cycle':'miner'}`:undefined;
  const groups=new Map<string,TaxonEntry[]>();for(const t of all){const k=groupOf(t);if(k)groups.set(k,[...(groups.get(k)??[]),t]);}
  const dc=(t:TaxonEntry)=>t.check.utilization!==undefined&&Number.isFinite(t.check.utilization)?t.check.utilization:-1;
  const rows:{t:TaxonEntry;members:TaxonEntry[]}[]=[];
@@ -174,12 +201,15 @@ export function appendixA(tax:Taxonomy,units:Units){
   const gov=v.reduce((a,b)=>(b.check.status==='fail'?1e9:0)+dc(b)>(a.check.status==='fail'?1e9:0)+dc(a)?b:a,v[0]);
   if(t===gov)rows.push({t,members:v});
  }
- rows.sort((a,b)=>order[a.t.type]-order[b.t.type]||a.t.elementLabel.localeCompare(b.t.elementLabel));
+ rows.sort((a,b)=>typeOrder[a.t.type]-typeOrder[b.t.type]||el(a.t)-el(b.t)||a.t.elementLabel.localeCompare(b.t.elementLabel));
  const range=(v:TaxonEntry[])=>{const d=v.map(dc).filter(x=>x>=0);if(!d.length)return '';const lo=dcText(Math.min(...d),2),hi=dcText(Math.max(...d),2);return lo===hi?`D/C ${hi}`:`D/C ${lo} to ${hi}`;};
- const grouped=rows.filter(r=>r.members.length>1).reduce((n,r)=>n+r.members.length,0);
- return `<p>Every computed result (${all.length}). Type: design checks count toward the governing D/C; detailing rules are pass/fail; the rest are recorded. Gate: evaluated, screened (with the reason) or not applicable. A check repeated at many stations or register points is printed once (${rows.filter(r=>r.members.length>1).length} rows for ${grouped} results): its governing instance, the number of points and the range of D/C. Every result, with its location, is listed in the check-results CSV.</p><table class="appendix-a"><colgroup><col style="width:7%"/><col style="width:10%"/><col style="width:25%"/><col style="width:16%"/><col style="width:8%"/><col style="width:8%"/><col style="width:5%"/><col style="width:6%"/><col style="width:15%"/></colgroup><thead><tr><th>Type</th><th>Element</th><th>Check · reference</th><th>Gate · reason</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th><th>Repeats · case</th></tr></thead><tbody>${rows.map(({t,members})=>{const c=t.check,n=members.length;
+ // A value without a limit that applies (an unstiffened strength where stiffeners carry the force) is information, not N/A.
+ const info=(t:TaxonEntry)=>t.check.status==='not-applicable'&&has(t.check.utilization)&&has(t.check.capacity);
+ const status=(t:TaxonEntry)=>t.type==='by-others'?'By others':info(t)?'Info':gateLabel[t.gate]==='Not applicable'?'N/A':gateLabel[t.gate];
+ const type=(t:TaxonEntry)=>t.type==='design'?(t.effect?esc(effectLabel[t.effect]):''):`${esc(checkTypeLabel[t.type])}${t.effect?`<small>${esc(effectLabel[t.effect])}</small>`:''}`;
+ return `<p>Check results. Status: Evaluated; Screened (largest fatigue range below F<sub>TH</sub>); N/A, with the reason; Info (a value reported without a limit that applies). A check repeated at many locations is printed once, at the governing location, with the number of locations and the D/C range; the CSV lists every location.</p><table class="appendix-a"><colgroup><col style="width:7%"/><col style="width:10%"/><col style="width:25%"/><col style="width:16%"/><col style="width:8%"/><col style="width:8%"/><col style="width:5%"/><col style="width:6%"/><col style="width:15%"/></colgroup><thead><tr><th>Type</th><th>Element</th><th>Check and reference</th><th>Status</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th><th>Case and locations</th></tr></thead><tbody>${rows.map(({t,members})=>{const c=t.check,n=members.length;
   const where=t.location?`<small>${n>1?'governs at ':''}${esc(t.location)}</small>`:'';
-  return `<tr class="${c.status}" data-check="${esc(c.id)}"${n>1?` data-members="${esc(members.map(m=>m.check.id).join(' '))}"`:''}><td>${esc(checkTypeLabel[t.type])}${t.effect?`<small>${esc(effectLabel[t.effect])}</small>`:''}</td><td>${esc(t.elementLabel)}</td><td>${esc(c.title)}<small>${esc(shortReference(c))}</small></td><td>${esc(gateLabel[t.gate])}${t.reason?`<small>${esc(t.reason)}</small>`:''}</td><td class="num">${value(c.demand,q(c),units)}</td><td class="num">${value(c.capacity,q(c),units,c.demand)}</td><td class="num">${dcText(c.utilization,2,'—')}</td><td>${esc(statusLabel(c.status))}</td><td>${n>1?`typical of ${n}; ${range(members)}`:''}${where}${c.caseId?`<small>${esc(tax.caseName(c.caseId))}</small>`:''}</td></tr>`;}).join('')}</tbody></table>`;
+  return `<tr class="${c.status}" data-check="${esc(c.id)}"${n>1?` data-members="${esc(members.map(m=>m.check.id).join(' '))}"`:''}><td>${type(t)}</td><td>${esc(t.elementLabel)}</td><td>${esc(c.title)}<small>${esc(shortReference(c))}</small></td><td>${status(t)}${t.reason&&t.type!=='by-others'?`<small>${esc(t.reason)}</small>`:''}</td><td class="num">${value(c.demand,q(c),units)}</td><td class="num">${value(c.capacity,q(c),units,c.demand)}</td><td class="num">${dcText(c.utilization,2,'—')}</td><td>${info(t)?'Info':t.gate==='not-applicable'?'N/A':esc(statusLabel(c.status))}</td><td>${n>1?`${n} locations; ${range(members)}`:''}${where}${c.caseId?`<small>${esc(tax.caseName(c.caseId))}</small>`:''}</td></tr>`;}).join('')}${recorded.length?`<tr class="pass" data-check="${esc(recorded[0].check.id)}" data-members="${esc(recorded.map(t=>t.check.id).join(' '))}"><td>Recorded</td><td colspan="8">Inputs and load-basis records without a comparison: ${recorded.map(t=>esc(t.check.title.replace(/\s*·\s*/g,', '))).join('; ')} (values in the CSV).</td></tr>`:''}</tbody></table>`;
 }
 export const taxonomyCss=`figure.fatigue-sn{display:block}figure.fatigue-sn>svg{display:block;width:100%;max-width:600px;height:auto;margin:0 auto 4px}table.body-checks small.ctrl{display:block;font-size:7.5px;margin-top:1px}p.others{font-size:8.5px;margin:2px 0 8px;font-style:italic}p.counts{font-size:9px;border:1px solid #000;padding:4px 8px}table.open-items,table.by-others{font-size:8.5px}table.open-items small,table.by-others small{display:block;font-size:7.5px}table.fatigue-table td small,table.detailing-list td small,table.classification td small{display:block;font-size:7.5px}table.appendix-a{font-size:6.8px}table.appendix-a td{padding:1px 2px;border-bottom:.3px solid #999}table.appendix-a small{display:block;font-size:6px;color:#333}table.appendix-a th{font-size:7px}table.assumptions,table.load-basis,table.classification{font-size:8.5px}p.verified{border-left:3px solid #000;padding:2px 6px}`;
 

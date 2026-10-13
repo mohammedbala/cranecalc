@@ -24,7 +24,7 @@ const p=demoFocus005RevB(),s=calculate(p),check=(id:string)=>s.checks.find(c=>c.
 const tax=buildTaxonomy(s,summaryElements(s.input)),html=compactReport(s,'');
 const plain=(h:string)=>h.replace(/<annotation[\s\S]*?<\/annotation>/g,'').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g,' ');
 const text=plain(html),page1=plain(html.slice(0,html.indexOf('</section>')));
-const section=(title:string)=>{const i=html.indexOf(`/ ${title}</h2>`);expect(i,title).toBeGreaterThan(0);return plain(html.slice(i,html.indexOf('</section>',i)));};
+const section=(title:string)=>{const i=html.search(new RegExp(`<h2>\\d+\\.\\d+ ${title}</h2>`));expect(i,title).toBeGreaterThan(0);return plain(html.slice(i,html.indexOf('</section>',i)));};
 const ru=(note:string)=>Number(note.match(/R_u = ([\d.,]+) kip/)![1].replace(/,/g,''));
 
 describe('Rev B stays clean',()=>{
@@ -75,8 +75,8 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   // Each flange: the case name, the equation and its substitution on separate lines (none runs past the margin), then the strength.
   expect(j10).toHaveLength(8);expect(j10[0]).toMatch(/^\\text\{Top flange \(/);expect(j10[1]).toBe('R_u=T+\\frac{3M_f}{b}');expect(j10[2]).toMatch(/^\\quad=/);expect(j10[3]).toContain('6.25F_{yf}t_f^2');expect(j10[4]).toMatch(/^\\text\{Bottom flange \(/);expect(j10[7]).toContain('J10.3');
   expect(workedSteps(s,check('haunch-column-panel'),tx as never)?.[0]).toContain('\\max(T,\\ C\\cos\\alpha)');
-  expect(text).toMatch(/Worked: unstiffened J10 at the haunch flanges · for information, not governing \(stiffened\)/);
-  expect(text).toMatch(/Decision: column stiffeners required/);expect(text).toMatch(/J10\.7 \(unframed beam ends\) do not apply/);
+  expect(text).toMatch(/Worked: unstiffened J10 at the haunch flanges \(basis for the stiffener decision\)/);
+  expect(text).toMatch(/Column stiffeners required\. Unstiffened, web local yielding \(J10\.2\) is exceeded at both flange levels \(D\/C 1\.32 top, 1\.20 bottom\)/);expect(text).toMatch(/J10\.5 and J10\.7 do not apply/);
  });
 });
 
@@ -93,14 +93,15 @@ describe('C4 · forces delivered to the building columns',()=>{
   expect(d.stopGrids).toEqual([1,5]);expect(d.stop/kip).toBeCloseTo(10,3);expect(d.tractionGrids).toEqual([1,2,3,4,5]);expect(d.traction/kip).toBeCloseTo(3.2,3);
   expect(d.grids[5].sets.every(x=>Math.abs(x.F)<1)).toBe(true);
  });
- it('delivers the tie design force at the tie line, and prints the same rows on page 1, in section 3.5 and on S-00',()=>{
+ it('delivers the tie design force at the tie line, and prints the same rows in section 3.5 and on S-00 (page 1 points to them)',()=>{
   expect(Math.max(...d.grids.flatMap(g=>g.sets.map(x=>x.Htie)))).toBeCloseTo(d.tie.design,6);
   expect(d.tie.design).toBeCloseTo(check('brace-member').demand!,6);
   const rows=deliveredRows(s),line=(r:string[])=>r.slice(3).join(' ');
   const s35=section('Forces delivered to the building'),cover=[...coverSheetSvg(s,[]).matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1]).join(' ');
-  for(const r of rows){expect(page1).toContain(line(r));expect(s35).toContain(line(r));for(const v of r.slice(3))expect(cover).toContain(v.toUpperCase().replace(/&/g,'&amp;'));}
-  expect(page1).not.toMatch(/seat moment 2\.11/);expect(s35).toMatch(/not the girder torque about its shear center/);
-  expect(s35).toMatch(/El\. 118'-0"/);expect(s35).toMatch(/reaches grids 1 and 5 only/);
+  expect(page1).not.toMatch(/Forces delivered to the building/);
+  for(const r of rows){expect(s35).toContain(line(r));for(const v of r.slice(3))expect(cover).toContain(v.toUpperCase().replace(/&/g,'&amp;'));}
+  expect(page1).not.toMatch(/seat moment 2\.11/);expect(s35).toMatch(/y,seat ?: moment of the unbalanced end reactions about the grid \(column weak axis\)/);
+  expect(s35).toMatch(/El\. 118'-0"/);expect(s35).toMatch(/Stop force 10\.0 kip at grids 1 and 5 only/);
  });
 });
 
@@ -108,10 +109,11 @@ describe('M5 · the existing column check states its conditions',()=>{
  it('is conditional on a braced frame next to its D/C and in the matrix',()=>{
   const c=check('column-interaction');expect(c.title).toMatch(/braced frame assumed/);expect(c.note).toMatch(/^Conditional on a braced \(non-sway\) frame/);
   expect(page1).toMatch(/combined axial and flexure \(H1\), braced frame assumed/);
-  const col=section('Existing column check');
-  expect(col).toMatch(/Conditional result\. The column is checked as part of a braced \(non-sway\) frame/);
-  expect(col).toMatch(/Unbraced lengths\. L ?cx = 312 in.*use 120 in.*not the entered L ?cy = 96 in/);
-  expect(col).toMatch(/Impact\. Vertical impact Ci is included/);expect(col).toMatch(/Drift height\. AIST TR-13 §5\.3: H = 23[12](\.\d+)? in .*limit min\(H\/400, 2 in\) = 0\.58 in/);
+  const col=section('Existing column');
+  expect(col).toMatch(/Braced frame assumed \(pinned base, braced top, B1 only\)\. If the frame is a sway frame, repeat with B2 from the frame analysis/);
+  expect(col).toMatch(/L ?cx = 312 in, base to the braced top\. Weak-axis, torsional and lateral-torsional buckling use 120 in: the girts at 96 in brace the outer flange only/);
+  expect(col).toMatch(/Impact C ?i is included in the column load/);expect(col).toMatch(/Drift \(AIST TR-13 §5\.3\): H = 23[12](\.\d+)? in .*limit min\(H\/400, 2 in\) = 0\.58 in/);
+  expect(col).toMatch(/Frame action, base fixity, anchors and foundations are by others \(section 6\.7\)/);expect(col).not.toMatch(/verified separately/);
   expect(col).toMatch(/combinations with E .*do not govern/);
  });
  it('numbers the combinations as ASCE 7-16 §2.3.1 and §2.3.6',()=>{
@@ -133,20 +135,20 @@ describe('M6 · the tie design force and the restraint at the tie line',()=>{
   // Worked on the girder page: P_br, then F = H + P_br, against the tie strength.
   const w=workedSteps(s,check('brace-member'),((v:number,q:string)=>`${q}:${v}`) as never)!;
   expect(w).toHaveLength(3);expect(w[0]).toContain('P_{br}=\\frac{0.02M_rC_d}{h_o}+0.01P_r');expect(w[1]).toContain(`F=H+P_{br}=force:${r.demands.brace}+force:${A6.force}`);
-  const tie=section('Cap tieback angle');
-  expect(tie).toMatch(/Tie design force, each tie: F = H \+ P ?br = 4\.\d\d kip \+ 2\.29 kip = 6\.\d\d kip/);
-  expect(tie).toMatch(/one girder end alone reaches/);expect(tie).toMatch(/Stiffness: β ?br = .*5\.21 kip\/in/);expect(tie).toMatch(/Fatigue range ΔF = .* from the largest pull to the largest push/);
+  const tie=section('Cap tieback');
+  expect(tie).toMatch(/tie design force F = H \+ P ?br = 4\.\d\d kip \+ 2\.29 kip = 6\.\d\d kip, pull or push/);
+  expect(tie).toMatch(/H: largest top-flange restraint force at a grid \(LRFD 2b, grid 2\)/);expect(tie).toMatch(/Required brace stiffness 5\.21 kip\/in vs 272 kip\/in provided/);expect(tie).toMatch(/Fatigue range ΔF = 2\.\d\d kip/);
  });
 });
 
 describe('M10 · the responsibility matrix',()=>{
  const rows=responsibilityMatrix(tax,s),item=(re:RegExp)=>rows.find(r=>re.test(r.item));
  it('gives item, need, acceptance criterion, forces and location, responsible party for every item left to others',()=>{
-  const m=section('Not checked in this package · responsibility matrix');
+  const m=section('Items by others and forces delivered');
   expect(m).toMatch(/Item What is needed Acceptance criterion Force and location delivered Responsible party/);
   for(const re of [/frame type/,/10-year wind \(TR-13/,/rail gauge/,/Runway seismic/,/alteration evaluation/,/Crane-level strut on the girder line/,/Crane data/,/Rail and crane wheels/,/Opposite runway/,/Existing column survey/,/Load test at 125%/])expect(item(re),String(re)).toBeDefined();
   expect(item(/10-year wind \(TR-13/)!.criterion).toMatch(/H\/400 or 2 in.*H = 232 in.*limit 0\.58 in/);
-  expect(item(/rail gauge/)!.forces).toMatch(/Computed here, part of the total: .*\+6\.97 × 10⁻² in|Computed here, part of the total: .*\+?0\.070? in/);
+  expect(item(/rail gauge/)!.forces).toMatch(/Column alone, runway dead load plus static crane: \+0\.070? in \(7% of the limit\)\. Frame spread: by others\./);
   expect(item(/Crane data/)!.needed).toMatch(/s = 0\.5.*0\.9 trolley factor/);
   expect(item(/Crane-level strut/)!.needed).toMatch(/the existing column check relies on it/);expect(item(/Crane-level strut/)!.forces).toMatch(/crane stop 10\.0 kip at grids 1 and 5/);
   expect(item(/Load test/)!.criterion).toMatch(/12\.2 kip per wheel ≤ the design wheel load 13\.6 kip/);
@@ -154,6 +156,6 @@ describe('M10 · the responsibility matrix',()=>{
   expect(rows.some(r=>/column-side load path|load paths to the column/.test(r.item))).toBe(false);
   expect(tax.byOthers.some(t=>t.check.id==='bracket-load-path')).toBe(false);
   for(const r of rows)for(const k of ['item','needed','criterion','forces','party'] as const)expect(r[k].length,`${r.item} ${k}`).toBeGreaterThan(0);
-  expect(page1).toMatch(/Not checked in this package: responsibility matrix/);
+  expect(page1).toMatch(/Items by others and the forces delivered to them: section 6\.7/);
  });
 });

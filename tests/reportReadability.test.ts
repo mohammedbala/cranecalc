@@ -17,9 +17,9 @@ const coloured=(text:string)=>[...text.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi
 
 describe('compact, readable calculation report',()=>{
  it('opens with the summary: result, specified details, the load-path figure and the governing check of each element',()=>{
-  const summary=html.indexOf('Design summary'),basis=html.indexOf('1.1 / Scope, codes &amp; design basis');
+  const summary=html.indexOf('Design summary'),basis=html.indexOf('1.1 Codes and design basis');
   expect(summary).toBeGreaterThan(0);expect(basis).toBeGreaterThan(summary);
-  expect(html.search(/ALL DESIGN CHECKS SATISFIED|OPEN ITEMS? — REVIEW REQUIRED/)).toBeLessThan(summary);expect(html).not.toContain('NO FAILED CHECKS');
+  expect(html.search(/All design checks satisfied\.|OPEN ITEMS? — REVIEW REQUIRED/)).toBeLessThan(summary);expect(html).not.toContain('NO FAILED CHECKS');
   expect(html.indexOf('class="load-path-figure"')).toBeGreaterThan(summary);
   expect(html.indexOf('class="summary-checks"')).toBeLessThan(basis);
   // The actual bracket, tie and girder are named on page 1.
@@ -29,22 +29,22 @@ describe('compact, readable calculation report',()=>{
   expect(elementChecks(capped).reduce((n,v)=>n+v.checks.length,0)).toBe(capped.checks.length);
  },240000);
  it('reads as a calculation: inputs, load development, analysis, member checks, then connection checks',()=>{
-  const parts=['1 · DESIGN BASIS &amp; INPUTS','2 · LOAD DEVELOPMENT','3 · ANALYSIS','4 · MEMBER CHECKS','5 · CONNECTION CHECKS','6 · DETAILING, FABRICATION &amp; APPLICABILITY'].map(t=>html.indexOf(t));
+  const parts=['1 DESIGN BASIS AND INPUTS','2 LOAD DEVELOPMENT','3 ANALYSIS','4 MEMBER CHECKS','5 CONNECTION CHECKS','6 DETAILING, FABRICATION AND APPLICABILITY'].map(t=>html.indexOf(t));
   expect(parts.every(i=>i>0)).toBe(true);expect([...parts].sort((a,b)=>a-b)).toEqual(parts);
   // Pages are numbered within their part, in order.
-  const titles=[...html.matchAll(/<h2>(\d+)\.(\d+) \/ [^<]*<\/h2>/g)].map(m=>[Number(m[1]),Number(m[2])]);
+  const titles=[...html.matchAll(/<h2>(\d+)\.(\d+) [^<]*<\/h2>/g)].map(m=>[Number(m[1]),Number(m[2])]);
   for(let i=1;i<titles.length;i++)expect(titles[i][0]>titles[i-1][0]||titles[i][1]===titles[i-1][1]+1).toBe(true);
   // Every load with the equation that produced it, before the analysis results that use it.
   const at=(t:string)=>html.indexOf(t,parts[0]);
-  for(const t of ['Crane wheel loads &amp; impact','Side thrust, traction &amp; bumper forces','Dead loads, load cases &amp; combinations','Fatigue loading'])expect(at(t)).toBeGreaterThan(parts[1]);
+  for(const t of ['Crane wheel loads and impact','Side thrust, traction and bumper forces','Dead loads, load cases and combinations','Fatigue loading'])expect(at(t)).toBeGreaterThan(parts[1]);
   expect(at('Governing design actions')).toBeGreaterThan(parts[2]);expect(at('Bracket design forces')).toBeGreaterThan(parts[2]);expect(at('Bracket design forces')).toBeLessThan(parts[3]);
   // Members before connections: the girder, rail and bracket as a member, then the welds and attachments.
   // The section heading (page 1 may cite the existing-column reference by the same name when one of its checks governs).
-  for(const t of ['Runway girder · strength &amp; stability','Welded bracket · member checks','Existing column check</h2>'])expect(at(t)).toBeGreaterThan(parts[3]),expect(at(t)).toBeLessThan(parts[4]);
-  for(const t of ['Cap channel welds','Bolted end bearings','Welded bracket · welds, fatigue','Direct flange attachment','Runway end stops'])expect(at(t)).toBeGreaterThan(parts[4]);
+  for(const t of ['Runway girder, strength and stability','Welded bracket, member checks','Existing column</h2>'])expect(at(t)).toBeGreaterThan(parts[3]),expect(at(t)).toBeLessThan(parts[4]);
+  for(const t of ['Cap channel welds','Bolted end bearings','Welded bracket, welds, fatigue','Direct flange attachment','Runway end stops'])expect(at(t)).toBeGreaterThan(parts[4]);
   // Each check group states its loads and governing case, and the girder flexure and shear are worked with numbers.
   expect(html.match(/<p class="basis">/g)!.length).toBeGreaterThan(12);
-  const girder=html.slice(at('Runway girder · strength &amp; stability'),at('Runway girder · serviceability'));
+  const girder=html.slice(at('Runway girder, strength and stability'),at('Runway girder serviceability'));
   expect(girder).toContain('class="basis"');expect(girder).toContain('class="worked"');expect(girder).toContain('LRFD 2c');
   expect(girder.match(/<span class="katex-display">/g)!.length).toBeGreaterThanOrEqual(3);
   expect(html).not.toContain('@@ref');expect(html).not.toMatch(/sections? —/);

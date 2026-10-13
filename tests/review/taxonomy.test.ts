@@ -105,12 +105,13 @@ describe('gates (item 2; C19, C20, C21)',()=>{
 describe('body and page 1 (items 3-5; A1, C16)',()=>{
  it('shows about 35-40 design checks',()=>{
   expect(tax.counts.designShown).toBeGreaterThanOrEqual(35);expect(tax.counts.designShown).toBeLessThanOrEqual(44);
-  const rows=(html.match(/<tr class="[a-z-]+" data-checks=/g)??[]).length;
+  // A section whose highest D/C is not a body line repeats that check in its table (data-top): not a body row.
+  const rows=(html.match(/<tr class="[a-z-]+" data-checks=/g)??[]).length-(html.match(/ data-top="1"/g)??[]).length;
   expect(rows+tax.fatigue.evaluated.length).toBe(tax.counts.designShown);
  });
  it('takes the page-1 governing D/C from a design check: rail rotation 0.98 with the owner twist limit, rod bracing 0.86 without',()=>{
   expect(tax.governing!.check.id).toBe('rail-twist');expect(tax.governing!.dc.toFixed(2)).toBe('0.98');
-  expect(text(page1)).toMatch(/Governing design D\/C 0\.98: Rail rotation/);
+  expect(text(page1)).toMatch(/Governing D\/C = 0\.98: Rail rotation/);
   const t=taxonomy(noTwist());expect(t.governing!.check.id).toBe('brace-tension');expect(t.governing!.dc.toFixed(2)).toBe('0.86');
   // Never a detailing minimum (lap-bolt edge distance 1.00) or the cap-end full-force rule (0.97).
   for(const v of [tax,t])expect(['cap-angle-lap-edge','cap-development','cap-angle-column-holes']).not.toContain(v.governing!.check.id);
@@ -145,7 +146,7 @@ describe('body and page 1 (items 3-5; A1, C16)',()=>{
   expect(line('end-bearing-bolts').members).toHaveLength(7);
   expect(line('haunch-stiffeners').controlling.id).toBe('haunch-stiffener-column');
   expect(line('rail-joint').members).toHaveLength(5);
-  expect(text(html)).toMatch(/Cap tie sleeves and plate washers Controlling: Steel sleeves · bolt installation load/);
+  expect(text(html)).toMatch(/Cap tie sleeves and plate washers Controlling: Steel sleeves, bolt installation load/);
  });
  it('groups repeated register points as typical of N with the governing location (item 3)',()=>{
   const keeper=tax.fatigue.rows.find(r=>r.title==='Rail keeper')!;
@@ -168,36 +169,38 @@ describe('body and page 1 (items 3-5; A1, C16)',()=>{
   expect(t.governing!.check.id).toBe('rail-twist');
  });
  it('prints the counts line',()=>{
-  expect(text(page1)).toMatch(/Design checks evaluated 414 \(44 body rows; 272 of them at 136 fatigue register points\), screened 419 \(400 of them at 200 register points\), not applicable 4; detailing rules 75 \(16 flagged\)/);
+  expect(text(page1)).toMatch(/414 design checks evaluated, 419 screened below the fatigue threshold, 4 N\/A; 75 detailing rules \(16 with small margin, section 6\.2\)\. All results: Appendix A\./);
+  expect(text(page1)).not.toMatch(/body rows?|register points?/);
  });
  it('states exactly what remains by others with the forces delivered (D34)',()=>{
   const t=text(page1);
   // Peer review M10/C4: page 1 lists each item with its responsible party (the responsibility matrix in section 6.7 gives
   // what is needed, the criterion and the forces) and the per-grid concurrent force sets delivered to the columns.
-  expect(t).toMatch(/Not checked in this package: responsibility matrix/);
-  expect(t).toMatch(/Collector, brace connections|Crane-level strut on the girder line/);expect(t).toMatch(/Building engineer of record/);
-  expect(t).toMatch(/Forces delivered to the building columns/);expect(t).toMatch(/LRFD 2c 35\.6 kip/);
-  const m=text(html.slice(html.indexOf('/ Not checked in this package · responsibility matrix</h2>')));
+  // Editorial review: page 1 points to the items by others (section 6.7); the forces delivered are in section 3.5 and on S-00.
+  expect(t).toMatch(/Items by others and the forces delivered to them: section 6\.\d/);expect(t).not.toMatch(/Forces delivered to the building columns/);
+  expect(text(html.slice(html.indexOf('Forces delivered to the building</h2>')))).toMatch(/LRFD 2c 35\.6 kip/);
+  const m=text(html.slice(html.indexOf('Items by others and forces delivered</h2>')));
+  expect(m).toMatch(/Collector, brace connections|Crane-level strut on the girder line/);expect(m).toMatch(/Building engineer of record/);
   expect(m).toMatch(/base shear 10 kip and column axial ±7\.2 kip/);expect(m).toMatch(/Acceptance criterion/);
  });
 });
 
 describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>{
- const section=(title:string)=>{const i=html.indexOf(`<h2>${title}`)>=0?html.indexOf(`<h2>${title}`):html.indexOf(` / ${title}</h2>`);return html.slice(i,html.indexOf('</section>',i));};
+ const section=(title:string)=>{const i=html.indexOf(`<h2>${title}`)>=0?html.indexOf(`<h2>${title}`):html.indexOf(` ${title}</h2>`);return html.slice(i,html.indexOf('</section>',i));};
  it('lists only flagged detailing rules on one page, never with a D/C',()=>{
   const flagged=tax.detailing.flagged.map(f=>f.entry.check.id);
   expect(flagged).toEqual(expect.arrayContaining(['end-bearing-seat-fit','cap-angle-endplate-edge','cap-angle-lap-edge','cap-angle-washer','end-bearing-washer','stiffener-weld-minimum','haunch-web-weld-minimum']));
   expect(flagged.length).toBeLessThanOrEqual(25);
   const page=text(section('Detailing checklist'));
-  expect(page).toMatch(/59 detailing rules satisfied/);
+  expect(page).toMatch(/Other 59 rules: OK \(Appendix A\)/);
   expect(page).not.toMatch(/Bolt spacing/); // a satisfied rule with margin is not listed
-  expect(page).toMatch(/Bearings and bolts fit on the haunch top flange .* At limit/);
+  expect(page).toMatch(/Bearings and bolts fit on the haunch top flange .* At limit/);expect(page).not.toMatch(/exactly/);
  });
  it('prints one short fatigue table with both methods side by side and the setting stated',()=>{
-  const page=text(section('Fatigue · girder and attachments'));
-  expect(page).toMatch(/Governing method: Miner’s rule, D\/C = f sr,eq \/F SR \(bold\); the all-cycle ratio is shown alongside/);
-  expect(page).toMatch(/7 details evaluated; 3\d details screened/);
-  expect(page).toMatch(/Rail keeper typical of 136 register points Rail keeper 61, x = 109\.8 ft D 7 ksi 17\.7 ksi 13\.3 ksi 11\.5 ksi 0\.28 0\.65 0\.76 OK/);
+  const page=text(section('Runway girder fatigue'));
+  expect(page).toMatch(/Miner’s rule, no threshold credit\)\. The largest bin range applied to all cycles, f sr,max \/F SR ?, is shown for comparison/);
+  expect(page).toMatch(/Screened details \(\d+\), closest to F TH/);expect(page).not.toMatch(/details evaluated; \d+ details screened/);
+  expect(page).toMatch(/Rail keeper 136 locations Rail keeper 61, x = 109\.8 ft D 7 ksi 17\.7 ksi 13\.3 ksi 11\.5 ksi 0\.28 0\.65 0\.76 OK/);
   const s=clone();s.input.fatigue.method='all-cycle';
   const t=taxonomy(s);expect(t.fatigue.evaluated.find(r=>r.title==='Rail keeper')!.dc!.toFixed(2)).toBe('0.76');
  });
