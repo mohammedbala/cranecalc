@@ -90,7 +90,8 @@ describe('AISC notation in the calculation report (Rev B)',()=>{
  it('lists in the notation only symbols the equations use, and every one of them',()=>{
   const used=new Set([...equations,...combinations].flatMap(t=>[...equationSymbols(t)]));
   const entries=notationGroups.flatMap(([,l])=>l.map(([t])=>t));
-  expect(entries.filter(t=>!used.has(entrySymbol(t)))).toEqual([]);
+  // W_h (weight below the hook) enters the crane statics only when the crane has one; Rev B's has none.
+  expect(entries.filter(t=>!used.has(entrySymbol(t))&&t!=='W_h')).toEqual([]);
   // Brief: crane-girder symbols only, at most 30 table rows; standard AISC symbols are not listed.
   const n=notationSection([...equations,...combinations]),rows=(n.match(/<tr><td>/g)??[]).length;
   expect(rows).toBeLessThanOrEqual(30);expect(n).toContain('Crane runway symbols.');

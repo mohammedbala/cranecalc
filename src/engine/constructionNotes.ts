@@ -75,7 +75,7 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
  const erection=[
   'Provide temporary lateral and torsional restraint of each girder until its ties are complete. Set bearings level and fit bearing stiffeners before welding.',
   // One clearance note: in an existing building the test also covers the existing framing and services.
-  `Runway clearance test before the load test (AIST TR-13 §1.5.6.2): crane unloaded, hook fully up, run the crane the full length of the runway three times, with the trolley at each end of the bridge and at center; check the Fig. 1.1 clearances${p.existingColumn?.enabled&&!p.existingColumn.isNew?' to the existing roof framing, bracing, lights, piping and other obstructions, with the roof framing deflected under snow; report any shortfall to the engineer of record before commissioning.':', including the clearance to the roof trusses deflected under snow.'}`];
+  `Runway clearance test before the load test (AIST TR-13 §1.5.6.2): crane unloaded, hook fully up, run the crane the full length of the runway three times, with the trolley at each end of the bridge and at center; check the Fig. 1.1 clearances, including the clearance to the roof trusses deflected under snow${p.existingColumn?.enabled&&!p.existingColumn.isNew?', and to the existing roof framing, bracing, lights, piping and other obstructions; report any shortfall to the engineer of record before commissioning':''}.`];
  // (Re-tightening of the rail joint bolts after 30 and 90 days is stated once, with the rail joints under bolting.)
  const tolerances=[
   'Runway fabrication and erection tolerances (AIST TR-13 §5.18), unless the crane manufacturer requires less:',

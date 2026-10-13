@@ -97,7 +97,8 @@ describe('sliding end bearings under AISC J1.10(c)',()=>{
  it('pretensions sliding-end bolts against sleeves that clear the flange',()=>{
   const p=demo.input,e=p.details!.endBearing!,g=endBearingGeometry(p,e);
   expect(g.sleeved).toBe(true);
-  expect(g.sleeve!.od).toBeCloseTo((13/16+2*5/16)*inch,9);expect(g.sleeve!.length).toBeCloseTo(p.section.tf+inch/16,9);
+  expect(g.sleeve!.od).toBeCloseTo((13/16+2*5/16)*inch,9);// cut to a 1/16 in length at least the flange plus 1/16 in
+  expect(g.sleeve!.length).toBeCloseTo(Math.ceil((p.section.tf+inch/16)/(inch/16)-1e-6)*inch/16,9);expect(g.sleeve!.length-p.section.tf).toBeGreaterThanOrEqual(inch/16-1e-9);
   expect(g.slotWidth).toBeCloseTo(g.sleeve!.od+inch/16,9);expect(g.slot).toBeCloseTo(g.slotWidth+inch,9);
   const checks=demo.checks.filter(c=>c.group==='End bearings');
   expect(checks.some(c=>c.id==='end-bearing-j110')).toBe(false);

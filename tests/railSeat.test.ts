@@ -107,13 +107,14 @@ describe('rail seat: pad and rail clips',()=>{
  });
  it('dimensions T.O.R. to T.O.S. at the top of the W on a capped girder, as the S-00 / S-01 elevations',()=>{
   const p=cappedDemonstrationProject(),t=texts(railKeeperView(snapshot(p)).render().svg),el=runwayElevations(p)!;
-  // 6 in rail on the 0.40 in C15 web, no pad: 6 3/8 in, the T.O.R. - T.O.S. difference of the elevations.
-  expect(t).toContain('6 3/8"');expect(t).not.toContain('6"');
+  // 6 in rail on the 0.40 in C15 web, no pad: 6 3/8 in, the T.O.R. - T.O.S. difference of the elevations, a reference
+  // dimension (in parentheses).
+  expect(t).toContain('(6 3/8")');expect(t).not.toContain('6"');
   expect((el.tor-el.tos)/25.4).toBeCloseTo(6+p.section.capTw/25.4,6);
  });
  it('specifies the rail clips in the standard note, with the field-welded base, the pad and the joint',()=>{
   const svg=railKeeperView(snapshot(openJoints(demonstrationProject()))).render().svg,us=texts(svg),all=us.join(' ');
-  for(const t of ['RAIL PAD 1/8" X 6", CONT.:','ALLOWABLE COMPRESSION 1.45 KSI','6 1/8"','T.O.R.','T.O.S.','RAIL CLIP, EACH SIDE (SCHEMATIC):','EACH END OF CLIP BASE (MIN.)'])expect(us).toContain(t);
+  for(const t of ['RAIL PAD 1/8" X 6", CONT.:','ALLOWABLE COMPRESSION 1.45 KSI','(6 1/8")','T.O.R.','T.O.S.','RAIL CLIP, EACH SIDE (SCHEMATIC):','EACH END OF CLIP BASE (MIN.)'])expect(us).toContain(t);
   expect(all).toContain(`RAIL CLIPS: WELD-ON, PER MANUFACTURER (FICTITIOUS SUPPLIER DATA RC-W6`);
   expect(all).toContain('RATED ≥ 10 KIP LATERAL AND ≥ 5 KIP UPLIFT PER CLIP (ALLOWABLE), IN OPPOSING PAIRS AT 2\'-0" O.C. MAX.');
   expect(all).toContain('FLOATING; WELD BASE TO GIRDER TOP FLANGE PER MANUFACTURER (MIN. 3/8" FILLET X 2 1/2", EACH END OF THE BASE)');
@@ -125,7 +126,7 @@ describe('rail seat: pad and rail clips',()=>{
   expect(all).toContain('2 BARS 1 1/4" X 3 3/4" X 1\'-0 1/2", SLOTTED 1 5/16" X 15/16" ALONG THE RAIL');expect(all).toContain('15/16" DRILLED HOLES IN THE RAIL WEB');
   expect(all).toContain('DRILL HOLES AND SAW-CUT ENDS; NO FLAME CUTTING OR PUNCHING');
   const capped=texts(railKeeperView(snapshot(cappedDemonstrationProject())).render().svg);
-  expect(capped.some(t=>t.startsWith('RAIL PAD'))).toBe(false);expect(capped).toContain('6 3/8"');expect(capped.join(' ')).toContain('WELD BASE TO CAP CHANNEL PER MANUFACTURER (MIN. 1/4" FILLET');
+  expect(capped.some(t=>t.startsWith('RAIL PAD'))).toBe(false);expect(capped).toContain('(6 3/8")');expect(capped.join(' ')).toContain('WELD BASE TO CAP CHANNEL PER MANUFACTURER (MIN. 1/4" FILLET');
   const si=openJoints(demonstrationProject());si.units='SI';
   const metric=texts(railKeeperView(snapshot(si)).render().svg).join(' ');
   expect(metric).not.toMatch(/"|KSI|KIP|\d\.\d{2,} ?mm|\d\.[1-46-9] ?mm/);expect(metric).toContain('10 MPa');expect(metric).toContain('44 kN LATERAL');
