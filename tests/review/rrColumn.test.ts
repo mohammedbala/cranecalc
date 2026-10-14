@@ -49,7 +49,7 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   const b=14*inch;expect(Math.abs(S.pull.P!)/kip).toBeCloseTo(48.70,1);expect(Math.abs(S.pull.M!)/kft).toBeCloseTo(37.17,1);
   expect(S.pull.value).toBeCloseTo(Math.abs(S.pull.P!)+3*Math.abs(S.pull.M!)/b,3);
   // J10.2 is exceeded unstiffened (1.32): stiffeners are required. J10.1 cites J10.1, not J10.8.
-  expect(check('haunch-column-yield-top').note).toMatch(/^Unstiffened J10\.2, not governing \(the column is stiffened at this level\): R_u = 132(\.\d+)? kip against φR_n = 100(\.\d+)? kip, D\/C 1\.32 \(exceeded\)\./);
+  expect(check('haunch-column-yield-top').note).toMatch(/^Unstiffened J10\.2, not governing \(the column is stiffened at this level\): R_u = 144(\.\d+)? kip against φR_n = 100(\.\d+)? kip, D\/C 1\.44 \(exceeded\)\./);
   expect(check('haunch-column-flange').note).toMatch(/^Unstiffened J10\.1, not governing/);
   // The panel takes the net flange force; the couples add none.
   expect(check('haunch-column-panel').demand).toBeCloseTo(Math.max(S.tension.value,S.compression.value),6);
@@ -140,7 +140,7 @@ describe('M6 · the tie design force and the restraint at the tie line',()=>{
   expect(w).toHaveLength(3);expect(w[0]).toContain('P_{br}=\\frac{0.02M_rC_d}{h_o}+0.01P_r');expect(w[1]).toContain(`F=H+P_{br}=force:${r.demands.brace}+force:${A6.force}`);
   const tie=section('Cap tieback');
   expect(tie).toMatch(/tie design force F = H \+ P ?br = 4\.\d\d kip \+ 2\.50 kip = 6\.\d\d kip ?, pull or push/);
-  expect(tie).toMatch(/H: largest top-flange restraint force at a grid \(LRFD 2b, grid 2\)/);expect(tie).toMatch(/Required brace stiffness 5\.21 kip\/in vs 272 kip\/in provided/);expect(tie).toMatch(/Fatigue range ΔF = 2\.\d\d kip/);
+  expect(tie).toMatch(/H: largest top-flange restraint force at a grid \(LRFD A2b, grid 5\)/);expect(tie).toMatch(/Required brace stiffness 5\.68 kip\/in vs 34\.8 kip\/in provided \(the secant stiffness with the tie's play; 272 kip\/in after contact\)/);expect(tie).toMatch(/Fatigue range ΔF = 2\.\d\d kip/);
  });
 });
 

@@ -65,9 +65,9 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
   // Peer review round 3 (load basis): the ASCE 7 crane-as-live combinations A2b / A2c, the crane at stop contact, traction
   // through the rail string, the restraint play and the new-steel dead load move every strength, reaction and movement
   // check; the fatigue and detailing checks, which none of them touch, are still compared one by one.
-  // The bracket applicability (total reactions) and the simple-span movements (end rotation) are detailing checks that
-  // the loads move too.
-  const loadBasis=(c:{id:string;group:string})=>!['Fatigue','Detailing'].includes(c.group)||['column-brackets','simple-guide-travel','simple-joint-gap'].includes(c.id);
+  // The bracket applicability (total reactions) and the simple-span movements and rotation clearance (end rotation) are
+  // detailing checks that the loads move too.
+  const loadBasis=(c:{id:string;group:string})=>!['Fatigue','Detailing'].includes(c.group)||['column-brackets','simple-guide-travel','simple-joint-gap','rotation-clearance'].includes(c.id);
   for(const b of demoFocus005Before().checks){if(changed.has(b.id)||keeperDetail.test(b.id)||roundA.test(b.id)||railKeepers.test(b.id)||loadBasis(b))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
  });
 });
