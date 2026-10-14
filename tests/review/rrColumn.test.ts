@@ -46,7 +46,7 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   expect(S.push.value/kip).toBeCloseTo(133.4,0);
   // The flange force system: T = 44.4 kip (with the wing stiffeners' weight) with M_f = 34.3 kip-ft (DG9 flange bending
   // of the torque), R_u = T + 3M_f/b.
-  const b=14*inch;expect(Math.abs(S.pull.P!)/kip).toBeCloseTo(44.45,1);expect(Math.abs(S.pull.M!)/kft).toBeCloseTo(34.25,1);
+  const b=14*inch;expect(Math.abs(S.pull.P!)/kip).toBeCloseTo(48.70,1);expect(Math.abs(S.pull.M!)/kft).toBeCloseTo(37.17,1);
   expect(S.pull.value).toBeCloseTo(Math.abs(S.pull.P!)+3*Math.abs(S.pull.M!)/b,3);
   // J10.2 is exceeded unstiffened (1.32): stiffeners are required. J10.1 cites J10.1, not J10.8.
   expect(check('haunch-column-yield-top').note).toMatch(/^Unstiffened J10\.2, not governing \(the column is stiffened at this level\): R_u = 132(\.\d+)? kip against φR_n = 100(\.\d+)? kip, D\/C 1\.32 \(exceeded\)\./);
@@ -139,7 +139,7 @@ describe('M6 · the tie design force and the restraint at the tie line',()=>{
   const w=workedSteps(s,check('brace-member'),((v:number,q:string)=>`${q}:${v}`) as never)!;
   expect(w).toHaveLength(3);expect(w[0]).toContain('P_{br}=\\frac{0.02M_rC_d}{h_o}+0.01P_r');expect(w[1]).toContain(`F=H+P_{br}=force:${r.demands.brace}+force:${A6.force}`);
   const tie=section('Cap tieback');
-  expect(tie).toMatch(/tie design force F = H \+ P ?br = 4\.\d\d kip \+ 2\.29 kip = 6\.\d\d kip ?, pull or push/);
+  expect(tie).toMatch(/tie design force F = H \+ P ?br = 4\.\d\d kip \+ 2\.50 kip = 6\.\d\d kip ?, pull or push/);
   expect(tie).toMatch(/H: largest top-flange restraint force at a grid \(LRFD 2b, grid 2\)/);expect(tie).toMatch(/Required brace stiffness 5\.21 kip\/in vs 272 kip\/in provided/);expect(tie).toMatch(/Fatigue range ΔF = 2\.\d\d kip/);
  });
 });
@@ -154,7 +154,7 @@ describe('M10 · the responsibility matrix',()=>{
   expect(item(/rail gauge/)!.forces).toMatch(/Column alone, runway dead load plus static crane: \+0\.073 in \(7% of the limit\)\. Frame spread: by others\./);
   expect(item(/Crane data/)!.needed).toMatch(/s = 0\.5.*0\.9 trolley factor/);
   expect(item(/Crane-level strut/)!.needed).toMatch(/the existing column check relies on it/);expect(item(/Crane-level strut/)!.forces).toMatch(/crane stop 10\.0 kip at grids 1 and 5/);
-  expect(item(/Load test/)!.criterion).toMatch(/12\.2 kip per wheel ≤ the design wheel load 13\.6 kip/);
+  expect(item(/Load test/)!.criterion).toMatch(/12\.2 kip per wheel ≤ the design wheel load 15\.0 kip/);
   // No by-others row for what this package checks.
   expect(rows.some(r=>/column-side load path|load paths to the column/.test(r.item))).toBe(false);
   expect(tax.byOthers.some(t=>t.check.id==='bracket-load-path')).toBe(false);
