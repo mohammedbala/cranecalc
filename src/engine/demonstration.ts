@@ -42,7 +42,7 @@ export function demonstrationDetails():RunwayDetails{return {
   release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
  // Cover plates (gauge + two edges) clear the bearing stiffener and its welds at half the bearing length.
  end:{...lap(),rows:4,gauge:2.75*inch,edge:1.25*inch,thickness:.75*inch,weldSize:.4375*inch,weldLength:11.5*inch,projection:1.5*inch},
- bearing:{width:12*inch,length:12.5*inch,thickness:1*inch,stiffenerWidth:5*inch,stiffenerThickness:1*inch,cope:1*inch,weldSize:.3125*inch},
+ bearing:{width:12*inch,length:12.5*inch,thickness:1.125*inch,stiffenerWidth:5*inch,stiffenerThickness:1*inch,cope:1*inch,weldSize:.3125*inch},
  rail:{name:'Demo R-6 crane rail · idealized plate geometry',headWidth:3*inch,headThickness:1.25*inch,baseWidth:6*inch,baseThickness:.75*inch,webThickness:.75*inch,Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:'Fictitious RP-01 polyurethane crane-rail pad; allowable compression per fictitious supplier rating sheet RP-01',padThickness:.125*inch,padWidth:6*inch,
   // Rail clips: fictitious supplier data (weld-on floating clips, manufacturer's allowable ratings and base weld), see
   // demonstrationClip.

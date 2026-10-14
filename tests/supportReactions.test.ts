@@ -1,3 +1,4 @@
+import {girderDeadLoad,newSteelTakeoff} from '../src/engine/newSteel';
 import {describe,it,expect} from 'vitest';
 import {supportReactions} from '../src/engine/supportReactions';
 import {sectionProperties} from '../src/engine/section';
@@ -11,10 +12,12 @@ describe('unfactored support reactions by load type',()=>{
   // Two 20 kip static wheels (8 kip empty) at 10 ft on 25 ft bays: one wheel over the
   // support and the other 10 ft into the adjacent bay gives R = P(1 + 15/25) = 1.6P.
   const p=demonstrationProject(),props=sectionProperties(p.section),r=supportReactions(p,props);
-  const interior=r.supports[1],q=p.deadLoad+p.railWeight+props.weight;
+  // D: the girder, rail and attachments (girderDeadLoad), with the bearing hardware and support steel at each grid.
+  const interior=r.supports[1],q=girderDeadLoad(p,props.weight),steel=newSteelTakeoff(p);
   expect(interior.Cd/kip).toBeCloseTo(1.6*8,6);expect(interior.Cv/kip).toBeCloseTo(1.6*12,6);expect(interior.Ci/kip).toBeCloseTo(1.6*.25*20,6);
   expect(interior.Css/kip).toBeCloseTo(1.6*2,6); // 2 kip per wheel already meets the 4 kip runway minimum
-  expect(interior.D).toBeCloseTo(q*p.spans[0],6);expect(r.supports[0].D).toBeCloseTo(q*p.spans[0]/2,6);
+  expect(interior.D).toBeCloseTo(q*p.spans[0]+steel.grid[1]+steel.support[1],6);expect(r.supports[0].D).toBeCloseTo(q*p.spans[0]/2+steel.grid[0]+steel.support[0],6);
+  expect(steel.grid[1]).toBeCloseTo(2*steel.perEnd,6);expect(interior.Ds).toBe(steel.support[1]);
   expect(r.Cls/kip).toBeCloseTo(4,6);
  });
  it('reproduces the moving-load reaction envelope with dead load and impact',()=>{

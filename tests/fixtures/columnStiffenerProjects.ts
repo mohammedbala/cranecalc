@@ -28,7 +28,8 @@ export function cappedTwinRibW14X90(stiffened:boolean){
 }
 /**
  * The capped demonstration with a W12X58 stub on an older ASTM A36 W14X90 (Fy 36 ksi): J10.1 under the stub's tension
- * flange fails unstiffened (1.107); 3/4 in pairs at the stub flanges with 7/16 in fillets (throat fatigue) pass.
+ * flange fails unstiffened; full-depth 3/4 in pairs at the stub flanges with 7/16 in fillets (throat fatigue; the full
+ * depth for the column web shear along them under the ASCE 7 crane-as-live combinations) pass.
  */
 export function cappedStubW14X90(stiffened:boolean){
  const p=onW14X90(cappedDemonstrationProject());
@@ -38,7 +39,7 @@ export function cappedStubW14X90(stiffened:boolean){
  const b=p.details.bracket!;b.corbelShape='W12X58';b.seatThickness=1.5*inch;b.seatWeld=.375*inch;
  b.rolled={...b.rolled!,flangeJoint:'cjp',flangeWeld:.3125*inch,webWeld:.3125*inch,stiffenerThickness:.5*inch,stiffenerWeld:.25*inch,seatPlate:true};
  p.details.endBearing!.bolts.edge=2.125*inch;p.details.brace.release!.travel=.1875*inch;
- if(stiffened)b.columnStiffeners=plates(.75*inch,7/16*inch);
+ if(stiffened)b.columnStiffeners={...plates(.75*inch,7/16*inch),length:'full'};
  return p;
 }
 /**

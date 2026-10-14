@@ -52,7 +52,11 @@ describe('representative runway package',()=>{
   c.observe({kind:'strength',id:'grouped',combination:'independent fixture',cranes:[{index:0,origin:x,loaded:true}],horizontalCrane:0,lateralSign:1,wheels:[{x,p:10000,h:1000},{x:x+100,p:20000,h:2000}],q:0,railTorquePerLength:0,axial:1000,verticalReactions:[{x:0,r:15000},{x:p.spans[0],r:15000}]});
   const r=c.finish();expect(r.demands.railVertical).toBe(30000);expect(r.demands.railLateral).toBe(3000);
   const L=p.spans.reduce((sum,v)=>sum+v,0);
-  expect(r.interfaces.every(v=>v.id==='grouped-T1'&&Math.abs(v.longitudinal)===(v.x===0?1000:0))).toBe(true);
+  // The crane on bay 1: traction at its locating end (grid 1) either way, or through the floating rail string to the
+  // right-end stop on bay 3, delivered at its locating end (grid 3). The left stop is already bay 1's own case.
+  expect(r.interfaces.every(v=>v.id==='grouped-T1'||v.id==='grouped-R3')).toBe(true);
+  expect(r.interfaces.filter(v=>v.id==='grouped-T1').every(v=>Math.abs(v.longitudinal)===(v.x===0?1000:0))).toBe(true);
+  expect(r.interfaces.filter(v=>v.id==='grouped-R3').every(v=>v.longitudinal===(Math.abs(v.x-2*p.spans[0])<1?1000:0))).toBe(true);
   expect(r.interfaces.some(v=>v.x>0&&v.x<L&&v.longitudinal===0)).toBe(true);
   expect(r.interfaces.some(v=>v.longitudinal<0)).toBe(true);
  });

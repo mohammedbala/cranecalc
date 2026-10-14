@@ -174,10 +174,10 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const bottomK=(x:number)=>ebK&&supports.some(v=>Math.abs(v-x)<=1e-6)?ebK:brace.stiffness;
  // On a column cap no tie reaches the top flange: the bearing stiffeners and the bolted bottom flange form a fork.
  const forkK=columnCap&&eb?capForkStiffness(p).k:0,topK=(x:number)=>forkK&&supports.some(v=>Math.abs(v-x)<=1e-6)?forkK:brace.stiffness;
- // Play in the support restraints: the top tie at the supports and the sliding bearing (right) end of each simple bay.
  // Girder-end hardware on the seats (bearing plate and stiffeners at each girder end, end stops at the runway ends).
  const steel=newSteelTakeoff(p),endHardware=(bay:number,end:'left'|'right')=>steel.perEnd+(bay===0&&end==='left'&&steel.stops.includes('left')||bay===p.spans.length-1&&end==='right'&&steel.stops.includes('right')?steel.stopEach:0);
  const gridHardware=(x:number)=>steel.grid[supports.findIndex(v=>Math.abs(v-x)<1e-6)]??0;
+ // Play in the support restraints: the top tie at the supports and the sliding bearing (right) end of each simple bay.
  const clearance=restraintClearances(p),gapped=clearance.top.gap>0||clearance.bottom.gap>0,atSupport=(x:number)=>!forkK&&supports.some(v=>Math.abs(v-x)<=1e-6),gapK=(k:number,gap:number,P:number)=>gap>0?secantStiffness(k,gap,P):k;
  const bearings=independentBearings(p),adjacent=adjacentBays(p);
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
@@ -242,11 +242,10 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const bayKey=JSON.stringify([e.kind,bin,bayIndex,wheels.map(w=>[w.x,w.p,w.h]),e.q,e.railTorquePerLength,strength?e.axial:0,strength?totalH:0]);
    let restraintForces=bayStates.get(bayKey),r:ReturnType<LateralTorsionBeam['solve']>|undefined;
    if(!restraintForces){
-   // Restraints with play (restraintClearances) enter the buckling eigenvalue of the strength cases at their secant
-   // stiffness, the play taken up at the Appendix 6 brace force of the design envelope (AISC 360-16 Appendix 6.3.1b,
-   // as the brace stiffness check). The stresses use the stiffness after contact: in a bay restrained at its ends the
-   // play only moves it as a rigid body (the rail-head check adds that movement; clearanceEffects bounds the twist
-   // between its ends).
+   // Restraints with play (restraintClearances) enter the strength cases, stresses and buckling eigenvalue alike, at
+   // their secant stiffness, the play taken up at the Appendix 6 brace force of the design envelope (AISC 360-16
+   // Appendix 6.3.1b, as the brace stiffness check). Service cases use the stiffness after contact; the rail-head check
+   // adds the rigid-body take-up, and clearanceEffects bounds the twist between the two ends of a bay.
    const brScale=strength&&gapped?braceForce??0:0;
    const restraintsAt=(secant:boolean)=>stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?gapK(topK(x),secant&&atSupport(x)?clearance.top.gap:0,brScale)*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?gapK(bottomK(x),secant&&ebK&&Math.abs(x-end)<1e-6?clearance.bottom.gap:0,brScale)*stiffnessFactor:0}));
    const beamWith=(restraints:ReturnType<typeof restraintsAt>)=>new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
@@ -257,7 +256,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     // Apply the full UDL at rail height for the stability test conservatively.
     distributedVertical:strength?e.q:0,distributedHeight:z
    });
-   const beam=beamWith(restraintsAt(false)),stability=strength&&brScale>0?beamWith(restraintsAt(true)):beam;
+   const beam=beamWith(restraintsAt(brScale>0)),stability=beam;
    let ownMultiplier:number|undefined;
    if(strength&&!stability.isStable(result.criticalMultiplier)){
     const critical=stability.criticalMultiplier(result.criticalMultiplier);

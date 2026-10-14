@@ -52,7 +52,7 @@ describe('narrative generated from the design (C3, M11)',()=>{
 describe('engineering names, not software ids (P1)',()=>{
  it('names cases by combination and crane position',()=>{
   expect(body).not.toMatch(/\b[DS]-\d{3,}/);
-  expect(body).toMatch(/LRFD 2c, crane at (grid \d|\d+'-\d+" past grid \d)/);
+  expect(body).toMatch(/LRFD A?2c, crane at (grid \d|\d+'-\d+" past grid \d)/);
   const id=s.checks.find(c=>c.caseId?.startsWith('D-'))!.caseId!;
   expect(caseName(s,id)).toMatch(/^LRFD [\w-]+, crane/);
  });
@@ -98,7 +98,9 @@ describe('units, rounding and sizes (P3)',()=>{
  });
  it('prints plate, bolt and weld sizes as fractions',()=>{
   expect(fixed2(9.525,'length','US')).toBe('3/8 in');expect(fixed2(15.875,'length','US')).toBe('5/8 in');expect(fixed2(7.9375,'length','US')).toBe('5/16 in');
-  for(const v of ['0.37 in','0.63 in','0.31 in'])expect(body,v).not.toContain(v);
+  // A computed movement may read 0.31 in (the sliding-end slot travel); sizes never do.
+  const sizes=body.replace(/(slot travel each way|movement allowance each direction[^:]*:|Owner criteria Evaluated) 0\.31 in/g,'');
+  for(const v of ['0.37 in','0.63 in','0.31 in'])expect(sizes,v).not.toContain(v);
   expect(body).toContain('A 3/8 in × 4 1/4 in tie plate');
   expect(body).toMatch(/Lap bolts[,·] edge distances[^O]*\d\/\d+ in/);
  });

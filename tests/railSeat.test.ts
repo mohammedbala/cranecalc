@@ -84,7 +84,7 @@ describe('rail seat: pad and rail clips',()=>{
   const note=texts(railKeeperView(snapshot(p)).render().svg).join(' ');
   expect(note).toContain('TIGHT JOINT (AIST TR-13 §5.16.1)');expect(note).toContain('PRETENSIONED IN 15/16" STANDARD HOLES');expect(note).toContain('RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS');expect(note).not.toContain('SNUG');
   expect(note).toContain('ANCHORED BY THE END STOPS');expect(note).toContain('NO ANCHOR CLIPS OR RAIL NOTCHES');
-  const plan=texts(railLayoutView(snapshot(p)).render().svg).join(' ');expect(plan).toContain('EACH RAIL STRING IS ANCHORED BY THE END STOPS');expect(plan).toContain('6.4 KIP FACTORED');
+  const plan=texts(railLayoutView(snapshot(p)).render().svg).join(' ');expect(plan).toContain('FLOATING RAIL CLIPS, NO RAIL-SEAT FRICTION RELIED ON');expect(plan).toContain('THROUGH AN END STOP');expect(plan).toContain('6.4 KIP FACTORED');
   expect(plan).toContain(`UP TO ${movementUpTo(Math.max(...moves.ends.map(v=>v.movement)),'US')} INTO THE CLEARANCE GAP`);expect(plan).toContain('RAIL CLIP PAIRS (TICKS) AT 2\'-0" O.C. MAX.');
   expect(railLayoutView(snapshot(p)).render().svg).not.toContain('data-rail-anchor=');
  });

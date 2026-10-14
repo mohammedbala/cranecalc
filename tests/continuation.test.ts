@@ -1,3 +1,4 @@
+import {newSteelTakeoff} from '../src/engine/newSteel';
 import {describe,expect,it} from 'vitest';
 import {reviewOpenItem} from './review/openItems';
 import {calculate,validateProject} from '../src/engine/calculate';
@@ -48,7 +49,8 @@ describe('runway continuing beyond a modeled end',()=>{
   // The end bracket at grid 4 carries the existing girder too, as the interior brackets carry two girders.
   const at=(x:number)=>s.detailResults!.interfaces.filter(r=>Math.abs(r.x-x)<1),Lm=75*foot;
   expect(at(Lm).some(r=>r.ends?.some(e=>e.existing&&e.vertical>0))).toBe(true);
-  expect(Math.max(...at(Lm).map(r=>r.vertical))).toBeCloseTo(Math.max(...at(50*foot).map(r=>r.vertical)),3);
+  // Grid 3 also carries the bearing hardware of two new girder ends, grid 4 of one (the existing girder's is in its own reaction).
+  expect(Math.abs(Math.max(...at(Lm).map(r=>r.vertical))-Math.max(...at(50*foot).map(r=>r.vertical)))).toBeLessThanOrEqual(1.4*newSteelTakeoff(p).perEnd);
   expect(at(0).some(r=>r.ends?.some(e=>e.existing))).toBe(false);
   const set=drawingSheetSet(s),sheet=(n:string)=>set.find(v=>v.number===n)!.svg;
   expect(sheet('S-01')).toContain('data-existing-bay="right"');expect(sheet('S-01')).not.toContain('data-existing-bay="left"');

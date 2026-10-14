@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {stopContacts} from '../src/engine/craneTravel';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 import {endStopChecks,endStopGeometry,stopBumperForce,wrenchClearance} from '../src/engine/endStop';
@@ -14,7 +15,7 @@ import {girderStrength} from '../src/engine/aiscStrength';
 import {sideReactions} from '../src/engine/bracketForces';
 import {format} from '../src/engine/units';
 
-const inch=25.4,kip=4448.2216152605;
+const inch=25.4,foot=304.8,kip=4448.2216152605;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
 const demo=calculate(demonstrationProject());
 type Seg=[[number,number],[number,number]];
@@ -54,14 +55,16 @@ describe('girder-mounted runway end stops',()=>{
  it('applies the crane stop force only with the crane against a stop, for the girder, its stops and its supports alike',()=>{
   const p=demonstrationProject(),c=p.cranes[0],props=sectionProperties(p.section),stops=new Set(['LRFD 8','LRFD 10-B']),seen:{origin:number;stop?:string;axial:number}[]=[];
   runwayDesignAnalysis(p,props,girderStrength(p,props),24,20,e=>{if(e.kind==='strength'&&stops.has(e.combination))seen.push({origin:e.cranes[0].origin,stop:e.stop,axial:e.axial});});
-  // Every stop case has the crane at the end of its travel toward the stop it strikes, with the full stop force.
+  // Every stop case has the crane at stop contact toward the stop it strikes, with the full stop force. Without the
+  // end-truck geometry the contacts are the travel limits kept on the runway: the first wheel at grid 1, the last at grid 4.
+  const [left,right]=stopContacts(p,0).map(v=>v.origin);expect([left,right]).toEqual([0,75*foot-c.wheels.at(-1)!.offset]);
   expect(seen.length).toBeGreaterThan(0);
-  for(const v of seen){expect(v.stop).toBe(Math.abs(v.origin-c.travelStart)<1e-6?'left':'right');expect([c.travelStart,c.travelEnd].some(o=>Math.abs(v.origin-o)<1e-6)).toBe(true);expect(v.axial).toBeCloseTo(20*kip,3);}
+  for(const v of seen){expect(v.stop).toBe(Math.abs(v.origin-left)<1e-6?'left':'right');expect([left,right].some(o=>Math.abs(v.origin-o)<1e-6)).toBe(true);expect(v.axial).toBeCloseTo(20*kip,3);}
   expect(new Set(seen.map(v=>v.stop))).toEqual(new Set(['left','right']));
   // The stop combinations' girder moments are those with the crane at the stop, and the end stop check adds the
   // bumper couple to them; the locating bearings still take the full stop force.
   const lrfd8=demo.designAnalysis!.combinations.find(v=>v.id==='LRFD 8')!;
-  expect(lrfd8.positions.every(o=>[c.travelStart,c.travelEnd].some(t=>Math.abs(o-t)<1e-6))).toBe(true);
+  expect(lrfd8.positions.every(o=>[left,right].some(t=>Math.abs(o-t)<1e-6))).toBe(true);
   expect(demo.designAnalysis!.axial).toBeCloseTo(20*kip,3);expect(demo.designAnalysis!.governing.axial!.id).toMatch(/LRFD (8|10-B)/);
   expect(demo.checks.find(v=>v.id==='end-bearing-locating-shear')!.note).toContain(format(20*kip,'force','US',3));
   // The symmetric runway gives mirror-image least reactions: the stop at grid 4 no longer meets a crane loading RG2.

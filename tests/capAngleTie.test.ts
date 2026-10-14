@@ -1,3 +1,5 @@
+import {restraintClearances,secantStiffness} from '../src/engine/restraintClearance';
+import {braceImperfection} from '../src/engine/forcesDelivered';
 import {overPrecise} from './fixtures/reportText';
 import {describe,it,expect,beforeAll} from 'vitest';
 import {reviewOpenItem} from './review/openItems';
@@ -207,7 +209,10 @@ describe('cap tieback angle: the calculated demonstration',()=>{
  it('takes the tie force from the brace member, its stiffness from the series model, its travel from the end rotation',()=>{
   const F=check(s,'brace-member').demand!,r=capAngleResult(s)!;
   close(check(s,'cap-angle-cap-bolt').demand!,F/2+r.design.Q,1e-9);
-  close(check(s,'brace-stiffness').capacity!,capAngleBraceSystem(p)!.stiffness,1e-6);
+  // The brace stiffness check takes the series stiffness with the angle's play (sleeve length less the angle leg) taken
+  // up at the Appendix 6 brace force: the secant stiffness.
+  const play=restraintClearances(p).top.gap;expect(play).toBeGreaterThan(0);
+  close(check(s,'brace-stiffness').capacity!,secantStiffness(capAngleBraceSystem(p)!.stiffness,play,braceImperfection(p,s.designAnalysis!,s.properties!).force),1e-6);
   // Travel = θ·(d + t_w,cap − gauge) + α·L·ΔT + setting tolerance, against the 3/8 in slot travel each way.
   const ss=simpleSupportInput(p),theta=s.designAnalysis!.endRotation;
   const travel=theta*(24.3+.4-2.25)*inch+12e-6*Math.max(...p.spans)*Math.max(ss.temperatureRise,ss.temperatureFall)+ss.settingTolerance;

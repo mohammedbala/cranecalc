@@ -22,7 +22,9 @@ describe('DEMO-FOCUS-005 rev B',()=>{
  it('resolves the review failures by the revised inputs',()=>{
   for(const id of ['building-class','fatigue-cycles','crane-1-statics-runway','crane-1-statics-lifted','crane-1-statics-total','crane-1-bumper-decel','crane-1-bumper-energy','crane-1-bumper-stop','construction-notes','end-bearing-seat-fit','cap-angle-endplate-edge'])expect(check(id)?.status,id).toBe('pass');
   expect(s.checks.some(c=>c.id==='crane-1-data'||c.id==='crane-1-bumper-selection'),'supplier data complete').toBe(false);
-  expect(s.checks.some(c=>c.id==='column-torsion'&&c.status!=='not-applicable'&&(c.utilization??0)>0)).toBe(false);
+  // The crane-level strut on the girder line, at least 10 times the column's own stiffness there, leaves the column 1/11
+  // of the longitudinal force: checked as torsion and weak-axis bending.
+  expect(check('column-torsion').status).toBe('pass');expect(check('column-torsion').note).toContain('1/11');
   // No rail rotation limit: the rotation is reported for information, not checked.
   expect(check('rail-twist').status).toBe('not-applicable');
  });

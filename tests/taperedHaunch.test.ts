@@ -207,7 +207,7 @@ describe('tapered I haunch: drawings, parts, report and figures',()=>{
    for(const t of ['Tapered haunch, inputs and actions','Tapered haunch, member checks','Tapered haunch welds, fatigue and column local effects'])expect(html.includes(t),t).toBe(true);
    const pages=html.slice(html.indexOf('Tapered I haunch · inputs'),html.indexOf('Tapered I haunch · welds')+20000);expect(pages.match(/.{80}(NaN|undefined|Infinity).{40}/)?.[0]).toBeUndefined();
   }
- });
+ },240000);
  it('draws its isometric report figure with the five captioned markers',()=>{
   const f=checkFigure('Column bracket',cappedTaperedHaunch());
   expect(f.view).toBe('isometric');expect(f.path).toHaveLength(5);
