@@ -1,3 +1,4 @@
+import {haunchInput,isTaperedHaunch} from '../engine/taperedHaunchInputs';
 import {cantileverSystems,seismicBasis} from '../engine/runwaySeismic';
 import {astmSpec} from '../engine/materialSpecs';
 import {preheatBasis,constructionRequirements,enteredFabricationNote,addedSentences,cjpWelds,awsEdition} from '../engine/constructionNotes';
@@ -327,7 +328,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['WELDING','AISC N5.4 TASKS BEFORE, DURING AND AFTER WELDING; QUALIFIED WPS AND WELDERS','O / P'],
   ['NDT',`${cjpPresent?`UT 100% OF CJP GROOVE WELDS${cjpList.length?` (${cjpList.join('; ')})`:''}; `:''}MT AT FILLET TERMINATIONS ON CYCLIC DETAILS; AWS D1.1:${awsEdition} CLAUSE 8 ACCEPTANCE CRITERIA FOR CYCLICALLY LOADED CONNECTIONS FOR THE RUNWAY GIRDER WELDS${fieldWelds?' AND THE WELDS TO THE EXISTING COLUMN':''} (AIST TR-13 §5.17)`.toUpperCase(),'P'],
   ['BOLTING',`AISC N5.6 TASKS; PRETENSION VERIFICATION PER RCSC; FAYING SURFACE CLASS${d&&(tieRelease(p)||activeEndBearing(p))?'; SLEEVE LENGTHS AND SLOT TRAVEL AT SLEEVED BOLTS':''}`,'O / P'],
-  ...(p.existingColumn?.isNew&&p.existingColumn.enabled?[]:[['EXISTING STEEL','FIELD-VERIFY SIZES, CONDITION AND WELDABILITY BEFORE WORK','P']]),
+  ...(p.existingColumn?.isNew&&p.existingColumn.enabled?[]:[['EXISTING STEEL',`FIELD-VERIFY SIZES, CONDITION AND WELDABILITY BEFORE WORK${cjpToExisting(p)?'; UT THE COLUMN FLANGE FOR LAMINATIONS UNDER THE HAUNCH FLANGE CJP WELDS BEFORE WELDING (LOADED THROUGH ITS THICKNESS)':''}`,'P']]),
   ...(fieldWelds?[['FIELD WELDS TO EXISTING STEEL',`BASE METAL CONFIRMED, WPS APPROVED, PREHEAT ${(preheatBasis(p)?format(preheatBasis(p)!.governing,'temperature',u,0).toUpperCase()+' MIN.':'PER THE APPROVED WPS')}; VISUAL AND MT OF EVERY FIELD WELD TO EXISTING STEEL${columnStiffenerGeometry(p)?', INCLUDING THE COLUMN STIFFENER WELDS':''}`,'P']]:[]),
   ...(d&&columnStiffenerGeometry(p)?[['COLUMN STIFFENERS',`FIT-UP AT THE BRACKET FORCE LEVELS WITH THE CORNER CLIPS CLEAR OF THE COLUMN FILLETS${supportColumn(p).field?' (SURVEY THE COLUMN AT BOTH LEVELS FIRST)':''}; VISUAL OF EVERY STIFFENER WELD, MT OF THE FLANGE FILLETS`,'P']]:[]),
   // The rail clip base welds are cyclic attachments on the girder top plate: MT at their terminations, as the NDT row.
@@ -388,4 +389,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  svg+=`</g>`;
  // No scaled view on the cover.
  return svg+titleBlock(s,'S-00','COVER, GENERAL NOTES & DESIGN CRITERIA','NONE')+'</svg>';
+}
+/** A tapered haunch whose flanges are CJP groove welded to an existing column flange (through-thickness loading). */
+function cjpToExisting(p:CalculationSnapshot['input']){
+ const b=p.details?.bracket;
+ return !!b?.enabled&&isTaperedHaunch(b)&&haunchInput(b).flangeJoint==='cjp'&&!(p.existingColumn?.isNew&&p.existingColumn.enabled);
 }

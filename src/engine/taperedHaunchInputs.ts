@@ -82,6 +82,12 @@ export const haunchInput=(b:{haunch?:TaperedHaunchInput;seatProjection:number;re
  * flange is tb thick normal to its plane, tb / cos(alpha) on a vertical section. W, the bearing plate width across
  * the runway, places the top flange flare: it reaches the full seat width at the bearing plate edge, y = a - W/2.
  */
+/**
+ * Weld access hole in the haunch web at each CJP flange, at the column face (AISC 360-16 J1.6): length at least
+ * 1 1/2 times the web thickness and 1 1/2 in from the toe of the weld preparation, height at least the web thickness and
+ * 3/4 in, the reentrant corner rounded to 3/8 in. The flange CJPs are welded through it on continuous steel backing.
+ */
+export const weldAccessHole=(tw:number)=>({length:ceilTo(Math.max(1.5*tw,1.5*inch),inch/8),height:ceilTo(Math.max(tw,.75*inch),inch/8),radius:3/8*inch});
 export function haunchGeometry(b:Bracket,W=0){
  const h=haunchInput(b),L=b.seatProjection,s=(h.rootDepth-h.tipDepth)/L,alpha=Math.atan(s),cos=Math.cos(alpha),tbv=h.bottomThickness/cos;
  const depth=(y:number)=>h.rootDepth-s*Math.min(Math.max(y,0),L);
@@ -92,6 +98,9 @@ export function haunchGeometry(b:Bracket,W=0){
  return {input:h,L,a,hr:h.rootDepth,ht:h.tipDepth,s,alpha,cos,degrees:alpha*180/Math.PI,
   tw:h.webThickness,bt,btr,flare,tt:h.topThickness,bb:h.bottomWidth,tb:h.bottomThickness,tbv,
   joint:h.flangeJoint,flangeWeld:h.flangeWeld,webWeld:b.rootWeld,flangeWebWeld:h.flangeWebWeld,endPlate:h.endPlate??false,
+  accessHole:h.flangeJoint==='cjp'?weldAccessHole(h.webThickness):undefined,
+  /** CJP flanges: reinforcing fillet over the backgouged root, t/4 up to 3/8 in (AWS D1.1, cyclically loaded T-joints). */
+  reinforcingFillet:h.flangeJoint==='cjp'?ceilTo(Math.min(Math.max(h.topThickness,h.bottomThickness)/4,3/8*inch),inch/16):0,
   depth,
   /** Width of the top flange at y: the welded root width, flaring at 45 degrees to the seat width. */
   topWidthAt:(y:number)=>!flare||y<=flare.y0?btr:y>=flare.y1?bt:btr+2*(y-flare.y0),

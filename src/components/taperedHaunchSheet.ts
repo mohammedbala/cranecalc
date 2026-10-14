@@ -81,6 +81,11 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   if(cs)svg+=stiffenerSideEdges(cs.g,{face:0,k,Y,top:topY,bottom:botY,cls:colCls});
   svg+=rect(X(L),Y(0),L*k,tt*k,'runway-line');
   svg+=poly([[X(0),Y(-hr)],[X(L),Y(-ht)],[X(L),Y(inner(L))],[X(0),Y(inner(0))]]);
+  // Weld access holes in the web at both CJP flanges, at the column face (AISC J1.6): open to the column, rounded at the far end.
+  if(g.accessHole){const {length:hl,height:hh}=g.accessHole,r=Math.min(hh,hl)*k/2;
+   // From the flange face into the web: down under the top flange, up over the bottom flange.
+   for(const [face,dir] of [[-tt,1],[inner(0),-1]] as const){const y0=Y(face),y1=y0+dir*hh*k,x1=X(hl);
+    svg+=`<path class="runway-line" data-access-hole="1" fill="#fff" d="M${n(0)},${n(y0)}L${n(x1+r)},${n(y0)}Q${n(x1)},${n(y0)} ${n(x1)},${n(y0+dir*r)}L${n(x1)},${n(y1)}L${n(0)},${n(y1)}"/>`;}}
   if(g.endPlate)svg+=poly([[X(L),Y(-tt)],[X(Lw),Y(-tt)],[X(Lw),Y(inner(Lw))],[X(L),Y(inner(L))]]);
   else svg+=line([X(L),Y(-tt)],[X(L),Y(inner(L))],'runway-line');
   svg+=poly([[X(a-st.t/2),Y(-tt)],[X(a+st.t/2),Y(-tt)],[X(a+st.t/2),Y(inner(a+st.t/2))],[X(a-st.t/2),Y(inner(a-st.t/2))]]);
@@ -224,7 +229,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const notes=[
   `A BUILT-UP TAPERED I HAUNCH ${dim(L)} LONG, ${dim(hr)} DEEP AT THE COLUMN TAPERING TO ${dim(ht)} AT THE TIP (BOTTOM FLANGE AT ${deg}°): ${webLabel}, ${topLabel}, ${botLabel}, ${stiffLabel} AT THE GIRDER C/L${g.endPlate?`, END PL ${size(tep)}`:''}. PLATES ${Fy} MIN. YIELD.`,
   `${where} WELD THE HAUNCH TO THE ${colName} FLANGE: ${g.joint==='cjp'?'CJP GROOVE WELDS AT BOTH FLANGES':`${size(g.flangeWeld)} FILLETS ON BOTH FACES OF BOTH FLANGES`} AND ${size(g.webWeld)} FILLETS BOTH SIDES OF THE WEB. SHOP: ${size(g.flangeWebWeld)} FLANGE-TO-WEB FILLETS BOTH SIDES, CONTINUOUS; STIFFENERS FITTED TO BEAR ON THE TOP FLANGE AND WELDED TO THE WEB AND BOTH FLANGES WITH ${size(st.weld)} FILLETS BOTH SIDES.`,
-  `WELDS: ${electrodeClass(d.material.Fexx,p.units)} LOW-HYDROGEN ELECTRODE${g.joint==='cjp'?', MATCHING FILLER FOR THE CJP WELDS WITH STEEL BACKING REMOVED, ROOT BACKGOUGED AND REWELDED, UT PER S-00':''}. CONTINUOUS WELDS AS SHOWN; NO INTERMITTENT WELDS.${f?` CUT THE TOP FLANGE FLARE WITH A ${size(f.radius)} RADIUS AT THE RE-ENTRANT CORNERS AND GRIND SMOOTH.`:''}`,
+  `WELDS: ${electrodeClass(d.material.Fexx,p.units)} LOW-HYDROGEN ELECTRODE, MATCHING FILLER.${g.accessHole?` FLANGE CJP: SINGLE BEVEL ON THE HAUNCH FLANGE, 45°, ${size(6.35)} ROOT OPENING ON STEEL BACKING, WELDED THROUGH THE WEB ACCESS HOLES (${dim(g.accessHole.length)} X ${size(g.accessHole.height)}, ${size(g.accessHole.radius)} R, AISC J1.6); REMOVE THE BACKING, BACKGOUGE, REWELD AND ADD A ${size(g.reinforcingFillet)} REINFORCING FILLET; UT PER S-00.`:''} CONTINUOUS WELDS AS SHOWN; NO INTERMITTENT WELDS.${f?` CUT THE TOP FLANGE FLARE WITH A ${size(f.radius)} RADIUS AT THE RE-ENTRANT CORNERS AND GRIND SMOOTH.`:''}`,
   ...(sc.isNew?[`SHOP WELD THE HAUNCH TO THE ${sc.name} BEFORE ERECTION; INSPECT STARTS, STOPS AND TOES.`]:[
    // The base metal, WPS, preheat and load condition are stated once, in the existing building notes on S-00.
    'WELDING TO THE EXISTING COLUMN: BASE METAL CONFIRMATION, APPROVED WPS, PREHEAT AND LOAD CONDITION PER THE EXISTING BUILDING NOTES ON S-00. REMOVE PAINT, COATINGS, MILL SCALE AND RUST FROM THE COLUMN FLANGE AT THE WELDS; CLEAN TO BRIGHT METAL.'

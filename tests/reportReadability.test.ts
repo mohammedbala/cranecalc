@@ -19,7 +19,7 @@ describe('compact, readable calculation report',()=>{
  it('opens with the summary: result, specified details, the load-path figure and the governing check of each element',()=>{
   const summary=html.indexOf('Design summary'),basis=html.indexOf('1.1 Codes and design basis');
   expect(summary).toBeGreaterThan(0);expect(basis).toBeGreaterThan(summary);
-  expect(html.search(/All design checks satisfied\.|OPEN ITEMS? — REVIEW REQUIRED/)).toBeLessThan(summary);expect(html).not.toContain('NO FAILED CHECKS');
+  expect(html.search(/Demonstration analysis completed for assumed design criteria\.|All design checks within their limits for the stated design criteria\.|OPEN ITEMS? — REVIEW REQUIRED/)).toBeLessThan(summary);expect(html).not.toContain('NO FAILED CHECKS');
   expect(html.indexOf('class="load-path-figure"')).toBeGreaterThan(summary);
   expect(html.indexOf('class="summary-checks"')).toBeLessThan(basis);
   // The actual bracket, tie and girder are named on page 1.

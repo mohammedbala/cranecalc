@@ -64,12 +64,16 @@ export function openItemsBlock(tax:Taxonomy,s:CalculationSnapshot){
 }
 /** The governing check as the banner names it: its title without separators and without a repeated "fatigue". */
 const governingTitle=(t:string)=>(/fatigue/i.test(t.replace(/\s*·\s*fatigue$/i,''))?t.replace(/\s*·\s*fatigue$/i,''):t).replace(/\s*·\s*/g,', ');
-/** The pass banner: never "no failed checks" while an open item exists. */
-export function banner(tax:Taxonomy,draft=false){
+/**
+ * The pass banner: never "no failed checks" while an open item exists. A demonstration states what was done, an analysis
+ * for assumed design criteria, not a verified design; a project states that its checks are within their limits for the
+ * stated design criteria (the engineer of record's review and seal are separate).
+ */
+export function banner(tax:Taxonomy,draft=false,demonstration=false){
  const n=tax.openItems.length,g=tax.governing,gov=g?` Governing D/C = ${dcText(g.dc,2)} (${esc(g.element)}): ${esc(governingTitle(g.title))}.`:'';
  const head=draft?'<b>REVIEW DRAFT — NOT FOR ISSUE.</b> Open items include missing input (unverified); the calculation cannot be issued until they are resolved.<br/>':'';
  if(n){const kinds=[...new Set(tax.openItems.map(o=>kindLabel[o.kind].toLowerCase()))];return `<div class="banner fail">${head}<b>${n} OPEN ITEM${n>1?'S':''} — REVIEW REQUIRED, DO NOT ISSUE FOR CONSTRUCTION</b><br/>${esc(kinds.join('; '))}: listed below.${gov}</div>`;}
- return `<div class="banner"><b>All design checks satisfied.</b>${gov}</div>`;
+ return `<div class="banner"><b>${demonstration?'Demonstration analysis completed for assumed design criteria.':'All design checks within their limits for the stated design criteria.'}</b>${gov}</div>`;
 }
 /** The count of results under the summary: design checks evaluated, screened and not applicable; detailing rules and those with small margin. */
 export function countsLine(tax:Taxonomy){
