@@ -16,6 +16,8 @@ Open http://127.0.0.1:4175. After validation, **Generate output** recalculates t
 
 `.github/workflows/pages.yml` tests and builds the static site on pushes to `main`, then deploys it to GitHub Pages. Set the repository's **Settings → Pages → Source** to **GitHub Actions**. No API key, server, database, or secrets are required. Relative asset paths support both repository Pages URLs and custom domains. Only `dist` is published; source reference files, generated local reports, and private attachments are not web assets.
 
+The **Sample calcs** tab lists sample calculation packages produced with CraneCalc; each PDF and its cover thumbnail live in `public/samples` and are listed in `src/data/sampleCalcs.ts`.
+
 The static and local versions use the same calculation engine and report renderer. Invalid, incomplete, unverified and unsupported results block export; verified failed checks remain visible in exportable reports. Publishing the application does not expand its engineering scope or certify a design.
 
 ## Run

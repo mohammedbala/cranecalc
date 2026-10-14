@@ -158,3 +158,11 @@
  .check-explanation > div { grid-template-columns:80px minmax(0,1fr); }
  .worksheet-scroll .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
+/* Four worksheet views: labels stay on one line; on a phone the row scrolls sideways instead of wrapping. */
+.worksheet-toolbar nav button { white-space:nowrap; }
+@media (max-width:640px) {
+ .worksheet-toolbar { gap:10px; }
+ .worksheet-toolbar nav { gap:16px; min-width:0; overflow-x:auto; scrollbar-width:none; }
+ .worksheet-toolbar nav::-webkit-scrollbar { display:none; }
+ .worksheet-toolbar .live-state { flex:none; }
+}
