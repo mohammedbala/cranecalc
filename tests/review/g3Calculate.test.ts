@@ -13,7 +13,7 @@ describe('DEMO-FOCUS-005 girder after the G3 review fixes',()=>{
   expect(snapshot.errors).toEqual([]);
   const c=check('cap-development');
   expect(before('cap-development').utilization).toBeCloseTo(.9705,4);
-  expect(c.title).toBe('Cap end · cumulative weld force development');expect(c.utilization!).toBeCloseTo(.0647,3);expect(c.status).toBe('pass');
+  expect(c.title).toBe('Cap end · cumulative weld force development');expect(c.utilization!).toBeCloseTo(.0697,3);expect(c.status).toBe('pass');
   const full=check('cap-development-full-force');expect(full.status).toBe('not-applicable');expect(full.note).toMatch(/full length/);
  });
  it('C18: rail rotation is checked against the owner criterion entered in the fixture, citing the criteria only',()=>{
@@ -25,7 +25,7 @@ describe('DEMO-FOCUS-005 girder after the G3 review fixes',()=>{
  });
  it('C23: case 16 web compactness for positive moment and F4 flexure',()=>{
   const w=check('compact-web');expect(w.demand!).toBeCloseTo(27.70,2);expect(w.capacity!).toBeCloseTo(137.27,2);
-  expect(check('major').utilization!).toBeCloseTo(.1329,3);expect(check('major').note).toContain('F4');
+  expect(check('major').utilization!).toBeCloseTo(.1436,3);expect(check('major').note).toContain('F4');
  });
  it('D25: Iyc/Iy prints as 0.807 against 0.9',()=>{
   const c=check('cap-proportion');expect(c.demand!).toBeCloseTo(.8070,4);expect(c.capacity).toBe(.9);
@@ -42,10 +42,11 @@ describe('DEMO-FOCUS-005 girder after the G3 review fixes',()=>{
   expect(check('cap-weld-fatigue').capacity!/6.894757293168361).toBeCloseTo(Math.max(8,100*(1.5/demoFocus005().fatigue.cycles)**.167),8);
  });
  it('E36 basis: girder D/Cs after C17 / C18 (flexure, H1, shear, deflection)',()=>{
-  // Round 2 group A (M6): the top restraint at the cap tie line lowers H1 to 0.2524 / 0.2512 (0.2529 / 0.2517 at the W top flange).
+  // Round 2 group A (M6): the top restraint at the cap tie line lowered H1 to 0.2524 / 0.2512. Round 3: the ASCE 7
+  // crane-as-live combinations and the restraint play (secant restraint stiffness in the load-height M_cx) raise it to 0.332 / 0.345.
   // Peer review M2 / m11: H1 at each flange with the load-height M_cx (0.1754 at the more stressed flange with the Cb = 1 M_cx).
-  expect(check('major').utilization!).toBeLessThan(.16);expect(check('combined').utilization!).toBeCloseTo(.2524,3);expect(check('combined-bottom').utilization!).toBeCloseTo(.2512,3);
-  expect(check('shear').utilization!).toBeCloseTo(.0893,3);// Vertical deflection against L/1000: G1 (A3) puts the fixture in AIST Class B (L/600 gave 0.1355).
+  expect(check('major').utilization!).toBeLessThan(.16);expect(check('combined').utilization!).toBeCloseTo(.3316,3);expect(check('combined-bottom').utilization!).toBeCloseTo(.3447,3);
+  expect(check('shear').utilization!).toBeCloseTo(.0966,3);// Vertical deflection against L/1000: G1 (A3) puts the fixture in AIST Class B (L/600 gave 0.1355).
   expect(check('vertical').utilization!).toBeCloseTo(.1355*1000/600,3);
  });
 });

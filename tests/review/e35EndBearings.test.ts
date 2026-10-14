@@ -51,11 +51,11 @@ describe('E35 geometry: the end-bay girder runs past the grid, its bearing cente
   const r0=railLayout(demoFocus005()).rails[0],r1=railLayout(p).rails[0];
   expect((r0.start-r1.start)/inch).toBeCloseTo(6,9);expect((r1.end-r0.end)/inch).toBeCloseTo(6,9);
  });
- it('drops the seat moment at grids 1 and 6 from 27.9 to 10.5 kip-ft, below the 26.9 kip-ft of the interior grids',()=>{
+ it('drops the seat moment at grids 1 and 6 from 28.0 to 10.5 kip-ft, below the 26.9 kip-ft of the interior grids',()=>{
   const e0=seatEnds(demoFocus005()),e1=seatEnds(centered(demoFocus005()));
   expect(e0[0][0].offset/inch).toBeCloseTo(9.6,6);expect(e1[0][0].offset/inch).toBeCloseTo(3.6,6);expect(e1[5][0].offset/inch).toBeCloseTo(-3.6,6);
-  expect(seatMoment(e0[0],factors)/kft).toBeCloseTo(27.91,2);
-  for(const j of [0,5]){const m=seatMoment(e1[j],factors)/kft;expect(m).toBeCloseTo(10.47,2);expect(m).toBeLessThan(seatMoment(e1[2],factors)/kft);}
+  expect(seatMoment(e0[0],factors)/kft).toBeCloseTo(27.98,2);
+  for(const j of [0,5]){const m=seatMoment(e1[j],factors)/kft;expect(m).toBeCloseTo(10.49,2);expect(m).toBeLessThan(seatMoment(e1[2],factors)/kft);}
   expect(seatMoment(e1[2],factors)/kft).toBeCloseTo(26.93,2);expect(e1.slice(1,5)).toEqual(e0.slice(1,5));
  });
  it('centers the runway-end bolts on the web: holes 4 in each side of the grid, clear of the web by more than before',()=>{
@@ -77,19 +77,19 @@ describe('E35 supporting column (existing W14X90): weak-axis moment, H1 and tors
  it('drops My, H1 and H1 with torsion at the runway-end grids; grid 5 (crane stop at its locating seat) still governs',()=>{
   const p0=demoFocus005(),p1=centered(demoFocus005()),re=supportReactions(p0,sectionProperties(p0.section));
   const r0=existingColumnAnalysis(p0,re),r1=existingColumnAnalysis(p1,re),at=(r:typeof r0,j:number)=>r.bySupport[j];
-  // Grid 1: My 69.1 → 60.7 kip-ft, H1 0.382 → 0.351, H1 with the warping stress 1.167 → 1.136.
-  expect(at(r0,0).My!/kft).toBeCloseTo(69.08,1);expect(at(r1,0).My!/kft).toBeCloseTo(60.68,1);
-  expect(at(r0,0).U).toBeCloseTo(.3822,3);expect(at(r1,0).U).toBeCloseTo(.3512,3);
-  expect(at(r0,0).Ut!).toBeCloseTo(1.167,3);expect(at(r1,0).Ut!).toBeCloseTo(1.136,3);
-  // Grid 6 (sliding end, no torsion): My 19.5 → 7.3 kip-ft, H1 0.297 → 0.266.
-  expect(at(r0,5).My!/kft).toBeCloseTo(19.46,1);expect(at(r1,5).My!/kft).toBeCloseTo(7.30,1);
-  expect(at(r0,5).U).toBeCloseTo(.2968,3);expect(at(r1,5).U).toBeCloseTo(.2658,3);expect(at(r1,5).Ut).toBeUndefined();
+  // Grid 1: My 69.1 → 60.7 kip-ft, H1 0.386 → 0.355, H1 with the warping stress 1.171 → 1.140.
+  expect(at(r0,0).My!/kft).toBeCloseTo(69.13,1);expect(at(r1,0).My!/kft).toBeCloseTo(60.70,1);
+  expect(at(r0,0).U).toBeCloseTo(.3859,3);expect(at(r1,0).U).toBeCloseTo(.3548,3);
+  expect(at(r0,0).Ut!).toBeCloseTo(1.171,3);expect(at(r1,0).Ut!).toBeCloseTo(1.140,3);
+  // Grid 6 (sliding end, no torsion): My 19.5 → 7.3 kip-ft, H1 0.301 → 0.269.
+  expect(at(r0,5).My!/kft).toBeCloseTo(19.50,1);expect(at(r1,5).My!/kft).toBeCloseTo(7.31,1);
+  expect(at(r0,5).U).toBeCloseTo(.3005,3);expect(at(r1,5).U).toBeCloseTo(.2694,3);expect(at(r1,5).Ut).toBeUndefined();
   for(const j of [1,2,3,4])expect(at(r1,j)).toEqual(at(r0,j));
-  expect(r1.support!.seat.map(v=>Math.round(v.moment/kft*100)/100)).toEqual([10.47,26.93,26.93,26.93,26.93,10.47]);
+  expect(r1.support!.seat.map(v=>Math.round(v.moment/kft*100)/100)).toEqual([10.49,26.93,26.93,26.93,26.93,10.49]);
   // The governing values are at grid 5 (bumper force at the locating seat of bay 5, 27 in girder offset): unchanged.
   const c0=existingColumnChecks(p0,r0),c1=existingColumnChecks(p1,r1),u=(c:typeof c0,id:string)=>c.find(v=>v.id===id)!.utilization!;
   for(const id of ['column-flexure-y','column-interaction','column-torsion'])expect(u(c1,id)).toBeCloseTo(u(c0,id),9);
-  expect(u(c1,'column-torsion')).toBeCloseTo(1.175,3);expect(r1.torsion!.station/inch/12).toBeCloseTo(100,6);
+  expect(u(c1,'column-torsion')).toBeCloseTo(1.179,3);expect(r1.torsion!.station/inch/12).toBeCloseTo(100,6);
  });
 });
 
@@ -97,15 +97,16 @@ describe('E35 haunch and bearing fit (one detailed load pass per option)',()=>{
  let d0:RunwayDetailResults,d1:RunwayDetailResults,a1:DesignAnalysis,p1:ProjectInput;
  const pass=(p:ProjectInput)=>{const props=sectionProperties(p.section),c=createDetailCollector(p,props,20),a=runwayDesignAnalysis(p,props,girderStrength(p,props),40,20,c.observe);return {a,r:c.finish()};};
  beforeAll(()=>{d0=pass(demoFocus005()).r;p1=centered(demoFocus005());const x=pass(p1);d1=x.r;a1=x.a;},600000);
- it('drops the haunch root stress and torque at grids 1 and 6 (20.7 → 11.5 ksi, 19.5 → 9.8 ksi); shared grids govern at 20.4 ksi',()=>{
+ it('drops the haunch root stress and torque at grids 1 and 6 (22.4 → 12.4 ksi, 21.2 → 10.7 ksi); shared grids govern at 22.0 ksi',()=>{
   const g0=d0.taperedHaunch!.grids!,g1=d1.taperedHaunch!.grids!,at=(g:typeof g0,ft:number)=>g.find(v=>Math.abs(v.x/inch/12-ft)<1e-6)!;
-  expect(at(g0,0).normal/ksi).toBeCloseTo(20.70,1);expect(at(g1,0).normal/ksi).toBeCloseTo(11.54,1);
-  expect(at(g0,125).normal/ksi).toBeCloseTo(19.49,1);expect(at(g1,125).normal/ksi).toBeCloseTo(9.83,1);
-  expect(at(g0,0).torque/kft).toBeCloseTo(27.87,1);expect(at(g1,0).torque/kft).toBeCloseTo(11.86,1);
-  expect(at(g0,125).torque/kft).toBeCloseTo(26.13,1);expect(at(g1,125).torque/kft).toBeCloseTo(9.80,1);
-  // The review's 20.7 ksi at the root was the runway-end grid; centered, the unbalanced shared grids (one bay loaded) govern.
-  expect(d0.taperedHaunch!.strength.normal.value/ksi).toBeCloseTo(before('haunch-combined').demand!/ksi,1);
-  expect(d1.taperedHaunch!.strength.normal.value/ksi).toBeCloseTo(20.43,1);
+  expect(at(g0,0).normal/ksi).toBeCloseTo(22.35,1);expect(at(g1,0).normal/ksi).toBeCloseTo(12.37,1);
+  expect(at(g0,125).normal/ksi).toBeCloseTo(21.20,1);expect(at(g1,125).normal/ksi).toBeCloseTo(10.69,1);
+  expect(at(g0,0).torque/kft).toBeCloseTo(30.17,1);expect(at(g1,0).torque/kft).toBeCloseTo(12.73,1);
+  expect(at(g0,125).torque/kft).toBeCloseTo(28.43,1);expect(at(g1,125).torque/kft).toBeCloseTo(10.66,1);
+  // The review's 20.7 ksi at the root (TR-13 combinations; 22.4 ksi with the ASCE 7 crane-as-live envelope) was the
+  // runway-end grid; centered, the unbalanced shared grids (one bay loaded) govern.
+  expect(before('haunch-combined').demand!/ksi).toBeCloseTo(20.7,1);expect(d0.taperedHaunch!.strength.normal.value/ksi).toBeCloseTo(22.35,1);
+  expect(d1.taperedHaunch!.strength.normal.value/ksi).toBeCloseTo(22.0,1);
   for(const ft of [25,50,75,100])expect(at(g1,ft).normal).toBeCloseTo(at(g0,ft).normal,6);
  });
  it('fits the centered runway-end bearing on the 25 in haunch top flange with the 1/8 in setting tolerance',()=>{
@@ -126,8 +127,9 @@ describe('E35 full calculation with the end-bay bearings centered (one run)',()=
   expect(s.errors).toEqual([]);
   expect(c('end-bearing-seat-fit-end').status).toBe('pass');
   const g=s.detailResults!.taperedHaunch!.grids!,end=g.find(v=>v.x===0)!;
-  expect(end.normal/ksi).toBeLessThan(12);expect(end.torque/kft).toBeLessThan(12.5);
-  expect(c('haunch-combined').demand!/ksi).toBeLessThan(before('haunch-combined').demand!/ksi);
+  expect(end.normal/ksi).toBeLessThan(12.5);expect(end.torque/kft).toBeLessThan(13);
+  // The shared grids govern at 22.0 ksi, below the 22.4 ksi of the on-grid runway-end bearings (same envelope).
+  expect(c('haunch-combined').demand!/ksi).toBeCloseTo(22.0,1);
   expect(c('column-interaction').status).toBe('pass');
   expect(reportHtml(s)).toMatch(/At the runway-end grids each end-bay girder runs [^.]* past the grid so that its bearing plate, stiffeners and reaction sit over the haunch web/);
   const svg=drawingSheetSet(s).map(v=>v.svg).join('');

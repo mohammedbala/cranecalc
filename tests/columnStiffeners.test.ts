@@ -237,7 +237,7 @@ const failing=(s:CalculationSnapshot)=>s.checks.filter(c=>!['pass','not-applicab
 describe('column stiffener test projects, full calculation and drawing set',()=>{
  it('makes the capped twin-rib bracket on a W14X90 pass, its drawing set clear in US and SI',()=>{
   const bare=calculate(cappedTwinRibW14X90(false));expect(bare.errors).toEqual([]);
-  expect(failing(bare).map(c=>c.id)).toEqual(['bracket-column-flange']);expect(failing(bare)[0].utilization).toBeCloseTo(1.376,3);
+  expect(failing(bare).map(c=>c.id)).toEqual(['bracket-column-flange']);expect(failing(bare)[0].utilization).toBeCloseTo(1.498,3);
   const s=calculate(cappedTwinRibW14X90(true));expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
   expect(failing(s).map(c=>c.id)).toEqual([]);
   expect(s.checks.find(c=>c.id==='bracket-column-flange')!.status).toBe('not-applicable');

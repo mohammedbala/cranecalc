@@ -86,7 +86,8 @@ describe('Concurrent design, fatigue and export safety',()=>{
   // Supplied 16 kN pattern is scaled to the 27.2 kN minimum, so the adopted design value passes.
   expect(c.status).toBe('pass');expect(c.demand).toBe(27200);expect(c.capacity).toBe(27200);// The governing wheel is A2c (2c with the crane dead load as ASCE 7 live load), above 2c's 1.2·42 + 1.6·68 + 1.6·0.25·110 kN.
   expect(a.wheelLoad).toBeCloseTo(1.6*(42000+68000+.25*110000),5);
-  expect(a.governing.interaction.id).toBe('LRFD 2b');expect(a.governing.interaction.axial).toBe(1.6*22000);expect(a.governing.moment.id).toBe('LRFD 2c');
+  // The ASCE 7 readings of 2b and 2c (crane dead load as live) govern.
+  expect(a.governing.interaction.id).toBe('LRFD A2b');expect(a.governing.interaction.axial).toBe(1.6*22000);expect(a.governing.moment.id).toBe('LRFD A2c');
   expect(a.interaction).toBeGreaterThan(1);expect(a.equilibriumError).toBeLessThan(1e-7);expect(a.convergence).toBeLessThan(.01);expect(a.meshConvergence).toBeLessThan(.01);
   p.cranes[0].includesImpact=true;p.cranes[0].wheels.forEach(w=>w.loaded*=1.25);const b=calculate(p).designAnalysis!;expect(b.moment).toBeCloseTo(a.moment,4);expect(b.fatigueMax-b.fatigueMin).toBeCloseTo(a.fatigueMax-a.fatigueMin,6);
   expect(s.eligible).toBe(false);expect(s.checks.find(c=>c.id==='torsion')?.status).toBe('unsupported');

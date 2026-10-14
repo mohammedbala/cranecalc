@@ -64,7 +64,7 @@ describe('C2 · one force system per W-stub flange at the column face',()=>{
  it('with column stiffeners: J10.1-J10.4 for information, the plates carry P/2 ± M_f/g with no unstiffened strength credited',()=>{
   const p=cappedStubW14X90(true),{r,checks}=stubRun(p),S=r.strength,g=columnStiffenerGeometry(p)!,gauge=stiffenerGauge(g);
   for(const id of ['column-flange','column-yield-top','column-yield-bottom','column-crippling']){const c=byId(checks,'wbracket-'+id);
-   expect(c.status,id).toBe('not-applicable');expect(c.note).toMatch(/^Unstiffened J10\.\d, not governing \(the column is stiffened at this level\): R_u = /);expect(c.note).toContain('half-depth column stiffener pair');}
+   expect(c.status,id).toBe('not-applicable');expect(c.note).toMatch(/^Unstiffened J10\.\d, not governing \(the column is stiffened at this level\): R_u = /);expect(c.note).toContain('full-depth column stiffener pair');}
   // The same R_u in the notes at each level.
   expect(ru(byId(checks,'wbracket-column-flange').note)).toBe(ru(byId(checks,'wbracket-column-yield-top').note));
   expect(ru(byId(checks,'wbracket-column-yield-bottom').note)).toBe(ru(byId(checks,'wbracket-column-crippling').note));
@@ -106,9 +106,9 @@ describe('C2 · the W-stub column stiffeners in the report (one calculate)',()=>
   expect(text).toMatch(/Each stub flange delivers an axial force \(T = M\/\(d − t f \) \+ N\/2 at the top/);expect(text).toMatch(/Unstiffened, the existing column would take each as one concentrated force/);
   expect(text).toMatch(/top, T = [\d.]+ kip with M f = [\d.]+ kip-ft: R u = T \+ 3M f \/b = /);
   expect(text).toMatch(/Column stiffeners required\. Unstiffened, .*web local yielding \(J10\.2\) is exceeded at (the top flange|both flange levels) \(D\/C 1\.\d\d/);
-  expect(text).toMatch(/Half-depth stiffener pairs \(2 pairs PL/);expect(text).toMatch(/carry each flange's full force system with no credit for the unstiffened column/);
+  expect(text).toMatch(/Full-depth stiffener pairs \(2 pairs PL/);expect(text).toMatch(/carry each flange's full force system with no credit for the unstiffened column/);
   expect(text).toMatch(/Worked: unstiffened J10 at the stub flanges \(basis for the stiffener decision\)/);
-  expect(text).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", half depth, one pair at each stub flange; 7\/16" fillets/);
+  expect(text).toMatch(/Column stiffeners 2 pairs PL 3\/4" × 6 3\/4", full depth, one pair at each stub flange; 7\/16" fillets/);
   // The J10 table: the same R_u at a level, stiffened, not governing.
   const top=check('wbracket-column-flange'),yt=check('wbracket-column-yield-top');expect(ru(top.note)).toBe(ru(yt.note));
   expect(text).toMatch(/Top flange J10\.1 flange local bending (\d+) kip [\d.]+ kip [\d.]+ (OK|Exceeded) Top flange J10\.2 web local yielding \1 kip/);

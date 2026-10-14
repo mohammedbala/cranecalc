@@ -74,7 +74,7 @@ describe('Seismic design of new freestanding runway columns',()=>{
   expect(t).toContain('RISK CATEGORY II, IE 1; SS 0.19, S1 0.05; SITE CLASS D; SDS 0.2, SD1 0.08;');
   expect(t).toContain('SEISMIC DESIGN CATEGORY B');
   expect(t).toContain('EQUIVALENT LATERAL FORCE PROCEDURE');
-  expect(t).toMatch(/V = 1\.45 KIP PER\s+COLUMN/);expect(t).toMatch(/V = 1\.78 KIP PER\s+RUNWAY LINE/);
+  expect(t).toMatch(/V = 1\.5 KIP PER\s+COLUMN/);expect(t).toMatch(/V = 1\.86 KIP PER\s+RUNWAY LINE/);
   expect(t).toContain('WIND (NEW COLUMNS)');expect(t).toContain('REDUNDANCY 1;');
   // The Greek rho is not upper-cased into a P-like capital.
   expect(t).not.toContain('Ρ');

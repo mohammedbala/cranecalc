@@ -42,8 +42,8 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   for(const c of [...top,...bottom]){expect(c.status,c.id).toBe('not-applicable');expect(c.note).toMatch(/^Unstiffened J10\.\d, not governing \(the column is stiffened at this level\): R_u = /);}
   // One R_u per level: T + 3M_f/b at the top, C cos α + 3M_f/b at the bottom; before, J10.1 used 132 kip and J10.2 used T = 44.3 kip.
   expect(ru(top[0].note)).toBe(ru(top[1].note));expect(ru(bottom[0].note)).toBe(ru(bottom[1].note));
-  expect(ru(top[0].note)).toBeCloseTo(S.pull.value/kip,0);expect(S.pull.value/kip).toBeCloseTo(132.4,0);
-  expect(S.push.value/kip).toBeCloseTo(121.2,0);
+  expect(ru(top[0].note)).toBeCloseTo(S.pull.value/kip,0);expect(S.pull.value/kip).toBeCloseTo(144.3,0);
+  expect(S.push.value/kip).toBeCloseTo(133.4,0);
   // The flange force system: T = 44.4 kip (with the wing stiffeners' weight) with M_f = 34.3 kip-ft (DG9 flange bending
   // of the torque), R_u = T + 3M_f/b.
   const b=14*inch;expect(Math.abs(S.pull.P!)/kip).toBeCloseTo(44.45,1);expect(Math.abs(S.pull.M!)/kft).toBeCloseTo(34.25,1);
@@ -60,7 +60,7 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   const up=check('haunch-colstiff-upper'),low=check('haunch-colstiff-lower');
   expect(up.equation).toContain('R_{st}=\\frac{T}{2}\\pm\\frac{M_f}{g}');expect(low.equation).toContain('\\frac{C}{2}\\pm\\frac{M_f}{g}');
   const T=S.stiffUpperT;expect(up.demand).toBeCloseTo(Math.abs(T.P!)/2+Math.abs(T.M!)/gauge,3);
-  expect(up.demand!/kip).toBeCloseTo(79.3,0);expect(low.demand!/kip).toBeCloseTo(72.1,0);
+  expect(up.demand!/kip).toBeCloseTo(86.4,0);expect(low.demand!/kip).toBeCloseTo(79.4,0);
   // One plate in tension: J4.1 yielding at the clipped contact, 0.90 Fy (b_s − c) t_s = 0.9(50)(6.0)(0.75) = 202.5 kip.
   expect(up.capacity!/kip).toBeCloseTo(.9*50*6*.75,1);expect(up.status).toBe('pass');expect(low.status).toBe('pass');
   // Welds on one plate (two throats) and the web shear along them carry the larger plate force.
@@ -77,7 +77,7 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   expect(j10).toHaveLength(8);expect(j10[0]).toMatch(/^\\text\{Top flange \(/);expect(j10[1]).toBe('R_u=T+\\frac{3M_f}{b}');expect(j10[2]).toMatch(/^\\quad=/);expect(j10[3]).toContain('6.25F_{yf}t_f^2');expect(j10[4]).toMatch(/^\\text\{Bottom flange \(/);expect(j10[7]).toContain('J10.3');
   expect(workedSteps(s,check('haunch-column-panel'),tx as never)?.[0]).toContain('\\max(T,\\ C\\cos\\alpha)');
   expect(text).toMatch(/Worked: unstiffened J10 at the haunch flanges \(basis for the stiffener decision\)/);
-  expect(text).toMatch(/Column stiffeners required\. Unstiffened, web local yielding \(J10\.2\) is exceeded at both flange levels \(D\/C 1\.32 top, 1\.20 bottom; k = t ?f ?, no rolled-fillet credit for the existing column; with the catalog k ?des = 1\.31 in, D\/C 0\.\d\d top, 0\.\d\d bottom\)/);expect(text).toMatch(/J10\.5 and J10\.7 do not apply/);
+  expect(text).toMatch(/Column stiffeners required\. Unstiffened, flange local bending \(J10\.1\) is exceeded at the top flange \(D\/C 1\.02\); web local yielding \(J10\.2\) is exceeded at both flange levels \(D\/C 1\.44 top, 1\.32 bottom; k = t ?f ?, no rolled-fillet credit for the existing column; with the catalog k ?des = 1\.31 in, D\/C 0\.\d\d top, 0\.\d\d bottom\)/);expect(text).toMatch(/J10\.5 and J10\.7 do not apply/);
  });
 });
 
@@ -86,7 +86,7 @@ describe('C4 · forces delivered to the building columns',()=>{
  it('gives per-grid concurrent sets with the strong-axis V·e and the weak-axis seat moment, not the girder torque',()=>{
   expect(d.grids.map(g=>g.grid)).toEqual([1,2,3,4,5,6]);expect(d.e!/inch).toBeCloseTo(33,6);
   const maxV=d.grids[2].sets.find(x=>x.label.startsWith('max V'))!;
-  expect(maxV.V/kip).toBeCloseTo(26.5,1);expect(maxV.Mx!/kft).toBeCloseTo(26.5*33/12,0);expect(Math.abs(maxV.My)/kft).toBeCloseTo(18.5,1);
+  expect(maxV.V/kip).toBeCloseTo(29.0,1);expect(maxV.Mx!/kft).toBeCloseTo(29.04*33/12,0);expect(Math.abs(maxV.My)/kft).toBeCloseTo(20.4,1);
   // The girder torque about its shear center (2.11 kip-ft before) is not the seat moment.
   const torque=Math.max(...s.detailResults!.interfaces.map(v=>Math.abs(v.torque)));
   expect(Math.abs(maxV.My)).toBeGreaterThan(5*torque);
@@ -109,7 +109,9 @@ describe('C4 · forces delivered to the building columns',()=>{
 describe('M5 · the existing column check states its conditions',()=>{
  it('is conditional on a braced frame next to its D/C and in the matrix',()=>{
   const c=check('column-interaction');expect(c.title).toMatch(/braced frame assumed/);expect(c.note).toMatch(/^Conditional on a braced \(non-sway\) frame/);
-  expect(page1).toMatch(/combined axial and flexure \(H1\), braced frame assumed/);
+  // Page 1 names the column element as conditional; its governing check is the torsion from the share the strut leaves it.
+  expect(page1).toMatch(/Existing column \(conditional\) Existing column, torsion from the longitudinal force offset/);
+  expect(text).toMatch(/Conditional result\. The column check of this section holds with these restraints/);
   const col=section('Existing column');
   expect(col).toMatch(/Braced frame assumed \(pinned base, braced top, B1 only\)\. If the frame is a sway frame, repeat with B2 from the frame analysis/);
   expect(col).toMatch(/L ?cx = 312 in, base to the braced top\. Weak-axis, torsional and lateral-torsional buckling use 120 in, the surveyed unbraced length of the inner flange, which receives the bracket \(the girts at 96 in brace the outer flange only\)/);
@@ -128,8 +130,8 @@ describe('M6 · the tie design force and the restraint at the tie line',()=>{
  it('models the top restraint at the tie plate line and derives F = H + P_br on the page',()=>{
   const g=capAngleGeometry(p)!;expect(capTieLine(p)!/inch).toBeCloseTo(13.9+.716+.375/2,2);expect(g.plate.zc/inch).toBeCloseTo(.1875,4);
   const A6=braceImperfection(p,s.designAnalysis!,s.properties!),r=s.detailResults!;
-  // P_br = 0.02(122.3 × 12)/13.42 + 0.01(10.0) = 2.19 + 0.10 = 2.29 kip; stiffness 5.21 kip/in required.
-  expect(A6.force/kip).toBeCloseTo(2.29,2);expect(A6.stiffness/(kip/inch)).toBeCloseTo(5.21,2);
+  // P_br = 0.02(134.0 × 12)/13.42 + 0.01(10.0) = 2.40 + 0.10 = 2.50 kip (A2c moment); stiffness 5.68 kip/in required.
+  expect(A6.force/kip).toBeCloseTo(2.50,2);expect(A6.stiffness/(kip/inch)).toBeCloseTo(5.68,2);
   expect(check('brace-member').demand).toBeCloseTo(r.demands.brace+A6.force,6);
   // The analysis force per grid (all girder ends) and per girder end (one tie); the restraint at the tie line lowers H from 4.38 kip.
   expect(r.demands.brace/kip).toBeLessThan(4.38);expect(r.demands.braceEnd!).toBeLessThanOrEqual(r.demands.brace*(1+1e-9));
@@ -149,7 +151,7 @@ describe('M10 · the responsibility matrix',()=>{
   expect(m).toMatch(/Item What is needed Acceptance criterion Force and location delivered Responsible party/);
   for(const re of [/frame type/,/10-year wind \(TR-13/,/rail gauge/,/Runway seismic/,/alteration evaluation/,/Crane-level strut on the girder line/,/Crane data/,/Rail and crane wheels/,/Opposite runway/,/Existing column survey/,/Load test at 125%/])expect(item(re),String(re)).toBeDefined();
   expect(item(/10-year wind \(TR-13/)!.criterion).toMatch(/H\/400 or 2 in.*H = 232 in.*limit 0\.58 in/);
-  expect(item(/rail gauge/)!.forces).toMatch(/Column alone, runway dead load plus static crane: \+0\.070? in \(7% of the limit\)\. Frame spread: by others\./);
+  expect(item(/rail gauge/)!.forces).toMatch(/Column alone, runway dead load plus static crane: \+0\.073 in \(7% of the limit\)\. Frame spread: by others\./);
   expect(item(/Crane data/)!.needed).toMatch(/s = 0\.5.*0\.9 trolley factor/);
   expect(item(/Crane-level strut/)!.needed).toMatch(/the existing column check relies on it/);expect(item(/Crane-level strut/)!.forces).toMatch(/crane stop 10\.0 kip at grids 1 and 5/);
   expect(item(/Load test/)!.criterion).toMatch(/12\.2 kip per wheel ≤ the design wheel load 13\.6 kip/);

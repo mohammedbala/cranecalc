@@ -172,7 +172,7 @@ describe('revision identity and consistency (m1–m9)',()=>{
   for(const svg of sheets){expect(svg).toContain('REVISION: B');expect(svg).not.toContain('CURRENT OUTPUT');expect(svg).not.toMatch(/>P1</);}
  });
  it('names each reaction once (m2) and states the deflection limit that governs (m3)',()=>{
-  expect(body).toMatch(/ΣR u = 26\.5 kip per grid/);
+  expect(body).toMatch(/ΣR u = 29\.0 kip per grid/);
   expect(body).toMatch(/the full grid reaction, used for one girder end/);
   expect(body).not.toContain('1.4 LRFD / 1.0 ASD');
   expect(body).toContain('vertical L/1000 = 0.30 in (AIST Class B governs); lateral L/400');
@@ -193,7 +193,7 @@ describe('revision identity and consistency (m1–m9)',()=>{
   const s03=sheets.find(v=>v.includes('GOVERNING STOP CHECK'))!.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
   expect(s03).toMatch(/GOVERNING STOP CHECK GIRDER TOP FLANGE · THICKNESS FOR NO PRYING: D\/C 0\.68 \(THICKNESS RATIO\)/);
   // The 0.78 of the cap tieback is its slot travel (a movement check), not strength; the sleeves govern strength.
-  expect(s03).toContain('MAX. D/C 0.77 STRENGTH, 0.78 SLOT TRAVEL, 0.23 FATIGUE');
+  expect(s03).toContain('MAX. D/C 0.77 STRENGTH, 0.80 SLOT TRAVEL, 0.23 FATIGUE');
   expect(sheets.join('')).not.toContain('CAP-CS-02');
   expect(body).toMatch(/Bumper, deceleration at 50% speed Peak deceleration at 50% of the rated speed 2\.08 ft\/s² against 16 ft\/s²[^]*?2\.08 ft\/s²/);
   expect(body).toMatch(/Energy at 100% speed W ?E ?v ?²\/2g = 0\.31 kip-ft \(W ?E = 7\.\d+ kip\)/);
@@ -211,7 +211,7 @@ describe('check results CSV (m13)',()=>{
   const tax=buildTaxonomy(s,summaryElements(s.input)),csv=checksCsv(s,tax).trim().split('\n'),head=csv[0].split(',');
   expect(head).toContain('case_name');expect(csv.join('\n')).not.toContain('SI internal');
   const row=(id:string)=>{const r=csv.find(v=>v.startsWith(id+','))!;return r;};
-  expect(row('cap-angle-slot-travel')).toMatch(/,0\.29,0\.375,0\.78,length,in,/);
+  expect(row('cap-angle-slot-travel')).toMatch(/,0\.3,0\.375,0\.8,length,in,/);
   expect(row('crane-1-side')).toMatch(/,1\.25,2,0\.63,force,kip,/);
   const internal=checksCsv(s,tax,{internal:true});expect(internal).toContain('SI internal (N, mm, MPa)');
   expect(csv).toHaveLength(s.checks.length+1);

@@ -62,6 +62,10 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
    // checks (manufacturer data not entered in this project, so they are unverified); the RC points are rail clip base welds.
    railKeepers=/^rail-(keeper|anchor)-|^rail-flange-local$/,
    roundA=/^(haunch-column-(flange|yield-top|yield-bottom|crippling|sidesway|panel)|haunch-colstiff-.+|brace-member|cap-angle-.+|end-bearing-.+|stiffener-(combined-weld|fatigue|lateral-flexure|weld-fatigue)|rail-head|rail-twist|torsion-(normal|shear|stability)|detail-equilibrium)$/;
-  for(const b of demoFocus005Before().checks){if(changed.has(b.id)||keeperDetail.test(b.id)||roundA.test(b.id)||railKeepers.test(b.id))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
+  // Peer review round 3 (load basis): the ASCE 7 crane-as-live combinations A2b / A2c, the crane at stop contact, traction
+  // through the rail string, the restraint play and the new-steel dead load move every strength, reaction and movement
+  // check; the fatigue and detailing checks, which none of them touch, are still compared one by one.
+  const loadBasis=(c:{group:string})=>!['Fatigue','Detailing'].includes(c.group);
+  for(const b of demoFocus005Before().checks){if(changed.has(b.id)||keeperDetail.test(b.id)||roundA.test(b.id)||railKeepers.test(b.id)||loadBasis(b))continue;const a=byId(b.id);expect(a,b.id).toBeDefined();expect(a!.status,b.id).toBe(b.status);if(b.utilization!==undefined)expect(Math.abs(a!.utilization!-b.utilization),b.id).toBeLessThanOrEqual(1e-3*Math.max(1,b.utilization));}
  });
 });

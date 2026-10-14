@@ -67,10 +67,12 @@ describe('girder-mounted runway end stops',()=>{
   expect(lrfd8.positions.every(o=>[left,right].some(t=>Math.abs(o-t)<1e-6))).toBe(true);
   expect(demo.designAnalysis!.axial).toBeCloseTo(20*kip,3);expect(demo.designAnalysis!.governing.axial!.id).toMatch(/LRFD (8|10-B)/);
   expect(demo.checks.find(v=>v.id==='end-bearing-locating-shear')!.note).toContain(format(20*kip,'force','US',3));
-  // The symmetric runway gives mirror-image least reactions: the stop at grid 4 no longer meets a crane loading RG2.
+  // The symmetric runway gives mirror-image least reactions. At stop contact the crane stands on the end bay, so the stop
+  // case no longer gives the least reaction: that is the traction carried through the floating rail string to the end
+  // stop (1.6 × 4 kip) with the crane off the end bay, LRFD 10-T.
   const f=demo.detailResults!.bracketForces!;
-  expect(f[2].minVertical.vertical).toBeCloseTo(f[1].minVertical.vertical,6);expect(f[2].minVertical.vertical/kip).toBeCloseTo(3.47,2);
-  expect(f[2].minVertical.combination).toBe('LRFD 10-B');expect(f[2].minVertical.longitudinal).toBeCloseTo(20*kip,3);
+  expect(f[2].minVertical.vertical).toBeCloseTo(f[1].minVertical.vertical,6);expect(f[2].minVertical.vertical/kip).toBeCloseTo(5.65,2);
+  expect(f[2].minVertical.combination).toBe('LRFD 10-T');expect(f[2].minVertical.longitudinal).toBeCloseTo(1.6*4*kip,3);
   expect(sideReactions(f[2].minVertical).left).toBeCloseTo(sideReactions(f[1].minVertical).right!,6);
  });
  it('flags bolts that clash with the bearing stiffeners or the face plate',()=>{
