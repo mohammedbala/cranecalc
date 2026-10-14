@@ -303,7 +303,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  // the sheet already states (materials table, general notes, the generated requirement) is left out.
  if(d){
   const steel=addedSentences(enteredFabricationNote(p,'steel'),written.slice(materialsFrom),true).join(' ');
-  const welding=items('welding').filter(v=>!(existing&&onExisting&&existingWeldNote(p).length&&/^Field welds to the existing column/.test(v)));
+  const welding=items('welding').filter(v=>!(existing&&onExisting&&existingWeldNote(p).length&&/^Field welds to the existing column/.test(v))&&!/^Haunch flange CJPs/.test(v));
   // The rail joints and the rail anchorage are stated in full once, on their details; the bolting note points there.
   const bolting=items('bolting').map(v=>/^Rail joints:/.test(v)?`Rail joints: ${railJointType(p)==='tight'?'tight':'open'} joints, bolts pretensioned and re-tightened per ${detailRef(detailTitles.railJoint)}; rail anchorage per ${detailRef(detailTitles.railLayout)}.`:v);
   // An entered sentence whose words the bolting statements on this sheet (this note, the general notes and the

@@ -57,7 +57,7 @@ export interface ConstructionNote {key:'bolting'|'welding'|'inspection'|'erectio
  */
 export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
  const d=p.details;if(!d)return [];
- const tight=railJointType(p)==='tight',cjp=cjpWelds(p),heat=preheatBasis(p),existing=weldsToExistingColumn(p);
+ const tight=railJointType(p)==='tight',cjp=cjpWelds(p),haunchCjp=!!d.bracket?.enabled&&usesTaperedHaunch(p)&&haunchInput(d.bracket).flangeJoint==='cjp',onExisting=!(p.existingColumn?.isNew&&p.existingColumn.enabled),heat=preheatBasis(p),existing=weldsToExistingColumn(p);
  const bolting=[
   runwayBoltingBasis,
   ...(activeEndBearing(p)||capAngleGeometry(p)?['Bolts in slotted sliding plies are pretensioned against steel sleeves so the slotted ply is not clamped; plate washers cover the slots.']:[]),
@@ -65,11 +65,13 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
    :'Rail joints: open joints with the expansion gap shown (project choice); joint bolts re-tightened after 30 and 90 days of crane operation.'];
  const welding=[
   `E70XX low-hydrogen weld metal, ${awsCode}, cyclically loaded provisions (Clause 4 Part C); qualified or prequalified WPS and qualified welders.`,
-  ...(existing?[`Field welds to the existing column: base metal confirmed before welding (AISC 360-16 Appendix 5.2.3: mill certificates or chemical analysis), a WPS approved by the engineer of record for that steel, ${heat?heat.text:'preheat per AWS D1.1 Table 5.8'}; weld with the crane out of service (${awsCode} Clause 11).`]:[])];
+  ...(existing?[`Field welds to the existing column: base metal confirmed before welding (AISC 360-16 Appendix 5.2.3: mill certificates or chemical analysis), a WPS approved by the engineer of record for that steel, ${heat?heat.text:'preheat per AWS D1.1 Table 5.8'}; weld with the crane out of service (${awsCode} Clause 11).`]:[]),
+  ...(haunchCjp?[`Haunch flange CJPs to the column flange: single-bevel groove on the haunch flange, on steel backing, welded through weld access holes in the haunch web (AISC 360-16 J1.6); backing removed, root backgouged and rewelded, reinforcing fillet (${awsCode}, cyclically loaded T-joints). Details on the haunch sheet.`]:[])];
  const inspection=[
   'Visual inspection of every weld (AISC 360-16 N5.4) and of every bolted joint; verify pretension and faying surfaces per the RCSC Specification (N5.6).',
   `Runway girder welds${existing?' and the welds to the existing column':''}: ${awsCode} Clause 8 acceptance criteria for cyclically loaded nontubular connections (AIST TR-13 §5.17).`,
   ...(cjp.length?[`100% UT of all CJP groove welds (${cjp.join('; ')}) to the cyclically loaded acceptance criteria of ${awsCode} 8.13.2.`]:[]),
+  ...(haunchCjp&&onExisting?['UT of the existing column flange for laminations under the haunch flange CJP welds before welding (the flange is loaded through its thickness).']:[]),
   'MT at the terminations of fillet welds on cyclically loaded details and at repaired welds.',
   'Record the baseline rail and connection condition before commissioning.'];
  const erection=[

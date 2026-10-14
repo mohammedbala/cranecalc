@@ -89,6 +89,10 @@ describe('G4 · B15, D28, D29, D32 construction requirements',()=>{
  it('requires AWS D1.1 cyclic acceptance criteria and 100% UT of the CJP welds',()=>{
   expect(cjpWelds(p0)).toEqual(['girder bearing stiffeners to the W top flange','haunch flanges to the existing column flange (field)']);
   expect(text).toMatch(/100% UT of all CJP groove welds/);expect(text).toMatch(/cyclically loaded nontubular connections \(AIST TR-13 §5\.17\)/);
+  // The haunch flange joint is defined (access holes, backing removed, backgouge, reinforcing fillet) and the existing
+  // column flange, loaded through its thickness, is scanned for laminations first.
+  expect(text).toMatch(/weld access holes in the haunch web \(AISC 360-16 J1\.6\); backing removed, root backgouged and rewelded, reinforcing fillet/);
+  expect(text).toMatch(/UT of the existing column flange for laminations under the haunch flange CJP welds before welding/);
  });
  it('flags the entered notes that contradict them',()=>{
   const bad=supersededFabricationNotes(p0);

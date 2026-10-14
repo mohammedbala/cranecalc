@@ -623,7 +623,7 @@ const statusText=statusLabel;
    ['Projection L / face to runway center',`${f(g.L)} / ${f(g.a)}`,'Root / tip depth, slope',`${f(g.hr)} / ${f(g.ht)}, ${deg}°`],
    ['Web',`${f(g.tw)}`,'Top flange (seat)',`${f(g.tt)} × ${f(g.bt)}${g.flare?`, ${f(g.btr)} at the column, 45° flare from ${f(g.flare.y0)}`:''}`],
    ['Bottom flange',`${f(g.tb)} × ${f(g.bb)}`,'Bearing stiffeners',st.wing?`2 wing PL ${f(st.t)} × ${f(st.top)} under the seat, tapered to ${f(st.width)} on the bottom flange, ${f(st.weld)} fillets, at the girder web line`:`2 PL ${f(st.t)} × ${f(st.width)}, ${f(st.weld)} fillets, at the girder web line`],
-   ['Flanges to column',g.joint==='cjp'?'CJP groove welds':`${f(g.flangeWeld)} fillets both faces`,'Web to column / flanges to web',`${f(g.webWeld)} / ${f(g.flangeWebWeld)} fillets both sides`],
+   ['Flanges to column',g.joint==='cjp'?`CJP groove welds: single bevel, 45°, on backing, through ${f(g.accessHole!.length)} × ${f(g.accessHole!.height)} weld access holes (J1.6); backing removed, backgouged, ${f(g.reinforcingFillet)} reinforcing fillet`:`${f(g.flangeWeld)} fillets both faces`,'Web to column / flanges to web',`${f(g.webWeld)} / ${f(g.flangeWebWeld)} fillets both sides${g.accessHole?', the web weld between the access holes':''}`],
    ['Plates Fy / Fu',f(d.material.Fy,'stress')+' / '+f(d.material.Fu,'stress'),'Tip end plate',g.endPlate?`${f(st.t)}`:'None'],
    ['Column d / bf',f(c.depth)+' / '+f(c.width),'Column tf / tw',f(c.flangeThickness)+' / '+f(c.webThickness)],
    ['Column Fy / Fu',f(c.Fy,'stress')+' / '+f(c.Fu,'stress'),'Existing factored column axial',f(c.axialDemand,'force')],

@@ -173,11 +173,14 @@ describe('tapered I haunch: drawings, parts, report and figures',()=>{
   const dim=(v:number)=>drawingLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
   for(const t of [dim(h.L),dim(h.a),dim(h.hr),dim(h.ht),dim(h.bt),dim(h.btr),dim(h.bb),`WEB PL ${size(h.tw)}`,`TOP FL. PL ${size(h.tt)} X ${dim(h.bt)}`,`BOTTOM FL. PL ${size(h.tb)} X ${dim(h.bb)}`,...(st.wing?[`2 WING STIFF. PL ${size(st.t)} X ${size(st.top)}`,`TAPERED TO ${size(st.width)}`]:[`2 STIFF. PL ${size(st.t)} X ${size(st.width)}`]),size(h.webWeld).replaceAll('"',''),size(h.flangeWebWeld).replaceAll('"','')])expect(svg,t).toContain(t);
   expect(svg).toContain('data-weld="cjp"');expect(svg).toContain('data-weld-location="field"');
+  // CJP flanges: weld access holes cut in the web at both flanges (AISC J1.6), and the joint stated in the notes.
+  const hole=h.accessHole!;expect(hole.length/inch).toBeCloseTo(1.5,6);expect(hole.height/inch).toBeCloseTo(.75,6);expect(hole.radius/inch).toBeCloseTo(.375,6);
+  expect(svg.match(/data-access-hole="1"/g)?.length).toBe(2);
   const bolts=taperedHaunchParts(p).bolts.filter(b=>b.grid==='interior').length;expect(svg).toContain(`${bolts} - `);
   // The bracket sheet as issued, notes included, in US and SI.
   for(const units of ['US','SI'] as const){
    const sheet=drawingSheetSet({...s,input:{...s.input,units}}).find(v=>v.svg.includes('data-view="tapered-haunch-elevation"'))!;
-   expect(sheet.svg).toContain('HAUNCH FABRICATION');expect(sheet.svg.match(/.{60}(NaN|undefined|Infinity).{30}/)?.[0]).toBeUndefined();
+   expect(sheet.svg).toContain('HAUNCH FABRICATION');if(units==='US')expect(sheet.svg.replace(/<[^>]+>/g,' ').replaceAll('&quot;','"').replace(/\s+/g,' ')).toContain(`WEB ACCESS HOLES (1 1/2" X 3/4", 3/8" R, AISC J1.6)`);expect(sheet.svg.match(/.{60}(NaN|undefined|Infinity).{30}/)?.[0]).toBeUndefined();
   }
  });
  it('exports the plate, weld and bolt geometry in mm for the isometric figures',()=>{
