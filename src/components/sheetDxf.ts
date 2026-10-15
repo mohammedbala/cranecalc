@@ -2,7 +2,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {defaultFraming,type FramingSettings} from './framingSettings';
 import {drawingSheetSet} from './planSheet';
 import {sheetFormat} from './sheetGraphics';
-import {sheetEntities,sheetLayers,type Pt,type Units} from './svgEntities';
+import {sheetEntities,sheetLayers,type Entity,type LayerDef,type Pt,type Units} from './svgEntities';
 export {sheetEntities,sheetLayers} from './svgEntities';
 
 /**
@@ -17,10 +17,26 @@ const round=(v:number)=>Number(v.toFixed(5));
 const symbols:Record<string,string>={'·':'-','\u2212':'-','×':'X','°':'%%d','±':'%%p','Ø':'%%c','⌀':'%%c','§':'SEC. ','–':'-','—':'-','≤':'<=','≥':'>=','’':"'",'‘':"'",'“':'"','”':'"','′':"'",'″':'"'};
 const dxfText=(t:string)=>t.replace(/[\r\n\u0000-\u001f]/g,' ').replace(/%%/g,'%%%').replace(/[^\x20-\x7e]/g,c=>symbols[c]??`\\U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}`);
 
-/** One AC1015 DXF holding the given sheets side by side (2 in / 50 mm apart). */
-export function sheetsDxf(sheets:{svg:string}[],units:Units){
+/** A DXF entity: the sheet entities plus arcs (counterclockwise, degrees). */
+export type DxfEntity=Entity|{type:'arc';layer:string;center:Pt;radius:number;start:number;end:number};
+/** A DXF layer state: off (hidden) and locked layers keep their geometry. */
+export type DxfLayer=LayerDef&{off?:boolean;locked?:boolean};
+
+/**
+ * One AC1015 DXF holding the given sheets side by side (2 in / 50 mm apart). A sheet may bring its own entities
+ * (an edited sheet from the CAD editor) in place of its SVG.
+ */
+export function sheetsDxf(sheets:{svg:string;entities?:DxfEntity[];layers?:Record<string,DxfLayer>}[],units:Units){
  const k=units==='US'?1/72:25.4/72,gap=units==='US'?2:50,sheetW=sheetFormat.width*k,sheetH=sheetFormat.height*k;
- const entities=sheets.flatMap((sheet,i)=>sheetEntities(sheet.svg,units,i*(sheetW+gap)));
+ const shift=(e:DxfEntity,dx:number):DxfEntity=>{const m=(p:Pt):Pt=>[p[0]+dx,p[1]];switch(e.type){case 'line':return {...e,a:m(e.a),b:m(e.b)};case 'poly':case 'solid':return {...e,points:e.points.map(m)};case 'circle':case 'arc':return {...e,center:m(e.center)};case 'text':return {...e,at:m(e.at)};}};
+ const entities=sheets.flatMap((sheet,i)=>sheet.entities?sheet.entities.map(e=>shift(e,i*(sheetW+gap))):sheetEntities(sheet.svg,units,i*(sheetW+gap)));
+ const layers={...sheetLayers,...Object.assign({},...sheets.map(v=>v.layers??{}))} as Record<string,DxfLayer>;
+ return dxfDocument(entities,units,layers,sheets.length*(sheetW+gap)-gap,sheetH);
+}
+
+/** An AC1015 DXF of entities on the given layers, in inches (US) or millimeters (SI), limits width by height. */
+export function dxfDocument(entities:DxfEntity[],units:Units,layerDefs:Record<string,DxfLayer>,width:number,height:number){
+ const sheetH=height;
  let handle=0;const next=()=>(++handle).toString(16).toUpperCase();
  const H={blockRecordTable:next(),layerTable:next(),styleTable:next(),ltypeTable:next(),viewTable:next(),ucsTable:next(),vportTable:next(),appidTable:next(),dimstyleTable:next(),
   model:next(),paper:next(),modelLayout:next(),paperLayout:next(),root:next(),groups:next(),layouts:next(),plotStyles:next(),placeholder:next()};
@@ -28,19 +44,20 @@ export function sheetsDxf(sheets:{svg:string}[],units:Units){
  const table=(name:string,h:string,count:number,extra:(string|number)[]=[])=>put(0,'TABLE',2,name,5,h,330,0,100,'AcDbSymbolTable',70,count,...extra);
  const record=(type:string,owner:string,subclass:string,...pairs:(string|number)[])=>put(0,type,5,next(),330,owner,100,'AcDbSymbolTableRecord',100,subclass,...pairs);
  put(0,'SECTION',2,'CLASSES',0,'ENDSEC',0,'SECTION',2,'TABLES');
- const center=[(sheets.length*(sheetW+gap)-gap)/2,sheetH/2];
+ const center=[width/2,sheetH/2];
  table('VPORT',H.vportTable,1);
- record('VPORT',H.vportTable,'AcDbViewportTableRecord',2,'*Active',70,0,10,0,20,0,11,1,21,1,12,round(center[0]),22,round(center[1]),13,0,23,0,14,.5,24,.5,15,.5,25,.5,16,0,26,0,36,1,17,0,27,0,37,0,40,round(sheetH*1.1),41,round(Math.max(1.5,(sheets.length*(sheetW+gap))/(sheetH*1.1))),42,50,43,0,44,0,50,0,51,0,71,0,72,1000,73,1,74,3,75,0,76,0,77,0,78,0,281,0,65,0,146,0);
+ record('VPORT',H.vportTable,'AcDbViewportTableRecord',2,'*Active',70,0,10,0,20,0,11,1,21,1,12,round(center[0]),22,round(center[1]),13,0,23,0,14,.5,24,.5,15,.5,25,.5,16,0,26,0,36,1,17,0,27,0,37,0,40,round(sheetH*1.1),41,round(Math.max(1.5,width/(sheetH*1.1))),42,50,43,0,44,0,50,0,51,0,71,0,72,1000,73,1,74,3,75,0,76,0,77,0,78,0,281,0,65,0,146,0);
  put(0,'ENDTAB');
  const dash=units==='US'?{DASHED:[.125,-.0625],HIDDEN:[.0625,-.03125],CENTER:[.25,-.0625,.0625,-.0625]}:{DASHED:[3,-1.5],HIDDEN:[1.5,-.75],CENTER:[6,-1.5,1.5,-1.5]};
  table('LTYPE',H.ltypeTable,6);
  for(const name of ['ByBlock','ByLayer','Continuous'])record('LTYPE',H.ltypeTable,'AcDbLinetypeTableRecord',2,name,70,0,3,name==='Continuous'?'Solid line':'',72,65,73,0,40,0);
  for(const [name,segments] of Object.entries(dash)){record('LTYPE',H.ltypeTable,'AcDbLinetypeTableRecord',2,name,70,0,3,name==='DASHED'?'Dashed __ __ __':name==='HIDDEN'?'Hidden _ _ _ _':'Center ____ _ ____',72,65,73,segments.length,40,round(segments.reduce((a,v)=>a+Math.abs(v),0)));for(const seg of segments)put(49,round(seg),74,0);}
  put(0,'ENDTAB');
- const layers=Object.entries(sheetLayers);
+ const layers=Object.entries(layerDefs).filter(([name])=>name!=='0');
  table('LAYER',H.layerTable,layers.length+1);
  record('LAYER',H.layerTable,'AcDbLayerTableRecord',2,'0',70,0,62,7,6,'Continuous',370,-3,390,H.placeholder);
- for(const [name,l] of layers)record('LAYER',H.layerTable,'AcDbLayerTableRecord',2,name,70,0,62,l.color,6,l.ltype,370,l.weight,390,H.placeholder);
+ // A layer that is off has a negative color; a locked layer has flag 4.
+ for(const [name,l] of layers)record('LAYER',H.layerTable,'AcDbLayerTableRecord',2,name,70,l.locked?4:0,62,l.off?-l.color:l.color,6,l.ltype,370,l.weight,390,H.placeholder);
  put(0,'ENDTAB');
  table('STYLE',H.styleTable,3);
  for(const [name,font] of [['Standard','arial.ttf'],['ARIAL','arial.ttf'],['ARIAL-BOLD','arialbd.ttf']])record('STYLE',H.styleTable,'AcDbTextStyleTableRecord',2,name,70,0,40,0,41,1,50,0,71,0,42,units==='US'?.125:2.5,3,font,4,'');
@@ -65,6 +82,7 @@ export function sheetsDxf(sheets:{svg:string}[],units:Units){
   else if(e.type==='poly'){e.points.forEach(p=>grow(p));base('LWPOLYLINE',e.layer,'AcDbPolyline');put(90,e.points.length,70,e.closed?1:0,43,0);for(const p of e.points)put(10,round(p[0]),20,round(p[1]));}
   else if(e.type==='solid'){e.points.forEach(p=>grow(p));const [a,b,c,d=c]=e.points;base('SOLID',e.layer,'AcDbTrace');put(10,round(a[0]),20,round(a[1]),30,0,11,round(b[0]),21,round(b[1]),31,0,12,round(d[0]),22,round(d[1]),32,0,13,round(c[0]),23,round(c[1]),33,0);}
   else if(e.type==='circle'){grow(e.center,e.radius);base('CIRCLE',e.layer,'AcDbCircle');put(10,round(e.center[0]),20,round(e.center[1]),30,0,40,round(e.radius));}
+  else if(e.type==='arc'){grow(e.center,e.radius);base('ARC',e.layer,'AcDbCircle');put(10,round(e.center[0]),20,round(e.center[1]),30,0,40,round(e.radius),100,'AcDbArc',50,round(e.start),51,round(e.end));}
   else{grow(e.at);base('TEXT',e.layer,'AcDbText');put(10,round(e.at[0]),20,round(e.at[1]),30,0,40,round(e.height),1,dxfText(e.value),50,round(e.angle),7,e.bold?'ARIAL-BOLD':'ARIAL',72,e.align,11,round(e.at[0]),21,round(e.at[1]),31,0,100,'AcDbText',73,0);}
  }
  put(0,'ENDSEC',0,'SECTION',2,'OBJECTS');
@@ -79,7 +97,7 @@ export function sheetsDxf(sheets:{svg:string}[],units:Units){
    100,'AcDbLayout',1,name,70,1,71,tab,10,0,20,0,11,units==='US'?36:914.4,21,units==='US'?24:609.6,12,0,22,0,32,0,14,1e20,24,1e20,34,1e20,15,-1e20,25,-1e20,35,-1e20,146,0,13,0,23,0,33,0,16,1,26,0,36,0,17,0,27,1,37,0,76,1,330,owner);
  put(0,'ENDSEC',0,'EOF');
  const header:(string|number)[]=[0,'SECTION',2,'HEADER',9,'$ACADVER',1,'AC1015',9,'$ACADMAINTVER',70,6,9,'$DWGCODEPAGE',3,'ANSI_1252',9,'$INSBASE',10,0,20,0,30,0,
-  9,'$EXTMIN',10,round(min[0]),20,round(min[1]),30,0,9,'$EXTMAX',10,round(max[0]),20,round(max[1]),30,0,9,'$LIMMIN',10,0,20,0,9,'$LIMMAX',10,round(sheets.length*(sheetW+gap)-gap),20,round(sheetH),
+  9,'$EXTMIN',10,round(min[0]),20,round(min[1]),30,0,9,'$EXTMAX',10,round(max[0]),20,round(max[1]),30,0,9,'$LIMMIN',10,0,20,0,9,'$LIMMAX',10,round(width),20,round(sheetH),
   9,'$LTSCALE',40,1,9,'$PSLTSCALE',70,1,9,'$TEXTSTYLE',7,'ARIAL',9,'$CLAYER',8,'0',9,'$INSUNITS',70,units==='US'?1:4,9,'$MEASUREMENT',70,units==='US'?0:1,9,'$LUNITS',70,units==='US'?4:2,9,'$LWDISPLAY',290,1,9,'$HANDSEED',5,(handle+1).toString(16).toUpperCase(),0,'ENDSEC'];
  return [...header,...body].join('\n')+'\n';
 }
