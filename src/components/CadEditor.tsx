@@ -5,7 +5,7 @@ import {
  Undo2,Ungroup,Waypoints,X,Slash,
 } from 'lucide-react';
 import {
- DEG,add,angleOf,bbox,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,intersections,lerp,nearest,parseLength,
+ DEG,add,angleOf,bbox,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,intersections,lerp,nearest,nearestOnSegment,parseLength,
  parsePoint,segments,snapPoints,stretchGrip,sub,sweep,type Box,type CadDoc,type CadLayer,type Ent,type NewEnt,type Pt,type SnapKind,
 } from '../cad/model';
 import {CadStore} from '../cad/store';
@@ -129,11 +129,18 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   let best:{kind:SnapKind;p:Pt}|undefined,score=Infinity;
   const offer=(kind:SnapKind,q:Pt)=>{const d=dist(p,q);if(d>r)return;const s=snapRank[kind]*1e6+d;if(s<score){score=s;best={kind,p:q};}};
   for(const e of near)for(const s of snapPoints(e,store.doc))offer(s.kind,s.p);
-  const close=near.filter(e=>nearest(e,p,store.doc).d<=r).slice(-40);
-  for(let i=0;i<close.length;i++)for(let j=i+1;j<close.length;j++)for(const q of intersections(close[i],close[j],store.doc))offer('int',q);
-  if(base)for(const e of close){
-   for(const [a,b] of segments(e,store.doc)){const v=sub(b,a),l2=v[0]*v[0]+v[1]*v[1];if(l2<1e-24)continue;const t=((base[0]-a[0])*v[0]+(base[1]-a[1])*v[1])/l2;if(t>=0&&t<=1)offer('per',lerp(a,b,t));}
-   if(e.type==='circle'||e.type==='arc'){const d=dist(base,e.center);if(d>1e-12){const q=add(e.center,[(base[0]-e.center[0])/d*e.radius,(base[1]-e.center[1])/d*e.radius]);if(e.type==='circle'||nearest(e,q).d<1e-9)offer('per',q);}}
+  // Intersections and perpendiculars: only the segments and curves passing under the cursor.
+  const pieces:Ent[]=[];
+  for(const e of near){
+   if(pieces.length>=80)break;
+   if(e.type==='text')continue;
+   if(e.type==='circle'||e.type==='arc'){if(nearest(e,p).d<=r)pieces.push(e);continue;}
+   for(const [a,b] of segments(e,store.doc))if(dist(p,nearestOnSegment(p,a,b).point)<=r)pieces.push({id:-1,type:'line',layer:e.layer,a,b});
+  }
+  for(let i=0;i<pieces.length;i++)for(let j=i+1;j<pieces.length;j++)for(const q of intersections(pieces[i],pieces[j]))offer('int',q);
+  if(base)for(const e of pieces){
+   if(e.type==='line'){const v=sub(e.b,e.a),l2=v[0]*v[0]+v[1]*v[1];if(l2<1e-24)continue;const t=((base[0]-e.a[0])*v[0]+(base[1]-e.a[1])*v[1])/l2;if(t>=0&&t<=1)offer('per',lerp(e.a,e.b,t));}
+   else if(e.type==='circle'||e.type==='arc'){const d=dist(base,e.center);if(d>1e-12){const q=add(e.center,[(base[0]-e.center[0])/d*e.radius,(base[1]-e.center[1])/d*e.radius]);if(e.type==='circle'||nearest(e,q).d<1e-9)offer('per',q);}}
   }
   return best;
  }
