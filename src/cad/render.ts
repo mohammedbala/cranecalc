@@ -1,0 +1,165 @@
+import {DEG,bbox,dimGeometry,textBox,textWidthPerHeight,type Box,type CadDoc,type Ent,type Grip,type NewEnt,type Pt,type SnapKind} from './model';
+import {dashPattern} from './convert';
+
+/** Screen view: world point (cx, cy) at the canvas center, scale pixels per drawing unit, canvas w × h CSS pixels. */
+export interface View{cx:number;cy:number;scale:number;w:number;h:number}
+export type Theme='dark'|'paper';
+export const toScreen=(v:View,p:Pt):[number,number]=>[(p[0]-v.cx)*v.scale+v.w/2,v.h/2-(p[1]-v.cy)*v.scale];
+export const toWorld=(v:View,x:number,y:number):Pt=>[(x-v.w/2)/v.scale+v.cx,(v.h/2-y)/v.scale+v.cy];
+export const viewBox=(v:View):Box=>{const a=toWorld(v,0,v.h),b=toWorld(v,v.w,0);return [a[0],a[1],b[0],b[1]];};
+
+// AutoCAD color index: 1–9 and the hue wheel in steps of 10.
+const ACI:Record<number,string>={1:'#ff0000',2:'#ffff00',3:'#00ff00',4:'#00ffff',5:'#0000ff',6:'#ff00ff',7:'#ffffff',8:'#808080',9:'#c0c0c0'};
+const wheel=['#ff0000','#ff3f00','#ff7f00','#ffbf00','#ffff00','#bfff00','#7fff00','#3fff00','#00ff00','#00ff3f','#00ff7f','#00ffbf','#00ffff','#00bfff','#007fff','#003fff','#0000ff','#3f00ff','#7f00ff','#bf00ff','#ff00ff','#ff00bf','#ff007f','#ff003f'];
+export const aci=(c:number)=>ACI[c]??wheel[Math.round((c-10)/10)%24]??'#ffffff';
+export const aciPalette=[1,2,3,4,5,6,7,8,9,30,40,140,150,210];
+/** On screen: the layer color on the dark model view; black (gray for the gray layers) on paper. */
+export function layerColor(color:number,theme:Theme){
+ if(theme==='paper')return color===8?'#5f6670':color===9?'#9aa1a8':'#111';
+ return color===7?'#e8edf2':color===5?'#4d7dff':aci(color);
+}
+export const themeColors=(theme:Theme)=>theme==='dark'
+ ?{bg:'#141b26',sheet:'#2b3a4c',grid:'rgba(255,255,255,.07)',select:'#5aa9ff',preview:'#9fd4ff',hover:'rgba(120,190,255,.55)',underlay:'rgba(255,159,67,.45)',crosshair:'rgba(225,235,245,.55)',snap:'#ffd60a',tip:'#22303f',tipText:'#e8edf2'}
+ :{bg:'#cfd5cf',sheet:'#ffffff',grid:'rgba(0,0,0,.07)',select:'#1f6feb',preview:'#1f6feb',hover:'rgba(31,111,235,.45)',underlay:'rgba(230,110,0,.5)',crosshair:'rgba(20,30,40,.45)',snap:'#d97706',tip:'#ffffff',tipText:'#14202b'};
+
+const boxCache=new WeakMap<object,Box>();
+/** Cached extents of an entity (entities are immutable: a change makes a new object). */
+export function cachedBox(e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>){let b=boxCache.get(e);if(!b){b=bbox(e as Ent,doc);boxCache.set(e,b);}return b;}
+const overlaps=(a:Box,b:Box)=>a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1];
+
+/** Add an entity's strokes to the current path (solids and text are filled separately). */
+function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>){
+ const S=(p:Pt)=>toScreen(v,p);
+ switch(e.type){
+  case 'line':{const a=S(e.a),b=S(e.b);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);break;}
+  case 'poly':{const p=e.points.map(S);ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);if(e.closed)ctx.closePath();break;}
+  case 'circle':{const c=S(e.center),r=e.radius*v.scale;ctx.moveTo(c[0]+r,c[1]);ctx.arc(c[0],c[1],r,0,2*Math.PI);break;}
+  case 'arc':{const c=S(e.center),r=e.radius*v.scale,s=S([e.center[0]+e.radius*Math.cos(e.start*DEG),e.center[1]+e.radius*Math.sin(e.start*DEG)]);ctx.moveTo(s[0],s[1]);ctx.arc(c[0],c[1],r,-e.start*DEG,-e.end*DEG,true);break;}
+  case 'dim':for(const [a,b] of dimGeometry(e as Ent&{type:'dim'},doc).lines){const p=S(a),q=S(b);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}break;
+ }
+}
+function fillShapes(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>){
+ const polys=e.type==='solid'?[e.points]:e.type==='dim'?dimGeometry(e as Ent&{type:'dim'},doc).arrows:[];
+ for(const pts of polys){const p=pts.map(q=>toScreen(v,q));ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);ctx.closePath();}
+}
+function drawText(ctx:CanvasRenderingContext2D,v:View,at:Pt,height:number,value:string,angle:number,align:number,bold:boolean){
+ const px=height/.716*v.scale,[x,y]=toScreen(v,at);
+ if(px<2.2){
+  // Too small to read: a gray bar where the text is (greeked).
+  const w=textWidthPerHeight(value,bold)*height*v.scale,x0=align===1?-w/2:align===2?-w:0;
+  ctx.save();ctx.translate(x,y);ctx.rotate(-angle*DEG);ctx.globalAlpha*=.45;ctx.fillRect(x0,-px*.6,w,Math.max(.8,px*.55));ctx.restore();return;
+ }
+ ctx.save();ctx.translate(x,y);if(angle)ctx.rotate(-angle*DEG);
+ ctx.font=`${bold?700:400} ${px}px Arial, "Liberation Sans", Helvetica, sans-serif`;ctx.textAlign=align===1?'center':align===2?'right':'left';ctx.textBaseline='alphabetic';
+ ctx.fillText(value,0,0);ctx.restore();
+}
+function textOf(e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>){
+ if(e.type==='text')return {at:e.at,height:e.height,value:e.value,angle:e.angle,align:e.align,bold:e.bold};
+ if(e.type==='dim'){const t=dimGeometry(e as Ent&{type:'dim'},doc).text;return {...t,align:1,bold:false};}
+ return undefined;
+}
+
+export interface SceneOptions{doc:CadDoc;view:View;theme:Theme;lwt:boolean;grid:number|null;underlay?:CadDoc|null}
+/** The drawing itself: background, sheet, grid, underlay and every visible entity, batched by layer. */
+export function drawScene(ctx:CanvasRenderingContext2D,o:SceneOptions){
+ const {doc,view:v,theme}=o,c=themeColors(theme),vb=viewBox(v);
+ ctx.fillStyle=c.bg;ctx.fillRect(0,0,v.w,v.h);
+ const s0=toScreen(v,[0,doc.height]),s1=toScreen(v,[doc.width,0]);
+ if(theme==='paper'){ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(s0[0]+4,s0[1]+4,s1[0]-s0[0],s1[1]-s0[1]);ctx.fillStyle=c.sheet;ctx.fillRect(s0[0],s0[1],s1[0]-s0[0],s1[1]-s0[1]);}
+ else{ctx.strokeStyle=c.sheet;ctx.lineWidth=1;ctx.setLineDash([]);ctx.strokeRect(s0[0]+.5,s0[1]+.5,s1[0]-s0[0],s1[1]-s0[1]);}
+ if(o.grid){
+  let g=o.grid;while(g*v.scale<8)g*=g*v.scale<3?10:2;
+  ctx.strokeStyle=c.grid;ctx.lineWidth=1;ctx.beginPath();
+  const x0=Math.max(0,Math.floor(vb[0]/g)*g),x1=Math.min(doc.width,vb[2]),y0=Math.max(0,Math.floor(vb[1]/g)*g),y1=Math.min(doc.height,vb[3]);
+  for(let x=x0;x<=x1;x+=g){const p=toScreen(v,[x,0]);ctx.moveTo(Math.round(p[0])+.5,Math.max(0,s0[1]));ctx.lineTo(Math.round(p[0])+.5,Math.min(v.h,s1[1]));}
+  for(let y=y0;y<=y1;y+=g){const p=toScreen(v,[0,y]);ctx.moveTo(Math.max(0,s0[0]),Math.round(p[1])+.5);ctx.lineTo(Math.min(v.w,s1[0]),Math.round(p[1])+.5);}
+  ctx.stroke();
+ }
+ if(o.underlay){
+  ctx.strokeStyle=c.underlay;ctx.fillStyle=c.underlay;ctx.lineWidth=1;ctx.setLineDash([]);ctx.beginPath();
+  for(const e of o.underlay.entities)if(overlaps(cachedBox(e,doc),vb))strokePath(ctx,v,e,doc);
+  ctx.stroke();
+ }
+ const byLayer=new Map<string,Ent[]>();
+ for(const e of doc.entities){if(!overlaps(cachedBox(e,doc),vb))continue;let list=byLayer.get(e.layer);if(!list)byLayer.set(e.layer,list=[]);list.push(e);}
+ for(const layer of doc.layers){
+  const list=byLayer.get(layer.name);if(!layer.visible||!list?.length)continue;
+  const color=layerColor(layer.color,theme);
+  ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=o.lwt?Math.max(1,layer.weight/24):1;ctx.lineCap='round';ctx.lineJoin='round';
+  const dash=dashPattern(layer.ltype,doc.unit).map(d=>d*v.scale);
+  ctx.setLineDash(dash.length&&Math.min(...dash)>=1.5?dash:[]);
+  ctx.beginPath();for(const e of list)if(e.type!=='text'&&e.type!=='solid')strokePath(ctx,v,e,doc);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();for(const e of list)if(e.type==='solid'||e.type==='dim')fillShapes(ctx,v,e,doc);ctx.fill();
+  for(const e of list){const t=textOf(e,doc);if(t)drawText(ctx,v,t.at,t.height,t.value,t.angle,t.align,t.bold);}
+ }
+ ctx.setLineDash([]);
+}
+
+export interface OverlayOptions{
+ doc:CadDoc;view:View;theme:Theme;
+ selected:Ent[];hover?:Ent;preview?:NewEnt[];rubber?:[Pt,Pt];
+ window?:{a:Pt;b:Pt};grips?:Grip[];hot?:Pt;snap?:{kind:SnapKind;p:Pt};
+ cursor?:[number,number];crosshair:boolean;tip?:string;pickbox:number;
+}
+const snapNames:Record<SnapKind,string>={end:'Endpoint',mid:'Midpoint',cen:'Center',qua:'Quadrant',int:'Intersection',per:'Perpendicular',nea:'Nearest',ins:'Insertion',grid:'Grid'};
+/** Everything that follows the cursor: selection highlight, hover, preview, window, grips, snap marker, crosshair. */
+export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
+ const {doc,view:v,theme}=o,c=themeColors(theme),vb=viewBox(v);
+ ctx.clearRect(0,0,v.w,v.h);ctx.lineCap='round';ctx.lineJoin='round';
+ const outline=(list:(Ent|NewEnt)[],color:string,width:number,dash:number[])=>{
+  ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);ctx.beginPath();
+  for(const e of list){
+   if(!overlaps(cachedBox(e,doc),vb))continue;
+   if(e.type==='text'){const b=textBox(e as Ent&{type:'text'}).map(p=>toScreen(v,p));ctx.moveTo(b[0][0],b[0][1]);for(let i=1;i<4;i++)ctx.lineTo(b[i][0],b[i][1]);ctx.closePath();}
+   else if(e.type==='solid')fillShapes(ctx,v,e,doc);
+   else strokePath(ctx,v,e,doc);
+  }
+  ctx.stroke();ctx.setLineDash([]);
+ };
+ if(o.selected.length)outline(o.selected.slice(0,4000),c.select,1.6,[6,4]);
+ if(o.hover)outline([o.hover],c.hover,4,[]);
+ if(o.preview?.length){
+  outline(o.preview,c.preview,1.2,[]);
+  ctx.fillStyle=c.preview;ctx.beginPath();for(const e of o.preview)if(e.type==='solid'||e.type==='dim')fillShapes(ctx,v,e,doc);ctx.fill();
+  for(const e of o.preview){const t=textOf(e,doc);if(t)drawText(ctx,v,t.at,t.height,t.value,t.angle,t.align,t.bold);}
+ }
+ if(o.rubber){const a=toScreen(v,o.rubber[0]),b=toScreen(v,o.rubber[1]);ctx.strokeStyle=c.preview;ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.setLineDash([]);}
+ if(o.window){
+  const a=toScreen(v,o.window.a),b=toScreen(v,o.window.b),crossing=b[0]<a[0];
+  ctx.fillStyle=crossing?'rgba(70,200,110,.16)':'rgba(70,130,255,.16)';ctx.strokeStyle=crossing?'#46c86e':'#4682ff';ctx.lineWidth=1;ctx.setLineDash(crossing?[5,4]:[]);
+  ctx.fillRect(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.abs(b[0]-a[0]),Math.abs(b[1]-a[1]));ctx.strokeRect(Math.min(a[0],b[0])+.5,Math.min(a[1],b[1])+.5,Math.abs(b[0]-a[0]),Math.abs(b[1]-a[1]));ctx.setLineDash([]);
+ }
+ if(o.grips?.length){
+  for(const g of o.grips){const [x,y]=toScreen(v,g.p);if(x<-8||y<-8||x>v.w+8||y>v.h+8)continue;const hot=o.hot&&Math.abs(o.hot[0]-g.p[0])<1e-12&&Math.abs(o.hot[1]-g.p[1])<1e-12;
+   ctx.fillStyle=hot?'#ff3b30':'#2b7bff';ctx.fillRect(x-4,y-4,8,8);ctx.strokeStyle=theme==='dark'?'#dbe9ff':'#ffffff';ctx.lineWidth=1;ctx.strokeRect(x-4.5,y-4.5,9,9);}
+ }
+ if(o.snap){
+  const [x,y]=toScreen(v,o.snap.p),r=6;ctx.strokeStyle=c.snap;ctx.lineWidth=2;ctx.beginPath();
+  switch(o.snap.kind){
+   case 'end':ctx.rect(x-r,y-r,2*r,2*r);break;
+   case 'mid':ctx.moveTo(x,y-r);ctx.lineTo(x+r,y+r*.8);ctx.lineTo(x-r,y+r*.8);ctx.closePath();break;
+   case 'cen':ctx.arc(x,y,r,0,2*Math.PI);break;
+   case 'qua':ctx.moveTo(x,y-r);ctx.lineTo(x+r,y);ctx.lineTo(x,y+r);ctx.lineTo(x-r,y);ctx.closePath();break;
+   case 'int':ctx.moveTo(x-r,y-r);ctx.lineTo(x+r,y+r);ctx.moveTo(x+r,y-r);ctx.lineTo(x-r,y+r);break;
+   case 'per':ctx.moveTo(x-r,y-r);ctx.lineTo(x-r,y+r);ctx.lineTo(x+r,y+r);ctx.moveTo(x-r,y);ctx.lineTo(x,y);ctx.lineTo(x,y+r);break;
+   case 'nea':ctx.moveTo(x-r,y-r);ctx.lineTo(x+r,y-r);ctx.lineTo(x-r,y+r);ctx.lineTo(x+r,y+r);ctx.closePath();break;
+   case 'ins':ctx.rect(x-r,y-r,2*r,2*r);ctx.moveTo(x-r,y);ctx.lineTo(x+r,y);break;
+   case 'grid':ctx.moveTo(x-r,y);ctx.lineTo(x+r,y);ctx.moveTo(x,y-r);ctx.lineTo(x,y+r);break;
+  }
+  ctx.stroke();
+  if(o.cursor)tip(ctx,o.cursor[0]+14,o.cursor[1]+22,snapNames[o.snap.kind],c);
+ }
+ if(o.cursor&&o.crosshair){
+  const [x,y]=o.cursor;ctx.strokeStyle=c.crosshair;ctx.lineWidth=1;ctx.beginPath();
+  ctx.moveTo(0,Math.round(y)+.5);ctx.lineTo(v.w,Math.round(y)+.5);ctx.moveTo(Math.round(x)+.5,0);ctx.lineTo(Math.round(x)+.5,v.h);ctx.stroke();
+  const p=o.pickbox;ctx.strokeStyle=theme==='dark'?'#ffffff':'#14202b';ctx.strokeRect(Math.round(x-p)+.5,Math.round(y-p)+.5,2*p,2*p);
+ }
+ if(o.cursor&&o.tip)tip(ctx,o.cursor[0]+14,o.cursor[1]-(o.snap?28:14),o.tip,c);
+}
+function tip(ctx:CanvasRenderingContext2D,x:number,y:number,text:string,c:ReturnType<typeof themeColors>){
+ ctx.font='12px "DM Sans", Arial, sans-serif';const w=ctx.measureText(text).width+10;
+ const X=Math.min(x,ctx.canvas.clientWidth-w-4);
+ ctx.fillStyle=c.tip;ctx.strokeStyle='rgba(120,140,160,.6)';ctx.lineWidth=1;ctx.fillRect(X,y-14,w,19);ctx.strokeRect(X+.5,y-13.5,w-1,18);
+ ctx.fillStyle=c.tipText;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(text,X+5,y-4.5);
+}

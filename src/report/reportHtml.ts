@@ -12,9 +12,12 @@ import { format, type Quantity } from '../engine/units';
 /** A CSS string literal for an @page margin box. */
 const pageText=(v:string)=>`"${v.replace(/[\\"]/g,c=>`\\${c}`).replace(/[\n\r]/g,' ').replace(/</g,'\\3c ')}"`;
 const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-/** `reviewDraft`: export a snapshot whose only blockers are missing-data open items, marked REVIEW DRAFT (reviewDraftExportable). */
-export function reportHtml(s:CalculationSnapshot, framing:FramingSettings=defaultFraming, fontCss="", options:{reviewDraft?:boolean}={}){
- return appendPlanSheet(calculationReportHtml(s,fontCss,!!options.reviewDraft),s,framing);
+/**
+ * `reviewDraft`: export a snapshot whose only blockers are missing-data open items, marked REVIEW DRAFT (reviewDraftExportable).
+ * `sheetSvgs`: drawing sheets edited in the CAD editor, by sheet number, in place of the generated sheets.
+ */
+export function reportHtml(s:CalculationSnapshot, framing:FramingSettings=defaultFraming, fontCss="", options:{reviewDraft?:boolean;sheetSvgs?:Record<string,string>}={}){
+ return appendPlanSheet(calculationReportHtml(s,fontCss,!!options.reviewDraft),s,framing,options.sheetSvgs);
 }
 function calculationReportHtml(s:CalculationSnapshot,fontCss:string,reviewDraft=false){
  if(!(s.eligible||(reviewDraft&&reviewDraftExportable(s)))||!s.analysis||!s.properties)throw Error('This calculation snapshot is not eligible for export.');

@@ -78,3 +78,33 @@ test('carries the girder on column caps over new freestanding columns',async({pa
  await expect(page.locator('.drafting-linework svg')).toContainText('COLUMN CAP DESIGN FORCES');
  expect(errors).toEqual([]);
 });
+
+test('edits an issued sheet in the CAD editor and carries the edit into the outputs',async({page})=>{
+ const errors=watch(page);
+ await page.goto('/');
+ await page.getByRole('button',{name:'Load demonstration'}).first().click();
+ const generate=page.getByRole('button',{name:'Generate output',exact:true});
+ await expect(generate).toBeEnabled({timeout:540000});
+ await page.getByRole('button',{name:'Drawings'}).click();
+ const tabs=page.locator('.drafting-views button');
+ await expect(tabs.filter({hasText:'S-01'})).toHaveCount(1,{timeout:120000});
+ await tabs.filter({hasText:'S-01'}).first().click();
+ await page.getByRole('button',{name:'Edit in CAD'}).click();
+ await expect(page.getByTestId('cad-canvas')).toBeVisible();
+ // AutoCAD-style command line: TEXT at a typed point, height, rotation, contents, then an empty line ends it.
+ const line=page.getByLabel('Command line');
+ for(const value of ['T','30,20','0.25','0','CAD EDIT CHECK','']){await line.fill(value);await line.press('Enter');}
+ await expect(page.locator('.cad-save')).toHaveText('Edits saved in this browser');
+ await page.getByRole('button',{name:'Close the CAD editor'}).click();
+ await expect(page.locator('.drafting-badge')).toHaveText(/edited/i);
+ await expect(page.locator('.drafting-linework svg')).toContainText('CAD EDIT CHECK');
+ await generate.click();
+ const dialog=page.getByRole('dialog',{name:'Generated output'});
+ await expect(dialog).toBeVisible({timeout:120000});
+ await expect(dialog.locator('.cad-edited-note')).toContainText('S-01');
+ const set=page.waitForEvent('download');await dialog.getByRole('button',{name:'Download drawing set (.dxf)'}).click();
+ expect(await fs.readFile((await (await set).path())!,'utf8')).toContain('CAD EDIT CHECK');
+ const report=page.waitForEvent('download');await dialog.getByRole('button',{name:'Download printable report (.html)'}).click();
+ expect(await fs.readFile((await (await report).path())!,'utf8')).toContain('CAD EDIT CHECK');
+ expect(errors).toEqual([]);
+});

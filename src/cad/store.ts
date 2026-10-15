@@ -26,6 +26,8 @@ export class CadStore{
  get canRedo(){return this.redoStack.length>0;}
  get undoLabel(){return this.undoStack[this.undoStack.length-1]?.label;}
  get redoLabel(){return this.redoStack[this.redoStack.length-1]?.label;}
+ /** Change drawing settings that are not geometry (the drawing scale): not undoable. */
+ setMeta(patch:Partial<Pick<CadDoc,'realPerUnit'>>){this.doc={...this.doc,...patch};this.emit(true);}
  /** Replace the whole drawing (open, revert); clears the history. */
  reset(doc:CadDoc){this.doc=doc;this.index();this.selection.clear();this.undoStack=[];this.redoStack=[];this.emit(true);}
  /** Record and apply an edit; returns the ids of the entities it added. */

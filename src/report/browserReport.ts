@@ -2,6 +2,8 @@ import rawCss from 'katex/dist/katex.min.css?raw';
 import type {CalculationSnapshot,ProjectInput} from '../engine/types';
 import type {FramingSettings} from '../components/framingSettings';
 import {printableReport} from './printReport';
+import {docToSvg} from '../cad/convert';
+import type {CadDoc} from '../cad/model';
 
 // Inline WOFF2 fonts so a saved report works offline, without CDN or server requests.
 const fonts=import.meta.glob<string>('../../node_modules/katex/dist/fonts/*.woff2',{query:'?inline',import:'default',eager:true});
@@ -13,7 +15,8 @@ const fontCss=rawCss.replace(/src:[^;]+;/g,source=>{
  return `src:url(${data}) format("woff2");`;
 });
 
-export async function createBrowserReport(input:ProjectInput,revision:string,framing:FramingSettings){
+/** `cadSheets`: drawing sheets edited in the CAD editor for this design, by sheet number. */
+export async function createBrowserReport(input:ProjectInput,revision:string,framing:FramingSettings,cadSheets:Record<string,CadDoc>={}){
  const snapshot=await new Promise<CalculationSnapshot>((resolve,reject)=>{
   const worker=new Worker(new URL('../engine/worker.ts',import.meta.url),{type:'module'});
   const finish=()=>{clearTimeout(timeout);worker.terminate();};
@@ -22,6 +25,6 @@ export async function createBrowserReport(input:ProjectInput,revision:string,fra
   worker.onerror=event=>{finish();reject(Error(event.message||'Report calculation failed.'));};
   worker.postMessage({input,requestId:'report'});
  });
- const html=printableReport(snapshot,framing,revision,fontCss);
+ const html=printableReport(snapshot,framing,revision,fontCss,Object.fromEntries(Object.entries(cadSheets).map(([k,doc])=>[k,docToSvg(doc)])));
  return {snapshot,blob:new Blob([html],{type:'text/html;charset=utf-8'}),framing,format:'html' as const};
 }

@@ -107,6 +107,18 @@ The PDF ends with the ARCH D (36 × 24 in) drawing set, numbered *N OF M*. **S-0
 
 Drawing dimensions use feet and fractional inches in US mode, with small plate/bolt sizes in fractional inches; SI drawings use millimeters. Under **Project**, enter the originator, checker, floor datum, top-of-rail elevation (unless the existing column survey sets it), engineer of record, issue purpose and revision rows. Preview the sheets under **Drawings**, or download their individual SVGs from Generated output. Calculation pages remain Letter size.
 
+## Editing drawings in the CAD editor
+
+Under **Drawings**, **Edit in CAD** opens the selected sheet (S-00 onward) or sketch in a full-screen CAD editor that works like AutoCAD. Sheets open in paper inches (or millimeters in SI) on their named layers; sketches open in sketch units.
+
+- **Commands** come from the tool bar or the command line, with AutoCAD aliases: L, PL, REC, C, A, T, DLI, DAL, M, CO, RO, SC, MI, O, TR, EX, X, E, DI, Z, U and REDO. Enter or Space repeats or ends a command, Esc cancels, and F1 lists every command and shortcut.
+- **Points** are clicks with object snaps (endpoint, midpoint, center, quadrant, intersection, perpendicular, insertion), or typed: `x,y`, `@dx,dy`, `@d<angle`, or a bare distance along the cursor direction. Lengths accept feet-inches and fractions (`1'6"`, `1-1/2`, `3/4`). F3 toggles snaps, F7 the grid, F8 ortho and F9 grid snap.
+- **Selection**: click objects; drag left to right for a window or right to left for a crossing window; Shift removes. Ctrl+A selects all, and Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste. Grips on the selection stretch endpoints, vertices, radii and text positions, and double-clicking text edits it.
+- **Panels**: Properties edits coordinates, sizes, text and layer; Layers turns layers on and off, locks them, sets their color and makes one current. Undo and redo are unlimited.
+- **Scale**: the drawing scale (for example 3/4" = 1'-0") sets what dimensions and DIST read; dimensions measure live and can be overridden.
+
+Edits save automatically in the browser (IndexedDB), by project number and drawing, together with the design they were made for. While the design is unchanged, the edited drawing replaces the generated one everywhere: the drafting viewer (marked **Edited**), the drawing-set DXF, the sheet SVGs and the reduced sheets bound into the report, whose output panel lists the edited sheets. After a design change, the generated drawing returns and the edit waits for review: the editor can keep the edits, start over from the current design, or show the current design underneath for comparison. **Revert to generated** discards the edits. The editor also exports the drawing alone as DXF (sheets at paper size, sketches at real size, with arcs and layer states) or SVG. Edits are drawn as made; they are not checked against the calculation.
+
 ## Reference support framing in 3D
 
 The default full bay is an open prefab metal building with continuous tapered fabricated I-columns, haunched gable rafters, bolted moment-frame knees and ridge splices, lipped Z roof purlins, C wall girts/eave struts and sidewall/roof bracing. W12X40 runway brackets bear off these building columns. Both runway lines and the schematic bridge crane remain visible. The arrangement follows the tapered clear-span framing illustrated in [MBMA's guide](https://www.mbmaeducation.org/wp-content/uploads/2023/06/MBMA_Student-Design-Competition_Quickstart_Guide.pdf), with illustrative member/connection dimensions.

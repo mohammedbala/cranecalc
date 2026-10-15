@@ -8,11 +8,15 @@ import { revisionIdentity } from '../src/engine/drawingData';
 import { defaultFraming, framingSchema } from '../src/components/framingSettings';
 import type { ProjectInput } from '../src/engine/types';
 import { chromiumChannel } from './browserRuntime';
+import { parseCadDoc } from '../src/cad/validate';
+import { docToSvg } from '../src/cad/convert';
 const app=express();
 app.disable('x-powered-by');
 const allowedOrigins=new Set(['http://127.0.0.1:5173','http://localhost:5173','http://127.0.0.1:4174','http://localhost:4174']);
 app.use((req,res,next)=>{const origin=req.get('origin');if(origin&&!allowedOrigins.has(origin)){res.status(403).json({error:'Only the local CraneCalc application may access this service.'});return;}res.setHeader('X-Content-Type-Options','nosniff');next();});
-app.use(express.json({limit:'100kb'}));
+// The report request may carry drawing sheets edited in the CAD editor; every other request stays small.
+const smallJson=express.json({limit:'100kb'}),reportJson=express.json({limit:'25mb'});
+app.use((req,res,next)=>(req.path==='/api/report'?reportJson:smallJson)(req,res,next));
 app.get('/api/health',(_req,res)=>res.json({status:'ok',version:'0.1.0'}));
 let reporting=false;
 app.post('/api/report',async(req,res)=>{
@@ -30,7 +34,10 @@ app.post('/api/report',async(req,res)=>{
   browser=await chromium.launch({headless:true,channel:chromiumChannel});const page=await browser.newPage();
   // Reports contain only server-rendered, escaped input. No external assets or requests are allowed.
   await page.route('**/*',route=>route.abort());
-  await page.setContent(reportHtml(snapshot,framing.data,{reviewDraft:draft}),{waitUntil:'load'});await page.evaluate(()=>document.fonts.ready);
+  // Edited sheets arrive as drawing data, are validated and are drawn here like the generated ones (no client SVG).
+  const sheetSvgs:Record<string,string>={};
+  for(const [sheet,raw] of Object.entries((req.body.cadSheets??{}) as Record<string,unknown>).slice(0,40)){const doc=parseCadDoc(raw);if(!doc||doc.key!==sheet){res.status(422).json({error:`The edited drawing ${sheet.slice(0,20)} is not valid.`});return;}sheetSvgs[sheet]=docToSvg(doc);}
+  await page.setContent(reportHtml(snapshot,framing.data,{reviewDraft:draft,sheetSvgs}),{waitUntil:'load'});await page.evaluate(()=>document.fonts.ready);
   // The report's CSS @page margin boxes print the running header and the footer (page numbers, calc ID): no browser footer.
   const pdf=await page.pdf({format:'Letter',preferCSSPageSize:true,printBackground:true,displayHeaderFooter:false});
   res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`attachment; filename="${(snapshot.input.number||'cranecalc').replace(/[^\w.-]+/g,'-')}-${revisionIdentity(snapshot).label.replace(/\s+/g,'-')}.pdf"`);res.setHeader('X-Calculation-Revision',snapshot.revision);res.send(pdf);

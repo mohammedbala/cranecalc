@@ -486,11 +486,11 @@ export function detailSheetNumbers(s:CalculationSnapshot,f:FramingSettings=defau
  * (tabloid; A3 in SI) landscape page, with a line saying it is a reduced copy, so the package prints on office
  * paper and stays legible. The full-size ARCH D set (36 × 24 in) is the separate drawing set (drawingSetHtml, SVG, DXF).
  */
-export function appendPlanSheet(html:string,s:CalculationSnapshot,f:FramingSettings=defaultFraming){
+export function appendPlanSheet(html:string,s:CalculationSnapshot,f:FramingSettings=defaultFraming,edited:Record<string,string>={}){
   const si=s.input.units==='SI',page=si?'420mm 297mm':'17in 11in',w=si?'405mm':'16.2in',h=si?'270mm':'10.8in';
   const css=`<style>@page runwayArrangement{size:${page};margin:0}.runway-plan-sheet-page{page:runwayArrangement;break-before:page;break-after:auto;width:${si?'420mm':'17in'};height:${si?'297mm':'11in'};margin:0;padding:${si?'5mm 7.5mm 0':'0.08in 0.4in 0'};line-height:0;overflow:hidden}.runway-plan-sheet-page svg{display:block;width:${w};height:${h}}.runway-plan-sheet-page .reduced{font:7px/1 Arial,sans-serif;line-height:1.2;margin:2px 0 0;letter-spacing:.3px}</style>`;
   const note=`REDUCED COPY OF ARCH D SHEET (${si?'914 × 610 MM':'36 × 24 IN'}) · PRINTED AT ${si?'44':'45'}% · DO NOT SCALE · FULL-SIZE SHEETS ISSUED AS THE SEPARATE DRAWING SET`;
-  return html.replace('</head>',`${css}</head>`).replace('</body>',drawingSheetSet(s,f).map(sheet=>`<section class="runway-plan-sheet-page">${sheet.svg}<p class="reduced">${sheet.number} · ${note}</p></section>`).join('')+'</body>');
+  return html.replace('</head>',`${css}</head>`).replace('</body>',drawingSheetSet(s,f).map(sheet=>`<section class="runway-plan-sheet-page">${edited[sheet.number]??sheet.svg}<p class="reduced">${sheet.number} · ${note}</p></section>`).join('')+'</body>');
 }
 /** The full-size drawing set (ARCH D, 36 × 24 in or 914 × 610 mm), one sheet per page, as its own printable document. */
 export function drawingSetHtml(s:CalculationSnapshot,f:FramingSettings=defaultFraming){
