@@ -197,7 +197,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const share=designed?braceShare(p,j):undefined,brace=(id:string)=>designed?.cases.find(v=>v.id===id);
  // A column cap: the girder end reactions act along the runway off the column centerline (weak axis, top moment).
  const ex=capAlongEccentricity(p,j),amplifyY=(P:number)=>P<=0?1:alpha*P>=Pey?Infinity:1/(1-alpha*P/Pey);
- const dead=support.D,live=support.Cd+support.Cv+support.Ci+support.L+support.Clv,liveStatic=support.Cd+support.Cv,lateral=support.Css;
+ const dead=support.D,live=support.Cd+support.Cv+support.Ci+support.L+support.Clv,liveStatic=support.Cd+support.Cv,lateral=support.Css,liveAll=live,lateralAll=lateral,concurrent=p.aist?.concurrency==='full';
  const seat=ends?.[j]??[],seatCase=(fD:number,fL:number,fCd:number,fCv:number)=>seat.length?seatMoment(seat,{D:fD,L:fL,Cd:fCd,Cv:fCv}):0;
  // Weak-axis moment from the seat moment and the longitudinal force F at the seat (the eave-strut path only), and the torque F·offset.
  const reviewMy=(Mseat:number,F:number)=>alongM&&alongF?combinedPeak(alongM.samples,alongF.samples,'moment',Mseat,exit==='eave-strut'?F:exit==='girder-strut'?keep*F:0):0;
@@ -205,7 +205,10 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
   if(!unitTorsion||!F||!keep)return row;const T=keep*F*offset,w=unitTorsion.stress*T,ratio=row.P>=0?row.P/capacity.Pc:-row.P/capacity.Pt;
   return {...row,warping:w,Ut:row.U+(ratio>=.2?8/9:1)*w/fy,torque:T};
  };
- const asceRow=(k:{id:string;equation:string;factors:Record<typeof existingLoadKeys[number],number>},cd?:number)=>{
+ // One concurrency rule with the girder (craneCombinations): impact and side thrust in separate combinations, TR-13
+ // 2b (side thrust, no impact) and 2c (impact, no side thrust), unless the project adopts full concurrency (C1).
+ const asceRow=(k:{id:string;equation:string;factors:Record<typeof existingLoadKeys[number],number>},cd?:number,split?:'Css'|'Ci')=>{
+  const live=split==='Css'?liveAll-support.Ci:liveAll,lateral=split==='Ci'?0:lateralAll;
   const f=k.factors,existing=(key:'P'|'Mx'|'My'|'V',abs:boolean,keys:readonly typeof existingLoadKeys[number][]=existingLoadKeys)=>keys.reduce((sum,t)=>sum+(abs?Math.abs(f[t]*c.existing[t][key]):f[t]*c.existing[t][key]),0);
   // TR-13 supporting-structure forms take the crane dead load with the dead-load factor (cd), the rest of the crane with L.
   const runway=f.D*dead+(cd===undefined?f.L*live:cd*support.Cd+f.L*(live-support.Cd)),bc=brace(`${p.method} ${k.id}`);
@@ -223,10 +226,11 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
   const Mxr=sway===undefined?B1x*Mx:B1x*(combinedPeak(eccentric.samples,side.samples,'moment',runway*e,0)+existing('Mx',true,nonSway))+sway*(combinedPeak(eccentric.samples,side.samples,'moment',0,f.L*lateral+Eside)+existing('Mx',true,['W','E']));
   const ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=Mxr/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
-  const row={id:`${p.method} ${k.id}`,equation:k.equation,P,Mx:Mxr,My:B1y*My,V,B1x,B1y,U};
+  const row={id:`${p.method} ${k.id}${split?` (${split==='Css'?'side thrust, no impact':'impact, no side thrust'})`:''}`,equation:k.equation,P,Mx:Mxr,My:B1y*My,V,B1x,B1y,U};
   return bc&&share?torsional(row,share.locating?bc.Hbay*designed!.offset:0):reviewRow(row,F);
  };
- const combinations:ExistingColumnCombination[]=[...asceCombinations(p.method).map(k=>asceRow(k)),...tr13.map(k=>asceRow(k,k.cd))];
+ const rule=(k:{factors:{L:number}})=>!k.factors.L?[undefined]:concurrent?[undefined,'Css' as const,'Ci' as const]:['Css' as const,'Ci' as const];
+ const combinations:ExistingColumnCombination[]=[...asceCombinations(p.method).flatMap(k=>rule(k).map(v=>asceRow(k,undefined,v))),...tr13.flatMap(k=>rule(k).map(v=>asceRow(k,k.cd,v)))];
  // TR-13 crane stop (8 / ASD 9) at a column locating a girder that carries a stop: 1.2(D + Cds) + Cvs + 1.0Cbs.
  if(review&&bracingPath&&stops.grids.has(j)){
   const [fD,fB]=p.method==='LRFD'?[1.2,1]:[1,.67],runway=fD*dead+fD*support.Cd+support.Cv,P=fD*c.existing.D.P+runway;

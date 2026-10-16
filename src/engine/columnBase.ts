@@ -107,14 +107,17 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
   const seat=(f:{D:number;L:number;Cd:number;Cv:number})=>ends&&seatTop&&ends[j]?.length?seatMoment(ends[j],f):0;
   const ex=capTop?capAlongEccentricity(p,j):0,capMy=(runway:number,ms=0)=>(capTop?Math.abs(runway*ex*capTop.reactions.baseMoment):0)+(ms&&seatTop?Math.abs(ms*seatTop.reactions.baseMoment):0),capVy=(runway:number,ms=0)=>(capTop?Math.abs(runway*ex*capTop.reactions.base):0)+(ms&&seatTop?Math.abs(ms*seatTop.reactions.base):0);
   const dead=sp.D+column,live=sp.Cd+sp.Cv+sp.Ci+sp.L+sp.Clv,lift=Math.min(0,sp.craneMinimum);
-  const act=(k:{id:string;equation:string;factors:{D:number;L:number}},vertical:number,tag:string):BaseAction=>{
-   const runway=k.factors.D*sp.D+k.factors.L*vertical,Mh=Math.abs(k.factors.L*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.factors.L*sp.Css*side.reactions.base),ms=seat({D:k.factors.D,L:k.factors.L,Cd:k.factors.L,Cv:k.factors.L});
+  const act=(k:{id:string;equation:string;factors:{D:number;L:number}},vertical:number,tag:string,thrust=1):BaseAction=>{
+   const runway=k.factors.D*sp.D+k.factors.L*vertical,Mh=Math.abs(thrust*k.factors.L*sp.Css*side.reactions.baseMoment),Vh=Math.abs(thrust*k.factors.L*sp.Css*side.reactions.base),ms=seat({D:k.factors.D,L:k.factors.L,Cd:k.factors.L,Cv:k.factors.L});
    return {id:`${method} ${k.id}${tag}`,equation:k.equation,P:k.factors.D*dead+k.factors.L*vertical,
     Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,
     My:(along?Math.abs(k.factors.L*longitudinal*along.reactions.baseMoment):0)+capMy(runway,ms),Vy:(along?Math.abs(k.factors.L*longitudinal*along.reactions.base):0)+capVy(runway,ms),
     Pd:k.factors.D*dead,Md:Math.abs(k.factors.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.factors.D*sp.D*e*eccentric.reactions.base),Mh,Vh};
   };
-  const actions=asceCombinations(method).filter(k=>!k.factors.W&&!k.factors.E).flatMap(k=>[act(k,live,''),...(k.factors.L?[act(k,lift,' · least crane vertical')]:[])]);
+  // The girder's concurrency rule (craneCombinations): side thrust without impact (TR-13 2b) and impact without side
+  // thrust (2c), the fully concurrent set as well only where the project adopts it (C1).
+  const full=p.aist?.concurrency==='full',crane=(k:{factors:{L:number}})=>!k.factors.L?[]:[...(full?[]:[[live-sp.Ci,' · side thrust, no impact',1],[live,' · impact, no side thrust',0]] as [number,string,number][])];
+  const actions=asceCombinations(method).filter(k=>!k.factors.W&&!k.factors.E).flatMap(k=>[...(!k.factors.L||full?[act(k,live,'')]:[]),...crane(k).map(([v,t,h])=>act(k,v,t,h)),...(k.factors.L?[act(k,lift,' · least crane vertical')]:[])]);
   // Braced new columns: the rod whose top ends at this column compresses it; the rod whose bottom ends here lifts
   // the base and shears it along the runway; at a locating column the girder's longitudinal force is a torque.
   if(designed){
