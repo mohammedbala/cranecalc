@@ -63,9 +63,13 @@ interface EnvelopeResponse {td:{reactions:Reactions;displacement:number[]};tl:{r
  * last used, which bounds the memory.
  */
 interface ResponseCache {vertical:Map<string,VerticalResponse>;envelope:Map<string,EnvelopeResponse>}
-let scope:{caches:Map<string,ResponseCache>;envelopeKey?:string}|undefined;
-/** Runs f with the crane-position responses shared by its runwayDesignAnalysis calls; nothing is kept after f returns. */
-export function withDesignCache<T>(f:()=>T):T{const outer=scope;scope={caches:new Map()};try{return f();}finally{scope=outer;}}
+/** Progress of a calculation's moving-load searches (calculate's onProgress): which search, its travel steps and mesh,
+ * and the fraction of the first crane's positions done. */
+export interface DesignProgress {search:'design'|'detailed';steps:number;mesh:number;fraction:number}
+let scope:{caches:Map<string,ResponseCache>;envelopeKey?:string;progress?:(p:DesignProgress)=>void}|undefined;
+/** Runs f with the crane-position responses shared by its runwayDesignAnalysis calls (nothing is kept after f returns),
+ * reporting their progress to onProgress at most four times a second. */
+export function withDesignCache<T>(f:()=>T,onProgress?:(p:DesignProgress)=>void):T{const outer=scope;scope={caches:new Map(),progress:onProgress};try{return f();}finally{scope=outer;}}
 
 export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:GirderStrength,steps:number,mesh:number,observe?:RunwayCaseObserver,options:DesignAnalysisOptions={}):DesignAnalysis {
  const envelope=options.envelope!==false;
@@ -268,13 +272,15 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
    }
   }
  }
- let added=0;
+ let added=0,done=0,reported=-Infinity;
+ const progress=scope?.progress,report=()=>{if(!progress)return;const now=performance.now(),fraction=++done/responses[0].length;if(fraction<1&&now-reported<250)return;reported=now;progress({search:observe?'detailed':'design',steps,mesh,fraction});};
  function visit(index:number){
   if(index===responses.length){if(!reuse||added)evaluate();return;}
   visit(index+1); // A crane absent from the modeled runway is a real load state.
   for(const r of responses[index]){
    const previous=chosen.at(-1);if(!pairs(p,index,r.position,previous&&{index:previous.index,position:previous.response.position}))continue;
-   if(!r.wheels.length&&!r.beyond)continue;const isNew=old(index,r.position)?0:1;chosen.push({index,response:r});added+=isNew;visit(index+1);added-=isNew;chosen.pop();
+   if(!r.wheels.length&&!r.beyond){if(!index)report();continue;}const isNew=old(index,r.position)?0:1;chosen.push({index,response:r});added+=isNew;visit(index+1);added-=isNew;chosen.pop();
+   if(!index)report();
   }
  }
  visit(0);result.combinations=[...records.values()];result.equilibriumError=eq;result.verticalByBay=verticalByBay;result.lateralByBay=lateralByBay;
