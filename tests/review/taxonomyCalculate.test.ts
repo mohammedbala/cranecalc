@@ -26,7 +26,9 @@ describe('fatigue gates from current results',()=>{
   expect(gateCheck(s,c).gate).toBe('evaluated');
   const t=buildTaxonomy(s,summaryElements(s.input));
   expect(t.fatigue.evaluated.some(r=>r.members.some(m=>m.id===id))).toBe(true);
-  expect(t.fatigue.evaluated.length).toBeGreaterThan(buildTaxonomy(base,summaryElements(base.input)).fatigue.evaluated.length);
+  // Screened in the stored calculation, evaluated now. (The row counts are not compared: with the restraint model at the
+  // tie line the heavier crane's register ranges move, and the rail keeper rows of the stored calculation are screened.)
+  expect(buildTaxonomy(base,summaryElements(base.input)).fatigue.evaluated.some(r=>r.members.some(m=>m.id===id))).toBe(false);
  });
  it('classifies every check of a fresh calculation by the explicit table',()=>{
   expect(s.checks.filter(c=>classifyCheck(c).rule==='default').map(c=>c.id)).toEqual([]);

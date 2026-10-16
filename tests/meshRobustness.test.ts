@@ -104,8 +104,10 @@ describe('detailed collector, t03 bay 4 (LRFD A2c)',()=>{
   return collector.finish();
  };
  it('gives the multiplier, stresses and brace force of the wheel on the support',()=>{
+  // 1.37 with the flexible plate's force at its line below the flange (tieLine), which on this W14X61 restrains the twist
+  // much less than a restraint at the flange did (2.05); the sliver element gave 0.70.
   const exact=result(0);
-  expect(exact.criticalMultiplier).toBeGreaterThan(1.5);expect(exact.unstableCases??0).toBe(0);
+  expect(exact.criticalMultiplier).toBeGreaterThan(1.2);expect(exact.unstableCases??0).toBe(0);
   for(const delta of offsets){
    const r=result(delta);
    expect(r.unstableCases??0).toBe(0);expect(r.residual).toBeLessThan(1e-6);

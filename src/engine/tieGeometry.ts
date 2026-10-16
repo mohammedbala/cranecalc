@@ -6,6 +6,8 @@ import {tieArrangement} from './connectionOptions';
 import {boltProperties} from './connectionStrength';
 import {existingColumnSection} from './existingColumn';
 import {activeEndBearing} from './endBearingInputs';
+import {capTieLine} from './capAngle';
+import {activeColumnCap} from './columnCapInputs';
 
 /**
  * Ties of the direct flange-tie family: two flat bars, one each side of the girder and column gussets, or one
@@ -142,4 +144,21 @@ export function stiffenerTieGeometry(p:ProjectInput){
   // Bars and gusset sit the clearance inside each tied flange; on a capped girder the top ones drop below the cap
   // channel's turned-down flanges, which reach capDepth − capTw below the W top past the W flange tips.
   topCenter:b.d/2-Math.max(b.tf,b.kind==='cap'?b.capDepth-b.capTw:0)-clear-t.width/2,bottomCenter:-b.d/2+b.tf+clear+t.width/2};
+}
+
+/**
+ * Height above the girder bottom, mm, of the line where a tie force acts on the girder (`top`, the default) and of the
+ * bottom restraint line (`bottom`). A bar force F at a drop e below the flange is F at the flange plus the torque F·e, so
+ * the restraint line is the bar line: the cap tieback's tie plate line (capTieLine); the bar (or flexible plate) centroid
+ * of a direct flange saddle tie (flangeTieGeometry) or of the bars on the bearing-stiffener gusset (stiffenerTieGeometry),
+ * below the tied flange by the saddle or gusset and its clearance. A column cap fork and a tie without a laid-out
+ * attachment act at the flange at mid-thickness; the bottom flange at mid-thickness where the end bearing bolts
+ * restrain it. The girder analysis, the rail-head take-up, the interface torque and the S-00 tie elevation use it.
+ */
+export function tieLine(p:ProjectInput,side:'top'|'bottom'='top'){
+ const s=p.section,flange=side==='top'?s.d-s.tf/2:s.tf/2;
+ if(activeColumnCap(p))return flange;
+ if(side==='top'){const cap=capTieLine(p);if(cap!==undefined)return cap;}
+ const tie=flangeTieGeometry(p)??stiffenerTieGeometry(p);
+ return tie&&tie.sides.includes(side==='top'?1:-1)?s.d/2+(side==='top'?tie.topCenter:tie.bottomCenter):flange;
 }

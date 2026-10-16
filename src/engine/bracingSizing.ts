@@ -47,7 +47,7 @@ export function columnTorsionRatio(p:ProjectInput,reactions:SupportReactionSet=s
 }
 export function bracingRatios(p:ProjectInput,reactions?:SupportReactionSet):Record<string,number>{
  const out:Record<string,number>={};
- for(const c of bracingChecks(p,reactions))if(c.utilization!==undefined)out[c.id]=Number.isFinite(c.utilization)?c.utilization:1e12;
+ for(const c of bracingChecks(p,reactions))if(c.utilization!==undefined)out[c.id]=Number.isNaN(c.utilization)?Infinity:c.utilization;
  return out;
 }
 

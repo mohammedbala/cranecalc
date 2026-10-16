@@ -24,11 +24,17 @@ export function boxClearance(a:{min:number[];max:number[]},b:{min:number[];max:n
 
 const gridName=(p:ProjectInput,station:number)=>{let x=0;const grids=[0,...p.spans.map(s=>x+=s)];const i=grids.findIndex(g=>Math.abs(g-station)<1);return i>=0?`grid ${i+1}`:`station ${format(station,'length',p.units,3)}`;};
 
+/**
+ * A clearance record: met or not, never a ratio (a used-up clearance is not a D/C). A clash states the overlap, or the
+ * clear distance and its shortfall, and the clearance required; an overlap is a geometry conflict (checkIntegrity.ts).
+ */
 function check(p:ProjectInput,id:string,title:string,required:number,clear:number,equation:string,note:string,referenceIds:string[]):CheckResult{
- const pass=withinLimit(required,clear);
- return {id,group:coordinationGroup,title,status:pass?'pass':'fail',demand:required,capacity:clear,quantity:'length',utilization:clear>0?required/clear:1e12,equation,
-  substitution:`${latexNumber(required)}\\le${latexNumber(clear)}`,note:(pass?'':'OPEN ITEM: CONNECTION LAYOUT REQUIRES REDESIGN; do not fabricate this arrangement. ')+note,referenceIds};
+ const pass=withinLimit(required,clear),len=(v:number)=>format(v,'length',p.units,3);
+ const lead=clear<0?`Invalid geometry: clear distance = −${len(-clear)}: the parts overlap by ${len(-clear)}; ${len(required)} clear required. `:pass?'':`Clear ${len(clear)} against ${len(required)} required: short by ${len(required-clear)}. `;
+ return {id,group:coordinationGroup,title,status:pass?'pass':'fail',demand:required,capacity:clear,quantity:'length',equation,...(clear<0?{geometry:true}:{}),
+  substitution:`${latexNumber(required)}\\le${latexNumber(clear)}`,note:lead+(pass?'':`${openItemLead} `)+note,referenceIds};
 }
+const openItemLead='OPEN ITEM: CONNECTION LAYOUT REQUIRES REDESIGN; do not fabricate this arrangement.';
 
 /**
  * Cap tieback angle: the cap bolt nuts, their washers and the bolt ends inside the girder against the girder's
@@ -114,5 +120,5 @@ export function coordinationChecks(p:ProjectInput):CheckResult[]{
  * strip show these. Derived from coordinationChecks so the text and the check never disagree.
  */
 export function connectionCoordination(p:ProjectInput):string[]{
- return coordinationChecks(p).filter(c=>c.status==='fail').map(c=>`${c.title}: ${c.note.replace(/^OPEN ITEM: CONNECTION LAYOUT REQUIRES REDESIGN; do not fabricate this arrangement\. /,'')}`);
+ return coordinationChecks(p).filter(c=>c.status==='fail').map(c=>`${c.title}: ${c.note.replace(`${openItemLead} `,'')}`);
 }
