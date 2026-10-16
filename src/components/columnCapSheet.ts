@@ -1,5 +1,4 @@
-// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
-import {dcText} from '../engine/checkPresentation';
+import {checkDcText,elementSummary,failingNote,sheetDc} from './sheetRatios';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {activeEndBearing,endBearingGeometry} from '../engine/endBearing';
@@ -185,7 +184,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
  }});
 
  // Notes and design data.
- const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${dcText(v.utilization,2)}`:'-';};
+ const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>checkDcText(s,check(id));
  const force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
  const r=s.detailResults?.columnCap,peak=r?Math.max(...r.grids.flatMap(v=>v.bearings.map(x=>x.R.value))):0;
  const rows=[
@@ -195,6 +194,8 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   ['BEARING BOLTS',`4 - ${size(db)} DIA. ${eb.bolts.grade} AT EACH GIRDER ${p.system==='continuous'?'BEARING':'END'}, THRU FLANGE, BEARING PL AND CAP`],
   [`LARGEST GIRDER END REACTION (${p.method})`,r?force(peak):'-'],
   ['RATIOS: CAP PL / WELDS / BOLTS / STIFFENER / WEB',`${ratio('column-cap-plate')} / ${ratio('column-cap-weld')} / ${ratio('column-cap-bolt-tension')} / ${g.stiffened?ratio('column-cap-stiffener-weld'):'-'} / ${ratio('column-cap-web-yield')}`],
+  // The largest D/C over every check of the column cap, and the failing ones by name (sheetRatios).
+  ...(()=>{const e=elementSummary(s,(c,e)=>e==='support'&&c.group==='Column cap'),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL COLUMN CAP CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})(),
   ['FORK RESTRAINT / REQUIRED',r&&check('column-cap-fork-stiffness')?`${force(r.fork.k,'stiffness')} / ${force(check('column-cap-fork-stiffness')!.demand!,'stiffness')}`:'-']
  ];
  const notes=[

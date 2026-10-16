@@ -10,7 +10,9 @@ import { buildReferenceFraming,newColumnFraming } from './referenceFraming';
 import { buildReferenceStructure, cloneOppositeRunway } from './referenceStructure';
 import { defaultFraming, drawnFrameStyle, framingSchema, type FramingSettings } from './framingSettings';
 import {flangeTieGeometry} from '../engine/tieGeometry';
-const tieFaceMeters=(p:Parameters<typeof flangeTieGeometry>[0])=>{const f=flangeTieGeometry(p)?.face;return f===undefined?undefined:f/1000;};
+import {supportFace} from '../engine/runwayGeometry';
+// The column face where the views draw it (supportFace): the laid-out tie's, else the surveyed existing column's.
+const tieFaceMeters=(p:Parameters<typeof flangeTieGeometry>[0])=>{const f=supportFace(p);return f===undefined?undefined:f/1000;};
 
 export type Point = [number, number, number];
 export type Segment = [Point, Point];
