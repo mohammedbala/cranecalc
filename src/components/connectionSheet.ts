@@ -15,7 +15,7 @@ import { bearingStiffenerProfile } from './bearingStiffenerGeometry';
 import { boltProperties } from '../engine/connectionStrength';
 import { defaultFraming, drawnFrameStyle, type FramingSettings } from './framingSettings';
 import { planSheetGeometry } from './planSheetGeometry';
-import { drawingLength, plateInches,dimensionLength} from './drawingFormat';
+import { drawingLength, plateInches,dimensionLength,limitLength} from './drawingFormat';
 import {viewConflict,conflictView} from './detailHolds';
 import {supportFace} from '../engine/runwayGeometry';
 import {refDim, lettering, sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
@@ -222,11 +222,24 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
    {at:[X(tg/2),Z((Math.max(b.bf/2,g.root)+g.gussetEnd)/2)],labels:[`GIRDER GUSSET PL ${size(tg)} X ${size(g.height)} X ${size(g.gussetLength)}`,`${size(g.clear)} INSIDE FLANGE; BARS ${size(g.clear)} CLEAR`,'OF STIFFENER']},
    {at:[X(tg/2)+tbk+3,Z(girderRows.at(-1)!)],labels:[`EACH END: ${2*c.rows} - ${size(c.diameter)} ${c.grade}, ${c.rows} ROWS`,`X 2 AT ${size(c.gauge)} VERT. GAUGE; CLASS ${c.surface}`,`${size(hole)} STD HOLES${rel?' AT THE GIRDER END':''}`]},
    {at:[X(tg/2)+tbk,Z(cut?z1:(g.gussetEnd+g.face-g.connection)/2)-4],labels:[`2 FB ${size(tb)} X ${size(t.width)} (VERTICAL) X ${dim(t.length)}`,'ONE EACH SIDE OF THE GUSSETS']},
-   ...(rel?[{at:[X(tg/2)+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`]}]:[]),
+   ...(rel?[{at:[X(tg/2)+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`,
+    // The slots take the support's deflection limit handed to its designer (S-00): the same words as there.
+    ...(()=>{const lim=s.checks.find(v=>v.id==='tie-move-support')?.capacity;return lim!==undefined&&lim>0?['SLOTS TAKE THE BRACKET\'S VERTICAL','DEFLECTION AT THE BEARING UNDER CRANE',`LOADS ${limitLength(lim,p.units,'max')} MAX.`]:[];})()]}]:[]),
    {at:[X(tg/2),colZ],labels:[`COLUMN GUSSET PL ${size(tg)} X ${size(hg)} X ${size(g.columnGussetLength)}`,`2 ROOT FILLETS X ${dim(c.weldLength)}, ${sc.weld}`],weld:'fillet'},
    {at:[cx+colW*k*.3,colZ+colT*k],labels:[colRef]}
   ];
   const height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*11,y0=Z(-b.bf/2)-10,y1=colB+6,total=items.reduce((a,v)=>a+height(v),0),space=Math.max(8,(y1-y0-total)/(items.length-1));
+  // In the order of their targets down the sheet; two neighbours whose straight leaders would still cross (targets at
+  // nearly one depth, far apart across the sheet: a wide column flange beside the gusset root weld) swap places.
+  items.sort((u,v)=>u.at[1]-v.at[1]);
+  {const side=(p:XY,q:XY,o:XY)=>Math.sign((q[0]-p[0])*(o[1]-p[1])-(q[1]-p[1])*(o[0]-p[0]));
+   const crosses=(a:[XY,XY],r:[XY,XY])=>side(a[0],a[1],r[0])*side(a[0],a[1],r[1])<0&&side(r[0],r[1],a[0])*side(r[0],r[1],a[1])<0;
+   // Crossing pairs of straight leaders, each from its target to its label in the column.
+   const count=()=>{const ys=items.map((_,j)=>y0+items.slice(0,j).reduce((a,v)=>a+height(v)+space,0)),seg=items.map((v,j):[XY,XY]=>[v.at,[lx-14,ys[j]+(v.weld?3:0)]]);
+    let n=0;for(let i=0;i<seg.length;i++)for(let j=i+1;j<seg.length;j++)if(crosses(seg[i],seg[j]))n++;return n;};
+   // A neighbour swap is kept only where it leaves fewer crossings.
+   for(let n=count(),pass=0;n>0&&pass<items.length;pass++)for(let i=0;i+1<items.length;i++){
+    [items[i],items[i+1]]=[items[i+1],items[i]];const m=count();if(m<n)n=m;else [items[i],items[i+1]]=[items[i+1],items[i]];}}
   let ly=y0;
   for(const v of items){
    if(v.weld==='cjp')svg+=grooveLeader(v.at,[lx,ly+3],v.labels);

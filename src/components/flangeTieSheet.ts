@@ -335,5 +335,5 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
 export function tieForceNote(s:CalculationSnapshot):string[]{
  const d=deliveredForces(s);if(!d)return [];
  const u=s.input.units,f=(v:number)=>{const t=format(v,'force',u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
- return [`TIE DESIGN FORCE F = H + P_BR = ${f(d.tie.design-d.brace.force)} + ${f(d.brace.force)} = ${f(d.tie.design)}, EITHER WAY: H THE LARGEST CONCURRENT TOP-FLANGE RESTRAINT FORCE AT A GRID (H TOP IN THE SUPPORT FORCE TABLE), P_BR THE AISC 360 APPENDIX 6 BRACE FORCE; THE S-00 H TIE INCLUDES P_BR.`];
+ return [`TIE DESIGN FORCE F = H + P BR = ${f(d.tie.design-d.brace.force)} + ${f(d.brace.force)} = ${f(d.tie.design)}, EITHER WAY: H THE LARGEST CONCURRENT TOP-FLANGE RESTRAINT FORCE AT A GRID (H TOP IN THE SUPPORT FORCE TABLE), P BR THE AISC 360 APPENDIX 6 BRACE FORCE; THE S-00 H TIE INCLUDES P BR.`];
 }

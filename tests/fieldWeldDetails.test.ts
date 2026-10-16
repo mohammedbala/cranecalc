@@ -9,7 +9,7 @@ import {connectionConceptSheetSvg} from '../src/components/connectionConceptShee
 import {detailedDrawings} from '../src/components/detailedDrawings';
 import {buildWeldedBrackets} from '../src/components/weldedBracketGeometry';
 import {buildIndependentSupports} from '../src/components/independentSupportGeometry';
-const snapshot=(input=cappedDemonstrationProject()):CalculationSnapshot=>({input,revision:'field-weld-review',createdAt:'2026-10-08',errors:[],warnings:[],properties:null,analysis:null,checks:[],eligible:false,referenceVersion:''});
+const snapshot=(input=cappedDemonstrationProject()):CalculationSnapshot=>({input,revision:'field-weld-review',createdAt:'2026-10-08',errors:[],warnings:[],properties:null,analysis:null,checks:[],eligible:true,referenceVersion:''});
 const flags=(svg:string)=>(svg.match(/data-field-weld="true"/g)??[]).length;
 describe('field welds to existing building steel',()=>{
  it('flags column attachments and preserves unflagged new-part weld symbols',()=>{

@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {templateProject} from '../src/engine/templates';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {automaticFatigueDetails,braceSystem,createDetailCollector} from '../src/engine/detailAnalysis';
 import {flangeTieGeometry} from '../src/engine/tieGeometry';
 import {flangeTieResponse} from '../src/engine/flangeTieDesign';
@@ -9,10 +9,12 @@ import {sectionProperties} from '../src/engine/section';
  * The direct flange saddle has two fatigue sites with different stress directions: the toes of its transverse end
  * fillets under the girder's longitudinal stress (SA, AISC A-3.1 item 7.1 by the saddle length along the runway), and the
  * end fillet terminations under the local flange bending across the flange from the tie force (SL, item 7.1 by the saddle
- * width across the flange: typically E′). The two ranges are never added.
+ * width across the flange: typically E′). The two ranges are never added. No configurator template ties on a saddle any
+ * more (t05 moved its tie to the bearing stiffener: its saddle exceeded the flange limits at the tie line), so the
+ * saddle demonstration carries the mechanics.
  */
-const inch=25.4,p=templateProject('t05'),g=flangeTieGeometry(p)!;
-describe('saddle fatigue by stress direction (template:5 saddle)',()=>{
+const inch=25.4,p=saddleDemonstration(),g=flangeTieGeometry(p)!;
+describe('saddle fatigue by stress direction (saddle demonstration)',()=>{
  it('registers the transverse points at Category E′ beside the longitudinal toes',()=>{
   expect(g.rootLength).toBeGreaterThan(4*inch);expect(g.attachment.saddleThickness).toBeGreaterThan(.8*inch);
   const f=automaticFatigueDetails(p),sa=f.filter(v=>v.id.startsWith('SA')),sl=f.filter(v=>v.id.startsWith('SL'));

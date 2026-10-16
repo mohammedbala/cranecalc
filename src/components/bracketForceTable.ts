@@ -132,7 +132,7 @@ export function bracketForceBlocks(s:CalculationSnapshot,t:Style):Block[]{
  const ten=tenths.length?` COMB. ${tenths.join(' / ')}: COMBINATION${tenths.length>1?'S':''} ${tenths.map(v=>combinationLabel(v).toUpperCase()).join(' / ')} ON S-00.`:'';
  // The S-00 tie force adds the Appendix 6 brace force to this restraint force.
  const brace=!cap?deliveredForces(s)?.brace.force:undefined;
- const braced=!cap&&deliveredRows(s).length?` H TOP IS THE RESTRAINT FORCE; THE TIE DESIGN FORCE (S-00 H TIE) ADDS THE APPENDIX 6 BRACE FORCE${brace!==undefined?` P_BR = ${sig3(brace,'force',u)}`:''}.`:'';
+ const braced=!cap&&deliveredRows(s).length?` H TOP IS THE RESTRAINT FORCE; THE TIE DESIGN FORCE (S-00 H TIE) ADDS THE APPENDIX 6 BRACE FORCE${brace!==undefined?` P BR = ${sig3(brace,'force',u)}`:''}.`:'';
  const locating=envelopes.filter(v=>Math.abs(v.longitudinal.longitudinal)>=1).map(v=>v.grid),stop=envelopes.filter(v=>Math.abs(v.longitudinal.longitudinal)>=1&&stops.has(v.longitudinal.combination)).map(v=>v.grid);
  const list=(g:number[])=>g.length>1?`GRIDS ${g.slice(0,-1).join(', ')} AND ${g.at(-1)}`:`GRID ${g[0]}`;
  const interior=simple&&grids.some(g=>g.cases.some(c=>c.label.includes('END V'))),mirrored=grids.some(g=>g.cases.some(c=>c.mirrored));
