@@ -37,9 +37,9 @@ describe('issued drawing set',()=>{
    set.forEach((sheet,i)=>{expect(sheet.svg).toContain(`${i+1} OF ${set.length}`);expect(sheet.svg).toContain(`SHEET ${sheet.number}`);});
   }
   // Cover, general arrangement and the details on as few sheets as hold them at the 3/32 in lettering: two for the
-  // rolled demonstration, three for the capped and four for the new-column demonstration, whose covers continue their
-  // notes on S-00A.
-  expect(demoSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
+  // rolled demonstration, three for the capped and four for the new-column demonstration; every cover continues its
+  // notes on S-00A (the rolled demonstration's with the seat survey, faying-surface and tie erection notes).
+  expect(demoSet.map(v=>v.number)).toEqual(['S-00','S-00A','S-01','S-02','S-03']);
   expect(cappedSet.map(v=>v.number)).toEqual(['S-00','S-00A','S-01','S-02','S-03','S-04']);
   // The new-column set adds the new-column and bracing details.
   expect(newColumnSet.map(v=>v.number)).toEqual(['S-00','S-00A','S-01','S-02','S-03','S-04','S-05']);
@@ -168,7 +168,8 @@ describe('drawings agree with the calculation',()=>{
   const title='BRACKET DESIGN FORCES / FACTORED LRFD ENVELOPE';
   // The capped set carries the bracket details on S-03 (with the column stiffeners), after the connections and cap
   // channel; the new-column set on S-03 too, ahead of the new-column and bracing sheets.
-  for(const [s,set,at] of [[demo,demoSet,'S-02'],[capped,cappedSet,'S-03'],[newColumn,newColumnSet,'S-03']] as const){
+  // The rolled demonstration's tie on the bearing stiffener draws its plan on S-02, so the table goes to S-03.
+  for(const [s,set,at] of [[demo,demoSet,'S-03'],[capped,cappedSet,'S-03'],[newColumn,newColumnSet,'S-03']] as const){
    const holding=set.filter(v=>texts(v.svg).includes(title));
    expect(holding.map(v=>v.number)).toEqual([at]);
    // Values to three significant figures (two decimals below 0.1), as the forces delivered to the columns on S-00, without

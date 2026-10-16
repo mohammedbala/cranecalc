@@ -1,4 +1,5 @@
 import {beforeAll,it,expect} from 'vitest';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {reviewOpenItem} from './review/openItems';
 import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/demonstration';
 import {calculate,fingerprint} from '../src/engine/calculate';
@@ -53,7 +54,8 @@ it('calls for UT only where the set has CJP welds and names the surveyed column 
  // The cover and the sheets continuing its notes.
  const capped=drawingSheetSet(s),cover=capped.filter(v=>v.number.startsWith('S-00')).map(v=>v.svg).join('');
  expect(cover).toContain('UT 100% OF CJP GROOVE WELDS');
- const plain=structuredClone(s);plain.input=demonstrationProject();
+ // The demonstration with its tie on the flange saddle has no CJP weld (on its bearing stiffener the tie gusset is a CJP).
+ const plain=structuredClone(s);plain.input=saddleDemonstration();
  const plainCover=drawingSheetSet(plain).filter(v=>v.number.startsWith('S-00')).map(v=>v.svg).join('');
  expect(plainCover).not.toContain('UT 100% OF CJP');expect(plainCover).toContain('MT AT FILLET TERMINATIONS ON CYCLIC DETAILS');
  // The capped example surveys a W14X90 column: the connection labels it, not the viewer's tapered frame.

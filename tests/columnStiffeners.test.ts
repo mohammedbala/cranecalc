@@ -249,8 +249,9 @@ describe('column stiffener test projects, full calculation and drawing set',()=>
  it('makes the capped twin-rib bracket on a W14X90 pass, its drawing set clear in US and SI',()=>{
   const bare=calculate(cappedTwinRibW14X90(false));expect(bare.errors).toEqual([]);
   // The rib reaction at the girder web line moved by the rail eccentricity and the support torque (it was the far edge
-  // of the bearing plate, beyond the flange tip): the unstiffened flange at the ribs still fails, at 1.180 (was 1.498).
-  expect(failing(bare).map(c=>c.id)).toEqual(['bracket-column-flange']);expect(failing(bare)[0].utilization).toBeCloseTo(1.180,3);
+  // of the bearing plate, beyond the flange tip): the unstiffened flange at the ribs still fails, at 1.184 (was 1.498;
+  // 1.180 with the capped demonstration's 1 3/8 in saddle, whose tie line the 1 1/2 in saddle lowers 1/8 in).
+  expect(failing(bare).map(c=>c.id)).toEqual(['bracket-column-flange']);expect(failing(bare)[0].utilization).toBeCloseTo(1.184,3);
   const s=calculate(cappedTwinRibW14X90(true));expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
   expect(failing(s).map(c=>c.id)).toEqual([]);
   expect(s.checks.find(c=>c.id==='bracket-column-flange')!.status).toBe('not-applicable');

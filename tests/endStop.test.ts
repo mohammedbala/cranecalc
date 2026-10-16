@@ -190,9 +190,10 @@ describe('girder-mounted runway end stops',()=>{
  });
  it('draws the end stop details and references them from S-01, the cover and the cap details',()=>{
   const set=drawingSheetSet(demo),s07=set.find(v=>v.svg.includes('data-view="end-stop-elevation"'))!;
-  // Cover, general arrangement and two detail sheets at the 3/32 in lettering: the end stops share S-03 with the flange ties.
-  expect(set.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
-  expect(s07.svg.match(/data-view-title="below"/g)).toHaveLength(6);
+  // Cover (its notes running on to S-00A), general arrangement and two detail sheets at the 3/32 in lettering. The tie is
+  // on the bearing stiffener (S-02), so S-03 holds no flange tie views beside the end stops.
+  expect(set.map(v=>v.number)).toEqual(['S-00','S-00A','S-01','S-02','S-03']);
+  expect(s07.svg.match(/data-view-title="below"/g)).toHaveLength(5);
   expect(s07.svg).not.toMatch(/\{\{|NOT IN SET|NaN|undefined|data-overflow/);
   for(const view of ['end-stop-elevation','end-stop-plan','end-stop-section','end-stop-notes'])expect(s07.svg).toContain(`data-view="${view}"`);
   const t=texts(s07.svg).join(' | ');

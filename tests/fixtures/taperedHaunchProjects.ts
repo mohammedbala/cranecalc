@@ -2,6 +2,7 @@ import {cappedDemonstrationProject,demonstrationProject} from '../../src/engine/
 import {selectBracketArrangement} from '../../src/engine/connectionOptions';
 import {sizeTaperedHaunch} from '../../src/engine/taperedHaunchSizing';
 import type {ProjectInput} from '../../src/engine/types';
+import {saddleDemonstration} from './saddleDemonstration';
 
 const inch=25.4,foot=304.8,kip=4448.2216152605,ksi=6.894757293168;
 /** AISC W14X90: d 14.0 in, bf 14.5 in, tf 0.71 in, tw 0.44 in. */
@@ -34,7 +35,8 @@ export function cappedTaperedHaunch():ProjectInput{
  * and deepens the haunch until the stiffeners' web shear and fillet throat fatigue are within limits.
  */
 export function existingBuildingHaunch(units:'US'|'SI'='US'):ProjectInput{
- const p=demonstrationProject();
+ // The demonstration with its top-flange tie on the direct flange saddle (the demonstration itself ties at its stiffener).
+ const p=saddleDemonstration();
  p.units=units;
  p.title='Cedar Works · New 7.5-ton runway in the existing 5-bay building';p.number=units==='SI'?'DEMO-TH-075-SI':'DEMO-TH-075';
  p.spans=[25*foot,25*foot,25*foot,25*foot,25*foot];

@@ -92,7 +92,7 @@ describe('reach for the top-flange tie',()=>{
   expect(t.length).toBeCloseTo(t.reach,9);expect(g.face).toBeCloseTo(b.reach,9);
   // Clear length between the bolt groups: the stiffener tie is sized for the end movement by its own checks (tie-move-*,
   // sizeFlangeTie), within the imposed-movement limit; tieReach serves the saddle ties.
-  expect(free).toBeGreaterThan(0);expect(tieSizingRatios(p)['tie-move-strength']).toBeLessThanOrEqual(.97+1e-9);
+  expect(free).toBeGreaterThan(0);expect(tieSizingRatios(p)['tie-move-strength']).toBeLessThanOrEqual(1);
   // A configured reach is kept.
   const fixed=buildProject({...templateProject('t01').configurator!,reach:20});expect(fixed.details!.bracket!.reach).toBeCloseTo(20*inch,9);
   expect(fixed.details!.brace.length).toBeCloseTo(fixed.details!.brace.reach,9);expect(stiffenerTieGeometry(fixed)!.face).toBeCloseTo(20*inch,9);

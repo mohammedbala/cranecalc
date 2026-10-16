@@ -108,7 +108,7 @@ describe('flexible plate tieback design (10-ton demonstration)',()=>{
   // Fit-up: the 1/8 in alignment the erector can hold (the S-00 bearing plan tolerance) plus half the 1/16 in sleeve clearance.
   expect(plateFitOffset(p)).toBeCloseTo(5/32*inch,9);expect(tieRelease(p)?.clearance).toBeCloseTo(inch/16,9);
   // Weak-axis demand from the imposed movement in the H1 check: M = 6EI(delta)/L^2 plus the amplified lap share.
-  const note=check(s,'tie-move-strength').note;expect(note).toContain('single plate');expect(note).toContain('η = 0.078');
+  const note=check(s,'tie-move-strength').note;expect(note).toContain('single plate');expect(note).toContain('η = 0.042');
   expect(t.thickness).toBeCloseTo(.5*inch);
  });
  it('carries the lap couple into the gusset welds and column flange and softens the tie',()=>{
@@ -126,7 +126,7 @@ describe('flexible plate tieback design (10-ton demonstration)',()=>{
   expect(words).toContain('FLEXIBLE PL 1/2" X 5 1/4" X 2\'-1 1/4", 3/4" CLR. TO COLUMN;');
   expect(words).toContain('GIRDER END: 4 - 5/8" A325 SC, SINGLE SHEAR,');
   expect(words).toContain('FLEXIBLE PLATE TIE NOTES / LOCAL CHECKS');
-  expect(words).toContain('GIRDER GUSSET PL 1 1/4" X 5 7/8" X 5 1/2"');
+  expect(words).toContain('GIRDER GUSSET PL 1 1/4" X 5 7/8" X 5 1/4"');
   expect(words.some(v=>v.startsWith('2 FL')||v.includes('FILLER (HIDDEN)'))).toBe(false);
   expect(all).not.toMatch(/NaN|Infinity|undefined/);
   // Weld symbols: the column root fillets and the saddle fillets at their engine sizes and lengths.
