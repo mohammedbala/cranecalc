@@ -111,8 +111,10 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   svg+=multiLeader(stiffPts,[lx,stiffY],[`2 PL ${size(d.bearing.stiffenerThickness)} X ${size(d.bearing.stiffenerWidth)}`,`FULL-DEPTH FITTED BEARING STIFFENERS`,`${size(d.bearing.cope)} WEB-SIDE CORNER COPES`],8,stiffPts.map(()=>[[215,stiffY-5]]));
   svg+=filletLeader([weldPts[1]],[lx,218],size(d.bearing.weldSize),['TYP. BOTH STIFFENERS',cjp?'CONT. WEB FILLETS':'CONT. WEB & FLANGE FILLETS',cjp?'FIT BOTTOM END':'FIT / MILL STIFFENER ENDS'],true);
   svg+=multiLeader([hu?[inner-hu.L*.15*k/1000,bt+hu.hr*.55*k/1000]:[230,(bt+bb)/2]],[lx,287],usesExistingBracket(p)?[`EXISTING ${existingBracketLabel(d.bracket)}`,`NEW BOLTED SEAT: ${bracketRef}`]:hu?['WELDED TAPERED I HAUNCH',`STIFFENERS: ${detailRef(detailTitles.haunchSection)}; WELDS: ${bracketRef}`]:ws?[`WELDED ${ws.name} COLUMN BRACKET`,`${ws.seat?'SEAT / ':''}STIFFENERS / WELDS: ${bracketRef}`]:wb?['WELDED COLUMN BRACKET',`SEAT / RIBS / WELDS: ${bracketRef}`]:['COLUMN BRACKET (REF.)','COLUMN ATTACHMENT BY','BUILDING DESIGNER']);
-  // Below the bracket and the broken column, clear of the reference bracket's sloped soffit.
-  svg+=multiLeader([[cx,bottom+pt]],[111,bb+(wb?32:40)],[`BEARING PL ${size(d.bearing.thickness)} X ${size(d.bearing.width)} X ${size(d.bearing.length)}`]);
+  // Below the bracket and the broken column, clear of the reference bracket's sloped soffit and of the bracket callout's
+  // leader (a long plate size in SI): lower or farther left where the leader would cross it.
+  const plate=[`BEARING PL ${size(d.bearing.thickness)} X ${size(d.bearing.width)} X ${size(d.bearing.length)}`],plateY=bb+(wb?32:40),drawn=new AnnotationSpace(svg);
+  svg+=drawn.pick([[111,plateY],[111,plateY+14],[60,plateY],[60,plateY+14],[111,plateY+28]].map(([x,y])=>multiLeader([[cx,bottom+pt]],[x,y],plate)));
   return {svg:svg+'</g>',scale:scale.label};
  }});
 
