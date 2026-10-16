@@ -7,7 +7,7 @@ import {sectionProperties} from './section';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 import {seismicBasis,seismicCombinations} from './runwaySeismic';
-import {alongSeismic,braceCases,braceShare,bracingGeometry,bracingLayout,designsBracing,girderOffset,offsetRodEnds} from './newColumnBracing';
+import {alongSeismic,baseWarping,braceCases,braceShare,bracingGeometry,bracingLayout,designsBracing,girderOffset,offsetRodEnds,torsionBase} from './newColumnBracing';
 import {activeColumnCap} from './columnCapInputs';
 import {capAlongEccentricity} from './columnCap';
 import type {SupportReactionSet} from './supportReactions';
@@ -65,7 +65,25 @@ export interface BaseAction {id:string;equation:string;P:number;Mx:number;My:num
  /** A seismic combination with overstrength: ACI 318 §17.10 applies to the anchors. */
  seismic?:boolean;
  /** Braced new columns: upward brace force at the base, concentric, and the torque from a girder's longitudinal force. */
- uplift?:number;torque?:number;}
+ uplift?:number;torque?:number;
+ /**
+  * Braced new columns: the warping bimoment at the base, B = T a tanh(z/a) of each torque applied up the column (the
+  * seat and the offset rod's top), from the same fixed-base column torsion model as the column check; the base resists
+  * it as opposite lateral moments B/h0 in the two flanges.
+  */
+ bimoment?:number;}
+/**
+ * Flange lateral moment of the base bimoment, M_fl = B/h0, and what it does at the base (AISC Design Guide 9 §4.2): a
+ * vertical force couple at each flange's tips, bearing at one tip and lifting the other (basePlate takes it on the plate
+ * halves beside the web), and an in-plane moment on the flange's weld lines to the plate (section modulus S_w of the
+ * lines about the flange center, weld length L_w both faces).
+ */
+export function baseBimoment(p:ProjectInput,b:ColumnBaseInput,B:number){
+ const {section:c}=existingColumnSection(p),h0=c.d-c.tf,Mfl=Math.abs(B)/h0;
+ // Fillet lines of one flange to the plate: the outer face over bf and the inner face over bf - tw, about the flange center.
+ const outer=c.bf**3/12,inner=2*((c.bf/2)**3-(c.tw/2)**3)/3,Sw=(outer+inner)/(c.bf/2),Lw=2*c.bf-c.tw;
+ return {Mfl,Sw,Lw};
+}
 /**
  * Column base reactions for each ASCE 7 combination without wind or seismic: compression positive, moments
  * and shears as magnitudes with the eccentric reaction and the side thrust adding. Each combination with
@@ -96,15 +114,20 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
   // the base and shears it along the runway; at a locating column the girder's longitudinal force is a torque.
   if(designed){
    // The offset rod B lands on the base of the lower-numbered column of each braced span off the column centerline.
-   const share=braceShare(p,j),rodOffset=offsetRodEnds(p).base(j)?bracingGeometry(p,section).cross.offset/bracingLayout(p).spans.length:0;
+   const share=braceShare(p,j),ends=offsetRodEnds(p),layout=bracingLayout(p),cross=bracingGeometry(p,section).cross.offset/layout.spans.length;
+   // A base restrained against warping takes the bimoment of each torque applied up the column (torsionBase).
+   const rodOffset=ends.base(j)?cross:0,rodTop=ends.top(j)?cross:0,restrained=torsionBase(p)==='warping-restrained',warping=(T:number,z:number)=>T&&restrained?baseWarping(section,T,z).B:0;
    for(const k of designed.cases)if(share.vertical||share.locating){
     const torque=share.locating?k.Hbay*designed.offset:0,V=k.H*share.vertical;
-    const at=(crane:number,tag:string,brace:number,Vy:number,rod=0):BaseAction=>{
+    // The offset rod whose top ends here twists the column at the work point, as its torque at the seat does: both reach
+    // the base, each with its bimoment there (magnitudes added).
+    const at=(crane:number,tag:string,brace:number,Vy:number,rod=0,top=0):BaseAction=>{
      const runway=k.D*sp.D+crane,Mh=Math.abs(k.side*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.side*sp.Css*side.reactions.base);
      return {id:`${k.id}${tag}`,equation:k.equation,P:k.D*dead+crane+brace,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway),Vy:Vy+capVy(runway),
-      Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:k.seismic||undefined,uplift:Math.max(0,-brace),torque:torque+rod};
+      Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:k.seismic||undefined,uplift:Math.max(0,-brace),torque:torque+rod+top,
+      ...(restrained?{bimoment:warping(torque,hs)+warping(top,layout.height)}:{})};
     };
-    actions.push(at(k.live*live+k.Cd*sp.Cd+k.Cv*sp.Cv,' · brace',V,0));
+    actions.push(at(k.live*live+k.Cd*sp.Cd+k.Cv*sp.Cv,' · brace',V,0,0,V>0?k.H*rodTop:0));
     if(V>0)actions.push(at(Math.max(k.live,k.Cd,k.Cv)*lift,' · brace uplift',-V,k.H*share.shear,k.H*rodOffset));
    }
   }
@@ -121,31 +144,46 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
  });
 }
 
-/** AISC Design Guide 1 (2nd ed.) §3.3-3.4: base plate under axial load and strong-axis moment. */
+/**
+ * AISC Design Guide 1 (2nd ed.) §3.3-3.4: base plate under axial load and strong-axis moment. With a base bimoment
+ * (braced new columns, the column fixed against warping) each half of the plate beside the web carries half the axial
+ * load and half the moment plus the couple of the flange lateral moments: each flange's M_fl = B/h0 puts its tip halves
+ * at ±2M_fl/bf, compression under one flange and tension under the other on the same side of the web, a moment
+ * 2M_fl h0/bf = 2B/bf on that half (AISC Design Guide 9 §4.2). The worse half is designed as a Design Guide 1 plate of
+ * width B/2 with its half of each anchor row; the other half takes the moment less the couple.
+ */
 export function basePlate(p:ProjectInput,b:ColumnBaseInput,a:BaseAction,method=p.method){
- const pl=b.plate,{section:c}=existingColumnSection(p),N=pl.N,B=pl.B,fc=b.concrete.fc,lrfd=method==='LRFD';
+ const pl=b.plate,{section:c}=existingColumnSection(p),N=pl.N,B=pl.B,fc=b.concrete.fc,lrfd=method==='LRFD',nr=b.anchors.perRow;
  // A2 is the largest footing area geometrically similar to and concentric with the plate, at most 4A1.
- const ratio=Math.min(2,b.footing.L/N,b.footing.B/B),fpMax=(lrfd?.65:1/2.31)*Math.min(.85*fc*ratio,1.7*fc),qMax=fpMax*B;
- const f=N/2-b.anchors.edge,P=a.P,e=P>0?a.Mx/P:Infinity,eCrit=N/2-Math.max(0,P)/(2*qMax);
- let Y:number,T=0,bearing:number;
- // Small moment: uniform bearing over Y = N - 2e. Large moment: bearing at the limit over Y and anchor tension;
- // the plate is long enough while (f + N/2)^2 >= 2(M + Pf)/q_max (Design Guide 1 Eq. 3.4.4).
- if(P>0&&e<=eCrit){Y=N-2*e;bearing=P/(B*Y)/fpMax;}
- else{const need=2*(a.Mx+P*f)/qMax,r=(f+N/2)**2-need;
-  // Net uplift that the moment does not overcome: no bearing, both rows in tension, the row toward the moment more.
-  if(need<=0){Y=0;bearing=0;T=Math.max(0,-P/2+a.Mx/(2*f));}
-  else{bearing=need/(f+N/2)**2;Y=r>=0?f+N/2-Math.sqrt(r):NaN;T=Number.isNaN(Y)?Infinity:qMax*Y-P;}}
- const fp=Y>0?(P+T)/(B*Y):Number.isNaN(Y)?Infinity:0;
- const m=(N-.95*c.d)/2,n=(B-.8*c.bf)/2,l=Math.max(m,n,Math.sqrt(c.d*c.bf)/4),phiB=lrfd?.9:1/1.67;
- // Compression side: cantilever l under fp, or the shorter bearing length Y when Y < m.
- const tc=!Number.isFinite(fp)?Infinity:Y>=m?l*Math.sqrt(2*fp/(phiB*pl.Fy)):Math.sqrt(4*fp*Y*(m-Y/2)/(phiB*pl.Fy));
- // Tension side: the anchor row force on its lever to the flange centerline, over the plate width.
- const x=f-c.d/2+c.tf/2,tt=T>0&&x>0?Math.sqrt(4*T*x/(B*phiB*pl.Fy)):0;
- return {fpMax,Y,T,fp,l,bearing,tRequired:Math.max(tc,tt)};
+ const ratio=Math.min(2,b.footing.L/N,b.footing.B/B),fpMax=(lrfd?.65:1/2.31)*Math.min(.85*fc*ratio,1.7*fc);
+ const f=N/2-b.anchors.edge,m=(N-.95*c.d)/2,n=(B-.8*c.bf)/2,l=Math.max(m,n,Math.sqrt(c.d*c.bf)/4),phiB=lrfd?.9:1/1.67,x=f-c.d/2+c.tf/2;
+ /** One plate of width w under P and M: the bearing block, the anchor row tension, the bearing ratio and the thickness. */
+ const plate=(w:number,P:number,M:number)=>{
+  const qMax=fpMax*w,e=P>0?M/P:Infinity,eCrit=N/2-Math.max(0,P)/(2*qMax);
+  let Y:number,T=0,bearing:number;
+  // Small moment: uniform bearing over Y = N - 2e. Large moment: bearing at the limit over Y and anchor tension;
+  // the plate is long enough while (f + N/2)^2 >= 2(M + Pf)/q_max (Design Guide 1 Eq. 3.4.4).
+  if(P>0&&e<=eCrit){Y=N-2*e;bearing=P/(w*Y)/fpMax;}
+  else{const need=2*(M+P*f)/qMax,r=(f+N/2)**2-need;
+   // Net uplift that the moment does not overcome: no bearing, both rows in tension, the row toward the moment more.
+   if(need<=0){Y=0;bearing=0;T=Math.max(0,-P/2+M/(2*f));}
+   else{bearing=need/(f+N/2)**2;Y=r>=0?f+N/2-Math.sqrt(r):NaN;T=Number.isNaN(Y)?Infinity:qMax*Y-P;}}
+  const fp=Y>0?(P+T)/(w*Y):Number.isNaN(Y)?Infinity:0;
+  // Compression side: cantilever l under fp, or the shorter bearing length Y when Y < m.
+  const tc=!Number.isFinite(fp)?Infinity:Y>=m?l*Math.sqrt(2*fp/(phiB*pl.Fy)):Math.sqrt(4*fp*Y*(m-Y/2)/(phiB*pl.Fy));
+  // Tension side: the anchor row force on its lever to the flange centerline, over the plate width.
+  const tt=T>0&&x>0?Math.sqrt(4*T*x/(w*phiB*pl.Fy)):0;
+  return {Y,T,fp,bearing,tRequired:Math.max(tc,tt)};
+ };
+ const couple=a.bimoment?2*Math.abs(a.bimoment)/c.bf:0;
+ if(!couple){const r=plate(B,a.P,a.Mx);return {fpMax,...r,l,rodT:Math.max(0,r.T)/nr,couple:0};}
+ const worse=plate(B/2,a.P/2,a.Mx/2+couple),other=plate(B/2,a.P/2,Math.abs(a.Mx/2-couple));
+ // The row tension is both halves'; its most loaded rod is in the worse half (half the row's rods, at least one).
+ return {fpMax,Y:worse.Y,T:worse.T+other.T,fp:worse.fp,l,bearing:worse.bearing,tRequired:worse.tRequired,rodT:Math.max(0,worse.T)/Math.max(1,nr/2),couple};
 }
 
 /** ACI 318-19 Chapter 17: headed cast-in rods in two rows at the plate N edges, strength-level loads. */
-export function anchorStrength(b:ColumnBaseInput,T:number,Vx:number,Vy=0,seismic=false){
+export function anchorStrength(b:ColumnBaseInput,T:number,Vx:number,Vy=0,seismic=false,torque=0,rodT=T/b.anchors.perRow){
  const a=b.anchors,f=b.footing,sq=sqrtPsi(b.concrete.fc),da=a.diameter,n=a.perRow,s=n>1?a.gauge/(n-1):0;
  const Ase=anchorArea(da),Abrg=nutBearingArea(da),fu=Math.min(futa[a.grade],1.9*fya[a.grade],125000*psi);
  const row=b.plate.N/2-a.edge,ca1=f.L/2-row,ca2=f.B/2-a.gauge/2,ha=f.thickness;
@@ -156,6 +194,8 @@ export function anchorStrength(b:ColumnBaseInput,T:number,Vx:number,Vy=0,seismic
  // Tension row: projected area to the near edge, 1.5hef inward and across the row.
  const ANc=Math.min(n*ANco,(Math.min(ca1,1.5*hef)+1.5*hef)*(2*Math.min(ca2,1.5*hef)+a.gauge));
  const steelT=.75*n*Ase*fu,breakout=.7*ANc/ANco*psiEd*Nb,pullout=.7*n*8*Abrg*b.concrete.fc;
+ // Steel and pullout are per rod, at the most loaded rod (a base bimoment loads the rods of one half of the row
+ // more); the breakout of the row takes the row's tension T.
  // §17.6.4: side-face blowout when the rods are deep relative to the edge distance.
  const blowout=hef>2.5*ca1?.7*(1+Math.min(s,6*ca1)/(6*ca1))*160*ins(ca1)*Math.sqrt(Abrg/inch**2)*sq*lbf:undefined;
  // Shear: every rod with a grout pad (§17.7.1.2.1, 0.8); breakout of the front line of rods toward the
@@ -172,10 +212,16 @@ export function anchorStrength(b:ColumnBaseInput,T:number,Vx:number,Vy=0,seismic
  const ANcAll=Math.min(2*n*ANco,(2*Math.min(ca1,1.5*hef)+depth)*(2*Math.min(ca2,1.5*hef)+a.gauge));
  const pryout=.7*(hef>=2.5*inch?2:1)*ANcAll/ANco*psiEd*Nb;
  // §17.10.5.4: in Seismic Design Category C to F, 0.75 on the concrete-governed tension strengths.
- const ks=seismic?.75:1,V=Math.hypot(Vx,Vy),phiNn=Math.min(steelT,ks*breakout,ks*pullout,blowout===undefined?Infinity:ks*blowout);
- const rv=Math.max(V/steelV,V/pryout,Vx/breakoutV,Vy/breakoutVy),phiVn=rv>0?V/rv:Math.min(steelV,pryout,breakoutV,breakoutVy);
- const rn=T/phiNn,interaction=rv<=.2?rn:rn<=.2?rv:(rn+rv)/1.2;
- return {T,V,Vx,Vy,steelT,breakout,pullout,blowout,steelV,breakoutV,breakoutVy,pryout,phiNn,phiVn,interaction,hef,seismic};
+ // Shear: the direct shear shared by every rod and the torque's shear about the group centroid, T r/Σr² normal to the
+ // radius, added as vectors at each rod; the most loaded rod times the rod count is the group demand, by component
+ // for the breakout toward each edge.
+ const rods=Array.from({length:n},(_,i)=>n>1?-a.gauge/2+i*a.gauge/(n-1):0).flatMap(y=>[[row,y],[-row,y]] as [number,number][]),J=rods.reduce((t,[u,v])=>t+u*u+v*v,0),m=rods.length;
+ const per=rods.map(([u,v])=>[Vx/m-(J?torque*v/J:0),Vy/m+(J?torque*u/J:0)]),V=m*Math.max(...per.map(([x,y])=>Math.hypot(x,y))),Vxe=m*Math.max(...per.map(([x])=>Math.abs(x))),Vye=m*Math.max(...per.map(([,y])=>Math.abs(y)));
+ const ks=seismic?.75:1,Tn=Math.max(T,n*rodT);
+ const rt=Math.max(Tn/steelT,T/(ks*breakout),Tn/(ks*pullout),blowout===undefined?0:T/(ks*blowout)),phiNn=rt>0?Tn/rt:Math.min(steelT,ks*breakout,ks*pullout,blowout===undefined?Infinity:ks*blowout);
+ const rv=Math.max(V/steelV,V/pryout,Vxe/breakoutV,Vye/breakoutVy),phiVn=rv>0?V/rv:Math.min(steelV,pryout,breakoutV,breakoutVy);
+ const rn=rt,interaction=rv<=.2?rn:rn<=.2?rv:(rn+rv)/1.2;
+ return {T:Tn,Trow:T,rodT,V,Vx:Vxe,Vy:Vye,torque,steelT,breakout,pullout,blowout,steelV,breakoutV,breakoutVy,pryout,phiNn,phiVn,interaction,hef,seismic};
 }
 
 /** Footing weight with the soil or slab over it. */
@@ -226,10 +272,11 @@ export interface ColumnBaseResult {
  station:number;
  /** Results at each support, for checks that govern elsewhere than the support reported here. */
  supports?:ColumnBaseResult[];
- plate:{action:BaseAction;bearingAction:BaseAction;Y:number;T:number;fp:number;fpMax:number;bearing:number;l:number;tRequired:number;weld:{demand:number;capacity:number}};
+ plate:{action:BaseAction;bearingAction:BaseAction;Y:number;T:number;couple?:number;fp:number;fpMax:number;bearing:number;l:number;tRequired:number;weld:{demand:number;capacity:number;action?:BaseAction;Mfl?:number;Ff?:number}};
  /** Braced new columns: the brace uplift against the dead load of the runway, column and footing (service). */
  uplift?:{action:BaseAction;uplift:number;resist:number;required:number};
- anchors:ReturnType<typeof anchorStrength>&{action:BaseAction};
+ /** The anchor rods at the action with the largest tension-shear interaction, and at the largest tension and shear, each its own worst case. */
+ anchors:ReturnType<typeof anchorStrength>&{action:BaseAction};anchorTension?:ReturnType<typeof anchorStrength>&{action:BaseAction};anchorShear?:ReturnType<typeof anchorStrength>&{action:BaseAction};
  footing:{weight:number;qMax:number;soilAction:BaseAction;overturning:number;overturningRequired:number;sliding:number;slidingRequired:number;stabilityAction:BaseAction;slidingAction:BaseAction;
   strength:ReturnType<typeof footingStrength>;shearAction:BaseAction;punchingAction:BaseAction;flexureAction:BaseAction;oneWay:number;oneWayDirection:'L'|'B';twoWay:number;flexure:number;flexureDirection:'L'|'B';
   /** Governing flexure direction: factored moment and design strength at its critical section. */
@@ -240,19 +287,38 @@ export interface ColumnBaseResult {
 type Worst<T>={value:number;action:BaseAction;result:T};
 const worst=<T,>(actions:BaseAction[],evaluate:(a:BaseAction)=>T,score:(r:T)=>number):Worst<T>=>actions.map(a=>{const result=evaluate(a);return {value:score(result),action:a,result};}).reduce((x,y)=>(Number.isNaN(y.value)?Infinity:y.value)>(Number.isNaN(x.value)?Infinity:x.value)?y:x);
 
+/**
+ * Column flange to base plate fillets for one action, as an equivalent flange force on the weld length L_w (both faces):
+ * the flange force of the moment less the flange share of the axial load, F_f = M/(d - tf) - P A_f/A, and the
+ * flange lateral moment of the base bimoment M_fl = B/h0 as an in-plane moment on the weld lines, F_eq = F_f + M_fl L_w/S_w.
+ */
+export function flangeWeldDemand(p:ProjectInput,b:ColumnBaseInput,a:BaseAction,A:number){
+ const {section:c}=existingColumnSection(p),Ff=a.Mx/(c.d-c.tf)-a.P*c.bf*c.tf/A,w=baseBimoment(p,b,a.bimoment??0);
+ // A CJP flange joint: the flange section bf·tf with the lateral moment on its section modulus tf bf²/6.
+ return {Ff,Mfl:w.Mfl,demand:Math.max(0,Ff)+w.Mfl*(b.plate.flangeJoint==='cjp'?6/c.bf:w.Lw/w.Sw)};
+}
+/**
+ * Strength of one flange's joint to the base plate as a flange force: fillets both faces over L_w = 2bf - tw (E70XX,
+ * no directional increase), or a CJP groove weld, whose tension normal to its axis the base metal governs (AISC
+ * 360-16 Table J2.5): φF_y b_f t_f with the lesser of the column and plate yield.
+ */
+export function flangeWeldCapacity(p:ProjectInput,b:ColumnBaseInput){
+ const {section:c}=existingColumnSection(p),lrfd=p.method==='LRFD';
+ return b.plate.flangeJoint==='cjp'?(lrfd?.9:1/1.67)*Math.min(c.Fy,b.plate.Fy)*c.bf*c.tf:(lrfd?.75:.5)*.6*70000*psi*(b.plate.weld/Math.SQRT2)*(2*c.bf-c.tw);
+}
+/** The anchor rods for one strength-level action: the row tension from the bearing block, the base shears and torque, and the bimoment's rod force. */
+export function anchorsFor(p:ProjectInput,b:ColumnBaseInput,a:BaseAction,seismicAnchors:boolean){
+ const plate=basePlate(p,b,a,'LRFD');
+ return anchorStrength(b,Math.max(0,plate.T),a.Vx,a.Vy,!!a.seismic&&seismicAnchors,a.torque??0,plate.rodT);
+}
 export function columnBaseAnalysis(p:ProjectInput,reactions:SupportReactionSet):ColumnBaseResult{
  const b=p.columnBase!,{section:c}=existingColumnSection(p),A=sectionProperties(c).A,f=b.footing,arm=f.thickness+b.grout;
  const design=columnBaseActions(p,reactions,p.method),strength=columnBaseActions(p,reactions,'LRFD'),service=columnBaseActions(p,reactions,'ASD');
- // A torque on the base shears the rods about the group centroid: equivalent group shear n·T·rmax/Σr².
- const an=b.anchors,radii=Array.from({length:an.perRow},(_,i)=>an.perRow>1?-an.gauge/2+i*an.gauge/(an.perRow-1):0).flatMap(x=>[Math.hypot(x,b.plate.N/2-an.edge),Math.hypot(x,b.plate.N/2-an.edge)]);
- const torqueShear=(T:number)=>T?radii.length*T*Math.max(...radii)/radii.reduce((a,r)=>a+r*r,0):0;
  const results=design.map((sp,j):ColumnBaseResult=>{
   const thick=worst(sp.actions,a=>basePlate(p,b,a),r=>r.tRequired),bearing=worst(sp.actions,a=>basePlate(p,b,a),r=>r.bearing);
-  // Flange welds: the flange force of the moment, less the flange share of the axial load.
-  const flange=Math.max(0,...sp.actions.map(a=>a.Mx/(c.d-c.tf)-a.P*c.bf*c.tf/A));
-  const weld=(p.method==='LRFD'?.75:.5)*.6*70000*psi*(b.plate.weld/Math.SQRT2)*(2*c.bf-c.tw);
-  const seismicAnchors=(seismicBasis(p)?.sdc??'A')>='C';
-  const anchors=worst(strength[j].actions,a=>anchorStrength(b,Math.max(0,basePlate(p,b,a,'LRFD').T),a.Vx,a.Vy+torqueShear(a.torque??0),!!a.seismic&&seismicAnchors),r=>r.interaction);
+  const weld=flangeWeldCapacity(p,b),flange=worst(sp.actions,a=>flangeWeldDemand(p,b,a,A),v=>v.demand);
+  const seismicAnchors=(seismicBasis(p)?.sdc??'A')>='C',rods=(a:BaseAction)=>anchorsFor(p,b,a,seismicAnchors);
+  const anchors=worst(strength[j].actions,rods,r=>r.interaction),anchorTension=worst(strength[j].actions,rods,r=>r.phiNn>0?r.T/r.phiNn:Infinity),anchorShear=worst(strength[j].actions,rods,r=>r.phiVn>0?r.V/r.phiVn:Infinity);
   const W=footingWeight(b);
   const soil=worst(service[j].actions,a=>soilPressure(b,a.P+W,a.Mx+a.Vx*arm,a.My+a.Vy*arm),q=>q);
   // Overturning about the footing edge, with only dead load resisting: across the runway about the edge on the
@@ -271,8 +337,9 @@ export function columnBaseAnalysis(p:ProjectInput,reactions:SupportReactionSet):
   const oneWay=ways(shear.result).reduce((x,y)=>y.Vu/y.phiVc>x.Vu/x.phiVc?y:x),flexure=ways(bending.result).reduce((x,y)=>y.Mu/y.phiMn>x.Mu/x.phiMn?y:x);
   return {station:sp.x,
    ...(lift?{uplift:{action:lift.action,...lift.result}}:{}),
-   plate:{action:thick.action,bearingAction:bearing.action,Y:thick.result.Y,T:thick.result.T,fp:bearing.result.fp,fpMax:bearing.result.fpMax,bearing:bearing.value,l:thick.result.l,tRequired:thick.result.tRequired,weld:{demand:flange,capacity:weld}},
-   anchors:{...anchors.result,action:anchors.action},
+   plate:{action:thick.action,bearingAction:bearing.action,Y:thick.result.Y,T:thick.result.T,couple:thick.result.couple,fp:bearing.result.fp,fpMax:bearing.result.fpMax,bearing:bearing.value,l:thick.result.l,tRequired:thick.result.tRequired,
+    weld:{demand:Math.max(0,flange.value),capacity:weld,action:flange.action,Mfl:flange.result.Mfl,Ff:flange.result.Ff}},
+   anchors:{...anchors.result,action:anchors.action},anchorTension:{...anchorTension.result,action:anchorTension.action},anchorShear:{...anchorShear.result,action:anchorShear.action},
    footing:{weight:W,qMax:soil.value,soilAction:soil.action,overturning:tipping.result.fs,overturningRequired:tipping.result.required,sliding:sliding.result.fs,slidingRequired:sliding.result.required,stabilityAction:tipping.action,slidingAction:sliding.action,
     strength:bending.result,shearAction:shear.action,punchingAction:punching.action,flexureAction:bending.action,oneWay:shear.value,oneWayDirection:oneWay.direction,twoWay:punching.value,flexure:bending.value,flexureDirection:flexure.direction,
     development:Math.max(...ways(bending.result).map(w=>w.ld/w.available)),
@@ -323,13 +390,14 @@ function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
  checks.push({id:'base-basis',group:'New column base',title:'Soil, concrete and anchor data',status:b.confirmed&&b.source.trim()?'pass':'unverified',equation:'',referenceIds:['aci-318','dg1'],
   note:b.confirmed&&b.source.trim()?`Allowable bearing ${f(b.soil.allowable,'pressure')}, base friction ${b.soil.friction}, soil ${f(b.soil.unitWeight,'unitWeight')}, frost depth ${f(b.soil.frost,'length')}; f'c = ${f(b.concrete.fc,'stress')}; bars fy = ${f(b.footing.fy,'stress')}. Source: ${b.source}.`:'Enter and confirm the geotechnical report values and the concrete, reinforcement and anchor rod specifications.'});
  add('bearing','Base plate · concrete bearing',pl.bearing,1,'ratio','f_p\\le f_{p,max}=\\phi_c\\,0.85f^\\prime_c\\sqrt{A_2/A_1}\\le\\phi_c\\,1.7f^\\prime_c;\\quad\\left(f+\\tfrac N2\\right)^2\\ge\\frac{2(M+Pf)}{q_{max}}',`${at}, ${pl.bearingAction.id}. f_p,max = ${f(pl.fpMax,'stress')}. Small moment: f_p/f_p,max; large moment: the bearing block at f_p,max needs 2(M + Pf)/q_max of the available (f + N/2)². A2 is the largest footing area similar to and concentric with the plate, at most 4A1.`,['dg1'],pl.bearingAction.id);
- add('plate','Base plate · thickness',pl.tRequired,b.plate.thickness,'length','t\\ge l\\sqrt{\\frac{2f_p}{\\phi F_y}};\\quad t\\ge\\sqrt{\\frac{4Tx}{\\phi BF_y}}',`${at}, ${pl.action.id}: P = ${f(pl.action.P)}, M = ${f(pl.action.Mx,'moment')}; bearing length Y = ${f(pl.Y,'length')}${pl.T>0?`, anchor row tension ${f(pl.T)}`:''}. Cantilever l = max(m, n, λn′) = ${f(pl.l,'length')}; Fy = ${f(b.plate.Fy,'stress')}.`,['dg1'],pl.action.id);
- add('weld','Base plate · column flange welds',pl.weld.demand,pl.weld.capacity,'force','F_f=\\frac{M}{d-t_f}-P\\frac{A_f}{A}',`${at}: ${f(b.plate.weld,'length')} fillet both sides of each flange, E70XX, no directional increase.`,['aisc-connections']);
- const rods=`${at}: ${2*b.anchors.perRow} - ${f(b.anchors.diameter,'length')} ${b.anchors.grade} headed rods, hef ${f(a.hef,'length')}; strength-level ASCE 7 loads, ${a.action.id}${a.action.seismic?' with overstrength Ωo (ASCE 7 §12.2.5.2)':''}${a.seismic?'; ACI 318-19 §17.10.5.4: 0.75 on concrete breakout, pullout and side-face blowout':''}. Cracked concrete, Condition B, no anchor reinforcement credited.`;
- add('anchor-tension','Anchor rods · tension',a.T,a.phiNn,'force','\\phi N_n=\\min(\\phi N_{sa},\\phi N_{cbg},\\phi N_{pn},\\phi N_{sbg})',`${rods} Steel ${f(a.steelT)}, concrete breakout ${f(a.breakout)}, pullout ${f(a.pullout)}${a.blowout?`, side-face blowout ${f(a.blowout)}`:''}.`,['aci-318'],a.action.id);
- add('anchor-shear','Anchor rods · shear',a.V,a.phiVn,'force','\\phi V_n=\\min(\\phi V_{sa},\\phi V_{cbg},\\phi V_{cpg})',`${rods} All rods share the base shear with a grout pad (0.8) and no friction credit. Steel ${f(a.steelV)}, pryout ${f(a.pryout)}; breakout toward the footing edge ${f(a.breakoutV)} across the runway (Vx = ${f(a.Vx)})${a.Vy>0?` and ${f(a.breakoutVy)} along it (Vy = ${f(a.Vy)})`:''}, each direction checked separately.`,['aci-318'],a.action.id);
+ add('plate','Base plate · thickness',pl.tRequired,b.plate.thickness,'length','t\\ge l\\sqrt{\\frac{2f_p}{\\phi F_y}};\\quad t\\ge\\sqrt{\\frac{4Tx}{\\phi BF_y}}',`${at}, ${pl.action.id}: P = ${f(pl.action.P)}, M = ${f(pl.action.Mx,'moment')}; bearing length Y = ${f(pl.Y,'length')}${pl.T>0?`, anchor row tension ${f(pl.T)}`:''}${pl.couple?`; base bimoment ${f(pl.action.bimoment!,'bimoment')}: each half of the plate beside the web designed for P/2 and M/2 + 2B/bf = M/2 + ${f(pl.couple,'moment')} on width B/2 (the flange lateral moments B/h0 as tip forces ±2M_fl/bf)`:''}. Cantilever l = max(m, n, λn′) = ${f(pl.l,'length')}; Fy = ${f(b.plate.Fy,'stress')}.`,['dg1'],pl.action.id);
+ add('weld','Base plate · column flange welds',pl.weld.demand,pl.weld.capacity,'force',pl.weld.Mfl?'F_{eq}=\\frac{M}{d-t_f}-P\\frac{A_f}{A}+M_{fl}\\frac{L_w}{S_w},\\;M_{fl}=\\frac{B}{h_o}':'F_f=\\frac{M}{d-t_f}-P\\frac{A_f}{A}',`${at}${pl.weld.action?`, ${pl.weld.action.id}`:''}: ${b.plate.flangeJoint==='cjp'?`CJP groove weld of each flange (tension normal to the weld: base metal, φFy·bf·tf, Table J2.5), ${f(b.plate.weld,'length')} fillets both sides of the web`:`${f(b.plate.weld,'length')} fillet both sides of each flange, E70XX, no directional increase`}.${pl.weld.Mfl?` The column is fixed against warping at the base (the column torsion check credits it): the base bimoment B = ${f(pl.weld.action!.bimoment!,'bimoment')} acts as opposite flange lateral moments M_fl = B/h0 = ${f(pl.weld.Mfl,'moment')}, an in-plane moment on each flange's weld lines (S_w about the flange center) added to the flange force ${f(Math.max(0,pl.weld.Ff??0))} (AISC Design Guide 9 §4.2).`:''}`,['aisc-connections'],pl.weld.action?.id);
+ const rods=(a:ColumnBaseResult['anchors'])=>`${at}: ${2*b.anchors.perRow} - ${f(b.anchors.diameter,'length')} ${b.anchors.grade} headed rods, hef ${f(a.hef,'length')}; strength-level ASCE 7 loads, ${a.action.id}${a.action.seismic?' with overstrength Ωo (ASCE 7 §12.2.5.2)':''}${a.seismic?'; ACI 318-19 §17.10.5.4: 0.75 on concrete breakout, pullout and side-face blowout':''}. Cracked concrete, Condition B, no anchor reinforcement credited.`;
+ const at_=r.anchorTension??a,as=r.anchorShear??a;
+ add('anchor-tension','Anchor rods · tension',at_.T,at_.phiNn,'force','\\phi N_n=\\min(\\phi N_{sa},\\phi N_{cbg},\\phi N_{pn},\\phi N_{sbg})',`${rods(at_)} Largest tension of all the actions. Steel ${f(at_.steelT)}, concrete breakout ${f(at_.breakout)}, pullout ${f(at_.pullout)}${at_.blowout?`, side-face blowout ${f(at_.blowout)}`:''}.${at_.action.bimoment?` With the base bimoment ${f(at_.action.bimoment,'bimoment')} the rods of one half of the row take more (base plate check): steel and pullout at the most loaded rod, ${f(at_.rodT)} (n times it, ${f(at_.T)}, against the row strengths); breakout of the row ${f(at_.Trow)}.`:''}`,['aci-318'],at_.action.id);
+ add('anchor-shear','Anchor rods · shear',as.V,as.phiVn,'force','\\phi V_n=\\min(\\phi V_{sa},\\phi V_{cbg},\\phi V_{cpg})',`${rods(as)} Largest shear of all the actions. All rods share the base shear with a grout pad (0.8) and no friction credit${as.torque?`; the base torque ${f(as.torque,'moment')} shears each rod T r/Σr² normal to its radius, added as a vector to its share of the direct shear, the most loaded rod times the rod count giving the group demand`:''}. Steel ${f(as.steelV)}, pryout ${f(as.pryout)}; breakout toward the footing edge ${f(as.breakoutV)} across the runway (Vx = ${f(as.Vx)})${as.Vy>0?` and ${f(as.breakoutVy)} along it (Vy = ${f(as.Vy)})`:''}, each direction checked separately.`,['aci-318'],as.action.id);
  {const w=plateWasherWeld(b),n=2*b.anchors.perRow;
-  add('washer-weld','Plate washer · weld to base plate',a.V/n,w.phiRn,'force','\\phi R_n=0.75\\cdot0.60F_{EXX}\\cdot0.707w\\cdot4b_w',`${at}, ${a.action.id}: one rod's share of the base shear, V/${n}. ${f(w.size,'length')} fillet all around each ${f(anchorHardware(b.anchors.diameter).washer,'length')} plate washer, E70XX, L = ${f(w.length,'length')}; Table J2.4 minimum for the thicker part, within the J2.2b edge maximum.`,['aisc-connections','dg1'],a.action.id);}
+  add('washer-weld','Plate washer · weld to base plate',as.V/n,w.phiRn,'force','\\phi R_n=0.75\\cdot0.60F_{EXX}\\cdot0.707w\\cdot4b_w',`${at}, ${as.action.id}: the most loaded rod's shear, V/${n}. ${f(w.size,'length')} fillet all around each ${f(anchorHardware(b.anchors.diameter).washer,'length')} plate washer, E70XX, L = ${f(w.length,'length')}; Table J2.4 minimum for the thicker part, within the J2.2b edge maximum.`,['aisc-connections','dg1'],as.action.id);}
  add('anchor-interaction','Anchor rods · tension and shear',a.interaction,1,'ratio','\\frac{N_{ua}}{\\phi N_n}+\\frac{V_{ua}}{\\phi V_n}\\le1.2',`${at}, ${a.action.id}: ACI 318-19 §17.8; a ratio of 0.2 or less is checked alone. Reported as a fraction of 1.2.`,['aci-318'],a.action.id);
  add('soil','Footing · soil bearing',ft.qMax,b.soil.allowable,'pressure','q_{max}=\\frac{P}{BL}\\left(1+\\frac{6e}{L}\\right)\;\\text{or}\;\\frac{2P}{3B(L/2-e)}',`${at}, ${ft.soilAction.id} (service): column load plus footing and soil ${f(ft.weight)}; base moment plus base shear times the footing and grout depth.`,['aci-318'],ft.soilAction.id);
  add('overturning','Footing · overturning',ft.overturningRequired,ft.overturning,'ratio',`FS=\\frac{W_D\\,L/2-M_{D,e}}{M_{ot}}\\ge${ft.overturningRequired}`,`${at}, ${ft.stabilityAction.id}${ft.overturningRequired<1.5?' (seismic, reduced dead load, FS 1.0)':''}: dead load of the runway, column, footing and soil about the footing edge against the side thrust (or longitudinal force) moment at the footing base. Across the runway the edge on the bracket side governs, with the runway dead reaction's eccentric moment deducted from the restoring moment; the crane vertical load is not credited.`,['aci-318'],ft.stabilityAction.id);

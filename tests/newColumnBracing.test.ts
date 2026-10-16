@@ -2,7 +2,7 @@ import {describe,expect,it} from 'vitest';
 import {reviewOpenItem} from './review/openItems';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {newColumnDemonstrationProject} from '../src/engine/demonstration';
-import {existingColumnSection} from '../src/engine/existingColumn';
+import {existingColumnAnalysis,existingColumnSection} from '../src/engine/existingColumn';
 import {columnBaseActions} from '../src/engine/columnBase';
 import {alongSeismic,baseWarping,bracingGeometry,bracingLayout,bracingSystemChecks,braceCases,girderOffset,strutProperties,webYieldLine} from '../src/engine/newColumnBracing';
 import {sectionProperties} from '../src/engine/section';
@@ -65,12 +65,21 @@ describe('rod X-bracing between new freestanding columns',()=>{
   // Grid 1 locates its girder but is not braced; grid 4 does neither.
   expect(base1.actions.some(a=>a.id.endsWith('brace uplift'))).toBe(false);expect(base1.actions.find(a=>a.id==='LRFD AIST bumper · brace')!.torque).toBeCloseTo(Cbs*e,3);
   expect(base4.actions.some(a=>a.id.includes('· brace'))).toBe(false);
-  // DG9 cantilever: B = T a tanh(z/a) at the fixed base, fw = B Wno / Cw.
+  // Default: no warping restraint relied on at the base, the torque below the seat in Saint-Venant torsion (lower
+  // bound): no warping stress, flange shear T tf/J, no bimoment at the base.
   const t=s.existingColumn!.torsion!,props=sectionProperties(column),a=Math.sqrt(column.E*props.Cw/(column.E/2.6*props.J));
-  expect(t.case.id).toBe('LRFD AIST bumper');expect(t.T).toBeCloseTo(Cbs*e,3);
-  const w=baseWarping(column,t.T,p.existingColumn!.seatElevation);
-  expect(w.a).toBeCloseTo(a,6);expect(t.stress).toBeCloseTo(t.T*a*Math.tanh(p.existingColumn!.seatElevation/a)*(props.h0*column.bf/4)/props.Cw,6);
-  expect(check('column-torsion')!.demand).toBeGreaterThan(check('column-interaction')!.demand!);
+  expect(t.model).toBe('warping-free');expect(t.case.id).toBe('LRFD AIST bumper');expect(t.T).toBeCloseTo(Cbs*e,3);
+  expect(t.stress).toBe(0);expect(t.shear).toBeCloseTo(t.T*column.tf/props.J,6);expect(comp.bimoment).toBeUndefined();
+  expect(t.twist).toBeCloseTo(t.T*p.existingColumn!.seatElevation/(column.E/2.6*props.J),9);
+  expect(check('column-torsion')!.demand).toBeCloseTo(Math.max(t.U,t.shear/t.shearCapacity),9);
+  // Restrained against warping: DG9 cantilever, B = T a tanh(z/a) at the fixed base, fw = B Wno / Cw, and the base
+  // actions carry that bimoment for the base plate, its flange welds and the rods.
+  const q=structuredClone(p);q.existingColumn!.torsionBase='warping-restrained';
+  const tq=existingColumnAnalysis(q,reactions).torsion!,w=baseWarping(column,tq.T,p.existingColumn!.seatElevation);
+  expect(tq.model).toBe('warping-restrained');expect(w.a).toBeCloseTo(a,6);
+  expect(tq.stress).toBeCloseTo(tq.T*a*Math.tanh(p.existingColumn!.seatElevation/a)*(props.h0*column.bf/4)/props.Cw,6);
+  const restrained=columnBaseActions(q,reactions,'LRFD')[1].actions.find(v=>v.id==='LRFD AIST bumper · brace')!;
+  expect(restrained.bimoment).toBeCloseTo(baseWarping(column,Cbs*e,p.existingColumn!.seatElevation).B,3);
  });
  it('calculates the seismic force along the runway, the drift and the separation from the building',()=>{
   const z=alongSeismic(p,s.supportReactions!,column)!,cross=p.existingColumn!.seismic!;

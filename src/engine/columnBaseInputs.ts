@@ -11,8 +11,11 @@ export const barSizes=['#4','#5','#6','#7','#8','#9','#10','#11'] as const;
  */
 export const columnBaseSchema=z.object({
  enabled:z.boolean(),
- /** Fillet weld of each column flange and the web to the plate, both sides. */
- plate:z.object({N:pos,B:pos,thickness:pos,Fy:pos,weld:pos}),
+ /**
+  * Fillet weld of each column flange and the web to the plate, both sides; the flanges CJP groove welded instead
+  * ('cjp') where the base bimoment of a braced column needs more than the fillets the flange and plate allow.
+  */
+ plate:z.object({N:pos,B:pos,thickness:pos,Fy:pos,weld:pos,flangeJoint:z.enum(['fillet','cjp']).optional()}),
  anchors:z.object({grade:z.enum(anchorGrades),diameter:pos,perRow:z.number().int().min(2).max(4),edge:pos,gauge:pos,embedment:pos}),
  grout:nn,
  concrete:z.object({fc:pos}),

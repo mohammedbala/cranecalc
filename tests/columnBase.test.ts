@@ -141,7 +141,8 @@ describe('New freestanding column package',()=>{
   expect(w.size/inch).toBeCloseTo(5/16,9);expect(w.length/inch).toBeCloseTo(12,9);if(!s.columnBase)throw new Error('no base');
   expect(w.phiRn/kip).toBeCloseTo(.75*.6*70*Math.SQRT1_2*5/16*12,1);
   expect(check.status).toBe('pass');expect(check.capacity).toBeCloseTo(w.phiRn,6);
-  expect((s.columnBase.supports??[]).some(v=>Math.abs(v.anchors.V/4-check.demand!)<1e-6)).toBe(true);
+  // One rod's share of the largest base shear of all the actions (anchor shear reported as its own worst case).
+  expect((s.columnBase.supports??[]).some(v=>Math.abs(v.anchorShear!.V/4-check.demand!)<1e-6)).toBe(true);
   expect(columns.svg).toContain('data-weld-all-around="true"');
   // Welded after the nuts are snug, so in the field: the flag stands with the all-around circle at the arrow.
   expect(columns.svg).toMatch(/data-weld-location="field" data-weld-all-around="true"/);

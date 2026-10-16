@@ -21,6 +21,7 @@ import {movingAnalysis} from './analysis';
 import {selectBracketArrangement,selectTieArrangement} from './connectionOptions';
 import {sizeTaperedHaunch} from './taperedHaunchSizing';
 import {baseSizingRatios,columnDriftShare,sizeColumnBase} from './columnBaseSizing';
+import {columnTorsionRatio,sizeBracing} from './bracingSizing';
 import {supportReactions} from './supportReactions';
 import {existingColumnAnalysis} from './existingColumn';
 import {baseDrift} from './columnBase';
@@ -384,7 +385,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  attachTie(p,cfg);
  // The supports carry the bracket (or cap) and tie before the new column bases are sized for their reactions.
  const tie=sizedTieRatios(p),q=finishTie(withHaunch(withWeldedBracket(p),cfg),tie);
- return cfg.structure==='new'?withColumnBase(q,cfg):q;
+ return cfg.structure==='new'?withColumnBase(sizeBracing(q,baseTarget),cfg):q;
 }
 /**
  * The welded rib seats (twin-rib, haunched seat) sized for the reactions (sizeWeldedBracket): ribs, seat, fillets, the
@@ -449,7 +450,10 @@ const baseTarget=.9;
  */
 function withColumnBase(p:ProjectInput,cfg:RunwayConfig):ProjectInput{
  const q=sizeColumnBase(p,baseTarget);clearExistingFootings(q);
- if(cfg.columnShape||baseSizingRatios(q).ratios.drift<=baseTarget)return q;
+ // The column twists where the girder's longitudinal force reaches it off its centerline (a bracket) or an offset
+ // rod ends: the column torsion ratios (column-torsion, brace-rod-torsion) judge the shape as the drift does.
+ const torsionOk=(r:ProjectInput)=>columnTorsionRatio(r)<=1;
+ if(cfg.columnShape||baseSizingRatios(q).ratios.drift<=baseTarget&&torsionOk(q))return q;
  const reactions=supportReactions(q,sectionProperties(q.section));
  for(const shape of heavierColumns(q.existingColumn!.shape)){
   const t=structuredClone(q),w=aiscShapeByName(shape)!;
@@ -457,8 +461,9 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig):ProjectInput{
   if(t.details?.bracket?.enabled)Object.assign(t.details.bracket.receiver,shapePlates(shape));
   const d=baseDrift(t,existingColumnAnalysis(t,reactions));
   if(d.total>baseTarget*d.limit&&d.column>columnDriftShare*baseTarget*d.limit)continue;
+  if(columnTorsionRatio(t,reactions)>1.05)continue;
   const r=buildProject({...cfg,columnShape:shape});
-  if(baseSizingRatios(r).ratios.drift<=baseTarget)return {...r,configurator:{...cfg}};
+  if(baseSizingRatios(r).ratios.drift<=baseTarget&&torsionOk(r))return {...r,configurator:{...cfg}};
  }
  return q;
 }

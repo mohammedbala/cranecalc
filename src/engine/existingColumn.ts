@@ -10,7 +10,7 @@ import type {CheckResult,ProjectInput,Properties,Section} from './types';
 import {format} from './units';
 import {latexNumber} from './math';
 import {cantileverHeightLimit,cantileverSystems,sdcFromSD1,sdcFromSDS,seismicBasis,seismicCombinations,seismicImportance,type SeismicBasis} from './runwaySeismic';
-import {alongSeismic,baseWarping,braceCases,braceShare,designsBracing,girderOffset} from './newColumnBracing';
+import {alongSeismic,braceCases,braceShare,columnTorsion,designsBracing,girderOffset,torsionBase} from './newColumnBracing';
 import {railTopAboveSteel} from './railSeat';
 import {activeColumnCap} from './columnCapInputs';
 import {capAlongEccentricity} from './columnCap';
@@ -114,7 +114,9 @@ export interface ExistingColumnResult {
  bySupport:{x:number;U:number;My?:number;Ut?:number}[];
  drift:{value:number;limit:number};
  /** Braced new columns: the largest H1 ratio with the warping stress from the eccentric longitudinal force, and the flange shear. */
- torsion?:{U:number;shear:number;shearCapacity:number;T:number;stress:number;a:number;offset:number;station:number;case:ExistingColumnCombination};
+ torsion?:{U:number;shear:number;shearCapacity:number;T:number;stress:number;a:number;offset:number;station:number;case:ExistingColumnCombination;
+  /** Base warping condition of the model, and the twist at the seat under the largest torque (factored) with the girder's displacement there, twist times the offset. */
+  model:'warping-free'|'warping-restrained';twist:number;slip:number};
  /** New freestanding columns with seismic design: base shear, design drift, stability and the 15% axial limit. */
  seismic?:{basis:SeismicBasis;weight:number;QE:number;height:number;drift:number;driftLimit:number;theta:number;thetaMax:number;axial:number;axialLimit:number;axialCase:string};
  /**
@@ -165,7 +167,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  // Braced new columns: brace overturning compresses the columns of a braced span, and a girder's longitudinal force
  // reaches its locating column at the bracket, offset from the centerline where the strut and rods hold it: a torque.
  const designed=designsBracing(p)?{cases:braceCases(p,reactions,p.method,alongSeismic(p,reactions,section)),offset:girderOffset(p)}:undefined;
- const warp=(T:number)=>baseWarping(section,T,hs),fy=available(section.Fy,p.method,.9,1.67);
+ const model=torsionBase(p),warp=(T:number)=>columnTorsion(section,T,hs,model),fy=available(section.Fy,p.method,.9,1.67);
  // Existing columns (review B7–B9, D33): the seat moment of the girder reactions about the haunch web and the
  // longitudinal force at each locating seat bend the column about its weak axis; the force, offset from the column
  // centerline by the girder line, twists it unless a crane-level strut takes it on the girder line.
@@ -173,14 +175,15 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const ends=review&&p.details?.bracket?.enabled&&!activeColumnCap(p)?seatEnds(p):undefined;
  const alongM=review?columnResponse(c.height,E*props.Iy,c.weak,[{x:hs,moment:1}],[hs]):undefined,alongF=review?columnResponse(c.height,E*props.Iy,c.weak,[{x:hs,force:1}],[hs]):undefined;
  const locating=new Set(review&&bracingPath?locatingGrids(p):[]),stops=bumperAtGrids(p),offset=girderOffset(p),Cls=reactions.Cls;
- // Torsion per unit torque: twist held at the base and at a braced top (warping free), or the fixed-base cantilever.
- const unitTorsion=review?(c.weak.top==='braced'?pinnedTorsion(section,1,hs,c.height):{...baseWarping(section,1,hs),shear:section.tf/props.J+1.5/(props.h0*section.bf*section.tf)}):undefined;
+ // Torsion per unit torque: twist held at the base and at a braced top (warping free), or the cantilever with the
+ // base warping condition of the torsion model (columnTorsion).
+ const unitTorsion=review?(c.weak.top==='braced'?pinnedTorsion(section,1,hs,c.height):(()=>{const t=columnTorsion(section,1,hs,model);return {...t,shear:model==='warping-free'?t.shear:section.tf/props.J+1.5/(props.h0*section.bf*section.tf)};})()):undefined;
  // A crane-level strut on the girder line shares the longitudinal force with the column in proportion to their
  // stiffnesses there: the column's k_c is its weak-axis translation at the seat in series with its twist over the
  // girder offset (k_y and K_θ/e²). The strut is specified at least 10 k_c, so the column keeps at most 1/11 of the force,
  // as weak-axis bending and torsion, and is checked for that share.
  const strut=review&&exit==='girder-strut'&&alongF&&unitTorsion?(()=>{
-  const G=E/2.6,a=Math.sqrt(E*props.Cw/(G*props.J)),kY=1/alongF.displacement(hs),Ktheta=c.weak.top==='braced'?1/(pinnedTorsion(section,1,hs,c.height).twist||Infinity):G*props.J/(hs-a*Math.tanh(hs/a)),offset=girderOffset(p);
+  const kY=1/alongF.displacement(hs),Ktheta=c.weak.top==='braced'?1/(pinnedTorsion(section,1,hs,c.height).twist||Infinity):columnTorsion(section,1,hs,model).Ktheta,offset=girderOffset(p);
   const kc=1/(1/kY+offset**2/Ktheta);return {kY,Ktheta,kc,ratio:10,required:10*kc,share:1/11};
  })():undefined,keep=exit==='girder-strut'?strut?.share??0:1;
  const frame=c.frame,sway=review&&frame?.type==='sway'&&frame.B2!==undefined?frame.B2:undefined;
@@ -279,15 +282,18 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
   const rows=all.flatMap(v=>v.combinations.filter(x=>x.Ut!==undefined).map(k=>({station:v.station,k})));
   if(rows.length){
    const g=rows.reduce((a,b)=>b.k.Ut!>a.k.Ut!?b:a),T=Math.max(...rows.map(v=>v.k.torque??0));
-   torsion={U:g.k.Ut!,shear:unitTorsion.shear*T,shearCapacity:available(.6*section.Fy,p.method,.9,1.67),T:g.k.torque??0,stress:g.k.warping??0,a:unitTorsion.a,offset,station:g.station,case:g.k};
+   const twist=unitTorsion.twist*T;
+   torsion={U:g.k.Ut!,shear:unitTorsion.shear*T,shearCapacity:available(.6*section.Fy,p.method,.9,1.67),T:g.k.torque??0,stress:g.k.warping??0,a:unitTorsion.a,offset,station:g.station,case:g.k,model,twist,slip:twist*offset};
   }
  }
  if(designed){
   const rows=all.flatMap(v=>v.combinations.filter(x=>x.Ut!==undefined).map(k=>({station:v.station,k})));
   if(rows.length){
-   const g=rows.reduce((a,b)=>b.k.Ut!>a.k.Ut!?b:a),T=Math.max(...rows.map(v=>v.k.torque??0)),a=warp(1).a;
-   const shear=T*section.tf/props.J*(1-1/Math.cosh(hs/a))+1.5*T/(props.h0*section.bf*section.tf);
-   torsion={U:g.k.Ut!,shear,shearCapacity:available(.6*section.Fy,p.method,.9,1.67),T:g.k.torque??0,stress:g.k.warping??0,a,offset:designed.offset,station:g.station,case:g.k};
+   // The governing row: H1 with the warping stress, or the flange shear of its torque, whichever is larger.
+   const cap=available(.6*section.Fy,p.method,.9,1.67),score=(k:ExistingColumnCombination)=>Math.max(k.Ut!,warp(k.torque??0).shear/cap);
+   const g=rows.reduce((a,b)=>score(b.k)>score(a.k)?b:a),T=Math.max(...rows.map(v=>v.k.torque??0)),a=warp(1).a,shear=warp(T).shear;
+   const twist=warp(T).twist;
+   torsion={U:g.k.Ut!,shear,shearCapacity:available(.6*section.Fy,p.method,.9,1.67),T:g.k.torque??0,stress:g.k.warping??0,a,offset:designed.offset,station:g.station,case:g.k,model,twist,slip:twist*designed.offset};
   }
  }
  let support:ColumnSupportResult|undefined;
@@ -336,12 +342,12 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):Chec
  if(r.torsion&&r.support){
   const t=r.torsion,fm=(v:number)=>format(v,'moment',u,3),fs=(v:number)=>format(v,'stress',u,3),z=r.support;
   checks.push({...mk('torsion',`${label} · torsion from the longitudinal force offset (TR-13 §5.9.2)`,Math.max(t.U,t.shear/t.shearCapacity),1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}+\\frac{\\sigma_{ws}}{\\phi F_y}\\right)\\le1;\\;\\tau_t+\\tau_{ws}\\le\\phi0.6F_y',
-   `Each girder's longitudinal force reaches its locating column at the seat on the girder line, ${format(t.offset,'length',u,3)} from the column centerline, while ${z.exit==='girder-strut'&&z.strut?`the crane-level strut on the girder line takes it in proportion to its stiffness: with the strut at least ${z.strut.ratio} k_c = ${format(z.strut.required,'stiffness',u,3)} (the column's own stiffness there k_c = (1/k_y + e²/K_θ)⁻¹ = ${format(z.strut.kc,'stiffness',u,3)}: weak-axis k_y = ${format(z.strut.kY,'stiffness',u,3)} in series with the twist K_θ/e² = ${format(z.strut.Ktheta/z.offset**2,'stiffness',u,3)}) the column keeps at most 1/${Math.round(1/z.strut.share)} of it, as weak-axis bending (in H1) and torsion`:z.exit==='column-strut'?'the crane-level strut holds the column at its centerline':'the eave strut holds the column at its top'}: torque T = ${fm(t.T)} at the seat (${t.case.id}, support x=${format(t.station,'length',u,3)}). Twist held at the base and ${c.weak.top==='braced'?'at the braced top, warping free (AISC Design Guide 9, exact two-segment solution)':'nowhere above: fixed-base cantilever bound'}, a = ${format(t.a,'length',u,3)}: warping stress ${fs(t.stress)} at the flange tips added to H1 as flange lateral bending; flange shear (Saint-Venant plus warping) ${fs(t.shear)} against ${fs(t.shearCapacity)}. ${Math.max(t.U,t.shear/t.shearCapacity)>1?'Not adequate: provide a crane-level strut on the girder line (or a torsion-resisting detail) so the longitudinal force does not twist the column.':z.exit==='girder-strut'?'The strut stiffness and strength (the full force) are by the building engineer of record.':'A crane-level strut on the girder line would remove this torsion.'}`,t.case.id),referenceIds:['tr13-column-path','aisc-h3','existing-column']});
+   `Each girder's longitudinal force reaches its locating column at the seat on the girder line, ${format(t.offset,'length',u,3)} from the column centerline, while ${z.exit==='girder-strut'&&z.strut?`the crane-level strut on the girder line takes it in proportion to its stiffness: with the strut at least ${z.strut.ratio} k_c = ${format(z.strut.required,'stiffness',u,3)} (the column's own stiffness there k_c = (1/k_y + e²/K_θ)⁻¹ = ${format(z.strut.kc,'stiffness',u,3)}: weak-axis k_y = ${format(z.strut.kY,'stiffness',u,3)} in series with the twist K_θ/e² = ${format(z.strut.Ktheta/z.offset**2,'stiffness',u,3)}) the column keeps at most 1/${Math.round(1/z.strut.share)} of it, as weak-axis bending (in H1) and torsion`:z.exit==='column-strut'?'the crane-level strut holds the column at its centerline':'the eave strut holds the column at its top'}: torque T = ${fm(t.T)} at the seat (${t.case.id}, support x=${format(t.station,'length',u,3)}). Twist held at the base and ${c.weak.top==='braced'?'at the braced top, warping free (AISC Design Guide 9, exact two-segment solution)':t.model==='warping-free'?'nowhere above, warping free at the base: the torque below the seat is carried in Saint-Venant torsion (AISC Design Guide 9; the base\'s warping restraint is not relied on)':'nowhere above, the base restrained against warping: fixed-base cantilever bound (the base by the building engineer of record must provide that restraint)'}, a = ${format(t.a,'length',u,3)}: warping stress ${fs(t.stress)} at the flange tips added to H1 as flange lateral bending; flange shear (Saint-Venant plus warping) ${fs(t.shear)} against ${fs(t.shearCapacity)}. Twist at the seat under the largest torque ${t.twist.toFixed(4)} rad: the girder line moves ${format(t.slip,'length',u,3)} along the runway there (for information). ${Math.max(t.U,t.shear/t.shearCapacity)>1?'Not adequate: provide a crane-level strut on the girder line (or a torsion-resisting detail) so the longitudinal force does not twist the column.':z.exit==='girder-strut'?'The strut stiffness and strength (the full force) are by the building engineer of record.':'A crane-level strut on the girder line would remove this torsion.'}`,t.case.id),referenceIds:['tr13-column-path','aisc-h3','existing-column']});
  }
  else if(r.torsion){
   const t=r.torsion,fm=(v:number)=>format(v,'moment',u,3),fs=(v:number)=>format(v,'stress',u,3);
   add('torsion',`${label} · H1 with torsion from the longitudinal force`,Math.max(t.U,t.shear/t.shearCapacity),1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{\\sigma_{ws}}{\\phi F_y}\\right)\\le1;\\quad\\sigma_{ws}=\\frac{BW_{no}}{C_w},\\;B=Ta\\tanh\\frac{z}{a}',
-   `Each girder's longitudinal force reaches its locating column at the bracket seat, ${format(t.offset,'length',u,3)} from the column centerline at the girder web, while the strut and rods hold the column at its centerline: torque T = ${fm(t.T)} at the seat (${t.case.id}, support x=${format(t.station,'length',u,3)}). Fixed base restrained against warping, free top (AISC Design Guide 9), a = ${format(t.a,'length',u,3)}: warping stress ${fs(t.stress)} at the base flange tips, added to H1 at first yield as flange lateral bending. Flange shear from the largest torque, Saint-Venant and warping parts bounded separately: ${fs(t.shear)} against ${fs(t.shearCapacity)} (H3.3).`,t.case.id);
+   `Each girder's longitudinal force reaches its locating column at the bracket seat, ${format(t.offset,'length',u,3)} from the column centerline at the girder web, while the strut and rods hold the column at its centerline: torque T = ${fm(t.T)} at the seat (${t.case.id}, support x=${format(t.station,'length',u,3)}). ${t.model==='warping-free'?`Twist held at the base, free top, no warping restraint relied on at the base (AISC Design Guide 9): the torque below the seat is pure Saint-Venant torsion, which satisfies equilibrium with no bimoment (a lower-bound solution, so the base needs no warping design); no warping stress enters H1. Flange shear from the largest torque, T t_f/J: ${fs(t.shear)} against ${fs(t.shearCapacity)} (H3.3).`:`Fixed base restrained against warping, free top (AISC Design Guide 9), a = ${format(t.a,'length',u,3)}: warping stress ${fs(t.stress)} at the base flange tips, added to H1 at first yield as flange lateral bending; the base plate, its flange welds and the anchor rods are designed for the matching bimoment (New column base). Flange shear from the largest torque, Saint-Venant and warping parts bounded separately: ${fs(t.shear)} against ${fs(t.shearCapacity)} (H3.3).`} Twist at the seat under the largest (factored) torque ${t.twist.toFixed(4)} rad, moving the girder bearing ${format(t.slip,'length',u,3)} along the runway (for information; a column cap or a girder-line collector removes it).`,t.case.id);
  }
  if(r.support)for(const v of checks){if(['column-axial','column-flexure-y','column-interaction'].includes(v.id))v.referenceIds=[...v.referenceIds,'tr13-supporting','tr13-column-path'];if(v.id==='column-drift')v.referenceIds=[...v.referenceIds,'tr13-service'];}
  for(const v of checks)if(v.id.startsWith('column-seismic-'))v.referenceIds=v.id==='column-seismic-basis'||!r.seismic||r.seismic.basis.integrityOnly?['asce-12','aisc-e']:['asce-12','aisc-341','aisc-e'];
