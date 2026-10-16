@@ -2,7 +2,7 @@ import {finiteLife,fatigueCoefficient,fatigueThreshold,KSI} from './fatigueConst
 import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
-import {flangeTieGeometry,tiePlies} from './tieGeometry';
+import {flangeTieGeometry,tieLine,tiePlies} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
 import {createBracketCollector} from './bracketDesign';
@@ -31,7 +31,6 @@ import {runwayEnds} from './continuation';
 import {activeColumnCap} from './columnCapInputs';
 import {capForkStiffness,createColumnCapCollector} from './columnCap';
 import {capAngleBraceSystem,capAngleFatigueDetails} from './capAngleTie';
-import {capTieLine} from './capAngle';
 
 export function braceSystem(p:ProjectInput){
  // The cap tieback angle: its tie plate member and the series stiffness of its plate, legs, bolts, shims and column flange.
@@ -201,10 +200,13 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const cb=gradient*f1Factor;
   return {segment:[a,b] as [number,number],mmax,quarter,gradient,y:yLoad,h:depth,factor:f1Factor,cb,capacity:c.capacity(cb*c.mocr)};
  };
- // The top restraint acts where the tie acts on the girder: the cap tieback's tie plate line above the cap (M6), else
- // the W top flange; the bottom restraint (end bearing bolts or bottom tie) at the W bottom flange.
- const tieLine=capTieLine(p),topRestraint=cap?(tieLine!==undefined?tieLine-cap.shearCenter:cap.topOffset):undefined;
- const mechanics=cap?{Iy:cap.Iy,topOffset:topRestraint,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
+ // Each restraint acts where its tie acts on the girder (tieLine): the cap tieback's tie plate line above the cap (M6),
+ // the bar or plate centroid of a direct flange saddle tie or of the bars on the bearing-stiffener gusset (a bar force F
+ // at a drop e below the flange is F at the flange plus the torque F·e), the flange itself on a column cap fork; the
+ // bottom restraint at the bottom tie's bar line, or the W bottom flange (end bearing bolts). Offsets from the shear center
+ // set the restraint stiffness k·y², the restraint torque and the interface torque alike.
+ const shearCenter=cap?cap.shearCenter:p.section.d/2,topRestraint=tieLine(p)-shearCenter,bottomRestraint=tieLine(p,'bottom')-shearCenter;
+ const mechanics=cap?{Iy:cap.Iy,topOffset:topRestraint,bottomOffset:bottomRestraint,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{topOffset:topRestraint,bottomOffset:bottomRestraint};
  const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),observedSets=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
  const snap=(x:number)=>supports.find(v=>Math.abs(v-x)<1e-6)??x;
  const braceFatigue={min:0,max:0},braceEndFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
@@ -424,7 +426,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     const support=supports.indexOf(x);
     for(const c of concurrent(x)){
      const {id,sign,couple,ends}=c;
-     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple+(e.deadFactor??0)*gridHardware(x),top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*topRestraint!+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
+     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple+(e.deadFactor??0)*gridHardware(x),top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:r.top*topRestraint+r.bottom*bottomRestraint,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);else if(endBearingOffset(x))item.seatMoment=item.vertical*Math.sign(endBearingOffset(x))*Lbr/2;
      if(support>=0)forces.add(support,supportSet(x,c));
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){

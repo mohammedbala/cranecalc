@@ -4,11 +4,11 @@ import {format} from './units';
 import {flangeTieChecks,stiffenerTieChecks} from './flangeTieDesign';
 import {tieMovementChecks} from './tieMovement';
 import {isPlateTie,plateTieChecks} from './plateTie';
-import {capTieLine,isCapAngleTie} from './capAngle';
-import {clearanceEffects,secantStiffness} from './restraintClearance';
+import {isCapAngleTie} from './capAngle';
+import {clearanceEffects,restraintClearances,secantStiffness} from './restraintClearance';
 import {railTopAboveSteel} from './railSeat';
 import {capAngleChecks} from './capAngleTie';
-import {tieEccentricity} from './tieGeometry';
+import {flangeTieGeometry,stiffenerTieGeometry,tieEccentricity,tieLine} from './tieGeometry';
 import {connectionOptionChecks} from './connectionOptions';
 import {capReady,capAttachmentChecks} from './capChecks';
 import type { CalculationSnapshot,CheckResult,ProjectInput } from './types';
@@ -170,8 +170,8 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  r.interaction={mcx,top:h1.interactionTop??h1.interaction,bottom:h1.interactionBottom??h1.interaction,topCase:h1.governing.interactionTop,bottomCase:h1.governing.interactionBottom,combinations:h1.combinations.map(c=>({id:c.id,interaction:c.interaction}))};
  checks.push(...flangeInteractionChecks(p,h1,strength,mcxNote));
  // Restraint play (restraintClearances): rigid-body take-up added to the elastic rail-head movement.
- const play=clearanceEffects(p,props,capTieLine(p),(capped?p.section.d+p.section.capTw:p.section.d)+railTopAboveSteel(p)),len=(v:number)=>format(v,'length',p.units,3);
- add('rail-head','Serviceability','Rail-head lateral movement including twist',r.railDisplacement+(play.any?play.rail:0),Math.min(...p.spans)/Math.max(400,p.lateralLimit,d.criteria.railLateralLimit),'length',play.any?'\\Delta_r=\\Delta_o+(y_r-y_o)\\theta+g_t+\\frac{g_t+g_b}{h_r}(y_r-y_t)':'\\Delta_r=\\Delta_o+(y_r-y_o)\\theta',`Single static crane; finite girder-side tie/connection flexibility. Building interfaces are assumed fixed and their framing/foundations are excluded.${play.any?` Elastic movement ${len(r.railDisplacement)} plus the rigid-body take-up of the restraint play ${len(play.rail)}: top tie g_t = ${len(play.gt)}, sliding bearing g_b = ${len(play.gb)}, taken up in opposite directions over h_r = ${len(play.hr)} between the tie line and the bottom flange (θ = ${play.theta.toFixed(4)} rad), the rail head ${len((capped?p.section.d+p.section.capTw:p.section.d)+railTopAboveSteel(p)-play.yt)} above the tie line.`:''}`,['tr13-girder','criteria','vlasov']);
+ const play=clearanceEffects(p,props,tieLine(p),(capped?p.section.d+p.section.capTw:p.section.d)+railTopAboveSteel(p)),len=(v:number)=>format(v,'length',p.units,3);
+ add('rail-head','Serviceability','Rail-head lateral movement including twist',r.railDisplacement+(play.any?play.rail:0),Math.min(...p.spans)/Math.max(400,p.lateralLimit,d.criteria.railLateralLimit),'length',play.any?'\\Delta_r=\\Delta_o+(y_r-y_o)\\theta+g_t+\\frac{g_t+g_b}{h_r}(y_r-y_t)':'\\Delta_r=\\Delta_o+(y_r-y_o)\\theta',`Single static crane; finite girder-side tie/connection flexibility. Building interfaces are assumed fixed and their framing/foundations are excluded.${play.any?` Elastic movement ${len(r.railDisplacement)} plus the rigid-body take-up of the restraint play ${len(play.rail)}: top tie g_t = ${len(play.gt)}, sliding bearing g_b = ${len(play.gb)}, taken up in opposite directions over h_r = ${len(play.hr)} between the tie line and the bottom restraint line (θ = ${play.theta.toFixed(4)} rad), the rail head ${len((capped?p.section.d+p.section.capTw:p.section.d)+railTopAboveSteel(p)-play.yt)} above the tie line.`:''}`,['tr13-girder','criteria','vlasov']);
  // Rail twist: TR-13 sets no rotation limit, so it is checked only against a limit the owner or crane supplier enters.
  // The rotation itself comes from the lateral / warping torsion model; without a limit the row is informational.
  const twistLimit=d.criteria.twistLimit,twistAt=r.governing.twist?` Governing ${r.governing.twist.combination} at x = ${format(r.governing.twist.x,'length',p.units,3)}.`:'';

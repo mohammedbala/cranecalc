@@ -4,7 +4,7 @@ import {craneCombinations} from './aistLoads';
 import {runwayElevations} from './drawingData';
 import {capTieLine} from './capAngle';
 import {activeColumnCap} from './columnCapInputs';
-import {flangeTieGeometry} from './tieGeometry';
+import {flangeTieGeometry,tieLine} from './tieGeometry';
 
 /**
  * Forces the runway delivers to the building columns (C4): at each grid, whole concurrent sets of the factored bracket
@@ -71,9 +71,10 @@ export function deliveredForces(s:CalculationSnapshot){
   if(v.minVertical.vertical<0)add('uplift',v.minVertical);
   return {grid:v.grid,x:v.x,sets};
  });
- // The tie line of the girder analysis (the top flange at mid-thickness, or the cap tieback line), and where a flange
- // tie's bars bring the force to the column: their centerline, below the flange by the saddle and its clearance.
- const el=runwayElevations(p),tie=capTieLine(p)??p.section.d-p.section.tf/2,ft=capTieLine(p)===undefined?flangeTieGeometry(p):undefined;
+ // The tie line of the girder analysis (tieLine: the bar centroid of a flange or stiffener tie, the cap tieback line, or
+ // the top flange at mid-thickness on a fork), and where a flange tie's bars bring the force to the column: their
+ // centerline, below the flange by the saddle and its clearance (the same line).
+ const el=runwayElevations(p),tie=tieLine(p),ft=capTieLine(p)===undefined?flangeTieGeometry(p):undefined;
  const bars=ft?p.section.d/2+ft.topCenter:undefined;
  const stopGrids=grids.filter(g=>g.sets.some(x=>stops.has(x.combination)&&Math.abs(x.F)>=1)).map(g=>g.grid);
  const tractionGrids=grids.filter(g=>g.sets.some(x=>!stops.has(x.combination)&&Math.abs(x.F)>=1)).map(g=>g.grid);
