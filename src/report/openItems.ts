@@ -1,5 +1,5 @@
 import type {CalculationSnapshot,CheckResult,ProjectInput} from '../engine/types';
-import {fatigueData,registerFamily,type OpenItem,type Taxonomy,type TaxonEntry} from '../engine/checkTaxonomy';
+import {fatigueData,mergeDefs,registerFamily,type OpenItem,type Taxonomy,type TaxonEntry} from '../engine/checkTaxonomy';
 import {dcText,noCapacity} from '../engine/checkPresentation';
 import {noteLength} from '../engine/units';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
@@ -35,7 +35,7 @@ export interface OpenGroup{
  remedy:string;
 }
 const order:Record<OpenKind,number>={clash:0,redesign:1,detailing:2,input:3};
-export const openKindLabel:Record<OpenKind,string>={clash:'Clash / fit',redesign:'Redesign',detailing:'Detailing',input:'Input'};
+export const openKindLabel:Record<OpenKind,string>={clash:'Clash / fit / geometry',redesign:'Redesign',detailing:'Detailing',input:'Input'};
 const dcOf=(c:CheckResult)=>c.utilization===undefined||Number.isNaN(c.utilization)?-1:noCapacity(c.utilization)?Infinity:c.utilization;
 const pointOf=(id:string)=>id.match(/^detail-(?:fatigue|full-cycle)-(.+)$/)?.[1];
 /** A register detail name without its numbers, sides and positions: "Flange saddle 3 · end fillet toe 2 / top-right" → "Flange saddle · end fillet toe". */
@@ -60,6 +60,10 @@ export function openGroups(tax:Taxonomy,s:CalculationSnapshot):{groups:OpenGroup
  };
  const byKey=new Map<string,OpenItem[]>();
  for(const o of tax.openItems){const k=keyOf(o.check);byKey.set(k,[...(byKey.get(k)??[]),o]);}
+ // The comparison bound is not an open item (its gate is advisory, checkTaxonomy.ts): where it exceeds 1.0 it is folded
+ // into the item of its point, or counted where the design ratio of the point is within its limit.
+ const exceeds=(c:CheckResult)=>c.status==='fail'||(c.utilization!==undefined&&!Number.isNaN(c.utilization)&&c.utilization>1+1e-9);
+ for(const c of s.checks)if(isBound(c)&&exceeds(c)&&!tax.openItems.some(o=>o.check===c)){const k=keyOf(c);byKey.set(k,[...(byKey.get(k)??[]),{kind:'redesign',check:c}]);}
  // Register points of each detail type, open or not, for "n of N locations".
  const pointsOf=new Map<string,Set<string>>();
  for(const c of s.checks){const pt=pointOf(c.id);if(!pt)continue;const k=keyOf(c);pointsOf.set(k,(pointsOf.get(k)??new Set()).add(pt));}
@@ -90,7 +94,7 @@ export function openItemGroups(tax:Taxonomy,s:CalculationSnapshot){
  let v=cache.get(tax);if(!v){v=openGroups(tax,s);cache.set(tax,v);}
  return v;
 }
-const lineTitle=(tax:Taxonomy,key:string)=>tax.lines.find(l=>l.key===key)?.title;
+const lineTitle=(tax:Taxonomy,key:string)=>tax.lines.find(l=>l.key===key)?.title??mergeDefs.find(m=>key.startsWith(`${m.key}@`))?.title;
 
 // ---------------------------------------------------------------- remedies
 interface RemedyContext{c:CheckResult;g:OpenGroup;s:CalculationSnapshot;p:ProjectInput;u:number;units:ProjectInput['units'];
@@ -146,6 +150,7 @@ const remedies:Remedy[]=[
  [/^bracket-root-weld$/,x=>{const w=x.p.details?.bracket?.rootWeld;return `Increase the rib-to-column fillets to w ≥ ${w?x.size(w,x.u):'u·w'}, or deeper ribs.`;}],
  [/^bracket-seat-weld$/,x=>{const w=x.p.details?.bracket?.seatWeld;return `Increase the seat fillets to w ≥ ${w?x.size(w,x.u):'u·w'}.`;}],
  [/^(column-brackets|(bracket|haunch|wbracket)-tr13-load)$/,x=>`The support reaction${x.c.demand!==undefined?` ${value(x.c.demand,'force',x.units)}`:''} exceeds the AIST TR-13 §5.9.2 recommendation of ${value(50*4448.2216152605,'force',x.units)} for column brackets; no bracket proportion changes it: carry the girders on new crane columns with column caps (direct column bearing; in the configurator, new columns with the column cap support), or record the engineer of record’s acceptance of brackets for this load.`],
+ [/^crane-\d+-bumper-stop$/,x=>x.c.utilization===undefined?'Resolve the end stop first (its own checks): this item restates them and closes with them.':`The end stop is the part to redesign: raise its design strength by at least ${Math.ceil((x.u-1)*100)}% (the end stop checks, section on end stops), or select a bumper with a peak force within the present strength.`],
  [/^column-torsion$/,()=>'Take the longitudinal force out at the girder line: a crane-level strut at the locating columns (by others), or a bracket that brings the force to the column centerline.'],
  [/^column-/,x=>`Existing column exceeded by ${Math.ceil((x.u-1)*100)}%: reinforce the column or reduce its demand; confirm the restraint assumptions with the building engineer of record.`],
  [/fatigue/,x=>`${sentenceStart(range(x))}: a better detail category, a larger section at the detail, or a smaller cyclic force.`],
@@ -175,7 +180,13 @@ export function remedyFor(g:OpenGroup,s:CalculationSnapshot,tax:Taxonomy){
   size:(mm,r)=>Number.isFinite(r)?noteLength(Math.ceil(mm*r/step-1e-9)*step,units):'a larger size'};
  // Missing or unconfirmed data: what to supply, from the check's own note.
  if(g.kind==='input'&&c.status!=='fail')return `Supply or confirm: ${firstSentence(c.note)}`;
- if(c.group==='Coordination'&&!c.demand)return firstSentence(c.note);
+ // A model outside the supported scope: a separate model, or an arrangement inside the scope.
+ if(c.status==='unsupported')return `Outside the scope of this calculation: ${firstSentence(c.note)} Provide a separate analysis, or revise the arrangement.`;
+ // A geometry conflict: the part cannot exist as dimensioned, so no size can be scaled from it.
+ if(c.geometry)return `${firstSentence(c.note.replace(/^Invalid geometry:\s*/,'Invalid geometry, '))} Revise the arrangement (move or resize the parts) until the dimension is positive and the rule is met; the drawings show the part as not detailed until then.`;
+ // A result computed for holes or parts outside the ply (checkIntegrity.ts): its prerequisite comes first.
+ if(c.note.startsWith('Not valid:'))return `${firstSentence(c.note)} Correct that layout first, then recalculate this check.`;
+ if(c.group==='Coordination'&&!c.demand)return `Revise the layout so the parts clear each other (${(c.capacity??0)<0?`they overlap by ${sig3(-(c.capacity??0),'length',units)}`:`clear ${sig3(c.capacity??0,'length',units)}`}): move or resize them.`;
  const own=remedies.find(([re])=>re.test(c.id));
  const text=t?.type==='detailing'||g.kind==='clash'?detailingRemedy(x):undefined;
  if(text)return text;

@@ -86,7 +86,11 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   expect(reg).toHaveLength(2*points);
   const ev=reg.filter(c=>tax.entries.get(c.id)!.gate==='evaluated'),sc=reg.filter(c=>tax.entries.get(c.id)!.gate==='screened');
   const pts=(v:typeof reg)=>new Set(v.map(c=>c.id.replace(/^detail-(fatigue|full-cycle)-/,''))).size;
-  expect(ev.length).toBe(2*pts(ev));expect(sc.length).toBe(2*pts(sc));expect(pts(ev)+pts(sc)).toBe(points);
+  // With the Miner method the all-cycle bound of each point is its comparison ratio (advisory, check integrity); the
+  // Miner check of the point is evaluated or screened.
+  const adv=reg.filter(c=>tax.entries.get(c.id)!.gate==='advisory');
+  expect(adv).toHaveLength(points);expect(adv.every(c=>c.id.startsWith('detail-full-cycle-'))).toBe(true);
+  expect(ev.length).toBe(pts(ev));expect(sc.length).toBe(pts(sc));expect(pts(ev)+pts(sc)).toBe(points);
   // With the rail clip model every register point is below F_TH (screened): the evaluated count then names no register points.
   // One count line under the summary, without bookkeeping of body rows or register points.
   expect(body).toMatch(new RegExp(`${tax.counts.designEvaluated} design checks evaluated( \\(\\d+ NG\\))?, and ${tax.counts.designScreened} more screened below the fatigue threshold`));
@@ -99,7 +103,9 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   const fatigueChecks=[...tax.entries.values()].filter(t=>t.type==='design'&&t.effect==='fatigue'&&!/^fatigue-peak/.test(t.check.id)&&t.check.status!=='not-applicable');
   expect(members.length).toBe(fatigueChecks.length);
   const nEv=members.filter(c=>gate(c.id)==='evaluated').length,nSc=members.filter(c=>gate(c.id)==='screened').length;
-  expect(nSc).toBe(tax.counts.designScreened);expect(nEv+nSc).toBe(members.length);
+  // The other members are the comparison bounds beside the Miner checks (advisory, check integrity).
+  const bounds=members.filter(c=>gate(c.id)==='advisory');expect(bounds.every(c=>c.id.startsWith('detail-full-cycle-'))).toBe(true);
+  expect(nSc).toBe(tax.counts.designScreened);expect(nEv+nSc+bounds.length).toBe(members.length);
   expect(body).not.toMatch(/details evaluated; \d+ details screened|Of their \d+ checks/);
   const keeper=[...F.evaluated,...F.screened].find(v=>v.title==='Rail clip base weld')!;expect(keeper.points*2).toBe(keeper.members.length);
   const kSc=pts(keeper.members.filter(c=>gate(c.id)==='screened'));

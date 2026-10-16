@@ -1,12 +1,16 @@
 import type {CalculationSnapshot,CheckResult,ProjectInput} from '../engine/types';
 import {toDisplay,unit,type Quantity} from '../engine/units';
 import {dcText,noCapacity} from '../engine/checkPresentation';
-import {allCycleRange,categoryLabel,checkTypeLabel,effectLabel,gateLabel,openStatuses,registerPoints,type BodyLine,type CheckType,type FatigueRow,type Taxonomy,type TaxonEntry} from '../engine/checkTaxonomy';
-import {caseLabel,checkTitle,equationCell,fixed2,maximumRule,num,shortReference,sig3,statusLabel,subscripts,textRelation,tidyNumbers,value} from './reportParts';
+import {allCycleRange,categoryLabel,checkTypeLabel,classifyCheck,dcOf,effectLabel,gateLabel,openStatuses,registerPoints,type BodyLine,type CheckType,type FatigueRow,type Taxonomy,type TaxonEntry} from '../engine/checkTaxonomy';
+import {caseLabel,checkTitle,equationCell,exceedsLimit,fixed2,maximumRule as maximumWording,num,shortReference,sig3,statusLabel,subscripts,textRelation,tidyNumbers,value} from './reportParts';
 import {responsibilityMatrix,responsibilityBlock} from './responsibility';
 import {damageText} from '../engine/fatigueConstants';
 import {groupDcCell,openItemGroups,openKindLabel,type OpenGroup} from './openItems';
-export {maximumRule};
+/**
+ * A maximum-type detailing rule (a maximum weld, a part that must fit a space): the provided value is the demand and the
+ * limit the capacity. Detailing rules only: an input record titled "Maximum load on one runway" is not a rule.
+ */
+export const maximumRule=(c:CheckResult)=>classifyCheck(c).type==='detailing'&&maximumWording(c);
 
 /**
  * Report blocks driven by the check taxonomy: body rows of the governing DESIGN checks, page-1 open items and counts,
@@ -41,10 +45,13 @@ const sentence=(v:string)=>v.charAt(0).toUpperCase()+v.slice(1);
 /**
  * The two value cells of a check row. A design check: its demand and its limit, plain, so a failing row never reads as
  * a true relation (the D/C and the result say how they compare); a ratio whose demand is a no-capacity sentinel prints
- * no number. A detailing rule: the provided value and the requirement with its sense (≥ a minimum, ≤ a maximum).
+ * no number. A detailing rule: the provided value and the requirement with its sense (≥ a minimum, ≤ a maximum). A
+ * check whose demand is the requirement (sense 'min': a factor of safety, λ = M_cr/M_u, a stiffness): the provided value,
+ * then the requirement with the true relation (≥ when met, < when not), "0.31 | < 1.50".
  */
 export function valueCells(c:CheckResult,type:CheckType|undefined,units:Units):[string,string]{
  const qq=q(c);
+ if(c.sense==='min')return [value(c.capacity,qq,units,c.demand),`${exceedsLimit(c)?'&lt;':'≥'} ${value(c.demand,qq,units)}`];
  if(type==='detailing')return maximumRule(c)?[value(c.demand,qq,units),`≤ ${value(c.capacity,qq,units,c.demand)}`]:[value(c.capacity,qq,units,c.demand),`≥ ${value(c.demand,qq,units)}`];
  return [qq==='ratio'&&noCapacity(c.demand)?'—':value(c.demand,qq,units),value(c.capacity,qq,units,c.demand)];
 }
@@ -52,7 +59,7 @@ export function valueCells(c:CheckResult,type:CheckType|undefined,units:Units):[
 /** One body row per line: the controlling limit state with its equation, demand, limit and D/C; merged lines name it. */
 export function bodyTable(lines:BodyLine[],tax:Taxonomy,units:Units){
  if(!lines.length)return '';
- return `<table class="checks body-checks"><colgroup><col class="c-title"/><col class="c-eq"/><col class="c-num"/><col class="c-num"/><col class="c-dc"/><col class="c-res"/></colgroup><thead><tr><th>Check · reference</th><th>Equation</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th></tr></thead><tbody>${lines.map(l=>{
+ return `<table class="checks body-checks"><colgroup><col class="c-title"/><col class="c-eq"/><col class="c-num"/><col class="c-num"/><col class="c-dc"/><col class="c-res"/></colgroup><thead><tr><th>Check · reference</th><th>Equation</th><th>Value</th><th>Limit</th><th>D/C</th><th>Result</th></tr></thead><tbody>${lines.map(l=>{
   const c=l.controlling,t=tax.entries.get(c.id)!;
   const head=l.merged?`<b>${esc(l.title)}</b><small class="ctrl">Controlling: ${esc(c.title.replace(/\s*·\s*/g,', '))}${l.also.length?`; also ${l.also.map(a=>`${esc(a.title.replace(/\s*·\s*/g,', '))} (${dcText(a.utilization,2)})`).join('; ')}`:''}</small>`:`<b>${esc(checkTitle(c.title))}</b>`;
   const typical=t.typicalOf>1?` <span class="family">typical of ${t.typicalOf}</span>`:'';
@@ -66,7 +73,7 @@ export const othersLine=(checks:CheckResult[])=>{
  return `<p class="others">${checks.length} other limit state${checks.length>1?'s':''} checked, max D/C ${dcText(max,2)} (Appendix A).</p>`;
 };
 
-const kindLabel={clash:'Clash / coordination',redesign:'Redesign flag',input:'Missing or inconsistent input',detailing:'Detailing rule not met'} as const;
+const kindLabel={clash:'Clash, fit or geometry conflict',redesign:'Redesign flag',input:'Missing or inconsistent input',detailing:'Detailing rule not met'} as const;
 /** Where an open item applies: the governing location of its detail and the governing case. */
 function itemWhere(g:OpenGroup,tax:Taxonomy){
  const c=g.governing,t=tax.entries.get(c.id),parts:string[]=[];
@@ -90,11 +97,14 @@ export function openItemsBlock(tax:Taxonomy,s:CalculationSnapshot){
   return [named,folded].filter(Boolean).map(v=>`<small>${v}</small>`).join('');
  };
  const list=groups.length?`<table class="open-items"><colgroup><col style="width:3%"/><col style="width:24%"/><col style="width:28%"/><col style="width:8%"/><col style="width:37%"/></colgroup><thead><tr><th>#</th><th>Open item</th><th>Governing check, reference and location</th><th>D/C</th><th>What is needed</th></tr></thead><tbody>${groups.map((g,i)=>`<tr class="open-item" data-status="${g.governing.status}" data-open="${esc(g.members.map(m=>m.id).join(' '))}"><td>${i+1}</td><td><b>${esc(g.elementLabel)}</b>: ${esc(checkTitle(g.title))}<small>${esc(openKindLabel[g.kind])}${g.of>1?` · ${g.locations} of ${g.of} locations`:''}</small></td><td>${g.title===g.governing.title?'':esc(checkTitle(g.governing.title))}<small>${esc(shortReference(g.governing))}${itemWhere(g,tax)?`; ${itemWhere(g,tax)}`:''}</small>${also(g)}</td><td class="num">${groupDcCell(g)}</td><td>${esc(g.remedy)}</td></tr>`).join('')}</tbody></table>`:'';
- const n=groups.reduce((a,g)=>a+g.members.length+g.folded.length,0);
+ // Open checks: the members of the items; a folded comparison bound is not one.
+ const n=groups.reduce((a,g)=>a+g.members.length,0);
  const bound=bounds.points?`The all-cycle bound exceeds 1.0 at ${bounds.points}${groups.length?' more':''} register point${bounds.points>1?'s':''} (up to ${dcText(bounds.max,2)}) where the Miner ratio, the design ratio, is within its limit: shown in the fatigue table (section @@ref:fatigue@@), not open items.`:'';
  const note=groups.length?`<p class="others">${n} open check${n>1?'s':''} in ${groups.length} item${groups.length>1?'s':''}, one per detail type and element, most severe first; each check's method and numbers are in its section.${bound?` ${bound}`:''}</p>`:bound?`<p class="others">${bound}</p>`:'';
  const others=responsibilityMatrix(tax,s).length?`<p>Items by others and the forces delivered to them: section @@ref:by-others@@.</p>`:'';
- return `${groups.length?`<h2>Open items</h2>${list}`:''}${note}${others}`;
+ // Recommendations of the Specification not met (the E2 user note): listed, not open items and not code failures.
+ const rec=tax.recommendations.length?`<p class="others"><b>Recommendation${tax.recommendations.length>1?'s':''} (not code requirements, not counted as open items):</b> ${tax.recommendations.map(r=>`${esc(checkTitle(r.check.title))} ${sig3(r.check.demand,q(r.check),s.input.units)} against ${sig3(r.check.capacity,q(r.check),s.input.units)} (${esc(r.reason.replace(/;.*$/,''))})`).join('; ')}.</p>`:'';
+ return `${groups.length?`<h2>Open items</h2>${list}`:''}${note}${rec}${others}`;
 }
 /** The governing check as the banner names it: its title without separators and without a repeated "fatigue". */
 const governingTitle=(t:string)=>(/fatigue/i.test(t.replace(/\s*·\s*fatigue$/i,''))?t.replace(/\s*·\s*fatigue$/i,''):t).replace(/\s*·\s*/g,', ');
@@ -243,7 +253,8 @@ export function appendixA(tax:Taxonomy,units:Units,o:{unverified?:(t:TaxonEntry)
  const empty=(t:TaxonEntry)=>{const c=t.check;return (t.type==='load-basis'&&(c.quantity??'ratio')==='ratio'&&c.demand===1&&c.capacity===1)||(t.type==='input'&&!has(c.demand)&&!has(c.capacity));};
  const recorded=[...tax.entries.values()].filter(empty),all=[...tax.entries.values()].filter(t=>!empty(t)),groupOf=(t:TaxonEntry)=>t.repeat?`${t.repeat}|${t.repeat.startsWith('register:')?'':same(t)}|${/^detail-full-cycle-/.test(t.check.id)?'all-cycle':'miner'}`:undefined;
  const groups=new Map<string,TaxonEntry[]>();for(const t of all){const k=groupOf(t);if(k)groups.set(k,[...(groups.get(k)??[]),t]);}
- const dc=(t:TaxonEntry)=>t.check.utilization!==undefined&&Number.isFinite(t.check.utilization)?t.check.utilization:-1;
+ // No capacity ranks above every finite D/C; a rule or a geometry conflict without a ratio below (checkTaxonomy dcOf).
+ const dc=(t:TaxonEntry)=>dcOf(t.check);
  const rows:{t:TaxonEntry;members:TaxonEntry[]}[]=[];
  for(const t of all){
   const k=groupOf(t);if(!k){rows.push({t,members:[t]});continue;}
@@ -280,10 +291,13 @@ function csvNumber(v:number|undefined,q:Quantity,units:Units){
 export function checksCsv(s:CalculationSnapshot,tax:Taxonomy,o:{internal?:boolean}={}){
  const cell=(v:unknown)=>{const t=String(v??'');return /[",\n]/.test(t)?`"${t.replace(/"/g,'""')}"`:t;};
  const units=s.input.units;
- const head=['id','type','effect','element','title','group','location','repeat_group','typical_of','governs_group','body_line','gate','gate_reason','status','demand','capacity','utilization','quantity','units','reference','case','case_name','classification_rule'];
+ const head=['id','type','effect','element','title','group','location','repeat_group','typical_of','governs_group','body_line','gate','gate_reason','status','demand','capacity','utilization','quantity','units','reference','case','case_name','classification_rule','dc_state'];
+ // A check without a usable D/C says why: no capacity (the flag, as JSON writes Infinity as null), invalid geometry, or a
+ // result not valid because its edge or fit prerequisite fails; its utilization cell is then empty.
+ const state=(c:CheckResult)=>c.geometry?'invalid geometry':c.noCapacity||noCapacity(c.utilization)?'no capacity':c.note.startsWith('Not valid:')?'not valid':'';
  const rows=[...tax.entries.values()].map(t=>{const c=t.check,line=t.line&&tax.shown.some(l=>l.key===t.line)?t.line:'',qq=(c.quantity??'ratio') as Quantity;
-  const [demand,capacity,util,u]=o.internal?[c.demand??'',c.capacity??'',c.utilization??'','SI internal (N, mm, MPa)']:[csvNumber(c.demand,qq,units),csvNumber(c.capacity,qq,units),c.utilization!==undefined&&Number.isFinite(c.utilization)?Number(c.utilization.toFixed(c.utilization<.1&&c.utilization>0?4:2)):'',unit(qq,units)];
-  return [c.id,t.type,t.effect??'',t.elementLabel,c.title,c.group,t.location??'',t.repeat??'',t.typicalOf,t.governsRepeat?'yes':'',line,t.gate,t.reason??'',c.status,demand,capacity,util,c.quantity??'',u,shortReference(c),c.caseId??'',c.caseId?tax.caseName(c.caseId):'',t.rule];});
+  const st=state(c),[demand,capacity,util,u]=o.internal?[c.demand??'',c.capacity??'',st?'':c.utilization??'','SI internal (N, mm, MPa)']:[csvNumber(c.demand,qq,units),csvNumber(c.capacity,qq,units),!st&&c.utilization!==undefined&&Number.isFinite(c.utilization)?Number(c.utilization.toFixed(c.utilization<.1&&c.utilization>0?4:2)):'',unit(qq,units)];
+  return [c.id,t.type,t.effect??'',t.elementLabel,c.title,c.group,t.location??'',t.repeat??'',t.typicalOf,t.governsRepeat?'yes':'',line,t.gate,t.reason??'',c.status,demand,capacity,util,c.quantity??'',u,shortReference(c),c.caseId??'',c.caseId?tax.caseName(c.caseId):'',t.rule,st];});
  return [head,...rows].map(r=>r.map(cell).join(',')).join('\n')+'\n';
 }
 

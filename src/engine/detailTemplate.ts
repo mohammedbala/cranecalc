@@ -13,6 +13,8 @@ import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
 import {sizeFlangeTie,tieSizingDemands} from './flangeTieSizing';
 import {available} from './aiscStrength';
 import {minimumEdge} from './capAngle';
+import {minimumFillet} from './connectionStrength';
+import {stiffenerPairSection} from './detailChecks';
 /** Template sizing of the tapered I haunch for the project's reactions. */
 export {sizeTaperedHaunch} from './taperedHaunchSizing';
 
@@ -29,10 +31,13 @@ const up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step
  */
 export function neutralDetails(p:ProjectInput):RunwayDetails{
  const b=p.section,shape=aiscShapeByName(b.catalogueId??''),k1=b.tw/2+(shape?shape.kdes*inch-b.tf:0);
- // Bearing stiffener pair: the J10.8 proportions, and thick enough to carry the top-flange tie force down the girder as
- // the restraint diaphragm (full-height cantilever, stiffener-lateral-flexure) at 90% under the tie sizing estimate.
- const stiffenerWidth=down((b.bf-b.tw)/2-.25*inch,.25*inch),webHeight=b.d-2*(shape?shape.kdes*inch:b.tf);
- const demands=tieSizingDemands(p),diaphragm=6*demands.force*webHeight/(2*stiffenerWidth**2*.9*available(50*ksi,p.method,.9,1.67));
+ // Bearing stiffener pair: the J10.8 proportions, and thick enough for the restraint diaphragm (stiffener-lateral-flexure)
+ // at 90% under the tie sizing estimate F. The pair, welded continuously to both web faces, is one plate of width
+ // 2b_s + t_w less the copes (stiffenerPairSection). Before the analysis the support torque is unknown, so the moment is
+ // bounded by F·h_o whatever the arrangement: it bounds the St Venant torque with the Appendix 6 couple (both flanges
+ // restrained directly), F·y_g plus that torque (a gusset tie) and the cantilever F·h (one flange restrained).
+ const stiffenerWidth=down((b.bf-b.tw)/2-.25*inch,.25*inch),stiffenerCope=up(Math.max(k1-b.tw/2,.75*inch),.125*inch);
+ const demands=tieSizingDemands(p),diaphragm=demands.force*(b.d-b.tf)/(stiffenerPairSection({stiffenerWidth,stiffenerThickness:1,cope:stiffenerCope},b.tw).S*.9*available(50*ksi,p.method,.9,1.67));
  const stiffenerThickness=up(Math.max(b.tf/2,stiffenerWidth/16,.5*inch,diaphragm),.125*inch);
  const h=p.railHeight||p.aist?.railDepth||100,L=p.spans.reduce((a,v)=>a+v,0),longest=Math.max(...p.spans);
  // Fatigue register: bottom flange at each midspan, stiffener weld toes at each support, top flange in the longest bay.
@@ -57,8 +62,12 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // largest that keeps the AISC J3.4 edge distance to both bar edges (holes on the bars' mid-height).
  const jointHeight=Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35;
  const jointBolt=[.875,.75,.625,.5].map(v=>v*inch).find(db=>2*minimumEdge(db)<=jointHeight+1e-6)??.5*inch;
- // Bearing stiffener fillets: 5/16 in, within the edge limit t - 1/16 in of the thinner of the web and the stiffener.
- const stiffenerWeld=Math.max(3/16*inch,Math.min(.3125*inch,Math.floor((Math.min(b.tw,stiffenerThickness)-inch/16)/(inch/16)+1e-9)*inch/16));
+ // Bearing stiffener fillets: the J2.4 minimum by the thinner part; else 5/16 in, within the edge limit t - 1/16 in of the
+ // thinner of the web and the stiffener, and no larger than the smallest fillet that develops the web in shear rupture
+ // with fillets on both faces, D = t_w F_u/(1.414 F_EXX) to the next 1/16 in (t_w = 6.19D/F_u for E70, AISC J4.2): a larger
+ // fillet adds no strength to the group (the web governs it), a smaller one would lower it below the web's.
+ const webMatch=Math.ceil(b.tw*b.Fu/(Math.SQRT2*70*ksi)/(inch/16)-1e-9)*inch/16;
+ const stiffenerWeld=Math.max(minimumFillet(Math.min(b.tw,stiffenerThickness)),Math.min(.3125*inch,Math.floor((Math.min(b.tw,stiffenerThickness)-inch/16)/(inch/16)+1e-9)*inch/16,webMatch));
  // The bolted bearing sized for the girder (bearingLayout): the slot travel for the span and end rotation, the bolt whose
  // sliding slot keeps the J3.3 long-slot proportion, the gauge narrowing on a narrow flange for the J3.4 edge distance, and
  // the plate length from the bolt layout, the J10 end bearing and the flange saddle, width and thickness.

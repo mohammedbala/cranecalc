@@ -53,9 +53,13 @@ export function revisionIdentity(s:CalculationSnapshot){
 }
 export function issueStatus(s:CalculationSnapshot){
  const p=s.input,d=p.drawing,eor=d?.eor,reasons:string[]=[];
- if(p.reportPurpose==='demonstration')return {issued:false,label:'DEMONSTRATION - NOT FOR CONSTRUCTION',reasons:['Fictitious demonstration data']};
+ // Parts that cannot be built as dimensioned (checkIntegrity.ts): the sheets draw them GEOMETRY CONFLICT - NOT DETAILED.
+ const conflicts=s.geometryConflicts??s.checks.filter(c=>c.geometry).map(c=>({id:c.id,title:c.title}));
+ const geometry=conflicts.length?[`Geometry conflict: ${conflicts.map(c=>c.title).join('; ')}`]:[];
+ if(p.reportPurpose==='demonstration')return {issued:false,label:'DEMONSTRATION - NOT FOR CONSTRUCTION',reasons:['Fictitious demonstration data',...geometry]};
  if(!s.eligible)reasons.push('Resolve blocking inputs and models');
  const failed=s.checks.filter(c=>c.status==='fail').length;if(failed)reasons.push(`Resolve ${failed} failed check${failed>1?'s':''}`);
+ reasons.push(...geometry);
  if(!(eor?.name.trim()&&eor.firm.trim()&&eor.license.trim()))reasons.push('Enter the engineer of record, firm and license');
  if(!d?.issue||d.issue==='preliminary')reasons.push('Select an issue purpose');
  if(!d?.code?.building.trim())reasons.push('Enter the building code adopted by the jurisdiction');
