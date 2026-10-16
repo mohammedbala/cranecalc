@@ -125,7 +125,7 @@ describe('M5 · the existing column check states its conditions',()=>{
  it('numbers the combinations as ASCE 7-16 §2.3.1 and §2.3.6',()=>{
   const k=(id:string)=>asceCombinations('LRFD').find(v=>v.id===id)!.equation;
   expect(k('5+')).toBe('0.9D + 1.0W');expect(k('6+')).toBe('1.2D + 1.0E + L + 0.2S');expect(k('7+')).toBe('0.9D + 1.0E');
-  expect(s.existingColumn!.combinations.some(v=>v.id==='LRFD 6+'&&v.equation.includes('E'))).toBe(true);
+  expect(s.existingColumn!.combinations.some(v=>v.id.startsWith('LRFD 6+')&&v.equation.includes('E'))).toBe(true);
  });
 });
 

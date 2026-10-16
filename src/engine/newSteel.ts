@@ -11,6 +11,7 @@ import {haunchGeometry,haunchWeight,isTaperedHaunch} from './taperedHaunchInputs
 import {columnStiffenerGeometry} from './columnStiffeners';
 import {rolledSelfWeight} from './rolledBracket';
 import {rolledStub,isRolledBracket} from './rolledBracketInputs';
+import {haunchTipDepth,haunchedBracket,weldedRibBracket} from './bracketRib';
 
 const inch=25.4;
 /**
@@ -56,8 +57,11 @@ export function newSteelTakeoff(p:ProjectInput){
  // Support steel at each grid: the tapered haunch or rolled stub with its plates, and the column stiffeners.
  const br=d.bracket?.enabled?d.bracket:undefined;
  if(br){
-  const each=isTaperedHaunch(br)?haunchWeight(haunchGeometry(br,b.width),s.density):isRolledBracket(br)&&rolledStub(br)?rolledSelfWeight(p,rolledStub(br)!):0;
-  if(each){for(let j=0;j<grids.length;j++)support[j]+=each;add(isTaperedHaunch(br)?'Tapered haunch':'Stub bracket','support',grids.length,each);}
+  // Welded rib brackets: the seat plate and the two ribs (a haunched rib by its mean depth, root to tip), the plates the
+  // bracket check uses.
+  const ribs=weldedRibBracket(br)?w(br.seatLength*br.seatProjection*br.seatThickness)+2*w(br.seatProjection*(haunchedBracket(br)?(br.ribDepth+haunchTipDepth(br))/2:br.ribDepth)*br.ribThickness):0;
+  const each=isTaperedHaunch(br)?haunchWeight(haunchGeometry(br,b.width),s.density):isRolledBracket(br)&&rolledStub(br)?rolledSelfWeight(p,rolledStub(br)!):ribs;
+  if(each){for(let j=0;j<grids.length;j++)support[j]+=each;add(isTaperedHaunch(br)?'Tapered haunch':ribs?(haunchedBracket(br)?'Haunched rib bracket (seat and two ribs)':'Twin-rib bracket (seat and two ribs)'):'Stub bracket','support',grids.length,each);}
   const cs=columnStiffenerGeometry(p);
   if(cs){const plates=2*2*w(cs.length*cs.width*cs.t);for(let j=0;j<grids.length;j++)support[j]+=plates;add('Column stiffeners (four plates)','support',grids.length,plates);}
  }

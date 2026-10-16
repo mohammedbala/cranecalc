@@ -82,6 +82,13 @@ export const existingColumnSchema=z.object({
   */
  longitudinalExit:z.enum(['girder-strut','column-strut','eave-strut']).optional(),
  /**
+  * Warping at the column base in the torsion check. 'warping-free' (default): the torque is carried in Saint-Venant
+  * torsion with no warping restraint relied on at the base (a lower-bound equilibrium solution, AISC Design Guide 9
+  * §4.2); 'warping-restrained': the base is fixed against warping, so warping stresses develop above it and the new
+  * column base is designed for the bimoment B = T a tanh(z/a).
+  */
+ torsionBase:z.enum(['warping-free','warping-restrained']).optional(),
+ /**
   * Frame type of the building at this column line across the runway (review B9). A sway (portal) frame needs the
   * frame's sway amplification B2 (AISC Appendix 8) from its analysis; without it the column check is provisional.
   */

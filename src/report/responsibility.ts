@@ -72,6 +72,11 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
   criterion:'IEBC §503.4 / §805.3: demand-capacity ratio of existing lateral elements not more than 10% above that without the alteration (verify against the adopted edition).',forces:rows.some(r=>r.forces===weight)&&weight!=='—'?'Seismic weight as above.':weight,party:EOR});
  take('brace-drift-wind',{item:'Longitudinal bracing · displacement under the 10-year wind',needed:'Crane-level displacement of the braced line along the runway under the 10-year wind.',
   criterion:'AIST TR-13 §5.5: H/400 or 2 in, whichever is less.',forces:'—',party:EOR});
+ // The crane-level strut the existing-column check relies on: its location, stiffness and forces.
+ const cls=byId.get('crane-level-strut');
+ if(cls)take('crane-level-strut',{item:cls.title,needed:`${sentences(cls.note.replace(/^Not checked here:\s*/,'')).slice(0,1).join(' ').replace(/^./,c=>c.toUpperCase()).replace(/\.$/,'')}; the existing column check relies on it.`,
+  criterion:'AISC 360-16 strength for the line force; on the girder line, an axial stiffness at each seat at least 10 times the column\'s own (the column check keeps 1/11 of the force).',
+  forces:[longitudinal&&longitudinal.charAt(0).toUpperCase()+longitudinal.slice(1)+'.',...sentences(cls.note).filter(x=>/\d\s*(kip|kN)/.test(x))].filter(Boolean).join(' ')||'See section @@ref:interfaces@@.',party:EOR});
  const strut=byId.get('brace-by-others')??byId.get('column-longitudinal');
  if(strut){const force=sentences(strut.note).find(x=>/\d\s*(kip|kN)\b/.test(x));
   take(strut.id,{item:'Crane-level strut on the girder line, collector, brace connections, braced-bay columns and foundation',
