@@ -10,8 +10,9 @@ import {heading,numbered,noteStyle,flowBlocks,type Block,type Style,type Lane,ty
  * its width, each detail centered in its cell above its title; lanes of notes at the right hold the sheet notes and the
  * notes and tables of every group of details on the sheet. The rows, and the scale of every detail, are chosen so the
  * details print at the largest standard scales the sheet holds (withDetailRoom). Text keeps the lettering size
- * (sheetGraphics lettering): notes that do not fit one lane continue in the next, and a sheet takes no more details
- * than fit at their standard scales. Content scale 1: layout units print at 1/72 in.
+ * (sheetGraphics lettering): notes that do not fit one lane continue in the next, a detail whose annotation would crowd
+ * at its scale is drawn larger (clearView), and a sheet takes no more details than fit at their standard scales.
+ * Content scale 1: layout units print at 1/72 in.
  */
 
 /**
