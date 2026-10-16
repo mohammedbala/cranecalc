@@ -50,7 +50,8 @@ export function sheetDc(s:CalculationSnapshot,u:number|undefined,digits=2,empty=
  if(u===undefined||Number.isNaN(u))return empty;
  if(!Number.isFinite(u)||noCapacity(u))return 'NO CAPACITY';
  if(u>99)return '> 99 NG';
- const t=u.toFixed(digits);
+ // Just past the limit reads with one more digit, never as 1.00 NG.
+ const t=u>1+1e-9&&Number(u.toFixed(digits))<=1?u.toFixed(digits+1):u.toFixed(digits);
  return u>1+1e-9?`${t} NG`:t;
 }
 /** A check's own D/C as printed (a geometry conflict, which has no ratio, reads GEOMETRY CONFLICT). */

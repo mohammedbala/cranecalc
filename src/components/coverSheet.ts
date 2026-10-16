@@ -40,7 +40,7 @@ const abbreviationList:[RegExp,string][]=[
  [/\(E\)/,'(E) EXISTING'],[/\(N\)/,'(N) NEW'],[/\bBOT\./,'BOT. BOTTOM'],[/\bBRG\./,'BRG. BEARING'],[/\bC\/L\b/,'C/L CENTERLINE'],
  [/\bCJP\b/,'CJP COMPLETE JOINT PENETRATION'],[/\bCLR\./,'CLR. CLEAR'],[/\bCOL\./,'COL. COLUMN'],[/\bCOMB\./,'COMB. LOAD COMBINATION'],
  [/\bCONT\./,'CONT. CONTINUOUS'],[/\bD\/C\b/,'D/C DEMAND / CAPACITY RATIO'],[/\bEA\./,'EA. EACH'],[/\bED\./,'ED. EDITION'],[/\bEL\./,'EL. ELEVATION'],[/\bFIG\./,'FIG. FIGURE'],
- [/\bFL\./,'FL. FLANGE'],[/\bFREQ\./,'FREQ. FREQUENCY'],[/\bFW\b/,'FW FIELD WELD'],[/\bGR\./,'GR. GRADE'],[/\bHORIZ\./,'HORIZ. HORIZONTAL'],
+ [/\bFB\b/,'FB FLAT BAR'],[/\bFL\./,'FL. FLANGE'],[/\bFREQ\./,'FREQ. FREQUENCY'],[/\bFW\b/,'FW FIELD WELD'],[/\bGR\./,'GR. GRADE'],[/\bHORIZ\./,'HORIZ. HORIZONTAL'],
  [/\bLONG\.(?!\w)/,'LONG. LONGITUDINAL'],[/\bLSL\b/,'LSL LONG-SLOTTED HOLE'],[/\bMAX\./,'MAX. MAXIMUM'],[/\bMIN\./,'MIN. MINIMUM'],
  [/\bMT\b/,'MT MAGNETIC PARTICLE TESTING'],[/\bNDT\b/,'NDT NONDESTRUCTIVE TESTING'],[/\bO\.C\./,'O.C. ON CENTER'],[/\bOD\b/,'OD OUTSIDE DIAMETER'],[/\bPL\b/,'PL PLATE'],[/\bQTY\b/,'QTY QUANTITY'],
  [/\bREF\./,'REF. REFERENCE (EXISTING OR BY OTHERS)'],[/\bSC\b/,'SC SLIP-CRITICAL'],[/\bSSL\b/,'SSL SHORT-SLOTTED HOLE'],[/\bSTD\b/,'STD STANDARD HOLE'],
@@ -221,7 +221,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(unevaluatedStructure(s).length?['ITEMS MARKED BY OTHERS IN THE CALCULATION REPORT (FRAME, CONNECTIONS TO EXISTING MEMBERS, ANCHORS AND FOUNDATIONS NOT CHECKED HERE) SHALL BE VERIFIED BY THE ENGINEER OF RECORD FOR THE REPORTED FORCES.']:[])
  ].map(v=>v.toUpperCase())));
  if(d)blocks.push(H('CRANE RUNWAY INSTALLATION'),...N([
-  `RAIL: ${d.rail.name.split(" · ")[0]}; GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${tol(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS. SET EACH RAIL C/L ON ITS GIRDER WEB C/L WITHIN ${tol(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${tol(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${tol(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION. VERIFY THE GAUGE AND TOLERANCES WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
+  `RAIL: ${d.rail.name.split(" · ")[0]}; GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${tol(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS. SET EACH RAIL C/L ON ITS GIRDER WEB C/L WITHIN ${tol(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${tol(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${tol(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION. IN SERVICE KEEP THE RAIL C/L WITHIN ${limitLength(Math.abs(p.railEccentricity)>0?Math.min(Math.abs(p.railEccentricity),.75*p.section.tw):.75*p.section.tw,u,'max')} OF THE WEB C/L (THE DESIGN ECCENTRICITY, AT MOST 3/4 OF THE WEB THICKNESS, AIST TR-13 §5.18); REALIGN THE RAIL BEYOND IT. VERIFY THE GAUGE AND TOLERANCES WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
   ...addedSentences(enteredFabricationNote(p,'railAlignment'),[...written,...(constructionRequirements(p).find(v=>v.key==='tolerances')?.items??[])]),
   // The rail setting clause of the TR-13 list is the note above.
   ...constructionRequirements(p).filter(v=>v.key==='tolerances').map(v=>v.items.filter(i=>!/^rail centerline set on/i.test(i)).join(' ').replace(/; (Survey)/,'. $1')),

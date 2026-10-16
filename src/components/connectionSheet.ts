@@ -221,7 +221,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
    {at:[X(tg/2),Z(g.root)],labels:['GIRDER GUSSET TO TIE-SIDE BEARING','STIFFENER, EACH TIED FLANGE'],weld:'cjp'},
    {at:[X(tg/2),Z((Math.max(b.bf/2,g.root)+g.gussetEnd)/2)],labels:[`GIRDER GUSSET PL ${size(tg)} X ${size(g.height)} X ${size(g.gussetLength)}`,`${size(g.clear)} INSIDE FLANGE; BARS ${size(g.clear)} CLEAR`,'OF STIFFENER']},
    {at:[X(tg/2)+tbk+3,Z(girderRows.at(-1)!)],labels:[`EACH END: ${2*c.rows} - ${size(c.diameter)} ${c.grade}, ${c.rows} ROWS`,`X 2 AT ${size(c.gauge)} VERT. GAUGE; CLASS ${c.surface}`,`${size(hole)} STD HOLES${rel?' AT THE GIRDER END':''}`]},
-   {at:[X(tg/2)+tbk,Z(cut?z1:(g.gussetEnd+g.face-g.connection)/2)-4],labels:[`2 FL ${size(tb)} X ${size(t.width)} (VERTICAL) X ${dim(t.length)}`,'ONE EACH SIDE OF THE GUSSETS']},
+   {at:[X(tg/2)+tbk,Z(cut?z1:(g.gussetEnd+g.face-g.connection)/2)-4],labels:[`2 FB ${size(tb)} X ${size(t.width)} (VERTICAL) X ${dim(t.length)}`,'ONE EACH SIDE OF THE GUSSETS']},
    ...(rel?[{at:[X(tg/2)+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`]}]:[]),
    {at:[X(tg/2),colZ],labels:[`COLUMN GUSSET PL ${size(tg)} X ${size(hg)} X ${size(g.columnGussetLength)}`,`2 ROOT FILLETS X ${dim(c.weldLength)}, ${sc.weld}`],weld:'fillet'},
    {at:[cx+colW*k*.3,colZ+colT*k],labels:[colRef]}

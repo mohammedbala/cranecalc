@@ -48,7 +48,7 @@ describe('D/C as the sheets print it',()=>{
  const s=sheetFixture('t04');
  it('reads NO CAPACITY, NG above 1.00 and UNVERIFIED for a blocked package',()=>{
   expect(sheetDc(s,Infinity)).toBe('NO CAPACITY');expect(sheetDc(s,1e12)).toBe('NO CAPACITY');expect(sheetDc(s,523)).toBe('> 99 NG');
-  expect(sheetDc(s,1.234)).toBe('1.23 NG');expect(sheetDc(s,.5)).toBe('0.50');
+  expect(sheetDc(s,1.234)).toBe('1.23 NG');expect(sheetDc(s,1.004)).toBe('1.004 NG');expect(sheetDc(s,.5)).toBe('0.50');
   const b=clone(s);b.eligible=false;b.checks.push({id:'analysis-equilibrium',group:'Analysis',title:'Equilibrium',status:'fail',equation:'',note:'',referenceIds:[]});
   expect(blockedPackage(b)).toBe(true);expect(sheetDc(b,.5)).toBe('UNVERIFIED');
  });
@@ -57,7 +57,7 @@ describe('D/C as the sheets print it',()=>{
   Object.assign(sa,{status:'fail',utilization:1.45,demand:(sa.capacity??1)*1.45});
   // A part with no capacity: the flag is the truth (JSON stores its Infinity as null).
   Object.assign(tie,{status:'fail',utilization:null,noCapacity:true});
-  const e=elementSummary(v,inElements(['tie'],/^(detail-(fatigue|full-cycle)-SA|plate-tie-keeper-flange$)/));
+  const e=elementSummary(v,inElements(['tie'],/^(detail-(fatigue|full-cycle)-(SA|SL)|plate-tie-keeper-flange$)/));
   expect(e.strength?.dc).toBe(Infinity);expect(e.failing[0].check.id).toBe('flange-tie-flange');
   const t=notesText(v).toUpperCase();
   expect(t).toContain('NO CAPACITY STRENGTH');expect(t).toMatch(/1\.45 NG FATIGUE/);expect(t).toContain(sa.id.toUpperCase());
@@ -74,7 +74,7 @@ describe('every template sheet set',()=>{
   // The flange tie summary is at least the largest evaluated design D/C of the tie.
   const topic=flangeTieTopic(s);
   if(topic){
-   const mapped=(c:CheckResult)=>{const t=tax.entries.get(c.id)!;return (t.element==='tie'||/^(detail-(fatigue|full-cycle)-SA|plate-tie-keeper-flange$)/.test(c.id))&&t.type==='design'&&t.gate==='evaluated'&&['pass','fail'].includes(c.status)&&typeof c.utilization==='number';};
+   const mapped=(c:CheckResult)=>{const t=tax.entries.get(c.id)!;return (t.element==='tie'||/^(detail-(fatigue|full-cycle)-(SA|SL)|plate-tie-keeper-flange$)/.test(c.id))&&t.type==='design'&&t.gate==='evaluated'&&['pass','fail'].includes(c.status)&&typeof c.utilization==='number';};
    const strength=Math.max(0,...s.checks.filter(c=>mapped(c)&&tax.entries.get(c.id)!.effect!=='fatigue'&&!/fatigue|full-cycle/.test(c.id)).map(c=>c.utilization!));
    const m=notesText(s).match(/MAX\. D\/C ([\d.]+)/);
    if(strength>0){expect(m,name).not.toBeNull();expect(Number(m![1])).toBeGreaterThanOrEqual(Math.min(strength,99)-.005);}

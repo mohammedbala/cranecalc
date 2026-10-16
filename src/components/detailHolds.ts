@@ -56,7 +56,7 @@ export function holdsFor(s:CalculationSnapshot):Hold[]{
   const c=g.members.find(m=>m.status==='fail')===g.governing?g.governing:g.members.find(m=>m.status==='fail')!;
   const views=byId.find(([re])=>re.test(c.id))?.[1]??byElement[g.element];
   const dc=c.geometry?undefined:g.kind==='clash'||g.kind==='detailing'?checkDc(c):g.dc;
-  const value=c.geometry?'GEOMETRY CONFLICT':blockedPackage(s)||dc===undefined?'':`D/C ${sheetDc(s,dc).replace(/ NG$/,'')}`;
+  const shown=dc===undefined?'':sheetDc(s,dc).replace(/ NG$/,''),value=c.geometry?'GEOMETRY CONFLICT':blockedPackage(s)||!shown?'':shown==='NO CAPACITY'?shown:`D/C ${shown}`;
   return {group:g,check:c,dc,views:views&&views.source!=='$^'?views:undefined,text:`NG ${c.id.toUpperCase()}${value?` ${value}`:''}`};
  });
  cache.set(s.checks,v);return v;
