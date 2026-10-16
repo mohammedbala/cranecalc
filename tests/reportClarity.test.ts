@@ -206,7 +206,8 @@ describe('forces delivered to columns by others',()=>{
   for(const r of deliveredRows(base,d))expect(r[4]).not.toBe('—');
   const note=deliveredNote(base,d);
   expect(note).toContain('at e = 37.0 in from the column face');expect(note).toContain('for the column centerline add V times half the column depth');
-  expect(d.elevation!.tieBars!).toBeLessThan(d.elevation!.tie);
+  // The analysis applies the tie force at the bars' centerline (tieLine), so the tie line and the bars coincide.
+  expect(d.elevation!.tieBars!).toBeCloseTo(d.elevation!.tie,6);
   expect(note).toMatch(/delivered to the column by the tie at its centerline, El\. /);
   const rows=responsibilityMatrix(tax,base).map(r=>`${r.needed} ${r.forces}`).join(' ');
   expect(rows).not.toContain('@@ref:column@@');expect(rows).toContain('the columns themselves are not checked in this package');
