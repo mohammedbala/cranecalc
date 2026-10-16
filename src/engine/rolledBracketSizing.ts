@@ -126,8 +126,9 @@ export function sizeRolledBracket(p:ProjectInput,target=.9,options:BracketSizing
   if(r.stiffeners){
    const st=rolledStub(b)!,s=st.stiffener!;
    r.stiffenerThickness=Math.max(r.stiffenerThickness,.375*inch,up(Math.max(st.tf/2,s.width/16,s.width/(.56*Math.sqrt(E/r.Fy))),eighth));
-   r.stiffenerWeld=Math.max(r.stiffenerWeld,filletMinimum([r.stiffenerThickness,st.tw],[r.stiffenerThickness,st.tf]));
   }
+  // The stiffener fillet at its J2.4 minimum (kept as an input where the stub has no stiffeners).
+  r.stiffenerWeld=Math.max(r.stiffenerWeld,filletMinimum([r.stiffenerThickness,st0.tw],[r.stiffenerThickness,st0.tf]));
   if(r.seatPlate){
    const st=rolledStub(b)!;
    b.seatWeld=Math.max(b.seatWeld,filletMinimum([b.seatThickness,st.tf]));

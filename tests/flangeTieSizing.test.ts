@@ -131,15 +131,18 @@ describe('configured tie proportions',()=>{
   expect(q.details!.bracket!.reach).toBeCloseTo(24*inch,9);expect(flangeTieGeometry(q)!.face).toBeCloseTo(24*inch,9);
   expect(validateProject(q)).toEqual([]);expect(Math.max(...Object.values(tieSizingRatios(q)))).toBeLessThanOrEqual(1);
  });
- it('gives the release slots the travel of a bracket that deflects more than its limit (the rolled W-stub of t03)',()=>{
-  // The W-stub bracket is not sized to its 1/16 in limit: the slots take its own service deflection.
-  const p=templateProject('t03'),b=p.details!.bracket!,t=p.details!.brace,v=bracketServiceDeflection(p)!,d=tieSizingDemands(p);
+ it('gives the release slots the travel of a bracket that deflects more than its limit (an unsized W stub on t03)',()=>{
+  // t03 with the W12X65 stub the configurator used before the stub was sized, which deflects past its 1/16 in limit:
+  // the slots take its own service deflection.
+  const p=structuredClone(templateProject('t03')),b=p.details!.bracket!;
+  b.corbelShape='W12X65';b.seatThickness=1.5*inch;b.rolled={...b.rolled!,flangeJoint:'cjp',stiffeners:true,stiffenerThickness:.5*inch};delete b.columnStiffeners;
+  const q=sizeFlangeTie(p),t=q.details!.brace,v=bracketServiceDeflection(q)!,d=tieSizingDemands(q);
   expect(v).toBeGreaterThan(b.deflectionLimit);expect(d.support).toBeCloseTo(v,9);
-  const impact=Math.max(...p.cranes.map(c=>c.impact));
-  expect(t.release!.travel).toBeGreaterThanOrEqual(v*p.cranes.length*(1+impact)+d.rotation*t.flangeAttachment!.longitudinalSetback+inch/16-1e-9);
-  // A sized welded seat stays within its limit, which the travel then covers.
-  const q=templateProject('t01');expect(bracketServiceDeflection(q)!).toBeLessThan(q.details!.bracket!.deflectionLimit);
-  expect(tieSizingDemands(q).support).toBeCloseTo(q.details!.bracket!.deflectionLimit,9);
+  const impact=Math.max(...q.cranes.map(c=>c.impact));
+  expect(t.release!.travel).toBeGreaterThanOrEqual(v*q.cranes.length*(1+impact)+d.rotation*t.flangeAttachment!.longitudinalSetback+inch/16-1e-9);
+  // Sized brackets, the welded seat of t01 and the W stub of t03, stay within their limits, which the travel then covers.
+  for(const id of ['t01','t03']){const r=templateProject(id);expect(bracketServiceDeflection(r)!,id).toBeLessThan(r.details!.bracket!.deflectionLimit);
+   expect(tieSizingDemands(r).support,id).toBeCloseTo(r.details!.bracket!.deflectionLimit,9);}
  });
  it('turns a saddle tie that cannot pass on a capped girder into the cap tieback angle, with the reason',()=>{
   // 5-ton pendant crane on a W14X61 + C15X33.9: the W flange under the saddle takes 1.26 of its local strength.
