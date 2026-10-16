@@ -57,7 +57,9 @@ describe('haunched rib mechanics, hand-checked',()=>{
   const thin=ribFreeEdge({...g,thickness:.5*inch},E,Fy,'ASD');expect(thin.Fcr).toBeCloseTo(Fy*(edge.limit/48)**2,9);expect(thin.capacity).toBeCloseTo(thin.Fcr/1.67,9);
  });
  it('adds the free-edge corner shear to the root fillet and the column weld group',()=>{
-  const R=40000,r=bracketResponse(p,[{vertical:2*R,offset:0}]),a=b.rootWeld/Math.SQRT2,Aw=2*a*b.ribDepth,Iw=2*a*b.ribDepth**3/12,fb=R*e*(b.ribDepth/2)/Iw;
+  // The set's reaction on the web line moved by the rail eccentricity (no support torque here).
+  const R=40000,r=bracketResponse(p,[{vertical:2*R,offset:0}]),e=b.reach+Math.abs(p.railEccentricity),a=b.rootWeld/Math.SQRT2,Aw=2*a*b.ribDepth,Iw=2*a*b.ribDepth**3/12,fb=R*e*(b.ribDepth/2)/Iw;
+  expect(r.e).toBeCloseTo(e,9);
   expect(r.R).toBe(R);expect(r.rootWeld).toBeCloseTo(Math.hypot(fb,R/Aw+fb*g.slope),9);expect(rootCornerStress(fb,R/Aw,g.slope)).toBeCloseTo(r.rootWeld,9);
   expect(r.rootWeld).toBeGreaterThan(Math.hypot(fb,R/Aw));
   // Critical-section stresses scale the rib reaction by the geometric factors.
@@ -112,15 +114,16 @@ describe('haunched seat package',()=>{
   const p=haunched();expect(connectionOptionChecks(p)).toEqual([]);
   const s=calculate(p);expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
   expect(s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
-  const by=(id:string)=>s.checks.find(c=>c.id===id)!,b=p.details!.bracket!,g=ribGeometry(b),E=p.section.E,e=b.reach+p.details!.bearing.width/2,k=ribResponse(g,e,E,E/2.6);
+  const by=(id:string)=>s.checks.find(c=>c.id===id)!,b=p.details!.bracket!,g=ribGeometry(b),E=p.section.E,S=s.detailResults!.bracket!.strength,at=(pk:{e?:number})=>ribResponse(g,pk.e!,E,E/2.6);
   for(const id of ['rib-flexure','rib-flexure-root','rib-shear','rib-shear-root','rib-interaction','rib-edge','rib-edge-thickness','fatigue-rib-edge','root-weld','column-weld','fatigue-rib','fatigue-rootWeld','deflection','rotation','tr13-load'])expect(by('bracket-'+id).status,id).toBe('pass');
-  // Demands follow the peak rib reaction through the geometric factors.
-  const R=s.detailResults!.bracket!.strength.ribReaction.value;
-  expect(by('bracket-rib-flexure').demand).toBeCloseTo(R*k.critical.moment,0);
-  expect(by('bracket-rib-flexure-root').demand).toBeCloseTo(R*e,0);
-  expect(by('bracket-rib-edge').demand).toBeCloseTo(R*k.critical.edge,6);
+  // Demands follow each peak's rib reaction through the geometric factors at that set's eccentricity, within the flange contact.
+  for(const pk of [S.ribMoment,S.ribRootMoment,S.ribEdge]){expect(pk.e!).toBeGreaterThanOrEqual(b.reach);expect(pk.e!).toBeLessThanOrEqual(b.reach+p.section.bf/2+1e-9);}
+  expect(by('bracket-rib-flexure').demand).toBeCloseTo(S.ribMoment.R!*at(S.ribMoment).critical.moment,0);
+  expect(by('bracket-rib-flexure-root').demand).toBeCloseTo(S.ribRootMoment.R!*S.ribRootMoment.e!,0);
+  expect(by('bracket-rib-edge').demand).toBeCloseTo(S.ribEdge.R!*at(S.ribEdge).critical.edge,6);
   expect(by('bracket-rib-edge-thickness').demand).toBeCloseTo(24*inch/(1.47*Math.sqrt(E/p.details!.material.Fy)),9);
-  expect(by('bracket-rib-flexure').capacity).toBeCloseTo(ribFlexure(b,E,p.details!.material.Fy,p.method,k.critical.x).capacity,3);
+  // The strength at the critical section of the largest eccentricity, the shallowest candidate.
+  expect(by('bracket-rib-flexure').capacity).toBeCloseTo(ribFlexure(b,E,p.details!.material.Fy,p.method,ribResponse(g,S.eccentricity.value,E,E/2.6).critical.x).capacity,3);
   for(const id of ['end-bearing-wrench-rib','end-bearing-seat-prying','end-bearing-seat-bearing'])expect(by(id).status,id).toBe('pass');
   expect(s.checks.some(c=>c.id==='option-bracket-model')).toBe(false);
  },300000);

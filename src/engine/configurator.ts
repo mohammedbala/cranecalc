@@ -25,7 +25,7 @@ import {supportReactions} from './supportReactions';
 import {existingColumnAnalysis} from './existingColumn';
 import {baseDrift} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
-import {initialColumnStiffeners,receiverK} from './columnStiffenerInputs';
+import {sizeWeldedBracket} from './bracketSizing';
 import {defaultRolledBracket} from './rolledBracketInputs';
 import {defaultColumnCap} from './columnCapInputs';
 import {capWorkPointDrop} from './columnCap';
@@ -426,7 +426,8 @@ function attachBracket(p:ProjectInput,cfg:RunwayConfig,shape:string,reach:number
  const base=cappedDemonstrationProject().details!.bracket!;
  let b={...structuredClone(base),reach,receiver,loadPathConfirmed:true};
  delete b.columnStiffeners;
- // The seat carries both bearings and reaches past the far bearing edge; ribs straddle the bearing bolts on the column flange.
+ // The seat carries both bearings and reaches past the far bearing edge; ribs straddle the bearing bolts on the column
+ // flange (the welded rib seats are sized below).
  b.seatProjection=Math.max(b.seatProjection,up(reach+d.bearing.width/2+1.5*inch,inch));
  b.ribSpacing=Math.min(b.ribSpacing,plates.width-2*inch);
  if(heavy){b.ribThickness=Math.max(b.ribThickness,1.5*inch);b.seatThickness=Math.max(b.seatThickness,2*inch);b.rootWeld=Math.max(b.rootWeld,.5*inch);}
@@ -439,12 +440,13 @@ function attachBracket(p:ProjectInput,cfg:RunwayConfig,shape:string,reach:number
   p.details.endBearing!.bolts.edge=2.125*inch;
  }
  if(kind==='tapered-haunch'){delete b.haunch;p.details=selectBracketArrangement(p.details,'tapered-haunch',p.system);b=p.details.bracket!;}
- // Continuity plates in a thin existing receiving flange at the welded rib bracket levels (the haunch sizing adds its
- // own); a new column is chosen heavy enough to go without, clear of the crane-level bracing gussets on its web.
- if((kind==='twin-rib'||kind==='haunched-seat')&&!isNew&&plates.flangeThickness<1.25*inch)b.columnStiffeners=initialColumnStiffeners(b.receiver,receiverK(b,p.existingColumn)?.k,Math.max(b.seatThickness,b.ribThickness));
+ // The welded rib seats are sized for the reactions: ribs, seat, fillets, the rib spacing under the girder bearing
+ // stiffeners and any continuity plates the receiving column needs (where they clear a new column's bracing gussets);
+ // without a configured reach, one that leaves the top-flange tie the clear length its movement needs.
+ if(kind==='twin-rib'||kind==='haunched-seat'){p.details.bracket=sizeWeldedBracket(p,.9,{reach:cfg.reach===undefined?'tie':'fixed'}).details!.bracket;b=p.details.bracket!;}
  // The tie spans from its girder end to the column face at the bracket reach.
  const t=p.details.brace,f=t.flangeAttachment;
- if(f?.enabled&&f.columnFace!==undefined){const shift=reach-f.columnFace;t.length+=shift;t.reach=t.length;delete f.columnFace;}
+ if(f?.enabled&&f.columnFace!==undefined){const shift=b.reach-f.columnFace;t.length+=shift;t.reach=t.length;delete f.columnFace;}
 }
 
 /** The configured tieback on the details. */
