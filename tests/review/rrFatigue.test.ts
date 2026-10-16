@@ -104,8 +104,8 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   expect(members.length).toBe(fatigueChecks.length);
   const nEv=members.filter(c=>gate(c.id)==='evaluated').length,nSc=members.filter(c=>gate(c.id)==='screened').length;
   // The other members are the comparison bounds beside the Miner checks (advisory, check integrity).
-  const adv=members.filter(c=>gate(c.id)==='advisory');expect(adv.every(c=>c.id.startsWith('detail-full-cycle-'))).toBe(true);
-  expect(nSc).toBe(tax.counts.designScreened);expect(nEv+nSc+adv.length).toBe(members.length);
+  const bounds=members.filter(c=>gate(c.id)==='advisory');expect(bounds.every(c=>c.id.startsWith('detail-full-cycle-'))).toBe(true);
+  expect(nSc).toBe(tax.counts.designScreened);expect(nEv+nSc+bounds.length).toBe(members.length);
   expect(body).not.toMatch(/details evaluated; \d+ details screened|Of their \d+ checks/);
   const keeper=[...F.evaluated,...F.screened].find(v=>v.title==='Rail clip base weld')!;expect(keeper.points*2).toBe(keeper.members.length);
   const kSc=pts(keeper.members.filter(c=>gate(c.id)==='screened'));
