@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {Hammer,LayoutTemplate,LoaderCircle,RotateCcw,TriangleAlert} from 'lucide-react';
 import {runwayTemplates,type RunwayTemplate} from '../engine/templates';
-import {defaultRunwayConfig,supportLabels,tieLabels,type RunwayConfig,type SupportKind,type TieKind} from '../engine/configInputs';
+import {defaultRunwayConfig,defaultSupportFor,supportLabels,tieLabels,type RunwayConfig,type SupportKind,type TieKind} from '../engine/configInputs';
 import {normalizeConfig,type previewConfig} from '../engine/configurator';
 import {aiscWShapes} from '../data/aiscSections';
 import type {ProjectInput} from '../engine/types';
@@ -138,7 +138,7 @@ export default function StartPanel({project,onBuild}:{project:ProjectInput;onBui
       {c.girder==='capped'&&<Select label="Cap channel" value={c.capChannel??''} options={[{value:'',label:'Size automatically'},...channels.map(v=>({value:v,label:v}))]} onChange={v=>set({capChannel:v||undefined})}/>}
      </div></fieldset>
      {design&&<fieldset><legend>Supports and tieback</legend><div className="field-grid">
-      <Select label="Structure" value={c.structure} options={[{value:'existing',label:'Existing building columns'},{value:'new',label:'New freestanding columns'}]} onChange={v=>set({structure:v,columnShape:undefined})}/>
+      <Select label="Structure" value={c.structure} options={[{value:'existing',label:'Existing building columns'},{value:'new',label:'New freestanding columns'}]} onChange={v=>set({structure:v,columnShape:undefined,support:defaultSupportFor(v,c.support)})}/>
       <Select label="Girder support" value={c.support} options={supports} onChange={v=>set({support:v})}/>
       <Select label="Top-flange tieback" value={c.tie} options={ties} onChange={v=>set({tie:v})}/>
       {c.support!=='by-others'&&<Select label={c.structure==='new'?'New column':'Existing column'} value={c.columnShape??''} options={[{value:'',label:'Chosen for the crane'},...columnShapes.map(v=>({value:v,label:v}))]} onChange={v=>set({columnShape:v||undefined})}/>}

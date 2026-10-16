@@ -39,7 +39,8 @@ describe('existing column member check',()=>{
   expect(r.capacity.Pc/(.9*Fcr*A)).toBeCloseTo(1,3);
   // Simply supported column: eccentric reaction moment at the seat plus side thrust at the rail head.
   const H=c.height,hs=c.seatElevation,ht=existingColumnRailElevation(p);
-  const combo=r.combinations.find(k=>k.id==='LRFD 2-Lr')!,runway=1.2*r.crane.dead+1.6*r.crane.live,M0=runway*r.eccentricity,F=1.6*r.crane.lateral;
+  // One concurrency rule with the girder (TR-13 2c): impact without side thrust.
+  const combo=r.combinations.find(k=>k.id==='LRFD 2-Lr (impact, no side thrust)')!,runway=1.2*r.crane.dead+1.6*r.crane.live,M0=runway*r.eccentricity,F=0;
   const sections=[[M0*hs/H,F*hs*(H-ht)/H],[M0*(H-hs)/H,F*hs*(H-ht)/H],[M0*(H-ht)/H,F*ht*(H-ht)/H]];
   const Mx=Math.max(...sections.map(([a,b])=>a+b));
   expect(combo.Mx/combo.B1x).toBeCloseTo(Mx,3);
@@ -55,7 +56,7 @@ describe('existing column member check',()=>{
  },60000);
  it('bends the weak axis when the column resists the crane longitudinal force',()=>{
   const p=project({longitudinal:'column'}),s=calculate(p),r=s.existingColumn!,c=p.existingColumn!,ht=existingColumnRailElevation(p);
-  const combo=r.combinations.find(k=>k.id==='LRFD 2-Lr')!;
+  const combo=r.combinations.find(k=>k.id==='LRFD 2-Lr (side thrust, no impact)')!;
   expect(combo.My/combo.B1y).toBeCloseTo(1.6*r.crane.longitudinal*ht*(c.height-ht)/c.height,3);
   expect(s.checks.some(k=>k.id==='column-flexure-y')).toBe(true);
  },60000);

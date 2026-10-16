@@ -5,6 +5,7 @@ import {runwayElevations} from './drawingData';
 import {capTieLine} from './capAngle';
 import {activeColumnCap} from './columnCapInputs';
 import {flangeTieGeometry,tieLine} from './tieGeometry';
+import {craneLevelStrut,existingColumnEccentricity} from './existingColumn';
 
 /**
  * Forces the runway delivers to the building columns (C4): at each grid, whole concurrent sets of the factored bracket
@@ -54,7 +55,8 @@ export function deliveredForces(s:CalculationSnapshot){
  // A seat by others on a column this calculation does not model: from the column face, the girder web line entered for
  // the tie (its column face) plus half the bearing; the column half depth is the building engineer's (eFrom 'face').
  const face=!b?.enabled&&!p.existingColumn?.enabled&&!activeColumnCap(p)?d.brace.capAngle?.columnFace??d.brace.flangeAttachment?.columnFace:undefined;
- const e=b?.enabled?b.receiver.depth/2+b.reach+d.bearing.width/2:p.existingColumn?.enabled?p.existingColumn.eccentricity:face!==undefined?face+d.bearing.width/2:undefined;
+ // A column checked here takes e from its resolved support, as its own check does (a column cap: the rail eccentricity).
+ const e=p.existingColumn?.enabled?existingColumnEccentricity(p):b?.enabled?b.receiver.depth/2+b.reach+d.bearing.width/2:face!==undefined?face+d.bearing.width/2:undefined;
  const eFrom:'centerline'|'face'|undefined=e===undefined?undefined:face!==undefined&&!b?.enabled&&!p.existingColumn?.enabled?'face':'centerline';
  const brace=braceImperfection(p,a,props),stops=new Set(craneCombinations(p.method,p.aist?.concurrency==='full').filter(c=>c.bumper>0).map(c=>`${p.method} ${c.id}`));
  const grids:DeliveredGrid[]=r.bracketForces.map(v=>{
@@ -81,7 +83,9 @@ export function deliveredForces(s:CalculationSnapshot){
  const traction=Math.max(0,...grids.flatMap(g=>g.sets.filter(x=>!stops.has(x.combination)).map(x=>Math.abs(x.F))));
  const stop=Math.max(0,...grids.flatMap(g=>g.sets.filter(x=>stops.has(x.combination)).map(x=>Math.abs(x.F))));
  const analysis=Math.max(0,...grids.flatMap(g=>g.sets.map(x=>Math.abs(x.top))));
- return {grids,e,eFrom,brace,
+ // The crane-level strut by others that the existing-column check relies on: location, stiffness and design force.
+ const strut=s.existingColumn?craneLevelStrut(p,s.existingColumn):undefined;
+ return {grids,e,eFrom,brace,strut,
   /** The girder web line from the column centerline (bracket) or from the column face (seat by others); e is taken at the far bearing edge beyond it. */
   web:b?.enabled?b.receiver.depth/2+b.reach:face,
   /** The tie design force: the largest concurrent top-flange restraint force (all girder ends at a grid) plus the brace force. */

@@ -16,7 +16,7 @@ import type {ProjectInput} from './types';
 import {sectionProperties} from './section';
 import {supportReactions,type SupportReactionSet} from './supportReactions';
 import {existingColumnAnalysis,existingColumnSection} from './existingColumn';
-import {anchorStrength,barArea,barDiameter,baseDrift,basePlate,columnBaseActions,columnBaseAnalysis,columnBaseChecks,footingStrength,footingWeight,plateWasherWeld,soilPressure} from './columnBase';
+import {anchorsFor,anchorStrength,barArea,barDiameter,baseDrift,basePlate,columnBaseActions,columnBaseAnalysis,columnBaseChecks,flangeWeldCapacity,flangeWeldDemand,footingStrength,footingWeight,plateWasherWeld,soilPressure} from './columnBase';
 import {anchorHardware,barSizes} from './columnBaseInputs';
 import {seismicBasis} from './runwaySeismic';
 
@@ -74,18 +74,17 @@ export function baseSizingRatios(p:ProjectInput,set:BaseSizingSet=baseSizingSet(
  let tRequired=0;
  for(const sp of set.design)for(const a of sp.actions){const r=basePlate(p,b,a);tRequired=Math.max(tRequired,finite(r.tRequired));put('bearing',r.bearing);}
  put('plate',tRequired/b.plate.thickness);
- const flange=Math.max(0,...set.design.flatMap(sp=>sp.actions.map(a=>a.Mx/(c.d-c.tf)-a.P*c.bf*c.tf/A)));
- put('weld',flange/((p.method==='LRFD'?.75:.5)*.6*70000*psi*(b.plate.weld/Math.SQRT2)*(2*c.bf-c.tw)));
- // A torque on the base shears the rods about the group centroid: equivalent group shear n·T·rmax/Σr².
- const radii=Array.from({length:an.perRow},(_,i)=>an.perRow>1?-an.gauge/2+i*an.gauge/(an.perRow-1):0).flatMap(x=>[Math.hypot(x,b.plate.N/2-an.edge),Math.hypot(x,b.plate.N/2-an.edge)]);
- const torqueShear=(T:number)=>T?radii.length*T*Math.max(...radii)/radii.reduce((s,r)=>s+r*r,0):0;
+ // The flange fillets with the base bimoment's flange lateral moments (flangeWeldDemand).
+ const flange=Math.max(0,...set.design.flatMap(sp=>sp.actions.map(a=>flangeWeldDemand(p,b,a,A).demand)));
+ put('weld',flange/flangeWeldCapacity(p,b));
+ // The rods (anchorsFor): torque shear added as vectors per rod, the bimoment's rod force; tension and shear each at their own worst action.
  const seismicAnchors=(seismicBasis(p)?.sdc??'A')>='C',washer=plateWasherWeld(b).phiRn;
  let governing:{r:AnchorResult;v:number}|undefined;
  for(const sp of set.strength){
   let worst:{r:AnchorResult;v:number}|undefined;
-  for(const a of sp.actions){const r=anchorStrength(b,Math.max(0,basePlate(p,b,a,'LRFD').T),a.Vx,a.Vy+torqueShear(a.torque??0),!!a.seismic&&seismicAnchors),v=finite(r.interaction);if(!worst||v>worst.v)worst={r,v};}
+  for(const a of sp.actions){const r=anchorsFor(p,b,a,seismicAnchors),v=finite(r.interaction);put('anchor-tension',r.T/r.phiNn);put('anchor-shear',r.V/r.phiVn);put('washer-weld',r.V/(2*an.perRow)/washer);if(!worst||v>worst.v)worst={r,v};}
   if(!worst)continue;
-  const r=worst.r;put('anchor-tension',r.T/r.phiNn);put('anchor-shear',r.V/r.phiVn);put('washer-weld',r.V/(2*an.perRow)/washer);put('anchor-interaction',r.interaction);
+  put('anchor-interaction',worst.r.interaction);
   if(!governing||worst.v>governing.v)governing=worst;
  }
  const fs=(resist:number,ot:number)=>resist<=0?0:ot>0?resist/ot:Infinity;
@@ -197,7 +196,9 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
   switch(key){
    case 'plate':{const t=Math.max(next(pl.thickness,inch/8),up(s.tRequired/target,inch/8));if(!Number.isFinite(t))return longer();if(t>caps.thickness+1e-6)return false;pl.thickness=t;return true;}
    case 'bearing':return larger();
-   case 'weld':{const w=Math.max(next(pl.weld,inch/16),up(pl.weld*s.ratios.weld/target,inch/16));if(w>Math.min(section.tf,pl.thickness)+1e-6)return false;pl.weld=w;return true;}
+   // Fillets up to the flange and plate thickness, then CJP flanges (the web keeps its fillets).
+   case 'weld':{if(pl.flangeJoint==='cjp')return false;const w=Math.max(next(pl.weld,inch/16),up(pl.weld*s.ratios.weld/target,inch/16));
+    if(w>Math.min(section.tf,pl.thickness)+1e-6){pl.flangeJoint='cjp';return true;}pl.weld=w;return true;}
    case 'anchor-tension':case 'anchor-shear':case 'anchor-interaction':case 'washer-weld':{
     if(key==='washer-weld')return largerRod()||moreRods();
     const shear=key==='anchor-shear'||(key==='anchor-interaction'&&s.dominant==='shear');
