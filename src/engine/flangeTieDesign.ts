@@ -32,10 +32,11 @@ export function flangeEffectiveWidth(p:ProjectInput,g=flangeTieGeometry(p)!){
  * from the fillet toe to the gusset (x/2 each way), stopped by a column top less than x above the gusset:
  * b_c = h_g + min(x, s_top). Checked against a Reissner-Mindlin plate model of the column flange outstand (clamped at
  * the fillet toe, free at the flange tip, the column continuing or ending 1 to 2 1/2 in above the gusset; W14X61 to
- * W14X159, gussets 5 3/4 to 6 1/2 in tall, the force on the two gusset root fillets): the root moment averaged over
- * t_f is at most F·x/b_c (within 0.1% on the narrow W14X61, 10% to 25% below on W14X90 to W14X159); the check takes the
- * larger lever e. The column top above the gusset: the surveyed or new column's height, else the girder top. With ties
- * at both girder flanges the spread toward the other gusset stops at half the clear gap between them.
+ * W14X257, gussets 5 3/4 to 8 in tall, the force on the two gusset root fillets): the root moment averaged over t_f is
+ * at most 2.5% above F·x/b_c (the narrow W14X61 with an 8 in gusset) and up to 22% below it on the wider flanges; the
+ * check takes the lever e from the web centerline, 1.5 to 1.9 times x. The column top above the gusset: the surveyed
+ * or new column's height, else the girder top. With ties at both girder flanges the spread toward the other gusset
+ * stops at half the clear gap between them.
  */
 export function columnFlangeWidth(p:ProjectInput,g=flangeTieGeometry(p)!){
  const d=p.details!,b=d.bracket,col=p.existingColumn,hg=g.columnGusset,s=p.section;
@@ -79,6 +80,11 @@ export function flangeTieResponse(p:ProjectInput,F:number){
  // flexibility is excluded with the building.
  const columnWidth=r?columnFlangeWidth(p,g):undefined,columnStrip=(w:number)=>r?6*(F*e+twist)/(w*r.flangeThickness**2)+1.5*F/(w*r.flangeThickness):0;
  const column=columnStrip(columnWidth?.width??hg),columnScreen=columnStrip(hg);
+ // Column flange at the toes of the gusset root fillets (the welded detail): the cantilever moment there, F(t_g/2 + w)
+ // with the lap couple, over the gusset height alone, no spread credited. On the plate model of the column flange
+ // outstand (W14X61 to W14X257, gussets 5 3/4 and 8 in tall, the column continuing or ending 1 in above the gusset)
+ // the moment across the gusset toes is at most 0.8 of it and the moment along the column at the gusset ends 0.3.
+ const columnToe=r?6*(F*(t.gussetThickness/2+t.connection.weldSize)+twist)/(hg*r.flangeThickness**2)+1.5*F/(hg*r.flangeThickness):0;
  const rootWeld=(F/(2*hg)+twist/(t.gussetThickness*hg))/(t.connection.weldSize/Math.sqrt(2));
  const flangeI=B*p.section.tf**3/12,columnI=r?hg*r.flangeThickness**3/12:Infinity;
  // The gusset delivers F·h to the flange as a linear couple along the saddle root (the same distribution as
@@ -88,7 +94,7 @@ export function flangeTieResponse(p:ProjectInput,F:number){
  // the tie by e times the rotations.
  const k=gussetRotation(p,g.columnGussetLength,L,H),lapCompliance=g.eccentricity**2*(1/k.column+1/k.girder)/E;
  const compliance=h*h*((g.rootStart-p.section.tw/2)+13/35*L)/(E*flangeI)+3*H*H*B**3/(E*a.saddleThickness**3*L**3)+4*H**3/(E*t.gussetThickness*L**3)+e**3/(3*E*columnI)+lapCompliance;
- return {gusset,saddle,flange,flangeScreen,effective,column,columnScreen,columnWidth,rootWeld,gussetWeld:weld(t.gussetThickness,M),saddleWeld:weld(B,flangeM,g.endWeldLength),compliance,h,H,L,B,twist};
+ return {gusset,saddle,flange,flangeScreen,effective,column,columnScreen,columnWidth,columnToe,rootWeld,gussetWeld:weld(t.gussetThickness,M),saddleWeld:weld(B,flangeM,g.endWeldLength),compliance,h,H,L,B,twist};
 }
 /** Minimum clear distance of the girder gusset to a cap channel flange, mm (1/2 in). */
 export const capClearance=12.7;
@@ -118,7 +124,15 @@ export function flangeTieChecks(s:CalculationSnapshot,force:number):CheckResult[
  const E1=finiteLife(.39,cyc),C=finiteLife(4.4,cyc),weldF=categoryF(cyc);
  add('saddle-fatigue','Saddle plate · all-cycle fatigue bound',f.saddle,E1,'f_{sr}\\le6900(0.39/n_{SR})^{0.333}\\ \\ \\text{(Cat. E}^{\\prime}\\text{)}','Category E-prime for welded attachment; full tie range at all cycles, no endurance credit.');
  add('gusset-fatigue','Flange gusset · weld-root fatigue',f.gusset,transverseFilletFatigue(t.gussetThickness,a.weldSize,cyc).capacity,'f_{sr}\\le F_{SR}\\ \\ \\text{(Cat. C}^{\\prime\\prime}\\text{)}','Transverse fillet root at the saddle; includes eccentric bending and direct shear by addition.');
- if(g.receiver&&f.columnWidth)add('column-fatigue','Column flange at tie · local fatigue',f.column,E1,'f_{sr}\\le6900(0.39/n_{SR})^{0.333}\\ \\ \\text{(Cat. E}^{\\prime}\\text{)}',`Category E-prime, local tie action only: the full tie range over the column flange's effective width b_c = ${len(f.columnWidth.width)} (Column flange at tie · local elastic stress); the gusset-height strip gives ${format(f.columnScreen,'stress',p.units,3)}. Cyclic building-frame stresses require separate combination.`);
+ // Two details of the column flange under the full tie range at all cycles: the base metal at the toes of the gusset
+ // root fillets (Category E', the stress there), and the rolled base metal at the toe of the column web fillet, where
+ // the flange bending peaks (Category A, the stress over b_c).
+ if(g.receiver&&f.columnWidth){
+  const A=finiteLife(250,cyc),toe=f.columnToe/E1,root=f.column/A,stress=(v:number)=>format(v,'stress',p.units,3);
+  add('column-fatigue','Column flange at tie · local fatigue',toe>=root?f.columnToe:f.column,toe>=root?E1:A,
+   (single?'f_{sr,toe}=\\frac{6\\Delta F(t_g/2+w+e_l)}{h_gt_c^2}+\\frac{1.5\\Delta F}{h_gt_c}':'f_{sr,toe}=\\frac{6\\Delta F(t_g/2+w)}{h_gt_c^2}+\\frac{1.5\\Delta F}{h_gt_c}')+'\\le F_{SR}\\ \\text{(Cat. E}^{\\prime}\\text{)};\\quad f_{sr,root}=\\frac{6\\Delta Fe}{b_ct_c^2}+\\frac{1.5\\Delta F}{b_ct_c}\\le F_{SR}\\ \\text{(Cat. A)}',
+   `Local tie action only, the full tie range at all cycles, no endurance credit; two details of the column flange. At the toes of the gusset root fillets (Category E-prime, AISC Table A-3.1 item 7.1, an attachment longer than 4 in along the column): the cantilever moment at the toe, the range times t_g/2 + w = ${len(t.gussetThickness/2+c.weldSize)}${single?' with the lap couple':''}, over the gusset height h_g = ${len(g.columnGusset)} alone: ${stress(f.columnToe)}, D/C ${toe.toFixed(2)}; an elastic plate model of the column flange outstand gives at most 0.8 of it across the gusset toes and 0.3 along the column at the gusset ends. At the toe of the column web fillet, where the flange bending peaks, rolled base metal (Category A, item 1.1): the range over the effective width b_c = ${len(f.columnWidth.width)} (Column flange at tie · local elastic stress): ${stress(f.column)}, D/C ${root.toFixed(2)}. Screening bound with that root stress against Category E-prime: D/C ${(f.column/E1).toFixed(2)}. Cyclic building-frame stresses require separate combination.`);
+ }
  else byOthers('column-fatigue','Column flange at tie · local fatigue');
  add('weld-fatigue','Flange attachment welds · all-cycle fatigue',Math.max(f.gussetWeld.demand,f.saddleWeld.demand,f.rootWeld),weldF,'f_{sr}\\le F_{SR}\\ \\ \\text{(Cat. F)}','Largest elastic weld throat range (gusset-to-saddle fillets, saddle transverse end fillets, column root fillets) from the full brace-force range, applied to every cycle. The base metal at the toe of the transverse end fillets on the girder flange is a fatigue detail (AISC Table A-3.1 item 7.1, Appendix A).');
  const rootRange=s.detailResults.demands.braceFatigue*(1/(t.gussetThickness*g.columnGusset)+6*g.eccentricity/(g.columnGusset*t.gussetThickness**2));

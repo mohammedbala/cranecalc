@@ -37,7 +37,7 @@ describe('direct flange attachment',()=>{
   // Flange strip loaded by the gusset couple along the saddle root: [g_web + (13/35)L]/(EI), plus the other parts.
   expect(r.compliance).toBeGreaterThan(h*h*(g.rootStart-p.section.tw/2+13/35*L)/(p.section.E*(B*p.section.tf**3/12)));
   const twice=flangeTieResponse(p,2*F);
-  for(const key of ['gusset','saddle','flange','flangeScreen','column','rootWeld'] as const)expect(twice[key]).toBeCloseTo(2*r[key],8);
+  for(const key of ['gusset','saddle','flange','flangeScreen','column','columnScreen','rootWeld'] as const)expect(twice[key]).toBeCloseTo(2*r[key],8);
   expect(twice.compliance).toBe(r.compliance);
   expect(r.gussetWeld.demand).toBeGreaterThan(F/(2*L*g.attachment.weldSize/Math.sqrt(2)));
   expect(t.width).toBeCloseTo(5.25*inch);

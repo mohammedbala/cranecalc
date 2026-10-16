@@ -182,7 +182,9 @@ export function girderEndRotation(p:ProjectInput){
  * held to 0.8 of the plastic moment φF_yZ_y, the rest of the tie's H1 check left for its axial force:
  * L ≥ √(2Et_bΔ/(0.8φF_y)). Rounded up to whole inches, to 36 in. Simple spans with a flange-saddle tie only (a
  * continuous girder's ties sit at its bearing stiffeners; a cap tieback angle slides in its slots). The bars are those
- * the details carry when the bracket is sized; a thinner tie needs less.
+ * the details carry when the bracket is sized; a thinner tie needs less. The configurator sizes the tie first
+ * (sizeFlangeTie: the shortest column face at which the sized bars pass every tie check) and then the bracket at that
+ * reach ('fixed'); this closed-form screen serves a bracket sized on its own.
  */
 export function tieReach(p:ProjectInput,reach:number,rotation?:number){
  const d=p.details!,t=d.brace,f=t.flangeAttachment,arrangement=t.arrangement??'paired-bars';
@@ -218,7 +220,10 @@ type Move=(b:BracketInput)=>boolean;
  * A sized bracket that fails validation is not used: the configured one is kept.
  */
 export interface BracketSizingOptions {
- /** 'tie': no reach is configured, so choose one long enough for the top-flange tie (tieReach); 'fixed' (default): keep it. */
+ /**
+  * 'tie': no reach is configured, so choose one long enough for the top-flange tie as the details carry it (tieReach);
+  * 'fixed' (default): keep it (the configurator, whose tie sizing has set the reach).
+  */
  reach?:'tie'|'fixed';
  /** Called after every step with the governing ratio and the bracket it led to (undefined: nothing helps that ratio). */
  trace?:(step:number,key:string,ratio:number,next?:BracketInput)=>void;

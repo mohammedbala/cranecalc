@@ -9,11 +9,14 @@
  * - the column-end release slots with the travel the vertical movement needs, and the gauge, bar width and column
  *   gusset height that follow from the slots;
  * - the thinnest bar or plate, from 1/4 in in 1/16 in steps, that carries the force with the imposed movement;
- * - gussets from 3/4 in in 1/8 in steps, larger bolts, the saddle plate and its fillets, the setback of the tie from
- *   the bearing stiffener and the bar width where those checks govern;
- * - the flexible length: where the movement needs it, the column face (the designed bracket's reach, or the column
- *   face of a support by others) moves out in 1 in steps.
- * Canonical units N, mm, MPa.
+ * - gussets from 3/4 in in 1/8 in steps, larger bolts, the saddle plate and its fillets and the bar width where those
+ *   checks govern; a smaller bolt (shorter bolt groups, a longer flexible length) where the imposed movement governs
+ *   and the bolts have the strength;
+ * - the flexible length: where the movement still needs it, the column face (the designed bracket's reach, or the
+ *   column face of a support by others) moves out in 1 in steps, so the reach is the shortest the tie allows; the
+ *   configurator then sizes a welded bracket at that reach.
+ * Strength and fatigue ratios are held to 0.9, the imposed-movement checks to 0.97 and the fit and detailing limits to
+ * one (sizingLimit). Canonical units N, mm, MPa.
  */
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import {sectionProperties} from './section';
@@ -23,7 +26,7 @@ import {craneDesignMinimum} from './aistLoads';
 import {craneTravel} from './craneTravel';
 import {railTopAboveSteel} from './railSeat';
 import {braceSystem,fatigueSpectrumBin} from './detailAnalysis';
-import {flangeTieChecks,flangeTieResponse,stiffenerTieChecks} from './flangeTieDesign';
+import {columnFlangeWidth,flangeTieChecks,flangeTieResponse,stiffenerTieChecks} from './flangeTieDesign';
 import {tieMovementChecks} from './tieMovement';
 import {isPlateTie,plateTieChecks} from './plateTie';
 import {lapChecks} from './detailChecks';
@@ -239,6 +242,17 @@ const movementChecks=new Set(['tie-move-strength','tie-move-gusset','tie-move-we
 const gussetChecks=new Set(['tie-move-gusset','tie-move-weld','tie-move-root-fatigue','flange-tie-gusset','flange-tie-gusset-weld','flange-tie-gusset-fatigue','flange-tie-column-weld','flange-tie-column-root-fatigue','tie-gusset-compression','tie-net','tie-block','tie-weld','tie-release-net','tie-release-block','tie-release-bearing']);
 const boltChecks=new Set(['tie-bolt','tie-slip','tie-prying','tie-bearing','plate-tie-bolt-fatigue','tie-release-sleeve']);
 
+/** Sizing target of the strength and fatigue ratios of the tie (the fit and detailing limits are held at one). */
+export const tieSizingTarget=.9;
+/**
+ * Checks of the imposed girder end movement: the bars or plate fixed at both bolt groups, and the gussets and welds
+ * that hold them. Their movement is the analysis's own (the same beam end rotations, thermal travel and geometry) and
+ * only the axial share of the H1 sum is estimated (the tie force estimate, within 3% of the analysis on t01, t05 and
+ * t08), so they are sized nearer their limit: the target plus 0.07, 0.97 at the default target.
+ */
+const imposedMovement=new Set(['tie-move-strength','tie-move-gusset','tie-move-weld','tie-move-root-fatigue','tie-move-fatigue']);
+/** The limit the sizing holds a ratio to: one for fit and detailing limits, the movement target for the imposed movement, else the target. */
+export const sizingLimit=(ratios:Record<string,number>,k:string,target=tieSizingTarget)=>sizingLimits(ratios).has(k)?1:imposedMovement.has(k)?Math.min(1,target+.07):target;
 /**
  * The project with its tie sized for the estimated demands (tieSizingDemands), every ratio at most `target` where the
  * search finds such a set. `reach`: the largest column face distance from the girder web centerline (bracket reach, or
@@ -246,14 +260,16 @@ const boltChecks=new Set(['tie-bolt','tie-slip','tie-prying','tie-bearing','plat
  * faces from the current one outward in 1 in steps; at each, bars or plates from 1/4 in in 1/16 in steps; at each
  * thickness the governing check sets the next step (a thicker gusset, a larger bolt, a thicker saddle or a thinner one
  * for a shorter lever on the flange, larger saddle fillets, a wider bar and taller column gusset for the column flange)
- * until every ratio is at most the target or no step helps. A thickness at which the imposed movement governs ends that
- * face; a face whose best set is governed by a check the flexible length does not change ends the search. Returns the
- * first passing set, or the one with the smallest largest ratio.
+ * until every ratio is at most its limit or no step helps (a ratio no step relieves is set aside). A thickness at which
+ * the imposed movement exceeds its limit ends that face, and the face moves out only while a set at the face is bound by
+ * the imposed movement (the flexible length relieves nothing else), so the reach is the shortest at which the tie
+ * passes. Returns the first passing set, or the one with the least excess over the code limits, then over the sizing
+ * limits with each inch of reach counted as 0.01.
  */
-export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number}={}):ProjectInput{
+export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;trace?:(face:number,thickness:number,governs:string,worst:number,x:TieProportions)=>void}={}):ProjectInput{
  const d=p.details;
  if(!d||!flangeTieFamily(d)||(!flangeTieGeometry(p)&&!stiffenerTieGeometry(p)))return p;
- const target=opts.target??.9,base=tieProportions(p),demand=tieSizingDemands(p);
+ const target=opts.target??tieSizingTarget,base=tieProportions(p),demand=tieSizingDemands(p);
  const plate=tieArrangement(d)==='flexible-plate',release=!!d.brace.release?.enabled;
  // Release travel: the vertical movement at the tie (a designed support's deflection limit under every crane with
  // impact, or the same allowance for a support by others; the end rotation over the setback) plus the 1/16 in
@@ -263,73 +279,109 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number}
  const faces:number[]=[];for(let f=base.face;f<=Math.max(base.face,opts.reach??base.face)+1e-6;f+=inch)faces.push(f);
  const thicknesses=[4,5,6,7,8,9,10,12].map(v=>v*sixteenth),bolts=[.5,.625,.75,.875].map(v=>v*inch);
  const minSaddle=Math.max(inch,up(p.section.tf,inch/8));
- type Trial={q:ProjectInput;ratios:Record<string,number>;worst:number;excess:number;governs:string;compression:number};
- let best:Trial|undefined,evaluations=0;
- // The best set: the least total excess over the limits (strength and fatigue at the target, fit at one), then the least
- // largest ratio.
- const better=(a:Trial,b?:Trial)=>!b||a.excess<b.excess-1e-9||(Math.abs(a.excess-b.excess)<=1e-9&&a.worst<b.worst);
+ type Trial={q:ProjectInput;face:number;ratios:Record<string,number>;worst:number;excess:number;fails:number;score:number;governs:string;compression:number};
+ // At most this many trial sets are checked.
+ let best:Trial|undefined,evaluations=0;const budget=400;
+ // The best set: the least total excess of the checks over one (failing), then the least total excess over the sizing
+ // limits (sizingLimit) with each inch of column face beyond the start counted as 0.01 (a longer bracket for a real
+ // gain only), then the least largest ratio.
+ const better=(a:Trial,b?:Trial)=>!b||a.fails<b.fails-1e-9||(Math.abs(a.fails-b.fails)<=1e-9&&(a.score<b.score-1e-9||(Math.abs(a.score-b.score)<=1e-9&&a.worst<b.worst)));
  const evaluate=(x:TieProportions):Trial|undefined=>{
   evaluations++;
   const q=applyTieProportions(structuredClone(p),x);
   if(validateRunwayDetails(q).length)return undefined;
   const ratios=tieSizingRatios(q,demand),brace=braceSystem(q);
-  // Strength and fatigue ratios against the target, fit and detailing limits against one.
-  const geometric=sizingLimits(ratios),entries=Object.entries(ratios).map(([k,v])=>[k,geometric.has(k)?v:v/target] as const).sort((u,v)=>v[1]-u[1]);
+  // Strength and fatigue ratios against the target (the imposed movement nearer one), fit and detailing limits against one.
+  const entries=Object.entries(ratios).map(([k,v])=>[k,v/sizingLimit(ratios,k,target)] as const).sort((u,v)=>v[1]-u[1]);
   // The axial part P/P_c of the H1 check of one ply, compression governing.
   const compression=demand.force/brace.cos/brace.plies/brace.member.compression.capacity;
-  const r={q,ratios,worst:entries[0]?.[1]??0,excess:entries.reduce((n,[,v])=>n+Math.max(0,v-1),0),governs:entries[0]?.[0]??'',compression};
+  const excess=entries.reduce((n,[,v])=>n+Math.max(0,v-1),0);
+  const r={q,face:x.face,ratios,worst:entries[0]?.[1]??0,excess,fails:Object.values(ratios).reduce((n,v)=>n+Math.max(0,v-1),0),score:excess+.01*(x.face-base.face)/inch,governs:entries[0]?.[0]??'',compression};
   if(better(r,best))best=r;
   return r;
  };
- // The step that relieves the governing check; false when there is none left.
- const step=(x:TieProportions,k:string,r:Trial)=>{
+ // Bolt ratios scaled to a smaller bolt (shear area ~ d^2): room for it within 0.8 of the target.
+ const boltRoom=(r:Trial,from:number,to:number)=>Math.max(0,...['tie-bolt','tie-slip','tie-prying','tie-bearing','plate-tie-bolt-fatigue'].map(id=>r.ratios[id]??0))*(from/to)**2<=.8*target;
+ // The girder flange under the saddle: its local checks, and whether they keep within the target when a 1/4 in wider
+ // bar drops the tie line (the lever on the flange) by 1/8 in.
+ const flangeLocalOf=(r:Trial)=>Math.max(r.ratios['flange-tie-flange']??0,r.ratios['saddle-toe-fatigue']??0,r.ratios['plate-tie-keeper-flange']??0);
+ const widenRoom=(r:Trial)=>{const lever=flangeTieGeometry(r.q)?.topDrop;return !lever||flangeLocalOf(r)*(lever+inch/8)/lever<=target;};
+ // The step that relieves check k; false when there is none left. `grown`: the bolt has grown in this trial (a smaller
+ // one is then not tried again); `movement`: a step was taken for the imposed movement (a longer tie would serve it).
+ const step=(x:TieProportions,k:string,r:Trial,trial:{grown:boolean;movement:boolean})=>{
+  const smaller=[...bolts].reverse().find(v=>v<x.diameter-1e-6);
+  // Imposed movement: a smaller bolt shortens both bolt groups, a longer flexible length at the same reach.
+  if(imposedMovement.has(k)&&smaller&&!trial.grown&&boltRoom(r,x.diameter,smaller)){x.diameter=smaller;trial.movement=true;return true;}
   // Axial force with imposed movement: a wider bar adds compression strength without adding to the weak-axis moment
-  // ratio of the imposed movement; its share of the H1 sum decides.
-  if(k==='tie-move-strength'&&r.compression>=.3&&x.widen<3*inch-1e-6){x.widen+=inch/4;return true;}
+  // ratio of the imposed movement, where the widening left can bring the H1 sum to its limit.
+  if(k==='tie-move-strength'&&x.widen<3*inch-1e-6&&widenRoom(r)){
+   const w=r.q.details!.brace.width,limit=sizingLimit(r.ratios,k,target);
+   if(r.compression*(1-w/(w+3*inch-x.widen))>=r.ratios[k]-limit){x.widen+=inch/4;trial.movement=true;return true;}
+  }
   if(gussetChecks.has(k)&&x.gusset<1.25*inch-1e-6){x.gusset+=inch/8;return true;}
-  if(boltChecks.has(k)){const next=bolts.find(v=>v>x.diameter+1e-6);if(next){x.diameter=next;return true;}}
+  if(boltChecks.has(k)){const next=bolts.find(v=>v>x.diameter+1e-6);if(next){x.diameter=next;trial.grown=true;return true;}}
   // The receiving column flange: a taller column gusset, by longer slot travel first (the slot pattern sets the gusset
-  // height and widens the bars only half as much), then wider bars.
+  // height and widens the bars only half as much), then wider bars; only where the taller gusset left can bring the
+  // ratio to its limit (the stress over the effective width b_c, which the gusset height adds to).
   if(k==='flange-tie-column'||k==='flange-tie-column-fatigue'){
-   if(release&&x.travel<travel+3/16*inch-1e-6){x.travel+=sixteenth;return true;}
-   if(x.widen<3*inch-1e-6){x.widen+=inch/4;return true;}
+   const g=flangeTieGeometry(r.q),width=g?.receiver?columnFlangeWidth(r.q,g).width:0;
+   const room=(release?2*Math.max(0,travel+3/16*inch-x.travel):0)+Math.max(0,3*inch-x.widen);
+   if(width>0&&r.ratios[k]*width/(width+room)<=sizingLimit(r.ratios,k,target)){
+    if(release&&x.travel<travel+3/16*inch-1e-6){x.travel+=sixteenth;return true;}
+    if(x.widen<3*inch-1e-6&&widenRoom(r)){x.widen+=inch/4;return true;}
+   }
   }
   // The saddle plate and the flange under it trade off: a thicker saddle bends less but moves the tie line (the lever on
   // the flange) down by as much. Each takes its step only while the other keeps within the target.
-  const flangeLocal=Math.max(r.ratios['flange-tie-flange']??0,r.ratios['saddle-toe-fatigue']??0,r.ratios['plate-tie-keeper-flange']??0),saddlePlate=Math.max(r.ratios['flange-tie-saddle']??0,r.ratios['flange-tie-saddle-fatigue']??0);
+  const flangeLocal=flangeLocalOf(r),saddlePlate=Math.max(r.ratios['flange-tie-saddle']??0,r.ratios['flange-tie-saddle-fatigue']??0);
   const lever=flangeTieGeometry(r.q)?.topDrop??Infinity;
   if((k==='flange-tie-saddle'||k==='flange-tie-saddle-fatigue')&&x.saddleThickness<2.5*inch-1e-6&&flangeLocal*(lever+inch/8)/lever<=target){x.saddleThickness+=inch/8;return true;}
   if(k==='flange-tie-flange'||k==='saddle-toe-fatigue'||k==='plate-tie-keeper-flange'){
    if(x.saddleThickness>minSaddle+1e-6&&saddlePlate*(x.saddleThickness/(x.saddleThickness-inch/8))**2<=target){x.saddleThickness-=inch/8;return true;}
    // A smaller bolt narrows the bars, their slots and the lever, where the bolts have the strength.
-   const smaller=[...bolts].reverse().find(v=>v<x.diameter-1e-6);
-   if(smaller&&Math.max(0,...['tie-bolt','tie-slip','tie-prying','tie-bearing','plate-tie-bolt-fatigue'].map(id=>r.ratios[id]??0))*(x.diameter/smaller)**2<=.8*target){x.diameter=smaller;return true;}
+   if(smaller&&!trial.grown&&boltRoom(r,x.diameter,smaller)){x.diameter=smaller;return true;}
   }
-  if((k==='flange-tie-saddle-weld'||k==='flange-tie-weld-fatigue')&&x.saddleWeld+sixteenth<=Math.min(x.saddleThickness,p.section.tf,x.gusset)-sixteenth+1e-6){x.saddleWeld+=sixteenth;return true;}
+  // Larger saddle fillets, within the plate-edge limit and keeping the end fillet clear of the bearing stiffener and its
+  // fillets (flange-tie-stiffener-clearance).
+  if(k==='flange-tie-saddle-weld'||k==='flange-tie-weld-fatigue'){
+   const a=r.q.details!.brace.flangeAttachment,st=r.q.details!.bearing,clear=a?a.saddleLength/2+x.saddleWeld+sixteenth+st.stiffenerThickness/2+st.weldSize+a.clearance<=x.setback+1e-6:true;
+   if(clear&&x.saddleWeld+sixteenth<=Math.min(x.saddleThickness,p.section.tf,x.gusset)-sixteenth+1e-6){x.saddleWeld+=sixteenth;return true;}
+  }
   return false;
  };
+ // The largest ratio over its limit that a step may still relieve.
+ const governing=(r:Trial,stuck:Set<string>)=>Object.entries(r.ratios).map(([k,v])=>[k,v/sizingLimit(r.ratios,k,target)] as const).filter(([k,v])=>v>1&&!stuck.has(k)).sort((u,v)=>v[1]-u[1])[0]?.[0];
  for(const face of faces){
-  let atFace:Trial|undefined,previous:number|undefined;
+  let atFace:Trial|undefined,previous:number|undefined,faceMovement=false;
   for(const thickness of thicknesses){
-   if(evaluations>300)break;
+   if(evaluations>budget)break;
    const x:TieProportions={...base,face,thickness,travel,diameter:.625*inch,gusset:Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0};
    let r=evaluate(x);
-   for(let i=0;i<30&&r&&r.worst>1;i++){
-    const before={...x};if(!step(x,r.governs,r))break;
-    const next=evaluate(x);if(!next){Object.assign(x,before);break;}
+   // A ratio no step relieves is set aside (the checks report it), so the others are still sized.
+   const stuck=new Set<string>(),trial={grown:false,movement:false};
+   for(let i=0;i<30&&r&&evaluations<=budget;i++){
+    const k=governing(r,stuck);if(!k)break;
+    const before={...x};
+    if(!step(x,k,r,trial)){stuck.add(k);continue;}
+    const next=evaluate(x);if(!next){Object.assign(x,before);stuck.add(k);continue;}
     r=next;
    }
    if(!r)continue;
+   opts.trace?.(face,thickness,r.governs,r.worst,{...x});
    if(r.worst<=1)return r.q;
    if(better(r,atFace))atFace=r;
-   // The imposed movement governs: a thicker bar or plate only adds to it, except to the axial force with imposed
+   // The imposed movement over its limit: a thicker bar or plate only adds to it, except to the axial force with imposed
    // movement while its compression share falls faster than the moment share grows.
-   const h1=r.ratios['tie-move-strength']??0;
-   if(movementChecks.has(r.governs)&&!(r.governs==='tie-move-strength'&&(previous===undefined||h1<previous)))break;
+   const h1=r.ratios['tie-move-strength']??0,h1Limit=sizingLimit(r.ratios,'tie-move-strength',target);
+   const movement=Object.entries(r.ratios).filter(([k,v])=>movementChecks.has(k)&&v>sizingLimit(r!.ratios,k,target)+1e-9).map(([k])=>k);
+   if(movement.length||trial.movement)faceMovement=true;
+   if(movement.length&&!(movement.length===1&&movement[0]==='tie-move-strength'&&h1>h1Limit&&(previous===undefined||h1<previous)))break;
    previous=h1;
   }
-  // A farther column face only relieves the imposed movement: go on while a movement check is above the target.
-  if(!atFace||!Object.entries(atFace.ratios).some(([k,v])=>movementChecks.has(k)&&v>target)||evaluations>300)break;
+  // A farther column face only relieves the imposed movement: go on while some set at this face is over a movement
+  // limit (the sets at a face trade the movement against other checks: a smaller bolt lengthens the bars but lowers the
+  // slotted column gusset).
+  if(!atFace||!faceMovement||evaluations>budget)break;
  }
  return best?.q??p;
 }
