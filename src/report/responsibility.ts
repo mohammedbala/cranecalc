@@ -1,4 +1,13 @@
-import type {CalculationSnapshot,CheckResult} from '../engine/types';
+import type {CalculationSnapshot,CheckResult,ProjectInput} from '../engine/types';
+import {activeEndBearing} from '../engine/endBearingInputs';
+import {activeEndStop} from '../engine/endStopInputs';
+import {activeColumnCap} from '../engine/columnCapInputs';
+import {usesExistingBracket} from '../engine/existingBracket';
+import {usesTaperedHaunch} from '../engine/taperedHaunch';
+import {usesRolledBracket} from '../engine/rolledBracket';
+import {columnStiffenerGeometry} from '../engine/columnStiffeners';
+import {capAngleGeometry} from '../engine/capAngle';
+import {simpleSupportInput} from '../engine/simpleSupports';
 import type {Taxonomy} from '../engine/checkTaxonomy';
 import {deliveredForces} from '../engine/forcesDelivered';
 import {runwayMass,runwaySeismicBound} from '../engine/columnSupport';
@@ -19,18 +28,34 @@ const itemName=(v:string)=>v.replace(/\s*&\s*/g,' and ').replace(/\s+·\s+/g,', 
 const sentences=(v:string)=>v.split(/(?<=[.;])\s+(?=[A-Z])/).map(t=>t.trim()).filter(Boolean);
 const list=(v:number[])=>v.length>2?`${v.slice(0,-1).join(', ')} and ${v.at(-1)}`:v.join(' and ');
 const gridList=(v:number[])=>v.length?`grid${v.length>1?'s':''} ${v.length>2&&v.every((g,i)=>!i||g===v[i-1]+1)?`${v[0]}–${v.at(-1)}`:list(v)}`:'';
+/** The parts of one runway as this project builds them: girders, bearings, the support parts it designs, ties and end stops. */
+export function runwayParts(p:ProjectInput){
+ const b=p.details?.bracket,out=['girders',activeEndBearing(p)?'bolted end bearings':'bearings'];
+ if(activeColumnCap(p))out.push('column caps');
+ else if(b?.enabled)out.push(usesExistingBracket(p)?'new seats on the existing brackets':usesTaperedHaunch(p)?'haunches':usesRolledBracket(p)?'W-stub brackets':'brackets');
+ if(columnStiffenerGeometry(p))out.push('column stiffeners');
+ if(!activeColumnCap(p))out.push(capAngleGeometry(p)?'cap tiebacks':'ties');
+ if(activeEndStop(p))out.push('end stops');
+ return `${out.slice(0,-1).join(', ')} and ${out.at(-1)}`;
+}
 
 export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):ResponsibilityRow[]{
  const p=s.input,u=p.units,f=(v:number|undefined)=>sig3(v,'force',u),len=(v:number|undefined)=>sig3(v,'length',u),m=(v:number|undefined)=>sig3(v,'moment',u);
  const dl=deliveredForces(s),z=s.existingColumn?.support,col=p.existingColumn;
  const el=(v?:number)=>v===undefined?'':` El. ${drawingElevation(v,u)}`;
- const where=dl?`per-grid concurrent sets, section @@ref:interfaces@@ and S-00: V at e = ${len(dl.e)} from the column centerline with Mx = V·e and the weak-axis seat moment My at the seat${el(dl.elevation?.seat)}; lateral at the tie line${el(dl.elevation?.tie)}, up to the tie design force ${f(dl.tie.design)}; longitudinal at the seat on the girder line`:'section @@ref:interfaces@@';
+ // V with its eccentricity and moment as the forces-delivered table states them: from the column centerline, from the
+ // column face where the seat is by others, or to be taken from the surveyed seat where neither is known.
+ const vAt=!dl?'':dl.e===undefined?'V on the seat with Mx = V·e, e from the surveyed seat position (not established here)':dl.eFrom==='face'?`V at e = ${len(dl.e)} from the column face, Mx = V·e at the face plus V times half the column depth at its centerline`:`V at e = ${len(dl.e)} from the column centerline with Mx = V·e`;
+ const tieAt=dl?`lateral at the tie line${el(dl.elevation?.tie)}${dl.elevation?.tieBars!==undefined?`, entering the column at the tie centerline${el(dl.elevation.tieBars)}`:''}, up to the tie design force ${f(dl.tie.design)}`:'';
+ const where=dl?`per-grid concurrent sets, section @@ref:interfaces@@ and S-00: ${vAt}, and the weak-axis seat moment My at the seat${el(dl.elevation?.seat)}; ${tieAt}; longitudinal at the seat on the girder line`:'section @@ref:interfaces@@';
  const longitudinal=dl&&(dl.stop||dl.traction)?`longitudinal at the seat on the girder line: ${dl.stop?`crane stop ${f(dl.stop)} at ${gridList(dl.stopGrids)}`:''}${dl.stop&&dl.traction?', ':''}${dl.traction?`traction ${f(dl.traction)} at ${gridList(dl.tractionGrids)}`:''} (factored)`:'';
  const rows:ResponsibilityRow[]=[];
  const byId=new Map(tax.byOthers.map(t=>[t.check.id,t.check]));
  const take=(id:string,row:Omit<ResponsibilityRow,'check'>)=>{const c=byId.get(id);if(!c)return;byId.delete(id);rows.push({...row,check:c});};
  const sup=byId.get('supporting-structure');
- if(sup)take('supporting-structure',{item:sup.title,needed:'Check the building frame, roof and wall framing, the column-to-foundation connections, anchors and foundations for the crane forces combined with the building loads; the existing column member is checked in section @@ref:column@@ (braced frame assumed).',
+ // The column member is checked here only where the project models it; otherwise it is part of what is needed.
+ const columnText=col?.enabled?`the ${col.isNew?'new':'existing'} column member is checked in section @@ref:column@@${col.isNew?'':' (braced frame assumed)'}`:'the columns themselves are not checked in this package: check them for the forces delivered, with the reaction eccentricity and its moment';
+ if(sup)take('supporting-structure',{item:sup.title,needed:`Check the building frame, roof and wall framing, the column-to-foundation connections, anchors and foundations for the crane forces combined with the building loads; ${columnText}.`,
   criterion:'AISC 360-16 and ACI 318 strength under the ASCE 7-16 §2.3 combinations, crane loads as L (§4.9); IEBC alteration provisions.',forces:`Factored ${where}. Unfactored reactions by load type: section @@ref:reactions@@.`,party:EOR});
  take('column-frame',{item:'Existing column · frame type and second-order effects',needed:`Confirm that the column line is braced (non-sway) across the runway, or give the frame's B2 from its analysis. The existing column check (section @@ref:column@@) is conditional on a braced frame: ${col?`${col.strong.base} base, ${col.strong.top} top, B1 only`:'B1 only'}.`,
   criterion:'AISC 360-16 Chapter C and Appendix 8 (B2 for a sway frame); repeat the H1 check with B2.',forces:'Column check combinations and moments, section @@ref:column@@.',party:EOR});
@@ -52,6 +77,12 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
   take(strut.id,{item:'Crane-level strut on the girder line, collector, brace connections, braced-bay columns and foundation',
    needed:`Design the crane-level strut at each locating column on the girder line${col?.longitudinalExit==='girder-strut'?' (the existing column check relies on it: the longitudinal force leaves the column at the seat with no column torsion or weak-axis bending)':''}, the collector to the braced bay, the brace end connections (gussets, clevises, bolts, welds), the braced-bay columns, anchors and foundation.`,
    criterion:'AISC 360-16 and ACI 318 strength; the strut stiff enough to hold the girder line at the seat.',forces:[longitudinal&&longitudinal.charAt(0).toUpperCase()+longitudinal.slice(1)+'.',force].filter(Boolean).join(' ')||'See section @@ref:interfaces@@.',party:EOR});}
+ // A seat by others: the plan it must give the bearings (two plates and the joint gap at a shared grid), with the holes.
+ const bs=p.details?.bearing,gap=p.system==='simple'?simpleSupportInput(p).endGap:0;
+ if(bs&&byId.has('end-bearing-seat'))take('end-bearing-seat',{item:'Bracket seat by others: plan, holes and nut clearance',
+  needed:`A seat at least ${len(p.system==='simple'?2*bs.length+gap:bs.length)} along the runway${p.system==='simple'?` at a shared grid (two bearing plates ${len(bs.length)} long and the ${len(gap)} joint gap; ${len(bs.length)} at a runway end)`:''} by ${len(bs.width)} across, with standard holes matching the bearing bolts and nut clearance below the seat; it carries the bolt forces reported here.`,
+  criterion:'Seat plan position and elevation within ±1/8 in (AIST TR-13 §5.18); holes matching the bearing plate holes; seat strength and stiffness by the building engineer of record.',
+  forces:`V, H seat and F per grid at the seat${el(dl?.elevation?.seat)}, section @@ref:interfaces@@.`,party:EOR});
  // Any other check left to others.
  for(const c of byId.values()){const rest=sentences(c.note.replace(/^Not checked here:\s*/,''))[0]??'';const force=sentences(c.note).find(x=>/\d\s*(kip|kN)\b/.test(x));
   rows.push({item:c.title,needed:rest.charAt(0).toUpperCase()+rest.slice(1),criterion:'As stated in the check (Appendix A).',forces:force?.trim()??'See section @@ref:interfaces@@.',party:EOR,check:c});}
@@ -60,9 +91,9 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
   rows.push({item:`Crane data · ${c.name}`,needed:`Signed confirmation of the data used: wheel loads ${f(max)} maximum / ${f(empty)} empty per wheel${d?.minWheelLoad?`, ${f(d.minWheelLoad)} minimum on the far runway`:''}, ${c.wheels.length} wheels${spacing?` at ${len(spacing)}`:''}; side thrust share s = ${d?.sideShare??0.5} to this runway; driven-wheel load ${f(d?.drivenWheelLoad)}; bumper force ${f(d?.bumperForce)} and its height above the rail; bridge speed; the 0.9 trolley factor in the bumper energy.`,
    criterion:'The values used in sections 1.4 and 2.2; any increase requires a re-check.',forces:'—',party:'Crane supplier'});}
  if(p.details?.rail)rows.push({item:'Rail and crane wheels',needed:`Confirm that the ${p.details.rail.name.split(' · ')[0]} suits the crane wheels (tread width, flange clearance, wheel load) and the rail joints and rail clips specified.`,criterion:'Crane supplier wheel and rail requirements.',forces:'—',party:'Crane supplier'});
- rows.push({item:'Opposite runway',needed:'Build the opposite runway identical to this one, opposite hand (S-00, S-01): girders, bearings, haunches, column stiffeners, ties and end stops; survey its column line as this one.',criterion:'This calculation applies where the opposite columns, seat elevation and frame match those used here; otherwise a separate check.',forces:'As this runway (section @@ref:interfaces@@).',party:'Engineer of record for the runway; contractor survey'});
+ rows.push({item:'Opposite runway',needed:`Build the opposite runway identical to this one, opposite hand (S-00, S-01): ${runwayParts(p)}; survey its column line as this one.`,criterion:'This calculation applies where the opposite columns, seat elevation and frame match those used here; otherwise a separate check.',forces:'As this runway (section @@ref:interfaces@@).',party:'Engineer of record for the runway; contractor survey'});
  if(col?.enabled&&!col.isNew){const r=p.details?.bracket?.receiver;
-  rows.push({item:'Existing column survey',needed:`Field-verify every existing column before fabrication: ${col.shape??'section'}${r?` d = ${len(r.depth)}, bf = ${len(r.width)}, tf = ${len(r.flangeThickness)}, tw = ${len(r.webThickness)}`:''}, plumb, and nothing attached inside the flanges at the haunch and column stiffener levels; base metal per the mill certificates.`,
+  rows.push({item:'Existing column survey',needed:`Field-verify every existing column before fabrication: ${col.shape??'section'}${r?` d = ${len(r.depth)}, bf = ${len(r.width)}, tf = ${len(r.flangeThickness)}, tw = ${len(r.webThickness)}`:''}, plumb, and nothing attached inside the flanges at the ${usesTaperedHaunch(p)?'haunch':p.details?.bracket?.enabled?'bracket':'seat'}${columnStiffenerGeometry(p)?' and column stiffener':''} levels; base metal per the mill certificates.`,
    criterion:'Surveyed dimensions within the ASTM A6 tolerances of the values used here; any difference to the engineer of record before fabrication.',forces:'—',party:'Contractor (survey), reviewed by the engineer of record'});}
  const a=s.designAnalysis;
  if(a&&p.cranes.length){const c=p.cranes[0],max=Math.max(...c.wheels.map(w=>w.loaded)),empty=Math.max(...c.wheels.map(w=>w.unloaded)),lrfd=p.method==='LRFD',test=(lrfd?1.2:1)*empty+(lrfd?1.6:1)*1.25*(max-empty);

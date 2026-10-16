@@ -24,10 +24,16 @@ export function presentCheck(check:CheckResult,units:ProjectInput['units']):Chec
  return c;
 }
 /**
- * Demand/capacity ratio as printed. A check whose capacity is zero (a clearance that is used up, a part that
- * cannot carry the action at all) reports a sentinel ratio of 1e12 or more: it reads NO CAPACITY, not a number.
+ * A ratio that is not a number a reader can use: infinite, or above 1000. A check whose capacity is zero (a clearance
+ * that is used up, a part that cannot carry the action at all) reports a sentinel ratio of 1e12, and an amplifier with
+ * its denominator clamped (B1 with αP_r ≥ P_e1) a ratio of millions: both mean the part has no capacity.
+ */
+export const noCapacity=(u:number|undefined)=>u!==undefined&&!Number.isNaN(u)&&(!Number.isFinite(u)||u>1e3);
+/**
+ * Demand/capacity ratio as printed: NO CAPACITY for a ratio that is infinite or above 1000 (noCapacity), never the
+ * sentinel or clamped number itself.
  */
 export function dcText(u:number|undefined,digits:number,empty='-'){
  if(u===undefined||Number.isNaN(u))return empty;
- return !Number.isFinite(u)||u>=1e6?'NO CAPACITY':u.toFixed(digits);
+ return noCapacity(u)?'NO CAPACITY':u.toFixed(digits);
 }

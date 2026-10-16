@@ -33,7 +33,7 @@ export function newSteelTakeoff(p:ProjectInput){
  const w=(volume:number)=>volume*s.density*9.80665/1e9,items:SteelItem[]=[],props=sectionProperties(s);
  const add=(name:string,where:SteelItem['where'],count:number,each:number)=>{if(count>0&&each>0)items.push({name,where,count,each,total:count*each});};
  const grid=grids.map(()=>0),support=grids.map(()=>0),gridOf=(x:number)=>grids.reduce((k,g,i)=>Math.abs(g-x)<Math.abs(grids[k]-x)?i:k,0);
- add('Girder (W and cap channel)','line',1,props.weight*L);add('Rail','line',1,p.railWeight*L);
+ add(s.kind==='cap'?'Girder (W and cap channel)':`Girder (${s.kind==='welded'?'welded plate girder':'W shape'})`,'line',1,props.weight*L);add('Rail','line',1,p.railWeight*L);
  if(!d)return {items,line:0,grid,support,perLine:items.reduce((a,v)=>a+v.total,0),total:2*items.reduce((a,v)=>a+v.total,0),allowance:0,perEnd:0,stopEach:0,stops:[] as ('left'|'right')[]};
  // Rail clips in opposing pairs (the clip taken as twice its base plate where the supplier gives no weight) and joint bars.
  const clip=railClipInput(d.rail);

@@ -19,15 +19,19 @@ const fatigueConstants={A:[25,24*KSI],B:[12,16*KSI],B1:[6.1,12*KSI],C:[4.4,10*KS
 export function fatigueResistance(category:ProjectInput['fatigue']['category'],cycles:number){const [Cf,Fth]=fatigueConstants[category];return {Cf,Fth,FSR:Math.max(Fth,finiteLife(Cf,cycles))};}
 /**
  * AISC H1-1 at each flange (AISC DG7): the top flange (cap and W top flange, or the W top flange) and the W bottom flange,
- * each with its own lateral moment M_f from the rail-head force couple and its own M_cf = phi F_y S_f, with the same
+ * each with its own lateral moment M_f from the rail-head force couple and its own M_cf = phi M_n of the flange (F_y Z_f
+ * for a compact W flange), with the same
  * concurrent M_rx and P_r. M_cx is the governing major-axis strength, stated in `mcx`.
  */
 export function flangeInteractionChecks(p:ProjectInput,a:DesignAnalysis,str:ReturnType<typeof girderStrength>,mcx:string):CheckResult[]{
  const f=(v:number|undefined,q:'moment'|'force'|'length')=>format(v,q,p.units,3),capped=p.section.kind==='cap';
+ // M_cf named by the expression that gives it: F_yZ_f of a compact W flange (F6-1), F_yS_f of an elastic one; else the F6 strength.
+ const near=(x:number,y:number)=>Math.abs(x-y)<=5e-3*Math.abs(y),{tf,bf,Fy}=p.section;
+ const mcfLabel=(Mcf:number,top:boolean)=>top&&capped?'φM_n':near(available(Fy*tf*bf**2/4,p.method,.9,1.67),Mcf)?'φF_yZ_f':near(available(Fy*tf*bf**2/6,p.method,.9,1.67),Mcf)?'φF_yS_f':'φM_n';
  return ([['combined','interactionTop','top flange',capped?'cap channel and W top flange':'W top flange',str.topMinor??str.flangeMinor],['combined-bottom','interactionBottom','bottom flange','W bottom flange',str.bottomMinor??str.flangeMinor]] as const).map(([id,key,name,parts,Mcf])=>{
   const g=a.governing[key]??a.governing.interaction,u=a[key]??a.interaction,ratio=(g?.axial??0)/str.compression,other=a[key==='interactionTop'?'interactionBottom':'interactionTop'];
   const eq=ratio>=.2?'\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_f}{M_{cf}}\\right)\\le1\\ \\ \\text{(H1-1a)}':'\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_f}{M_{cf}}\\le1\\ \\ \\text{(H1-1b)}';
-  return compared(id,'Strength',`H1 interaction · ${name}`,u,1,'ratio',eq,`AISC H1-1 at the ${name} (${parts}) with its own flange lateral moment M_f from the DG7 rail-head force couple and M_cf = φF_yS_f = ${f(Mcf,'moment')} of that flange; ${mcx}; P_c = ${f(str.compression,'force')}. Evaluated at every station and crane state with concurrent actions. Governing x = ${f(g?.location,'length')}: P_r = ${f(g?.axial,'force')}, M_rx = ${f(g?.moment,'moment')}, M_f = ${f(g?.lateralMoment,'moment')}. B1 uses Cm = 1 and alpha = ${p.method==='LRFD'?1:1.6}; frame sidesway is outside this girder worksheet.${other!==undefined?` The ${key==='interactionTop'?'bottom':'top'} flange gives ${other.toFixed(2)}; the ${u>=other?name+' governs':(key==='interactionTop'?'bottom':'top')+' flange governs'}.`:''}`,['aisc-h','dg7'],g?.id);
+  return compared(id,'Strength',`H1 interaction · ${name}`,u,1,'ratio',eq,`AISC H1-1 at the ${name} (${parts}) with its own flange lateral moment M_f from the DG7 rail-head force couple and M_cf = ${mcfLabel(Mcf,key==='interactionTop')} = ${f(Mcf,'moment')} of that flange; ${mcx}; P_c = ${f(str.compression,'force')}. Evaluated at every station and crane state with concurrent actions. Governing x = ${f(g?.location,'length')}: P_r = ${f(g?.axial,'force')}, M_rx = ${f(g?.moment,'moment')}, M_f = ${f(g?.lateralMoment,'moment')}. B1 uses Cm = 1 and alpha = ${p.method==='LRFD'?1:1.6}; frame sidesway is outside this girder worksheet.${other!==undefined?` The ${key==='interactionTop'?'bottom':'top'} flange gives ${other.toFixed(2)}; the ${u>=other?name+' governs':(key==='interactionTop'?'bottom':'top')+' flange governs'}.`:''}`,['aisc-h','dg7'],g?.id);
  });
 }
 export function aistChecks(s:CalculationSnapshot):CheckResult[]{

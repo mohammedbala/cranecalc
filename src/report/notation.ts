@@ -54,7 +54,10 @@ export const entrySymbol=(tex:string)=>[...equationSymbols(tex)][0]??tex;
 /** Notation table for the symbols that appear in the given equations. */
 export function notationSection(equations:string[]){
  const used=new Set<string>();for(const e of equations)for(const v of equationSymbols(e))used.add(v);
- const rows=notationGroups.map(([g,list])=>[g,list.filter(([t])=>used.has(entrySymbol(t)))] as const).filter(([,l])=>l.length);
+ // A group is titled by what it lists: the capped-girder heading only where a cap symbol is used.
+ const capSymbols=['A_c','Q_c','t_{wc}','a^{\\prime}','r_w','q_w'].map(entrySymbol);
+ const rows=notationGroups.map(([g,list])=>{const l=list.filter(([t])=>used.has(entrySymbol(t)));
+  return [g.startsWith('Capped girder')&&!l.some(([t])=>capSymbols.includes(entrySymbol(t)))?'Flange bending and rail':g,l] as const;}).filter(([,l])=>l.length);
  return `<p>Crane runway symbols. Other symbols follow AISC 360-16, the AISC Manual and AISC DG9; symbols used in one check only are defined under that check.</p>`
   +`<table class="notation"><colgroup><col style="width:12%"/><col style="width:38%"/><col style="width:12%"/><col style="width:38%"/></colgroup><tbody>${rows.map(([g,l])=>{
    const half=Math.ceil(l.length/2),cells=Array.from({length:half},(_,i)=>[l[i],l[i+half]]);

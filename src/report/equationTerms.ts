@@ -7,7 +7,8 @@ import {equationSymbols,entrySymbol,notationGroups} from './notation';
  * are printed. Keyed by check id (pattern); the same symbol may mean different things in different details.
  */
 type Term=[tex:string,meaning:string];
-const terms:[RegExp,Term[]][]=[
+/** Definitions by check id; a function gives the wording of the check's own arrangement (capped or rolled). */
+const terms:[RegExp,Term[]|((c:CheckResult)=>Term[])][]=[
  // Solution checks.
  [/^(convergence|mesh|design-travel|design-mesh|detail-travel|detail-mesh)$/,[['D_n','each governing demand with n crane positions, stations or elements'],['D_{2n}','the same with twice as many'],
   ['\\varepsilon','estimated difference of the reported (finest) results from the converged values'],['\\rho','ratio of the last refinement change to the one before it']]],
@@ -22,7 +23,8 @@ const terms:[RegExp,Term[]][]=[
  [/^rail-clip-weld-fatigue$/,[['Q_i','lifted load of duty bin i'],['f_w','clip base weld stress per unit force set']]],
  // Girder.
  [/^major$/,[['M_{n,LTB}','lateral-torsional buckling strength, F4-2 or F4-3']]],
- [/^torsion-normal(-bottom)?$/,[['P','axial force'],['M_y','lateral bending moment of the section'],['S_{xc}','section modulus to the top fiber (cap)'],['S_{xt}','section modulus to the bottom fiber'],['S_y','I_y over half the cap width'],['W_{no}','normalized warping function at the tips of this flange']]],
+ // The top fiber and the half width are the cap's only on a capped girder (the check names its cap tips).
+ [/^torsion-normal(-bottom)?$/,c=>{const cap=/\bcap\b/i.test(c.title);return [['P','axial force'],['M_y','lateral bending moment of the section'],['S_{xc}',cap?'section modulus to the top fiber (cap)':'section modulus to the top fiber'],['S_{xt}','section modulus to the bottom fiber'],['S_y',cap?'I_y over half the cap width':'I_y over half the flange width'],['W_{no}','normalized warping function at the tips of this flange']];}],
  [/^vertical$/,[['L','span']]],
  [/^torsion-shear$/,[['\\tau_b','shear stress from flexural shear, VQ/(It)']]],
  [/^torsion-stability$/,[['\\lambda','elastic buckling load factor of the strength case (0.8 stiffness)']]],
@@ -83,13 +85,13 @@ const terms:[RegExp,Term[]][]=[
  [/^haunch-colstiff-(upper|lower|flange-weld|web-weld|web-shear)$/,[['R_{st}','force on one column stiffener plate'],['T','haunch top flange tension at the column face'],['C','haunch bottom flange compression at the column face, C cos α'],['M_f','lateral moment of that flange at the column face'],['g','distance between the centroids of the two plates, t_w + b_s'],['b_s','stiffener width'],['c','corner clip'],['t_s','stiffener thickness'],['P_n','nominal strength of the pair as a J10.8 column with a 25t_w web strip']]],
  [/^haunch-colstiff-proportions$/,[['b_p','width of the haunch flange delivering the force'],['t_p','its thickness']]],
  [/^haunch-colstiff-length$/,[['L_s','stiffener length']]],
- [/^haunch-colstiff-fatigue-plate$/,[['P_i','stiffener force of duty bin i (ΔP<sub>i</sub> its range)']]],
+ [/^haunch-colstiff-fatigue-plate$/,[['P_i','stiffener force of duty bin i (ΔP_i its range)']]],
  // W stub at the column face (C2): one force system per stub flange, the same R_u in every J10 limit state at a level.
  [/^wbracket-column-(flange|yield-top|yield-bottom|crippling|sidesway)$/,[['R_u','equivalent concentrated force of the stub flange at this level, the same in every J10 limit state there'],['T','top flange tension at the column face, M/(d − t_f) + N/2'],['C','bottom flange compression at the column face, M/(d − t_f) − N/2'],['M_f','lateral moment of that flange at the column face (torsion as flange bending, and the lateral force)'],['b','stub flange width'],['k','column flange thickness (no fillet credit)'],['l_b','bearing length of the flange force on the column, the stub flange thickness']]],
  [/^wbracket-colstiff-(upper|lower|flange-weld|web-weld|web-shear)$/,[['R_{st}','force on one column stiffener plate'],['T','stub top flange tension at the column face'],['C','stub bottom flange compression at the column face'],['M_f','lateral moment of that flange at the column face'],['g','distance between the centroids of the two plates, t_w + b_s'],['b_s','stiffener width'],['c','corner clip'],['t_s','stiffener thickness'],['P_n','nominal strength of the pair as a J10.8 column with a 25t_w web strip']]],
  [/^wbracket-colstiff-proportions$/,[['b_p','width of the stub flange delivering the force'],['t_p','its thickness']]],
  [/^(wbracket|bracket)-colstiff-length$/,[['L_s','stiffener length']]],
- [/^(wbracket|bracket)-colstiff-fatigue-plate$/,[['P_i','stiffener force of duty bin i (ΔP<sub>i</sub> its range)']]],
+ [/^(wbracket|bracket)-colstiff-fatigue-plate$/,[['P_i','stiffener force of duty bin i (ΔP_i its range)']]],
  // Welded rib brackets: each plate of a column stiffener pair takes the rib over it.
  [/^bracket-colstiff-(upper|lower|flange-weld|web-weld|web-shear)$/,[['R_{st}','force on one column stiffener plate: the rib on its side of the web, its root moment Pe over the pair spacing s (with half the lateral force at the seat by the lever rule)'],['b_s','stiffener width'],['c','corner clip'],['t_s','stiffener thickness'],['P_n','nominal strength of the pair as a J10.8 column with a 25t_w web strip']]],
  [/^bracket-colstiff-proportions$/,[['b_p','width of the seat plate or the ribs delivering the force'],['t_p','its thickness']]],
@@ -142,7 +144,7 @@ export function termsFor(c:CheckResult):Term[]{
  if(!c.equation)return [];
  const used=equationSymbols(c.equation),seen=new Set<string>(),out:Term[]=[];
  // Keyed by the definition's TeX: x_j and x_j′, h(0) and h(L) are separate entries.
- for(const [re,list] of terms)if(re.test(c.id))for(const [tex,meaning] of list){
+ for(const [re,v] of terms)if(re.test(c.id))for(const [tex,meaning] of typeof v==='function'?v(c):v){
   if(seen.has(tex))continue;
   if(usesTerm(c.equation,used,tex)){seen.add(tex);out.push([tex,meaning]);}
  }
