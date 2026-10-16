@@ -139,9 +139,9 @@ describe('girder end zone: shims, survey and faying surfaces',()=>{
   expect(slip.note).toMatch(/Class A/);
   const seat=checks.find(c=>c.id==='end-bearing-seat')!;expect(seat.note).toMatch(/survey the seats.*shim.*field drill or ream/i);
   const notes=constructionRequirements(p).flatMap(v=>v.items).join(' ');
-  expect(notes).toMatch(/survey the seats; shim to the theoretical elevation/);expect(notes).toMatch(/field drill or ream the seat holes after the girder is lined and leveled/);
+  expect(notes).toMatch(/survey the seats; shim to the theoretical elevation/);expect(notes).toMatch(/field drill or ream the seat holes after the girder is lined and leveled/);expect(notes).toMatch(/seats surveyed and shimmed/);
   expect(notes).not.toMatch(/seat \(bearing\) plan position and elevation ±1\/8 in/);expect(notes).toMatch(/Class A faying surfaces/);
-  expect(notes).toMatch(/Top-flange ties: install and pretension the bearing bolts before the ties; set, line and level the girder/);
+  expect(notes).toMatch(/Top-flange ties: bearing bolts first; set, line and level the girder/);
  });
  it('keeps Class B and no shims on a seat shop welded to a new column',()=>{
   const p=buildProject(config({title:'new',capacity:5,craneSpan:50,control:'pendant',cmaa:'B',buildingClass:'C',system:'simple',bays:2,span:20,structure:'new',support:'twin-rib',tie:'paired-bars'}));

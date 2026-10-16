@@ -58,16 +58,16 @@ export function cjpWelds(p:ProjectInput):string[]{
  * girder as set, so the ±1/8 in seat tolerance (AIST TR-13 §5.18) is not demanded of steel that cannot be shop-located.
  */
 function seatSurvey(p:ProjectInput){
- const shim=bearingShim(p),max=shim.max>0?shim.max:inch/2;
- return `Bearing seats (${bearingSeat(p)==='by-others'?'by others':bearingSeat(p)==='existing'?'existing brackets':'field welded to the existing columns'}): survey the seats; shim to the theoretical elevation with steel shims, full bearing under the bearing plate, at most ${shim.plies||3} plies and ${inches(max,p.units)} total, drilled to the bolt pattern; field drill or ream the seat holes after the girder is lined and leveled. Report a seat more than ${inches(max,p.units)} low or any seat high to the engineer of record.`;
+ const shim=bearingShim(p),max=shim.max>0?shim.max:inch/2,seat=bearingSeat(p);
+ return `Bearing seats (${seat==='by-others'?'by others':seat==='existing'?'existing brackets':'field welded'}): survey the seats; shim to the theoretical elevation (steel shims, full bearing, ${shim.plies||3} plies and ${inches(max,p.units)} max., drilled to the bolt pattern); field drill or ream the seat holes after the girder is lined and leveled.`;
 }
 /** Faying surfaces of the bolted bearings: the plate-to-seat interface the locating slip passes through. */
 function bearingFaying(p:ProjectInput){
- return bearingSurface(p)==='A'?`Bolted bearings: Class A faying surfaces (clean mill scale, slip coefficient 0.30) at the bearing plate, shims and seat; remove paint, loose scale and oil from the seat at the bearing footprint. The girder flange and bearing plate may be shop blast-cleaned (Class B); the slip check uses Class A.`
-  :'Bolted bearings: Class B faying surfaces (blast-cleaned, slip coefficient 0.50) at the girder flange, bearing plate and shop-welded seat, prepared in the shop.';
+ return bearingSurface(p)==='A'?'Bolted bearings: Class A faying surfaces (slip coefficient 0.30) at the bearing plate, shims and seat; clean paint, loose scale and oil off the seat at the bearing.'
+  :'Bolted bearings: Class B faying surfaces (blast-cleaned, slip coefficient 0.50) at the girder flange, bearing plate and shop-welded seat.';
 }
 /** Field sequence of a top-flange tie with a slotted column gusset: the gusset is set to the girder as erected, not to the theoretical column face. */
-const tieSequence='Top-flange ties: install and pretension the bearing bolts before the ties; set, line and level the girder; bolt the bars to the girder gusset; insert the column gusset (cut to suit) between the bars with the sleeves centered in the slots; tack it to the column; remove the bars where access to the root fillets needs it; weld out; reinstall the bars and pretension the bolts.';
+const tieSequence='Top-flange ties: bearing bolts first; set, line and level the girder; bolt the bars to the girder gusset; fit the column gusset (cut to suit) between the bars, sleeves centered in the slots; tack it, weld out (bars removed where access needs it), reinstall and pretension.';
 
 export interface ConstructionNote {key:'bolting'|'welding'|'inspection'|'erection'|'tolerances';title:string;items:string[]}
 /**
@@ -104,7 +104,7 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
  // (Re-tightening of the rail joint bolts after 30 and 90 days is stated once, with the rail joints under bolting.)
  const tolerances=[
   'Runway fabrication and erection tolerances (AIST TR-13 §5.18), unless the crane manufacturer requires less:',
-  activeEndBearing(p)&&bearingSeat(p)!=='shop'?'column base lines ±1/8 in; seats on existing, by-others and field-welded supports surveyed and the bearings shimmed to the theoretical elevation, the seat holes field drilled or reamed to the lined and leveled girder (in place of the ±1/8 in seat position and elevation);':'column base lines ±1/8 in; seat (bearing) plan position and elevation ±1/8 in;',
+  activeEndBearing(p)&&bearingSeat(p)!=='shop'?'column base lines ±1/8 in; seats surveyed and shimmed, holes drilled to the set girder (in place of the ±1/8 in seat position and elevation);':'column base lines ±1/8 in; seat (bearing) plan position and elevation ±1/8 in;',
   'girder sweep 1/4 in per 50 ft; camber +1/4 in / −0 in per 50 ft; bearing-zone flatness ±1/32 in; girder end depth ±1/16 in; adjacent tops of girder flanges within 1/16 in;',
   'rail gauge ±1/4 in at 68 °F; rail line and grade 1/4 in per 50 ft, 3/8 in total;',
   // The service limit and the design value are stated separately: the design may take a larger eccentricity than the

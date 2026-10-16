@@ -32,13 +32,16 @@ export function demonstrationClip(weld:number,light=false):NonNullable<RunwayDet
 export function demonstrationDetails():RunwayDetails{return {
  material:{Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi},
  simpleSupport:{...defaultSimpleSupport},
+ // The direct flange saddle (used where a project selects it, e.g. the flexible plate): sized for the tie force at the
+ // tie line, a 2 in saddle (its plate fatigue), 1/2 in end fillets and a 7/8 in gusset (their fatigue). The 10-ton
+ // demonstration itself ties the girder at its bearing stiffener (demonstrationProject).
  // Top-flange tie on a direct flange saddle; the bottom flange is bolted to the seat. Thin bars flex with end
  // rotation and thermal travel; sleeved bolts in vertical slots at the column gusset release support deflection.
  // The 2 3/4 in gauge leaves the required material between the 1 1/2 in slots with the slot location tolerance;
  // the bars hold that gauge and two 1 1/4 in edges. The root fillets run the 5 3/4 in column gusset height.
- brace:{width:5.25*inch,thickness:.375*inch,length:25.5*inch,reach:25.5*inch,gussetThickness:.75*inch,connectionLength:5.75*inch,
+ brace:{width:5.25*inch,thickness:.375*inch,length:25.5*inch,reach:25.5*inch,gussetThickness:.875*inch,connectionLength:5.75*inch,
   connection:{...lap(),diameter:.625*inch,gauge:2.75*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,weldSize:.3125*inch,weldLength:5.75*inch},
-  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.75*inch,webGap:.75*inch,clearance:.25*inch,weldSize:.375*inch,columnFace:28*inch},
+  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:2*inch,webGap:.75*inch,clearance:.25*inch,weldSize:.5*inch,columnFace:28*inch},
   release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
  // Cover plates (gauge + two edges) clear the bearing stiffener and its welds at half the bearing length.
  end:{...lap(),rows:4,gauge:2.75*inch,edge:1.25*inch,thickness:.75*inch,weldSize:.4375*inch,weldLength:11.5*inch,projection:1.5*inch},
@@ -70,6 +73,14 @@ export function demonstrationProject():ProjectInput {
  p.aist={...emptyAistInputs,buildingClass:'C',classConfirmed:true,buildingCycles:75000,railDepth:6*inch,bearingLength:10*inch,netFlangeArea:p.section.bf*p.section.tf,bottomBraceSpacing:25*foot,axialLength:25*foot,torsionalLength:25*foot,runwayOnly:true,supportType:'bracket',clipSpacing:24*inch,railPad:true,camber:0,fatiguePoint:'bottom-left',fatigueReference:'AISC Table A-3.1, 1.1; full detail register in package',cycleSource:'Fictitious 1,000,000 wheel-induced stress fluctuations; three duty bins; includes loaded and empty return cycles.'};
  p.fatigue={category:'A',cycles:1000000,detail:'Plain rolled bottom flange; welded attachments checked separately in the detail register.',location:12.5*foot};
  p.details=demonstrationDetails();p.connections.enabled=true;
+ // The rolled W24X229 ties at its bearing stiffener: the bars bolt to a gusset CJP welded to the tie-side bearing
+ // stiffener (stiffenerTieGeometry), the stiffener pair carrying the tie force into the girder. With the restraint at the
+ // tie line, a saddle 5 in below the flange leaves the rail twist over its limit and the saddle's flange bending and
+ // fatigue near theirs; the bars just under the flange keep the twist within it. Proportions as sizeFlangeTie gives
+ // them for the 28 in column face: 5/16 x 4 3/4 bars, 3/4 in gussets, 5/8 in bolts at 1 3/4 in pitch, 3/16 in travel.
+ {const t=p.details.brace;t.flangeAttachment!.enabled=false;
+  Object.assign(t,{width:4.75*inch,thickness:.3125*inch,length:22.25*inch,reach:22.25*inch,gussetThickness:.75*inch,connectionLength:4.25*inch});
+  Object.assign(t.connection,{pitch:1.75*inch,edge:inch,thickness:.3125*inch});t.release={...t.release!,travel:.1875*inch};}
  // Bolted end bearings: standard holes at each bay's locating left end, long slots at its sliding right end.
  // A 1/2-in sliding allowance keeps the 3/4-in bolt slots within the AISC J3.2 long-slot limit.
  p.details.endBearing={...structuredClone(defaultEndBearing),enabled:true};p.details.simpleSupport={...p.details.simpleSupport!,guideTravel:.5*inch};
@@ -134,7 +145,8 @@ export function cappedDemonstrationProject():ProjectInput {
  // Revised independent ties: shorter, shifted clear of bearing stiffeners,
  // directly attached to flange saddles. No holes or cuts in the cap channel.
  Object.assign(p.details!.brace,{length:18*inch,reach:18*inch,width:5.25*inch,thickness:.3125*inch,gussetThickness:.875*inch,connectionLength:6*inch,
-  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.375*inch,webGap:.875*inch,clearance:.25*inch,weldSize:.3125*inch}});
+  flangeAttachment:{enabled:true,longitudinalSetback:3.5*inch,saddleLength:4*inch,saddleThickness:1.5*inch,webGap:.875*inch,clearance:.25*inch,weldSize:.3125*inch},
+  release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}});
  Object.assign(p.details!.brace.connection,{diameter:.625*inch,gauge:2.75*inch,pitch:2*inch,edge:1.25*inch,thickness:.3125*inch,weldLength:5.75*inch});
  p.details!.bracket!.seatWeld=.625*inch;
  p.details!.fabrication.bolting='ASTM F3125 Grade A325, sizes as detailed (tie bolts smaller than the other girder bolts), pretensioned to the RCSC Table 8.1 minimum pretension. Standard holes and Class B faying surfaces. Sliding-end bearing bolts and column-end tie bolts are pretensioned against steel sleeves. Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.';
