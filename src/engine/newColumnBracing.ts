@@ -112,6 +112,18 @@ export const strutSection=(p:ProjectInput):Section=>{const d=bracingDesign(p).st
 export const strutProperties=(p:ProjectInput)=>sectionProperties(strutSection(p));
 
 /**
+ * Bolting of the crane-level strut to its gussets and tabs. The strut carries the reversing traction and the crane
+ * stop at every column, so its joints are pretensioned and slip-critical (AIST TR-13 §5.14; RCSC Specification 2014
+ * §4.3, fatigue with load reversal), with Class B faying surfaces (the runway's slip-critical class, as the locating
+ * end bearings) in standard holes; bolt shear and bearing remain further limit states (AISC 360-16 J3.6, J3.10).
+ */
+export function strutBolting(p:ProjectInput){
+ const s=bracingDesign(p).strut;
+ return {grade:s.grade,diameter:s.boltDiameter,count:s.bolts??2,surface:'B' as const,holes:'standard' as const,pretensioned:true,slipCritical:true,
+  pretension:boltProperties(s.grade,s.boltDiameter).pretension,callout:'PRETENSIONED, SLIP-CRITICAL, CLASS B FAYING SURFACES, STD HOLES'};
+}
+
+/**
  * Connection geometry in mm. Upper gusset: x along the runway from the column centerline toward the braced span,
  * z up from the upper work point; lower gusset: z up from the top of the base plate. Each rod end is a clevis pin
  * through a gusset proportioned by AISC D5.2: width 2beff + dh, extension 1.33beff beyond the hole. The pin clears
@@ -127,14 +139,14 @@ export function bracingGeometry(p:ProjectInput,column:Section){
  const b=p.longitudinalBracing!,d=bracingDesign(p),L=bracingLayout(p),{cos,sin}=L,base=p.columnBase!;
  const shape=aiscShapeByName(d.strut.shape),sd=(shape?.d??6)*inch,sk=(shape?.kdes??.75)*inch,stf=(shape?.tf??.4)*inch,stw=(shape?.tw??.3)*inch,sbf=(shape?.bf??6)*inch;
  const t=d.gusset.thickness,dp=d.pin.diameter,dh=dp+inch/32,beff=2*t+.63*inch,width=up(2*beff+dh),end=up(1.33*beff+dh/2),clevis=1.5*dp;
- const db=d.strut.boltDiameter,bolt=boltProperties(d.strut.grade,db),edge=up(2*db),pitch=up(3*db,inch/2),strutEnd=up(column.bf/2+inch/2);
- const bolts=[strutEnd+edge,strutEnd+edge+pitch],tabEnd=bolts[1]+edge,cope=tabEnd-strutEnd+inch/2,half=Math.max(edge,Math.floor((sd/2-sk)/(inch/4))*inch/4);
+ const db=d.strut.boltDiameter,bolt=boltProperties(d.strut.grade,db),edge=up(2*db),pitch=up(3*db,inch/2),strutEnd=up(column.bf/2+inch/2),count=d.strut.bolts??2;
+ const bolts=Array.from({length:count},(_,i)=>strutEnd+edge+i*pitch),tabEnd=bolts[count-1]+edge,cope=tabEnd-strutEnd+inch/2,half=Math.max(edge,Math.floor((sd/2-sk)/(inch/4))*inch/4);
  const top=up(Math.max((column.bf/2+clevis)/cos,(sd/2+inch/4+clevis)/sin)),bottom=up(Math.max((column.bf/2+clevis)/cos,(clevis+inch/2)/sin));
  const x0=column.tw/2,plateEdge=base.plate.B/2-inch/2;
  const need=b.rod.diameter+inch/4-(t+stw),filler=need>1e-9?up(need,inch/16):0,offset=t+stw+filler;
  return {t,dp,dh,beff,width,end,a:end-dh/2,clevis,rod:b.rod.diameter,cos,sin,
   cross:{offset,filler,clear:offset-b.rod.diameter},
-  strut:{shape:d.strut.shape,d:sd,bf:sbf,tf:stf,tw:stw,kdes:sk,end:strutEnd,cope,bolts,tabEnd,half,edge,pitch,bolt,lap:(t+stw)/2},
+  strut:{shape:d.strut.shape,d:sd,bf:sbf,tf:stf,tw:stw,kdes:sk,end:strutEnd,cope,bolts,tabEnd,half,edge,pitch,bolt,lap:(t+stw)/2,bolting:strutBolting(p)},
   top:{s:top,pin:[top*cos,-top*sin] as [number,number]},bottom:{s:bottom,pin:[bottom*cos,bottom*sin] as [number,number]},x0,plateEdge};
 }
 type Pt=[number,number];
@@ -279,13 +291,16 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
  add('brace-strut-slenderness','Crane-level strut','Strut · slenderness',span/ry,200,'ratio','L/r_y\\le200','AISC E2 user note.',['aisc-e']);
  const hole=sg.bolt.hole,web=2*sg.half,An=(web-hole)*sg.tw;
  add('brace-strut-tension','Crane-level strut','Strut · tension at the coped end',H,Math.min(available(S.Fy*sp.A,method,.9,1.67),available(S.Fu*An,method,.75,2)),'force','\\min(F_yA_g,\\;F_uA_e),\\;A_e=(h_w-d_h)t_w',`${strut} The flanges are coped back ${f(sg.cope,'length')} so the web alone (${f(web,'length')} deep) laps the gusset: net area with one hole, U = 1.`,['aisc-e']);
- const bc=boltCapacity({grade:d.strut.grade,diameter:d.strut.boltDiameter,planes:1,surface:'B',shear:H/2,tension:0,method});
+ const nb=sg.bolts.length,bolting=sg.bolting,bc=boltCapacity({grade:d.strut.grade,diameter:d.strut.boltDiameter,planes:1,surface:bolting.surface,shear:H/nb,tension:0,method});
  // AISC J5.2(b): a filler over 1/4 in under the strut web at the offset gusset reduces the bolt shear strength.
- const fill=g.cross.filler,fillFactor=fill>inch/4+1e-9?1-.4*(fill-inch/4)/inch:1;
- add('brace-strut-bolts','Crane-level strut','Strut bolts · shear',H,2*bc.shear*fillFactor,'force',fillFactor<1?'2\\phi F_{nv}A_b[1-0.4(t_f-0.25)]':'2\\phi F_{nv}A_b',`Two ${f(d.strut.boltDiameter,'length')} ${d.strut.grade} bolts in line, single shear, threads included, snug-tight in standard holes; pitch ${f(sg.pitch,'length')}, edge ${f(sg.edge,'length')}.${fill?` At rod B's offset gusset a ${f(fill,'length')} filler lies under the strut web${fillFactor<1?` (J5.2(b) factor ${fillFactor.toFixed(3)})`:' (1/4 in or less: no reduction, J5.2(b))'}.`:''}`,['aisc-connections']);
+ const fill=g.cross.filler,fillFactor=fill>inch/4+1e-9?1-.4*(fill-inch/4)/inch:1,fillers=fill>0?1:0,hf=fillers>=2?.85:1;
+ const boltText=`${nb} - ${f(d.strut.boltDiameter,'length')} ${d.strut.grade} bolts in line, single shear, ${bolting.callout.toLowerCase()} (AIST TR-13 §5.14; RCSC 2014 §4.3: the strut joint carries the reversing traction and crane stop)`;
+ // AISC J3.8: slip resistance phi mu Du hf Tb ns, phi 1.00 (Omega 1.50) in standard holes; hf 1.0 with no filler or one.
+ add('brace-strut-slip','Crane-level strut','Strut bolts · slip resistance (slip-critical)',H,nb*bc.slip*hf,'force','\\phi R_n=\\phi\\mu D_uh_fT_bn_s\\ \\text{(J3.8)}',`${boltText}: μ = 0.50 (Class B), Du = 1.13, Tb = ${f(bolting.pretension)}, ns = 1, h_f = ${hf.toFixed(2)} (${fillers?`one ${f(fill,'length')} filler at rod B's offset gusset`:'no filler'}; 0.85 applies to two or more fillers), φ = 1.00 / Ω = 1.50 in standard holes. Shear and bearing are checked as further limit states.`,['aisc-connections','tr13-bolting','rcsc-joints']);
+ add('brace-strut-bolts','Crane-level strut','Strut bolts · shear',H,nb*bc.shear*fillFactor,'force',fillFactor<1?`${nb}\\phi F_{nv}A_b[1-0.4(t_f-0.25)]`:`${nb}\\phi F_{nv}A_b`,`${boltText}, threads included; pitch ${f(sg.pitch,'length')}, edge ${f(sg.edge,'length')}.${fill?` At rod B's offset gusset a ${f(fill,'length')} filler lies under the strut web${fillFactor<1?` (J5.2(b) factor ${fillFactor.toFixed(3)})`:' (1/4 in or less: no reduction, J5.2(b))'}.`:''}`,['aisc-connections']);
  const bear=Math.min(plateBearing(d.strut.boltDiameter,hole,sg.tw,S.Fu,sg.edge,sg.pitch,method).capacity,plateBearing(d.strut.boltDiameter,hole,t,Fu,sg.edge,sg.pitch,method).capacity);
- add('brace-strut-bearing','Crane-level strut','Strut bolts · bearing and tearout',H,2*bear,'force','R_n=\\min(1.2l_ctF_u,\\;2.4dtF_u)',`Strut web ${f(sg.tw,'length')} and gusset ${f(t,'length')}, the thinner governing at each bolt; the force reverses.`,['aisc-connections']);
- const blk=(th:number,Fyp:number,Fup:number)=>blockShear((sg.edge+sg.pitch)*th,(sg.edge+sg.pitch-1.5*hole)*th,(sg.half-hole/2)*th,Fyp,Fup,method);
+ add('brace-strut-bearing','Crane-level strut','Strut bolts · bearing and tearout',H,nb*bear,'force','R_n=\\min(1.2l_ctF_u,\\;2.4dtF_u)\\ \\text{(J3.10)}',`Strut web ${f(sg.tw,'length')} and gusset ${f(t,'length')}, the thinner governing at each bolt, the smaller of the edge and pitch clear distances at every bolt; the force reverses.`,['aisc-connections']);
+ const run=sg.edge+(nb-1)*sg.pitch,blk=(th:number,Fyp:number,Fup:number)=>blockShear(run*th,(run-(nb-.5)*hole)*th,(sg.half-hole/2)*th,Fyp,Fup,method);
  add('brace-strut-block','Crane-level strut','Strut web and gusset · block shear',H,Math.min(blk(sg.tw,S.Fy,S.Fu),blk(t,Fy,Fu)),'force','R_n=0.6F_uA_{nv}+U_{bs}F_uA_{nt}\\le0.6F_yA_{gv}+U_{bs}F_uA_{nt}',`Shear along the bolt line from the end and tension to the cope edge or gusset edge ${f(sg.half,'length')} from the bolt line; Ubs = 0.5.`,['aisc-connections']);
  const tab=weldGroup([[[g.x0,-sg.half],[g.x0,sg.half]]],[H,0],[0,0]);
  add('brace-strut-tab','Crane-level strut','Strut tab at other columns · welds and column web',Math.max(tab.peak/2/cap.weld,H/webYieldLine(column,2*sg.half,method)),1,'ratio','\\max\\left(\\frac{f}{\\phi R_w},\\;\\frac{H}{\\phi R_{web}}\\right)\\le1',`At columns without a rod, the strut tab ${f(2*sg.half,'length')} tall carries H with ${f(d.weld,'length')} fillets both faces to the web; the web takes it out of its plane (yield line as at the gusset).`,['aisc-connections']);

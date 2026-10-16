@@ -30,7 +30,9 @@ export const longitudinalBracingSchema=z.object({
   pin:z.object({diameter:pos,Fu:pos}),
   gusset:z.object({thickness:pos,Fy:pos,Fu:pos}),
   weld:pos,
-  strut:z.object({shape:z.string().max(30),Fy:pos,Fu:pos,boltDiameter:pos,grade:z.enum(['A325','A490'])}),
+  strut:z.object({shape:z.string().max(30),Fy:pos,Fu:pos,boltDiameter:pos,grade:z.enum(['A325','A490']),
+   /** Bolts in line at each strut end, pretensioned slip-critical (2 when not given). */
+   bolts:z.number().int().min(2).max(5).optional()}),
   seatWeld:pos
  }).optional()
 });

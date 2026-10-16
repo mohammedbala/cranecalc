@@ -20,7 +20,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
   expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
   expect(s.checks.filter(c=>c.status==='fail'&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
   for(const id of ['brace-tension','brace-pin','brace-pin-bearing','brace-gusset-rupture','brace-gusset-tearout','brace-gusset-yield','brace-gusset-weld','brace-column-web',
-   'brace-strut','brace-strut-slenderness','brace-strut-tension','brace-strut-bolts','brace-strut-bearing','brace-strut-block','brace-strut-tab','brace-seat-weld','brace-collector-bearing',
+   'brace-strut','brace-strut-slenderness','brace-strut-tension','brace-strut-slip','brace-strut-bolts','brace-strut-bearing','brace-strut-block','brace-strut-tab','brace-seat-weld','brace-collector-bearing',
    'brace-seismic-basis','brace-seismic-drift','brace-separation','column-torsion','base-uplift','brace-rod-crossing','brace-offset-gusset','brace-rod-torsion','existing-steel-clear','existing-footing-clear'])expect(check(id)?.status,id).toBe('pass');
   // The existing building's steel is checked against the separation the bracing analysis gives.
   expect(check('existing-steel-clear')?.demand).toBeCloseTo(s.bracingSystem!.separation!.required,9);
