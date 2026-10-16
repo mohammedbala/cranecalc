@@ -369,7 +369,9 @@ describe('no impossible geometry is printed',()=>{
   expect(bad).toEqual([]);
  },300000);
  it('draws a tie whose part cannot exist as GEOMETRY CONFLICT - NOT DETAILED, its title kept',()=>{
-  const s=structuredClone(sheetFixture('t03'));s.geometryConflicts=[{id:'tie-edge',title:'Tie bar edge distance'}];
+  // s020: a flexible plate on a direct flange saddle (no configurator template ties on a saddle now; t03 moved its tie to
+  // the bearing stiffener).
+  const s=structuredClone(sheetFixture('s020'));s.geometryConflicts=[{id:'tie-edge',title:'Tie bar edge distance'}];
   const tie=detailTopics(s).find(t=>t.key==='flange-tie')!;
   for(const v of tie.views){const r=v.render();expect(r.svg,v.title).toContain('GEOMETRY CONFLICT - NOT DETAILED');expect(r.svg).toContain('(TIE-EDGE)');}
   const sheet=drawingSheetSet(s).find(v=>v.svg.includes('data-geometry-conflict'))!;

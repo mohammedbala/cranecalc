@@ -53,7 +53,9 @@ describe('D/C as the sheets print it',()=>{
   expect(blockedPackage(b)).toBe(true);expect(sheetDc(b,.5)).toBe('UNVERIFIED');
  });
  it('takes the tie maximum from the whole tie, the saddle-toe register points included, and names failures',()=>{
-  const v=clone(sheetFixture('t03')),sa=v.checks.find(c=>/^detail-fatigue-SA/.test(c.id))!,tie=v.checks.find(c=>c.id==='flange-tie-flange')!;
+  // s014: paired bars on a direct flange saddle, every tie check passing (t03 now ties at the bearing stiffener, without
+  // saddle-toe points).
+  const v=clone(sheetFixture('s014')),sa=v.checks.find(c=>/^detail-fatigue-SA/.test(c.id))!,tie=v.checks.find(c=>c.id==='flange-tie-flange')!;
   Object.assign(sa,{status:'fail',utilization:1.45,demand:(sa.capacity??1)*1.45});
   // A part with no capacity: the flag is the truth (JSON stores its Infinity as null).
   Object.assign(tie,{status:'fail',utilization:null,noCapacity:true});

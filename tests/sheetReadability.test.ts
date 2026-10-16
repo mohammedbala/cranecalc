@@ -7,7 +7,7 @@ import {sheetEntities,type Entity} from '../src/components/svgEntities';
 import {textWidth,lettering,sheetArea} from '../src/components/sheetGraphics';
 
 /**
- * Readable drawing sheets for the configurations the quick configurator builds: its templates (all but t09) and generated
+ * Readable drawing sheets for the configurations the quick configurator builds: its templates and generated
  * projects whose sheets once had overlapping annotation (tests/fixtures/sheets, calculation snapshots stored so these
  * tests need no calculate()), each drawn in US and SI units. On every sheet and every detail view: no text over text or
  * linework (annotationClashes), no text under 3/32 in capitals (the lettering minimum), nothing outside the sheet border,
@@ -50,9 +50,9 @@ function cellProblems(svg:string){
 describe('readable drawing sheets',()=>{
  it('has the fixtures of the configurator templates and the generated projects',()=>{
   const names=sheetFixtureNames();
-  // Every template but t09 (two cranes, five bays), whose calculate() outgrows the memory a test process gets (stopped at
-  // 4.5 GB after 95 min); scripts/refreshSheetFixtures.ts t09 adds it where it runs, and this file then draws it too.
-  for(let i=1;i<=12;i++)if(i!==9)expect(names,`template t${String(i).padStart(2,'0')}`).toContain(`t${String(i).padStart(2,'0')}`);
+  // Every template, t09 (two cranes, five bays) included: its two-crane calculate() now fits in memory (about 20 min with
+  // 3 GB of heap; scripts/refreshSheetFixtures.ts t09), and the stored snapshot is drawn like the others.
+  for(let i=1;i<=12;i++)expect(names,`template t${String(i).padStart(2,'0')}`).toContain(`t${String(i).padStart(2,'0')}`);
   expect(names.filter(v=>v.startsWith('s')).length).toBeGreaterThanOrEqual(8);
   expect(readdirSync(new URL('./fixtures/sheets/',import.meta.url)).filter(f=>f.endsWith('.json.gz')).length).toBe(names.length);
  });
