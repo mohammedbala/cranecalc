@@ -117,6 +117,17 @@ export function longitudinalBracingChecks(p:ProjectInput,r:LongitudinalBracingRe
   add('rod-fatigue','Longitudinal bracing · threaded rod fatigue (A-3.1 item 8.5)',f.range,Math.max(f.allowable,f.threshold),'stress','f_{sr}=\\frac{\\Delta T}{A_t}\\le F_{SR}=\\left(\\frac{C_f}{n_{SR}}\\right)^{0.333}\\ge F_{TH}',
    `AISC 360-16 Table A-3.1 item 8.5 (threaded rods, Cf = 3.9 × 10^8 ksi³, threshold ${stress(f.threshold)}): unfactored single-crane traction ${format(r.Cls,'force',u,3)} gives ${format(f.force,'force',u,3)} in one tension-only rod each time the crane starts or stops (0 to T), on the tensile stress area ${format(f.area,'area',u,3)} of the threaded end and its nut. Stress range f_sr = ${stress(f.range)} against F_TH = ${stress(f.threshold)}: ${below?'below the threshold, no cycle limit (constant amplitude).':'above the threshold, so the cycle count matters.'} ${f.cycles.toExponential(2)} cycles (the runway fatigue count) give F_SR = ${stress(f.allowable)}. Tighten the rods and keep them tight; loose tension-only rods take impact.`);
  }
+ // An existing brace that fails: reinforce or replace it (by the engineer of record), with the rod the forces need.
+ if(!G.spans){
+  const rodFor=(area:number)=>{const d=Math.sqrt(4*area/Math.PI),e=Math.ceil(d/(inch/8)-1e-9)*inch/8;return e;};
+  const need=(c:CheckResult|undefined,area:number,what:string)=>{if(!c||c.status!=='fail')return;
+   c.note+=` REINFORCE OR REPLACE (engineer of record): ${b.system==='rod-x'?`a rod of at least ${noteLength(rodFor(area),u)} diameter (${format(area,'area',u,3)} ${what})`:`a diagonal of at least ${format(area,'area',u,3)} ${what}`}, with its connections and the braced-bay columns and foundation for the forces here; drawn on S-01 as the (E) braced bay.`;};
+  const t=checks.find(c=>c.id==='brace-tension'),phiFnt=available(.75*b.rod.Fu,p.method,.75,2),phiFy=available(b.rod.Fy,p.method,.9,1.67);
+  if(b.system==='rod-x')need(t,g.force/Math.min(phiFnt,phiFy),'gross area for 0.75Fu and Fy');else need(t,r.member.area*g.force/r.member.tension,'gross area');
+  const fat=checks.find(c=>c.id==='brace-rod-fatigue');
+  // Threaded rod fatigue on its tensile stress area, A_t ≈ 0.75 A_b for the sizes used: the gross area that brings f_sr to F_SR.
+  if(r.rodFatigue)need(fat,r.rodFatigue.force/Math.max(r.rodFatigue.allowable,r.rodFatigue.threshold)/.75,'gross area, its threaded area at about 0.75 of it for the fatigue range');
+ }
  // Between new columns the collector, connections, columns and foundation are designed here (Brace connections, Crane-level strut, New column).
  if(!G.spans)checks.push({id:'brace-by-others',group:'Longitudinal bracing',title:'Collector, brace connections, braced-bay columns & foundation',status:'excluded',equation:'',note:`Not checked here: the crane-level strut or collector from each locating support to the braced bay, the brace end connections (gussets, clevises, bolts, welds), and the braced-bay columns, anchors and foundation. Per braced bay under ${g.equation}: base shear ${format(r.foundation.shear,'force',u,3)} and column axial ±${format(r.foundation.axial,'force',u,3)} from overturning, in addition to the columns' other loads.`,referenceIds:refs});
  return checks;

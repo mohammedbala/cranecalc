@@ -310,7 +310,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  // The forces delivered to the building columns: the same concurrent sets as the calculation (page 1 and section 3.5),
  // each column as wide as its widest value so the values stay on one line (the set names wrap where the table is tight).
  const delivered=deliveredRows(s);
- if(delivered.length)blocks.push(H(`FORCES DELIVERED TO THE BUILDING COLUMNS · FACTORED ${p.method}, CONCURRENT SETS PER GRID`),{...T(deliveredHeaders.map(v=>v.toUpperCase()),delivered,fitColumns(t,deliveredHeaders.map(v=>v.toUpperCase()),delivered,[1])),keep:true},P(deliveredNote(s)));
+ if(delivered.length)blocks.push(H(`${p.existingColumn?.enabled&&p.existingColumn.isNew?'FORCES ON THE NEW RUNWAY COLUMNS (DESIGNED IN THE CALCULATION REPORT, NEW COLUMN)':'FORCES DELIVERED TO THE BUILDING COLUMNS'} · FACTORED ${p.method}, CONCURRENT SETS PER GRID`),{...T(deliveredHeaders.map(v=>v.toUpperCase()),delivered,fitColumns(t,deliveredHeaders.map(v=>v.toUpperCase()),delivered,[1])),keep:true},P(deliveredNote(s)));
  // Without bracket or support details the cover carries the factored bracket design forces.
  if(d&&s.detailResults&&!bracketForceTopic(s))blocks.push(...bracketForceBlocks(s,t));
  // Column 3: index, materials, inspection.

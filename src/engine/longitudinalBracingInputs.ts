@@ -20,6 +20,8 @@ export const longitudinalBracingSchema=z.object({
  /** Unfactored 10-year wind force along the runway on this braced line, for the TR-13 §5.5 drift check; not entered, the check is unverified. */
  wind10:nn.optional(),
  source:z.string().max(500),confirmed:z.boolean(),
+ /** Existing building lines: the runway spans (1-based) of the surveyed braced bays, drawn dashed on S-01. */
+ spans:z.array(z.number().int().min(1).max(20)).max(6).optional(),
  /**
   * New freestanding columns: the braced runway spans (1-based), the clevis pin and gusset at each rod end, the
   * fillets of the gussets to the column web, the crane-level strut that collects the longitudinal force from

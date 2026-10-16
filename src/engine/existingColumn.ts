@@ -313,6 +313,21 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  return {source,eccentricity:e,railElevation:ht,capacity,...governingSupport,bySupport:all.map(v=>{const t=v.combinations.filter(k=>k.Ut!==undefined);return {x:v.station,U:v.governing.U.U,My:Math.abs(v.governing.My.My),...(t.length?{Ut:Math.max(...t.map(k=>k.Ut!))}:{})};}),torsion,support};
 }
 
+/**
+ * The crane-level strut by others that the existing-column check relies on (review B8): on the girder line (the
+ * girder web, `offset` from the column centerline) with at least `ratio` times the column's own stiffness there, or at
+ * the column centerline; at every locating grid it takes the girder's longitudinal force, factored as in the column
+ * check (traction with L, the crane stop TR-13 1.0Cbs / 0.67Cbs at the stop grids), and carries the line force to the
+ * braced bay: F = max(traction, stop). Undefined where no strut is assumed (eave-strut exit, or no bracing path).
+ */
+export function craneLevelStrut(p:ProjectInput,r:Pick<ExistingColumnResult,'support'>){
+ const z=r.support,c=p.existingColumn;if(!z||!c||c.isNew||c.longitudinal!=='bracing'||z.exit==='eave-strut')return undefined;
+ const lrfd=p.method==='LRFD',traction=(lrfd?1.6:1)*z.traction,stop=(lrfd?1:.67)*z.bumper,grids=locatingGrids(p).map(j=>j+1);
+ return {location:z.exit==='girder-strut'?'girder-line' as const:'column-centerline' as const,offset:z.exit==='girder-strut'?z.offset:0,grids,traction,stop,stopGrids:z.bumperGrids,
+  force:Math.max(traction,stop),stiffness:z.exit==='girder-strut'?z.strut?.required:undefined,ratio:z.strut?.ratio,assumed:!z.exitEntered};
+}
+export type CraneLevelStrut=NonNullable<ReturnType<typeof craneLevelStrut>>;
+
 export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):CheckResult[]{
  const c=p.existingColumn!,refs=['asce','aisc-e','aisc-f2','aisc-h','existing-column'],u=p.units,checks:CheckResult[]=[],label=c.isNew?'New column':'Existing column';
  const add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,caseId?:string)=>checks.push({id:'column-'+id,group:label,title,demand,capacity,quantity,utilization:demand/capacity,status:Number.isFinite(demand)&&demand<=capacity*(1+1e-9)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(demand/capacity).toFixed(4)}`,note,caseId,referenceIds:refs});
@@ -330,6 +345,12 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):Chec
  add('interaction',`${label} · combined axial and flexure (H1)${braced?', braced frame assumed':''}`,g.U.U,1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)\\le1\\ \\ \\text{(H1-1a)};\\quad\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\le1\\ \\ \\text{(H1-1b)}',`${condition}Governing ASCE 7 combination ${g.U.equation}: Pr=${format(g.U.P,'force',u,3)}, Mrx=${format(g.U.Mx,'moment',u,3)}, Mry=${format(g.U.My,'moment',u,3)}. ${r.combinations.length} combinations with W and E in both directions${r.support?` (${r.support.combinations.asce} ASCE 7 with crane loads as L, ${r.support.combinations.tr13} AIST TR-13 §3.10 supporting-structure forms with the crane dead load at the dead-load factor${r.support.combinations.bumper?', and the TR-13 crane stop case':''}; the weak-axis moment includes the seat moment and the longitudinal force at the locating seat)`:''}. Column-alone model: frame action, base flexibility and a direct-analysis stability check are not included; second-order effects use B1 with the specified effective lengths.`,g.U.id);
  add('drift',`${label} · runway-level lateral displacement`,r.drift.value,r.drift.limit,'length',r.support?'\\Delta\\le\\min(H/400,\\;2\\,\\mathrm{in})':'\\Delta\\le h/n',r.support?`Service side thrust and static eccentric reaction of the crane, column alone (${c.strong.top} top). AIST TR-13 §5.3 limit: H/400 or 2 in, whichever is less, with H = ${format(r.support.girderTop,'length',u,3)} from the column base to the top of the crane girder (seat ${format(c.seatElevation,'length',u,3)} + bearing plate, girder and cap): ${format(r.support.driftLimit,'length',u,3)}. The displacement is taken at the rail head, ${format(r.railElevation,'length',u,3)} above the base (slightly above the top of the girder). Frame and roof diaphragm flexibility are excluded: the frame drift under the 10-year wind is by others (responsibility matrix).`:`Service side thrust and static eccentric reaction of the crane, column alone (${c.strong.top} top). Limit h/${c.driftLimit}; DG7 suggests about h/240 and 2 in for cab-operated cranes and h/100 for pendant cranes. Frame and roof diaphragm flexibility are excluded.`);
  if(r.support)checks.push(...columnSupportChecks(p,r,label,refs));
+ // The crane-level strut the check relies on: by the building engineer of record, specified here (S-00, S-01, delivered forces).
+ const strut=craneLevelStrut(p,r);
+ if(strut){const fl=(v:number)=>format(v,'length',u,3),ff=(v:number)=>format(v,'force',u,3),at=strut.location==='girder-line'?`on the girder line (girder web, ${fl(strut.offset)} from the column centerline)`:'at the column centerline';
+  const grids=`grid${strut.grids.length>1?'s':''} ${strut.grids.join(', ')}`,k=strut.stiffness!==undefined?`, k ≥ ${format(strut.stiffness,'stiffness',u,3)}`:'';
+  checks.push({id:'crane-level-strut',group:label,title:`Crane-level strut by others ${at} at ${grids}${k}, F = ${ff(strut.force)} (${p.method})`,status:'excluded',equation:strut.stiffness!==undefined?'k_s\ge10\,k_c':'',referenceIds:['tr13-column-path',...refs],
+   note:`Not checked here: the existing-column check relies on a crane-level strut ${at}, connected at the seat level of every locating column (${grids}) and carried to the braced bay. Factored ${p.method} forces at each locating seat: traction ${ff(strut.traction)}${strut.stop?`; crane stop ${ff(strut.stop)} at grid${strut.stopGrids.length>1?'s':''} ${strut.stopGrids.join(', ')}`:''}; strut design force (the line force to the braced bay) F = ${ff(strut.force)}.${strut.stiffness!==undefined?` Axial stiffness at each seat at least ${strut.ratio} times the column's own stiffness there: k_s ≥ ${format(strut.stiffness,'stiffness',u,3)}, so the column keeps at most 1/${strut.ratio!+1} of the force.`:''}${strut.assumed?' The exit is assumed (not entered): confirm it with the building engineer of record.':''} Strut, its connections and the braced bay by the building engineer of record (S-00, S-01).`});}
  if(r.support)checks.push(...buildingSeismicChecks(p));
  if(r.seismic){
   const z=r.seismic,b=z.basis,f=(v:number,q:Parameters<typeof format>[1]='force')=>format(v,q,u,3),src=c.seismic?.source.trim();

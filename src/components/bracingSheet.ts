@@ -361,8 +361,9 @@ export const specifiedSeparation=(required:number,units:'US'|'SI')=>{const q=uni
 
 /**
  * The bracing on the general arrangement's girder elevation (sheet units; model meters from the girder mid-depth,
- * x from grid 1): the column stubs run on `stub` below the girder to a break, with the strut at the work point and
- * the rods leaving the upper gussets into the break. The whole braced bay is drawn on the bracing details.
+ * x from grid 1): the column stubs run on `stub` below the girder to a break, with the strut at the work point. The rods
+ * are not cut off at the stubs (short diagonals there read as knee braces): the braced spans carry a reference to the
+ * braced bay elevation on the bracing details, where the whole bay is drawn.
  */
 export function bracingOnElevation(s:CalculationSnapshot,o:{EX:(x:number)=>number;EY:(y:number)=>number;ek:number;supports:number[];columnWidth:number;girderBottom:number;stub:number;columnTop?:number}){
  const p=s.input,r=s.bracingSystem!,g=r.geometry,L=r.layout,dt=p.details!,br=dt.bracket?.enabled?dt.bracket:undefined;
@@ -373,20 +374,13 @@ export function bracingOnElevation(s:CalculationSnapshot,o:{EX:(x:number)=>numbe
  // Below a column cap the whole strut shows, between the column flanges.
  const capped=capWorkPointDrop(p)>0,seat=capped?half:(br?bracketSeat(br).length:0)*mm/2,sb=EY(wp-g.strut.d*mm/2),st=EY(wp+g.strut.d*mm/2);
  for(let i=1;i<o.supports.length;i++)svg+=line([EX(o.supports[i-1]+seat),sb],[EX(o.supports[i]-seat),sb],'runway-line')+(capped?line([EX(o.supports[i-1]+seat),st],[EX(o.supports[i]-seat),st],'runway-line'):'');
- // Rods from each upper pin down into the break at the stub ends.
- const slope=L.height/L.width;
- for(const i of L.spans)for(const [x0,dir] of [[o.supports[i-1],1],[o.supports[i],-1]] as const){
-  const px=x0+dir*g.top.pin[0]*mm,py=EY(wp+g.top.pin[1]*mm),drop=(end-py)/o.ek,ex=px+dir*drop/slope;
-  svg+=circle(EX(px),py,1.4,'runway-line')+line([EX(px),py],[EX(ex),end],'runway-line')+breakLine([EX(ex)-4*dir,end-3],[EX(ex)+4*dir,end+3]);
- }
- // The callout in the first braced span, below the girder marks and between the rods.
- const i=L.spans[0],cx=(EX(o.supports[i-1])+EX(o.supports[i]))/2,labels=[`${plateInches(p.longitudinalBracing!.rod.diameter,p.units)} DIA. ROD X-BRACING, GRIDS ${L.spans.map(v=>`${v}-${v+1}`).join(', ')}, BOTH RUNWAYS`,`${g.strut.shape} STRUT ON COLUMN LINE, ALL SPANS; SEE ${detailRef(detailTitles.bracedBay)}`];
- const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),lettering.text))),rodX=EX(o.supports[i]-g.top.pin[0]*mm-(end-6-EY(wp+g.top.pin[1]*mm))/o.ek/slope);
- // Centered in the span where that reads clear of the rods, columns and strut, else beside the rod it points to, clear of
- // its own leader.
- const drawn=new AnnotationSpace(svg),at:XY=[rodX,end-6];
- // An unbraced span beside it, clear of the rods, is the last resort.
+ // The callout in the first braced span, below the girder marks, pointing at the strut there.
+ const i=L.spans[0],cx=(EX(o.supports[i-1])+EX(o.supports[i]))/2,labels=[`${plateInches(p.longitudinalBracing!.rod.diameter,p.units)} DIA. ROD X-BRACING BELOW, GRIDS ${L.spans.map(v=>`${v}-${v+1}`).join(', ')}, BOTH RUNWAYS`,`${g.strut.shape} STRUT ON COLUMN LINE, ALL SPANS; SEE ${detailRef(detailTitles.bracedBay)}`];
+ const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),lettering.text)));
+ // The leader lands on the strut a quarter span in, clear of the girder mark at mid-span.
+ const q=EX(o.supports[i-1]*.75+o.supports[i]*.25),drawn=new AnnotationSpace(svg),at:XY=[q,sb];
+ // An unbraced span beside it is the last resort.
  const spans=o.supports.slice(1).map((x,k)=>k+1).filter(k=>!L.spans.includes(k)).map(k=>(EX(o.supports[k-1])+EX(o.supports[k]))/2-w/2);
- svg+=drawn.pick([end-14,end-20,end-26,end-32,end-46].flatMap(y=>[cx-w/2,rodX-14-w,rodX+14,...spans].map(x=>multiLeader([at],[x,y],labels,lettering.text))));
+ svg+=drawn.pick([end-14,end-20,end-26,end-32,end-46,end-6].flatMap(y=>[cx-w/2,q+14,q-14-w,cx+14,cx-14-w,...spans].map(x=>multiLeader([at],[x,y],labels,lettering.text))));
  return svg+'</g>';
 }
