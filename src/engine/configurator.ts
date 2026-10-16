@@ -23,7 +23,7 @@ import {sizeTaperedHaunch} from './taperedHaunchSizing';
 import {baseSizingRatios,columnDriftShare,sizeColumnBase} from './columnBaseSizing';
 import {columnTorsionRatio,sizeBracing} from './bracingSizing';
 import {supportReactions} from './supportReactions';
-import {existingColumnAnalysis} from './existingColumn';
+import {existingColumnAnalysis,existingColumnChecks} from './existingColumn';
 import {baseDrift} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
 import {sizeWeldedBracket} from './bracketSizing';
@@ -385,7 +385,21 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  attachTie(p,cfg);
  // The supports carry the bracket (or cap) and tie before the new column bases are sized for their reactions.
  const tie=sizedTieRatios(p),q=finishTie(withHaunch(withWeldedBracket(p),cfg),tie);
- return cfg.structure==='new'?withColumnBase(sizeBracing(q,baseTarget),cfg):q;
+ return cfg.structure==='new'?withColumnBase(sizeBracing(q,baseTarget),cfg):withLongitudinalExit(q,cfg);
+}
+/**
+ * Existing columns: the configured longitudinal exit, else the crane-level strut at the column centerline, or on the
+ * girder line (at least 10 times the column's own stiffness there, so the column keeps 1/11 of the force) where the
+ * column fails torsion from the girder offset with the centerline strut. Both struts are by the building engineer of
+ * record, specified on S-00 and S-01.
+ */
+function withLongitudinalExit(p:ProjectInput,cfg:RunwayConfig):ProjectInput{
+ const c=p.existingColumn;if(!c?.enabled||c.isNew)return p;
+ if(cfg.longitudinalExit){c.longitudinalExit=cfg.longitudinalExit;return p;}
+ c.longitudinalExit='column-strut';
+ const torsion=existingColumnChecks(p,existingColumnAnalysis(p,supportReactions(p,sectionProperties(p.section)))).find(v=>v.id==='column-torsion');
+ if(torsion&&!(torsion.utilization!<=1))c.longitudinalExit='girder-strut';
+ return p;
 }
 /**
  * The welded rib seats (twin-rib, haunched seat) sized for the reactions (sizeWeldedBracket): ribs, seat, fillets, the
