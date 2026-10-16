@@ -252,19 +252,23 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   if(close(Req,dem)&&close(Rw,cap))return [`R_{eq}=R+8H=${tx(R,'force')}+8\\times${tx(H,'force')}=${tx(Req,'force')}\\quad(H=H_{top}+P_{br})`,
    `${lhs}R_n=${fl(.75,2)}\\times0.6F_{EXX}(0.707w)\\,4(h-2c)=${fl(.75,2)}\\times0.6\\times${tx(d.material.Fexx,'stress')}\\times0.707\\times${tx(b.weldSize,'length')}\\times4(${tx(h,'length')}-2\\times${tx(b.cope,'length')})=${tx(Rw,'force')}${check(Rw,'R_{eq}')}`];
  }
- // Direct flange tie: the tie design force F = (H_top + P_br)/cos θ and the elastic strip stresses it causes.
+ // Direct flange tie: the tie design force F = (H_top + P_br)/cos θ and the elastic stresses it causes (the girder flange
+ // over its effective width b_e).
  if(/^(flange-tie-(flange|gusset|saddle)|plate-tie-keeper-flange)$/.test(c.id)&&d&&A6!==undefined&&Ht!==undefined&&flangeTieGeometry(p)){
   const cos=braceSystem(p).cos,F=(Ht+A6)/cos,w=flangeTieResponse(p,F),tf=p.section.tf,a=flangeTieGeometry(p)!.attachment,t=d.brace,inclined=Math.abs(cos-1)>1e-6;
   const Fline=`F=${inclined?'(H_{top}+P_{br})/\\cos\\theta':'H_{top}+P_{br}'}=${inclined?`(${tx(Ht,'force')}+${tx(A6,'force')})/${cos.toFixed(3)}`:`${tx(Ht,'force')}+${tx(A6,'force')}`}=${tx(F,'force')}\\quad(\\text{tie design force, section 3})`;
   const strip=(lever:number,width:number,thick:number,k=6)=>`\\frac{${k}\\times${tx(F,'force')}\\times${tx(lever,'length')}}{${tx(width,'length')}\\times(${tx(thick,'length')})^2}+\\frac{1.5\\times${tx(F,'force')}}{${tx(width,'length')}\\times${tx(thick,'length')}}`;
-  if(c.id==='flange-tie-flange'&&close(w.flange,dem))return [`${Fline};\\quad h=${tx(w.h,'length')}\\ (\\text{tie force below the flange});\\quad B=${tx(w.B,'length')}\\ (\\text{saddle length, the strip width})`,
-   `f_f=\\frac{6Fh}{Bt_f^2}+\\frac{1.5F}{Bt_f}=${strip(w.h,w.B,tf)}=${tx(6*F*w.h/(w.B*tf**2),'stress')}+${tx(1.5*F/(w.B*tf),'stress')}=${tx(w.flange,'stress')}${rel.le}${yieldLimit(p.section.Fy)}\\quad ${rel.dc}`];
+  // The girder flange carries the couple over its effective width (flangeEffectiveWidth).
+  const fe=w.effective,be=fe.width,beLine=`b_e=B+a+\\min(a,s_e)=${tx(fe.B,'length')}+${tx(fe.a,'length')}+\\min(${tx(fe.a,'length')},\\,${tx(fe.end,'length')})=${tx(be,'length')}`;
+  if(c.id==='flange-tie-flange'&&close(w.flange,dem))return [`${Fline};\\quad h=${tx(w.h,'length')}\\ (\\text{tie force below the flange})`,
+   `${beLine}\\quad(\\text{effective flange width: the saddle length, the spread to the web fillet toe and the free flange to the girder end})`,
+   `f_f=\\frac{6Fh}{b_et_f^2}+\\frac{1.5F}{b_et_f}=${strip(w.h,be,tf)}=${tx(6*F*w.h/(be*tf**2),'stress')}+${tx(1.5*F/(be*tf),'stress')}=${tx(w.flange,'stress')}${rel.le}${yieldLimit(p.section.Fy)}\\quad ${rel.dc}`];
   if(c.id==='flange-tie-gusset'&&close(w.gusset,dem))return [`${Fline};\\quad H=${tx(w.H,'length')}\\ (\\text{force below the saddle});\\quad L_w=${tx(w.L,'length')}`,
    `f_g=\\frac{6FH}{t_gL_w^2}+\\frac{1.5F}{t_gL_w}=\\frac{6\\times${tx(F,'force')}\\times${tx(w.H,'length')}}{${tx(t.gussetThickness,'length')}\\times(${tx(w.L,'length')})^2}+\\frac{1.5\\times${tx(F,'force')}}{${tx(t.gussetThickness,'length')}\\times${tx(w.L,'length')}}=${tx(w.gusset,'stress')}${rel.le}${yieldLimit(d.material.Fy)}\\quad ${rel.dc}`];
   if(c.id==='flange-tie-saddle'&&close(w.saddle,dem))return [`${Fline};\\quad H=${tx(w.H,'length')};\\quad B=${tx(w.B,'length')};\\quad L_w=${tx(w.L,'length')}`,
    `f_s=\\frac{9FHB}{L_w^2t_s^2}+\\frac{1.5F}{L_wt_s}=\\frac{9\\times${tx(F,'force')}\\times${tx(w.H,'length')}\\times${tx(w.B,'length')}}{(${tx(w.L,'length')})^2\\times(${tx(a.saddleThickness,'length')})^2}+\\frac{1.5\\times${tx(F,'force')}}{${tx(w.L,'length')}\\times${tx(a.saddleThickness,'length')}}=${tx(w.saddle,'stress')}${rel.le}${yieldLimit(d.material.Fy)}\\quad ${rel.dc}`];
   if(c.id==='plate-tie-keeper-flange'&&s.detailResults){const clip=railClipResponse(p,s.detailResults.demands.railLateral).flangeStress;
-   if(close(w.flange+clip,dem))return [Fline,`f_{saddle}=\\frac{6Fh}{Bt_f^2}+\\frac{1.5F}{Bt_f}=${strip(w.h,w.B,tf)}=${tx(w.flange,'stress')}\\quad(h=${tx(w.h,'length')},\\ B=${tx(w.B,'length')})`,
+   if(close(w.flange+clip,dem))return [Fline,beLine,`f_{saddle}=\\frac{6Fh}{b_et_f^2}+\\frac{1.5F}{b_et_f}=${strip(w.h,be,tf)}=${tx(w.flange,'stress')}\\quad(h=${tx(w.h,'length')})`,
     `f=f_{saddle}+f_{clip}=${tx(w.flange,'stress')}+${tx(clip,'stress')}=${tx(w.flange+clip,'stress')}${rel.le}${yieldLimit(p.section.Fy)}\\quad ${rel.dc}`,
     `\\quad(f_{clip}:\\ \\text{the flange strip under the rail clip, factored wheel group})`];}
  }

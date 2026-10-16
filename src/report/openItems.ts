@@ -3,6 +3,8 @@ import {fatigueData,registerFamily,type OpenItem,type Taxonomy,type TaxonEntry} 
 import {dcText,noCapacity} from '../engine/checkPresentation';
 import {noteLength} from '../engine/units';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
+import {columnFlangeWidth,flangeEffectiveWidth} from '../engine/flangeTieDesign';
+import {flangeTieGeometry} from '../engine/tieGeometry';
 import {maximumRule,sig3,statusLabel,value} from './reportParts';
 
 /**
@@ -106,7 +108,7 @@ const sentenceStart=(v:string)=>v.charAt(0).toUpperCase()+v.slice(1);
  */
 const remedies:Remedy[]=[
  // Fatigue register points, by detail family (the register id prefix).
- [/^detail-(fatigue|full-cycle)-SA/,x=>`Saddle end-fillet toes on the girder flange (AISC Table A-3.1 item 7.1): the range is the global flange stress plus the local flange-strip bending from the tie force; ${range(x)}. Take the tie to the bearing stiffener (no attachment welded to the flange), or reduce the strip bending with a stiffer saddle; a longer attachment lowers the category.`],
+ [/^detail-(fatigue|full-cycle)-SA/,x=>`Saddle end-fillet toes on the girder flange (AISC Table A-3.1 item 7.1): the range is the global flange stress plus the local flange bending from the tie force over the flange's effective width; ${range(x)}. Take the tie to the bearing stiffener (no attachment welded to the flange), or reduce the local bending with a shorter lever (a thinner saddle or a narrower tie) or a longer saddle; a longer attachment lowers the category.`],
  [/^detail-(fatigue|full-cycle)-RC/,x=>`Rail clip base welds on the ${x.p.section.kind==='cap'?'cap channel web':'girder top flange'}: ${range(x)}. Bolted clips or clips on a rail pad without welds to the flange, or a closer clip spacing that lowers the force on each clip.`],
  [/^detail-(fatigue|full-cycle)-(FT|FB)/,x=>`Girder flange at midspan: ${range(x)}. A heavier girder, or move the attachments that set the category away from the midspan flange.`],
  [/^detail-(fatigue|full-cycle)-FS/,x=>`Bearing stiffener weld toes: ${range(x)}. Thicker stiffeners and web, or a better detail at the toe.`],
@@ -124,7 +126,11 @@ const remedies:Remedy[]=[
  [/^stiffener-(weld|combined-weld)$/,x=>{const b=x.p.details?.bearing;return `Increase the stiffener-to-web fillets to w ≥ ${b?x.size(b.weldSize,x.u):'u·w'}.`;}],
  [/^stiffener-(fatigue|weld-fatigue)$/,x=>`Bearing stiffener: ${range(x)} (thicker or wider stiffeners, or full-penetration welds to a better category).`],
  // Ties at the flange
- [/^(flange-tie-flange|plate-tie-keeper-flange)$/,x=>{const a=x.p.details?.brace.flangeAttachment;return `The girder flange bends locally under the saddle (elastic strip, saddle length only): lengthen the saddle to B ≥ ${a?x.size(a.saddleLength,x.u):'u·B'}, or take the tie to the bearing stiffener (stiffener tie, no flange bending); refine the strip model if neither is practical.`;}],
+ [/^(flange-tie-flange|plate-tie-keeper-flange)$/,x=>{const g=flangeTieGeometry(x.p),b=g&&flangeEffectiveWidth(x.p,g);
+  // The local stress falls with the effective width b_e = B + a + min(a, s_e): a saddle longer by (u - 1) b_e.
+  return `The girder flange bends locally under the saddle (elastic, over the effective width b_e = B + a + min(a, s_e)${b?` = ${x.len(b.width)}`:''}): lengthen the saddle to B ≥ ${b?x.size(b.B+(x.u-1)*b.width,1):'B + (u − 1)b_e'} (the end-fillet toe category falls past 4 in), shorten the lever (a thinner saddle or a narrower tie), or take the tie to the bearing stiffener (stiffener tie, no flange bending).`;}],
+ [/^flange-tie-column$/,x=>{const g=flangeTieGeometry(x.p),b=g?.receiver&&columnFlangeWidth(x.p,g);
+  return `The column flange bends locally at the tie gusset (elastic, over b_c = h_g + min(x, s_top)${b?` = ${x.len(b.width)}`:''}): a taller column gusset${b?` (h_g ≥ ${x.size(b.hg+(x.u-1)*b.width,1)})`:''}, the gusset nearer the column web, or a column stiffener behind the gusset.`;}],
  [/^flange-tie-(gusset|saddle)$/,x=>`Thicker ${/gusset/.test(x.c.id)?'tie gusset':'saddle plate'} or a longer weld line: the local stress must drop by ${reduction(x.u)}%.`],
  [/^flange-tie-(saddle-weld|gusset-weld)$/,x=>{const a=x.p.details?.brace.flangeAttachment;return `Increase the ${/saddle/.test(x.c.id)?'saddle-to-flange end':'gusset-to-saddle'} fillets to w ≥ ${a?x.size(a.weldSize,x.u):'u·w'} (within the J2.2b edge limit), or lengthen them.`;}],
  [/^(flange-tie-column-weld|tie-weld|tie-move-weld)$/,x=>{const w=x.p.details?.brace.connection.weldSize;return `Increase the column gusset root fillets to w ≥ ${w?x.size(w,x.u):'u·w'}, or a taller gusset${/move/.test(x.c.id)?'; or release the imposed movement at the column end (sleeved slots)':''}.`;}],
