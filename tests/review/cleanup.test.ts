@@ -98,8 +98,8 @@ describe('units, rounding and sizes (P3)',()=>{
  });
  it('prints plate, bolt and weld sizes as fractions',()=>{
   expect(fixed2(9.525,'length','US')).toBe('3/8 in');expect(fixed2(15.875,'length','US')).toBe('5/8 in');expect(fixed2(7.9375,'length','US')).toBe('5/16 in');
-  // A computed movement may read 0.31 in (the sliding-end slot travel); sizes never do.
-  const sizes=body.replace(/(slot travel each way|movement allowance each direction[^:]*:|Owner criteria Evaluated) 0\.31 in/g,'');
+  // A computed movement may read 0.31 in (the sliding-end slot travel, also as the required value after ≥ in the detailing checklist); sizes never do.
+  const sizes=body.replace(/(slot travel each way|movement allowance each direction[^:]*:|Owner criteria Evaluated)( [\d.]+ in ≥)? 0\.31 in/g,'');
   for(const v of ['0.37 in','0.63 in','0.31 in'])expect(sizes,v).not.toContain(v);
   expect(body).toContain('A 3/8 in × 4 1/4 in tie plate');
   expect(body).toMatch(/Lap bolts[,·] edge distances[^O]*\d\/\d+ in/);
