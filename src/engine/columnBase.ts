@@ -88,8 +88,8 @@ export function baseBimoment(p:ProjectInput,b:ColumnBaseInput,B:number){
 /**
  * Column base reactions for each ASCE 7 combination without wind or seismic: compression positive, moments
  * and shears as magnitudes with the eccentric reaction and the side thrust adding. Each combination with
- * crane load is also taken with only an upward crane reaction ("least crane vertical") and the full side
- * thrust, for anchor tension and overturning.
+ * crane load is also taken with only an upward crane reaction ("least crane vertical"), for anchor tension and
+ * overturning, without side thrust: side thrust comes with the wheel loads of the crane producing it.
  */
 export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,method:ProjectInput['method']){
  const c=p.existingColumn!,{section}=existingColumnSection(p),props=sectionProperties(section),E=section.E;
@@ -117,7 +117,7 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
   // The girder's concurrency rule (craneCombinations): side thrust without impact (TR-13 2b) and impact without side
   // thrust (2c), the fully concurrent set as well only where the project adopts it (C1).
   const full=p.aist?.concurrency==='full',crane=(k:{factors:{L:number}})=>!k.factors.L?[]:[...(full?[]:[[live-sp.Ci,' · side thrust, no impact',1],[live,' · impact, no side thrust',0]] as [number,string,number][])];
-  const actions=asceCombinations(method).filter(k=>!k.factors.W&&!k.factors.E).flatMap(k=>[...(!k.factors.L||full?[act(k,live,'')]:[]),...crane(k).map(([v,t,h])=>act(k,v,t,h)),...(k.factors.L?[act(k,lift,' · least crane vertical')]:[])]);
+  const actions=asceCombinations(method).filter(k=>!k.factors.W&&!k.factors.E).flatMap(k=>[...(!k.factors.L||full?[act(k,live,'')]:[]),...crane(k).map(([v,t,h])=>act(k,v,t,h)),...(k.factors.L?[act(k,lift,' · least crane vertical',0)]:[])]);
   // Braced new columns: the rod whose top ends at this column compresses it; the rod whose bottom ends here lifts
   // the base and shears it along the runway; at a locating column the girder's longitudinal force is a torque.
   if(designed){
@@ -129,14 +129,17 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
     const torque=share.locating?k.Hbay*designed.offset:0,V=k.H*share.vertical;
     // The offset rod whose top ends here twists the column at the work point, as its torque at the seat does: both reach
     // the base, each with its bimoment there (magnitudes added).
-    const at=(crane:number,tag:string,brace:number,Vy:number,rod=0,top=0):BaseAction=>{
-     const runway=k.D*sp.D+crane,Mh=Math.abs(k.side*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.side*sp.Css*side.reactions.base),ms=seat({D:k.D,L:k.live,Cd:k.Cd,Cv:k.Cv});
+    const at=(crane:number,tag:string,brace:number,Vy:number,rod=0,top=0,thrust=k.side):BaseAction=>{
+     const runway=k.D*sp.D+crane,Mh=Math.abs(thrust*sp.Css*side.reactions.baseMoment),Vh=Math.abs(thrust*sp.Css*side.reactions.base),ms=seat({D:k.D,L:k.live,Cd:k.Cd,Cv:k.Cv});
      return {id:`${k.id}${tag}`,equation:k.equation,P:k.D*dead+crane+brace,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway,ms),Vy:Vy+capVy(runway,ms),
       Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:k.seismic||undefined,uplift:Math.max(0,-brace),torque:torque+rod+top,
       ...(restrained?{bimoment:warping(torque,hs)+warping(top,layout.height)}:{})};
     };
     actions.push(at(k.live*live+k.Cd*sp.Cd+k.Cv*sp.Cv,' · brace',V,0,0,V>0?k.H*rodTop:0));
-    if(V>0)actions.push(at(Math.max(k.live,k.Cd,k.Cv)*lift,' · brace uplift',-V,k.H*share.shear,k.H*rodOffset));
+    // The least crane vertical means no crane at this column, so no side thrust here either; side thrust comes with the
+    // wheel loads of the crane that produces it (without impact, TR-13 2b).
+    if(V>0)actions.push(at(Math.max(k.live,k.Cd,k.Cv)*lift,' · brace uplift',-V,k.H*share.shear,k.H*rodOffset,0,0));
+    if(V>0&&k.side&&sp.Css)actions.push(at(k.live*(live-sp.Ci),' · brace uplift, side thrust',-V,k.H*share.shear,k.H*rodOffset));
    }
   }
   // Seismic across the runway at the girder, with overstrength for the base, anchors and footing (ASCE 7 §12.2.5.2).
