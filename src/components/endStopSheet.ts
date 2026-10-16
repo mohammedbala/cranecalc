@@ -3,7 +3,7 @@ import {dcText} from '../engine/checkPresentation';
 import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
 import {railPadThickness,clipGeometry} from '../engine/railSeat';
 import {girderBearingTitle} from './columnCapSheet';
-import {stopEnds,stopLocation} from '../engine/endStopInputs';
+import {stopEnds,stopLocation,stopStiffeners,stopStiffenerArrangement} from '../engine/endStopInputs';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {endStopGeometry,stopBumperForce,activeEndStop,wrenchClearance} from '../engine/endStop';
@@ -42,7 +42,9 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
  // The rail stands on its pad, where there is one, and the first rail clip pair is the typical clip (schematic).
  const pad=railPadThickness(p),cg=clipGeometry(r,pad),kg={length:cg.baseLength,height:cg.noseHeight+12.7,tip:cg.tip,outer:cg.outer};
  const shown=Math.max(g.railEnd+8*inch,d.bearing.length+4*inch),depthShown=capT+b.tf+6*inch;
- const boltLabel=`4 - ${size(db)} ${e.bolts.grade} PRETENSIONED (SC)`,hole=boltProperties(e.bolts.grade,db).hole,hx=heavyHex(db);
+ const zs=stopStiffeners(e),arrangement=stopStiffenerArrangement(e),nBolts=2*g.rows.length;
+ const stiffenerLabel=arrangement==='center'?`1 PL ${size(ts)} STIFFENER ON STOP C/L`:arrangement==='outer'?`2 PL ${size(ts)} STIFFENERS AT BASE PL EDGES`:`2 PL ${size(ts)} STIFFENERS AT ${dim(sp)} O.C.`;
+ const boltLabel=`${nBolts} - ${size(db)} ${e.bolts.grade} PRETENSIONED (SC)`,hole=boltProperties(e.bolts.grade,db).hole,hx=heavyHex(db);
  const keeperRef=detailRef(detailTitles.railKeeper),views:DetailView[]=[];
 
  // 1: Elevation along the runway at the runway end.
@@ -66,9 +68,9 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   svg+=`<path class="runway-line" d="M${n(X(g.faceBack))},${n(yb)}L${n(X(g.faceBack))},${n(Y(tb+stiffTop))}L${n(X(g.stiffenerEnd))},${n(Y(tb+inch))}L${n(X(g.stiffenerEnd))},${n(yb)}"/>`;
   // Ordinate dimensions from the girder end, stacked above the stop with the shortest nearest the stop, so no
   // extension line crosses a dimension line. The bolt center lines run up from the bolts to their dimensions.
-  const top=Y(tb+H),ordinates:[number,string][]=[[g.backRow,'BACK BOLTS'],[g.frontRow,'FRONT BOLTS'],[g.faceFront,'STOP FACE']],tier=(i:number)=>top-10-12*i;
+  const top=Y(tb+H),ordinates:[number,string][]=[...g.rows.map((x,i)=>[x,i===0?'BACK BOLTS':i===g.rows.length-1?'FRONT BOLTS':'MIDDLE BOLTS'] as [number,string]),[g.faceFront,'STOP FACE']],tier=(i:number)=>top-10-12*i;
   // Heavy hex bolts with heads on the base plate and nuts below the flange.
-  for(const [i,x] of [g.backRow,g.frontRow].entries()){
+  for(const [i,x] of g.rows.entries()){
    svg+=line([X(x),tier(i)-over],[X(x),wFl+hx.nut*kk+3],'grid-line');
    svg+=hexSide(X(x),Y(tb),hx.corners*kk,hx.head*kk,-1)+hexSide(X(x),wFl,hx.corners*kk,hx.nut*kk,1);
   }
@@ -96,11 +98,11 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   svg+=labelColumn([
    {at:[X(g.faceFront),Y(tb+H*.85)],labels:[`PL ${size(tp)} X ${size(Wb)} X ${dim(H)} FACE`]},
    {at:[bc[0]+br*kk*.7,bc[1]-br*kk*.7],labels:['CRANE BUMPER (REF.), BY CRANE SUPPLIER',`C/L ${dim(e.bumperHeight)} ABOVE T.O.R.`]},
-   {at:[X(g.faceBack-Ls*.35),Y(tb+inch+(stiffTop-inch)*.65)],labels:[`2 PL ${size(ts)} STIFFENERS AT ${dim(sp)} O.C.`,`${dim(Ls)} AT BASE, ${dim(stiffTop)} HIGH AT FACE`]},
+   {at:[X(g.faceBack-Ls*.35),Y(tb+inch+(stiffTop-inch)*.65)],labels:[stiffenerLabel,`${dim(Ls)} AT BASE, ${dim(stiffTop)} HIGH AT FACE`]},
    // Stiffeners brace the face plate: welded to it over their full height.
-   {at:[X(g.faceBack),Y(tb+stiffTop*.3)],labels:['STIFFENERS TO FACE PL,','BOTH SIDES, FULL HEIGHT'],weld:size(e.weldSize)},
+   {at:[X(g.faceBack),Y(tb+stiffTop*.3)],labels:[zs.length>1?'STIFFENERS TO FACE PL,':'STIFFENER TO FACE PL,','BOTH SIDES, FULL HEIGHT'],weld:size(e.weldSize)},
    {at:[X(g.railEnd),Y(railDepth*.6)],labels:[`RAIL ENDS ${dim(g.railClear)} CLEAR OF BASE PL`]},
-   {at:[X(g.faceFront)+1,yb],labels:['FACE PL AND STIFFENERS TO','BASE PL, BOTH SIDES'],weld:size(e.weldSize)},
+   {at:[X(g.faceFront)+1,yb],labels:[zs.length>1?'FACE PL AND STIFFENERS TO':'FACE PL AND STIFFENER TO','BASE PL, BOTH SIDES'],weld:size(e.weldSize)},
    {at:[X(g.front),yb+tb*kk/2],labels:[`PL ${size(tb)} X ${size(Wb)} X ${dim(e.base.length)} BASE`]},
    {at:[X(g.frontRow)+hx.corners/2*kk,wFl+hx.nut/2*kk],labels:[boltLabel,`${size(hole)} STD HOLES THRU ${capped?'CAP AND ':''}FLANGE`,'HEADS UP, NUTS BELOW TOP FLANGE']},
    {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:[`END BEARING STIFFENERS, SEE ${detailRef(girderBearingTitle(p))}`]},
@@ -125,10 +127,10 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // Rail clips seen from above: from the nose over the rail base to the outer edge of the base.
   const keeper=g.railEnd+12.7;for(const side of [-1,1]){const a=Z(rz+side*kg.tip),b2=Z(rz+side*kg.outer);svg+=rect(X(keeper),Math.min(a,b2),kg.length*kk,Math.abs(b2-a),'runway-line');}
   svg+=rect(X(g.back),Z(-Wb/2),e.base.length*kk,Wb*kk,'runway-line')+rect(X(g.faceBack),Z(-Wb/2),tp*kk,Wb*kk,'runway-line');
-  for(const side of [-1,1])svg+=rect(X(g.stiffenerEnd),Z(side*sp/2-ts/2),Ls*kk,ts*kk,'runway-line');
+  for(const z of zs)svg+=rect(X(g.stiffenerEnd),Z(z-ts/2),Ls*kk,ts*kk,'runway-line');
   // Heavy hex heads seen from above, on the bolt centers.
   const hr=hx.corners/2*kk;
-  for(const x of [g.backRow,g.frontRow])for(const side of [-1,1]){const c:XY=[X(x),Z(side*gauge/2)],rr=db/2*kk;svg+=hexPlan(c[0],c[1],hx.flats*kk)+line([c[0]-rr-2,c[1]],[c[0]+rr+2,c[1]])+line([c[0],c[1]-rr-2],[c[0],c[1]+rr+2]);}
+  for(const x of g.rows)for(const side of [-1,1]){const c:XY=[X(x),Z(side*gauge/2)],rr=db/2*kk;svg+=hexPlan(c[0],c[1],hx.flats*kk)+line([c[0]-rr-2,c[1]],[c[0]+rr+2,c[1]])+line([c[0],c[1]-rr-2],[c[0],c[1]+rr+2]);}
   // Extension lines start clear of the heads and the base plate edge, and run past the dimension lines.
   {const xg=X(0)-22,xw=X(0)-40;svg+=dimV(Z(-gauge/2),Z(gauge/2),X(g.backRow)-hr-2,xg,dim(gauge))+dimV(Z(-Wb/2),Z(Wb/2),X(g.back)-2,xw,dim(Wb));}
   // Separate dimensions on one line below the girder, none chained across a part it does not measure, each extension
@@ -150,7 +152,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   {const labels=[boltLabel,'HEADS ON BASE PL'],w=Math.max(...labels.map(v=>textWidth(labelCaps(v),8.5))),c:XY=[X(g.backRow),Z(-gauge/2)];
    svg+=multiLeader([[c[0]-hr*.25,c[1]-hx.flats/2*kk]],[c[0]-24-w,Z(-width/2)-26],labels);}
   // Both stiffeners to the face plate, each side of each stiffener.
-  svg+=filletLeader([[X(g.faceBack)-1,Z(sp/2+ts/2)+1]],[X(shown)+44,Math.max(Z(width/2)-4,Z(-width/2)+50)],size(e.weldSize),['TYP. BOTH STIFFENERS TO FACE PL','FULL HEIGHT'],true,[[[X(g.faceFront)+6,Z(width/2)-6]]]);
+  svg+=filletLeader([[X(g.faceBack)-1,Z(zs.at(-1)!+ts/2)+1]],[X(shown)+44,Math.max(Z(width/2)-4,Z(-width/2)+50)],size(e.weldSize),[zs.length>1?'TYP. BOTH STIFFENERS TO FACE PL':'STIFFENER TO FACE PL, BOTH SIDES','FULL HEIGHT'],true,[[[X(g.faceFront)+6,Z(width/2)-6]]]);
   svg+=text(X(0)-4,zd+30,'GIRDER END',8,'start',700);
   // Section between the base plate edge and the rail end, looking at the face.
   {const xs=X((g.front+g.railEnd)/2);svg+=sectionCut([xs,Z(-width/2)-4],[xs,Z(width/2)+4],[-1,0],detailTitles.endStopSection,['a']);}
@@ -166,7 +168,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   svg+=rect(X(-b.bf/2),wTop,b.bf*kk,b.tf*kk,'runway-line')+line([X(-b.tw/2),wFl],[X(-b.tw/2),cut],'runway-line')+line([X(b.tw/2),wFl],[X(b.tw/2),cut],'runway-line');
   svg+=breakLine([X(-b.tw/2)-10,cut],[X(b.tw/2)+10,cut]);
   svg+=rect(X(-Wb/2),yb,Wb*kk,tb*kk,'runway-line')+rect(X(-Wb/2),Y(tb+H),Wb*kk,H*kk,'runway-line');
-  for(const side of [-1,1])svg+=rect(X(side*sp/2-ts/2),Y(tb+stiffTop),ts*kk,stiffTop*kk,'hidden-line');
+  for(const z of zs)svg+=rect(X(z-ts/2),Y(tb+stiffTop),ts*kk,stiffTop*kk,'hidden-line');
   // Heads behind the face plate (hidden) and nuts below the flange.
   for(const side of [-1,1]){const x=X(side*gauge/2);svg+=hexSide(x,yb,hx.corners*kk,hx.head*kk,-1,'hidden-line')+hexSide(x,wFl,hx.corners*kk,hx.nut*kk,1)+line([x,yb-hx.head*kk-3],[x,wFl+hx.nut*kk+3],'grid-line');}
   const tor=Y(pad+railDepth),bc:XY=[X(p.railEccentricity),Y(tb+g.contact)];
@@ -183,7 +185,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const lx=Math.min(X(Math.max(Wb,g.surfaceWidth)/2)+60,420);
   svg+=labelColumn([
    {at:[bc[0]+e.bumperDiameter/2*kk*.7,bc[1]-e.bumperDiameter/2*kk*.7],labels:['CRANE BUMPER (REF.)',`${size(e.bumperDiameter)} CONTACT, ON RAIL C/L`,`C/L ${drawingLength(g.contact,u)} ABOVE BASE PL`]},
-   {at:[X(sp/2+ts/2),Y(tb+stiffTop*.5)],labels:['STIFFENERS BEYOND (HIDDEN),','WELDED TO FACE PL FULL HEIGHT']},
+   {at:[X(zs.at(-1)!+ts/2),Y(tb+stiffTop*.5)],labels:[zs.length>1?'STIFFENERS BEYOND (HIDDEN),':'STIFFENER BEYOND (HIDDEN),','WELDED TO FACE PL FULL HEIGHT']},
    {at:[X(gauge/2)+hx.corners/2*kk,wFl+hx.nut/2*kk],labels:[boltLabel,'NUTS BELOW TOP FLANGE','CLEAR OF WEB FILLET']},
    {at:[X(b.tw/2),cut-6],labels:[`${b.name} RUNWAY GIRDER`]}
   ],lx,410,620);
@@ -210,9 +212,9 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   ];
   const notes=[
    stopEnds(p).length===2?'PROVIDE ONE STOP AT EACH END OF EACH RUNWAY, CENTERED ON THE GIRDER. THE STOP AT THE OPPOSITE END IS THE MIRROR IMAGE.':`PROVIDE ONE STOP AT ${stopLocation(p).split(';')[0].toUpperCase()}, CENTERED ON THE GIRDER. THE RUNWAY CONTINUES BEYOND THE OTHER MODELED END; NO STOP THERE.`,
-   `DRILL ${size(hole)} STANDARD HOLES THROUGH ${capped?'THE CAP CHANNEL WEB AND ':''}THE TOP FLANGE ONLY AT THE LOCATIONS SHOWN, ${dim(g.backRow)} AND ${dim(g.frontRow)} FROM THE GIRDER END. NO OTHER HOLES IN THE TOP FLANGE.`,
+   `DRILL ${size(hole)} STANDARD HOLES THROUGH ${capped?'THE CAP CHANNEL WEB AND ':''}THE TOP FLANGE ONLY AT THE LOCATIONS SHOWN, ${g.rows.map(dim).join(g.rows.length>2?', ':' AND ').replace(/, ([^,]*)$/,' AND $1')} FROM THE GIRDER END. NO OTHER HOLES IN THE TOP FLANGE.`,
    `BOLTS: ASTM F3125 GR. ${e.bolts.grade} HEAVY HEX, PRETENSIONED, CLASS B FAYING SURFACES (SLIP-CRITICAL); HEADS ON THE BASE PLATE, A563 DH NUTS BELOW THE FLANGE, F436 WASHER UNDER THE TURNED ELEMENT. BOLT CENTERS ARE ${size(wrenchClearance(db))} MIN. CLEAR OF THE STOP WELD TOES FOR THE SOCKET (AISC MANUAL TABLE 7-15). VERIFY NUT CLEARANCE BELOW THE FLANGE AT THE BEARING STIFFENERS${flangeTieGeometry(p)?' AND THE TOP TIE SADDLE':''} BEFORE DRILLING.`,
-   `SHOP WELD THE FACE PLATE AND THE STIFFENERS TO THE BASE PLATE, AND EACH STIFFENER TO THE FACE PLATE OVER ITS FULL HEIGHT, WITH CONTINUOUS ${size(e.weldSize)} FILLETS BOTH SIDES. GRIND THE FACE SMOOTH AT THE BUMPER CONTACT.`,
+   `SHOP WELD THE FACE PLATE AND THE ${zs.length>1?'STIFFENERS':'STIFFENER'} TO THE BASE PLATE, AND ${zs.length>1?'EACH STIFFENER':'THE STIFFENER'} TO THE FACE PLATE OVER ITS FULL HEIGHT, WITH CONTINUOUS ${size(e.weldSize)} FILLETS BOTH SIDES. GRIND THE FACE SMOOTH AT THE BUMPER CONTACT.`,
    `TERMINATE THE RAIL ${dim(g.railClear)} CLEAR OF THE STOP BASE PLATE EDGE (${dim(g.railEnd-g.faceFront)} CLEAR OF THE STOP FACE), ${dim(g.railEnd)} FROM THE GIRDER END. THE FIRST RAIL CLIP PAIR IS AT THE RAIL END; CLIP SPACING PER ${keeperRef}. THE RAIL END BEARS ON THE STOP ONLY AFTER CREEP: THE STOPS ANCHOR THE FLOATING RAIL.`,
    'CONFIRM THE BUMPER FORCE, BUMPER HEIGHT AND CONTACT DIAMETER WITH THE CRANE SUPPLIER BEFORE FABRICATION. STOPS SHALL BE INSTALLED BEFORE THE CRANE IS OPERATED.',
    `THE GIRDER AXIAL FORCE AND ${locating} INCLUDE THE BUMPER FORCE; THE END COUPLE IS INCLUDED IN THE GIRDER STOP COMBINATIONS (CALCULATION REPORT, RUNWAY END STOPS).`
