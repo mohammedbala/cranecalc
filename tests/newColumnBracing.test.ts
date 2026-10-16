@@ -6,6 +6,8 @@ import {existingColumnAnalysis,existingColumnSection} from '../src/engine/existi
 import {columnBaseActions} from '../src/engine/columnBase';
 import {alongSeismic,baseWarping,bracingGeometry,bracingLayout,bracingSystemChecks,braceCases,girderOffset,strutProperties,webYieldLine} from '../src/engine/newColumnBracing';
 import {sectionProperties} from '../src/engine/section';
+import {columnResponse} from '../src/engine/columnAnalysis';
+import {seatEnds,seatMoment} from '../src/engine/columnSupport';
 import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import {compactReport} from '../src/report/compactReport';
 import type {ProjectInput} from '../src/engine/types';
@@ -58,8 +60,11 @@ describe('rod X-bracing between new freestanding columns',()=>{
   const [base1,base2,,base4]=columnBaseActions(p,reactions,'LRFD'),V=Cbs*L.height/L.width,sp=reactions.supports[1];
   const comp=base2.actions.find(a=>a.id==='LRFD AIST bumper · brace')!,lift=base2.actions.find(a=>a.id==='LRFD AIST bumper · brace uplift')!;
   const dead=sp.D+sectionProperties(column).weight*p.existingColumn!.height;
-  expect(comp.P).toBeCloseTo(1.2*dead+1.2*sp.Cd+sp.Cv+V,3);expect(comp.Vy).toBe(0);expect(comp.torque).toBeCloseTo(Cbs*e,3);
-  expect(lift.P).toBeCloseTo(1.2*dead+1.2*Math.min(0,sp.craneMinimum)-V,3);expect(lift.uplift).toBeCloseTo(V,3);expect(lift.Vy).toBeCloseTo(Cbs,3);
+  // Along the runway the bracket seat moment bends the column braced at the seat (its base shear), as in the column check.
+  const weak=columnResponse(p.existingColumn!.height,column.E*sectionProperties(column).Iy,p.existingColumn!.weak,[{x:p.existingColumn!.seatElevation,moment:1}],[p.existingColumn!.seatElevation]);
+  const seatV=(f:{D:number;L:number;Cd:number;Cv:number})=>Math.abs(seatMoment(seatEnds(p)[1],f)*weak.reactions.base);
+  expect(comp.P).toBeCloseTo(1.2*dead+1.2*sp.Cd+sp.Cv+V,3);expect(comp.Vy).toBeCloseTo(seatV({D:1.2,L:0,Cd:1.2,Cv:1}),3);expect(comp.torque).toBeCloseTo(Cbs*e,3);
+  expect(lift.P).toBeCloseTo(1.2*dead+1.2*Math.min(0,sp.craneMinimum)-V,3);expect(lift.uplift).toBeCloseTo(V,3);expect(lift.Vy).toBeCloseTo(Cbs+seatV({D:1.2,L:0,Cd:1.2,Cv:1}),3);
   // The offset rod (upper end at grid 3) lands on the grid 2 base off the column centerline: its torque adds there.
   expect(lift.torque).toBeCloseTo(Cbs*e+Cbs*bracingGeometry(p,column).cross.offset,3);
   // Grid 1 locates its girder but is not braced; grid 4 does neither.
@@ -133,9 +138,10 @@ describe('rod X-bracing between new freestanding columns',()=>{
   // S-01 by number: the cover's notes may continue on S-00A ahead of it.
   const set=drawingSheetSet(s),s01=set.find(v=>v.number==='S-01')!.svg,all=set.map(v=>texts(v.svg)).join(' ');
   expect(s01).toContain('data-elevation-bracing="true"');expect(s01).toContain('data-bracing="plan"');
-  expect(texts(s01)).toContain('3/4" DIA. ROD X-BRACING, GRIDS 2-3, BOTH RUNWAYS');
+  // The rods are not cut off at the column stubs (they read as knee braces): a reference to the braced bay.
+  expect(texts(s01)).toContain('3/4" DIA. ROD X-BRACING BELOW, GRIDS 2-3, BOTH RUNWAYS');
   expect(texts(s01)).toContain('W8X24 STRUT ON COLUMN LINE, ALL SPANS');
-  expect(texts(s01)).toMatch(/SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL 0'-1 5\/8" MIN\. CLEAR/);
+  expect(texts(s01)).toMatch(/SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL 0'-1 3\/4" MIN\. CLEAR/);
   const sheet=set.find(v=>v.svg.includes('data-view="braced-bay-elevation"'))!;
   for(const view of ['brace-top-connection','brace-base-connection','strut-plan','bracing-notes'])expect(sheet.svg).toContain(`data-view="${view}"`);
   expect(texts(sheet.svg)).toContain('BRACING DESIGN DATA');expect(texts(sheet.svg)).toContain('DEVELOP THE ROD');
@@ -157,8 +163,8 @@ describe('rod X-bracing between new freestanding columns',()=>{
    expect(cover).toContain('BESIDE THE RUNWAY ARE DASHED (2/S-01, 5/S-01)');expect(cover).not.toContain('THE EXISTING BUILDING IS NOT SHOWN');
    expect(cover).toContain('THE EXISTING COLUMNS AND FOOTINGS ON S-01 ARE FROM FICTITIOUS SURVEY SV-02');
    if(units==='US'){
-    expect(t).toContain('4\'-10 13/16" CLR.');expect(t).toContain('0\'-9" CLR.');expect(t).toContain('SEISMIC SEP. 0\'-1 5/8" MIN.');
-    expect(t).toContain('FOOTING CLR. 0\'-9", 0\'-6" MIN.');expect(t).toContain('KEEP ALL RUNWAY STEEL 0\'-1 5/8" MIN. CLEAR OF THE EXISTING BUILDING');
+    expect(t).toContain('4\'-10 13/16" CLR.');expect(t).toContain('0\'-9" CLR.');expect(t).toContain('SEISMIC SEP. 0\'-1 3/4" MIN.');
+    expect(t).toContain('FOOTING CLR. 0\'-9", 0\'-6" MIN.');expect(t).toContain('KEEP ALL RUNWAY STEEL 0\'-1 3/4" MIN. CLEAR OF THE EXISTING BUILDING');
    }
   }
   // Without the survey the arrangement is as before.
