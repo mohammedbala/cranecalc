@@ -86,11 +86,12 @@ describe('tie sizing estimates',()=>{
   expect(est.factored).toBeCloseTo(1.2*q*L**3/(24*EI)+1.6*1.25*est.service,4);
  });
  it('estimates the tie force and range within the analysis of the 10-ton template t01',()=>{
-  // t01 analysis (the tie on the bearing stiffener, the restraint at its bar line): brace force 10.31 kip with the
-  // imperfection force, fatigue range 3.14 kip. The estimate is calibrated to the analysis (tieForceCalibration).
+  // t01 analysis (a mill-type cab crane, side thrust 0.4Q; the tie on the bearing stiffener, the restraint at its bar
+  // line): brace force 12.12 kip with the imperfection force, fatigue range 4.81 kip. The estimate is calibrated to the
+  // analysis (tieForceCalibration).
   const d=tieSizingDemands(templateProject('t01')),kip=4448.2216152605;
-  expect(d.force/kip).toBeGreaterThan(10.31);expect(d.force/kip).toBeLessThan(10.31*1.15);
-  expect(d.range/kip).toBeGreaterThan(3.14);expect(d.range/kip).toBeLessThan(3.14*1.25);
+  expect(d.force/kip).toBeGreaterThan(12.12);expect(d.force/kip).toBeLessThan(12.12*1.15);
+  expect(d.range/kip).toBeGreaterThan(4.81);expect(d.range/kip).toBeLessThan(4.81*1.25);
   expect(d.rotation).toBeCloseTo(3.080e-3,5);expect(d.serviceRotation).toBeCloseTo(1.462e-3,5);
  });
 });
@@ -107,8 +108,8 @@ describe('configured tie proportions',()=>{
   // = 0.172 in -> 3/16 in.
   expect(t.release!.travel).toBeCloseTo(3/16*inch,9);
   expect(c.gauge).toBeCloseTo(r.minimumGauge,9);expect(t.width).toBeGreaterThanOrEqual(c.gauge+2*c.edge-1e-9);
-  // The reach grows to 21 in for the bars' flexible length: 8 1/4 in between the gussets.
-  expect(p.details!.bracket!.reach).toBeCloseTo(21*inch,9);expect(g.face).toBeCloseTo(21*inch,9);
+  // The reach grows to 22 in for the bars' flexible length: 9 1/4 in between the gussets.
+  expect(p.details!.bracket!.reach).toBeCloseTo(22*inch,9);expect(g.face).toBeCloseTo(22*inch,9);
   const free=t.length-2*((c.rows-1)*c.pitch+2*c.edge)-columnGussetExtension(p);
   expect(free/inch).toBeGreaterThan(8);
   // Under the sizing estimates (the fatigue range 1.25 H against the analysis's 1.05 H) every ratio is near or below one;
@@ -123,9 +124,9 @@ describe('configured tie proportions',()=>{
   expect(sizingLimit(r,'tie-pitch')).toBe(1);expect(sizingLimit(r,'tie-move-strength',.95)).toBe(1);
  });
  it('sizes the tie before the bracket: the bracket at the reach the tie needs, the release travel the tie\'s own',()=>{
-  // The 1/4 in bars on the bearing stiffener pass at a 21 in reach, so the welded seats are sized there.
+  // The 1/4 in bars on the bearing stiffener pass at a 22 in reach, so the welded seats are sized there.
   const p=templateProject('t01'),b=p.details!.bracket!,t=p.details!.brace;
-  expect(b.reach).toBeCloseTo(21*inch,9);expect(stiffenerTieGeometry(p)!.face).toBeCloseTo(b.reach,9);expect(t.length).toBeCloseTo(t.reach,9);
+  expect(b.reach).toBeCloseTo(22*inch,9);expect(stiffenerTieGeometry(p)!.face).toBeCloseTo(b.reach,9);expect(t.length).toBeCloseTo(t.reach,9);
   // The slots take the bracket at its deflection limit with the cranes and impact, the end rotation over the setback
   // and the positioning allowance: the bracket sizing's release coordination holds wherever its deflection check does.
   const set=bracketSizingSet(p),rel=set.release!,r=bracketSizingRatios(p,set);

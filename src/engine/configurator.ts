@@ -407,10 +407,12 @@ export function buildProject(input:RunwayConfig):ProjectInput{
   const bd=p.longitudinalBracing.design!;bd.pin={...bd.pin,diameter:Math.max(bd.pin.diameter,p.longitudinalBracing.rod.diameter)};
   if(cfg.support==='column-cap'){
    const col=p.existingColumn;d.bracket={...structuredClone(demo.details!.bracket!),enabled:false};
-   if(d.brace.flangeAttachment)d.brace.flangeAttachment.enabled=false;p.aist!.supportType='column';setBearings(p);
+   if(d.brace.flangeAttachment)d.brace.flangeAttachment.enabled=false;p.aist!.supportType='column';
    if(d.endBearing)d.endBearing.enabled=true;
    col.height=col.seatElevation;col.Lcx=2.1*col.height;col.Lcy=col.height;col.Lcz=col.height;col.Lb=col.height;
    p.columnCap={...structuredClone(defaultColumnCap),enabled:true};
+   // The bearings on the shop-welded cap (no shims, Class B), before the cap is sized for them.
+   setBearings(p);
    // The cap plate covers the column (its weld plus 1/8 in beyond each flange face) and the girder bearing plates.
    const capWidth=Math.max(w.bf*inch+1.5*inch,w.d*inch+2*(p.columnCap.weld+inch/8),d.bearing.width);
    p.columnCap.plate={...p.columnCap.plate,width:Math.max(p.columnCap.plate.width,up(capWidth,.5*inch))};

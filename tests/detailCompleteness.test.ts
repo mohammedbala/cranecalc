@@ -96,7 +96,7 @@ describe('dimensions and weld callouts of the tie, rail clip and bearing details
   expect(texts(section).filter(v=>v==='2 1/4"')).toHaveLength(2);expect(texts(section)).toContain('2 3/4"');
   expect(words).toContain('GIRDER GUSSET PL 7/8" X 5 7/8" X 5 1/2"');expect(words).toContain('1/16" FILLER (HIDDEN)');
   // The column gusset spans the bolt group, its 1 1/2 in end edge and the 1/2 in gap to the column flange.
-  expect(words).toContain('COLUMN GUSSET PL 3/4" X 5 3/4" X 5 1/2"');expect(words).toContain('2 FB 3/8" X 5 1/4" X 2\'-1 1/2", 1/2" CLR. TO COLUMN;');
+  expect(words).toContain('COLUMN GUSSET PL 7/8" X 5 3/4" X 5 1/2"');expect(words).toContain('2 FB 3/8" X 5 1/4" X 2\'-1 1/2", 1/2" CLR. TO COLUMN;');
   // Tie and girder end located from the stiffener at each girder end of the shared support.
   const plan=texts(t.views[1].render().svg);
   expect(plan.filter(v=>v==='0\'-3 1/2"')).toHaveLength(2);expect(plan.filter(v=>v==='0\'-6 1/4"')).toHaveLength(2);

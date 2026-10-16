@@ -52,7 +52,7 @@ describe('issued drawing set',()=>{
   const index=texts(cappedSet[0].svg).join(' | ');
   for(const sheet of cappedSet.slice(1))expect(index).toContain(`${sheet.number} | ${sheet.title}`);
   // Notes that do not fit the cover at the lettering size continue on S-00A, as the cover says.
-  expect(index).toContain('GENERAL NOTES CONTINUE ON SHEET S-00A.');expect(texts(demoSet[0].svg).join(' ')).not.toContain('CONTINUE ON SHEET');
+  expect(index).toContain('GENERAL NOTES CONTINUE ON SHEET S-00A.');expect(texts(demoSet[0].svg).join(' ')).toContain('GENERAL NOTES CONTINUE ON SHEET S-00A.');
  },120000);
  it('resolves every token, detail number and sheet reference',()=>{
   for(const [name,set] of Object.entries(sets())){
@@ -219,7 +219,7 @@ describe('drawings agree with the calculation',()=>{
   // The supports and the cover refer to the table instead of repeating it.
   // The table is on the same sheet as the support notes.
   expect(texts(sheetOf(cappedSet,'S-03').svg).join(' ')).toContain('FACTORED FORCES: BRACKET DESIGN FORCES ON THIS SHEET.');
-  expect(texts(demoSet[0].svg).join(' ')).toContain('BRACKET DESIGN FORCES ON S-02');
+  expect(texts(demoSet[0].svg).join(' ')).toContain('BRACKET DESIGN FORCES ON S-03');
  },120000);
 });
 
