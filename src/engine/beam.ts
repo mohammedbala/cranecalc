@@ -1,4 +1,5 @@
 /** Euler–Bernoulli finite elements. Canonical units: N, mm, MPa. */
+import {meshNodes,meshTolerance} from './meshNodes';
 export interface AppliedLoad {x:number;p:number;}
 export interface BeamResult {x:number[]; displacement:number[]; rotation:number[]; reactions:{x:number;r:number}[]; moment:number[]; shear:number[]; equilibriumError:number;}
 function stiffness(EI:number,L:number){const a=EI/L**3;return [[12,6*L,-12,6*L],[6*L,4*L*L,-6*L,2*L*L],[-12,-6*L,12,-6*L],[6*L,2*L*L,-6*L,4*L*L]].map(r=>r.map(v=>v*a));}
@@ -7,20 +8,15 @@ function solve(l:number[][],f:number[]){const n=f.length,y=Array(n).fill(0) as n
 export class Beam {
  readonly nodes:number[]; private K:number[][]; private free:number[];private fixed:number[];private factor:number[][];
  constructor(start:number,end:number,EI:number,supports:number[],subdivisions=20){
-  const anchors=[start,...supports.filter(x=>x>start&&x<end),end].sort((a,b)=>a-b);
-  const set=new Set<number>(anchors);
-  for(let i=0;i<subdivisions;i++)set.add(start+(end-start)*i/subdivisions);
-  // Merge nodes closer than 1e-6 mm: spans summed in floating point leave grid stations a few 1e-13 mm from
-  // the subdivision points, and such sliver elements ruin the stiffness conditioning. Anchors keep their value.
-  const nodes:number[]=[];
-  for(const x of [...set].sort((a,b)=>a-b)){
-   if(nodes.length&&x-nodes[nodes.length-1]<1e-6){if(anchors.includes(x))nodes[nodes.length-1]=x;continue;}
-   nodes.push(x);
-  }
-  this.nodes=nodes;const n=this.nodes.length*2;
+  // No sliver elements (they ruin the stiffness conditioning): supports closer than meshTolerance share a node, the
+  // first listed keeping its position (beamSystem lists the grids before the brace stations), and subdivision points
+  // within it of a support are left out. Loads are not nodes: evaluate() applies them by the element shape functions.
+  const tolerance=meshTolerance(end-start),inside=supports.filter(x=>x>start&&x<end);
+  const mesh=meshNodes([start,end,...inside],[],Array.from({length:subdivisions},(_,i)=>start+(end-start)*i/subdivisions).slice(1),tolerance);
+  this.nodes=mesh.nodes;const n=this.nodes.length*2;
   this.K=Array.from({length:n},()=>Array(n).fill(0) as number[]);
   for(let e=0;e<this.nodes.length-1;e++){const k=stiffness(EI,this.nodes[e+1]-this.nodes[e]);for(let i=0;i<4;i++)for(let j=0;j<4;j++)this.K[2*e+i][2*e+j]+=k[i][j];}
-  this.fixed=this.nodes.flatMap((x,i)=>supports.some(s=>Math.abs(s-x)<1e-6)?[2*i]:[]);
+  this.fixed=[...new Set(supports.filter(x=>x>=start-tolerance&&x<=end+tolerance).map(x=>2*mesh.index(x)))].sort((a,b)=>a-b);
   this.free=Array.from({length:n},(_,i)=>i).filter(i=>!this.fixed.includes(i));
   this.factor=cholesky(this.free.map(i=>this.free.map(j=>this.K[i][j])));
  }
@@ -44,8 +40,10 @@ export class Beam {
 export function momentAt(x:number,reactions:{x:number;r:number}[],loads:AppliedLoad[],q:number,start=0){return reactions.reduce((s,r)=>s+(r.x<x?r.r*(x-r.x):0),0)-loads.reduce((s,p)=>s+(p.x<x?p.p*(x-p.x):0),0)-q*(x-start)**2/2;}
 export function beamSystem(spans:number[],EI:number,system:'simple'|'continuous',braceSpacing?:number,subdivisions=20){
  const supports=[0];for(const span of spans)supports.push(supports.at(-1)!+span);
- // Every brace station along the runway: the loop bound is the runway end, fixed before the stations are added.
- if(braceSpacing){const L=supports.at(-1)!;for(let x=braceSpacing;x<L-1e-6;x+=braceSpacing)supports.push(x);supports.sort((a,b)=>a-b);}
+ // Every brace station along the runway: the loop bound is the runway end, fixed before the stations are added. The
+ // grids stay listed first, so a mesh node they share with a brace station keeps the grid position; a station within
+ // meshTolerance of a grid is that grid.
+ if(braceSpacing){const L=supports.at(-1)!,grids=[...supports],tolerance=meshTolerance(Math.min(...spans));for(let x=braceSpacing;x<L-1e-6;x+=braceSpacing)if(grids.every(g=>Math.abs(g-x)>tolerance))supports.push(x);}
  const groups=system==='continuous'?[[0,spans.reduce((a,b)=>a+b,0)]]:spans.map((s,i)=>[spans.slice(0,i).reduce((a,b)=>a+b,0),spans.slice(0,i+1).reduce((a,b)=>a+b,0)]);
  const beams=groups.map(([a,b])=>new Beam(a,b,EI,supports.filter(x=>x>=a&&x<=b),subdivisions*Math.max(1,system==='continuous'?spans.length:1)));
  return {evaluate(loads:AppliedLoad[],q=0):BeamResult {

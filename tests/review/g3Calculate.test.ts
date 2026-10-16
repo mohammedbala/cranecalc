@@ -45,7 +45,9 @@ describe('DEMO-FOCUS-005 girder after the G3 review fixes',()=>{
   // Round 2 group A (M6): the top restraint at the cap tie line lowered H1 to 0.2524 / 0.2512. Round 3: the ASCE 7
   // crane-as-live combinations and the restraint play (secant restraint stiffness in the load-height M_cx) raise it to 0.332 / 0.345.
   // Peer review M2 / m11: H1 at each flange with the load-height M_cx (0.1754 at the more stressed flange with the Cb = 1 M_cx).
-  expect(check('major').utilization!).toBeLessThan(.16);expect(check('combined').utilization!).toBeCloseTo(.3316,3);expect(check('combined-bottom').utilization!).toBeCloseTo(.3447,3);
+  // The detailed search stops at 80 travel steps once the governing D/Cs change by less than 1% (the per-quantity gate
+  // went on to 1280 steps for fatigue ranges at D/C 0.005): 0.3321 / 0.3452 there, 0.3316 / 0.3447 at 1280 steps.
+  expect(check('major').utilization!).toBeLessThan(.16);expect(check('combined').utilization!).toBeCloseTo(.3321,3);expect(check('combined-bottom').utilization!).toBeCloseTo(.3452,3);
   expect(check('shear').utilization!).toBeCloseTo(.0966,3);// Vertical deflection against L/1000: G1 (A3) puts the fixture in AIST Class B (L/600 gave 0.1355).
   expect(check('vertical').utilization!).toBeCloseTo(.1355*1000/600,3);
  });

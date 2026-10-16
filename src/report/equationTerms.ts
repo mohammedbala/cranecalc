@@ -9,7 +9,8 @@ import {equationSymbols,entrySymbol,notationGroups} from './notation';
 type Term=[tex:string,meaning:string];
 const terms:[RegExp,Term[]][]=[
  // Solution checks.
- [/^(convergence|mesh|design-travel|design-mesh|detail-travel|detail-mesh)$/,[['D_n','each governing demand with n crane positions, stations or elements'],['D_{2n}','the same with twice as many']]],
+ [/^(convergence|mesh|design-travel|design-mesh|detail-travel|detail-mesh)$/,[['D_n','each governing demand with n crane positions, stations or elements'],['D_{2n}','the same with twice as many'],
+  ['\\varepsilon','estimated difference of the reported (finest) results from the converged values'],['\\rho','ratio of the last refinement change to the one before it']]],
  [/^(equilibrium|design-equilibrium)$/,[['R','support reactions'],['w','dead load per unit length']]],
  // AWS D1.1 carbon equivalent: element contents in percent by mass (mill certificate).
  [/^column-weld-ce$/,[['\\mathrm{CE}','carbon equivalent, AWS D1.1 Annex B; element contents in percent by mass from the mill certificate']]],
@@ -89,7 +90,7 @@ const terms:[RegExp,Term[]][]=[
  [/^(wbracket|bracket)-colstiff-length$/,[['L_s','stiffener length']]],
  [/^(wbracket|bracket)-colstiff-fatigue-plate$/,[['P_i','stiffener force of duty bin i (ΔP<sub>i</sub> its range)']]],
  // Welded rib brackets: each plate of a column stiffener pair takes the rib over it.
- [/^bracket-colstiff-(upper|lower|flange-weld|web-weld|web-shear)$/,[['R_{st}','force on one column stiffener plate: the rib over it, its root couple 1.5Pe/h_r (with half the lateral force at the seat)'],['b_s','stiffener width'],['c','corner clip'],['t_s','stiffener thickness'],['P_n','nominal strength of the pair as a J10.8 column with a 25t_w web strip']]],
+ [/^bracket-colstiff-(upper|lower|flange-weld|web-weld|web-shear)$/,[['R_{st}','force on one column stiffener plate: the rib on its side of the web, its root moment Pe over the pair spacing s (with half the lateral force at the seat by the lever rule)'],['b_s','stiffener width'],['c','corner clip'],['t_s','stiffener thickness'],['P_n','nominal strength of the pair as a J10.8 column with a 25t_w web strip']]],
  [/^bracket-colstiff-proportions$/,[['b_p','width of the seat plate or the ribs delivering the force'],['t_p','its thickness']]],
  [/^haunch-slope$/,[['h(0)','depth at the column face'],['h(L)','depth at the tip']]],
  // Bearings and end connections.

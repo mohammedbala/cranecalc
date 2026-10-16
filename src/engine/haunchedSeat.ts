@@ -3,15 +3,19 @@ import type {CheckResult,ProjectInput} from './types';
 import type {BracketResults} from './bracketDesign';
 import {available} from './aiscStrength';
 import {format} from './units';
-import {ribGeometry,ribResponse,ribFlexure,ribFreeEdge} from './bracketRib';
+import {ribGeometry,ribResponse,ribFlexure,ribFreeEdge,seatEccentricity} from './bracketRib';
 
 type Add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,caseId?:string,refs?:string[])=>void;
 /** Category A constant of AISC Table A-3.1 in the app's 10^8 units, as fatigueSpectrumBin uses. */
 const categoryA=25;
 const refs=['bracket-basis','haunched-bracket','tr13-bracket'];
-/** Geometry of the haunched rib of a project as the checks and drawings state it. */
-export function haunchedRibData(p:ProjectInput){
- const b=p.details!.bracket!,g=ribGeometry(b),E=p.section.E,e=b.reach+p.details!.bearing.width/2,rib=ribResponse(g,e,E,E/2.6),edge=ribFreeEdge(g,E,p.details!.material.Fy,p.method);
+/**
+ * Geometry of the haunched rib of a project as the checks and drawings state it, with the rib response at the reaction
+ * eccentricity e from the column face: the checks pass the largest of their strength sets; without one, the girder web
+ * line moved by the rail eccentricity (seatEccentricity).
+ */
+export function haunchedRibData(p:ProjectInput,e=seatEccentricity(p,1).e){
+ const b=p.details!.bracket!,g=ribGeometry(b),E=p.section.E,rib=ribResponse(g,e,E,E/2.6),edge=ribFreeEdge(g,E,p.details!.material.Fy,p.method);
  return {b,g,e,rib,edge,degrees:g.angle*180/Math.PI};
 }
 /**
@@ -19,8 +23,8 @@ export function haunchedRibData(p:ProjectInput){
  * section is checked by the common rib checks), the sloping free edge for yield / local buckling and its minimum
  * thickness, and fatigue of the free edge at the critical section.
  */
-export function haunchedRibChecks(p:ProjectInput,r:BracketResults,add:Add,common:string){
- const {b,g,rib,edge,degrees}=haunchedRibData(p),m=p.details!.material,E=p.section.E,f=(v:number)=>format(v,'length',p.units,3);
+export function haunchedRibChecks(p:ProjectInput,r:BracketResults,add:Add,common:string,e?:number){
+ const {b,g,rib,edge,degrees}=haunchedRibData(p,e),m=p.details!.material,E=p.section.E,f=(v:number)=>format(v,'length',p.units,3);
  const peak=(key:string)=>r.strength[key];
  const from=(key:string,id:string,title:string,capacity:number,q:CheckResult['quantity'],eq:string,note:string)=>{const v=peak(key);add(id,title,v?.value??0,capacity,q,eq,note,v?.caseId,refs);};
  from('ribRootMoment','rib-flexure-root','Haunched ribs · flexure / lateral buckling at the root',ribFlexure(b,E,m.Fy,p.method,0).capacity,'moment','M_r=|P_\\pm|e;\\quad M_n=\\min(F_yZ,\\,F_{cr}S)\\big|_{h_r};\\quad F_{cr}=F_{11}(L_b=2L,\\,d=h_r)',`${common} Root section, depth ${f(g.root)}, at the column face; the critical section along the taper is checked above.`);

@@ -18,7 +18,7 @@ export function onW14X90(p:ProjectInput){
 const plates=(thickness:number,weld:number)=>({enabled:true,thickness,width:6.75*inch,length:'half' as const,clip:.75*inch,flangeWeld:weld,webWeld:weld});
 /**
  * The primary case: the capped 2-ton demonstration with its welded twin-rib bracket on a W14X90 receiving column.
- * Unstiffened, J10.1 local bending of the flange at the ribs fails (1.498); with 1 in stiffener pairs at the seat and
+ * Unstiffened, J10.1 local bending of the flange at the ribs fails (1.180); with 1 in stiffener pairs at the seat and
  * the rib bottom (t >= seat thickness / 2), 5/16 in fillets, every check passes.
  */
 export function cappedTwinRibW14X90(stiffened:boolean){
