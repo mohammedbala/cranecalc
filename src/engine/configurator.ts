@@ -26,7 +26,8 @@ import {existingColumnAnalysis} from './existingColumn';
 import {baseDrift} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
 import {sizeWeldedBracket} from './bracketSizing';
-import {defaultRolledBracket} from './rolledBracketInputs';
+import {sizeRolledBracket} from './rolledBracketSizing';
+import {defaultRolledBracket,isRolledBracket} from './rolledBracketInputs';
 import {defaultColumnCap} from './columnCapInputs';
 import {capWorkPointDrop} from './columnCap';
 import {columnBaseElevation} from './columnBaseInputs';
@@ -355,11 +356,14 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  * clear a new column's bracing gussets), at the reach the sized tie needs (attachTie: the shortest at which the tie
  * passes its checks), kept as it is. The tie owns its column-end release travel, sized for the bracket's deflection
  * limit with the cranes and impact (sizeFlangeTie), so the bracket's release coordination (bracketSizingRatios
- * 'release') holds wherever its deflection check does and never grows the bracket.
+ * 'release') holds wherever its deflection check does and never grows the bracket. The rolled W stub likewise
+ * (sizeRolledBracket): the stub shape, spreader seat, flange joint and fillets, bearing stiffeners and the full-depth
+ * continuity plates an existing column needs (a new column's only where they clear its bracing gussets).
  */
 function withWeldedBracket(p:ProjectInput):ProjectInput{
  const b=p.details?.bracket;
  if(b?.enabled&&weldedRibBracket(b))p.details!.bracket=sizeWeldedBracket(p,.9,{reach:'fixed'}).details!.bracket;
+ else if(b?.enabled&&isRolledBracket(b))p.details!.bracket=sizeRolledBracket(p,.9,{reach:'fixed'}).details!.bracket;
  return p;
 }
 /** The sizing ratios of a sized paired-bar or flexible-plate tie on a designed bracket (tieSizingRatios), else none. */
