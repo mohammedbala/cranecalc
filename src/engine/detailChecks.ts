@@ -28,7 +28,7 @@ import {rolledBracketChecks} from './rolledBracket';
 import {taperedHaunchChecks} from './taperedHaunch';
 import {existingBracketChecks} from './existingBracket';
 import {endStopChecks} from './endStop';
-import {endBearingChecks,activeEndBearing} from './endBearing';
+import {endBearingChecks,bearingPlateChecks,activeEndBearing} from './endBearing';
 import {activeColumnCap} from './columnCapInputs';
 import {columnCapChecks} from './columnCap';
 
@@ -211,9 +211,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const diaphragmForce=r.demands.brace+imperfection,diaphragmMoment=diaphragmForce*strength.h;
  add('stiffener-lateral-flexure','Local forces','Restraint diaphragm lateral flexure',diaphragmMoment/(2*bs.stiffenerThickness*bs.stiffenerWidth**2/6),available(m.Fy,p.method,.9,1.67),'stress','f_b=\\frac{Hh}{2t_sb_s^2/6}','Paired full-depth plates at every flange-restraint station. Full-height cantilever for the larger flange reaction plus imperfection, with no web participation.');
  add('stiffener-combined-weld','Connections','Bearing stiffener welds · reaction with the lateral flange forces',a.reaction+8*diaphragmForce,stiffWeld,'force','R_{eq}=R+2H+\\frac{6Hh}{h}=R+8H','Direct-plus-moment stress bound on the four web weld lines: the full vertical reaction R, both lateral flange forces H as direct shear (2H) and their moment H·h over the weld length h (6Hh/h = 6H), R_eq = R + 8H. Fitted ends also require continuous flange fillets.');
- const bearingPressure=a.reaction/(bs.width*bs.length),cantilever=Math.max((bs.width-(2*bs.stiffenerWidth+p.section.tw))/2,(bs.length-bs.stiffenerThickness)/2);
- add('bearing-plate','Connections','Bearing plate flexure',6*(bearingPressure*cantilever**2/2)/bs.thickness**2,available(m.Fy,p.method,.9,1.67),'stress','f_b=6m/t_p^2;\\quad m=f_pa^2/2','Uniform contact over the steel seat plate; longest cantilever from the stiffener load footprint. Enabled welded brackets have a separate Column bracket check group; full frame capacity is outside scope.');
- add('bearing-contact','Connections','Steel bearing contact',bearingPressure,available(1.8*Math.min(m.Fy,p.section.Fy),p.method,.75,2),'stress','f_p=R/A_{pb}\\le1.8F_y','Fitted steel-to-steel contact. No concrete/foundation resistance is evaluated.');
+ checks.push(...bearingPlateChecks(p,a.reaction));
  if(bearingBolts)add('hold-down-model','Connections','End bearing uplift resistance',a.uplift,4*Math.min(...checks.filter(c=>['end-bearing-locating-tension'].includes(c.id)).map(c=>c.capacity??0)),'force','R_{up}\\le4\\phi R_n','Four bolts through the bottom flange, bearing plate and seat at each girder end resist uplift; see End bearings.');
  else add('hold-down-model','Connections','End connection uplift resistance',a.uplift,Math.min(...checks.filter(c=>['end-bolt','end-slip','end-bearing','end-net','end-block'].includes(c.id)).map(c=>c.capacity??0)),'force','R_{up}\\le\\phi R_n\\ \\ \\text{(end connection)}','Uplift uses the same in-plane double-cover end connection; that connection is also checked for the full maximum reaction plus longitudinal action.');
  add('rotation-clearance','Detailing','Simple-end rotation clearance',p.section.d*a.endRotation,d.criteria.rotationClearance,'length','\\theta d\\le g','Maximum exact nodal rotation from all factored vertical load combinations, including dead load and impact, bounds the end rotation allowance. Clear flange ends and flexible end plates are required; the connection must not impose a moment fixity (AISC DG7 §11.2: girder end rotation released at the supports).',['dg7','criteria']);

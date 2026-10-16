@@ -1,5 +1,5 @@
 import type {CalculationSnapshot} from '../engine/types';
-import {activeEndBearing,endBearingGeometry,continuousBearings} from '../engine/endBearing';
+import {activeEndBearing,endBearingGeometry,continuousBearings,bearingShim} from '../engine/endBearing';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {weldedRibBracket} from '../engine/bracketRib';
 import {usesExistingBracket} from '../engine/existingBracket';
@@ -16,6 +16,8 @@ import type {ViewRender} from './detailSheet';
 const inch=25.4;
 const breakX=(x:number,y1:number,y2:number)=>{const m=(y1+y2)/2;return `<polyline class="annotation" points="${[[x,y1],[x,m-3],[x-3,m-1],[x+3,m+1],[x,m+3],[x,y2]].map(p=>`${n(p[0])},${n(p[1])}`).join(' ')}"/>`;};
 const breakY=(y:number,x1:number,x2:number)=>{const m=(x1+x2)/2;return `<polyline class="annotation" points="${[[x1,y],[m-3,y],[m-1,y-3],[m+1,y+3],[m+3,y],[x2,y]].map(p=>`${n(p[0])},${n(p[1])}`).join(' ')}"/>`;};
+/** Shims under the bearing plate, where the seat takes them. */
+const shimLabel=(p:CalculationSnapshot['input'],size:(v:number)=>string)=>{const m=bearingShim(p);return m.max>0?[`STEEL SHIMS TO ${size(m.max)} MAX., ${m.plies} PL MAX.`]:[];};
 /** Rounded slot outline along x. */
 function slot(cx:number,cy:number,length:number,width:number,cls:string){const r=width/2,a=cx-length/2+r,b=cx+length/2-r;return `<path class="${cls}" d="M${n(a)},${n(cy-r)}L${n(b)},${n(cy-r)}A${n(r)},${n(r)} 0 0 1 ${n(b)},${n(cy+r)}L${n(a)},${n(cy+r)}A${n(r)},${n(r)} 0 0 1 ${n(a)},${n(cy-r)}Z"/>`;}
 
@@ -100,8 +102,8 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
  svg+=labelColumn([
   {at:[X(gap/2+g.stiffener)+bs.stiffenerThickness*kk/2,(yTop+Y(b.tf))/2],labels:['BEARING STIFFENERS',`SEE ${detailRef(girderBearingTitle(p))}`]},
   {at:[X(gap/2+g.rows[1])+hx.corners*kk/2,Y(b.tf)-hx.head*kk/2],labels:[`LOCATING: 4 - ${size(db)} ${e.bolts.grade} SC,`,`PRETENSIONED; ${size(g.hole)} STD HOLES`]},
-  {at:[X(gap/2+bs.length*.85),yB+bs.thickness*kk/2],labels:[`BEARING PL ${size(bs.thickness)} X ${size(bs.width)} X ${size(bs.length)}`]},
-  {at:[X(seatL/2)-4,yBearing+seatT*kk/2],labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS:','MATCH HOLES, NUT CLEARANCE'])}
+  {at:[X(gap/2+bs.length*.85),yB+bs.thickness*kk/2],labels:[`BEARING PL ${size(bs.thickness)} X ${size(bs.width)} X ${size(bs.length)}`,...shimLabel(p,size)]},
+  {at:[X(seatL/2)-4,yBearing+seatT*kk/2],labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS: SURVEY, SHIM,','FIELD DRILL TO THE SET GIRDER'])}
  ],lx,Math.min(92,slideY-38-79),Math.min(200,slideY-38));
  svg+=labelColumn([
   {at:slideAt,labels:g.sleeve?[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} PRETENSIONED AGAINST`,`STEEL SLEEVES ${size(g.sleeve.od)} OD X ${size(g.sleeve.length)}; ${size(g.slotWidth)} X`,`${size(g.slot)} SLOT IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]:[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} SNUG-TIGHT`,`(NOT PERMITTED: PRETENSION, SEE CALC); ${size(g.hole)} X`,`${size(g.slot)} LSL IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]}
@@ -201,8 +203,8 @@ function continuousBearingView(s:CalculationSnapshot):ViewRender{
  svg+=labelColumn([
   {at:[XL(0)+bs.stiffenerThickness*kk/2,(yTop+Y(b.tf))/2],labels:['BEARING STIFFENERS',`SEE ${detailRef(girderBearingTitle(p))}`]},
   {at:[XL(rows[1])+hx.corners*kk/2,Y(b.tf)-hx.head*kk/2],labels:[`LOCATING: 4 - ${size(db)} ${e.bolts.grade} SC,`,`PRETENSIONED; ${size(g.hole)} STD HOLES`]},
-  {at:[XL(bs.length*.4),yB+bs.thickness*kk/2],labels:[`BEARING PL ${size(bs.thickness)} X ${size(bs.width)} X ${size(bs.length)}`,'EACH SUPPORT']},
-  {at:[XL(seatL/2)-4,yBearing+seatT*kk/2],labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS:','MATCH HOLES, NUT CLEARANCE'])}
+  {at:[XL(bs.length*.4),yB+bs.thickness*kk/2],labels:[`BEARING PL ${size(bs.thickness)} X ${size(bs.width)} X ${size(bs.length)}`,'EACH SUPPORT',...shimLabel(p,size)]},
+  {at:[XL(seatL/2)-4,yBearing+seatT*kk/2],labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS: SURVEY, SHIM,','FIELD DRILL TO THE SET GIRDER'])}
  ],lx,Math.min(yTop-30,colBottom-3*22-3*8),colBottom);
  svg+=labelColumn([
   {at:slideAt,labels:g.sleeve?[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} PRETENSIONED AGAINST`,`STEEL SLEEVES ${size(g.sleeve.od)} OD X ${size(g.sleeve.length)}; ${size(g.slotWidth)} X`,`${size(g.slot)} SLOT IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]:[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} SNUG-TIGHT`,`(NOT PERMITTED: PRETENSION, SEE CALC); ${size(g.hole)} X`,`${size(g.slot)} LSL IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]}

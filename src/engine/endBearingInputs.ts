@@ -36,12 +36,18 @@ export function locatingSupport(p:ProjectInput){
  return g.reduce((best,x,i)=>Math.abs(x-mid)<Math.abs(g[best]-mid)-1e-6?i:best,0);
 }
 /**
+ * A continuous girder whose runway-end bearings are centered on the runway-end grids (details.simpleSupport.endGridBearing
+ * 'centered', as on simple spans): the girder runs half the bearing length past each runway-end grid.
+ */
+export const continuousEndCentered=(p:ProjectInput)=>p.system==='continuous'&&p.details?.simpleSupport?.endGridBearing==='centered';
+/**
  * Bolted bearings of a continuous girder, one per support: the bearing plate centered on an interior grid and
- * starting at the girder end at a runway end. Travel is the distance from the locating support.
+ * starting at the girder end at a runway end, or centered on the runway-end grid too (continuousEndCentered), the girder
+ * then running half the bearing length past it. Travel is the distance from the locating support.
  */
 export function continuousBearings(p:ProjectInput){
  if(p.system!=='continuous')return [];
- const g=grids(p),L=g.at(-1)!,length=p.details?.bearing.length??254,locating=locatingSupport(p);
- return g.map((station,i)=>{const start=i===0?0:i===g.length-1?L-length:station-length/2;
+ const g=grids(p),L=g.at(-1)!,length=p.details?.bearing.length??254,locating=locatingSupport(p),centered=continuousEndCentered(p);
+ return g.map((station,i)=>{const start=centered?station-length/2:i===0?0:i===g.length-1?L-length:station-length/2;
   return {grid:i+1,station,start,finish:start+length,center:start+length/2,role:i===locating?'LOCATING' as const:'SLIDING' as const,distance:Math.abs(station-g[locating])};});
 }

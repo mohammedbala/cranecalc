@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
-import {endBearingChecks,endBearingGeometry,activeEndBearing,continuousBearings,locatingSupport} from '../src/engine/endBearing';
+import {endBearingChecks,endBearingGeometry,activeEndBearing,continuousBearings,locatingSupport,bearingSurface} from '../src/engine/endBearing';
 import {boltCapacity} from '../src/engine/connectionStrength';
 import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import {detailedDrawings} from '../src/components/detailedDrawings';
@@ -21,7 +21,9 @@ describe('bolted girder end bearings',()=>{
   const p=capped.input,e=p.details!.endBearing!,a=capped.designAnalysis!,checks=Object.fromEntries(capped.checks.filter(c=>c.group==='End bearings').map(c=>[c.id,c]));
   const H=capped.detailResults!.demands.brace,V=checks['end-bearing-locating-shear'].demand!;
   expect(V).toBeGreaterThanOrEqual(Math.hypot(a.axial,H)/4-1e-6);
-  const bolt=boltCapacity({grade:'A325',diameter:.75*inch,planes:1,surface:'B',shear:V,tension:a.uplift/4,method:'LRFD'});
+  // The seat is field welded to the existing column: Class A at the bearing-plate-to-seat interface (no shims entered: h_f = 1).
+  expect(bearingSurface(p)).toBe('A');
+  const bolt=boltCapacity({grade:'A325',diameter:.75*inch,planes:1,surface:'A',shear:V,tension:a.uplift/4,method:'LRFD'});
   expect(checks['end-bearing-locating-slip'].capacity).toBeCloseTo(bolt.slip,3);
   expect(Object.values(checks).every(c=>c.status==='pass')).toBe(true);
   expect(capped.checks.some(c=>c.id==='end-bolt')).toBe(false);

@@ -55,7 +55,10 @@ export const runwayDetailsSchema=z.object({
   /** Column-end movement release: bolts pretensioned against steel sleeves in vertical slots of the column gusset. */
   release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
  end:lapConnectionSchema,
- bearing:z.object({width:pos,length:pos,thickness:pos,stiffenerWidth:pos,stiffenerThickness:pos,cope:nn,weldSize:pos}),
+ bearing:z.object({width:pos,length:pos,thickness:pos,stiffenerWidth:pos,stiffenerThickness:pos,cope:nn,weldSize:pos,
+  /** Steel shims under the bearing plate, full bearing, drilled to the bolt pattern: the largest stack (max, mm) and its
+   * most plies (at most 3). Absent: no shims (a shop-welded seat on a new column, set to elevation in the shop). */
+  shim:z.object({max:nn,plies:z.number().int().min(0).max(3)}).optional()}),
  // Rail: the pad (when aist.railPad) lies under the rail. clip: the proprietary rail clips (AISC DG7, crane rail clip
  // manufacturers), entered from the manufacturer's data; absent in earlier project files (then every clip check is
  // unverified). Later fields are optional so earlier project files load with the defaults in railSeat.ts.

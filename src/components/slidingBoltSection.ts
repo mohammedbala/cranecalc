@@ -2,7 +2,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
 import {haunchUnderSeat} from './taperedHaunchSheet';
-import {activeEndBearing,endBearingGeometry} from '../engine/endBearing';
+import {activeEndBearing,endBearingGeometry,bearingShim} from '../engine/endBearing';
 import {slidingBolts} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {capSeat} from '../engine/columnCap';
@@ -27,7 +27,8 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
   const b=p.section,bs=d.bearing,sl=slidingBolts(e),db=e.bolts.diameter,wb=d.bracket?.enabled?d.bracket:undefined,cs=capSeat(p),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
   const size=(v:number)=>plateInches(v,p.units),hx=heavyHex(db),washer=hx.washer,sleeve=g.sleeve!;
   // Grip: plate washer, sleeve, bearing plate and seat, from under the head to under the F436 washer.
-  const plies=e.washerThickness+sleeve.length+bs.thickness,grip=wb||cs?`LENGTH ${size(boltLength(db,plies+seatT,p.units))}, GRIP ${size(plies+seatT)}`:`LENGTH TO SUIT SEAT, GRIP = ${size(plies)} + SEAT`;
+  // The grip includes the shim stack under the bearing plate (its largest thickness), where the seat takes shims.
+  const plies=e.washerThickness+sleeve.length+bs.thickness+bearingShim(p).max,grip=wb||cs?`LENGTH ${size(boltLength(db,plies+seatT,p.units))}, GRIP ${size(plies+seatT)}`:`LENGTH TO SUIT SEAT, GRIP = ${size(plies)} + SEAT`;
   const tail=.35*db,half=g.washer.length/2+1.25*inch,stack=hx.head+e.washerThickness+sleeve.length+bs.thickness+seatT+washer.t+hx.nut+tail;
   const sc=drawingScale(Math.min(1.45,222/stack,300/(2*half)),p.units),k=sc.pointsPerMm;
   const cx=240,yBear=150,Y=(h:number)=>yBear-h*k,X=(x:number)=>cx+x*k;
