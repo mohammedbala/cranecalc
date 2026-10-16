@@ -166,7 +166,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
  snapshot.checks=snapshot.checks.map(c=>presentCheck(c,p.units));
  // The analysis cases a printed result names, with their combination and crane positions: the report prints these
  // names, not the case ids (the CSV keeps the ids).
- const registry=(snapshot.detailResults as {caseRegistry?:Map<string,RunwayCaseRecord>}|undefined)?.caseRegistry;
+ const registry=(snapshot.detailResults as {caseRegistry?:{get(id:string):RunwayCaseRecord|undefined}}|undefined)?.caseRegistry;
  if(snapshot.detailResults&&registry){
   const index:Record<string,RunwayCaseRecord>={},text=JSON.stringify([snapshot.checks,snapshot.detailResults,snapshot.designAnalysis?.governing]);
   for(const m of text.matchAll(caseIdPattern)){const base=caseBase(m[0]),r=registry.get(base);if(r)index[base]=r;}

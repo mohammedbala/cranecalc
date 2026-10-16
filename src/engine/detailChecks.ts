@@ -259,18 +259,21 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
 
  return checks;
  };
- const built=new Map<RunwayDetailResults,CheckResult[]>(),level=(r:RunwayDetailResults)=>{let c=built.get(r);if(!c){c=levelChecks(r,[],false);built.set(r,c);}return {checks:c,results:r};};
- const step=(from:RunwayDetailResults,to:RunwayDetailResults)=>refinementChange(level(from),level(to));
+ // A level is kept only as what refinementChange compares, the D/C of every check by id and the support force
+ // envelope, once its checks are built: its results, checks and case registry are released (only the finest mesh
+ // level, which may be reported, keeps its results until the next one replaces it).
+ type Level={checks:CheckResult[];results:RunwayDetailResults};
+ const level=(r:RunwayDetailResults):Level=>({checks:levelChecks(r,[],false).map(c=>({id:c.id,utilization:c.utilization}) as CheckResult),results:{bracketForces:r.bracketForces} as RunwayDetailResults});
  // Crane positions first, at the base mesh: one crane refines to 32 times the base steps (the search converges
  // first-order where a fatigue range peaks between stations), several cranes to 4 times.
- let coarse=run(steps,20),fine=run(steps*2,20),travel=steps*2;
- const travelSteps=[step(coarse,fine)];
- while(travelSteps.at(-1)!.value>.01&&travel<steps*(p.cranes.length===1?32:4)){coarse=fine;travel*=2;fine=run(travel,20);travelSteps.push(step(coarse,fine));}
+ let coarse=level(run(steps,20)),fine=level(run(steps*2,20)),travel=steps*2;
+ const travelSteps=[refinementChange(coarse,fine)];
+ while(travelSteps.at(-1)!.value>.01&&travel<steps*(p.cranes.length===1?32:4)){coarse=fine;travel*=2;fine=level(run(travel,20));travelSteps.push(refinementChange(coarse,fine));}
  // Then the lateral/warping mesh, doubled from 20 elements per span until it converges, up to 160 per span (a
  // continuous girder is one member over all its spans: createDetailCollector gives it that many per span on average).
- let spatial=run(travel,40),mesh=40;
- const meshSteps=[step(fine,spatial)];
- for(const next of [80,160]){if(meshSteps.at(-1)!.value<=.01)break;fine=spatial;spatial=run(travel,next);mesh=next;meshSteps.push(step(fine,spatial));}
+ let spatial=run(travel,40),mesh=40,spatialLevel=level(spatial);
+ const meshSteps=[refinementChange(fine,spatialLevel)];
+ for(const next of [80,160]){if(meshSteps.at(-1)!.value<=.01)break;fine=spatialLevel;spatial=run(travel,next);spatialLevel=level(spatial);mesh=next;meshSteps.push(refinementChange(fine,spatialLevel));}
  const travelVerdict=refinementVerdict(travelSteps),meshVerdict=refinementVerdict(meshSteps);
  const r=spatial;r.travelChange=travelVerdict.value;r.meshChange=meshVerdict.value;
  const pct=(v:number)=>`${(100*v).toFixed(2)}%`;
