@@ -1,0 +1,55 @@
+import {z} from 'zod';
+
+/**
+ * Quick-configurator choices: the few decisions that set up a whole runway project (the crane, the runway, the girder,
+ * how it is supported and tied back, and whether the columns are existing or new). US customary values as the user
+ * states them: US tons, feet and inches. configurator.ts turns them into a complete project.
+ */
+export const supportKinds=['by-others','twin-rib','haunched-seat','rolled-corbel','tapered-haunch','column-cap'] as const;
+export const tieKinds=['paired-bars','flexible-plate','cap-angle'] as const;
+export const runwayConfigSchema=z.object({
+ /** Template the configuration started from, for the record. */
+ template:z.string().max(40).optional(),
+ title:z.string().min(1).max(120),
+ number:z.string().max(80),
+ units:z.enum(['US','SI']),
+ method:z.enum(['LRFD','ASD']),
+ /** 'design': girder, connections, supports and drawings; 'analysis': the girder under supplied loads only. */
+ scope:z.enum(['design','analysis']),
+ /** Rated capacity, US tons. */
+ capacity:z.number().finite().min(.5).max(60),
+ /** Crane span, rail to rail, ft. */
+ craneSpan:z.number().finite().min(20).max(150),
+ control:z.enum(['cab','pendant']),
+ cmaa:z.enum(['A','B','C','D']),
+ cranes:z.union([z.literal(1),z.literal(2)]),
+ buildingClass:z.enum(['A','B','C','D']),
+ system:z.enum(['simple','continuous']),
+ bays:z.number().int().min(1).max(6),
+ /** Bay length, column to column, ft. */
+ span:z.number().finite().min(10).max(50),
+ /** Top of rail above the floor, ft. */
+ railElevation:z.number().finite().min(10).max(60),
+ girder:z.enum(['rolled','capped']),
+ /** Catalog W shape of the girder; blank: sized by the configurator. */
+ girderShape:z.string().max(30).optional(),
+ /** Cap channel of a capped girder; blank: sized by the configurator. */
+ capChannel:z.string().max(30).optional(),
+ structure:z.enum(['existing','new']),
+ support:z.enum(supportKinds),
+ tie:z.enum(tieKinds),
+ /** Supporting column W shape; blank: chosen for the crane. */
+ columnShape:z.string().max(30).optional(),
+ /** Column face to the girder web centerline, in; blank: 20 in. */
+ reach:z.number().finite().min(12).max(48).optional(),
+});
+export type RunwayConfig=z.infer<typeof runwayConfigSchema>;
+export type SupportKind=RunwayConfig['support'];
+export type TieKind=RunwayConfig['tie'];
+
+export const supportLabels:Record<SupportKind,string>={
+ 'by-others':'Bracket by others (existing)','twin-rib':'Welded twin-rib seat','haunched-seat':'Haunched (tapered) rib seat','rolled-corbel':'Rolled W-stub bracket','tapered-haunch':'Built-up tapered I haunch','column-cap':'Column cap (new columns)'};
+export const tieLabels:Record<TieKind,string>={'paired-bars':'Paired flat bars','flexible-plate':'Flexible plate','cap-angle':'Cap tieback angle'};
+
+export const defaultRunwayConfig:RunwayConfig={title:'Crane runway',number:'',units:'US',method:'LRFD',scope:'design',capacity:10,craneSpan:60,control:'cab',cmaa:'C',cranes:1,buildingClass:'C',
+ system:'simple',bays:3,span:25,railElevation:20,girder:'rolled',structure:'existing',support:'twin-rib',tie:'paired-bars'};
