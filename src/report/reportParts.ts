@@ -240,7 +240,8 @@ export function equationLines(tex:string){
  out.push(tex.slice(last));return out.map(v=>v.trim()).filter(Boolean);
 }
 export function equationCell(c:CheckResult){
- if(c.equation){const t=termsFor(c);return equationLines(c.equation).map(inlineMath).join('<br/>')+(t.length?`<small class="where">where ${t.map(([s,m])=>`${inlineMath(s)} ${esc(m)}`).join('; ')}</small>`:'');}
+ // A definition naming another symbol (I_y, h_r) prints it with its subscript, as the equations do.
+ if(c.equation){const t=termsFor(c);return equationLines(c.equation).map(inlineMath).join('<br/>')+(t.length?`<small class="where">where ${t.map(([s,m])=>`${inlineMath(s)} ${subscripts(esc(m))}`).join('; ')}</small>`:'');}
  return `<i>${c.status==='excluded'?'Outside this calculation':c.status==='not-applicable'?'Not applicable':'Recorded input'}: ${subscripts(esc(tidyNumbers(firstSentence(c.note))))}</i>`;
 }
 export interface CheckTableContext{units:ProjectInput['units'];rendered:Set<string>}

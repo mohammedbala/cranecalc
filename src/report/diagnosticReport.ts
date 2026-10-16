@@ -26,6 +26,11 @@ const cssText=(v:string)=>`"${v.replace(/[\\"]/g,c=>`\\${c}`).replace(/[\n\r]/g,
 const math=(tex:string)=>katex.renderToString(tex,{throwOnError:false,displayMode:false});
 /** Types of result that do not depend on the analysis: dimensions and fit, recorded inputs and the supplied loads. */
 const independent=new Set<TaxonEntry['type']>(['detailing','input','load-basis','by-others']);
+/**
+ * A classification depends on the analysis only where it compares a reaction with a limit (the TR-13 §5.9.2 bracket
+ * reaction recommendation); section compactness, slenderness, flange holes and proportions are geometry and material.
+ */
+const analysisClassification=(t:TaxonEntry)=>/^column-brackets$|-tr13-load$/.test(t.check.id);
 export const diagnosticTitle='NOT VERIFIED — DIAGNOSTIC';
 
 /** What to do about a failed verification, from its kind and the analysis indicators. */
@@ -57,7 +62,7 @@ export function diagnosticReport(s:CalculationSnapshot,fontCss=''){
   ['Support',p.details?.bracket?.enabled?(p.details.bracket.arrangement??'bracket'):p.existingColumn?.enabled?'existing column seat':'seat by others'],['Top-flange restraint',p.details?.brace.arrangement??'—'],['Fatigue cycles',p.fatigue.cycles.toLocaleString('en-US')]];
  const cranes=p.cranes.map(c=>`<tr><td><b>${esc(c.name)}</b><small>${esc(c.loadSource)}</small></td><td>${c.wheels.length}</td><td class="num">${c.wheels.map(w=>sig3(w.loaded,'force',u)).join(' / ')}</td><td class="num">${c.wheels.map(w=>sig3(w.unloaded,'force',u)).join(' / ')}</td><td class="num">${c.wheels.map(w=>sig3(w.lateral,'force',u)).join(' / ')}</td><td class="num">${(c.impact*100).toFixed(0)}%</td></tr>`).join('');
  const combos=craneCombinations(p.method,p.aist?.concurrency==='full').map(c=>`<li>${esc(`${p.method} ${c.id}`)}: ${math(c.equation)}</li>`).join('');
- const dependent=(t:TaxonEntry)=>!independent.has(t.type)&&t.type!=='verification';
+ const dependent=(t:TaxonEntry)=>t.type==='classification'?analysisClassification(t):!independent.has(t.type)&&t.type!=='verification';
  const nDependent=[...tax.entries.values()].filter(dependent).length;
  const footer=`${p.number} · ${diagnosticTitle} · no calculation issued · Calc ${s.revision}`;
  const title=`${esc(p.title)} · ${diagnosticTitle}`;
@@ -75,7 +80,7 @@ ${remedies?`<h3>What is needed</h3><ul>${remedies}</ul>`:''}
 <h2>3. Inputs</h2><table><tbody>${inputs.map(([k,v])=>`<tr><th style="width:35%">${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table>
 <h2>4. Load basis</h2><table><colgroup><col style="width:30%"/><col style="width:8%"/><col style="width:18%"/><col style="width:18%"/><col style="width:16%"/><col style="width:10%"/></colgroup><thead><tr><th>Crane</th><th>Wheels</th><th>Loaded wheel</th><th>Empty wheel</th><th>Lateral</th><th>Impact</th></tr></thead><tbody>${cranes}</tbody></table>
 <p>Load combinations (AIST TR-13 §3.10${p.method==='LRFD'?', with the ASCE 7 §4.9 reading':''}):</p><ul>${combos}</ul>
-<h2>5. Results, unverified</h2><p>Every result of the snapshot. Results that depend on the analysis (strength, serviceability, fatigue, stability and their classifications) are printed for diagnosis only and marked <b>Unverified</b>; dimensional and fit rules, recorded inputs and supplied loads do not depend on it and keep their status.</p>${appendixA(tax,u,{unverified:dependent})}
+<h2>5. Results, unverified</h2><p>Every result of the snapshot. Results that depend on the analysis (strength, serviceability, fatigue and stability, and the bracket reaction limits) are printed for diagnosis only and marked <b>Unverified</b>; section classifications, dimensional and fit rules, recorded inputs and supplied loads do not depend on it and keep their status.</p>${appendixA(tax,u,{unverified:dependent})}
 <h2>Appendix: project input</h2><pre>${raw(JSON.stringify(p,null,1))}</pre>
 </body></html>`;
 }

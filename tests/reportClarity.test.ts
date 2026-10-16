@@ -14,7 +14,7 @@ import {termsFor} from '../src/report/equationTerms';
 import {notationSection} from '../src/report/notation';
 import {deliveredNote,deliveredRows} from '../src/report/deliveredTable';
 import {responsibilityMatrix,runwayParts} from '../src/report/responsibility';
-import {sig3} from '../src/report/reportParts';
+import {equationCell,sig3} from '../src/report/reportParts';
 import type {CalculationSnapshot,CheckResult} from '../src/engine/types';
 
 /**
@@ -147,6 +147,8 @@ describe('text follows the arrangement (uncapped W, one flexible plate, top-flan
  it('defines equation symbols and notation groups by the section',()=>{
   const c=check(base,'torsion-normal');
   expect(termsFor(c).map(([,m])=>m).join(' ')).not.toMatch(/\bcap\b/);
+  // A definition that names another symbol prints its subscript, never the underscore.
+  expect(equationCell(c)).toContain('I<sub>y</sub> over half the flange width');expect(equationCell(c)).not.toContain('I_y over half');
   expect(termsFor({...c,title:'Combined normal stress with warping · top flange (cap tips)'}).map(([,m])=>m).join(' ')).toContain('half the cap width');
   expect(notationSection(['M_f\\le M_{cf}'])).toContain('Flange bending and rail');
   expect(notationSection(['q_w\\le r_w','M_f'])).toContain('Capped girder, flange bending and rail');
@@ -226,6 +228,8 @@ describe('a blocked package: the NOT VERIFIED — DIAGNOSTIC report, never the c
   const design=rows.filter(m=>m[2]==='torsion-normal'||m[2]==='bearing-plate');
   expect(design.map(m=>m[1])).toEqual(['unverified','unverified']);
   expect(rows.find(m=>m[2]==='rail-joint-edge')?.[1]).toBe('pass');
+  // Section classifications are geometry: they keep their status; the bracket reaction limit uses the reactions.
+  expect(rows.find(m=>m[2]==='compact-flange')?.[1]).toBe('pass');expect(rows.find(m=>m[2]==='column-brackets')?.[1]).toBe('unverified');
   expect(out).not.toContain('class="summary-checks"');expect(out).not.toContain('runway-plan-sheet-page');
  });
  it('leaves an eligible package to its calculation',()=>{
