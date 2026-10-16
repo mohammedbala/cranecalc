@@ -2,7 +2,7 @@ import {describe,it,expect} from 'vitest';
 import {cappedDemonstrationProject,demonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {createDetailCollector,longitudinalPaths} from '../src/engine/detailAnalysis';
 import {sectionProperties} from '../src/engine/section';
-import {bracketResponse,columnWeldGroup,columnWeldField,columnWeldStress,createBracketCollector,bracketChecks,seatColumnWeld,seatColumnWeldSizes,seatColumnWeldLength} from '../src/engine/bracketDesign';
+import {bracketResponse,columnWeldGroup,columnWeldField,columnWeldStress,createBracketCollector,bracketChecks,seatColumnWeld,seatColumnWeldSizes,seatColumnWeldLength,torqueArm} from '../src/engine/bracketDesign';
 import {createSupportForceEnvelope,type SupportForceSet} from '../src/engine/bracketForces';
 import {minimumFillet} from '../src/engine/connectionStrength';
 import {bracingDesign} from '../src/engine/newColumnBracing';
@@ -99,12 +99,13 @@ describe('bracket design force envelope',()=>{
   for(const v of forces)for(const k of ['maxVertical','maxMoment','minVertical','minBearing','top','bottom'] as const)expect(v[k]).toEqual(v.longitudinal);
   expect(forces[2].longitudinal.longitudinal).toBe(F);expect(forces[2].forward).toEqual(forces[2].longitudinal);expect(forces[2].backward).toBeUndefined();
   // The weld group peak from the tabulated sets, with the bracket self-weight and the bottom-flange force either
-  // way at the mean bearing offset, is the one the bracket checks record.
+  // way at the mean bearing offset, is the one the bracket checks record; each set's reaction at its own eccentricity,
+  // moved off the web line by its support torque (the top-flange restraint force on torqueArm).
   const self=1.4*(b.seatLength*b.seatProjection*b.seatThickness+2*b.ribDepth*b.ribThickness*b.seatProjection)*p.section.density*9.80665/1e9;
   seatColumnWeldSizes(p).forEach((w,i)=>{
    const g=columnWeldGroup(b,w);let seat=0;
    for(const v of forces){
-    const f=v.longitudinal,rr=bracketResponse(p,[...f.ends.map(e=>({vertical:e.vertical,offset:e.offset,length:.4*Lbr})),{vertical:self,offset:0,length:b.seatLength}]);
+    const f=v.longitudinal,rr=bracketResponse(p,[...f.ends.map(e=>({vertical:e.vertical,offset:e.offset,length:.4*Lbr})),{vertical:self,offset:0,length:b.seatLength}],Math.abs(f.top)*torqueArm(p));
     const xH=f.ends.reduce((a,e)=>a+e.offset-(e.end==='left'?1:-1)*.3*Lbr,0)/f.ends.length;
     for(const H of [f.bottom,-f.bottom])seat=Math.max(seat,columnWeldStress(b,g,rr.e,{V:rr.V,Mseat:rr.Mx,F:f.longitudinal,H,xH}).seat);
    }

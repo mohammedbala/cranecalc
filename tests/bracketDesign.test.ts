@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import * as THREE from 'three';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
-import {bracketResponse,seatStrip,rectangularRibFlexure,createBracketCollector,bracketChecks,validateBracket} from '../src/engine/bracketDesign';
+import {bracketResponse,seatStrip,rectangularRibFlexure,createBracketCollector,bracketChecks,validateBracket,seatEccentricity,torqueArm} from '../src/engine/bracketDesign';
 import {projectSchema} from '../src/engine/types';
 import {buildWeldedBrackets} from '../src/components/weldedBracketGeometry';
 import {buildReferenceFraming} from '../src/components/referenceFraming';
@@ -25,10 +25,36 @@ describe('welded bracket independent statics and limit states',()=>{
   expect(bracketResponse(p,[{vertical:20000,offset:-130},{vertical:20000,offset:130}]).ribs).toEqual([20000,20000]);
  });
  it('matches hand-calculated eccentric root-weld endpoint stress',()=>{
+  // Without a support torque the reaction is on the girder web line moved by the design rail eccentricity (1/4 in).
   const p=cappedDemonstrationProject(),b=p.details!.bracket!,r=bracketResponse(p,[{vertical:20000,offset:0}]);
-  const P=10000,e=b.reach+p.details!.bearing.width/2,a=b.rootWeld/Math.sqrt(2),Aw=2*a*b.ribDepth,Iw=2*a*b.ribDepth**3/12;
+  const P=10000,e=b.reach+.25*25.4,a=b.rootWeld/Math.sqrt(2),Aw=2*a*b.ribDepth,Iw=2*a*b.ribDepth**3/12;
+  expect(r.e).toBeCloseTo(e,9);
   expect(r.rootWeld).toBeCloseTo(Math.hypot(P/Aw,P*e*(b.ribDepth/2)/Iw),9);
   expect(r.normal).toBeCloseTo(6*P*e/(b.ribThickness*b.ribDepth**2),9);
+ });
+ it('places the reaction on the web line, moved by the rail eccentricity and the support torque, never past the flange tip',()=>{
+  // Capped demonstration: W24X94 bottom flange 9.07 in on a 12 in wide bearing plate, reach 20 in, rail 1/4 in off the web.
+  const p=cappedDemonstrationProject(),b=p.details!.bracket!,inch=25.4,bf=p.section.bf,V=100000;
+  expect(p.details!.bearing.width).toBeGreaterThan(bf);
+  // Support torque of a 2 kip top-flange force: M_t = T h_t with h_t the bearing plate and the girder (to the cap top).
+  const ht=torqueArm(p),T=2*4448.2216152605,Mt=T*ht;
+  expect(ht).toBeCloseTo(p.details!.bearing.thickness+p.section.d+p.section.capTw,9);
+  const v=seatEccentricity(p,V,Mt);
+  expect(v.shift).toBeCloseTo(.25*inch+Mt/V,9);expect(v.shift).toBeLessThan(bf/2);expect(v.e).toBeCloseTo(b.reach+.25*inch+Mt/V,9);
+  // A small reaction (or uplift) with the same torque is bounded by the flange tip, b_f/2 off the web: not the
+  // 12 in plate's far edge, which the narrower flange never loads.
+  expect(seatEccentricity(p,2000,Mt).e).toBeCloseTo(b.reach+bf/2,9);expect(seatEccentricity(p,-5000).e).toBeCloseTo(b.reach+bf/2,9);
+  expect(seatEccentricity(p,2000,Mt).e).toBeLessThan(b.reach+p.details!.bearing.width/2);
+  // The response carries the set's eccentricity through every rib quantity.
+  const r=bracketResponse(p,[{vertical:V,offset:0}],Mt);expect(r.e).toBeCloseTo(v.e,9);expect(r.normal).toBeCloseTo(6*(V/2)*v.e/(b.ribThickness*b.ribDepth**2),9);
+ });
+ it('takes the seat deflection under the bearings from the elastic strip, not the free seat corner',()=>{
+  // Centered point load on a simple span: P g^3/(48EI); a load on an overhang c beyond a support: P c^2 (g + c)/(3EI).
+  const EI=2e11,g=300,P=50000;
+  expect(seatStrip([{vertical:P,offset:0,length:1e-6}],g,100).bearingDeflection(EI)).toBeCloseTo(P*g**3/(48*EI),9);
+  const c=100;expect(seatStrip([{vertical:P,offset:g/2+c,length:1e-6}],g,100).bearingDeflection(EI)).toBeCloseTo(P*c**2*(g+c)/(3*EI),6);
+  // A uniform patch a long centered on the span: q a (8g^3 - 4g a^2 + a^3)/(384 EI) at midspan, the largest under it.
+  const a=120;expect(seatStrip([{vertical:P,offset:0,length:a}],g,100).bearingDeflection(EI)).toBeCloseTo(P*(8*g**3-4*g*a**2+a**3)/(384*EI),9);
  });
  it('exercises all AISC F11 branches and LRFD/ASD resistance factors',()=>{
   const b=cappedDemonstrationProject().details!.bracket!,E=200000,Fy=345;
