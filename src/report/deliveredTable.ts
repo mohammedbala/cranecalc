@@ -22,7 +22,8 @@ export function deliveredRows(s:CalculationSnapshot,d:DeliveredForces|undefined=
  const u=s.input.units,small=(v:number|undefined,q:'force'|'moment')=>v!==undefined&&Math.abs(toDisplay(v,q,u))<.1?`${Math.abs(toDisplay(v,q,u)).toFixed(2)} ${unit(q,u)}`:sig3(v,q,u);
  const f=(v:number|undefined)=>small(v,'force'),m=(v:number|undefined)=>small(v,'moment');
  const sign=(v:number,t:string)=>Math.abs(v)<1?'—':`${v>=0?'+':'−'}${t}`;
- const row=(grid:number,i:number,x:DeliveredSet)=>[i?'':String(grid),sentence(x.label),x.combination,f(x.V),m(x.Mx),Math.abs(x.My)<1?'—':x.mirrored?`±${m(Math.abs(x.My))}`:`${x.My>=0?'+':'−'}${m(Math.abs(x.My))}`,
+ // Mx is never a dash: V·e where e is known (from the column face where the seat is by others), else the product to form.
+ const row=(grid:number,i:number,x:DeliveredSet)=>[i?'':String(grid),sentence(x.label),x.combination,f(x.V),x.Mx===undefined?'V·e':m(x.Mx),Math.abs(x.My)<1?'—':x.mirrored?`±${m(Math.abs(x.My))}`:`${x.My>=0?'+':'−'}${m(Math.abs(x.My))}`,
   `±${f(x.Htie)}`,Math.abs(x.Hseat)<1?'—':`${Math.sign(x.Hseat)===Math.sign(x.top)||Math.abs(x.top)<1?'±':'∓'}${f(Math.abs(x.Hseat))}`,sign(x.F,f(Math.abs(x.F)))];
  return d.grids.flatMap(g=>g.sets.map((x,i)=>row(g.grid,i,x)));
 }
@@ -33,10 +34,16 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
  const u=s.input.units,f=(v:number|undefined)=>sig3(v,'force',u),len=(v:number|undefined)=>sig3(v,'length',u),el=(v?:number)=>v===undefined?'':`, El. ${drawingElevation(v,u)}`;
  const grids=(v:number[])=>v.length>1?`grids ${v.slice(0,-1).join(', ')} and ${v.at(-1)}`:`grid ${v[0]}`;
  const support=s.detailResults?.taperedHaunch?'haunch':s.input.details?.bracket?.enabled?'bracket':'support';
+ // Where V acts: from the column centerline, or from the column face where the seat and the column are by others.
+ const far=d.web!==undefined&&d.e!==undefined&&d.e-d.web>1e-3?` (the far edge of the bearing plate, a conservative reaction position; the girder web is at ${len(d.web)})`:'';
+ const at=d.e===undefined?'; e, from the column centerline to the reaction, is not established here (the column is by others): Mx = V·e with the surveyed seat position (column strong axis).'
+  :d.eFrom==='face'?`, at e = ${len(d.e)} from the column face${far}. Mx = V·e is the moment at the column face; for the column centerline add V times half the column depth (column by others).`
+  :`, at e = ${len(d.e)} from the column centerline${far}. Mx = V·e (column strong axis).`;
+ const bars=d.elevation?.tieBars;
  return [`Factored ${s.input.method}. Each row is one concurrent set; do not combine rows.`,
-  `V: girder reactions on the seat${d.elevation?el(d.elevation.seat):''}, at e = ${len(d.e)} from the column centerline${d.web!==undefined&&d.e!==undefined&&d.e-d.web>1e-3?` (the far edge of the bearing plate, a conservative reaction position; the girder web is at ${len(d.web)})`:''}. Mx = V·e (column strong axis).`,
+  `V: girder reactions on the seat${d.elevation?el(d.elevation.seat):''}${at}`,
   `My,seat: moment of the unbalanced end reactions about the grid (column weak axis).`,
-  `H tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the tie line${d.elevation?el(d.elevation.tie):''}; design value ${f(d.tie.design)}.`,
+  `H tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the tie line${d.elevation?el(d.elevation.tie):''}${bars!==undefined&&d.elevation?`, delivered to the column by the tie at its centerline${el(bars)}`:''}; design value ${f(d.tie.design)}.`,
   `H seat: bottom-flange restraint force at the bearing bolts, ∓ opposite in sign to H tie.`,
   `F: longitudinal force at the locating bearing, + toward the next grid.${d.stopGrids.length?` Stop force ${f(d.stop)} at ${grids(d.stopGrids)} only.`:''}${railBearsOnStops(s.input)?' Traction reaches the bay under the crane, or through the floating rail string an end bay at its stop.':''}`,
   `V includes the bearing hardware on the seat; the ${support} and other support steel (${f(Math.max(0,...(s.supportReactions?.supports??[]).map(v=>v.Ds)))} per grid, dead) goes straight into the column.`].join(separator);

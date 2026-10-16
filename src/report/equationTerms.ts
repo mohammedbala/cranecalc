@@ -7,7 +7,8 @@ import {equationSymbols,entrySymbol,notationGroups} from './notation';
  * are printed. Keyed by check id (pattern); the same symbol may mean different things in different details.
  */
 type Term=[tex:string,meaning:string];
-const terms:[RegExp,Term[]][]=[
+/** Definitions by check id; a function gives the wording of the check's own arrangement (capped or rolled). */
+const terms:[RegExp,Term[]|((c:CheckResult)=>Term[])][]=[
  // Solution checks.
  [/^(convergence|mesh|design-travel|design-mesh|detail-travel|detail-mesh)$/,[['D_n','each governing demand with n crane positions, stations or elements'],['D_{2n}','the same with twice as many']]],
  [/^(equilibrium|design-equilibrium)$/,[['R','support reactions'],['w','dead load per unit length']]],
@@ -21,7 +22,8 @@ const terms:[RegExp,Term[]][]=[
  [/^rail-clip-weld-fatigue$/,[['Q_i','lifted load of duty bin i'],['f_w','clip base weld stress per unit force set']]],
  // Girder.
  [/^major$/,[['M_{n,LTB}','lateral-torsional buckling strength, F4-2 or F4-3']]],
- [/^torsion-normal(-bottom)?$/,[['P','axial force'],['M_y','lateral bending moment of the section'],['S_{xc}','section modulus to the top fiber (cap)'],['S_{xt}','section modulus to the bottom fiber'],['S_y','I_y over half the cap width'],['W_{no}','normalized warping function at the tips of this flange']]],
+ // The top fiber and the half width are the cap's only on a capped girder (the check names its cap tips).
+ [/^torsion-normal(-bottom)?$/,c=>{const cap=/\bcap\b/i.test(c.title);return [['P','axial force'],['M_y','lateral bending moment of the section'],['S_{xc}',cap?'section modulus to the top fiber (cap)':'section modulus to the top fiber'],['S_{xt}','section modulus to the bottom fiber'],['S_y',cap?'I_y over half the cap width':'I_y over half the flange width'],['W_{no}','normalized warping function at the tips of this flange']];}],
  [/^vertical$/,[['L','span']]],
  [/^torsion-shear$/,[['\\tau_b','shear stress from flexural shear, VQ/(It)']]],
  [/^torsion-stability$/,[['\\lambda','elastic buckling load factor of the strength case (0.8 stiffness)']]],
@@ -47,7 +49,8 @@ const terms:[RegExp,Term[]][]=[
  [/^rail-web$/,[['t_h','rail head thickness']]],
  [/^rail-clip-(lateral|uplift)$/,[['H_c','side thrust on one clip: the wheel group at the clip station, service or factored as the rating basis'],['R_c','manufacturer’s rated lateral capacity of one clip'],['T_c','uplift on the hold-down clip'],['R_t','manufacturer’s rated uplift capacity of one clip'],['b_r','rail base width']]],
  [/^rail-clip-weld$/,[['l_w','length of each of the two base welds (across the rail)'],['V','lateral force on the clip'],['T','uplift on the clip'],['M','moment about the weld centroid (V at mid-height of the rail base, or T at the clip nose)']]],
- [/^rail-joint-plate$/,[['a','distance from the joint centerline to the first bolt line']]],
+ [/^rail-joint-plate$/,[['a','distance from the joint centerline to the first bolt line'],['Z_{net}','plastic section modulus of the two joint bars through the bolt holes'],['S_{net}','elastic section modulus of the two joint bars through the bolt holes']]],
+ [/^rail-joint-edge$/,[['l_e','edge distance of the joint bolt holes: half the bar height (the end distance at the bar ends where smaller)'],['l_{e,min}','minimum edge distance for the joint bolt diameter, AISC 360-16 Table J3.4']]],
  [/^rail-joint-fit$/,[['h_j','joint bar height'],['t_h','rail head thickness'],['t_b','rail base thickness']]],
  [/^rail-anchorage$/,[['F','factored crane longitudinal force (traction and braking)'],['R_a','manufacturer’s rated longitudinal resistance of one anchor clip pair']]],
  [/^rail-(end-gap|expansion-gap)$/,[['g','gap'],['L','rail length that grows toward the gap'],['L_1','anchor-to-joint lengths of the two pieces']]],
@@ -140,7 +143,7 @@ export function termsFor(c:CheckResult):Term[]{
  if(!c.equation)return [];
  const used=equationSymbols(c.equation),seen=new Set<string>(),out:Term[]=[];
  // Keyed by the definition's TeX: x_j and x_j′, h(0) and h(L) are separate entries.
- for(const [re,list] of terms)if(re.test(c.id))for(const [tex,meaning] of list){
+ for(const [re,v] of terms)if(re.test(c.id))for(const [tex,meaning] of typeof v==='function'?v(c):v){
   if(seen.has(tex))continue;
   if(usesTerm(c.equation,used,tex)){seen.add(tex);out.push([tex,meaning]);}
  }

@@ -30,17 +30,19 @@ app.post('/api/report',async(req,res)=>{
   const snapshot=calculate(input as ProjectInput);
   // A review draft (req.body.reviewDraft) may export with missing-data open items; it prints REVIEW DRAFT and lists them.
   const draft=req.body.reviewDraft===true&&reviewDraftExportable(snapshot);
-  if(!snapshot.eligible&&!draft){res.status(422).json({error:'This calculation has invalid, unverified or unsupported results and cannot be exported.',errors:snapshot.errors,blockingChecks:snapshot.checks.filter(c=>!['pass','fail','not-applicable'].includes(c.status)).map(c=>c.title)});return;}
+  // A blocked snapshot exports, on request (req.body.diagnostic), only its NOT VERIFIED — DIAGNOSTIC report, never the calculation.
+  const diagnostic=req.body.diagnostic===true&&!snapshot.eligible&&!draft;
+  if(!snapshot.eligible&&!draft&&!diagnostic){res.status(422).json({error:'This calculation has invalid, unverified or unsupported results and cannot be exported.',errors:snapshot.errors,blockingChecks:snapshot.checks.filter(c=>!['pass','fail','not-applicable'].includes(c.status)).map(c=>c.title),diagnosticAvailable:true});return;}
   browser=await chromium.launch({headless:true,channel:chromiumChannel});const page=await browser.newPage();
   // Reports contain only server-rendered, escaped input. No external assets or requests are allowed.
   await page.route('**/*',route=>route.abort());
   // Edited sheets arrive as drawing data, are validated and are drawn here like the generated ones (no client SVG).
   const sheetSvgs:Record<string,string>={};
   for(const [sheet,raw] of Object.entries((req.body.cadSheets??{}) as Record<string,unknown>).slice(0,40)){const doc=parseCadDoc(raw);if(!doc||doc.key!==sheet){res.status(422).json({error:`The edited drawing ${sheet.slice(0,20)} is not valid.`});return;}sheetSvgs[sheet]=docToSvg(doc);}
-  await page.setContent(reportHtml(snapshot,framing.data,{reviewDraft:draft,sheetSvgs}),{waitUntil:'load'});await page.evaluate(()=>document.fonts.ready);
+  await page.setContent(reportHtml(snapshot,framing.data,{reviewDraft:draft,diagnostic,sheetSvgs}),{waitUntil:'load'});await page.evaluate(()=>document.fonts.ready);
   // The report's CSS @page margin boxes print the running header and the footer (page numbers, calc ID): no browser footer.
   const pdf=await page.pdf({format:'Letter',preferCSSPageSize:true,printBackground:true,displayHeaderFooter:false});
-  res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`attachment; filename="${(snapshot.input.number||'cranecalc').replace(/[^\w.-]+/g,'-')}-${revisionIdentity(snapshot).label.replace(/\s+/g,'-')}.pdf"`);res.setHeader('X-Calculation-Revision',snapshot.revision);res.send(pdf);
+  res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`attachment; filename="${(snapshot.input.number||'cranecalc').replace(/[^\w.-]+/g,'-')}-${revisionIdentity(snapshot).label.replace(/\s+/g,'-')}${diagnostic?'-NOT-VERIFIED-DIAGNOSTIC':''}.pdf"`);res.setHeader('X-Calculation-Revision',snapshot.revision);res.send(pdf);
  }catch(error){console.error(error);res.status(500).json({error:'Report generation failed. Verify the local Chromium runtime with: npx playwright install chromium.'});}finally{
   // The response is complete; release the render lock before browser teardown.
   reporting=false;await browser?.close();

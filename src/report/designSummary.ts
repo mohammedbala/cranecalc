@@ -7,6 +7,7 @@ import {activeEndBearing} from '../engine/endBearingInputs';
 import {equationCell,governing,shortReference,statusLabel,subscripts} from './reportParts';
 import {loadPathSteps,supportAssemblyFigure} from './hairline/figures';
 import {classifyCheck,type Taxonomy} from '../engine/checkTaxonomy';
+import {groupDc,openByElement,openItemGroups,ruleItem} from './openItems';
 
 /**
  * The summary at the top of the calculation: the support section with its numbered load path, and the
@@ -26,7 +27,9 @@ export function summaryElements(p:ProjectInput):Element[]{
  const column=p.existingColumn?.enabled,isNew=column&&p.existingColumn!.isNew,cap=!!activeColumnCap(p),n=loadPathSteps(p);
  // Numbered as the summary figure's markers, without gaps; girder deflection and fatigue continue the girder (no number).
  const list:Omit<Element,'order'>[]=[
-  {key:'rail',step:n.rail,label:'Rail, clips and joints',component:'rail',path:'Wheel load P and side thrust H at the rail head; the rail bears on the flange, the rail clips hold it',match:c=>c.group==='Rail details'||c.id.startsWith('rail-')},
+  {key:'rail',step:n.rail,label:'Rail, clips and joints',component:'rail',path:'Wheel load P and side thrust H at the rail head; the rail bears on the flange, the rail clips hold it',
+   // The rail-head movement and rotation are girder serviceability (section 4.3), not rail checks.
+   match:c=>c.group!=='Serviceability'&&(c.group==='Rail details'||c.id.startsWith('rail-'))},
   {key:'bearing',step:n.bearing,label:activeEndBearing(p)?'Bolted end bearings':'Bearings',component:'bearing',path:`Bearing stiffeners and bearing plate${activeEndBearing(p)?'; bolts carry longitudinal force and uplift':''}`,match:c=>c.group==='End bearings'||bearingIds.includes(c.id)||/^(simple-|rotation-clearance$)/.test(c.id)},
   {key:'girder',step:n.girder,label:'Runway girder strength',component:'girder',path:'Bending, shear, torsion and wheel patch between supports',match:c=>['Strength','Local forces','Cap channel'].includes(c.group)},
   {key:'service',label:'Runway girder deflection',path:'Single crane, static: vertical and rail-head lateral movement',match:c=>c.group==='Serviceability'},
@@ -62,24 +65,33 @@ export function governingForSummary(checks:CheckResult[]){
  return governing(strength.length?strength:checks);
 }
 /**
- * Summary rows: one per element with DESIGN checks, its governing DESIGN check (body line or evaluated fatigue
- * detail) inline with its reference, equation and D/C. Detailing rules, inputs and classifications never govern an
- * element. The element is named only; its specification is in the design summary above.
+ * Summary rows: one per element with DESIGN checks or open items, its governing DESIGN check (body line or evaluated
+ * fatigue detail) inline with its reference, equation and D/C. Detailing rules, inputs and classifications never govern
+ * an element, but its result is the worst of everything open there: an element with an open item (a failed strength or
+ * fatigue check, a detailing rule or fit not met, missing input) reads NG (or the open status) with its open items
+ * named, so the summary never says OK where the open-items list has an item. The element is named only; its
+ * specification is in the design summary above.
  */
 export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
  const p=s.input,defs=summaryElements(p),title=(v:string)=>v.replace(/\s*·\s*/g,', ');
+ const open=openByElement(openItemGroups(tax,s).groups);
  const rows=defs.map(e=>{
-  const el=tax.elements.find(v=>v.key===e.key),lines=el?.shown??[],fat=tax.fatigue.evaluated.filter(r=>r.element===e.key);
+  const el=tax.elements.find(v=>v.key===e.key),lines=el?.shown??[],fat=tax.fatigue.evaluated.filter(r=>r.element===e.key),items=open.get(e.key)??[];
   const cands=[...lines.map(l=>({c:l.controlling,dc:l.controlling.utilization??0})),...fat.map(r=>({c:r.governing,dc:r.dc??0}))];
   // The longitudinal system left to the building engineer keeps its step in the load path, as a by-others row.
-  if(!cands.length)return e.key==='longitudinal'&&p.existingColumn?.enabled?{e,byOthers:true as const}:undefined;
-  const g=cands.reduce((a,b)=>(b.c.status==='fail'?1e9:0)+b.dc>(a.c.status==='fail'?1e9:0)+a.dc?b:a);
-  return {e,g};
+  if(!cands.length&&!items.length)return e.key==='longitudinal'&&p.existingColumn?.enabled?{e,byOthers:true as const}:undefined;
+  // Without a design check, the first open item stands in (a detailing rule or fit with no ratio).
+  const g:{c:CheckResult;dc:number|undefined}=cands.length?cands.reduce((a,b)=>(b.c.status==='fail'?1e9:0)+b.dc>(a.c.status==='fail'?1e9:0)+a.dc?b:a):{c:items[0].governing,dc:ruleItem(items[0])?undefined:items[0].dc};
+  return {e,g,items};
  }).filter(v=>v!==undefined).sort((a,b)=>a!.e.order-b!.e.order);
  return `<table class="summary-checks"><colgroup><col class="s-el"/><col class="s-check"/><col class="s-eq"/><col class="s-dc"/><col class="s-res"/></colgroup><thead><tr><th>Element</th><th>Governing check</th><th>Equation</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(v=>{
   if('byOthers' in v!){const {e}=v!;return `<tr class="excluded"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b></td><td colspan="2">Crane-level strut, collector, brace connections and braced bay: building engineer of record (section @@ref:by-others@@). Forces delivered: section @@ref:interfaces@@.</td><td class="num">—</td><td class="res"><b>By others</b></td></tr>`;}
-  const {e,g}=v as Exclude<typeof v,{byOthers:true}>;
-  return `<tr class="${g.c.status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b></td><td>${esc(title(g.c.title))}<small class="ref">${esc(shortReference(g.c))}</small></td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—')}</td><td class="res"><b class="${g.c.status}">${esc(statusLabel(g.c.status))}</b></td></tr>`;
+  const {e,g,items}=v as Exclude<typeof v,{byOthers:true}>;
+  // The element's result: NG when anything there failed, else an open status (unverified, incomplete), else the governing check's.
+  const status=items.some(i=>i.governing.status==='fail')?'fail':items.length?items[0].governing.status:g.c.status;
+  const others=items.filter(i=>!i.members.includes(g.c));
+  const note=others.length?`<small class="open">Open: ${others.slice(0,2).map(i=>`${esc(title(i.title))} (${esc(groupDc(i))})`).join('; ')}${others.length>2?`; ${others.length-2} more`:''} (open items, page 1)</small>`:'';
+  return `<tr class="${status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b></td><td>${esc(title(g.c.title))}<small class="ref">${esc(shortReference(g.c))}</small>${note}</td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—')}</td><td class="res"><b class="${status}">${esc(statusLabel(status))}</b></td></tr>`;
  }).join('')}</tbody></table>`;
 }
 export const summaryCss=`.summary-head{display:grid;grid-template-columns:330px 1fr;gap:12px;align-items:start;margin:6px 0}.summary-head svg{width:330px;height:auto;border:1px solid #000}.summary-head .key td,.summary-head .key th{padding:2px 5px;font-size:8.5px}.summary-head .key th:first-child{width:24%}.banner{border:2px solid #000;padding:6px 10px;margin:8px 0;font-size:11px}.banner b{font-size:12px}.banner.fail{background:#e6e6e6}table.summary-checks{font-size:9px}table.summary-checks col.s-el{width:20%}table.summary-checks col.s-check{width:32%}table.summary-checks col.s-eq{width:34%}table.summary-checks col.s-dc{width:6%}table.summary-checks col.s-res{width:8%}table.summary-checks td{vertical-align:middle;padding:3px 4px}table.summary-checks td small{display:block;font-size:7.5px;color:#222}table.summary-checks td small.path{font-style:italic}table.summary-checks td.num{text-align:right}table.summary-checks td.res{text-align:center}table.summary-checks td.eq .katex{font-size:1em;white-space:normal}table.summary-checks tr.fail td{background:#e6e6e6;font-weight:700}`;

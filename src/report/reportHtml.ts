@@ -3,6 +3,7 @@ import {checkFigureHtml,checkFigureCss} from '../components/checkFigures';
 import katex from 'katex';
 import { compactReport } from './compactReport';
 import { reviewDraftExportable } from '../engine/checkTaxonomy';
+import { diagnosticReport } from './diagnosticReport';
 import { appendPlanSheet } from '../components/planSheet';
 import { defaultFraming, type FramingSettings } from '../components/framingSettings';
 import type { CalculationSnapshot } from '../engine/types';
@@ -14,9 +15,13 @@ const pageText=(v:string)=>`"${v.replace(/[\\"]/g,c=>`\\${c}`).replace(/[\n\r]/g
 const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 /**
  * `reviewDraft`: export a snapshot whose only blockers are missing-data open items, marked REVIEW DRAFT (reviewDraftExportable).
+ * `diagnostic`: a blocked snapshot (failed analysis verification, input errors or unsupported results) exports the
+ * NOT VERIFIED — DIAGNOSTIC report instead (diagnosticReport.ts): never the calculation, and without the drawing sheets.
+ * An eligible or review-draft snapshot ignores it and exports its calculation.
  * `sheetSvgs`: drawing sheets edited in the CAD editor, by sheet number, in place of the generated sheets.
  */
-export function reportHtml(s:CalculationSnapshot, framing:FramingSettings=defaultFraming, fontCss="", options:{reviewDraft?:boolean;sheetSvgs?:Record<string,string>}={}){
+export function reportHtml(s:CalculationSnapshot, framing:FramingSettings=defaultFraming, fontCss="", options:{reviewDraft?:boolean;diagnostic?:boolean;sheetSvgs?:Record<string,string>}={}){
+ if(options.diagnostic&&!(s.eligible||reviewDraftExportable(s)))return diagnosticReport(s,fontCss);
  return appendPlanSheet(calculationReportHtml(s,fontCss,!!options.reviewDraft),s,framing,options.sheetSvgs);
 }
 function calculationReportHtml(s:CalculationSnapshot,fontCss:string,reviewDraft=false){
