@@ -106,6 +106,10 @@ const terms:[RegExp,Term[]|((c:CheckResult)=>Term[])][]=[
  [/^end-bearing-seat-fit(-end)?$/,[['N','bearing plate length'],['b_t','width of the haunch top flange (seat)'],['g','gap between the girder ends']]],
  [/^end-bearing-(sleeve-bearing)$|^cap-angle-sleeve-bearing$/,[['d_s','sleeve outside diameter']]],
  [/^end-bearing-(flange-edge|end-edge)$|^cap-angle-(slot-toe|washer-bending)$|^end-bearing-washer-bending$/,[['w_{slot}','slot width'],['L_{slot}','slot length']]],
+ [/^end-bearing-slot-fit$/,[['L_{slot}','slot length'],['w_{slot}','slot width'],['d_s','sleeve outside diameter'],['u','slot travel each way']]],
+ [/^bearing-contact$/,[['N','bearing plate length along the girder'],['B','bearing plate width across the girder']]],
+ // The crane-level strut by others (existing columns): the stiffness it must provide.
+ [/^crane-level-strut$/,[['k_s','axial stiffness of the crane-level strut at the locating seat'],['k_c','lateral stiffness of the column alone at the seat, along the runway']]],
  // Cap tieback angle.
  [/^cap-angle-slot-travel$/,[['L','distance from the locating support'],['\\Delta T','temperature change']]],
  [/^cap-angle-/,[['F','tie force (pull or push)'],['g_v','cap bolt line below the top of the cap'],['g_h','lap bolt line from the back of the vertical leg'],['t_a','angle thickness'],['M_v','moment from the support movement'],['V_v','end shear from the support movement'],['q_{ep}','end plate prying force'],['q_c','column flange prying force'],['e','lever arm to the toe of the horizontal leg'],

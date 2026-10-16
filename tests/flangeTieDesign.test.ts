@@ -60,7 +60,7 @@ describe('direct flange attachment',()=>{
 });
 
 describe('saddle-to-flange weld, gusset sizing and cap coordination',()=>{
- const snapshot=(p:ProjectInput)=>({input:p,checks:[],detailResults:{demands:{braceFatigue:4000}}}) as unknown as CalculationSnapshot;
+ const snapshot=(p:ProjectInput)=>({input:p,checks:[],errors:[],eligible:true,detailResults:{demands:{braceFatigue:4000}}}) as unknown as CalculationSnapshot;
  const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
  const welds=(svg:string)=>svg.match(/<g data-multileader="weld"/g)??[];
  it('welds the saddle to the flange only by two full-width transverse end fillets, and checks exactly those',()=>{

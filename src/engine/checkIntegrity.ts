@@ -9,7 +9,8 @@ import {format,noteLength,type Quantity} from './units';
  * (i)  A dimensional check (quantity 'length', or a fit / clearance / edge / length / gap rule) whose demand or capacity
  *      is negative describes a part that cannot exist or parts that overlap: it fails as a geometry conflict
  *      (geometry: true), carries no D/C and its note starts "Invalid geometry: <what> = <value>" with the overlap or the
- *      shortfall. A dimension never reads NO CAPACITY: a zero provided dimension has no ratio either.
+ *      shortfall. A dimension never reads NO CAPACITY: a zero provided dimension has no ratio either. A length check
+ *      the module itself fails with noCapacity (rail-head of a girder unstable at the factored load) keeps it.
  * (ii) Any other check whose capacity is ≤ 0, or whose ratio is not finite or above 1000 (a 1e12 sentinel of a module,
  *      an amplifier past its limit), fails with utilization Infinity and noCapacity: true; it ranks above every finite
  *      D/C. JSON writes Infinity as null: the flag is the source of truth.
@@ -35,13 +36,15 @@ const evaluated=(c:CheckResult)=>c.status==='pass'||c.status==='fail';
 export function integrityFields(c:CheckResult):Partial<Pick<CheckResult,'status'|'utilization'|'geometry'|'noCapacity'>>&{rule:'geometry'|'shortfall'|'no-capacity'|'no-demand'}|undefined{
  if(!evaluated(c))return undefined;
  const d=c.demand,k=c.capacity,u=c.utilization;
+ // A response the module declared to have no capacity (the girder has no second-order equilibrium at the factored load,
+ // so the rail movement it would measure does not exist) stays so, a length check included: it is not a dimension.
+ if(c.noCapacity&&u===Infinity&&c.status==='fail')return undefined;
  if(geometricCheck(c)){
   if((finite(d)&&d<0)||(finite(k)&&k<0)||(d!==undefined&&Number.isNaN(d))||(k!==undefined&&Number.isNaN(k)))return {rule:'geometry',status:'fail',geometry:true,utilization:undefined,noCapacity:undefined};
   // A provided dimension of zero (a clearance used up): the rule is met or not, there is no ratio.
   if(u!==undefined&&(!Number.isFinite(u)||Math.abs(u)>noCapacityRatio))return {rule:'shortfall',utilization:undefined,noCapacity:undefined};
   return undefined;
  }
- if(c.noCapacity&&u===Infinity&&c.status==='fail')return undefined;
  const none=(k!==undefined&&!(k>0))||(u!==undefined&&(!Number.isFinite(u)||u>noCapacityRatio));
  if(!none)return undefined;
  // Nothing to carry and nothing to carry it with (a zero demand on a zero resistance): met, with a zero ratio.

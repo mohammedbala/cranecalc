@@ -16,6 +16,9 @@ import {dimText,sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,fil
 import {heading,numbered,paragraph,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type ViewRender} from './detailSheet';
 import {AnnotationSpace} from './annotationSpace';
+/** The travel the slots give, floored (never overstated): the 1/64 in limit form in US units; in SI on the sheet's
+ * half-millimetre grid, as the slot and sleeve sizes it comes from are printed. */
+const slotTravel=(mm:number,u:'US'|'SI')=>u==='SI'?`${Math.floor(2*mm+1e-9)/2} mm`:limitLength(mm,u,'max');
 
 type Units=CalculationSnapshot['input']['units'];
 /** SI drawing values to the millimeter, or the half millimeter under 25 mm: no soft-converted decimals. */
@@ -182,7 +185,7 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
  // Longitudinal section through the saddle, looking from the column.
  if(saddleCut){const xs=X(g.rootStart+g.rootLength/2);svg+=sectionCut([xs,Y(-b.tf-(cap?b.capTw:0))-4],[xs,Y(barBottom)+4],[-1,0],detailTitles.saddle,['a']);}
  const notesY=Math.max(bottom,overall)+17;
- svg+=text(x,notesY,rel?`SLOTS GIVE ${limitLength(rel.travel,u,'max')} VERTICAL TRAVEL EACH WAY; DO NOT CLAMP THE COLUMN GUSSET`:'COLUMN END BOLTS PRETENSIONED IN STANDARD HOLES',8);
+ svg+=text(x,notesY,rel?`SLOTS GIVE ${slotTravel(rel.travel,u)} VERTICAL TRAVEL EACH WAY; DO NOT CLAMP THE COLUMN GUSSET`:'COLUMN END BOLTS PRETENSIONED IN STANDARD HOLES',8);
  const topPart=single?'TOP OF PLATE':'TOP BAR';
  svg+=text(x,notesY+16,cap?`${topPart} CLEAR OF CAP BY ${sz(a.clearance)} MIN. / NO CAP HOLES OR CUTS AT THE TIE`:`${topPart} ${sz(g.saddleClear)} CLEAR OF SADDLE / NO FLANGE HOLES OR CUTS AT THE TIE`,8);
  return {svg:svg+'</g>',scale:scale.label};
