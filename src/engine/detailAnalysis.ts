@@ -294,13 +294,17 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    if(!r){result.unstableCases=(result.unstableCases??0)+1;restraintForces=stations.map(x=>({x:x-start,top:0,bottom:0}));bayStates.set(bayKey,restraintForces);}
    else{
    result.residual=Math.max(result.residual,r.residual);
+   restraintForces=r.restraints.map(v=>({x:v.x,top:v.top,bottom:v.bottom}));bayStates.set(bayKey,restraintForces);
+   }
    if(strength){
     // Load-height LTB: the elastic critical moment of this case (wheels at the rail head, UDL at rail height, axial
     // load, modeled restraints and moment gradient) is Mcr = lambda M / 0.8 because the eigen model carries 0.8
     // stiffness. It enters F2 / F4 / F5 as Cb = Mcr / Mocr (AISC 360-16 F1 and Commentary F1), never above 1, and the
     // strength never exceeds phi Mcr. A case is screened out when it is stable at the multiplier that would just reach
-    // the governing utilization so far.
-    let Mx=0,xm=start;for(const st of r.stations){const m=moment(st.x+start);if(Math.abs(m)>Math.abs(Mx)){Mx=m;xm=st.x+start;}}
+    // the governing utilization so far. A case that buckles below the applied load (no second-order state) enters with
+    // its own multiplier like any other, so it never lowers the D/C. The moment is sampled at the mesh nodes and element
+    // midpoints, the stations of a solution.
+    let Mx=0,xm=start;for(const x of stability.nodes.flatMap((v,i,a)=>i?[(a[i-1]+v)/2,v]:[v])){const m=moment(x+start);if(Math.abs(m)>Math.abs(Mx)){Mx=m;xm=x+start;}}
     const c=Mx>=0?curves.positive:curves.negative,M=Math.abs(Mx);
     if(M>0){
      const record=(u:number,capacity:number,critical:number)=>{if(u>loadHeight.utilization)Object.assign(loadHeight,{utilization:u,demand:M,capacity,length:p.unbracedLength,critical,cb:Number.isFinite(critical)?c.cb(critical):1,mocr:c.mocr,sign:Mx>=0?1:-1,id:e.id,combination:e.combination,x:xm,commentary:commentary(moment,xm,start,end,wheels.map(w=>w.x),c)});};
@@ -315,8 +319,6 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
       record(M/capacity,capacity,critical);
      }
     }
-   }
-   restraintForces=r.restraints.map(v=>({x:v.x,top:v.top,bottom:v.bottom}));bayStates.set(bayKey,restraintForces);
    }
    }
    if(p.system==='simple')for(const [endName,x] of [['left',start],['right',end]] as const){

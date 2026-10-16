@@ -142,10 +142,13 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  // the design envelope for H1; the reported level re-runs it when load height lowers M_cx.
  const levelChecks=(r:RunwayDetailResults,analysis:CheckResult[],reported:boolean):CheckResult[]=>{
  const checks:CheckResult[]=[];s.detailResults=r;
- if(r.bracket)checks.push(...bracketChecks(p,r.bracket,a.serviceReaction));
- if(r.existingBracket)checks.push(...existingBracketChecks(p,r.existingBracket));
- if(r.rolledBracket)checks.push(...rolledBracketChecks(p,r.rolledBracket,a.serviceReaction));
- if(r.taperedHaunch)checks.push(...taperedHaunchChecks(p,r.taperedHaunch,a.serviceReaction));
+ // The checks whose demand includes the restraint forces of the strength cases (the tie, bracket and bearing families):
+ // with unstable cases they cannot be met (failUnstable, at the end).
+ const restraintChecks=new Set<CheckResult>(),restraint=(list:CheckResult[])=>{for(const c of list)restraintChecks.add(c);return list;};
+ if(r.bracket)checks.push(...restraint(bracketChecks(p,r.bracket,a.serviceReaction)));
+ if(r.existingBracket)checks.push(...restraint(existingBracketChecks(p,r.existingBracket)));
+ if(r.rolledBracket)checks.push(...restraint(rolledBracketChecks(p,r.rolledBracket,a.serviceReaction)));
+ if(r.taperedHaunch)checks.push(...restraint(taperedHaunchChecks(p,r.taperedHaunch,a.serviceReaction)));
  checks.push(...analysis);
  const add=(...args:Parameters<typeof compared>)=>checks.push(compared(...args));
  // m11: the combined normal stress at each flange's own extreme fibres (AISC DG7 / DG9), top (cap tips) and bottom.
@@ -156,7 +159,11 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  add('torsion-normal','Strength',capped?'Combined normal stress with warping · top flange (cap tips)':'Combined normal stress with warping · flange tips',fn.top,available(designFy,p.method,.9,1.67),'stress','f_{un}=\\frac{P}{A}+\\frac{M_x}{S_{xc}}+\\frac{M_y}{S_y}+\\sigma_{ws};\\quad M_y=0.8EI_y|v^{\\prime\\prime}|,\\ \\sigma_{ws}=0.8EW_{no}|\\theta^{\\prime\\prime}|',normalNote('top'),['aisc-h3','dg7','vlasov']);
  if(capped)add('torsion-normal-bottom','Strength','Combined normal stress with warping · bottom flange',fn.bottom,available(designFy,p.method,.9,1.67),'stress','f_{un}=\\frac{P}{A}+\\frac{M_x}{S_{xt}}+\\frac{M_yb_f}{2I_y}+\\sigma_{ws};\\quad M_y=0.8EI_y|v^{\\prime\\prime}|,\\ \\sigma_{ws}=0.8EW_{no}|\\theta^{\\prime\\prime}|',normalNote('bottom'),['aisc-h3','dg7','vlasov']);
  add('torsion-shear','Strength','Combined shear including Saint-Venant / warping',r.shearStress,available(.6*designFy,p.method,.9,1.67),'stress','f_{uv}=\\tau_b+\\tau_t+\\tau_{ws};\\quad\\tau_t=0.8Gt\\theta^{\\prime},\\ \\tau_{ws}=\\frac{0.8ES_w\\theta^{\\prime\\prime\\prime}}{t}','Checks flange and web shear bounds, adding direct shear and torsional components by magnitude, the St Venant and warping shear at the analysis stiffness (0.8G, 0.8E). No torsional plastic redistribution.',['aisc-h3','vlasov']);
- add('torsion-stability','Strength','Load-height / lateral-torsional stability',p.method==='LRFD'?1/.9:1.67,r.criticalMultiplier,'ratio',p.method==='LRFD'?'\\lambda=M_{cr}/M_u\\ge1/\\phi_b':'\\lambda=M_{cr}/M_a\\ge\\Omega_b',`Lowest sampled elastic critical load multiplier with 0.8 member and brace stiffness. Major-moment coupling, axial geometric stiffness, above-shear-center wheel forces and an elevated dead load are included. The load-height flexural strength and H1 also control.${r.unstableCases?` ${r.unstableCases} strength case${r.unstableCases>1?'s buckle':' buckles'} below the applied load, so their stresses and restraint forces are not recovered: increase the girder, cap or bracing.`:''}`,['aisc-f4','vlasov']);
+ // The second-order analysis behind torsion-normal has an equilibrium state only while the lowest elastic critical load
+ // multiplier at 0.8 stiffness exceeds the load factor of that analysis (alpha = 1 LRFD, 1.6 for ASD loads). Member
+ // lateral-torsional buckling strength is Chapter F (flexure-load-height, Mcr = lambda M_u / 0.8 from the same eigenvalue).
+ const alpha=p.method==='LRFD'?1:1.6,lambda=r.criticalMultiplier,gaps=restraintClearances(p),played=gaps.top.gap>0||gaps.bottom.gap>0;
+ add('torsion-stability','Strength','Load-height / lateral-torsional stability',alpha,lambda,'ratio','\\lambda>\\alpha;\\quad A=\\frac{1}{1-\\alpha/\\lambda}',`Lowest sampled elastic critical load multiplier λ = ${lambda.toFixed(2)}${r.governing.criticalMultiplier?` (${r.governing.criticalMultiplier.combination})`:''} with 0.8 member and brace stiffness. Major-moment coupling, axial geometric stiffness, above-shear-center wheel forces and an elevated dead load are included. The coupled second-order analysis of the stresses and restraint forces (AISC 360-16 C2.3 / Appendix 1, at α = ${alpha}${p.method==='LRFD'?'':' times the ASD loads'}) has an equilibrium state only for λ > α: ${lambda>alpha?`it amplifies the twist and lateral bending about 1/(1 − α/λ) = ${(1/(1-alpha/lambda)).toFixed(2)}`:'none exists'}. Member lateral-torsional buckling strength is Chapter F: flexure-load-height (M_cr = λM_u/0.8 from the same eigenvalue) and H1 control it.${lambda/alpha<1.5&&played?` Restraint-sensitive: λ/α < 1.5 with restraint play (top ${format(gaps.top.gap,'length',p.units,3)}, bottom ${format(gaps.bottom.gap,'length',p.units,3)}) taken up at the Appendix 6 brace force; the amplification depends on the secant restraint stiffness.`:''}${r.unstableCases?` ${r.unstableCases} strength case${r.unstableCases>1?'s buckle':' buckles'} below the applied load, so their stresses and restraint forces are not recovered and the checks that depend on them fail: increase the girder, cap or bracing.`:''}`,['aisc-f4','vlasov']);
  // M2: load-height LTB. The elastic buckling eigenvalue of the bay with the wheels at the rail head gives M_cr; it enters
  // F4 (F2 / F5) as Cb = M_cr / M_ocr (AISC 360-16 F1, Commentary F1), never above 1. The Commentary F1 load-height Cb of
  // the same case is printed beside it for comparison.
@@ -185,23 +192,23 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const cap=activeColumnCap(p),capR=r.columnCap;
  if(cap&&capR){
   // A column cap: the girder end is a fork on the cap; no flange tie. Its restraint stiffness, strength, bolts and welds.
-  checks.push(...columnCapChecks(p,capR,{imperfection,required:requiredK}));
+  checks.push(...restraint(columnCapChecks(p,capR,{imperfection,required:requiredK})));
  }else if(capAngle){
   // Cap tieback angle (top flange only; the bolted end bearings restrain the bottom flange): its own member, stiffness and components.
   const c=(brace as {compliance?:Record<string,number>}).compliance??{},share=(k:string)=>`${k} ${(100*(c[k]??0)*brace.stiffness).toFixed(0)}%`;
   add('brace-member','Bracing','Top-flange tie strength',r.demands.brace+imperfection,brace.capacity,'force','P_{br}=H+0.02M_rC_d/h_o+0.01P_r',`Cap tieback angle at the top flange; the bottom flange is restrained by the end bearing bolts. The tie plate in tension (D2) and in compression over its clear span (E3, K = 1.0); full concurrent horizontal reaction plus flexural/axial imperfection demands. The angle, bolts, end plate and column flange are checked under Cap tieback.`,['aisc-brace','aisc-e','cap-angle-basis']);
   add('brace-stiffness','Bracing','Brace and connection stiffness in series',requiredK,secantStiffness(brace.stiffness,play.gt,imperfection),'stiffness',play.gt>0?'\\beta_{sec}=\\left(\\sum1/k_i+g_t/P_{br}\\right)^{-1}\\ge\\beta_{br}':'\\beta=\\left(\\sum1/k_i\\right)^{-1}\\ge\\beta_{br}',`${play.gt>0?`Secant stiffness with the angle's play g_t = ${len(play.gt)} taken up at the Appendix 6 brace force P_br = ${format(imperfection,'force',p.units,3)}: (1/${format(brace.stiffness,'stiffness',p.units,3)} + g_t/P_br)⁻¹ = ${format(secantStiffness(brace.stiffness,play.gt,imperfection),'stiffness',p.units,3)}. `:''}Cap tieback angle in pull, in series: tie plate axial strain over its clear span, lap bolt shear, the angle's short leg bending from the bolt line to the long leg, the channel flange bending from its web, cap and column bolt elongation, the end plate between its bolts, the shims and the column flange bending from its web. Shares of the compliance: ${['plate','lapBolts','angleLeg','channelFlange','capBolts','endPlate','columnBolts','shims','columnFlange'].map(share).join(', ')}. This stiffness is the top-flange restraint of the lateral/torsional model. Building deformation is excluded at the stated interface. Top-flange load amplification is included in Appendix 6 requirements.`,['aisc-brace','cap-angle-basis']);
-  checks.push(...capAngleChecks(s,{force:(r.demands.brace+imperfection)/brace.cos}));
+  checks.push(...restraint(capAngleChecks(s,{force:(r.demands.brace+imperfection)/brace.cos})));
  }else{
  add('brace-member','Bracing',activeEndBearing(p)?'Top-flange tie strength':'Both-flange tie strength',r.demands.brace+imperfection,brace.capacity,'force','P_{br}=H+0.02M_rC_d/h_o+0.01P_r',`${plate?'One flexible plate (AISC DG7 §11.2) at':'Two symmetric flat bars at'} ${activeEndBearing(p)?'the top flange; the bottom flange is restrained by the end bearing bolts':'each flange'}. Out-of-plane buckling over 0.8 × the length between the innermost bolt rows, and net-section tension; full concurrent horizontal reaction plus flexural/axial imperfection demands.`,['aisc-brace','aisc-e']);
  add('brace-stiffness','Bracing','Brace and connection stiffness in series',requiredK,secantStiffness(brace.stiffness,play.gt,imperfection),'stiffness',play.gt>0?'\\beta_{sec}=\\left[\\left(\\cos^2\\theta\\left(\\sum1/k_i\\right)^{-1}\\right)^{-1}+g_t/P_{br}\\right]^{-1}\\ge\\beta_{br}':'\\beta=\\cos^2\\theta\\left(\\sum1/k_i\\right)^{-1}\\ge\\beta_{br}',(play.gt>0?`Secant stiffness with the gusset slot play g_t = ${len(play.gt)} taken up at the Appendix 6 brace force P_br = ${format(imperfection,'force',p.units,3)}. `:'')+(plate?'One flexible plate; single-plane bolt shear deformation, and the lap couple rotating both gussets (e²/k_gusset), are included. ':'')+'Gusset axial strain and bolt shear deformation are included at both ends. Direct flange saddles additionally include local flange, saddle, gusset and receiving-flange flexibility. Building deformation is excluded at the stated interface. Top-flange load amplification is included in Appendix 6 requirements.',['aisc-brace']);
  // The single flexible plate's single-shear laps are checked with the plate (plateTieChecks).
- if(!plate)checks.push(...lapChecks(p,d.brace.connection,'tie','Flange tie connection',(r.demands.brace+imperfection)/brace.cos,0,d.brace.gussetThickness,d.material.Fy,d.material.Fu));
+ if(!plate)checks.push(...restraint(lapChecks(p,d.brace.connection,'tie','Flange tie connection',(r.demands.brace+imperfection)/brace.cos,0,d.brace.gussetThickness,d.material.Fy,d.material.Fu)));
  }
  const bearingBolts=activeEndBearing(p);
  // The fork brings both flange forces to the bearing bolts.
  const boltLateral=cap&&capR?Math.max(...capR.grids.map(v=>v.lateral.value))+imperfection:r.demands.brace+imperfection;
- if(bearingBolts)checks.push(...endBearingChecks(p,bearingBolts,{analysis:a,lateral:boltLateral}));
+ if(bearingBolts)checks.push(...restraint(endBearingChecks(p,bearingBolts,{analysis:a,lateral:boltLateral})));
  else checks.push(...lapChecks(p,d.end,'end','Girder end / longitudinal connection',a.axial,Math.max(a.reaction,a.uplift),p.section.tw,p.section.Fy,p.section.Fu));
  const bs=d.bearing,m=d.material,stiffener=bearingStiffener({width:bs.stiffenerWidth,thickness:bs.stiffenerThickness,cope:bs.cope,webThickness:p.section.tw,webDepth:strength.h,flangeThickness:p.section.tf,loadedWidth:p.section.bf,E:p.section.E,Fy:Math.min(m.Fy,p.section.Fy),method:p.method});
  add('stiffener-column','Local forces','Paired full-depth bearing stiffeners',a.reaction,stiffener.compression.capacity,'force','L_c=0.75h;\\quad A=2b_st_s+12t_w^2;\\quad P_n=F_{cr}A','Uses the smaller end effective web strip at every support. Fitted stiffeners, full-depth web welds; no reliance on the bare web strength.',['aisc-connections','aisc-e']);
@@ -254,12 +261,21 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  if(!cap&&!capAngle){
  const gusset=d.brace.gussetThickness,gwidth=d.brace.connection.gauge+2*d.brace.connection.edge;
  add('tie-gusset-compression','Bracing','Tie gusset compression buckling',(r.demands.brace+imperfection)/brace.cos,compressionResistance(gwidth*gusset,gusset/Math.sqrt(12),2*d.brace.connectionLength,p.section.E,m.Fy,p.method).capacity,'force','P_n=F_{cr}A;\\quad L_c=2L_g','Unsupported gusset treated as a cantilever; full central-plate force, no beneficial load spreading.',['aisc-e']);
- checks.push(...flangeTieChecks(s,(r.demands.brace+imperfection)/brace.cos),...stiffenerTieChecks(s,(r.demands.brace+imperfection)/brace.cos));
- checks.push(...tieMovementChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,member:brace.member}));
- if(plate)checks.push(...plateTieChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,cos:brace.cos,member:brace.member}));
+ checks.push(...restraint([...flangeTieChecks(s,(r.demands.brace+imperfection)/brace.cos),...stiffenerTieChecks(s,(r.demands.brace+imperfection)/brace.cos)]));
+ checks.push(...restraint(tieMovementChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,member:brace.member})));
+ if(plate)checks.push(...restraint(plateTieChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,cos:brace.cos,member:brace.member})));
  }
  checks.push(...railChecks(s),...capAttachmentChecks(s),...simpleSupportChecks(p,a.endRotation),...endStopChecks(p,{analysis:a,strength:{...strength,major:Math.min(strength.major,mcx)},props,holdDown:checks.find(c=>c.id==='hold-down-model')?.capacity??0}));
 
+ // Unstable strength cases (no second-order state at the factored load): every check whose demand comes from their
+ // stresses or restraint forces fails with no capacity (utilization Infinity), so no unstable case lowers a D/C. Fatigue
+ // and service cases are first-order and stay; geometric limits stay.
+ if(r.unstableCases){
+  const n=r.unstableCases,why=`Girder unstable at the factored load in ${n} case${n>1?'s':''} (λ = ${r.criticalMultiplier.toFixed(2)} at 0.8 stiffness, not above α = ${alpha}): those cases have no second-order equilibrium, so their stresses and restraint forces are not recovered and this check has no capacity. `;
+  const own=/^(torsion-normal|torsion-normal-bottom|torsion-shear|rail-head|brace-member|brace-stiffness|stiffener-lateral-flexure|stiffener-combined-weld|tie-gusset-compression|cap-weld-(strength|metal|rupture))$/;
+  const strengthResult=(c:CheckResult)=>c.demand!==undefined&&!/fatigue/.test(c.id)&&c.group!=='Fatigue'&&(c.quantity!=='length'||c.id==='rail-head')&&!['not-applicable','excluded','unsupported','unverified','incomplete'].includes(c.status);
+  for(const c of checks)if((own.test(c.id)||restraintChecks.has(c))&&strengthResult(c))Object.assign(c,{status:'fail',utilization:Infinity,noCapacity:true,substitution:`\\lambda=${r.criticalMultiplier.toFixed(3)}\\le\\alpha=${alpha}`,note:why+c.note});
+ }
  return checks;
  };
  const built=new Map<RunwayDetailResults,CheckResult[]>(),level=(r:RunwayDetailResults)=>{let c=built.get(r);if(!c){c=levelChecks(r,[],false);built.set(r,c);}return {checks:c,results:r};};
