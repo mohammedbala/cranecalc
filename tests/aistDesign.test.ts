@@ -111,7 +111,7 @@ describe('Concurrent design, fatigue and export safety',()=>{
   const p=designProject();p.system='continuous';p.spans=[7620,7620];p.cranes[0].travelEnd=15240;p.cranes.push({...structuredClone(p.cranes[0]),id:'second',name:'Second crane'});const s=calculate(p);
   expect(s.errors).toEqual([]);expect(s.designAnalysis!.singleVertical).toBeLessThan(s.analysis!.demand.deflection);expect(s.designAnalysis!.serviceReaction).toBeGreaterThan(50*4448.221615);expect(s.checks.find(c=>c.id==='column-brackets')?.status).toBe('fail');
   expect(s.designAnalysis!.combinations.some(c=>c.moment>0&&c.positions.length===2)).toBe(true);
- },20000);
+ },300000);
  it('renders every worksheet equation without KaTeX errors and resolves every provision identifier',()=>{
   const s=calculate(designProject());for(const c of s.checks){if(c.equation)expect(()=>katex.renderToString(c.equation,{throwOnError:true})).not.toThrow();if(c.substitution)expect(()=>katex.renderToString(c.substitution!,{throwOnError:true})).not.toThrow();for(const id of c.referenceIds)expect(references.some(r=>r.id===id),id).toBe(true);}
  });

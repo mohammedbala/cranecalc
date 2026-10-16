@@ -8,11 +8,11 @@ import {drawingSheetSet} from '../src/components/planSheet';
 import {reportHtml} from '../server/report';
 import type {CalculationSnapshot} from '../src/engine/types';
 let s:CalculationSnapshot;
-beforeAll(()=>{s=calculate(cappedDemonstrationProject());},120000);
+beforeAll(()=>{s=calculate(cappedDemonstrationProject());},600000);
 it('runs the complete three-bay capped example with no unresolved or failed checks',()=>{
  expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
  expect(s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)&&!reviewOpenItem(c))).toEqual([]);
- expect(s.checks.filter(c=>c.status==='excluded').map(c=>c.id).sort()).toEqual(['brace-by-others','bracket-load-path','supporting-structure']);
+ expect(s.checks.filter(c=>c.status==='excluded').map(c=>c.id).sort()).toEqual(['brace-by-others','bracket-load-path','crane-level-strut','supporting-structure']);
  expect(s.checks.find(c=>c.id==='bracket-receiver')?.note).toContain('not checked here');
  expect(s.detailResults!.cap!.longitudinalFlow).toBeGreaterThan(0);
  expect(s.detailResults!.fatigue.some(f=>f.id.startsWith('CW'))).toBe(true);

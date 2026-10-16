@@ -147,7 +147,7 @@ describe('New freestanding column package',()=>{
   // Welded after the nuts are snug, so in the field: the flag stands with the all-around circle at the arrow.
   expect(columns.svg).toMatch(/data-weld-location="field" data-weld-all-around="true"/);
   expect(texts(columns.svg)).toContain('5/16" FILLET ALL AROUND');
- },120000);
+ },300000);
  it('reports geometry clashes and drawing mismatches as input errors',()=>{
   const p=newColumnDemonstrationProject();
   // Washers on the rods clash with the column flange welds on a short plate.

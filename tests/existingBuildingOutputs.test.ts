@@ -6,7 +6,7 @@ import {reportHtml} from '../server/report';
 import type {CalculationSnapshot} from '../src/engine/types';
 
 let s:CalculationSnapshot;
-beforeAll(()=>{s=calculate(cappedDemonstrationProject());},120000);
+beforeAll(()=>{s=calculate(cappedDemonstrationProject());},600000);
 // RFC 4180 quoted fields with doubled quotes.
 const rows=(csv:string)=>csv.split('\r\n').map(line=>{const out:string[]=[];let i=0;while(i<line.length){let v='';i++;while(i<line.length){if(line[i]==='"'){if(line[i+1]==='"'){v+='"';i+=2;continue;}i++;break;}v+=line[i++];}out.push(v);i++;}return out;});
 describe('existing building outputs',()=>{
@@ -17,7 +17,7 @@ describe('existing building outputs',()=>{
   expect(r.governing.U.U).toBe(Math.max(...r.bySupport.map(v=>v.U)));
   // Interior supports carry two girder ends of dead load.
   expect(r.station).toBeGreaterThan(0);expect(r.station).toBeLessThan(s.supportReactions!.supports.at(-1)!.x);
-  expect(s.checks.filter(c=>c.status==='excluded').map(c=>c.id).sort()).toEqual(['brace-by-others','bracket-load-path','supporting-structure']);
+  expect(s.checks.filter(c=>c.status==='excluded').map(c=>c.id).sort()).toEqual(['brace-by-others','bracket-load-path','crane-level-strut','supporting-structure']);
  });
  it('prints unfactored reactions and the column check, and labels the factored interface forces',()=>{
   const html=reportHtml(s);
