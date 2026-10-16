@@ -77,6 +77,23 @@ describe('welded bracket independent statics and limit states',()=>{
   expect(c.result.service.deflection.value).toBe(direct.deflection);
   expect(c.result.strength.vertical.value).toBeGreaterThan(40000); // own weight only in strength
  });
+ it('adds the ribs\' couples with their signs in the column web and panel; the flange at each rib takes its own',()=>{
+  // One girder end beyond the near rib: the seat cantilevers over it and holds the far rib down (P < 0).
+  const p=cappedDemonstrationProject(),b=p.details!.bracket!,x=b.ribSpacing/2+150;delete b.columnStiffeners;
+  const r=bracketResponse(p,[{vertical:80000,offset:x}]);
+  expect(r.ribs[0]).toBeLessThan(0);expect(r.ribs[1]).toBeGreaterThan(r.V);
+  const couple=(P:number)=>1.5*P*r.e/b.ribDepth;
+  // The web sees the net couple of both ribs at a level, 1.5|V|e/h_r, not the sum of their magnitudes.
+  expect(r.receiverForce).toBeCloseTo(couple(r.V),6);expect(r.receiverForce).toBeCloseTo(Math.abs(couple(r.ribs[0])+couple(r.ribs[1])),6);
+  expect(r.receiverForce).toBeLessThan(.75*couple(Math.abs(r.ribs[0])+Math.abs(r.ribs[1])));
+  expect(r.ribTension).toBeCloseTo(couple(r.ribs[1]),6);
+  // The checks: J10.2, J10.3 and the J10.6 panel take the net force; the flange local bending at each rib the larger rib's couple.
+  const c=createBracketCollector(p)!;c.observe('strength','offset',0,[{vertical:80000,offset:x}],-1);
+  const checks=bracketChecks(p,c.result),get=(id:string)=>checks.find(v=>v.id==='bracket-'+id)!,S=c.result.strength;
+  for(const id of ['column-yield','column-crippling','column-panel'])expect(get(id).demand,id).toBe(S.receiverForce.value);
+  expect(get('column-flange').demand).toBe(S.ribTension.value);expect(S.ribTension.value).toBeGreaterThan(1.2*S.receiverForce.value);
+  expect(get('column-yield').note).toContain('1.5|V|e/h_r');expect(get('column-panel').note).toContain('1.5|V|e/h_r');
+ });
  it('blocks unconfirmed geometry and fails thin seat, uplift without a hold-down and high column axial force',()=>{
   // Without bolted end bearings nothing holds the girder down: uplift fails the gravity bracket.
   const p=cappedDemonstrationProject(),b=p.details!.bracket!;b.seatThickness=12.7;b.receiver.axialDemand=1e8;b.receiver.confirmed=false;p.details!.endBearing!.enabled=false;
