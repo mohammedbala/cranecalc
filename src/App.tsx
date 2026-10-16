@@ -51,6 +51,9 @@ import './styles.css';
 import './calculation-layout.css';
 import './worksheet-density.css';
 import {sheetIndex} from './components/planSheet';
+import type { DesignProgress } from './engine/designAnalysis';
+/** The progress line while calculating: which moving-load search, its travel steps, and how far it is. */
+const progressLabel=(p:DesignProgress)=>`${p.search==='design'?'design search':'detailed search'}, ${p.steps} travel steps · ${Math.round(100*p.fraction)}%`;
 const RunwayViewer=lazy(()=>import('./components/RunwayViewer'));
 const storageKey='cranecalc.project.v1';
 const staticHosting=import.meta.env.VITE_STATIC_HOST==='true';
@@ -74,6 +77,8 @@ function WorksheetSection({name,number,title,children,project}:{name:string;numb
 }
 export default function App(){
  const [project,setProject]=useState(initialProject),[snapshot,setSnapshot]=useState<CalculationSnapshot|null>(null),[busy,setBusy]=useState(true),[engineError,setEngineError]=useState(''),[tab,setTab]=useState(()=>hasSavedProject()?'Calculation':'Templates'),[activeSection,setActiveSection]=useState('Geometry'),[jumpTarget,setJumpTarget]=useState<string|null>(null),[issuesOnly,setIssuesOnly]=useState(false),[toast,setToast]=useState(''),[exporting,setExporting]=useState(false),[report,setReport]=useState<{snapshot:CalculationSnapshot;blob:Blob;framing:FramingSettings;format:'pdf'|'html'}|null>(null),[showOutput,setShowOutput]=useState(false);
+ // Progress of the moving-load searches of the calculation in the worker (calculate's onProgress).
+ const [progress,setProgress]=useState<DesignProgress|undefined>();
  const [framing,setFraming]=useState(initialFraming);
  useEffect(()=>{try{localStorage.setItem(framingKey,JSON.stringify(framing));}catch{}},[framing]);
  const importRef=useRef<HTMLInputElement>(null),sequence=useRef(0);
@@ -91,8 +96,8 @@ export default function App(){
   return drawingSheetSet(report.snapshot,report.framing).map(sheet=>{const edit=cadEditFor(projectKey,sheet.number,base);
    return edit?.current?{...sheet,svg:docToSvg(edit.record.doc),entities:docDxfEntities(edit.record.doc),layers:docDxfLayers(edit.record.doc),edited:true}:{...sheet,edited:false};});
  },[showOutput,report,cadVersion]);// eslint-disable-line react-hooks/exhaustive-deps
- useEffect(()=>{if(project.units!=='US'){setBusy(true);setProject(withImperialUnits(project));return;}setBusy(true);setEngineError('');const id=++sequence.current;let worker:Worker|undefined;
- const timer=setTimeout(()=>{worker=new Worker(new URL('./engine/worker.ts',import.meta.url),{type:'module'});worker.onmessage=e=>{if(e.data.requestId!==sequence.current)return;if(e.data.error)setEngineError(e.data.error);else setSnapshot(e.data.snapshot);setBusy(false);};worker.onerror=e=>{setEngineError(e.message);setBusy(false);};worker.postMessage({input:project,requestId:id});},200);
+ useEffect(()=>{if(project.units!=='US'){setBusy(true);setProject(withImperialUnits(project));return;}setBusy(true);setEngineError('');setProgress(undefined);const id=++sequence.current;let worker:Worker|undefined;
+ const timer=setTimeout(()=>{worker=new Worker(new URL('./engine/worker.ts',import.meta.url),{type:'module'});worker.onmessage=e=>{if(e.data.requestId!==sequence.current)return;if(e.data.progress){setProgress(e.data.progress);return;}setProgress(undefined);if(e.data.error)setEngineError(e.data.error);else setSnapshot(e.data.snapshot);setBusy(false);};worker.onerror=e=>{setEngineError(e.message);setBusy(false);};worker.postMessage({input:project,requestId:id});},200);
  if(!validateProject(project).length){try{localStorage.setItem(storageKey,JSON.stringify(project));}catch{setToast('Device storage is unavailable. Save a project file to retain these inputs.');}}
  return ()=>{clearTimeout(timer);worker?.terminate();};},[project]);
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),5000);return ()=>clearTimeout(t);},[toast]);
@@ -171,7 +176,7 @@ export default function App(){
     <div className="worksheet-toolbar"><nav aria-label="Worksheet views">{['Templates','Calculation','Diagrams','References','Samples'].map(t=><button key={t} className={tab===t?'active':''} aria-pressed={tab===t} onClick={()=>{setTab(t);worksheetScroll.current?.scrollTo({top:0});}}>{t==='Calculation'?'Inputs & checks':t==='Diagrams'?'Drawings':t==='Samples'?'Sample calcs':t}</button>)}</nav><span className={`live-state ${busy?'busy':''}`} role="status">{busy?<LoaderCircle size={12} className="spin"/>:<span className="live-dot"/>}{busy?'Recalculating':'Live'}</span></div>
     {tab==='Calculation'&&<nav className="worksheet-jumps" aria-label="Jump to calculation section">{worksheetSections.map((name,i)=><button key={name} className={activeSection===name?'selected':''} onClick={()=>setStep(name)}><span>{String(i+1).padStart(2,'0')}</span>{name==='Crane loads'?'Loads':name==='Project'?'Report':name}</button>)}</nav>}
     <div className="worksheet-scroll" ref={worksheetScroll} onScroll={()=>{if(tab!=='Calculation')return;const scroll=worksheetScroll.current;if(!scroll)return;let current='Geometry';for(const name of worksheetSections){const element=document.getElementById(sectionId(name));if(element&&element.offsetTop<=scroll.scrollTop+80)current=name;}setActiveSection(current);}}>
- <div className={`readiness-strip ${ready&&!connectionCoordination(project).length?'ready':errors.length||engineError?'invalid':'pending'}`}><span>{busy?<LoaderCircle size={13} className="spin"/>:ready&&!connectionCoordination(project).length?<CheckCircle2 size={13}/>:<TriangleAlert size={13}/>}<strong>{busy?'Calculating…':errors.length||engineError?'Inputs need correction':ready?(connectionCoordination(project).length?'Export for review · tie clashes':'Ready to export'):blockers.length?'Code design incomplete':'Numerical checks need review'}</strong></span><button onClick={()=>setStep('Validation')}>{blockers.length?`${blockers.length} pending checks`:'Review'}<ChevronRight size={12}/></button></div>
+ <div className={`readiness-strip ${ready&&!connectionCoordination(project).length?'ready':errors.length||engineError?'invalid':'pending'}`}><span>{busy?<LoaderCircle size={13} className="spin"/>:ready&&!connectionCoordination(project).length?<CheckCircle2 size={13}/>:<TriangleAlert size={13}/>}<strong>{busy?`Calculating…${progress?` ${progressLabel(progress)}`:''}`:errors.length||engineError?'Inputs need correction':ready?(connectionCoordination(project).length?'Export for review · tie clashes':'Ready to export'):blockers.length?'Code design incomplete':'Numerical checks need review'}</strong></span><button onClick={()=>setStep('Validation')}>{blockers.length?`${blockers.length} pending checks`:'Review'}<ChevronRight size={12}/></button></div>
  {engineError&&<div className="error-banner"><TriangleAlert size={16}/>{engineError}</div>}{errors.length>0&&<div className="error-banner"><TriangleAlert size={16}/><div><strong>Correct inputs to continue</strong>{errors.map(e=><p key={e}>{e}</p>)}</div></div>}
 
      {tab==='Calculation'&&<>
