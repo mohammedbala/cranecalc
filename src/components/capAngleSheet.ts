@@ -1,3 +1,5 @@
+// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
+import {dcText} from '../engine/checkPresentation';
 import type {CalculationSnapshot} from '../engine/types';
 import {capAngleGeometry,boltHardware,capAngleStiffenerGeometry,type CapAngleGeometry} from '../engine/capAngle';
 import {capAngleResult} from '../engine/capAngleTie';
@@ -230,6 +232,6 @@ export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
  return {key:'cap-angle-tie',name:'CAP TIEBACK ANGLES',views:[
   {title:capAngleTitles.section,render:()=>capAngleSection(s)},
   ...(shared?[{title:capAngleTitles.plan,render:()=>capAngleSharedPlan(s)}]:[])
- ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${movement>0?`${movement.toFixed(2)} ${travel}, `:''}${fatigue>0?`${fatigue.toFixed(2)} FATIGUE`:'FATIGUE BELOW THRESHOLD'})`:''}.`)]};
+ ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${dcText(strength,2)} STRENGTH, ${movement>0?`${dcText(movement,2)} ${travel}, `:''}${fatigue>0?`${dcText(fatigue,2)} FATIGUE`:'FATIGUE BELOW THRESHOLD'})`:''}.`)]};
 }
 export const capAngleLabelWidth=(v:string)=>textWidth(labelCaps(v),8.5);

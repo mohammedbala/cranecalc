@@ -1,3 +1,5 @@
+// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
+import {dcText} from '../engine/checkPresentation';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {activeEndBearing,endBearingGeometry} from '../engine/endBearing';
@@ -183,7 +185,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
  }});
 
  // Notes and design data.
- const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${v.utilization.toFixed(2)}`:'-';};
+ const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${dcText(v.utilization,2)}`:'-';};
  const force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
  const r=s.detailResults?.columnCap,peak=r?Math.max(...r.grids.flatMap(v=>v.bearings.map(x=>x.R.value))):0;
  const rows=[

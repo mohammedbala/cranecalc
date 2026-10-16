@@ -1,3 +1,5 @@
+// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
+import {dcText} from '../engine/checkPresentation';
 import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
 import {railPadThickness,clipGeometry} from '../engine/railSeat';
 import {girderBearingTitle} from './columnCapSheet';
@@ -202,7 +204,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    ['FRONT BOLT TENSION / BOLT SHEAR',T!==undefined&&V!==undefined?`${force(T)} / ${force(V)}`:'-'],
    // Socket room for the heads beside the stop welds (AISC Manual Table 7-15).
    ['BOLT C/L TO WELD TOE: FACE PL / STIFFENER',`${size(g.toe.face)} / ${size(g.toe.stiffener)}, ${size(wrenchClearance(db))} MIN.`],
-   ['GOVERNING STOP CHECK',worst?`${worst.title.replace(/\s*\(ratio t_min\/t\)/,'').toUpperCase()}: D/C ${(worst.utilization??0).toFixed(2)}${/prying/.test(worst.id)?' (THICKNESS RATIO)':''}`:'-'],
+   ['GOVERNING STOP CHECK',worst?`${worst.title.replace(/\s*\(ratio t_min\/t\)/,'').toUpperCase()}: D/C ${dcText(worst.utilization??0,2)}${/prying/.test(worst.id)?' (THICKNESS RATIO)':''}`:'-'],
    ['QUANTITY',`${2*stopEnds(p).length}: ${stopLocation(p).split(';')[0].toUpperCase()}`],
    ['DATA SOURCE',e.source||'NOT ENTERED']
   ];

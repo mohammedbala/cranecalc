@@ -1,3 +1,5 @@
+// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
+import {dcText} from '../engine/checkPresentation';
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
@@ -329,7 +331,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  // Drawing order on the sheet: the braced bay and the plans over two rows each, then the connections and the crossing.
  {const order=[detailTitles.bracedBay,detailTitles.strutPlan,detailTitles.braceTop,detailTitles.braceBase,rodCrossingTitle] as string[];views.sort((x,y)=>order.indexOf(x.title)-order.indexOf(y.title));}
 
- const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${v.utilization.toFixed(2)}`:'-';}).join(' / ');
+ const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${dcText(v.utilization,2)}`:'-';}).join(' / ');
  const z=r.seismic,sep=r.separation,lb=s.longitudinalBracing!;
  const rows=[
   ['BRACING',`${rodName} X, TENSION ONLY, GRIDS ${spanGrids}, BOTH RUNWAYS; W.P. ${dim(L.height)} ABOVE T/BASE PL${el?` (${capG?`${dim(capG.drop)} BELOW THE CAP TOP, EL. ${dim(datum+columnBaseElevation(base)+L.height)}`:`BRG. SEAT ${elev(L.height)}`})`:''}`],

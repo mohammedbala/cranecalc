@@ -154,7 +154,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
   }
   // Without the survey the arrangement is as before.
   const q=newColumnDemonstrationProject();delete q.existingColumn!.adjacent;
-  const plain=drawingSheetSet({...s,input:q})[1].svg;
+  const plain=drawingSheetSet({...s,input:q}).find(v=>v.number==='S-01')!.svg;
   expect(plain).not.toContain('data-existing-building');expect(texts(plain)).toContain('THE EXISTING BUILDING FRAMING IS NOT SHOWN');
  });
 });

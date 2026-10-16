@@ -1,3 +1,5 @@
+// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
+import {dcText} from '../engine/checkPresentation';
 import {supportColumn} from '../engine/drawingData';
 import type {CalculationSnapshot} from '../engine/types';
 import {flangeTieGeometry,tieRelease} from '../engine/tieGeometry';
@@ -303,7 +305,7 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const rated=checks.filter(v=>v.utilization!==undefined&&v.quantity!=='length'&&v.id!=='tie-slenderness'),most=(list:typeof checks)=>Math.max(0,...list.map(v=>v.utilization??0));
  const strength=most(rated.filter(v=>!v.id.includes('fatigue'))),fatigue=most(rated.filter(v=>v.id.includes('fatigue')));
  const minimumWeld=checks.some(v=>v.id==='flange-tie-weld-minimum'&&v.status==='pass'&&(v.utilization??0)>=1-1e-9);
- const summary=rated.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue.toFixed(2)} FATIGUE${minimumWeld?`; MINIMUM FILLET SIZE GOVERNS THE ${sz(a.weldSize).replaceAll('"','')} SADDLE WELDS`:''})`:'';
+ const summary=rated.length?` (MAX. D/C ${dcText(strength,2)} STRENGTH, ${dcText(fatigue,2)} FATIGUE${minimumWeld?`; MINIMUM FILLET SIZE GOVERNS THE ${sz(a.weldSize).replaceAll('"','')} SADDLE WELDS`:''})`:'';
  return {key:'flange-tie',name:single?'FLEXIBLE PLATE TIES':'FLANGE TIES',views:[
   {title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,128,true)},
   {title:detailTitles.tiePlan,render:plan},

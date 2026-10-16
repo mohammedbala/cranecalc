@@ -134,7 +134,8 @@ describe('New freestanding column package',()=>{
   expect(elevation).toMatch(new RegExp(`^\\d+/${columns.number}$`));
   expect(texts(set[0].svg)).toContain(columns.number);expect(texts(set[0].svg)).toContain(elevation);
   // A new column is shop welded: no field-weld flags or existing-column labels on the column-side details.
-  for(const sheet of set.slice(2))expect(texts(sheet.svg)).not.toMatch(/EXISTING COLUMN|FIELD WELD TO/);
+  // The detail sheets: after the cover (and its continuation, S-00A) and the general arrangement.
+  for(const sheet of set.filter(v=>!/^S-0[01]/.test(v.number)))expect(texts(sheet.svg)).not.toMatch(/EXISTING COLUMN|FIELD WELD TO/);
   // The plate washer weld: an all-around fillet on 4/S-04, sized in the note and checked for one rod's shear.
   const w=plateWasherWeld(p.columnBase!),check=s.checks.find(c=>c.id==='base-washer-weld')!;
   expect(w.size/inch).toBeCloseTo(5/16,9);expect(w.length/inch).toBeCloseTo(12,9);if(!s.columnBase)throw new Error('no base');
