@@ -82,7 +82,9 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  const railHead=railTopAboveSteel(p),railTop=(cap?p.section.d+p.section.capTw:p.section.d)+railHead,bumperLever=railTop+(p.details?.endStop?.bumperHeight??0);
  const railLever=(cap?p.section.d+p.section.capTw+railHead-cap.topY:railHead+p.section.tf/2)/props.h0,verticalLever=p.railEccentricity/props.h0;
  let eq=Math.max(dead.equilibriumError,live.equilibriumError);
- const positions=cranePositions(p,steps,criticalStations);
+ // Reduced pairing for several cranes (PairingOptions): a crane over a station with its neighbor at closest approach
+ // or on the coarse grid of the base travel steps.
+ const positions=cranePositions(p,steps,criticalStations,{coarseSteps:p.cranes.length===2?12:6});
  const cacheKey=scope?`${mesh}|${JSON.stringify(props)}|${JSON.stringify(p)}`:'';
  let cache:ResponseCache|undefined;
  if(scope){
