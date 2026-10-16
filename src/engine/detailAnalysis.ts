@@ -13,6 +13,8 @@ import {createTaperedHaunchCollector} from './taperedHaunch';
 import {bracketSeat} from './rolledBracketInputs';
 import { LateralTorsionBeam,type LateralTorsionStation } from './lateralTorsion';
 import {meshTolerance} from './meshNodes';
+import {EventDedup,KeyedCache,KeyFields} from './numericKeys';
+import {CaseRegistry} from './caseRegistry';
 import { beamSystem,momentAt } from './beam';
 import { boltProperties,plateMember,compressionResistance } from './connectionStrength';
 import type { RunwayCaseEvent,RunwayCaseObserver } from './designAnalysis';
@@ -226,7 +228,19 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  // set the restraint stiffness k·y², the restraint torque and the interface torque alike.
  const shearCenter=cap?cap.shearCenter:p.section.d/2,topRestraint=tieLine(p)-shearCenter,bottomRestraint=tieLine(p,'bottom')-shearCenter;
  const mechanics=cap?{Iy:cap.Iy,topOffset:topRestraint,bottomOffset:bottomRestraint,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{topOffset:topRestraint,bottomOffset:bottomRestraint};
- const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),observedSets=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
+ // Dedup stores with numeric keys (numericKeys.ts): every event once (exact), the restraint forces of the most recent
+ // bay states and support sets (bounded, least recently used out; a bay state or set met again after it left is solved
+ // or observed again, which sets no new extreme). The unstable bay states are remembered exactly, as they are counted.
+ const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new EventDedup(),observedSets=new KeyedCache<true>(100000),bayStates=new KeyedCache<{x:number;top:number;bottom:number}[]>(200000),unstableStates=new KeyedCache<true>(Infinity),forces=createSupportForceEnvelope(supports);
+ const eventFields=new KeyFields(),bayFields=new KeyFields(),setFields=new KeyFields(),kindCode=(k:RunwayCaseEvent['kind'])=>k==='strength'?0:k==='service'?1:k==='fatigue'?2:3;
+ // The interfaceExtremes key `${combination}:${x}:${part}:${dir}` (part `bay${n}` for a bay end), the same string, built
+ // once per combination, station, part and direction instead of at every comparison.
+ const comboIds=new Map<string,number>(),stationIds=new Map<number,number>(),partIds=new Map<string,number>(),extremeKeys=new Map<number,string>();
+ const idOf=<K>(m:Map<K,number>,k:K)=>{let i=m.get(k);if(i===undefined){i=m.size;m.set(k,i);}return i;};
+ const extremeKey=(combination:string,x:number,part:string,dir:number,bay=0)=>{
+  const id=((idOf(comboIds,combination)*4096+idOf(stationIds,x))*64+idOf(partIds,part))*4096+2*bay+(dir===1?1:0);
+  let k=extremeKeys.get(id);if(k===undefined){k=`${combination}:${x}:${part==='bay'?`bay${bay}`:part}:${dir}`;extremeKeys.set(id,k);}return k;
+ };
  const snap=(x:number)=>supports.find(v=>Math.abs(v-x)<1e-6)??x;
  const braceFatigue={min:0,max:0},braceEndFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
  // Restraint forces of each girder end (top and bottom) in each duty bin, for the saddle's transverse register points (SL).
@@ -251,11 +265,14 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    loads:[],distributedTorque:p.railWeight*p.railEccentricity}).solve();deadTorsion.set(bay,t);}return t;};
  const deadMoment=(x:number)=>{deadVertical??=vertical.evaluate([],deadQ);return momentAt(x,deadVertical.reactions,[],deadQ);};
  // The dead-load torsion at a station, recovered once per bay and station (stations recur over the crane positions).
- const deadStations=new Map<string,ReturnType<ReturnType<LateralTorsionBeam['solve']>['at']>>();
- const deadAt=(bay:number,x:number)=>{const key=`${bay}:${x.toFixed(4)}`;let v=deadStations.get(key);if(!v){v=deadBay(bay).at(x);deadStations.set(key,v);}return v;};
+ // Keyed by bay and the station rounded to four decimals as toFixed(4) rounds it, as a number (x >= 0; toFixed decides
+ // only within 1e-6 of a rounding tie, where x*1e4 could round otherwise).
+ const deadStations=new Map<number,ReturnType<ReturnType<LateralTorsionBeam['solve']>['at']>>();
+ const deadKey=(bay:number,x:number)=>{const s=x*1e4,f=s-Math.trunc(s);return bay*1e12+(Math.abs(f-.5)<1e-6?Math.round(Number(x.toFixed(4))*1e4):Math.round(s));};
+ const deadAt=(bay:number,x:number)=>{const key=deadKey(bay,x);let v=deadStations.get(key);if(!v){v=deadBay(bay).at(x);deadStations.set(key,v);}return v;};
  function peak(key:'normalStress'|'shearStress'|'railDisplacement'|'twist',value:number,e:RunwayCaseEvent,x:number){if(value>result[key]){result[key]=value;result.governing[key]={id:e.id,combination:e.combination,x,value};}}
  // Every strength and service case by id, so printed results can name the combination and crane position (caseIndex).
- const registry=new Map<string,RunwayCaseRecord>();
+ const registry=new CaseRegistry();
  // Combined normal stress of each flange: section modulus, half width and normalized warping function at its tips.
  const flangeNormal=result.flangeNormal={top:0,bottom:0},flangeS={top:cap?cap.Stop:props.Sx,bottom:cap?cap.Sbottom:props.Sx},flangeHalf={top:(cap?p.section.capWidth:p.section.bf)/2,bottom:p.section.bf/2};
  const flangeW=cap?{top:Math.max(...cap.fibres.filter(v=>v.y>0).map(v=>Math.abs(v.omega))),bottom:Math.max(...cap.fibres.filter(v=>v.y<0).map(v=>Math.abs(v.omega)))}:{top:props.h0*p.section.bf/4,bottom:props.h0*p.section.bf/4};
@@ -266,8 +283,16 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const peakSource:{top?:{beam:LateralTorsionBeam;index:number;M:number};bottom?:{beam:LateralTorsionBeam;index:number;M:number}}={};
  function flangePeak(k:'top'|'bottom',value:number,e:RunwayCaseEvent,x:number,v:FlangeStressParts){if(value>flangeNormal[k]){flangeNormal[k]=value;flangeParts[k]=v;result.governing[k==='top'?'normalStressTop':'normalStressBottom']={id:e.id,combination:e.combination,x,value};}}
  const evaluate=(e:RunwayCaseEvent,bin=-1)=>{
-  const key=JSON.stringify([e.kind,bin,e.wheels,e.q,e.railTorquePerLength,e.axial,e.horizontalCrane,e.cranes]);
-  if(seen.has(key))return;seen.add(key);result.cases++;
+  // The fields of the former JSON key [kind, bin, wheels, q, rail torque, axial, lateral crane, cranes], its group
+  // (kind and cranes) first.
+  const key=eventFields.reset().push(kindCode(e.kind)).push(e.cranes.length);
+  for(const c of e.cranes)key.push(c.index).push(c.origin).push(c.loaded?1:0);
+  const groupLength=key.length;key.push(bin).push(e.wheels.length);
+  for(const w of e.wheels)key.push(w.x).push(w.p).push(w.h);
+  key.push(e.q).push(e.railTorquePerLength).push(e.axial).push(e.horizontalCrane);
+  // A case standing for later identical ones (repeats, designAnalysis) counts them as the distinct cases they were;
+  // when it repeats an earlier case (its crane state listed again), so did they.
+  if(seen.seen(key,groupLength))return;result.cases+=1+(e.repeats??0);
   if(e.kind!=='fatigue'&&!registry.has(e.id))registry.set(e.id,{combination:e.combination,cranes:e.cranes.map(c=>({...c})),lateralSign:e.lateralSign,...(e.stop?{stop:e.stop}:{})});
   const majorLoads=e.wheels.map(w=>({x:w.x,p:w.p}));
   const moment=(x:number)=>momentAt(x,e.verticalReactions,majorLoads,e.q);
@@ -283,7 +308,9 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    // A bay's lateral/torsional response depends only on its own loads. When the same bay state recurs
    // (other cranes elsewhere, a repeated combination), every peak it can set is already recorded, so only
    // its restraint forces are needed again for the shared supports and interfaces.
-   const bayKey=JSON.stringify([e.kind,bin,bayIndex,wheels.map(w=>[w.x,w.p,w.h]),e.q,e.railTorquePerLength,strength?e.axial:0,strength?totalH:0]);
+   const bayKey=bayFields.reset().push(kindCode(e.kind)).push(bin).push(bayIndex).push(wheels.length);
+   for(const w of wheels)bayKey.push(w.x).push(w.p).push(w.h);
+   bayKey.push(e.q).push(e.railTorquePerLength).push(strength?e.axial:0).push(strength?totalH:0).hash();
    let restraintForces=bayStates.get(bayKey),r:ReturnType<LateralTorsionBeam['solve']>|undefined;
    if(!restraintForces){
    // Restraints with play (restraintClearances) enter the strength cases, stresses and buckling eigenvalue alike, at
@@ -309,7 +336,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    // A girder that buckles below the applied load has no equilibrium state to recover: record the case and let
    // the stability check (whose multiplier is then below 1) report the failure instead of stopping the analysis.
    try{r=beam.solve(geometry);}catch(error){if(!(strength&&error instanceof Error&&error.message.startsWith('Lateral/torsional instability')))throw error;}
-   if(!r){result.unstableCases=(result.unstableCases??0)+1;restraintForces=stations.map(x=>({x:x-start,top:0,bottom:0}));bayStates.set(bayKey,restraintForces);}
+   if(!r){if(!unstableStates.get(bayKey)){unstableStates.set(bayKey,true);result.unstableCases=(result.unstableCases??0)+1;}restraintForces=stations.map(x=>({x:x-start,top:0,bottom:0}));bayStates.set(bayKey,restraintForces);}
    else{
    result.residual=Math.max(result.residual,r.residual);
    // Restraint diaphragm: the St Venant torque G_k·J·θ′ (0.8G for strength) each girder end delivers to its support
@@ -457,7 +484,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const key=[...loads.map(v=>v.vertical),horizontal.longitudinal].join();if(distinct.has(key))continue;distinct.add(key);
    // The same whole set at the same support recurs whenever the loads that reach it repeat (another crane elsewhere,
    // a combination with the same factors here): the collectors have already recorded everything it can set.
-   const setKey=[e.kind,bin,x,...loads.flatMap(v=>[v.vertical,v.offset]),f.vertical,f.moment,f.longitudinal,f.top,f.bottom,horizontal.offset].join();if(observedSets.has(setKey))continue;observedSets.add(setKey);
+   const setKey=setFields.reset().push(kindCode(e.kind)).push(bin).push(x).push(loads.length);for(const v of loads)setKey.push(v.vertical).push(v.offset);
+   setKey.push(f.vertical).push(f.moment).push(f.longitudinal).push(f.top).push(f.bottom).push(horizontal.offset).hash();if(observedSets.get(setKey))continue;observedSets.set(setKey,true);
    bracket?.observe(e.kind,f.id,x,loads,bin,horizontal);
    existingBracket?.observe(e.kind,f.id,x,loads,bin);
    capCollector?.observe(e.kind,x,f,bin);
@@ -477,16 +505,16 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);else if(endBearingOffset(x))item.seatMoment=item.vertical*Math.sign(endBearingOffset(x))*Lbr/2;
      if(support>=0)forces.add(support,supportSet(x,c));
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
-      const k=`${e.combination}:${x}:${component}:${dir}`,old=interfaceExtremes.get(k);
+      const k=extremeKey(e.combination,x,component,dir),old=interfaceExtremes.get(k);
       if(!old||dir*item[component]>dir*old[component])interfaceExtremes.set(k,{...item,controls:[`${component} ${dir===1?'max':'min'}`]});
      }
      // Retain individual end-bearing extrema, with the OTHER end's
      // simultaneous force intact. Combined bracket maxima alone miss these.
      for(const end of ends??[])for(const dir of [-1,1]){
-      const k=`${e.combination}:${x}:bay${end.bay}:${dir}`,old=interfaceExtremes.get(k),previous=old?.ends?.find(v=>v.bay===end.bay)?.vertical;
+      const k=extremeKey(e.combination,x,'bay',dir,end.bay),old=interfaceExtremes.get(k),previous=old?.ends?.find(v=>v.bay===end.bay)?.vertical;
       if(previous===undefined||dir*end.vertical>dir*previous)interfaceExtremes.set(k,{...item,controls:[`${end.existing?'adjacent existing girder':`bay ${end.bay}`} bearing ${dir===1?'max':'min'}`]});
      }
-     if(ends)for(const dir of [-1,1]){const k=`${e.combination}:${x}:seatMoment:${dir}`,old=interfaceExtremes.get(k);if(!old||dir*item.seatMoment!>dir*old.seatMoment!)interfaceExtremes.set(k,{...item,controls:[`seat eccentricity moment ${dir===1?'max':'min'}`]});}
+     if(ends)for(const dir of [-1,1]){const k=extremeKey(e.combination,x,'seatMoment',dir),old=interfaceExtremes.get(k);if(!old||dir*item.seatMoment!>dir*old.seatMoment!)interfaceExtremes.set(k,{...item,controls:[`seat eccentricity moment ${dir===1?'max':'min'}`]});}
     }
    }
    result.demands.endLongitudinal=Math.max(result.demands.endLongitudinal,e.axial);

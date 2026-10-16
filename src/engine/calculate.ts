@@ -1,5 +1,6 @@
 import {caseBase,caseIdPattern} from './caseNames';
 import type {RunwayCaseRecord} from './runwayDetails';
+import {withDesignCache,type DesignProgress} from './designAnalysis';
 import {packageContentChecks} from './detailTemplate';
 import {connectionCoordination,coordinationChecks} from './connectionCoordination';
 import {constructionNoteChecks} from './constructionNotes';
@@ -91,7 +92,13 @@ export function integrityAndGates(snapshot:CalculationSnapshot){
   return {...c,status:'not-applicable',note:`${g.reason??'Not applicable to this arrangement.'} ${c.note}`.trim()};});
  if(contradictions.length)snapshot.warnings.push(`FATIGUE: ${contradictions.length} failing check${contradictions.length>1?'s':''} would be screened below the threshold, which contradicts the check's own allowable; kept as failures: ${contradictions.join('; ')}`);
 }
-export function calculate(input:ProjectInput):CalculationSnapshot {
+export interface CalculateOptions {
+ /** Progress of the moving-load searches (DesignProgress), at most four times a second. */
+ onProgress?:(progress:DesignProgress)=>void;
+}
+/** One calculation; its moving-load searches share their crane-position responses (withDesignCache) until it returns. */
+export function calculate(input:ProjectInput,options:CalculateOptions={}):CalculationSnapshot {return withDesignCache(()=>calculateSnapshot(input),options.onProgress);}
+function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  const p=structuredClone(input),errors=validateProject(p);const snapshot:CalculationSnapshot={revision:fingerprint(p),createdAt:new Date().toISOString(),input:p,errors,warnings:[],properties:null,analysis:null,checks:[],eligible:false,referenceVersion};
  if(errors.length)return snapshot;
  const props=sectionProperties(p.section);snapshot.properties=props;
@@ -183,7 +190,7 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
  snapshot.checks=snapshot.checks.map(c=>presentCheck(c,p.units));
  // The analysis cases a printed result names, with their combination and crane positions: the report prints these
  // names, not the case ids (the CSV keeps the ids).
- const registry=(snapshot.detailResults as {caseRegistry?:Map<string,RunwayCaseRecord>}|undefined)?.caseRegistry;
+ const registry=(snapshot.detailResults as {caseRegistry?:{get(id:string):RunwayCaseRecord|undefined}}|undefined)?.caseRegistry;
  if(snapshot.detailResults&&registry){
   const index:Record<string,RunwayCaseRecord>={},text=JSON.stringify([snapshot.checks,snapshot.detailResults,snapshot.designAnalysis?.governing]);
   for(const m of text.matchAll(caseIdPattern)){const base=caseBase(m[0]),r=registry.get(base);if(r)index[base]=r;}

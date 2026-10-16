@@ -8,7 +8,7 @@ import {isCapAngleTie} from './capAngle';
 import {clearanceEffects,restraintClearances,secantStiffness} from './restraintClearance';
 import {railTopAboveSteel} from './railSeat';
 import {capAngleChecks} from './capAngleTie';
-import {flangeTieGeometry,stiffenerTieGeometry,tieEccentricity,tieLine} from './tieGeometry';
+import {flangeTieGeometry,stiffenerTieGeometry,tieEccentricity,tieLine,tieSides} from './tieGeometry';
 import {connectionOptionChecks} from './connectionOptions';
 import {capReady,capAttachmentChecks} from './capChecks';
 import type { CalculationSnapshot,CheckResult,ProjectInput } from './types';
@@ -199,7 +199,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  if(!p.aist||!p.aist.runwayOnly||!p.connections.enabled)return [];
  const designFy=p.section.kind==='cap'?Math.min(p.section.Fy,p.capDesign!.Fy):p.section.Fy;
  const strength=girderStrength(p,props),steps=p.cranes.length===1?40:p.cranes.length===2?12:6;
- const braceForce=braceImperfection(p,a,props).force,run=(travel:number,mesh:number)=>{const c=createDetailCollector(p,props,mesh,braceForce);runwayDesignAnalysis(p,props,strength,travel,20,c.observe);return c.finish();};
+ const braceForce=braceImperfection(p,a,props).force,run=(travel:number,mesh:number)=>{const c=createDetailCollector(p,props,mesh,braceForce);runwayDesignAnalysis(p,props,strength,travel,20,c.observe,{envelope:false});return c.finish();};
  // The checks of one level in report order: bracket checks, the analysis checks (the reported level only), then the
  // girder, bracing and connection checks. A level built only to compare its governing results (refinementChange) keeps
  // the design envelope for H1; the reported level re-runs it when load height lowers M_cx.
@@ -263,7 +263,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
   add('brace-stiffness','Bracing','Brace and connection stiffness in series',requiredK,secantStiffness(brace.stiffness,play.gt,imperfection),'stiffness',play.gt>0?'\\beta_{sec}=\\left(\\sum1/k_i+g_t/P_{br}\\right)^{-1}\\ge\\beta_{br}':'\\beta=\\left(\\sum1/k_i\\right)^{-1}\\ge\\beta_{br}',`${play.gt>0?`Secant stiffness with the angle's play g_t = ${len(play.gt)} taken up at the Appendix 6 brace force P_br = ${format(imperfection,'force',p.units,3)}: (1/${format(brace.stiffness,'stiffness',p.units,3)} + g_t/P_br)⁻¹ = ${format(secantStiffness(brace.stiffness,play.gt,imperfection),'stiffness',p.units,3)}. `:''}Cap tieback angle in pull, in series: tie plate axial strain over its clear span, lap bolt shear, the angle's short leg bending from the bolt line to the long leg, the channel flange bending from its web, cap and column bolt elongation, the end plate between its bolts, the shims and the column flange bending from its web. Shares of the compliance: ${['plate','lapBolts','angleLeg','channelFlange','capBolts','endPlate','columnBolts','shims','columnFlange'].map(share).join(', ')}. This stiffness is the top-flange restraint of the lateral/torsional model. Building deformation is excluded at the stated interface. Top-flange load amplification is included in Appendix 6 requirements.`,['aisc-brace','cap-angle-basis']);
   checks.push(...restraint(capAngleChecks(s,{force:(r.demands.brace+imperfection)/brace.cos})));
  }else{
- add('brace-member','Bracing',activeEndBearing(p)?'Top-flange tie strength':'Both-flange tie strength',r.demands.brace+imperfection,brace.capacity,'force','P_{br}=H+0.02M_rC_d/h_o+0.01P_r',`${plate?'One flexible plate (AISC DG7 §11.2) at':'Two symmetric flat bars at'} ${activeEndBearing(p)?'the top flange; the bottom flange is restrained by the end bearing bolts':'each flange'}. Out-of-plane buckling over 0.8 × the length between the innermost bolt rows, and net-section tension; full concurrent horizontal reaction plus flexural/axial imperfection demands.`,['aisc-brace','aisc-e']);
+ add('brace-member','Bracing',tieSides(p).length>1?'Both-flange tie strength':'Top-flange tie strength',r.demands.brace+imperfection,brace.capacity,'force','P_{br}=H+0.02M_rC_d/h_o+0.01P_r',`${plate?'One flexible plate (AISC DG7 §11.2) at':'Two symmetric flat bars at'} ${tieSides(p).length>1?'each flange':'the top flange; the bottom flange is restrained by the end bearing bolts'}. Out-of-plane buckling over 0.8 × the length between the innermost bolt rows, and net-section tension; full concurrent horizontal reaction plus flexural/axial imperfection demands.`,['aisc-brace','aisc-e']);
  add('brace-stiffness','Bracing','Brace and connection stiffness in series',requiredK,secantStiffness(brace.stiffness,play.gt,imperfection),'stiffness',play.gt>0?'\\beta_{sec}=\\left[\\left(\\cos^2\\theta\\left(\\sum1/k_i\\right)^{-1}\\right)^{-1}+g_t/P_{br}\\right]^{-1}\\ge\\beta_{br}':'\\beta=\\cos^2\\theta\\left(\\sum1/k_i\\right)^{-1}\\ge\\beta_{br}',(play.gt>0?`Secant stiffness with the gusset slot play g_t = ${len(play.gt)} taken up at the Appendix 6 brace force P_br = ${format(imperfection,'force',p.units,3)}. `:'')+(plate?'One flexible plate; single-plane bolt shear deformation, and the lap couple rotating both gussets (e²/k_gusset), are included. ':'')+'Gusset axial strain and bolt shear deformation are included at both ends. Direct flange saddles additionally include local flange, saddle, gusset and receiving-flange flexibility. Building deformation is excluded at the stated interface. Top-flange load amplification is included in Appendix 6 requirements.',['aisc-brace']);
  // The single flexible plate's single-shear laps are checked with the plate (plateTieChecks).
  if(!plate)checks.push(...restraint(lapChecks(p,d.brace.connection,'tie','Flange tie connection',(r.demands.brace+imperfection)/brace.cos,0,d.brace.gussetThickness,d.material.Fy,d.material.Fu)));
@@ -357,18 +357,21 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  }
  return checks;
  };
- const built=new Map<RunwayDetailResults,CheckResult[]>(),level=(r:RunwayDetailResults)=>{let c=built.get(r);if(!c){c=levelChecks(r,[],false);built.set(r,c);}return {checks:c,results:r};};
- const step=(from:RunwayDetailResults,to:RunwayDetailResults)=>refinementChange(level(from),level(to));
+ // A level is kept only as what refinementChange compares, the D/C of every check by id and the support force
+ // envelope, once its checks are built: its results, checks and case registry are released (only the finest mesh
+ // level, which may be reported, keeps its results until the next one replaces it).
+ type Level={checks:CheckResult[];results:RunwayDetailResults};
+ const level=(r:RunwayDetailResults):Level=>({checks:levelChecks(r,[],false).map(c=>({id:c.id,utilization:c.utilization}) as CheckResult),results:{bracketForces:r.bracketForces} as RunwayDetailResults});
  // Crane positions first, at the base mesh: one crane refines to 32 times the base steps (the search converges
  // first-order where a fatigue range peaks between stations), several cranes to 4 times.
- let coarse=run(steps,20),fine=run(steps*2,20),travel=steps*2;
- const travelSteps=[step(coarse,fine)];
- while(travelSteps.at(-1)!.value>.01&&travel<steps*(p.cranes.length===1?32:4)){coarse=fine;travel*=2;fine=run(travel,20);travelSteps.push(step(coarse,fine));}
+ let coarse=level(run(steps,20)),fine=level(run(steps*2,20)),travel=steps*2;
+ const travelSteps=[refinementChange(coarse,fine)];
+ while(travelSteps.at(-1)!.value>.01&&travel<steps*(p.cranes.length===1?32:4)){coarse=fine;travel*=2;fine=level(run(travel,20));travelSteps.push(refinementChange(coarse,fine));}
  // Then the lateral/warping mesh, doubled from 20 elements per span until it converges, up to 160 per span (a
  // continuous girder is one member over all its spans: createDetailCollector gives it that many per span on average).
- let spatial=run(travel,40),mesh=40;
- const meshSteps=[step(fine,spatial)];
- for(const next of [80,160]){if(meshSteps.at(-1)!.value<=.01)break;fine=spatial;spatial=run(travel,next);mesh=next;meshSteps.push(step(fine,spatial));}
+ let spatial=run(travel,40),mesh=40,spatialLevel=level(spatial);
+ const meshSteps=[refinementChange(fine,spatialLevel)];
+ for(const next of [80,160]){if(meshSteps.at(-1)!.value<=.01)break;fine=spatialLevel;spatial=run(travel,next);spatialLevel=level(spatial);mesh=next;meshSteps.push(refinementChange(fine,spatialLevel));}
  const travelVerdict=refinementVerdict(travelSteps),meshVerdict=refinementVerdict(meshSteps);
  const r=spatial;r.travelChange=travelVerdict.value;r.meshChange=meshVerdict.value;
  const pct=(v:number)=>`${(100*v).toFixed(2)}%`;

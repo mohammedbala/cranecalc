@@ -1,5 +1,4 @@
-// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
-import {dcText} from '../engine/checkPresentation';
+import {checkDcText,elementSummary,failingNote,inElements,sheetDc} from './sheetRatios';
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
@@ -13,7 +12,7 @@ import {capWorkPointDrop,columnCapGeometry} from '../engine/columnCap';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapTitles} from './columnCapSheet';
 import {runwayElevations} from '../engine/drawingData';
-import {drawingLength,holeInches,plateInches,dimensionLength} from './drawingFormat';
+import {drawingLength,holeInches,plateInches,dimensionLength,limitLength} from './drawingFormat';
 import {refDim,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import type {DetailTopic,DetailView} from './detailSheet';
@@ -331,7 +330,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  // Drawing order on the sheet: the braced bay and the plans over two rows each, then the connections and the crossing.
  {const order=[detailTitles.bracedBay,detailTitles.strutPlan,detailTitles.braceTop,detailTitles.braceBase,rodCrossingTitle] as string[];views.sort((x,y)=>order.indexOf(x.title)-order.indexOf(y.title));}
 
- const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${dcText(v.utilization,2)}`:'-';}).join(' / ');
+ const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>checkDcText(s,check(id))).join(' / ');
  const z=r.seismic,sep=r.separation,lb=s.longitudinalBracing!;
  const rows=[
   ['BRACING',`${rodName} X, TENSION ONLY, GRIDS ${spanGrids}, BOTH RUNWAYS; W.P. ${dim(L.height)} ABOVE T/BASE PL${el?` (${capG?`${dim(capG.drop)} BELOW THE CAP TOP, EL. ${dim(datum+columnBaseElevation(base)+L.height)}`:`BRG. SEAT ${elev(L.height)}`})`:''}`],
@@ -342,8 +341,10 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   ['ROD CROSSING',`ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}; RODS ${drawingLength(cr.clear,u)} CLEAR AT MID-BAY`],
   ['COLLECTOR AT EACH COLUMN',capG?`GIRDER LOCATING BOLTS TO THE COLUMN CAP, CAP FILLETS ALL AROUND THE COLUMN: ${force(r.seatForce.F)}`:rolled?`GIRDER LOCATING BOLTS TO ${rolled.seat?'SEAT':'BRACKET FLANGE'}, ${rolled.name} BRACKET WELDS TO FLANGE: ${force(r.seatForce.F)}`:`GIRDER LOCATING BOLTS TO SEAT, ${size(d.seatWeld)} SEAT FILLET TO FLANGE: ${force(r.seatForce.F)}`],
   ...(z?[['SEISMIC ALONG RUNWAY',`R ${z.basis.R}, CS ${z.basis.Cs.toFixed(3)}, QE ${force(z.QE)}; DRIFT ${dim(z.drift)}`]]:[]),
-  ...(sep?[['SEISMIC SEPARATION',`${dim(specifiedSeparation(sep.required,u))} MIN. CLEAR TO EXISTING BUILDING (ASCE 7 §12.12.3)`]]:[]),
-  ['RATIOS: ROD / GUSSET / WELD / WEB / STRUT / COL. TORSION',ratio('brace-tension','brace-pin-bearing','brace-gusset-weld','brace-column-web','brace-strut','column-torsion')]
+  ...(sep?[['SEISMIC SEPARATION',`${separationLength(sep.required,u)} MIN. CLEAR TO EXISTING BUILDING (ASCE 7 §12.12.3)`]]:[]),
+  ['RATIOS: ROD / GUSSET / WELD / WEB / STRUT / COL. TORSION',ratio('brace-tension','brace-pin-bearing','brace-gusset-weld','brace-column-web','brace-strut','column-torsion')],
+  // The largest D/C over every check of the longitudinal system, and the failing ones by name (sheetRatios).
+  ...(()=>{const e=elementSummary(s,inElements(['longitudinal'])),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL BRACING CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})()
  ];
  const notes=[
   `RODS: ASTM F1554 GR. 36 (OR A36) ${rodName}, THREADED FOR A FORGED CLEVIS AT EACH END AND A TURNBUCKLE ${Math.round(turnAt*100)}% OF THE LENGTH FROM THE LOWER END (RIGHT- AND LEFT-HAND THREADS). CLEVIS, PIN AND TURNBUCKLE RATED BY THE MANUFACTURER TO DEVELOP THE ROD, ${force(r.develop)}; CLEVIS GRIP TO SUIT THE ${size(g.t)} GUSSET. SUBMIT CATALOG DATA.`,
@@ -352,12 +353,14 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   `CRANE-LEVEL STRUT: ASTM A992 ${sg.shape} ON THE COLUMN CENTERLINE AT THE W.P., EVERY SPAN OF BOTH RUNWAYS, FLANGES COPED ${dim(sg.cope)} EACH END, ${boltName} ${bolting} (AIST TR-13 §5.14, RCSC §4.3: REVERSING CRANE FORCES), TO THE GUSSET OR TAB AT EACH COLUMN. IT COLLECTS THE GIRDERS' LONGITUDINAL FORCE AT EVERY COLUMN AND BRACES THE COLUMNS ALONG THE RUNWAY.`,
   capG?`AT EVERY COLUMN THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO THE COLUMN CAP, WELDED ALL AROUND THE COLUMN TOP (${detailRef(columnCapTitles.section)}); THE COLUMN CARRIES IT ${dim(capG.drop)} DOWN TO THE STRUT, CENTERED UNDER THE GIRDER, WITHOUT TORQUE.`:rolled?`AT EVERY COLUMN THE ${rolled.name} BRACKET, SHOP WELDED TO THE COLUMN FLANGE (${detailRef(detailTitles.weldedBracket)}), IS THE COLLECTOR: THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO ${rolled.seat?'ITS SEAT':'ITS TOP FLANGE'}; THE COLUMN TAKES THE TORQUE FROM ITS ${dim(girderOffset(p))} OFFSET (CALCULATION REPORT, NEW COLUMN).`:`AT EVERY COLUMN: SHOP WELD THE BRACKET SEAT PLATE TO THE COLUMN FLANGE WITH A ${size(d.seatWeld)} TOP FILLET ACROSS THE FLANGE. THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO THE SEAT; THE COLUMN TAKES THE TORQUE FROM ITS ${dim(girderOffset(p))} OFFSET (CALCULATION REPORT, NEW COLUMN).`,
   `ERECT THE STRUT AND RODS WITH THE COLUMNS, BEFORE THE GIRDERS ARE SET. THE BRACED COLUMNS AND FOOTINGS ARE DESIGNED FOR THE ROD FORCES, INCLUDING UPLIFT AND SHEAR ALONG THE RUNWAY AT THE BASE.`,
-  ...(sep?[`KEEP THE NEW COLUMNS, STRUT, RODS, GIRDERS AND RAILS AT LEAST ${dim(specifiedSeparation(sep.required,u))} CLEAR OF THE EXISTING BUILDING IN EVERY DIRECTION (ASCE 7 §12.12.3); FIELD VERIFY BEFORE SETTING THE FOOTINGS.`]:[])
+  ...(sep?[`KEEP THE NEW COLUMNS, STRUT, RODS, GIRDERS AND RAILS AT LEAST ${separationLength(sep.required,u)} CLEAR OF THE EXISTING BUILDING IN EVERY DIRECTION (ASCE 7 §12.12.3); FIELD VERIFY BEFORE SETTING THE FOOTINGS.`]:[])
  ];
  return {key:'bracing',name:'LONGITUDINAL BRACING',views,notes:(t:Style)=>[heading(t,'BRACING DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.25,1.75]),heading(t,'BRACING NOTES'),...numbered(t,notes)]};
 }
 /** Required seismic separation as specified on the drawings, rounded up to 1/8 in or 5 mm. */
 export const specifiedSeparation=(required:number,units:'US'|'SI')=>{const q=units==='US'?inch/8:5;return Math.ceil(required/q-1e-9)*q;};
+/** The seismic separation as every sheet prints it: the specified minimum, never rounded down (drawingFormat.limitLength). */
+export const separationLength=(required:number,units:'US'|'SI')=>limitLength(specifiedSeparation(required,units),units,'min');
 
 /**
  * The bracing on the general arrangement's girder elevation (sheet units; model meters from the girder mid-depth,

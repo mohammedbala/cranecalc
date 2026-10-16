@@ -4,6 +4,7 @@ import {nextScaleRatio} from './drawingFormat';
 import {sheetEntities} from './svgEntities';
 import {annotationItems,countClashes} from './annotationSpace';
 import {heading,numbered,noteStyle,flowBlocks,type Block,type Style,type Lane,type Placement} from './noteBlocks';
+import {holdTag,viewHolds} from './detailHolds';
 
 /**
  * Detail sheets. The details stand in rows that fill the drawing area from top to bottom, the cells of a row sharing
@@ -27,7 +28,9 @@ export interface ViewRender {svg:string;scale:string;room?:number;clashes?:numbe
  */
 export interface DetailView {title:string;rows?:1|2;subdetails?:readonly string[];render:()=>ViewRender}
 /** A group of related details (one subject, such as the end stops) with its notes and tables. */
-export interface DetailTopic {key:string;name:string;views:DetailView[];notes?:(t:Style)=>Block[];message?:string[]}
+export interface DetailTopic {key:string;name:string;views:DetailView[];notes?:(t:Style)=>Block[];message?:string[];
+ /** HOLD lines of the topic's views (detailHolds), listed at the top of the notes of its sheet. */
+ holds?:string[]}
 
 /**
  * Layout units. The notes lanes are 480 wide at the right edge of the drawing area, the rightmost stopping above the
@@ -57,7 +60,9 @@ function noteLanes(count:number):Lane[]{
  */
 function placeNotes(topics:DetailTopic[],units:'US'|'SI'){
  const t=noteStyle(detailLayout.lane.width-2*detailLayout.lane.pad,units);
- const groups=[{key:'sheet',blocks:sheetNotes(t)},...topics.flatMap(v=>v.notes?[{key:v.key,blocks:v.notes(t)}]:[])];
+ // Open items at the details of the sheet come first: HOLD, not for fabrication (detailHolds).
+ const holds=[...new Set(topics.flatMap(v=>v.holds??[]))];
+ const groups=[...(holds.length?[{key:'holds',blocks:[heading(t,'HOLDS - NOT FOR FABRICATION'),...numbered(t,holds)]}]:[]),{key:'sheet',blocks:sheetNotes(t)},...topics.flatMap(v=>v.notes?[{key:v.key,blocks:v.notes(t)}]:[])];
  const blocks=groups.flatMap(g=>g.blocks),owner=groups.flatMap(g=>g.blocks.map(()=>g.key));
  for(let count=1;count<=detailLayout.maxLanes;count++){
   const lanes=noteLanes(count);let placed=flowBlocks(blocks,lanes);
@@ -309,7 +314,7 @@ export function detailSheetSvg(s:CalculationSnapshot,number:string,title:string,
   const dy=h>bottom-top?bottom-b.y1:Math.max((top+bottom)/2-(b.y0+b.y1)/2,bottom-70-b.y1),dx=ax-(b.x0+b.x1)/2;
   if(h>bottom-top+10||b.x1-b.x0>c.w-2*cell.side){fits=false;svg+=`<g data-overflow-cell="${esc(c.placed.view.title)}" data-overflow-size="${n(b.x1-b.x0)}x${n(h)} in ${n(c.w-2*cell.side)}x${n(bottom-top+10)}"/>`;}
   // The cell's box (layout units) marked ahead of its detail.
-  svg+=`<g data-cell-box="${n(c.x)},${n(c.y)},${n(c.w)},${n(c.h)}"/><g data-detail-cell="${c.col+1},${c.row+1},1" data-cell-height="${n(c.h)}" transform="translate(${n(dx)} ${n(dy)})">${r.svg}</g>${viewTitle(ax,ay,c.placed.view.title,r.scale)}`;
+  svg+=`<g data-cell-box="${n(c.x)},${n(c.y)},${n(c.w)},${n(c.h)}"/><g data-detail-cell="${c.col+1},${c.row+1},1" data-cell-height="${n(c.h)}" transform="translate(${n(dx)} ${n(dy)})">${r.svg}</g>${viewTitle(ax,ay,c.placed.view.title,r.scale)}${holdTag(ax,ay+25,viewHolds(s,c.placed.view.title))}`;
  }
  // Subjects without drawable details state why.
  const messages=layout.topics.flatMap(t=>t.views.length?[]:t.message??[]);

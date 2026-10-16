@@ -3,7 +3,8 @@ import {astmSpec} from '../engine/materialSpecs';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
 import {haunchUnderSeat} from './taperedHaunchSheet';
-import {bracingOnElevation,bracingTopic,specifiedSeparation} from './bracingSheet';
+import {bracingOnElevation,bracingTopic,separationLength} from './bracingSheet';
+import {viewHolds} from './detailHolds';
 import {ribGeometry} from '../engine/bracketRib';
 import {flangeTieTopic} from './flangeTieSheet';
 import {capAngleTopic} from './capAngleSheet';
@@ -130,7 +131,7 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
    // Clearance to the surveyed existing steel: survey data, printed as surveyed.
    svg+=refDim(dimH(x1,x2,yc-4,yc,`${drawingLength(clear,p.units)} CLR.`,e.sign<0?'left':'right'));
    // The separation required and the column's label in the clear space, where it has room.
-   const note=sep?`SEISMIC SEP. ${drawingLength(specifiedSeparation(sep.required,p.units),p.units)} MIN.`:'',label=[e.input.shape?`(E) ${e.input.shape} COLUMN`:'(E) COLUMN','PER SURVEY'];
+   const note=sep?`SEISMIC SEP. ${separationLength(sep.required,p.units)} MIN.`:'',label=[e.input.shape?`(E) ${e.input.shape} COLUMN`:'(E) COLUMN','PER SURVEY'];
    const room=x2-x1-12,lw=Math.max(...label.map(v=>textWidth(v,8.5)));
    if(note&&textWidth(note,8)<=room)svg+=text((x1+x2)/2,yc+12,note,8,'middle');
    if(lw+30<=room){const ly=SY(vTop-(vTop-vBottom)*.3),lx0=e.sign<0?x1+22:x2-22-lw;svg+=multiLeader([[e.sign<0?x1:x2,ly-14]],[lx0,ly],label,8.5);}
@@ -313,7 +314,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   }else later+=dimV(Y(rows[1]),Y(rows[0]),right+13,right+48,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
   later+=text(X(0),planDim+20,`RAIL C/L SPACING (CRANE SPAN): ${dim(m.width+2*m.railZ)}${p.details?'':' (REF.)'}`,9,'middle');
   const sep=newColumns?s.bracingSystem?.separation:undefined;
-  if(sep)later+=text(X(0),planDim+33,`SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL ${drawingLength(specifiedSeparation(sep.required,p.units),p.units)} MIN. CLEAR OF THE EXISTING BUILDING (ASCE 7 §12.12.3)`,8,'middle');
+  if(sep)later+=text(X(0),planDim+33,`SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL ${separationLength(sep.required,p.units)} MIN. CLEAR OF THE EXISTING BUILDING (ASCE 7 §12.12.3)`,8,'middle');
   // Callouts between the runways, each where it reads clear of the plan drawn so far: its preferred place first, then
   // others along the runway and up or down between the runways.
   const drawn=new AnnotationSpace(svg.slice(planFrom)+later),midY=Y(-m.width/2),width=(labels:string[])=>Math.max(...labels.map(v=>textWidth(v.toUpperCase(),lettering.text)));
@@ -391,7 +392,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const bracing=braced?bracingOnElevation(s,{EX:x=>EX(x-m.length/2),EY,ek,supports:m.supports.map(x=>x+m.length/2),columnWidth:m.column.bf,girderBottom:bottom,stub:stubLength,columnTop:capGeo?bottom+(p.details!.bearing.thickness+capGeo.cap.plate.thickness)/1000*ek:undefined}):undefined;
   svg+=`<g data-view="elevation">`;
   const bubbleY=top-44-lift,elevationFrom=svg.length;
-  svg+=text(el,bubbleY-30,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: ${sheetRef('connection')}${p.system==='simple'&&p.details?` / SHARED SUPPORT: ${detailRef(capGeo?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}`:''}`,lettering.text);
+  svg+=text(el,bubbleY-30,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: ${sheetRef('connection')}${p.system==='simple'&&p.details&&p.spans.length>1?` / SHARED SUPPORT: ${detailRef(capGeo?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}`:''}`,lettering.text);
   m.supports.forEach((x,i)=>{
     // The column is beyond the girder. A new column ends at its top, at or below the top of the girder. An existing
     // building column is drawn only below the seat, a stub broken once at its foot: above the girder it continues to
@@ -472,12 +473,12 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
     return [mark,String(all.length*2),specGrade(`${p.section.name}; ${p.section.kind==='cap'&&p.capDesign?`W ${astmSpec('w-shape',p.section.Fy,p.section.Fu)}, CAP ${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource)}`:astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu)}`.toUpperCase())+`${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
   const notes=[
     'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
-    newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${len(specifiedSeparation(separation.required,u))} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS ARE SHOWN AS CENTERLINES (DASH-DOT); COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
+    newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${separationLength(separation.required,u)} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS ARE SHOWN AS CENTERLINES (DASH-DOT); COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
     `ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`,
     // With the detailed set the rail setting is the S-00 crane runway installation note.
     ...(d?[]:[`SET RAIL C/L SPACING (CRANE SPAN) TO THE CRANE MANUFACTURER'S GAUGE, EACH RAIL ON ITS GIRDER WEB C/L. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${plateInches(Math.abs(p.railEccentricity),u)}; IT IS NOT A SETTING DIMENSION.`]),
-    p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
+    p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}.`:'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
     ...adjacentBays(p).map(b=>`AT GRID ${b.end==='left'?1:p.spans.length+1} THE EXISTING RUNWAY CONTINUES (${short((p.continuation?.source??'').toUpperCase(),70)}). THE EXISTING ${len(b.length)} GIRDER BEARS ON THE SAME SUPPORT AND STAYS IN PLACE; ITS REACTION IS INCLUDED IN THE SUPPORT DESIGN. FIELD VERIFY ITS SPAN, BEARING, TIE AND RAIL JOINT BEFORE FABRICATION.`)
   ];
   return noteStack([(t:Style)=>[heading(t,'RUNWAY GIRDER SCHEDULE'),table(t,['MARK','QTY','SECTION','LENGTH','GRIDS','CAMBER','ENDS'],rows,[.55,.45,1.6,.8,.75,.65,1.9]),heading(t,'SHEET NOTES'),...numbered(t,notes)]],u,box);
@@ -536,7 +537,8 @@ export function detailTopics(s:CalculationSnapshot,f:FramingSettings=defaultFram
     ...(d&&activeEndStop(p)?[endStopTopic(s)]:[]),
     ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[...(activeColumnCap(p)?[columnCapTopic(s)]:[]),newColumnTopic(s)]:[]),
     ...(s.bracingSystem?[bracingTopic(s)]:[])];
-  return topics.map(t=>({...t,views:t.views.map(clearView)}));
+  // HOLD lines of each topic's views: the open items with a failing check at the details that draw them (detailHolds).
+  return topics.map(t=>({...t,views:t.views.map(clearView),holds:[...new Set(t.views.flatMap(v=>viewHolds(s,v.title)))].map(h=>`${h.text}: ${t.views.filter(v=>h.views!.test(v.title)).map(v=>v.title).join('; ')}`)}));
 }
 /** The issued set: cover S-00 with general notes, criteria and sheet index, S-01, then detail sheets from S-02. */
 function sheetPlan(s:CalculationSnapshot,f:FramingSettings){

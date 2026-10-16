@@ -2,7 +2,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {aiscShapeByName} from '../data/aiscSections';
 import {existingColumnSection} from '../engine/existingColumn';
 import {existingLayout,planClear,type ClearancePair,type ExistingLayout,type PlanBox} from '../engine/existingLayout';
-import {specifiedSeparation} from './bracingSheet';
+import {separationLength} from './bracingSheet';
 import {drawingLength} from './drawingFormat';
 import {refDim,dimText,sheetDrawingScale,bubble,dimH,labelColumn,line,n,rect,text,textWidth,viewTitle,detailRef,detailTitles,type XY} from './sheetGraphics';
 
@@ -95,7 +95,7 @@ export function existingClearancePlan(s:CalculationSnapshot,r:ExistingLayout,box
  // The clear distances against their limits, under the plan.
  const sep=s.bracingSystem?.separation,ny=Math.max(inboard,outboardY)+22+(along&&sg>0?18:0)+(sg<0?24:0);
  const cx=(left+right)/2,notes=[
-  `STEEL CLR. ${dim(steelClear)}${sep?`, SEISMIC SEP. ${dim(specifiedSeparation(sep.required,u))} MIN.`:''}`,
+  `STEEL CLR. ${dim(steelClear)}${sep?`, SEISMIC SEP. ${separationLength(sep.required,u)} MIN.`:''}`,
   ...(footClear!==undefined?[`FOOTING CLR. ${dim(footClear)}, ${dim(r.footingClear)} MIN.`]:[]),
   `LEAST CLEARANCE AT GRID ${g.grid+1}${g.line}; (E) PER SURVEY`
  ];

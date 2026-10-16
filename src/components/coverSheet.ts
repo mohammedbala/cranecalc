@@ -19,7 +19,7 @@ import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
 import {usesTaperedHaunch} from '../engine/taperedHaunch';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
 import {activeColumnCap} from '../engine/columnCapInputs';
-import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength,specGrade} from './drawingFormat';
+import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength,specGrade,limitLength} from './drawingFormat';
 import {railPad} from '../engine/railSeat';
 import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth,lettering} from './sheetGraphics';
 import {heading,paragraph,numbered,table,capsFor,flowBlocks,fitColumns,type Block,type Style} from './noteBlocks';
@@ -30,6 +30,8 @@ import {bearingSurface} from '../engine/endBearing';
 import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newColumnBracing';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
 import {deliveredRows,deliveredHeaders,deliveredNote} from '../report/deliveredTable';
+import {blockedPackage,verificationFailures} from './sheetRatios';
+import {unplacedHolds} from './detailHolds';
 import {sig3} from '../report/reportParts';
 
 /** A sheet of the set as the cover indexes it, with the titles of its details in drawing order. */
@@ -39,7 +41,7 @@ const abbreviationList:[RegExp,string][]=[
  [/\(E\)/,'(E) EXISTING'],[/\(N\)/,'(N) NEW'],[/\bBOT\./,'BOT. BOTTOM'],[/\bBRG\./,'BRG. BEARING'],[/\bC\/L\b/,'C/L CENTERLINE'],
  [/\bCJP\b/,'CJP COMPLETE JOINT PENETRATION'],[/\bCLR\./,'CLR. CLEAR'],[/\bCOL\./,'COL. COLUMN'],[/\bCOMB\./,'COMB. LOAD COMBINATION'],
  [/\bCONT\./,'CONT. CONTINUOUS'],[/\bD\/C\b/,'D/C DEMAND / CAPACITY RATIO'],[/\bEA\./,'EA. EACH'],[/\bED\./,'ED. EDITION'],[/\bEL\./,'EL. ELEVATION'],[/\bFIG\./,'FIG. FIGURE'],
- [/\bFL\./,'FL. FLANGE'],[/\bFREQ\./,'FREQ. FREQUENCY'],[/\bFW\b/,'FW FIELD WELD'],[/\bGR\./,'GR. GRADE'],[/\bHORIZ\./,'HORIZ. HORIZONTAL'],
+ [/\bFB\b/,'FB FLAT BAR'],[/\bFL\./,'FL. FLANGE'],[/\bFREQ\./,'FREQ. FREQUENCY'],[/\bFW\b/,'FW FIELD WELD'],[/\bGR\./,'GR. GRADE'],[/\bHORIZ\./,'HORIZ. HORIZONTAL'],
  [/\bLONG\.(?!\w)/,'LONG. LONGITUDINAL'],[/\bLSL\b/,'LSL LONG-SLOTTED HOLE'],[/\bMAX\./,'MAX. MAXIMUM'],[/\bMIN\./,'MIN. MINIMUM'],
  [/\bMT\b/,'MT MAGNETIC PARTICLE TESTING'],[/\bNDT\b/,'NDT NONDESTRUCTIVE TESTING'],[/\bO\.C\./,'O.C. ON CENTER'],[/\bOD\b/,'OD OUTSIDE DIAMETER'],[/\bPL\b/,'PL PLATE'],[/\bQTY\b/,'QTY QUANTITY'],
  [/\bREF\./,'REF. REFERENCE (EXISTING OR BY OTHERS)'],[/\bSC\b/,'SC SLIP-CRITICAL'],[/\bSSL\b/,'SSL SHORT-SLOTTED HOLE'],[/\bSTD\b/,'STD STANDARD HOLE'],
@@ -197,7 +199,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  blocks.push(H('SCOPE OF WORK'),P(scope));
  blocks.push(H('GENERAL NOTES'),...N([
   ...structuralGeneralNotes(s),
-  'THESE DRAWINGS AND THE CALCULATION REPORT OF THE SAME REVISION FORM ONE PACKAGE. WHERE THEY DIFFER, THE MORE STRINGENT REQUIREMENT GOVERNS UNTIL CLARIFIED BY THE ENGINEER OF RECORD.',
+  // A package whose analysis did not verify has no calculation report: the drawings point at the diagnostic report.
+  blockedPackage(s)?'NO CALCULATION REPORT IS ISSUED FOR THESE DRAWINGS: THE ANALYSIS DID NOT VERIFY (SEE THE DIAGNOSTIC REPORT OF THE SAME REVISION). NO SIZE OR RATIO SHOWN IS CONFIRMED BY CALCULATION; DO NOT FABRICATE.':'THESE DRAWINGS AND THE CALCULATION REPORT OF THE SAME REVISION FORM ONE PACKAGE. WHERE THEY DIFFER, THE MORE STRINGENT REQUIREMENT GOVERNS UNTIL CLARIFIED BY THE ENGINEER OF RECORD.',
   'ALL WORK SHALL CONFORM TO THE BUILDING CODE ADOPTED BY THE AUTHORITY HAVING JURISDICTION AND THE STANDARDS LISTED UNDER DESIGN CRITERIA.',
   // Millimeter values of imperial products are conversions, not metric product sizes.
   ...(u==='SI'?['DIMENSIONS ARE IN MILLIMETERS AND ELEVATIONS IN METERS. BOLT, PLATE, WELD AND SECTION SIZES ARE THOSE OF THE DESIGN; WHERE A SIZE IS AN IMPERIAL PRODUCT SHOWN IN MILLIMETERS (FOR EXAMPLE A 3/4 IN BOLT SHOWN AS 19 MM), FURNISH THAT PRODUCT. SUBSTITUTE METRIC PRODUCTS ONLY AFTER THE ENGINEER OF RECORD RECALCULATES WITH THEIR SIZES.']:[])
@@ -219,7 +222,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(unevaluatedStructure(s).length?['ITEMS MARKED BY OTHERS IN THE CALCULATION REPORT (FRAME, CONNECTIONS TO EXISTING MEMBERS, ANCHORS AND FOUNDATIONS NOT CHECKED HERE) SHALL BE VERIFIED BY THE ENGINEER OF RECORD FOR THE REPORTED FORCES.']:[])
  ].map(v=>v.toUpperCase())));
  if(d)blocks.push(H('CRANE RUNWAY INSTALLATION'),...N([
-  `RAIL: ${d.rail.name.split(" · ")[0]}; GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${tol(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS. SET EACH RAIL C/L ON ITS GIRDER WEB C/L WITHIN ${tol(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${tol(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${tol(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION. VERIFY THE GAUGE AND TOLERANCES WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
+  `RAIL: ${d.rail.name.split(" · ")[0]}; GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${tol(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS. SET EACH RAIL C/L ON ITS GIRDER WEB C/L WITHIN ${tol(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${tol(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${tol(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION; IN SERVICE ${limitLength(Math.abs(p.railEccentricity)>0?Math.min(Math.abs(p.railEccentricity),.75*p.section.tw):.75*p.section.tw,u,'max')} MAX. (TR-13 §5.18). VERIFY THE GAUGE AND TOLERANCES WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
   ...addedSentences(enteredFabricationNote(p,'railAlignment'),[...written,...(constructionRequirements(p).find(v=>v.key==='tolerances')?.items??[])]),
   // The rail setting clause of the TR-13 list is the note above.
   ...constructionRequirements(p).filter(v=>v.key==='tolerances').map(v=>v.items.filter(i=>!/^rail centerline set on/i.test(i)).join(' ').replace(/; (Survey)/,'. $1')),
@@ -311,7 +314,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  // The forces delivered to the building columns: the same concurrent sets as the calculation (page 1 and section 3.5),
  // each column as wide as its widest value so the values stay on one line (the set names wrap where the table is tight).
  const delivered=deliveredRows(s);
- if(delivered.length)blocks.push(H(`${p.existingColumn?.enabled&&p.existingColumn.isNew?'FORCES ON THE NEW RUNWAY COLUMNS (DESIGNED IN THE CALCULATION REPORT, NEW COLUMN)':'FORCES DELIVERED TO THE BUILDING COLUMNS'} · FACTORED ${p.method}, CONCURRENT SETS PER GRID`),{...T(deliveredHeaders.map(v=>v.toUpperCase()),delivered,fitColumns(t,deliveredHeaders.map(v=>v.toUpperCase()),delivered,[1])),keep:true},P(deliveredNote(s)));
+ // H tie is the tie design force (restraint plus the Appendix 6 brace force); the S-02 force table prints the restraint alone.
+ const deliveredHeads=deliveredHeaders.map(v=>v==='H tie'?'H TIE (DESIGN)':v.toUpperCase());
+ if(delivered.length)blocks.push(H(`${p.existingColumn?.enabled&&p.existingColumn.isNew?'FORCES ON THE NEW RUNWAY COLUMNS (DESIGNED IN THE CALCULATION REPORT, NEW COLUMN)':'FORCES DELIVERED TO THE BUILDING COLUMNS'} · FACTORED ${p.method}, CONCURRENT SETS PER GRID`),{...T(deliveredHeads,delivered,fitColumns(t,deliveredHeads,delivered,[1])),keep:true},P(deliveredNote(s)));
  // Without bracket or support details the cover carries the factored bracket design forces.
  if(d&&s.detailResults&&!bracketForceTopic(s))blocks.push(...bracketForceBlocks(s,t));
  // Column 3: index, materials, inspection.
@@ -395,7 +400,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   'CRANE, END TRUCKS, CRANE-MOUNTED BUMPERS, CONDUCTOR BARS AND ELECTRIFICATION: CRANE SUPPLIER.',
   ...(bypass?['BUILDING-MOUNTED CRANE END STOPS AND THEIR SUPPORT FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
-  ...(!d?.bracket?.enabled&&!activeColumnCap(p)?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${tol(support.capacity)} MAX.`:'.'}`]:[]),
+  ...(!d?.bracket?.enabled&&!activeColumnCap(p)?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${limitLength(support.capacity,u,'max')} MAX.`:'.'}`]:[]),
   ...(p.system==='simple'&&d&&!activeEndBearing(p)?[`COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (${detailRef(detailTitles.movement)}) FOR THE LONGITUDINAL, LATERAL AND UPLIFT FORCES IN THE ${bracketForcesAt(s,'cover','ON THIS SHEET')}.`]:[]),
   ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`)
  ];
@@ -408,11 +413,14 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
    P(`${checked.length?`THE CALCULATION REPORT CHECKS ${checked.join(', ').replace(/, ([^,]*)$/,' AND $1')} FOR THE ADDED CRANE LOADS. `:''}THE ENGINEER OF RECORD SHALL EVALUATE THE FOLLOWING FOR THE FORCES IN THE CALCULATION REPORT AND INCLUDE THE EVALUATION IN THE PERMIT SUBMITTAL; THEY ARE NOT DEFERRED SUBMITTALS. EVALUATION: ${reference?reference.toUpperCase():'NOT REFERENCED; THE SET IS NOT ISSUED UNTIL IT IS'}.`),
    ...N(unchecked.map(c=>c.title.toUpperCase()+'.')));
  }
+ // Open items with a failing check that no detail of the set draws: listed here, as the details' HOLD tags list theirs.
+ const unplaced=unplacedHolds(s,sheets.flatMap(v=>[...(v.details??[])]));
+ if(unplaced.length&&!blockedPackage(s))blocks.push(H('OPEN ITEMS - NOT FOR FABRICATION'),P(`FAILING CHECKS NOT TAGGED AT A DETAIL (SEE CALCULATION, OPEN ITEMS): ${unplaced.map(h=>`${h.text.replace(/^NG /,'')}${h.group.locations>1?` (${h.group.locations} LOCATIONS)`:''}`).join('; ')}.`));
  blocks.push(legend(t,p.units,referenceDims));
  // Only the abbreviations used on this sheet or the others.
  const used=`${written.join(' ')} ${otherWords}`,abbreviations=abbreviationList.filter(([re])=>otherWords===undefined||re.test(used)).map(([,v])=>v);
  if(abbreviations.length)blocks.push(H('ABBREVIATIONS'),P(abbreviations.join(' · ')));
- blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} ${revisionIdentity(s).letter?`DRAWINGS AND CALCULATION REPORT REVISION ${revisionIdentity(s).letter!.toUpperCase()}, ${revisionIdentity(s).date}.`:`CALCULATION ${s.revision}.`}`));
+ blocks.push(H('ISSUE'),P(`${blockedPackage(s)?`NOT ISSUABLE: THE ANALYSIS DID NOT VERIFY (${verificationFailures(s).join(', ')}); SEE THE DIAGNOSTIC REPORT. `:''}${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} ${revisionIdentity(s).letter?`DRAWINGS AND CALCULATION REPORT REVISION ${revisionIdentity(s).letter!.toUpperCase()}, ${revisionIdentity(s).date}.`:`CALCULATION ${s.revision}.`}`));
  return blocks;};
  return build;
 }
