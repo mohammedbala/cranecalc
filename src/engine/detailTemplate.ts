@@ -6,7 +6,7 @@ import {defaultEndBearing} from './endBearingInputs';
 import {bearingLayout,applyBearingLayout} from './endBearing';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {sizeEndStop} from './endStopSizing';
-import {railJointKindForDuty} from './railLayout';
+import {railJointKindForDuty,railHasJoints} from './railLayout';
 import {defaultRailClip} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
@@ -122,6 +122,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // The runway end stop sized for the cranes' bumper force on the girder as detailed: its flange, the end bearing
  // stiffener and the runway-end tie saddle.
  if(details.endStop)details.endStop=sizeEndStop({...p,details}).stop;
+ // A rail in one piece (the runway within one mill length, not continued) has no joint to state.
+ if(jointText&&!railHasJoints({...p,details}))details.fabrication.bolting=details.fabrication.bolting.replace(jointText,'');
  return details;
 }
 

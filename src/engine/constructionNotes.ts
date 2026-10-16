@@ -6,7 +6,7 @@ import {usesTaperedHaunch} from './taperedHaunch';
 import {haunchInput} from './taperedHaunchInputs';
 import {usesRolledBracket} from './rolledBracket';
 import {rolledStub} from './rolledBracketInputs';
-import {railJointType} from './railLayout';
+import {railJointType,railJointDetail,weldedRailJointNote} from './railLayout';
 import {runwayBoltingBasis} from './boltingBasis';
 import {capAngleGeometry} from './capAngle';
 import {activeEndBearing} from './endBearingInputs';
@@ -77,15 +77,18 @@ export interface ConstructionNote {key:'bolting'|'welding'|'inspection'|'erectio
  */
 export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
  const d=p.details;if(!d)return [];
+ const joint=railJointDetail(p),floating='The rail floats in its clips between the end stops, which anchor it; the clearance gaps at the stops take its thermal movement.';
  const tight=railJointType(p)==='tight',cjp=cjpWelds(p),haunchCjp=!!d.bracket?.enabled&&usesTaperedHaunch(p)&&haunchInput(d.bracket).flangeJoint==='cjp',onExisting=!(p.existingColumn?.isNew&&p.existingColumn.enabled),heat=preheatBasis(p),existing=weldsToExistingColumn(p);
  const bolting=[
   runwayBoltingBasis,
   ...(activeEndBearing(p)||capAngleGeometry(p)?['Bolts in slotted sliding plies are pretensioned against steel sleeves so the slotted ply is not clamped; plate washers cover the slots.']:[]),
   ...(activeEndBearing(p)?[bearingFaying(p)]:[]),
-  tight?'Rail joints: tight joints, rail ends butted with a gap of 1/16 in or less, staggered across the runway; joint bolts pretensioned in standard holes and re-tightened after 30 and 90 days of crane operation (AIST TR-13 §5.16.1). The rail floats in its clips between the end stops, which anchor it; the clearance gaps at the stops take its thermal movement.'
-   :'Rail joints: open joints with the expansion gap shown (project choice); joint bolts re-tightened after 30 and 90 days of crane operation.'];
+  // Rail joints by the layout and the joint kind: bolted joint bars here; welded joints under welding; none for one-piece rails.
+  ...(joint!=='bars'?[]:[tight?'Rail joints: tight joints, rail ends butted with a gap of 1/16 in or less, staggered across the runway; joint bolts pretensioned in standard holes and re-tightened after 30 and 90 days of crane operation (AIST TR-13 §5.16.1). The rail floats in its clips between the end stops, which anchor it; the clearance gaps at the stops take its thermal movement.'
+   :'Rail joints: open joints with the expansion gap shown (project choice); joint bolts re-tightened after 30 and 90 days of crane operation.'])];
  const welding=[
   `E70XX low-hydrogen weld metal, ${awsCode}, cyclically loaded provisions (Clause 4 Part C); qualified or prequalified WPS and qualified welders.`,
+  ...(joint==='welded'?[`${weldedRailJointNote} ${floating}`]:[]),
   ...(existing?[`Field welds to the existing column: base metal confirmed before welding (AISC 360-16 Appendix 5.2.3: mill certificates or chemical analysis), a WPS approved by the engineer of record for that steel, ${heat?heat.text:'preheat per AWS D1.1 Table 5.8'}; weld with the crane out of service (${awsCode} Clause 11).`]:[]),
   ...(haunchCjp?[`Haunch flange CJPs to the column flange: single-bevel groove on the haunch flange, on steel backing, welded through weld access holes in the haunch web (AISC 360-16 J1.6); backing removed, root backgouged and rewelded, reinforcing fillet (${awsCode}, cyclically loaded T-joints). Details on the haunch sheet.`]:[])];
  const inspection=[
@@ -96,6 +99,7 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
   'MT at the terminations of fillet welds on cyclically loaded details and at repaired welds.',
   'Record the baseline rail and connection condition before commissioning.'];
  const erection=[
+  ...(joint==='none'?[`Rail: each rail is one piece, no rail joint. ${tight?floating:'An anchor clip pair at mid-length holds it (rail layout); it moves thermally from there toward the stops.'}`]:[]),
   'Provide temporary lateral and torsional restraint of each girder until its ties are complete. Set bearings level and fit bearing stiffeners before welding.',
   ...(activeEndBearing(p)&&bearingSeat(p)!=='shop'?[seatSurvey(p)]:[]),
   ...(flangeTieFamily(d)&&d.brace.release?.enabled&&(d.bracket?.enabled||p.existingColumn?.enabled||d.brace.flangeAttachment?.columnFace!==undefined)?[tieSequence]:[]),

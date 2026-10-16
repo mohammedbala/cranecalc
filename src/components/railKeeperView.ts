@@ -1,7 +1,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {railSeat,clipOutline} from '../engine/railSeat';
 import {boltProperties} from '../engine/connectionStrength';
-import {railJointType,railJointGap,railJointBars} from '../engine/railLayout';
+import {railJointType,railJointGap,railJointBars,railJointDetail,weldedRailJointNote} from '../engine/railLayout';
 import {format} from '../engine/units';
 import {drawingLength,dimensionLength,plateInches} from './drawingFormat';
 import {refDim,dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,capChannelSection,subdetailTitle,lettering,type XY} from './sheetGraphics';
@@ -52,12 +52,14 @@ const labelWidth=(labels:string[])=>Math.max(0,...labels.map(v=>textWidth(labelC
 /**
  * Rail clip detail: the section through the rail, a pair of opposing rail clips and the girder top plate, with the
  * clip callout and the base weld symbol (field weld: the clips are welded with the rail set and aligned), the rail
- * clip note in the standard form, and the bolted rail joint. The clip is drawn schematically: its shape, nose and
- * capacity are the manufacturer's.
+ * clip note in the standard form, and the bolted rail joint where the rail has joint bars (railJointDetail): a welded
+ * joint is a note (by the rail supplier), a one-piece rail has no joint. The clip is drawn schematically: its shape, nose
+ * and capacity are the manufacturer's.
  */
 export function railKeeperView(s:CalculationSnapshot):DetailView{
- // The rail joint elevation is drawn in the same cell, numbered as its own detail.
- return {title:detailTitles.railKeeper,subdetails:[detailTitles.railJoint],render:()=>{
+ // The rail joint elevation is drawn in the same cell, numbered as its own detail, where the rail has joint bars.
+ const jointKind=railJointDetail(s.input),bars=jointKind==='bars';
+ return {title:detailTitles.railKeeper,subdetails:bars?[detailTitles.railJoint]:[],render:()=>{
   const p=s.input,b=p.section,d=p.details!,r=d.rail,u=p.units,depth=p.aist!.railDepth,capped=b.kind==='cap';
   // SI sizes read to the millimeter, and those under 10 mm (clearances, small welds) to the half millimeter:
   // no false precision from converted inch sizes.
@@ -106,8 +108,13 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   sec+='</g>';
   const section=place(sec,0,0);
 
+  // Notes wrapped to a width in capitals, an SI value kept on one line with its unit.
+  const wrap=(v:string,width:number,size:number)=>wrapToWidth(labelCaps(v).replace(/(\d) mm\b/g,'$1\u0001mm'),width,size).map(row=>row.replaceAll('\u0001',' '));
+  const tight=railJointType(p)==='tight';
+  let svg='<g data-view="rail-connection">'+section.svg,rowY=section.h+14,W=560;
+  if(bars){
   // ---- 4. Bolted rail joint, elevation; edge distances and pitch on the left half, symmetric about the joint.
-  const hole=boltProperties('A325',r.jointBoltDiameter).hole,tight=railJointType(p)==='tight',gap=railJointGap(p),jb0=railJointBars(p),bar=jb0.length;
+  const hole=boltProperties('A325',r.jointBoltDiameter).hole,gap=railJointGap(p),jb0=railJointBars(p),bar=jb0.length;
   // The bar length closes the symmetric string of edge distances, pitches and the gap as they read.
   const barLabel=u==='SI'?siMm(2*(siValue(r.jointEdge)+siValue(r.jointPitch)+siValue(jb0.centerEdge))):dim(bar);
   const js=drawingScale(Math.min(.36,150/bar,60/depth),u),jk=js.pointsPerMm,J=(mm:number)=>mm*jk;
@@ -132,25 +139,24 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   // is wider than the joint.
   const tk=13/14,titleLeft=joint.w/2+10-textWidth(detailTitles.railJoint,13.5*tk,true)/2-37*tk;
   const jx=section.w+24+Math.max(0,-titleLeft),noteW=Math.max(joint.w,660-jx);
-  // Notes wrapped to a width in capitals, an SI value kept on one line with its unit.
-  const wrap=(v:string,width:number,size:number)=>wrapToWidth(labelCaps(v).replace(/(\d) mm\b/g,'$1\u0001mm'),width,size).map(row=>row.replaceAll('\u0001',' '));
   // The bars carry the slots (their net section and block shear are checked with them); the rail web is drilled.
   const jointNotes=wrap(tight?`TIGHT JOINT (AIST TR-13 §5.16.1): 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}; 4 - ${size(r.jointBoltDiameter)} A325 PRETENSIONED IN ${size(hole)} STANDARD HOLES IN THE BARS AND THE RAIL WEB. RAIL ENDS BUTTED, GAP 1/16" MAX.; RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS OF OPERATION. SYMMETRIC`:`OPEN JOINT: 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}, SLOTTED ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG THE RAIL; 4 - ${size(r.jointBoltDiameter)} A325 IN ${size(hole)} DRILLED HOLES IN THE RAIL WEB. GAP ${size(gap)}. RE-TIGHTEN AFTER 30 AND 90 DAYS. SYMMETRIC`,noteW,lettering.text);
   // The joint carries its own detail title (bubble numbered with the set), a little smaller than the cell title: its
   // sheet number stays at the 6.5 pt minimum text height.
-  const jt=joint.h+22,notesY=jt+28,rowY=Math.max(section.h,notesY+jointNotes.length*lettering.noteLeading)+14;
-  let svg='<g data-view="rail-connection">'+section.svg;
+  const jt=joint.h+22,notesY=jt+28;rowY=Math.max(section.h,notesY+jointNotes.length*lettering.noteLeading)+14;
   svg+=`<g transform="translate(${n(jx)} 0)">${joint.svg}${subdetailTitle(joint.w/2+10,jt,detailTitles.railJoint,js.label,14/13)}${jointNotes.map((v,i)=>text(joint.w/2,notesY+i*lettering.noteLeading,v,lettering.text,'middle')).join('')}</g>`;
+  W=Math.max(560,jx+joint.w);
+  }
   // The rail clip note: type, manufacturer, rating, spacing, float and the base weld, as the engineer of record specifies them.
   const rated=(v:number)=>format(v,'force',u,u==='SI'?0:1),basis=C.basis==='allowable'?'ALLOWABLE':'LRFD',seat=capped?'CAP CHANNEL':'GIRDER TOP FLANGE';
-  const clipNote=`RAIL CLIPS: ${C.type==='weld-on'?'WELD-ON':'BOLTED'}, PER MANUFACTURER (${entered?C.product:'MANUFACTURER AND SERIES TO BE ENTERED'}), RATED ≥ ${rated(C.lateral)} LATERAL AND ≥ ${rated(C.uplift)} UPLIFT PER CLIP (${basis}), IN OPPOSING PAIRS AT ${dim(p.aist!.clipSpacing)} O.C. MAX. AND A PAIR EACH SIDE OF EVERY RAIL JOINT, FLOATING; ${C.type==='weld-on'?`WELD BASE TO ${seat} PER MANUFACTURER (MIN. ${size(C.weld)} FILLET X ${size(C.weldLength)}, EACH END OF THE BASE).`:`BOLT PER MANUFACTURER.`}`;
-  const anchorNote=tight?`RAIL ANCHORAGE: THE FLOATING RAIL IS ANCHORED BY THE END STOPS (${detailRef(detailTitles.endStop)}); NO ANCHOR CLIPS OR RAIL NOTCHES. RAIL JOINTS AND CLIP SPACING: ${detailRef(detailTitles.railLayout)}.`
+  const clipNote=`RAIL CLIPS: ${C.type==='weld-on'?'WELD-ON':'BOLTED'}, PER MANUFACTURER (${entered?C.product:'MANUFACTURER AND SERIES TO BE ENTERED'}), RATED ≥ ${rated(C.lateral)} LATERAL AND ≥ ${rated(C.uplift)} UPLIFT PER CLIP (${basis}), IN OPPOSING PAIRS AT ${dim(p.aist!.clipSpacing)} O.C. MAX.${jointKind==='none'?'':' AND A PAIR EACH SIDE OF EVERY RAIL JOINT'}, FLOATING; ${C.type==='weld-on'?`WELD BASE TO ${seat} PER MANUFACTURER (MIN. ${size(C.weld)} FILLET X ${size(C.weldLength)}, EACH END OF THE BASE).`:`BOLT PER MANUFACTURER.`}`;
+  const anchorNote=tight?`RAIL ANCHORAGE: THE FLOATING RAIL IS ANCHORED BY THE END STOPS (${detailRef(detailTitles.endStop)}); NO ANCHOR CLIPS OR RAIL NOTCHES. ${jointKind==='none'?'CLIP SPACING':'RAIL JOINTS AND CLIP SPACING'}: ${detailRef(detailTitles.railLayout)}.`
    :`RAIL ANCHORAGE: ONE ANCHOR CLIP PAIR (FIXED CLIPS PER MANUFACTURER) AT MID-LENGTH OF EACH RAIL PIECE (${detailRef(detailTitles.railLayout)}).`;
   // Crane rail is high-carbon steel: heat from flame cutting hardens and cracks it.
-  const fabrication='RAIL STEEL: DRILL HOLES AND SAW-CUT ENDS; NO FLAME CUTTING OR PUNCHING. DO NOT WELD TO THE RAIL.';
-  const W=Math.max(560,jx+joint.w);
+  const fabrication=jointKind==='welded'?'RAIL STEEL: SAW-CUT ENDS; NO FLAME CUTTING, PUNCHING OR DRILLING. DO NOT WELD TO THE RAIL EXCEPT THE RAIL SUPPLIER\'S JOINT WELDS.':`RAIL STEEL: ${bars?'DRILL HOLES AND ':''}SAW-CUT ENDS; NO FLAME CUTTING OR PUNCHING. DO NOT WELD TO THE RAIL.`;
+  const weldedJoint=jointKind==='welded'?[weldedRailJointNote.replace(/^Rail joints:/,'RAIL JOINTS:')]:[];
   let my=rowY+4;
-  svg+=`<g data-note="rail-clips">${[clipNote,anchorNote,fabrication].map(v=>{const rows=wrap(v,W,lettering.text),t=rows.map((row,i)=>text(0,my+i*lettering.noteLeading,row,lettering.text)).join('');my+=rows.length*lettering.noteLeading+6;return t;}).join('')}</g>`;
+  svg+=`<g data-note="rail-clips">${[clipNote,anchorNote,...weldedJoint,fabrication].map(v=>{const rows=wrap(v,W,lettering.text),t=rows.map((row,i)=>text(0,my+i*lettering.noteLeading,row,lettering.text)).join('');my+=rows.length*lettering.noteLeading+6;return t;}).join('')}</g>`;
   return {svg:svg+'</g>',scale:scale.label};
  }};
 }

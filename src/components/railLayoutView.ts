@@ -1,5 +1,5 @@
 import type {CalculationSnapshot} from '../engine/types';
-import {railLayout,railLayoutCriteria,railMovements,railJointMovement,railJointType,railJointGap} from '../engine/railLayout';
+import {railLayout,railLayoutCriteria,railMovements,railJointMovement,railJointType,railJointGap,railJointDetail} from '../engine/railLayout';
 import {railAnchorForce} from '../engine/railClip';
 import {railClipStations} from '../engine/simpleSupports';
 import {activeEndStop} from '../engine/endStopInputs';
@@ -24,7 +24,7 @@ export function movementUpTo(mm:number,u:'US'|'SI'){
 }
 export function railLayoutView(s:CalculationSnapshot):DetailView{
  return {title:detailTitles.railLayout,render:()=>{
-  const p=s.input,r=railLayout(p),{stock,clear}=railLayoutCriteria,dim=(v:number)=>dimensionLength(v,p.units),moves=p.details?railMovements(p,r):undefined;
+  const p=s.input,r=railLayout(p),{stock,clear}=railLayoutCriteria,dim=(v:number)=>dimensionLength(v,p.units),moves=p.details?railMovements(p,r):undefined,jointKind=railJointDetail(p,r);
   let x=0;const grids=[0,...p.spans.map(v=>x+=v)];
   const lo=Math.min(0,...r.rails.map(v=>v.start)),hi=Math.max(grids.at(-1)!,...r.rails.map(v=>v.end));
   const scale=drawingScale(Math.min(.06,520/(hi-lo)),p.units),k=scale.pointsPerMm,x0=80,X=(v:number)=>x0+(v-lo)*k;
@@ -66,7 +66,8 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
    if(r.existing.left)svg+=rect(X(lo)-6,y-4,X(0)-X(lo)+5,8,'reference-line');
    if(r.existing.right)svg+=rect(X(L)+1,y-4,X(hi)-X(L)+5,8,'reference-line');
    for(let i=1;i<stations.length;i++)svg+=line([X(stations[i-1])+(i>1?1.2:0),y],[X(stations[i])-(i<stations.length-1?1.2:0),y],'rail-line');
-   for(const j of rail.joints)svg+=rect(X(j)-4,y-2.2,8,4.4,'runway-line');
+   // Joint bars across a bolted joint; a welded joint (by the rail supplier) is the break in the rail line alone.
+   if(jointKind==='bars')for(const j of rail.joints)svg+=rect(X(j)-4,y-2.2,8,4.4,'runway-line');
    // Rail clip pairs: a short tick each side of the rail at every clip station.
    const clips=railClipStations(p).filter(v=>v>=rail.start-1e-6&&v<=rail.end+1e-6);
    for(const c of clips)svg+=line([X(c),y-6.5],[X(c),y-2.5],'runway-line')+line([X(c),y+2.5],[X(c),y+6.5],'runway-line');
@@ -93,11 +94,11 @@ export function railLayoutView(s:CalculationSnapshot):DetailView{
   }
   const steps=r.wheelSteps.filter(v=>v>0).map(dim).join(', ');
   const notes=[
-   `RAIL PIECES ${dim(stock)} MAX. (MILL LENGTH); SAW-CUT THE SHORTER PIECES SHOWN, NO FLAME CUTTING. KEEP RAIL JOINTS ${dim(clear)} MIN. FROM GIRDER JOINTS AND FROM THE OPPOSITE RAIL JOINTS, AND OPPOSITE JOINTS ${dim(clear)} MIN. FROM ANY CRANE WHEEL SPACING${steps?` (${steps})`:''}.`,
-   `RAIL CLIP PAIRS (TICKS) AT ${dim(p.aist?.clipSpacing??0)} O.C. MAX., A PAIR EACH SIDE OF EVERY JOINT; CLIPS: ${detailRef(detailTitles.railKeeper)}; JOINTS: ${detailRef(detailTitles.railJoint)}. RUNWAYS DRAWN CLOSER THAN THE CRANE SPAN.`,
+   `RAIL PIECES ${dim(stock)} MAX. (MILL LENGTH); ${jointKind==='none'?'EACH RAIL IS ONE PIECE (NO RAIL JOINT); SAW-CUT IT TO LENGTH, NO FLAME CUTTING.':`SAW-CUT THE SHORTER PIECES SHOWN, NO FLAME CUTTING. KEEP RAIL JOINTS ${dim(clear)} MIN. FROM GIRDER JOINTS AND FROM THE OPPOSITE RAIL JOINTS, AND OPPOSITE JOINTS ${dim(clear)} MIN. FROM ANY CRANE WHEEL SPACING${steps?` (${steps})`:''}.`}`,
+   `RAIL CLIP PAIRS (TICKS) AT ${dim(p.aist?.clipSpacing??0)} O.C. MAX., ${jointKind==='none'?'':'A PAIR EACH SIDE OF EVERY JOINT; '}CLIPS: ${detailRef(detailTitles.railKeeper)}${jointKind==='bars'?`; JOINTS: ${detailRef(detailTitles.railJoint)}`:jointKind==='welded'?'; JOINTS THERMITE OR FLASH-BUTT WELDED BY THE RAIL SUPPLIER (WELDING NOTES)':''}. RUNWAYS DRAWN CLOSER THAN THE CRANE SPAN.`,
    ...(moves?[(()=>{const F=railAnchorForce(p),stop=activeEndStop(p),u=p.units,gap=railJointGap(p),endMove=Math.max(0,...moves.ends.filter(v=>!v.existing).map(v=>v.movement));
     return railJointType(p)==='tight'
-     ?`RAIL ANCHORAGE: FLOATING RAIL CLIPS, NO RAIL-SEAT FRICTION RELIED ON. TRACTION AND BRAKING (${labelForce(F.force,u)} FACTORED) REACH THE GIRDER UNDER THE WHEELS OR, AFTER RAIL CREEP, THROUGH AN END STOP${stop?` (${detailRef(detailTitles.endStop)})`:''}; BOTH PATHS ARE DESIGNED. TIGHT RAIL JOINTS PER ${detailRef(detailTitles.railJoint)} (GAP AND RE-TIGHTENING THERE), STAGGERED AS SHOWN. THE RAIL STRING MOVES THERMALLY UP TO ${movementUpTo(endMove,u)} INTO THE CLEARANCE GAP AT AN END STOP. AT EACH PERIODIC CRANE INSPECTION CHECK THE RAIL ENDS AT THE STOPS FOR CREEP.`
+     ?`RAIL ANCHORAGE: FLOATING RAIL CLIPS, NO RAIL-SEAT FRICTION RELIED ON. TRACTION AND BRAKING (${labelForce(F.force,u)} FACTORED) REACH THE GIRDER UNDER THE WHEELS OR, AFTER RAIL CREEP, THROUGH AN END STOP${stop?` (${detailRef(detailTitles.endStop)})`:''}; BOTH PATHS ARE DESIGNED. ${jointKind==='bars'?`TIGHT RAIL JOINTS PER ${detailRef(detailTitles.railJoint)} (GAP AND RE-TIGHTENING THERE), STAGGERED AS SHOWN. `:jointKind==='welded'?'WELDED RAIL JOINTS, STAGGERED AS SHOWN. ':''}THE RAIL STRING MOVES THERMALLY UP TO ${movementUpTo(endMove,u)} INTO THE CLEARANCE GAP AT AN END STOP. AT EACH PERIODIC CRANE INSPECTION CHECK THE RAIL ENDS AT THE STOPS FOR CREEP.`
      :`RAIL ANCHORS, SOLID TRIANGLES: AT MID-LENGTH OF EACH RAIL PIECE AN ANCHOR CLIP PAIR (FIXED CLIPS PER MANUFACTURER, ${detailRef(detailTitles.railKeeper)}) TAKES THE CRANE LONGITUDINAL FORCE (TRACTION AND BRAKING, ${labelForce(F.force,u)} FACTORED) AND RAIL CREEP INTO THE GIRDER. ALL OTHER CLIPS ARE FLOATING; EACH PIECE MOVES THERMALLY FROM ITS ANCHOR, UP TO ${movementUpTo(railJointMovement(moves),u)} AT A JOINT (OPEN JOINTS, ${u==='SI'?`${Math.round(gap*2)/2} mm`:plateInches(gap,u)} GAP). RE-TIGHTEN THE JOINT BOLTS AFTER 30 AND 90 DAYS OF OPERATION. AT EACH PERIODIC CRANE INSPECTION CHECK THE JOINT GAPS AND THE RAIL ENDS AT THE STOPS FOR CREEP.`;})()]:[]),
    ...(['left','right'] as const).filter(e=>r.existing[e]).map(e=>`AT GRID ${e==='left'?1:grids.length} JOIN THE EXISTING RAIL: CUT IT BACK TO ${dim(clear)} BEYOND THE GRID. FIELD VERIFY ITS SECTION AND JOINTS.`)
   ];

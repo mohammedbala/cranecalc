@@ -164,6 +164,18 @@ export function railMovements(p:ProjectInput,layout:RailLayout=railLayout(p)){
  * onto an existing rail. Without one each rail is one piece and no rail joint is detailed or checked.
  */
 export function railHasJoints(p:ProjectInput,layout:RailLayout=railLayout(p)){return layout.existing.left||layout.existing.right||layout.rails.some(r=>r.joints.length>0);}
+/**
+ * The rail joint as the drawings and notes show it, from the layout and rail.jointKind: 'none' where each rail is one
+ * piece (no joint detail, no joint hardware), 'welded' for thermite or flash-butt welded joints by the rail supplier (a
+ * weld note, no joint bars, bolts or drilled rail), else 'bars' (the joint bars detailed, the supplier's or these).
+ */
+export function railJointDetail(p:ProjectInput,layout?:RailLayout):'none'|'welded'|'bars'{
+ if(!p.details)return 'bars';
+ if(!railHasJoints(p,layout??railLayout(p)))return 'none';
+ return railJointKind(p)==='welded'?'welded':'bars';
+}
+/** The welded rail joint, stated once for the notes and the rail details. */
+export const weldedRailJointNote='Rail joints: thermite or flash-butt welded by the rail supplier\'s qualified procedure (preheat, finish grinding of the head and inspection per the supplier), rail ends set to the supplier\'s weld gap and staggered across the runway; no joint bars, bolts or drilled holes in the rail.';
 /** Largest closure of a rail joint, between new pieces or onto an existing rail: what each joint gap and slot takes. */
 export function railJointMovement(m:Pick<ReturnType<typeof railMovements>,'joints'|'ends'>){
  return Math.max(0,...m.joints.map(v=>v.movement),...m.ends.filter(v=>v.existing).map(v=>v.movement));

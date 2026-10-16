@@ -11,6 +11,7 @@ import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {capAngleGeometry} from '../engine/capAngle';
 import {activeEndStop} from '../engine/endStopInputs';
+import {railJointDetail} from '../engine/railLayout';
 
 /**
  * The specified detail of each runway component, in words, from the project inputs: what a figure or a summary
@@ -29,7 +30,7 @@ function girder(p:ProjectInput){
 }
 function rail(p:ProjectInput){
  const r=p.details?.rail;if(!r)return `Rail ${format(p.railWeight,'lineLoad',p.units,2)}, head ${len(p,p.railHeight)} above the flange`;
- return `${r.name.split(' · ')[0]}; ${r.clip?`${r.clip.type} rail clips per manufacturer, base welds ${fillet(p,r.clip.weld)}`:'rail clips per manufacturer'}; joint bars 2-${plate(p,r.jointPlateThickness,r.jointPlateHeight)}, ${plateInches(r.jointBoltDiameter,p.units)} bolts`;
+ return `${r.name.split(' · ')[0]}; ${r.clip?`${r.clip.type} rail clips per manufacturer, base welds ${fillet(p,r.clip.weld)}`:'rail clips per manufacturer'}${(()=>{const j=railJointDetail(p);return j==='none'?'; one-piece rail, no joints':j==='welded'?'; welded rail joints by the rail supplier':`; joint bars 2-${plate(p,r.jointPlateThickness,r.jointPlateHeight)}, ${plateInches(r.jointBoltDiameter,p.units)} bolts`;})()}`;
 }
 function bearing(p:ProjectInput){
  const d=p.details;if(!d)return 'Girder bearing on its support';

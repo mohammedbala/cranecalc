@@ -1,7 +1,7 @@
 import type {ProjectInput} from './types';
 import {sectionProperties} from './section';
 import {railClipInput} from './railSeat';
-import {railLayout,railJointBars} from './railLayout';
+import {railLayout,railJointBars,railJointDetail} from './railLayout';
 import {independentBearings,railClipStations} from './simpleSupports';
 import {activeEndStop,stopEnds} from './endStopInputs';
 import {endStopGeometry} from './endStop';
@@ -40,7 +40,8 @@ export function newSteelTakeoff(p:ProjectInput){
  const clip=railClipInput(d.rail);
  add('Rail clips (pairs)','line',railClipStations(p).length,2*2*w(clip.baseLength*clip.baseWidth*clip.baseThickness));
  const r=d.rail,bars=railJointBars(p),joints=Math.max(...railLayout(p).rails.map(v=>v.joints.length));
- add('Rail joint bars (pairs)','line',joints,2*w(r.jointPlateThickness*r.jointPlateHeight*bars.length));
+ // Joint bars only where the joints are bolted: welded joints and one-piece rails have none.
+ if(railJointDetail(p)==='bars')add('Rail joint bars (pairs)','line',joints,2*w(r.jointPlateThickness*r.jointPlateHeight*bars.length));
  // Bearing plate and the pair of bearing stiffeners at each girder end.
  const b=d.bearing,stiffenerHeight=s.d-2*s.tf,ends=p.system==='simple'?independentBearings(p).map(v=>v.station):grids;
  const end=w(b.length*b.width*b.thickness)+2*w(b.stiffenerWidth*b.stiffenerThickness*stiffenerHeight);
