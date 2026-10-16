@@ -23,7 +23,8 @@ import {sizeTaperedHaunch} from './taperedHaunchSizing';
 import {baseSizingRatios,columnDriftShare,sizeColumnBase} from './columnBaseSizing';
 import {columnTorsionRatio,sizeBracing} from './bracingSizing';
 import {supportReactions} from './supportReactions';
-import {existingColumnAnalysis,existingColumnChecks} from './existingColumn';
+import {existingColumnAnalysis,existingColumnChecks,existingColumnSection} from './existingColumn';
+import {existingWeldingDemand} from './existingWelding';
 import {baseDrift} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
 import {sizeWeldedBracket} from './bracketSizing';
@@ -386,7 +387,17 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  attachTie(p,cfg);
  // The supports carry the bracket (or cap) and tie before the new column bases are sized for their reactions.
  const tie=sizedTieRatios(p),q=finishTie(withHaunch(withWeldedBracket(p),cfg),tie);
- return cfg.structure==='new'?withColumnBase(sizeBracing(q,baseTarget),cfg):withLongitudinalExit(q,cfg);
+ return cfg.structure==='new'?withColumnBase(sizeBracing(q,baseTarget),cfg):withLongitudinalExit(withPreheat(q),cfg);
+}
+/**
+ * Existing columns: the specified preheat of the field welds to the column is the AWS D1.1 Category B minimum for the
+ * thickest part welded there (existingWeldingDemand), once the bracket or haunch is sized, rather than the capped
+ * demonstration's value.
+ */
+function withPreheat(p:ProjectInput):ProjectInput{
+ const c=p.existingColumn;if(!c?.enabled||c.isNew||!c.welding)return p;
+ c.welding={...c.welding,preheat:existingWeldingDemand(p,existingColumnSection(p).section.tf).need};
+ return p;
 }
 /**
  * Existing columns: the configured longitudinal exit, else the crane-level strut at the column centerline, or on the
