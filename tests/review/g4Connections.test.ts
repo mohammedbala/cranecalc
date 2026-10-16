@@ -30,7 +30,9 @@ describe('G4 · A1 coordination checks replace the text flag',()=>{
  it('fails, with the parts and grid named, when the stiffener outstand reaches the nut',()=>{
   const p=structuredClone(p0);p.details!.bearing.stiffenerWidth=6*inch;
   const tie=coordinationChecks(p).find(v=>v.id==='coord-cap-tie-stiffener')!;
-  expect(tie.status).toBe('fail');expect(tie.capacity!).toBeLessThan(0);expect(tie.note).toMatch(/^OPEN ITEM: CONNECTION LAYOUT REQUIRES REDESIGN/);
+  // An overlap is a geometry conflict without a ratio (checkIntegrity.ts): the note states it first, then the open item.
+  expect(tie.status).toBe('fail');expect(tie.capacity!).toBeLessThan(0);expect(tie.geometry).toBe(true);expect(tie.utilization).toBeUndefined();
+  expect(tie.note).toMatch(/^Invalid geometry: clear distance = −[\d.]+ in: the parts overlap by [\d.]+ in; 0\.125 in clear required\. OPEN ITEM: CONNECTION LAYOUT REQUIRES REDESIGN/);
   expect(tie.note).toMatch(/Interference/);expect(connectionCoordination(p)[0]).toMatch(/bearing stiffeners/);
  });
  it('measures signed box clearance',()=>{
