@@ -165,7 +165,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
    expect(cover).toContain('THE EXISTING COLUMNS AND FOOTINGS ON S-01 ARE FROM FICTITIOUS SURVEY SV-02');
    if(units==='US'){
     expect(t).toContain('4\'-10 13/16" CLR.');expect(t).toContain('0\'-9" CLR.');expect(t).toContain('SEISMIC SEP. 1 3/4" MIN.');
-    expect(t).toContain('FOOTING CLR. 0\'-9", 0\'-6" MIN.');expect(t).toContain('KEEP ALL RUNWAY STEEL 0\'-1 3/4" MIN. CLEAR OF THE EXISTING BUILDING');
+    expect(t).toContain('FOOTING CLR. 0\'-9", 0\'-6" MIN.');expect(t).toContain('KEEP ALL RUNWAY STEEL 1 3/4" MIN. CLEAR OF THE EXISTING BUILDING');
    }
   }
   // Without the survey the arrangement is as before.
