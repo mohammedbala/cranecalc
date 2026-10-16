@@ -40,16 +40,17 @@ describe('rail joint layout',()=>{
   expect(titles).toContain(detailTitles.railLayout);expect(titles).toContain(detailTitles.slidingBolt);
   // The tie plan and end bearing details draw these at a larger scale.
   expect(titles).not.toContain(detailTitles.supportTies);expect(titles).not.toContain(detailTitles.movement);
-  expect(titles).toHaveLength(12);
+  // The connections and supports: six details on S-02 at the 3/32 in lettering (the flange ties and end stops on S-03).
+  expect(titles).toHaveLength(6);
   // The rail joint elevation, drawn in the rail clip cell, is numbered as its own detail, after the rail clip section.
   expect(refs.get(detailTitles.railJoint)).toBe(`${Number(refs.get(detailTitles.railKeeper)!.split('/')[0])+1}/S-02`);
   const t=texts(s02.svg).join(' ');
   expect(t).toContain('19\'-6"');expect(t).toContain('39\'-0"');
   expect(t).toContain('RAIL PIECES 39\'-0" MAX.');
   expect(t).toContain('STEEL SLEEVE 1 7/16" OD X 13/16" BORE');
-  // Each section is keyed on its parent view by its own detail number.
+  // Each section is keyed on its parent view by its own detail number (the tie and end stop views are on S-03).
   for(const title of [detailTitles.flangeTie,detailTitles.saddle,detailTitles.endStopSection]){
-   const cut=s02.svg.match(new RegExp(`<g data-section-cut="${title}">(.*?)</g>`))?.[1];
+   const cut=set.map(v=>v.svg.match(new RegExp(`<g data-section-cut="${title}">(.*?)</g>`))?.[1]).find(v=>v!==undefined);
    expect(cut,title).toBeDefined();expect(cut).toContain(refs.get(title));
   }
  },240000);

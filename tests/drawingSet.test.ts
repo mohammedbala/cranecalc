@@ -9,12 +9,14 @@ import {runwayElevations,issueStatus,girderMarks} from '../src/engine/drawingDat
 import {drawingLength,plateInches} from '../src/components/drawingFormat';
 import {multiLeader,textWidth,wrapToWidth,viewTitle,detailRef,sheetDrawingScale,withDetailRoom,text,line} from '../src/components/sheetGraphics';
 import {annotationClashes} from '../src/components/detailSheet';
-import {coverSheetSvg} from '../src/components/coverSheet';
+import {coverSheetSvgs} from '../src/components/coverSheet';
 import {format} from '../src/engine/units';
 import type {CalculationSnapshot} from '../src/engine/types';
 import {bracketForceCases,bracketForceCells} from '../src/components/bracketForceTable';
 import {sig3} from '../src/report/reportParts';
 import {seatColumnWeldLength} from '../src/engine/bracketDesign';
+// The cover with the sheets continuing its notes (S-00A) where they do not fit it at the lettering size.
+const coverSheetSvg=(...a:Parameters<typeof coverSheetSvgs>)=>coverSheetSvgs(...a).join('');
 
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
 const capped=withoutOpenItems(calculate(cappedDemonstrationProject())),demo=calculate(demonstrationProject()),newColumn=calculate(newColumnDemonstrationProject());
@@ -23,6 +25,8 @@ const si=(s:CalculationSnapshot)=>{const v=structuredClone(s);v.input.units='SI'
 // The three demonstrations as issued, and the same sets drawn in SI units.
 let drawn:Record<string,ReturnType<typeof drawingSheetSet>>|undefined;
 const sets=()=>drawn??=({demo:demoSet,capped:cappedSet,newColumn:newColumnSet,demoSI:drawingSheetSet(si(demo)),cappedSI:drawingSheetSet(si(capped)),newColumnSI:drawingSheetSet(si(newColumn))});
+// A sheet of a set by its number (the cover's notes may continue on S-00A ahead of S-01).
+const sheetOf=(set:ReturnType<typeof drawingSheetSet>,number:string)=>set.find(v=>v.number===number)!;
 
 describe('issued drawing set',()=>{
  it('leads with the cover sheet and numbers every sheet in the set',()=>{
@@ -30,18 +34,23 @@ describe('issued drawing set',()=>{
    expect(set[0].number).toBe('S-00');
    set.forEach((sheet,i)=>{expect(sheet.svg).toContain(`${i+1} OF ${set.length}`);expect(sheet.svg).toContain(`SHEET ${sheet.number}`);});
   }
-  // Cover, general arrangement and the details on as few sheets as fit: one for the rolled
-  // demonstration, two for the capped and new-column demonstrations.
-  expect(demoSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02']);
-  expect(cappedSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
-  // The new-column set adds the new-column and bracing details on a third detail sheet.
-  expect(newColumnSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03','S-04']);
-  // The capped set's brackets carry the column stiffener details (W14X90 receiver): the bracket topic fills S-02 and
-  // the ties and end stops share S-03, the fullest split of the topics in order (packDetailSheets).
-  for(const set of [demoSet,cappedSet,newColumnSet])for(const sheet of set.slice(2)){const n=sheet.svg.match(/data-view-title="below"/g)!.length;expect(n,sheet.number).toBeGreaterThanOrEqual(set===cappedSet?6:8);expect(n,sheet.number).toBeLessThanOrEqual(12);}
+  // Cover, general arrangement and the details on as few sheets as hold them at the 3/32 in lettering: two for the
+  // rolled demonstration, three for the capped and four for the new-column demonstration, whose covers continue their
+  // notes on S-00A.
+  expect(demoSet.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
+  expect(cappedSet.map(v=>v.number)).toEqual(['S-00','S-00A','S-01','S-02','S-03','S-04']);
+  // The new-column set adds the new-column and bracing details.
+  expect(newColumnSet.map(v=>v.number)).toEqual(['S-00','S-00A','S-01','S-02','S-03','S-04','S-05']);
+  // The capped set's brackets carry the column stiffener details (W14X90 receiver): the supports and brackets take S-03
+  // between the connections and cap channel and the ties and end stops, the fullest split of the topics in order
+  // (packDetailSheets). Every detail sheet holds five details or more.
+  for(const set of [demoSet,cappedSet,newColumnSet])for(const sheet of set.filter(v=>v.svg.includes('data-detail-grid'))){const n=sheet.svg.match(/data-view-title="below"/g)!.length;expect(n,sheet.number).toBeGreaterThanOrEqual(5);expect(n,sheet.number).toBeLessThanOrEqual(12);}
+  expect(cappedSet.find(v=>v.number==='S-03')!.title).toBe('SUPPORTS & BRACKETS');
   expect(sheetIndex(capped).map(v=>v.title)).toEqual(cappedSet.map(v=>v.title));
   const index=texts(cappedSet[0].svg).join(' | ');
   for(const sheet of cappedSet.slice(1))expect(index).toContain(`${sheet.number} | ${sheet.title}`);
+  // Notes that do not fit the cover at the lettering size continue on S-00A, as the cover says.
+  expect(index).toContain('GENERAL NOTES CONTINUE ON SHEET S-00A.');expect(texts(demoSet[0].svg).join(' ')).not.toContain('CONTINUE ON SHEET');
  },120000);
  it('resolves every token, detail number and sheet reference',()=>{
   for(const [name,set] of Object.entries(sets())){
@@ -71,8 +80,8 @@ describe('issued drawing set',()=>{
      // The 2.5-in seal box at the lower right stays clear.
      expect(x>33&&y<5,`${name} ${sheet.number} enters the seal box`).toBe(false);
     }
-    // No text under about 0.09 in (6.5 points); cap height is 0.716 of the font size.
-    if(e.type==='text')expect(e.height/.716*72,`${name} ${sheet.number} "${e.value}"`).toBeGreaterThanOrEqual(6.5-1e-6);
+    // No text with capitals under 3/32 in, the lettering minimum (sheetGraphics lettering); e.height is the cap height.
+    if(e.type==='text')expect(e.height,`${name} ${sheet.number} "${e.value}"`).toBeGreaterThanOrEqual(3/32-1e-6);
    }
   }
  },300000);
@@ -88,7 +97,7 @@ describe('issued drawing set',()=>{
 
 describe('drawings agree with the calculation',()=>{
  it('labels runway elevations from the surveyed seat or entered rail elevation',()=>{
-  const p=capped.input,e=runwayElevations(p)!,s01=texts(cappedSet[1].svg);
+  const p=capped.input,e=runwayElevations(p)!,s01=texts(sheetOf(cappedSet,'S-01').svg);
   expect(e.source).toBe(p.existingColumn?.enabled?'surveyed column seat':'entered top of rail');
   expect(s01).toContain(`T.O.R. EL. ${drawingLength(e.tor,p.units)}`);
   expect(s01).toContain(`T.O.S. EL. ${drawingLength(e.tos,p.units)}`);
@@ -99,7 +108,7 @@ describe('drawings agree with the calculation',()=>{
   expect(calculate(entered).checks.find(c=>c.id==='drawing-elevation')?.status).toBe('incomplete');
  },240000);
  it('schedules every girder piece with its calculated length',()=>{
-  const p=capped.input,marks=girderMarks(p),schedule=texts(cappedSet[1].svg);
+  const p=capped.input,marks=girderMarks(p),schedule=texts(sheetOf(cappedSet,'S-01').svg);
   expect(marks.reduce((a,g)=>a+g.length,0)).toBeLessThanOrEqual(p.spans.reduce((a,b)=>a+b,0));
   for(const mark of new Set(marks.map(g=>g.mark))){
    const all=marks.filter(g=>g.mark===mark),i=schedule.indexOf(mark,schedule.indexOf('RUNWAY GIRDER SCHEDULE'));
@@ -155,14 +164,15 @@ describe('drawings agree with the calculation',()=>{
  },300000);
  it('tabulates one factored bracket force envelope per set, mirror-symmetric for the symmetric runways',()=>{
   const title='BRACKET DESIGN FORCES / FACTORED LRFD ENVELOPE';
-  // The capped set carries the bracket details on S-02 (with the column stiffeners); the new-column set on S-03, ahead
-  // of the new-column and bracing sheet.
-  for(const [s,set,at] of [[demo,demoSet,'S-02'],[capped,cappedSet,'S-02'],[newColumn,newColumnSet,'S-03']] as const){
+  // The capped set carries the bracket details on S-03 (with the column stiffeners), after the connections and cap
+  // channel; the new-column set on S-03 too, ahead of the new-column and bracing sheets.
+  for(const [s,set,at] of [[demo,demoSet,'S-02'],[capped,cappedSet,'S-03'],[newColumn,newColumnSet,'S-03']] as const){
    const holding=set.filter(v=>texts(v.svg).includes(title));
    expect(holding.map(v=>v.number)).toEqual([at]);
-   // Values to three significant figures (two decimals below 0.1), as the forces delivered to the columns on S-00.
-   const kipN=4448.2216152605,cells=texts(holding[0].svg),f=s.detailResults!.bracketForces!,kip=(v:number)=>(Math.abs(v)<.1*kipN?`${(Math.abs(v)/kipN).toFixed(2)} kip`:sig3(Math.abs(v),'force','US')).toUpperCase();
-   expect(cells.filter(v=>v===title)).toHaveLength(1);expect(f).toHaveLength(4);
+   // Values to three significant figures (two decimals below 0.1), as the forces delivered to the columns on S-00, without
+   // units so each reads on one line: the note under the table states them.
+   const kipN=4448.2216152605,cells=texts(holding[0].svg),f=s.detailResults!.bracketForces!,kip=(v:number)=>(Math.abs(v)<.1*kipN?(Math.abs(v)/kipN).toFixed(2):sig3(Math.abs(v),'force','US').replace(/ kip$/,'')).toUpperCase();
+   expect(cells.filter(v=>v===title)).toHaveLength(1);expect(f).toHaveLength(4);expect(cells.join(' ')).toContain('FORCES IN KIP, MOMENTS IN KIP-FT.');
    // Mirror images: equal reactions, opposite end moments, and both signs at the interior grids.
    const V=f.map(v=>v.maxVertical.vertical),M=f.map(v=>v.maxMoment.moment);
    expect(V[3]).toBeCloseTo(V[0],6);expect(V[2]).toBeCloseTo(V[1],6);expect(M[3]).toBeCloseTo(-M[0],3);expect(M[0]).toBeGreaterThan(0);
@@ -170,13 +180,13 @@ describe('drawings agree with the calculation',()=>{
    for(const v of f)expect(cells).toContain(kip(v.maxVertical.vertical));
    // An interior grid reaches its largest reaction from either side, but the two cases differ in their
    // longitudinal force: both are listed, each with its own sign of seat moment.
-   const kipft=(v:number)=>sig3(v,'moment','US').toUpperCase();
+   const kipft=(v:number)=>sig3(v,'moment','US').replace(/ kip-ft$/,'').toUpperCase();
    expect(Math.abs(f[1].mirror.vertical!.longitudinal-f[1].maxVertical.longitudinal)).toBeGreaterThan(1);expect(cells).toContain(kipft(f[1].maxVertical.moment));expect(cells).toContain(kipft(f[1].mirror.vertical!.moment));
    // One table, every row a whole concurrent case: all its reactions, seat moment, longitudinal and lateral forces, under
    // the labels of the forces delivered to the columns on S-00.
    expect(cells).toEqual(expect.arrayContaining(['GRID','CASE','COMB.','V','LEFT V','RIGHT V','MY,SEAT','F','H TIE']));expect(cells).not.toContain('SEAT M');
    const cases=bracketForceCases(s);
-   for(const g of cases)for(const c of g.cases)for(const value of Object.values(bracketForceCells(c.force,c.mirrored,'US')))if(value!=='—')expect(cells).toContain(value.toUpperCase());
+   for(const g of cases)for(const c of g.cases)for(const value of Object.values(bracketForceCells(c.force,c.mirrored,'US',false)))if(value!=='—')expect(cells).toContain(value.toUpperCase());
    const stopRow=cases[2].cases.find(c=>c.label.includes('MAX LONG.'))!;
    expect(stopRow.force).toBe(f[2].longitudinal);expect(stopRow.force.ends).toHaveLength(2);expect(stopRow.force.combination).toBe('LRFD 8');
    // The crane is against the grid-4 stop, so RG3 carries its own dead load and the couple only: the least V at
@@ -204,7 +214,7 @@ describe('drawings agree with the calculation',()=>{
   const st=capped.detailResults!.bracket!.stations;expect(st[3].vertical).toBeCloseTo(st[0].vertical,6);expect(st[3].leftRib).toBeCloseTo(st[0].rightRib,6);
   // The supports and the cover refer to the table instead of repeating it.
   // The table is on the same sheet as the support notes.
-  expect(texts(cappedSet[2].svg).join(' ')).toContain('FACTORED FORCES: BRACKET DESIGN FORCES ON THIS SHEET.');
+  expect(texts(sheetOf(cappedSet,'S-03').svg).join(' ')).toContain('FACTORED FORCES: BRACKET DESIGN FORCES ON THIS SHEET.');
   expect(texts(demoSet[0].svg).join(' ')).toContain('BRACKET DESIGN FORCES ON S-02');
  },120000);
 });
@@ -232,24 +242,28 @@ describe('welded bracket, new-column and bracing details',()=>{
    for(const id of ['bracket-seat-flange','bracket-seat-web'])expect(s.checks.find(c=>c.id===id)?.status,id).toBe(s.input.details!.bracket!.columnStiffeners?.enabled?'not-applicable':'pass');
   }
  },120000);
- it('fills the new-column and bracing sheet and draws the strut, gussets, rod crossing and section keys',()=>{
-  const sheet=sheetWith(newColumnSet,'braced-bay-elevation').svg;
-  // Every cell of the 3 x 4 grid is taken: the column elevation, braced bay and strut plans span two rows.
-  const cells=[...sheet.matchAll(/data-detail-cell="(\d+),(\d+),(\d+)"/g)].flatMap(m=>Array.from({length:+m[3]},(_,i)=>`${m[1]},${+m[2]+i}`));
-  expect(new Set(cells).size).toBe(12);expect(cells).toHaveLength(12);
-  const elevation=texts(view(sheet,'new-column-elevation')).join(' ');
+ it('fills the new-column and bracing sheets and draws the strut, gussets, rod crossing and section keys',()=>{
+  // A detail's drawing wherever the set puts it.
+  const at=(set:ReturnType<typeof drawingSheetSet>,name:string)=>view(sheetWith(set,name).svg,name);
+  const columns=sheetWith(newColumnSet,'new-column-elevation').svg,bracing=sheetWith(newColumnSet,'braced-bay-elevation').svg;
+  // The details fill each sheet: rows of cells across the whole drawing field beside the notes, none left empty.
+  for(const sheet of [columns,bracing]){
+   const boxes=[...sheet.matchAll(/data-cell-box="([\d.]+),([\d.]+),([\d.]+),([\d.]+)"/g)].map(m=>m.slice(1,5).map(Number));
+   const right=Math.max(...boxes.map(([x,,w])=>x+w)),area=boxes.reduce((a,[,,w,h])=>a+w*h,0);
+   expect(boxes.length).toBeGreaterThanOrEqual(5);expect(area/(right*1512)).toBeCloseTo(1,3);
+  }
+  const elevation=texts(at(newColumnSet,'new-column-elevation')).join(' ');
   expect(elevation).toContain('W8X24 STRUT AT W.P.,');expect(elevation).toContain('ROD GUSSETS, BRACED COLUMNS;');
-  expect(view(sheet,'footing-plan')).toContain('data-section-cut="FOOTING / SECTION"');
-  expect(view(sheet,'braced-bay-elevation')).toContain('data-section-cut="ROD CROSSING / SECTION AT MID-BAY"');
-  const crossing=texts(view(sheet,'rod-crossing')).join(' '),g=newColumn.bracingSystem!.geometry;
+  expect(at(newColumnSet,'footing-plan')).toContain('data-section-cut="FOOTING / SECTION"');
+  expect(at(newColumnSet,'braced-bay-elevation')).toContain('data-section-cut="ROD CROSSING / SECTION AT MID-BAY"');
+  const crossing=texts(at(newColumnSet,'rod-crossing')).join(' '),g=newColumn.bracingSystem!.geometry;
   expect(crossing).toContain(`${drawingLength(g.cross.clear,'US')} CLEAR`);expect(crossing).toContain('ROD 3-2, IN THE PLANE OF ITS');
-  expect(texts(view(sheet,'strut-plan')).join(' ')).toContain(`${plateInches(g.cross.filler,'US')} FILLER UNDER`);
-  expect(texts(sheet).join(' ')).toContain('ANCHOR GROUP (LRFD): TENSION ON THE 2-ROD ROW / SHEAR ON ALL 4 RODS');
+  expect(texts(at(newColumnSet,'strut-plan')).join(' ')).toContain(`${plateInches(g.cross.filler,'US')} FILLER UNDER`);
+  expect(texts(columns).join(' ')).toContain('ANCHOR GROUP (LRFD): TENSION ON THE 2-ROD ROW / SHEAR ON ALL 4 RODS');
   for(const id of ['brace-rod-crossing','brace-offset-gusset','brace-rod-torsion'])expect(newColumn.checks.find(c=>c.id===id)?.status,id).toBe('pass');
   // SI: no inch, psi, psf, ksi or kip residue in these details and their notes.
-  const siSheet=sheetWith(sets().newColumnSI,'braced-bay-elevation').svg,siBracket=sheetWith(sets().cappedSI,'welded-bracket-plan').svg;
-  for(const [svg,names] of [[siSheet,['new-column-elevation','base-plate-plan','footing-plan','footing-section','braced-bay-elevation','strut-plan','brace-top-connection','brace-base-connection','rod-crossing','new-column-notes','bracing-notes']],[siBracket,['welded-bracket-side','welded-bracket-plan','welded-bracket-face','bracket-notes']]] as const)
-   for(const name of names){const t=texts(view(svg,name)).join(' ');expect(t,name).not.toMatch(/"|\bPSF\b|\bPSI\b|\bKSI\b|\bKIP\b/);}
+  for(const [set,names] of [[sets().newColumnSI,['new-column-elevation','base-plate-plan','footing-plan','footing-section','braced-bay-elevation','strut-plan','brace-top-connection','brace-base-connection','rod-crossing','new-column-notes','bracing-notes']],[sets().cappedSI,['welded-bracket-side','welded-bracket-plan','welded-bracket-face','bracket-notes']]] as const)
+   for(const name of names){const t=texts(at(set,name)).join(' ');expect(t,name).not.toMatch(/"|\bPSF\b|\bPSI\b|\bKSI\b|\bKIP\b/);}
  },300000);
 });
 
@@ -324,7 +338,7 @@ describe('drawing set DXF',()=>{
   expect(count('LINE')).toBe((svg.match(/<line /g)??[]).length);
   expect(count('CIRCLE')).toBe((svg.match(/<circle /g)??[]).length);
   expect(count('TEXT')).toBe(texts(svg).filter(t=>t.trim()).length);
-  const s01=sheetEntities(cappedSet[1].svg,'US'),border=s01.find(e=>e.type==='poly'&&e.layer==='G-TTLB');
+  const s01=sheetEntities(sheetOf(cappedSet,'S-01').svg,'US'),border=s01.find(e=>e.type==='poly'&&e.layer==='G-TTLB');
   // ARCH D border 0.5 in inside the trim: 35 x 23 in.
   expect(border&&border.type==='poly'&&border.points.map(p=>p.map(v=>+v.toFixed(3)))).toEqual([[.5,23.5],[35.5,23.5],[35.5,.5],[.5,.5]]);
   const rotated=s01.find(e=>e.type==='text'&&e.angle!==0);expect(rotated&&rotated.type==='text'&&rotated.angle).toBe(90);
@@ -332,8 +346,8 @@ describe('drawing set DXF',()=>{
   expect(Number(text?.get(10))).toBeGreaterThan(36);
  },120000);
  it('exports SI sheets in millimetres and only from a validated calculation',()=>{
-  const si=sheetsDxf([cappedSet[1]],'SI');expect(si).toContain('$INSUNITS\n70\n4');
-  const border=sheetEntities(cappedSet[1].svg,'SI').find(e=>e.type==='poly'&&e.layer==='G-TTLB');
+  const si=sheetsDxf([sheetOf(cappedSet,'S-01')],'SI');expect(si).toContain('$INSUNITS\n70\n4');
+  const border=sheetEntities(sheetOf(cappedSet,'S-01').svg,'SI').find(e=>e.type==='poly'&&e.layer==='G-TTLB');
   expect(border&&border.type==='poly'&&+border.points[1][0].toFixed(2)).toBe(901.7);
   expect(()=>drawingSetDxf({...capped,eligible:false})).toThrow('validated');
  });

@@ -3,7 +3,7 @@ import {girderBearingTitle} from './columnCapSheet';
 import {activeEndStop} from '../engine/endStopInputs';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
-import {refDim,sheetDrawingScale as drawingScale,rect,line,text,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,capAngleTitles,sectionCut,capChannelSection} from './sheetGraphics';
+import {refDim,sheetDrawingScale as drawingScale,rect,line,text,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,capAngleTitles,sectionCut,capChannelSection,textWidth,lettering} from './sheetGraphics';
 import {capAngleGeometry} from '../engine/capAngle';
 import {tieDim,tieSize} from './flangeTieSheet';
 import {heading,numbered,type Style} from './noteBlocks';
@@ -49,9 +49,14 @@ export function capTopic(s:CalculationSnapshot):DetailTopic{
  svg+=dimH(ex,ex+c.developmentLength*ek,ey-8,185,dim(c.developmentLength));
  svg+=dimH(end-c.developmentLength*ek,end,ey-8,185,dim(c.developmentLength));
  svg+=text((ex+end)/2,157,'MINIMUM CAP FORCE DEVELOPMENT / EACH END',9,'middle',700);
- svg+=text((ex+end)/2,ey+b.d*ek+19,b.name,9,'middle',700);
- // The capped girder section is cut through the member clear of the development regions, looking along the runway.
- {const xs=ex+.3*length*ek;svg+=sectionCut([xs,ey-b.capTw*ek-6],[xs,ey+b.d*ek+6],[1,0],detailTitles.capSection);}
+ // The capped girder section is cut through the member clear of the development regions, looking along the runway, its
+ // reference (read left of the cut) clear of the development dimension's extension line. The girder name under the
+ // member is centered, or beside the cut line where that would cross it.
+ {const room=textWidth('00/S-00',lettering.text,true)+10,from=ex+c.developmentLength*ek+room,to=end-c.developmentLength*ek-4,mid=(ex+end)/2;
+  const xs=from<=to?Math.min(Math.max(ex+.3*length*ek,from),to):mid,half=textWidth(b.name,lettering.text,true)/2+6;
+  svg+=sectionCut([xs,ey-b.capTw*ek-6],[xs,ey+b.d*ek+6],[1,0],detailTitles.capSection);
+  const nx=Math.abs(mid-xs)>=half?mid:xs+half<=end-half?xs+half:xs-half;
+  svg+=text(nx,ey+b.d*ek+19,b.name,lettering.text,'middle',700);}
  svg+=text(906,380,p.system==='continuous'?'CAP CONTINUOUS THROUGH INTERIOR SUPPORTS':'REPEAT AT EACH SIMPLY SUPPORTED MEMBER',9,'middle');
  svg+=text(906,398,'CONTINUOUS WELDS EXTEND THROUGH DEVELOPMENT REGIONS',8.5,'middle');
  return {svg:svg+'</g>',scale:es.label};

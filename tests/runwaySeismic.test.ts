@@ -3,12 +3,14 @@ import {reviewOpenItem} from './review/openItems';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {sdcFromSD1,sdcFromSDS,seismicBasis,seismicCombinations} from '../src/engine/runwaySeismic';
-import {coverSheetSvg} from '../src/components/coverSheet';
+import {coverSheetSvgs} from '../src/components/coverSheet';
 import {anchorStrength,columnBaseActions} from '../src/engine/columnBase';
 import {existingColumnSection,seismicHeight} from '../src/engine/existingColumn';
 import {supportReactions} from '../src/engine/supportReactions';
 import {sectionProperties} from '../src/engine/section';
 import type {ProjectInput} from '../src/engine/types';
+// The cover with the sheets continuing its notes (S-00A) where they do not fit it at the lettering size.
+const coverSheetSvg=(...a:Parameters<typeof coverSheetSvgs>)=>coverSheetSvgs(...a).join('');
 
 const foot=304.8,kip=4448.2216152605;
 const seismic=(patch:Partial<NonNullable<NonNullable<ProjectInput['existingColumn']>['seismic']>>={})=>{

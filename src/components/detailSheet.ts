@@ -1,28 +1,44 @@
 import type {CalculationSnapshot} from '../engine/types';
-import {sheetStart,titleBlock,viewTitle,line,text,esc,n,textWidth,sheetFormat,sheetArea,withDetailRoom} from './sheetGraphics';
+import {sheetStart,titleBlock,viewTitle,line,text,esc,n,textWidth,sheetFormat,sheetArea,withDetailRoom,detailRoomFactor,lettering} from './sheetGraphics';
+import {nextScaleRatio} from './drawingFormat';
 import {sheetEntities} from './svgEntities';
-import {heading,numbered,noteFit,noteStack,detailNoteSizes,type Block,type Style} from './noteBlocks';
+import {annotationItems,countClashes} from './annotationSpace';
+import {heading,numbered,noteStyle,flowBlocks,type Block,type Style,type Lane,type Placement} from './noteBlocks';
 
 /**
- * Detail sheets: details laid out on a module grid of three columns by up to four rows of cells, each
- * detail centered in its cell above its title, with a notes column at the right holding the sheet
- * notes and the notes and tables of every group of details on the sheet. Content scale 1: layout
- * units print at 1/72 in.
+ * Detail sheets. The details stand in rows that fill the drawing area from top to bottom, the cells of a row sharing
+ * its width, each detail centered in its cell above its title; lanes of notes at the right hold the sheet notes and the
+ * notes and tables of every group of details on the sheet. The rows, and the scale of every detail, are chosen so the
+ * details print at the largest standard scales the sheet holds (withDetailRoom). Text keeps the lettering size
+ * (sheetGraphics lettering): notes that do not fit one lane continue in the next, a detail whose annotation would crowd
+ * at its scale is drawn larger (clearView), and a sheet takes no more details than fit at their standard scales.
+ * Content scale 1: layout units print at 1/72 in.
  */
 
-/** A drawn detail in its own layout coordinates with its printed scale; the composer measures and places it. */
-export interface ViewRender {svg:string;scale:string}
-/** A detail drawn in one cell; `subdetails` are the titles of further numbered details drawn inside it (subdetailTitle), numbered after it. */
+/**
+ * A drawn detail in its own layout coordinates with its printed scale; the composer measures and places it. A detail
+ * drawn by clearView also reports the detail room it took and its annotation clashes.
+ */
+export interface ViewRender {svg:string;scale:string;room?:number;clashes?:number}
+/**
+ * A detail drawn in one cell; `subdetails` are the titles of further numbered details drawn inside it (subdetailTitle),
+ * numbered after it. `rows` 2 marks a tall detail (the elevation of a column or a braced bay); the composer sizes every
+ * cell from the drawn detail.
+ */
 export interface DetailView {title:string;rows?:1|2;subdetails?:readonly string[];render:()=>ViewRender}
 /** A group of related details (one subject, such as the end stops) with its notes and tables. */
 export interface DetailTopic {key:string;name:string;views:DetailView[];notes?:(t:Style)=>Block[];message?:string[]}
 
-export const detailGrid={cols:3,rows:4,cell:{w:680,h:378},notes:{x:2040,w:480,pad:18,top:18,bottom:1314},titleDrop:30} as const;
-const notesBox={x:detailGrid.notes.x+detailGrid.notes.pad,y:detailGrid.notes.top,width:detailGrid.notes.w-2*detailGrid.notes.pad,height:detailGrid.notes.bottom-detailGrid.notes.top};
+/**
+ * Layout units. The notes lanes are 480 wide at the right edge of the drawing area, the rightmost stopping above the
+ * seal and the issue status; lane text is 444 wide. A cell keeps 14 clear above its detail, 8 each side and 52 below it
+ * for the title, whose bubble centers 30 above the foot of the cell. A row holds up to `perRow` details.
+ */
+export const detailLayout={width:sheetArea.width,height:sheetArea.height,lane:{width:480,pad:18,top:18,bottom:1494,last:1314},cell:{top:14,side:8,bottom:52},titleDrop:30,maxLanes:3,perRow:5} as const;
 
-interface Placed {topic:DetailTopic;view:DetailView;col:number;row:number;rows:number}
-export interface DetailSheetLayout {topics:DetailTopic[];placed:Placed[];cursor:{row:number;col:number};fits:boolean}
-const emptyLayout=():DetailSheetLayout=>({topics:[],placed:[],cursor:{row:0,col:0},fits:true});
+interface Placed {topic:DetailTopic;view:DetailView}
+/** The topics of a detail sheet and their details in drawing order, its number of notes lanes, and whether all of it fits. */
+export interface DetailSheetLayout {topics:DetailTopic[];placed:Placed[];lanes:number;fits:boolean}
 
 /** General notes repeated on every detail sheet, ahead of the notes of its details. */
 const sheetNotes=(t:Style):Block[]=>[heading(t,'SHEET NOTES'),...numbered(t,[
@@ -30,53 +46,208 @@ const sheetNotes=(t:Style):Block[]=>[heading(t,'SHEET NOTES'),...numbered(t,[
  'NEW CONSTRUCTION IS SHOWN SOLID; EXISTING AND REFERENCE CONSTRUCTION IS SHOWN DASHED. DIMENSIONS GOVERN; DO NOT SCALE THE DRAWINGS.',
  'DETAIL REFERENCES READ DETAIL / SHEET. DETAILS ARE TYPICAL FOR BOTH RUNWAYS, OPPOSITE HAND AT GRID B, U.N.O.'
 ])];
-const noteBuilders=(topics:DetailTopic[])=>[sheetNotes,...topics.flatMap(t=>t.notes?[t.notes]:[])];
-
+/** The notes lanes of a sheet with `count` of them, left to right. */
+function noteLanes(count:number):Lane[]{
+ const {width,lane}=detailLayout;
+ return Array.from({length:count},(_,i)=>({x:width-(count-i)*lane.width+lane.pad,top:lane.top,bottom:i===count-1?lane.last:lane.bottom}));
+}
 /**
- * Place a topic's details in reading order from the cursor, continuing onto the next row so the grid
- * fills without holes and any spare cells fall at the end of the sheet. Details that do not fit in the
- * grid are left out and the layout is marked as not fitting.
+ * The sheet notes and the notes of each topic at the lettering size, flowed into the fewest lanes that hold them and
+ * balanced between those lanes; undefined when even the most lanes do not.
  */
-function placeTopic(layout:DetailSheetLayout,topic:DetailTopic):DetailSheetLayout{
- const {cols,rows}=detailGrid,used=new Set(layout.placed.flatMap(p=>Array.from({length:p.rows},(_,i)=>`${p.row+i},${p.col}`)));
- let {row,col}=layout.cursor,fits=layout.fits;
- const placed=[...layout.placed];
- for(const view of topic.views){
-  const h=view.rows??1;let r=row,c=col;
-  while(r+h<=rows&&Array.from({length:h},(_,i)=>used.has(`${r+i},${c}`)).some(Boolean)){c++;if(c>=cols){c=0;r++;}}
-  if(r+h>rows){fits=false;continue;}
-  for(let i=0;i<h;i++)used.add(`${r+i},${c}`);
-  placed.push({topic,view,col:c,row:r,rows:h});
-  row=r;col=c+1;if(col>=cols){col=0;row++;}
+function placeNotes(topics:DetailTopic[],units:'US'|'SI'){
+ const t=noteStyle(detailLayout.lane.width-2*detailLayout.lane.pad,units);
+ const groups=[{key:'sheet',blocks:sheetNotes(t)},...topics.flatMap(v=>v.notes?[{key:v.key,blocks:v.notes(t)}]:[])];
+ const blocks=groups.flatMap(g=>g.blocks),owner=groups.flatMap(g=>g.blocks.map(()=>g.key));
+ for(let count=1;count<=detailLayout.maxLanes;count++){
+  const lanes=noteLanes(count);let placed=flowBlocks(blocks,lanes);
+  if(!placed)continue;
+  // Two or more lanes end at about the same height: the lowest common bottom at which the notes still fit.
+  if(count>1)for(let limit=Math.max(...blocks.map(b=>b.height))+detailLayout.lane.top;limit<detailLayout.lane.bottom;limit+=6){const v=flowBlocks(blocks,lanes,limit);if(v){placed=v;break;}}
+  return {count,placed,owner};
  }
- return {topics:[...layout.topics,topic],placed,cursor:{row,col},fits};
+ return undefined;
+}
+/** Notes lanes a group of topics needs, or undefined when its notes do not fit a sheet. */
+const notesLanes=(topics:DetailTopic[],units:'US'|'SI')=>placeNotes(topics,units)?.count;
+
+type Bounds={x0:number;y0:number;x1:number;y1:number};
+/** A detail drawn at one standard scale: its drawing, content bounds, and its scale gain over the standard scale (log2). */
+interface Drawing {room:number;render:ViewRender;bounds:Bounds;gain:number;clashes?:number}
+/** Annotation clashes of a drawing, counted when first asked for (packing the sheets needs only the bounds). */
+const clashesOf=(d:Drawing)=>d.clashes??=d.render.clashes??annotationClashes(d.render.svg);
+const cleared=new WeakSet<DetailView>();
+/**
+ * The detail drawn where its annotation reads clear: a detail whose text would overlap text or linework at the scale its
+ * budget gives (annotationClashes) is drawn at the next larger standard scale instead, at most two scales larger, where
+ * that has fewer clashes. It takes a larger cell; its text is never made smaller (sheetGraphics lettering).
+ */
+export function clearView(view:DetailView):DetailView{
+ if(cleared.has(view))return view;
+ const v:DetailView={...view,render:()=>{
+  const room=detailRoomFactor();let best:ViewRender=view.render(),clashes=annotationClashes(best.svg),at=room,r=room;
+  for(let step=0;step<2&&clashes>0;step++){
+   const ratio=nextScaleRatio(best.scale);if(!ratio||fullSize.test(best.scale))break;
+   r*=ratio;const next=withDetailRoom(r,()=>view.render());
+   if(next.scale===best.scale||fullSize.test(next.scale))break;
+   const c=annotationClashes(next.svg);if(c<clashes){best=next;clashes=c;at=r;}
+  }
+  return {...best,room:at,clashes};
+ }};
+ cleared.add(v);return v;
+}
+const drawings=new WeakMap<DetailView,{list:Drawing[];done:boolean}>();
+/**
+ * A detail is enlarged to at most four times its own scale budget, and not to full size: the largest printed scale a
+ * detail is enlarged to is 6" = 1'-0" (1:2).
+ */
+const largestRoom=4,fullSize=/^SCALE: (12" = 1'-0"|1:1\b)/;
+/**
+ * A detail at its standard scale (level 0) or at the level-th larger standard scale it takes, each drawn once; undefined
+ * past the largest. A larger scale that adds annotation clashes is not taken.
+ */
+function drawing(view:DetailView,level:number):Drawing|undefined{
+ let cache=drawings.get(view);
+ if(!cache){cache={list:[],done:false};drawings.set(view,cache);}
+ const {list}=cache;
+ while(list.length<=level&&!cache.done){
+  // The next level from the room the last was drawn with (clearView may have drawn it larger than asked).
+  const last=list.at(-1),ratio=last?nextScaleRatio(last.render.scale):1,room=last&&ratio?(last.render.room??last.room)*ratio:1;
+  if(!ratio||room>largestRoom+1e-9){cache.done=true;break;}
+  const render=last?withDetailRoom(room,()=>view.render()):view.render();
+  if(last&&(render.scale===last.render.scale||fullSize.test(render.scale))){cache.done=true;break;}
+  const next:Drawing={room,render,bounds:contentBounds(render.svg),gain:last?last.gain+Math.log2(ratio!):0};
+  if(last&&clashesOf(next)>clashesOf(list[0])){cache.done=true;break;}
+  list.push(next);
+ }
+ return list[level];
+}
+/** Width a detail title takes: the bubble left of the centered title and the cell's side clearances. */
+const titleWidth=(title:string)=>textWidth(title,lettering.title,true)+74+2*detailLayout.cell.side;
+/** Cell a detail drawing needs. */
+function need(view:DetailView,d:Drawing){
+ const {cell}=detailLayout,b=d.bounds;
+ return {w:Math.max(b.x1-b.x0+2*cell.side,titleWidth(view.title)),h:b.y1-b.y0+cell.top+cell.bottom};
+}
+/** Least total height of the details in rows of the field width at their standard scales (Infinity when one is too wide). */
+function leastHeight(items:Placed[],fieldW:number){
+ const needs=items.map(p=>need(p.view,drawing(p.view,0)!)),best=new Array<number>(items.length+1).fill(Infinity);best[items.length]=0;
+ for(let i=items.length-1;i>=0;i--){
+  let w=0,h=0;
+  for(let k=i;k<items.length&&k<i+detailLayout.perRow;k++){w+=needs[k].w;h=Math.max(h,needs[k].h);if(w>fieldW)break;best[i]=Math.min(best[i],h+best[k+1]);}
+ }
+ return best[0];
+}
+interface Cell {placed:Placed;drawing:Drawing;x:number;y:number;w:number;h:number;row:number;col:number}
+/**
+ * Details in rows filling a field: every split of the details into rows (in drawing order) whose standard scales fit,
+ * each detail then enlarged to its next standard scale while its row and the field hold it, the cheapest gain first.
+ * The arrangement with the largest total scale gain is taken; among equal ones the one whose emptiest row is fullest.
+ */
+function arrange(items:Placed[],fieldW:number,fieldH:number):Cell[]|undefined{
+ const count=items.length;if(!count)return [];
+ const base=items.map(p=>drawing(p.view,0)!),needs0=base.map((d,i)=>need(items[i].view,d));
+ let best:{score:number[];rows:number[][];levels:number[];heights:number[]}|undefined;
+ const better=(a:number[],b:number[])=>{for(let i=0;i<a.length;i++){if(Math.abs(a[i]-b[i])>1e-6)return a[i]>b[i];}return false;};
+ const evaluate=(rows:number[][])=>{
+  const rowOf=new Array<number>(count),levels=new Array<number>(count).fill(0),needs=[...needs0];
+  rows.forEach((r,i)=>r.forEach(j=>rowOf[j]=i));
+  const rowW=rows.map(r=>r.reduce((a,j)=>a+needs[j].w,0)),rowH=rows.map(r=>Math.max(...r.map(j=>needs[j].h)));
+  let total=rowH.reduce((a,b)=>a+b,0),gain=0;
+  for(;;){
+   let pick=-1,value=0,next:Drawing|undefined,nextNeed={w:0,h:0};
+   for(let j=0;j<count;j++){
+    const d=drawing(items[j].view,levels[j]+1);if(!d)continue;
+    const q=need(items[j].view,d),r=rowOf[j];
+    if(rowW[r]-needs[j].w+q.w>fieldW+1e-6)continue;
+    const dh=Math.max(0,q.h-rowH[r]);if(total+dh>fieldH+1e-6)continue;
+    const v=(d.gain-drawing(items[j].view,levels[j])!.gain)/(1+dh/60);
+    if(v>value+1e-9){pick=j;value=v;next=d;nextNeed=q;}
+   }
+   if(pick<0||!next)break;
+   const r=rowOf[pick],dh=Math.max(0,nextNeed.h-rowH[r]);
+   gain+=next.gain-drawing(items[pick].view,levels[pick])!.gain;
+   rowW[r]+=nextNeed.w-needs[pick].w;rowH[r]+=dh;total+=dh;needs[pick]=nextNeed;levels[pick]++;
+  }
+  const score=[Math.round(gain*1000)/1000,Math.min(...rowW.map(w=>w/fieldW)),-rows.length];
+  if(!best||better(score,best.score))best={score,rows,levels,heights:rowH};
+ };
+ const split=(start:number,rows:number[][],height:number)=>{
+  if(start===count){evaluate(rows);return;}
+  let w=0,h=0;
+  for(let k=start;k<count&&k<start+detailLayout.perRow;k++){
+   w+=needs0[k].w;h=Math.max(h,needs0[k].h);
+   if(w>fieldW+1e-6||height+h>fieldH+1e-6)break;
+   split(k+1,[...rows,Array.from({length:k-start+1},(_,i)=>start+i)],height+h);
+  }
+ };
+ split(0,[],0);
+ if(!best)return undefined;
+ // The height left over goes to the rows in proportion to their heights; the width left in a row to its cells in
+ // proportion to theirs.
+ const {rows,levels,heights}=best,used=heights.reduce((a,b)=>a+b,0),cells:Cell[]=[];
+ let y=0;
+ rows.forEach((r,i)=>{
+  const h=heights[i]*fieldH/used,ds=r.map(j=>drawing(items[j].view,levels[j])!),ws=r.map((j,k)=>need(items[j].view,ds[k]).w),sum=ws.reduce((a,b)=>a+b,0);
+  let x=0;
+  r.forEach((j,k)=>{const w=ws[k]*fieldW/sum;cells.push({placed:items[j],drawing:ds[k],x,y,w,h,row:i,col:k});x+=w;});
+  y+=h;
+ });
+ return cells;
+}
+/** Each detail at its standard scale in rows of the field, for a sheet whose details do not all fit (marked as overflowing). */
+function fallback(items:Placed[],fieldW:number,fieldH:number):Cell[]{
+ const cells:Cell[]=[],rows:Placed[][]=[];let row:Placed[]=[],w=0;
+ for(const p of items){const q=need(p.view,drawing(p.view,0)!).w;if(row.length&&(w+q>fieldW||row.length>=detailLayout.perRow)){rows.push(row);row=[];w=0;}row.push(p);w+=q;}
+ if(row.length)rows.push(row);
+ const h=fieldH/Math.max(1,rows.length);
+ rows.forEach((r,i)=>r.forEach((p,k)=>cells.push({placed:p,drawing:drawing(p.view,0)!,x:k*fieldW/r.length,y:i*h,w:fieldW/r.length,h,row:i,col:k})));
+ return cells;
 }
 
+/** Whether a group of topics fits one sheet: its notes in the lanes and its details at their standard scales beside them. */
+function sheetFor(topics:DetailTopic[],units:'US'|'SI'):DetailSheetLayout{
+ const placed=topics.flatMap(topic=>topic.views.map(view=>({topic,view}))),lanes=notesLanes(topics,units);
+ const fits=lanes!==undefined&&leastHeight(placed,detailLayout.width-lanes*detailLayout.lane.width)<=detailLayout.height+1e-6;
+ return {topics,placed,lanes:lanes??detailLayout.maxLanes,fits};
+}
 /**
- * Detail sheets in topic order, a topic never split between sheets: as few sheets as the details and
- * their notes fit, then the split between them that leaves the emptiest sheet fullest.
+ * A topic too large for a sheet of its own continues on the next: its details in as many consecutive parts as needed,
+ * the notes with the first. Each part keeps the topic's key, so references find its first sheet.
+ */
+function parts(topic:DetailTopic,units:'US'|'SI'):DetailTopic[]{
+ if(sheetFor([topic],units).fits||topic.views.length<2)return [topic];
+ const out:DetailTopic[]=[];let views:DetailView[]=[];
+ const part=(v:DetailView[]):DetailTopic=>({...topic,views:v,notes:out.length?undefined:topic.notes,message:out.length?undefined:topic.message});
+ for(const view of topic.views){
+  if(views.length&&!sheetFor([part([...views,view])],units).fits){out.push(part(views));views=[];}
+  views.push(view);
+ }
+ if(views.length)out.push(part(views));
+ return out;
+}
+/**
+ * Detail sheets in topic order, a topic never split between sheets unless it does not fit one: as few sheets as the
+ * details and their notes fit, then the split between them that leaves the emptiest sheet fullest.
  */
 export function packDetailSheets(topics:DetailTopic[],units:'US'|'SI'):DetailSheetLayout[]{
- const fitsNotes=(l:DetailSheetLayout)=>noteFit(noteBuilders(l.topics),units,notesBox)!==undefined;
- const layout=(group:DetailTopic[])=>{const l=group.reduce(placeTopic,emptyLayout());return {...l,fits:l.fits&&fitsNotes(l)};};
+ topics=topics.flatMap(t=>parts({...t,views:t.views.map(clearView)},units));
+ const memo=new Map<string,DetailSheetLayout>(),layout=(from:number,to:number)=>{const key=`${from},${to}`;let v=memo.get(key);if(!v){v=sheetFor(topics.slice(from,to),units);memo.set(key,v);}return v;};
  // Greedy fill sets the number of sheets.
- const sheets:DetailSheetLayout[]=[];let current=emptyLayout();
- for(const topic of topics){
-  let next=placeTopic(current,topic);
-  if((!next.fits||!fitsNotes(next))&&current.topics.length){sheets.push(current);current=emptyLayout();next=placeTopic(current,topic);}
-  // A topic larger than a whole sheet keeps the details that fit; the set checks report the overflow.
-  current={...next,fits:next.fits&&fitsNotes(next)};
+ const sheets:DetailSheetLayout[]=[];let from=0;
+ for(let i=1;i<=topics.length;i++){
+  if(i-from>1&&!layout(from,i).fits){sheets.push(layout(from,i-1));from=i-1;}
  }
- if(current.topics.length||!sheets.length)sheets.push(current);
+ if(from<topics.length||!sheets.length)sheets.push(layout(from,topics.length));
  if(sheets.length<2||sheets.length>4||topics.length>10)return sheets;
  // Every split of the topics into that many consecutive groups that fits.
  let best=sheets,score=Math.min(...sheets.map(l=>l.placed.length));
  const fuller=(a:DetailSheetLayout[],b:DetailSheetLayout[])=>{const i=a.findIndex((l,j)=>l.placed.length!==b[j].placed.length);return i>=0&&a[i].placed.length>b[i].placed.length;};
- const split=(from:number,left:number,done:DetailSheetLayout[])=>{
-  if(left===1){const last=layout(topics.slice(from));if(!last.fits)return;const all=[...done,last],min=Math.min(...all.map(l=>l.placed.length));
+ const split=(start:number,left:number,done:DetailSheetLayout[])=>{
+  if(left===1){const last=layout(start,topics.length);if(!last.fits)return;const all=[...done,last],min=Math.min(...all.map(l=>l.placed.length));
    // Ties go to the split with the fuller earlier sheets.
    if(min>score||min===score&&fuller(all,best)){best=all;score=min;}return;}
-  for(let to=from+1;to<=topics.length-left+1;to++){const l=layout(topics.slice(from,to));if(l.fits)split(to,left-1,[...done,l]);}
+  for(let to=start+1;to<=topics.length-left+1;to++){const l=layout(start,to);if(l.fits)split(to,left-1,[...done,l]);}
  };
  split(0,sheets.length,[]);
  return best;
@@ -87,22 +258,9 @@ export function packDetailSheets(topics:DetailTopic[],units:'US'|'SI'):DetailShe
  * long for the title block reads "STRUCTURAL DETAILS".
  */
 export function detailSheetTitle(layout:DetailSheetLayout){
- const names=layout.topics.flatMap(t=>t.name.split(' & '));
+ const names=[...new Set(layout.topics.flatMap(t=>t.name.split(' & ')))];
  const title=names.length<2?names[0]??'DETAILS':`${names.slice(0,-1).join(', ')} & ${names[names.length-1]}`;
  return textWidth(title,16,true)<=560?title:'STRUCTURAL DETAILS';
-}
-
-/** Cell edges between occupied cells and their neighbors, and the notes column edge. */
-function gridLines(placed:Placed[],h:number,rows:number){
- const {cols,cell:{w},notes}=detailGrid,owner=new Map<string,number>();
- placed.forEach((p,i)=>{for(let r=0;r<p.rows;r++)owner.set(`${p.row+r},${p.col}`,i);});
- let svg=line([notes.x,0],[notes.x,1512],'annotation');
- for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
-  const a=owner.get(`${r},${c}`),right=owner.get(`${r},${c+1}`),below=owner.get(`${r+1},${c}`);
-  if(c+1<cols&&(a!==undefined||right!==undefined)&&a!==right)svg+=line([(c+1)*w,r*h],[(c+1)*w,(r+1)*h],'annotation');
-  if(r+1<rows&&(a!==undefined||below!==undefined)&&a!==below)svg+=line([c*w,(r+1)*h],[(c+1)*w,(r+1)*h],'annotation');
- }
- return svg;
 }
 
 /** Extents of drawn content in its own layout units, text included (Arial advance widths). */
@@ -124,73 +282,45 @@ export function contentBounds(svg:string){
 }
 
 /**
- * Text that overlaps other text or has linework through it in a drawn detail. A detail is drawn at a
- * larger scale in a tall cell only when that adds no such clash. Text boxes are shrunk as on review:
- * descenders, underlines and lines touching the box edge are tolerated.
+ * Text that overlaps other text or has linework through it in a drawn detail or sheet (annotationSpace.ts). Text boxes
+ * are shrunk as on review: descenders, underlines and lines touching the box edge are tolerated.
  */
-export function annotationClashes(svg:string){
- const pt=(q:readonly number[]):[number,number]=>[q[0]*72,sheetFormat.height-q[1]*72];
- const boxes:{x0:number;y0:number;x1:number;y1:number;short:boolean}[]=[],segments:{a:[number,number];b:[number,number];note:boolean}[]=[];
- for(const e of sheetEntities(`<g data-sheet-content="detail">${svg}</g>`,'US')){
-  if(e.type==='text'){
-   const size=e.height*72/.716,w=textWidth(e.value,size,e.bold),[x,y]=pt(e.at),a=e.align===1?-w/2:e.align===2?-w:0,up=size*.72,down=size*.21;
-   const b=Math.abs(e.angle)<1?{x0:x+a,x1:x+a+w,y0:y-up,y1:y+down}:Math.abs(e.angle-90)<1?{x0:x-up,x1:x+down,y0:y-a-w,y1:y-a}:{x0:x-down,x1:x+up,y0:y+a,y1:y+a+w};
-   boxes.push({x0:b.x0+size*.12,x1:b.x1-size*.12,y0:b.y0+size*.12,y1:b.y1-size*.25,short:e.value.length<=2});
-  }
-  else if((e.type==='line'||e.type==='poly')&&e.layer!=='S-PATT'){
-   const p=(e.type==='line'?[e.a,e.b]:e.points).map(pt),note=e.layer==='S-ANNO'||e.layer==='S-GRID';
-   for(let i=1;i<p.length;i++)segments.push({a:p[i-1],b:p[i],note});
-   if(e.type==='poly'&&e.closed)segments.push({a:p[p.length-1],b:p[0],note});
-  }
- }
- // Liang-Barsky: does the segment pass through the box?
- const through=(a:[number,number],b:[number,number],r:{x0:number;y0:number;x1:number;y1:number})=>{
-  let t0=0,t1=1;const dx=b[0]-a[0],dy=b[1]-a[1];
-  for(const [p,q] of [[-dx,a[0]-r.x0],[dx,r.x1-a[0]],[-dy,a[1]-r.y0],[dy,r.y1-a[1]]] as const){
-   if(p===0){if(q<0)return false;continue;}
-   const t=q/p;if(p<0){if(t>t1)return false;if(t>t0)t0=t;}else{if(t<t0)return false;if(t<t1)t1=t;}
-  }
-  return t1-t0>1e-6;
- };
- let count=0;
- for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];if(a.x0<b.x1&&b.x0<a.x1&&a.y0<b.y1&&b.y0<a.y1)count++;}
- // Bubble numbers sit on white fills, so only leaders and grids count against them.
- for(const box of boxes)for(const s of segments)if((s.note||!box.short)&&through(s.a,s.b,box))count++;
- return count;
-}
+export function annotationClashes(svg:string){return countClashes(annotationItems(svg));}
 
 /**
- * Draw one detail sheet: grid, details with their titles, and the notes column. A sheet of three rows
- * spreads them over the full height; each detail is centered in its cell above its title.
+ * Draw one detail sheet: the details in their rows, each centered in its cell above its title, the cell edges, and the
+ * notes in their lanes at the right.
  */
 export function detailSheetSvg(s:CalculationSnapshot,number:string,title:string,layout:DetailSheetLayout){
- const {cell:{w},titleDrop}=detailGrid,u=s.input.units,rows=Math.max(1,...layout.placed.map(p=>p.row+p.rows));
- const h=Math.min(sheetArea.height/rows,sheetArea.height/3);
+ const {cell,titleDrop,height}=detailLayout,u=s.input.units,notes=placeNotes(layout.topics,u),lanes=notes?.count??layout.lanes;
+ const fieldW=detailLayout.width-lanes*detailLayout.lane.width;
+ const arranged=arrange(layout.placed,fieldW,height),cells=arranged??fallback(layout.placed,fieldW,height);
+ let fits=layout.fits&&!!arranged&&!!notes;
  let svg=sheetStart(s,number,`CRANE RUNWAY / ${title}`)+layout.topics.map(t=>`<g data-topic="${esc(t.key)}"/>`).join('');
- svg+=`<g data-detail-grid="3x${rows}">${gridLines(layout.placed,h,rows)}</g>`;
- let fits=layout.fits;
- for(const p of layout.placed){
-  const ax=p.col*w+w/2,ay=(p.row+p.rows)*h-titleDrop,top=p.row*h+14,bottom=ay-22;
-  const within=(v:ViewRender)=>{const c=contentBounds(v.svg);return c.y1-c.y0<=bottom-top&&c.x1-c.x0<=w-16;};
-  // A cell taller than the module lets the detail take a larger standard scale when it still fits and
-  // its annotation stays as clear as at the standard scale.
-  const roomy=h>detailGrid.cell.h?withDetailRoom(h/detailGrid.cell.h,()=>p.view.render()):undefined;
-  const standard=p.view.render(),r=roomy&&within(roomy)&&annotationClashes(roomy.svg)<=annotationClashes(standard.svg)?roomy:standard,b=contentBounds(r.svg);
+ // Cell edges: between the rows, between the cells of a row, and the notes lanes.
+ const rows=Math.max(0,...cells.map(c=>c.row+1));
+ let grid=line([fieldW,0],[fieldW,height],'annotation');
+ for(let i=1;i<lanes;i++)grid+=line([fieldW+i*detailLayout.lane.width,0],[fieldW+i*detailLayout.lane.width,height],'annotation');
+ for(const c of cells){if(c.col)grid+=line([c.x,c.y],[c.x,c.y+c.h],'annotation');if(c.row&&!c.col)grid+=line([0,c.y],[fieldW,c.y],'annotation');}
+ svg+=`<g data-detail-grid="${Array.from({length:rows},(_,i)=>cells.filter(c=>c.row===i).length).join('-')}">${grid}</g>`;
+ for(const c of cells){
+  const r=c.drawing.render,b=c.drawing.bounds,ax=c.x+c.w/2,ay=c.y+c.h-titleDrop,top=c.y+cell.top,bottom=ay-22,h=b.y1-b.y0;
   // Clear of the cell edges and of the title: centered, but no farther than 70 above the title.
-  const height=b.y1-b.y0;
-  const dy=height>bottom-top?bottom-b.y1:Math.max((top+bottom)/2-(b.y0+b.y1)/2,bottom-70-b.y1),dx=ax-(b.x0+b.x1)/2;
-  if(height>bottom-top+10||b.x1-b.x0>w-16){fits=false;svg+=`<g data-overflow-cell="${esc(p.view.title)}" data-overflow-size="${n(b.x1-b.x0)}x${n(height)} in ${n(w-16)}x${n(bottom-top+10)}"/>`;}
-  svg+=`<g data-detail-cell="${p.col+1},${p.row+1},${p.rows}" data-cell-height="${n(h)}" transform="translate(${n(dx)} ${n(dy)})">${r.svg}</g>${viewTitle(ax,ay,p.view.title,r.scale)}`;
+  const dy=h>bottom-top?bottom-b.y1:Math.max((top+bottom)/2-(b.y0+b.y1)/2,bottom-70-b.y1),dx=ax-(b.x0+b.x1)/2;
+  if(h>bottom-top+10||b.x1-b.x0>c.w-2*cell.side){fits=false;svg+=`<g data-overflow-cell="${esc(c.placed.view.title)}" data-overflow-size="${n(b.x1-b.x0)}x${n(h)} in ${n(c.w-2*cell.side)}x${n(bottom-top+10)}"/>`;}
+  // The cell's box (layout units) marked ahead of its detail.
+  svg+=`<g data-cell-box="${n(c.x)},${n(c.y)},${n(c.w)},${n(c.h)}"/><g data-detail-cell="${c.col+1},${c.row+1},1" data-cell-height="${n(c.h)}" transform="translate(${n(dx)} ${n(dy)})">${r.svg}</g>${viewTitle(ax,ay,c.placed.view.title,r.scale)}`;
  }
  // Subjects without drawable details state why.
  const messages=layout.topics.flatMap(t=>t.views.length?[]:t.message??[]);
- messages.forEach((m,i)=>{svg+=text(1020,700+i*22,m,i?11:13.5,'middle',i?400:700);});
- const blocks=(t:Style)=>noteBuilders(layout.topics).map((b,i)=>{
-  const inner=b(t),key=i?layout.topics.filter(v=>v.notes)[i-1].key:'sheet';
-  const height=inner.reduce((a,v)=>a+v.height+2.4,0)-2.4;
-  return {height,render:(x:number,y:number)=>{let out=`<g data-view="${esc(key)}-notes">`,yy=y;for(const v of inner){out+=v.render(x,yy);yy+=v.height+2.4;}return out+'</g>';}} as Block;
- });
- svg+=noteStack([blocks],u,notesBox,detailNoteSizes);
+ messages.forEach((m,i)=>{svg+=text(fieldW/2,700+i*22,m,i?11:13.5,'middle',i?400:700);});
+ // Notes, each group in its own group element wherever its blocks fall.
+ if(notes){
+  const by=new Map<string,Placement[]>();
+  for(const v of notes.placed){const key=notes.owner[v.index>=0?v.index:v.section];by.set(key,[...(by.get(key)??[]),v]);}
+  for(const [key,list] of by)svg+=`<g data-view="${esc(key)}-notes">${list.map(v=>v.b.render(v.x,v.y)).join('')}</g>`;
+ }
+ else svg+='<g data-overflow="notes"/>';
  if(!fits)svg+='<g data-overflow="details"/>';
  return svg+titleBlock(s,number,title)+'</svg>';
 }

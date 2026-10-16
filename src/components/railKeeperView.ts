@@ -4,7 +4,7 @@ import {boltProperties} from '../engine/connectionStrength';
 import {railJointType,railJointGap,railJointBars} from '../engine/railLayout';
 import {format} from '../engine/units';
 import {drawingLength,dimensionLength,plateInches} from './drawingFormat';
-import {refDim,dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,capChannelSection,subdetailTitle,type XY} from './sheetGraphics';
+import {refDim,dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,capChannelSection,subdetailTitle,lettering,type XY} from './sheetGraphics';
 import {runwayElevations} from '../engine/drawingData';
 import {printedElevation} from './drawingFormat';
 import {contentBounds,type DetailView} from './detailSheet';
@@ -21,7 +21,7 @@ function hatchRect(x:number,y:number,w:number,h:number,step=4){
  * weld: the keepers and anchors are welded with the rail set and aligned in place.
  */
 function fillet(points:XY[],at:XY,size:string,length:string,labels:string[],via:XY[][]=[]){
- return filletLeader(points,at,size,labels,false,via,true).replace(/<\/g>$/,'')+dimText(at[0]+53,at[1]+4,labelCaps(length.replaceAll('"','')),8)+'</g>';
+ return filletLeader(points,at,size,labels,false,via,true).replace(/<\/g>$/,'')+dimText(at[0]+53,at[1]+4,labelCaps(length.replaceAll('"','')),lettering.text)+'</g>';
 }
 /** Vertical dimension from an extension line at yExt to a surface it lands on; the text reads beside a short one. */
 function dimToSurface(yExt:number,ySurface:number,fromX:number,x:number,label:string,side:'left'|'right'){
@@ -47,7 +47,7 @@ function dimChain(dir:'h'|'v',at:number[],from:number[],pos:number,labels:string
 }
 /** Translate drawn content so its top-left corner sits at (x, y); returns the placed content and its size. */
 function place(svg:string,x:number,y:number){const b=contentBounds(svg);return {svg:`<g transform="translate(${n(x-b.x0)} ${n(y-b.y0)})">${svg}</g>`,w:b.x1-b.x0,h:b.y1-b.y0};}
-const labelWidth=(labels:string[])=>Math.max(0,...labels.map(v=>textWidth(labelCaps(v),8.5)));
+const labelWidth=(labels:string[])=>Math.max(0,...labels.map(v=>textWidth(labelCaps(v),lettering.text)));
 
 /**
  * Rail clip detail: the section through the rail, a pair of opposing rail clips and the girder top plate, with the
@@ -80,10 +80,14 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   // the pad and, on a capped girder, the channel web. A reference dimension, so it is the difference of the two
   // elevations as they print.
   const edge=X(recW/2),xd=edge+10,el=runwayElevations(p),torTos=el?printedElevation(el.tor,u)-printedElevation(el.tos,u):depth+pt+(capped?b.capTw:0);
-  sec+=line([X(r.headWidth/2)+2,0],[xd+5,0])+line([edge+2,wTop],[xd+5,wTop])+line([xd,0],[xd,wTop])+[0,wTop].map(y=>line([xd-3,y+2.5],[xd+3,y-2.5])).join('')+refDim(dimText(xd-6,wTop/2,size(torTos),9,'middle',400,-90))+text(xd+8,3,'T.O.R.',7.5)+text(xd+8,wTop+3,'T.O.S.',7.5);
+  // The value reads along its dimension line where it fits between the extension lines, else level beside it, between
+  // the T.O.R. and T.O.S. labels or, where they stand too close, beyond them.
+  const torLabel=size(torTos),torFits=textWidth(`(${torLabel})`,lettering.text)+6<=wTop,besideX=wTop>=2*lettering.leading?xd+8:xd+16+Math.max(textWidth('T.O.R.',lettering.text),textWidth('T.O.S.',lettering.text));
+  sec+=line([X(r.headWidth/2)+2,0],[xd+5,0])+line([edge+2,wTop],[xd+5,wTop])+line([xd,0],[xd,wTop])+[0,wTop].map(y=>line([xd-3,y+2.5],[xd+3,y-2.5])).join('')
+   +refDim(torFits?dimText(xd-6,wTop/2,torLabel,lettering.text,'middle',400,-90):dimText(besideX,wTop/2+lettering.text*.36,torLabel,lettering.text,'start'))+text(xd+8,3,'T.O.R.',lettering.text)+text(xd+8,wTop+3,'T.O.S.',lettering.text);
   // Callouts left of the section, in the order of their targets down the section.
   const productName=r.padSource.split(/[:;]/)[0].trim(),railLabel=`${size(depth)} RAIL: HEAD ${size(r.headWidth)} X ${size(r.headThickness)},`;
-  const productLines=wrapToWidth(labelCaps(productName),Math.max(160,labelWidth([railLabel,`RAIL PAD ${size(pt)} X ${size(pad?.width??0)}, CONT.:`,`ALLOWABLE COMPRESSION ${format(r.padAllowable,'stress',u,u==='SI'?1:2)}`])),8.5);
+  const productLines=wrapToWidth(labelCaps(productName),Math.max(160,labelWidth([railLabel,`RAIL PAD ${size(pt)} X ${size(pad?.width??0)}, CONT.:`,`ALLOWABLE COMPRESSION ${format(r.padAllowable,'stress',u,u==='SI'?1:2)}`])),lettering.text);
   const noseAt:XY=[X(-(C.tip+C.inner)/2),ySteel-X(C.noseHeight)-X(6.35)];
   const items:{at:XY;labels:string[];via?:XY[];weld?:boolean}[]=[
    {at:[X(-r.headWidth/2)+4,X(r.headThickness)*.5],labels:[railLabel,`BASE ${size(r.baseWidth)} X ${size(r.baseThickness)}`]},
@@ -96,8 +100,8 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   let ly=-4;
   for(const v of items){
    // The weld symbol keeps its elbow beyond the widest callout so its leader clears the text above.
-   if(v.weld){const x=cx+cw-labelWidth(v.labels);sec+=fillet([v.at],[Math.min(x,cx+cw-92),ly+3],size(C.weld),size(C.weldLength),v.labels);ly+=17+v.labels.length*11+8;}
-   else{sec+=multiLeader([v.at],[cx,ly],v.labels,8.5,v.via?[v.via]:[],cw);ly+=v.labels.length*11+8;}
+   if(v.weld){const x=cx+cw-labelWidth(v.labels);sec+=fillet([v.at],[Math.min(x,cx+cw-92),ly+3],size(C.weld),size(C.weldLength),v.labels);ly+=17+v.labels.length*lettering.leading+8;}
+   else{sec+=multiLeader([v.at],[cx,ly],v.labels,lettering.text,v.via?[v.via]:[],cw);ly+=v.labels.length*lettering.leading+8;}
   }
   sec+='</g>';
   const section=place(sec,0,0);
@@ -124,16 +128,19 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
 
   // ---- Compose. Top: the section and its callouts, the rail joint at the right with its notes. Below: the rail clip
   // note in the standard form, the anchorage and the rail fabrication note.
-  const jx=section.w+24,noteW=Math.max(joint.w,660-jx);
+  // The joint's title (centered on it, the bubble left of the title) stays clear of the section's labels where the title
+  // is wider than the joint.
+  const tk=13/14,titleLeft=joint.w/2+10-textWidth(detailTitles.railJoint,13.5*tk,true)/2-37*tk;
+  const jx=section.w+24+Math.max(0,-titleLeft),noteW=Math.max(joint.w,660-jx);
   // Notes wrapped to a width in capitals, an SI value kept on one line with its unit.
   const wrap=(v:string,width:number,size:number)=>wrapToWidth(labelCaps(v).replace(/(\d) mm\b/g,'$1\u0001mm'),width,size).map(row=>row.replaceAll('\u0001',' '));
   // The bars carry the slots (their net section and block shear are checked with them); the rail web is drilled.
-  const jointNotes=wrap(tight?`TIGHT JOINT (AIST TR-13 §5.16.1): 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}; 4 - ${size(r.jointBoltDiameter)} A325 PRETENSIONED IN ${size(hole)} STANDARD HOLES IN THE BARS AND THE RAIL WEB. RAIL ENDS BUTTED, GAP 1/16" MAX.; RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS OF OPERATION. SYMMETRIC`:`OPEN JOINT: 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}, SLOTTED ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG THE RAIL; 4 - ${size(r.jointBoltDiameter)} A325 IN ${size(hole)} DRILLED HOLES IN THE RAIL WEB. GAP ${size(gap)}. RE-TIGHTEN AFTER 30 AND 90 DAYS. SYMMETRIC`,noteW,7.2);
+  const jointNotes=wrap(tight?`TIGHT JOINT (AIST TR-13 §5.16.1): 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}; 4 - ${size(r.jointBoltDiameter)} A325 PRETENSIONED IN ${size(hole)} STANDARD HOLES IN THE BARS AND THE RAIL WEB. RAIL ENDS BUTTED, GAP 1/16" MAX.; RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS OF OPERATION. SYMMETRIC`:`OPEN JOINT: 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}, SLOTTED ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG THE RAIL; 4 - ${size(r.jointBoltDiameter)} A325 IN ${size(hole)} DRILLED HOLES IN THE RAIL WEB. GAP ${size(gap)}. RE-TIGHTEN AFTER 30 AND 90 DAYS. SYMMETRIC`,noteW,lettering.text);
   // The joint carries its own detail title (bubble numbered with the set), a little smaller than the cell title: its
   // sheet number stays at the 6.5 pt minimum text height.
-  const jt=joint.h+22,notesY=jt+26,rowY=Math.max(section.h,notesY+jointNotes.length*9)+14;
+  const jt=joint.h+22,notesY=jt+28,rowY=Math.max(section.h,notesY+jointNotes.length*lettering.noteLeading)+14;
   let svg='<g data-view="rail-connection">'+section.svg;
-  svg+=`<g transform="translate(${n(jx)} 0)">${joint.svg}${subdetailTitle(joint.w/2+10,jt,detailTitles.railJoint,js.label,14/13)}${jointNotes.map((v,i)=>text(joint.w/2,notesY+i*9,v,7.2,'middle')).join('')}</g>`;
+  svg+=`<g transform="translate(${n(jx)} 0)">${joint.svg}${subdetailTitle(joint.w/2+10,jt,detailTitles.railJoint,js.label,14/13)}${jointNotes.map((v,i)=>text(joint.w/2,notesY+i*lettering.noteLeading,v,lettering.text,'middle')).join('')}</g>`;
   // The rail clip note: type, manufacturer, rating, spacing, float and the base weld, as the engineer of record specifies them.
   const rated=(v:number)=>format(v,'force',u,u==='SI'?0:1),basis=C.basis==='allowable'?'ALLOWABLE':'LRFD',seat=capped?'CAP CHANNEL':'GIRDER TOP FLANGE';
   const clipNote=`RAIL CLIPS: ${C.type==='weld-on'?'WELD-ON':'BOLTED'}, PER MANUFACTURER (${entered?C.product:'MANUFACTURER AND SERIES TO BE ENTERED'}), RATED ≥ ${rated(C.lateral)} LATERAL AND ≥ ${rated(C.uplift)} UPLIFT PER CLIP (${basis}), IN OPPOSING PAIRS AT ${dim(p.aist!.clipSpacing)} O.C. MAX. AND A PAIR EACH SIDE OF EVERY RAIL JOINT, FLOATING; ${C.type==='weld-on'?`WELD BASE TO ${seat} PER MANUFACTURER (MIN. ${size(C.weld)} FILLET X ${size(C.weldLength)}, EACH END OF THE BASE).`:`BOLT PER MANUFACTURER.`}`;
@@ -143,7 +150,7 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   const fabrication='RAIL STEEL: DRILL HOLES AND SAW-CUT ENDS; NO FLAME CUTTING OR PUNCHING. DO NOT WELD TO THE RAIL.';
   const W=Math.max(560,jx+joint.w);
   let my=rowY+4;
-  svg+=`<g data-note="rail-clips">${[clipNote,anchorNote,fabrication].map(v=>{const rows=wrap(v,W,8.5),t=rows.map((row,i)=>text(0,my+i*11,row,8.5)).join('');my+=rows.length*11+6;return t;}).join('')}</g>`;
+  svg+=`<g data-note="rail-clips">${[clipNote,anchorNote,fabrication].map(v=>{const rows=wrap(v,W,lettering.text),t=rows.map((row,i)=>text(0,my+i*lettering.noteLeading,row,lettering.text)).join('');my+=rows.length*lettering.noteLeading+6;return t;}).join('')}</g>`;
   return {svg:svg+'</g>',scale:scale.label};
  }};
 }

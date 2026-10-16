@@ -11,12 +11,39 @@ export const sheetOrdinalToken='{{SHEET_ORDINAL}}';
 export const sheetFormat = { widthIn:36, heightIn:24, width:2592, height:1728, contentScale:1 } as const;
 /** Drawing area of a sheet in layout units at content scale 1: inside the border, above the title band. */
 export const sheetArea={x:0,y:0,width:2520,height:1512,seal:{x:2340,y:1332}} as const;
+/**
+ * Lettering standard of the sheets, as printed font sizes in points (1/72 in); Arial capitals are 0.716 of the font
+ * size. Every note, dimension, callout, table and label prints with capitals at least 3/32 in high, the US National
+ * CAD Standard minimum for plotted text: font size 6.75 / 0.716 = 9.43, used as 9.5. Text is never shrunk below it
+ * to make it fit: the layout wraps it, moves it to free space, gives the detail a larger cell or continues it on
+ * the next cell or sheet (detailSheet.ts, noteBlocks.ts, coverSheet.ts). The title block prints nothing smaller.
+ */
+export const lettering={
+ /** Smallest printed size: 3/32 in capitals. */
+ min:9.5,
+ /** Notes, dimensions, callouts, labels and table text. */
+ text:9.5,
+ /** Line spacing of stacked callout lines (about 1.6 capital heights, as CAD single line spacing). */
+ leading:11,
+ /** Line spacing of wrapped note text. */
+ noteLeading:12,
+ /** Headings of note blocks and tables. */
+ heading:11,
+ /** Detail titles; their scale and the bubble's sheet number print at the text size. */
+ title:13.5
+} as const;
+// Content scale of the sheet being drawn (sheetStart): the minimum applies to the printed size.
+let letteringScale=1;
+/** Font size, in layout units, that text asked for at `size` is drawn and measured at: never below the minimum. */
+export const legibleSize=(size:number)=>Math.max(size,lettering.min/letteringScale);
 let detailRoom=1;
 /**
  * Draw a detail with its scale budgets enlarged by `factor`, for a cell taller than the module: the
  * detail takes the next standard scale where its enlarged budget allows one.
  */
 export function withDetailRoom<T>(factor:number,draw:()=>T):T{const was=detailRoom;detailRoom=factor;try{return draw();}finally{detailRoom=was;}}
+/** The factor the detail being drawn has its scale budgets enlarged by (withDetailRoom), 1 outside it. */
+export const detailRoomFactor=()=>detailRoom;
 /** Select and label the actual printed scale for a sheet drawn at the given content scale. */
 export function sheetDrawingScale(maxLayoutUnitsPerMm:number,units:CalculationSnapshot['input']['units'],contentScale:number=sheetFormat.contentScale){
  const scale=drawingScale(maxLayoutUnitsPerMm*contentScale*detailRoom,units);
@@ -27,10 +54,10 @@ export const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '
 export const n = (v: number) => Number(v.toFixed(3));
 export const short = (s: string, limit: number) => s.length > limit ? `${s.slice(0, limit - 3)}...` : s;
 export const line = (a: XY, b: XY, cls = 'annotation') => `<line class="${cls}" x1="${n(a[0])}" y1="${n(a[1])}" x2="${n(b[0])}" y2="${n(b[1])}"/>`;
-export const text = (x: number, y: number, value: string, size = 9, anchor = 'start', weight = 400, angle = 0) =>
-  `<text x="${n(x)}" y="${n(y)}" font-size="${size}" text-anchor="${anchor}" font-weight="${weight}"${angle ? ` transform="rotate(${n(angle)} ${n(x)} ${n(y)})"` : ''}>${esc(value)}</text>`;
+export const text = (x: number, y: number, value: string, size: number = lettering.text, anchor = 'start', weight = 400, angle = 0) =>
+  `<text x="${n(x)}" y="${n(y)}" font-size="${n(legibleSize(size))}" text-anchor="${anchor}" font-weight="${weight}"${angle ? ` transform="rotate(${n(angle)} ${n(x)} ${n(y)})"` : ''}>${esc(value)}</text>`;
 /** Text of a dimension (its value), marked so drawing tests can find every dimension string. */
-export const dimText = (x: number, y: number, value: string, size = 9, anchor = 'start', weight = 400, angle = 0) => text(x, y, value, size, anchor, weight, angle).replace(/^<text([^>]*)>/, '<text$1 data-dim="true">');
+export const dimText = (x: number, y: number, value: string, size: number = lettering.text, anchor = 'start', weight = 400, angle = 0) => text(x, y, value, size, anchor, weight, angle).replace(/^<text([^>]*)>/, '<text$1 data-dim="true">');
 /**
  * A reference dimension: a rolled-shape or material size (section depth, rail on its pad and the cap web) or a size that
  * follows from dimensioned geometry, printed as it is rather than to the 1/4 in dimension grid.
@@ -54,8 +81,8 @@ export function breakLine(a:XY,b:XY){
  const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy),ux=dx/L,uy=dy/L,px=-uy*4,py=ux*4;
  return `<polyline class="annotation" points="${[a,[mx-ux*3,my-uy*3],[mx-ux*1+px,my-uy*1+py],[mx+ux*1-px,my+uy*1-py],[mx+ux*3,my+uy*3],b].map(p=>`${n(p[0])},${n(p[1])}`).join(' ')}"/>`;
 }
-export function bubble(x: number, y: number, label: string, r = 8) { const size = r > 8 ? r : 9; return circle(x, y, r, 'bubble') + text(x, y + size * .36, label, size, 'middle', 700); }
-export function leader(at: XY, end: XY, label: string, size = 9) {
+export function bubble(x: number, y: number, label: string, r = 8) { const size = Math.max(r, lettering.text); return circle(x, y, r, 'bubble') + text(x, y + size * .36, label, size, 'middle', 700); }
+export function leader(at: XY, end: XY, label: string, size: number = lettering.text) {
   return line(at, [end[0] - 8, end[1] - 3]) + line([end[0] - 8, end[1] - 3], [end[0] + 6, end[1] - 3])
     + circle(at[0], at[1], 1.4, 'dot') + text(end[0] + 9, end[1], label, size);
 }
@@ -63,35 +90,35 @@ export function leader(at: XY, end: XY, label: string, size = 9) {
 // dimension line, as drafted by hand, instead of writing it across the extension lines. `clear` is a
 // neighboring extension line the carried text is also kept beyond.
 export function dimH(x1: number, x2: number, fromY: number, y: number, label: string, outside: 'left' | 'right' = 'right', clear?: number) {
-  const w = textWidth(label, 9), fits = w + 6 <= Math.abs(x2 - x1), lo = Math.min(x1, x2), hi = Math.max(x1, x2);
+  const w = textWidth(label, lettering.text), fits = w + 6 <= Math.abs(x2 - x1), lo = Math.min(x1, x2), hi = Math.max(x1, x2);
   const l = Math.min(lo, clear ?? lo), r = Math.max(hi, clear ?? hi);
   const [a, b] = fits ? [lo, hi] : outside === 'right' ? [lo, r + w + 6] : [l - w - 6, hi];
   // Extension lines run just past the dimension line, away from the part.
   const ext = y + (y < fromY ? -4 : 5);
   return line([x1, fromY], [x1, ext]) + line([x2, fromY], [x2, ext]) + line([a, y], [b, y])
     + [x1, x2].map(x => line([x - 2.5, y + 3], [x + 2.5, y - 3])).join('')
-    + (fits ? dimText((x1 + x2) / 2, y - 5, label, 9, 'middle') : outside === 'right' ? dimText(r + 4, y - 5, label, 9, 'start') : dimText(l - 4, y - 5, label, 9, 'end'));
+    + (fits ? dimText((x1 + x2) / 2, y - 5, label, lettering.text, 'middle') : outside === 'right' ? dimText(r + 4, y - 5, label, lettering.text, 'start') : dimText(l - 4, y - 5, label, lettering.text, 'end'));
 }
 export function dimV(y1: number, y2: number, fromX: number, x: number, label: string) {
-  const w = textWidth(label, 9), fits = w + 6 <= Math.abs(y2 - y1), far = Math.max(y1, y2);
+  const w = textWidth(label, lettering.text), fits = w + 6 <= Math.abs(y2 - y1), far = Math.max(y1, y2);
   const ext = x + (x < fromX ? -4 : 5);
   return line([fromX, y1], [ext, y1]) + line([fromX, y2], [ext, y2]) + line([x, Math.min(y1, y2)], [x, fits ? far : far + w + 6])
     + [y1, y2].map(y => line([x - 3, y + 2.5], [x + 3, y - 2.5])).join('')
-    + dimText(x - 6, fits ? (y1 + y2) / 2 : far + 4 + w / 2, label, 9, 'middle', 400, -90);
+    + dimText(x - 6, fits ? (y1 + y2) / 2 : far + 4 + w / 2, label, lettering.text, 'middle', 400, -90);
 }
 // Arial advance widths per em, for laying out text without a browser.
 const glyphWidths:Record<string,number>={' ':.278,'!':.278,'"':.355,'#':.556,'$':.556,'%':.889,'&':.667,"'":.191,'(':.333,')':.333,'*':.389,'+':.584,',':.278,'-':.333,'.':.278,'/':.278,':':.278,';':.278,'<':.584,'=':.584,'>':.584,'?':.556,'@':1.015,'[':.278,']':.278,'_':.556,'·':.278,'§':.556,'×':.584,'°':.4,
  A:.667,B:.667,C:.722,D:.722,E:.667,F:.611,G:.778,H:.722,I:.278,J:.5,K:.667,L:.556,M:.833,N:.722,O:.778,P:.667,Q:.778,R:.722,S:.667,T:.611,U:.722,V:.667,W:.944,X:.667,Y:.667,Z:.611,
  a:.556,b:.556,c:.5,d:.556,e:.556,f:.278,g:.556,h:.556,i:.222,j:.222,k:.5,l:.222,m:.833,n:.556,o:.556,p:.556,q:.556,r:.333,s:.5,t:.278,u:.556,v:.5,w:.722,x:.5,y:.5,z:.5};
 /** Estimated rendered width of Arial text; bold is about 6% wider. */
-export function textWidth(value:string,size:number,bold=false){let w=0;for(const c of resolvedLength(value))w+=glyphWidths[c]??(/[0-9]/.test(c)?.556:.6);return w*size*(bold?1.06:1);}
+export function textWidth(value:string,size:number,bold=false){let w=0;for(const c of resolvedLength(value))w+=glyphWidths[c]??(/[0-9]/.test(c)?.556:.6);return w*legibleSize(size)*(bold?1.06:1);}
 /** Break text into rows that fit the given width. */
 export function wrapToWidth(value:string,width:number,size:number,bold=false){
   const rows:string[]=[];let row='';
   for(const word of value.split(/\s+/).filter(Boolean)){const next=row?`${row} ${word}`:word;if(row&&textWidth(next,size,bold)>width){rows.push(row);row=word;}else row=next;}
   if(row)rows.push(row);return rows.length?rows:[''];
 }
-export function wrappedText(x: number, y: number, value: string, maxChars: number, size = 9, leading = 12) {
+export function wrappedText(x: number, y: number, value: string, maxChars: number, size: number = lettering.text, leading = 12) {
   const rows: string[] = []; let row = '';
   for (const word of value.split(/\s+/)) { if (row && resolvedLength(row).length + resolvedLength(word).length + 1 > maxChars) { rows.push(row); row = ''; } row += `${row ? ' ' : ''}${word}`; }
   if (row) rows.push(row);
@@ -117,6 +144,7 @@ const detailLineWeights=`
 /** Content transform: layout origin at the inner corner of the border, scaled by the content scale. */
 const contentTransform=(k:number)=>k===2?'translate(72 36) scale(2)':`translate(36 36) scale(${k})`;
 export function sheetStart(s: CalculationSnapshot, number: string, title: string, contentScale:number=sheetFormat.contentScale) {
+  letteringScale=contentScale;
   return `<svg xmlns="http://www.w3.org/2000/svg" class="runway-plan-sheet" width="${s.input.units==='SI'?'914.4mm':'36in'}" height="${s.input.units==='SI'?'609.6mm':'24in'}" viewBox="0 0 2592 1728" role="img" aria-label="${esc(`${number} / ${title} / ${s.input.units==='SI'?'ARCH D 914.4 by 609.6 mm drawing':'ARCH D 36 by 24 inch drawing'}`)}"><style>
   .runway-plan-sheet{background:white;color:#111}
   .runway-plan-sheet text{font-family:Arial,sans-serif;fill:#111;stroke:none;letter-spacing:0}
@@ -139,6 +167,8 @@ export function sheetStart(s: CalculationSnapshot, number: string, title: string
 }
 /** Title block; `scale` is AS SHOWN for sheets of scaled details, NONE for a sheet of notes and tables. */
 export function titleBlock(s: CalculationSnapshot, number: string, title: string, scale = 'AS SHOWN') {
+  // The title band is laid out in sheet points.
+  letteringScale=1;
   const p=s.input,d=p.drawing,top=1548,bottom=1692,rev=revisionIdentity(s),date=rev.date;
   const originator=d?.originator||p.engineer||'',checker=d?.checker||'';
   // Close the scaled drawing region: the title band is laid out in PDF points.
@@ -160,7 +190,7 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+=text(1398,1564,'DRAWING RESPONSIBILITY',10,'middle',700)+line([1236,1572],[1560,1572]);
   const eor=d?.eor,engineer=eor?.name.trim()?`${eor.name}${eor.license.trim()?` · ${eor.jurisdiction.trim()?`${eor.jurisdiction} `:''}LIC. ${eor.license}`:''}`:'';
   for(const [i,label,value] of [[0,'ORIGINATOR',originator],[1,'CHECKER',checker],[2,'ENGINEER OF RECORD',engineer]] as const){
-    const y=1572+i*40;svg+=line([1236,y+40],[1560,y+40])+text(1247,y+14,label,9,'start',700)+text(1247,y+31,short(value,48),12);
+    const y=1572+i*40;svg+=line([1236,y+40],[1560,y+40])+text(1247,y+14,label,lettering.text,'start',700)+text(1247,y+31,short(value,48),12);
   }
   svg+='</g><g data-title-panel="project">';
   svg+=text(1858,1566,title,16,'middle',700)+line([1560,1578],[2156,1578]);
@@ -173,7 +203,7 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+=text(2170,1662,rev.letter?`REVISION: ${rev.letter.toUpperCase()} (SAME AS THE CALCULATION)`:`CALC: ${s.revision}`,11)+text(2170,1681,`DATE: ${date}    SCALE: ${scale}`,10);
   svg+='</g></g>';
   const status=issueStatus(s);
-  svg+=`<g data-stamp="${status.issued?'seal':'blank'}">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${eor?.firm.trim()?text(2466,1520,short(eor.firm.toUpperCase(),30),8,'middle'):''}${text(2466,1534,status.issued?'SEAL AND SIGNATURE REQUIRED':'NOT SEALED',9,'middle')}</g>`;
+  svg+=`<g data-stamp="${status.issued?'seal':'blank'}">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${eor?.firm.trim()?text(2466,1520,short(eor.firm.toUpperCase(),26),lettering.text,'middle'):''}${text(2466,1534,status.issued?'SEAL AND SIGNATURE REQUIRED':'NOT SEALED',lettering.text,'middle')}</g>`;
   svg+=`<g data-issue-status="${status.issued?'issued':'preliminary'}">${text(2360,1494,status.label,11,'end',700)}</g>`+text(2360,1513,'REFERENCE FRAMING SHOWN DASHED',10,'end');
   // A detail on a sheet must never be read as acceptable while any calculation check fails.
   const failed=s.checks.filter(c=>c.status==='fail').length;
@@ -215,10 +245,10 @@ export function sectionCut(a:XY,b:XY,look:XY,title:string,ends:('a'|'b')[]=['a',
   // The reference reads beyond the arrow tip, or beyond the cut line on the side away from the arrow.
   // Beyond the tip; on a cut across the view the reference reads outward from the cut end, clear of the part it cuts.
   // Over the arrow leg, ending at the cut line: clear of extension lines that run beside the cut end.
-  if(label==='over'&&across)svg+=text(o[0]-Math.sign(v[0])*3,o[1]-4,detailRef(title),8,v[0]<0?'end':'start',700);
-  else if(label==='tip')svg+=across?text(tip[0]+v[0]*3,tip[1]+v[1]*3+3,detailRef(title),8,v[0]>0?'start':'end',700)
-   :text(tip[0]-s*4,tip[1]+v[1]*3+(v[1]>0?9:-2),detailRef(title),8,s<0?'end':'start',700);
-  else{const q:XY=[o[0]+s*t[0]*4-v[0]*4,o[1]+s*t[1]*4-v[1]*4];svg+=text(q[0],q[1]+(across?(s>0?9:0):(s>0?3:-1)),detailRef(title),8,across?(v[0]>0?'end':'start'):'middle',700);}
+  if(label==='over'&&across)svg+=text(o[0]-Math.sign(v[0])*3,o[1]-4,detailRef(title),lettering.text,v[0]<0?'end':'start',700);
+  else if(label==='tip')svg+=across?text(tip[0]+v[0]*3,tip[1]+v[1]*3+3,detailRef(title),lettering.text,v[0]>0?'start':'end',700)
+   :text(tip[0]-s*4,tip[1]+v[1]*3+(v[1]>0?9:-2),detailRef(title),lettering.text,s<0?'end':'start',700);
+  else{const q:XY=[o[0]+s*t[0]*4-v[0]*4,o[1]+s*t[1]*4-v[1]*4];svg+=text(q[0],q[1]+(across?(s>0?9:0):(s>0?3:-1)),detailRef(title),lettering.text,across?(v[0]>0?'end':'start'):'middle',700);}
  }
  return svg+'</g>';
 }
@@ -237,7 +267,7 @@ const resolvedLength=(v:string)=>v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00').repla
  */
 export function viewTitle(cx:number,y:number,title:string,scale:string,contentScale:number=sheetFormat.contentScale){
  const k=1/contentScale,size=13.5*k,w=textWidth(title,size,true),r=15*k,bx=cx-w/2-r-7*k;
- return `<g data-view-title="below" data-detail-title="${esc(title)}">${circle(bx,y,r,'divider')}${line([bx-r,y],[bx+r,y],'annotation')}${text(bx,y-3.6*k,detailNumberToken,11.5*k,'middle',700)}${text(bx,y+9.4*k,sheetNumberToken,7*k,'middle')}${text(cx,y-4*k,title,size,'middle',700)}${line([bx+r,y],[cx+w/2+5*k,y],'divider')}${text(cx,y+12*k,scale,9*k,'middle')}</g>`;
+ return `<g data-view-title="below" data-detail-title="${esc(title)}">${circle(bx,y,r,'divider')}${line([bx-r,y],[bx+r,y],'annotation')}${text(bx,y-3.6*k,detailNumberToken,11.5*k,'middle',700)}${text(bx,y+9.4*k,sheetNumberToken,lettering.text*k,'middle')}${text(cx,y-4*k,title,size,'middle',700)}${line([bx+r,y],[cx+w/2+5*k,y],'divider')}${text(cx,y+12*k,scale,lettering.text*k,'middle')}</g>`;
 }
 /**
  * Title of a further detail drawn inside another detail's cell, as viewTitle (smaller by contentScale), numbered by the
@@ -251,7 +281,7 @@ const siSymbol=/^\(?(k?N|MPa|GPa|mm|m|kN·m|kN-m|N\/mm|kN\/m)[),.;:]*$/;
 export const labelCaps=(v:string)=>v.split(/(\s+)/).map(w=>siSymbol.test(w)?w:w.toUpperCase()).join('');
 /** Explicit waypoints keep annotation corridors separate from adjacent callouts.
  * Identical components may use one arrow with a TYP / quantity note. */
-export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][]=[],span?:number){
+export function multiLeader(points:XY[],at:XY,labels:string[],size:number=lettering.text,via:XY[][]=[],span?:number){
  // Land on the label end nearest the targets so a leader never crosses its own text.
  const w=span??Math.max(0,...labels.map(v=>textWidth(labelCaps(v),size))),right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+w);
  const elbow:XY=right?[at[0]+w+14,at[1]-3]:[at[0]-14,at[1]-3],landing:XY=right?[at[0]+w+3,at[1]-3]:[at[0]-3,at[1]-3];
@@ -262,7 +292,7 @@ export function multiLeader(points:XY[],at:XY,labels:string[],size=8.5,via:XY[][
   const next=route[1],angle=Math.atan2(next[1]-p[1],next[0]-p[0]),c=Math.cos(angle),s=Math.sin(angle);
   svg+=`<path class="leader-arrow" d="M${n(p[0])},${n(p[1])}L${n(p[0]+5*c-1.5*s)},${n(p[1]+5*s+1.5*c)}L${n(p[0]+5*c+1.5*s)},${n(p[1]+5*s-1.5*c)}Z"/>`;
  }
- return svg+labels.map((v,i)=>text(at[0],at[1]+i*11,labelCaps(v),size)).join('')+'</g>';
+ return svg+labels.map((v,i)=>text(at[0],at[1]+i*lettering.leading,labelCaps(v),size)).join('')+'</g>';
 }
 /**
  * AWS A2.4 field-weld flag on a staff rising from the arrow/reference-line junction `at`. The pennant points away
@@ -278,15 +308,15 @@ export const weldJunction=(at:XY,right:boolean):XY=>right?[at[0]+103,at[1]-3]:[a
 export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[],field=false,allAround=false){
  // AWS-style reference line with the fillet triangle on the arrow side (below).
  // A second triangle denotes both sides only when the template requires it.
- let svg=multiLeader(points,at,[],8,via,89);
+ let svg=multiLeader(points,at,[],lettering.text,via,89);
  const y=at[1]-3,x=at[0]+41;
  svg+=line([at[0]-3,y],[at[0]+92,y]);
  for(const sign of bothSides?[-1,1]:[1])svg+=`<path class="annotation" d="M${x},${y}l0,${sign*7}l8,${-sign*7}Z"/>`;
  // Weld sizes sit immediately left of the symbol, on its vertical centerline.
  // Inch marks are omitted by drafting convention; SI values retain MM.
  // Both-sides fillets carry the size on each side of the reference line (AWS A2.4).
- svg+=text(x-6,y+7,labelCaps(sizeLabel.replaceAll('"','')),8,'end')+(bothSides?text(x-6,y-2,labelCaps(sizeLabel.replaceAll('"','')),8,'end'):'');
- svg+=labels.map((v,i)=>text(at[0],at[1]+17+i*11,labelCaps(v),8)).join('');
+ svg+=text(x-6,y+7,labelCaps(sizeLabel.replaceAll('"','')),lettering.text,'end')+(bothSides?text(x-6,y-2,labelCaps(sizeLabel.replaceAll('"','')),lettering.text,'end'):'');
+ svg+=labels.map((v,i)=>text(at[0],at[1]+17+i*lettering.leading,labelCaps(v),lettering.text)).join('');
  const right=points.length>0&&points.every((p,i)=>(via[i]?.[via[i].length-1]??p)[0]>at[0]+89);
  // Weld-all-around: a circle where the arrow meets the reference line (AWS A2.4).
  // The leader meets the reference line at its elbow, 14 pt beyond the line's end, where a field flag also stands.
@@ -300,11 +330,11 @@ export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:stri
  * cross; labels are spaced by their line count within [top, bottom].
  */
 export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boolean;arrowSide?:boolean;allAround?:boolean}[],x:number,top:number,bottom:number){
- const sorted=[...items].sort((a,b)=>a.at[1]-b.at[1]),height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*11;
+ const sorted=[...items].sort((a,b)=>a.at[1]-b.at[1]),height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*lettering.leading;
  const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
  const slots=()=>{let y=top;return sorted.map(v=>{const at=y;y+=height(v)+gap;return at;});};
  // Leader from a target to its label's elbow; labels left of their targets land on the right.
- const route=(v:typeof items[number],y:number):[XY,XY]=>{const w=v.weld?89:Math.max(0,...v.labels.map(l=>textWidth(labelCaps(l),8.5))),ly=(v.weld?y+3:y)-3;return [v.at,v.at[0]>x+w?[x+w+14,ly]:[x-14,ly]];};
+ const route=(v:typeof items[number],y:number):[XY,XY]=>{const w=v.weld?89:Math.max(0,...v.labels.map(l=>textWidth(labelCaps(l),lettering.text))),ly=(v.weld?y+3:y)-3;return [v.at,v.at[0]>x+w?[x+w+14,ly]:[x-14,ly]];};
  const crosses=([a,b]:[XY,XY],[c,d]:[XY,XY])=>{const o=(p:XY,q:XY,r:XY)=>Math.sign((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]));return o(a,b,c)*o(a,b,d)<0&&o(c,d,a)*o(c,d,b)<0;};
  // Ordering by target height alone can cross leaders whose targets differ in depth; swap such neighbors.
  for(let pass=0;pass<sorted.length;pass++){

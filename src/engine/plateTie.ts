@@ -111,9 +111,10 @@ export function plateTieChecks(s:CalculationSnapshot,ctx:{force:number;cos:numbe
 /**
  * Girder-side attachment against the rail and its clips. Every tie part (saddle, end fillets, gussets, plate and
  * bolts) is below the tied flange, so nothing reaches the rail, clips or top flange surface. Where a rail clip
- * stands over the saddle (clip base length, its end fillets and a spread through the flange thickness), the flange strip
- * there carries both transverse local bending stresses: the saddle strip stress from the tie force and the rail clip
- * strip stress under the factored wheel group, added by magnitude.
+ * stands over the saddle (clip base length, its end fillets and a spread through the flange thickness), the flange
+ * there carries both transverse local bending stresses: the girder flange stress from the tie force over the flange's
+ * effective width (flangeEffectiveWidth, a bound on the peak of the root moment) and the rail clip strip stress under the
+ * factored wheel group, added by magnitude.
  */
 export function keeperInteraction(s:CalculationSnapshot,force:number):CheckResult{
  const p=s.input,d=p.details!,g=flangeTieGeometry(p)!,r=s.detailResults!,a=g.attachment,tf=p.section.tf;
@@ -126,7 +127,7 @@ export function keeperInteraction(s:CalculationSnapshot,force:number):CheckResul
  const saddle=flangeTieResponse(p,force).flange,keeper=railClipResponse(p,r.demands.railLateral).flangeStress,capacity=available(p.section.Fy,p.method,.9,1.67);
  const ratio=(saddle+keeper)/capacity;
  return {...base,demand:saddle+keeper,capacity,quantity:'stress',utilization:ratio,status:withinLimit(saddle+keeper,capacity)?'pass':'fail',substitution:`\\frac{${latexNumber(saddle+keeper)}}{${latexNumber(capacity)}}=${ratio.toFixed(4)}`,
-  note:`${clear} At ${hits.length} tie${hits.length>1?'s':''} a rail clip stands over the saddle (clip base, fillets and a ${format(tf,'length',p.units,3)} spread through the flange): the saddle strip stress ${format(saddle,'stress',p.units,3)} (full tie force) and the clip strip stress ${format(keeper,'stress',p.units,3)} (factored wheel group) are added by magnitude on the same flange strip, though their peaks lie at the web root and at the clip weld. Fatigue: the saddle toes (SA) and clips (RC) are separate register details, each with its own local range on the global range.`};
+  note:`${clear} At ${hits.length} tie${hits.length>1?'s':''} a rail clip stands over the saddle (clip base, fillets and a ${format(tf,'length',p.units,3)} spread through the flange): the girder flange stress under the saddle ${format(saddle,'stress',p.units,3)} (full tie force, over the flange's effective width, as the girder flange check) and the clip strip stress ${format(keeper,'stress',p.units,3)} (factored wheel group) are added by magnitude at the same flange, though their peaks lie at the web root and at the clip weld. Fatigue: the saddle toes (SA) and clips (RC) are separate register details, each with its own local range on the global range.`};
 }
 
 /** Geometry and fit of the flexible plate tieback beyond the shared direct flange-tie validation. */

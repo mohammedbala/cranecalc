@@ -18,6 +18,7 @@ import { latexNumber,withinLimit } from './math';
 import { validateRunwayDetails } from './detailValidation';
 import { completeRunwayChecks } from './detailChecks';
 import { gateCheck } from './checkTaxonomy';
+import { normalizeChecks } from './checkIntegrity';
 import { compressionFlangeGap } from './detailAnalysis';
 import { travelLimits } from './continuation';
 import {craneTravel,stopContacts} from './craneTravel';
@@ -71,6 +72,25 @@ export function validateProject(input:unknown):string[]{
   for(const v of stopContacts(p,i))if(v.railEnd!==undefined&&(v.end==='left'?v.wheel<v.railEnd:v.wheel>v.railEnd))errors.push(`cranes.${i}.design.bumperOverhang: at the ${v.end} stop the bumper overhang less the stroke leaves the end wheel off the rail; check the end-truck geometry and the stop and rail-end layout.`);
   const reach=craneTravel(p,i);if(reach.start>=reach.end)errors.push(`cranes.${i}.design.bumperOverhang: the stop contacts leave the crane no travel between the stops.`);});
  return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateColumnBase(p),...validateLongitudinalBracing(p),...validateAdjacentBuilding(p),...validateColumnCap(p)];
+}
+/**
+ * After every module: each check tells the truth about its own status (checkIntegrity.ts: impossible geometry fails as a
+ * geometry conflict without a ratio, a part with no capacity fails with an infinite ratio, the results of a ply its holes
+ * lie outside of are not valid), then the taxonomy gates. A rule that does not apply to this arrangement is not a failure
+ * (J2.2b maximum fillets in T-joints, J10.8 proportions of stiffeners that J10.1-J10.4 do not require, full-force
+ * development of a full-length cap, the F13.1 hole test as a capacity modifier, an owner criterion not given, advisory
+ * rules such as the E2 user note and the fatigue ratio that is not the project's method, fatigue at fewer than 20,000
+ * cycles): not-applicable, with the reason. A failing check that its largest range would screen below F_TH contradicts
+ * itself: it stays failed and a warning names it.
+ */
+export function integrityAndGates(snapshot:CalculationSnapshot){
+ normalizeChecks(snapshot);
+ if(snapshot.geometryConflicts?.length)snapshot.warnings.push(`GEOMETRY CONFLICT: ${snapshot.geometryConflicts.map(c=>c.title).join('; ')}. These parts cannot be built as dimensioned; the drawings mark them NOT DETAILED until the arrangement is revised.`);
+ const contradictions:string[]=[];
+ snapshot.checks=snapshot.checks.map(c=>{if(c.status!=='fail')return c;const g=gateCheck(snapshot,c);if(g.gate==='evaluated')return c;
+  if(g.gate==='screened'&&g.screen==='threshold'){contradictions.push(`${c.title} (${c.id}): ${g.reason}`);return c;}
+  return {...c,status:'not-applicable',note:`${g.reason??'Not applicable to this arrangement.'} ${c.note}`.trim()};});
+ if(contradictions.length)snapshot.warnings.push(`FATIGUE: ${contradictions.length} failing check${contradictions.length>1?'s':''} would be screened below the threshold, which contradicts the check's own allowable; kept as failures: ${contradictions.join('; ')}`);
 }
 export interface CalculateOptions {
  /** Progress of the moving-load searches (DesignProgress), at most four times a second. */
@@ -163,10 +183,7 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  // Project option: a check left unverified only for missing data is omitted from this package (listed as not checked,
  // by others) instead of blocking it. Incomplete or unsupported results still block.
  if(p.omitUnverified)snapshot.checks=snapshot.checks.map(c=>c.status==='unverified'?{...c,status:'excluded',note:`Not checked here: ${c.note.trim()} Omitted from this package until these data are provided (by others).`}:c);
- // A rule that does not apply to this arrangement is not a failure (the taxonomy gates: J2.2b maximum fillets in
- // T-joints, J10.8 proportions of stiffeners that J10.1-J10.4 do not require, full-force development of a full-length
- // cap, the F13.1 hole test as a capacity modifier, fatigue that need not be evaluated): not-applicable, with the reason.
- snapshot.checks=snapshot.checks.map(c=>{if(c.status!=='fail')return c;const g=gateCheck(snapshot,c);return g.gate==='evaluated'?c:{...c,status:'not-applicable',note:`${g.reason??'Not applicable to this arrangement.'} ${c.note}`.trim()};});
+ integrityAndGates(snapshot);
  const blocking=snapshot.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status));
  // Failed engineering criteria can export; failed numerical verification cannot.
  snapshot.eligible=!blocking&&!snapshot.errors.length&&snapshot.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass');

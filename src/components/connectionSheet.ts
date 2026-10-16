@@ -20,6 +20,7 @@ import {refDim, sheetDrawingScale as drawingScale, text, line, rect, circle, dim
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
 import { railKeeperView } from './railKeeperView';
+import { AnnotationSpace, dimVClear } from './annotationSpace';
 import {ribGeometry} from '../engine/bracketRib';
 import {haunchedRibOutline} from './haunchedBracketDrawing';
 import { slidingBoltView } from './slidingBoltSection';
@@ -110,8 +111,10 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   svg+=multiLeader(stiffPts,[lx,stiffY],[`2 PL ${size(d.bearing.stiffenerThickness)} X ${size(d.bearing.stiffenerWidth)}`,`FULL-DEPTH FITTED BEARING STIFFENERS`,`${size(d.bearing.cope)} WEB-SIDE CORNER COPES`],8,stiffPts.map(()=>[[215,stiffY-5]]));
   svg+=filletLeader([weldPts[1]],[lx,218],size(d.bearing.weldSize),['TYP. BOTH STIFFENERS',cjp?'CONT. WEB FILLETS':'CONT. WEB & FLANGE FILLETS',cjp?'FIT BOTTOM END':'FIT / MILL STIFFENER ENDS'],true);
   svg+=multiLeader([hu?[inner-hu.L*.15*k/1000,bt+hu.hr*.55*k/1000]:[230,(bt+bb)/2]],[lx,287],usesExistingBracket(p)?[`EXISTING ${existingBracketLabel(d.bracket)}`,`NEW BOLTED SEAT: ${bracketRef}`]:hu?['WELDED TAPERED I HAUNCH',`STIFFENERS: ${detailRef(detailTitles.haunchSection)}; WELDS: ${bracketRef}`]:ws?[`WELDED ${ws.name} COLUMN BRACKET`,`${ws.seat?'SEAT / ':''}STIFFENERS / WELDS: ${bracketRef}`]:wb?['WELDED COLUMN BRACKET',`SEAT / RIBS / WELDS: ${bracketRef}`]:['COLUMN BRACKET (REF.)','COLUMN ATTACHMENT BY','BUILDING DESIGNER']);
-  // Below the bracket and the broken column, clear of the reference bracket's sloped soffit.
-  svg+=multiLeader([[cx,bottom+pt]],[111,bb+(wb?32:40)],[`BEARING PL ${size(d.bearing.thickness)} X ${size(d.bearing.width)} X ${size(d.bearing.length)}`]);
+  // Below the bracket and the broken column, clear of the reference bracket's sloped soffit and of the bracket callout's
+  // leader (a long plate size in SI): lower or farther left where the leader would cross it.
+  const plate=[`BEARING PL ${size(d.bearing.thickness)} X ${size(d.bearing.width)} X ${size(d.bearing.length)}`],plateY=bb+(wb?32:40),drawn=new AnnotationSpace(svg);
+  svg+=drawn.pick([[111,plateY],[111,plateY+14],[60,plateY],[60,plateY+14],[111,plateY+28]].map(([x,y])=>multiLeader([[cx,bottom+pt]],[x,y],plate)));
   return {svg:svg+'</g>',scale:scale.label};
  }});
 
@@ -200,9 +203,11 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   // Girder-end bolt group, bar length and centerline to column face left of the bars, each on its own line.
   const xb=X(-tg/2)-tbk-8;
   // Pitch nearest the bars and the edge outside it, so neither carried text crosses the other's extension lines.
-  if(c.rows>1)svg+=dimV(Z(girderRows[0]),Z(girderRows.at(-1)!),xb,xb-24,c.rows>2?`${c.rows-1} @ ${size(c.pitch)}`:size(c.pitch));
-  svg+=dimV(Z(g.start),Z(girderRows[0]),xb,xb-46,size(c.edge));
-  svg+=dimV(Z(g.start),colZ,xb,xb-70,dim(t.length))+dimV(Z(0),colZ,xb,xb-94,dim(g.face));
+  // A value too long for its dimension reads where it is clear of the drawn girder and ties.
+  const drawn=new AnnotationSpace(svg);
+  if(c.rows>1)svg+=dimVClear(drawn,Z(girderRows[0]),Z(girderRows.at(-1)!),xb,xb-24,c.rows>2?`${c.rows-1} @ ${size(c.pitch)}`:size(c.pitch));
+  svg+=dimVClear(drawn,Z(g.start),Z(girderRows[0]),xb,xb-46,size(c.edge));
+  svg+=dimVClear(drawn,Z(g.start),colZ,xb,xb-70,dim(t.length))+dimVClear(drawn,Z(0),colZ,xb,xb-94,dim(g.face));
   // Callouts in a column right of the girder, in the order of their targets down the sheet.
   const lx=X(half)+50,items:{at:XY;labels:string[];weld?:'cjp'|'fillet'}[]=[
    {at:[X(half*.6),Z(-b.bf/2)],labels:[`${b.name} RUNWAY GIRDER`,`PLAN; TIE AT ${g.sides.length>1?'BOTH FLANGES':'TOP FLANGE'}`]},

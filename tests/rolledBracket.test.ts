@@ -7,7 +7,7 @@ import {projectSchema} from '../src/engine/types';
 import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
 import {connectionOptionChecks,selectBracketArrangement} from '../src/engine/connectionOptions';
 import {rolledStub,bracketSeat,defaultRolledBracket} from '../src/engine/rolledBracketInputs';
-import {stubFlexure,stubShear,stubWebBearing,stubStiffener,stubWeldGroup,stubWeldStress,stubActions,stubLoads,flangeTipStresses,columnFlangeForces,validateRolledBracket,stubBoltLayout,createRolledBracketCollector,rolledBracketChecks} from '../src/engine/rolledBracket';
+import {stubFlexure,stubShear,stubWebBearing,stubStiffener,stubWeldGroup,stubWeldStress,stubActions,stubLoads,flangeTipStresses,columnFlangeForces,validateRolledBracket,stubBoltLayout,createRolledBracketCollector,rolledBracketChecks,stubColumnStrengths} from '../src/engine/rolledBracket';
 import {seatStrip} from '../src/engine/bracketDesign';
 import {compactReport} from '../src/report/compactReport';
 import {bracketSheetSvg} from '../src/components/bracketSheet';
@@ -165,14 +165,14 @@ describe('new rolled wide-flange bracket',()=>{
    expect(web.geometry.boundingBox!.getSize(new THREE.Vector3()).y).toBeCloseTo((st.d-2*st.tf)/1000,7);
   }
  });
- it('designs the capped demonstration on the wide-flange bracket: every check passes but the unstiffened column web (J10.2)',()=>{
-  const s=calculate(rolledProject());expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
+ it('designs the capped demonstration on the wide-flange bracket: every check passes, J10.2 with the column k_des',()=>{
+  const p=rolledProject(),s=calculate(p);expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
   // C2: with one force system per stub flange, J10.2 web yielding takes the same R_u = P + 3M_f/b as J10.1 at each flange
-  // level and the 0.44 in W14X90 web is exceeded at both (1.10 at the top flange, 1.03 at the bottom flange): this stub
-  // on this column needs column stiffeners (as cappedStubW14X90(true)). A real result, reported, not hidden.
-  expect(s.checks.filter(c=>(c.status==='fail'||c.status==='unverified'||c.status==='unsupported')&&!reviewOpenItem(c)).map(c=>c.id)).toEqual(['wbracket-column-yield-top','wbracket-column-yield-bottom']);
-  const yt=s.checks.find(c=>c.id==='wbracket-column-yield-top')!,j1=s.checks.find(c=>c.id==='wbracket-column-flange')!;
-  expect(yt.demand).toBe(j1.demand);expect(yt.utilization).toBeCloseTo(1.191,2);expect(yt.note).toContain('a full-depth column stiffener pair at each stub flange level (J10.8) is required');
+  // level. AISC J10.2 measures k to the web toe of the fillet: k = kdes = 1.31 in of the W14X90 (with k = tf, 0.71 in,
+  // the 0.44 in web was exceeded, D/C 1.191 at the top flange), so the unstiffened column carries both systems.
+  expect(s.checks.filter(c=>(c.status==='fail'||c.status==='unverified'||c.status==='unsupported')&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
+  const yt=s.checks.find(c=>c.id==='wbracket-column-yield-top')!,j1=s.checks.find(c=>c.id==='wbracket-column-flange')!,J=stubColumnStrengths(p,rolledStub(p.details!.bracket!)!),f=J.topWebEnd?2.5:5;
+  expect(yt.demand).toBe(j1.demand);expect(yt.utilization).toBeCloseTo(1.191*(f*.71*inch+J.levels.lbTop)/(f*J.k+J.levels.lbTop),2);expect(yt.note).toContain('k = kdes = 1.31 in (AISC W14X90)');
   expect(s.detailResults?.rolledBracket).toBeDefined();expect(s.detailResults?.bracket).toBeUndefined();expect(s.checks.some(c=>c.id==='bracket-rib-flexure')).toBe(false);
   const ids=s.checks.filter(c=>c.id.startsWith('wbracket-')).map(c=>c.id);
   for(const id of ['stub-flexure','stub-shear','stub-combined','web-yielding','web-crippling','stiffener-column','stiffener-weld','flange-cjp','web-weld','column-flange','column-yield-top','column-yield-bottom','column-crippling','seat-flexure','seat-weld','fatigue-flange','fatigue-column','tr13-load','deflection'])expect(ids).toContain('wbracket-'+id);

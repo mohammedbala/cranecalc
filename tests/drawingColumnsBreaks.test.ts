@@ -46,9 +46,12 @@ function zigzag(points:Pt[],amplitude?:number){
 }
 /** The break lines among the entities (peaks 4 pt either side of the line, in paper inches): the midpoint of each. */
 const breaks=(e:Entity[]):Pt[]=>e.flatMap(v=>v.type==='poly'&&!v.closed&&v.layer==='S-ANNO'&&zigzag(v.points,4/72)?[[(v.points[0][0]+v.points[5][0])/2,(v.points[0][1]+v.points[5][1])/2] as Pt]:[]);
-/** Entities of one view in sheet paper inches: those of the sheet with only that view, less those of the sheet without views. */
-function viewEntities(n:string,view:string){
- const svg=sheet(n),none=new Set(sheetEntities(keepView(svg),'US').map(v=>JSON.stringify(v)));
+/**
+ * Entities of one view in sheet paper inches, on the sheet that draws it (the detail sheets take as many details as fit
+ * at the lettering size): those of the sheet with only that view, less those of the sheet without views.
+ */
+function viewEntities(view:string){
+ const svg=sheets.find(v=>v.svg.includes(`data-view="${view}"`))!.svg,none=new Set(sheetEntities(keepView(svg),'US').map(v=>JSON.stringify(v)));
  return sheetEntities(keepView(svg,view),'US').filter(v=>!none.has(JSON.stringify(v)));
 }
 
@@ -70,15 +73,14 @@ describe('prismatic W columns',()=>{
  },900000);
 
  it('has no tapered (slanted) column edge in any view that draws the column',()=>{
-  const views:[string,string][]=[['S-01','typical-section'],['S-01','elevation'],['S-02','bracket-connection'],['S-02','tapered-haunch-elevation'],
-   ['S-02','tapered-haunch-plan'],['S-02','column-stiffener-plan'],['S-03','cap-angle-section'],['S-03','cap-angle-plan']];
-  for(const [n,view] of views)expect(slanted(viewEntities(n,view),'S-EXISTING'),`${n} ${view}`).toEqual([]);
+  const views=['typical-section','elevation','bracket-connection','tapered-haunch-elevation','tapered-haunch-plan','column-stiffener-plan','cap-angle-section','cap-angle-plan'];
+  for(const view of views)expect(slanted(viewEntities(view),'S-EXISTING'),view).toEqual([]);
   // The tapered haunch itself is still drawn tapered: its sloping bottom flange is new steel.
-  expect(slanted(viewEntities('S-02','tapered-haunch-elevation'),'S-STEEL-NEW').length).toBeGreaterThan(0);
+  expect(slanted(viewEntities('tapered-haunch-elevation'),'S-STEEL-NEW').length).toBeGreaterThan(0);
  },900000);
 
  it('draws the columns of the typical section in the DXF as parallel flange lines 14.0 in apart',()=>{
-  const e=viewEntities('S-01','typical-section'),xs=e.flatMap(v=>v.type==='line'?[v.a,v.b]:v.type==='poly'?v.points:v.type==='circle'?[v.center]:[]);
+  const e=viewEntities('typical-section'),xs=e.flatMap(v=>v.type==='line'?[v.a,v.b]:v.type==='poly'?v.points:v.type==='circle'?[v.center]:[]);
   const box={x0:Math.min(...xs.map(p=>p[0])),x1:Math.max(...xs.map(p=>p[0])),y0:Math.min(...xs.map(p=>p[1])),y1:Math.max(...xs.map(p=>p[1]))};
   // The DXF as written: LINE and LWPOLYLINE entities on the existing-steel layer inside the section.
   const dxf=sheetsDxf([{svg:sheet('S-01')}],'US').split('\n').map(v=>v.trim()),lines:[Pt,Pt][]=[];
@@ -117,22 +119,22 @@ describe('break lines',()=>{
  },900000);
  it('breaks no member drawn to its full length and no short dimensioned piece',()=>{
   // The girder end in the haunch elevation is drawn full depth; the cap tie plates whole.
-  expect(breaks(viewEntities('S-02','tapered-haunch-elevation'))).toEqual([]);
+  expect(breaks(viewEntities('tapered-haunch-elevation'))).toEqual([]);
   // The cap tieback section: the cap channel and girder web (cut away) and the column above and below, not the tie plate.
-  expect(breaks(viewEntities('S-03','cap-angle-section')).length).toBe(4);
+  expect(breaks(viewEntities('cap-angle-section')).length).toBe(4);
   // The shared-column plan: the two girder ends only.
-  expect(breaks(viewEntities('S-03','cap-angle-plan')).length).toBe(2);
+  expect(breaks(viewEntities('cap-angle-plan')).length).toBe(2);
   // The sliding bolt section: one break line each side across the flange, bearing plate and seat.
-  expect(breaks(viewEntities('S-02','sliding-bolt')).length).toBe(2);
+  expect(breaks(viewEntities('sliding-bolt')).length).toBe(2);
  },900000);
  it('breaks each elevation column once at its foot, and the shortened crane span once',()=>{
-  const supports=s.input.spans.length+1,el=breaks(viewEntities('S-01','elevation'));
+  const supports=s.input.spans.length+1,el=breaks(viewEntities('elevation'));
   expect(el.length).toBe(supports);
   // One row of breaks, at the foot of the column stubs below the girder.
   expect(Math.max(...el.map(p=>p[1]))-Math.min(...el.map(p=>p[1]))).toBeLessThan(1e-6);
   // The typical section: the columns above and below the band (4), one break line across the span, and the break
   // symbols on the two dimension lines that cross it.
-  expect(breaks(viewEntities('S-01','typical-section')).length).toBe(7);
+  expect(breaks(viewEntities('typical-section')).length).toBe(7);
  },900000);
  it('draws no break lines in the SK sketches',()=>{
   for(const d of engineeringSketches(s))expect(d.entities.filter(e=>e.type==='polyline'&&!e.closed&&zigzag(e.points)).length,d.number).toBe(0);

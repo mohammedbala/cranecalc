@@ -40,7 +40,7 @@ export const runwayConfigSchema=z.object({
  tie:z.enum(tieKinds),
  /** Supporting column W shape; blank: chosen for the crane. */
  columnShape:z.string().max(30).optional(),
- /** Column face to the girder web centerline, in; blank: 20 in. */
+ /** Column face to the girder web centerline, in; blank: 20 in, or farther (to 30 in) where the tie needs the flexible length. */
  reach:z.number().finite().min(12).max(48).optional(),
 });
 export type RunwayConfig=z.infer<typeof runwayConfigSchema>;

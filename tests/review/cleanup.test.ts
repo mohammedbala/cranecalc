@@ -157,7 +157,8 @@ describe('references (P5)',()=>{
   expect(register.match(/AIST Technical Report 13/g)).toHaveLength(1);expect(register).toContain('AIST Technical Report 13 (2021): §1.4');
   expect(body).toContain('Basis: AIST Technical Report 13 (2021);');
   for(const banned of ['UNVERIFIED','text not read','not re-read','transcribed','committee draft','ballot draft','February 24, 2020','2021 printing','Published edition'])expect(text,banned).not.toContain(banned);
-  const cover=sheets[0].replace(/<[^>]+>/g,' ');
+  // The cover and the sheets continuing its notes (S-00A), its words in order across wrapped table cells.
+  const cover=sheets.filter(v=>/data-view="cover(-continued)?"/.test(v)).join(' ').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
   expect(cover).toContain('AIST TECHNICAL REPORT 13 (2021)');expect(cover).not.toMatch(/FEBRUARY 24|COPY DATED/);
  });
 });
@@ -183,7 +184,7 @@ describe('revision identity and consistency (m1–m9)',()=>{
   expect(body).toMatch(/Existing column, preheat for field welds Preheat and interpass temperature 150 °F minimum \(project requirement on the drawings\), above the AWS D1\.1(\/D1\.1M)?:2020 Table 5\.8 prequalified minimum of 50 °F[^]*?150 °F/);
  });
  it('uses AISC 360-16 bolt groups and the Table J3.2 F_nt (m7)',()=>{
-  const cover=sheets[0];
+  const cover=sheets.filter(v=>/data-view="cover(-continued)?"/.test(v)).join(' ');
   expect(cover).toContain('ASTM F3125 GR. A325 (GROUP A)');expect(cover).not.toContain('GROUP 120');
   expect(cover).not.toContain('A513');expect(cover).toContain('ASTM A1085 STEEL TUBE');
   expect(body).toContain('ASTM F3125 Gr. A325 (Group A)');

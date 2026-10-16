@@ -55,15 +55,27 @@ export function plateInches(mm: number, units: ProjectInput['units']) {
   return value.startsWith('0\'-') ? value.slice(3).replace(/^0 (?=\d+\/)/, '') : value;
 }
 
+// Standard printed scales, largest first: inches to the foot (US) and ratio denominators (SI).
+const usScales:[number,string][]=[[12,'12'],[6,'6'],[3,'3'],[1.5,'1 1/2'],[1,'1'],[.75,'3/4'],[.5,'1/2'],[.375,'3/8'],[.25,'1/4'],[.1875,'3/16'],[.125,'1/8'],[.09375,'3/32'],[.0625,'1/16'],[.03125,'1/32'],[.015625,'1/64']];
+const siScales=[1,2,5,10,20,25,50,100,200,250,500,1000,2000];
 /** Largest conventional printed scale that fits; SVG units are PDF points. */
 export function drawingScale(maxPointsPerMm:number,units:ProjectInput['units']){
- const us:[number,string][]=[[12,'12'],[6,'6'],[3,'3'],[1.5,'1 1/2'],[1,'1'],[.75,'3/4'],[.5,'1/2'],[.375,'3/8'],[.25,'1/4'],[.1875,'3/16'],[.125,'1/8'],[.09375,'3/32'],[.0625,'1/16'],[.03125,'1/32'],[.015625,'1/64']];
  if(units==='US'){
-  const [inches,label]=us.find(([v])=>v*72/304.8<=maxPointsPerMm+1e-10)??us.at(-1)!;
+  const [inches,label]=usScales.find(([v])=>v*72/304.8<=maxPointsPerMm+1e-10)??usScales.at(-1)!;
   return {pointsPerMm:inches*72/304.8,label:`SCALE: ${label}" = 1'-0"`};
  }
- const denominator=[1,2,5,10,20,25,50,100,200,250,500,1000,2000].find(v=>72/(25.4*v)<=maxPointsPerMm+1e-10)??2000;
+ const denominator=siScales.find(v=>72/(25.4*v)<=maxPointsPerMm+1e-10)??2000;
  return {pointsPerMm:72/(25.4*denominator),label:`SCALE: 1:${denominator}`};
+}
+/**
+ * Ratio of the next larger standard scale to the scale a label of drawingScale names ("SCALE: 1 1/2" = 1'-0"" to 3" is
+ * 2), or undefined for the largest scale or a label that names none.
+ */
+export function nextScaleRatio(label:string){
+ const us=/^SCALE: ([\d /]+)" = 1'-0"/.exec(label),si=/^SCALE: 1:(\d+)\b/.exec(label);
+ if(us){const i=usScales.findIndex(([,v])=>v===us[1]);return i>0?usScales[i-1][0]/usScales[i][0]:undefined;}
+ if(si){const i=siScales.indexOf(Number(si[1]));return i>0?siScales[i]/siScales[i-1]:undefined;}
+ return undefined;
 }
 /**
  * Weld filler by its AWS classification from the entered electrode strength: E70XX in US units, and in SI

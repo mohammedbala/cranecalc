@@ -2,7 +2,7 @@ import {supportColumn,runwayElevations} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength,referenceLength} from './drawingFormat';
-import {refDim,dimText,sheetDrawingScale,textWidth,wrapToWidth,labelCaps,line,rect,text,circle,n,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,capChannelSection,type XY} from './sheetGraphics';
+import {refDim,dimText,sheetDrawingScale,textWidth,wrapToWidth,labelCaps,line,rect,text,circle,n,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,sectionCut,bearingBoltsTitle,capChannelSection,lettering,type XY} from './sheetGraphics';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {bracketForceBlocks} from './bracketForceTable';
@@ -21,8 +21,11 @@ export const haunchPlanTitle=detailTitles.haunchPlan;
 export const haunchSectionTitle=detailTitles.haunchSection;
 type Item={at:XY;labels:string[];weld?:string;both?:boolean;field?:boolean;groove?:boolean;tail?:string;allAround?:boolean};
 /** Callouts in a column at x, ordered by target height (or as given) between top and bottom: plain, fillet or CJP groove. */
+const itemHeight=(v:Item)=>(v.weld||v.groove?17:0)+v.labels.length*lettering.leading;
+/** Height of a callout column at the least spacing. */
+const columnHeight=(items:Item[])=>items.reduce((a,v)=>a+itemHeight(v),0)+8*Math.max(0,items.length-1);
 function calloutColumn(items:Item[],x:number,top:number,bottom:number,sort=true){
- const sorted=sort?[...items].sort((a,b)=>a.at[1]-b.at[1]):items,height=(v:Item)=>(v.weld||v.groove?17:0)+v.labels.length*11;
+ const sorted=sort?[...items].sort((a,b)=>a.at[1]-b.at[1]):items,height=itemHeight;
  const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
  let y=top,svg='';
  for(const v of sorted){
@@ -40,9 +43,9 @@ function dimVFrom(y1:number,x1:number,y2:number,x2:number,x:number,label:string,
  return line([x1,y1],[ext(x1),y1])+line([x2,y2],[ext(x2),y2])+line([x,lo],[x,fits?far:far+w+6])+[y1,y2].map(y=>line([x-3,y+2.5],[x+3,y-2.5])).join('')+dimText(x-6,fits?at:far+4+w/2,label,9,'middle',400,-90);
 }
 /** Rows of a label no wider than `width`, never breaking a dimension (1'-0 9/16", 12.7 mm). */
-const wrapRows=(v:string,width:number,size=8.5)=>wrapToWidth(labelCaps(v).replace(/(\d) (\d+\/\d+|mm\b|m\b)/g,'$1\u00a0$2'),width,size).map(r=>r.replaceAll('\u00a0',' '));
+const wrapRows=(v:string,width:number,size:number=lettering.text)=>wrapToWidth(labelCaps(v).replace(/(\d) (\d+\/\d+|mm\b|m\b)/g,'$1\u00a0$2'),width,size).map(r=>r.replaceAll('\u00a0',' '));
 /** Callout lines no wider than a weld reference line, so a leader leaving its far end clears the text. */
-const wrapped=(v:string)=>wrapRows(v,90,8);
+const wrapped=(v:string)=>wrapRows(v,90,lettering.text);
 const poly=(pts:XY[],cls='runway-line')=>`<path class="${cls}" d="M${pts.map(q=>`${n(q[0])},${n(q[1])}`).join('L')}Z"/>`;
 
 /** Built-up tapered I haunch: elevation along the runway, plan of the top flange and section at the stiffeners, with notes. */
@@ -208,8 +211,6 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=rect(X(-bt/2),Y(0),bt*k,tt*k,'runway-line')+rect(X(-tw/2),Y(-tt),tw*k,(zb+tt)*-k,'runway-line')+rect(X(-bb/2),Y(zb),bb*k,tbv*k,'runway-line');
   for(const sx of [-1,1]){const x0=sx*tw/2,x1=sx*(tw/2+st.width),xt=sx*(tw/2+st.top),cl=st.clip;
    svg+=poly([[X(x0+sx*cl),Y(-tt)],[X(xt),Y(-tt)],[X(x1),Y(zb)],[X(x0+sx*cl),Y(zb)],[X(x0),Y(zb+cl)],[X(x0),Y(-tt-cl)]]);}
-  svg+=dimH(X(-bt/2),X(bt/2),Y(0)-2,Y(ext)-16,dim(bt));
-  svg+=dimH(X(-bb/2),X(bb/2),Y(-hr)+2,Y(-hr-ext)+16,dim(bb));
   // The depth at the cut follows from the dimensioned taper: a reference dimension to the nearest 1/4 in.
   svg+=refDim(dimV(Y(0),Y(zu),X(-wide/2)-4,X(-wide/2)-18,referenceLength(h,p.units)));
   const items:Item[]=[
@@ -221,7 +222,13 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[X(bb*.4),Y(zb+tbv/2)],labels:[botLabel,`SLOPE ${deg}°; ITS UNDERSIDE BEYOND`]},
    ...(cs?[{at:[X(-(cs.g.tw/2+cs.g.width*.8)),Y(cs.g.levels[1].z)+cs.g.t*k/2] as XY,labels:['COL. STIFFENERS BEYOND',`(HIDDEN); SEE ${detailRef(columnStiffenerTitle)}`]}]:[])
   ];
-  svg+=calloutColumn(items,X(wide/2)+40,Y(0)-14,Y(-hr)+16);
+  // The callouts span at least the section; a column taller than it stands centered on its targets, and the flange widths
+  // are dimensioned beyond its ends, so no leader crosses them.
+  const tall=columnHeight(items),mid=(Math.min(...items.map(v=>v.at[1]))+Math.max(...items.map(v=>v.at[1])))/2;
+  const top=Math.min(Y(0)-14,mid-tall/2),bottom=Math.max(Y(-hr)+16,top+tall);
+  svg+=dimH(X(-bt/2),X(bt/2),Y(0)-2,Math.min(Y(ext)-16,top-14),dim(bt));
+  svg+=dimH(X(-bb/2),X(bb/2),Y(-hr)+2,Math.max(Y(-hr-ext)+16,bottom+lettering.text+8),dim(bb));
+  svg+=calloutColumn(items,X(wide/2)+40,top,bottom);
   return {svg:svg+'</g>',scale:scale.label};
  }});
  const ties=topFlangeRestraint(p);

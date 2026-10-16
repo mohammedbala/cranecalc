@@ -1,3 +1,5 @@
+// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
+import {dcText} from '../engine/checkPresentation';
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
@@ -273,7 +275,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  }});
  // 5: Design data and notes.
  {
-  const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${v.utilization.toFixed(2)}`:'-';};
+  const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${dcText(v.utilization,2)}`:'-';};
   const act=r?.plate.action,anchorAct=r?.anchors.action;
   const rows=[
    ['COLUMN',`${name}, ${dim(H)} BASE TO TOP, SEAT ${dim(seat)}`],

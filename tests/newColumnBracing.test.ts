@@ -121,7 +121,8 @@ describe('rod X-bracing between new freestanding columns',()=>{
   for(const [x,z] of r.outlines.upper)expect(x<cope||Math.abs(z)>g.strut.d/2).toBe(true);
  });
  it('draws the bracing on S-01 and details it, with its design data and the separation',()=>{
-  const set=drawingSheetSet(s),s01=set[1].svg,all=set.map(v=>texts(v.svg)).join(' ');
+  // S-01 by number: the cover's notes may continue on S-00A ahead of it.
+  const set=drawingSheetSet(s),s01=set.find(v=>v.number==='S-01')!.svg,all=set.map(v=>texts(v.svg)).join(' ');
   expect(s01).toContain('data-elevation-bracing="true"');expect(s01).toContain('data-bracing="plan"');
   expect(texts(s01)).toContain('3/4" DIA. ROD X-BRACING, GRIDS 2-3, BOTH RUNWAYS');
   expect(texts(s01)).toContain('W8X24 STRUT ON COLUMN LINE, ALL SPANS');
@@ -133,12 +134,13 @@ describe('rod X-bracing between new freestanding columns',()=>{
   for(const title of ['BRACED BAY / ELEVATION','BRACE AND STRUT AT WORK POINT','BRACE AT COLUMN BASE','STRUT AND GUSSETS AT WORK POINT / PLAN'])expect(refs.get(title)).toMatch(new RegExp(`^\\d+/${sheet.number}$`));
   expect(all).not.toContain('NOT IN SET');
   // The isometric draws the rods and strut as new steel.
-  expect(set[1].svg.match(/data-view="isometric"[\s\S]*?<\/g>/)![0].length).toBeGreaterThan(0);
+  expect(s01.match(/data-view="isometric"[\s\S]*?<\/g>/)![0].length).toBeGreaterThan(0);
   expect(compactReport(s,'')).toMatch(/5\.\d+ Bracing connections, strut and seismic along the runway/);
  });
  it('shows the surveyed existing building on S-01 with the clearances dimensioned and noted',()=>{
   for(const units of ['US','SI'] as const){
-   const set=drawingSheetSet({...s,input:{...s.input,units}}),s01=set[1].svg,cover=texts(set[0].svg),t=texts(s01);
+   // The cover's notes with their continuation on S-00A.
+   const set=drawingSheetSet({...s,input:{...s.input,units}}),s01=set.find(v=>v.number==='S-01')!.svg,cover=set.filter(v=>v.number.startsWith('S-00')).map(v=>texts(v.svg)).join(' '),t=texts(s01);
    for(const view of ['data-existing-building="plan"','data-existing-line="A"','data-existing-line="B"','data-existing-clearance="plan"','data-existing-column="A"','data-existing-column="B"','data-view="existing-clearance-plan"'])expect(s01,`${units} ${view}`).toContain(view);
    expect(detailReferences(set).get('EXISTING BUILDING CLEARANCE / PLAN')).toBe('5/S-01');
    expect(t).toContain('(E) COL. LINE');expect(t).toContain('(E) W12X40 COL.');expect(t).toContain('SEE 5/S-01');
@@ -152,7 +154,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
   }
   // Without the survey the arrangement is as before.
   const q=newColumnDemonstrationProject();delete q.existingColumn!.adjacent;
-  const plain=drawingSheetSet({...s,input:q})[1].svg;
+  const plain=drawingSheetSet({...s,input:q}).find(v=>v.number==='S-01')!.svg;
   expect(plain).not.toContain('data-existing-building');expect(texts(plain)).toContain('THE EXISTING BUILDING FRAMING IS NOT SHOWN');
  });
 });

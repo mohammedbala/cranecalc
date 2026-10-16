@@ -1,3 +1,5 @@
+// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
+import {dcText} from '../engine/checkPresentation';
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
@@ -12,9 +14,10 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapTitles} from './columnCapSheet';
 import {runwayElevations} from '../engine/drawingData';
 import {drawingLength,holeInches,plateInches,dimensionLength} from './drawingFormat';
-import {refDim,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,type XY} from './sheetGraphics';
+import {refDim,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import type {DetailTopic,DetailView} from './detailSheet';
+import {AnnotationSpace} from './annotationSpace';
 
 const inch=25.4;
 type Pt=[number,number];
@@ -328,7 +331,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  // Drawing order on the sheet: the braced bay and the plans over two rows each, then the connections and the crossing.
  {const order=[detailTitles.bracedBay,detailTitles.strutPlan,detailTitles.braceTop,detailTitles.braceBase,rodCrossingTitle] as string[];views.sort((x,y)=>order.indexOf(x.title)-order.indexOf(y.title));}
 
- const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${v.utilization.toFixed(2)}`:'-';}).join(' / ');
+ const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${dcText(v.utilization,2)}`:'-';}).join(' / ');
  const z=r.seismic,sep=r.separation,lb=s.longitudinalBracing!;
  const rows=[
   ['BRACING',`${rodName} X, TENSION ONLY, GRIDS ${spanGrids}, BOTH RUNWAYS; W.P. ${dim(L.height)} ABOVE T/BASE PL${el?` (${capG?`${dim(capG.drop)} BELOW THE CAP TOP, EL. ${dim(datum+columnBaseElevation(base)+L.height)}`:`BRG. SEAT ${elev(L.height)}`})`:''}`],
@@ -378,7 +381,12 @@ export function bracingOnElevation(s:CalculationSnapshot,o:{EX:(x:number)=>numbe
  }
  // The callout in the first braced span, below the girder marks and between the rods.
  const i=L.spans[0],cx=(EX(o.supports[i-1])+EX(o.supports[i]))/2,labels=[`${plateInches(p.longitudinalBracing!.rod.diameter,p.units)} DIA. ROD X-BRACING, GRIDS ${L.spans.map(v=>`${v}-${v+1}`).join(', ')}, BOTH RUNWAYS`,`${g.strut.shape} STRUT ON COLUMN LINE, ALL SPANS; SEE ${detailRef(detailTitles.bracedBay)}`];
- const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),7.5))),rodX=EX(o.supports[i]-g.top.pin[0]*mm-(end-6-EY(wp+g.top.pin[1]*mm))/o.ek/slope);
- svg+=multiLeader([[rodX,end-6]],[cx-w/2,end-14],labels,7.5);
+ const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),lettering.text))),rodX=EX(o.supports[i]-g.top.pin[0]*mm-(end-6-EY(wp+g.top.pin[1]*mm))/o.ek/slope);
+ // Centered in the span where that reads clear of the rods, columns and strut, else beside the rod it points to, clear of
+ // its own leader.
+ const drawn=new AnnotationSpace(svg),at:XY=[rodX,end-6];
+ // An unbraced span beside it, clear of the rods, is the last resort.
+ const spans=o.supports.slice(1).map((x,k)=>k+1).filter(k=>!L.spans.includes(k)).map(k=>(EX(o.supports[k-1])+EX(o.supports[k]))/2-w/2);
+ svg+=drawn.pick([end-14,end-20,end-26,end-32,end-46].flatMap(y=>[cx-w/2,rodX-14-w,rodX+14,...spans].map(x=>multiLeader([at],[x,y],labels,lettering.text))));
  return svg+'</g>';
 }

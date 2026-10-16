@@ -2,6 +2,7 @@ import type {CheckResult,Crane,ProjectInput} from './types';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 import {activeEndStop} from './endStopInputs';
+import {dependentChecks,outside} from './checkIntegrity';
 
 /**
  * Crane input consistency (statics of the supplier data, TR-13 §1.5.6.1 crane data) and bumper selection (TR-13
@@ -60,11 +61,23 @@ export const craneInputWarnings=(checks:CheckResult[])=>checks.filter(c=>c.group
 const stopStrengthIds=['end-stop-bolt-tension','end-stop-bolt-shear','end-stop-slip','end-stop-bearing-base','end-stop-bearing-flange','end-stop-flexure','end-stop-shear','end-stop-face','end-stop-face-outstand','end-stop-weld','end-stop-stiffener-weld','end-stop-web'];
 const pryingIds=['end-stop-base-prying','end-stop-flange-prying'];
 /**
+ * The end-stop check that leaves the stop without a design strength: a strength check with no capacity (capacity ≤ 0,
+ * or a ratio that is not finite or above 1000), or an edge or fit rule that puts the stop's holes outside its plies
+ * (its bearing and prying results are then not valid). Undefined when every stop check has a finite ratio.
+ */
+export function stopWithoutStrength(checks:CheckResult[]){
+ const strength=checks.filter(c=>stopStrengthIds.includes(c.id)||pryingIds.includes(c.id));
+ const none=strength.find(c=>c.noCapacity||(c.capacity!==undefined&&!(c.capacity>0))||(c.utilization!==undefined&&(!Number.isFinite(c.utilization)||c.utilization>1e3)));
+ return none??checks.find(c=>c.id.startsWith('end-stop-')&&dependentChecks[c.id]&&outside(c));
+}
+/**
  * Unfactored bumper force the girder-mounted stop can take: the design bumper force over the largest D/C of the
- * stop strength checks (no-prying thickness scales with the square root of the force, so its D/C is squared).
+ * stop strength checks (no-prying thickness scales with the square root of the force, so its D/C is squared). Zero when
+ * a stop check leaves the stop without a design strength (stopWithoutStrength).
  */
 export function stopDesignStrength(p:ProjectInput,checks:CheckResult[],bumperForce:number){
  if(!activeEndStop(p))return undefined;
+ if(stopWithoutStrength(checks))return 0;
  const u=Math.max(0,...checks.filter(c=>stopStrengthIds.includes(c.id)).map(c=>c.utilization??0),...checks.filter(c=>pryingIds.includes(c.id)).map(c=>(c.utilization??0)**2));
  return u>0?bumperForce/u:undefined;
 }
@@ -89,7 +102,10 @@ export function bumperSelectionChecks(p:ProjectInput,checks:CheckResult[]):Check
   const accel=(x:number)=>u==='US'?`${+(x/.3048).toFixed(2)} ft/s²`:`${+x.toFixed(3)} m/s²`,energy=(x:number)=>u==='US'?`${(x/1355.817948).toFixed(3)} kip-ft`:`${(x/1000).toFixed(3)} kJ`;
   out.push(ratioCheck(`${prefix}-bumper-decel`,bumperGroup,label+'Bumper · deceleration at 50% speed',a50*1000,bumperDecelerationLimit*1000,'acceleration','a=\\frac{(0.5v)^2}{2\\eta s}\\le16\\,\\mathrm{ft/s^2}',`Peak deceleration at 50% of the rated speed ${accel(a50)} against ${accel(bumperDecelerationLimit)} (TR-13 commentary to §3.6.3). ${basis}`,refs));
   out.push(ratioCheck(`${prefix}-bumper-energy`,bumperGroup,label+'Bumper · peak force absorbing the full energy at 100% speed',F,d.bumperForce,'force','F=\\frac{W_Ev^2}{2g\\eta s}\\le C_{bs}',`Energy at 100% speed W_Ev²/2g = ${energy(E)} (W_E = ${f(WE)}), absorbed over the ${format(d.bumperStroke!,'length',u,3)} stroke at efficiency ${eta}: peak force ${f(F)} against the supplier bumper force ${f(d.bumperForce)}, for which the runway, end stops and their load path are designed. ${basis}`,refs));
-  const girder=!d.bumperBypassesGirder,strength=girder?stopDesignStrength(p,checks,d.bumperForce):undefined;
+  const girder=!d.bumperBypassesGirder,strength=girder?stopDesignStrength(p,checks,d.bumperForce):undefined,none=strength===0?stopWithoutStrength(checks):undefined;
+  // A stop without a design strength: this item restates the end-stop checks, it has no ratio of its own.
+  if(none){out.push({id:`${prefix}-bumper-stop`,group:bumperGroup,title:label+'Bumper · peak force within the stop design strength',status:'fail',demand:F,quantity:'force',equation:'F\\le\\phi R_n\\ \\ \\text{(end stop)}',
+   note:`Restates the end-stop checks: ${none.title} (${none.id}) ${dependentChecks[none.id]?'puts the stop bolts outside the plies':'has no capacity'}, so the girder-mounted stop has no design strength to compare the peak bumper force ${f(F)} with. Resolve the end stop; this item closes with it.`,referenceIds:refs});return;}
   out.push(ratioCheck(`${prefix}-bumper-stop`,bumperGroup,label+'Bumper · peak force within the stop design strength',F,strength??d.bumperForce,'force','F\\le\\phi R_n\\ \\ \\text{(end stop)}',strength?`Peak bumper force ${f(F)} against the girder-mounted stop design strength ${f(strength)}: the ${f(d.bumperForce)} design bumper force over the largest strength D/C of the stop checks (a no-prying thickness ratio is squared to a strength ratio).`:`${girder?'No girder-mounted stop is designed in this calculation':'Building-mounted stop'}: its design strength is taken as the bumper force it is designed for, ${f(d.bumperForce)}; confirm with the stop design.`,refs));
  });
  return out;

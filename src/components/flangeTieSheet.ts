@@ -1,3 +1,5 @@
+// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
+import {dcText} from '../engine/checkPresentation';
 import {supportColumn} from '../engine/drawingData';
 import type {CalculationSnapshot} from '../engine/types';
 import {flangeTieGeometry,tieRelease} from '../engine/tieGeometry';
@@ -8,9 +10,10 @@ import {boltProperties} from '../engine/connectionStrength';
 import {format} from '../engine/units';
 import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
 import {capChannelProfile} from '../engine/channelProfile';
-import {dimText,sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,filletLeader,multiLeader,detailRef,detailTitles,columnReference,breakLine,textWidth,labelCaps,n,sectionCut,capChannelSection,type XY} from './sheetGraphics';
+import {dimText,sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,filletLeader,multiLeader,detailRef,detailTitles,columnReference,breakLine,textWidth,labelCaps,n,sectionCut,capChannelSection,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,paragraph,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type ViewRender} from './detailSheet';
+import {AnnotationSpace} from './annotationSpace';
 
 type Units=CalculationSnapshot['input']['units'];
 /** SI drawing values to the millimeter, or the half millimeter under 25 mm: no soft-converted decimals. */
@@ -64,15 +67,14 @@ const columnTop=(items:Callout[])=>{const ys=items.map(v=>v.at[1]);return (Math.
  * outer extension line of an end segment, on the dimension line carried out to it, or under the line at an
  * inner segment.
  */
-function chainH(xs:number[],fromY:number,y:number,labels:string[]){
- let svg=line([xs[0],y],[xs[xs.length-1],y]);
- for(const x of xs)svg+=line([x,fromY],[x,y+5])+line([x-2.5,y+3],[x+2.5,y-3]);
+function chainH(xs:number[],fromY:number,y:number,labels:string[],drawn=new AnnotationSpace()){
+ let svg=drawn.add(line([xs[0],y],[xs[xs.length-1],y]));
+ for(const x of xs)svg+=drawn.add(line([x,fromY],[x,y+5])+line([x-2.5,y+3],[x+2.5,y-3]));
+ const size=lettering.text;
  labels.forEach((v,i)=>{
-  const a=xs[i],b=xs[i+1],w=textWidth(v,9);
-  if(w+6<=b-a)svg+=dimText((a+b)/2,y-5,v,9,'middle');
-  else if(i===0)svg+=line([a-w-6,y],[a,y])+dimText(a-4,y-5,v,9,'end');
-  else if(i===labels.length-1)svg+=line([b,y],[b+w+6,y])+dimText(b+4,y-5,v,9,'start');
-  else svg+=dimText((a+b)/2,y+12,v,9,'middle');
+  const a=xs[i],b=xs[i+1],w=textWidth(v,size),left=line([a-w-6,y],[a,y])+dimText(a-4,y-5,v,size,'end'),right=line([b,y],[b+w+6,y])+dimText(b+4,y-5,v,size,'start'),under=dimText((a+b)/2,y+size+3,v,size,'middle');
+  // Between its extension lines where it fits; else the first place that reads clear of the drawn content.
+  svg+=w+6<=b-a?drawn.add(dimText((a+b)/2,y-5,v,size,'middle')):drawn.pick(i===0?[left,under,right]:i===labels.length-1?[right,under,left]:[under,left,right]);
  });
  return svg;
 }
@@ -98,8 +100,11 @@ function tieColumn(s:CalculationSnapshot){
 export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleCut=false):ViewRender{
  const p=s.input,u=p.units,g=flangeTieGeometry(p)!;const b=p.section,t=p.details!.brace,a=g.attachment,c=t.connection,rel=tieRelease(p),col=tieColumn(s),single=g.plies===1;
  // x is the left edge of the view: the girder half-width, the tie and the column flange ahead of a callout column.
- const scale=drawingScale(Math.min(.38,380/(g.face+col.flange+b.bf/2)),u),k=scale.pointsPerMm,xc=x+b.bf/2*k,X=(z:number)=>xc+z*k,Y=(v:number)=>y+v*k;
- const drop=g.topDrop,dim=(v:number)=>tieDim(v,u),sz=(v:number)=>tieSize(v,u),hole=boltProperties(c.grade,c.diameter).hole,hg=g.columnGusset;
+ const dim=(v:number)=>tieDim(v,u),sz=(v:number)=>tieSize(v,u),hole=boltProperties(c.grade,c.diameter).hole,hg=g.columnGusset;
+ // Large enough that the bolt gauge reads in the free length of the bars between the gussets (up to 3" = 1'-0").
+ const free=Math.max(1,g.columnGussetStart-g.gussetEnd),legible=(textWidth(sz(c.gauge),lettering.text)+24)/free;
+ const scale=drawingScale(Math.max(Math.min(.38,380/(g.face+col.flange+b.bf/2)),Math.min(.75,2*legible)),u),k=scale.pointsPerMm,xc=x+b.bf/2*k,X=(z:number)=>xc+z*k,Y=(v:number)=>y+v*k;
+ const drop=g.topDrop;
  const barTop=drop-t.width/2,barBottom=drop+t.width/2,cap=b.kind==='cap',capDrop=cap?b.capDepth-b.capTw-b.tf:0,gap=3;
  // A single flexible plate is seen on its near face, over the gussets; paired bars show the near bar.
  let svg=`<g data-view="flange-saddle-section">`;
@@ -140,12 +145,16 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
  const chain=Math.max(cy1+30,webEnd+16),girderEnd=groupChain(g.start,c,sz),columnEnd=groupChain(g.columnGussetStart,c,sz,rel?.endEdge??c.edge);
  // The column-end chain drops a tier where its outer value would crowd the girder-end closing value.
  const crowded=X(g.columnGussetStart)-X(g.gussetEnd)<textWidth(girderEnd.labels[girderEnd.labels.length-1],9)+textWidth(columnEnd.labels[0],9)+28,columnChain=crowded?chain+22:chain;
- svg+=chainH(girderEnd.xs.map(X),gy1+gap,chain,girderEnd.labels)+chainH(columnEnd.xs.map(X),cy1+gap,columnChain,columnEnd.labels);
  const overall=columnChain+26;
  svg+=line([X(g.start),gy1+gap],[X(g.start),overall+5])+line([X(g.barEnd),cy1+gap],[X(g.barEnd),overall+5])+dimH(X(g.start),X(g.barEnd),overall+5,overall,dim(t.length));
+ const drawn=new AnnotationSpace(svg);
+ svg+=chainH(girderEnd.xs.map(X),gy1+gap,chain,girderEnd.labels,drawn)+chainH(columnEnd.xs.map(X),cy1+gap,columnChain,columnEnd.labels,drawn);
  // Vertical bolt gauge in the free length of the bars; the value reads across the bar beside its dimension line.
  {const rowEnd=g.start+c.edge+(c.rows-1)*c.pitch,w=textWidth(sz(c.gauge),9),gx=Math.max(X(g.gussetEnd)+12,(X(g.gussetEnd)+X(g.columnGussetStart)-w)/2-2),ya=Y(drop-c.gauge/2),yb=Y(drop+c.gauge/2),fx=X(rowEnd)+hole*k/2+2;
-  svg+=line([fx,ya],[gx+5,ya])+line([fx,yb],[gx+5,yb])+line([gx,ya],[gx,yb])+[ya,yb].map(v=>line([gx-3,v+2.5],[gx+3,v-2.5])).join('')+dimText(gx+4,(ya+yb)/2+3,sz(c.gauge),9);}
+  // The value reads right of its line, else where it reads clear: left of it, or along the line beyond either bar.
+  svg+=drawn.add(line([fx,ya],[gx+5,ya])+line([fx,yb],[gx+5,yb])+line([gx,ya],[gx,yb])+[ya,yb].map(v=>line([gx-3,v+2.5],[gx+3,v-2.5])).join(''));
+  const label=sz(c.gauge),mid=(ya+yb)/2,size=lettering.text;
+  svg+=drawn.pick([dimText(gx+4,mid+3,label,size),dimText(gx-4,mid+3,label,size,'end'),line([gx,ya-w-6],[gx,ya])+dimText(gx-6,ya-4-w/2,label,size,'middle',400,-90),line([gx,yb],[gx,yb+w+6])+dimText(gx-6,yb+4+w/2,label,size,'middle',400,-90)]);}
  // Capped girder: the gusset end clears the turned-down channel flange (dimensioned where the gusset rises above it).
  const capItem:Callout[]=[];
  if(cap&&g.capClear!==undefined&&a.saddleThickness<capDrop){
@@ -264,8 +273,10 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  svg+=line([X(-B/2),Y(ts)+3],[X(-B/2),dimY+5])+line([X(B/2),Y(ts)+3],[X(B/2),dimY+5])+dimH(X(-B/2),X(B/2),dimY+5,dimY,dim(B));
  const endWeld:Weld={size:sz(w),length:weldLength(g.endWeldLength,u),both:false},legAt=(side:number):XY=>[X(side*(B/2+w/3)),Y(w/3)];
  const lx=X(Math.min(-half,nutEnd,headFace-dir*head))-150,rx=X(Math.max(half,nutEnd,headFace-dir*head))+40;
- // One symbol for each end fillet: the left end, and the right end in the callout column.
- svg+=weldLeader([legAt(-1)],[lx,Y(topFace)+6],endWeld,['SADDLE TO FLANGE, END 1','TRANSVERSE END FILLET']);
+ // One symbol for each end fillet: the left end, and the right end in the callout column. The left callout stands where
+ // its leader clears its own labels and the section: lower and farther out where the section draws large.
+ const end1=['SADDLE TO FLANGE, END 1','TRANSVERSE END FILLET'],drawn=new AnnotationSpace(svg);
+ svg+=drawn.pick([0,-30,-60].flatMap(dx=>[6,-8,20].map(dy=>weldLeader([legAt(-1)],[lx+dx,Y(topFace)+dy],endWeld,end1))));
  const items:Callout[]=[
   {at:legAt(1),weld:endWeld,labels:['SADDLE TO FLANGE, END 2','TRANSVERSE END FILLET']},
   {at:[X(B/2)-6,Y(ts*.5)],labels:[`SADDLE PL ${sz(ts)} X ${sz(B)} X ${sz(g.rootLength)}`]},
@@ -294,7 +305,7 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const rated=checks.filter(v=>v.utilization!==undefined&&v.quantity!=='length'&&v.id!=='tie-slenderness'),most=(list:typeof checks)=>Math.max(0,...list.map(v=>v.utilization??0));
  const strength=most(rated.filter(v=>!v.id.includes('fatigue'))),fatigue=most(rated.filter(v=>v.id.includes('fatigue')));
  const minimumWeld=checks.some(v=>v.id==='flange-tie-weld-minimum'&&v.status==='pass'&&(v.utilization??0)>=1-1e-9);
- const summary=rated.length?` (MAX. D/C ${strength.toFixed(2)} STRENGTH, ${fatigue.toFixed(2)} FATIGUE${minimumWeld?`; MINIMUM FILLET SIZE GOVERNS THE ${sz(a.weldSize).replaceAll('"','')} SADDLE WELDS`:''})`:'';
+ const summary=rated.length?` (MAX. D/C ${dcText(strength,2)} STRENGTH, ${dcText(fatigue,2)} FATIGUE${minimumWeld?`; MINIMUM FILLET SIZE GOVERNS THE ${sz(a.weldSize).replaceAll('"','')} SADDLE WELDS`:''})`:'';
  return {key:'flange-tie',name:single?'FLEXIBLE PLATE TIES':'FLANGE TIES',views:[
   {title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,128,true)},
   {title:detailTitles.tiePlan,render:plan},

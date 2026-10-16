@@ -9,7 +9,11 @@ import {railSeatDefaults,defaultRailClip} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
+import {sizeFlangeTie,tieSizingDemands} from './flangeTieSizing';
+import {available} from './aiscStrength';
 import {minimumEdge} from './capAngle';
+import {minimumFillet} from './connectionStrength';
+import {stiffenerPairSection} from './detailChecks';
 /** Template sizing of the tapered I haunch for the project's reactions. */
 export {sizeTaperedHaunch} from './taperedHaunchSizing';
 
@@ -26,7 +30,14 @@ const up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step
  */
 export function neutralDetails(p:ProjectInput):RunwayDetails{
  const b=p.section,shape=aiscShapeByName(b.catalogueId??''),k1=b.tw/2+(shape?shape.kdes*inch-b.tf:0);
- const stiffenerWidth=down((b.bf-b.tw)/2-.25*inch,.25*inch),stiffenerThickness=up(Math.max(b.tf/2,stiffenerWidth/16,.5*inch),.125*inch);
+ // Bearing stiffener pair: the J10.8 proportions, and thick enough for the restraint diaphragm (stiffener-lateral-flexure)
+ // at 90% under the tie sizing estimate F. The pair, welded continuously to both web faces, is one plate of width
+ // 2b_s + t_w less the copes (stiffenerPairSection). Before the analysis the support torque is unknown, so the moment is
+ // bounded by F·h_o whatever the arrangement: it bounds the St Venant torque with the Appendix 6 couple (both flanges
+ // restrained directly), F·y_g plus that torque (a gusset tie) and the cantilever F·h (one flange restrained).
+ const stiffenerWidth=down((b.bf-b.tw)/2-.25*inch,.25*inch),stiffenerCope=up(Math.max(k1-b.tw/2,.75*inch),.125*inch);
+ const diaphragm=tieSizingDemands(p).force*(b.d-b.tf)/(stiffenerPairSection({stiffenerWidth,stiffenerThickness:1,cope:stiffenerCope},b.tw).S*.9*available(50*ksi,p.method,.9,1.67));
+ const stiffenerThickness=up(Math.max(b.tf/2,stiffenerWidth/16,.5*inch,diaphragm),.125*inch);
  const h=p.railHeight||p.aist?.railDepth||100,L=p.spans.reduce((a,v)=>a+v,0),longest=Math.max(...p.spans);
  // Fatigue register: bottom flange at each midspan, stiffener weld toes at each support, top flange in the longest bay.
  let x=0;const mids=p.spans.map(span=>{const m=x+span/2;x+=span;return m;}),grids=[0,...p.spans.map((_,i)=>p.spans.slice(0,i+1).reduce((a,v)=>a+v,0))];
@@ -41,15 +52,21 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // The saddle starts on the 1/4 in grid from the web centerline, at least 3/4 in and 1/4 in past the rolled fillet clear of the web.
  const simple=p.system==='simple',weld=.3125*inch,saddleWeld=.375*inch,rootStart=up(Math.max(b.tw/2+.75*inch,k1+.25*inch),.25*inch),webGap=rootStart-b.tw/2,saddle={length:3.5*inch,thickness:up(Math.max(1.5*inch,b.tf),.125*inch)};
  const tieConnection=2.25*inch+2*1.25*inch,tieStart=up(Math.max(rootStart+.5*inch,b.bf/2-tieConnection+.25*inch),.25*inch),tieLength=26*inch;
- const tieSetback=up(saddle.length/2+weld+stiffenerThickness/2+weld+.25*inch,.25*inch),bearingLength=12*inch;
+ // The tie sits far enough from the bearing stiffener that the saddle end fillet clears the stiffener and its fillets by
+ // 1/4 in (the flange-tie-stiffener-clearance rule, with the 5/16 in largest stiffener fillet).
+ const tieSetback=up(saddle.length/2+saddleWeld+stiffenerThickness/2+weld+.25*inch,.25*inch),bearingLength=12*inch;
  // Stop bolts clear the runway-end tie saddle and the bearing stiffener with nut clearance.
  const stopEdge=defaultEndStop.bolts.edge,C=wrenchClearance(defaultEndStop.bolts.diameter);
  // Rail joint bars fill 95% of the clear web between head and base, to the 1/4 in below; the joint bolt is the
  // largest that keeps the AISC J3.4 edge distance to both bar edges (holes on the bars' mid-height).
  const jointHeight=Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35;
  const jointBolt=[.875,.75,.625,.5].map(v=>v*inch).find(db=>2*minimumEdge(db)<=jointHeight+1e-6)??.5*inch;
- // Bearing stiffener fillets: 5/16 in, within the edge limit t - 1/16 in of the thinner of the web and the stiffener.
- const stiffenerWeld=Math.max(3/16*inch,Math.min(.3125*inch,Math.floor((Math.min(b.tw,stiffenerThickness)-inch/16)/(inch/16)+1e-9)*inch/16));
+ // Bearing stiffener fillets: the J2.4 minimum by the thinner part; else 5/16 in, within the edge limit t - 1/16 in of the
+ // thinner of the web and the stiffener, and no larger than the smallest fillet that develops the web in shear rupture
+ // with fillets on both faces, D = t_w F_u/(1.414 F_EXX) to the next 1/16 in (t_w = 6.19D/F_u for E70, AISC J4.2): a larger
+ // fillet adds no strength to the group (the web governs it), a smaller one would lower it below the web's.
+ const webMatch=Math.ceil(b.tw*b.Fu/(Math.SQRT2*70*ksi)/(inch/16)-1e-9)*inch/16;
+ const stiffenerWeld=Math.max(minimumFillet(Math.min(b.tw,stiffenerThickness)),Math.min(.3125*inch,Math.floor((Math.min(b.tw,stiffenerThickness)-inch/16)/(inch/16)+1e-9)*inch/16,webMatch));
  // On a narrow flange the bolt gauges narrow to keep the flange edge distances: the end bearing's sleeved slots
  // (1.5d less half the hole plus half the slot, AISC J3.4) and the stop bolts (1.5d); the stop stiffeners close up
  // to keep the tightening clearance at their weld toes, and the stop base keeps its 1.5d edges.
@@ -59,7 +76,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  const sd=defaultEndStop.bolts.diameter,stopBase=Math.min(defaultEndStop.base.width,down(b.bf,.25*inch)),stopGauge=Math.min(defaultEndStop.bolts.gauge,down(stopBase-3*sd,.25*inch));
  const stopStiffener=stopGauge<defaultEndStop.bolts.gauge?.5*inch:defaultEndStop.stiffener.thickness;
  const stop={gauge:stopGauge,baseWidth:stopBase,thickness:stopStiffener,spacing:Math.min(defaultEndStop.stiffener.spacing,down(stopGauge-stopStiffener-2*(defaultEndStop.weldSize+C),.25*inch))};
- const stopSetback=up(Math.max(bearingLength/2-tieSetback+saddle.length/2+weld,bearingLength/2+stiffenerThickness/2+weld)+C-stopEdge,.25*inch);
+ const stopSetback=up(Math.max(bearingLength/2-tieSetback+saddle.length/2+saddleWeld,bearingLength/2+stiffenerThickness/2+weld)+C-stopEdge,.25*inch);
  const details:RunwayDetails={
   material:{Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi},
   simpleSupport:{...defaultSimpleSupport,guideTravel:.5*inch},
@@ -122,6 +139,8 @@ export function startDetailedDesign(p:ProjectInput):ProjectInput{
  // so a value left from another section does not block validation.
  q.aist.netFlangeArea=Math.min(q.aist.netFlangeArea||Infinity,q.section.bf*q.section.tf);
  q.drawing??={originator:'',checker:'',datumElevation:0,datumLabel:'Finished floor'};
+ // The tie sized for the girder's tie force and imposed movements; the column face may move out to 30 in.
+ q.details=sizeFlangeTie(q,{reach:30*inch}).details;
  return q;
 }
 

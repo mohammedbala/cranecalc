@@ -1,6 +1,6 @@
 import type {ProjectInput} from './types';
 import {capAngleGeometry} from './capAngle';
-import {tieRelease} from './tieGeometry';
+import {tieLine as restraintLine,tieRelease} from './tieGeometry';
 import {activeEndBearing} from './endBearingInputs';
 import {endBearingGeometry} from './endBearing';
 
@@ -25,13 +25,15 @@ export const secantStiffness=(k:number,gap:number,P:number)=>gap>0&&k>0&&P>0?1/(
 /**
  * What the restraint play does, beside the secant restraint stiffness of the strength cases:
  *  rail: rigid-body take-up at the rail head, the top restraint g_t plus the twist (g_t + g_b)/h_r over the rail head
- *   height above the tie line (top and bottom taken up in opposite directions);
+ *   height above the tie line (top and bottom taken up in opposite directions); h_r from the tie line (tieLine: the bar
+ *   line of a flange or stiffener tie, the cap tieback line) to the bottom restraint line (the bottom bars or the W bottom
+ *   flange at mid-thickness);
  *  torque: uniform twist of a simple bay whose two ends take up their play differently, at most (g_t + g_b)/h_r between
  *   its ends: St Venant torque GJ·Δθ/L, no warping stress (φ'' = 0); lateral take-up only translates the bay.
  */
 export function clearanceEffects(p:ProjectInput,props:{J:number},tieLine:number|undefined,railTop:number){
  const c=restraintClearances(p),s=p.section,gt=c.top.gap,gb=c.bottom.gap;
- const yt=tieLine??s.d-s.tf/2,yb=s.tf/2,hr=yt-yb,theta=(gt+gb)/hr,G=s.E/2.6;
+ const yt=tieLine??restraintLine(p),yb=restraintLine(p,'bottom'),hr=yt-yb,theta=(gt+gb)/hr,G=s.E/2.6;
  const torque=G*props.J*theta/Math.min(...p.spans),t=Math.max(s.tf,s.tw,s.kind==='cap'?s.capTw:0);
  return {...c,gt,gb,yt,yb,hr,theta,railTop,rail:gt+theta*(railTop-yt),torque,tau:torque*t/props.J,any:gt>0||gb>0};
 }

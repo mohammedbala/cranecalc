@@ -1,3 +1,5 @@
+// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
+import {dcText} from '../engine/checkPresentation';
 import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
 import {railPadThickness,clipGeometry} from '../engine/railSeat';
 import {girderBearingTitle} from './columnCapSheet';
@@ -134,7 +136,9 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // face plate and the rail end to the nearest stop steel, the base plate edge in front of the face. The plates are
   // sized by their callouts. A value too long for its
   // dimension is led off below it, clear of the extension lines.
-  const edge=Z(width/2)+2,zd=Z(width/2)+16,from=(x:number,z:number)=>z+2<edge?line([x,z+2],[x,edge]):'';
+  // The dimension line stands below the girder edge and below a base plate wider than the girder, clear of the base
+  // plate width's extension line.
+  const edge=Z(width/2)+2,zd=Z(Math.max(width,Wb)/2)+16,from=(x:number,z:number)=>z+2<edge?line([x,z+2],[x,edge]):'';
   const short=(x1:number,z1:number,x2:number,z2:number,label:string,side:-1|1)=>{const w=textWidth(label,9),mid=(x1+x2)/2;
    return from(x1,z1)+from(x2,z2)+line([x1,edge],[x1,zd+5])+line([x2,edge],[x2,zd+5])+line([x1,zd],[x2,zd])+tickH(x1,zd)+tickH(x2,zd)+multiLeader([[mid,zd]],[side<0?mid-14-w:mid+14,zd+14],[label],9);};
   svg+=dimH(X(0),X(g.back),edge,zd,dim(e.setback))+from(X(g.back),Z(Wb/2));
@@ -200,7 +204,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    ['FRONT BOLT TENSION / BOLT SHEAR',T!==undefined&&V!==undefined?`${force(T)} / ${force(V)}`:'-'],
    // Socket room for the heads beside the stop welds (AISC Manual Table 7-15).
    ['BOLT C/L TO WELD TOE: FACE PL / STIFFENER',`${size(g.toe.face)} / ${size(g.toe.stiffener)}, ${size(wrenchClearance(db))} MIN.`],
-   ['GOVERNING STOP CHECK',worst?`${worst.title.replace(/\s*\(ratio t_min\/t\)/,'').toUpperCase()}: D/C ${(worst.utilization??0).toFixed(2)}${/prying/.test(worst.id)?' (THICKNESS RATIO)':''}`:'-'],
+   ['GOVERNING STOP CHECK',worst?`${worst.title.replace(/\s*\(ratio t_min\/t\)/,'').toUpperCase()}: D/C ${dcText(worst.utilization??0,2)}${/prying/.test(worst.id)?' (THICKNESS RATIO)':''}`:'-'],
    ['QUANTITY',`${2*stopEnds(p).length}: ${stopLocation(p).split(';')[0].toUpperCase()}`],
    ['DATA SOURCE',e.source||'NOT ENTERED']
   ];
