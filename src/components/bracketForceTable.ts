@@ -10,6 +10,7 @@ import {sheetRef} from './sheetGraphics';
 import {topFlangeRestraint} from './tieNames';
 import {sig3} from '../report/reportParts';
 import {deliveredRows} from '../report/deliveredTable';
+import {deliveredForces} from '../engine/forcesDelivered';
 
 /**
  * Details whose notes carry the bracket design force table: the bracket details, else the independent
@@ -118,7 +119,7 @@ export function bracketForceBlocks(s:CalculationSnapshot,t:Style):Block[]{
  const bolted=activeEndBearing(p);
  // The labels of the forces delivered to the columns on S-00 (and the calculation): M_y,seat, F, H tie, H seat. A column
  // cap has neither seat nor tie: its lateral forces stay at the top and bottom flanges.
- const L=cap?{M:'SEAT M',F:'LONG.',top:'H TOP',bottom:'H BOT.'}:{M:'MY,SEAT',F:'F',top:'H TIE',bottom:bolted?'H SEAT':'H BOT.'};
+ const L=cap?{M:'SEAT M',F:'LONG.',top:'H TOP',bottom:'H BOT.'}:{M:'MY,SEAT',F:'F',top:'H TOP (RESTRAINT)',bottom:bolted?'H SEAT':'H BOT.'};
  const caseLabel=(v:string)=>cap?v:v.replace(/\bLONG\./g,'F').replace(/\bH BOT\./g,L.bottom);
  const rows=grids.flatMap(({grid,cases})=>cases.map((c,i)=>{
   const v=bracketForceCells(c.force,c.mirrored,u,false),head=[i?'':String(grid),caseLabel(c.label),combination(c.force),v.vertical];
@@ -130,7 +131,8 @@ export function bracketForceBlocks(s:CalculationSnapshot,t:Style):Block[]{
  const tenths=[...new Set(grids.flatMap(g=>g.cases.map(c=>combination(c.force))).filter(v=>/^\d+-[TB]$/.test(v)))].sort();
  const ten=tenths.length?` COMB. ${tenths.join(' / ')}: COMBINATION${tenths.length>1?'S':''} ${tenths.map(v=>combinationLabel(v).toUpperCase()).join(' / ')} ON S-00.`:'';
  // The S-00 tie force adds the Appendix 6 brace force to this restraint force.
- const braced=!cap&&deliveredRows(s).length?` H TIE HERE EXCLUDES THE APPENDIX 6 BRACE FORCE THAT THE S-00 H TIE ADDS.`:'';
+ const brace=!cap?deliveredForces(s)?.brace.force:undefined;
+ const braced=!cap&&deliveredRows(s).length?` H TOP IS THE RESTRAINT FORCE; THE TIE DESIGN FORCE (S-00 H TIE) ADDS THE APPENDIX 6 BRACE FORCE${brace!==undefined?` P_BR = ${sig3(brace,'force',u)}`:''}.`:'';
  const locating=envelopes.filter(v=>Math.abs(v.longitudinal.longitudinal)>=1).map(v=>v.grid),stop=envelopes.filter(v=>Math.abs(v.longitudinal.longitudinal)>=1&&stops.has(v.longitudinal.combination)).map(v=>v.grid);
  const list=(g:number[])=>g.length>1?`GRIDS ${g.slice(0,-1).join(', ')} AND ${g.at(-1)}`:`GRID ${g[0]}`;
  const interior=simple&&grids.some(g=>g.cases.some(c=>c.label.includes('END V'))),mirrored=grids.some(g=>g.cases.some(c=>c.mirrored));

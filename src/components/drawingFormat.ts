@@ -93,3 +93,25 @@ export function holeInches(mm:number,units:ProjectInput['units']){
  while(numerator&&numerator%2===0){numerator/=2;denominator/=2;}
  return `${inches?inches:''}${numerator?`${inches?' ':''}${numerator}/${denominator}`:''}"`;
 }
+/**
+ * A limit or requirement handed to others (a deflection, a drift, a slot travel, a separation): never rounded toward the
+ * unsafe side. A maximum floors and a minimum ceils: in US units to 1/64 in, with the decimal inch (floored or ceiled to
+ * 0.001 in) where the fraction would misstate it ("0.053 IN (3/64)"); in SI to 0.1 mm. The caller adds MAX. or MIN.
+ */
+export function limitLength(mm:number,units:ProjectInput['units'],sense:'max'|'min'){
+ const round=(v:number)=>sense==='max'?Math.floor(v+1e-9):Math.ceil(v-1e-9);
+ if(units!=='US')return `${(round(mm*10)/10).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})} mm`;
+ const inches=mm/25.4,ticks=round(inches*64),exact=Math.abs(ticks/64-inches)<5e-4,feet=Math.floor(ticks/768),rest=ticks-feet*768;
+ let a=rest%64,d=64;while(a&&a%2===0){a/=2;d/=2;}
+ const whole=Math.floor(rest/64),inch=`${whole||!a?whole:''}${a?`${whole?' ':''}${a}/${d}`:''}`,fraction=feet?`${feet}'-${inch.replace(/^(?=\d+\/)/,'0 ')}"`:`${inch}"`;
+ // Above two feet a 1/64 in step is below any field measurement: the floored or ceiled fraction alone.
+ if(exact||inches>=24)return fraction;
+ return `${(round(inches*1000)/1000).toFixed(3)} IN (${fraction.replace(/"$/,'')})`;
+}
+/**
+ * A part size (plate, bar, gusset length) as printed, or undefined for a size that cannot exist (≤ 0, not finite): such a
+ * part is never printed; its view reads GEOMETRY CONFLICT - NOT DETAILED (geometryConflict in sheetRatios).
+ */
+export function partSize(mm:number,units:ProjectInput['units']):string|undefined{
+ return Number.isFinite(mm)&&mm>0?plateInches(mm,units):undefined;
+}

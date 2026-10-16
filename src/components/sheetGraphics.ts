@@ -1,6 +1,7 @@
 import type { CalculationSnapshot } from '../engine/types';
 import { drawingScale } from './drawingFormat';
 import { issueStatus, revisionIdentity, supportColumn } from '../engine/drawingData';
+import { sheetStamp } from './sheetRatios';
 import { capChannelProfile } from '../engine/channelProfile';
 /** Replaced with the sheet ordinal and count once the whole set is assembled. */
 export const sheetOrdinalToken='{{SHEET_ORDINAL}}';
@@ -205,9 +206,10 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   const status=issueStatus(s);
   svg+=`<g data-stamp="${status.issued?'seal':'blank'}">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${eor?.firm.trim()?text(2466,1520,short(eor.firm.toUpperCase(),26),lettering.text,'middle'):''}${text(2466,1534,status.issued?'SEAL AND SIGNATURE REQUIRED':'NOT SEALED',lettering.text,'middle')}</g>`;
   svg+=`<g data-issue-status="${status.issued?'issued':'preliminary'}">${text(2360,1494,status.label,11,'end',700)}</g>`+text(2360,1513,'REFERENCE FRAMING SHOWN DASHED',10,'end');
-  // A detail on a sheet must never be read as acceptable while any calculation check fails.
-  const failed=s.checks.filter(c=>c.status==='fail').length;
-  if(failed)svg+=`<g data-flag="failed-checks">${text(2360,1532,`${failed} FAILED CHECK${failed>1?'S':''} - SEE CALCULATION`,11,'end',700)}</g>`;
+  // A detail on a sheet must never be read as acceptable while any calculation check fails: the open items as the
+  // report groups them, or, for a package whose analysis did not verify, that no calculation is issued (sheetRatios).
+  const stamp=sheetStamp(s);
+  if(stamp)svg+=`<g data-flag="${stamp.blocked?'not-verified':'failed-checks'}">${text(2360,1532,stamp.text,11,'end',700)}${stamp.detail?text(2360,1475,stamp.detail,lettering.text,'end'):''}</g>`;
   return svg;
 }
 

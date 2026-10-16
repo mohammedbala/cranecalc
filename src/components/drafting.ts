@@ -1,5 +1,6 @@
 import { capChannelProfile } from '../engine/channelProfile';
 import { issueStatus,revisionIdentity } from '../engine/drawingData';
+import { sheetStamp } from './sheetRatios';
 import {girderSegments} from '../engine/simpleSupports';
 import { detailedDrawings } from './detailedDrawings';
 import type { CalculationSnapshot } from '../engine/types';
@@ -47,8 +48,9 @@ export class Draft {
     this.text(28, height - 22, `CRANECALC / ${short(s.input.number || 'UNTITLED', 40)} / ENGINEERING SKETCH`, 8, 'start', 'BORDER');
     this.text(604, height - 37, `${revisionIdentity(s).heading} · ${revisionIdentity(s).date}`, 9);
     this.text(604, height - 22, 'DIMENSIONS GOVERN / DO NOT SCALE PRINT', 8, 'start', 'BORDER');
-    const failed=s.checks.filter(c=>c.status==='fail').length;
-    this.text(824, height - 37, failed?`${failed} FAILED CHECK${failed>1?'S':''} - SEE CALC`:s.input.reportPurpose==='demonstration'?'DEMONSTRATION':s.input.scope==='design'?'DESIGN MODEL':'ANALYSIS ONLY', 9);
+    // Open items as the report groups them, or a package whose analysis did not verify (sheetRatios.sheetStamp).
+    const stamp=sheetStamp(s,true);
+    this.text(824, height - 37, stamp?stamp.text:s.input.reportPurpose==='demonstration'?'DEMONSTRATION':s.input.scope==='design'?'DESIGN MODEL':'ANALYSIS ONLY', stamp&&stamp.text.length>30?7.5:9);
     const status=issueStatus(s);
     this.text(824, height - 22, status.issued?status.label:'NOT FOR CONSTRUCTION', 8, 'start', 'BORDER');
   }

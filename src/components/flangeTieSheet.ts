@@ -1,5 +1,5 @@
-// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
-import {dcText} from '../engine/checkPresentation';
+import {elementSummary,inElements,summaryNote,calculationRef} from './sheetRatios';
+import {viewConflict,conflictView} from './detailHolds';
 import {supportColumn} from '../engine/drawingData';
 import type {CalculationSnapshot} from '../engine/types';
 import {flangeTieGeometry,tieRelease} from '../engine/tieGeometry';
@@ -8,7 +8,8 @@ import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeEndStop} from '../engine/endStopInputs';
 import {boltProperties} from '../engine/connectionStrength';
 import {format} from '../engine/units';
-import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
+import {plateInches,dimensionLength,limitLength} from './drawingFormat';
+import {deliveredForces} from '../engine/forcesDelivered';
 import {capChannelProfile} from '../engine/channelProfile';
 import {dimText,sheetDrawingScale as drawingScale,line,rect,circle,text,dimH,filletLeader,multiLeader,detailRef,detailTitles,columnReference,breakLine,textWidth,labelCaps,n,sectionCut,capChannelSection,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,paragraph,type Style} from './noteBlocks';
@@ -99,6 +100,7 @@ function tieColumn(s:CalculationSnapshot){
 /** Transverse elevation of the top-flange tie, projected along the installed bolt axes. */
 export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleCut=false):ViewRender{
  const p=s.input,u=p.units,g=flangeTieGeometry(p)!;const b=p.section,t=p.details!.brace,a=g.attachment,c=t.connection,rel=tieRelease(p),col=tieColumn(s),single=g.plies===1;
+ const conflict=flangeTieConflict(s);if(conflict)return conflictView(conflict);
  // x is the left edge of the view: the girder half-width, the tie and the column flange ahead of a callout column.
  const dim=(v:number)=>tieDim(v,u),sz=(v:number)=>tieSize(v,u),hole=boltProperties(c.grade,c.diameter).hole,hg=g.columnGusset;
  // Large enough that the bolt gauge reads in the free length of the bars between the gussets (up to 3" = 1'-0").
@@ -187,6 +189,15 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
 /** Direct flange tie details on their own sheet. */
 export function flangeTieSheetSvg(s:CalculationSnapshot,number='S-06'){
  const topic=flangeTieTopic(s);return topic?topicSheetSvg(s,topic,number,'DIRECT FLANGE TIES'):'';
+}
+/**
+ * The direct flange tie cannot be built as dimensioned: a part size or clear length ≤ 0, the gusset end not clear of the
+ * cap channel flange (cap-clearance), or a geometry conflict among the tie's checks. Its views are then not detailed.
+ */
+export function flangeTieConflict(s:CalculationSnapshot){
+ const g=flangeTieGeometry(s.input);if(!g)return undefined;const t=s.input.details!.brace,a=g.attachment;
+ return viewConflict(s,{sizes:[g.rootLength,a.saddleLength,a.saddleThickness,g.columnGussetLength,g.columnGusset,t.length,t.thickness,t.width,g.face,g.barGap,g.capClear,g.columnGussetStart-g.gussetEnd],
+  fits:/^(cap-clearance|flange-tie-.*(fit|clear(ance)?))$/,checks:/^(flange-tie-|plate-tie-|tie-|cap-clearance$)/});
 }
 /** Direct flange tie section, tie plan at a support, saddle section, and the tie notes. */
 export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
@@ -291,24 +302,32 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const support=s.checks.find(v=>v.id==='tie-move-support'),bottom=g.sides.includes(-1),stress=(v:number)=>format(v,'stress',u,0);
  // Flange holes the set does detail: bearing bolts through the bottom flange, stop bolts through the top flange.
  const drilled=[...(activeEndBearing(p)?['END BEARINGS']:[]),...(activeEndStop(p)?['END STOPS']:[])];
- const notes=[single?`FLEXIBLE PLATE TIES (AISC DG7 §11.2): ONE PL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)} ${bottom?'AT EACH FLANGE':`AT THE TOP FLANGE. THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef(detailTitles.endBearing)})`}, ON THE GUSSET FACE TOWARD THE GIRDER END. SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS. PLATE ENDS ${sz(g.barGap)} CLEAR OF THE COLUMN FLANGE.`:`TIES: ${dim(t.length)} LONG, ${bottom?'AT BOTH FLANGES':`AT THE TOP FLANGE. THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef(detailTitles.endBearing)})`}. SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS. BAR ENDS ${sz(g.barGap)} CLEAR OF THE COLUMN FLANGE.`,
+ const notes=[single?`FLEXIBLE PLATE TIES (AISC DG7 §11.2): ONE PL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)} ${bottom?'AT EACH FLANGE':'AT THE TOP FLANGE'}, ON THE GUSSET FACE TOWARD THE GIRDER END, SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS; PLATE ENDS ${sz(g.barGap)} CLEAR OF THE COLUMN FLANGE.${bottom?'':` THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef(detailTitles.endBearing)}).`}`:`TIES: ${dim(t.length)} LONG, ${bottom?'AT BOTH FLANGES':`AT THE TOP FLANGE. THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef(detailTitles.endBearing)})`}. SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS. BAR ENDS ${sz(g.barGap)} CLEAR OF THE COLUMN FLANGE.`,
   `GIRDER FORCE TRANSFERS THROUGH THE GUSSET AND SADDLE DIRECTLY TO THE FLANGE. DO NOT WELD THE GUSSET TO THE WEB. WELD THE SADDLE TO THE FLANGE ONLY WITH THE TWO ${sz(a.weldSize).replaceAll('"','')} TRANSVERSE END FILLETS, ONE ACROSS EACH END, ${dim(g.endWeldLength)} LONG, WITHOUT END RETURNS; DO NOT WELD THE SADDLE EDGES ALONG THE RUNWAY.`,
   col.isNew?`SHOP WELD COLUMN GUSSET TO THE ${col.name}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}.`:`FIELD WELD COLUMN GUSSET TO ${g.receiver?'EXISTING COLUMN':'THE COLUMN'}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}. VERIFY STEEL GRADE, WELDABILITY AND SURFACE CONDITION.`,
   rel?single?`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)} LONG (FY ${stress(d.material.Fy)} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET, THE PLATE ON ONE SLEEVE END AND AN F436 WASHER ON THE OTHER. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. NO FILLER: THE PLATE FLEXES TO TAKE UP THE SLEEVE PROJECTION.`:`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.sleeveLength)} LONG (FY ${stress(d.material.Fy)} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. PROVIDE A ${sz(rel.clearance)} FILLER (CLASS B SURFACES) AT THE GIRDER GUSSET SO THE BARS STAY PARALLEL.`:single?'COLUMN END: STANDARD HOLES; THE PLATE ALSO FLEXES WITH SUPPORT DEFLECTION.':'COLUMN END: STANDARD HOLES; THE BARS ALSO FLEX WITH SUPPORT DEFLECTION.',
-  `${single?'THE PLATE FLEXES ABOUT ITS WEAK AXIS':'TIE BARS FLEX OUT OF PLANE'} WITH GIRDER END ROTATION AND, AT SLIDING ENDS, THERMAL TRAVEL; SEE THE TIE MOVEMENT CHECKS.${single?` KEEP ITS CLEAR LENGTH FREE OF ATTACHMENTS AND WELDS. SET THE COLUMN GUSSET IN LINE WITH THE GIRDER GUSSET WITHIN ${sz(25.4/16)} ALONG THE RUNWAY; THE PLATE FLEXURE CHECK INCLUDES THAT OFFSET${rel?' AND HALF THE SLEEVE CLEARANCE':''}.`:''}${support?.capacity!==undefined?` BRACKET BY OTHERS: VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${drawingLength(support.capacity,u)} MAX.`:''}`,
-  `GIRDER END: STANDARD HOLES, PRETENSIONED ${c.grade} BOLTS${single?' IN SINGLE SHEAR, HEADS ON THE PLATE':''}, CLASS B FAYING SURFACES. NO HOLES OR CUTS THROUGH THE ${cap?'CAP OR ':''}W FLANGES${drilled.length?` EXCEPT THOSE DETAILED FOR THE ${drilled.join(' AND ')}`:''}.` ];
- // The summary D/C is the largest strength and fatigue ratio. Minimum weld sizes, clearances, edge distances and
- // slenderness are detailing limits: one scores 1.00 whenever the provided size equals the limit, which would read
- // as a fully stressed connection. A saddle fillet at the minimum size is stated instead.
- // The single plate's member, lap and bolt checks are rated with the flange attachment and movement checks.
- const checks=s.checks.filter(v=>(v.group==='Flange attachment'||v.group==='Tie movement'||(single&&(v.id.startsWith('plate-tie')||/^tie-(bolt|prying|slip|bearing|net|block|weld)$/.test(v.id))))&&v.status!=='excluded'&&v.status!=='not-applicable');
- const rated=checks.filter(v=>v.utilization!==undefined&&v.quantity!=='length'&&v.id!=='tie-slenderness'),most=(list:typeof checks)=>Math.max(0,...list.map(v=>v.utilization??0));
- const strength=most(rated.filter(v=>!v.id.includes('fatigue'))),fatigue=most(rated.filter(v=>v.id.includes('fatigue')));
- const minimumWeld=checks.some(v=>v.id==='flange-tie-weld-minimum'&&v.status==='pass'&&(v.utilization??0)>=1-1e-9);
- const summary=rated.length?` (MAX. D/C ${dcText(strength,2)} STRENGTH, ${dcText(fatigue,2)} FATIGUE${minimumWeld?`; MINIMUM FILLET SIZE GOVERNS THE ${sz(a.weldSize).replaceAll('"','')} SADDLE WELDS`:''})`:'';
+  `${single?'THE PLATE FLEXES ABOUT ITS WEAK AXIS':'TIE BARS FLEX OUT OF PLANE'} WITH GIRDER END ROTATION AND, AT SLIDING ENDS, THERMAL TRAVEL; SEE THE TIE MOVEMENT CHECKS.${single?` KEEP ITS CLEAR LENGTH FREE OF ATTACHMENTS AND WELDS. SET THE COLUMN GUSSET IN LINE WITH THE GIRDER GUSSET WITHIN ${sz(25.4/16)} ALONG THE RUNWAY; THE PLATE FLEXURE CHECK INCLUDES THAT OFFSET${rel?' AND HALF THE SLEEVE CLEARANCE':''}.`:''}${support?.capacity!==undefined?` BRACKET BY OTHERS: VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${limitLength(support.capacity,u,'max')} MAX.`:''}`,
+  `GIRDER END: STANDARD HOLES, PRETENSIONED ${c.grade} BOLTS${single?' IN SINGLE SHEAR, HEADS ON THE PLATE':''}, CLASS B FAYING SURFACES. NO HOLES OR CUTS THROUGH THE ${cap?'CAP OR ':''}W FLANGES${drilled.length?` EXCEPT THOSE DETAILED FOR THE ${drilled.join(' AND ')}`:''}.`,
+  ...tieForceNote(s)];
+ // The summary D/C is the largest evaluated DESIGN ratio of the tie (sheetRatios.elementSummary): the tie element of the
+ // report with the saddle-toe register points and the keeper flange. Minimum weld sizes, clearances, edge distances and
+ // slenderness are detailing limits: one scores 1.00 whenever the provided size equals the limit, which would read as a
+ // fully stressed connection; a failing rule is named apart. A saddle fillet at the minimum size is stated instead.
+ const tie=elementSummary(s,inElements(['tie'],/^(detail-(fatigue|full-cycle)-SA|plate-tie-keeper-flange$)/));
+ const minimumWeld=tie.checks.some(v=>v.id==='flange-tie-weld-minimum'&&v.status==='pass'&&(v.utilization??0)>=1-1e-9);
+ const rated=summaryNote(s,tie),summary=rated?` (${rated}${minimumWeld?`; MINIMUM FILLET SIZE GOVERNS THE ${sz(a.weldSize).replaceAll('"','')} SADDLE WELDS`:''})`:'';
  return {key:'flange-tie',name:single?'FLEXIBLE PLATE TIES':'FLANGE TIES',views:[
   {title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,128,true)},
-  {title:detailTitles.tiePlan,render:plan},
-  {title:detailTitles.saddle,render:saddle}
- ],notes:(st:Style)=>[heading(st,single?'FLEXIBLE PLATE TIE NOTES / LOCAL CHECKS':'FLANGE TIE CONNECTION NOTES / LOCAL CHECKS'),...numbered(st,notes),paragraph(st,`${single?'PLATE, LAP, LOCAL':'TIE LOCAL'} AND MOVEMENT CHECKS: SEE CALCULATION REPORT${summary}.`)]};
+  {title:detailTitles.tiePlan,render:()=>{const c=flangeTieConflict(s);return c?conflictView(c):plan();}},
+  {title:detailTitles.saddle,render:()=>{const c=flangeTieConflict(s);return c?conflictView(c):saddle();}}
+ ],notes:(st:Style)=>[heading(st,single?'FLEXIBLE PLATE TIE NOTES / LOCAL CHECKS':'FLANGE TIE CONNECTION NOTES / LOCAL CHECKS'),...numbered(st,notes),paragraph(st,`${single?'PLATE, LAP, LOCAL':'TIE LOCAL'} AND MOVEMENT CHECKS: ${calculationRef(s)}${summary}.`)]};
+}
+/**
+ * The tie design force as the calculation designs the tie: F = H + P_br, the largest concurrent top-flange restraint
+ * force at a grid (H TOP on the bracket force table) plus the AISC Appendix 6 brace force (the S-00 H TIE).
+ */
+export function tieForceNote(s:CalculationSnapshot):string[]{
+ const d=deliveredForces(s);if(!d)return [];
+ const u=s.input.units,f=(v:number)=>{const t=format(v,'force',u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
+ return [`TIE DESIGN FORCE F = H + P_BR = ${f(d.tie.design-d.brace.force)} + ${f(d.brace.force)} = ${f(d.tie.design)}, EITHER WAY: H THE LARGEST CONCURRENT TOP-FLANGE RESTRAINT FORCE AT A GRID (H TOP IN THE SUPPORT FORCE TABLE), P_BR THE AISC 360 APPENDIX 6 BRACE FORCE; THE S-00 H TIE INCLUDES P_BR.`];
 }

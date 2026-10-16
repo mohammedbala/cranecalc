@@ -1,5 +1,4 @@
-// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
-import {dcText} from '../engine/checkPresentation';
+import {checkDcText,elementSummary,failingNote,inElements,sheetDc} from './sheetRatios';
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
@@ -331,7 +330,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  // Drawing order on the sheet: the braced bay and the plans over two rows each, then the connections and the crossing.
  {const order=[detailTitles.bracedBay,detailTitles.strutPlan,detailTitles.braceTop,detailTitles.braceBase,rodCrossingTitle] as string[];views.sort((x,y)=>order.indexOf(x.title)-order.indexOf(y.title));}
 
- const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${dcText(v.utilization,2)}`:'-';}).join(' / ');
+ const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>checkDcText(s,check(id))).join(' / ');
  const z=r.seismic,sep=r.separation,lb=s.longitudinalBracing!;
  const rows=[
   ['BRACING',`${rodName} X, TENSION ONLY, GRIDS ${spanGrids}, BOTH RUNWAYS; W.P. ${dim(L.height)} ABOVE T/BASE PL${el?` (${capG?`${dim(capG.drop)} BELOW THE CAP TOP, EL. ${dim(datum+columnBaseElevation(base)+L.height)}`:`BRG. SEAT ${elev(L.height)}`})`:''}`],
@@ -343,7 +342,9 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   ['COLLECTOR AT EACH COLUMN',capG?`GIRDER LOCATING BOLTS TO THE COLUMN CAP, CAP FILLETS ALL AROUND THE COLUMN: ${force(r.seatForce.F)}`:rolled?`GIRDER LOCATING BOLTS TO ${rolled.seat?'SEAT':'BRACKET FLANGE'}, ${rolled.name} BRACKET WELDS TO FLANGE: ${force(r.seatForce.F)}`:`GIRDER LOCATING BOLTS TO SEAT, ${size(d.seatWeld)} SEAT FILLET TO FLANGE: ${force(r.seatForce.F)}`],
   ...(z?[['SEISMIC ALONG RUNWAY',`R ${z.basis.R}, CS ${z.basis.Cs.toFixed(3)}, QE ${force(z.QE)}; DRIFT ${dim(z.drift)}`]]:[]),
   ...(sep?[['SEISMIC SEPARATION',`${dim(specifiedSeparation(sep.required,u))} MIN. CLEAR TO EXISTING BUILDING (ASCE 7 §12.12.3)`]]:[]),
-  ['RATIOS: ROD / GUSSET / WELD / WEB / STRUT / COL. TORSION',ratio('brace-tension','brace-pin-bearing','brace-gusset-weld','brace-column-web','brace-strut','column-torsion')]
+  ['RATIOS: ROD / GUSSET / WELD / WEB / STRUT / COL. TORSION',ratio('brace-tension','brace-pin-bearing','brace-gusset-weld','brace-column-web','brace-strut','column-torsion')],
+  // The largest D/C over every check of the longitudinal system, and the failing ones by name (sheetRatios).
+  ...(()=>{const e=elementSummary(s,inElements(['longitudinal'])),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL BRACING CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})()
  ];
  const notes=[
   `RODS: ASTM F1554 GR. 36 (OR A36) ${rodName}, THREADED FOR A FORGED CLEVIS AT EACH END AND A TURNBUCKLE ${Math.round(turnAt*100)}% OF THE LENGTH FROM THE LOWER END (RIGHT- AND LEFT-HAND THREADS). CLEVIS, PIN AND TURNBUCKLE RATED BY THE MANUFACTURER TO DEVELOP THE ROD, ${force(r.develop)}; CLEVIS GRIP TO SUIT THE ${size(g.t)} GUSSET. SUBMIT CATALOG DATA.`,

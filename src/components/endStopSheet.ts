@@ -1,6 +1,4 @@
-// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
-import {dcText} from '../engine/checkPresentation';
-import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
+import {elementSummary,failingNote,inElements,sheetDc} from './sheetRatios';
 import {railPadThickness,clipGeometry} from '../engine/railSeat';
 import {girderBearingTitle} from './columnCapSheet';
 import {stopEnds,stopLocation} from '../engine/endStopInputs';
@@ -192,8 +190,9 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
  // 4: Design data and notes.
  {
   const P=Math.max(...craneCombinations(p.method).map(c=>c.bumper))*stopBumperForce(p),check=(id:string)=>s.checks.find(c=>c.id===id);
-  // The governing DESIGN check of the stop, as the calculation reports it (no classification or detailing rule).
-  const stops=s.checks.filter(c=>{if(c.group!=='End stops'||c.utilization===undefined||c.status==='not-applicable')return false;const k=classifyCheck(c);return k.type==='design'&&gateCheck(s,c,k).gate==='evaluated';}),worst=[...stops].sort((a,b)=>(b.utilization??0)-(a.utilization??0))[0];
+  // The governing DESIGN check of the stop, as the calculation reports it (no classification or detailing rule), and
+  // the open items of the stop element with a failing check, failing detailing and fit rules named apart (sheetRatios).
+  const stop=elementSummary(s,inElements(['stops'])),worst=stop.strength?.check,fails=failingNote(s,stop);
   const T=check('end-stop-bolt-tension')?.demand,V=check('end-stop-bolt-shear')?.demand;
   // Where the bumper force leaves the girder: the one locating support of a continuous girder, else the end bay's locating end.
   const fixed=continuousBearings(p).find(v=>v.role==='LOCATING'),locating=fixed&&activeEndBearing(p)?`THE LOCATING BEARING AT GRID ${fixed.grid}`:p.system==='simple'?'THE LOCATING END OF EACH END BAY':'THE LOCATING END CONNECTION';
@@ -204,7 +203,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    ['FRONT BOLT TENSION / BOLT SHEAR',T!==undefined&&V!==undefined?`${force(T)} / ${force(V)}`:'-'],
    // Socket room for the heads beside the stop welds (AISC Manual Table 7-15).
    ['BOLT C/L TO WELD TOE: FACE PL / STIFFENER',`${size(g.toe.face)} / ${size(g.toe.stiffener)}, ${size(wrenchClearance(db))} MIN.`],
-   ['GOVERNING STOP CHECK',worst?`${worst.title.replace(/\s*\(ratio t_min\/t\)/,'').toUpperCase()}: D/C ${dcText(worst.utilization??0,2)}${/prying/.test(worst.id)?' (THICKNESS RATIO)':''}`:'-'],
+   ['GOVERNING STOP CHECK',worst?`${worst.title.replace(/\s*\(ratio t_min\/t\)/,'').toUpperCase()}: D/C ${sheetDc(s,stop.strength!.dc)}${/prying/.test(worst.id)?' (THICKNESS RATIO)':''}`:'-'],
+   ...(fails?[['OPEN ITEMS',fails]]:[]),
    ['QUANTITY',`${2*stopEnds(p).length}: ${stopLocation(p).split(';')[0].toUpperCase()}`],
    ['DATA SOURCE',e.source||'NOT ENTERED']
   ];

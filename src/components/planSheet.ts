@@ -357,7 +357,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const bracing=braced?bracingOnElevation(s,{EX:x=>EX(x-m.length/2),EY,ek,supports:m.supports.map(x=>x+m.length/2),columnWidth:m.column.bf,girderBottom:bottom,stub:stubLength,columnTop:capGeo?bottom+(p.details!.bearing.thickness+capGeo.cap.plate.thickness)/1000*ek:undefined}):undefined;
   svg+=`<g data-view="elevation">`;
   const bubbleY=top-44-lift,elevationFrom=svg.length;
-  svg+=text(el,bubbleY-30,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: ${sheetRef('connection')}${p.system==='simple'&&p.details?` / SHARED SUPPORT: ${detailRef(capGeo?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}`:''}`,lettering.text);
+  svg+=text(el,bubbleY-30,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: ${sheetRef('connection')}${p.system==='simple'&&p.details&&p.spans.length>1?` / SHARED SUPPORT: ${detailRef(capGeo?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}`:''}`,lettering.text);
   m.supports.forEach((x,i)=>{
     // The column is beyond the girder. A new column ends at its top, at or below the top of the girder. An existing
     // building column is drawn only below the seat, a stub broken once at its foot: above the girder it continues to
@@ -443,7 +443,7 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
     `ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`,
     // With the detailed set the rail setting is the S-00 crane runway installation note.
     ...(d?[]:[`SET RAIL C/L SPACING (CRANE SPAN) TO THE CRANE MANUFACTURER'S GAUGE, EACH RAIL ON ITS GIRDER WEB C/L. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${plateInches(Math.abs(p.railEccentricity),u)}; IT IS NOT A SETTING DIMENSION.`]),
-    p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?'GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL WITH THE END GAP AT EACH SHARED SUPPORT.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
+    p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}.`:'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
     ...adjacentBays(p).map(b=>`AT GRID ${b.end==='left'?1:p.spans.length+1} THE EXISTING RUNWAY CONTINUES (${short((p.continuation?.source??'').toUpperCase(),70)}). THE EXISTING ${len(b.length)} GIRDER BEARS ON THE SAME SUPPORT AND STAYS IN PLACE; ITS REACTION IS INCLUDED IN THE SUPPORT DESIGN. FIELD VERIFY ITS SPAN, BEARING, TIE AND RAIL JOINT BEFORE FABRICATION.`)
   ];
   return noteStack([(t:Style)=>[heading(t,'RUNWAY GIRDER SCHEDULE'),table(t,['MARK','QTY','SECTION','LENGTH','GRIDS','CAMBER','ENDS'],rows,[.55,.45,1.6,.8,.75,.65,1.9]),heading(t,'SHEET NOTES'),...numbered(t,notes)]],u,box);

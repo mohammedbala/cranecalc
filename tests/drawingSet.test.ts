@@ -183,8 +183,9 @@ describe('drawings agree with the calculation',()=>{
    const kipft=(v:number)=>sig3(v,'moment','US').replace(/ kip-ft$/,'').toUpperCase();
    expect(Math.abs(f[1].mirror.vertical!.longitudinal-f[1].maxVertical.longitudinal)).toBeGreaterThan(1);expect(cells).toContain(kipft(f[1].maxVertical.moment));expect(cells).toContain(kipft(f[1].mirror.vertical!.moment));
    // One table, every row a whole concurrent case: all its reactions, seat moment, longitudinal and lateral forces, under
-   // the labels of the forces delivered to the columns on S-00.
-   expect(cells).toEqual(expect.arrayContaining(['GRID','CASE','COMB.','V','LEFT V','RIGHT V','MY,SEAT','F','H TIE']));expect(cells).not.toContain('SEAT M');
+   // the labels of the forces delivered to the columns on S-00; the top-flange force is the restraint force, which the
+   // S-00 H TIE (the tie design force) raises by the Appendix 6 brace force.
+   expect(cells).toEqual(expect.arrayContaining(['GRID','CASE','COMB.','V','LEFT V','RIGHT V','MY,SEAT','F','H TOP (RESTRAINT)']));expect(cells).not.toContain('SEAT M');
    const cases=bracketForceCases(s);
    for(const g of cases)for(const c of g.cases)for(const value of Object.values(bracketForceCells(c.force,c.mirrored,'US',false)))if(value!=='—')expect(cells).toContain(value.toUpperCase());
    const stopRow=cases[2].cases.find(c=>c.label.includes('MAX LONG.'))!;
@@ -208,7 +209,7 @@ describe('drawings agree with the calculation',()=>{
    // H TOP and H BOTTOM of one case act together, opposite: a couple, signed relative to each other.
    expect(Math.sign(f[0].top.top)).toBe(-Math.sign(f[0].top.bottom));
    expect(cells).toContain(`±${kip(Math.abs(f[0].top.top))}`);expect(cells).toContain(`∓${kip(Math.abs(f[0].top.bottom))}`);
-   expect(cells.join(' ')).toMatch(/H (SEAT|BOT\.) IS SIGNED RELATIVE TO H TIE/);expect(cells.join(' ')).not.toContain('ITS OWN MAXIMUM');
+   expect(cells.join(' ')).toMatch(/H (SEAT|BOT\.) IS SIGNED RELATIVE TO H TOP \(RESTRAINT\)/);expect(cells.join(' ')).not.toContain('ITS OWN MAXIMUM');
   }
   // The bracket is checked for the same concurrent sets, so its governing rows mirror too.
   const st=capped.detailResults!.bracket!.stations;expect(st[3].vertical).toBeCloseTo(st[0].vertical,6);expect(st[3].leftRib).toBeCloseTo(st[0].rightRib,6);

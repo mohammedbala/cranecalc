@@ -16,6 +16,7 @@ import { boltProperties } from '../engine/connectionStrength';
 import { defaultFraming, drawnFrameStyle, type FramingSettings } from './framingSettings';
 import { planSheetGeometry } from './planSheetGeometry';
 import { drawingLength, plateInches,dimensionLength} from './drawingFormat';
+import {viewConflict,conflictView} from './detailHolds';
 import {refDim, sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
@@ -177,9 +178,12 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   let svg='<g data-view="tie-connection">';
   // Across the runway (down the sheet) from the web centerline; along the runway from the tie-side bearing stiffener.
   const c=d.brace.connection,t=d.brace,bs=d.bearing,g=stiffenerTieGeometry(p)!,rel=tieRelease(p),hg=columnGussetHeight(p),hole=boltProperties(c.grade,c.diameter).hole;
+  // A part that cannot be built as dimensioned is not drawn (detailHolds.viewConflict).
+  const conflict=viewConflict(s,{sizes:[g.gussetLength,g.columnGussetLength,g.clear,t.length,g.face,hg],fits:/^tie-stiffener-(bar-clearance|fit)$/,checks:/^tie-/});
+  if(conflict)return conflictView(conflict);
   const colW=m().column.bf*1000,colT=m().column.tf*1000,tb=t.thickness,tg=t.gussetThickness,inch=25.4;
   // The bars are broken between their bolt groups, and the column below its inner flange, so both ends draw large.
-  const z1=g.gussetEnd+1.5*inch,z2=g.face-g.connection-1.5*inch,cut=z2-z1>2*inch?z2-z1:0,gap=14,below=colT+2*inch;
+  const z1=Math.max(g.gussetEnd,b.bf/2)+1.5*inch,z2=g.face-g.connection-1.5*inch,cut=z2-z1>2*inch?z2-z1:0,gap=14,below=colT+2*inch;
   const scale=drawingScale(Math.min(.36,(250-(cut?gap:0))/(b.bf/2+g.face+below-cut)),p.units),k=scale.pointsPerMm,cx=181,top=430;
   const X=(x:number)=>cx+x*k,Z=(z:number)=>top+(b.bf/2+z)*k-(cut&&z>=z2-1e-6?cut*k-gap:0),edge=Z(b.bf/2),half=Math.max(bs.length/2,b.bf/2),tbk=tb*k,tgk=tg*k;
   // Only what lies under the top flange is hidden: the web, stiffeners and the inner ends of the gusset and bars.
