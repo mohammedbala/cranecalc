@@ -1,5 +1,6 @@
 import type {ProjectInput} from './types';
 import {craneTravel,stopContacts} from './craneTravel';
+import {meshTolerance} from './meshNodes';
 
 /**
  * Crane origins sampled for the moving-load search. `after` marks a crane placed at closest approach
@@ -27,6 +28,19 @@ function maximumMomentOrigins(offsets:number[],loads:number[],spans:[number,numb
  return out;
 }
 
+/**
+ * A sampled crane origin that puts a wheel within meshTolerance of a support, moved so that the wheel is exactly on it
+ * (the nearest such wheel and support): every model then has the wheel on the support node, instead of an element a
+ * fraction of a millimetre long beside it (the lateral-torsional meshes also merge any other load within the tolerance
+ * of a node). Origins outside the travel stay where they are.
+ */
+export function snapToSupports(p:ProjectInput,crane:number,origin:number,within:(o:number)=>boolean){
+ const tolerance=meshTolerance(Math.min(...p.spans),p.section.d);
+ let best=origin,distance=tolerance,x=0;
+ for(const span of [0,...p.spans]){x+=span;for(const w of p.cranes[crane].wheels){const v=x-w.offset,d=Math.abs(v-origin);if(d>0&&d<=distance&&within(v)){distance=d;best=v;}}}
+ return best;
+}
+
 export function cranePositions(p:ProjectInput,steps:number,stations:number[]):CranePosition[][]{
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const spans=p.spans.map((_,i)=>[supports[i],supports[i+1]] as [number,number]);
@@ -34,10 +48,13 @@ export function cranePositions(p:ProjectInput,steps:number,stations:number[]):Cr
  const loaded=(k:number)=>p.cranes[k].wheels.map(w=>w.loaded);
  const aligned=p.cranes.map(()=>new Set<number>());
  const sets=p.cranes.map((c,k)=>{
-  const {start,end}=travel[k],o=new Set<number>(Array.from({length:steps+1},(_,i)=>start+(end-start)*i/steps));
+  // Uniform travel samples and maximum-moment positions are sampling devices: one within meshTolerance of putting a
+  // wheel on a support is taken with the wheel on it (snapToSupports). Stop contacts keep their exact origin.
+  const snap=(o:number)=>snapToSupports(p,k,o,v=>within(k,v));
+  const {start,end}=travel[k],o=new Set<number>(Array.from({length:steps+1},(_,i)=>snap(start+(end-start)*i/steps)));
   // The crane at each stop it strikes: the stop combinations act there alone.
   for(const v of stopContacts(p,k))o.add(v.origin);
-  for(const v of maximumMomentOrigins(c.wheels.map(w=>w.offset),loaded(k),spans))if(within(k,v))o.add(v);
+  for(const v of maximumMomentOrigins(c.wheels.map(w=>w.offset),loaded(k),spans))if(within(k,v))o.add(snap(v));
   for(const x of stations)for(const w of c.wheels){const v=x-w.offset;if(within(k,v)&&!o.has(v)){o.add(v);aligned[k].add(v);}}
   return o;
  });

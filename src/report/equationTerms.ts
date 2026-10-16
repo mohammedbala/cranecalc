@@ -10,7 +10,8 @@ type Term=[tex:string,meaning:string];
 /** Definitions by check id; a function gives the wording of the check's own arrangement (capped or rolled). */
 const terms:[RegExp,Term[]|((c:CheckResult)=>Term[])][]=[
  // Solution checks.
- [/^(convergence|mesh|design-travel|design-mesh|detail-travel|detail-mesh)$/,[['D_n','each governing demand with n crane positions, stations or elements'],['D_{2n}','the same with twice as many']]],
+ [/^(convergence|mesh|design-travel|design-mesh|detail-travel|detail-mesh)$/,[['D_n','each governing demand with n crane positions, stations or elements'],['D_{2n}','the same with twice as many'],
+  ['\\varepsilon','estimated difference of the reported (finest) results from the converged values'],['\\rho','ratio of the last refinement change to the one before it']]],
  [/^(equilibrium|design-equilibrium)$/,[['R','support reactions'],['w','dead load per unit length']]],
  // AWS D1.1 carbon equivalent: element contents in percent by mass (mill certificate).
  [/^column-weld-ce$/,[['\\mathrm{CE}','carbon equivalent, AWS D1.1 Annex B; element contents in percent by mass from the mill certificate']]],

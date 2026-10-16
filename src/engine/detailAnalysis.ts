@@ -12,6 +12,7 @@ import {createRolledBracketCollector} from './rolledBracket';
 import {createTaperedHaunchCollector} from './taperedHaunch';
 import {bracketSeat} from './rolledBracketInputs';
 import { LateralTorsionBeam } from './lateralTorsion';
+import {meshTolerance} from './meshNodes';
 import { beamSystem,momentAt } from './beam';
 import { boltProperties,plateMember,compressionResistance } from './connectionStrength';
 import type { RunwayCaseEvent,RunwayCaseObserver } from './designAnalysis';
@@ -58,8 +59,9 @@ const mergeStations=(xs:number[])=>[...xs].sort((a,b)=>a-b).filter((x,i,s)=>!i||
 /** Each flange is restrained only at its own brace stations; both flanges are tied at supports. */
 export function flangeRestraintStations(p:ProjectInput){
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
- const L=supports.at(-1)!;
- const series=(spacing:number)=>{const s=[...supports];for(let i=1;i*spacing<L-1e-6;i++)s.push(i*spacing);return mergeStations(s);};
+ const L=supports.at(-1)!,tolerance=meshTolerance(Math.min(...p.spans));
+ // A brace station within meshTolerance of a support is that support (the support restrains both flanges there).
+ const series=(spacing:number)=>{const s=[...supports];for(let i=1;i*spacing<L-1e-6;i++)if(supports.every(x=>Math.abs(x-i*spacing)>tolerance))s.push(i*spacing);return mergeStations(s);};
  return {top:series(p.lateralBraceSpacing),bottom:series(p.aist?.bottomBraceSpacing||L)};
 }
 export function restraintStations(p:ProjectInput){const f=flangeRestraintStations(p);return mergeStations([...f.top,...f.bottom]);}
@@ -165,6 +167,9 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+railTopAboveSteel(p)-cap.shearCenter:railTopAboveSteel(p)+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
+ // `subdivisions` elements per span: a continuous girder, one member over all its spans, has subdivisions times the
+ // number of spans over its length (as its vertical beamSystem), not `subdivisions` over the whole runway.
+ const memberSubdivisions=subdivisions*(p.system==='continuous'?p.spans.length:1);
  const longitudinal=longitudinalPaths(p,supports);
  // Bolted end bearings restrain the bottom flange at each support through four bolts into the seat: bolt shear
  // deformation over the flange, bearing plate and seat grip. Otherwise the bottom flange tie is the brace pair.
@@ -208,7 +213,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const deadQ=girderDeadLoad(p,props.weight)+(p.aist?.liveLoad??0),deadTorsion=new Map<number,ReturnType<LateralTorsionBeam['solve']>>();
  let deadVertical:ReturnType<typeof vertical.evaluate>|undefined;
  const deadBay=(bay:number)=>{let t=deadTorsion.get(bay);if(!t){const [start,end]=groups[bay];
-  t=new LateralTorsionBeam({length:end-start,E,G,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
+  t=new LateralTorsionBeam({length:end-start,E,G,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions:memberSubdivisions,...mechanics,
    restraints:allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6).map(x=>({x:x-start,top:restrains(flanges.top,x)?topK(x):0,bottom:restrains(flanges.bottom,x)?bottomK(x):0})),
    loads:[],distributedTorque:p.railWeight*p.railEccentricity}).solve();deadTorsion.set(bay,t);}return t;};
  const deadMoment=(x:number)=>{deadVertical??=vertical.evaluate([],deadQ);return momentAt(x,deadVertical.reactions,[],deadQ);};
@@ -248,7 +253,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    // adds the rigid-body take-up, and clearanceEffects bounds the twist between the two ends of a bay.
    const brScale=strength&&gapped?braceForce??0:0;
    const restraintsAt=(secant:boolean)=>stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?gapK(topK(x),secant&&atSupport(x)?clearance.top.gap:0,brScale)*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?gapK(bottomK(x),secant&&ebK&&Math.abs(x-end)<1e-6?clearance.bottom.gap:0,brScale)*stiffnessFactor:0}));
-   const beamWith=(restraints:ReturnType<typeof restraintsAt>)=>new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions,...mechanics,
+   const beamWith=(restraints:ReturnType<typeof restraintsAt>)=>new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions:memberSubdivisions,...mechanics,
     loads:wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),
     restraints,
     axial:strength?e.axial:0,moment:strength?x=>moment(x+start):undefined,
