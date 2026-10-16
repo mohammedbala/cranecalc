@@ -360,8 +360,8 @@ export const mergeDefs:MergeDef[]=[
  {key:'tie-column-welds',effect:'connection',title:'Tie gusset root fillets (tie force; with the imposed movement)',re:/^(flange-tie-column-weld|tie-weld|tie-move-weld)$/},
  {key:'tie-column-root-fatigue',title:'Column gusset root · weld-root normal fatigue',re:/^(tie-root-fatigue|flange-tie-column-root-fatigue)$/},
  {key:'tie-member',effect:'axial',title:'Tie member · tension and compression buckling',re:/^(brace-member|plate-tie-compression)$/},
- // The AIST TR-13 §5.9.2 bracket limit, stated at the column and at the bracket: one open item.
- {key:'bracket-applicability',title:'Column bracket applicability (AIST TR-13 §5.9.2 total reaction)',re:/^(column-brackets|bracket-tr13-load)$/,types:['classification']},
+ // The AIST TR-13 §5.9.2 bracket limit, stated at the column and at the bracket, haunch or W-stub: one open item.
+ {key:'bracket-applicability',title:'Column bracket applicability (AIST TR-13 §5.9.2 total reaction)',re:/^(column-brackets|(bracket|wbracket|haunch)-tr13-load)$/,types:['classification']},
 ];
 
 export interface TaxonEntry{check:CheckResult;type:CheckType;effect?:Effect;owner:boolean;rule:Classification['rule'];gate:Gate;reason?:string;
