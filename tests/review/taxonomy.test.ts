@@ -63,7 +63,10 @@ describe('gates (item 2; C19, C20, C21)',()=>{
   const r=(t:string)=>tax.fatigue.rows.find(v=>v.title===t)!,ksi=(v?:number)=>Number((v!/6.894757293168).toFixed(2));
   expect([ksi(r('Rail keeper').range),r('Rail keeper').category,r('Rail keeper').miner!.toFixed(2),r('Rail keeper').allCycle!.toFixed(2)]).toEqual([13.33,'D','0.65','0.76']);
   expect([ksi(r('Haunch flanges at the column welds (top and bottom)').range),ksi(r('Existing column flange at the haunch weld toes').range),ksi(r('Column stiffener fillets · throat fatigue (A-3.1 item 8.2)').range)]).toEqual([15.94,3.76,10.52]);
-  for(const id of ['fatigue','stiffener-fatigue','cap-weld-fatigue','rail-keeper-fatigue','haunch-fatigue-stiffener-weld','cap-angle-plate-fatigue','detail-fatigue-CE3-left','detail-full-cycle-SH-left1-left','detail-fatigue-CA3-L'])expect(gate(base,id)).toBe('screened');
+  for(const id of ['fatigue','stiffener-fatigue','cap-weld-fatigue','rail-keeper-fatigue','haunch-fatigue-stiffener-weld','cap-angle-plate-fatigue','detail-fatigue-CE3-left','detail-fatigue-CA3-L'])expect(gate(base,id)).toBe('screened');
+  // The all-cycle bound of a register point beside its Miner check is the comparison ratio (fatigue method Miner): advisory.
+  expect(gate(base,'detail-full-cycle-SH-left1-left')).toBe('advisory');
+  expect(gateCheck(base,base.checks.find(c=>c.id==='detail-full-cycle-SH-left1-left')!).reason).toMatch(/^Comparison bound; Miner governs/);
   expect(tax.fatigue.screened.length).toBeGreaterThan(25);
  });
  it('screens every fatigue detail when live-load cycles are under 20,000',()=>{
@@ -171,7 +174,9 @@ describe('body and page 1 (items 3-5; A1, C16)',()=>{
  it('prints the counts line',()=>{
   // The screened details are further checks beside the evaluated ones ("and N more"); failing design checks and
   // detailing rules not met would be counted in the same line (none in this baseline).
-  expect(text(page1)).toMatch(/414 design checks evaluated, and 419 more screened below the fatigue threshold, 4 N\/A; 75 detailing rules \(16 with small margin, section 6\.2\)\. All results: Appendix A\./);
+  // The all-cycle bounds of the register points (136 evaluated, 200 screened before) are comparison ratios beside the
+  // Miner checks (advisory) and the E2 user-note slenderness of the cap tie plate is a recommendation: neither is counted.
+  expect(text(page1)).toMatch(/278 design checks evaluated, and 219 more screened below the fatigue threshold, 4 N\/A; 74 detailing rules \(16 with small margin, section 6\.2\)\. All results: Appendix A\./);
   expect(text(page1)).not.toMatch(/body rows?|register points?/);
  });
  it('states exactly what remains by others with the forces delivered (D34)',()=>{
@@ -194,7 +199,8 @@ describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>
   expect(flagged).toEqual(expect.arrayContaining(['end-bearing-seat-fit','cap-angle-endplate-edge','cap-angle-lap-edge','cap-angle-washer','end-bearing-washer','stiffener-weld-minimum','haunch-web-weld-minimum']));
   expect(flagged.length).toBeLessThanOrEqual(25);
   const page=text(section('Detailing checklist'));
-  expect(page).toMatch(/Other 59 rules: OK \(Appendix A\)/);
+  // 58: the cap tie plate slenderness (AISC E2 user note) is a recommendation, not a detailing rule.
+  expect(page).toMatch(/Other 58 rules: OK \(Appendix A\)/);
   expect(page).not.toMatch(/Bolt spacing/); // a satisfied rule with margin is not listed
   expect(page).toMatch(/Bearings and bolts fit on the haunch top flange .* At limit/);expect(page).not.toMatch(/exactly/);
  });
@@ -212,7 +218,7 @@ describe('detailing checklist, fatigue table, appendix and CSV (items 6-8)',()=>
   const listed=[...a.matchAll(/data-check="([^"]*)"(?: data-members="([^"]*)")?/g)].flatMap(m=>m[2]?m[2].split(' '):[m[1]]);
   expect(listed).toHaveLength(966);expect(new Set(listed)).toEqual(new Set(base.checks.map(c=>c.id)));
   const csv=checksCsv(base,tax).trim().split('\n');expect(csv).toHaveLength(967);
-  expect(csv[0]).toBe('id,type,effect,element,title,group,location,repeat_group,typical_of,governs_group,body_line,gate,gate_reason,status,demand,capacity,utilization,quantity,units,reference,case,case_name,classification_rule');
+  expect(csv[0]).toBe('id,type,effect,element,title,group,location,repeat_group,typical_of,governs_group,body_line,gate,gate_reason,status,demand,capacity,utilization,quantity,units,reference,case,case_name,classification_rule,dc_state');
   expect(new Set(csv.slice(1).map(r=>r.split(',')[0]))).toEqual(new Set(base.checks.map(c=>c.id)));
   expect(csv.find(r=>r.startsWith('haunch-fatigue-stiffener-weld,'))).toMatch(/,screened,"?Below threshold: largest range 7\.29 ksi < F_TH 8\.00 ksi/);
  });

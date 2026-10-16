@@ -81,6 +81,9 @@ const idRules:Rule[]=[
  T(/^(cap-development-length|cap-rail-footprint|haunch-colstiff-weld-minimum)$/,'detailing'),
  T(/^cap-angle-plate-slenderness$/,'detailing'),
  // Design: strength and serviceability, by effect
+ // Thickness from strength (t_req ≤ t): the base plate in bending (AISC DG1); the bumper peak force against the end stop
+ // design strength (a check of the stop, filed with its redesign).
+ D(/^base-plate$/,'flexure'),D(/^crane-\d+-bumper-stop$/,'connection'),
  D(/^(cap-weld-(strength|metal|rupture)|rail-joint-plate|end-stop-bearing-(base|flange)|cap-development(-full-force)?)$/,'connection'),
  // Rail clips: the manufacturer's lateral and uplift ratings; the rail anchorage (end stops or anchor clip pair).
  D(/^(rail-clip-(lateral|uplift)|rail-anchorage)$/,'connection'),
@@ -108,8 +111,10 @@ export function classifyCheck(c:CheckResult):Classification{
  if(r)return {type:r.type,effect:r.type==='design'?r.effect??'other':undefined,owner:!!r.owner,rule:'id'};
  const g=groupRules.find(([re])=>re.test(c.group));
  if(g)return {type:g[1],effect:g[2],owner:false,rule:'group'};
- // Default: a dimensional rule is detailing; anything with a demand and capacity is a design check; else a record.
- if(c.quantity==='length')return {type:'detailing',owner:false,rule:'default'};
+ // Default: a dimensional rule is detailing, unless it is a thickness or size required for strength (its equation carries a
+ // resistance or safety factor, t ≥ √(…/φF_y)): a design check; anything with a demand and capacity is a design check;
+ // else a record.
+ if(c.quantity==='length')return /\\phi|\\Omega/.test(c.equation)?{type:'design',effect:'flexure',owner:false,rule:'default'}:{type:'detailing',owner:false,rule:'default'};
  if(c.demand!==undefined&&c.capacity!==undefined)return {type:'design',effect:'other',owner:false,rule:'default'};
  return {type:'input',owner:false,rule:'default'};
 }
@@ -209,6 +214,12 @@ export function fatigueData(s:CalculationSnapshot,c:CheckResult):FatigueData|und
   return {range,threshold:root?undefined:thresholdOf(k),category:k,miner:m.range/m.capacity,equivalent:m.range,damage:m.damage,capacity:FSR,allCycle:range/FSR,bins,source:'support results'};
  }
  if(c.quantity!=='stress'||c.demand===undefined||c.capacity===undefined)return undefined;
+ // A weld-root detail (AISC 360-16 Table A-3.1 items 5.4/5.6, Eq. A-3-6): the check's own allowable carries R_FIL (in
+ // its equation, or "R_FIL =" / "with R_FIL" in its note) and is below the Category C curve at n_SR. Its curve is C″
+ // whatever category the note names first (a toe crack, a bound), and a root crack has no threshold: never screened.
+ // A Category F throat check that only refers to a root check elsewhere is not one.
+ const ownRoot=/R_\{FIL\}/.test(c.equation)||/\bR_?FIL\s*=|\bwith R_FIL\b/.test(note),categoryF=/1\.5\/n_\{SR\}|\(1\.5\/n/.test(c.equation)||/\bCategory F\b/.test(note);
+ if(ownRoot&&!categoryF&&c.capacity<allCycleRange('C',n)*(1-.005))return {range:c.demand,threshold:undefined,category:"C''",allCycle:c.utilization,capacity:c.capacity,source:'check'};
  // All-cycle checks: the demand is the largest range. Root cracks (C″, R_FIL < 1): no threshold.
  if(cat==="C''"||(!cat&&rfil)){const R=rootR();return {range:c.demand,threshold:R<1-1e-9?undefined:thresholdOf('C'),category:R<1-1e-9?"C''":'C',allCycle:c.utilization,capacity:c.capacity,source:'check'};}
  // Bolts and threaded rods in tension, Table A-3.1 item 8.5 (F_TH = 7 ksi stated in the note).
@@ -221,7 +232,11 @@ export function fatigueData(s:CalculationSnapshot,c:CheckResult):FatigueData|und
 /** Peak-stress limits (Appendix 3.1, 0.66Fy) accompany the fatigue checks; they are not stress-range checks. */
 const isPeak=(id:string)=>/^fatigue-peak/.test(id);
 
-export interface GateResult{gate:Gate;reason?:string}
+export interface GateResult{gate:Gate;reason?:string;
+ /** A screen by the cycle count (fewer than 20,000, AISC 360-16 Appendix 3.1) or by the largest range below F_TH. */
+ screen?:'cycles'|'threshold';
+ /** An advisory rule that is a recommendation of the Specification (a user note): listed apart, never a failure. */
+ recommendation?:boolean}
 /** The project's governing fatigue method: Miner's sum over the duty bins (default) or the all-cycle bound. */
 export const fatigueMethod=(p:ProjectInput)=>p.fatigue.method??'miner';
 const j10Required=(s:CalculationSnapshot,prefix:string,column:boolean)=>{
@@ -234,10 +249,34 @@ const j10Required=(s:CalculationSnapshot,prefix:string,column:boolean)=>{
  const web=s.checks.filter(v=>new RegExp(`^${prefix}-web-(yielding|crippling)$`).test(v.id));
  return web.length?web.some(v=>v.status==='fail'||(v.utilization??0)>1):true;
 };
-/** Gate of one check from the current inputs and results; never hard-coded to a project. */
+/** The user notes of AISC 360-16 E2 (L_c/r preferably not over 200) and D1 (L/r preferably not over 300): recommendations. */
+const userNote=(c:CheckResult)=>c.note.match(/\b(E2|D1) user note\b/)?.[1]??(/^(tie|brace-strut|cap-angle-plate)-slenderness$/.test(c.id)?'E2':undefined);
+const idSets=new WeakMap<CheckResult[],Set<string>>();
+const idsOf=(s:CalculationSnapshot)=>{let v=idSets.get(s.checks);if(!v){v=new Set(s.checks.map(c=>c.id));idSets.set(s.checks,v);}return v;};
+/**
+ * The fatigue ratio of a detail that is not the project's method, beside the one that is: the all-cycle bound of a
+ * register point (or of a support check, id ending -all-cycle) when the method is Miner's sum, the Miner check when it
+ * is the all-cycle bound. Only where both ratios are computed for the same point.
+ */
+export function comparisonBound(s:CalculationSnapshot,c:CheckResult){
+ const ids=idsOf(s),miner=fatigueMethod(s.input)==='miner';
+ const full=c.id.match(/^detail-full-cycle-(.+)$/)?.[1],eq=c.id.match(/^detail-fatigue-(.+)$/)?.[1],support=c.id.match(/^(.+)-all-cycle$/)?.[1];
+ if(miner)return !!(full&&ids.has(`detail-fatigue-${full}`))||!!(support&&ids.has(support));
+ return !!(eq&&ids.has(`detail-full-cycle-${eq}`))||ids.has(`${c.id}-all-cycle`);
+}
+/**
+ * Gate of one check from the current inputs and results; never hard-coded to a project. calculate() files a failing check
+ * that a gate other than the threshold screen holds as not applicable, with the gate's reason first; an advisory rule
+ * keeps its gate then (a recommendation stays listed, a comparison bound stays a bound).
+ */
 export function gateCheck(s:CalculationSnapshot,c:CheckResult,k:Classification=classifyCheck(c)):GateResult{
+ if(c.status!=='not-applicable')return ruleGate(s,c,k);
+ const g=ruleGate(s,c,k);
+ if(g.gate==='advisory'&&g.reason&&c.note.startsWith(g.reason))return g;
+ return {gate:'not-applicable',reason:firstSentence(c.note)||'Not applicable to this arrangement.'};
+}
+function ruleGate(s:CalculationSnapshot,c:CheckResult,k:Classification):GateResult{
  const p=s.input;
- if(c.status==='not-applicable')return {gate:'not-applicable',reason:firstSentence(c.note)||'Not applicable to this arrangement.'};
  if(c.id==='cap-angle-column-holes'||/F13\.1/.test(c.title)&&k.type==='classification')
   return {gate:'modifier',reason:`AISC F13.1 test ${c.status==='fail'||(c.utilization??0)>1?'NOT MET: the member flexural strength uses F13-1':'met: holes do not reduce the member flexural strength'}. A capacity modifier, not a check.`};
  if(k.owner&&!(c.capacity!==undefined&&Number.isFinite(c.capacity)&&c.capacity>0))return {gate:'not-applicable',reason:'Owner criterion not provided; not checked.'};
@@ -251,11 +290,16 @@ export function gateCheck(s:CalculationSnapshot,c:CheckResult,k:Classification=c
  // Full channel-force development at cap ends: partial-length caps only.
  if((/full channel force/i.test(c.title)||/^cap-development-(full-force|length)$/.test(c.id))&&p.capDesign?.fullLength)
   return {gate:'not-applicable',reason:'Full channel-force development applies at the ends of partial-length caps; this cap runs the full girder length and ends at the supports, where the moment is negligible.'};
+ // AISC 360-16 E2 and D1 user notes: slenderness limits the Specification recommends; the strength checks govern.
+ const note=userNote(c);
+ if(note)return {gate:'advisory',recommendation:true,reason:note==='E2'?'AISC 360-16 E2 user note: L_c/r preferably should not exceed 200; a recommendation, not a requirement (the compression strength is checked by AISC E3 and H1).':'AISC 360-16 D1 user note: L/r preferably should not exceed 300; a recommendation, not a requirement.'};
  if(k.effect==='fatigue'&&!isPeak(c.id)){
   const n=fatigueCycles(s);
-  if(n<2e4)return {gate:'screened',reason:`Live-load cycles ${n.toLocaleString('en-US')} < 20,000 (AISC 360-16 Appendix 3.1): fatigue need not be evaluated.`};
+  if(n<2e4)return {gate:'screened',screen:'cycles',reason:`Live-load cycles ${n.toLocaleString('en-US')} < 20,000 (AISC 360-16 Appendix 3.1): fatigue need not be evaluated.`};
+  if(comparisonBound(s,c)){const miner=fatigueMethod(p)==='miner';
+   return {gate:'advisory',reason:`Comparison bound; ${miner?'Miner':'all-cycle'} governs: the project's fatigue method is ${miner?"Miner's sum over the duty bins":'the all-cycle bound'}, so this ratio is listed for comparison (fatigue table, Appendix A and the CSV) and is not a check.`};}
   const f=fatigueData(s,c);
-  if(f&&f.threshold!==undefined&&f.range<f.threshold)return {gate:'screened',reason:`Below threshold: largest range ${(f.range/ksi).toFixed(2)} ksi < F_TH ${(f.threshold/ksi).toFixed(2)} ksi (${categoryPhrase(f.category,c.title)}, AISC 360-16 Appendix 3.1).`};
+  if(f&&f.threshold!==undefined&&f.range<f.threshold)return {gate:'screened',screen:'threshold',reason:`Below threshold: largest range ${(f.range/ksi).toFixed(2)} ksi < F_TH ${(f.threshold/ksi).toFixed(2)} ksi (${categoryPhrase(f.category,c.title)}, AISC 360-16 Appendix 3.1).`};
  }
  return {gate:'evaluated'};
 }
@@ -270,10 +314,12 @@ export function registerFamily(s:CalculationSnapshot,id:string){
 /** Distinct fatigue register points (a station and flange edge) among checks; each has an equivalent-range and an all-cycle check. */
 export const registerPoints=(checks:CheckResult[])=>new Set(checks.flatMap(c=>c.id.match(/^detail-(?:fatigue|full-cycle)-(.+)$/)?.[1]??[])).size;
 /** Named fatigue checks of one detail: the haunch (bracket) flanges at their welds to the column, top and bottom. */
-const fatigueDetailKey=(id:string)=>id.replace(/^(haunch|wbracket|bracket)-fatigue-(top|bottom)-flange$/,'$1-fatigue-flanges');
-const fatigueDetailTitle:Record<string,string>={'haunch-fatigue-flanges':'Haunch flanges at the column welds (top and bottom)'};
+const fatigueDetailKey=(id:string)=>id.replace(/^(haunch|wbracket|bracket)-fatigue-(top|bottom)-flange$/,'$1-fatigue-flanges').replace(/^(tie-root-fatigue|flange-tie-column-root-fatigue)$/,'tie-column-root-fatigue');
+const fatigueDetailTitle:Record<string,string>={'haunch-fatigue-flanges':'Haunch flanges at the column welds (top and bottom)','tie-column-root-fatigue':'Column gusset root · weld-root normal fatigue'};
 const familyTitle=(name:string)=>name.replace(/\s+\d+\b/,'').replace(/,\s*bay \d+.*?(?=·|$)/,'').replace(/\s*·\s*(left|right|channel flange (left|right))\b/,'').replace(/\s*·\s*all-cycle bound$/,'').replace(/\s+(front|back) row/,'').trim();
-interface MergeDef{key:string;title:string;re:RegExp;prefer?:RegExp;effect?:Effect;/** Always shown in the body, governing or not (the member's flexural strength). */always?:boolean}
+interface MergeDef{key:string;title:string;re:RegExp;prefer?:RegExp;effect?:Effect;/** Always shown in the body, governing or not (the member's flexural strength). */always?:boolean;
+ /** Merge checks of these types into one open item (no body line): applicability tests stated twice. Default: design checks, one body line. */
+ types?:CheckType[]}
 /**
  * Redundant checks reported as one line, the controlling limit state named: one combined-action check and one LTB
  * check per member, one line per bolt group, stiffener set and weld group, one line for the rail joint.
@@ -309,6 +355,13 @@ export const mergeDefs:MergeDef[]=[
  {key:'rail-keepers',effect:'connection',title:'Rail keepers (lip, shear, welds)',re:/^rail-keeper-(flexure|shear|weld)$/},
  {key:'rail-anchor',effect:'connection',title:'Rail anchor (welds, notch bearing)',re:/^rail-anchor-(weld|bearing)$/},
  {key:'fatigue-peak',title:'Peak elastic stress (AISC Appendix 3.1, 0.66Fy)',re:/^fatigue-peak(-detailed)?$/},
+ // One physical weld or member checked by two or three modules: the column gusset root fillets under the tie force (the
+ // flange attachment, the tie connection, and with the imposed movement), their weld-root fatigue, the tie in compression.
+ {key:'tie-column-welds',effect:'connection',title:'Tie gusset root fillets (tie force; with the imposed movement)',re:/^(flange-tie-column-weld|tie-weld|tie-move-weld)$/},
+ {key:'tie-column-root-fatigue',title:'Column gusset root · weld-root normal fatigue',re:/^(tie-root-fatigue|flange-tie-column-root-fatigue)$/},
+ {key:'tie-member',effect:'axial',title:'Tie member · tension and compression buckling',re:/^(brace-member|plate-tie-compression)$/},
+ // The AIST TR-13 §5.9.2 bracket limit, stated at the column and at the bracket: one open item.
+ {key:'bracket-applicability',title:'Column bracket applicability (AIST TR-13 §5.9.2 total reaction)',re:/^(column-brackets|bracket-tr13-load)$/,types:['classification']},
 ];
 
 export interface TaxonEntry{check:CheckResult;type:CheckType;effect?:Effect;owner:boolean;rule:Classification['rule'];gate:Gate;reason?:string;
@@ -325,19 +378,39 @@ export interface FatigueRow{key:string;title:string;element:string;category:stri
  /** typicalOf: checks of the detail (two per register point: equivalent range and all-cycle); points: register points. */
  gate:Gate;reason?:string;typicalOf:number;points:number;members:CheckResult[];governing:CheckResult}
 export interface ElementDef{key:string;label:string;step?:number;match:(c:CheckResult)=>boolean}
+/**
+ * What an open item needs: a clash or geometry conflict resolved; a redesign (a strength, movement or fatigue check, an
+ * applicability limit such as AIST TR-13 §5.9.2, the end stop under the bumper); a detailing rule met; input supplied or
+ * corrected (missing data, crane data that do not add up). A recommendation (an advisory user note of the Specification)
+ * is not an open item: Taxonomy.recommendations lists it apart, never as a failure.
+ */
 export interface OpenItem{kind:'clash'|'redesign'|'input'|'detailing';check:CheckResult}
+/** An advisory recommendation not met: the check and the gate's reason. */
+export interface Recommendation{check:CheckResult;reason:string}
 export interface Taxonomy{
  entries:Map<string,TaxonEntry>;lines:BodyLine[];shown:BodyLine[];
  elements:{key:string;label:string;step?:number;shown:BodyLine[];others:{count:number;max?:number}}[];
  fatigue:{method:'miner'|'all-cycle';cycles:number;rows:FatigueRow[];evaluated:FatigueRow[];screened:FatigueRow[];peak?:BodyLine};
  detailing:{evaluated:TaxonEntry[];flagged:{entry:TaxonEntry;reason:string}[];satisfied:number;gated:TaxonEntry[]};
  counts:{total:number;byType:Record<CheckType,number>;designEvaluated:number;designShown:number;designScreened:number;designNotApplicable:number;detailing:number;detailingFlagged:number};
- openItems:OpenItem[];byOthers:TaxonEntry[];governing?:{title:string;dc:number;check:CheckResult;element:string};
+ openItems:OpenItem[];
+ /** Advisory recommendations not met (the E2 user note L_c/r ≤ 200): listed apart from the open items, never failures. */
+ recommendations:Recommendation[];
+ byOthers:TaxonEntry[];governing?:{title:string;dc:number;check:CheckResult;element:string};
  /** The engineering name of a case id (combination and crane position), for printed tables; ids stay in the CSV. */
  caseName:(id:string|undefined)=>string;
 }
 const defaultElements:ElementDef[]=[{key:'all',label:'Checks',match:()=>true}];
-const dcOf=(c:CheckResult)=>c.utilization!==undefined&&Number.isFinite(c.utilization)?c.utilization:-1;
+/**
+ * A check's D/C for ranking: a part with no capacity (noCapacity, or a stored ratio that is infinite or above 1000) ranks
+ * above every finite value; a check without a ratio (a rule, a geometry conflict) ranks below every one.
+ */
+export const dcOf=(c:CheckResult)=>{
+ const u=c.utilization;
+ if(c.geometry)return -1;
+ if(c.noCapacity||(u!==undefined&&!Number.isNaN(u)&&(!Number.isFinite(u)||u>1e3)))return c.quantity==='length'&&!c.noCapacity?-1:Infinity;
+ return u!==undefined&&Number.isFinite(u)?u:-1;
+};
 const pick=(v:CheckResult[])=>v.reduce((a,b)=>(b.status==='fail'?1e9:0)+dcOf(b)>(a.status==='fail'?1e9:0)+dcOf(a)?b:a,v[0]);
 export const openStatuses:CheckResult['status'][]=['fail','unverified','incomplete','unsupported'];
 const fitRule=(c:CheckResult)=>c.group==='Coordination'||/(-fit|-clear|-float|-contact|-endplate-edge)$/.test(c.id);
@@ -367,7 +440,12 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
  // Body lines: evaluated DESIGN checks, merged where redundant; fatigue goes to its own table.
  const design=[...entries.values()].filter(t=>t.type==='design'&&t.gate==='evaluated'&&!['not-applicable','excluded'].includes(t.check.status));
  const lines:BodyLine[]=[],used=new Set<string>();
- for(const m of mergeDefs){
+ // Applicability tests stated twice: one open item (the members share a line key; no body line).
+ for(const m of mergeDefs.filter(v=>v.types)){
+  const v=[...entries.values()].filter(t=>m.types!.includes(t.type)&&m.re.test(t.check.id));
+  if(v.length>1)for(const t of v)t.line=`${m.key}@${v[0].element}`;
+ }
+ for(const m of mergeDefs.filter(v=>!v.types)){
   const byEl=new Map<string,TaxonEntry[]>();
   for(const t of design)if(m.re.test(t.check.id))byEl.set(t.element,[...(byEl.get(t.element)??[]),t]);
   for(const [el,v] of byEl){
@@ -432,10 +510,11 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
    if(margin<Math.min(inch/8,.1*limit)-1e-6)flagged.push({entry:t,reason:margin<1e-6?'At limit':inch/8<=.1*limit?'Margin < 1/8 in':'Margin < 10%'});
   }else if(u>.9)flagged.push({entry:t,reason:u>=1-1e-6?'At limit':`Margin ${((1-u)*100).toFixed(0)}%`});
  }
- // Open items: clashes, redesign flags, missing or inconsistent input, failed detailing; then by others.
+ // Open items: clashes and geometry conflicts, redesign flags, missing or inconsistent input, failed detailing; then by
+ // others. An advisory rule is not an open item: a comparison bound is folded into its point, a recommendation listed apart.
  const order={clash:0,redesign:1,input:2,detailing:3};
- const openItems:OpenItem[]=[...entries.values()].filter(t=>openStatuses.includes(t.check.status)).map(t=>({check:t.check,
-  kind:(t.check.group==='Coordination'||(t.type==='detailing'&&fitRule(t.check))?'clash':t.type==='design'&&t.check.status==='fail'?'redesign':t.type==='detailing'?'detailing':'input') as OpenItem['kind']})).sort((a,b)=>order[a.kind]-order[b.kind]);
+ const openItems:OpenItem[]=[...entries.values()].filter(t=>openStatuses.includes(t.check.status)&&t.gate!=='advisory').map(t=>({check:t.check,kind:openKind(t)})).sort((a,b)=>order[a.kind]-order[b.kind]);
+ const recommendations:Recommendation[]=[...entries.values()].filter(t=>t.gate==='advisory'&&gateCheck(s,t.check).recommendation&&(t.check.status==='fail'||(t.check.utilization??0)>1+1e-9)).map(t=>({check:t.check,reason:t.reason??''}));
  // Layout conflicts the engine reports as notices rather than checks (connection coordination): open items too,
  // unless the snapshot already carries them as Coordination checks.
  if(!s.checks.some(c=>c.group==='Coordination'))connectionCoordination(s.input).forEach((note,i)=>openItems.unshift({kind:'clash',check:{id:`coordination-notice-${i+1}`,group:'Coordination',title:'Connection layout requires redesign',status:'fail',equation:'',note,referenceIds:[]}}));
@@ -450,7 +529,21 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
   detailing:{evaluated:detEval,flagged,satisfied:detEval.length-flagged.length,gated},
   counts:{total:entries.size,byType,designEvaluated:designAll.filter(t=>t.gate==='evaluated'&&!['not-applicable','excluded'].includes(t.check.status)).length,designShown:shown.length+evaluatedFatigue.length,
    designScreened:designAll.filter(t=>t.gate==='screened').length,designNotApplicable:designAll.filter(t=>t.gate==='not-applicable'||t.check.status==='not-applicable').length,detailing:detEval.length,detailingFlagged:flagged.length},
-  openItems,byOthers:[...entries.values()].filter(t=>t.type==='by-others'),governing:top&&top.dc>=0?{title:top.title,dc:top.dc,check:top.check,element:top.element}:undefined};
+  openItems,recommendations,byOthers:[...entries.values()].filter(t=>t.type==='by-others'),governing:top&&top.dc>=0?{title:top.title,dc:top.dc,check:top.check,element:top.element}:undefined};
+}
+/**
+ * The kind of an open item, from its status and type: a clash or a geometry conflict; missing data ('unverified' or
+ * 'incomplete') and true input checks (crane data, criteria, load basis) as input; a detailing rule; everything else that
+ * fails (strength, movement, fatigue, an applicability limit, a model outside the supported scope) as redesign.
+ */
+export function openKind(t:Pick<TaxonEntry,'check'|'type'>):OpenItem['kind']{
+ const c=t.check;
+ if(c.group==='Coordination'||c.geometry||(t.type==='detailing'&&fitRule(c)))return 'clash';
+ if(c.status==='unverified'||c.status==='incomplete')return 'input';
+ if(c.status==='unsupported')return 'redesign';
+ if(t.type==='input'||t.type==='load-basis'||t.type==='by-others')return 'input';
+ if(t.type==='detailing')return 'detailing';
+ return 'redesign';
 }
 /** The force effects the body reports one governing line for (stability with flexure). */
 export const bodyEffect=(e:Effect):Effect=>e==='stability'||e==='other'?'flexure':e;

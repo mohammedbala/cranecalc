@@ -36,7 +36,9 @@ const check=(s:CalculationSnapshot,id:string)=>s.checks.find(c=>c.id===id)!;
 describe('open items: one per detail type and element, sorted, with what is needed',()=>{
  const {groups,bounds}=openGroups(tax,base);
  it('groups the register points of one detail, folds the all-cycle bound into the Miner item and counts its locations',()=>{
-  expect(tax.openItems.length).toBe(52);
+  // 32 open checks: the 20 all-cycle bounds beside the failing Miner points are comparison ratios (gate advisory,
+  // "comparison bound; Miner governs"), folded into their items below, not open checks of their own.
+  expect(tax.openItems.length).toBe(32);
   expect(groups.length).toBeLessThan(16);
   const saddle=groups.filter(g=>g.key.startsWith('register:SA'));
   expect(saddle).toHaveLength(1);
@@ -170,8 +172,9 @@ describe('the element results include every open item',()=>{
  });
  it('counts the NG design checks and the detailing rules not met or not established under the summary',()=>{
   const ng=[...tax.entries.values()].filter(t=>t.type==='design'&&t.gate==='evaluated'&&t.check.status==='fail').length;
-  expect(ng).toBe(51);
-  expect(text(countsLine(tax))).toContain(`${tax.counts.designEvaluated} design checks evaluated (51 NG), and ${tax.counts.designScreened} more screened below the fatigue threshold`);
+  // The 20 failing all-cycle bounds are comparison ratios beside their Miner checks (advisory), not NG design checks.
+  expect(ng).toBe(31);
+  expect(text(countsLine(tax))).toContain(`${tax.counts.designEvaluated} design checks evaluated (31 NG), and ${tax.counts.designScreened} more screened below the fatigue threshold`);
   const s=clone(),edge=check(s,'rail-joint-edge');edge.status='fail';edge.utilization=1.1;
   expect(text(countsLine(taxonomy(s)))).toMatch(/detailing rules \(1 not met(, \d+ with small margin)?, section/);
   edge.status='unverified';
