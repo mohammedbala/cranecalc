@@ -70,6 +70,12 @@ describe('rod X-bracing between new freestanding columns',()=>{
   // Grid 1 locates its girder but is not braced; grid 4 does neither.
   expect(base1.actions.some(a=>a.id.endsWith('brace uplift'))).toBe(false);expect(base1.actions.find(a=>a.id==='LRFD AIST bumper · brace')!.torque).toBeCloseTo(Cbs*e,3);
   expect(base4.actions.some(a=>a.id.includes('· brace'))).toBe(false);
+  // Side thrust comes with the wheel loads of the crane that produces it: the least crane vertical (no crane at the
+  // column) carries none; the brace uplift is also taken with side thrust and its crane vertical (TR-13 2b).
+  for(const base of [base1,base2,base4])for(const a of base.actions.filter(x=>x.id.endsWith('least crane vertical')||x.id.endsWith('brace uplift')))expect(a.Mh).toBe(0);
+  const withThrust=base2.actions.filter(a=>a.id.endsWith('brace uplift, side thrust'));
+  expect(withThrust.length).toBeGreaterThan(0);
+  for(const a of withThrust){const plain=base2.actions.find(x=>x.id===a.id.replace(', side thrust',''))!;expect(a.Mh).toBeGreaterThan(0);expect(a.uplift).toBeCloseTo(plain.uplift!,6);expect(a.P).toBeGreaterThan(plain.P);}
   // Default: no warping restraint relied on at the base, the torque below the seat in Saint-Venant torsion (lower
   // bound): no warping stress, flange shear T tf/J, no bimoment at the base.
   const t=s.existingColumn!.torsion!,props=sectionProperties(column),a=Math.sqrt(column.E*props.Cw/(column.E/2.6*props.J));
