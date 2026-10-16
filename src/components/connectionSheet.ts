@@ -20,6 +20,7 @@ import {refDim, sheetDrawingScale as drawingScale, text, line, rect, circle, dim
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
 import { railKeeperView } from './railKeeperView';
+import { AnnotationSpace, dimVClear } from './annotationSpace';
 import {ribGeometry} from '../engine/bracketRib';
 import {haunchedRibOutline} from './haunchedBracketDrawing';
 import { slidingBoltView } from './slidingBoltSection';
@@ -200,9 +201,11 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   // Girder-end bolt group, bar length and centerline to column face left of the bars, each on its own line.
   const xb=X(-tg/2)-tbk-8;
   // Pitch nearest the bars and the edge outside it, so neither carried text crosses the other's extension lines.
-  if(c.rows>1)svg+=dimV(Z(girderRows[0]),Z(girderRows.at(-1)!),xb,xb-24,c.rows>2?`${c.rows-1} @ ${size(c.pitch)}`:size(c.pitch));
-  svg+=dimV(Z(g.start),Z(girderRows[0]),xb,xb-46,size(c.edge));
-  svg+=dimV(Z(g.start),colZ,xb,xb-70,dim(t.length))+dimV(Z(0),colZ,xb,xb-94,dim(g.face));
+  // A value too long for its dimension reads where it is clear of the drawn girder and ties.
+  const drawn=new AnnotationSpace(svg);
+  if(c.rows>1)svg+=dimVClear(drawn,Z(girderRows[0]),Z(girderRows.at(-1)!),xb,xb-24,c.rows>2?`${c.rows-1} @ ${size(c.pitch)}`:size(c.pitch));
+  svg+=dimVClear(drawn,Z(g.start),Z(girderRows[0]),xb,xb-46,size(c.edge));
+  svg+=dimVClear(drawn,Z(g.start),colZ,xb,xb-70,dim(t.length))+dimVClear(drawn,Z(0),colZ,xb,xb-94,dim(g.face));
   // Callouts in a column right of the girder, in the order of their targets down the sheet.
   const lx=X(half)+50,items:{at:XY;labels:string[];weld?:'cjp'|'fillet'}[]=[
    {at:[X(half*.6),Z(-b.bf/2)],labels:[`${b.name} RUNWAY GIRDER`,`PLAN; TIE AT ${g.sides.length>1?'BOTH FLANGES':'TOP FLANGE'}`]},

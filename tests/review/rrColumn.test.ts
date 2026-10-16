@@ -3,7 +3,7 @@ import {calculate} from '../../src/engine/calculate';
 import {buildTaxonomy} from '../../src/engine/checkTaxonomy';
 import {summaryElements} from '../../src/report/designSummary';
 import {compactReport} from '../../src/report/compactReport';
-import {coverSheetSvg} from '../../src/components/coverSheet';
+import {coverSheetSvgs} from '../../src/components/coverSheet';
 import {columnStiffenerGeometry,stiffenerGauge} from '../../src/engine/columnStiffeners';
 import {deliveredForces,braceImperfection} from '../../src/engine/forcesDelivered';
 import {deliveredRows} from '../../src/report/deliveredTable';
@@ -12,6 +12,8 @@ import {capTieLine,capAngleGeometry} from '../../src/engine/capAngle';
 import {asceCombinations} from '../../src/engine/asceCombinations';
 import {workedSteps,haunchJ10Worked} from '../../src/report/workedChecks';
 import {demoFocus005RevB} from '../fixtures/demoFocus005RevB';
+// The cover with the sheets continuing its notes (S-00A) where they do not fit it at the lettering size.
+const coverSheetSvg=(...a:Parameters<typeof coverSheetSvgs>)=>coverSheetSvgs(...a).join('');
 
 /**
  * Peer review round 2, group A (column side and hand-off) on DEMO-FOCUS-005 Rev B: C2 one force system at the haunch

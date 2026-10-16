@@ -2,7 +2,7 @@ import {supportColumn} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,electrodeClass,plateInches,dimensionLength} from './drawingFormat';
-import {sheetDrawingScale,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,labelColumn,textWidth,type XY} from './sheetGraphics';
+import {sheetDrawingScale,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,labelColumn,textWidth,lettering,type XY} from './sheetGraphics';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {usesExistingBracket} from '../engine/existingBracket';
@@ -83,9 +83,15 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    const x0=Math.min(v.end,v.end+v.dir*L);
    svg+=rect(X(x0),Y(b.reach-W/2),L*k,W*k,'runway-line');
    if(g)for(const row of g.rows){const x=v.end+v.dir*row;holesX.push(x);for(const y of rowsY)svg+=circle(X(x),Y(y),g.hole/2*k,'runway-line')+line([X(x)-2.5,Y(y)],[X(x)+2.5,Y(y)])+line([X(x),Y(y)-2.5],[X(x),Y(y)+2.5]);}
+  }
+  // The hole ordinates read down from the seat tip; the end labels and the notes stand below the longest of them.
+  const ordinates=g&&eb?[0,...holesX].sort((a,c)=>a-c):[],ordinateFoot=tip+14+Math.max(0,...ordinates.map(x=>textWidth(x?dim(Math.abs(x)):'0',lettering.text)));
+  let notesY=ordinateFoot+lettering.leading;
+  for(const v of plates){
    // Each label centered under its plate, on two lines when the pair would run together on one.
-   if(v.label&&g){const one=(L+gap)*k>1.1*(textWidth('SLIDING END',7)+textWidth('LOCATING END',7))/2+6;
-    svg+=one?text(X(v.end+v.dir*L/2),tip+60,`${v.label} END`,7,'middle',700):text(X(v.end+v.dir*L/2),tip+56,v.label,7,'middle',700)+text(X(v.end+v.dir*L/2),tip+64,'END',7,'middle',700);}
+   if(v.label&&g){const one=(L+gap)*k>1.1*(textWidth('SLIDING END',lettering.text,true)+textWidth('LOCATING END',lettering.text,true))/2+6,y=ordinateFoot+lettering.text+6;
+    svg+=one?text(X(v.end+v.dir*L/2),y,`${v.label} END`,lettering.text,'middle',700):text(X(v.end+v.dir*L/2),y,v.label,lettering.text,'middle',700)+text(X(v.end+v.dir*L/2),y+lettering.leading,'END',lettering.text,'middle',700);
+    notesY=Math.max(notesY,y+(one?0:lettering.leading)+lettering.leading+4);}
   }
   // Column stiffeners at the seat: the column broken just beyond the flange, the plates cut.
   if(cs)svg+=stiffenerPlan(cs.g,{cx,face,k,cls:sc.isNew?'runway-line':'reference-line',stub:10}).svg;
@@ -96,9 +102,9 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   // the hole columns as ordinates from the grid below the seat, the rows at the gauge on the girder C/L.
   svg+=dimV(face,Y(b.reach),left-2,left-16,dim(b.reach))+dimV(face,tip,left-2,left-34,dim(b.seatProjection));
   if(g&&eb){
-   for(const x of [0,...holesX].sort((a,c)=>a-c))svg+=line([X(x),tip+3],[X(x),tip+12])+text(X(x)+3,tip+14,x?dim(Math.abs(x)):'0',7.5,'end',400,-90);
-   svg+=text(left,tip+76,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,7.5);
-   svg+=text(left,tip+86,p.system==='simple'?endGridBearingNote(p,g.rows,dim):`AT A RUNWAY-END GRID: THE GIRDER END ON THE GRID, ITS BEARING INBOARD; HOLES ${dim(g.rows[0])} AND ${dim(g.rows[1])} FROM IT.`,7.5);
+   for(const x of ordinates)svg+=line([X(x),tip+3],[X(x),tip+12])+text(X(x)+3,tip+14,x?dim(Math.abs(x)):'0',lettering.text,'end',400,-90);
+   svg+=text(left,notesY,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,lettering.text);
+   svg+=text(left,notesY+lettering.noteLeading,p.system==='simple'?endGridBearingNote(p,g.rows,dim):`AT A RUNWAY-END GRID: THE GIRDER END ON THE GRID, ITS BEARING INBOARD; HOLES ${dim(g.rows[0])} AND ${dim(g.rows[1])} FROM IT.`,lettering.text);
   }
   // Keys: the transverse section between the rib and the outer hole column, the elevation from the runway side.
   const cut=X(g?(b.ribSpacing/2+b.ribThickness/2+g.rows[1]+gap/2)/2:(b.ribSpacing/2+half)/2);

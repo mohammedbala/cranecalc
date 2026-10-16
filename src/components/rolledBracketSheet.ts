@@ -3,7 +3,7 @@ import {supportColumn} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
 import {drawingLength,electrodeClass,plateInches,dimensionLength} from './drawingFormat';
-import {sheetDrawingScale,textWidth,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldWeldFlag,weldJunction,labelCaps,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,type XY} from './sheetGraphics';
+import {sheetDrawingScale,textWidth,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldWeldFlag,weldJunction,labelCaps,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,lettering,type XY} from './sheetGraphics';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {format} from '../engine/units';
 import {bracketForceBlocks} from './bracketForceTable';
@@ -99,8 +99,14 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    const x0=Math.min(v.end,v.end+v.dir*L);
    svg+=rect(X(x0),Y(a-W/2),L*k,W*k,'runway-line');
    if(eg)for(const row of eg.rows){const x=v.end+v.dir*row;holesX.push(x);for(const y of rowsY)svg+=circle(X(x),Y(y),eg.hole/2*k,'runway-line')+line([X(x)-2.5,Y(y)],[X(x)+2.5,Y(y)])+line([X(x),Y(y)-2.5],[X(x),Y(y)+2.5]);}
-   // Labels too wide for a short bearing stagger, the locating end below.
-   if(v.label&&eg)svg+=text(X(v.end+v.dir*L/2),tip+60+(v.dir>0&&L*k<textWidth('LOCATING END',7,true)+6?9:0),`${v.label} END`,7,'middle',700);
+  }
+  // The hole ordinates read down from the tip; the end labels (too wide for a short bearing: staggered, the locating end
+  // below) and the notes stand below the longest of them.
+  const ordinates=eg&&eb?[0,...holesX].sort((u,v)=>u-v):[],ordinateFoot=tip+14+Math.max(0,...ordinates.map(x=>textWidth(x?dim(Math.abs(x)):'0',lettering.text)));
+  let notesY=ordinateFoot+lettering.leading;
+  for(const v of plates)if(v.label&&eg){
+   const y=ordinateFoot+lettering.text+6+(v.dir>0&&L*k<textWidth('LOCATING END',lettering.text,true)+6?lettering.leading:0);
+   svg+=text(X(v.end+v.dir*L/2),y,`${v.label} END`,lettering.text,'middle',700);notesY=Math.max(notesY,y+lettering.leading+4);
   }
   // Column stiffeners at the stub top flange: the column broken just beyond the flange, the plates cut.
   if(cs)svg+=stiffenerPlan(cs.g,{cx,face,k,cls:colCls,stub:10}).svg;
@@ -109,15 +115,16 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=dimH(left,right,face-b.receiver.flangeThickness*k,87,dim(plate.length));
   svg+=dimV(face,Y(a),left-2,left-16,dim(a))+dimV(face,tip,left-2,left-34,dim(st.L));
   if(eg&&eb){
-   for(const x of [0,...holesX].sort((u,v)=>u-v))svg+=line([X(x),tip+3],[X(x),tip+12])+text(X(x)+3,tip+14,x?dim(Math.abs(x)):'0',7.5,'end',400,-90);
-   svg+=text(left,tip+80,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,7.5);
-   if(p.system==='simple')svg+=text(left,tip+90,endGridBearingNote(p,eg.rows,dim),7.5);
-   else svg+=text(left,tip+90,`AT A RUNWAY-END GRID THE GIRDER END IS ON THE GRID; HOLES ${dim(eg.rows[0])} AND ${dim(eg.rows[1])} FROM IT.`,7.5);
+   for(const x of ordinates)svg+=line([X(x),tip+3],[X(x),tip+12])+text(X(x)+3,tip+14,x?dim(Math.abs(x)):'0',lettering.text,'end',400,-90);
+   svg+=text(left,notesY,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,lettering.text);
+   if(p.system==='simple')svg+=text(left,notesY+lettering.noteLeading,endGridBearingNote(p,eg.rows,dim),lettering.text);
+   else svg+=text(left,notesY+lettering.noteLeading,`AT A RUNWAY-END GRID THE GIRDER END IS ON THE GRID; HOLES ${dim(eg.rows[0])} AND ${dim(eg.rows[1])} FROM IT.`,lettering.text);
   }
   // Keys: the transverse section beyond the flange tip, the elevation from the runway side.
   const lay=eb?stubBoltLayout(p,eb):undefined,beyond=(lay?.xs.filter(x=>x>st.bf/2)??[]).sort((u,v)=>u-v)[0];
   const cut=X(beyond!==undefined?(st.bf/2+beyond)/2:Math.min(half,st.bf/2+12));
-  svg+=sectionCut([cut,face-3],[cut,tip+3],[-1,0],detailTitles.weldedBracket,['a'],cs?'over':'tail');
+  // Its reference reads over the arrow where, beyond the cut, it would reach the seat's end and its extension line.
+  svg+=sectionCut([cut,face-3],[cut,tip+3],[-1,0],detailTitles.weldedBracket,['a'],cs||cut+12+textWidth('00/S-00',lettering.text,true)>right-4?'over':'tail');
   svg+=sectionCut([left-4,tip+6],[right+4,tip+6],[0,-1],rolledElevationTitle,['b']);
   const pl=plates[plates.length-1],items:{at:XY;labels:string[]}[]=[
    {at:[right,Y(st.L*.62)],labels:seat?[`${plate.label} X ${dim(seat.length)}`,`${st.name} BELOW (HIDDEN)`]:[`${st.name} TOP FLANGE`,'STUB WEB HIDDEN']},

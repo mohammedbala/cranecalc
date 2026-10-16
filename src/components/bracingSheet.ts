@@ -12,9 +12,10 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapTitles} from './columnCapSheet';
 import {runwayElevations} from '../engine/drawingData';
 import {drawingLength,holeInches,plateInches,dimensionLength} from './drawingFormat';
-import {refDim,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,type XY} from './sheetGraphics';
+import {refDim,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import type {DetailTopic,DetailView} from './detailSheet';
+import {AnnotationSpace} from './annotationSpace';
 
 const inch=25.4;
 type Pt=[number,number];
@@ -378,7 +379,12 @@ export function bracingOnElevation(s:CalculationSnapshot,o:{EX:(x:number)=>numbe
  }
  // The callout in the first braced span, below the girder marks and between the rods.
  const i=L.spans[0],cx=(EX(o.supports[i-1])+EX(o.supports[i]))/2,labels=[`${plateInches(p.longitudinalBracing!.rod.diameter,p.units)} DIA. ROD X-BRACING, GRIDS ${L.spans.map(v=>`${v}-${v+1}`).join(', ')}, BOTH RUNWAYS`,`${g.strut.shape} STRUT ON COLUMN LINE, ALL SPANS; SEE ${detailRef(detailTitles.bracedBay)}`];
- const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),7.5))),rodX=EX(o.supports[i]-g.top.pin[0]*mm-(end-6-EY(wp+g.top.pin[1]*mm))/o.ek/slope);
- svg+=multiLeader([[rodX,end-6]],[cx-w/2,end-14],labels,7.5);
+ const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),lettering.text))),rodX=EX(o.supports[i]-g.top.pin[0]*mm-(end-6-EY(wp+g.top.pin[1]*mm))/o.ek/slope);
+ // Centered in the span where that reads clear of the rods, columns and strut, else beside the rod it points to, clear of
+ // its own leader.
+ const drawn=new AnnotationSpace(svg),at:XY=[rodX,end-6];
+ // An unbraced span beside it, clear of the rods, is the last resort.
+ const spans=o.supports.slice(1).map((x,k)=>k+1).filter(k=>!L.spans.includes(k)).map(k=>(EX(o.supports[k-1])+EX(o.supports[k]))/2-w/2);
+ svg+=drawn.pick([end-14,end-20,end-26,end-32,end-46].flatMap(y=>[cx-w/2,rodX-14-w,rodX+14,...spans].map(x=>multiLeader([at],[x,y],labels,lettering.text))));
  return svg+'</g>';
 }

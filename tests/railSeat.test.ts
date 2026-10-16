@@ -9,7 +9,9 @@ import {validateProject} from '../src/engine/calculate';
 import {projectSchema,type CalculationSnapshot,type ProjectInput} from '../src/engine/types';
 import {railKeeperView} from '../src/components/railKeeperView';
 import {railLayoutView,movementUpTo} from '../src/components/railLayoutView';
-import {coverSheetSvg} from '../src/components/coverSheet';
+import {coverSheetSvgs} from '../src/components/coverSheet';
+// The cover with the sheets continuing its notes (S-00A) where they do not fit it at the lettering size.
+const coverSheetSvg=(...a:Parameters<typeof coverSheetSvgs>)=>coverSheetSvgs(...a).join('');
 /** The open-joint scheme (expansion gap at every joint, each piece anchored): a project choice; TR-13 tight joints are the default. */
 const openJoints=(p:ProjectInput)=>{p.details!.rail.jointType='open';p.details!.rail.jointGap=.375*25.4;return p;};
 

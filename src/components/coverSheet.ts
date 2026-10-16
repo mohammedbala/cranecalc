@@ -21,8 +21,8 @@ import {columnStiffenerGeometry} from '../engine/columnStiffeners';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength,specGrade} from './drawingFormat';
 import {railPad} from '../engine/railSeat';
-import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth} from './sheetGraphics';
-import {heading,paragraph,numbered,table,capsFor,type Block,type Style} from './noteBlocks';
+import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth,lettering} from './sheetGraphics';
+import {heading,paragraph,numbered,table,capsFor,flowBlocks,fitColumns,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
 import {existingLayout} from '../engine/existingLayout';
 import {tieRelease,stiffenerTieGeometry,flangeTieGeometry} from '../engine/tieGeometry';
@@ -108,23 +108,13 @@ function wheelDiagram(t:Style,c:Crane,o:{force:(v:number)=>string;length:(mm:num
  }};
 }
 /**
- * Greedy column flow; a heading stays with the block after it, and a section carried into the next column
- * restarts under its heading marked continued. Returns undefined when the blocks do not fit.
+ * Greedy column flow over the four columns of each of `pages` sheets (flowBlocks): a heading stays with the block after
+ * it, and a section carried into the next column restarts under its heading marked continued. Returns undefined when the
+ * blocks do not fit.
  */
-function flow(blocks:Block[],limit:number,overflow=false){
- const placed:{x:number;y:number;b:Block}[]=[];let column=0,y=top,section:Block|undefined;
- for(let i=0;i<blocks.length;i++){
-  // A kept block needs room for the block after it, and a heading over a kept table also for the table's key,
-  // so the heading never stays behind alone; a chain taller than a column falls back to the next block only.
-  const b=blocks[i],next=b.keep?blocks[i+1]:undefined,after=b.continued&&next?.keep?blocks[i+2]:undefined,bottom=Math.min(limit,limits[column]);
-  const pair=b.height+(next?2.4+next.height:0),chain=pair+(after?2.4+after.height:0),need=chain<=Math.min(limit,limits[column])-top?chain:pair;
-  if(b.continued)section=b;
-  if(y>top&&y+need>bottom&&column<columns.length-1){column++;y=top;if(!b.continued&&section){const c=section.continued!();placed.push({x:columns[column],y,b:c});y+=c.height+2.4;}}
-  else if(y>top&&y+need>bottom&&!overflow)return undefined;
-  if(y+b.height>Math.min(limit,limits[column])&&!overflow)return undefined;
-  placed.push({x:columns[column],y,b});y+=b.height+2.4;
- }
- return placed;
+function flow(blocks:Block[],limit:number,overflow=false,pages=1){
+ const lanes=Array.from({length:4*pages},(_,i)=>({x:columns[i%4],top,bottom:limits[i%4]}));
+ return flowBlocks(blocks,lanes,limit,overflow)?.map(v=>({...v,page:Math.floor(v.lane/4)}));
 }
 
 export const coverSheetTitle='COVER, GENERAL NOTES & DESIGN CRITERIA';
@@ -136,8 +126,60 @@ function existingWeldNote(p:ProjectInput){
  // One thickness basis with the calculation and the bracket sheet: the thickest part at the weld (preheatBasis).
  return [`FIELD WELDS TO THE EXISTING COLUMNS: EXISTING STEEL ${steel}. WELD ONLY TO A WPS APPROVED BY THE ENGINEER OF RECORD FOR THAT STEEL; LOW-HYDROGEN PROCESSES ONLY. ${heat.text.toUpperCase()}. WELD WITH THE CRANE OUT OF SERVICE AND THE COLUMN UNDER DEAD LOAD ONLY; SEQUENCE THE WELDS TO LIMIT HEAT INPUT.`];
 }
-export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){
+/**
+ * Sheets that continue the cover's notes when they do not fit the cover at the lettering size: S-00A, S-00B, numbered
+ * after the cover so the sheet numbers the notes and details refer to stay as they are.
+ */
+export const coverContinuation=(page:number)=>({number:`S-00${String.fromCharCode(64+page)}`,title:'GENERAL NOTES & DESIGN CRITERIA (CONT.)'});
+/** The cover sheet (S-00): general notes, design criteria, the crane data, the sheet and detail indexes. */
+export function coverSheetSvg(s:CalculationSnapshot,sheets:SheetEntry[]){return coverSheetSvgs(s,sheets)[0];}
+/**
+ * Sheets the cover's notes take at the lettering size: one, or more when they do not fit it. Counted without drawing the
+ * other sheets, with every abbreviation and symbol the set may use, so it is never fewer than the notes need.
+ */
+export function coverSheetCount(s:CalculationSnapshot,sheets:SheetEntry[]){
+ for(let pages=1;;pages++){
+  const blocks=coverBlocks(s,sheets,undefined,true,pages)(coverStyle(s.input.units,lettering.text));
+  if(pages>=4||flow(blocks,Infinity,false,pages))return pages;
+ }
+}
+const coverStyle=(u:'US'|'SI',body:number):Style=>({width:columnWidth,body,leading:body*1.31,heading:body*1.3,caps:capsFor(u)});
+/**
+ * The cover and the sheets continuing its notes: the notes at the largest text size that fits (body 5/32 in down to the
+ * 3/32 in lettering minimum), on one sheet with its columns balanced to the shortest height that still fits; notes that
+ * do not fit the cover at the minimum continue on the next sheets, never smaller, filling the cover first.
+ */
+export function coverSheetSvgs(s:CalculationSnapshot,sheets:SheetEntry[],pages=coverSheetCount(s,sheets)){
  const otherWords=sheets.map(v=>v.render?sheetWords(v.render()):'').join(' '),referenceDims=sheets.some(v=>v.render&&v.render().includes('data-dim="ref"'));
+ const build=coverBlocks(s,sheets,otherWords,referenceDims,pages),u=s.input.units;
+ let placed:ReturnType<typeof flow>;
+ for(const body of [11.25,10.5,9.75,lettering.text]){
+  const blocks=build(coverStyle(u,body));
+  // One sheet: its columns balanced; notes continued on further sheets fill the cover first.
+  if(pages>1)placed=flow(blocks,limits[0],false,pages);
+  else for(let h=Math.max(...blocks.map(b=>b.height))+top;h<=limits[0]+.01&&!placed;h+=4)placed=flow(blocks,h,false,pages);
+  if(placed)break;
+ }
+ // Content that cannot fit is drawn at the minimum size and marked so set checks report it.
+ let overflow=false;
+ if(!placed){placed=flow(build(coverStyle(u,lettering.text)),limits[0],true,pages)!;overflow=true;}
+ return Array.from({length:pages},(_,page)=>{
+  const number=page?coverContinuation(page).number:'S-00',title=page?coverContinuation(page).title:coverSheetTitle,here=placed!.filter(v=>v.page===page);
+  let svg=sheetStart(s,number,page?`CRANE RUNWAY / ${title}`:title)+`<g data-view="${page?'cover-continued':'cover'}">`;
+  if(overflow&&page===pages-1)svg+='<g data-overflow="cover"/>';
+  for(const v of here)svg+=v.b.render(v.x,v.y);
+  // Column rules run to the foot of the longest column.
+  const foot=Math.max(top,...here.map(v=>v.y+v.b.height))+10;
+  for(const x of columns.slice(1))if(here.some(v=>v.x===x))svg+=line([x-18,top-6],[x-18,foot],'divider');
+  // Notes continued on the next sheet say so at the foot of the last column.
+  if(page<pages-1)svg+=text(columns[3],limits[3]+18,`GENERAL NOTES CONTINUE ON SHEET ${coverContinuation(page+1).number}.`,lettering.text,'start',700);
+  svg+=`</g>`;
+  // No scaled view on the cover.
+  return svg+titleBlock(s,number,title,'NONE')+'</svg>';
+ });
+}
+/** The cover's note blocks at a style; `otherWords` are the words of the other sheets (undefined: every abbreviation). */
+function coverBlocks(s:CalculationSnapshot,sheets:SheetEntry[],otherWords:string|undefined,referenceDims:boolean,pages:number){
  const p=s.input,u=p.units,d=p.details,f=(v:number|undefined,q:Parameters<typeof format>[1]='force')=>format(v,q,u,2),len=(mm:number)=>dimensionLength(mm,u),tol=(mm:number)=>plateInches(mm,u);// tolerances in inches (1/8"), not feet and inches
  const ksi=(v:number)=>format(v,'stress',u,u==='SI'?0:3),status=issueStatus(s),elevations=runwayElevations(p);
  const capacity=(N:number)=>u==='US'?`${+(N/8896.443).toFixed(2)} ton (${f(N)})`:`${+(N/9806.65).toFixed(2)} TONNES (${f(N)})`;
@@ -265,13 +307,14 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  const f3=(v:number)=>Math.abs(toDisplay(v,'force',u))<.1?`${Math.abs(toDisplay(v,'force',u)).toFixed(2)} ${unit('force',u)}`:sig3(v,'force',u);
  const gridAt=(x:number)=>{let at=0;const i=[0,...p.spans.map(v=>at+=v)].findIndex(g=>Math.abs(g-x)<1);return i<0?len(x):`${i+1} (${len(x)})`;};
  if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, PER SUPPORT'),T(['GRID (STATION)','D','Cd','Cv','Ci','Css','Cls·hr/L'],r.supports.map(v=>[gridAt(v.x),...[v.D,v.Cd,v.Cv,v.Ci,v.Css].map(f3),'±'+f3(v.Clv)]),[1.4,1,1,1,1,1,1.05]),P(`Cd CRANE EMPTY, Cv LIFTED, Ci IMPACT${p.cranes.length>1?' (ALL CRANES, ANY ARRANGEMENT)':''}, Css SIDE THRUST AT RAIL HEAD (ONE CRANE). RUNWAY LONGITUDINAL FORCE Cls = ${f(r.Cls)} AT THE RAIL HEAD; Cls·hr/L IS ITS END COUPLE AT THE BEARINGS OF THE BAY THAT CARRIES IT, hr THE HEIGHT OF THE RAIL HEAD ABOVE THE BEARING AND L THE SPAN. ALL CRANE COMPONENTS ARE LIVE LOAD L (ASCE 7 §4.9).${adjacentBays(p).map(b=>` AT ${len(b.station)} THE REACTIONS INCLUDE THE EXISTING ADJACENT ${len(b.length)} BAY (SAME GIRDER, RAIL AND DEAD LOAD ASSUMED).`).join('')} FACTORED: ${bracketForcesAt(s,'cover')}.`));
- // The forces delivered to the building columns: the same concurrent sets as the calculation (page 1 and section 3.5).
+ // The forces delivered to the building columns: the same concurrent sets as the calculation (page 1 and section 3.5),
+ // each column as wide as its widest value so the values stay on one line (the set names wrap where the table is tight).
  const delivered=deliveredRows(s);
- if(delivered.length)blocks.push(H(`FORCES DELIVERED TO THE BUILDING COLUMNS · FACTORED ${p.method}, CONCURRENT SETS PER GRID`),{...T(deliveredHeaders.map(v=>v.toUpperCase()),delivered,[.4,1.05,1.05,.65,.85,.8,.65,.65,.7]),keep:true},P(deliveredNote(s)));
+ if(delivered.length)blocks.push(H(`FORCES DELIVERED TO THE BUILDING COLUMNS · FACTORED ${p.method}, CONCURRENT SETS PER GRID`),{...T(deliveredHeaders.map(v=>v.toUpperCase()),delivered,fitColumns(t,deliveredHeaders.map(v=>v.toUpperCase()),delivered,[1])),keep:true},P(deliveredNote(s)));
  // Without bracket or support details the cover carries the factored bracket design forces.
  if(d&&s.detailResults&&!bracketForceTopic(s))blocks.push(...bracketForceBlocks(s,t));
  // Column 3: index, materials, inspection.
- blocks.push(H('SHEET INDEX'),T(['SHEET','TITLE'],[['S-00',coverSheetTitle],...sheets.map(v=>[v.number,v.title])],[.7,3.3]));
+ blocks.push(H('SHEET INDEX'),T(['SHEET','TITLE'],[['S-00',coverSheetTitle],...Array.from({length:pages-1},(_,i)=>[coverContinuation(i+1).number,coverContinuation(i+1).title]),...sheets.map(v=>[v.number,v.title])],[.7,3.3]));
  // Every detail by number and sheet; references resolve when the set is assembled.
  const details=sheets.flatMap(v=>(v.details??[]).map(t=>[detailRef(t),t]));
  if(details.length)blocks.push(H('DETAIL INDEX'),T(['DETAIL','TITLE'],details,[.7,3.3]));
@@ -366,29 +409,11 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  }
  blocks.push(legend(t,p.units,referenceDims));
  // Only the abbreviations used on this sheet or the others.
- const used=`${written.join(' ')} ${otherWords}`,abbreviations=abbreviationList.filter(([re])=>re.test(used)).map(([,v])=>v);
+ const used=`${written.join(' ')} ${otherWords}`,abbreviations=abbreviationList.filter(([re])=>otherWords===undefined||re.test(used)).map(([,v])=>v);
  if(abbreviations.length)blocks.push(H('ABBREVIATIONS'),P(abbreviations.join(' · ')));
  blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} ${revisionIdentity(s).letter?`DRAWINGS AND CALCULATION REPORT REVISION ${revisionIdentity(s).letter!.toUpperCase()}, ${revisionIdentity(s).date}.`:`CALCULATION ${s.revision}.`}`));
  return blocks;};
- // Largest legible text that fits (body 5/32 in down to 0.09 in), with the columns balanced to the
- // shortest height that still fits.
- let placed:ReturnType<typeof flow>;
- const style=(body:number):Style=>({width:columnWidth,body,leading:body*1.31,heading:body*1.3,caps:capsFor(u)});
- for(const body of [11.25,10.5,9.75,9,8.6,8.2,7.8,7.4,7,6.6]){
-  const blocks=build(style(body));
-  for(let h=Math.max(...blocks.map(b=>b.height))+top;h<=limits[0]+.01&&!placed;h+=4)placed=flow(blocks,h);
-  if(placed)break;
- }
- let svg=sheetStart(s,'S-00','COVER, GENERAL NOTES & DESIGN CRITERIA')+`<g data-view="cover">`;
- // Content that cannot fit is drawn at the smallest size and marked so set checks report it.
- if(!placed){placed=flow(build(style(6.6)),limits[0],true)!;svg+='<g data-overflow="cover"/>';}
- for(const v of placed)svg+=v.b.render(v.x,v.y);
- // Column rules run to the foot of the longest column.
- const foot=Math.max(...placed.map(v=>v.y+v.b.height))+10;
- for(const x of columns.slice(1))if(placed.some(v=>v.x===x))svg+=line([x-18,top-6],[x-18,foot],'divider');
- svg+=`</g>`;
- // No scaled view on the cover.
- return svg+titleBlock(s,'S-00','COVER, GENERAL NOTES & DESIGN CRITERIA','NONE')+'</svg>';
+ return build;
 }
 /** A tapered haunch whose flanges are CJP groove welded to an existing column flange (through-thickness loading). */
 function cjpToExisting(p:CalculationSnapshot['input']){

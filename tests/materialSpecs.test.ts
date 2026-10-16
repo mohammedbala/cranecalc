@@ -1,8 +1,10 @@
 import {describe,expect,it} from 'vitest';
 import {astmSpec} from '../src/engine/materialSpecs';
 import {compactReport} from '../src/report/compactReport';
-import {coverSheetSvg} from '../src/components/coverSheet';
+import {coverSheetSvgs} from '../src/components/coverSheet';
 import {demoFocus005Snapshot} from './fixtures/demoFocus005';
+// The cover with the sheets continuing its notes (S-00A) where they do not fit it at the lettering size.
+const coverSheetSvg=(...a:Parameters<typeof coverSheetSvgs>)=>coverSheetSvgs(...a).join('');
 
 const ksi=6.894757293168,text=(h:string)=>h.replace(/<[^>]+>/g,' ').replace(/&quot;/g,'"').replace(/&amp;/g,'&').replace(/\s+/g,' ');
 describe('ASTM designations on every material listing',()=>{

@@ -19,8 +19,8 @@ it('runs the complete three-bay capped example with no unresolved or failed chec
 });
 it('shows the cap-specific equations and scaled cap attachment details',()=>{
  const sheets=drawingSheetSet(s),html=reportHtml(s),withView=(view:string)=>sheets.find(v=>v.svg.includes(`data-view="${view}"`))!;
- // Cover, general arrangement and two detail sheets.
- expect(sheets.map(v=>v.number)).toEqual(['S-00','S-01','S-02','S-03']);
+ // Cover (its notes continued on S-00A at the 3/32 in lettering), general arrangement and three detail sheets.
+ expect(sheets.map(v=>v.number)).toEqual(['S-00','S-00A','S-01','S-02','S-03','S-04']);
  expect(withView('flange-tie-plan').title).toContain('FLANGE TIES');
  const cap=withView('cap-development').svg;expect(cap).toContain('CAP END DEVELOPMENT');
  expect(cap).toContain('SCALE:');expect(cap).toContain('5&#39;-0&quot;');
@@ -50,10 +50,11 @@ it('completes the ASD continuous capped branch with signed support moments',()=>
  expect(r.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass')).toBe(true);
 },300000); // The softer movement-tolerant ties need a further load-position refinement pass; about 130 s alone.
 it('calls for UT only where the set has CJP welds and names the surveyed column on the connection',()=>{
- const capped=drawingSheetSet(s),cover=capped.find(v=>v.number==='S-00')!.svg;
+ // The cover and the sheets continuing its notes.
+ const capped=drawingSheetSet(s),cover=capped.filter(v=>v.number.startsWith('S-00')).map(v=>v.svg).join('');
  expect(cover).toContain('UT 100% OF CJP GROOVE WELDS');
  const plain=structuredClone(s);plain.input=demonstrationProject();
- const plainCover=drawingSheetSet(plain).find(v=>v.number==='S-00')!.svg;
+ const plainCover=drawingSheetSet(plain).filter(v=>v.number.startsWith('S-00')).map(v=>v.svg).join('');
  expect(plainCover).not.toContain('UT 100% OF CJP');expect(plainCover).toContain('MT AT FILLET TERMINATIONS ON CYCLIC DETAILS');
  // The capped example surveys a W14X90 column: the connection labels it, not the viewer's tapered frame.
  const connection=capped.find(v=>v.svg.includes('data-view="bracket-connection"'))!.svg;

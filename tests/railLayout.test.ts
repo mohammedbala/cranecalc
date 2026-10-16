@@ -40,7 +40,8 @@ describe('rail joint layout',()=>{
   expect(titles).toContain(detailTitles.railLayout);expect(titles).toContain(detailTitles.slidingBolt);
   // The tie plan and end bearing details draw these at a larger scale.
   expect(titles).not.toContain(detailTitles.supportTies);expect(titles).not.toContain(detailTitles.movement);
-  expect(titles).toHaveLength(12);
+  // The connections and supports: six details on S-02 at the 3/32 in lettering (the flange ties and end stops on S-03).
+  expect(titles).toHaveLength(6);
   // The rail joint elevation, drawn in the rail clip cell, is numbered as its own detail, after the rail clip section.
   expect(refs.get(detailTitles.railJoint)).toBe(`${Number(refs.get(detailTitles.railKeeper)!.split('/')[0])+1}/S-02`);
   const t=texts(s02.svg).join(' ');
