@@ -40,6 +40,8 @@ describe('DEMO-FOCUS-005 · G1 crane input, loads, end stops, fatigue duty',()=>
    'compact-web','major','combined','flexure-load-height','wheel-yield','wheel-cripple','cap-development','cap-weld-strength','cap-weld-metal','cap-weld-rupture','cap-weld-fatigue','haunch-colstiff-fatigue-plate','rail-keeper-root',
    'column-weld-ce','bracket-load-path','cap-angle-channel-flange','cap-angle-nut-seat','cap-angle-nut-fit','cap-angle-endplate-edge','end-bearing-seat-fit',
    'rail-joint-bearing','rail-joint-plate','rail-joint-block','rail-expansion-gap','rail-joint-slot','rail-end-gap','rail-joint-fatigue','detail-equilibrium',
+   // Stops and rails: J3.9 slip by bolt row, the stop's rail-string resistance, cycles per wheel passage.
+   'rail-joint-shear-fatigue','rail-clip-weld-fatigue','rail-anchorage',
    // Layout on the 1/4 in drawing grid: column stiffeners cut to it (12.58 → 12 1/2 in) at their levels to the nearest 1/4 in, the end stop base plate
    // lip in front of the face (9/16 → 3/4 in) and the keeper end fillets stopped 1/2 in (the 5/16 in weld size, up to the grid)
    // short of the rail-side face, so the keeper welds and the flange under them carry a little more.

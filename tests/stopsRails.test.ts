@@ -26,8 +26,8 @@ describe('end stops sized for the bumper force',()=>{
   const t=endStopChecks(p).find(c=>c.id==='end-stop-bolt-tension')!;expect(t.utilization!).toBeLessThanOrEqual(.9+1e-9);
   expect(endStopChecks(p).every(c=>c.utilization===undefined||c.utilization<1e3)).toBe(true);
   expect(validateRunwayDetails(p).filter(v=>/end stop/.test(v))).toEqual([]);
-  // A larger bumper force than the light default: bigger bolts, more rows or a longer base.
-  expect(e.bolts.diameter>.75*inch||(e.bolts.rows??2)===3||e.base.length>12*inch).toBe(true);
+  // Every check passes on the stop as sized: no NO CAPACITY, slip by the J3.9 rows.
+  expect(endStopChecks(p).find(c=>c.id==='end-stop-slip')!.capacity!).toBeGreaterThan(e.bolts.diameter>0?p.cranes[0].design!.bumperForce:0);
  },120000);
  it('keeps light-crane stops light: plates at most 3/4 in',()=>{
   const p=config({capacity:3,control:'pendant',cmaa:'B',bays:2,span:20}),e=p.details!.endStop!;
