@@ -223,6 +223,14 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),observedSets=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
  const snap=(x:number)=>supports.find(v=>Math.abs(v-x)<1e-6)??x;
  const braceFatigue={min:0,max:0},braceEndFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
+ // St Venant torque each support takes from each girder end (key: bay and end, or the support of a continuous girder):
+ // its strength envelope and its signed extremes in each duty bin, for the restraint diaphragm (stiffener-lateral-flexure).
+ const torqueEnds=new Map<string,{x:number;bay?:number;end?:'left'|'right';torque:number;bins:{min:number;max:number}[];governing?:{id:string;combination:string}}>();
+ const deliverTorque=(key:string,x:number,T:number,e:RunwayCaseEvent,bin:number,where:{bay?:number;end?:'left'|'right'})=>{
+  let v=torqueEnds.get(key);if(!v){v={x,...where,torque:0,bins:details.spectrum.map(()=>({min:0,max:0}))};torqueEnds.set(key,v);}
+  if(e.kind==='strength'){if(Math.abs(T)>v.torque){v.torque=Math.abs(T);v.governing={id:e.id,combination:e.combination};}}
+  else if(bin>=0){const b=v.bins[bin];b.min=Math.min(b.min,T);b.max=Math.max(b.max,T);}
+ };
  // Unfactored dead load for the Appendix 3.1 peak and the register peaks: major bending from the girder, cap, rail and
  // entered live load; torsion of each bay from the eccentric rail weight, with the modeled restraints. Solved once.
  const deadQ=girderDeadLoad(p,props.weight)+(p.aist?.liveLoad??0),deadTorsion=new Map<number,ReturnType<LateralTorsionBeam['solve']>>();
@@ -294,6 +302,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    if(!r){result.unstableCases=(result.unstableCases??0)+1;restraintForces=stations.map(x=>({x:x-start,top:0,bottom:0}));bayStates.set(bayKey,restraintForces);}
    else{
    result.residual=Math.max(result.residual,r.residual);
+   // Restraint diaphragm: the St Venant torque G_k·J·θ′ (0.8G for strength) each girder end delivers to its support
+   // (simple bays: the bay's own ends; a continuous girder: its runway ends and the jump across an interior support).
+   if(e.kind!=='service'){const T=(x:number,side:'left'|'right')=>stiffnessFactor*G*props.J*r!.at(x,side).twistRate;
+    if(p.system==='continuous')for(const [i,x] of supports.entries())deliverTorque(`${i}`,x,(i?T(x-start,'left'):0)-(i<supports.length-1?T(x-start,'right'):0),e,bin,{});
+    else{deliverTorque(`${bayIndex+1}:left`,start,T(0,'right'),e,bin,{bay:bayIndex+1,end:'left'});deliverTorque(`${bayIndex+1}:right`,end,T(end-start,'left'),e,bin,{bay:bayIndex+1,end:'right'});}}
    restraintForces=r.restraints.map(v=>({x:v.x,top:v.top,bottom:v.bottom}));bayStates.set(bayKey,restraintForces);
    }
    if(strength){
@@ -526,6 +539,10 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   result.demands.braceFatigue=braceFatigue.max-braceFatigue.min;
   if(p.system==='simple')result.demands.braceEndFatigue=braceEndFatigue.max-braceEndFatigue.min;
   result.demands.verticalFatigue=verticalFatigue.max-verticalFatigue.min;
+  {const ends=[...torqueEnds.values()],range=(v:typeof ends[number])=>Math.max(0,...v.bins.map(b=>b.max-b.min));
+   if(ends.length){const top=ends.reduce((a,v)=>v.torque>a.torque?v:a);
+    result.diaphragm={torque:top.torque,range:Math.max(...ends.map(range)),bins:details.spectrum.map((_,i)=>Math.max(...ends.map(v=>v.bins[i].max-v.bins[i].min))),...(top.governing?{governing:{...top.governing,x:top.x}}:{}),
+     ends:ends.map(v=>({x:v.x,...(v.bay?{bay:v.bay,end:v.end}:{}),torque:v.torque,range:range(v)}))};}}
   // The saddle toes add the local flange bending range over the flange's effective width, the same local stress as the
  // flange-tie-flange check (flangeTieResponse), to every duty bin.
  if(flangeTieGeometry(p)){const localRange=flangeTieResponse(p,result.demands.braceFatigue).flange;for(const f of fatigue)if(f.id.startsWith('SA'))for(const b of f.bins){b.minimum-=localRange/2;b.maximum+=localRange/2;}}

@@ -69,6 +69,69 @@ export function lapChecks(p:ProjectInput,c:LapConnection,id:string,title:string,
   resolved(`${id}-prying`,`${title} · bolt tension / prying`,'Defined symmetric double-lap forces lie in the connected plate plane. Bolt tension and prying do not arise in this template. Out-of-plane connection actions require a different model.')
  ];
 }
+/**
+ * The bearing stiffener pair as the restraint diaphragm at a support: a vertical plate spanning the web depth in the
+ * cross-section plane. Welded continuously to both web faces, the pair acts as one plate of width 2b_s + t_w (AISC 360-16
+ * Appendix 6.3.2a takes a stiffener pair as one plate of width 2b_s): at the copes the web strip and the cope widths are
+ * lost, S = 2t_s[(t_w/2 + b_s)³ − (t_w/2 + c)³]/[3(t_w/2 + b_s)], and the stiffener-to-web welds carry its shear flow
+ * VQ/I (Q of one plate about the web centerline, I of the full width). One-sided or intermittent stiffeners stay
+ * separate plates bending on their own, S = 2t_sb_s²/6.
+ */
+export function stiffenerPairSection(b:{stiffenerWidth:number;stiffenerThickness:number;cope:number},tw:number,composite=true){
+ const bs=b.stiffenerWidth,ts=b.stiffenerThickness,outer=tw/2+bs,inner=tw/2+Math.min(b.cope,bs);
+ return composite?{composite,S:2*ts*(outer**3-inner**3)/(3*outer),I:ts*(2*bs+tw)**3/12,Q:ts*bs*(tw+bs)/2}:{composite,S:2*ts*bs**2/6,I:2*ts*bs**3/12,Q:0};
+}
+/**
+ * How the bearing stiffener pair carries the restraint forces at the supports, from the restraint geometry (never from
+ * the girder system):
+ *  both-flanges: each flange is restrained directly at the station (a direct flange saddle or the cap tieback at the top;
+ *   the end bearing bolts or a bottom saddle at the bottom). Each flange's lateral shear goes straight to its own
+ *   restraint; only the St Venant torque delivered to the support crosses the depth: M = |T_sv|, X = T_sv/h_o.
+ *  gusset: a tie gusset CJP welded to the stiffener (stiffenerTieGeometry): the tie force H enters the stiffener y_g from
+ *   the tied flange's inner face, M = H·y_g plus the St Venant torque, which this plate also takes across the depth.
+ *  one-flange: one flange only is restrained at the station (a column cap fork; a tie without a laid-out attachment):
+ *   the stiffener cantilevers the other flange's force over the web depth, M = H·h.
+ */
+export function diaphragmArrangement(p:ProjectInput):{kind:'both-flanges'|'gusset'|'one-flange';yg:number;text:string}{
+ const s=p.section,saddle=flangeTieGeometry(p),gusset=saddle?undefined:stiffenerTieGeometry(p),bolts=!!activeEndBearing(p);
+ if(activeColumnCap(p))return {kind:'one-flange',yg:0,text:'On the column cap the stiffener pair and the bolted bottom flange form the fork: the pair cantilevers the top flange force over the web depth'};
+ const top=isCapAngleTie(p)||saddle?.sides.includes(1)?'direct':gusset?.sides.includes(1)?'gusset':undefined;
+ const bottom=bolts||saddle?.sides.includes(-1)?'direct':gusset?.sides.includes(-1)?'gusset':undefined;
+ const yg=Math.max(top==='gusset'?s.d/2-s.tf-gusset!.topCenter:0,bottom==='gusset'?gusset!.bottomCenter+s.d/2-s.tf:0);
+ const at=(v:string|undefined,f:string)=>v==='direct'?(f==='top'?(isCapAngleTie(p)?'the cap tieback':`the direct flange saddle`):bolts?'the end bearing bolts':'the bottom flange saddle'):`the ${f} tie gusset on the stiffener`;
+ if(top&&bottom)return top==='direct'&&bottom==='direct'
+  ?{kind:'both-flanges',yg:0,text:`Both flanges are restrained directly at the support (top: ${at(top,'top')}; bottom: ${at(bottom,'bottom')}): each flange's lateral shear goes straight to its own restraint, and only the St Venant torque delivered to the support crosses the depth in the stiffener pair`}
+  :{kind:'gusset',yg,text:`The tie gusset is CJP welded to the stiffener (top: ${at(top,'top')}; bottom: ${at(bottom,'bottom')}): the tie force enters the stiffener y_g = ${format(yg,'length',p.units,3)} from the tied flange, and the pair also takes the St Venant torque across the depth`};
+ return {kind:'one-flange',yg:0,text:'One flange only is restrained at the support with a laid-out attachment: the stiffener pair cantilevers the restraint force over the web depth'};
+}
+/**
+ * In-plane moment M and shear V of the restraint diaphragm (diaphragmArrangement): H the restraint force (with the
+ * Appendix 6 brace force for strength), torque the St Venant torque the support takes from a girder end, couple the
+ * Appendix 6.3.2 torsional restraint moment 0.02M_rC_d at the fork (P_br,flexure·h_o; conservatively all St Venant),
+ * h the web depth.
+ */
+export function diaphragmDemand(a:Pick<ReturnType<typeof diaphragmArrangement>,'kind'|'yg'>,o:{H:number;torque:number;couple:number;h:number;h0:number}){
+ if(a.kind==='both-flanges'){const M=Math.abs(o.torque)+o.couple;return {M,V:M/o.h0};}
+ if(a.kind==='gusset'){const M=o.H*a.yg+Math.abs(o.torque)+o.couple;return {M,V:Math.max(o.H,M/o.h0)};}
+ return {M:o.H*o.h,V:o.H};
+}
+/**
+ * Equivalent reaction on the four stiffener-to-web fillet lines (the reaction capacity form): a composite pair takes per
+ * line R/(4L_w) + VQ/(2I), R_eq = R + 2VQL_w/I; separate plates the direct-plus-moment bound R + 2V + 6M/L_w (R + 8H for the
+ * full-height cantilever).
+ */
+export const diaphragmWeldEquivalent=(R:number,d:{M:number;V:number},sec:ReturnType<typeof stiffenerPairSection>,Lw:number)=>sec.composite?R+2*d.V*sec.Q*Lw/sec.I:R+2*d.V+6*d.M/Lw;
+/**
+ * The stiffener-to-web weld group of the bearing stiffener pair, four continuous fillet lines over L_w = h − 2c: the least
+ * of the weld metal φ0.6F_EXX(0.707w)·4L_w, the web base metal in shear rupture on its two planes φ0.6F_u·t_w·2L_w (each
+ * plane takes the fillets on both web faces: t_w ≥ 6.19D/F_u to develop them) and the stiffener base metal φ0.6F_u·t_s·2L_w
+ * (each stiffener's plane takes its two fillets), AISC 360-16 J2.4 and J4.2(b), φ = 0.75 (Ω = 2.00).
+ */
+export function stiffenerWeldGroup(p:ProjectInput,h:number){
+ const d=p.details!,b=d.bearing,m=d.material,Lw=h-2*b.cope,av=(v:number)=>available(v,p.method,.75,2);
+ const weld=av(.6*m.Fexx*b.weldSize/Math.SQRT2*4*Lw),web=av(.6*p.section.Fu*p.section.tw*2*Lw),stiffener=av(.6*m.Fu*b.stiffenerThickness*2*Lw),capacity=Math.min(weld,web,stiffener);
+ return {Lw,weld,web,stiffener,capacity,governs:capacity===weld?'weld metal':capacity===web?'web base metal':'stiffener base metal'};
+}
 /** The D/C of a check, when it has a finite one. */
 const checkRatio=(c:CheckResult)=>typeof c.utilization==='number'&&Number.isFinite(c.utilization)?c.utilization:undefined;
 /** Change of the governing results between two refinement levels (refinementChange), with the result that moved most. */
@@ -215,11 +278,21 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  add('stiffener-bearing','Local forces','Fitted stiffener-end bearing',a.reaction,stiffener.bearing,'force','R_n=1.8F_y A_{pb}','Actual cope deducted from both fitted bearing areas; requires milled/fitted contact to the loaded flange.',['aisc-connections']);
  add('stiffener-width','Detailing','Stiffener minimum width',stiffener.minimumWidth,bs.stiffenerWidth,'length','b_s+t_w/2\\ge b_f/3','J10.8 additional stiffener geometry.');
  add('stiffener-thickness','Detailing','Stiffener minimum thickness',stiffener.minimumThickness,bs.stiffenerThickness,'length','t_s\\ge\\max(t_f/2,b_s/16)','J10.8 additional stiffener geometry.');
- const stiffWeld=available(.6*m.Fexx*(bs.weldSize/Math.sqrt(2))*4*(strength.h-2*bs.cope),p.method,.75,2);
- add('stiffener-weld','Connections','Stiffener-to-web load transfer',a.reaction,stiffWeld,'force','R_n=0.6F_{EXX}(0.707w)(4h)','Four continuous full-depth fillet lines transfer the full support reaction, without reducing demand by web resistance.');
- const diaphragmForce=r.demands.brace+imperfection,diaphragmMoment=diaphragmForce*strength.h;
- add('stiffener-lateral-flexure','Local forces','Restraint diaphragm lateral flexure',diaphragmMoment/(2*bs.stiffenerThickness*bs.stiffenerWidth**2/6),available(m.Fy,p.method,.9,1.67),'stress','f_b=\\frac{Hh}{2t_sb_s^2/6}','Paired full-depth plates at every flange-restraint station. Full-height cantilever for the larger flange reaction plus imperfection, with no web participation.');
- add('stiffener-combined-weld','Connections','Bearing stiffener welds · reaction with the lateral flange forces',a.reaction+8*diaphragmForce,stiffWeld,'force','R_{eq}=R+2H+\\frac{6Hh}{h}=R+8H','Direct-plus-moment stress bound on the four web weld lines: the full vertical reaction R, both lateral flange forces H as direct shear (2H) and their moment H·h over the weld length h (6Hh/h = 6H), R_eq = R + 8H. Fitted ends also require continuous flange fillets.');
+ // Stiffener-to-web welds: the least of the weld metal and the web and stiffener base metal (stiffenerWeldGroup).
+ const welds=stiffenerWeldGroup(p,strength.h),stiffWeld=welds.capacity,frc=(v:number)=>format(v,'force',p.units,3);
+ const weldNote=`Weld metal ${frc(welds.weld)}, web base metal ${frc(welds.web)} (two shear planes of t_w = ${len(p.section.tw)}, each taking the fillets on both web faces), stiffener base metal ${frc(welds.stiffener)} (one plane of t_s per stiffener): the ${welds.governs} governs (AISC 360-16 J2.4, J4.2(b)); L_w = h − 2c = ${len(welds.Lw)}.`;
+ add('stiffener-weld','Connections','Stiffener-to-web load transfer',a.reaction,stiffWeld,'force','R_n=\\min[0.6F_{EXX}(0.707w)\\,4L_w,\\ 0.6F_ut_w\\,2L_w,\\ 0.6F_ut_s\\,2L_w];\\quad L_w=h-2c',`Four continuous full-depth fillet lines transfer the full support reaction, without reducing demand by web resistance. ${weldNote}`);
+ // The restraint diaphragm by arrangement (diaphragmArrangement), on the section of the pair (stiffenerPairSection): the
+ // support torque from the analysis (St Venant torque at 0.8G of the strength cases), the restraint force H with the
+ // Appendix 6 brace force, and the Appendix 6.3.2 torsional restraint moment 0.02M_rC_d at the fork.
+ const arrangement=diaphragmArrangement(p),pair=stiffenerPairSection(bs,p.section.tw),diaphragmForce=r.demands.brace+imperfection,couple=A6.flexure*props.h0;
+ const supportTorque=r.diaphragm?.torque??diaphragmForce*strength.h,dia=diaphragmDemand(arrangement,{H:diaphragmForce,torque:supportTorque,couple,h:strength.h,h0:props.h0});
+ const mom=(v:number)=>format(v,'moment',p.units,3),Md=arrangement.kind==='both-flanges'?'|T_{sv}|+0.02M_rC_d':arrangement.kind==='gusset'?'Hy_g+|T_{sv}|+0.02M_rC_d':'Hh';
+ const sectionText=`${pair.composite?`The pair is welded continuously to both web faces and acts as one plate of width 2b_s + t_w (AISC 360-16 Appendix 6.3.2a takes a pair as one plate of width 2b_s); at the copes S = 2t_s[(t_w/2 + b_s)³ − (t_w/2 + c)³]/[3(t_w/2 + b_s)] = ${format(pair.S,'modulus',p.units,4)}, and the web welds carry its shear flow VQ/I`:`Separate plates, S = 2t_sb_s²/6 = ${format(pair.S,'modulus',p.units,4)}`}.`;
+ const demandText=arrangement.kind==='one-flange'?`H = ${frc(diaphragmForce)} (restraint force plus the Appendix 6 brace force) over h = ${len(strength.h)}: M = ${mom(dia.M)}`
+  :`T_sv = ${mom(supportTorque)}, the largest St Venant torque G_k·J·θ′ (0.8G) a girder end delivers to its support in the strength cases${r.diaphragm?.governing?` (${r.diaphragm.governing.combination}, x = ${len(r.diaphragm.governing.x)})`:r.diaphragm?'':', bounded by H·h (no solved case)'}; 0.02M_rC_d = ${mom(couple)}${arrangement.kind==='gusset'?`; H·y_g = ${frc(diaphragmForce)} × ${len(arrangement.yg)}`:''}: M = ${mom(dia.M)}, V = ${frc(dia.V)}`;
+ add('stiffener-lateral-flexure','Local forces','Restraint diaphragm lateral flexure',dia.M/pair.S,available(m.Fy,p.method,.9,1.67),'stress',`f_b=\\frac{M_d}{S_d};\\quad M_d=${Md}`,`${arrangement.text}. ${demandText}. ${sectionText}`);
+ add('stiffener-combined-weld','Connections','Bearing stiffener welds · reaction with the lateral flange forces',diaphragmWeldEquivalent(a.reaction,dia,pair,welds.Lw),stiffWeld,'force',pair.composite?'R_{eq}=R+\\frac{2VQL_w}{I}':'R_{eq}=R+2V+\\frac{6M_d}{L_w}',`The full vertical reaction R on the four web weld lines${pair.composite?` and the diaphragm's shear flow VQ/I (V = ${frc(dia.V)}, Q = ${format(pair.Q,'modulus',p.units,3)}, I = ${format(pair.I,'inertia',p.units,3)}), per line R/(4L_w) + VQ/(2I)`:`, the restraint force as direct shear (2V) and the diaphragm moment over the weld length (6M_d/L_w)`}, as an equivalent reaction on the group. ${weldNote} Fitted ends also require continuous flange fillets.`);
  const bearingPressure=a.reaction/(bs.width*bs.length),cantilever=Math.max((bs.width-(2*bs.stiffenerWidth+p.section.tw))/2,(bs.length-bs.stiffenerThickness)/2);
  add('bearing-plate','Connections','Bearing plate flexure',6*(bearingPressure*cantilever**2/2)/bs.thickness**2,available(m.Fy,p.method,.9,1.67),'stress','f_b=6m/t_p^2;\\quad m=f_pa^2/2','Uniform contact over the steel seat plate; longest cantilever from the stiffener load footprint. Enabled welded brackets have a separate Column bracket check group; full frame capacity is outside scope.');
  add('bearing-contact','Connections','Steel bearing contact',bearingPressure,available(1.8*Math.min(m.Fy,p.section.Fy),p.method,.75,2),'stress','f_p=R/A_{pb}\\le1.8F_y','Fitted steel-to-steel contact. No concrete/foundation resistance is evaluated.');
@@ -254,8 +327,11 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  root('end-root-fatigue','End plates · weld-root normal fatigue',endPlateRange,d.end.thickness,d.end.weldSize);
  }
  if(!cap&&!capAngle)root('tie-root-fatigue','Tie gusset · weld-root normal fatigue',r.demands.braceFatigue/(brace.cos*d.brace.gussetThickness*d.brace.connection.weldLength)*(plate?1+6*tieEccentricity(p)/d.brace.gussetThickness:1),d.brace.gussetThickness,d.brace.connection.weldSize);
- add('stiffener-fatigue','Fatigue','Bearing stiffeners · plate fatigue',r.demands.verticalFatigue/(2*(bs.stiffenerWidth-bs.cope)*bs.stiffenerThickness)+r.demands.braceFatigue*strength.h/(2*bs.stiffenerThickness*bs.stiffenerWidth**2/6),fatigueSpectrumBin('C',1,totalCycles).allowable,'stress','f_{sr}=\\Delta R/A_{st}\\le F_{SR}=6900(4.4/n_{SR})^{0.333}','Sum of full reaction axial range and full lateral-brace bending range through the stiffener pair, applied to every cycle.',['aisc-fatigue']);
- add('stiffener-weld-fatigue','Fatigue','Bearing stiffeners · weld throat fatigue',(r.demands.verticalFatigue+8*r.demands.braceFatigue)/(4*(strength.h-2*bs.cope)*bs.weldSize/Math.sqrt(2)),weldRange,'stress','f_{sr}=\\Delta R/A_{we}','Effective weld length excludes both end copes; full reaction range for all cycles.',['aisc-fatigue']);
+ // The same diaphragm demand in fatigue: the largest St Venant torque range of a girder end in one duty bin (no brace force).
+ const diaRange=diaphragmDemand(arrangement,{H:r.demands.braceFatigue,torque:r.diaphragm?.range??r.demands.braceFatigue*strength.h,couple:0,h:strength.h,h0:props.h0});
+ const rangeText=arrangement.kind==='one-flange'?`ΔH = ${frc(r.demands.braceFatigue)} over h: ΔM = ${mom(diaRange.M)}`:`ΔT_sv = ${mom(r.diaphragm?.range??r.demands.braceFatigue*strength.h)}, the largest St Venant torque range of a girder end in one duty bin${arrangement.kind==='gusset'?`, plus ΔH·y_g`:''}: ΔM = ${mom(diaRange.M)}, ΔV = ${frc(diaRange.V)}`;
+ add('stiffener-fatigue','Fatigue','Bearing stiffeners · plate fatigue',r.demands.verticalFatigue/(2*(bs.stiffenerWidth-bs.cope)*bs.stiffenerThickness)+diaRange.M/pair.S,fatigueSpectrumBin('C',1,totalCycles).allowable,'stress','f_{sr}=\\frac{\\Delta R}{A_{st}}+\\frac{\\Delta M_d}{S_d}\\le F_{SR}=6900(4.4/n_{SR})^{0.333}',`Sum of the full reaction axial range and the restraint diaphragm bending range of the stiffener pair (as stiffener-lateral-flexure: ${rangeText}), applied to every cycle.`,['aisc-fatigue']);
+ add('stiffener-weld-fatigue','Fatigue','Bearing stiffeners · weld throat fatigue',diaphragmWeldEquivalent(r.demands.verticalFatigue,diaRange,pair,welds.Lw)/(4*welds.Lw*bs.weldSize/Math.sqrt(2)),weldRange,'stress',pair.composite?'f_{sr}=\\frac{\\Delta R+2\\Delta VQL_w/I}{4L_w(0.707w)}':'f_{sr}=\\frac{\\Delta R+2\\Delta V+6\\Delta M_d/L_w}{4L_w(0.707w)}',`Effective weld length excludes both end copes; full reaction range and the restraint diaphragm's ${pair.composite?'shear flow':'force and moment'} range (${rangeText}) for all cycles.`,['aisc-fatigue']);
  add('stiffener-weld-minimum','Detailing','Bearing stiffener minimum fillet',filletMinimum([bs.stiffenerThickness,p.section.tw]),bs.weldSize,'length','w\\ge w_{min}','Continuous welds both sides of both plates; AISC 360-16 Table J2.4, by the thinner part joined (the stiffener or the girder web).');
  add('stiffener-weld-maximum','Detailing','Bearing stiffener fillet edge limit',bs.weldSize,Math.min(bs.stiffenerThickness,p.section.tw)-1.5875,'length','w\\le t-1/16\\,in','Full-throat edge buildup not credited.');
  if(!cap&&!capAngle){

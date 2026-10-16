@@ -133,6 +133,13 @@ export interface RunwayDetailResults {
  /** H1 at each flange with the governing major-axis strength M_cx (load height included): governing concurrent actions. */
  interaction?:{mcx:number;top:number;bottom:number;topCase?:import('./types').DesignCaseSummary;bottomCase?:import('./types').DesignCaseSummary;
   /** H1 of each combination with this M_cx (the larger flange). */ combinations?:{id:string;interaction:number}[]};
+ /**
+  * St Venant torque G_k·J·θ′ the girder delivers to each support through each girder end, at the analysis stiffness
+  * (0.8G for strength): simple bays at each girder end; a continuous girder at its runway ends and as the jump across an
+  * interior support (zero where θ′ is continuous). Strength envelope, largest range in a duty bin (and per bin, the
+  * largest over the ends). The part of the support torque that must cross the depth in the bearing stiffener diaphragm.
+  */
+ diaphragm?:{torque:number;range:number;bins:number[];governing?:{id:string;combination:string;x:number};ends:{x:number;bay?:number;end?:'left'|'right';torque:number;range:number}[]};
  /** Strength cases whose girder bay is unstable at the applied load; their response is not recovered. */
  unstableCases?:number;
  normalStress:number;shearStress:number;railDisplacement:number;twist:number;criticalMultiplier:number;
