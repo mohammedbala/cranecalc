@@ -42,6 +42,12 @@ export const runwayConfigSchema=z.object({
  columnShape:z.string().max(30).optional(),
  /** Column face to the girder web centerline, in; blank: 20 in, or farther (to 30 in) where the tie needs the flexible length. */
  reach:z.number().finite().min(12).max(48).optional(),
+ /**
+  * Existing columns: where the crane longitudinal force leaves the column, a crane-level strut by others on the girder
+  * line or at the column centerline, or none (the eave strut at the column top takes it). Blank: the column-centerline
+  * strut, or the girder-line strut where the column fails torsion from the girder offset with it.
+  */
+ longitudinalExit:z.enum(['girder-strut','column-strut','eave-strut']).optional(),
 });
 export type RunwayConfig=z.infer<typeof runwayConfigSchema>;
 export type SupportKind=RunwayConfig['support'];
@@ -51,5 +57,7 @@ export const supportLabels:Record<SupportKind,string>={
  'by-others':'Bracket by others (existing)','twin-rib':'Welded twin-rib seat','haunched-seat':'Haunched (tapered) rib seat','rolled-corbel':'Rolled W-stub bracket','tapered-haunch':'Built-up tapered I haunch','column-cap':'Column cap (new columns)'};
 export const tieLabels:Record<TieKind,string>={'paired-bars':'Paired flat bars','flexible-plate':'Flexible plate','cap-angle':'Cap tieback angle'};
 
+/** Support offered when the structure is chosen: new columns bear the girders on column caps (no torsion from a bracket offset). */
+export const defaultSupportFor=(structure:RunwayConfig['structure'],current:SupportKind):SupportKind=>structure==='new'?'column-cap':current==='column-cap'?'twin-rib':current;
 export const defaultRunwayConfig:RunwayConfig={title:'Crane runway',number:'',units:'US',method:'LRFD',scope:'design',capacity:10,craneSpan:60,control:'cab',cmaa:'C',cranes:1,buildingClass:'C',
  system:'simple',bays:3,span:25,railElevation:20,girder:'rolled',structure:'existing',support:'twin-rib',tie:'paired-bars'};

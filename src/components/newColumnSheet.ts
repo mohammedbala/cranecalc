@@ -196,7 +196,8 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   const anchorAt=X(-row-hw.washer/2)-20-Math.max(...anchors.map(v=>textWidth(v,8)));
   svg+=multiLeader([[X(-row-hw.washer/2),Y(xs[0]-hw.washer/2)]],[anchorAt,Y(-b.plate.B/2)-36],anchors,8);
   const weldAt=X(-b.plate.N/2)-16-textWidth('BOTH SIDES OF FLANGES',8);
-  svg+=filletLeader([[X(-c.d/2+c.tf),Y(c.bf/4)]],[weldAt,cy+14],size(b.plate.weld),['COLUMN TO BASE PL,','BOTH SIDES OF FLANGES','AND WEB'],true);
+  svg+=b.plate.flangeJoint==='cjp'?multiLeader([[X(-c.d/2+c.tf),Y(c.bf/4)]],[weldAt,cy+14],['CJP FLANGES TO BASE PL,',`${size(b.plate.weld)} FILLETS BOTH`,'SIDES OF WEB'],8)
+   :filletLeader([[X(-c.d/2+c.tf),Y(c.bf/4)]],[weldAt,cy+14],size(b.plate.weld),['COLUMN TO BASE PL,','BOTH SIDES OF FLANGES','AND WEB'],true);
   const ay=Y(-b.plate.B/2)-12;svg+=text(X(b.plate.N/2)-40,ay-5,'TO GIRDER',7.5,'start',700)+line([X(b.plate.N/2)-40,ay],[X(b.plate.N/2),ay])+`<path class="leader-arrow" d="M${n(X(b.plate.N/2)+4)},${n(ay)}l-5,-1.6v3.2z"/>`;
   svg+=text(cx,Y(b.plate.B/2)+56,`PL ${size(tb)} X ${dim(b.plate.B)} X ${dim(b.plate.N)}, ASTM A572 GR. 50`,8.5,'middle',700);
   return {svg:svg+'</g>',scale:k.label};
@@ -294,7 +295,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   ];
   const notes=[
    `NEW COLUMNS: ASTM A992 ${name}, ONE AT EACH SUPPORT OF BOTH RUNWAYS. FIXED BASE, FREE TOP ACROSS THE RUNWAY; ALONG THE RUNWAY BY THE CRANE-LEVEL BRACING. ${capG?`COLUMN TOP MILLED TO BEAR UNDER THE COLUMN CAP, THE GIRDER CENTERED ON THE COLUMN (${detailRef(columnCapTitles.section)}).`:'COLUMN TOP AT OR BELOW THE TOP OF THE GIRDER, CLEAR OF THE CRANE END TRUCKS; VERIFY CLEARANCE WITH THE CRANE SUPPLIER.'}`,
-   `BASE PLATE ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN, ${size(b.plate.weld)} FILLETS BOTH SIDES OF FLANGES AND WEB. HOLES ${size(hw.hole)} DIA. (AISC DG1 TABLE 2.3) WITH ${size(hw.washer)} X ${size(hw.washer)} X ${size(hw.washerThickness)} PLATE WASHERS; WELD WASHERS TO THE PLATE, ${size(plateWasherWeld(b).size)} FILLET ALL AROUND, AFTER THE NUTS ARE SNUG SO ALL RODS SHARE THE SHEAR.`,
+   `BASE PLATE ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN, ${b.plate.flangeJoint==='cjp'?`CJP GROOVE WELDS AT BOTH FLANGES (AWS D1.1 PREQUALIFIED, BACKING REMOVED), ${size(b.plate.weld)} FILLETS BOTH SIDES OF THE WEB`:`${size(b.plate.weld)} FILLETS BOTH SIDES OF FLANGES AND WEB`}. HOLES ${size(hw.hole)} DIA. (AISC DG1 TABLE 2.3) WITH ${size(hw.washer)} X ${size(hw.washer)} X ${size(hw.washerThickness)} PLATE WASHERS; WELD WASHERS TO THE PLATE, ${size(plateWasherWeld(b).size)} FILLET ALL AROUND, AFTER THE NUTS ARE SNUG SO ALL RODS SHARE THE SHEAR.`,
    `ANCHOR RODS ASTM F1554 GR. ${a.grade.split('-')[1]} WITH ASTM A563 HEAVY HEX NUTS; EMBEDDED HEAVY HEX NUT TACK WELDED TO THE ROD. SET WITH A TEMPLATE TO AISC CODE OF STANDARD PRACTICE §7.5 TOLERANCES. DO NOT FIELD BEND OR HEAT RODS.`,
    `SET THE PLATE ON SHIM STACKS OR LEVELING NUTS AND FILL ${size(gr)} OF NON-SHRINK, NON-METALLIC GROUT (ASTM C1107, ${u==='US'?'5,000 PSI':'35 MPa'} MINIMUM) TO FULL BEARING BEFORE THE GIRDER IS SET.`,
    `FOOTING CONCRETE f'c = ${force(b.concrete.fc,'stress')} AT 28 DAYS, NORMALWEIGHT; REINFORCEMENT ${rebarGrade(b.footing.fy,u)}, ${size(ft.cover)} CLEAR COVER CAST AGAINST EARTH, STRAIGHT BARS EACH WAY.`,

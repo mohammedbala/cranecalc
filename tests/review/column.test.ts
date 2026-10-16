@@ -56,7 +56,7 @@ describe('B7 column weak-axis bending',()=>{
   // with the twist over the 27 in offset), so the column keeps at most 1/11 of the force: torsion F·e/11 and weak-axis bending.
   const z=r.support!.strut!;expect(z.share).toBeCloseTo(1/11,9);expect(z.required).toBeCloseTo(10*z.kc,6);expect(z.kc).toBeCloseTo(1/(1/z.kY+(27*inch)**2/z.Ktheta),6);
   expect(r.torsion!.T/kft).toBeCloseTo(.65,2);expect(r.governing.My.My/kft).toBeCloseTo(20.4,1);
-  expect(find(checks,'column-longitudinal-path').status).toBe('pass');expect(find(checks,'column-interaction').utilization).toBeCloseTo(.313,3);
+  expect(find(checks,'column-longitudinal-path').status).toBe('pass');expect(find(checks,'column-interaction').utilization).toBeCloseTo(.302,3);// .313 with impact and side thrust concurrent; TR-13 2b/2c as the girder
  });
 });
 
@@ -81,9 +81,9 @@ describe('B9 frame type',()=>{
  it('flags the column check until the frame type is entered, and applies B2 to the lateral moments of a sway frame',()=>{
   const p=demoFocus005();expect(find(checksOf(p),'column-frame').status).toBe('unverified');
   p.existingColumn!.frame={type:'sway',source:'test'};expect(find(checksOf(p),'column-frame').status).toBe('unverified');
-  const base=column(demoFocus005()).combinations.find(k=>k.id==='LRFD 4-S+')!;
+  const base=column(demoFocus005()).combinations.find(k=>k.id==='LRFD 4-S+ (side thrust, no impact)')!;
   p.existingColumn!.frame={type:'sway',B2:1.2,source:'test'};
-  const r=column(p),k=r.combinations.find(v=>v.id==='LRFD 4-S+')!;
+  const r=column(p),k=r.combinations.find(v=>v.id==='LRFD 4-S+ (side thrust, no impact)')!;
   expect(find(existingColumnChecks(p,r),'column-frame').status).toBe('pass');expect(k.Mx).toBeGreaterThan(base.Mx);
   p.existingColumn!.frame={type:'braced',source:'test'};expect(find(checksOf(p),'column-frame').status).toBe('pass');
  });

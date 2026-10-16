@@ -25,7 +25,9 @@ export function deliveredRows(s:CalculationSnapshot,d:DeliveredForces|undefined=
  // Mx is never a dash: V·e where e is known (from the column face where the seat is by others), else the product to form.
  const row=(grid:number,i:number,x:DeliveredSet)=>[i?'':String(grid),sentence(x.label),x.combination,f(x.V),x.Mx===undefined?'V·e':m(x.Mx),Math.abs(x.My)<1?'—':x.mirrored?`±${m(Math.abs(x.My))}`:`${x.My>=0?'+':'−'}${m(Math.abs(x.My))}`,
   `±${f(x.Htie)}`,Math.abs(x.Hseat)<1?'—':`${Math.sign(x.Hseat)===Math.sign(x.top)||Math.abs(x.top)<1?'±':'∓'}${f(Math.abs(x.Hseat))}`,sign(x.F,f(Math.abs(x.F)))];
- return d.grids.flatMap(g=>g.sets.map((x,i)=>row(g.grid,i,x)));
+ // The crane-level strut by others the column check relies on: its design force along the runway at the seat level.
+ const z=d.strut,strut=z?[['Strut',`Crane-level strut by others, ${z.location==='girder-line'?'girder line':'column C/L'}`,`traction / stop`,'—','—','—','—','—',`±${f(z.force)}`]]:[];
+ return [...d.grids.flatMap(g=>g.sets.map((x,i)=>row(g.grid,i,x))),...strut];
 }
 
 /** The key printed with the table, one line each: what acts together, where each force acts, the tie design force and the stop grids. */
@@ -46,6 +48,7 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
   `H tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the tie line${d.elevation?el(d.elevation.tie):''}${bars!==undefined&&d.elevation?`, delivered to the column by the tie at its centerline${el(bars)}`:''}; design value ${f(d.tie.design)}.`,
   `H seat: bottom-flange restraint force at the bearing bolts, ∓ opposite in sign to H tie.`,
   `F: longitudinal force at the locating bearing, + toward the next grid.${d.stopGrids.length?` Stop force ${f(d.stop)} at ${grids(d.stopGrids)} only.`:''}${railBearsOnStops(s.input)?' Traction reaches the bay under the crane, or through the floating rail string an end bay at its stop.':''}`,
+  ...(d.strut?[`Strut: the crane-level strut by others ${d.strut.location==='girder-line'?`on the girder line, ${len(d.strut.offset)} from the column centerline,`:'at the column centerline'} at the seat level of grids ${d.strut.grids.join(', ')}${d.strut.stiffness!==undefined?`, axial stiffness k ≥ ${sig3(d.strut.stiffness,'stiffness',u)} at each seat`:''}: design force F = ${f(d.strut.force)} (traction ${f(d.strut.traction)}${d.strut.stop?`, stop ${f(d.strut.stop)}`:''}), carried to the braced bay; the existing column check relies on it.`]:[]),
   `V includes the bearing hardware on the seat; the ${support} and other support steel (${f(Math.max(0,...(s.supportReactions?.supports??[]).map(v=>v.Ds)))} per grid, dead) goes straight into the column.`].join(separator);
 }
 
