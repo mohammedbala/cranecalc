@@ -286,7 +286,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
    existing:Object.fromEntries(Object.entries(e.existing).map(([key,v])=>[key,scale(v)])) as typeof e.existing,
    welding:{...e.welding!,grade:'ASTM A992',source:'Fictitious example: mill certificates with the original building records'},
    source:`Fictitious example: survey of the existing ${shape} columns and the original building calculations, column line B`,
-   longitudinalExit:'girder-strut',service:{...e.service!,source:'Fictitious example: building frame report, 10-year wind and dead/snow runs at the crane girder'},
+   longitudinalExit:'column-strut',service:{...e.service!,source:'Fictitious example: building frame report, 10-year wind and dead/snow runs at the crane girder'},
    frame:{type:'braced',source:'Fictitious example: column line B braced by the roof diaphragm and the sidewall rod bracing'},
    siteSeismic:{...e.siteSeismic!,source:'Fictitious example: site data from the original building report (Site Class D, SDS 0.25, SDC B; steel system not specifically detailed for seismic, R = 3)',
     alteration:{dcrIncrease:.06,source:'Fictitious example: evaluation of the existing bracing and frames with the runway and crane mass added (largest D/C increase 6%)'}}};
