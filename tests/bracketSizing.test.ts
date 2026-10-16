@@ -10,7 +10,8 @@ import {haunchedRibErrors,ribGeometry} from '../src/engine/bracketRib';
 import {supportReactions} from '../src/engine/supportReactions';
 import {sectionProperties} from '../src/engine/section';
 import {railTopAboveSteel} from '../src/engine/railSeat';
-import {flangeTieGeometry} from '../src/engine/tieGeometry';
+import {flangeTieGeometry,stiffenerTieGeometry,columnGussetExtension} from '../src/engine/tieGeometry';
+import {tieSizingRatios} from '../src/engine/flangeTieSizing';
 import {initialColumnStiffeners,receiverK} from '../src/engine/columnStiffenerInputs';
 import {columnStiffenerErrors} from '../src/engine/columnStiffeners';
 import {simpleSupportInput} from '../src/engine/simpleSupports';
@@ -85,15 +86,16 @@ describe('welded rib bracket sizing',()=>{
 
 describe('reach for the top-flange tie',()=>{
  it('lengthens the reach only as the tie bars need, and the tie still ends at the column face',()=>{
-  const p=templateProject('t01'),b=p.details!.bracket!,t=p.details!.brace,g=flangeTieGeometry(p)!;
+  // t01 ties at its bearing stiffener (its saddle exceeds the flange limits with the tie force at the tie line).
+  const p=templateProject('t01'),b=p.details!.bracket!,t=p.details!.brace,g=stiffenerTieGeometry(p)!,c=t.connection,free=t.length-2*((c.rows-1)*c.pitch+2*c.edge)-columnGussetExtension(p);
   // The tie ends at the bracket reach (the column face), and its length is its reach.
-  expect(t.length).toBeCloseTo(t.reach,9);expect(g.face).toBeCloseTo(b.reach,9);expect(p.details!.brace.flangeAttachment!.columnFace).toBeUndefined();
-  // Clear length between the bolt groups: the end movement bends each bar to at most 0.8 of its plastic moment.
-  const delta=girderEndRotation(p)*p.section.d+12e-6*Math.max(...p.spans)*30,Fy=p.details!.material.Fy;
-  expect(2*p.section.E*t.thickness*delta/g.freeLength**2/(.9*Fy)).toBeLessThanOrEqual(.8+1e-9);
+  expect(t.length).toBeCloseTo(t.reach,9);expect(g.face).toBeCloseTo(b.reach,9);
+  // Clear length between the bolt groups: the stiffener tie is sized for the end movement by its own checks (tie-move-*,
+  // sizeFlangeTie), within the imposed-movement limit; tieReach serves the saddle ties.
+  expect(free).toBeGreaterThan(0);expect(tieSizingRatios(p)['tie-move-strength']).toBeLessThanOrEqual(.97+1e-9);
   // A configured reach is kept.
   const fixed=buildProject({...templateProject('t01').configurator!,reach:20});expect(fixed.details!.bracket!.reach).toBeCloseTo(20*inch,9);
-  expect(fixed.details!.brace.length).toBeCloseTo(fixed.details!.brace.reach,9);expect(flangeTieGeometry(fixed)!.face).toBeCloseTo(20*inch,9);
+  expect(fixed.details!.brace.length).toBeCloseTo(fixed.details!.brace.reach,9);expect(stiffenerTieGeometry(fixed)!.face).toBeCloseTo(20*inch,9);
   // Thinner bars need no longer reach.
   const q=structuredClone(fixed);q.details!.brace.thickness=inch/8;q.details!.brace.flangeAttachment!.columnFace=q.details!.bracket!.reach;q.details!.brace.length=q.details!.brace.reach;
   expect(tieReach(q,20*inch)).toBeCloseTo(20*inch,9);

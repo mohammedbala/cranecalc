@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {buildProject} from '../src/engine/configurator';
 import {templateProject} from '../src/engine/templates';
 import {defaultRunwayConfig,type RunwayConfig} from '../src/engine/configInputs';
@@ -60,8 +61,8 @@ describe('girder end zone: the tie on the bearing stiffener for rolled simple sp
   expect(validateRunwayDetails(q).join(' ')).toMatch(/end stop bolts and nuts/);
  });
  it('keeps rail clips off a remaining top-flange saddle',()=>{
-  // Template t01: a 10-ton cab crane in a Class C building, whose sized saddle keeps within its limits.
-  const p=templateProject('t01');
+  // The 10-ton demonstration with its tie on the direct flange saddle.
+  const p=saddleDemonstration();
   const g=flangeTieGeometry(p);expect(g).toBeDefined();
   const clip=railClipInput(p.details!.rail),reach=clip.baseLength/2+clip.weld+p.section.tf,half=g!.attachment.saddleLength/2+g!.attachment.weldSize;
   for(const v of g!.stations)for(const k of railClipStations(p))expect(Math.abs(k-v.tieX)).toBeGreaterThan(reach+half);

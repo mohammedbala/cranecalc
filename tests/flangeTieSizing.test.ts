@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/demonstration';
 import {templateProject} from '../src/engine/templates';
 import {buildProject} from '../src/engine/configurator';
@@ -13,6 +14,8 @@ import {sectionProperties} from '../src/engine/section';
 import {girderDeadLoad} from '../src/engine/newSteel';
 import type {CalculationSnapshot} from '../src/engine/types';
 
+/** The saddle of the hand calculations: 4 x 1 3/4 in with 3/8 in end fillets, 3 1/2 in from the 12 1/2 in bearing center. */
+const saddleOf375=()=>{const p=saddleDemonstration();Object.assign(p.details!.brace.flangeAttachment!,{saddleThickness:1.75*25.4,weldSize:.375*25.4,longitudinalSetback:3.5*25.4});return p;};
 const inch=25.4,foot=304.8;
 
 describe('girder flange at the tie saddle · effective width',()=>{
@@ -21,7 +24,7 @@ describe('girder flange at the tie saddle · effective width',()=>{
   // Saddle 4 in long from 1 1/4 to 6 1/2 in across the flange: a = 3.875 - 0.98 = 2.895 in. The tie sits 3 1/2 in from
   // the 12 1/2 in bearing center toward the girder end: the saddle end is 6.25 - 3.5 - 2 = 0.75 in from it and the
   // 3/8 in end fillet leaves s_e = 0.375 in. b_e = 4 + 2.895 + 0.375 = 7.27 in.
-  const p=demonstrationProject(),fw=flangeEffectiveWidth(p);
+  const p=saddleOf375(),fw=flangeEffectiveWidth(p);
   expect(fw.k1/inch).toBeCloseTo(.98,9);expect(fw.a/inch).toBeCloseTo(2.895,9);expect(fw.end/inch).toBeCloseTo(.375,9);expect(fw.width/inch).toBeCloseTo(7.27,9);
   // F = 10 kN at h = 4 7/8 in below the flange: f = 6Fh/(b_e t_f^2) + 1.5F/(b_e t_f) = 20.837 + 1.849 = 22.685 MPa.
   const F=10000,r=flangeTieResponse(p,F),h=4.875*inch,tf=1.73*inch,be=7.27*inch,B=4*inch;
@@ -34,7 +37,7 @@ describe('girder flange at the tie saddle · effective width',()=>{
   expect(check.note).toContain('Screening bound with the saddle-length strip alone');expect(check.referenceIds).toContain('flange-saddle-mechanics');
  });
  it('stops the spread at the girder end and refuses a saddle fillet off the flange',()=>{
-  const p=demonstrationProject(),a=p.details!.brace.flangeAttachment!;
+  const p=saddleOf375(),a=p.details!.brace.flangeAttachment!;
   // 1/4 in more setback: the end fillet toe reaches the girder end, no spread on that side.
   a.longitudinalSetback=3.875*inch;
   expect(flangeEffectiveWidth(p).end).toBeCloseTo(0,9);expect(flangeEffectiveWidth(p).width/inch).toBeCloseTo(6.895,9);
@@ -83,9 +86,10 @@ describe('tie sizing estimates',()=>{
   expect(est.factored).toBeCloseTo(1.2*q*L**3/(24*EI)+1.6*1.25*est.service,4);
  });
  it('estimates the tie force and range within the analysis of the 10-ton template t01',()=>{
-  // t01 analysis: brace force 9.14 kip with the imperfection force, fatigue range 3.14 kip.
+  // t01 analysis (the tie on the bearing stiffener, the restraint at its bar line): brace force 10.31 kip with the
+  // imperfection force, fatigue range 3.14 kip. The estimate is calibrated to the analysis (tieForceCalibration).
   const d=tieSizingDemands(templateProject('t01')),kip=4448.2216152605;
-  expect(d.force/kip).toBeGreaterThan(9.14);expect(d.force/kip).toBeLessThan(9.14*1.1);
+  expect(d.force/kip).toBeGreaterThan(10.31);expect(d.force/kip).toBeLessThan(10.31*1.15);
   expect(d.range/kip).toBeGreaterThan(3.14);expect(d.range/kip).toBeLessThan(3.14*1.25);
   expect(d.rotation).toBeCloseTo(3.080e-3,5);expect(d.serviceRotation).toBeCloseTo(1.462e-3,5);
  });
@@ -93,23 +97,25 @@ describe('tie sizing estimates',()=>{
 
 describe('configured tie proportions',()=>{
  it('sizes the t01 tie from the girder: minimum bolt spacing, slots for the movement, a longer flexible length',()=>{
-  const p=templateProject('t01'),t=p.details!.brace,c=t.connection,g=flangeTieGeometry(p)!,r=tieRelease(p)!;
-  expect(validateProject(p)).toEqual([]);
-  // 5/8 in bolts: pitch 2 2/3 d = 1.67 in -> 1 3/4 in, edge 1.5 d = 0.94 in -> 1 in.
-  expect(tieBoltSpacing(.625*inch)).toEqual({pitch:1.75*inch,edge:inch});
-  expect(c.pitch).toBeCloseTo(1.75*inch,9);expect(c.edge).toBeCloseTo(inch,9);
-  // Slot travel: 1/16 in bracket deflection limit x 1.25 + 3.08e-3 x 3 in + 1/16 + 1/32 in = 0.181 in -> 3/16 in.
+  // t01's saddle, under the tie force at the tie line, exceeds its flange limits: the tie is on the bearing stiffener.
+  const p=templateProject('t01'),t=p.details!.brace,c=t.connection,g=stiffenerTieGeometry(p)!,r=tieRelease(p)!;
+  expect(validateProject(p)).toEqual([]);expect(flangeTieGeometry(p)).toBeUndefined();
+  // 1/2 in bolts: pitch 2 2/3 d = 1.33 in -> 1 3/8 in, edge 1.5 d = 0.75 in.
+  expect(tieBoltSpacing(.5*inch)).toEqual({pitch:1.375*inch,edge:.75*inch});
+  expect(c.pitch).toBeCloseTo(1.375*inch,9);expect(c.edge).toBeCloseTo(.75*inch,9);
+  // Slot travel: 1/16 in bracket deflection limit x 1.25 + no setback (the tie at the bearing center) + 1/16 + 1/32 in
+  // = 0.172 in -> 3/16 in.
   expect(t.release!.travel).toBeCloseTo(3/16*inch,9);
   expect(c.gauge).toBeCloseTo(r.minimumGauge,9);expect(t.width).toBeGreaterThanOrEqual(c.gauge+2*c.edge-1e-9);
-  // The 20 in reach stays; the shorter column-end bolt group gives 8 3/4 in between the gussets (7 3/4 in before).
-  expect(p.details!.bracket!.reach).toBeCloseTo(20*inch,9);
-  expect(g.freeLength).toBeCloseTo(t.length-2*((c.rows-1)*c.pitch+2*c.edge)-columnGussetExtension(p),9);
-  expect(g.freeLength/inch).toBeGreaterThan(8.5);
+  // The reach grows to 21 in for the bars' flexible length: 8 1/4 in between the gussets.
+  expect(p.details!.bracket!.reach).toBeCloseTo(21*inch,9);expect(g.face).toBeCloseTo(21*inch,9);
+  const free=t.length-2*((c.rows-1)*c.pitch+2*c.edge)-columnGussetExtension(p);
+  expect(free/inch).toBeGreaterThan(8);
   // Under the sizing estimates (the fatigue range 1.25 H against the analysis's 1.05 H) every ratio is near or below one;
   // the imposed-movement checks the old proportions failed by up to 2.5 are well below.
   const ratios=tieSizingRatios(p);
   expect(Math.max(...Object.values(ratios))).toBeLessThan(1.1);
-  for(const id of ['tie-move-strength','tie-move-gusset','tie-move-weld','tie-move-root-fatigue','saddle-toe-fatigue'])expect(ratios[id],id).toBeLessThan(1);
+  for(const id of ['tie-move-strength','tie-move-gusset','tie-move-weld','tie-move-root-fatigue'])expect(ratios[id],id).toBeLessThan(1);
  });
  it('holds strength and fatigue to 0.9, the imposed movement to 0.97 and fit limits to one',()=>{
   const r=tieSizingRatios(templateProject('t01'));
@@ -117,9 +123,9 @@ describe('configured tie proportions',()=>{
   expect(sizingLimit(r,'tie-pitch')).toBe(1);expect(sizingLimit(r,'tie-move-strength',.95)).toBe(1);
  });
  it('sizes the tie before the bracket: the bracket at the reach the tie needs, the release travel the tie\'s own',()=>{
-  // The 1/4 in bars pass at the 20 in default reach, so the welded seats are sized there.
+  // The 1/4 in bars on the bearing stiffener pass at a 21 in reach, so the welded seats are sized there.
   const p=templateProject('t01'),b=p.details!.bracket!,t=p.details!.brace;
-  expect(b.reach).toBeCloseTo(20*inch,9);expect(flangeTieGeometry(p)!.face).toBeCloseTo(b.reach,9);expect(t.length).toBeCloseTo(t.reach,9);
+  expect(b.reach).toBeCloseTo(21*inch,9);expect(stiffenerTieGeometry(p)!.face).toBeCloseTo(b.reach,9);expect(t.length).toBeCloseTo(t.reach,9);
   // The slots take the bracket at its deflection limit with the cranes and impact, the end rotation over the setback
   // and the positioning allowance: the bracket sizing's release coordination holds wherever its deflection check does.
   const set=bracketSizingSet(p),rel=set.release!,r=bracketSizingRatios(p,set);
@@ -128,7 +134,7 @@ describe('configured tie proportions',()=>{
   expect(r.deflection).toBeLessThanOrEqual(.9+1e-9);expect(r.release).toBeLessThan(1);
   // A configured reach is kept, the tie sized there.
   const q=buildProject({...p.configurator!,reach:24});
-  expect(q.details!.bracket!.reach).toBeCloseTo(24*inch,9);expect(flangeTieGeometry(q)!.face).toBeCloseTo(24*inch,9);
+  expect(q.details!.bracket!.reach).toBeCloseTo(24*inch,9);expect(stiffenerTieGeometry(q)!.face).toBeCloseTo(24*inch,9);
   expect(validateProject(q)).toEqual([]);expect(Math.max(...Object.values(tieSizingRatios(q)))).toBeLessThanOrEqual(1);
  });
  it('gives the release slots the travel of a bracket that deflects more than its limit (an unsized W stub on t03)',()=>{
@@ -154,9 +160,9 @@ describe('configured tie proportions',()=>{
   expect(p.details!.brace.arrangement).toBe('cap-angle');expect(p.details!.brace.capAngle).toBeDefined();
   expect(p.notes).toContain('do not suit this capped girder');expect(p.details!.bracket!.reach).toBeCloseTo(20*inch,9);
   expect(validateProject(p)).toEqual([]);
-  // The capped templates t04 and t11 keep their saddle ties, which pass.
-  expect(templateProject('t04').details!.brace.arrangement??'paired-bars').toBe('paired-bars');
-  expect(templateProject('t11').details!.brace.arrangement).toBe('flexible-plate');
+  // The capped templates t04 and t11 too, with the tie force at the tie line.
+  expect(templateProject('t04').details!.brace.arrangement).toBe('cap-angle');
+  expect(templateProject('t11').details!.brace.arrangement).toBe('cap-angle');
  });
  it('moves the column face out where the flexible length needs it, and sizes nothing it does not use',()=>{
   // Continuous t08: stiffener ties from 1/4 in clear of the bearing stiffener to a bracket reach chosen for the

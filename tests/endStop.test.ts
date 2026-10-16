@@ -18,8 +18,7 @@ import {format} from '../src/engine/units';
 
 const inch=25.4,foot=304.8,kip=4448.2216152605;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
-// The demonstration's end stops sit inboard of a runway-end tie saddle: the demonstration with its tie on the saddle.
-const demo=calculate(saddleDemonstration());
+const demo=calculate(demonstrationProject());
 type Seg=[[number,number],[number,number]];
 const segments=(points:string):Seg[]=>{const p=points.split(' ').map(v=>v.split(',').map(Number) as [number,number]);return p.slice(1).map((q,i)=>[p[i],q]);};
 // Least distance between two segments: zero when they cross or touch.
@@ -87,8 +86,8 @@ describe('girder-mounted runway end stops',()=>{
   expect(bearing.status).toBe('fail');e.setback=7*inch;
   e.bolts.frontClear=.75*inch;expect(endStopChecks(p).find(c=>c.id==='end-stop-wrench-face')!.status).toBe('fail');
   expect(wrenchClearance(.75*inch)).toBeCloseTo(1.25*inch,9);expect(wrenchClearance(1*inch)).toBeCloseTo(1.6*inch,9);
-  // A stop over the runway-end tie saddle puts its back nuts on the saddle.
-  e.bolts.frontClear=1.75*inch;e.setback=.5*inch;expect(endStopChecks(p).find(c=>c.id==='end-stop-wrench-saddle')!.status).toBe('fail');
+  // A stop over a runway-end tie saddle puts its back nuts on the saddle (the demonstration with its tie on the saddle).
+  const q=saddleDemonstration(),f=q.details!.endStop!;f.bolts.frontClear=1.75*inch;f.setback=.5*inch;expect(endStopChecks(q).find(c=>c.id==='end-stop-wrench-saddle')!.status).toBe('fail');e.bolts.frontClear=1.75*inch;e.setback=.5*inch;
   expect(endStopChecks(p).some(c=>c.id==='end-stop-zone')).toBe(false);
  });
  it('keeps the bolt heads a socket clearance clear of the stop weld toes',()=>{

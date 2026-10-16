@@ -39,8 +39,9 @@ describe('configuration templates',()=>{
   else expect(d.bracket).toMatchObject({enabled:true,arrangement:c.support});
   // A rolled simple-span saddle that does not suit the girder (or a high-cycle runway) gives way to paired bars on the
   // bearing stiffener (attachTie): the flexible plate then becomes paired bars.
-  const onStiffener=c.system==='simple'&&c.girder==='rolled'&&d.brace.flangeAttachment?.enabled===false;
-  if(c.support!=='column-cap')expect(d.brace.arrangement??'paired-bars').toBe(onStiffener?'paired-bars':c.tie);
+  // A capped saddle that does not suit the girder takes the cap tieback angle, with the reason in the notes.
+  const onStiffener=c.system==='simple'&&c.girder==='rolled'&&d.brace.flangeAttachment?.enabled===false,capAngle=c.girder==='capped'&&p.notes.includes('do not suit this capped girder');
+  if(c.support!=='column-cap')expect(d.brace.arrangement??'paired-bars').toBe(onStiffener?'paired-bars':capAngle?'cap-angle':c.tie);
   expect(!!p.existingColumn?.enabled).toBe(c.support!=='by-others');
   expect(!!p.existingColumn?.isNew).toBe(c.structure==='new');
   expect(!!p.columnBase?.enabled).toBe(c.structure==='new');

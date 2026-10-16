@@ -3,6 +3,7 @@ import {reviewOpenItem} from './review/openItems';
 import * as THREE from 'three';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 import {calculate,validateProject} from '../src/engine/calculate';
+import {loadAiscSection} from '../src/data/aiscSections';
 import {selectTieArrangement,tieOptions,connectionOptionChecks} from '../src/engine/connectionOptions';
 import {flangeTieGeometry,tieRelease,tiePlies,tieEccentricity} from '../src/engine/tieGeometry';
 import {braceSystem} from '../src/engine/detailAnalysis';
@@ -23,12 +24,15 @@ const inch=25.4,ksi=6.894757293168;
 export function plateDemonstration(){
  const p=demonstrationProject();p.details=selectTieArrangement(p.details!,'flexible-plate');
  // The 10-ton demonstration ties at its bearing stiffener; the flexible plate takes the direct flange saddle with its own
- // plate, bolt group and slots, and a 16 1/2 in bearing so the flange runs past the saddle's end fillet toward the girder
- // end and spreads the saddle couple (the transverse SL fatigue points).
- const t=p.details.brace;Object.assign(t,{thickness:.5*inch,width:5.25*inch,gussetThickness:1.125*inch,length:25.25*inch,reach:25.25*inch,connectionLength:5.75*inch});
- Object.assign(t.connection,{thickness:.5*inch,weldSize:.5*inch,pitch:2.25*inch,edge:1.25*inch});Object.assign(t.flangeAttachment!,{weldSize:.5*inch,longitudinalSetback:3.75*inch});
+ // plate, bolt group and slots. With the restraint at the tie line a single plate on the W24X229 leaves the rail twist
+ // over the 0.005 rad owner limit: the plate example runs on a W24X250. A 16 1/2 in bearing lets the flange run past the
+ // saddle's end fillet toward the girder end and spread the saddle couple (the transverse SL fatigue points); a
+ // 2 1/4 in saddle with 9/16 in end fillets (its plate and weld fatigue).
+ p.section=Object.assign(loadAiscSection(p.section,'W24X250'),{Fy:p.section.Fy,Fu:p.section.Fu,E:p.section.E});p.aist!.netFlangeArea=p.section.bf*p.section.tf;
+ const t=p.details.brace;Object.assign(t,{thickness:.5*inch,width:5.25*inch,gussetThickness:1.25*inch,length:25.25*inch,reach:25.25*inch,connectionLength:5.75*inch});
+ Object.assign(t.connection,{thickness:.5*inch,weldSize:.625*inch,pitch:2.25*inch,edge:1.25*inch});Object.assign(t.flangeAttachment!,{saddleThickness:2.25*inch,weldSize:.5625*inch,longitudinalSetback:3.75*inch});
  t.release={...t.release!,travel:.125*inch};p.details.bearing.length=16.5*inch;
- // The column gusset root under the imposed movement (tie-move-root-fatigue): a 1 1/8 in gusset and 1/2 in root fillets;
+ // The column gusset root under the imposed movement (tie-move-root-fatigue): a 1 1/4 in gusset and 5/8 in root fillets;
  // the end stop moves past the longer bearing's stiffener with its tightening clearance.
  p.details.endStop!.setback=9.5*inch;
  // The rail twist limit of this example is reached with the stiffer paired bars: design for the 3/16 in rail-to-web
@@ -96,10 +100,10 @@ describe('flexible plate tieback design (10-ton demonstration)',()=>{
   // One shear plane: phi Fnv Ab, threads included.
   expect(check(s,'tie-bolt').capacity).toBeCloseTo(.75*54*ksi*Math.PI*(.625*inch)**2/4,3);
   // Lap eccentricity, plate centroid to gusset mid-plane, and the plate's stiffness share of the couple.
-  const g=flangeTieGeometry(p)!,shape=aiscShapeByName('W24X229')!;
-  expect(tieEccentricity(p)).toBeCloseTo(.8125*inch,9);expect(g.freeLength).toBeCloseTo(15.5*inch,6);
+  const g=flangeTieGeometry(p)!,shape=aiscShapeByName('W24X250')!;
+  expect(tieEccentricity(p)).toBeCloseTo(.875*inch,9);expect(g.freeLength).toBeCloseTo(15.5*inch,6);
   const rootLength=(shape.bf-shape.tw)/2*inch-inch,arm=(5/8+5.25/2)*inch,plate=2*5.25*inch*(.5*inch)**3/12/(15.5*inch);
-  const column=5.75*inch*(1.125*inch)**3/(12*5.75*inch),girder=rootLength*(1.125*inch)**3/(7.8*arm);
+  const column=5.75*inch*(1.25*inch)**3/(12*5.75*inch),girder=rootLength*(1.25*inch)**3/(7.8*arm);
   expect(g.columnGusset).toBeCloseTo(5.75*inch,6);expect(g.lapShare).toBeCloseTo(plate/(plate+Math.min(column,girder)),9);
   // Fit-up: the 1/8 in alignment the erector can hold (the S-00 bearing plan tolerance) plus half the 1/16 in sleeve clearance.
   expect(plateFitOffset(p)).toBeCloseTo(5/32*inch,9);expect(tieRelease(p)?.clearance).toBeCloseTo(inch/16,9);
@@ -110,9 +114,9 @@ describe('flexible plate tieback design (10-ton demonstration)',()=>{
  it('carries the lap couple into the gusset welds and column flange and softens the tie',()=>{
   // The same saddle tie with paired bars (the 10-ton demonstration itself ties at its bearing stiffener).
   const F=40000,plateResponse=flangeTieResponse(p,F),bars={...structuredClone(p),details:selectTieArrangement(structuredClone(p.details!),'paired-bars')},barsResponse=flangeTieResponse(bars,F);
-  expect(plateResponse.twist).toBeCloseTo(F*.8125*inch,6);expect(barsResponse.twist).toBe(0);
-  const hg=flangeTieGeometry(p)!.columnGusset,w=.5*inch;
-  expect(plateResponse.rootWeld).toBeCloseTo((F/(2*hg)+F*.8125*inch/(1.125*inch*hg))/(w/Math.SQRT2),6);
+  expect(plateResponse.twist).toBeCloseTo(F*.875*inch,6);expect(barsResponse.twist).toBe(0);
+  const hg=flangeTieGeometry(p)!.columnGusset,w=.625*inch;
+  expect(plateResponse.rootWeld).toBeCloseTo((F/(2*hg)+F*.875*inch/(1.25*inch*hg))/(w/Math.SQRT2),6);
   const plate=braceSystem(p),pairs=braceSystem(bars);
   expect(plate.plies).toBe(1);expect(pairs.plies).toBe(2);expect(plate.stiffness).toBeLessThan(pairs.stiffness);
   expect(plate.capacity).toBeCloseTo(Math.min(plate.member.tension,plate.member.compression.capacity),6);
@@ -122,12 +126,12 @@ describe('flexible plate tieback design (10-ton demonstration)',()=>{
   expect(words).toContain('FLEXIBLE PL 1/2" X 5 1/4" X 2\'-1 1/4", 3/4" CLR. TO COLUMN;');
   expect(words).toContain('GIRDER END: 4 - 5/8" A325 SC, SINGLE SHEAR,');
   expect(words).toContain('FLEXIBLE PLATE TIE NOTES / LOCAL CHECKS');
-  expect(words).toContain('GIRDER GUSSET PL 1 1/8" X 5 7/8" X 5 1/2"');
+  expect(words).toContain('GIRDER GUSSET PL 1 1/4" X 5 7/8" X 5 1/2"');
   expect(words.some(v=>v.startsWith('2 FL')||v.includes('FILLER (HIDDEN)'))).toBe(false);
   expect(all).not.toMatch(/NaN|Infinity|undefined/);
   // Weld symbols: the column root fillets and the saddle fillets at their engine sizes and lengths.
-  expect(words.filter(v=>v==='1/2').length).toBeGreaterThanOrEqual(2);expect(words.filter(v=>v==='5 3/4').length).toBeGreaterThanOrEqual(2);
-  expect(words.filter(v=>v==='1/2').length).toBeGreaterThanOrEqual(3);
+  expect(words.filter(v=>v==='5/8').length).toBeGreaterThanOrEqual(2);expect(words.filter(v=>v==='5 3/4').length).toBeGreaterThanOrEqual(2);
+  expect(words.filter(v=>v==='9/16').length).toBeGreaterThanOrEqual(3);
   // The summary ratio on the sheet is the largest strength ratio of the rated tie checks.
   const topic=flangeTieTopic(s)!;expect(topic.name).toBe('FLEXIBLE PLATE TIES');
   const strength=Math.max(...s.checks.filter(c=>(['Flange attachment','Tie movement'].includes(c.group)||c.id.startsWith('plate-tie')||/^tie-(bolt|prying|slip|bearing|net|block|weld)$/.test(c.id))&&c.status==='pass'&&c.quantity!=='length'&&c.id!=='tie-slenderness'&&!c.id.includes('fatigue')).map(c=>c.utilization??0));

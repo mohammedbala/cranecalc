@@ -18,7 +18,7 @@ const inch=25.4,foot=304.8,kip=4448.2216152605;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
 const demo=calculate(demonstrationProject());
 /** The rolled demonstration drawn as a continuous girder without flange saddles; drawings read the input only. */
-const continuous=(bolted=true)=>{const s=structuredClone(demo);s.input.system='continuous';s.input.details!.brace.flangeAttachment!.enabled=false;s.input.details!.endBearing!.enabled=bolted;return s;};
+const continuous=(bolted=true)=>{const s=structuredClone({...demo,input:saddleDemonstration()});s.input.system='continuous';s.input.details!.brace.flangeAttachment!.enabled=false;s.input.details!.endBearing!.enabled=bolted;return s;};
 const view=(s:CalculationSnapshot,title:string)=>connectionTopic(s).views.find(v=>v.title===title)!;
 
 describe('end stop stiffeners braced to the face plate',()=>{
@@ -68,7 +68,7 @@ describe('continuous girder bearings, ties and end connection',()=>{
   const svg=view(s,'FLANGE TIE / COLUMN CONNECTION').render().svg,t=texts(svg).join(' | ');
   expect(svg).toContain('data-weld="cjp"');expect(t).toContain('GIRDER GUSSET TO TIE-SIDE BEARING');expect(t).toContain('PLAN; TIE AT TOP FLANGE');
   // The gusset is as tall as the 5 1/4 in bars; the slotted column gusset runs 1/4 in past its bolt group.
-  expect(t).toContain('GIRDER GUSSET PL 3/4" X 5 1/4" X 5"');expect(t).toContain('COLUMN GUSSET PL 3/4" X 5 3/4" X 5"');
+  expect(t).toContain('GIRDER GUSSET PL 7/8" X 5 1/4" X 5"');expect(t).toContain('COLUMN GUSSET PL 7/8" X 5 3/4" X 5"');
  });
  it('names the mating part of every weld of the girder web end connection',()=>{
   const t=texts(view(continuous(false),'GIRDER WEB / END CONNECTION').render().svg).join(' | ');
@@ -94,7 +94,7 @@ describe('dimensions and weld callouts of the tie, rail clip and bearing details
   expect(words).not.toContain('1 1/4" + 2 1/4"');
   expect(texts(section).filter(v=>v==='1 1/4"')).toHaveLength(3);expect(texts(section).filter(v=>v==='1 1/2"')).toHaveLength(1);
   expect(texts(section).filter(v=>v==='2 1/4"')).toHaveLength(2);expect(texts(section)).toContain('2 3/4"');
-  expect(words).toContain('GIRDER GUSSET PL 3/4" X 5 3/4" X 5 1/2"');expect(words).toContain('1/16" FILLER (HIDDEN)');
+  expect(words).toContain('GIRDER GUSSET PL 7/8" X 5 3/4" X 5 1/2"');expect(words).toContain('1/16" FILLER (HIDDEN)');
   // The column gusset spans the bolt group, its 1 1/2 in end edge and the 1/2 in gap to the column flange.
   expect(words).toContain('COLUMN GUSSET PL 3/4" X 5 3/4" X 5 1/2"');expect(words).toContain('2 FB 3/8" X 5 1/4" X 2\'-1 1/2", 1/2" CLR. TO COLUMN;');
   // Tie and girder end located from the stiffener at each girder end of the shared support.
