@@ -38,6 +38,9 @@ import {wrenchClearance} from './endStop';
 import {restraintClearances,secantStiffness} from './restraintClearance';
 import {snapQuarter} from './quarterInch';
 import {validateRunwayDetails} from './detailValidation';
+import {bracketSizingSet} from './bracketSizing';
+import {createBracketCollector} from './bracketDesign';
+import {createRolledBracketCollector} from './rolledBracket';
 
 const inch=25.4,sixteenth=inch/16,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step;
 
@@ -95,6 +98,18 @@ export function girderEndEstimate(p:ProjectInput,steps=60){
  return {service,factored,moment,lateral,clipLateral};
 }
 
+/**
+ * Vertical deflection at the bearings of a designed welded rib or rolled bracket under one crane with impact (the
+ * bracket sizing's service set, bracketSizingSet, through the bracket's own collector), mm; undefined for other
+ * supports (a tapered haunch is sized to its limit after the tie).
+ */
+export function bracketServiceDeflection(p:ProjectInput):number|undefined{
+ try{
+  const c=createBracketCollector(p)??createRolledBracketCollector(p);if(!c)return undefined;
+  for(const v of bracketSizingSet(p).service)c.observe('service','sizing',v.x,v.loads,-1,v.horizontal);
+  return c.result.service.deflection?.value;
+ }catch{return undefined;}
+}
 /** Demands for sizing the tie before any analysis (canonical units). */
 export interface TieSizingDemands {
  /** Factored tie force including the bracing imperfection force, N. */
@@ -115,9 +130,9 @@ export interface TieSizingDemands {
  * restraint with its torsional share (the rail head y_r above the tie line, over the depth h_r from the tie line to the
  * bottom restraint: R(1 + y_r/h_r)), plus the Appendix 6 brace force 0.02M_rC_d/h_o + 0.01P_r with P_r the factored
  * traction or the bumper force. Range: 1.25 times the unfactored side thrust of the crane (it reverses; the torsional
- * share). Rotations and the largest factored moment: girderEndEstimate. A designed support deflects at most its
- * deflection limit. Appendix 6 stiffness: (1/φ)(10M_rC_d/h_o + 8P_r)/L_br. Rail clip: the factored side thrust of the
- * wheels in one clip window.
+ * share). Rotations and the largest factored moment: girderEndEstimate. A designed support: its deflection limit, or
+ * its service deflection where larger (a bracket that is not sized to its limit, bracketServiceDeflection). Appendix 6
+ * stiffness: (1/φ)(10M_rC_d/h_o + 8P_r)/L_br. Rail clip: the factored side thrust of the wheels in one clip window.
  */
 export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
  const H=craneSideThrust(p),r=girderEndEstimate(p),b=p.details?.bracket,lrfd=p.method==='LRFD',props=sectionProperties(p.section),s=p.section;
@@ -129,7 +144,7 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
  const g=flangeTieGeometry(p),st=stiffenerTieGeometry(p),top=g?.topCenter??st?.topCenter??s.d/2-s.tf-4*inch,sides=g?.sides??st?.sides??[1];
  const bottom=sides.includes(-1)?(g?.bottomCenter??st?.bottomCenter??-s.d/2+s.tf):-s.d/2+s.tf/2;
  const railHead=s.d/2+(s.kind==='cap'?s.capTw:0)+railTopAboveSteel(p),torsion=1+Math.max(0,railHead-top)/Math.max(top-bottom,s.tf);
- return {force:(lrfd?1.6:1)*r.lateral*torsion+braceForce,range:1.25*H,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?b.deflectionLimit:undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
+ return {force:(lrfd?1.6:1)*r.lateral*torsion+braceForce,range:1.25*H,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
   braceForce,braceStiffness:(lrfd?1/.75:2)*(10*r.moment*Cd/props.h0+8*P)/Lbr};
 }
 
@@ -275,7 +290,15 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // impact, or the same allowance for a support by others; the end rotation over the setback) plus the 1/16 in
  // positioning allowance and a 1/32 in tolerance, on the 1/16 in grid.
  const cranes=p.cranes.length,impact=Math.max(...p.cranes.map(c=>c.impact));
- const travel=release?Math.max(inch/8,up((demand.support??sixteenth)*cranes*(1+impact)+demand.rotation*base.setback+sixteenth+inch/32,sixteenth)):base.travel;
+ // At each column face: the support deflection there (a designed bracket's limit, or its service deflection at that
+ // reach where larger) and the release travel it needs.
+ const faceDemands=new Map<number,{demand:TieSizingDemands;travel:number}>(),limit=d.bracket?.enabled?d.bracket.deflectionLimit:undefined;
+ const faceDemand=(face:number)=>{
+  let v=faceDemands.get(face);if(v)return v;
+  const support=demand.support===undefined||limit===undefined?demand.support:Math.max(limit,bracketServiceDeflection(applyTieProportions(structuredClone(p),{...base,face}))??0);
+  const travel=release?Math.max(inch/8,up((support??sixteenth)*cranes*(1+impact)+demand.rotation*base.setback+sixteenth+inch/32,sixteenth)):base.travel;
+  v={demand:{...demand,support},travel};faceDemands.set(face,v);return v;
+ };
  const faces:number[]=[];for(let f=base.face;f<=Math.max(base.face,opts.reach??base.face)+1e-6;f+=inch)faces.push(f);
  const thicknesses=[4,5,6,7,8,9,10,12].map(v=>v*sixteenth),bolts=[.5,.625,.75,.875].map(v=>v*inch);
  const minSaddle=Math.max(inch,up(p.section.tf,inch/8));
@@ -290,7 +313,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   evaluations++;
   const q=applyTieProportions(structuredClone(p),x);
   if(validateRunwayDetails(q).length)return undefined;
-  const ratios=tieSizingRatios(q,demand),brace=braceSystem(q);
+  const ratios=tieSizingRatios(q,faceDemand(x.face).demand),brace=braceSystem(q);
   // Strength and fatigue ratios against the target (the imposed movement nearer one), fit and detailing limits against one.
   const entries=Object.entries(ratios).map(([k,v])=>[k,v/sizingLimit(ratios,k,target)] as const).sort((u,v)=>v[1]-u[1]);
   // The axial part P/P_c of the H1 check of one ply, compression governing.
@@ -325,7 +348,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   // ratio to its limit (the stress over the effective width b_c, which the gusset height adds to).
   if(k==='flange-tie-column'||k==='flange-tie-column-fatigue'){
    const g=flangeTieGeometry(r.q),width=g?.receiver?columnFlangeWidth(r.q,g).width:0;
-   const room=(release?2*Math.max(0,travel+3/16*inch-x.travel):0)+Math.max(0,3*inch-x.widen);
+   const travel=faceDemand(x.face).travel,room=(release?2*Math.max(0,travel+3/16*inch-x.travel):0)+Math.max(0,3*inch-x.widen);
    if(width>0&&r.ratios[k]*width/(width+room)<=sizingLimit(r.ratios,k,target)){
     if(release&&x.travel<travel+3/16*inch-1e-6){x.travel+=sixteenth;return true;}
     if(x.widen<3*inch-1e-6&&widenRoom(r)){x.widen+=inch/4;return true;}
@@ -355,7 +378,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   let atFace:Trial|undefined,previous:number|undefined,faceMovement=false;
   for(const thickness of thicknesses){
    if(evaluations>budget)break;
-   const x:TieProportions={...base,face,thickness,travel,diameter:.625*inch,gusset:Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0};
+   const x:TieProportions={...base,face,thickness,travel:faceDemand(face).travel,diameter:.625*inch,gusset:Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0};
    let r=evaluate(x);
    // A ratio no step relieves is set aside (the checks report it), so the others are still sized.
    const stuck=new Set<string>(),trial={grown:false,movement:false};
