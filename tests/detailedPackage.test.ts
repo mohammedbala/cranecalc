@@ -16,17 +16,13 @@ let snapshot:CalculationSnapshot;
 beforeAll(()=>{snapshot=calculate(demonstrationProject());},180000);
 describe('representative runway package',()=>{
  it('recomputes an exportable design with passing model and engineering gates',()=>{
-  // The restraint model with the tie force at its bar line, 4 5/8 in below the flange (tieLine), raises the tie force
-  // range and the rail twist, and the saddle's local flange bending across the flange is its own Category E′ register
-  // point (SL): the demonstration's 0.005 rad owner twist limit, its saddle end fillets across the flange and its saddle,
-  // saddle gusset and attachment welds in fatigue are open items until the demonstration tie is resized. Nothing else.
-  const corrected=/^(rail-twist|detail-(fatigue|full-cycle)-SL\d+--?1-top-right|flange-tie-(saddle|gusset|weld)-fatigue)$/;
-  expect(snapshot.errors).toEqual([]);expect(snapshot.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)&&!reviewOpenItem(c)&&!corrected.test(c.id))).toEqual([]);expect(snapshot.eligible).toBe(true);
-  for(const c of snapshot.checks.filter(c=>corrected.test(c.id)&&c.status==='fail'))expect(c.utilization!,c.id).toBeLessThan(1.2);
+  // The restraint acts at the tie line; the demonstration ties at its bearing stiffener, its bars just under the flange,
+  // so the rail twist and the tie keep within their limits: no open item but the review records.
+  expect(snapshot.errors).toEqual([]);expect(snapshot.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)&&!reviewOpenItem(c))).toEqual([]);expect(snapshot.eligible).toBe(true);
   // Building adequacy is stated as outside the calculation, never as a pass.
-  // The demonstration bracket and column are by others, so the bearing seat, the column flange at the
-  // tie roots and the bracket deflection limit for the tie slots are listed with them.
-  expect(snapshot.checks.filter(c=>c.status==='excluded').map(c=>c.id)).toEqual(['supporting-structure','end-bearing-seat','flange-tie-column','flange-tie-column-fatigue','tie-move-support']);
+  // The demonstration bracket and column are by others, so the bearing seat and the bracket deflection limit for the
+  // tie slots are listed with them (the tie on the bearing stiffener has no saddle checks at the column flange).
+  expect(snapshot.checks.filter(c=>c.status==='excluded').map(c=>c.id)).toEqual(['supporting-structure','end-bearing-seat','tie-move-support']);
   expect(snapshot.detailResults!.fatigue.length).toBeGreaterThan(20);
   expect(snapshot.detailResults!.travelChange).toBeLessThan(.01);expect(snapshot.detailResults!.meshChange).toBeLessThan(.01);
  });
@@ -74,7 +70,8 @@ describe('representative runway package',()=>{
   p2.details!.spectrum[0].cycles--;p2.cranes[0].design!.bumperBypassesGirder=false;p2.details!.endStop!.enabled=false;expect(validateProject(p2).join()).toContain('design the girder-mounted runway end stops');
  });
  it('derives all detail sheets and export records from the current snapshot',()=>{
-  const sheets=engineeringSketches(snapshot);expect(sheets).toHaveLength(9);
+  // The tie on the bearing stiffener has no direct flange saddle sketch (SK-11): eight sketches.
+  const sheets=engineeringSketches(snapshot);expect(sheets).toHaveLength(8);
   // SK-05 shows the bolted end bearing: four standard holes at the locating end, four slots at the sliding end.
   expect(sheets.find(s=>s.number==='SK-05')!.entities.filter(e=>e.type==='circle')).toHaveLength(4);
   const dxf=lineworkDxf(snapshot);expect(dxf.includes('4 A325 bolts, diameter 7/8"')).toBe(true);expect(dxf).toContain(snapshot.revision);

@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {diaphragmArrangement,diaphragmDemand,diaphragmWeldEquivalent,stiffenerPairSection,stiffenerWeldGroup} from '../src/engine/detailChecks';
 import {demonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {defaultColumnCap} from '../src/engine/columnCapInputs';
@@ -39,9 +40,9 @@ describe('restraint diaphragm by arrangement',()=>{
  });
  it('detects the arrangement from the restraint geometry',()=>{
   // Direct flange saddle at the top, bolted end bearings at the bottom.
-  expect(diaphragmArrangement(demonstrationProject()).kind).toBe('both-flanges');
-  // Bars on a gusset welded to the stiffener: y_g from the gusset centroid to the tied flange's inner face.
-  const q=demonstrationProject();q.details!.brace.flangeAttachment={...q.details!.brace.flangeAttachment!,enabled:false};
+  expect(diaphragmArrangement(saddleDemonstration()).kind).toBe('both-flanges');
+  // Bars on a gusset welded to the stiffener (the demonstration): y_g from the gusset centroid to the tied flange's inner face.
+  const q=demonstrationProject();
   const a=diaphragmArrangement(q),st=stiffenerTieGeometry(q)!;
   expect(a.kind).toBe('gusset');expect(a.yg).toBeCloseTo(st.clear+st.height/2,6);
   // A column cap fork: the stiffeners carry the top flange force to the bolted bottom flange.

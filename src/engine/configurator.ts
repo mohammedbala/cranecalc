@@ -35,9 +35,8 @@ import {defaultColumnCap} from './columnCapInputs';
 import {capWorkPointDrop} from './columnCap';
 import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
-import {columnGussetHeight,flangeTieGeometry,stiffenerTieGeometry} from './tieGeometry';
-import {validateRunwayDetails} from './detailValidation';
-import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands} from './flangeTieSizing';
+import {columnGussetHeight,flangeTieGeometry} from './tieGeometry';
+import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener} from './flangeTieSizing';
 import {applyBearingLayout,bearingSeat,defaultBearingShim} from './endBearing';
 import {weldedRibBracket} from './bracketRib';
 import {classFromCycles} from './buildingClass';
@@ -575,8 +574,6 @@ function setBearings(p:ProjectInput){
 }
 /** Top-flange service where a welded saddle attachment (AISC Table A-3.1 Category D or E) on the tied flange is avoided: CMAA Class D to F cranes, AIST Class A and B buildings. */
 const highCycle=(cfg:RunwayConfig)=>['D','E','F'].includes(cfg.cmaa)||cfg.buildingClass==='A'||cfg.buildingClass==='B';
-/** Saddle tie checks that load the girder flange (the F·h couple, the saddle toes and fillet terminations, the rail clip over the saddle) or the saddle itself. */
-const saddleRatio=(k:string)=>k.startsWith('flange-tie-')||k==='plate-tie-keeper-flange'||k==='saddle-toe-fatigue'||k==='saddle-across-fatigue';
 /**
  * The configured tieback on the details. Paired bars and the flexible plate are sized for the girder's tie force and
  * imposed movements (sizeFlangeTie): bars or plate, bolts, gussets, saddle and release slots, the column face (a
@@ -610,32 +607,10 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig){
    p.notes+=` The ${cfg.tie==='flexible-plate'?'flexible plate':'paired flat bars'} on a direct flange saddle do not suit this capped girder (${worst[0]} ${worst[1].toFixed(2)} for the estimated tie demands): the tie is the cap tieback angle bolted to the channel cap.`;
   }
  }
- // A rolled simple-span girder: the saddle welded under the top flange bends the flange outstand with the couple F·h and is
- // a Category D/E attachment on the tied flange. Where the sized saddle still exceeds a flange or saddle limit, or the crane
- // service is high-cycle, the tie goes on the bearing stiffener instead (stiffenerTieGeometry): paired bars on a gusset
- // CJP welded to the tie-side bearing stiffener, the full-depth stiffener pair the restraint diaphragm.
- if(p.section.kind!=='cap'&&p.system==='simple'&&flangeTieGeometry(p)){
-  const ratios=tieSizingRatios(p),over=Object.entries(ratios).filter(([k,v])=>saddleRatio(k)&&v>sizingLimit(ratios,k)+1e-9).sort((a,b)=>b[1]-a[1]);
-  if(over.length||highCycle(cfg)){
-   const q=structuredClone(p),qd=q.details!,t=qd.brace;
-   if(bracket)qd.bracket=bracket;
-   if(cfg.tie==='flexible-plate'){t.arrangement='paired-bars';delete t.referenceDetail;}
-   const a=t.flangeAttachment!;a.enabled=false;if(face!==undefined)a.columnFace=face;
-   // Bars from 1/4 in clear of the stiffener to the column face (the bracket reach, or the face of the bracket by others).
-   const reach=qd.bracket?.enabled?qd.bracket.reach:a.columnFace??t.reach;
-   t.length=t.reach=reach-up(q.section.tw/2+qd.bearing.stiffenerWidth+.25*inch,.25*inch);
-   q.details=sizeFlangeTie(q,{reach:cfg.reach===undefined?30*inch:undefined}).details;
-   // Adopted where the stiffener tie is no worse than the saddle: its sized ratios exceed their limits by no more in
-   // total (a column face held by a configured reach can leave the shorter bars too stiff for the end movement).
-   const excess=(r:Record<string,number>)=>Object.entries(r).reduce((n,[k,v])=>n+Math.max(0,v-sizingLimit(r,k)),0);
-   if(stiffenerTieGeometry(q)&&!validateRunwayDetails(q).length&&excess(tieSizingRatios(q))<=excess(ratios)+1e-9){
-    p.details=q.details;
-    const cycles=`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (CMAA Class ${cfg.cmaa}, AIST Class ${cfg.buildingClass})`;
-    const why=[...(over.length?[`the sized saddle leaves ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),...(highCycle(cfg)?[cycles]:[])].join('; ');
-    p.notes+=` A direct flange saddle does not suit this rolled girder (${why}): the ${cfg.tie==='flexible-plate'?'tie is paired flat bars, which':'paired flat bars'} bolt to a gusset CJP welded to the tie-side bearing stiffener, the full-depth stiffener pair carrying the tie force into the girder.`;
-   }
-  }
- }
+ // A rolled simple-span girder whose sized saddle still exceeds a flange or saddle limit, or on a high-cycle runway: the
+ // tie on the bearing stiffener instead (tieOnBearingStiffener).
+ const moved=tieOnBearingStiffener(p,{reach:cfg.reach===undefined?30*inch:undefined,highCycle:highCycle(cfg)?`CMAA Class ${cfg.cmaa}, AIST Class ${cfg.buildingClass}`:undefined,bracket,face});
+ if(moved){p.details=moved.details;p.notes+=` A direct flange saddle does not suit this rolled girder (${moved.why}): the ${cfg.tie==='flexible-plate'?'tie is paired flat bars, which':'paired flat bars'} bolt to a gusset CJP welded to the tie-side bearing stiffener, the full-depth stiffener pair carrying the tie force into the girder.`;}
 }
 
 /** Fill a configuration's derived values for display: the crane estimate and the building class count. */

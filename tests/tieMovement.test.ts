@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {calculate} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 import {tieMovementChecks,tieMovements} from '../src/engine/tieMovement';
@@ -12,7 +13,8 @@ import type {CalculationSnapshot} from '../src/engine/types';
 
 const inch=25.4;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&')).join(' ');
-const demo=calculate(demonstrationProject()),capped=calculate(cappedDemonstrationProject());
+// The direct flange saddle tie (the demonstration itself ties at its bearing stiffener).
+const demo=calculate(saddleDemonstration()),capped=calculate(cappedDemonstrationProject());
 const force=(s:CalculationSnapshot)=>{const b=braceSystem(s.input),a=s.designAnalysis!,imperfection=.02*a.moment/s.properties!.h0+.01*a.axial;return {force:(s.detailResults!.demands.brace+imperfection)/b.cos,member:b.member};};
 const movement=(s:CalculationSnapshot)=>tieMovementChecks(s,force(s));
 const byId=(checks:{id:string}[],id:string)=>checks.find(c=>c.id===id) as ReturnType<typeof movement>[number];

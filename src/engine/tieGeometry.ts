@@ -136,9 +136,9 @@ export function stiffenerTieGeometry(p:ProjectInput){
  const d=p.details;if(!d||tieArrangement(d)!=='paired-bars'||flangeTieGeometry(p))return undefined;
  const b=p.section,t=d.brace,c=t.connection,connection=(c.rows-1)*c.pitch+2*c.edge,clear=stiffenerTieClearance;
  const root=b.tw/2+d.bearing.stiffenerWidth;
- // A designed bracket fixes the column face, as does the column face of a bracket by others; otherwise the bars start
- // clear of the stiffener.
- const face=d.bracket?.enabled?d.bracket.reach:t.flangeAttachment?.columnFace??root+clear+t.length,start=face-t.length,gussetEnd=start+connection;
+ // A designed bracket fixes the column face, as does the column face of a bracket by others on simple spans; otherwise
+ // the bars start clear of the stiffener.
+ const face=d.bracket?.enabled?d.bracket.reach:(p.system==='simple'?t.flangeAttachment?.columnFace:undefined)??root+clear+t.length,start=face-t.length,gussetEnd=start+connection;
  // The column gusset carries the column-end bolt group to the face, plus its longer slotted end edge.
  const columnGussetStart=face-connection-columnGussetExtension(p);
  // One tie at each girder end, at its bearing stiffener (the bearing center): on simple spans both girder ends at a shared

@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {calculate} from '../src/engine/calculate';
 import {demonstrationProject} from '../src/engine/demonstration';
 import {railLayout,railLayoutCriteria} from '../src/engine/railLayout';
@@ -35,7 +36,8 @@ describe('rail joint layout',()=>{
   for(const rail of r.rails)for(const piece of rail.pieces)expect(piece).toBeGreaterThanOrEqual(minPiece-1e-6);
  });
  it('draws the layout, the sliding bolt section and keyed section cuts on the detail sheet',()=>{
-  const s=calculate(demonstrationProject()),set=drawingSheetSet(s),refs=detailReferences(set),s02=set.find(v=>v.number==='S-02')!;
+  // The saddle tie's section cuts with the rail layout's: the demonstration with its tie on the flange saddle.
+  const s=calculate(saddleDemonstration()),set=drawingSheetSet(s),refs=detailReferences(set),s02=set.find(v=>v.number==='S-02')!;
   const titles=[...s02.svg.matchAll(/data-detail-title="([^"]*)"/g)].map(m=>m[1]);
   expect(titles).toContain(detailTitles.railLayout);expect(titles).toContain(detailTitles.slidingBolt);
   // The tie plan and end bearing details draw these at a larger scale.

@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {calculate} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 import {endStopChecks,endStopGeometry} from '../src/engine/endStop';
@@ -86,7 +87,8 @@ describe('continuous girder bearings, ties and end connection',()=>{
 
 describe('dimensions and weld callouts of the tie, rail clip and bearing details',()=>{
  it('chains the girder-end bolts, dimensions the bolt gauge and gussets and draws the release filler',()=>{
-  const t=flangeTieTopic(demo)!,section=t.views[0].render().svg,words=texts(section).join(' | ');
+  // The flange tie drawings of the demonstration with its tie on the saddle (the drawings read the input only).
+  const t=flangeTieTopic({...demo,input:saddleDemonstration()})!,section=t.views[0].render().svg,words=texts(section).join(' | ');
   // Each bar end's hole chain closes with its edge distance: edge, pitch, edge at the girder and column ends. The
   // column-end chain starts at the slotted gusset's 1 1/2 in end edge.
   expect(words).not.toContain('1 1/4" + 2 1/4"');

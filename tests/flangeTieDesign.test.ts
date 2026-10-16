@@ -1,4 +1,5 @@
 import {describe,it,expect} from 'vitest';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/demonstration';
 import {flangeTieGeometry,tieRelease} from '../src/engine/tieGeometry';
 import {flangeTieResponse,flangeTieChecks} from '../src/engine/flangeTieDesign';
@@ -26,7 +27,7 @@ describe('direct flange attachment',()=>{
  });
  it('matches independent section-modulus and virtual-work strip bounds',()=>{
   const p=cappedDemonstrationProject(),g=flangeTieGeometry(p)!,t=p.details!.brace,F=10000,r=flangeTieResponse(p,F);
-  const B=4*inch,ts=1.375*inch,L=g.rootLength,h=r.h,H=h-ts;
+  const B=4*inch,ts=1.5*inch,L=g.rootLength,h=r.h,H=h-ts;
   const flangeZ=B*p.section.tf**2/6;
   // The saddle-length strip is the screening bound; the flange carries the couple over its effective width.
   expect(r.flangeScreen).toBeCloseTo(F*h/flangeZ+1.5*F/(B*p.section.tf),8);
@@ -63,7 +64,7 @@ describe('saddle-to-flange weld, gusset sizing and cap coordination',()=>{
  const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
  const welds=(svg:string)=>svg.match(/<g data-multileader="weld"/g)??[];
  it('welds the saddle to the flange only by two full-width transverse end fillets, and checks exactly those',()=>{
-  for(const p of [demonstrationProject(),cappedDemonstrationProject()]){
+  for(const p of [saddleDemonstration(),cappedDemonstrationProject()]){
    const g=flangeTieGeometry(p)!,a=g.attachment,F=10000,r=flangeTieResponse(p,F);
    expect(g.endWeldLength).toBeCloseTo(g.rootLength,9);
    // Two weld lines along the tie, each the saddle width, at the saddle ends a saddle length apart; moment F·h.
@@ -74,7 +75,7 @@ describe('saddle-to-flange weld, gusset sizing and cap coordination',()=>{
   }
  });
  it('puts the toe of each end fillet on the flange in the fatigue register',()=>{
-  const p=demonstrationProject(),g=flangeTieGeometry(p)!,a=g.attachment,toes=automaticFatigueDetails(p).filter(v=>v.id.startsWith('SA'));
+  const p=saddleDemonstration(),g=flangeTieGeometry(p)!,a=g.attachment,toes=automaticFatigueDetails(p).filter(v=>v.id.startsWith('SA'));
   expect(toes).toHaveLength(2*g.stations.length);
   for(const [i,v] of g.stations.entries())for(const sign of [-1,1]){
    const toe=toes.find(f=>f.id===`SA${i}-${sign}-top-right`)!;
@@ -84,7 +85,7 @@ describe('saddle-to-flange weld, gusset sizing and cap coordination',()=>{
   }
  });
  it('rounds the column gusset up to a practical size with a slot tolerance and stops the bars clear of the column',()=>{
-  for(const p of [demonstrationProject(),cappedDemonstrationProject()]){
+  for(const p of [saddleDemonstration(),cappedDemonstrationProject()]){
    const g=flangeTieGeometry(p)!,r=tieRelease(p)!,c=p.details!.brace.connection;
    expect(g.columnGusset/(inch/4)).toBeCloseTo(Math.round(g.columnGusset/(inch/4)),9);
    expect((g.columnGusset-c.gauge)/2-r.travel).toBeGreaterThanOrEqual(r.edge+inch/16);
@@ -95,9 +96,9 @@ describe('saddle-to-flange weld, gusset sizing and cap coordination',()=>{
    expect(g.columnGussetLength).toBeCloseTo(g.connection+.75*inch,9);expect(g.columnGussetLength).toBeCloseTo(g.face-g.columnGussetStart,9);
    expect(validateRunwayDetails(p)).toEqual([]);
   }
-  // The bars stop below the toe of the 3/8 in gusset-to-saddle fillets on the rolled demonstration.
-  const p=demonstrationProject(),g=flangeTieGeometry(p)!;
-  expect(g.topDrop-p.details!.brace.width/2-g.attachment.saddleThickness).toBeCloseTo(.5*inch,9);
+  // The bars stop below the toe of the 1/2 in gusset-to-saddle fillets on the rolled demonstration's saddle.
+  const p=saddleDemonstration(),g=flangeTieGeometry(p)!;
+  expect(g.topDrop-p.details!.brace.width/2-g.attachment.saddleThickness).toBeCloseTo(.625*inch,9);
   expect(flangeTieChecks(snapshot(p),10000).find(c=>c.id==='flange-tie-bar-saddle-clearance')!.status).toBe('pass');
  });
  it('keeps the girder gusset at least 1/2 in clear of the cap channel flange',()=>{
@@ -108,7 +109,7 @@ describe('saddle-to-flange weld, gusset sizing and cap coordination',()=>{
   // Shorter bars push the gusset toward the channel flange.
   p.details!.brace.length=p.details!.brace.reach=17.5*inch;
   expect(flangeTieChecks(snapshot(p),10000).find(c=>c.id==='flange-tie-cap-clearance')!.status).toBe('fail');
-  expect(flangeTieChecks(snapshot(demonstrationProject()),10000).some(c=>c.id==='flange-tie-cap-clearance')).toBe(false);
+  expect(flangeTieChecks(snapshot(saddleDemonstration()),10000).some(c=>c.id==='flange-tie-cap-clearance')).toBe(false);
  });
  it('draws one A2.4 symbol per joint with its size and length, the column, and the cap in the tie views',()=>{
   const p=cappedDemonstrationProject(),t=flangeTieTopic(snapshot(p))!;

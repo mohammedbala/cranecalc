@@ -3,14 +3,14 @@ import type {RunwayDetails} from './runwayDetails';
 import {emptyAistInputs} from './aistLoads';
 import {defaultSimpleSupport} from './simpleSupports';
 import {defaultEndBearing} from './endBearingInputs';
-import {bearingLayout} from './endBearing';
+import {bearingLayout,applyBearingLayout} from './endBearing';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {wrenchClearance} from './endStop';
 import {railSeatDefaults,defaultRailClip} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
-import {sizeFlangeTie,tieSizingDemands} from './flangeTieSizing';
+import {sizeFlangeTie,tieSizingDemands,tieOnBearingStiffener} from './flangeTieSizing';
 import {available} from './aiscStrength';
 import {minimumEdge} from './capAngle';
 import {minimumFillet} from './connectionStrength';
@@ -143,6 +143,11 @@ export function startDetailedDesign(p:ProjectInput):ProjectInput{
  q.drawing??={originator:'',checker:'',datumElevation:0,datumLabel:'Finished floor'};
  // The tie sized for the girder's tie force and imposed movements; the column face may move out to 30 in.
  q.details=sizeFlangeTie(q,{reach:30*inch}).details;
+ // A rolled simple-span saddle that cannot pass, or on a high-cycle runway, gives way to bars on the bearing stiffener;
+ // the bearing then needs no room for the saddle.
+ const cmaa=q.cranes.map(c=>c.design?.cmaaClass).find(c=>c&&['D','E','F'].includes(c)),cls=q.aist.buildingClass==='A'||q.aist.buildingClass==='B'?q.aist.buildingClass:undefined;
+ const moved=tieOnBearingStiffener(q,{reach:30*inch,highCycle:cmaa||cls?[cmaa?`CMAA Class ${cmaa}`:'',cls?`AIST Class ${cls}`:''].filter(Boolean).join(', '):undefined});
+ if(moved){q.details=moved.details;applyBearingLayout(q,tieSizingDemands(q).rotation,tieSizingDemands(q).force);}
  return q;
 }
 

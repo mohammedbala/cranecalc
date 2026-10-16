@@ -425,3 +425,34 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  }
  return best?.q??p;
 }
+
+/** Saddle tie checks that load the girder flange (the F·h couple, the saddle toes and fillet terminations, the rail clip over the saddle) or the saddle itself. */
+const saddleRatio=(k:string)=>k.startsWith('flange-tie-')||k==='plate-tie-keeper-flange'||k==='saddle-toe-fatigue'||k==='saddle-across-fatigue';
+/**
+ * The tie of a rolled simple-span girder moved off a sized direct flange saddle onto the bearing stiffener: the saddle
+ * welded under the top flange bends the flange outstand with the couple F·h and is a Category D/E attachment on the tied
+ * flange. Where a sized saddle ratio (flange-tie-*, plate-tie-keeper-flange, the SA and SL saddle fatigue) still exceeds
+ * its sizing limit, or the runway is high-cycle (`highCycle`: the service named, CMAA D to F or AIST Class A/B), paired
+ * bars bolt to a gusset CJP welded to the tie-side bearing stiffener (stiffenerTieGeometry), from 1/4 in clear of the
+ * stiffener to the column face (`bracket` and `face`: the bracket and column face before the saddle sizing moved them),
+ * sized by sizeFlangeTie up to `reach`. A flexible plate becomes paired bars. Returned, with the reason, where the bars
+ * validate and their sized ratios exceed their limits by no more in total than the saddle's (a column face held by a
+ * configured reach can leave the shorter bars too stiff for the end movement); else undefined.
+ */
+export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCycle?:string;bracket?:NonNullable<ProjectInput['details']>['bracket'];face?:number}={}){
+ if(p.section.kind==='cap'||p.system!=='simple'||!flangeTieGeometry(p))return undefined;
+ const ratios=tieSizingRatios(p),over=Object.entries(ratios).filter(([k,v])=>saddleRatio(k)&&v>sizingLimit(ratios,k)+1e-9).sort((a,b)=>b[1]-a[1]);
+ if(!over.length&&!opts.highCycle)return undefined;
+ const q=structuredClone(p),qd=q.details!,t=qd.brace;
+ if(opts.bracket)qd.bracket=structuredClone(opts.bracket);
+ if(t.arrangement==='flexible-plate'){t.arrangement='paired-bars';delete t.referenceDetail;}
+ const a=t.flangeAttachment!;a.enabled=false;if(opts.face!==undefined)a.columnFace=opts.face;
+ const reach=qd.bracket?.enabled?qd.bracket.reach:a.columnFace??t.reach;
+ t.length=t.reach=reach-up(q.section.tw/2+qd.bearing.stiffenerWidth+inch/4,inch/4);
+ q.details=sizeFlangeTie(q,{reach:opts.reach}).details;
+ const excess=(r:Record<string,number>)=>Object.entries(r).reduce((n,[k,v])=>n+Math.max(0,v-sizingLimit(r,k)),0);
+ if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||excess(tieSizingRatios(q))>excess(ratios)+1e-9)return undefined;
+ const why=[...(over.length?[`the sized saddle leaves ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
+  ...(opts.highCycle?[`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (${opts.highCycle})`]:[])].join('; ');
+ return {details:q.details!,why};
+}

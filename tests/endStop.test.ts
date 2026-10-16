@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {saddleDemonstration} from './fixtures/saddleDemonstration';
 import {stopContacts} from '../src/engine/craneTravel';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
@@ -17,7 +18,8 @@ import {format} from '../src/engine/units';
 
 const inch=25.4,foot=304.8,kip=4448.2216152605;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&'));
-const demo=calculate(demonstrationProject());
+// The demonstration's end stops sit inboard of a runway-end tie saddle: the demonstration with its tie on the saddle.
+const demo=calculate(saddleDemonstration());
 type Seg=[[number,number],[number,number]];
 const segments=(points:string):Seg[]=>{const p=points.split(' ').map(v=>v.split(',').map(Number) as [number,number]);return p.slice(1).map((q,i)=>[p[i],q]);};
 // Least distance between two segments: zero when they cross or touch.
