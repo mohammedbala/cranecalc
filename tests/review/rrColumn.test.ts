@@ -48,8 +48,9 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   // of the torque), R_u = T + 3M_f/b.
   const b=14*inch;expect(Math.abs(S.pull.P!)/kip).toBeCloseTo(48.70,1);expect(Math.abs(S.pull.M!)/kft).toBeCloseTo(37.17,1);
   expect(S.pull.value).toBeCloseTo(Math.abs(S.pull.P!)+3*Math.abs(S.pull.M!)/b,3);
-  // J10.2 is exceeded unstiffened (1.32): stiffeners are required. J10.1 cites J10.1, not J10.8.
-  expect(check('haunch-column-yield-top').note).toMatch(/^Unstiffened J10\.2, not governing \(the column is stiffened at this level\): R_u = 144(\.\d+)? kip against φR_n = 100(\.\d+)? kip, D\/C 1\.44 \(exceeded\)\./);
+  // J10.2 with the column's k = kdes = 1.31 in (AISC J10.2: to the web toe of the fillet; with k = tf it read 1.44) is not
+  // exceeded unstiffened; J10.1 is (1.02, below), and M_f needs the stiffeners. J10.1 cites J10.1, not J10.8.
+  expect(check('haunch-column-yield-top').note).toMatch(/^Unstiffened J10\.2, not governing \(the column is stiffened at this level\): R_u = 144(\.\d+)? kip against φR_n = 166(\.\d+)? kip, D\/C 0\.87\./);expect(check('haunch-column-yield-top').note).toContain('k = kdes = 1.31 in (AISC W14X90)');
   expect(check('haunch-column-flange').note).toMatch(/^Unstiffened J10\.1, not governing/);
   // The panel takes the net flange force; the couples add none.
   expect(check('haunch-column-panel').demand).toBeCloseTo(Math.max(S.tension.value,S.compression.value),6);
@@ -77,7 +78,7 @@ describe('C2 · one force system for each haunch flange at the column face',()=>
   expect(j10).toHaveLength(8);expect(j10[0]).toMatch(/^\\text\{Top flange \(/);expect(j10[1]).toBe('R_u=T+\\frac{3M_f}{b}');expect(j10[2]).toMatch(/^\\quad=/);expect(j10[3]).toContain('6.25F_{yf}t_f^2');expect(j10[4]).toMatch(/^\\text\{Bottom flange \(/);expect(j10[7]).toContain('J10.3');
   expect(workedSteps(s,check('haunch-column-panel'),tx as never)?.[0]).toContain('\\max(T,\\ C\\cos\\alpha)');
   expect(text).toMatch(/Worked: unstiffened J10 at the haunch flanges \(basis for the stiffener decision\)/);
-  expect(text).toMatch(/Column stiffeners required\. Unstiffened, flange local bending \(J10\.1\) is exceeded at the top flange \(D\/C 1\.02\); web local yielding \(J10\.2\) is exceeded at both flange levels \(D\/C 1\.44 top, 1\.32 bottom; k = t ?f ?, no rolled-fillet credit for the existing column; with the catalog k ?des = 1\.31 in, D\/C 0\.\d\d top, 0\.\d\d bottom\)/);expect(text).toMatch(/J10\.5 and J10\.7 do not apply/);
+  expect(text).toMatch(/Column stiffeners required\. Unstiffened, flange local bending \(J10\.1\) is exceeded at the top flange \(D\/C 1\.02\), and the haunch needs M ?f resisted at the column/);expect(text).toMatch(/J10\.5 and J10\.7 do not apply/);
  });
 });
 

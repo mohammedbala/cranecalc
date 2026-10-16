@@ -2,7 +2,6 @@ import type {CalculationSnapshot} from '../engine/types';
 import {projectHaunch,haunchColumnStrengths} from '../engine/taperedHaunch';
 import {projectStub,stubColumnStrengths} from '../engine/rolledBracket';
 import {columnStiffenerGeometry,stiffenerGauge} from '../engine/columnStiffeners';
-import {receiverK} from '../engine/columnStiffenerInputs';
 import type {FlangePeak,FlangeLevelStrengths} from '../engine/flangeForceSystem';
 import {plateInches} from '../components/drawingFormat';
 import {caseLabel,sig3,tidyNumbers} from './reportParts';
@@ -63,10 +62,8 @@ export function flangeColumnBlock(s:CalculationSnapshot){
  const up=check('colstiff-upper'),low=check('colstiff-lower'),panel=check('column-panel'),gauge=stiffenerGauge(cs),spec=columnStiffenerSpec(s)!,depth=cs.full?'full-depth':'half-depth';
  const reach=cs.full?'Full depth, beyond the half depth J10.8(3) requires, takes the couple to the far flange':'Half depth, to the column centerline as J10.8(3) requires: the couple passes into the loaded flange and the web';
  // The exceeded limit states grouped by state: "web local yielding (J10.2) at both flange levels (D/C 1.32 top, 1.20 bottom)".
- // J10.2 takes k = t_f (no rolled-fillet credit); with an identified catalog shape, the k_des comparison is stated.
- const K=receiverK(p.details!.bracket!,p.existingColumn),tf=p.details!.bracket!.receiver.flangeThickness,yields=exceeded.filter(r=>/J10\.2/.test(r.state));
- const withK=K&&K.k>tf&&yields.length?(r:typeof rows[number])=>{const top=r.level==='Top flange',f=(top?J.topWebEnd:J.botWebEnd)?2.5:5,lb=top?J.levels.lbTop:J.levels.lbBottom;return r.Ru/(r.cap!*(f*K.k+lb)/(f*tf+lb));}:undefined;
- const fillet=withK?`; k = t<sub>f</sub>, no rolled-fillet credit for the ${column}; with the catalog k<sub>des</sub> = ${esc(L(K!.k))}, D/C ${yields.map(r=>`${withK(r).toFixed(2)}${yields.length>1?` ${r.level.split(' ')[0].toLowerCase()}`:''}`).join(', ')}`:'';
+ // J10.2 with the column's k (receiverWebK: surveyed, k_des of its AISC shape, else t_f without rolled-fillet credit).
+ const fillet=`; ${esc(J.kText)}`;
  const states=[...new Set(exceeded.map(r=>r.state))].map(st=>{const v=exceeded.filter(r=>r.state===st),cl=st.match(/^J10\.\d/)![0];
   return `${esc(st.replace(/^J10\.\d /,''))} (${cl}) is exceeded at ${v.length>1?'both flange levels':`the ${v[0].level.toLowerCase()}`} (D/C ${v.map(r=>`${dc(r)!.toFixed(2)}${v.length>1?` ${r.level.split(' ')[0].toLowerCase()}`:''}`).join(', ')}${cl==='J10.2'?fillet:''})`;});
  const decision=`<p><b>Column stiffeners required.</b> ${states.length?`Unstiffened, ${states.join('; ')}, and`:'The unstiffened J10 strengths are not exceeded, but'} the ${name} needs M<sub>f</sub> resisted at the column. ${sentence(depth)} stiffener pairs (${esc(spec)}) carry each flange's full force system with no credit for the unstiffened column: R<sub>st</sub> = T/2 ± M<sub>f</sub>/g, g = t<sub>w</sub> + b<sub>s</sub> = ${L(gauge)}${up||low?`, giving ${[up?`${F(up.demand)} at the top (D/C ${dcText(up.utilization,2)})`:'',low?`${F(low.demand)} at the bottom (D/C ${dcText(low.utilization,2)})`:''].filter(Boolean).join(' and ')}`:''}. The pairs are checked for J4.1 yielding, J4.4 buckling with the J10.8 web strip, J2.4 welds and J4.2 web shear. ${reach}; J10.5 and J10.7 do not apply to this continuous column.${panel?.demand!==undefined?` Panel shear J10.6: ${F(panel.demand)}, D/C ${dcText(panel.utilization,2)}; the stiffeners add no panel strength.`:''}${cs.field?` Field welding controls: section @@ref:fabrication@@.`:''}</p>`;
