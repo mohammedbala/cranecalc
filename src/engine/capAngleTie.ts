@@ -424,15 +424,17 @@ export function capAngleProportions(p:ProjectInput,size:{shape:string;diameter:n
  const edge=Math.max(eMin+.75*db,slotLength/2+eMin-hole/2),length=roundUp(pitch+2*edge,inch/4);
  const lapPitch=roundUp(Math.max(8/3*db,3*db,2.5*inch),inch/4),plateWidth=roundUp(lapPitch+2*eMin,inch/4);
  const lapGauge=roundUp(Math.max(ta+hw.corners/2+(base.mode==='sleeved'?base.sleeveClearance:0)+base.washerThickness+hw.head+hw.corners/2,bh-eMin-inch/4),step);
- const colGauge=roundUp(Math.max(size.plate/2+base.weldSize+wrenchOf(db),size.plate/2+base.weldSize+hw.washer.od/2+inch/16),step);
+ // Fillets about 0.6 t_p: the root of the pair (A-3.1 item 5.5) governs their fatigue. The column bolt gauge clears the
+ // fillets as sized (socket C1 and washer), not the base fillet.
+ const weldSize=Math.max(base.weldSize,minimumFillet(Math.max(size.plate,size.endPlate)),roundUp(.6*size.plate,inch/16));
+ const colGauge=roundUp(Math.max(size.plate/2+weldSize+wrenchOf(db),size.plate/2+weldSize+hw.washer.od/2+inch/16),step);
  // End plate edge: the J3.4 minimum plus C2 for a hole reamed oversized at fit-up to the field-drilled column holes.
  const epHeight=roundUp(2*(colGauge+eMin+oversizedEdgeIncrement(db)),inch/4);
  return {...base,shape:size.shape,length,setback:Math.max(base.setback,roundUp(length/2+inch/4,inch/4)),
   capBolts:{...base.capBolts,diameter:db,gauge,pitch},plateThickness:size.plate,plateWidth,
   lapBolts:{...base.lapBolts,diameter:db,gauge:Math.min(lapGauge,bh-eMin),pitch:lapPitch,edge:roundUp(eMin+slotEdgeIncrement(db,'short'),step)},
   endPlate:{thickness:size.endPlate,height:epHeight,width:plateWidth},columnBolts:{...base.columnBolts,diameter:db,gauge:colGauge},
-  // Fillets about 0.6 t_p: the root of the pair (A-3.1 item 5.5) governs their fatigue.
-  weldSize:Math.max(base.weldSize,minimumFillet(Math.max(size.plate,size.endPlate)),roundUp(.6*size.plate,inch/16))};
+  weldSize};
 }
 const wrenchOf=(db:number)=>wrenchClearance(db);
 function aiscChannelKdes(name:string){const c=channelData(name);return c?c.kdes*inch:undefined;}
