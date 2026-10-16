@@ -333,8 +333,9 @@ export function buildProject(input:RunwayConfig):ProjectInput{
    if(d.endBearing)d.endBearing.enabled=true;
    col.height=col.seatElevation;col.Lcx=2.1*col.height;col.Lcy=col.height;col.Lcz=col.height;col.Lb=col.height;
    p.columnCap={...structuredClone(defaultColumnCap),enabled:true};
-   // The cap plate covers the column and both girder bearings.
-   p.columnCap.plate={...p.columnCap.plate,width:Math.max(p.columnCap.plate.width,up(w.bf*inch+1.5*inch,.5*inch))};
+   // The cap plate covers the column (its weld plus 1/8 in beyond each flange face) and the girder bearing plates.
+   const capWidth=Math.max(w.bf*inch+1.5*inch,w.d*inch+2*(p.columnCap.weld+inch/8),d.bearing.width);
+   p.columnCap.plate={...p.columnCap.plate,width:Math.max(p.columnCap.plate.width,up(capWidth,.5*inch))};
    // The girder's bearing stiffener pair lands between the column flanges.
    const clear=(w.d-2*w.tf)*inch;d.bearing.stiffenerWidth=Math.min(d.bearing.stiffenerWidth,Math.floor((clear-p.section.tw)/2/(inch/8)+1e-9)*inch/8);
    p.longitudinalBracing.height=col.seatElevation-capWorkPointDrop(p);
