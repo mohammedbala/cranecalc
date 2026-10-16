@@ -11,6 +11,7 @@ import type {RunwayDetails} from './runwayDetails';
 import {runwayConfigSchema,type RunwayConfig} from './configInputs';
 import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationProject} from './demonstration';
 import {neutralDetails} from './detailTemplate';
+import {sizeEndStop} from './endStopSizing';
 import {emptyCraneDesign,craneDesignMinimum} from './aistLoads';
 import {emptyCapDesign} from './capDesignInputs';
 import {aiscWShapes,aiscShapeByName,loadAiscSection} from '../data/aiscSections';
@@ -85,6 +86,23 @@ export function estimateCrane(capacity:number,craneSpan:number,control:'cab'|'pe
  return {Q:Q*kip,T:T*kip,B:B*kip,approach:a*foot,offsets:offsets.map(v=>v*foot),Pmax:Pmax*kip,Pempty:Pempty*kip,Pmin:Pmin*kip,driven:Pmax*n/2*kip,speed:speed*fpm,stroke:stroke*inch,efficiency,bumper:bumper*kip,impact:control==='pendant'?.1:.25,double};
 }
 
+/**
+ * AIST TR-13 Table 3.2 crane type of the configured crane: as configured, else a maintenance (standby) crane for CMAA
+ * Class A service and a mill crane otherwise (the TR-13 row for production cranes in a steel mill building; cab side
+ * thrust 0.4Q, impact 25%). Pendant cranes: maintenance, which sets no load (their side thrust is 0.1(Q + T + B)).
+ */
+export const configCraneType=(cfg:RunwayConfig)=>cfg.aistType??(cfg.control==='pendant'||cfg.cmaa==='A'?'maintenance':'mill');
+/** The TR-13 side-thrust rule of the configured crane, for the configurator's summary. */
+export function sideThrustRule(cfg:RunwayConfig){
+ const type=configCraneType(cfg),eta={mill:.4,maintenance:.3,magnet:1,stacker:2}[type];
+ return {type,rule:cfg.control==='pendant'?'0.1(Q + T + B), pendant operation (TR-13 Table 3.2), at least 0.2(Q + T) (ASCE 7 §4.9.4)':type==='stacker'?'max(2.0Q, 0.4(Q + T + A), 0.15(Q + T + B + A)) (TR-13 Table 3.2, stacker)':`max(${eta}Q, 0.2(Q + T), 0.1(Q + T + B)) (TR-13 Table 3.2, ${type} crane, cab or radio operated)`};
+}
+/**
+ * Assumed bumper overhang, end-wheel centerline to the face of the extended bumper: 18 in (the end truck beyond the wheel
+ * and the bumper body, a typical supplier proportion) plus the bumper stroke. Stated in the project notes as assumed.
+ */
+export const exampleBumperOverhang=(e:Pick<CraneEstimate,'stroke'>)=>up(18*inch+e.stroke,inch);
+const overhangNote=(e:Pick<CraneEstimate,'stroke'>)=>`Bumper overhang assumed ${+(exampleBumperOverhang(e)/inch).toFixed(2)} in (end-wheel centerline to the extended bumper face, a typical supplier proportion): the stop contact positions use it; confirm with the crane supplier.`;
 /** The configured crane(s), with the side thrust at the design minimum and the traction of half the wheels driven. */
 export function exampleCranes(cfg:RunwayConfig,length:number):Crane[]{
  const e=estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control),tons=+cfg.capacity.toFixed(2),n=e.offsets.length,last=e.offsets.at(-1)!;
@@ -94,9 +112,11 @@ export function exampleCranes(cfg:RunwayConfig,length:number):Crane[]{
    longitudinal:Math.max(.2*e.driven,.1*n*e.Pmax),minSeparation:4*foot,travelStart:-last,travelEnd:length,
    operatingClass:`CMAA Class ${cfg.cmaa} ${cfg.control} crane; AIST Class ${cfg.buildingClass} building (example)`,
    loadSource:`Fictitious example supplier schedule: typical proportions of a ${tons}-ton ${e.double?'double':'single'}-girder ${cfg.control}-operated crane, ${+cfg.craneSpan.toFixed(1)} ft span; replace with the crane supplier's wheel loads`,
-   design:{...emptyCraneDesign,control:cfg.control,type:'maintenance',ratedLoad:e.Q,trolleyWeight:e.T,bridgeWeight:e.B,drivenWheelLoad:e.driven,sideShare:.5,
+   design:{...emptyCraneDesign,control:cfg.control,type:configCraneType(cfg),ratedLoad:e.Q,trolleyWeight:e.T,bridgeWeight:e.B,drivenWheelLoad:e.driven,sideShare:.5,
     distributionSource:'Fictitious example: one-half of the crane side thrust assigned to this runway (no stiffness analysis of both runways)',splitConfirmed:true,
-    bumperForce:e.bumper,bumperBypassesGirder:false,guideRollers:false,cmaaClass:cfg.cmaa,bridgeSpeed:e.speed,minWheelLoad:e.Pmin,bumperStroke:e.stroke,bumperEfficiency:e.efficiency}};
+    bumperForce:e.bumper,bumperBypassesGirder:false,guideRollers:false,cmaaClass:cfg.cmaa,bridgeSpeed:e.speed,minWheelLoad:e.Pmin,bumperStroke:e.stroke,bumperEfficiency:e.efficiency,
+    // Assumed end-truck geometry (exampleBumperOverhang), so the stop contacts follow the stop face.
+    bumperOverhang:exampleBumperOverhang(e)}};
   const side=craneDesignMinimum(c).runwaySide/n;c.wheels=c.wheels.map(w=>({...w,lateral:side}));
   return c;
  };
@@ -117,6 +137,12 @@ export function seatWidthNeeded(depth:number,clipWidth:number,tolerance=.125*inc
 
 const wCandidates=()=>aiscWShapes.filter(s=>s.d>=12&&s.d<=40&&s.bf/(2*s.tf)<=.38*Math.sqrt(29000/50)&&(s.d-2*s.kdes)/s.tw<=3.76*Math.sqrt(29000/50)).sort((a,b)=>a.weight-b.weight);
 const capChannels=['C10X15.3','C12X20.7','C12X25','C15X33.9','C15X40','C15X50','MC18X42.7'];
+/**
+ * Least clear pocket each side between the W top flange tip and the inside of the cap channel flange, where the
+ * continuous cap-to-flange fillet is laid: 1 1/2 in for a manual or semi-automatic fillet (2 in would be needed for
+ * submerged arc welding). capChecks cap-weld-pocket-clear checks it for named sections.
+ */
+export const capWeldPocket=1.5*inch;
 export interface GirderTrial {name:string;weight:number;utilization:number;deflection:number;lateral:number;shear:number;section:Section;
  /** The governing sizing ratio: top-flange tip stress with warping and second-order twist, the H1 top-flange interaction with the load-height LTB strength, or the elastic stability margin. */
  governs:string}
@@ -185,7 +211,9 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
     // AISC F13.2 proportions of a singly symmetric member: 0.1 <= I_yc/I_y <= 0.9 with the cap channel in the
     // compression flange.
     const Iyf=w.tf*w.bf**3/12,rho=(Iyf+c.Ix)/(2*Iyf+c.Ix);
-    if(c.d<w.bf+2*c.tf+.25+(opts.capRoom??0)/inch||w.bf*inch<minFlange-1e-6||w.bf<.6*c.d||(c.d/2-c.tf)*inch*2<opts.minSeat-1e-6||w.d<1.4*c.bf+8||w.d<c.d*.9||rho>.9)continue;
+    // Each side keeps a pocket of at least 1 1/2 in (capWeldPocket) between the W flange tip and the channel flange for
+    // the continuous cap-to-flange fillet, whatever room the ties need.
+    if((c.d-2*c.tf-w.bf)/2<Math.max(capWeldPocket/inch,(.25+(opts.capRoom??0)/inch)/2)-1e-9||w.bf*inch<minFlange-1e-6||w.bf<.6*c.d||(c.d/2-c.tf)*inch*2<opts.minSeat-1e-6||w.d<1.4*c.bf+8||w.d<c.d*.9||rho>.9)continue;
     consider(loadCappedSection(p.section,w.name,ch),`${w.name} + ${ch}`,w.weight+c.weight);
    }
   }
@@ -287,9 +315,13 @@ function screened(input:RunwayConfig){
 export function previewConfig(input:RunwayConfig){
  const {config:cfg,changes,sk,reaction}=screened(input),{p,depth,trial,spectrum}=sk;
  const crane=estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control),structure=cfg.scope==='analysis'?undefined:cfg.structure==='new'?(cfg.columnShape??newColumnFor(cfg.capacity)):cfg.support==='by-others'?undefined:(cfg.columnShape??existingColumnFor(cfg.capacity));
+ // The assumed end-truck geometry is stated with the changes (the crane supplier confirms it).
+ if(cfg.scope==='design')changes.push(overhangNote(crane));
  return {config:cfg,changes,crane,spectrum,railDepth:depth,girder:p.section.name,trial:trial&&{utilization:trial.utilization,deflection:trial.deflection,lateral:trial.lateral,weight:trial.weight},column:structure,verticalLimit:p.verticalLimit,
   /** Largest unfactored support reaction (all cranes, impact, dead load), for the AIST column-bracket recommendation. */
-  reaction};
+  reaction,
+  /** AIST TR-13 crane type and the side-thrust rule it takes. */
+  sideThrust:sideThrustRule(cfg)};
 }
 
 /** The configured project. Unknown supplier, survey and site data are fictitious examples, marked as such. */
@@ -315,6 +347,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  if(d.endStop)d.endStop.source='Fictitious example supplier data: bumper force, bumper centerline height and contact diameter';
  d.fabrication.steel=p.section.kind==='cap'?'W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50 unless noted.':'Girder ASTM A992; plates, bars and stiffeners ASTM A572 Grade 50 unless noted.';
  if(p.section.kind==='cap')d.fabrication.welding+=' Cap: continuous fillet each W top-flange edge, with the end development shown. Full cap bearing contact required. Bearing stiffeners CJP to the W top flange, bottom fitted.';
+ if(p.section.kind==='cap')d.fabrication.inspection+=' Capped girder shop sequence: weld and UT the bearing stiffener CJPs and any under-flange attachments, check the top flange flatness, then fit and weld the cap.';
  if(cfg.tie!=='cap-angle'&&d.brace.arrangement==='cap-angle'){d.brace.arrangement='paired-bars';delete d.brace.capAngle;}
 
  const reach=(cfg.reach??20)*inch,seatLevel=(base:number)=>cfg.railElevation*foot-base-railTopAboveSteel(p)-(p.section.kind==='cap'?p.section.capTw:0)-p.section.d-d.bearing.thickness;
@@ -384,6 +417,9 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  attachTie(p,cfg);
  // The supports carry the bracket (or cap) and tie before the new column bases are sized for their reactions.
  const tie=sizedTieRatios(p),q=finishTie(withHaunch(withWeldedBracket(p),cfg),tie);
+ // The end stops sized again for the crane bumper force on the finished girder end (bearing stiffener, tie saddle).
+ if(q.details?.endStop)q.details.endStop=sizeEndStop(q).stop;
+ q.notes+=` ${overhangNote(estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control))}`;
  return cfg.structure==='new'?withColumnBase(q,cfg):q;
 }
 /**

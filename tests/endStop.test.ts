@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {stopContacts} from '../src/engine/craneTravel';
+import {stopContacts,stopFace} from '../src/engine/craneTravel';
 import {calculate,validateProject} from '../src/engine/calculate';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 import {endStopChecks,endStopGeometry,stopBumperForce,wrenchClearance} from '../src/engine/endStop';
@@ -41,7 +41,11 @@ describe('girder-mounted runway end stops',()=>{
   expect(checks['end-stop-bolt-shear'].demand).toBeCloseTo(5*kip,3);
   const bolt=boltCapacity({grade:'A325',diameter:.75*inch,planes:1,surface:'B',shear:5*kip,tension:T,method:'LRFD'});
   expect(checks['end-stop-bolt-tension'].capacity).toBeCloseTo(bolt.tension,3);
-  expect(checks['end-stop-slip'].capacity).toBeCloseTo(bolt.slip,3);
+  // AISC J3.9 by bolt row: the two front bolts reduced by their own tension, the two back bolts at full slip resistance,
+  // against the whole bumper force.
+  const full=boltCapacity({grade:'A325',diameter:.75*inch,planes:1,surface:'B',shear:5*kip,tension:0,method:'LRFD'});
+  expect(checks['end-stop-slip'].demand).toBeCloseTo(20*kip,3);
+  expect(checks['end-stop-slip'].capacity).toBeCloseTo(2*bolt.slip+2*full.slip,3);
   // Face plate between stiffeners: P s / 4 on a 6 in strip, 1 in thick.
   expect(checks['end-stop-face'].demand).toBeCloseTo(20*kip*3*inch/4/(6*inch*inch**2/6),4);
   expect(Object.values(checks).every(c=>c.status==='pass')).toBe(true);
@@ -56,8 +60,9 @@ describe('girder-mounted runway end stops',()=>{
   const p=demonstrationProject(),c=p.cranes[0],props=sectionProperties(p.section),stops=new Set(['LRFD 8','LRFD 10-B']),seen:{origin:number;stop?:string;axial:number}[]=[];
   runwayDesignAnalysis(p,props,girderStrength(p,props),24,20,e=>{if(e.kind==='strength'&&stops.has(e.combination))seen.push({origin:e.cranes[0].origin,stop:e.stop,axial:e.axial});});
   // Every stop case has the crane at stop contact toward the stop it strikes, with the full stop force. Without the
-  // end-truck geometry the contacts are the travel limits kept on the runway: the first wheel at grid 1, the last at grid 4.
-  const [left,right]=stopContacts(p,0).map(v=>v.origin);expect([left,right]).toEqual([0,75*foot-c.wheels.at(-1)!.offset]);
+  // end-truck geometry the contacts are the travel limits kept on the runway, the end wheel no farther than the stop face
+  // (there is no rail beyond it): the first wheel at the left stop face, the last at the right one.
+  const [left,right]=stopContacts(p,0).map(v=>v.origin);expect(left).toBeCloseTo(stopFace(p,'left')!,6);expect(right).toBeCloseTo(stopFace(p,'right')!-c.wheels.at(-1)!.offset,6);
   expect(seen.length).toBeGreaterThan(0);
   for(const v of seen){expect(v.stop).toBe(Math.abs(v.origin-left)<1e-6?'left':'right');expect([left,right].some(o=>Math.abs(v.origin-o)<1e-6)).toBe(true);expect(v.axial).toBeCloseTo(20*kip,3);}
   expect(new Set(seen.map(v=>v.stop))).toEqual(new Set(['left','right']));

@@ -8,7 +8,8 @@ import {endGridOverhang} from './simpleSupports';
  * first-wheel position from grid 1 and `wheel` the end wheel nearest the stop. From the end-truck geometry
  * ('geometry') when this calculation designs the girder-mounted stop and the crane supplier gives the bumper overhang
  * a (end-wheel centerline to the extended bumper face): the end wheel stands a less the bumper stroke s from the stop
- * face. Otherwise ('travel') the entered travel limit toward that end, kept on the runway (every wheel on the girder).
+ * face. Otherwise ('travel') the entered travel limit toward that end, kept on the runway (every wheel on the girder)
+ * and, at a stop designed here, with the end wheel no farther than the stop face.
  */
 export interface StopContact{end:'left'|'right';origin:number;wheel:number;basis:'geometry'|'travel';face?:number;overhang?:number;stroke?:number;railEnd?:number}
 
@@ -38,7 +39,13 @@ export function stopContacts(p:ProjectInput,crane:number):StopContact[]{
   const face=c.design?.bumperBypassesGirder?undefined:stopFace(p,end),dir=end==='left'?1:-1;
   let contact:StopContact;
   if(face!==undefined&&a!==undefined){const wheel=face+dir*(a-s);contact={end,wheel,origin:end==='left'?wheel:wheel-last,basis:'geometry',face,overhang:a,stroke:s,railEnd:stopRailEndAt(p,end)};}
-  else{const origin=end==='left'?Math.max(c.travelStart,0):Math.min(c.travelEnd,L-last);contact={end,origin,wheel:end==='left'?origin:origin+last,basis:'travel'};}
+  else{
+   // Without the bumper overhang the travel limit is kept on the runway and, where a stop is designed here, the end
+   // wheel no farther than the stop face (beyond it there is no rail).
+   let origin=end==='left'?Math.max(c.travelStart,0):Math.min(c.travelEnd,L-last);
+   if(face!==undefined)origin=end==='left'?Math.max(origin,face):Math.min(origin,face-last);
+   contact={end,origin,wheel:end==='left'?origin:origin+last,basis:'travel',...(face!==undefined?{face}:{})};
+  }
   if(end==='left'?contact.wheel<=p.spans[0]+1e-6:contact.wheel>=L-p.spans.at(-1)!-1e-6)out.push(contact);
  }
  return out;
