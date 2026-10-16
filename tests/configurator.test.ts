@@ -92,3 +92,29 @@ describe('dependent choices',()=>{
   expect(previewConfig({...defaultRunwayConfig,girderShape:'W24X104'}).girder).toBe('W24X104');
  });
 });
+
+describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
+ it('estimates the support reaction as the calculation reports it',()=>{
+  // column-brackets of the full calculation (the design analysis service reaction) for the earlier templates t05
+  // (15 t, brackets by others), t08 (20 t continuous) and t10 (25 t haunches): 55.0, 86.0 and 91.5 kip.
+  const cases:[Partial<RunwayConfig>,number][]=[[{capacity:15,craneSpan:70,bays:4,span:25,support:'by-others',railElevation:24},55.0],
+   [{capacity:20,craneSpan:70,bays:4,span:30,system:'continuous',railElevation:26},86.0],
+   [{capacity:25,craneSpan:70,cmaa:'D',buildingClass:'B',bays:4,span:30,support:'tapered-haunch',railElevation:28},91.5]];
+  for(const [cfg,R] of cases)expect(Math.abs(previewConfig({...defaultRunwayConfig,...cfg}).reaction!/kip/R-1)).toBeLessThan(.02);
+ });
+ it('puts a new structure above it on column caps over the new crane columns, and says why',()=>{
+  const cfg:RunwayConfig={...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30,structure:'new',support:'twin-rib',tie:'flexible-plate'};
+  const v=previewConfig(cfg);
+  expect(v.reaction!).toBeGreaterThan(50*kip);expect(v.config).toMatchObject({structure:'new',support:'column-cap',tie:'paired-bars'});
+  expect(v.changes[0]).toMatch(/^The support reaction, about \d+ kip, exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets: the girders bear on column caps over the new crane columns/);
+  const p=buildProject(cfg);
+  expect(p.configurator?.support).toBe('column-cap');expect(p.columnCap?.enabled).toBe(true);expect(p.details!.bracket?.enabled).toBeFalsy();
+  expect(validateProject(p)).toEqual([]);
+ },120000);
+ it('keeps the brackets of an existing structure above it, with the warning; within it nothing is said',()=>{
+  const v=previewConfig({...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30});
+  expect(v.config.support).toBe('twin-rib');
+  expect(v.changes).toContainEqual(expect.stringMatching(/^Support reaction about \d+ kip exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets; consider new crane columns with column caps, or obtain the engineer of record's acceptance\.$/));
+  const light=previewConfig({...defaultRunwayConfig,capacity:5});expect(light.changes).toEqual([]);expect(light.reaction!).toBeLessThan(50*kip);
+ });
+});

@@ -16,6 +16,7 @@ import type {ProjectInput,CheckResult} from './types';
 import {available} from './aiscStrength';
 import {format} from './units';
 import {flangeStiffenerForces,coupleStiffenerForces,type ColumnStiffenerContext,type StiffenerLevelKey} from './columnStiffeners';
+import {receiverK} from './columnStiffenerInputs';
 
 /** A strength peak with the flange force system (normal force P, tension positive, and lateral moment M_f) of its governing set. */
 export type FlangePeak={value:number;caseId:string;x:number;P?:number;M?:number};
@@ -45,20 +46,31 @@ export interface FlangeLevels {
  lbTop:number;lbBottom:number;
 }
 /**
+ * k of the receiving column in J10.2 (AISC 360-16: the distance from the outer face of the flange to the web toe of the
+ * fillet): the surveyed k where one is entered, else k_des of the AISC shape that identifies the column (receiverK: a
+ * new column's shape, or the existing column's shape where its d, b_f, t_f and t_w match the surveyed receiver), else
+ * t_f, no rolled-fillet credit. `text` names it for the check notes.
+ */
+export function receiverWebK(p:ProjectInput){
+ const b=p.details!.bracket!,tf=b.receiver.flangeThickness,K=receiverK(b,p.existingColumn),f=(v:number)=>format(v,'length',p.units,3);
+ if(K&&K.k>=tf)return {k:K.k,source:K.source,text:K.source==='entered (survey)'?`k = ${f(K.k)} (surveyed)`:`k = kdes = ${f(K.k)} (${K.source})`};
+ return {k:tf,source:'tf',text:`k = tf = ${f(tf)} (no AISC shape identifies the column and no k is surveyed: no rolled-fillet credit)`};
+}
+/**
  * Unstiffened available strengths of the receiving column at the two flange levels (AISC 360-16 J10.1-J10.4): flange
  * local bending under the top flange, web local yielding at both, crippling and sidesway buckling under the bottom
- * flange, with the end-region expressions where the column top is close (or its height is not entered). k = tf (no
- * rolled-fillet credit).
+ * flange, with the end-region expressions where the column top is close (or its height is not entered). J10.2 with the
+ * column's k (receiverWebK: surveyed, k_des of its AISC shape, else t_f).
  */
 export function flangeLevelStrengths(p:ProjectInput,l:FlangeLevels){
- const c=p.details!.bracket!.receiver,E=p.section.E,method=p.method;
+ const c=p.details!.bracket!.receiver,E=p.section.E,method=p.method,K=receiverWebK(p),k=K.k;
  const columnEnd=p.existingColumn?.enabled?p.existingColumn.height-p.existingColumn.seatElevation:0,known=!!p.existingColumn?.enabled;
  const topFlangeEnd=!known||columnEnd+l.top<10*c.flangeThickness,topWebEnd=!known||!(columnEnd+l.top>c.depth),botWebEnd=!known||!(columnEnd+l.bottom>c.depth),botCrippleEnd=!known||!(columnEnd+l.bottom>=c.depth/2);
  const N=l.lbBottom,term=botCrippleEnd&&N/c.depth>.2?4*N/c.depth-.2:3*N/c.depth,hcol=c.depth-2*c.flangeThickness,sway=(hcol/c.webThickness)/(c.unbracedLength/c.width);
- return {columnEnd,topFlangeEnd,topWebEnd,botWebEnd,botCrippleEnd,N,hcol,sway,levels:l,
+ return {columnEnd,topFlangeEnd,topWebEnd,botWebEnd,botCrippleEnd,N,hcol,sway,levels:l,k,kText:K.text,
   flange:available((topFlangeEnd?.5:1)*6.25*c.Fy*c.flangeThickness**2,method,.9,1.67),
-  yieldTop:available(c.Fy*c.webThickness*((topWebEnd?2.5:5)*c.flangeThickness+l.lbTop),method,1,1.5),
-  yieldBottom:available(c.Fy*c.webThickness*((botWebEnd?2.5:5)*c.flangeThickness+l.lbBottom),method,1,1.5),
+  yieldTop:available(c.Fy*c.webThickness*((topWebEnd?2.5:5)*k+l.lbTop),method,1,1.5),
+  yieldBottom:available(c.Fy*c.webThickness*((botWebEnd?2.5:5)*k+l.lbBottom),method,1,1.5),
   crippling:available((botCrippleEnd?.4:.8)*c.webThickness**2*(1+term*(c.webThickness/c.flangeThickness)**1.5)*Math.sqrt(E*c.Fy*c.flangeThickness/c.webThickness),method,.75,2),
   sidesway:sway<=1.7?available(3.3e6*c.webThickness**3*c.flangeThickness/hcol**2*.4*sway**3,method,.85,1.76):undefined};
 }
@@ -95,9 +107,9 @@ export function flangeJ10Checks(p:ProjectInput,x:{S:Record<string,FlangePeak|und
   {key:'pull',id:'column-flange',title:`${t.column} flange · local bending at the ${t.level.top} (J10.1)`,cap:J.flange,eq:'R_u=T+3M_f/b\\le\\phi R_n=\\phi6.25F_{yf}t_f^2',
    note:`J10.1 flange local bending, t_f and F_yf of the column flange.${topFlangeEnd?' Within 10tf of the column top, or the column height not entered: half strength.':''} ${topSys}.`},
   {key:'pull',id:'column-yield-top',title:`${t.column} web · local yielding at the ${t.level.top} (J10.2)`,cap:J.yieldTop,eq:`R_u=T+3M_f/b\\le\\phi R_n=\\phi F_{yw}t_w(${topWebEnd?'2.5':'5'}k+l_b)`,
-   note:`J10.2 web local yielding; k = tf of the column (no rolled fillet credit), lb = ${t.lb.top}.${topWebEnd?' End-region expression: the column top is within the column depth, or not entered.':''} ${topSys}.`},
+   note:`J10.2 web local yielding; ${J.kText}, lb = ${t.lb.top}.${topWebEnd?' End-region expression: the column top is within the column depth, or not entered.':''} ${topSys}.`},
   {key:'push',id:'column-yield-bottom',title:`${t.column} web · local yielding at the ${t.level.bottom} (J10.2)`,cap:J.yieldBottom,eq:`R_u=C+3M_f/b\\le\\phi R_n=\\phi F_{yw}t_w(${botWebEnd?'2.5':'5'}k+l_b)`,
-   note:`J10.2 web local yielding; lb = ${t.lb.bottom}.${botWebEnd?' End-region expression.':''} ${botSys}.`},
+   note:`J10.2 web local yielding; ${J.kText}, lb = ${t.lb.bottom}.${botWebEnd?' End-region expression.':''} ${botSys}.`},
   {key:'push',id:'column-crippling',title:`${t.column} web · crippling at the ${t.level.bottom} (J10.3)`,cap:J.crippling,eq:`R_u=C+3M_f/b\\le\\phi R_n=\\phi${botCrippleEnd?'0.40':'0.80'}t_w^2[1+${botCrippleEnd&&N/c.depth>.2?'(4l_b/d-0.2)':'3(l_b/d)'}(t_w/t_f)^{1.5}]\\sqrt{EF_{yw}t_f/t_w}`,
    note:`J10.3 web crippling, ${botCrippleEnd?'end-region':'interior'} expression at the bottom flange level, ${fmt(columnEnd+J.levels.bottom)} below the column top; lb = ${fmt(N)}. ${botSys}.`},
   ...(J.sidesway!==undefined?[{key:'push' as const,id:'column-sidesway',title:`${t.column} web · sidesway buckling (J10.4)`,cap:J.sidesway,eq:'R_u=C+3M_f/b\\le\\phi R_n=\\phi(C_rt_w^3t_f/h^2)[0.4((h/t_w)/(L_b/b_f))^3]',

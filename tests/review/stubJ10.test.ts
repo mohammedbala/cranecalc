@@ -45,9 +45,11 @@ describe('C2 · one force system per W-stub flange at the column face',()=>{
   // The governing set's own forces: the offset end, with the longitudinal force, pulls hardest.
   const {a,e}=stubBearing(p),f=stubActions(st,a,e,[{vertical:100000,offset:230,length:120}],{longitudinal:8000,bottom:6000,offset:230});
   expect(columnFlangeForces(st,f).pull).toBeLessThanOrEqual(S.pull.value*(1+1e-9));
-  // Design checks without stiffeners; the A36 W14X90 web cannot take the top flange system (J10.2 above J10.1).
+  // Design checks without stiffeners; the A36 W14X90 cannot take the top flange system. J10.2 takes the column's
+  // k = kdes = 1.31 in (AISC J10.2: to the web toe of the fillet), so J10.1 flange local bending governs there.
   for(const c of [...top,...bottom]){expect(['pass','fail']).toContain(c.status);expect(c.note).toContain('One force system per stub flange');}
-  expect(top[1].status).toBe('fail');expect(top[1].utilization!).toBeGreaterThan(top[0].utilization!);
+  expect(top[0].status).toBe('fail');expect(top[1].status).toBe('fail');expect(top[0].utilization!).toBeGreaterThan(top[1].utilization!);
+  expect(top[1].note).toContain('k = kdes = 1.31 in (AISC W14X90)');
   expect(top[1].note).toContain('a full-depth column stiffener pair at each stub flange level (J10.8) is required');
   // The panel takes the net flange force; the couples add none.
   expect(byId(checks,'wbracket-column-panel').demand).toBeCloseTo(Math.max(S.tension.value,S.compression.value),6);
@@ -57,7 +59,9 @@ describe('C2 · one force system per W-stub flange at the column face',()=>{
   const p=cappedStubW14X90(false),st=projectStub(p),J=stubColumnStrengths(p,st),c=p.details!.bracket!.receiver;
   expect(J.levels).toEqual({top:1.5*inch,bottom:1.5*inch+st.d,lbTop:st.tf,lbBottom:st.tf});
   const half=J.topFlangeEnd?.5:1;expect(J.flange).toBeCloseTo(.9*half*6.25*36*ksi*(.71*inch)**2,3);
-  expect(J.yieldTop).toBeCloseTo(c.Fy*c.webThickness*((J.topWebEnd?2.5:5)*c.flangeThickness+st.tf),3);
+  // J10.2 with the column's k_des (the existing W14X90 matches the surveyed receiver), not t_f.
+  expect(J.k).toBeCloseTo(1.31*inch,6);expect(J.kText).toBe('k = kdes = 1.31 in (AISC W14X90)');
+  expect(J.yieldTop).toBeCloseTo(c.Fy*c.webThickness*((J.topWebEnd?2.5:5)*J.k+st.tf),3);
   // The tapered haunch uses the same function (its J10 values are unchanged: Rev B checks.json).
   const q=demoFocus005RevB(),g=projectHaunch(q);expect(haunchColumnStrengths(q,g)).toEqual(flangeLevelStrengths(q,haunchFlangeLevels(g)));
  });

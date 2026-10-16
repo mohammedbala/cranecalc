@@ -15,6 +15,7 @@ import {haunchedRibData,haunchedRibChecks} from './haunchedSeat';
 import {activeEndBearing} from './endBearingInputs';
 import {activeColumnStiffeners} from './columnStiffenerInputs';
 import {columnStiffenerErrors,columnStiffenerChecks,stiffenedColumnChecks,panelStiffenerNote,bracketStiffenerGeometry} from './columnStiffeners';
+import {receiverWebK} from './flangeForceSystem';
 export {seatEccentricity,torqueArm} from './bracketRib';
 
 const inch=25.4;
@@ -178,7 +179,10 @@ export function bracketResponse(p:ProjectInput,loads:BracketLoads,torque=0){
  const seatNormal=6*seat.moment/(p.details!.bearing.width*b.seatThickness**2);
  const seatShear=1.5*seat.shear/(p.details!.bearing.width*b.seatThickness);
  const weldLength=p.details!.bearing.width,seatWeld=R/(2*(b.seatWeld/Math.sqrt(2))*weldLength);
- const receiverForce=ribs.reduce((sum,v)=>sum+1.5*Math.abs(v)*e/b.ribDepth,0);
+ // The web and panel zone: the net force of both ribs' elastic root couples at a level, signed, since both deliver them
+ // through the same column flange (a rib the seat holds down, P < 0, pushes where the other pulls): 1.5|V|e/h_r. Each
+ // rib's own couple is the flange local bending at that rib and the force on its column stiffener plate.
+ const receiverForce=Math.abs(ribs.reduce((sum,v)=>sum+1.5*v*e/b.ribDepth,0));
  // Each rib pulls on the column flange over its tension zone (half the rib depth), at m from the web face.
  const ribTension=ribs.map(v=>1.5*v*e/b.ribDepth);
  // Column flange stress along the column at the rib weld toes: the whole bracket moment V·e_c on the receiving
@@ -323,6 +327,8 @@ export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:n
  const length=p.details!.bearing.width,ratio=length/b.seatWeld,beta=ratio<=100?1:ratio<=300?1.2-.002*ratio:180/ratio;
  from('seatWeld','seat-weld','Seat-to-rib · continuous fillet welds',available(.6*m.Fexx*beta,p.method,.75,2),'stress','f_w=|P|/[2(0.707w)b_p]','Two continuous fillets along each rib; only bearing-patch length credited. Includes tension in a rib caused by longitudinal seat eccentricity.');
  // Seat and rib root fillets to the column as one group under every concurrent set with its horizontal forces.
+ // J10.2 with the receiving column's k: surveyed, k_des of its AISC shape, else t_f (receiverWebK).
+ const K=receiverWebK(p);
  const cw=seatColumnWeld(p,r),cwPeaks=cw.peaks,cwf=(v:number)=>format(v,'length',p.units,3),columnEnd=p.existingColumn?.enabled?p.existingColumn.height-p.existingColumn.seatElevation:0;
  if(cwPeaks){
   const governs=cwPeaks.seat.value>=cwPeaks.root.value?cwPeaks.seat:cwPeaks.root;
@@ -331,7 +337,7 @@ export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:n
   // J10.1/J10.2 for the seat's pull on the flange; within 10tf (or d) of the column top the end-region values apply.
   const flangeEnd=columnEnd<10*c.flangeThickness,webEnd=!(columnEnd>c.depth);
   add('seat-flange','Column flange · local bending under the seat pull',cwPeaks.pull.value,available((flangeEnd?.5:1)*6.25*c.Fy*c.flangeThickness**2,p.method,.9,1.67),'force','R_n=6.25F_{yf}t_f^2\\\ \\text{(J10.1)}',`The peak tensile throat stress of the seat line over its whole length, ${cwf(cw.length)}: the seat plate pulls on the column flange like a plate across it.${flangeEnd?' Within 10tf of the column top, or the column height not entered: half strength.':''} Checked apart from the rib tension zones below.`,cwPeaks.pull.caseId);
-  add('seat-web','Column web · local yielding under the seat pull',cwPeaks.pull.value,available(c.Fy*c.webThickness*((webEnd?2.5:5)*c.flangeThickness+b.seatThickness),p.method,1,1.5),'force',`R_n=F_yt_w(${webEnd?'2.5':'5'}k+l_b)\\\ \\text{(J10.2)}`,`k = tf (no rolled fillet credit), lb = seat thickness ${cwf(b.seatThickness)}.${webEnd?' End-region expression: the column top is within the column depth of the seat, or not entered.':''}`,cwPeaks.pull.caseId);
+  add('seat-web','Column web · local yielding under the seat pull',cwPeaks.pull.value,available(c.Fy*c.webThickness*((webEnd?2.5:5)*K.k+b.seatThickness),p.method,1,1.5),'force',`R_n=F_yt_w(${webEnd?'2.5':'5'}k+l_b)\\\ \\text{(J10.2)}`,`${K.text}, lb = seat thickness ${cwf(b.seatThickness)}.${webEnd?' End-region expression: the column top is within the column depth of the seat, or not entered.':''}`,cwPeaks.pull.caseId);
  }
  for(const [id,w,t1,t2] of [['root',b.rootWeld,b.ribThickness,c.flangeThickness],['seat',b.seatWeld,b.ribThickness,b.seatThickness]] as const){
   add(id+'-minimum',`${id==='root'?'Root':'Seat'} weld · minimum leg`,filletMinimum([t1,t2]),w,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined.');
@@ -340,15 +346,17 @@ export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:n
  // Conservative end-region factors used at every bracket. No fillet/k credit.
  const N=b.ribDepth/2,term=N/c.depth>.2?4*N/c.depth-.2:3*N/c.depth;
  const strip=receiverStrip(p);
+ // The web takes the net couple force at a rib level, both ribs signed (bracketResponse receiverForce).
+ const net='R_u = |Σ1.5P_ie/h_r| = 1.5|V|e/h_r at a rib level: both ribs deliver their elastic root couples through the same column flange into the web, so they add with their signs (a rib the seat holds down, P < 0, pushes where the other pulls); each rib\'s own couple is the flange local bending at that rib.';
  if(strip.m>0)from('ribTension','column-flange','Column flange · local bending at each rib',available(c.Fy*c.flangeThickness**2*strip.length/(4*strip.m),p.method,.9,1.67),'force','T=1.5|P|e/h_r\\le\\phi F_yt_f^2\\frac{N+2m}{4m}',`Each narrow rib pulls the column flange over its tension zone N = ${format(strip.N,'length',p.units,3)} at m = ${format(strip.m,'length',p.units,3)} from the web face. Flange strip spread at 45° to the web root, plastic hinge at the root, no free-edge or continuity-plate credit. AISC J10.1 assumes a plate across the full flange and does not apply to narrow ribs off the web.`);
  else checks.push({id:'bracket-column-flange',group:'Column bracket',title:'Column flange · local bending at each rib',status:'not-applicable',equation:'m\\le0',note:'The ribs lie over the column web.',referenceIds:['bracket-basis']});
- from('receiverForce','column-yield','Column web · local yielding',available(c.Fy*c.webThickness*(2.5*c.flangeThickness+N),p.method,1,1.5),'force','R_n=F_y t_w(2.5k+l_b)','J10.2 end-region expression; k=tf and lb=half rib depth, no rolled fillet or added stiffener credit.');
- from('receiverForce','column-crippling','Column web · crippling',available(.4*c.webThickness**2*(1+term*(c.webThickness/c.flangeThickness)**1.5)*Math.sqrt(E*c.Fy*c.flangeThickness/c.webThickness),p.method,.75,2),'force','R_n=0.4t_w^2[1+\\eta(t_w/t_f)^{1.5}]\\sqrt{EF_y t_f/t_w}','J10.3 end-region expression. Assumes column web is continuously joined to the loaded flange; confirmed receiver geometry required.');
+ from('receiverForce','column-yield','Column web · local yielding',available(c.Fy*c.webThickness*(2.5*K.k+N),p.method,1,1.5),'force','R_n=F_y t_w(2.5k+l_b)',`J10.2 end-region expression; ${K.text} and lb = half rib depth, no added stiffener credit. ${net}`);
+ from('receiverForce','column-crippling','Column web · crippling',available(.4*c.webThickness**2*(1+term*(c.webThickness/c.flangeThickness)**1.5)*Math.sqrt(E*c.Fy*c.flangeThickness/c.webThickness),p.method,.75,2),'force','R_n=0.4t_w^2[1+\\eta(t_w/t_f)^{1.5}]\\sqrt{EF_y t_f/t_w}',`J10.3 end-region expression. Assumes column web is continuously joined to the loaded flange; confirmed receiver geometry required. ${net}`);
  const h=c.depth-2*c.flangeThickness,swayRatio=(h/c.webThickness)/(c.unbracedLength/c.width);
- if(swayRatio<=1.7)from('receiverForce','column-sidesway','Column web · sidesway buckling',available(3.3e6*c.webThickness**3*c.flangeThickness/h**2*.4*swayRatio**3,p.method,.85,1.76),'force','R_n=(C_r t_w^3t_f/h^2)[0.4((h/t_w)/(L_b/b_f))^3]',`J10.4 unrestrained compression-flange rotation; Cr=${format(3.3e6,'stress',p.units)} regardless of existing column moment. Actual largest flange unbraced length entered.`);
+ if(swayRatio<=1.7)from('receiverForce','column-sidesway','Column web · sidesway buckling',available(3.3e6*c.webThickness**3*c.flangeThickness/h**2*.4*swayRatio**3,p.method,.85,1.76),'force','R_n=(C_r t_w^3t_f/h^2)[0.4((h/t_w)/(L_b/b_f))^3]',`J10.4 unrestrained compression-flange rotation; Cr=${format(3.3e6,'stress',p.units)} regardless of existing column moment. Actual largest flange unbraced length entered. ${net}`);
  else checks.push({id:'bracket-column-sidesway',group:'Column bracket',title:'Column web · sidesway buckling',status:'not-applicable',equation:'(h/t_w)/(L_b/b_f)>1.7',note:'AISC J10.4(b)(2), unrestrained flange-rotation branch.',referenceIds:['bracket-basis']});
  const area=2*c.width*c.flangeThickness+h*c.webThickness,axialRatio=(p.method==='LRFD'?1:1.6)*(c.axialDemand+(r.strength.vertical?.value??0))/(c.Fy*area);
- from('receiverForce','column-panel','Column web · panel shear / axial reduction',available(.6*c.Fy*c.depth*c.webThickness*Math.max(0,Math.min(1,1.4-axialRatio)),p.method,.9,1.67),'force','R_n=0.6F_y d_c t_w\\min(1,1.4-\\alpha P_r/P_y)','J10.6(a): no inelastic panel-zone credit. Full root tension/compression couple force as panel shear; concurrent entered column axial force plus bracket vertical load. Global column strength and stability remain separate.');
+ from('receiverForce','column-panel','Column web · panel shear / axial reduction',available(.6*c.Fy*c.depth*c.webThickness*Math.max(0,Math.min(1,1.4-axialRatio)),p.method,.9,1.67),'force','R_n=0.6F_y d_c t_w\\min(1,1.4-\\alpha P_r/P_y)','J10.6(a): no inelastic panel-zone credit. The root tension/compression couple force as panel shear: the net of both ribs, 1.5|V|e/h_r, from the strong-axis moment V·e the bracket delivers (the ribs\' couples add with their signs; the uneven part bends the flange at each rib and adds no panel shear); concurrent entered column axial force plus bracket vertical load. Global column strength and stability remain separate.');
  // A single loaded flange does not create opposing double compression forces.
  const vertical=r.service.vertical?.value??0;
  add('tr13-load','AIST column bracket · reaction recommendation',Math.max(vertical,serviceReaction??0),50*4448.221615,'force',p.units==='SI'?'R<222.411\\,\\mathrm{kN}':'R<50\\,\\mathrm{kip}','Reference AIST Technical Report 13 §5.9.2. Unfactored support reaction with all cranes, impact and dead load, the same basis as the Detailing column-bracket applicability check.');

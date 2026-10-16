@@ -26,7 +26,9 @@ import {existingColumnAnalysis} from './existingColumn';
 import {baseDrift} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
 import {sizeWeldedBracket} from './bracketSizing';
-import {defaultRolledBracket} from './rolledBracketInputs';
+import {sizeRolledBracket} from './rolledBracketSizing';
+import {sizeColumnCap} from './columnCapSizing';
+import {defaultRolledBracket,isRolledBracket} from './rolledBracketInputs';
 import {defaultColumnCap} from './columnCapInputs';
 import {capWorkPointDrop} from './columnCap';
 import {columnBaseElevation} from './columnBaseInputs';
@@ -250,16 +252,49 @@ function skeleton(cfg:RunwayConfig){
  return {p,depth,clipWidth,spectrum,N,trial,railArea};
 }
 
+/** AIST TR-13 §5.9.2: column brackets are recommended for support reactions up to about 50 kip. */
+export const bracketReactionLimit=50*kip;
+/**
+ * The largest unfactored support reaction with all cranes present, impact and the dead load (girder, rail and the
+ * support steel): supportReactions on the project as built so far (the girder sized), the basis of the AIST
+ * column-bracket recommendation (aistChecks column-brackets: the design analysis service reaction).
+ */
+export function serviceReactionEstimate(p:ProjectInput){
+ const r=supportReactions(p,sectionProperties(p.section));
+ return Math.max(0,...r.supports.map(s=>s.D+s.Cd+s.Cv+s.Ci));
+}
+/**
+ * The configuration and its skeleton, screened against the AIST TR-13 §5.9.2 column-bracket recommendation once the
+ * girder is known: above it a new structure bears on column caps over the new crane columns (the direct column
+ * bearing TR-13 points to; normalizeConfig then drops the flange tie), with the reason; an existing structure keeps its
+ * brackets, with a warning and the remedy.
+ */
+function screened(input:RunwayConfig){
+ const {config,changes}=configOf(input);let cfg=config,sk=skeleton(cfg);
+ if(cfg.scope!=='design')return {config:cfg,changes,sk};
+ const R=serviceReactionEstimate(sk.p);
+ if(cfg.support==='column-cap'||R<=bracketReactionLimit)return {config:cfg,changes,sk,reaction:R};
+ const about=`about ${cfg.units==='SI'?`${Math.round(R/1000)} kN (${Math.round(R/kip)} kip)`:`${Math.round(R/kip)} kip`}`,limit=cfg.units==='SI'?'222 kN (50 kip)':'50 kip';
+ if(cfg.structure==='new'){
+  const n=normalizeConfig({...cfg,support:'column-cap'});
+  changes.push(`The support reaction, ${about}, exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets: the girders bear on column caps over the new crane columns (direct column bearing).`,...n.changes);
+  cfg=n.config;sk=skeleton(cfg);
+ }else changes.push(`Support reaction ${about} exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets; consider new crane columns with column caps, or obtain the engineer of record's acceptance.`);
+ return {config:cfg,changes,sk,reaction:R};
+}
+
 /** What a configuration will produce, for the configurator's summary: crane data, duty, rail and girder. */
 export function previewConfig(input:RunwayConfig){
- const {config:cfg,changes}=configOf(input),{p,depth,trial,spectrum}=skeleton(cfg);
+ const {config:cfg,changes,sk,reaction}=screened(input),{p,depth,trial,spectrum}=sk;
  const crane=estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control),structure=cfg.scope==='analysis'?undefined:cfg.structure==='new'?(cfg.columnShape??newColumnFor(cfg.capacity)):cfg.support==='by-others'?undefined:(cfg.columnShape??existingColumnFor(cfg.capacity));
- return {config:cfg,changes,crane,spectrum,railDepth:depth,girder:p.section.name,trial:trial&&{utilization:trial.utilization,deflection:trial.deflection,lateral:trial.lateral,weight:trial.weight},column:structure,verticalLimit:p.verticalLimit};
+ return {config:cfg,changes,crane,spectrum,railDepth:depth,girder:p.section.name,trial:trial&&{utilization:trial.utilization,deflection:trial.deflection,lateral:trial.lateral,weight:trial.weight},column:structure,verticalLimit:p.verticalLimit,
+  /** Largest unfactored support reaction (all cranes, impact, dead load), for the AIST column-bracket recommendation. */
+  reaction};
 }
 
 /** The configured project. Unknown supplier, survey and site data are fictitious examples, marked as such. */
 export function buildProject(input:RunwayConfig):ProjectInput{
- const cfg=configOf(input).config,{p,depth,clipWidth,spectrum,N,railArea}=skeleton(cfg),spans=p.spans;
+ const {config:cfg,sk}=screened(input),{p,depth,clipWidth,spectrum,N,railArea}=sk,spans=p.spans;
  p.configurator={...cfg};
  const scopeText=`${cfg.bays} ${cfg.system==='simple'?'simply supported':'continuous'} ${cfg.span}-ft bay${cfg.bays>1?'s':''}, ${p.section.name} girder${cfg.bays>1?'s':''}, ${cfg.cranes===2?'two':'one'} ${+cfg.capacity.toFixed(2)}-ton ${cfg.control} crane${cfg.cranes===2?'s':''}`;
  if(cfg.scope==='analysis'){
@@ -338,6 +373,8 @@ export function buildProject(input:RunwayConfig):ProjectInput{
    p.columnCap.plate={...p.columnCap.plate,width:Math.max(p.columnCap.plate.width,up(capWidth,.5*inch))};
    // The girder's bearing stiffener pair lands between the column flanges.
    const clear=(w.d-2*w.tf)*inch;d.bearing.stiffenerWidth=Math.min(d.bearing.stiffenerWidth,Math.floor((clear-p.section.tw)/2/(inch/8)+1e-9)*inch/8);
+   // The cap sized for the reactions (sizeColumnCap): plate, all-around fillets, cap stiffeners and the bearing bolts.
+   const sized=sizeColumnCap(p);p.columnCap=sized.columnCap;d.endBearing=sized.details!.endBearing;
    p.longitudinalBracing.height=col.seatElevation-capWorkPointDrop(p);
   }else attachBracket(p,cfg,shape,reach,true);
   p.notes=`Example configuration generated by the CraneCalc configurator; fictitious crane, supplier, site and owner data, to be replaced with project data. Scope: ${scopeText}, on new freestanding ${shape} columns with ${cfg.support==='column-cap'?'column caps':bracketText(cfg)}, base plates, anchor rods and spread footings, and crane-level rod X-bracing; the existing building carries no crane load. Seismic: ordinary steel cantilever column system across the runway and rod bracing not specifically detailed for seismic resistance along it, Seismic Design Category B.`;
@@ -355,11 +392,14 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  * clear a new column's bracing gussets), at the reach the sized tie needs (attachTie: the shortest at which the tie
  * passes its checks), kept as it is. The tie owns its column-end release travel, sized for the bracket's deflection
  * limit with the cranes and impact (sizeFlangeTie), so the bracket's release coordination (bracketSizingRatios
- * 'release') holds wherever its deflection check does and never grows the bracket.
+ * 'release') holds wherever its deflection check does and never grows the bracket. The rolled W stub likewise
+ * (sizeRolledBracket): the stub shape, spreader seat, flange joint and fillets, bearing stiffeners and the full-depth
+ * continuity plates an existing column needs (a new column's only where they clear its bracing gussets).
  */
 function withWeldedBracket(p:ProjectInput):ProjectInput{
  const b=p.details?.bracket;
  if(b?.enabled&&weldedRibBracket(b))p.details!.bracket=sizeWeldedBracket(p,.9,{reach:'fixed'}).details!.bracket;
+ else if(b?.enabled&&isRolledBracket(b))p.details!.bracket=sizeRolledBracket(p,.9,{reach:'fixed'}).details!.bracket;
  return p;
 }
 /** The sizing ratios of a sized paired-bar or flexible-plate tie on a designed bracket (tieSizingRatios), else none. */
