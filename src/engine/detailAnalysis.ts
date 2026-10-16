@@ -2,7 +2,7 @@ import {finiteLife,fatigueCoefficient,fatigueThreshold,KSI} from './fatigueConst
 import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
-import {flangeTieGeometry,tiePlies} from './tieGeometry';
+import {flangeTieGeometry,tieLine,tiePlies} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
 import {createBracketCollector} from './bracketDesign';
@@ -11,13 +11,13 @@ import {createExistingBracketCollector} from './existingBracket';
 import {createRolledBracketCollector} from './rolledBracket';
 import {createTaperedHaunchCollector} from './taperedHaunch';
 import {bracketSeat} from './rolledBracketInputs';
-import { LateralTorsionBeam } from './lateralTorsion';
+import { LateralTorsionBeam,type LateralTorsionStation } from './lateralTorsion';
 import {meshTolerance} from './meshNodes';
 import { beamSystem,momentAt } from './beam';
 import { boltProperties,plateMember,compressionResistance } from './connectionStrength';
 import type { RunwayCaseEvent,RunwayCaseObserver } from './designAnalysis';
 import type { ProjectInput,Properties } from './types';
-import type { FatigueDetailResult,InterfaceAction,RunwayCaseRecord,RunwayDetailResults } from './runwayDetails';
+import type { FatigueDetailResult,FlangeStressParts,InterfaceAction,RunwayCaseRecord,RunwayDetailResults } from './runwayDetails';
 import { railClipResponse } from './railClip';
 import { railTopAboveSteel,railClipInput } from './railSeat';
 import {tractionBays,railClipStations,girderSegments,independentBearings,endGridOverhang,endGridCentered} from './simpleSupports';
@@ -31,8 +31,20 @@ import {runwayEnds} from './continuation';
 import {activeColumnCap} from './columnCapInputs';
 import {capForkStiffness,createColumnCapCollector} from './columnCap';
 import {capAngleBraceSystem,capAngleFatigueDetails} from './capAngleTie';
-import {capTieLine} from './capAngle';
 
+/**
+ * Normal stress terms at a flange's tips from a station of the lateral/torsional solution (AISC DG9; the H3.3 first-yield
+ * check), recovered at the stiffness the bay was solved with, so they are the internal forces of that analysis (AISC
+ * 360-16 C2.3 and Appendix 1: the required strengths are those of the reduced-stiffness analysis): lateral bending
+ * M_y = kE·I_y|v″| and warping σ_w = kE·W_no|θ″| at each flange (W: its normalized warping function at the tips), k the
+ * stiffness factor of the solve (0.8 for strength, 1 for service and fatigue). A coupled second-order solve (geometric
+ * multiplier α > 0) carries the rotated major moment in v″ already (Vlasov equilibrium E·I_y·v″ = M_y,first-order + θM_x),
+ * so θM_x is a separate term only for a first-order solve (α = 0).
+ */
+export function flangeStressTerms(s:Pick<LateralTorsionStation,'curvature'|'warpingCurvature'|'twist'>,o:{E:number;factor:number;multiplier:number;Iy:number;M:number;W:{top:number;bottom:number}}){
+ const Ek=o.factor*o.E,w=Ek*Math.abs(s.warpingCurvature);
+ return {My:Ek*Math.abs(s.curvature)*o.Iy,thetaM:o.multiplier>0?0:Math.abs(o.M*s.twist),warping:{top:w*o.W.top,bottom:w*o.W.bottom}};
+}
 export function braceSystem(p:ProjectInput){
  // The cap tieback angle: its tie plate member and the series stiffness of its plate, legs, bolts, shims and column flange.
  const capAngle=capAngleBraceSystem(p);if(capAngle)return capAngle;
@@ -90,7 +102,13 @@ export function automaticFatigueDetails(p:ProjectInput){
  // (welds transverse to the stress) by its length a along the stress and thickness b. The crack starts at the
  // toe of each end fillet on the flange, one weld leg beyond the saddle end.
  const sa=tie?.attachment,inch=25.4,saddleCategory=!sa?'E1':sa.saddleLength<2*inch?'C':sa.saddleLength<=Math.min(12*sa.saddleThickness,4*inch)?'D':sa.saddleThickness<=.8*inch?'E':'E1';
- if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} · end fillet toe ${sign<0?1:2} / ${point}`,x:v.tieX+sign*(tie.attachment.saddleLength/2+tie.attachment.weldSize),point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.1, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment: toe of the transverse end fillet on the flange; global stress plus the local flange bending range over the effective width (flange-tie-flange)`});
+ if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} · end fillet toe ${sign<0?1:2} / ${point}`,x:v.tieX+sign*(tie.attachment.saddleLength/2+tie.attachment.weldSize),point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.1, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment along the runway: toe of the transverse end fillet on the flange under the girder's longitudinal stress (the local flange bending across the flange is its own register point, SL)`});
+ // The tie's local flange bending (the couple F·h over the flange's effective width, flange-tie-flange) is a stress across
+ // the flange, a different direction and crack site from the longitudinal stress at the toes: for it the attachment
+ // dimension parallel to the stress is the saddle width across the flange, item 7.1 by that width and the saddle
+ // thickness (typically E′), at the end fillets' terminations. Never added to the longitudinal range.
+ const across=!sa||!tie?'E1':tie.rootLength<2*inch?'C':tie.rootLength<=Math.min(12*sa.saddleThickness,4*inch)?'D':sa.saddleThickness<=.8*inch?'E':'E1';
+ if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SL${i}-${sign}-${point}`,name:`Flange saddle ${i+1} · end fillet ${sign<0?1:2} termination, across the flange / ${point}`,x:v.tieX+sign*tie.attachment.saddleLength/2,point,category:across,reference:`AISC Table A-3.1 item 7.1, Category ${across==='E1'?'E′':across} for the ${(tie.rootLength/inch).toFixed(2)} in saddle width across the flange (parallel to the local flange bending stress) and ${(tie.attachment.saddleThickness/inch).toFixed(2)} in thickness: termination of the transverse end fillet; the local flange bending range over the effective width (flange-tie-flange), not added to the longitudinal stress`});
  // Cap tieback angle: bolt holes in the column-side channel flange near each girder end.
  list.push(...capAngleFatigueDetails(p));
  // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
@@ -201,13 +219,28 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const cb=gradient*f1Factor;
   return {segment:[a,b] as [number,number],mmax,quarter,gradient,y:yLoad,h:depth,factor:f1Factor,cb,capacity:c.capacity(cb*c.mocr)};
  };
- // The top restraint acts where the tie acts on the girder: the cap tieback's tie plate line above the cap (M6), else
- // the W top flange; the bottom restraint (end bearing bolts or bottom tie) at the W bottom flange.
- const tieLine=capTieLine(p),topRestraint=cap?(tieLine!==undefined?tieLine-cap.shearCenter:cap.topOffset):undefined;
- const mechanics=cap?{Iy:cap.Iy,topOffset:topRestraint,bottomOffset:cap.bottomOffset,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{};
+ // Each restraint acts where its tie acts on the girder (tieLine): the cap tieback's tie plate line above the cap (M6),
+ // the bar or plate centroid of a direct flange saddle tie or of the bars on the bearing-stiffener gusset (a bar force F
+ // at a drop e below the flange is F at the flange plus the torque F·e), the flange itself on a column cap fork; the
+ // bottom restraint at the bottom tie's bar line, or the W bottom flange (end bearing bolts). Offsets from the shear center
+ // set the restraint stiffness k·y², the restraint torque and the interface torque alike.
+ const shearCenter=cap?cap.shearCenter:p.section.d/2,topRestraint=tieLine(p)-shearCenter,bottomRestraint=tieLine(p,'bottom')-shearCenter;
+ const mechanics=cap?{Iy:cap.Iy,topOffset:topRestraint,bottomOffset:bottomRestraint,centroidOffset:cap.centroidOffset,monosymmetry:cap.beta,polarRadiusSquared:cap.polarRadiusSquared}:{topOffset:topRestraint,bottomOffset:bottomRestraint};
  const interfaceExtremes=new Map<string,InterfaceAction>(),seen=new Set<string>(),observedSets=new Set<string>(),bayStates=new Map<string,{x:number;top:number;bottom:number}[]>(),forces=createSupportForceEnvelope(supports);
  const snap=(x:number)=>supports.find(v=>Math.abs(v-x)<1e-6)??x;
  const braceFatigue={min:0,max:0},braceEndFatigue={min:0,max:0},verticalFatigue={min:0,max:0};
+ // Restraint forces of each girder end (top and bottom) in each duty bin, for the saddle's transverse register points (SL).
+ const endForceBins=new Map<string,Record<'top'|'bottom',{min:number;max:number}[]>>();
+ const endForce=(a:{bay:number;end:'left'|'right';top:number;bottom:number},bin:number)=>{const k=`${a.bay}:${a.end}`;let v=endForceBins.get(k);if(!v){v={top:details.spectrum.map(()=>({min:0,max:0})),bottom:details.spectrum.map(()=>({min:0,max:0}))};endForceBins.set(k,v);}
+  for(const side of ['top','bottom'] as const){const b=v[side][bin];b.min=Math.min(b.min,a[side]);b.max=Math.max(b.max,a[side]);}};
+ // St Venant torque each support takes from each girder end (key: bay and end, or the support of a continuous girder):
+ // its strength envelope and its signed extremes in each duty bin, for the restraint diaphragm (stiffener-lateral-flexure).
+ const torqueEnds=new Map<string,{x:number;bay?:number;end?:'left'|'right';torque:number;bins:{min:number;max:number}[];governing?:{id:string;combination:string}}>();
+ const deliverTorque=(key:string,x:number,T:number,e:RunwayCaseEvent,bin:number,where:{bay?:number;end?:'left'|'right'})=>{
+  let v=torqueEnds.get(key);if(!v){v={x,...where,torque:0,bins:details.spectrum.map(()=>({min:0,max:0}))};torqueEnds.set(key,v);}
+  if(e.kind==='strength'){if(Math.abs(T)>v.torque){v.torque=Math.abs(T);v.governing={id:e.id,combination:e.combination};}}
+  else if(bin>=0){const b=v.bins[bin];b.min=Math.min(b.min,T);b.max=Math.max(b.max,T);}
+ };
  // Unfactored dead load for the Appendix 3.1 peak and the register peaks: major bending from the girder, cap, rail and
  // entered live load; torsion of each bay from the eccentric rail weight, with the modeled restraints. Solved once.
  const deadQ=girderDeadLoad(p,props.weight)+(p.aist?.liveLoad??0),deadTorsion=new Map<number,ReturnType<LateralTorsionBeam['solve']>>();
@@ -228,7 +261,10 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const flangeW=cap?{top:Math.max(...cap.fibres.filter(v=>v.y>0).map(v=>Math.abs(v.omega))),bottom:Math.max(...cap.fibres.filter(v=>v.y<0).map(v=>Math.abs(v.omega)))}:{top:props.h0*p.section.bf/4,bottom:props.h0*p.section.bf/4};
  result.flangeWarping=flangeW;
  const flangeParts:NonNullable<RunwayDetailResults['flangeParts']>=result.flangeParts={top:{P:0,M:0,My:0,thetaM:0,warping:0},bottom:{P:0,M:0,My:0,thetaM:0,warping:0}};
- function flangePeak(k:'top'|'bottom',value:number,e:RunwayCaseEvent,x:number,v:{P:number;M:number;My:number;thetaM:number;warping:number}){if(value>flangeNormal[k]){flangeNormal[k]=value;flangeParts[k]=v;result.governing[k==='top'?'normalStressTop':'normalStressBottom']={id:e.id,combination:e.combination,x,value};}}
+ // The solved beam, station and major moment of each flange's governing stress: its first-order terms and multiplier are
+ // found once, in finish().
+ const peakSource:{top?:{beam:LateralTorsionBeam;index:number;M:number};bottom?:{beam:LateralTorsionBeam;index:number;M:number}}={};
+ function flangePeak(k:'top'|'bottom',value:number,e:RunwayCaseEvent,x:number,v:FlangeStressParts){if(value>flangeNormal[k]){flangeNormal[k]=value;flangeParts[k]=v;result.governing[k==='top'?'normalStressTop':'normalStressBottom']={id:e.id,combination:e.combination,x,value};}}
  const evaluate=(e:RunwayCaseEvent,bin=-1)=>{
   const key=JSON.stringify([e.kind,bin,e.wheels,e.q,e.railTorquePerLength,e.axial,e.horizontalCrane,e.cranes]);
   if(seen.has(key))return;seen.add(key);result.cases++;
@@ -241,6 +277,9 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const wheels=e.wheels.filter(w=>w.x>=start-1e-6&&(w.x<end-1e-6||(end===L&&w.x<=end+1e-6)));
    const stations=allStations.filter(x=>x>=start-1e-6&&x<=end+1e-6);
    const strength=e.kind==='strength',stiffnessFactor=strength?.8:1,totalH=e.wheels.reduce((a,w)=>a+Math.abs(w.h),0);
+   // Strength cases are solved second-order (geometric multiplier 1 LRFD, 1.6 ASD) at 0.8 stiffness; the solved bay's
+   // beam is kept for the first-order terms and multiplier of a governing flange stress (flangeParts, finish).
+   const geometry=strength?(p.method==='LRFD'?1:1.6):0;let bayBeam:LateralTorsionBeam|undefined;
    // A bay's lateral/torsional response depends only on its own loads. When the same bay state recurs
    // (other cranes elsewhere, a repeated combination), every peak it can set is already recorded, so only
    // its restraint forces are needed again for the shared supports and interfaces.
@@ -261,26 +300,34 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     // Apply the full UDL at rail height for the stability test conservatively.
     distributedVertical:strength?e.q:0,distributedHeight:z
    });
-   const beam=beamWith(restraintsAt(brScale>0)),stability=beam;
+   const beam=beamWith(restraintsAt(brScale>0)),stability=beam;bayBeam=beam;
    let ownMultiplier:number|undefined;
    if(strength&&!stability.isStable(result.criticalMultiplier)){
     const critical=stability.criticalMultiplier(result.criticalMultiplier);
     if(critical.value<result.criticalMultiplier){result.criticalMultiplier=critical.value;result.governing.criticalMultiplier={id:e.id,combination:e.combination,x:start,value:critical.value};ownMultiplier=critical.value;}
    }
-   const geometry=strength?(p.method==='LRFD'?1:1.6):0;
    // A girder that buckles below the applied load has no equilibrium state to recover: record the case and let
    // the stability check (whose multiplier is then below 1) report the failure instead of stopping the analysis.
    try{r=beam.solve(geometry);}catch(error){if(!(strength&&error instanceof Error&&error.message.startsWith('Lateral/torsional instability')))throw error;}
    if(!r){result.unstableCases=(result.unstableCases??0)+1;restraintForces=stations.map(x=>({x:x-start,top:0,bottom:0}));bayStates.set(bayKey,restraintForces);}
    else{
    result.residual=Math.max(result.residual,r.residual);
+   // Restraint diaphragm: the St Venant torque G_k·J·θ′ (0.8G for strength) each girder end delivers to its support
+   // (simple bays: the bay's own ends; a continuous girder: its runway ends and the jump across an interior support).
+   if(e.kind!=='service'){const T=(x:number,side:'left'|'right')=>stiffnessFactor*G*props.J*r!.at(x,side).twistRate;
+    if(p.system==='continuous')for(const [i,x] of supports.entries())deliverTorque(`${i}`,x,(i?T(x-start,'left'):0)-(i<supports.length-1?T(x-start,'right'):0),e,bin,{});
+    else{deliverTorque(`${bayIndex+1}:left`,start,T(0,'right'),e,bin,{bay:bayIndex+1,end:'left'});deliverTorque(`${bayIndex+1}:right`,end,T(end-start,'left'),e,bin,{bay:bayIndex+1,end:'right'});}}
+   restraintForces=r.restraints.map(v=>({x:v.x,top:v.top,bottom:v.bottom}));bayStates.set(bayKey,restraintForces);
+   }
    if(strength){
     // Load-height LTB: the elastic critical moment of this case (wheels at the rail head, UDL at rail height, axial
     // load, modeled restraints and moment gradient) is Mcr = lambda M / 0.8 because the eigen model carries 0.8
     // stiffness. It enters F2 / F4 / F5 as Cb = Mcr / Mocr (AISC 360-16 F1 and Commentary F1), never above 1, and the
     // strength never exceeds phi Mcr. A case is screened out when it is stable at the multiplier that would just reach
-    // the governing utilization so far.
-    let Mx=0,xm=start;for(const st of r.stations){const m=moment(st.x+start);if(Math.abs(m)>Math.abs(Mx)){Mx=m;xm=st.x+start;}}
+    // the governing utilization so far. A case that buckles below the applied load (no second-order state) enters with
+    // its own multiplier like any other, so it never lowers the D/C. The moment is sampled at the mesh nodes and element
+    // midpoints, the stations of a solution.
+    let Mx=0,xm=start;for(const x of stability.nodes.flatMap((v,i,a)=>i?[(a[i-1]+v)/2,v]:[v])){const m=moment(x+start);if(Math.abs(m)>Math.abs(Mx)){Mx=m;xm=x+start;}}
     const c=Mx>=0?curves.positive:curves.negative,M=Math.abs(Mx);
     if(M>0){
      const record=(u:number,capacity:number,critical:number)=>{if(u>loadHeight.utilization)Object.assign(loadHeight,{utilization:u,demand:M,capacity,length:p.unbracedLength,critical,cb:Number.isFinite(critical)?c.cb(critical):1,mocr:c.mocr,sign:Mx>=0?1:-1,id:e.id,combination:e.combination,x:xm,commentary:commentary(moment,xm,start,end,wheels.map(w=>w.x),c)});};
@@ -296,8 +343,6 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
      }
     }
    }
-   restraintForces=r.restraints.map(v=>({x:v.x,top:v.top,bottom:v.bottom}));bayStates.set(bayKey,restraintForces);
-   }
    }
    if(p.system==='simple')for(const [endName,x] of [['left',start],['right',end]] as const){
     const lateral=restraintForces.find(re=>Math.abs(re.x-(x-start))<1e-6)!;
@@ -309,28 +354,32 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    for(const re of restraintForces){const x=snap(re.x+start),old=reactions.get(x)??{top:0,bottom:0};reactions.set(x,{top:old.top+re.top,bottom:old.bottom+re.bottom});}
    if(!r)continue;
    for(const s of r.stations){
-    const x=s.x+start,M=moment(x),warping=E*Math.abs(s.warpingCurvature)*props.h0*p.section.bf/4;
+    const x=s.x+start,M=moment(x);
     if(strength){
      // Sum component magnitudes for a conservative corner-stress envelope.
      // Whole-section bending + explicit warping replaces force-couple stresses
      // in this supplementary check; no double counting of the old flange model.
-     // Each flange at its own extreme fibre (AISC DG7 / DG9): P/A + Mx/Sx of that flange + lateral bending (M_y + theta Mx)
-     // and warping E W_no theta'' at that flange's tips. The larger is the girder's combined normal stress.
-     const P0=Math.abs(e.axial),M0=Math.abs(M),My0=E*Math.abs(s.curvature)*props.Iy,tM0=Math.abs(M*s.twist),w0=E*Math.abs(s.warpingCurvature);
-     const flange=(k:'top'|'bottom')=>P0/props.A+M0/flangeS[k]+(My0+tM0)*flangeHalf[k]/props.Iy+(cap?w0*flangeW[k]:warping);
+     // Each flange at its own extreme fibre (AISC DG7 / DG9): P/A + Mx/Sx of that flange + lateral bending M_y and warping
+     // E W_no theta'' at that flange's tips, recovered at the analysis stiffness (flangeStressTerms: 0.8E, no separate
+     // theta Mx in the coupled second-order solve). The larger is the girder's combined normal stress.
+     const P0=Math.abs(e.axial),M0=Math.abs(M),t=flangeStressTerms(s,{E,factor:stiffnessFactor,multiplier:geometry,Iy:props.Iy,M,W:flangeW});
+     const flange=(k:'top'|'bottom')=>P0/props.A+M0/flangeS[k]+(t.My+t.thetaM)*flangeHalf[k]/props.Iy+t.warping[k];
      const top=flange('top'),bottom=flange('bottom');
      peak('normalStress',Math.max(top,bottom),e,x);
-     if(top>flangeNormal.top)flangePeak('top',top,e,x,{P:P0,M:M0,My:My0,thetaM:tM0,warping:cap?w0*flangeW.top:warping});
-     if(bottom>flangeNormal.bottom)flangePeak('bottom',bottom,e,x,{P:P0,M:M0,My:My0,thetaM:tM0,warping:cap?w0*flangeW.bottom:warping});
+     const parts=(k:'top'|'bottom')=>{const v={P:P0,M:M0,My:t.My,thetaM:t.thetaM,warping:t.warping[k],theta:s.twist,warpingCurvature:s.warpingCurvature,factor:stiffnessFactor,multiplier:geometry};peakSource[k]={beam:bayBeam!,index:r!.stations.indexOf(s),M};return v;};
+     if(top>flangeNormal.top)flangePeak('top',top,e,x,parts('top'));
+     if(bottom>flangeNormal.bottom)flangePeak('bottom',bottom,e,x,parts('bottom'));
      const V=e.verticalReactions.reduce((a,v)=>a+(v.x<=x+1e-7?v.r:0),0)-e.wheels.reduce((a,w)=>a+(w.x<=x+1e-7?w.p:0),0)-e.q*x;
      const h=p.section.d-2*p.section.tf;
-     const tauWeb=1.5*Math.abs(V)/(h*p.section.tw)+G*p.section.tw*Math.abs(s.twistRate);
-     const tauFlange=1.5*totalH/(cap?Math.min(2*p.section.bf*p.section.tf,p.section.capWidth*p.section.capTw):2*p.section.bf*p.section.tf)+G*(cap?.maxThickness??p.section.tf)*Math.abs(s.twistRate)+E*Math.abs(s.warpingThird)*(cap?.shearCoefficient??props.h0*p.section.bf**2/16);
+     // St Venant and warping shear at the analysis stiffness (0.8G, 0.8E), as the normal stresses.
+     const Gk=stiffnessFactor*G,Ek=stiffnessFactor*E;
+     const tauWeb=1.5*Math.abs(V)/(h*p.section.tw)+Gk*p.section.tw*Math.abs(s.twistRate);
+     const tauFlange=1.5*totalH/(cap?Math.min(2*p.section.bf*p.section.tf,p.section.capWidth*p.section.capTw):2*p.section.bf*p.section.tf)+Gk*(cap?.maxThickness??p.section.tf)*Math.abs(s.twistRate)+Ek*Math.abs(s.warpingThird)*(cap?.shearCoefficient??props.h0*p.section.bf**2/16);
      peak('shearStress',Math.max(tauWeb,tauFlange),e,x);
     }
     if(cap&&(strength||e.kind==='fatigue')){
      const V=e.verticalReactions.reduce((a,v)=>a+(v.x<=x+1e-7?v.r:0),0)-e.wheels.reduce((a,w)=>a+(w.x<=x+1e-7?w.p:0),0)-e.q*x;
-     const flow=Math.abs(V)*cap.channelQ/(2*props.Ix)+E*Math.abs(s.lateralThird)*cap.channelHalfFirstMoment+E*Math.abs(s.warpingThird)*cap.channelHalfWarpBound;
+     const flow=Math.abs(V)*cap.channelQ/(2*props.Ix)+stiffnessFactor*E*(Math.abs(s.lateralThird)*cap.channelHalfFirstMoment+Math.abs(s.warpingThird)*cap.channelHalfWarpBound);
      if(strength)result.cap!.longitudinalFlow=Math.max(result.cap!.longitudinalFlow,flow);
      else result.cap!.fatigueFlows[bin]=Math.max(result.cap!.fatigueFlows[bin],flow);
     }
@@ -346,7 +395,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     }
    }
    if(e.kind==='fatigue')for(let i=0;i<fatigue.length;i++){
-    const f=detailInputs[i];if(f.x<start||f.x>end)continue;
+    const f=detailInputs[i];if(f.x<start||f.x>end||f.id.startsWith('SL'))continue;
     const s=r.at(f.x-start),y=f.point.startsWith('top')?props.h0/2:-props.h0/2,xEdge=f.point.endsWith('right')?p.section.bf/2:-p.section.bf/2;
     // Major-axis stress at the outer flange face; the sectorial coordinate uses the flange centroid distance h0/2.
     const points=cap?cap.fibres.filter(v=>(f.point.startsWith('top')?v.y>0:v.y<0)&&(f.point.endsWith('right')?v.x>0:v.x<0)):[{x:xEdge,y:Math.sign(y)*p.section.d/2,omega:xEdge*y}];
@@ -424,7 +473,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     const support=supports.indexOf(x);
     for(const c of concurrent(x)){
      const {id,sign,couple,ends}=c;
-     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple+(e.deadFactor??0)*gridHardware(x),top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:cap?r.top*topRestraint!+r.bottom*cap.bottomOffset:(r.top-r.bottom)*props.h0/2,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
+     const item:InterfaceAction={id,combination:e.combination,x,vertical:(e.verticalReactions.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+(e.adjacentReactions?.find(v=>Math.abs(v.x-x)<1e-6)?.r??0)+couple+(e.deadFactor??0)*gridHardware(x),top:r.top,bottom:r.bottom,longitudinal:delivered(x,{sign,ends}),torque:r.top*topRestraint+r.bottom*bottomRestraint,cranes:e.cranes,lateralSign:e.lateralSign,controls:[],ends};
      if(ends)item.seatMoment=ends.reduce((sum,v)=>sum+v.vertical*v.offset,0);else if(endBearingOffset(x))item.seatMoment=item.vertical*Math.sign(endBearingOffset(x))*Lbr/2;
      if(support>=0)forces.add(support,supportSet(x,c));
      for(const component of ['vertical','top','bottom','longitudinal','torque'] as const)for(const dir of [-1,1]){
@@ -459,7 +508,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     const bound=result.railFatigueBins[bin];bound.vertical=Math.max(bound.vertical,P);bound.lateral=Math.max(bound.lateral,H);
    }
    for(const r of reactions.values()){braceFatigue.min=Math.min(braceFatigue.min,r.top,r.bottom);braceFatigue.max=Math.max(braceFatigue.max,r.top,r.bottom);}
-   for(const a of endActions)if(!a.existing){braceEndFatigue.min=Math.min(braceEndFatigue.min,a.top);braceEndFatigue.max=Math.max(braceEndFatigue.max,a.top);}
+   for(const a of endActions)if(!a.existing){braceEndFatigue.min=Math.min(braceEndFatigue.min,a.top);braceEndFatigue.max=Math.max(braceEndFatigue.max,a.top);endForce(a,bin);}
    for(const r of e.verticalReactions){verticalFatigue.min=Math.min(verticalFatigue.min,r.r);verticalFatigue.max=Math.max(verticalFatigue.max,r.r);}
   }
  };
@@ -473,10 +522,20 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   }
  };
  const finish=()=>{
-  const deadBounds=detailInputs.map(f=>Math.abs(deadMoment(f.x))/props.Sx);
+  // The governing flange stresses: the twist, the case's elastic critical multiplier at the analysis stiffness, the same
+  // beam solved first-order (multiplier 0, θM_x then added as a first-order recovery) and the amplification of the lateral
+  // bending plus warping stress of that flange (second-order over first-order).
+  for(const k of ['top','bottom'] as const){const g=peakSource[k],v=flangeParts[k];if(!g)continue;
+   try{
+    const s1=g.beam.solve(0).stations[g.index],t1=flangeStressTerms(s1,{E,factor:v.factor??1,multiplier:0,Iy:props.Iy,M:g.M,W:flangeW});
+    const torsion=(My:number,w:number)=>My*flangeHalf[k]/props.Iy+w,first=torsion(t1.My,t1.warping[k]);
+    Object.assign(v,{lambda:g.beam.criticalMultiplier(128).value,first:{My:t1.My,thetaM:t1.thetaM,warping:t1.warping[k],theta:s1.twist,warpingCurvature:s1.warpingCurvature},amplification:first>0?torsion(v.My,v.warping)/first:undefined});
+   }catch{/* an ill-conditioned bay keeps its second-order terms only */}
+  }
+  const deadBounds=detailInputs.map(f=>f.id.startsWith('SL')?0:Math.abs(deadMoment(f.x))/props.Sx);
   for(const [bay,[start,end]] of groups.entries()){
    const deadT=deadBay(bay);
-   detailInputs.forEach((f,i)=>{if(f.x>=start&&f.x<=end){const v=deadT.at(f.x-start);deadBounds[i]+=E*Math.abs(v.curvature)*(cap?p.section.capWidth:p.section.bf)/2+E*Math.abs(v.warpingCurvature)*(cap?.omegaMax??props.h0*p.section.bf/4);}});
+   detailInputs.forEach((f,i)=>{if(f.x>=start&&f.x<=end&&!f.id.startsWith('SL')){const v=deadT.at(f.x-start);deadBounds[i]+=E*Math.abs(v.curvature)*(cap?p.section.capWidth:p.section.bf)/2+E*Math.abs(v.warpingCurvature)*(cap?.omegaMax??props.h0*p.section.bf/4);}});
   }
   // TR13 §3.10.2.3: Cds + liftFraction*Cvs + 0.5Css, without impact or
   // strength factors. Bound each bin by its own wheel-group force envelope.
@@ -490,9 +549,18 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   result.demands.braceFatigue=braceFatigue.max-braceFatigue.min;
   if(p.system==='simple')result.demands.braceEndFatigue=braceEndFatigue.max-braceEndFatigue.min;
   result.demands.verticalFatigue=verticalFatigue.max-verticalFatigue.min;
-  // The saddle toes add the local flange bending range over the flange's effective width, the same local stress as the
- // flange-tie-flange check (flangeTieResponse), to every duty bin.
- if(flangeTieGeometry(p)){const localRange=flangeTieResponse(p,result.demands.braceFatigue).flange;for(const f of fatigue)if(f.id.startsWith('SA'))for(const b of f.bins){b.minimum-=localRange/2;b.maximum+=localRange/2;}}
+  {const ends=[...torqueEnds.values()],range=(v:typeof ends[number])=>Math.max(0,...v.bins.map(b=>b.max-b.min));
+   if(ends.length){const top=ends.reduce((a,v)=>v.torque>a.torque?v:a);
+    result.diaphragm={torque:top.torque,range:Math.max(...ends.map(range)),bins:details.spectrum.map((_,i)=>Math.max(...ends.map(v=>v.bins[i].max-v.bins[i].min))),...(top.governing?{governing:{...top.governing,x:top.x}}:{}),
+     ends:ends.map(v=>({x:v.x,...(v.bay?{bay:v.bay,end:v.end}:{}),torque:v.torque,range:range(v)}))};}}
+  // The saddle's transverse register points (SL) take the local flange bending over the flange's effective width, the same
+ // local stress as the flange-tie-flange check (flangeTieResponse, linear in the tie force F = H/cos), from the range of
+ // their own girder end's restraint force at that flange in each duty bin; the SA toes keep the longitudinal stress alone
+ // (two stress directions, two crack sites, never added).
+ const saddles=flangeTieGeometry(p);
+ if(saddles){const unit=flangeTieResponse(p,1).flange/brace.cos;for(const f of fatigue){const m=f.id.match(/^SL(\d+)-/);if(!m)continue;
+  const st=saddles.stations[+m[1]],v=endForceBins.get(`${st.bay}:${st.end}`)?.[f.id.endsWith('top-right')?'top':'bottom'];
+  f.bins.forEach((b,k)=>{const local=unit*(v?v[k].max-v[k].min:0);b.minimum=-local/2;b.maximum=local/2;});}}
 
   for(const [i,f] of fatigue.entries()){for(const b of f.bins){b.range=b.maximum-b.minimum;Object.assign(b,fatigueSpectrumBin(f.category as keyof typeof constants,b.range,b.cycles));}f.range=Math.max(...f.bins.map(b=>b.range));f.damage=f.bins.reduce((a,b)=>a+b.damage,0);f.peak=deadBounds[i]+Math.max(...f.bins.flatMap(b=>[Math.abs(b.minimum),Math.abs(b.maximum)]));}
   const grouped=new Map<string,InterfaceAction>();
