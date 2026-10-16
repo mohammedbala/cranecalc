@@ -108,8 +108,9 @@ describe('configured tie proportions',()=>{
   // = 0.172 in -> 3/16 in.
   expect(t.release!.travel).toBeCloseTo(3/16*inch,9);
   expect(c.gauge).toBeCloseTo(r.minimumGauge,9);expect(t.width).toBeGreaterThanOrEqual(c.gauge+2*c.edge-1e-9);
-  // The reach grows to 22 in for the bars' flexible length: 9 1/4 in between the gussets.
-  expect(p.details!.bracket!.reach).toBeCloseTo(22*inch,9);expect(g.face).toBeCloseTo(22*inch,9);
+  // The reach grows to 21 in for the bars' flexible length, the bars widened for the axial share of H1 (a wider bar
+  // adds compression strength, not imposed-movement ratio): 22 in with bars at most 3 in wider than their bolt pattern.
+  expect(p.details!.bracket!.reach).toBeCloseTo(21*inch,9);expect(g.face).toBeCloseTo(21*inch,9);
   const free=t.length-2*((c.rows-1)*c.pitch+2*c.edge)-columnGussetExtension(p);
   expect(free/inch).toBeGreaterThan(8);
   // Under the sizing estimates (the fatigue range 1.25 H against the analysis's 1.05 H) every ratio is near or below one;
@@ -124,9 +125,9 @@ describe('configured tie proportions',()=>{
   expect(sizingLimit(r,'tie-pitch')).toBe(1);expect(sizingLimit(r,'tie-move-strength',.95)).toBe(1);
  });
  it('sizes the tie before the bracket: the bracket at the reach the tie needs, the release travel the tie\'s own',()=>{
-  // The 1/4 in bars on the bearing stiffener pass at a 22 in reach, so the welded seats are sized there.
+  // The 1/4 in bars on the bearing stiffener pass at a 21 in reach, so the welded seats are sized there.
   const p=templateProject('t01'),b=p.details!.bracket!,t=p.details!.brace;
-  expect(b.reach).toBeCloseTo(22*inch,9);expect(stiffenerTieGeometry(p)!.face).toBeCloseTo(b.reach,9);expect(t.length).toBeCloseTo(t.reach,9);
+  expect(b.reach).toBeCloseTo(21*inch,9);expect(stiffenerTieGeometry(p)!.face).toBeCloseTo(b.reach,9);expect(t.length).toBeCloseTo(t.reach,9);
   // The slots take the bracket at its deflection limit with the cranes and impact, the end rotation over the setback
   // and the positioning allowance: the bracket sizing's release coordination holds wherever its deflection check does.
   const set=bracketSizingSet(p),rel=set.release!,r=bracketSizingRatios(p,set);

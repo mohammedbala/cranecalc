@@ -339,12 +339,17 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   if(better(r,best))best=r;
   return r;
  };
+ // Widening of the bars beyond the bolt pattern, a search bound only: the fit, edge, gusset and flange ratios (with their
+ // limits) decide how wide a bar may be. A wider bar adds axial strength (area and weak-axis buckling strength grow with
+ // the width) without changing the ratio of the imposed out-of-plane movement (its moment and its strength both grow
+ // with the width), so it relieves the axial part of H1. 3 in stopped a 4 in bar at 7 in where 8 in met the limit.
+ const maxWiden=6*inch;
  // Bolt ratios scaled to a smaller bolt (shear area ~ d^2): room for it within 0.8 of the target.
  const boltRoom=(r:Trial,from:number,to:number)=>Math.max(0,...['tie-bolt','tie-slip','tie-prying','tie-bearing','plate-tie-bolt-fatigue'].map(id=>r.ratios[id]??0))*(from/to)**2<=.8*target;
  // The girder flange under the saddle: its local checks, and whether they keep within the target when a 1/4 in wider
  // bar drops the tie line (the lever on the flange) by 1/8 in.
  const flangeLocalOf=(r:Trial)=>Math.max(r.ratios['flange-tie-flange']??0,r.ratios['saddle-across-fatigue']??0,r.ratios['plate-tie-keeper-flange']??0);
- const widenRoom=(r:Trial)=>{const lever=flangeTieGeometry(r.q)?.topDrop;return !lever||flangeLocalOf(r)*(lever+inch/8)/lever<=target;};
+ const widenRoom=(r:Trial,widen=inch/4)=>{const lever=flangeTieGeometry(r.q)?.topDrop;return !lever||flangeLocalOf(r)*(lever+widen/2)/lever<=target;};
  // The step that relieves check k; false when there is none left. `grown`: the bolt has grown in this trial (a smaller
  // one is then not tried again); `movement`: a step was taken for the imposed movement (a longer tie would serve it).
  const step=(x:TieProportions,k:string,r:Trial,trial:{grown:boolean;movement:boolean})=>{
@@ -353,9 +358,13 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   if(imposedMovement.has(k)&&smaller&&!trial.grown&&boltRoom(r,x.diameter,smaller)){x.diameter=smaller;trial.movement=true;return true;}
   // Axial force with imposed movement: a wider bar adds compression strength without adding to the weak-axis moment
   // ratio of the imposed movement, where the widening left can bring the H1 sum to its limit.
-  if(k==='tie-move-strength'&&x.widen<3*inch-1e-6&&widenRoom(r)){
-   const w=r.q.details!.brace.width,limit=sizingLimit(r.ratios,k,target);
-   if(r.compression*(1-w/(w+3*inch-x.widen))>=r.ratios[k]-limit){x.widen+=inch/4;trial.movement=true;return true;}
+  if(k==='tie-move-strength'&&x.widen<maxWiden-1e-6&&widenRoom(r)){
+   const w=r.q.details!.brace.width,excess=r.ratios[k]-sizingLimit(r.ratios,k,target);
+   // In one step the widening the axial share needs, c(1 - w/(w + Δw)) = excess (each step is a whole evaluation).
+   if(r.compression*(1-w/(w+maxWiden-x.widen))>=excess){
+    const dw=Math.min(maxWiden-x.widen,Math.max(inch/4,up(w*excess/Math.max(r.compression-excess,1e-9),inch/4)));
+    if(widenRoom(r,dw)){x.widen+=dw;trial.movement=true;return true;}
+   }
   }
   if(gussetChecks.has(k)&&x.gusset<1.25*inch-1e-6){x.gusset+=inch/8;return true;}
   if(boltChecks.has(k)){const next=bolts.find(v=>v>x.diameter+1e-6);if(next){x.diameter=next;trial.grown=true;return true;}}
@@ -364,10 +373,10 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   // ratio to its limit (the stress over the effective width b_c, which the gusset height adds to).
   if(k==='flange-tie-column'||k==='flange-tie-column-fatigue'){
    const g=flangeTieGeometry(r.q),width=g?.receiver?columnFlangeWidth(r.q,g).width:0;
-   const travel=faceDemand(x.face).travel,room=(release?2*Math.max(0,travel+3/16*inch-x.travel):0)+Math.max(0,3*inch-x.widen);
+   const travel=faceDemand(x.face).travel,room=(release?2*Math.max(0,travel+3/16*inch-x.travel):0)+Math.max(0,maxWiden-x.widen);
    if(width>0&&r.ratios[k]*width/(width+room)<=sizingLimit(r.ratios,k,target)){
     if(release&&x.travel<travel+3/16*inch-1e-6){x.travel+=sixteenth;return true;}
-    if(x.widen<3*inch-1e-6&&widenRoom(r)){x.widen+=inch/4;return true;}
+    if(x.widen<maxWiden-1e-6&&widenRoom(r)){x.widen+=inch/4;return true;}
    }
   }
   // The saddle plate and the flange under it trade off: a thicker saddle bends less but moves the tie line (the lever on
@@ -407,7 +416,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
     r=next;
    }
    if(!r)continue;
-   opts.trace?.(face,thickness,r.governs,r.worst,{...x});
+   opts.trace?.(face,thickness,r.governs,r.worst,{...x})
    if(r.worst<=1)return r.q;
    if(better(r,atFace))atFace=r;
    // The imposed movement over its limit: a thicker bar or plate only adds to it, except to the axial force with imposed
@@ -423,6 +432,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   // slotted column gusset).
   if(!atFace||!faceMovement||evaluations>budget)break;
  }
+ return best?.q??p;
  return best?.q??p;
 }
 
