@@ -2,6 +2,7 @@ import katex from 'katex';
 import {references,tr13Clause} from '../engine/references';
 import {dcText} from '../engine/checkPresentation';
 import type {CheckResult,ProjectInput} from '../engine/types';
+import {dcOf} from '../engine/checkTaxonomy';
 import {toDisplay,unit,type Quantity} from '../engine/units';
 import {termsFor} from './equationTerms';
 
@@ -225,9 +226,12 @@ const firstSentence=(v:string)=>{
 };
 /** Checks repeating one equation, group and references over many stations or details. */
 const familyKey=(c:CheckResult)=>c.equation?`${c.group}|${c.equation}|${c.referenceIds.join(',')}`:c.id;
-/** The governing member: a failure first, then the largest finite demand/capacity. */
+/**
+ * The governing member: a failure first, then the largest demand/capacity, a part with no capacity (noCapacity, or a
+ * stored ratio that is infinite or above 1000) above every finite one, as checkTaxonomy ranks them (dcOf).
+ */
 export function governing(checks:CheckResult[]){
- const rank=(c:CheckResult)=>(c.status==='fail'?1e9:0)+(c.utilization!==undefined&&Number.isFinite(c.utilization)?Math.min(c.utilization,1e8):-1);
+ const rank=(c:CheckResult)=>(c.status==='fail'?1e9:0)+dcOf(c);
  return checks.reduce((a,b)=>rank(b)>rank(a)?b:a,checks[0]);
 }
 /** The equation cell: the check's equation inline, or what an equation-free check rests on. */

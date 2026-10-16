@@ -1,5 +1,4 @@
-// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
-import {dcText} from '../engine/checkPresentation';
+import {checkDcText,elementSummary,failingNote,inElements,sheetDc} from './sheetRatios';
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
@@ -13,7 +12,7 @@ import {flangeTieGeometry} from '../engine/tieGeometry';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapGeometry} from '../engine/columnCap';
 import {columnCapTitles} from './columnCapSheet';
-import {drawingLength,drawingElevation,plateInches,dimensionLength} from './drawingFormat';
+import {drawingLength,drawingElevation,plateInches,dimensionLength,limitLength} from './drawingFormat';
 import {dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {ribGeometry,ribDepthAt} from '../engine/bracketRib';
@@ -276,7 +275,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  }});
  // 5: Design data and notes.
  {
-  const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>{const v=check(id);return v?.utilization!==undefined?`${v.status==='fail'?'FAILS ':''}${dcText(v.utilization,2)}`:'-';};
+  const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>checkDcText(s,check(id));
   const act=r?.plate.action,anchorAct=r?.anchors.action;
   const rows=[
    ['COLUMN',`${name}, ${dim(H)} BASE TO TOP, SEAT ${dim(seat)}`],
@@ -287,8 +286,10 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    [`ANCHOR GROUP (${p.method}): TENSION ON THE ${a.perRow}-ROD ROW / SHEAR ON ALL ${2*a.perRow} RODS`,r&&anchorAct?`${force(r.anchors.T)} (${force(r.anchors.T/a.perRow)} PER ROD) / ${force(r.anchors.V)} (${force(r.anchors.V/(2*a.perRow))} PER ROD), ${anchorAct.id}`:'-'],
    ['SOIL: ALLOWABLE / MAX. SERVICE',r?`${force(b.soil.allowable,'pressure')} / ${force(r.footing.qMax,'pressure')}`:'-'],
    ['RATIOS: PLATE / RODS / SOIL / OVERTURNING / DRIFT',`${ratio('base-plate')} / ${ratio('base-anchor-interaction')} / ${ratio('base-soil')} / ${ratio('base-overturning')} / ${ratio('base-drift')}`],
+   // The largest D/C over every check of the column and its base, and the failing ones by name (sheetRatios).
+   ...(()=>{const e=elementSummary(s,inElements(['column','base'])),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL COLUMN AND BASE CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})(),
    // The drift limit is stated with the drift, as it governs the crane's rail alignment.
-   ...(()=>{const c=s.checks.find(v=>v.id==='base-drift');return c?.demand!==undefined&&c.capacity!==undefined?[['RUNWAY DRIFT AT RAIL / LIMIT',`${dim(c.demand)} / ${dim(c.capacity)} (COLUMN PLUS FOOTING ROTATION, SERVICE CRANE LOADS)`]]:[];})(),
+   ...(()=>{const c=s.checks.find(v=>v.id==='base-drift');return c?.demand!==undefined&&c.capacity!==undefined?[['RUNWAY DRIFT AT RAIL / LIMIT',`${limitLength(c.demand,u,'min')} / ${limitLength(c.capacity,u,'max')} MAX. (COLUMN PLUS FOOTING ROTATION, SERVICE CRANE LOADS)`]]:[];})(),
    ...(s.existingColumn?.seismic?[['SEISMIC ACROSS RUNWAY',`SDC ${s.existingColumn.seismic.basis.sdc}, CS ${s.existingColumn.seismic.basis.Cs.toFixed(3)}, QE ${force(s.existingColumn.seismic.QE)} PER COLUMN; ${s.existingColumn.seismic.basis.integrityOnly?'BASE':'COLUMN AND BASE'} FOR ΩO ${s.existingColumn.seismic.basis.Omega0}`]]:[]),
    ['DATA SOURCE',!b.source?'NOT ENTERED':u==='US'?b.source:`${b.source.split(':')[0]} (VALUES CONVERTED ABOVE AND IN THE NOTES)`]
   ];

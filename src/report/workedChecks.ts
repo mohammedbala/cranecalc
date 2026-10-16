@@ -24,6 +24,7 @@ import {clipGeometry,railPadThickness} from '../engine/railSeat';
 import {flangeTieResponse} from '../engine/flangeTieDesign';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {braceSystem} from '../engine/detailAnalysis';
+import {diaphragmArrangement,diaphragmDemand,diaphragmWeldEquivalent,stiffenerPairSection,stiffenerWeldGroup} from '../engine/detailChecks';
 
 
 /**
@@ -79,8 +80,9 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   if(close(R,cap))return [`A_{pb}=2(b_s-c)t_s=2(${tx(b.stiffenerWidth,'length')}-${tx(b.cope,'length')})\\times${tx(b.stiffenerThickness,'length')}=${tx(A,'area')}`,`${lhs}R_n=${fl(.75,2)}\\times1.8F_yA_{pb}=${fl(.75,2)}\\times1.8\\times${tx(Fy,'stress')}\\times${tx(A,'area')}=${tx(R,'force')}${check(R,'R_u')}`];
  }
  if(c.id==='stiffener-weld'&&d&&s.properties){
-  const b=d.bearing,h=girderStrength(p,s.properties).h,L=4*(h-2*b.cope),R=factor(.75,2)*.6*d.material.Fexx*(b.weldSize/Math.SQRT2)*L;
-  if(close(R,cap))return [`${lhs}R_n=${fl(.75,2)}\\times0.6F_{EXX}(0.707w)\\,4(h-2c)=${fl(.75,2)}\\times0.6\\times${tx(d.material.Fexx,'stress')}\\times0.707\\times${tx(b.weldSize,'length')}\\times4(${tx(h,'length')}-2\\times${tx(b.cope,'length')})=${tx(R,'force')}${check(R,'R_u')}`];
+  const b=d.bearing,h=girderStrength(p,s.properties).h,g=stiffenerWeldGroup(p,h);
+  if(close(g.capacity,cap))return [`L_w=h-2c=${tx(h,'length')}-2\\times${tx(b.cope,'length')}=${tx(g.Lw,'length')}`,
+   `${lhs}R_n=${fl(.75,2)}\\times\\min[0.6F_{EXX}(0.707w)\\,4L_w,\\ 0.6F_ut_w\\,2L_w,\\ 0.6F_ut_s\\,2L_w]=\\min(${tx(g.weld,'force')},\\,${tx(g.web,'force')},\\,${tx(g.stiffener,'force')})=${tx(g.capacity,'force')}\\quad(\\text{${g.governs}})${check(g.capacity,'R_u')}`];
  }
  // Existing or new column: AISC H1-1 with the amplified moments of the governing combination.
  if(c.id==='column-interaction'&&s.existingColumn){
@@ -233,12 +235,27 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  // shown only when they reproduce the check: the restraint force with the Appendix 6 brace force, then the stress.
  const A6=s.designAnalysis&&s.properties?braceImperfection(p,s.designAnalysis,s.properties).force:undefined,Ht=s.detailResults?.demands.brace;
  const yieldLimit=(Fy:number)=>`${close(factor(.9,1.67)*Fy,cap)?`${lhs}F_y=${fl(.9,1.67)}\\times${tx(Fy,'stress')}=`:''}${tx(cap,'stress')}`;
- // Bearing stiffener pair as the restraint diaphragm: a full-height cantilever for the restraint force, no web participation.
- if(c.id==='stiffener-lateral-flexure'&&d&&A6!==undefined&&Ht!==undefined&&s.properties){
-  const b=d.bearing,H=Ht+A6,h=girderStrength(p,s.properties).h,S=2*b.stiffenerThickness*b.stiffenerWidth**2/6,f=H*h/S;
-  if(close(f,dem))return [`H=H_{top}+P_{br}=${tx(Ht,'force')}+${tx(A6,'force')}=${tx(H,'force')}\\quad(\\text{restraint force with the Appendix 6 brace force});\\quad h=${tx(h,'length')}\\ (\\text{web depth})`,
-   `f_b=\\frac{Hh}{2t_sb_s^2/6}=\\frac{${tx(H,'force')}\\times${tx(h,'length')}}{2\\times${tx(b.stiffenerThickness,'length')}\\times(${tx(b.stiffenerWidth,'length')})^2/6}=${tx(f,'stress')}${rel.le}${yieldLimit(d.material.Fy)}\\quad ${rel.dc}`];
+ // Bearing stiffener pair as the restraint diaphragm, by arrangement (diaphragmArrangement): the moment it takes and the
+ // section of the pair (stiffenerPairSection), as the check computes them.
+ const ft=p.units==='US'?'\\times12\\,\\mathrm{in/ft}':'';
+ const diaphragm=()=>{
+  if(!d||A6===undefined||Ht===undefined||!s.properties||!s.designAnalysis)return undefined;
+  const H=Ht+A6,h=girderStrength(p,s.properties).h,arr=diaphragmArrangement(p),pair=stiffenerPairSection(d.bearing,p.section.tw),h0=s.properties.h0;
+  const couple=braceImperfection(p,s.designAnalysis,s.properties).flexure*h0,T=s.detailResults?.diaphragm?.torque??H*h,dia=diaphragmDemand(arr,{H,torque:T,couple,h,h0});
+  const Mline=arr.kind==='one-flange'?`M=Hh=${tx(H,'force')}\\times${tx(h,'length')}=${tx(dia.M,'moment')}\\quad(H=H_{top}+P_{br}=${tx(Ht,'force')}+${tx(A6,'force')})`
+   :`M=${arr.kind==='gusset'?`He+`:''}|T_u|+0.02M_rC_d=${arr.kind==='gusset'?`${tx(H*arr.yg,'moment')}+`:''}${tx(Math.abs(T),'moment')}+${tx(couple,'moment')}=${tx(dia.M,'moment')}${arr.kind==='gusset'?`;\\quad V=\\max(H,M/h_o)=${tx(dia.V,'force')}`:`;\\quad V=M/h_o=${tx(dia.V,'force')}`}`;
+  return {H,h,arr,pair,dia,Mline};
+ };
+ if(c.id==='stiffener-lateral-flexure'){const v=diaphragm();
+  if(v&&close(v.dia.M/v.pair.S,dem)){const b=d!.bearing,f=v.dia.M/v.pair.S;
+   return [v.Mline,v.pair.composite?`S=\\frac{2t_s[(t_w/2+b_s)^3-(t_w/2+c)^3]}{3(t_w/2+b_s)}=${tx(v.pair.S,'modulus')}\\quad(\\text{the pair as one plate, }t_s=${tx(b.stiffenerThickness,'length')},\\ b_s=${tx(b.stiffenerWidth,'length')})`:`S=\\frac{2t_sb_s^2}{6}=\\frac{2\\times${tx(b.stiffenerThickness,'length')}\\times(${tx(b.stiffenerWidth,'length')})^2}{6}=${tx(v.pair.S,'modulus')}`,
+    `f_b=\\frac{M}{S}=\\frac{${tx(v.dia.M,'moment')}${ft}}{${tx(v.pair.S,'modulus')}}=${tx(f,'stress')}${rel.le}${yieldLimit(d!.material.Fy)}\\quad ${rel.dc}`];}
+  // A one-flange cantilever on separate plates (M = Hh, S = 2t_sb_s²/6), as calculations before the diaphragm by arrangement report it.
+  if(v&&d){const b=d.bearing,S=2*b.stiffenerThickness*b.stiffenerWidth**2/6,f=v.H*v.h/S;
+   if(close(f,dem))return [`H=H_{top}+P_{br}=${tx(Ht!,'force')}+${tx(A6!,'force')}=${tx(v.H,'force')}\\quad(\\text{restraint force with the Appendix 6 brace force});\\quad h=${tx(v.h,'length')}\\ (\\text{web depth})`,
+    `f_b=\\frac{Hh}{2t_sb_s^2/6}=\\frac{${tx(v.H,'force')}\\times${tx(v.h,'length')}}{2\\times${tx(b.stiffenerThickness,'length')}\\times(${tx(b.stiffenerWidth,'length')})^2/6}=${tx(f,'stress')}${rel.le}${yieldLimit(d.material.Fy)}\\quad ${rel.dc}`];}
  }
+
  // Bearing plate in bending over the longest cantilever from the stiffener footprint, uniform contact.
  if(c.id==='bearing-plate'&&d&&s.designAnalysis){
   const b=d.bearing,R=s.designAnalysis.reaction,fp=R/(b.width*b.length),a=Math.max((b.width-(2*b.stiffenerWidth+p.section.tw))/2,(b.length-b.stiffenerThickness)/2),m=fp*a**2/2,f=6*m/b.thickness**2,per=p.units==='US'?'\\text{-in/in}':'\\cdot\\mathrm{mm/mm}';
@@ -246,11 +263,12 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
    `m=\\frac{f_pa^2}{2}=\\frac{${tx(fp,'stress')}\\times(${tx(a,'length')})^2}{2}=${tx(m,'force')}${per}`,
    `f_b=\\frac{6m}{t_p^2}=\\frac{6\\times${tx(m,'force')}${per}}{(${tx(b.thickness,'length')})^2}=${tx(f,'stress')}${rel.le}${yieldLimit(d.material.Fy)}\\quad ${rel.dc}`];
  }
- // Stiffener web welds under the reaction with both lateral flange forces and their moment.
- if(c.id==='stiffener-combined-weld'&&d&&A6!==undefined&&Ht!==undefined&&s.designAnalysis&&s.properties){
-  const b=d.bearing,H=Ht+A6,R=s.designAnalysis.reaction,Req=R+8*H,h=girderStrength(p,s.properties).h,Rw=factor(.75,2)*.6*d.material.Fexx*(b.weldSize/Math.SQRT2)*4*(h-2*b.cope);
-  if(close(Req,dem)&&close(Rw,cap))return [`R_{eq}=R+8H=${tx(R,'force')}+8\\times${tx(H,'force')}=${tx(Req,'force')}\\quad(H=H_{top}+P_{br})`,
-   `${lhs}R_n=${fl(.75,2)}\\times0.6F_{EXX}(0.707w)\\,4(h-2c)=${fl(.75,2)}\\times0.6\\times${tx(d.material.Fexx,'stress')}\\times0.707\\times${tx(b.weldSize,'length')}\\times4(${tx(h,'length')}-2\\times${tx(b.cope,'length')})=${tx(Rw,'force')}${check(Rw,'R_{eq}')}`];
+ // Stiffener web welds under the reaction with the diaphragm's shear flow or moment (diaphragmWeldEquivalent).
+ if(c.id==='stiffener-combined-weld'&&s.designAnalysis){const v=diaphragm();
+  if(v){const R=s.designAnalysis.reaction,g=stiffenerWeldGroup(p,v.h),Req=diaphragmWeldEquivalent(R,v.dia,v.pair,g.Lw);
+   if(close(Req,dem)&&close(g.capacity,cap))return [v.Mline,
+    v.pair.composite?`R_{eq}=R+\\frac{2VQL_w}{I}=${tx(R,'force')}+\\frac{2\\times${tx(v.dia.V,'force')}\\times${tx(v.pair.Q,'modulus')}\\times${tx(g.Lw,'length')}}{${tx(v.pair.I,'inertia')}}=${tx(Req,'force')}`:`R_{eq}=R+2V+\\frac{6M}{L_w}=${tx(R,'force')}+2\\times${tx(v.dia.V,'force')}+\\frac{6\\times${tx(v.dia.M,'moment')}${ft}}{${tx(g.Lw,'length')}}=${tx(Req,'force')}`,
+    `${lhs}R_n=\\min(${tx(g.weld,'force')},\\,${tx(g.web,'force')},\\,${tx(g.stiffener,'force')})=${tx(g.capacity,'force')}\\quad(\\text{${g.governs}, }L_w=${tx(g.Lw,'length')})${check(g.capacity,'R_{eq}')}`];}
  }
  // Direct flange tie: the tie design force F = (H_top + P_br)/cos θ and the elastic stresses it causes (the girder flange
  // over its effective width b_e).

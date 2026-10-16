@@ -1,9 +1,8 @@
-// D/C as the calculation prints it: NO CAPACITY for a sentinel or clamped ratio.
-import {dcText} from '../engine/checkPresentation';
+import {elementSummary,inElements,summaryNote,calculationRef} from './sheetRatios';
+import {viewConflict,conflictView} from './detailHolds';
 import type {CalculationSnapshot} from '../engine/types';
 import {capAngleGeometry,boltHardware,capAngleStiffenerGeometry,type CapAngleGeometry} from '../engine/capAngle';
 import {capAngleResult} from '../engine/capAngleTie';
-import {classifyCheck,gateCheck} from '../engine/checkTaxonomy';
 import {clipGeometry,clipOutline,railPadThickness} from '../engine/railSeat';
 import {supportColumn} from '../engine/drawingData';
 import {capChannelProfile} from '../engine/channelProfile';
@@ -37,7 +36,10 @@ function tieColumn(s:CalculationSnapshot,g:CapAngleGeometry){
 /** Section at a support looking along the runway: the girder with cap, rail and rail clip, the cap angle, tie plate, end plate, shims and column flange. */
 /** Whether two girder ends share a column, so the plan of the ties at it is drawn (and dimensions the bolt pitches). */
 const sharedColumn=(g:CapAngleGeometry)=>g.stations.some(v=>g.stations.some(o=>o!==v&&Math.abs(o.station-v.station)<1e-6));
+/** The cap tieback cannot be built as dimensioned: a failing fit or clearance rule, or a geometry conflict among its checks. */
+export const capAngleConflict=(s:CalculationSnapshot)=>viewConflict(s,{fits:/^cap-angle-.*-(fit|clear|clearance)$/,checks:/^cap-angle-/});
 export function capAngleSection(s:CalculationSnapshot):ViewRender{
+ const conflict=capAngleConflict(s);if(conflict)return conflictView(conflict);
  const p=s.input,u=p.units,g=capAngleGeometry(p)!,d=p.details!,b=p.section,c=g.input,res=capAngleResult(s);
  const sz=(v:number)=>tieSize(v,u),dim=(v:number)=>tieDim(v,u),tc=tieColumn(s,g);
  // The bolt pitches along the runway are dimensioned on the plan; without a plan the callouts give them.
@@ -220,18 +222,15 @@ export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `END PLATE: SHOP WELD TO THE TIE PLATE. FIELD-DRILL ${sz(g.column.hole)} HOLES IN THE ${tc.isNew?'COLUMN':'EXISTING COLUMN'} FLANGE TO MATCH; NO FIELD WELDING TO THE COLUMN FOR THE TIE. FINGER SHIMS 0 TO ${sz(c.shimMax)} TAKE UP THE FIT-UP; PRETENSION THE COLUMN BOLTS.`,
   ...(res?.stiffener.provided?[`COLUMN STIFFENER AT THE TIE LEVEL, ON THE TIE SIDE OF THE COLUMN WEB: ${tc.isNew?'SHOP':'FIELD'} WELD TO THE COLUMN FLANGE AND WEB (SEE EXISTING COLUMN WELDING).`]:[]),
   ...(shared?['AT A SHARED COLUMN THE TWO TIES SIT SIDE BY SIDE ON THE COLUMN FLANGE, EACH WITH ITS OWN END PLATE.']:[])];
- // Every DESIGN check of the tie, as the calculation reports its largest D/C, by its kind (check taxonomy): strength,
- // movement capacity (slot travel, a length check) and fatigue each labelled as what it is.
- const checks=s.checks.filter(v=>v.id.startsWith('cap-angle-')&&v.utilization!==undefined&&v.status==='pass');
- const most=(list:typeof checks)=>Math.max(0,...list.map(v=>v.utilization??0));
- // DESIGN checks only: no detailing rule, and not the F13.1 net-area test (a capacity modifier); fatigue only for
- // details above their threshold (screened details are not evaluated).
- const design=(v:typeof checks[number])=>{const k=classifyCheck(v);return k.type==='design'?k.effect:undefined;};
- const strength=most(checks.filter(v=>{const e=design(v);return e!==undefined&&e!=='fatigue'&&e!=='movement';})),fatigue=most(checks.filter(v=>{const k=classifyCheck(v);return k.effect==='fatigue'&&gateCheck(s,v,k).gate==='evaluated';}));
- const moving=checks.filter(v=>design(v)==='movement'),movement=most(moving),travel=moving.length&&moving.every(v=>/slot-travel$/.test(v.id))?'SLOT TRAVEL':'MOVEMENT';
+ // Every evaluated DESIGN check of the tie, failing or not, as the calculation reports its largest D/C, by its kind
+ // (check taxonomy): strength, movement capacity (slot travel, a length check) and fatigue each labelled as what it is;
+ // failing checks and rules named (sheetRatios.elementSummary).
+ const tie=elementSummary(s,inElements(['tie'],/^cap-angle-/),{movement:true});
+ const travel=tie.movement&&/slot-travel$/.test(tie.movement.check.id)?'SLOT TRAVEL':'MOVEMENT';
+ const summary=summaryNote(s,tie,{movement:travel,fatigueBelow:'FATIGUE BELOW THRESHOLD'});
  return {key:'cap-angle-tie',name:'CAP TIEBACK ANGLES',views:[
   {title:capAngleTitles.section,render:()=>capAngleSection(s)},
-  ...(shared?[{title:capAngleTitles.plan,render:()=>capAngleSharedPlan(s)}]:[])
- ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: SEE CALCULATION REPORT${checks.length?` (MAX. D/C ${dcText(strength,2)} STRENGTH, ${movement>0?`${dcText(movement,2)} ${travel}, `:''}${fatigue>0?`${dcText(fatigue,2)} FATIGUE`:'FATIGUE BELOW THRESHOLD'})`:''}.`)]};
+  ...(shared?[{title:capAngleTitles.plan,render:()=>{const c=capAngleConflict(s);return c?conflictView(c):capAngleSharedPlan(s);}}]:[])
+ ],notes:(st:Style)=>[heading(st,'CAP TIEBACK ANGLE NOTES'),...numbered(st,notes),paragraph(st,`CAP TIEBACK CHECKS: ${calculationRef(s)}${tie.checks.length&&summary?` (${summary})`:''}.`)]};
 }
 export const capAngleLabelWidth=(v:string)=>textWidth(labelCaps(v),8.5);
