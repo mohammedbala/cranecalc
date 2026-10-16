@@ -41,12 +41,14 @@ class BandMatrix {
  get(i:number,j:number){if(i<j){const k=i;i=j;j=k;}return i-j>bw?0:this.a[i*(bw+1)+i-j];}
  add(i:number,j:number,value:number){if(i<j){const k=i;i=j;j=k;}if(i-j>bw){if(Math.abs(value)>1e-15)throw Error('Nonlocal stiffness outside element bandwidth.');return;}this.a[i*(bw+1)+i-j]+=value;}
  set(i:number,j:number,value:number){if(i<j){const k=i;i=j;j=k;}if(i-j<=bw)this.a[i*(bw+1)+i-j]=value;}
- multiply(x:Float64Array){const out=new Float64Array(this.n);for(let i=0;i<this.n;i++)for(let j=Math.max(0,i-bw);j<=Math.min(this.n-1,i+bw);j++)out[i]+=this.get(i,j)*x[j];return out;}
+ // The same products, summed in the same order (j ascending), as out[i] += get(i,j)*x[j].
+ multiply(x:Float64Array){const out=new Float64Array(this.n),a=this.a,n=this.n,w=bw+1;for(let i=0;i<n;i++){let s=0;const hi=Math.min(n-1,i+bw);for(let j=Math.max(0,i-bw);j<=i;j++)s+=a[i*w+i-j]*x[j];for(let j=i+1;j<=hi;j++)s+=a[j*w+j-i]*x[j];out[i]=s;}return out;}
 }
 // Lower-band entry (i,j), i >= j, is stored at i*(bw+1)+i-j. Same operation order as get/set.
 const at=(i:number,j:number)=>i*(bw+1)+i-j;
-function factor(a:BandMatrix){
- const n=a.n,L=new BandMatrix(n),scale=new Float64Array(n),A=a.a,l=L.a;
+/** Banded Cholesky factor of a, in the workspace when given (each factor entry is written before it is read). */
+function factor(a:BandMatrix,work?:{l:Float64Array;scale:Float64Array}){
+ const n=a.n,A=a.a,l=work?.l??new Float64Array(n*(bw+1)),scale=work?.scale??new Float64Array(n);
  for(let i=0;i<n;i++){const d=A[at(i,i)];if(!(d>0))return null;scale[i]=Math.sqrt(d);}
  for(let i=0;i<n;i++)for(let j=Math.max(0,i-bw);j<=i;j++){
   let s=A[at(i,j)]/(scale[i]*scale[j]);
@@ -78,9 +80,15 @@ function hermiteInto(t:number,L:number){
  h.dd[0]=(-6+12*t)/L**2;h.dd[1]=(-4+6*t)/L;h.dd[2]=(6-12*t)/L**2;h.dd[3]=(-2+6*t)/L;
  return h;
 }
+/** hermiteInto() with the third derivatives, for station recovery. */
+function hermiteThird(t:number,L:number){const h=hermiteInto(t,L);h.ddd[0]=12/L**3;h.ddd[1]=6/L**2;h.ddd[2]=-12/L**3;h.ddd[3]=6/L**2;return h;}
+// Band offsets, relative to an element's first node, of its v/v, theta/theta and v/theta entries (as BandMatrix.add
+// stores entry (i,j) of the lower triangle: i*(bw+1)+i-j for i >= j).
+const localV=[0,1,4,5],localT=[2,3,6,7];
+const bandOffset=(i:number,j:number)=>i>=j?i*(bw+1)+i-j:j*(bw+1)+j-i;
+const bandVV=Array.from({length:16},(_,k)=>bandOffset(localV[k>>2],localV[k&3])),bandTT=Array.from({length:16},(_,k)=>bandOffset(localT[k>>2],localT[k&3])),bandVT=Array.from({length:16},(_,k)=>bandOffset(localV[k>>2],localT[k&3]));
 const gaussX=[-.906179845938664,-.538469310105683,0,.538469310105683,.906179845938664];
 const gaussW=[.236926885056189,.478628670499366,.568888888888889,.478628670499366,.236926885056189];
-const dot=(a:number[],b:number[])=>a.reduce((s,v,i)=>s+v*b[i],0);
 const dofNames=['v','slope','twist','warping'];
 
 export class LateralTorsionBeam {
@@ -107,35 +115,45 @@ export class LateralTorsionBeam {
   const n=this.nodes.length*4;this.elastic=new BandMatrix(n);this.geometric=new BandMatrix(n);this.force=new Float64Array(n);
   const index=(x:number)=>4*this.mesh.index(x);
   this.fixed=[...new Set((p.fixed??[]).flatMap(r=>r.dofs.map(d=>index(r.x)+dofNames.indexOf(d))))];
+  // Element assembly straight into the band storage: the same terms, added to each entry in the same order as
+  // elastic.add / geometric.add (the left factors of each product are taken first, as written).
+  const K=this.elastic.a,Kg=this.geometric.a,F=this.force,N=p.axial??0,qLateral=p.distributedLateral??0,qTorque=p.distributedTorque??0,beta=p.monosymmetry??0,c0=p.centroidOffset??0;
+  const ECw=p.E*p.Cw,GJ=p.G*p.J,heightLoad=(p.distributedVertical??0)*(p.distributedHeight??0),Nc=N*c0;
   for(let e=0;e<this.nodes.length-1;e++){
-   const x0=this.nodes[e],L=this.nodes[e+1]-x0;
-   const v=[4*e,4*e+1,4*e+4,4*e+5],t=v.map(i=>i+2);
+   const x0=this.nodes[e],L=this.nodes[e+1]-x0,base=4*e*(bw+1),v0=4*e;
    for(let g=0;g<gaussX.length;g++){
-    const xi=(gaussX[g]+1)/2,w=gaussW[g]*L/2,h=hermiteInto(xi,L),x=x0+xi*L,M=p.moment?.(x)??0,N=p.axial??0;
+    const xi=(gaussX[g]+1)/2,w=gaussW[g]*L/2,h=hermiteInto(xi,L),x=x0+xi*L,M=p.moment?.(x)??0;
     if(!Number.isFinite(M))throw Error('Nonfinite major-axis moment in lateral/torsion analysis.');
+    const wEI=w*p.E*p.Iy,mwN=-w*N,mw=-w,Kt=N*p.polarRadiusSquared+M*beta,n=h.n,d=h.d,dd=h.dd;
     for(let i=0;i<4;i++){
-     this.force[v[i]]+=w*h.n[i]*(p.distributedLateral??0);
-     this.force[t[i]]+=w*h.n[i]*(p.distributedTorque??0);
+     const vi=localV[i],ti=localT[i];
+     F[v0+vi]+=w*n[i]*qLateral;
+     F[v0+ti]+=w*n[i]*qTorque;
      for(let j=0;j<=i;j++){
-      this.elastic.add(v[i],v[j],w*p.E*p.Iy*h.dd[i]*h.dd[j]);
-      this.elastic.add(t[i],t[j],w*(p.E*p.Cw*h.dd[i]*h.dd[j]+p.G*p.J*h.d[i]*h.d[j]));
-      this.geometric.add(v[i],v[j],-w*N*h.d[i]*h.d[j]);
-      this.geometric.add(t[i],t[j],-w*((N*p.polarRadiusSquared+M*(p.monosymmetry??0))*h.d[i]*h.d[j]+(p.distributedVertical??0)*(p.distributedHeight??0)*h.n[i]*h.n[j]));
+      const vv=base+bandVV[4*i+j],tt=base+bandTT[4*i+j];
+      K[vv]+=wEI*dd[i]*dd[j];
+      K[tt]+=w*(ECw*dd[i]*dd[j]+GJ*d[i]*d[j]);
+      Kg[vv]+=mwN*d[i]*d[j];
+      Kg[tt]+=mw*(Kt*d[i]*d[j]+heightLoad*n[i]*n[j]);
      }
      // Every v/theta pair is distinct; add its symmetric contribution once.
-     for(let j=0;j<4;j++)this.geometric.add(v[i],t[j],w*(M*h.dd[i]*h.n[j]-N*(p.centroidOffset??0)*h.d[i]*h.d[j]));
+     for(let j=0;j<4;j++)Kg[base+bandVT[4*i+j]]+=w*(M*dd[i]*n[j]-Nc*d[i]*d[j]);
     }
    }
   }
   for(const r of p.restraints){const i=index(r.x),yt=p.topOffset??p.h0/2,yb=p.bottomOffset??-p.h0/2;this.elastic.add(i,i,r.top+r.bottom);this.elastic.add(i+2,i+2,r.top*yt*yt+r.bottom*yb*yb);this.elastic.add(i+2,i,r.top*yt+r.bottom*yb);}
   for(const l of p.loads){const i=index(l.x);this.force[i]+=l.lateral;this.force[i+2]+=l.torque;this.geometric.add(i+2,i+2,-(l.vertical??0)*(l.height??0));}
  }
+ // One scratch matrix and factor workspace per beam: every entry is rewritten by matrix() and by factor() before use.
+ private scratch?:BandMatrix;private work?:{l:Float64Array;scale:Float64Array};private stability=new Map<number,boolean>();
  private matrix(multiplier:number,constrain=true){
-  const a=new BandMatrix(this.elastic.n);for(let i=0;i<a.a.length;i++)a.a[i]=this.elastic.a[i]+multiplier*this.geometric.a[i];
+  const a=this.scratch??=new BandMatrix(this.elastic.n),out=a.a,K=this.elastic.a,Kg=this.geometric.a;for(let i=0;i<out.length;i++)out[i]=K[i]+multiplier*Kg[i];
   if(constrain)for(const i of this.fixed){for(let j=Math.max(0,i-bw);j<=Math.min(a.n-1,i+bw);j++)a.set(i,j,0);a.set(i,i,1);}
   return a;
  }
- isStable(multiplier=1){return factor(this.matrix(multiplier))!==null;}
+ private factorAt(multiplier:number){return factor(this.matrix(multiplier),this.work??={l:new Float64Array(this.elastic.a.length),scale:new Float64Array(this.elastic.n)});}
+ /** Positive definiteness at the multiplier; each multiplier is factorized once per beam. */
+ isStable(multiplier=1){let v=this.stability.get(multiplier);if(v===undefined){v=this.factorAt(multiplier)!==null;this.stability.set(multiplier,v);}return v;}
  /** First loss of positive definiteness under proportional geometric loading.
   * A returned upper bound means the critical multiplier is at least that bound.
   * It is an elastic eigenvalue; material/design resistance is checked separately.
@@ -150,8 +168,8 @@ export class LateralTorsionBeam {
   return {value:lo,bounded:false};
  }
  solve(geometricMultiplier=0):LateralTorsionResult {
-  const matrix=this.matrix(geometricMultiplier),f=this.force.slice();for(const i of this.fixed)f[i]=0;
-  const solver=factor(matrix);if(!solver)throw Error('Lateral/torsional instability at the applied load.');
+  const f=this.force.slice();for(const i of this.fixed)f[i]=0;
+  const solver=this.factorAt(geometricMultiplier),matrix=this.scratch!;if(!solver)throw Error('Lateral/torsional instability at the applied load.');
   const u=solver.solve(f),p=this.input;
   // One step of iterative refinement removes round-off left by the scaled band factorization.
   {const Ku=matrix.multiply(u),r=new Float64Array(u.length);for(let i=0;i<u.length;i++)r[i]=f[i]-Ku[i];const du=solver.solve(r);for(let i=0;i<u.length;i++)u[i]+=du[i];}
@@ -161,10 +179,12 @@ export class LateralTorsionBeam {
    if(e<0)e=this.nodes.length-2;
    return inElement(e,x);
   };
+  // hermite() and dot() without their arrays: the same values, each sum taken from 0 in the same order.
   const inElement=(e:number,x:number):LateralTorsionStation=>{
-   const h=hermite((x-this.nodes[e])/(this.nodes[e+1]-this.nodes[e]),this.nodes[e+1]-this.nodes[e]);
-   const v=[u[4*e],u[4*e+1],u[4*e+4],u[4*e+5]],t=[u[4*e+2],u[4*e+3],u[4*e+6],u[4*e+7]];
-   return {x,v:dot(h.n,v),slope:dot(h.d,v),twist:dot(h.n,t),twistRate:dot(h.d,t),curvature:dot(h.dd,v),warpingCurvature:dot(h.dd,t),warpingThird:dot(h.ddd,t),lateralThird:dot(h.ddd,v)};
+   const h=hermiteThird((x-this.nodes[e])/(this.nodes[e+1]-this.nodes[e]),this.nodes[e+1]-this.nodes[e]),k=4*e;
+   const v0=u[k],v1=u[k+1],v2=u[k+4],v3=u[k+5],t0=u[k+2],t1=u[k+3],t2=u[k+6],t3=u[k+7],n=h.n,d=h.d,dd=h.dd,ddd=h.ddd;
+   return {x,v:0+n[0]*v0+n[1]*v1+n[2]*v2+n[3]*v3,slope:0+d[0]*v0+d[1]*v1+d[2]*v2+d[3]*v3,twist:0+n[0]*t0+n[1]*t1+n[2]*t2+n[3]*t3,twistRate:0+d[0]*t0+d[1]*t1+d[2]*t2+d[3]*t3,
+    curvature:0+dd[0]*v0+dd[1]*v1+dd[2]*v2+dd[3]*v3,warpingCurvature:0+dd[0]*t0+dd[1]*t1+dd[2]*t2+dd[3]*t3,warpingThird:0+ddd[0]*t0+ddd[1]*t1+ddd[2]*t2+ddd[3]*t3,lateralThird:0+ddd[0]*v0+ddd[1]*v1+ddd[2]*v2+ddd[3]*v3};
   };
   // Element midpoints and both sides of each node, by element index: the elements at() would find.
   const stations=this.nodes.flatMap((x,i)=>i===0?[inElement(0,x)]:[inElement(i-1,(this.nodes[i-1]+x)/2),inElement(i-1,x),...(i===this.nodes.length-1?[]:[inElement(i,x)])]);

@@ -135,7 +135,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  if(!p.aist||!p.aist.runwayOnly||!p.connections.enabled)return [];
  const designFy=p.section.kind==='cap'?Math.min(p.section.Fy,p.capDesign!.Fy):p.section.Fy;
  const strength=girderStrength(p,props),steps=p.cranes.length===1?40:p.cranes.length===2?12:6;
- const braceForce=braceImperfection(p,a,props).force,run=(travel:number,mesh:number)=>{const c=createDetailCollector(p,props,mesh,braceForce);runwayDesignAnalysis(p,props,strength,travel,20,c.observe);return c.finish();};
+ const braceForce=braceImperfection(p,a,props).force,run=(travel:number,mesh:number)=>{const c=createDetailCollector(p,props,mesh,braceForce);runwayDesignAnalysis(p,props,strength,travel,20,c.observe,{envelope:false});return c.finish();};
  // The checks of one level in report order: bracket checks, the analysis checks (the reported level only), then the
  // girder, bracing and connection checks. A level built only to compare its governing results (refinementChange) keeps
  // the design envelope for H1; the reported level re-runs it when load height lowers M_cx.

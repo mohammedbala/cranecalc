@@ -1,5 +1,6 @@
 import {caseBase,caseIdPattern} from './caseNames';
 import type {RunwayCaseRecord} from './runwayDetails';
+import {withDesignCache} from './designAnalysis';
 import {packageContentChecks} from './detailTemplate';
 import {connectionCoordination,coordinationChecks} from './connectionCoordination';
 import {constructionNoteChecks} from './constructionNotes';
@@ -71,7 +72,9 @@ export function validateProject(input:unknown):string[]{
   const reach=craneTravel(p,i);if(reach.start>=reach.end)errors.push(`cranes.${i}.design.bumperOverhang: the stop contacts leave the crane no travel between the stops.`);});
  return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateColumnBase(p),...validateLongitudinalBracing(p),...validateAdjacentBuilding(p),...validateColumnCap(p)];
 }
-export function calculate(input:ProjectInput):CalculationSnapshot {
+/** One calculation; its moving-load searches share their crane-position responses (withDesignCache) until it returns. */
+export function calculate(input:ProjectInput):CalculationSnapshot {return withDesignCache(()=>calculateSnapshot(input));}
+function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  const p=structuredClone(input),errors=validateProject(p);const snapshot:CalculationSnapshot={revision:fingerprint(p),createdAt:new Date().toISOString(),input:p,errors,warnings:[],properties:null,analysis:null,checks:[],eligible:false,referenceVersion};
  if(errors.length)return snapshot;
  const props=sectionProperties(p.section);snapshot.properties=props;
