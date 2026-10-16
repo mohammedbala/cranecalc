@@ -31,7 +31,7 @@ describe('HOLD tags at failing details',()=>{
   const titles=detailTopics(s).flatMap(t=>t.views.map(v=>v.title)),unplaced=unplacedHolds(s,titles).map(h=>h.check.id);
   expect(unplaced).toContain('torsion-normal');expect(unplaced).not.toContain('end-stop-fit');
   const cover=sheets.filter(v=>v.number.startsWith('S-00')).map(v=>text(v.svg)).join(' ');
-  expect(cover).toContain('OPEN ITEMS - NOT FOR FABRICATION');expect(cover).toContain('NG TORSION-NORMAL D/C 1.31');
+  expect(cover).toContain('OPEN ITEMS - NOT FOR FABRICATION');expect(cover).toContain('TORSION-NORMAL D/C 1.31');
   // The tags add no annotation clashes.
   for(const v of sheets)expect(annotationClashes(v.svg),v.number).toBe(0);
  },300000);

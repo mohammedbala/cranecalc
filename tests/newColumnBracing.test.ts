@@ -141,7 +141,8 @@ describe('rod X-bracing between new freestanding columns',()=>{
   // The rods are not cut off at the column stubs (they read as knee braces): a reference to the braced bay.
   expect(texts(s01)).toContain('3/4" DIA. ROD X-BRACING BELOW, GRIDS 2-3, BOTH RUNWAYS');
   expect(texts(s01)).toContain('W8X24 STRUT ON COLUMN LINE, ALL SPANS');
-  expect(texts(s01)).toMatch(/SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL 0'-1 3\/4" MIN\. CLEAR/);
+  // The separation reads alike on S-01 and S-04 (bracingSheet.separationLength): the specified minimum in inches.
+  expect(texts(s01)).toMatch(/SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL 1 3\/4" MIN\. CLEAR/);
   const sheet=set.find(v=>v.svg.includes('data-view="braced-bay-elevation"'))!;
   for(const view of ['brace-top-connection','brace-base-connection','strut-plan','bracing-notes'])expect(sheet.svg).toContain(`data-view="${view}"`);
   expect(texts(sheet.svg)).toContain('BRACING DESIGN DATA');expect(texts(sheet.svg)).toContain('DEVELOP THE ROD');
@@ -163,7 +164,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
    expect(cover).toContain('BESIDE THE RUNWAY ARE DASHED (2/S-01, 5/S-01)');expect(cover).not.toContain('THE EXISTING BUILDING IS NOT SHOWN');
    expect(cover).toContain('THE EXISTING COLUMNS AND FOOTINGS ON S-01 ARE FROM FICTITIOUS SURVEY SV-02');
    if(units==='US'){
-    expect(t).toContain('4\'-10 13/16" CLR.');expect(t).toContain('0\'-9" CLR.');expect(t).toContain('SEISMIC SEP. 0\'-1 3/4" MIN.');
+    expect(t).toContain('4\'-10 13/16" CLR.');expect(t).toContain('0\'-9" CLR.');expect(t).toContain('SEISMIC SEP. 1 3/4" MIN.');
     expect(t).toContain('FOOTING CLR. 0\'-9", 0\'-6" MIN.');expect(t).toContain('KEEP ALL RUNWAY STEEL 0\'-1 3/4" MIN. CLEAR OF THE EXISTING BUILDING');
    }
   }

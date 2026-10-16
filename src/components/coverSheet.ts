@@ -221,7 +221,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(unevaluatedStructure(s).length?['ITEMS MARKED BY OTHERS IN THE CALCULATION REPORT (FRAME, CONNECTIONS TO EXISTING MEMBERS, ANCHORS AND FOUNDATIONS NOT CHECKED HERE) SHALL BE VERIFIED BY THE ENGINEER OF RECORD FOR THE REPORTED FORCES.']:[])
  ].map(v=>v.toUpperCase())));
  if(d)blocks.push(H('CRANE RUNWAY INSTALLATION'),...N([
-  `RAIL: ${d.rail.name.split(" · ")[0]}; GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${tol(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS. SET EACH RAIL C/L ON ITS GIRDER WEB C/L WITHIN ${tol(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${tol(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${tol(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION. IN SERVICE KEEP THE RAIL C/L WITHIN ${limitLength(Math.abs(p.railEccentricity)>0?Math.min(Math.abs(p.railEccentricity),.75*p.section.tw):.75*p.section.tw,u,'max')} OF THE WEB C/L (THE DESIGN ECCENTRICITY, AT MOST 3/4 OF THE WEB THICKNESS, AIST TR-13 §5.18); REALIGN THE RAIL BEYOND IT. VERIFY THE GAUGE AND TOLERANCES WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
+  `RAIL: ${d.rail.name.split(" · ")[0]}; GAUGE (CRANE SPAN) ${len(d.criteria.railGauge)} ± ${tol(2*d.criteria.alignmentTolerance)}, THE TOTAL OF THE SETTING TOLERANCES OF THE TWO RAILS. SET EACH RAIL C/L ON ITS GIRDER WEB C/L WITHIN ${tol(d.criteria.alignmentTolerance)} AND THE RAIL TOP WITHIN ${tol(d.criteria.levelTolerance)} OF THE THEORETICAL ELEVATION. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${tol(Math.abs(p.railEccentricity))} FOR SETTING AND WEAR; IT IS NOT A SETTING DIMENSION; IN SERVICE ${limitLength(Math.abs(p.railEccentricity)>0?Math.min(Math.abs(p.railEccentricity),.75*p.section.tw):.75*p.section.tw,u,'max')} MAX. (TR-13 §5.18). VERIFY THE GAUGE AND TOLERANCES WITH THE CRANE MANUFACTURER BEFORE SETTING RAILS.`,
   ...addedSentences(enteredFabricationNote(p,'railAlignment'),[...written,...(constructionRequirements(p).find(v=>v.key==='tolerances')?.items??[])]),
   // The rail setting clause of the TR-13 list is the note above.
   ...constructionRequirements(p).filter(v=>v.key==='tolerances').map(v=>v.items.filter(i=>!/^rail centerline set on/i.test(i)).join(' ').replace(/; (Survey)/,'. $1')),
@@ -414,7 +414,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  }
  // Open items with a failing check that no detail of the set draws: listed here, as the details' HOLD tags list theirs.
  const unplaced=unplacedHolds(s,sheets.flatMap(v=>[...(v.details??[])]));
- if(unplaced.length&&!blockedPackage(s))blocks.push(H('OPEN ITEMS - NOT FOR FABRICATION'),P('THE CALCULATION FAILS THESE CHECKS; THEY ARE NOT TAGGED AT A DETAIL. RESOLVE THEM BEFORE FABRICATION:'),...N(unplaced.map(h=>`${h.text}${h.group.locations>1?` (${h.group.locations} LOCATIONS)`:''}: ${h.group.title.toUpperCase()}.`)));
+ if(unplaced.length&&!blockedPackage(s))blocks.push(H('OPEN ITEMS - NOT FOR FABRICATION'),P(`FAILING CHECKS NOT TAGGED AT A DETAIL (SEE CALCULATION, OPEN ITEMS): ${unplaced.map(h=>`${h.text.replace(/^NG /,'')}${h.group.locations>1?` (${h.group.locations} LOCATIONS)`:''}`).join('; ')}.`));
  blocks.push(legend(t,p.units,referenceDims));
  // Only the abbreviations used on this sheet or the others.
  const used=`${written.join(' ')} ${otherWords}`,abbreviations=abbreviationList.filter(([re])=>otherWords===undefined||re.test(used)).map(([,v])=>v);
