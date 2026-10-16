@@ -22,6 +22,7 @@ import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import {sectionProperties} from './section';
 import {beamSystem} from './beam';
 import {girderDeadLoad} from './newSteel';
+import {supportReactions} from './supportReactions';
 import {craneDesignMinimum} from './aistLoads';
 import {craneTravel} from './craneTravel';
 import {railTopAboveSteel} from './railSeat';
@@ -128,7 +129,7 @@ export interface TieSizingDemands {
 /**
  * The sizing demands. Force: the factored side thrust reaction at a support (girderEndEstimate), carried to the top
  * restraint with its torsional share (the rail head y_r above the tie line, over the depth h_r from the tie line to the
- * bottom restraint: R(1 + y_r/h_r)), plus the Appendix 6 brace force 0.02M_rC_d/h_o + 0.01P_r with P_r the factored
+ * bottom restraint: R(1 + y_r/h_r)), the torque of the factored vertical reaction at the rail eccentricity over h_r, plus the Appendix 6 brace force 0.02M_rC_d/h_o + 0.01P_r with P_r the factored
  * traction or the bumper force. Range: 1.25 times the unfactored side thrust of the crane (it reverses; the torsional
  * share). Rotations and the largest factored moment: girderEndEstimate. A designed support: its deflection limit, or
  * its service deflection where larger (a bracket that is not sized to its limit, bracketServiceDeflection). Appendix 6
@@ -144,7 +145,10 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
  const g=flangeTieGeometry(p),st=stiffenerTieGeometry(p),top=g?.topCenter??st?.topCenter??s.d/2-s.tf-4*inch,sides=g?.sides??st?.sides??[1];
  const bottom=sides.includes(-1)?(g?.bottomCenter??st?.bottomCenter??-s.d/2+s.tf):-s.d/2+s.tf/2;
  const railHead=s.d/2+(s.kind==='cap'?s.capTw:0)+railTopAboveSteel(p),torsion=1+Math.max(0,railHead-top)/Math.max(top-bottom,s.tf);
- return {force:(lrfd?1.6:1)*r.lateral*torsion+braceForce,range:1.25*H,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
+ // The rail eccentricity e: the factored vertical reaction R_v at e from the web is a torque R_v·e at the support, taken
+ // by the restraint couple over h_r (the analysis's restraint at the tie line carries it with the side thrust).
+ const Rv=supportReactions(p,props).supports.reduce((m,v)=>Math.max(m,(lrfd?1.2:1)*Math.max(0,v.D-v.Ds)+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci)),0),eccentric=Rv*Math.abs(p.railEccentricity)/Math.max(top-bottom,s.tf);
+ return {force:(lrfd?1.6:1)*r.lateral*torsion+eccentric+braceForce,range:1.25*H,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
   braceForce,braceStiffness:(lrfd?1/.75:2)*(10*r.moment*Cd/props.h0+8*P)/Lbr};
 }
 
@@ -178,8 +182,13 @@ export function tieSizingRatios(p:ProjectInput,demand=tieSizingDemands(p)):Recor
   const a=g.attachment,cycles=p.details!.spectrum.reduce((n,v)=>n+v.cycles,0),category=a.saddleLength<2*inch?'C':a.saddleLength<=Math.min(12*a.saddleThickness,4*inch)?'D':a.saddleThickness<=.8*inch?'E':'E1';
   const props=sectionProperties(p.section),toe=Math.max(...g.stations.map(v=>Math.abs(v.tieX-v.station)))+a.saddleLength/2+a.weldSize;
   const wheels=Math.max(...p.cranes.map(c=>c.wheels.reduce((n,w)=>n+w.loaded/(c.includesImpact?1+c.impact:1),0)));
-  const range=flangeTieResponse(p,demand.range).flange+1.5*wheels*toe/props.Sx;
+  // Two stress directions, two crack sites, never added (as the analysis's register): the toes of the end fillets (SA)
+  // under the girder's longitudinal stress, by the saddle length; the fillet terminations (SL) under the local flange
+  // bending across the flange over its effective width, by the saddle width across the flange (typically E').
+  const range=1.5*wheels*toe/props.Sx;
   ratios['saddle-toe-fatigue']=range/fatigueSpectrumBin(category,range,cycles).allowable;
+  const across=g.rootLength<2*inch?'C':g.rootLength<=Math.min(12*a.saddleThickness,4*inch)?'D':a.saddleThickness<=.8*inch?'E':'E1',local=flangeTieResponse(p,demand.range).flange;
+  ratios['saddle-across-fatigue']=local/fatigueSpectrumBin(across,local,cycles).allowable;
  }
  return ratios;
 }
@@ -329,7 +338,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  const boltRoom=(r:Trial,from:number,to:number)=>Math.max(0,...['tie-bolt','tie-slip','tie-prying','tie-bearing','plate-tie-bolt-fatigue'].map(id=>r.ratios[id]??0))*(from/to)**2<=.8*target;
  // The girder flange under the saddle: its local checks, and whether they keep within the target when a 1/4 in wider
  // bar drops the tie line (the lever on the flange) by 1/8 in.
- const flangeLocalOf=(r:Trial)=>Math.max(r.ratios['flange-tie-flange']??0,r.ratios['saddle-toe-fatigue']??0,r.ratios['plate-tie-keeper-flange']??0);
+ const flangeLocalOf=(r:Trial)=>Math.max(r.ratios['flange-tie-flange']??0,r.ratios['saddle-across-fatigue']??0,r.ratios['plate-tie-keeper-flange']??0);
  const widenRoom=(r:Trial)=>{const lever=flangeTieGeometry(r.q)?.topDrop;return !lever||flangeLocalOf(r)*(lever+inch/8)/lever<=target;};
  // The step that relieves check k; false when there is none left. `grown`: the bolt has grown in this trial (a smaller
  // one is then not tried again); `movement`: a step was taken for the imposed movement (a longer tie would serve it).
@@ -361,7 +370,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   const flangeLocal=flangeLocalOf(r),saddlePlate=Math.max(r.ratios['flange-tie-saddle']??0,r.ratios['flange-tie-saddle-fatigue']??0);
   const lever=flangeTieGeometry(r.q)?.topDrop??Infinity;
   if((k==='flange-tie-saddle'||k==='flange-tie-saddle-fatigue')&&x.saddleThickness<2.5*inch-1e-6&&flangeLocal*(lever+inch/8)/lever<=target){x.saddleThickness+=inch/8;return true;}
-  if(k==='flange-tie-flange'||k==='saddle-toe-fatigue'||k==='plate-tie-keeper-flange'){
+  if(k==='flange-tie-flange'||k==='saddle-across-fatigue'||k==='plate-tie-keeper-flange'){
    if(x.saddleThickness>minSaddle+1e-6&&saddlePlate*(x.saddleThickness/(x.saddleThickness-inch/8))**2<=target){x.saddleThickness-=inch/8;return true;}
    // A smaller bolt narrows the bars, their slots and the lever, where the bolts have the strength.
    if(smaller&&!trial.grown&&boltRoom(r,x.diameter,smaller)){x.diameter=smaller;return true;}

@@ -540,8 +540,8 @@ function setBearings(p:ProjectInput){
 }
 /** Top-flange service where a welded saddle attachment (AISC Table A-3.1 Category D or E) on the tied flange is avoided: CMAA Class D to F cranes, AIST Class A and B buildings. */
 const highCycle=(cfg:RunwayConfig)=>['D','E','F'].includes(cfg.cmaa)||cfg.buildingClass==='A'||cfg.buildingClass==='B';
-/** Saddle tie checks that load the girder flange (the F·h couple, the saddle toes, the rail clip over the saddle) or the saddle itself. */
-const saddleRatio=(k:string)=>k.startsWith('flange-tie-')||k==='plate-tie-keeper-flange'||k==='saddle-toe-fatigue';
+/** Saddle tie checks that load the girder flange (the F·h couple, the saddle toes and fillet terminations, the rail clip over the saddle) or the saddle itself. */
+const saddleRatio=(k:string)=>k.startsWith('flange-tie-')||k==='plate-tie-keeper-flange'||k==='saddle-toe-fatigue'||k==='saddle-across-fatigue';
 /**
  * The configured tieback on the details. Paired bars and the flexible plate are sized for the girder's tie force and
  * imposed movements (sizeFlangeTie): bars or plate, bolts, gussets, saddle and release slots, the column face (a
