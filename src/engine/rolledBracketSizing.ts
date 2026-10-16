@@ -13,8 +13,8 @@
  * t - 1/16 in), the flange fillets to CJP groove welds where the fillet cannot carry the flange; bearing stiffeners where
  * the stub web or flange outstands need them; and, in the receiving column where an unstiffened J10 check governs,
  * full-depth continuity plates (existing columns, or new ones where they clear the bracing gussets; otherwise a deeper
- * stub). A second pass sizes the seat, welds and plates again from light on the stub the first pass chose, and the
- * lighter result is kept. Canonical units N, mm.
+ * stub). A second pass sizes the seat, welds and plates again from light on the stub the first pass chose, keeping
+ * that stub, and the lighter result within the target is kept. Canonical units N, mm.
  */
 import type {ProjectInput,CheckResult} from './types';
 import type {BracketInput} from './bracketInputs';
@@ -202,15 +202,17 @@ export function sizeRolledBracket(p:ProjectInput,target=.9,options:BracketSizing
   'colstiff-upper':[plateThicker,stub],'colstiff-lower':[plateThicker,stub],'colstiff-proportions':[plateThicker],
   'colstiff-flange-weld':[plateWeld('flangeWeld'),plateThicker,stub],'colstiff-fatigue-plate':[plateWeld('flangeWeld'),plateThicker,stub],
   'colstiff-web-weld':[plateWeld('webWeld'),plateThicker,stub],'colstiff-fatigue-weld':[both,plateThicker,stub],'colstiff-web-shear':[fullDepth,stub]};
- /** One growth pass from a settled bracket; returns the bracket and its ratios. */
- const grow=(from:BracketInput,pass:number)=>{
+ /** One growth pass from a settled bracket, with or without stub changes; returns the bracket and its ratios. */
+ const grow=(from:BracketInput,pass:number,stubs=true)=>{
+  const allowed=(m:Move)=>stubs||!stub.includes(m);
   let b=from,r=ratios(b);
   const stuck=new Set<string>(),scaled=(x:Record<string,number>)=>Object.entries(x).map(([k,v])=>[k,exact.has(k)?v*target:v] as [string,number]);
   const worst=(x:Record<string,number>)=>scaled(x).filter(([k])=>!stuck.has(k)).sort((u,v)=>v[1]-u[1])[0]??['',0];
   for(let i=0;i<200;i++){
    const [key,value]=worst(r);if(value<=target)break;
    let next:BracketInput|undefined;
-   for(const m of moves[key]??[stub]){
+   for(const entry of moves[key]??[stub]){
+    const m=Array.isArray(entry)?entry.filter(allowed):allowed(entry)?entry:undefined;if(!m)continue;
     if(Array.isArray(m)){
      // The candidate that lowers the governing ratio most per pound added (a fillet or a joint change counts as one pound).
      let best:{v:BracketInput;score:number;r:Record<string,number>}|undefined;
@@ -230,9 +232,9 @@ export function sizeRolledBracket(p:ProjectInput,target=.9,options:BracketSizing
   return {b,r,within:Object.entries(r).every(([k,v])=>v<=(exact.has(k)?1:target)+1e-9)};
  };
  const first=grow(start,0);
- // Again from light on the chosen stub: the seat, welds, stiffeners and plates grown for it alone.
+ // Again from light on the chosen stub, which stays: the seat, welds, stiffeners and plates grown for it alone.
  const again=light(first.b.corbelShape!);
- const second=settle(again)?grow(again,1):undefined;
+ const second=settle(again)?grow(again,1,false):undefined;
  // The result within every ratio, the lighter where both are (or neither is).
  const pick=!second||(first.within&&!second.within)?first:second.within&&!first.within?second:weight(second.b)<=weight(first.b)?second:first;
  d.bracket=pick.b;
