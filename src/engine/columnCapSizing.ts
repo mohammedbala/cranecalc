@@ -17,7 +17,7 @@
  * whichever lowers the bolt tension or slip ratio most per pound; the bolt edge distance 1/8 in for the nut clearance at
  * the column web; the cap stiffeners thicker, deeper or with larger fillets. After each step the cap plate covers the
  * column, the bearings and the bolt edges, the fillets meet their J2.4 minimum, the end bearing edge distances follow
- * the bolt, and a step that leaves the cap invalid or an end-bearing edge, slot, sleeve or nut clearance unmet is not
+ * the bolt, the bearing plate lengthens for the larger bolt's nut and washer clearance to the stiffener, and a step that leaves the cap invalid or an end-bearing edge, slot, sleeve or nut clearance unmet is not
  * taken. The bearing bolt count is the end bearing's four per girder end. Canonical units N, mm.
  */
 import type {ProjectInput,CheckResult} from './types';
@@ -34,6 +34,7 @@ import {filletMinimum,boltProperties} from './connectionStrength';
 import {activeEndBearing,slidingBolts,type EndBearingInput} from './endBearingInputs';
 import {endBearingChecks,endBearingGeometry} from './endBearing';
 import {plateSteps} from './bracketSizing';
+import {wrenchClearance} from './endStop';
 import type {DesignAnalysis} from './types';
 
 const inch=25.4,eighth=inch/8,sixteenth=inch/16,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
@@ -106,7 +107,7 @@ type Move=(v:{cap:ColumnCapInput;e:EndBearingInput})=>boolean;
 export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:number,key:string,ratio:number,next?:ColumnCapInput)=>void}={}):ProjectInput{
  const q=structuredClone(p),cap0=activeColumnCap(q),e0=activeEndBearing(q);
  if(!cap0||!e0)return q;
- const col=capColumn(q),bs=q.details!.bearing;
+ const col=capColumn(q),bs=q.details!.bearing,length0=bs.length;
  const apply=(v:{cap:ColumnCapInput;e:EndBearingInput})=>{q.columnCap=v.cap;q.details!.endBearing=v.e;};
  /** Dependent sizes: the plate covers the column, the bearings and the bolt edges; J2.4 minimum fillets; the end bearing edge for the bolt. */
  const settle=(v:{cap:ColumnCapInput;e:EndBearingInput})=>{
@@ -118,6 +119,11 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
   }catch{return false;}
   // The girder end and bearing plate edge distances for the bolt and its slot (end-bearing-end-edge, -plate-edge).
   try{const h=endBearingGeometry(q,v.e);b.edge=Math.max(b.edge,up(Math.max(1.5*b.diameter,1.5*b.diameter-h.hole/2+h.slot/2),eighth));}catch{return false;}
+  // The bearing plate long enough for the bolt rows at its ends to clear the stiffener pair at mid-bearing with the nut
+  // (C1) and the plate washer at either extreme of travel (end-bearing-wrench-stiffener, -washer-stiffener), as
+  // bearingLayout lays it out: a larger bolt has a larger edge, wrench clearance and washer. Never shorter than laid out.
+  try{const h=endBearingGeometry(q,v.e),toStiffener=Math.max(wrenchClearance(b.diameter),h.washer.length/2+h.travel)+bs.stiffenerThickness/2+bs.weldSize;
+   bs.length=Math.max(length0,up(2*(b.edge+toStiffener),inch/4));if(q.aist)q.aist.bearingLength=bs.length;}catch{return false;}
   c.weld=Math.max(c.weld,filletMinimum([c.plate.thickness,col.tf]));
   c.stiffener.weld=Math.max(c.stiffener.weld,filletMinimum([c.stiffener.thickness,col.tf]));
   const g=columnCapGeometry(q);
@@ -170,7 +176,8 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
   if(!next){stuck.add(key);continue;}
   v=next;
  }
- apply(v);
- if(validateColumnCap(q).length){q.columnCap=cap0;q.details!.endBearing=e0;}
+ // Settled again: the bearing length follows the chosen bolts, not the last step tried.
+ settle(v);
+ if(validateColumnCap(q).length){q.columnCap=cap0;q.details!.endBearing=e0;bs.length=length0;if(q.aist)q.aist.bearingLength=length0;}
  return q;
 }
