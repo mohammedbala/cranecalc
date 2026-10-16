@@ -343,6 +343,11 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  }
  checks.push(...railChecks(s),...capAttachmentChecks(s),...simpleSupportChecks(p,a.endRotation),...endStopChecks(p,{analysis:a,strength:{...strength,major:Math.min(strength.major,mcx)},props,holdDown:checks.find(c=>c.id==='hold-down-model')?.capacity??0}));
 
+ // A restraint component past its strength (flange-tie-*, D/C > 1) yields before the analysis' elastic restraint
+ // stiffness is reached: the stresses, twist, multiplier and rail movement rely on that stiffness.
+ const yielded=checks.filter(c=>/^flange-tie-/.test(c.id)&&!/fatigue/.test(c.id)&&c.status==='fail'&&(c.utilization??0)>1);
+ if(yielded.length){const worst=yielded.reduce((x,y)=>(y.utilization??0)>(x.utilization??0)?y:x),text=` Relies on the elastic stiffness of the direct flange tie attachment, whose strength is exceeded (${worst.id} D/C ${(worst.utilization??0).toFixed(2)}${yielded.length>1?` and ${yielded.length-1} more`:''}): the restraint yields first, so this result holds only once the attachment is strengthened (or rerun with the restraint at its yield force over its elastic displacement).`;
+  for(const c of checks)if(/^(torsion-normal|torsion-normal-bottom|torsion-stability|flexure-load-height|rail-head)$/.test(c.id))c.note+=text;}
  // Unstable strength cases (no second-order state at the factored load): every check whose demand comes from their
  // stresses or restraint forces fails with no capacity (utilization Infinity), so no unstable case lowers a D/C. Fatigue
  // and service cases are first-order and stay; geometric limits stay.
