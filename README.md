@@ -34,6 +34,36 @@ Open http://127.0.0.1:5173. The report service binds to 127.0.0.1:4174. For the 
 
 `npm test` runs the calculation, drawing and report tests. `npm run test:e2e` builds the GitHub Pages version and runs a browser smoke test against it: the default project calculates, the demonstration package passes, the drawing set renders, and the printable report and DXF set download. Set `CRANECALC_CHROMIUM_PATH` to use an installed Chromium. Pull requests run the typecheck, both test suites and the Pages build in CI (`.github/workflows/ci.yml`).
 
+## Templates and quick setup
+
+The **Templates** tab (opened first when no project is saved on the device) is the shortest way to a complete runway package.
+
+- **Twelve templates** cover the common arrangements:
+  - welded twin-rib seats, haunched seats, rolled W-stub brackets and built-up tapered haunches on existing columns;
+  - brackets by others;
+  - new freestanding columns with welded brackets or column caps;
+  - a continuous girder, two cranes, heavy CMAA D duty and a light 2-ton runway;
+  - a girder-only analysis.
+
+  **Build** creates the template's project. **Customize** loads its choices into the configurator.
+- **The quick configurator** takes a few choices:
+  - the crane's capacity, span, operation, CMAA class and number of cranes;
+  - the runway's bays, bay length, girder system, top of rail and AIST building class;
+  - the girder type, with the section optional;
+  - the supports: existing building or new columns, support, tieback, column and reach.
+
+  It generates every dependent input:
+  - crane wheel loads with consistent statics (both runways sum to the crane weight; TR-13 §1.5.6.1 data), bridge speed and a bumper selected for the 16 ft/s² limit;
+  - the rail for the wheel load;
+  - a duty spectrum whose total matches the building class;
+  - the girder, sized for the moving loads with the top flange's lateral bending, warping, load height and second-order twist;
+  - bearings, ties, end stops and the bracket or column cap, sized by the engine's own sizing routines;
+  - the existing or new columns, their bases and the longitudinal bracing.
+
+  Choices that cannot go together are adjusted at once, with the reason shown. The summary shows the crane data, duty, rail and sized girder before you build.
+- **Template data.** Supplier, survey and site data are fictitious examples, marked as such. A template builds a demonstration-purpose project. Switching the report purpose to a project blocks issue until every example item is replaced.
+- **Rebuilding.** The choices are stored with the project (`configurator`), so **Edit its choices** on the Templates tab rebuilds it after a change. Detailed edits made under Inputs & checks are not kept by a rebuild.
+
 ## Current calculation capability
 
 The app now includes an **AIST runway girder design worksheet** referenced to **AIST Technical Report 13** using the user's supplied source dated February 24, 2020, DG7 third edition (2019, appended 2023 corrections), and directly verified AISC 360-16 provisions. Exact source provenance is retained in the source audit; the reference building requires its own design.

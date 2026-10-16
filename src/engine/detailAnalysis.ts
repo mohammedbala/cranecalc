@@ -398,7 +398,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   if(bracket||existingBracket||capCollector||rolledBracket||taperedHaunch)for(const x of supports){const distinct=new Set<string>();for(const c of concurrent(x)){
    const edge=endBearingOffset(x),f=supportSet(x,c),loads=f.ends.length?f.ends.map(v=>({vertical:v.vertical,offset:v.offset,length:.4*Lbr})):[edge?{vertical:f.vertical,offset:edge,length:.4*Lbr}:{vertical:f.vertical,offset:0}];
    // The bottom-flange force passes through the bearing bolts: at a continuous runway end, at the bearing's center.
-   const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:f.longitudinal,bottom:f.bottom,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:Math.sign(edge)*Lbr/2};
+   // The top-flange restraint force goes with the set: its moment about the seat is the support torque (welded rib brackets).
+   const own=(c.ends??[]).filter(v=>!v.existing),horizontal={longitudinal:f.longitudinal,bottom:f.bottom,top:f.top,offset:own.length?own.reduce((a,v)=>a+v.offset,0)/own.length:Math.sign(edge)*Lbr/2};
    const key=[...loads.map(v=>v.vertical),horizontal.longitudinal].join();if(distinct.has(key))continue;distinct.add(key);
    // The same whole set at the same support recurs whenever the loads that reach it repeat (another crane elsewhere,
    // a combination with the same factors here): the collectors have already recorded everything it can set.

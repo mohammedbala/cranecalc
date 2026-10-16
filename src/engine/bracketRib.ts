@@ -18,6 +18,25 @@ export const haunchAngleLimits={min:10,max:45} as const;
 /** Bracket-plate proportions of the Salmon and Johnson triangular-bracket tests: projection / root depth. */
 export const haunchProportionLimits={min:.5,max:2} as const;
 
+/**
+ * Transverse position of a girder reaction on the seat, measured from the column face. The girder web, its bearing
+ * stiffener pair and the end-bearing bolt group lie on the reach line; the reaction moves off it only by the torque the
+ * girder end puts on its bearing, and never past the edge of the flange-to-bearing-plate contact:
+ * - the design rail eccentricity |e_r| (the rail set off the web within the alignment allowance);
+ * - the support torque M_t about the seat top, the girder's top-flange restraint force times its height above the seat
+ *   (the side-thrust and rail-eccentricity torque that the girder analysis delivers to the tie), taken here by the
+ *   bearing in rocking with no credit to the tie, the larger bracket demand of the two load paths: shift M_t/V;
+ * - bounded by min(b_f, W)/2, the half width of the girder bottom flange on the bearing plate: the plate is wider than
+ *   the flange and is loaded only under it. Without a downward reaction (uplift) the bound itself applies.
+ */
+export function seatEccentricity(p:ProjectInput,V:number,torque=0){
+ const d=p.details!,b=d.bracket!,half=Math.min(p.section.bf,d.bearing.width)/2,rail=Math.abs(p.railEccentricity),moment=Math.abs(torque);
+ const shift=V>0?Math.min(half,rail+moment/V):half;
+ return {e:b.reach+shift,shift,half,rail,torque:moment};
+}
+/** Height of the girder's top-flange restraint above the seat top, the lever of the support torque: the bearing plate and the full girder depth (to the cap top). */
+export const torqueArm=(p:ProjectInput)=>p.details!.bearing.thickness+p.section.d+(p.section.kind==='cap'?p.section.capTw:0);
+
 export interface RibGeometry {
  /** Depth at the column flange (root) and at the seat edge (tip); projection from the column face; thickness. */
  root:number;tip:number;length:number;thickness:number;tapered:boolean;
@@ -34,7 +53,7 @@ export function ribGeometry(b:BracketInput):RibGeometry{
 export const ribDepthAt=(g:RibGeometry,x:number)=>g.root-g.slope*Math.min(Math.max(x,0),g.length);
 const simpson=(f:(x:number)=>number,a:number,b:number,n=256)=>{if(b<=a)return 0;const h=(b-a)/n;let s=f(a)+f(b);for(let i=1;i<n;i++)s+=(i%2?4:2)*f(a+i*h);return s*h/3;};
 /**
- * Response of one rib to a unit force at e from the column face (the far edge of the bearing patch), as factors on
+ * Response of one rib to a unit force at e from the column face (the reaction's transverse position, seatEccentricity), as factors on
  * the rib reaction. Elementary beam theory on vertical sections of depth h(x) = h_r - (h_r - h_t)x/L:
  * - `critical`: the section of greatest bending stress (e - x)/S(x), at x = 2e - h_r/s when that lies between the root
  *   and the load, else the root; for a rectangular rib, the root;
@@ -49,8 +68,10 @@ export function ribResponse(g:RibGeometry,e:number,E:number,G:number){
  const x=g.slope>0?Math.min(xe,Math.max(0,2*e-g.root/g.slope)):0,cos2=Math.cos(g.angle)**2;
  const bending=(at:number)=>(e-at)/S(at);
  const I=(at:number)=>t*h(at)**3/12,A=(at:number)=>t*h(at),kappa=5/6;
- const delta=g.slope>0?simpson(v=>(e-v)**2/(E*I(v)),0,xe)+simpson(v=>1/(kappa*G*A(v)),0,xe):e**3/(3*E*I(0))+e/(kappa*G*A(0));
- const theta=g.slope>0?simpson(v=>(e-v)/(E*I(v)),0,xe):e**2/(2*E*I(0));
+ // Deflection and rotation are needed for the service sets only: integrated on first use (the eccentricity varies by set).
+ let delta:number|undefined,theta:number|undefined;
+ const deflection=()=>delta??=g.slope>0?simpson(v=>(e-v)**2/(E*I(v)),0,xe)+simpson(v=>1/(kappa*G*A(v)),0,xe):e**3/(3*E*I(0))+e/(kappa*G*A(0));
+ const rotation=()=>theta??=g.slope>0?simpson(v=>(e-v)/(E*I(v)),0,xe):e**2/(2*E*I(0));
  // Sample points for the combined elastic stress; both terms are smooth in x.
  const samples=[...Array.from({length:65},(_,i)=>xe*i/64),x];
  return {e,xe,t,cos2,
@@ -59,7 +80,7 @@ export function ribResponse(g:RibGeometry,e:number,E:number,G:number){
   load:{x:xe,depth:h(xe),shear:1.5/A(xe)},
   /** Largest f_b/F_b + f_v/F_v over the sections between the root and the load, per unit force. */
   interaction:(Fb:number,Fv:number)=>Math.max(...samples.map(v=>bending(v)/Fb+1.5/A(v)/Fv)),
-  delta,theta};
+  get delta(){return deflection();},get theta(){return rotation();}};
 }
 /**
  * AISC 360 F11 rectangular-bar flexure at the section x of a rib: yielding (Mp = Fy Z <= 1.6 My) and lateral-torsional

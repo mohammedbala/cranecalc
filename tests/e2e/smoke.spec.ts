@@ -6,7 +6,9 @@ const watch=(page:Page)=>{const errors:string[]=[];page.on('pageerror',e=>errors
 test('calculates the default project live in the browser',async({page})=>{
  const errors=watch(page);
  await page.goto('/');
- await expect(page.getByRole('button',{name:'Inputs & checks'})).toHaveAttribute('aria-pressed','true');
+ // A first visit opens on the templates; the default project calculates behind them.
+ await expect(page.getByRole('button',{name:'Templates'})).toHaveAttribute('aria-pressed','true');
+ await page.getByRole('button',{name:'Inputs & checks'}).click();
  await expect(page.getByText('Geometry & member design',{exact:true})).toBeVisible();
  // The worker finishes a first calculation: the vertical deflection check appears in the worksheet.
  await expect(page.getByText('Vertical crane-load deflection').first()).toBeAttached({timeout:120000});
@@ -20,6 +22,7 @@ test('calculates the default project live in the browser',async({page})=>{
 test('runs the demonstration package: checks, drawing set and printable report',async({page})=>{
  const errors=watch(page);
  await page.goto('/');
+ await page.getByRole('button',{name:'Inputs & checks'}).click();
  await page.getByRole('button',{name:'Load demonstration'}).first().click();
  const generate=page.getByRole('button',{name:'Generate output',exact:true});
  await expect(generate).toBeEnabled({timeout:540000});
@@ -47,6 +50,7 @@ test('runs the demonstration package: checks, drawing set and printable report',
 test('designs new freestanding columns with base plates and footings',async({page})=>{
  const errors=watch(page);
  await page.goto('/');
+ await page.getByRole('button',{name:'Inputs & checks'}).click();
  await page.getByRole('button',{name:'Load new-column example'}).first().click();
  await expect(page.getByRole('button',{name:'Generate output',exact:true})).toBeEnabled({timeout:540000});
  await page.getByRole('button',{name:'Drawings'}).click();
@@ -63,6 +67,7 @@ test('designs new freestanding columns with base plates and footings',async({pag
 test('carries the girder on column caps over new freestanding columns',async({page})=>{
  const errors=watch(page);
  await page.goto('/');
+ await page.getByRole('button',{name:'Inputs & checks'}).click();
  await page.getByRole('button',{name:'Load new-column example'}).first().click();
  await expect(page.getByRole('button',{name:'Generate output',exact:true})).toBeEnabled({timeout:540000});
  // Direct column bearing replaces the bracket: the cap inputs appear and the cap checks replace the tie.
@@ -82,6 +87,7 @@ test('carries the girder on column caps over new freestanding columns',async({pa
 test('edits an issued sheet in the CAD editor and carries the edit into the outputs',async({page})=>{
  const errors=watch(page);
  await page.goto('/');
+ await page.getByRole('button',{name:'Inputs & checks'}).click();
  await page.getByRole('button',{name:'Load demonstration'}).first().click();
  const generate=page.getByRole('button',{name:'Generate output',exact:true});
  await expect(generate).toBeEnabled({timeout:540000});
@@ -106,5 +112,25 @@ test('edits an issued sheet in the CAD editor and carries the edit into the outp
  expect(await fs.readFile((await (await set).path())!,'utf8')).toContain('CAD EDIT CHECK');
  const report=page.waitForEvent('download');await dialog.getByRole('button',{name:'Download printable report (.html)'}).click();
  expect(await fs.readFile((await (await report).path())!,'utf8')).toContain('CAD EDIT CHECK');
+ expect(errors).toEqual([]);
+});
+
+test('builds a project from a template and from the quick configurator',async({page})=>{
+ const errors=watch(page);
+ await page.goto('/');
+ await expect(page.locator('.template-card')).toHaveCount(12);
+ // The configurator summary sizes the girder for the chosen crane.
+ await page.locator('.template-card').first().getByRole('button',{name:'Customize'}).click();
+ await expect(page.locator('.config-summary')).toContainText(/W\d+X\d+/,{timeout:60000});
+ await page.getByLabel('Rated capacity').fill('5');
+ await expect(page.locator('.config-summary')).toContainText('rated 10.0 kip',{timeout:60000});
+ // Dependent choices: a column cap needs new columns.
+ await page.getByLabel('Girder support').selectOption('column-cap');
+ await expect(page.getByLabel('Structure',{exact:true})).toHaveValue('new');
+ // Build the girder-analysis template: the project is replaced and calculates.
+ await page.locator('.template-card').filter({hasText:'Girder analysis only'}).getByRole('button',{name:'Build'}).click();
+ await expect(page.getByRole('button',{name:'Inputs & checks'})).toHaveAttribute('aria-pressed','true',{timeout:60000});
+ await expect(page.locator('.calculation-project')).toContainText('TPL-T12');
+ await expect(page.getByText('Vertical crane-load deflection').first()).toBeAttached({timeout:240000});
  expect(errors).toEqual([]);
 });

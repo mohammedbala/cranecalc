@@ -4,7 +4,7 @@ import {reviewOpenItem} from './review/openItems';
 import * as THREE from 'three';
 import {cappedDemonstrationProject,newColumnDemonstrationProject} from '../src/engine/demonstration';
 import {selectBracketArrangement} from '../src/engine/connectionOptions';
-import {createBracketCollector,bracketChecks,validateBracket,columnWeldGroup,columnWeldLevels,stiffenerLevelForces,seatFatigueCategory,bracketResponse,seatStrip,seatColumnWeldSizes} from '../src/engine/bracketDesign';
+import {createBracketCollector,bracketChecks,validateBracket,stiffenerPlateForces,seatFatigueCategory,bracketResponse,seatStrip} from '../src/engine/bracketDesign';
 import {columnStiffenerGeometry,stiffenerPairStrength,flangeForceLevels,flangeStiffenerForces,bracketForceLevels,stiffenerGauge} from '../src/engine/columnStiffeners';
 import {createRolledBracketCollector,rolledBracketChecks,stubStiffenerForces,stubActions,projectStub,stubBearing} from '../src/engine/rolledBracket';
 import {receiverK,initialColumnStiffeners} from '../src/engine/columnStiffenerInputs';
@@ -62,14 +62,24 @@ describe('column stiffener geometry and strength, hand-checked',()=>{
   // Near the column top only 12tw of web counts.
   expect(stiffenerPairStrength(g,Fy,E,'ASD',true).A).toBeCloseTo((2*6.75+12*tw*tw)*inch**2,6);
  });
- it('splits the weld group force at its centroid in equilibrium with the lateral force',()=>{
-  const p=w14(),b=p.details!.bracket!,g=columnWeldGroup(b,seatColumnWeldSizes(p)[0]),e=b.reach+p.details!.bearing.width/2;
-  for(const f of [{V:100000,Mseat:2e6,F:5000,H:20000,xH:100},{V:-30000,Mseat:0,F:0,H:-8000,xH:0}]){
-   const w=columnWeldLevels(b,g,e,f);expect(w.upperT+w.lowerT-w.upperC-w.lowerC).toBeCloseTo(f.H,4);
-  }
-  // Gravity pulls at the seat and pushes at the rib bottom; the rib couple bounds them from below.
-  const r=bracketResponse(p,[{vertical:100000,offset:0}]),v=stiffenerLevelForces(b,[g],r.ribs,r.e,{V:r.V,Mseat:r.Mx,F:0,H:0,xH:0});
-  expect(v.upperT).toBeGreaterThanOrEqual(2*1.5*r.R*r.e/b.ribDepth-1e-6);expect(v.lowerC).toBeGreaterThanOrEqual(v.upperT*.5);expect(v.upperC).toBeCloseTo(0,6);
+ it('takes each plate force from equilibrium of its rib at the actual pair spacing',()=>{
+  const p=stiffened(),b=p.details!.bracket!,g=columnStiffenerGeometry(p)!,levels={upper:g.levels[0].z,lower:g.levels[1].z},s=levels.upper-levels.lower;
+  // Pairs at the 2 in seat's mid-thickness and with the 1 in plates' bottom faces on the 24 in rib bottom: 24.5 in apart.
+  expect(s).toBeCloseTo(24.5*inch,9);
+  // Gravity: each plate takes its rib's root moment P e as +P e/s at the seat and -P e/s at the rib bottom; no net force.
+  const r=bracketResponse(p,[{vertical:100000,offset:150}]),v=stiffenerPlateForces(b,levels,r.ribs,r.e,{V:r.V,Mseat:r.Mx,F:0,H:0,xH:0});
+  r.ribs.forEach((P,i)=>{expect(v.plates.upper[i]).toBeCloseTo(P*r.e/s,6);expect(v.plates.lower[i]).toBeCloseTo(-P*r.e/s,6);});
+  // The load 150 mm off the grid lifts the far rib (P < 0): its plate is pushed at the seat and pulled at the rib bottom.
+  expect(Math.min(...r.ribs)).toBeLessThan(0);
+  expect(v.upperT).toBeCloseTo(r.R*r.e/s,6);expect(v.lowerC).toBeCloseTo(r.R*r.e/s,6);expect(v.upperC).toBeCloseTo(-Math.min(...r.ribs)*r.e/s,6);expect(v.lowerT).toBeCloseTo(v.upperC,6);
+  // The pair spacing exceeds the rib depth, so the plate force is below the elastic rib couple 1.5 P e/h_r of the tension zone.
+  expect(v.upperT).toBeLessThan(1.5*r.R*r.e/b.ribDepth);
+  // The lateral force H at the seat top by the lever rule, half to each plate; the longitudinal force's moment F a about
+  // the vertical axis as -/+ F a/g on the two ribs at their mid-depth, shared the same way. Each side in equilibrium.
+  const f={V:0,Mseat:0,F:20000,H:12000,xH:0},w=stiffenerPlateForces(b,levels,[0,0],r.e,f),zr=-b.seatThickness-b.ribDepth/2,N=f.F*b.reach/b.ribSpacing;
+  expect(w.plates.upper[0]).toBeCloseTo((f.H/2*(-levels.lower)+N*(zr-levels.lower))/s,6);expect(w.plates.upper[1]).toBeCloseTo((f.H/2*(-levels.lower)-N*(zr-levels.lower))/s,6);
+  for(const i of [0,1])expect(w.plates.upper[i]+w.plates.lower[i]).toBeCloseTo(f.H/2+(i?-N:N),6);
+  expect((w.plates.upper[0]+w.plates.upper[1])*s).toBeCloseTo(f.H*(-levels.lower),4);
  });
  it('defines the force levels of any I-shaped bracket at its flanges, for brackets added later',()=>{
   // A 20 in deep bracket, 3/4 x 10 in flanges, its top flange 1 1/2 in below the seat top.
@@ -101,9 +111,10 @@ describe('column stiffener checks on the bracket',()=>{
   // C2: with the stiffeners every unstiffened check at their levels is for information, not governing, with its values.
   expect(flange.status).toBe('not-applicable');expect(flange.note).toMatch(/^Unstiffened flange local bending at the ribs, not governing \(the column is stiffened at this level\): R_u = .* D\/C 1\.\d\d \(exceeded\)/);
   for(const id of ['seat-flange','seat-web','column-yield','column-crippling'])expect(byId(checks,'bracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d, not governing/);
-  // Each plate carries the rib over it, the more loaded rib (half the pair total), with no unstiffened strength credited.
+  // Each plate carries the rib on its side of the web (the larger plate force), with no unstiffened strength credited.
   const upper=byId(checks,'bracket-colstiff-upper');
-  expect(upper.demand).toBeCloseTo(r.strength.stiffUpperT.value/2,4);expect(upper.status).toBe('pass');expect(upper.note).toContain('no unstiffened column strength credited');
+  expect(upper.demand).toBeCloseTo(Math.max(r.strength.stiffUpperT.value,r.strength.stiffUpperC?.value??0),4);expect(upper.status).toBe('pass');expect(upper.note).toContain('no unstiffened column strength credited');
+  expect(upper.note).toContain('equilibrium at that spacing');
   for(const id of ['upper','lower','proportions','length','flange-weld','web-weld','web-shear','weld-minimum','weld-length','fit','fatigue-plate','fatigue-weld','fatigue-toe'])expect(byId(checks,'bracket-colstiff-'+id)?.status,id).toBe('pass');
   // The flange fillets carry one plate's force on its two throats over the contact beyond the clip.
   expect(byId(checks,'bracket-colstiff-flange-weld').demand).toBeCloseTo(upper.demand!/(2*5/16*inch/Math.SQRT2*6*inch),6);
@@ -237,7 +248,9 @@ const failing=(s:CalculationSnapshot)=>s.checks.filter(c=>!['pass','not-applicab
 describe('column stiffener test projects, full calculation and drawing set',()=>{
  it('makes the capped twin-rib bracket on a W14X90 pass, its drawing set clear in US and SI',()=>{
   const bare=calculate(cappedTwinRibW14X90(false));expect(bare.errors).toEqual([]);
-  expect(failing(bare).map(c=>c.id)).toEqual(['bracket-column-flange']);expect(failing(bare)[0].utilization).toBeCloseTo(1.498,3);
+  // The rib reaction at the girder web line moved by the rail eccentricity and the support torque (it was the far edge
+  // of the bearing plate, beyond the flange tip): the unstiffened flange at the ribs still fails, at 1.180 (was 1.498).
+  expect(failing(bare).map(c=>c.id)).toEqual(['bracket-column-flange']);expect(failing(bare)[0].utilization).toBeCloseTo(1.180,3);
   const s=calculate(cappedTwinRibW14X90(true));expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
   expect(failing(s).map(c=>c.id)).toEqual([]);
   expect(s.checks.find(c=>c.id==='bracket-column-flange')!.status).toBe('not-applicable');

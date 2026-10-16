@@ -84,12 +84,13 @@ describe('C2 · one force system per W-stub flange at the column face',()=>{
   expect(byId(checks,'wbracket-colstiff-flange-weld').demand).toBeCloseTo(R/(2*g.s.flangeWeld/Math.SQRT2*g.contact),6);
   expect(byId(checks,'wbracket-colstiff-web-shear').demand).toBeCloseTo(R/(g.webLength*g.tw),6);
  });
- it('carries the whole force of each level on the welded twin-rib stiffeners as well: one plate takes the rib over it',()=>{
+ it('carries the whole force of each level on the welded twin-rib stiffeners as well: one plate takes the rib on its side',()=>{
   const p=cappedTwinRibW14X90(true),c=createBracketCollector(p)!;
   c.observe('strength','offset',0,[{vertical:80000,offset:250,length:120}],-1,{longitudinal:0,bottom:6000,offset:250});
   c.observe('fatigue','bin',0,[{vertical:30000,offset:250,length:120}],0);c.observe('service','v',0,[{vertical:40000,offset:0}],-1);
   const checks=bracketChecks(p,c.result),S=c.result.strength;
-  expect(byId(checks,'bracket-colstiff-upper').demand).toBeCloseTo(S.stiffUpperT.value/2,6);expect(byId(checks,'bracket-colstiff-lower').demand).toBeCloseTo(S.stiffLowerC.value/2,6);
+  // The collector keeps the force on one plate (equilibrium of its rib at the pair spacing), not a pair total.
+  expect(byId(checks,'bracket-colstiff-upper').demand).toBeCloseTo(S.stiffUpperT.value,6);expect(byId(checks,'bracket-colstiff-lower').demand).toBeCloseTo(S.stiffLowerC.value,6);
   for(const id of ['seat-flange','seat-web','column-yield','column-crippling'])expect(byId(checks,'bracket-'+id).note,id).toMatch(/^Unstiffened J10\.\d, not governing/);
   expect(byId(checks,'bracket-column-flange').note).toMatch(/^Unstiffened flange local bending at the ribs, not governing/);
  });
