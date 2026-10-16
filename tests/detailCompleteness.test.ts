@@ -97,12 +97,14 @@ describe('dimensions and weld callouts of the tie, rail clip and bearing details
   expect(words).toContain('GIRDER GUSSET PL 7/8" X 5 7/8" X 5 1/2"');expect(words).toContain('1/16" FILLER (HIDDEN)');
   // The column gusset spans the bolt group, its 1 1/2 in end edge and the 1/2 in gap to the column flange.
   expect(words).toContain('COLUMN GUSSET PL 7/8" X 5 3/4" X 5 1/2"');expect(words).toContain('2 FB 3/8" X 5 1/4" X 2\'-1 1/2", 1/2" CLR. TO COLUMN;');
-  // Tie and girder end located from the stiffener at each girder end of the shared support.
+  // Tie and girder end located from the stiffener at each girder end of the shared support: the saddle's 3 3/4 in
+  // setback (its 1/2 in end fillet clear of the stiffener and its fillets).
   const plan=texts(t.views[1].render().svg);
-  expect(plan.filter(v=>v==='0\'-3 1/2"')).toHaveLength(2);expect(plan.filter(v=>v==='0\'-6 1/4"')).toHaveLength(2);
+  expect(plan.filter(v=>v==='0\'-3 3/4"')).toHaveLength(2);expect(plan.filter(v=>v==='0\'-6 1/4"')).toHaveLength(2);
   const saddle=t.views[2].render().svg;expect(texts(saddle)).toEqual(expect.arrayContaining(['SADDLE TO FLANGE, END 1','SADDLE TO FLANGE, END 2','GUSSET TO SADDLE','5/8" A325 SC BOLTS (BEYOND)','1/16" FILLER, CLASS B SURFACES']));
   expect(texts(saddle)).not.toContain('BOTH EDGES');
-  const notes=texts(flangeTieSheetSvg(demo)).join(' ');
+  // The demonstration ties at its bearing stiffener and draws no flange tie sheet; its notes with the saddle input.
+  const notes=texts(flangeTieSheetSvg({...demo,input:saddleDemonstration()})).join(' ');
   expect(notes).toContain('NO HOLES OR CUTS THROUGH THE W FLANGES EXCEPT THOSE DETAILED FOR THE END BEARINGS AND END STOPS.');
   // The summary gives the largest strength and fatigue ratios, not the detailing limits.
   // The summary covers the whole tie, its saddle register points included, and names what fails (sheetRatios).

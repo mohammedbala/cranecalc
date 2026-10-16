@@ -203,7 +203,7 @@ describe('girder-mounted runway end stops',()=>{
   for(const view of ['end-stop-elevation','end-stop-plan','end-stop-section','end-stop-notes'])expect(s07.svg).toContain(`data-view="${view}"`);
   const t=texts(s07.svg).join(' | ');
   expect(t).toContain('4 - 3/4" A325 PRETENSIONED (SC)');expect(t).toContain('PL 1" X 10" X 1\'-3" FACE');expect(t).toContain('20 KIP');
-  const s01=texts(set.find(v=>v.number==='S-01')!.svg).join(' ');expect(s01).toContain(`SEE ${detailReferences(set).get('END STOP / ELEVATION')}`);expect(set[1].svg).toContain('data-end-stop="plan"');
+  const ga=set.find(v=>v.number==='S-01')!.svg,s01=texts(ga).join(' ');expect(s01).toContain(`SEE ${detailReferences(set).get('END STOP / ELEVATION')}`);expect(ga).toContain('data-end-stop="plan"');
   const cover=texts(set[0].svg).join(' ');expect(cover).toContain('RUNWAY END STOPS');expect(cover).not.toContain('RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE');
   expect(s07.svg).toContain('class="hidden-line"');expect(sheetsDxf([s07],'US')).toContain('S-STEEL-HIDDEN');
  },240000);
