@@ -25,6 +25,9 @@ export interface RunwayCaseEvent {
  deadFactor?:number;
  /** Crane stop combinations: the runway end whose stop the crane is against (craneAtStop). */
  stop?:'left'|'right';
+ /** The number of later cases identical to this one but for their cranes marked loaded (a combination without a
+  * lifted-load factor gives every load mask the loads of the first): they are numbered, not observed. */
+ repeats?:number;
 }
 export type RunwayCaseObserver=(event:RunwayCaseEvent)=>void;
 export interface DesignAnalysisOptions {
@@ -203,6 +206,9 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
    }
    for(const factors of combinations){
     if(factors.single&&chosen.length!==1)continue;
+    // No lifted-load factor (cv = 0, or the minimum lifted load): every load mask has the loads of the first, so the
+    // cases of the later masks are numbered (ids and case count unchanged) but neither evaluated nor observed again.
+    const liftFree=!!factors.minimumLift||!factors.cv,repeated=liftFree&&loadMask>0,repeats=liftFree&&!loadMask?2**chosen.length-1:0;
     const eq=site?factors.seismic??0:0;
     const ids=chosen.length&&(factors.h||factors.l||factors.bumper||eq)?Array.from({length:chosen.length},(_,i)=>i):[-1];
     for(const hi of ids)for(const sign of factors.h||eq?[-1,1]:[1]){
@@ -211,6 +217,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
      const stop=factors.bumper&&hi>=0?craneAtStop(p,chosen[hi].index,chosen[hi].response.origin):undefined;
      if(factors.bumper&&!stop)continue;
      if(++result.cases>designCaseLimit)throw Error(`AIST design search exceeds ${designCaseLimit.toLocaleString('en-US')} cases. Reduce cranes or travel ranges.`);
+     if(repeated)continue;
      const f=chosen.map((_,i)=>factors.minimumLift?0:full[i]?factors.cv:0);
      const traction=hi<0?0:factors.l*tractionForce[chosen[hi].index],bumper=hi<0?0:factors.bumper*bumperForce[chosen[hi].index];
      // Traction acts at the top of the rail and the bumper above it; both are resisted at the girder bearing,
@@ -221,7 +228,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
      const wheels=chosen.flatMap((s,i)=>s.response.wheels.map(w=>({x:w.x,p:factors.cd*w.unloaded+f[i]*(w.static-w.unloaded)+factors.i*w.static*s.response.impact,h:i===hi?factors.h*w.lateral*sign+eh*(w.unloaded+secured*(w.static-w.unloaded)):0})));
      const vr=dead.reactions.map((r,j)=>({x:r.x,r:factors.d*r.r+factors.live*live.reactions[j].r+chosen.reduce((sum,s,i)=>sum+factors.cd*s.response.vd.reactions[j].r+f[i]*s.response.vl.reactions[j].r+factors.i*s.response.vi.reactions[j].r,0)}));
      const ar=dead.reactions.map((r,j)=>({x:r.x,r:factors.d*deadAdjacent[j]+factors.live*liveAdjacent[j]+chosen.reduce((sum,s,i)=>sum+factors.cd*s.response.adjacent.vd[j]+f[i]*s.response.adjacent.vl[j]+factors.i*s.response.adjacent.vi[j],0)}));
-     observe?.({kind:'strength',adjacentReactions:ar,longitudinalCouple,deadFactor:factors.d,...(stop?{stop}:{}),id:`D-${result.cases}`,combination:record.id,cranes:chosen.map((s,i)=>({index:s.index,origin:s.response.origin,loaded:full[i]})),horizontalCrane:chosen[hi]?.index??-1,lateralSign:sign,wheels,q:factors.d*q+factors.live*di.liveLoad,railTorquePerLength:factors.d*p.railWeight*p.railEccentricity,axial,verticalReactions:vr});
+     observe?.({kind:'strength',adjacentReactions:ar,longitudinalCouple,deadFactor:factors.d,...(stop?{stop}:{}),id:`D-${result.cases}`,combination:record.id,cranes:chosen.map((s,i)=>({index:s.index,origin:s.response.origin,loaded:full[i]})),horizontalCrane:chosen[hi]?.index??-1,lateralSign:sign,wheels,q:factors.d*q+factors.live*di.liveLoad,railTorquePerLength:factors.d*p.railWeight*p.railEccentricity,axial,verticalReactions:vr,...(repeats?{repeats}:{})});
      if(!envelope)continue;
      const c:DesignCaseSummary={id:record.id,equation:record.equation,moment:0,lateralMoment:0,shear:0,reaction:0,interaction:0,positions:chosen.map(s=>s.response.origin),axial,location:0};
      // The section of the largest shear and the grid of the largest reaction, for the governing-action table.

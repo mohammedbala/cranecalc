@@ -45,21 +45,21 @@ class BandMatrix {
  multiply(x:Float64Array){const out=new Float64Array(this.n),a=this.a,n=this.n,w=bw+1;for(let i=0;i<n;i++){let s=0;const hi=Math.min(n-1,i+bw);for(let j=Math.max(0,i-bw);j<=i;j++)s+=a[i*w+i-j]*x[j];for(let j=i+1;j<=hi;j++)s+=a[j*w+j-i]*x[j];out[i]=s;}return out;}
 }
 // Lower-band entry (i,j), i >= j, is stored at i*(bw+1)+i-j. Same operation order as get/set.
-const at=(i:number,j:number)=>i*(bw+1)+i-j;
 /** Banded Cholesky factor of a, in the workspace when given (each factor entry is written before it is read). */
 function factor(a:BandMatrix,work?:{l:Float64Array;scale:Float64Array}){
- const n=a.n,A=a.a,l=work?.l??new Float64Array(n*(bw+1)),scale=work?.scale??new Float64Array(n);
- for(let i=0;i<n;i++){const d=A[at(i,i)];if(!(d>0))return null;scale[i]=Math.sqrt(d);}
- for(let i=0;i<n;i++)for(let j=Math.max(0,i-bw);j<=i;j++){
-  let s=A[at(i,j)]/(scale[i]*scale[j]);
-  for(let k=Math.max(0,i-bw,j-bw);k<j;k++)s-=l[at(i,k)]*l[at(j,k)];
-  if(i===j){if(!Number.isFinite(s)||s<1e-12)return null;l[at(i,i)]=Math.sqrt(s);}
-  else l[at(i,j)]=s/l[at(j,j)];
- }
+ const n=a.n,A=a.a,l=work?.l??new Float64Array(n*(bw+1)),scale=work?.scale??new Float64Array(n),W=bw+1;
+ // at(i,j) = i*W+i-j: with ri = at(i,0) the entries of row i are ri-j (the same entries, in the same order).
+ for(let i=0;i<n;i++){const d=A[i*W];if(!(d>0))return null;scale[i]=Math.sqrt(d);}
+ for(let i=0;i<n;i++){const ri=i*W+i;for(let j=Math.max(0,i-bw);j<=i;j++){
+  const rj=j*W+j;let s=A[ri-j]/(scale[i]*scale[j]);
+  for(let k=Math.max(0,i-bw,j-bw);k<j;k++)s-=l[ri-k]*l[rj-k];
+  if(i===j){if(!Number.isFinite(s)||s<1e-12)return null;l[ri-i]=Math.sqrt(s);}
+  else l[ri-j]=s/l[rj-j];
+ }}
  return {solve(f:Float64Array){
   const x=new Float64Array(n),y=new Float64Array(n);
-  for(let i=0;i<n;i++){let s=f[i]/scale[i];for(let j=Math.max(0,i-bw);j<i;j++)s-=l[at(i,j)]*y[j];y[i]=s/l[at(i,i)];}
-  for(let i=n-1;i>=0;i--){let s=y[i];for(let j=i+1;j<=Math.min(n-1,i+bw);j++)s-=l[at(j,i)]*x[j];x[i]=s/l[at(i,i)];}
+  for(let i=0;i<n;i++){const ri=i*W+i;let s=f[i]/scale[i];for(let j=Math.max(0,i-bw);j<i;j++)s-=l[ri-j]*y[j];y[i]=s/l[i*W];}
+  for(let i=n-1;i>=0;i--){let s=y[i];const hi=Math.min(n-1,i+bw);for(let j=i+1;j<=hi;j++)s-=l[j*W+j-i]*x[j];x[i]=s/l[i*W];}
   for(let i=0;i<n;i++)x[i]/=scale[i];return x;
  }};
 }
@@ -77,11 +77,11 @@ function hermiteInto(t:number,L:number){
  const h=scratch;
  h.n[0]=1-3*t*t+2*t*t*t;h.n[1]=L*(t-2*t*t+t*t*t);h.n[2]=3*t*t-2*t*t*t;h.n[3]=L*(-t*t+t*t*t);
  h.d[0]=(-6*t+6*t*t)/L;h.d[1]=1-4*t+3*t*t;h.d[2]=(6*t-6*t*t)/L;h.d[3]=-2*t+3*t*t;
- h.dd[0]=(-6+12*t)/L**2;h.dd[1]=(-4+6*t)/L;h.dd[2]=(6-12*t)/L**2;h.dd[3]=(-2+6*t)/L;
+ const L2=L**2;h.dd[0]=(-6+12*t)/L2;h.dd[1]=(-4+6*t)/L;h.dd[2]=(6-12*t)/L2;h.dd[3]=(-2+6*t)/L;
  return h;
 }
-/** hermiteInto() with the third derivatives, for station recovery. */
-function hermiteThird(t:number,L:number){const h=hermiteInto(t,L);h.ddd[0]=12/L**3;h.ddd[1]=6/L**2;h.ddd[2]=-12/L**3;h.ddd[3]=6/L**2;return h;}
+/** hermiteInto() with the third derivatives, for station recovery (L**2 and L**3 each evaluated once). */
+function hermiteThird(t:number,L:number){const h=hermiteInto(t,L),L2=L**2,L3=L**3;h.ddd[0]=12/L3;h.ddd[1]=6/L2;h.ddd[2]=-12/L3;h.ddd[3]=6/L2;return h;}
 // Band offsets, relative to an element's first node, of its v/v, theta/theta and v/theta entries (as BandMatrix.add
 // stores entry (i,j) of the lower triangle: i*(bw+1)+i-j for i >= j).
 const localV=[0,1,4,5],localT=[2,3,6,7];
