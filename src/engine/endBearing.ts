@@ -21,6 +21,7 @@ import {sectionProperties} from './section';
 import {girderStrength,concentratedResistance} from './aiscStrength';
 import {locatingSupport} from './endBearingInputs';
 import {craneDesignMinimum} from './aistLoads';
+import {capAngleGeometry,capBoltNutEnvelope} from './capAngle';
 export {endBearingSchema,defaultEndBearing,activeEndBearing,slidingBolts,continuousBearings,continuousEndCentered,locatingSupport,type EndBearingInput} from './endBearingInputs';
 
 const inch=25.4;
@@ -191,11 +192,12 @@ export function bearingPlateChecks(p:ProjectInput,reaction:number):CheckResult[]
  * - the length N, the largest of: the bolt layout (two end edges each side of the stiffener, the tightening clearance C1,
  *   or the plate washer with the travel, to the stiffener and its fillet, a pitch of at least 8/3 d), the J10.2/J10.3
  *   bearing length of the unstiffened end for the factored reaction (at most 12 in; at 0.9), and the flange saddle where
- *   one is used (its setback, half its length and its end fillet from the stiffener to the girder end);
+ *   one is used (its setback, half its length and its end fillet from the stiffener to the girder end) or the cap
+ *   tieback angle's cap bolt hardware clear of the stiffener and its fillets by 1/8 in (coord-cap-tie-stiffener);
  * - the width max(b_f + 1/2 in, g + 3d) on the 1/4 in grid;
  * - the thickness from the plate flexure beyond the flange tips (bearingPlateChecks) at 0.9, at least 3/4 in, in 1/8 in steps.
  */
-export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickness:number;stiffenerWeld:number;saddle?:{setback:number;length:number;weld:number};endBearing?:EndBearingInput;simple?:{temperatureRise:number;temperatureFall:number;settingTolerance:number};Fy?:number;minEdge?:number;lateral?:number;surface?:'A'|'B';plies?:number}){
+export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickness:number;stiffenerWeld:number;saddle?:{setback:number;length:number;weld:number};endBearing?:EndBearingInput;simple?:{temperatureRise:number;temperatureFall:number;settingTolerance:number};Fy?:number;minEdge?:number;lateral?:number;surface?:'A'|'B';plies?:number;capTie?:number}){
  const b=p.section,lrfd=p.method==='LRFD',up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step,q=inch/4;
  const e0=x.endBearing??defaultEndBearing,sl=slidingBolts(e0),sleeved=sl.mode==='sleeved',ss=x.simple??{temperatureRise:30,temperatureFall:30,settingTolerance:inch/8};
  // Travel each way from the farthest support's thermal strain, the end rotation over the depth and the setting tolerance.
@@ -208,7 +210,10 @@ export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickne
  const P=Math.max(0,...p.cranes.map(c=>Math.max((lrfd?1.6:1)*Math.max(c.longitudinal,craneDesignMinimum(c).traction),c.design&&!c.design.bumperBypassesGirder?c.design.bumperForce:0)));
  const V=Math.hypot(P,x.lateral??0)/4,surface=x.surface??'A',hf=(x.plies??3)>=2?.85:1;
  const trial=(db:number)=>{
-  const hole=boltProperties(e0.bolts.grade,db).hole,od=hole+2*sl.wall,slotWidth=sleeved?od+1.5875:hole,slot=slotWidth+2*travel,C=wrenchClearance(db);
+  // The sleeve wall carries 1.5 times the bolt pretension at F_y (end-bearing-sleeve): from the input wall in 1/16 in steps.
+  const bolt=boltProperties(e0.bolts.grade,db),hole=bolt.hole,Fs=x.Fy??50*6.894757293168;let wall=sl.wall;
+  while(sleeved&&wall<inch/2&&Fs*Math.PI/4*((hole+2*wall)**2-hole**2)<1.5*bolt.pretension)wall+=inch/16;
+  const od=hole+2*wall,slotWidth=sleeved?od+1.5875:hole,slot=slotWidth+2*travel,C=wrenchClearance(db);
   const washer={length:slotWidth+2*travel+12.7,width:Math.max(2.5*db,slotWidth+25.4)};
   // The gauge: the default 5 1/2 in where it fits, wider where the nuts and plate washers need it beside the web fillets,
   // narrower on a narrow flange for the J3.4 edge distance of the slots.
@@ -218,7 +223,7 @@ export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickne
   // the faying class and filler factor of the seat).
   const slip=boltCapacity({grade:e0.bolts.grade,diameter:db,planes:1,surface,shear:0,tension:0,method:p.method}).slip*hf;
   const fits=slot<=2.5*(sleeved?od:db)+1e-6&&gauge>=8/3*db-1e-6&&gauge/2-k1>=Math.max(C,washer.width/2)-1e-6&&.9*slip>=V;
-  return {db,hole,od,slotWidth,slot,C,washer,gauge,fits,edge:Math.max(x.minEdge??0,up(Math.max(1.5*db,1.5*db-hole/2+slot/2),q))};
+  return {db,hole,od,wall,slotWidth,slot,C,washer,gauge,fits,edge:Math.max(x.minEdge??0,up(Math.max(1.5*db,1.5*db-hole/2+slot/2),q))};
  };
  const sizes=[.75,.875,1,1.125,1.25].map(v=>v*inch),t=sizes.map(trial).find(v=>v.fits)??trial(e0.bolts.diameter);
  // Bolt layout: rows at e from each plate end, the stiffener at mid-length.
@@ -227,11 +232,13 @@ export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickne
  // J10.2 / J10.3 at the unstiffened end for the factored reaction (the support checks take no stiffener credit).
  const props=sectionProperties(b),str=girderStrength(p,props),R=supportReactions(p,props).supports.reduce((m,v)=>Math.max(m,(lrfd?1.2:1)*Math.max(0,v.D-v.Ds)+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci+Math.max(0,v.Clv))),0);
  let j10=0;for(let lb=0;lb<=12*inch+1e-6;lb+=q){const c=concentratedResistance(p,str,lb,true);j10=lb;if(.9*Math.min(c.yielding,c.crippling)>=R)break;}
- const saddle=x.saddle?2*(x.saddle.setback+x.saddle.length/2+x.saddle.weld):0;
+ const saddle=Math.max(x.saddle?2*(x.saddle.setback+x.saddle.length/2+x.saddle.weld):0,
+  // A cap tieback angle: its cap bolt hardware (from the girder end) clears the stiffener and its fillets by 1/8 in.
+  x.capTie!==undefined?2*(x.capTie+x.stiffenerThickness/2+x.stiffenerWeld+inch/8):0);
  const length=up(Math.max(layout,j10,saddle),q),width=up(Math.max(b.bf+inch/2,t.gauge+3*t.db),q);
  // Plate flexure beyond the flange tips at 0.9.
  const a=Math.max(0,(width-b.bf)/2),fp=R/(width*length),Fy=x.Fy??50*6.894757293168,tReq=a*Math.sqrt(3*fp/(.9*available(Fy,p.method,.9,1.67)));
- return {length,width,thickness:Math.max(.75*inch,up(tReq,inch/8)),travel,need,reaction:R,bolts:{diameter:t.db,gauge:t.gauge,edge:t.edge},layout,j10,saddle};
+ return {length,width,thickness:Math.max(.75*inch,up(tReq,inch/8)),travel,need,reaction:R,bolts:{diameter:t.db,gauge:t.gauge,edge:t.edge},sleeveWall:t.wall,layout,j10,saddle};
 }
 /**
  * The bearing sized for the project's current details (bearingLayout): the saddle requirement where a direct flange
@@ -243,10 +250,12 @@ export function applyBearingLayout(p:ProjectInput,rotation:number,lateral=0){
  const a=d.brace.flangeAttachment,saddle=p.system==='simple'&&a?.enabled?{setback:a.longitudinalSetback,length:a.saddleLength,weld:a.weldSize}:undefined;
  // An edge distance set for the support (a W-stub seat) is kept; a plate already thick enough keeps its thickness, so the
  // seat elevations set from it hold.
- const v=bearingLayout(p,{rotation,stiffenerThickness:d.bearing.stiffenerThickness,stiffenerWeld:d.bearing.weldSize,saddle,endBearing:d.endBearing,simple:d.simpleSupport,Fy:d.material.Fy,minEdge:d.endBearing?.bolts.edge,lateral,surface:bearingSurface(p),plies:bearingShim(p).plies});
+ // A cap tieback angle: the reach of its cap bolt nuts, washers and bolt ends along the runway from the girder end.
+ const cap=capAngleGeometry(p),capTie=cap?cap.input.setback+Math.max(...capBoltNutEnvelope(cap).flatMap(n=>n.parts.map(b=>b.max[0]))):undefined;
+ const v=bearingLayout(p,{capTie,rotation,stiffenerThickness:d.bearing.stiffenerThickness,stiffenerWeld:d.bearing.weldSize,saddle,endBearing:d.endBearing,simple:d.simpleSupport,Fy:d.material.Fy,minEdge:d.endBearing?.bolts.edge,lateral,surface:bearingSurface(p),plies:bearingShim(p).plies});
  Object.assign(d.bearing,{length:v.length,width:v.width,thickness:Math.max(d.bearing.thickness,v.thickness)});
  if(d.simpleSupport)d.simpleSupport.guideTravel=v.travel;
- if(d.endBearing)d.endBearing.bolts={...d.endBearing.bolts,diameter:v.bolts.diameter,gauge:v.bolts.gauge,edge:v.bolts.edge};
+ if(d.endBearing){d.endBearing.bolts={...d.endBearing.bolts,diameter:v.bolts.diameter,gauge:v.bolts.gauge,edge:v.bolts.edge};if(v.sleeveWall>slidingBolts(d.endBearing).wall+1e-9)d.endBearing.sleeveWall=v.sleeveWall;}
  if(p.aist)p.aist.bearingLength=v.length;
  return p;
 }

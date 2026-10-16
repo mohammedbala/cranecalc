@@ -111,6 +111,8 @@ export function bracketServiceDeflection(p:ProjectInput):number|undefined{
   return c.result.service.deflection?.value;
  }catch{return undefined;}
 }
+/** Factor on the statics tie force estimate, from the full analysis (tieSizingDemands). */
+export const tieForceCalibration=1.12;
 /** Demands for sizing the tie before any analysis (canonical units). */
 export interface TieSizingDemands {
  /** Factored tie force including the bracing imperfection force, N. */
@@ -148,7 +150,10 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
  // The rail eccentricity e: the factored vertical reaction R_v at e from the web is a torque R_v·e at the support, taken
  // by the restraint couple over h_r (the analysis's restraint at the tie line carries it with the side thrust).
  const Rv=supportReactions(p,props).supports.reduce((m,v)=>Math.max(m,(lrfd?1.2:1)*Math.max(0,v.D-v.Ds)+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci)),0),eccentric=Rv*Math.abs(p.railEccentricity)/Math.max(top-bottom,s.tf);
- return {force:(lrfd?1.6:1)*r.lateral*torsion+eccentric+braceForce,range:1.25*H,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
+ // Calibrated against the full analysis, whose restraint acts at the tie line on the twisting girder (t01, t03, t05,
+ // t10, simulation cases 5 and 15 after the restraint change): the statics estimate was 0.87 to 0.97 of the analysis
+ // tie force, so it is raised by 12%.
+ return {force:tieForceCalibration*((lrfd?1.6:1)*r.lateral*torsion+eccentric+braceForce),range:1.25*H,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
   braceForce,braceStiffness:(lrfd?1/.75:2)*(10*r.moment*Cd/props.h0+8*P)/Lbr};
 }
 

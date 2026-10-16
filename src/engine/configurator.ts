@@ -536,7 +536,11 @@ function attachBracket(p:ProjectInput,cfg:RunwayConfig,shape:string,reach:number
 function setBearings(p:ProjectInput){
  const d=p.details;if(!d)return;
  d.bearing.shim=defaultBearingShim(bearingSeat(p));
+ const before=d.bearing.length;
  applyBearingLayout(p,girderEndEstimate(p).factored,tieSizingDemands(p).force);
+ // A tapered haunch takes its top flange from the bearings it holds: proportioned again for the new bearing length.
+ const b=p.details!.bracket;
+ if(b?.enabled&&b.arrangement==='tapered-haunch'&&Math.abs(p.details!.bearing.length-before)>1e-6){delete b.haunch;p.details=selectBracketArrangement(p.details!,'tapered-haunch',p.system);}
 }
 /** Top-flange service where a welded saddle attachment (AISC Table A-3.1 Category D or E) on the tied flange is avoided: CMAA Class D to F cranes, AIST Class A and B buildings. */
 const highCycle=(cfg:RunwayConfig)=>['D','E','F'].includes(cfg.cmaa)||cfg.buildingClass==='A'||cfg.buildingClass==='B';

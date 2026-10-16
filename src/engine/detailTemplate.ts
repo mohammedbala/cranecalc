@@ -109,7 +109,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   },
   // Bolted bearings: each bay locates at its left end on simple spans; a continuous girder locates at one support.
   // The gauge narrows on a narrow flange so the sleeved slots keep the J3.4 edge distance.
-  endBearing:{...structuredClone(defaultEndBearing),enabled:true,bolts:{...defaultEndBearing.bolts,...bearing.bolts}},
+  endBearing:{...structuredClone(defaultEndBearing),enabled:true,bolts:{...defaultEndBearing.bolts,...bearing.bolts},...(bearing.sleeveWall>5/16*inch+1e-9?{sleeveWall:bearing.sleeveWall}:{})},
   // The stop sits inboard of the runway-end tie saddle.
   // The face plate holds the whole bumper above the rail and its pad, with 1/2 in to spare, in whole inches.
   ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,setback:stopSetback,base:{...defaultEndStop.base,length:11.5*inch,width:stop.baseWidth},face:{...defaultEndStop.face,height:up((p.aist?.railDepth??p.railHeight)+(p.aist?.railPad?railSeatDefaults.padThickness:0)+defaultEndStop.bumperHeight-defaultEndStop.base.thickness+defaultEndStop.bumperDiameter/2+.5*inch,inch)},stiffener:{...defaultEndStop.stiffener,length:8.5*inch,spacing:stop.spacing,thickness:stop.thickness},bolts:{...defaultEndStop.bolts,gauge:stop.gauge},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
