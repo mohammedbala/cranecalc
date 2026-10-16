@@ -10,6 +10,7 @@ import {seismicBasis,seismicCombinations} from './runwaySeismic';
 import {alongSeismic,baseWarping,braceCases,braceShare,bracingGeometry,bracingLayout,designsBracing,girderOffset,offsetRodEnds,torsionBase} from './newColumnBracing';
 import {activeColumnCap} from './columnCapInputs';
 import {capAlongEccentricity} from './columnCap';
+import {seatEnds,seatMoment} from './columnSupport';
 import type {SupportReactionSet} from './supportReactions';
 import type {CheckResult,ProjectInput} from './types';
 import type {ExistingColumnResult} from './existingColumn';
@@ -99,14 +100,18 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
  const designed=designsBracing(p)?{cases:braceCases(p,reactions,method,alongSeismic(p,reactions,section)),offset:girderOffset(p)}:undefined;
  // A column cap: the girder end reactions off the column centerline along the runway, a weak-axis moment at the top.
  const capTop=activeColumnCap(p)?columnResponse(c.height,E*props.Iy,c.weak,[{x:c.height,moment:1}]):undefined;
+ // A bracket: the seat moment of the uneven girder-end reactions bends the column about its weak axis (as in the column
+ // check), braced along the runway at the seat; its base moment and shear add to the cap's (none with a bracket).
+ const ends=p.details?.bracket?.enabled&&!capTop?seatEnds(p):undefined,seatTop=ends?columnResponse(c.height,E*props.Iy,c.weak,[{x:hs,moment:1}],[hs]):undefined;
  return reactions.supports.map((sp,j)=>{
-  const ex=capTop?capAlongEccentricity(p,j):0,capMy=(runway:number)=>capTop?Math.abs(runway*ex*capTop.reactions.baseMoment):0,capVy=(runway:number)=>capTop?Math.abs(runway*ex*capTop.reactions.base):0;
+  const seat=(f:{D:number;L:number;Cd:number;Cv:number})=>ends&&seatTop&&ends[j]?.length?seatMoment(ends[j],f):0;
+  const ex=capTop?capAlongEccentricity(p,j):0,capMy=(runway:number,ms=0)=>(capTop?Math.abs(runway*ex*capTop.reactions.baseMoment):0)+(ms&&seatTop?Math.abs(ms*seatTop.reactions.baseMoment):0),capVy=(runway:number,ms=0)=>(capTop?Math.abs(runway*ex*capTop.reactions.base):0)+(ms&&seatTop?Math.abs(ms*seatTop.reactions.base):0);
   const dead=sp.D+column,live=sp.Cd+sp.Cv+sp.Ci+sp.L+sp.Clv,lift=Math.min(0,sp.craneMinimum);
   const act=(k:{id:string;equation:string;factors:{D:number;L:number}},vertical:number,tag:string):BaseAction=>{
-   const runway=k.factors.D*sp.D+k.factors.L*vertical,Mh=Math.abs(k.factors.L*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.factors.L*sp.Css*side.reactions.base);
+   const runway=k.factors.D*sp.D+k.factors.L*vertical,Mh=Math.abs(k.factors.L*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.factors.L*sp.Css*side.reactions.base),ms=seat({D:k.factors.D,L:k.factors.L,Cd:k.factors.L,Cv:k.factors.L});
    return {id:`${method} ${k.id}${tag}`,equation:k.equation,P:k.factors.D*dead+k.factors.L*vertical,
     Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,
-    My:(along?Math.abs(k.factors.L*longitudinal*along.reactions.baseMoment):0)+capMy(runway),Vy:(along?Math.abs(k.factors.L*longitudinal*along.reactions.base):0)+capVy(runway),
+    My:(along?Math.abs(k.factors.L*longitudinal*along.reactions.baseMoment):0)+capMy(runway,ms),Vy:(along?Math.abs(k.factors.L*longitudinal*along.reactions.base):0)+capVy(runway,ms),
     Pd:k.factors.D*dead,Md:Math.abs(k.factors.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.factors.D*sp.D*e*eccentric.reactions.base),Mh,Vh};
   };
   const actions=asceCombinations(method).filter(k=>!k.factors.W&&!k.factors.E).flatMap(k=>[act(k,live,''),...(k.factors.L?[act(k,lift,' · least crane vertical')]:[])]);
@@ -122,8 +127,8 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
     // The offset rod whose top ends here twists the column at the work point, as its torque at the seat does: both reach
     // the base, each with its bimoment there (magnitudes added).
     const at=(crane:number,tag:string,brace:number,Vy:number,rod=0,top=0):BaseAction=>{
-     const runway=k.D*sp.D+crane,Mh=Math.abs(k.side*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.side*sp.Css*side.reactions.base);
-     return {id:`${k.id}${tag}`,equation:k.equation,P:k.D*dead+crane+brace,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway),Vy:Vy+capVy(runway),
+     const runway=k.D*sp.D+crane,Mh=Math.abs(k.side*sp.Css*side.reactions.baseMoment),Vh=Math.abs(k.side*sp.Css*side.reactions.base),ms=seat({D:k.D,L:k.live,Cd:k.Cd,Cv:k.Cv});
+     return {id:`${k.id}${tag}`,equation:k.equation,P:k.D*dead+crane+brace,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway,ms),Vy:Vy+capVy(runway,ms),
       Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:k.seismic||undefined,uplift:Math.max(0,-brace),torque:torque+rod+top,
       ...(restrained?{bimoment:warping(torque,hs)+warping(top,layout.height)}:{})};
     };
@@ -135,8 +140,8 @@ export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,me
   if(basis&&sideE){
    const QE=basis.Cs*(sp.D+sp.Cd+column),liveStatic=sp.Cd+sp.Cv;
    for(const k of seismicCombinations(method,basis).filter(v=>v.overstrength)){
-    const runway=k.D*sp.D+k.L*liveStatic,Mh=Math.abs(k.E*QE*sideE.reactions.baseMoment),Vh=Math.abs(k.E*QE*sideE.reactions.base);
-    actions.push({id:`${method} ${k.id}`,equation:k.equation,P:k.D*dead+k.L*liveStatic,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway),Vy:capVy(runway),
+    const runway=k.D*sp.D+k.L*liveStatic,Mh=Math.abs(k.E*QE*sideE.reactions.baseMoment),Vh=Math.abs(k.E*QE*sideE.reactions.base),ms=seat({D:k.D,L:0,Cd:k.L,Cv:k.L});
+    actions.push({id:`${method} ${k.id}`,equation:k.equation,P:k.D*dead+k.L*liveStatic,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway,ms),Vy:capVy(runway,ms),
      Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:true});
    }
   }

@@ -172,8 +172,10 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  // longitudinal force at each locating seat bend the column about its weak axis; the force, offset from the column
  // centerline by the girder line, twists it unless a crane-level strut takes it on the girder line.
  const review=!c.isNew&&!designed,bracingPath=c.longitudinal==='bracing',exit=c.longitudinalExit??'eave-strut';
- const ends=review&&p.details?.bracket?.enabled&&!activeColumnCap(p)?seatEnds(p):undefined;
- const alongM=review?columnResponse(c.height,E*props.Iy,c.weak,[{x:hs,moment:1}],[hs]):undefined,alongF=review?columnResponse(c.height,E*props.Iy,c.weak,[{x:hs,force:1}],[hs]):undefined;
+ // The seat moment of the uneven girder-end reactions about the bracket acts on every bracketed column, existing or new
+ // (a new column braced along the runway at the strut work point, at the seat).
+ const ends=(review||!!designed)&&p.details?.bracket?.enabled&&!activeColumnCap(p)?seatEnds(p):undefined,weakPath=review||!!ends;
+ const alongM=weakPath?columnResponse(c.height,E*props.Iy,c.weak,[{x:hs,moment:1}],[hs]):undefined,alongF=weakPath?columnResponse(c.height,E*props.Iy,c.weak,[{x:hs,force:1}],[hs]):undefined;
  const locating=new Set(review&&bracingPath?locatingGrids(p):[]),stops=bumperAtGrids(p),offset=girderOffset(p),Cls=reactions.Cls;
  // Torsion per unit torque: twist held at the base and at a braced top (warping free), or the cantilever with the
  // base warping condition of the torsion model (columnTorsion).
@@ -237,7 +239,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  if(designed&&share)for(const k of designed.cases.filter(v=>v.kind!=='asce'&&!v.overstrength)){
   const runway=k.D*dead+k.live*live+k.Cd*support.Cd+k.Cv*support.Cv,P=runway+k.D*ownWeight+k.H*share.vertical;
   const Mx=combinedPeak(eccentric.samples,side.samples,'moment',runway*e,k.side*lateral),V=combinedPeak(eccentric.samples,side.samples,'shear',runway*e,k.side*lateral);
-  const My=Math.abs(runway)*ex,B1y=amplifyY(P),B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
+  const My=Math.abs(runway)*ex+reviewMy(seatCase(k.D,k.live,k.Cd,k.Cv),0),B1y=amplifyY(P),B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
   combinations.push(torsional({id:k.id,equation:k.equation,P,Mx:B1x*Mx,My:B1y*My,V,B1x,B1y,U},share.locating?k.Hbay*designed.offset:0));
  }
@@ -248,7 +250,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const seismicCases=basis&&sideE?seismicCombinations(p.method,basis).filter(k=>!k.overstrength||!basis.integrityOnly).map(k=>{
   const runway=k.D*dead+k.L*liveStatic,P=runway+k.D*ownWeight;
   const Mx=combinedPeak(eccentricE!.samples,sideE.samples,'moment',runway*e,k.E*QE),V=combinedPeak(eccentricE!.samples,sideE.samples,'shear',runway*e,k.E*QE);
-  const My=Math.abs(runway)*ex,B1y=amplifyY(P),B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
+  const My=Math.abs(runway)*ex+reviewMy(seatCase(k.D,0,k.L,k.L),0),B1y=amplifyY(P),B1x=P<=0?1:alpha*P>=Pex?Infinity:1/(1-alpha*P/Pex),ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=B1x*Mx/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
   return {id:`${p.method} ${k.id}`,equation:k.equation,P,Mx:B1x*Mx,My:B1y*My,V,B1x,B1y,U,overstrength:k.overstrength};
  }):[];
