@@ -48,10 +48,27 @@ export function countClashes({boxes,segments}:{boxes:TextBox[];segments:Segment[
  for(const box of boxes)for(const s of segments)if(crosses(box,s))count++;
  return count;
 }
+/** Leader paths (multiLeader polylines) of a fragment as segments, in its own coordinates. */
+function leaderSegments(svg:string):[XY,XY][]{
+ const out:[XY,XY][]=[];
+ for(const m of svg.matchAll(/<polyline[^>]*data-leader-path="true"[^>]*points="([^"]*)"/g)){
+  const p=m[1].trim().split(/\s+/).map(v=>v.split(',').map(Number) as XY);
+  for(let i=1;i<p.length;i++)out.push([p[i-1],p[i]]);
+ }
+ return out;
+}
+/** Do two segments cross (touching at an end, as leaders meeting at one target, does not count)? */
+function cross([a,b]:[XY,XY],[c,d]:[XY,XY]){
+ const o=(p:XY,q:XY,r:XY)=>(q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]),e=1e-6;
+ const d1=o(c,d,a),d2=o(c,d,b),d3=o(a,b,c),d4=o(a,b,d);
+ return (d1>e&&d2<-e||d1<-e&&d2>e)&&(d3>e&&d4<-e||d3<-e&&d4>e);
+}
 /** Content already drawn, against which further annotation is placed. */
 export class AnnotationSpace{
- boxes:TextBox[];segments:Segment[];
- constructor(svg=''){const v=annotationItems(svg);this.boxes=v.boxes;this.segments=v.segments;}
+ boxes:TextBox[];segments:Segment[];leaders:[XY,XY][];
+ constructor(svg=''){const v=annotationItems(svg);this.boxes=v.boxes;this.segments=v.segments;this.leaders=leaderSegments(svg);}
+ /** Leaders of a fragment crossing the leaders drawn. */
+ crossings(fragment:string){return leaderSegments(fragment).reduce((n,s)=>n+this.leaders.filter(t=>cross(s,t)).length,0);}
  /** Clashes a fragment would add: its text against the text and lines drawn, its lines through the text drawn, and its own. */
  cost(fragment:string){
   const v=annotationItems(fragment);let count=countClashes(v);
@@ -60,12 +77,17 @@ export class AnnotationSpace{
   return count;
  }
  /** Record a fragment as drawn and return it. */
- add(fragment:string){const v=annotationItems(fragment);this.boxes.push(...v.boxes);this.segments.push(...v.segments);return fragment;}
+ add(fragment:string){const v=annotationItems(fragment);this.boxes.push(...v.boxes);this.segments.push(...v.segments);this.leaders.push(...leaderSegments(fragment));return fragment;}
  /** The first fragment that adds no clash, else the one adding the fewest, recorded as drawn. */
  pick(fragments:string[]){
   let best=fragments[0],least=Infinity;
   for(const f of fragments){const c=this.cost(f);if(c===0)return this.add(f);if(c<least){least=c;best=f;}}
   return this.add(best);
+ }
+ /** As pick, the first fragment that adds no clash and whose leaders cross none drawn preferred. */
+ pickUncrossed(fragments:string[]){
+  const clear=fragments.filter(f=>this.cost(f)===0);
+  return clear.length?this.add(clear.find(f=>this.crossings(f)===0)??clear[0]):this.pick(fragments);
  }
 }
 /** Where a dimension's value reads: between its ends, carried beyond the far or the near end, or level beside the line. */

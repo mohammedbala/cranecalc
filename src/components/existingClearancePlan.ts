@@ -4,7 +4,7 @@ import {existingColumnSection} from '../engine/existingColumn';
 import {existingLayout,planClear,type ClearancePair,type ExistingLayout,type PlanBox} from '../engine/existingLayout';
 import {separationLength} from './bracingSheet';
 import {drawingLength} from './drawingFormat';
-import {refDim,dimText,sheetDrawingScale,bubble,dimH,labelColumn,line,n,rect,text,textWidth,viewTitle,detailRef,detailTitles,type XY} from './sheetGraphics';
+import {refDim,dimText,sheetDrawingScale,bubble,dimH,labelColumn,line,n,rect,text,textWidth,viewTitle,detailRef,detailTitles,lettering,type XY} from './sheetGraphics';
 
 export const existingClearanceTitle='EXISTING BUILDING CLEARANCE / PLAN';
 /** The enlarged plan is drawn where an existing column lies within reach of the new runway. */
@@ -34,9 +34,12 @@ export function existingClearancePlan(s:CalculationSnapshot,r:ExistingLayout,box
  const x0=Math.min(...boxes.map(v=>v.x0)),x1=Math.max(...boxes.map(v=>v.x1)),u0=Math.min(...boxes.map(v=>v.u0)),u1=Math.max(...boxes.map(v=>v.u1));
  // Labels in a column on the left, the geometry, then three dimension strings and the bubble on the right.
  // The footing clear, a short string, reads beside its dimension line: the steel string stands beyond that text.
- const footText=e.footing?textWidth(`${dim(planClear(r.footings[g.grid],e.footing))} CLR.`,8):0,gap1=Math.max(64,footText+28);
- const labelW=124,dimsW=gap1+86,noteH=34,titleH=44;
- const scale=sheetDrawingScale(Math.min((box.w-labelW-dimsW)/(x1-x0),(box.h-noteH-titleH-80)/(u1-u0)),u,contentScale),k=scale.pointsPerMm;
+ // The steel clear text, too long for its string at the scale, reads level inside it: it then takes the room between the
+ // first two strings.
+ const footText=e.footing?textWidth(`${dim(planClear(r.footings[g.grid],e.footing))} CLR.`,8):0,steelMm=planClear(g.part==='footing'?r.columns[g.grid]:g.from,e.column),steelText=textWidth(`${dim(steelMm)} CLR.`,8);
+ const labelW=124,noteH=34,titleH=44,scaleFor=(gap:number)=>sheetDrawingScale(Math.min((box.w-labelW-gap-86)/(x1-x0),(box.h-noteH-titleH-80)/(u1-u0)),u,contentScale);
+ const gap0=Math.max(64,footText+28),gap1=textWidth(`${dim(steelMm)} CLR.`,9)+6<=steelMm*scaleFor(gap0).pointsPerMm?gap0:Math.max(gap0,steelText+4);
+ const dimsW=gap1+86,scale=scaleFor(gap1),k=scale.pointsPerMm;
  const gx=box.x+labelW+((box.w-labelW-dimsW)-(x1-x0)*k)/2,X=(x:number)=>gx+(x-x0)*k;
  // Centered in the box from the upper bubble to the view title.
  const along=Math.abs(((e.column.x0+e.column.x1)/2)-xg)>=1,across=(u1-u0)*k,height=32+across+22+(along?18:0)+noteH+titleH;
@@ -91,9 +94,10 @@ export function existingClearancePlan(s:CalculationSnapshot,r:ExistingLayout,box
   {at:[X(e.column.x0),Y(ul)],labels:[l.input.shape?`(E) ${l.input.shape} COL.`:'(E) COLUMN']},
   ...(e.footing?[{at:[X(e.footing.x0),Y(e.footing.u1-(e.footing.u1-e.footing.u0)*.25)] as XY,labels:[`(E) ${size(l.input.footing.L,l.input.footing.B)} FTG.`]}]:[])
  ];
- svg+=labelColumn(items,box.x,Math.min(inboard,outboardY)-4,Math.max(inboard,outboardY)+4);
- // The clear distances against their limits, under the plan.
- const sep=s.bracingSystem?.separation,ny=Math.max(inboard,outboardY)+22+(along&&sg>0?18:0)+(sg<0?24:0);
+ const colTop=Math.min(inboard,outboardY)-4,labelsEnd=colTop+items.reduce((a,v)=>a+v.labels.length*lettering.leading,0)+8*(items.length-1);
+ svg+=labelColumn(items,box.x,colTop,Math.max(inboard,outboardY)+4);
+ // The clear distances against their limits, under the plan and under the callouts where they stand taller than it.
+ const sep=s.bracingSystem?.separation,ny=Math.max(Math.max(inboard,outboardY)+22+(along&&sg>0?18:0)+(sg<0?24:0),labelsEnd+12);
  const cx=(left+right)/2,notes=[
   `STEEL CLR. ${dim(steelClear)}${sep?`, SEISMIC SEP. ${separationLength(sep.required,u)} MIN.`:''}`,
   ...(footClear!==undefined?[`FOOTING CLR. ${dim(footClear)}, ${dim(r.footingClear)} MIN.`]:[]),

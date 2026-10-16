@@ -377,13 +377,40 @@ export function bracingOnElevation(s:CalculationSnapshot,o:{EX:(x:number)=>numbe
  // Below a column cap the whole strut shows, between the column flanges.
  const capped=capWorkPointDrop(p)>0,seat=capped?half:(br?bracketSeat(br).length:0)*mm/2,sb=EY(wp-g.strut.d*mm/2),st=EY(wp+g.strut.d*mm/2);
  for(let i=1;i<o.supports.length;i++)svg+=line([EX(o.supports[i-1]+seat),sb],[EX(o.supports[i]-seat),sb],'runway-line')+(capped?line([EX(o.supports[i-1]+seat),st],[EX(o.supports[i]-seat),st],'runway-line'):'');
- // The callout in the first braced span, below the girder marks, pointing at the strut there.
- const i=L.spans[0],cx=(EX(o.supports[i-1])+EX(o.supports[i]))/2,labels=[`${plateInches(p.longitudinalBracing!.rod.diameter,p.units)} DIA. ROD X-BRACING BELOW, GRIDS ${L.spans.map(v=>`${v}-${v+1}`).join(', ')}, BOTH RUNWAYS`,`${g.strut.shape} STRUT ON COLUMN LINE, ALL SPANS; SEE ${detailRef(detailTitles.bracedBay)}`];
- const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),lettering.text)));
- // The leader lands on the strut a quarter span in, clear of the girder mark at mid-span.
- const q=EX(o.supports[i-1]*.75+o.supports[i]*.25),drawn=new AnnotationSpace(svg),at:XY=[q,sb];
- // An unbraced span beside it is the last resort.
- const spans=o.supports.slice(1).map((x,k)=>k+1).filter(k=>!L.spans.includes(k)).map(k=>(EX(o.supports[k-1])+EX(o.supports[k]))/2-w/2);
- svg+=drawn.pick([end-14,end-20,end-26,end-32,end-46,end-6].flatMap(y=>[cx-w/2,q+14,q-14-w,cx+14,cx-14-w,...spans].map(x=>multiLeader([at],[x,y],labels,lettering.text))));
  return svg+'</g>';
+}
+/**
+ * The bracing callout on the girder elevation (options as bracingOnElevation), placed where it reads clear of the
+ * elevation drawn so far (`drawn`, its grid lines, girder marks and dimensions included) and inside [left, right]: in the
+ * first braced span below the girder marks, else another span, on two lines or wrapped to four where a span is narrow;
+ * else beyond a runway end (the nearer first), level with the column stubs or below them. The leader lands on the strut a
+ * quarter span into the first braced span, clear of the girder mark at mid-span.
+ */
+export function bracingElevationCallout(s:CalculationSnapshot,o:Parameters<typeof bracingOnElevation>[1],drawn:string,[left,right]:[number,number]){
+ const p=s.input,r=s.bracingSystem!,g=r.geometry,L=r.layout,dt=p.details!;
+ const mm=.001,wp=-p.section.d/2*mm-dt.bearing.thickness*mm-capWorkPointDrop(p)*mm,{EX,EY}=o,end=o.girderBottom+o.stub,sb=EY(wp-g.strut.d*mm/2);
+ const i=L.spans[0],cx=(EX(o.supports[i-1])+EX(o.supports[i]))/2,rod=`${plateInches(p.longitudinalBracing!.rod.diameter,p.units)} DIA. ROD X-BRACING BELOW`,grids=`GRIDS ${L.spans.map(v=>`${v}-${v+1}`).join(', ')}, BOTH RUNWAYS`;
+ const strut=`${g.strut.shape} STRUT ON COLUMN LINE`,see=`SEE ${detailRef(detailTitles.bracedBay)}`;
+ const two=[`${rod}, ${grids}`,`${strut}, ALL SPANS; ${see}`],four=[`${rod},`,`${grids};`,`${strut},`,`ALL SPANS; ${see}`];
+ const width=(labels:string[])=>Math.max(...labels.map(v=>textWidth(v.toUpperCase(),lettering.text)));
+ const q=EX(o.supports[i-1]*.75+o.supports[i]*.25),space=new AnnotationSpace(drawn),at:XY=[q,sb];
+ const first=EX(o.supports[0])-o.columnWidth/2*o.ek,last=EX(o.supports[o.supports.length-1])+o.columnWidth/2*o.ek;
+ const inside=(x:number,labels:string[])=>x>=left&&x+width(labels)<=right;
+ const options:string[]=[];
+ // Within the spans: the braced span first, an unbraced span beside it the last resort.
+ for(const labels of [two,four]){
+  const w=width(labels),h=(labels.length-1)*lettering.leading;
+  const spans=o.supports.slice(1).map((x,k)=>k+1).filter(k=>!L.spans.includes(k)).map(k=>(EX(o.supports[k-1])+EX(o.supports[k]))/2-w/2);
+  const ys=labels.length===2?[end-14,end-20,end-26,end-32,end-46,end-6]:[end-6-h,end-h,end+6-h,end-12-h];
+  options.push(...ys.flatMap(y=>[cx-w/2,q+14,q-14-w,cx+14,cx-14-w,...spans].filter(x=>inside(x,labels)).map(x=>multiLeader([at],[x,y],labels,lettering.text))));
+ }
+ // Beyond the runway ends, the nearer end first, below the strut: the strut runs every span, so the leader lands on it a
+ // quarter span into the end span.
+ const n=o.supports.length,nearLeft=q-first<=last-q,ends:{x:(w:number)=>number;at:XY}[]=[
+  {x:w=>first-24-w,at:[EX(o.supports[0]*.75+o.supports[1]*.25),sb]},{x:()=>last+24,at:[EX(o.supports[n-2]*.25+o.supports[n-1]*.75),sb]}];
+ for(const labels of [two,four]){
+  const w=width(labels),ys=Array.from({length:12},(_,j)=>sb+lettering.leading+j*6);
+  for(const e of nearLeft?ends:[ends[1],ends[0]])if(inside(e.x(w),labels))options.push(...ys.map(y=>multiLeader([e.at],[e.x(w),y],labels,lettering.text)));
+ }
+ return options.length?space.pick(options):'';
 }
