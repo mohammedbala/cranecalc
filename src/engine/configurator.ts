@@ -38,6 +38,7 @@ import {railTopAboveSteel} from './railSeat';
 import {columnGussetHeight,flangeTieGeometry} from './tieGeometry';
 import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener} from './flangeTieSizing';
 import {applyBearingLayout,bearingSeat,defaultBearingShim} from './endBearing';
+import {validateRunwayDetails} from './detailValidation';
 import {weldedRibBracket} from './bracketRib';
 import {classFromCycles} from './buildingClass';
 
@@ -567,7 +568,12 @@ function setBearings(p:ProjectInput){
  const d=p.details;if(!d)return;
  d.bearing.shim=defaultBearingShim(bearingSeat(p));
  const before=d.bearing.length;
- applyBearingLayout(p,girderEndEstimate(p).factored,tieSizingDemands(p).force);
+ const rotation=girderEndEstimate(p).factored,force=tieSizingDemands(p).force;
+ applyBearingLayout(p,rotation,force);
+ // A cap tieback angle at a runway-end grid: with the bearing centered on the grid its column end plate would land on the
+ // column web; the girder end then stays on the grid.
+ if(p.system==='simple'&&d.brace.arrangement==='cap-angle'&&d.simpleSupport?.endGridBearing==='centered'&&validateRunwayDetails(p).some(e=>e.includes('details.brace.capAngle'))){
+  d.simpleSupport.endGridBearing='on-grid';applyBearingLayout(p,rotation,force);}
  // A tapered haunch takes its top flange from the bearings it holds: proportioned again for the new bearing length.
  const b=p.details!.bracket;
  if(b?.enabled&&b.arrangement==='tapered-haunch'&&Math.abs(p.details!.bearing.length-before)>1e-6){delete b.haunch;p.details=selectBracketArrangement(p.details!,'tapered-haunch',p.system);}

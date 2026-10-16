@@ -22,6 +22,7 @@ import {girderStrength,concentratedResistance} from './aiscStrength';
 import {locatingSupport} from './endBearingInputs';
 import {craneDesignMinimum} from './aistLoads';
 import {capAngleGeometry,capBoltNutEnvelope} from './capAngle';
+import {boxClearance,coordinationAllowance} from './connectionCoordination';
 export {endBearingSchema,defaultEndBearing,activeEndBearing,slidingBolts,continuousBearings,continuousEndCentered,locatingSupport,type EndBearingInput} from './endBearingInputs';
 
 const inch=25.4;
@@ -197,7 +198,7 @@ export function bearingPlateChecks(p:ProjectInput,reaction:number):CheckResult[]
  * - the width max(b_f + 1/2 in, g + 3d) on the 1/4 in grid;
  * - the thickness from the plate flexure beyond the flange tips (bearingPlateChecks) at 0.9, at least 3/4 in, in 1/8 in steps.
  */
-export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickness:number;stiffenerWeld:number;saddle?:{setback:number;length:number;weld:number};endBearing?:EndBearingInput;simple?:{temperatureRise:number;temperatureFall:number;settingTolerance:number};Fy?:number;minEdge?:number;lateral?:number;surface?:'A'|'B';plies?:number;capTie?:number}){
+export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickness:number;stiffenerWeld:number;saddle?:{setback:number;length:number;weld:number};endBearing?:EndBearingInput;simple?:{temperatureRise:number;temperatureFall:number;settingTolerance:number};Fy?:number;minEdge?:number;lateral?:number;surface?:'A'|'B';plies?:number;minLength?:number}){
  const b=p.section,lrfd=p.method==='LRFD',up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step,q=inch/4;
  const e0=x.endBearing??defaultEndBearing,sl=slidingBolts(e0),sleeved=sl.mode==='sleeved',ss=x.simple??{temperatureRise:30,temperatureFall:30,settingTolerance:inch/8};
  // Travel each way from the farthest support's thermal strain, the end rotation over the depth and the setting tolerance.
@@ -232,9 +233,8 @@ export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickne
  // J10.2 / J10.3 at the unstiffened end for the factored reaction (the support checks take no stiffener credit).
  const props=sectionProperties(b),str=girderStrength(p,props),R=supportReactions(p,props).supports.reduce((m,v)=>Math.max(m,(lrfd?1.2:1)*Math.max(0,v.D-v.Ds)+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci+Math.max(0,v.Clv))),0);
  let j10=0;for(let lb=0;lb<=12*inch+1e-6;lb+=q){const c=concentratedResistance(p,str,lb,true);j10=lb;if(.9*Math.min(c.yielding,c.crippling)>=R)break;}
- const saddle=Math.max(x.saddle?2*(x.saddle.setback+x.saddle.length/2+x.saddle.weld):0,
-  // A cap tieback angle: its cap bolt hardware (from the girder end) clears the stiffener and its fillets by 1/8 in.
-  x.capTie!==undefined?2*(x.capTie+x.stiffenerThickness/2+x.stiffenerWeld+inch/8):0);
+ // The saddle, or the least length another end-zone part needs (minLength, a cap tieback angle's hardware).
+ const saddle=Math.max(x.saddle?2*(x.saddle.setback+x.saddle.length/2+x.saddle.weld):0,x.minLength??0);
  const length=up(Math.max(layout,j10,saddle),q),width=up(Math.max(b.bf+inch/2,t.gauge+3*t.db),q);
  // Plate flexure beyond the flange tips at 0.9.
  const a=Math.max(0,(width-b.bf)/2),fp=R/(width*length),Fy=x.Fy??50*6.894757293168,tReq=a*Math.sqrt(3*fp/(.9*available(Fy,p.method,.9,1.67)));
@@ -247,15 +247,29 @@ export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickne
  */
 export function applyBearingLayout(p:ProjectInput,rotation:number,lateral=0){
  const d=p.details;if(!d)return p;
- const a=d.brace.flangeAttachment,saddle=p.system==='simple'&&a?.enabled?{setback:a.longitudinalSetback,length:a.saddleLength,weld:a.weldSize}:undefined;
+ const a=d.brace.flangeAttachment,saddle=p.system==='simple'&&a?.enabled&&d.brace.arrangement!=='cap-angle'?{setback:a.longitudinalSetback,length:a.saddleLength,weld:a.weldSize}:undefined;
  // An edge distance set for the support (a W-stub seat) is kept; a plate already thick enough keeps its thickness, so the
  // seat elevations set from it hold.
- // A cap tieback angle: the reach of its cap bolt nuts, washers and bolt ends along the runway from the girder end.
- const cap=capAngleGeometry(p),capTie=cap?cap.input.setback+Math.max(...capBoltNutEnvelope(cap).flatMap(n=>n.parts.map(b=>b.max[0]))):undefined;
- const v=bearingLayout(p,{capTie,rotation,stiffenerThickness:d.bearing.stiffenerThickness,stiffenerWeld:d.bearing.weldSize,saddle,endBearing:d.endBearing,simple:d.simpleSupport,Fy:d.material.Fy,minEdge:d.endBearing?.bolts.edge,lateral,surface:bearingSurface(p),plies:bearingShim(p).plies});
+ const layout=(minLength?:number)=>bearingLayout(p,{minLength,rotation,stiffenerThickness:d.bearing.stiffenerThickness,stiffenerWeld:d.bearing.weldSize,saddle,endBearing:d.endBearing,simple:d.simpleSupport,Fy:d.material.Fy,minEdge:d.endBearing?.bolts.edge,lateral,surface:bearingSurface(p),plies:bearingShim(p).plies});
+ // A cap tieback angle: the least length from the layout's at which its cap bolt hardware clears the stiffener.
+ let v=layout();const cap=capTieBearingLength(p,v.length);if(cap!==undefined&&cap>v.length+1e-6)v=layout(cap);
  Object.assign(d.bearing,{length:v.length,width:v.width,thickness:Math.max(d.bearing.thickness,v.thickness)});
  if(d.simpleSupport)d.simpleSupport.guideTravel=v.travel;
  if(d.endBearing){d.endBearing.bolts={...d.endBearing.bolts,diameter:v.bolts.diameter,gauge:v.bolts.gauge,edge:v.bolts.edge};if(v.sleeveWall>slidingBolts(d.endBearing).wall+1e-9)d.endBearing.sleeveWall=v.sleeveWall;}
  if(p.aist)p.aist.bearingLength=v.length;
  return p;
+}
+
+/**
+ * The least bearing length from `from` (1/4 in grid) at which a cap tieback angle's cap bolt hardware (nuts, washers, bolt ends inside
+ * the girder) clears the bearing stiffener pair at mid-bearing, with its fillets, by the 1/8 in coordination allowance
+ * (coord-cap-tie-stiffener, the same box envelopes): the tie sits its setback from the girder end, the stiffener half the
+ * bearing length from it. Undefined without a cap tieback angle.
+ */
+export function capTieBearingLength(p:ProjectInput,from=6*inch){
+ const g=capAngleGeometry(p),d=p.details;if(!g||!d)return undefined;
+ const s=p.section,bs=d.bearing,zTop=-(s.capTw+s.tf),zBot=-(s.capTw+s.d-s.tf),half=bs.stiffenerThickness/2+bs.weldSize,nuts=capBoltNutEnvelope(g),setback=g.input.setback;
+ const clear=(N:number)=>Math.min(...nuts.flatMap(n=>n.parts.map(part=>boxClearance(part,{min:[N/2-setback-half,s.tw/2,zBot],max:[N/2-setback+half,s.tw/2+bs.stiffenerWidth,zTop]}))));
+ for(let N=from;N<=inch*24+1e-6;N+=inch/4)if(clear(N)>=coordinationAllowance-1e-9)return N;
+ return 24*inch;
 }
