@@ -49,8 +49,9 @@ describe('AISC notation in the calculation report (Rev B)',()=>{
   for(const academic of ['\\partial','\\omega','\\det','v^{\\prime','Ku-f','\\mathbf'])expect(all,academic).not.toContain(academic);
   const eq=(id:string)=>s.checks.find(c=>c.id===id)!.equation;
   // m11 (peer review): each flange at its own extreme fibre, S_xc to the cap and S_xt to the bottom flange.
-  expect(eq('torsion-normal')).toBe('f_{un}=\\frac{P}{A}+\\frac{M_x}{S_{xc}}+\\frac{M_y+\\theta M_x}{S_y}+\\sigma_{ws};\\quad\\sigma_{ws}=EW_{no}\\theta^{\\prime\\prime}');
-  expect(eq('torsion-normal-bottom')).toBe('f_{un}=\\frac{P}{A}+\\frac{M_x}{S_{xt}}+\\frac{(M_y+\\theta M_x)b_f}{2I_y}+\\sigma_{ws};\\quad\\sigma_{ws}=EW_{no}\\theta^{\\prime\\prime}');
+  // The lateral moment of the coupled second-order analysis already carries theta M_x; both at its 0.8 stiffness (C2.3).
+  expect(eq('torsion-normal')).toBe('f_{un}=\\frac{P}{A}+\\frac{M_x}{S_{xc}}+\\frac{M_y}{S_y}+\\sigma_{ws};\\quad\\sigma_{ws}=0.8EW_{no}\\theta^{\\prime\\prime}');
+  expect(eq('torsion-normal-bottom')).toBe('f_{un}=\\frac{P}{A}+\\frac{M_x}{S_{xt}}+\\frac{M_yb_f}{2I_y}+\\sigma_{ws};\\quad\\sigma_{ws}=0.8EW_{no}\\theta^{\\prime\\prime}');
   expect(eq('torsion-shear')).toMatch(/^f_\{uv\}=\\tau_b\+\\tau_t\+\\tau_\{ws\}/);
   expect(eq('fatigue')).toMatch(/^f_\{sr\}=f_\{max\}-f_\{min\}\\le F_\{SR\}=/);
   expect(eq('crane-1-traction')).toContain('0.20\\Sigma P_d');
