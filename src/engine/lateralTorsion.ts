@@ -10,6 +10,7 @@
  * Nayak et al., AISC EJ 61(3), 2024, Eq.6 (centroidal M-coupling).
  * Load-height term follows vertical-load potential P*z*(cos(theta)-1).
  */
+import {meshNodes,meshTolerance,type MeshNodes} from './meshNodes';
 export interface LateralTorsionLoad { x:number; lateral:number; torque:number; vertical?:number; height?:number; }
 export interface FlangeRestraint { x:number; top:number; bottom:number; }
 export interface LateralTorsionInput {
@@ -84,6 +85,7 @@ const dofNames=['v','slope','twist','warping'];
 
 export class LateralTorsionBeam {
  readonly nodes:number[];
+ private readonly mesh:MeshNodes;
  private readonly elastic:BandMatrix;
  private readonly geometric:BandMatrix;
  private readonly force:Float64Array;
@@ -91,17 +93,20 @@ export class LateralTorsionBeam {
  constructor(readonly input:LateralTorsionInput){
   const p=input;
   for(const [k,v] of Object.entries({length:p.length,E:p.E,G:p.G,Iy:p.Iy,J:p.J,Cw:p.Cw,h0:p.h0,polarRadiusSquared:p.polarRadiusSquared}))if(!Number.isFinite(v)||v<=0)throw Error(`Invalid lateral/torsion ${k}.`);
-  if((p.subdivisions??24)<2||(p.subdivisions??24)>256)throw Error('Lateral/torsion subdivisions must be between 2 and 256.');
+  const subdivisions=p.subdivisions??24;
+  if(!(subdivisions>=2&&subdivisions<=4096))throw Error('Lateral/torsion subdivisions must be between 2 and 4096.');
   const locations=[0,p.length,...p.loads.map(l=>l.x),...p.restraints.map(r=>r.x),...(p.fixed??[]).map(r=>r.x)];
   if(locations.some(x=>!Number.isFinite(x)||x<0||x>p.length))throw Error('Lateral/torsion load or restraint is outside the member.');
   if(p.loads.some(l=>![l.lateral,l.torque,l.vertical??0,l.height??0].every(Number.isFinite))||p.restraints.some(r=>!Number.isFinite(r.top)||!Number.isFinite(r.bottom)||r.top<0||r.bottom<0))throw Error('Invalid lateral/torsion force or restraint stiffness.');
-  // Mesh points within 1 mm of a load or restraint node are left out: such a sliver element ruins the conditioning.
-  const anchors=[...locations];
-  for(let i=1;i<(p.subdivisions??24);i++){const x=p.length*i/(p.subdivisions??24);if(anchors.every(a=>Math.abs(a-x)>1))locations.push(x);}
-  this.nodes=locations.sort((a,b)=>a-b).filter((x,i,all)=>i===0||x-all[i-1]>1e-6);
+  // No sliver elements: a wheel a fraction of a millimetre from a restraint node made an element so short that the
+  // factorization of the softly restrained girder reported a false instability (meshTolerance). Supports and
+  // restraints closer than the tolerance share a node, a load within it of a node moves onto that node, and
+  // subdivision points within it of a load or restraint are left out.
+  this.mesh=meshNodes([0,p.length,...(p.fixed??[]).map(r=>r.x),...p.restraints.map(r=>r.x)],p.loads.map(l=>l.x),Array.from({length:Math.ceil(subdivisions)-1},(_,i)=>p.length*(i+1)/subdivisions),meshTolerance(p.length,p.h0));
+  this.nodes=this.mesh.nodes;
   const n=this.nodes.length*4;this.elastic=new BandMatrix(n);this.geometric=new BandMatrix(n);this.force=new Float64Array(n);
-  const index=(x:number)=>{const i=this.nodes.findIndex(v=>Math.abs(v-x)<1e-6);if(i<0)throw Error('Missing lateral/torsion node.');return 4*i;};
-  this.fixed=(p.fixed??[]).flatMap(r=>r.dofs.map(d=>index(r.x)+dofNames.indexOf(d)));
+  const index=(x:number)=>4*this.mesh.index(x);
+  this.fixed=[...new Set((p.fixed??[]).flatMap(r=>r.dofs.map(d=>index(r.x)+dofNames.indexOf(d))))];
   for(let e=0;e<this.nodes.length-1;e++){
    const x0=this.nodes[e],L=this.nodes[e+1]-x0;
    const v=[4*e,4*e+1,4*e+4,4*e+5],t=v.map(i=>i+2);
@@ -163,7 +168,8 @@ export class LateralTorsionBeam {
   };
   // Element midpoints and both sides of each node, by element index: the elements at() would find.
   const stations=this.nodes.flatMap((x,i)=>i===0?[inElement(0,x)]:[inElement(i-1,(this.nodes[i-1]+x)/2),inElement(i-1,x),...(i===this.nodes.length-1?[]:[inElement(i,x)])]);
-  const restraints=p.restraints.map(r=>{const s=at(r.x),yt=p.topOffset??p.h0/2,yb=p.bottomOffset??-p.h0/2,top=r.top*(s.v+yt*s.twist),bottom=r.bottom*(s.v+yb*s.twist);return {x:r.x,top,bottom,lateral:top+bottom,torque:top*yt+bottom*yb};});
+  // Each restraint acts at its node (it may share a node with a support or another restraint within meshTolerance).
+  const restraints=p.restraints.map(r=>{const s=at(this.nodes[this.mesh.index(r.x)]),yt=p.topOffset??p.h0/2,yb=p.bottomOffset??-p.h0/2,top=r.top*(s.v+yt*s.twist),bottom=r.bottom*(s.v+yb*s.twist);return {x:r.x,top,bottom,lateral:top+bottom,torque:top*yt+bottom*yb};});
   const residualVector=this.matrix(geometricMultiplier,false).multiply(u);
   let numerator=0,denominator=1;
   for(let i=0;i<u.length;i++){if(this.fixed.includes(i))continue;numerator=Math.max(numerator,Math.abs(residualVector[i]-this.force[i])/Math.sqrt(this.elastic.get(i,i)));denominator=Math.max(denominator,Math.abs(this.force[i])/Math.sqrt(this.elastic.get(i,i)));}

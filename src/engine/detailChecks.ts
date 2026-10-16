@@ -13,6 +13,7 @@ import {connectionOptionChecks} from './connectionOptions';
 import {capReady,capAttachmentChecks} from './capChecks';
 import type { CalculationSnapshot,CheckResult,ProjectInput } from './types';
 import type { LapConnection,RunwayDetailResults } from './runwayDetails';
+import type {SupportForceEnvelope,SupportForceSet} from './bracketForces';
 import { available,girderStrength } from './aiscStrength';
 import { bearingStiffener,blockShear,boltCapacity,boltProperties,elasticBoltGroup,parallelWeldGroup,plateBearing,compressionResistance,filletMinimum,transverseFilletFatigue } from './connectionStrength';
 import { braceSystem,createDetailCollector,restraintStations,fatigueSpectrumBin } from './detailAnalysis';
@@ -67,27 +68,62 @@ function lapChecks(p:ProjectInput,c:LapConnection,id:string,title:string,fx:numb
   resolved(`${id}-prying`,`${title} · bolt tension / prying`,'Defined symmetric double-lap forces lie in the connected plate plane. Bolt tension and prying do not arise in this template. Out-of-plane connection actions require a different model.')
  ];
 }
-const differences=(a:RunwayDetailResults,b:RunwayDetailResults)=>Math.max(
- ...(b.existingBracket&&a.existingBracket?(['strength','service'] as const).flatMap(kind=>Object.entries(b.existingBracket![kind]).map(([key,v])=>Math.abs(v.value-(a.existingBracket![kind][key]?.value??0))/Math.max(v.value,key==='seatDeflection'?1e-3:1))):[]),
- ...(b.existingBracket&&a.existingBracket?b.existingBracket.fatigue.flatMap((f,i)=>(['seatStress','vertical','rootMoment','seatMoment'] as const).map(k=>Math.abs(f[k]-a.existingBracket!.fatigue[i][k])/Math.max(f[k],1))):[]),
- ...(['normalStress','shearStress','railDisplacement','twist','criticalMultiplier','braceForce'] as const).map(k=>Math.abs(a[k]-b[k])/Math.max(Math.abs(b[k]),k==='twist'?1e-5:1)),
- ...(a.loadHeight&&b.loadHeight?[Math.abs(a.loadHeight.utilization-b.loadHeight.utilization)/Math.max(b.loadHeight.utilization,1e-3)]:[]),
- // Support force envelope extremes, the least bearing reaction relative to the largest.
- ...(b.bracketForces??[]).flatMap(v=>{const o=a.bracketForces?.find(w=>w.grid===v.grid);if(!o)return [];const scale=Math.max(Math.abs(v.maxVertical.vertical),1),least=(f:typeof v.minBearing)=>f.ends.length?Math.min(...f.ends.map(e=>e.vertical)):f.vertical;
-  return [Math.abs(v.maxVertical.vertical-o.maxVertical.vertical)/scale,Math.abs(Math.abs(v.maxMoment.moment)-Math.abs(o.maxMoment.moment))/Math.max(Math.abs(v.maxMoment.moment),1),Math.abs(least(v.minBearing)-least(o.minBearing))/scale,
-   ...(['longitudinal','top','bottom'] as const).map(k=>Math.abs(Math.abs(v[k][k])-Math.abs(o[k][k]))/Math.max(Math.abs(v[k][k]),1))];}),
- ...(b.bracket&&a.bracket?Object.entries(b.bracket.strength).map(([key,v])=>Math.abs(v.value-(a.bracket!.strength[key]?.value??0))/Math.max(v.value,1)):[]),
- ...(b.bracket&&a.bracket?Object.entries(b.bracket.service).map(([key,v])=>Math.abs(v.value-(a.bracket!.service[key]?.value??0))/Math.max(v.value,key==='rotation'?1e-6:key==='deflection'?1e-3:1)):[]),
- ...(b.rolledBracket&&a.rolledBracket?[...Object.entries(b.rolledBracket.strength).map(([key,v])=>Math.abs(v.value-(a.rolledBracket!.strength[key]?.value??0))/Math.max(v.value,key==='interaction'||key==='stiffener'||key==='cjp'?1e-3:1)),
-  ...Object.entries(b.rolledBracket.service).map(([key,v])=>Math.abs(v.value-(a.rolledBracket!.service[key]?.value??0))/Math.max(v.value,key==='rotation'||key==='twist'?1e-6:key==='deflection'?1e-3:1)),
-  ...b.rolledBracket.fatigue.flatMap((f,i)=>(['flange','web','webWeld','column','stiffenerWeld','stiffenerToe'] as const).map(k=>Math.abs(f[k]-a.rolledBracket!.fatigue[i][k])/Math.max(f[k],1)))]:[]),
- ...(b.taperedHaunch&&a.taperedHaunch?[...Object.entries(b.taperedHaunch.strength).map(([key,v])=>Math.abs(v.value-(a.taperedHaunch!.strength[key]?.value??0))/Math.max(v.value,['flexure','shear','interaction','stiffener','cjpTop','cjpBottom'].includes(key)?1e-3:1)),
-  ...Object.entries(b.taperedHaunch.service).map(([key,v])=>Math.abs(v.value-(a.taperedHaunch!.service[key]?.value??0))/Math.max(v.value,key==='rotation'||key==='twist'?1e-6:key==='deflection'?1e-3:1)),
-  ...b.taperedHaunch.fatigue.flatMap((f,i)=>(['topFlange','bottomFlange','flangeWeb','stiffenerToe','column','webWeld','flangeWeld','flangeWebWeld','stiffenerWeld','flare'] as const).map(k=>Math.abs(f[k]-a.taperedHaunch!.fatigue[i][k])/Math.max(f[k],1)))]:[]),
- ...(b.bracket&&a.bracket?b.bracket.fatigue.flatMap((f,i)=>(['rib','seat','rootWeld','seatWeld','column'] as const).map(k=>Math.abs(f[k]-a.bracket!.fatigue[i][k])/Math.max(f[k],1))):[]),
- ...b.fatigue.map((f,i)=>Math.abs(a.fatigue[i].range-f.range)/Math.max(f.range,1)),
- ...(b.cap&&a.cap?[Math.abs(a.cap.longitudinalFlow-b.cap.longitudinalFlow)/Math.max(b.cap.longitudinalFlow,1),...b.cap.fatigueFlows.map((q,i)=>Math.abs(a.cap!.fatigueFlows[i]-q)/Math.max(q,1))]:[])
-);
+/** The D/C of a check, when it has a finite one. */
+const checkRatio=(c:CheckResult)=>typeof c.utilization==='number'&&Number.isFinite(c.utilization)?c.utilization:undefined;
+/** Change of the governing results between two refinement levels (refinementChange), with the result that moved most. */
+export interface RefinementChange{value:number;governing?:string;changes:Map<string,number>}
+/**
+ * Change of the governing results between two refinement levels of the detailed model, for its convergence gates.
+ * - Every check the level sets, by its D/C: |ΔD/C| / max(D/C, 0.5). A result that governs (D/C ≥ 0.5) is held to its
+ *   relative change; a smaller one to an absolute change of its D/C (1% of 0.5 = 0.005), which cannot move a verdict.
+ * - Every support force the girder delivers (the force envelope at each grid, which the building takes and no check
+ *   here may compare): its change relative to the larger of itself and half the largest of that force over the grids.
+ * A stress, displacement, range or multiplier enters through the checks it decides, not on its own: a stress range of
+ * 0.01 MPa at an unloaded girder end no longer gates the package, while any change that could move a verdict does.
+ */
+export function refinementChange(coarse:{checks:CheckResult[];results:RunwayDetailResults},fine:{checks:CheckResult[];results:RunwayDetailResults}):RefinementChange{
+ const keyed=(checks:CheckResult[])=>{const seen=new Map<string,number>(),out=new Map<string,number>();for(const c of checks){const u=checkRatio(c);if(u===undefined)continue;const n=seen.get(c.id)??0;seen.set(c.id,n+1);out.set(n?`${c.id}#${n}`:c.id,u);}return out;};
+ const changes=new Map<string,number>(),before=keyed(coarse.checks);
+ for(const [id,u] of keyed(fine.checks)){const old=before.get(id);if(old!==undefined)changes.set(id,Math.abs(u-old)/Math.max(Math.abs(u),.5));}
+ const least=(f:SupportForceSet)=>f.ends.length?Math.min(...f.ends.map(e=>e.vertical)):f.vertical;
+ const components:[string,(v:SupportForceEnvelope)=>number][]=[['vertical',v=>v.maxVertical.vertical],['least bearing',v=>least(v.minBearing)],['seat moment',v=>Math.abs(v.maxMoment.moment)],
+  ...(['longitudinal','top','bottom'] as const).map(k=>[k,(v:SupportForceEnvelope)=>Math.abs(v[k][k])] as [string,(v:SupportForceEnvelope)=>number])];
+ const grids=fine.results.bracketForces??[];
+ for(const [name,value] of components){
+  // The least bearing reaction (uplift when negative) is measured against the largest reaction.
+  const scale=Math.max(...grids.map(v=>Math.abs(name==='least bearing'?v.maxVertical.vertical:value(v))),1);
+  for(const v of grids){const o=coarse.results.bracketForces?.find(w=>w.grid===v.grid);if(o)changes.set(`support force: grid ${v.grid} ${name}`,Math.abs(value(v)-value(o))/Math.max(Math.abs(value(v)),.5*scale));}
+ }
+ let value=0,governing:string|undefined;
+ for(const [id,c] of changes)if(c>value){value=c;governing=id;}
+ return {value,governing,changes};
+}
+/** The value a refinement check reports: the last change, or the estimated error of an accepted marginal miss. */
+export interface RefinementVerdict{converged:boolean;value:number;last:number;governing?:string;ratio?:number;estimate?:number}
+/**
+ * Verdict of a refinement sequence (each step the change from one level to the next, refinementChange). Converged when
+ * the last step changes the governing results by at most the target. A marginal miss, at most twice the target, is
+ * accepted when every result still above the target changed geometrically less over the last two steps (ratio ρ < 1):
+ * the finest level, which is reported, is then within ρ/(1−ρ) of its last change of the converged value (the rest of the
+ * geometric series), and that estimate must meet the target. A larger miss, a single step or a change that does not
+ * shrink is not converged, whatever its size: the package stays blocked.
+ */
+export function refinementVerdict(steps:RefinementChange[],target=.01):RefinementVerdict{
+ const last=steps.at(-1)!,previous=steps.at(-2);
+ if(last.value<=target)return {converged:true,value:last.value,last:last.value,governing:last.governing};
+ if(!previous||last.value>2*target)return {converged:false,value:last.value,last:last.value,governing:last.governing};
+ let estimate=0,worst=0;
+ for(const [id,c] of last.changes){
+  if(c<=target)continue;
+  const before=previous.changes.get(id),rho=before?c/before:Infinity;
+  if(!(rho<1))return {converged:false,value:last.value,last:last.value,governing:id,ratio:rho};
+  estimate=Math.max(estimate,c*rho/(1-rho));worst=Math.max(worst,rho);
+ }
+ return estimate<=target?{converged:true,value:estimate,last:last.value,governing:last.governing,ratio:worst,estimate}:{converged:false,value:last.value,last:last.value,governing:last.governing,ratio:worst,estimate};
+}
+/** The gate of a refinement check: the last change, or for an accepted marginal miss the estimated error of the finest level. */
+export const refinementEquation=(v:RefinementVerdict,what:string)=>v.converged&&v.estimate!==undefined
+ ?`\\varepsilon\\approx\\frac{\\rho}{1-\\rho}\\left|\\frac{D_{2n}}{D_n}-1\\right|\\le0.01\\ \\ \\text{(${what})}`:`|D_{2n}/D_n-1|\\le0.01\\ \\ \\text{(${what})}`;
 export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const p=s.input,d=p.details,props=s.properties!,a=s.designAnalysis!;
  if(!d||!a)return [];
@@ -100,23 +136,17 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const designFy=p.section.kind==='cap'?Math.min(p.section.Fy,p.capDesign!.Fy):p.section.Fy;
  const strength=girderStrength(p,props),steps=p.cranes.length===1?40:p.cranes.length===2?12:6;
  const braceForce=braceImperfection(p,a,props).force,run=(travel:number,mesh:number)=>{const c=createDetailCollector(p,props,mesh,braceForce);runwayDesignAnalysis(p,props,strength,travel,20,c.observe);return c.finish();};
- let coarse=run(steps,20),fine=run(steps*2,20),travel=steps*2;
- let travelChange=differences(coarse,fine);
- // The search converges first-order where a fatigue range peaks between stations (continuous girders): one crane
- // refines to 32 times the base steps before the gate reports non-convergence.
- while(travelChange>.01&&travel<steps*(p.cranes.length===1?32:4)){coarse=fine;travel*=2;fine=run(travel,20);travelChange=differences(coarse,fine);}
- let spatial=run(travel,40),meshChange=differences(fine,spatial);
- // Refine the lateral/warping mesh until it converges, up to 160 elements per member, before the gate.
- for(const mesh of [80,160]){if(meshChange<=.01)break;fine=spatial;spatial=run(travel,mesh);meshChange=differences(fine,spatial);}
- const r=spatial;r.travelChange=travelChange;r.meshChange=meshChange;s.detailResults=r;
+ // The checks of one level in report order: bracket checks, the analysis checks (the reported level only), then the
+ // girder, bracing and connection checks. A level built only to compare its governing results (refinementChange) keeps
+ // the design envelope for H1; the reported level re-runs it when load height lowers M_cx.
+ const levelChecks=(r:RunwayDetailResults,analysis:CheckResult[],reported:boolean):CheckResult[]=>{
+ const checks:CheckResult[]=[];s.detailResults=r;
  if(r.bracket)checks.push(...bracketChecks(p,r.bracket,a.serviceReaction));
  if(r.existingBracket)checks.push(...existingBracketChecks(p,r.existingBracket));
  if(r.rolledBracket)checks.push(...rolledBracketChecks(p,r.rolledBracket,a.serviceReaction));
  if(r.taperedHaunch)checks.push(...taperedHaunchChecks(p,r.taperedHaunch,a.serviceReaction));
+ checks.push(...analysis);
  const add=(...args:Parameters<typeof compared>)=>checks.push(compared(...args));
- add('detail-equilibrium','Analysis','Lateral / torsional equation residual',r.residual,1e-6,'ratio','|\\text{residual}|/|\\text{load}|\\le10^{-6}','Banded finite-element solution; all sampled strength, single-crane service and fatigue-bin states. Double-precision round-off in Ku grows with the conditioning of a softly supported girder near its critical load (1e-8 to 3e-7 for stable models); an unbalanced or mis-assembled model gives residuals of order one, so 1e-6 still exposes it.',['vlasov']);
- add('detail-travel','Analysis','Detailed load-position refinement',travelChange,.01,'ratio','|D_{2n}/D_n-1|\\le0.01\\ \\ \\text{(crane positions)}','Includes combined normal/shear stresses, rail movement, twist, elastic critical factor, load-height flexure, brace force and all fatigue details.',['mechanics','vlasov']);
- add('detail-mesh','Analysis','Lateral / warping mesh refinement',meshChange,.01,'ratio','|D_{2n}/D_n-1|\\le0.01\\ \\ \\text{(elements)}','Each wheel, support and brace is an exact mesh node. Checks both sides of element boundaries and interior stations.',['vlasov']);
  // m11: the combined normal stress at each flange's own extreme fibres (AISC DG7 / DG9), top (cap tips) and bottom.
  const capped=p.section.kind==='cap',capMech=cappedMechanics(p.section),fw=r.flangeWarping,fn=r.flangeNormal??{top:r.normalStress,bottom:r.normalStress};
  const normalNote=(k:'top'|'bottom')=>`${k==='top'?(capped?'Top flange: the cap channel tips':'Top flange tips'):'Bottom flange: the W bottom flange tips'}, S_x${k==='top'?'c':'t'} = ${format(capMech?(k==='top'?capMech.Stop:capMech.Sbottom):props.Sx,'modulus',p.units,4)}${fw?`, W_no = ${format(fw[k],'area',p.units,3)}`:''}. P/A, M_x/S_x of this flange's fibre, lateral bending (M_y + θM_x) over I_y at this flange's half width and warping E W_no θ″ at its tips, added by magnitude at every station and strength case. Coupled second-order response with the load above the shear center, finite restraint stiffness and 0.8 elastic stiffness for strength. ${k==='top'?'The bottom':'The top'} flange is checked separately.${r.governing[k==='top'?'normalStressTop':'normalStressBottom']?` Governing ${r.governing[k==='top'?'normalStressTop':'normalStressBottom'].combination} at x = ${format(r.governing[k==='top'?'normalStressTop':'normalStressBottom'].x,'length',p.units,3)}.`:''}`;
@@ -135,7 +165,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
   if(lh.capacity<mcx-1e-9){mcx=lh.capacity;mcxNote=`M_cx = φM_n = ${f(mcx,'moment')}, the load-height LTB strength (C_b = ${lh.cb.toFixed(2)}), which governs major flexure`;}
  }
  // H1 at each flange with the governing major-axis strength: re-run the design envelope when load height lowers M_cx.
- const h1=mcx<strength.major-1e-9&&a.travelSteps?runwayDesignAnalysis(p,props,{...strength,major:mcx},a.travelSteps,a.mesh??40):a;
+ const h1=reported&&mcx<strength.major-1e-9&&a.travelSteps?runwayDesignAnalysis(p,props,{...strength,major:mcx},a.travelSteps,a.mesh??40):a;
  r.interaction={mcx,top:h1.interactionTop??h1.interaction,bottom:h1.interactionBottom??h1.interaction,topCase:h1.governing.interactionTop,bottomCase:h1.governing.interactionBottom,combinations:h1.combinations.map(c=>({id:c.id,interaction:c.interaction}))};
  checks.push(...flangeInteractionChecks(p,h1,strength,mcxNote));
  // Restraint play (restraintClearances): rigid-body take-up added to the elastic rail-head movement.
@@ -228,4 +258,29 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  checks.push(...railChecks(s),...capAttachmentChecks(s),...simpleSupportChecks(p,a.endRotation),...endStopChecks(p,{analysis:a,strength:{...strength,major:Math.min(strength.major,mcx)},props,holdDown:checks.find(c=>c.id==='hold-down-model')?.capacity??0}));
 
  return checks;
+ };
+ const built=new Map<RunwayDetailResults,CheckResult[]>(),level=(r:RunwayDetailResults)=>{let c=built.get(r);if(!c){c=levelChecks(r,[],false);built.set(r,c);}return {checks:c,results:r};};
+ const step=(from:RunwayDetailResults,to:RunwayDetailResults)=>refinementChange(level(from),level(to));
+ // Crane positions first, at the base mesh: one crane refines to 32 times the base steps (the search converges
+ // first-order where a fatigue range peaks between stations), several cranes to 4 times.
+ let coarse=run(steps,20),fine=run(steps*2,20),travel=steps*2;
+ const travelSteps=[step(coarse,fine)];
+ while(travelSteps.at(-1)!.value>.01&&travel<steps*(p.cranes.length===1?32:4)){coarse=fine;travel*=2;fine=run(travel,20);travelSteps.push(step(coarse,fine));}
+ // Then the lateral/warping mesh, doubled from 20 elements per span until it converges, up to 160 per span (a
+ // continuous girder is one member over all its spans: createDetailCollector gives it that many per span on average).
+ let spatial=run(travel,40),mesh=40;
+ const meshSteps=[step(fine,spatial)];
+ for(const next of [80,160]){if(meshSteps.at(-1)!.value<=.01)break;fine=spatial;spatial=run(travel,next);mesh=next;meshSteps.push(step(fine,spatial));}
+ const travelVerdict=refinementVerdict(travelSteps),meshVerdict=refinementVerdict(meshSteps);
+ const r=spatial;r.travelChange=travelVerdict.value;r.meshChange=meshVerdict.value;
+ const pct=(v:number)=>`${(100*v).toFixed(2)}%`;
+ const verdictNote=(v:ReturnType<typeof refinementVerdict>,what:string)=>v.estimate!==undefined&&v.converged?` The last refinement of the ${what} changed the governing results by ${pct(v.last)} (${v.governing}); every result above 1% changed by a ratio of at most ${v.ratio!.toFixed(2)} over the last two refinements, so the reported results of the finest ${what} are within an estimated ${pct(v.estimate)} of the converged values (ρ/(1−ρ) times the last change).`:v.governing&&v.value>0?` Largest change: ${v.governing}.`:'';
+ const governingNote='Governing results: the D/C of every detailed check, |ΔD/C|/max(D/C, 0.5) (a result with D/C ≥ 0.5 to within 1%, a smaller one to within 0.005 of its D/C), and the support forces delivered to the building at each grid.';
+ for(const [v,what] of [[travelVerdict,'crane positions'],[meshVerdict,'mesh']] as const)if(v.converged&&v.estimate!==undefined)s.warnings.push(`Verification note: ${verdictNote(v,what).trim()}`);
+ const analysis=[
+  compared('detail-equilibrium','Analysis','Lateral / torsional equation residual',r.residual,1e-6,'ratio','|\\text{residual}|/|\\text{load}|\\le10^{-6}','Banded finite-element solution; all sampled strength, single-crane service and fatigue-bin states. Double-precision round-off in Ku grows with the conditioning of a softly supported girder near its critical load (1e-8 to 3e-7 for stable models); an unbalanced or mis-assembled model gives residuals of order one, so 1e-6 still exposes it.',['vlasov']),
+  compared('detail-travel','Analysis','Detailed load-position refinement',travelVerdict.value,.01,'ratio',refinementEquation(travelVerdict,'crane positions'),`${governingNote} Crane positions refined to ${travel} travel steps.${verdictNote(travelVerdict,'crane positions')}`,['mechanics','vlasov']),
+  compared('detail-mesh','Analysis','Lateral / warping mesh refinement',meshVerdict.value,.01,'ratio',refinementEquation(meshVerdict,'elements'),`Each wheel, support and brace is a mesh node; points closer than 1 mm, 1/10,000 of the member or 1/100 of the section depth (the largest) share a node, so no element is a sliver. Checks both sides of element boundaries and interior stations. ${governingNote} Refined to ${mesh} elements per span.${verdictNote(meshVerdict,'mesh')}`,['vlasov'])
+ ];
+ return levelChecks(r,analysis,true);
 }
