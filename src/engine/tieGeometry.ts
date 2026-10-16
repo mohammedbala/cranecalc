@@ -5,7 +5,7 @@ import {independentBearings} from './simpleSupports';
 import {tieArrangement} from './connectionOptions';
 import {boltProperties} from './connectionStrength';
 import {existingColumnSection} from './existingColumn';
-import {activeEndBearing} from './endBearingInputs';
+import {activeEndBearing,continuousBearings} from './endBearingInputs';
 
 /**
  * Ties of the direct flange-tie family: two flat bars, one each side of the girder and column gussets, or one
@@ -134,11 +134,16 @@ export function stiffenerTieGeometry(p:ProjectInput){
  const d=p.details;if(!d||tieArrangement(d)!=='paired-bars'||flangeTieGeometry(p))return undefined;
  const b=p.section,t=d.brace,c=t.connection,connection=(c.rows-1)*c.pitch+2*c.edge,clear=stiffenerTieClearance;
  const root=b.tw/2+d.bearing.stiffenerWidth;
- // A designed bracket fixes the column face; otherwise the bars start clear of the stiffener.
- const face=d.bracket?.enabled?d.bracket.reach:root+clear+t.length,start=face-t.length,gussetEnd=start+connection;
+ // A designed bracket fixes the column face, as does the column face of a bracket by others; otherwise the bars start
+ // clear of the stiffener.
+ const face=d.bracket?.enabled?d.bracket.reach:t.flangeAttachment?.columnFace??root+clear+t.length,start=face-t.length,gussetEnd=start+connection;
  // The column gusset carries the column-end bolt group to the face, plus its longer slotted end edge.
  const columnGussetStart=face-connection-columnGussetExtension(p);
- return {root,start,face,connection,gussetEnd,gussetLength:gussetEnd-root,height:t.width,clear,sides:tieSides(p),columnGussetStart,columnGussetLength:face-columnGussetStart,
+ // One tie at each girder end, at its bearing stiffener (the bearing center): on simple spans both girder ends at a shared
+ // grid, each at its own bearing; on a continuous girder one at each support.
+ const bearings=p.system==='simple'?independentBearings(p):continuousBearings(p);
+ const stations=bearings.map(v=>({station:v.station,center:v.center,start:v.start,finish:v.finish,tieX:v.center,offset:v.center-v.station}));
+ return {root,start,face,connection,gussetEnd,gussetLength:gussetEnd-root,height:t.width,clear,sides:tieSides(p),columnGussetStart,columnGussetLength:face-columnGussetStart,stations,receiver:tieReceiver(p),
   // Bars and gusset sit the clearance inside each tied flange; on a capped girder the top ones drop below the cap
   // channel's turned-down flanges, which reach capDepth − capTw below the W top past the W flange tips.
   topCenter:b.d/2-Math.max(b.tf,b.kind==='cap'?b.capDepth-b.capTw:0)-clear-t.width/2,bottomCenter:-b.d/2+b.tf+clear+t.width/2};

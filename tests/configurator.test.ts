@@ -37,7 +37,10 @@ describe('configuration templates',()=>{
   if(c.support==='column-cap'){expect(p.columnCap?.enabled).toBe(true);expect(d.bracket?.enabled).toBeFalsy();}
   else if(c.support==='by-others')expect(d.bracket?.enabled).toBeFalsy();
   else expect(d.bracket).toMatchObject({enabled:true,arrangement:c.support});
-  if(c.support!=='column-cap')expect(d.brace.arrangement??'paired-bars').toBe(c.tie);
+  // A rolled simple-span saddle that does not suit the girder (or a high-cycle runway) gives way to paired bars on the
+  // bearing stiffener (attachTie): the flexible plate then becomes paired bars.
+  const onStiffener=c.system==='simple'&&c.girder==='rolled'&&d.brace.flangeAttachment?.enabled===false;
+  if(c.support!=='column-cap')expect(d.brace.arrangement??'paired-bars').toBe(onStiffener?'paired-bars':c.tie);
   expect(!!p.existingColumn?.enabled).toBe(c.support!=='by-others');
   expect(!!p.existingColumn?.isNew).toBe(c.structure==='new');
   expect(!!p.columnBase?.enabled).toBe(c.structure==='new');

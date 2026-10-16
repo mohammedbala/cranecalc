@@ -47,16 +47,30 @@ export function independentBearings(p:ProjectInput){
   {bay:m.bay,end:'right' as const,station:m.rightGrid,start:m.end-length,finish:m.end,center:m.end-length/2,role:'SLIDING' as const}
  ]);
 }
+/**
+ * Distance from each girder end within which no rail clip stands where a direct flange saddle is welded under the top
+ * flange (paired bars or a flexible plate on simple spans): past the saddle, its end fillet and the clip's reach (half
+ * its base, its end weld and a spread through the flange thickness), so the clip's local flange bending is not added to
+ * the saddle's (plate-tie-keeper-flange). Zero without a saddle.
+ */
+function saddleClipSetback(p:ProjectInput,clip:ReturnType<typeof railClipInput>){
+ const d=p.details,a=d?.brace.flangeAttachment,kind=d?.brace.arrangement??'paired-bars';
+ if(!d||p.system!=='simple'||!a?.enabled||(kind!=='paired-bars'&&kind!=='flexible-plate')||p.section.kind==='cap')return 0;
+ const L=d.bearing.length,reach=clip.baseLength/2+clip.weld+p.section.tf;
+ // The saddle center is the setback from the bearing center toward the girder end; its far end fillet toe, plus the reach.
+ return Math.max(0,L/2-a.longitudinalSetback+a.saddleLength/2+a.weldSize+reach+1);
+}
 /** Rail clip pairs terminate on each actual girder, so a clip is never welded
- * across a simple-span joint. End stations bound every clear spacing. */
+ * across a simple-span joint. End stations bound every clear spacing. Where a top-flange saddle remains, the end clips
+ * stand clear of it (saddleClipSetback). */
 export function railClipStations(p:ProjectInput){
  const L=p.spans.reduce((a,b)=>a+b,0),spacing=p.aist?.clipSpacing??600,stop=activeEndStop(p),railEnd=stop?stopRailEnd(stop):0;
  // With girder-mounted stops the rail, and so its clips, stops short of each runway end.
  if(p.system!=='simple'||!p.details){const a=railEnd+(stop?railClipInput(p.details!.rail).baseLength/2:0),z=L-(a),stations=[];for(let x=a;x<z;x+=spacing)stations.push(x);return [...stations,z];}
  const ends=stopEnds(p);
- const half=railClipInput(p.details.rail).baseLength/2,last=p.spans.length;
+ const clip=railClipInput(p.details.rail),half=clip.baseLength/2,last=p.spans.length,keep=saddleClipSetback(p,clip);
  return girderSegments(p).flatMap(m=>{
-  const a=m.start+half+(m.bay===1&&ends.includes('left')?railEnd:0),z=m.end-half-(m.bay===last&&ends.includes('right')?railEnd:0);if(z<a)return [];
+  const a=Math.max(m.start+half+(m.bay===1&&ends.includes('left')?railEnd:0),m.start+keep),z=Math.min(m.end-half-(m.bay===last&&ends.includes('right')?railEnd:0),m.end-keep);if(z<a)return [];
   const count=Math.max(1,Math.ceil((z-a)/spacing));
   return Array.from({length:count+1},(_,i)=>a+(z-a)*i/count);
  });

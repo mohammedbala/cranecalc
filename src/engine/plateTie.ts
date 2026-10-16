@@ -1,3 +1,4 @@
+import {seatSettingTolerance} from './fitTolerances';
 import {finiteLife} from './fatigueConstants';
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import {available} from './aiscStrength';
@@ -27,8 +28,14 @@ export const isPlateTie=(p:ProjectInput)=>tieArrangement(p.details)==='flexible-
 const inch=25.4;
 const compared=(id:string,group:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds=['aisc-connections','flexible-plate-basis']):CheckResult=>({id,group,title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds});
 
-/** Fit-up offset the plate takes up by flexure: the 1/16 in column gusset position and, with release, the sleeve projection (half its clearance). */
-export const plateFitOffset=(p:ProjectInput)=>inch/16+(tieRelease(p)?.clearance??0)/2;
+/**
+ * Alignment of the column gusset with the girder gusset along the runway that the erector can hold: the 1/8 in plan
+ * position tolerance of the girder bearing on its seat (AIST TR-13 §5.18, sheet S-00), which the column gusset, set to the
+ * girder as erected, follows.
+ */
+export const plateAlignment=seatSettingTolerance;
+/** Fit-up offset the plate takes up by flexure: the column gusset alignment (plateAlignment) and, with release, the sleeve projection (half its clearance). */
+export const plateFitOffset=(p:ProjectInput)=>plateAlignment+(tieRelease(p)?.clearance??0)/2;
 
 /**
  * Bolt actions in one single-shear lap of the flexible plate, per bolt: in-plane shear from the tie force and any

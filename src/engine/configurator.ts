@@ -33,8 +33,10 @@ import {defaultColumnCap} from './columnCapInputs';
 import {capWorkPointDrop} from './columnCap';
 import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
-import {columnGussetHeight,flangeTieGeometry} from './tieGeometry';
-import {sizeFlangeTie,sizingLimit,tieSizingRatios} from './flangeTieSizing';
+import {columnGussetHeight,flangeTieGeometry,stiffenerTieGeometry} from './tieGeometry';
+import {validateRunwayDetails} from './detailValidation';
+import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands} from './flangeTieSizing';
+import {applyBearingLayout,bearingSeat,defaultBearingShim} from './endBearing';
 import {weldedRibBracket} from './bracketRib';
 import {classFromCycles} from './buildingClass';
 
@@ -306,6 +308,11 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  // Detailed connections for the girder, completed with fictitious example supplier data.
  delete p.details;p.connections.enabled=true;
  const d=neutralDetails(p);p.details=d;delete d.reviewed;
+ // Simple spans bear centered on the runway-end grids: the girder runs half the bearing length past them, so the end
+ // reaction is not eccentric to the support web (no rib reversal, no seat moment into the column at the runway ends).
+ if(p.system==='simple')d.simpleSupport={...d.simpleSupport!,endGridBearing:'centered'};
+ // The J10 effective bearing length is the bearing plate's (bearingLayout sizes the plate for it).
+ if(p.aist)p.aist.bearingLength=d.bearing.length;
  const r=d.rail;r.name=`Example ${+(depth/inch).toFixed(2)} in crane rail · idealized plate geometry (fictitious; use the rail supplier's section)`;
  r.padSource='Fictitious example RP-01 polyurethane crane-rail pad; allowable compression per the fictitious supplier rating sheet';
  r.clip=exampleClip(r.baseWidth,depth,(clipWidth<2.5*inch?.25:.3125)*inch);
@@ -364,7 +371,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
   const bd=p.longitudinalBracing.design!;bd.pin={...bd.pin,diameter:Math.max(bd.pin.diameter,p.longitudinalBracing.rod.diameter)};
   if(cfg.support==='column-cap'){
    const col=p.existingColumn;d.bracket={...structuredClone(demo.details!.bracket!),enabled:false};
-   if(d.brace.flangeAttachment)d.brace.flangeAttachment.enabled=false;p.aist!.supportType='column';
+   if(d.brace.flangeAttachment)d.brace.flangeAttachment.enabled=false;p.aist!.supportType='column';setBearings(p);
    if(d.endBearing)d.endBearing.enabled=true;
    col.height=col.seatElevation;col.Lcx=2.1*col.height;col.Lcy=col.height;col.Lcz=col.height;col.Lb=col.height;
    p.columnCap={...structuredClone(defaultColumnCap),enabled:true};
@@ -381,7 +388,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  }
  // The tie first, for a trial reach (the configured one, or 20 in growing only as far as the tie needs); then the bracket
  // at the reach the tie settled on, and the tie finished on that bracket.
- attachTie(p,cfg);
+ attachTie(p,cfg);if(cfg.support!=='column-cap')setBearings(p);
  // The supports carry the bracket (or cap) and tie before the new column bases are sized for their reactions.
  const tie=sizedTieRatios(p),q=finishTie(withHaunch(withWeldedBracket(p),cfg),tie);
  return cfg.structure==='new'?withColumnBase(q,cfg):q;
@@ -522,6 +529,20 @@ function attachBracket(p:ProjectInput,cfg:RunwayConfig,shape:string,reach:number
 }
 
 /**
+ * The girder bearings for the supports and the tie as configured: steel shims under the bearing plates on existing, by-others and field-welded seats (defaultBearingShim); and the plate,
+ * bolts and slot travel sized for the girder (applyBearingLayout: the length for the bolt layout, the J10 end bearing
+ * and any remaining flange saddle; the travel from the span and the factored end rotation).
+ */
+function setBearings(p:ProjectInput){
+ const d=p.details;if(!d)return;
+ d.bearing.shim=defaultBearingShim(bearingSeat(p));
+ applyBearingLayout(p,girderEndEstimate(p).factored,tieSizingDemands(p).force);
+}
+/** Top-flange service where a welded saddle attachment (AISC Table A-3.1 Category D or E) on the tied flange is avoided: CMAA Class D to F cranes, AIST Class A and B buildings. */
+const highCycle=(cfg:RunwayConfig)=>['D','E','F'].includes(cfg.cmaa)||cfg.buildingClass==='A'||cfg.buildingClass==='B';
+/** Saddle tie checks that load the girder flange (the F·h couple, the saddle toes, the rail clip over the saddle) or the saddle itself. */
+const saddleRatio=(k:string)=>k.startsWith('flange-tie-')||k==='plate-tie-keeper-flange'||k==='saddle-toe-fatigue';
+/**
  * The configured tieback on the details. Paired bars and the flexible plate are sized for the girder's tie force and
  * imposed movements (sizeFlangeTie): bars or plate, bolts, gussets, saddle and release slots, the column face (a
  * designed bracket's reach, or the face of a bracket by others) moving out to at most 30 in where the flexible length
@@ -552,6 +573,32 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig){
    if(bracket)p.details!.bracket=bracket;if(face!==undefined)p.details!.brace.flangeAttachment!.columnFace=face;
    p.details=selectTieArrangement(p.details!,'cap-angle');p.details.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p));
    p.notes+=` The ${cfg.tie==='flexible-plate'?'flexible plate':'paired flat bars'} on a direct flange saddle do not suit this capped girder (${worst[0]} ${worst[1].toFixed(2)} for the estimated tie demands): the tie is the cap tieback angle bolted to the channel cap.`;
+  }
+ }
+ // A rolled simple-span girder: the saddle welded under the top flange bends the flange outstand with the couple F·h and is
+ // a Category D/E attachment on the tied flange. Where the sized saddle still exceeds a flange or saddle limit, or the crane
+ // service is high-cycle, the tie goes on the bearing stiffener instead (stiffenerTieGeometry): paired bars on a gusset
+ // CJP welded to the tie-side bearing stiffener, the full-depth stiffener pair the restraint diaphragm.
+ if(p.section.kind!=='cap'&&p.system==='simple'&&flangeTieGeometry(p)){
+  const ratios=tieSizingRatios(p),over=Object.entries(ratios).filter(([k,v])=>saddleRatio(k)&&v>sizingLimit(ratios,k)+1e-9).sort((a,b)=>b[1]-a[1]);
+  if(over.length||highCycle(cfg)){
+   const q=structuredClone(p),qd=q.details!,t=qd.brace;
+   if(bracket)qd.bracket=bracket;
+   if(cfg.tie==='flexible-plate'){t.arrangement='paired-bars';delete t.referenceDetail;}
+   const a=t.flangeAttachment!;a.enabled=false;if(face!==undefined)a.columnFace=face;
+   // Bars from 1/4 in clear of the stiffener to the column face (the bracket reach, or the face of the bracket by others).
+   const reach=qd.bracket?.enabled?qd.bracket.reach:a.columnFace??t.reach;
+   t.length=t.reach=reach-up(q.section.tw/2+qd.bearing.stiffenerWidth+.25*inch,.25*inch);
+   q.details=sizeFlangeTie(q,{reach:cfg.reach===undefined?30*inch:undefined}).details;
+   // Adopted where the stiffener tie is no worse than the saddle: its sized ratios exceed their limits by no more in
+   // total (a column face held by a configured reach can leave the shorter bars too stiff for the end movement).
+   const excess=(r:Record<string,number>)=>Object.entries(r).reduce((n,[k,v])=>n+Math.max(0,v-sizingLimit(r,k)),0);
+   if(stiffenerTieGeometry(q)&&!validateRunwayDetails(q).length&&excess(tieSizingRatios(q))<=excess(ratios)+1e-9){
+    p.details=q.details;
+    const cycles=`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (CMAA Class ${cfg.cmaa}, AIST Class ${cfg.buildingClass})`;
+    const why=[...(over.length?[`the sized saddle leaves ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),...(highCycle(cfg)?[cycles]:[])].join('; ');
+    p.notes+=` A direct flange saddle does not suit this rolled girder (${why}): the ${cfg.tie==='flexible-plate'?'tie is paired flat bars, which':'paired flat bars'} bolt to a gusset CJP welded to the tie-side bearing stiffener, the full-depth stiffener pair carrying the tie force into the girder.`;
+   }
   }
  }
 }

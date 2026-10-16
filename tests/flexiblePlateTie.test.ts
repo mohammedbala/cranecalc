@@ -71,7 +71,9 @@ describe('flexible plate tieback design (10-ton demonstration)',()=>{
  it('passes every check and is eligible for the package',()=>{
   expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
   expect(s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
-  for(const id of ['plate-tie-tension-yield','plate-tie-tension-rupture','plate-tie-compression','tie-bolt','tie-prying','tie-slip','tie-bearing','tie-net','tie-block','tie-weld','plate-tie-wrench','plate-tie-bolt-fatigue','plate-tie-keeper-flange','tie-move-strength','tie-move-fatigue','tie-move-gusset','tie-move-weld','tie-move-root-fatigue','tie-release-travel','flange-tie-saddle-weld','flange-tie-saddle-fatigue','brace-member','brace-stiffness'])expect(check(s,id)?.status,id).toBe('pass');
+  for(const id of ['plate-tie-tension-yield','plate-tie-tension-rupture','plate-tie-compression','tie-bolt','tie-prying','tie-slip','tie-bearing','tie-net','tie-block','tie-weld','plate-tie-wrench','plate-tie-bolt-fatigue','tie-move-strength','tie-move-fatigue','tie-move-gusset','tie-move-weld','tie-move-root-fatigue','tie-release-travel','flange-tie-saddle-weld','flange-tie-saddle-fatigue','brace-member','brace-stiffness'])expect(check(s,id)?.status,id).toBe('pass');
+  // The rail clips stand clear of the saddles (railClipStations): no clip adds its local flange bending to the saddle's.
+  expect(check(s,'plate-tie-keeper-flange').status).toBe('not-applicable');
   // The paired-bar double-cover template is not applied to the single plate.
   expect(s.checks.some(c=>c.id==='tie-plate-compression'||c.id==='tie-gross')).toBe(false);
   const ids=new Set(references.map(r=>r.id));for(const c of s.checks)for(const r of c.referenceIds)expect(ids.has(r),`${c.id} → ${r}`).toBe(true);
@@ -92,8 +94,8 @@ describe('flexible plate tieback design (10-ton demonstration)',()=>{
   const rootLength=(shape.bf-shape.tw)/2*inch-inch,arm=(5/8+5.25/2)*inch,plate=2*5.25*inch*(.5*inch)**3/12/(15.5*inch);
   const column=5.75*inch*inch**3/(12*5.75*inch),girder=rootLength*inch**3/(7.8*arm);
   expect(g.columnGusset).toBeCloseTo(5.75*inch,6);expect(g.lapShare).toBeCloseTo(plate/(plate+Math.min(column,girder)),9);
-  // Fit-up: 1/16 in gusset position plus half the 1/16 in sleeve clearance.
-  expect(plateFitOffset(p)).toBeCloseTo(3/32*inch,9);expect(tieRelease(p)?.clearance).toBeCloseTo(inch/16,9);
+  // Fit-up: the 1/8 in alignment the erector can hold (the S-00 bearing plan tolerance) plus half the 1/16 in sleeve clearance.
+  expect(plateFitOffset(p)).toBeCloseTo(5/32*inch,9);expect(tieRelease(p)?.clearance).toBeCloseTo(inch/16,9);
   // Weak-axis demand from the imposed movement in the H1 check: M = 6EI(delta)/L^2 plus the amplified lap share.
   const note=check(s,'tie-move-strength').note;expect(note).toContain('single plate');expect(note).toContain('η = 0.078');
   expect(t.thickness).toBeCloseTo(.5*inch);

@@ -9,8 +9,8 @@ import { referenceColumns, referenceCrossheads, shapeMeters } from '../data/aisc
 import { buildReferenceFraming,newColumnFraming } from './referenceFraming';
 import { buildReferenceStructure, cloneOppositeRunway } from './referenceStructure';
 import { defaultFraming, drawnFrameStyle, framingSchema, type FramingSettings } from './framingSettings';
-import {flangeTieGeometry} from '../engine/tieGeometry';
-const tieFaceMeters=(p:Parameters<typeof flangeTieGeometry>[0])=>{const f=flangeTieGeometry(p)?.face;return f===undefined?undefined:f/1000;};
+import {flangeTieGeometry,stiffenerTieGeometry} from '../engine/tieGeometry';
+const tieFaceMeters=(p:Parameters<typeof flangeTieGeometry>[0])=>{const f=flangeTieGeometry(p)?.face??(p.details?.brace.flangeAttachment?.columnFace!==undefined?stiffenerTieGeometry(p)?.face:undefined);return f===undefined?undefined:f/1000;};
 
 export type Point = [number, number, number];
 export type Segment = [Point, Point];

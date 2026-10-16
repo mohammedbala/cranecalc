@@ -9,6 +9,7 @@ import { boltProperties } from './connectionStrength';
 import { clipGeometry,railClipInput,railPadThickness } from './railSeat';
 import { flangeRestraintGaps } from './detailAnalysis';
 import {girderSegments,simpleSupportInput,railClipStations} from './simpleSupports';
+import {activeEndStop,stopBoltRows,stopEnds} from './endStopInputs';
 export function validateRunwayDetails(p:ProjectInput){
  const d=p.details;if(!d)return [];
  const errors:string[]=[],L=p.spans.reduce((a,b)=>a+b,0),b=d.brace,r=d.rail;
@@ -73,7 +74,19 @@ export function validateRunwayDetails(p:ProjectInput){
   if(st){const f=(v:number)=>(v/25.4).toFixed(3),free=b.length-2*st.connection-columnGussetExtension(p);
    add(free<=0,`tie bars require clear length between the two bolt groups (${f(free)} in): lengthen the bars with a larger column face distance (bracket reach) or shorten the bolt groups.`);
    add(st.gussetLength<=0,`the girder tie gusset must reach from the bearing stiffener (${f(st.root)} in from the web centerline) through the girder-end bolt group: the ${f(b.length)} in bars start ${f(st.start)} in from the web centerline for a column face at ${f(st.face)} in. Shorten the bars or increase the bracket reach.`);
-   add(st.columnGussetLength<=0,'the column tie gusset must have a positive length.');}
+   add(st.columnGussetLength<=0,'the column tie gusset must have a positive length.');
+   // Simple spans: each girder end has its own tie at its bearing stiffener, its column gusset on the receiving column
+   // flange at the bearing center's offset from the grid (both girder ends at a shared grid).
+   if(p.system==='simple'&&st.receiver)add(st.stations.some(v=>Math.abs(v.offset)+b.gussetThickness/2+b.connection.weldSize>st.receiver!.width/2+1e-6),`the column tie gussets at the bearing stiffeners must fit on the receiving column flange with their root fillets: each girder end's bearing center lies ${f(Math.max(...st.stations.map(v=>Math.abs(v.offset))))} in from the grid, on a ${f(st.receiver.width)} in flange. Shorten the bearings or the girder end gap.`);
+   // The end stop bolts' nuts hang below the top flange: they stay clear of the girder gusset and the bars with their bolt
+   // hardware (head, nut, washer and stick-out along the runway) at the runway-end ties.
+   const stop=activeEndStop(p);
+   if(p.system==='simple'&&stop&&st.sides.includes(1)){
+    const sd=stop.bolts.diameter,corners=(1.5*sd+3.175)*2/Math.sqrt(3),db=b.connection.diameter,hardware=b.gussetThickness/2+b.thickness+Math.max(.625*db,db+3.97+.4*db);
+    const segs=girderSegments(p),ends=stopEnds(p),xs=[...(ends.includes('left')?stopBoltRows(stop).map(r=>segs[0].start+r):[]),...(ends.includes('right')?stopBoltRows(stop).map(r=>segs.at(-1)!.end-r):[])];
+    const across=stop.bolts.gauge/2+corners/2>st.root-1e-6;
+    add(across&&xs.some(x=>st.stations.some(v=>Math.abs(x-v.tieX)<corners/2+hardware)),'end stop bolts and nuts under the top flange clash with the runway-end tie gusset and bars at the bearing stiffener: increase the stop setback or narrow the stop bolt gauge.');
+   }}
   if(st&&s.kind==='cap'&&st.sides.includes(1)){const drop=s.capDepth-s.capTw,inner=s.capWidth/2-s.capTf;
    add(s.d/2-st.topCenter-st.height/2<drop&&st.root<s.capWidth/2&&st.face>inner,'paired tie bars and their girder gusset at the top flange pass through the turned-down cap channel flange: use the direct flange saddle, or a cap channel whose flanges stop above the bars.');}}
  add(r.Fu<r.Fy,'rail Fu must not be less than Fy.');

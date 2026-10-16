@@ -236,6 +236,8 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
  }else{
   const root=p.section.tw/2+d.bearing.stiffenerWidth,start=up(root+inch/4,inch/4);
   t.length=t.reach=x.face-start;
+  // A bracket by others: the column face moves with the tie.
+  if(!d.bracket?.enabled&&a?.columnFace!==undefined)a.columnFace=x.face;
   t.connectionLength=up(start+connection-root,inch/4);
  }
  c.weldLength=columnGussetHeight(p);
@@ -368,7 +370,8 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   // fillets (flange-tie-stiffener-clearance).
   if(k==='flange-tie-saddle-weld'||k==='flange-tie-weld-fatigue'){
    const a=r.q.details!.brace.flangeAttachment,st=r.q.details!.bearing,clear=a?a.saddleLength/2+x.saddleWeld+sixteenth+st.stiffenerThickness/2+st.weldSize+a.clearance<=x.setback+1e-6:true;
-   if(clear&&x.saddleWeld+sixteenth<=Math.min(x.saddleThickness,p.section.tf,x.gusset)-sixteenth+1e-6){x.saddleWeld+=sixteenth;return true;}
+   // The edge limit is the saddle's (J2.2b: the end fillets run along the saddle end edges; flange-tie-weld-maximum).
+   if(clear&&x.saddleWeld+sixteenth<=x.saddleThickness-sixteenth+1e-6){x.saddleWeld+=sixteenth;return true;}
   }
   return false;
  };

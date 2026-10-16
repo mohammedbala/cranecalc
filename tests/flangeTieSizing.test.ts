@@ -132,14 +132,18 @@ describe('configured tie proportions',()=>{
   expect(validateProject(q)).toEqual([]);expect(Math.max(...Object.values(tieSizingRatios(q)))).toBeLessThanOrEqual(1);
  });
  it('gives the release slots the travel of a bracket that deflects more than its limit (an unsized W stub on t03)',()=>{
-  // t03 with the W12X65 stub the configurator used before the stub was sized, which deflects past its 1/16 in limit:
+  // t03 with an unsized W12X58 stub, which deflects past its 1/16 in limit (the W12X65 the configurator
+  // used before the stub was sized no longer does under the shorter, centered bearings):
   // the slots take its own service deflection.
   const p=structuredClone(templateProject('t03')),b=p.details!.bracket!;
-  b.corbelShape='W12X65';b.seatThickness=1.5*inch;b.rolled={...b.rolled!,flangeJoint:'cjp',stiffeners:true,stiffenerThickness:.5*inch};delete b.columnStiffeners;
+  b.corbelShape='W12X58';b.seatThickness=1.5*inch;b.rolled={...b.rolled!,flangeJoint:'cjp',stiffeners:true,stiffenerThickness:.5*inch};delete b.columnStiffeners;
   const q=sizeFlangeTie(p),t=q.details!.brace,v=bracketServiceDeflection(q)!,d=tieSizingDemands(q);
   expect(v).toBeGreaterThan(b.deflectionLimit);expect(d.support).toBeCloseTo(v,9);
   const impact=Math.max(...q.cranes.map(c=>c.impact));
-  expect(t.release!.travel).toBeGreaterThanOrEqual(v*q.cranes.length*(1+impact)+d.rotation*t.flangeAttachment!.longitudinalSetback+inch/16-1e-9);
+  // The end rotation moves the tie vertically over its setback from the bearing center: none for a tie on the bearing
+  // stiffener (t03's saddle gives way to it).
+  const setback=flangeTieGeometry(q)?.attachment.longitudinalSetback??0;
+  expect(t.release!.travel).toBeGreaterThanOrEqual(v*q.cranes.length*(1+impact)+d.rotation*setback+inch/16-1e-9);
   // Sized brackets, the welded seat of t01 and the W stub of t03, stay within their limits, which the travel then covers.
   for(const id of ['t01','t03']){const r=templateProject(id);expect(bracketServiceDeflection(r)!,id).toBeLessThan(r.details!.bracket!.deflectionLimit);
    expect(tieSizingDemands(r).support,id).toBeCloseTo(r.details!.bracket!.deflectionLimit,9);}
