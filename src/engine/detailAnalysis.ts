@@ -90,7 +90,7 @@ export function automaticFatigueDetails(p:ProjectInput){
  // (welds transverse to the stress) by its length a along the stress and thickness b. The crack starts at the
  // toe of each end fillet on the flange, one weld leg beyond the saddle end.
  const sa=tie?.attachment,inch=25.4,saddleCategory=!sa?'E1':sa.saddleLength<2*inch?'C':sa.saddleLength<=Math.min(12*sa.saddleThickness,4*inch)?'D':sa.saddleThickness<=.8*inch?'E':'E1';
- if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} · end fillet toe ${sign<0?1:2} / ${point}`,x:v.tieX+sign*(tie.attachment.saddleLength/2+tie.attachment.weldSize),point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.1, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment: toe of the transverse end fillet on the flange; global stress plus local flange strip bending`});
+ if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SA${i}-${sign}-${point}`,name:`Flange saddle ${i+1} · end fillet toe ${sign<0?1:2} / ${point}`,x:v.tieX+sign*(tie.attachment.saddleLength/2+tie.attachment.weldSize),point,category:saddleCategory,reference:`AISC Table A-3.1 item 7.1, Category ${saddleCategory==='E1'?'E′':saddleCategory} for a ${(tie.attachment.saddleLength/inch).toFixed(2)} in attachment: toe of the transverse end fillet on the flange; global stress plus the local flange bending range over the effective width (flange-tie-flange)`});
  // Cap tieback angle: bolt holes in the column-side channel flange near each girder end.
  list.push(...capAngleFatigueDetails(p));
  // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
@@ -490,7 +490,9 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   result.demands.braceFatigue=braceFatigue.max-braceFatigue.min;
   if(p.system==='simple')result.demands.braceEndFatigue=braceEndFatigue.max-braceEndFatigue.min;
   result.demands.verticalFatigue=verticalFatigue.max-verticalFatigue.min;
-  if(flangeTieGeometry(p)){const localRange=flangeTieResponse(p,result.demands.braceFatigue).flange;for(const f of fatigue)if(f.id.startsWith('SA'))for(const b of f.bins){b.minimum-=localRange/2;b.maximum+=localRange/2;}}
+  // The saddle toes add the local flange bending range over the flange's effective width, the same local stress as the
+ // flange-tie-flange check (flangeTieResponse), to every duty bin.
+ if(flangeTieGeometry(p)){const localRange=flangeTieResponse(p,result.demands.braceFatigue).flange;for(const f of fatigue)if(f.id.startsWith('SA'))for(const b of f.bins){b.minimum-=localRange/2;b.maximum+=localRange/2;}}
 
   for(const [i,f] of fatigue.entries()){for(const b of f.bins){b.range=b.maximum-b.minimum;Object.assign(b,fatigueSpectrumBin(f.category as keyof typeof constants,b.range,b.cycles));}f.range=Math.max(...f.bins.map(b=>b.range));f.damage=f.bins.reduce((a,b)=>a+b.damage,0);f.peak=deadBounds[i]+Math.max(...f.bins.flatMap(b=>[Math.abs(b.minimum),Math.abs(b.maximum)]));}
   const grouped=new Map<string,InterfaceAction>();

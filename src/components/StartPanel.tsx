@@ -131,7 +131,7 @@ export default function StartPanel({project,onBuild}:{project:ProjectInput;onBui
       <NumberField label="Top of rail above floor" unit="ft" value={c.railElevation} min={10} max={60} step={.5} onChange={v=>v!==undefined&&set({railElevation:v})}/>
      </div></fieldset>
      <fieldset><legend>Girder</legend><div className="field-grid">
-      <Select label="Girder type" value={c.girder} options={[{value:'rolled',label:'Rolled W shape'},{value:'capped',label:'W shape + channel cap'}]} onChange={v=>set({girder:v,girderShape:undefined,capChannel:undefined})}/>
+      <Select label="Girder type" value={c.girder} options={[{value:'rolled',label:'Rolled W shape'},{value:'capped',label:'W shape + channel cap'}]} onChange={v=>set({girder:v,girderShape:undefined,capChannel:undefined,...(v==='capped'&&c.system==='simple'&&c.support!=='column-cap'?{tie:'cap-angle' as const}:{})})}/>
       <Select label="Girder section" value={c.girderShape??''} options={[{value:'',label:'Size automatically'},...compactW.map(v=>({value:v,label:v}))]} onChange={v=>set({girderShape:v||undefined,...(c.girder==='capped'&&v&&!c.capChannel?{capChannel:'C15X33.9'}:{})})}/>
       {c.girder==='capped'&&<Select label="Cap channel" value={c.capChannel??''} options={[{value:'',label:'Size automatically'},...channels.map(v=>({value:v,label:v}))]} onChange={v=>set({capChannel:v||undefined})}/>}
      </div></fieldset>
@@ -140,7 +140,7 @@ export default function StartPanel({project,onBuild}:{project:ProjectInput;onBui
       <Select label="Girder support" value={c.support} options={supports} onChange={v=>set({support:v})}/>
       <Select label="Top-flange tieback" value={c.tie} options={ties} onChange={v=>set({tie:v})}/>
       {c.support!=='by-others'&&<Select label={c.structure==='new'?'New column':'Existing column'} value={c.columnShape??''} options={[{value:'',label:'Chosen for the crane'},...columnShapes.map(v=>({value:v,label:v}))]} onChange={v=>set({columnShape:v||undefined})}/>}
-      {c.support!=='column-cap'&&<NumberField label="Column face to girder web" unit="in" value={c.reach} placeholder="20" min={12} max={48} step={.5} onChange={v=>set({reach:v})}/>}
+      {c.support!=='column-cap'&&<NumberField label="Column face to girder web" unit="in" value={c.reach} placeholder="auto" min={12} max={48} step={.5} onChange={v=>set({reach:v})}/>}
      </div></fieldset>}
      {notes.length>0&&<div className="inline-note config-notes"><TriangleAlert size={14}/><div>{notes.map(v=><p key={v}>{v}</p>)}</div></div>}
     </div>
