@@ -1,4 +1,4 @@
-import {cranePositions,pairs} from './cranePositions';
+import {cranePositions,pairs,type CranePosition} from './cranePositions';
 import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import { beamSystem, momentAt, type BeamResult } from './beam';
 import { craneCombinations, emptyAistInputs, craneDesignMinimum } from './aistLoads';
@@ -31,7 +31,15 @@ export interface DesignAnalysisOptions {
  /** false: only the load cases go to the observer (a detailed run); the envelope of the returned analysis is not
   * computed and stays zero. The cases, their order and their ids are the same either way. */
  envelope?:boolean;
+ /** The same envelope search (project, section, strength and mesh) at fewer travel steps, for a travel refinement:
+  * the states whose crane positions all recur here unchanged are its states, so only the others are evaluated and
+  * the envelope values (maxima and minima, exact) are merged with it. Such a result serves the refinement comparison
+  * only: its governing records, combination records and case count combine the two searches. Without an observer. */
+ previous?:DesignAnalysis;
 }
+/** The search behind an envelope result, for options.previous. */
+const searches=new WeakMap<DesignAnalysis,{p:ProjectInput;props:Properties;strength:GirderStrength;mesh:number;positions:CranePosition[][]}>();
+const positionKey=(v:CranePosition)=>`${v.origin}|${v.after}|${v.before}|${v.station}|${v.coarse}|${v.sparse}`;
 /** A search beyond this many strength cases stops with an error instead of running for hours. */
 export const designCaseLimit=4000000;
 
@@ -85,6 +93,11 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  // Reduced pairing for several cranes (PairingOptions): a crane over a station with its neighbor at closest approach
  // or on the coarse grid of the base travel steps.
  const positions=cranePositions(p,steps,criticalStations,{coarseSteps:p.cranes.length===2?12:6});
+ // Refinement reuse: every position of the previous search must recur here with the same pairing.
+ const prior=envelope&&!observe&&options.previous?searches.get(options.previous):undefined;
+ const reused=prior&&prior.p===p&&prior.props===props&&prior.strength===strength&&prior.mesh===mesh&&prior.positions.length===positions.length?prior.positions.map(list=>new Set(list.map(positionKey))):undefined;
+ const fresh=reused&&positions.map(list=>new Set(list.map(positionKey)));
+ const reuse=reused&&reused.every((keys,k)=>[...keys].every(key=>fresh![k].has(key)))?reused:undefined,old=(k:number,v:CranePosition)=>!!reuse?.[k].has(positionKey(v));
  const cacheKey=scope?`${mesh}|${JSON.stringify(props)}|${JSON.stringify(p)}`:'';
  let cache:ResponseCache|undefined;
  if(scope){
@@ -141,6 +154,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  const topStrength={...strength,flangeMinor:strength.topMinor??strength.flangeMinor},bottomStrength={...strength,flangeMinor:strength.bottomMinor??strength.flangeMinor};
  const nearEnd=(x:number)=>p.system==='simple'?stations.some(s=>Math.abs(x-s)<=p.section.d):Math.min(x,L-x)<=p.section.d,torsionArm=railHead+flangeY;
  for(const [craneIndex,group] of responses.entries())for(const s of group){
+  if(old(craneIndex,s.position))continue;
   if(envelope){
    result.singleVertical=Math.max(result.singleVertical,abs(s.vs.displacement));
    // Largest single-crane deflection within each bay, for a limit on that bay's own span.
@@ -247,13 +261,31 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
    }
   }
  }
+ let added=0;
  function visit(index:number){
-  if(index===responses.length){evaluate();return;}
+  if(index===responses.length){if(!reuse||added)evaluate();return;}
   visit(index+1); // A crane absent from the modeled runway is a real load state.
   for(const r of responses[index]){
    const previous=chosen.at(-1);if(!pairs(p,index,r.position,previous&&{index:previous.index,position:previous.response.position}))continue;
-   if(!r.wheels.length&&!r.beyond)continue;chosen.push({index,response:r});visit(index+1);chosen.pop();
+   if(!r.wheels.length&&!r.beyond)continue;const isNew=old(index,r.position)?0:1;chosen.push({index,response:r});added+=isNew;visit(index+1);added-=isNew;chosen.pop();
   }
  }
- visit(0);result.combinations=[...records.values()];result.equilibriumError=eq;result.verticalByBay=verticalByBay;result.lateralByBay=lateralByBay;return result;
+ visit(0);result.combinations=[...records.values()];result.equilibriumError=eq;result.verticalByBay=verticalByBay;result.lateralByBay=lateralByBay;
+ if(reuse)mergePrevious(result,options.previous!);
+ if(envelope)searches.set(result,{p,props,strength,mesh,positions});
+ return result;
+}
+
+/** The envelope of a refined search from its new states (result) and the previous search: maxima and minima merged. */
+function mergePrevious(result:DesignAnalysis,previous:DesignAnalysis){
+ for(const k of ['singleVertical','serviceRotation','singleLateral','endRotation','serviceReaction','fatigueMax','wheelLoad','wheelNearEndLoad','torsion','moment','shear','reaction','uplift','axial','lateralMoment','topLateralMoment','bottomLateralMoment','interaction','interactionTop','interactionBottom'] as const){
+  const b=previous[k]??0;if(b>=(result[k]??0)){result[k]=b;if(previous.governing[k])result.governing[k]=previous.governing[k];}
+ }
+ result.fatigueMin=Math.min(result.fatigueMin,previous.fatigueMin);result.cases+=previous.cases;
+ for(const key of ['verticalByBay','lateralByBay'] as const)result[key]=result[key]?.map((v,i)=>Math.max(v,previous[key]?.[i]??0));
+ for(const c of result.combinations){
+  const o=previous.combinations.find(v=>v.id===c.id);if(!o)continue;
+  c.moment=Math.max(c.moment,o.moment);c.lateralMoment=Math.max(c.lateralMoment,o.lateralMoment);c.shear=Math.max(c.shear,o.shear);c.reaction=Math.max(c.reaction,o.reaction);c.axial=Math.max(c.axial,o.axial);
+  if(o.interaction>c.interaction){c.interaction=o.interaction;c.positions=o.positions;c.location=o.location;}
+ }
 }

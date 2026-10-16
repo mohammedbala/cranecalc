@@ -69,10 +69,11 @@ export function aistChecks(s:CalculationSnapshot):CheckResult[]{
  if(missing.length)wait('load-basis','Loading','AIST crane load combinations',`${nominalBasis} Combination results are provisional until these inputs are resolved: ${missing.join('; ')}.`,['tr13-load','dg7-errata']);
  else compare('load-basis','Loading','AIST crane load combinations',1,1,'ratio',p.method==='LRFD'?'1.2(D+C_{dm})+1.6(C_{vm}+C_{ss}+C_{ls})+L':'D+C_{dm}+C_{vm}+C_{ss}+C_{ls}+L',`${nominalBasis} Independent absent/empty/loaded crane states; Css, Cls, impact and bumper are single-crane actions.${di.concurrency==='full'?' Fully concurrent ASCE 7 combination C1 is also checked: every crane load as live load L, impact with side thrust and with every crane present.':''} Minimum lifted load zero. No impact in the combined lateral branch; impact enters the separate single-crane branch. Omitted environmental combinations reduce to displayed or dominated cases only under the confirmed runway scope.`,['tr13-load','dg7-errata']);
  const steps=p.cranes.length===1?40:p.cranes.length===2?12:6;
- let coarse=runwayDesignAnalysis(p,props,str,steps,20),fine=runwayDesignAnalysis(p,props,str,steps*2,20);
+ // Each travel refinement evaluates only the states with a new crane position and merges the previous envelope.
+ let coarse=runwayDesignAnalysis(p,props,str,steps,20),fine=runwayDesignAnalysis(p,props,str,steps*2,20,undefined,{previous:coarse});
  const keys=['moment','shear','reaction','uplift','axial','lateralMoment','interaction','singleVertical','singleLateral','serviceReaction','fatigueMin','fatigueMax','wheelLoad','wheelNearEndLoad','torsion'] as const;
  const change=(a:DesignAnalysis,b:DesignAnalysis)=>Math.max(...keys.map(k=>Math.abs(a[k]-b[k])/Math.max(Math.abs(b[k]),1)));
- let travelSteps=steps*2;let convergence=change(coarse,fine);while(convergence>.01&&travelSteps<steps*(p.cranes.length===1?16:4)){coarse=fine;travelSteps*=2;fine=runwayDesignAnalysis(p,props,str,travelSteps,20);convergence=change(coarse,fine);}
+ let travelSteps=steps*2;let convergence=change(coarse,fine);while(convergence>.01&&travelSteps<steps*(p.cranes.length===1?16:4)){coarse=fine;travelSteps*=2;fine=runwayDesignAnalysis(p,props,str,travelSteps,20,undefined,{previous:coarse});convergence=change(coarse,fine);}
  const spatial=runwayDesignAnalysis(p,props,str,travelSteps,40);
  // Track the actual refinement level when a third travel pass was required.
  let mesh=change(fine,spatial),a=spatial,stations=40;
