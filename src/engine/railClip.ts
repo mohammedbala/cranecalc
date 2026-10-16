@@ -41,3 +41,13 @@ export function railAnchorForce(p:ProjectInput){
  const traction=Math.max(0,...p.cranes.map(c=>Math.max(c.longitudinal,craneDesignMinimum(c).traction)));
  return {factor,traction,force:factor*traction};
 }
+
+/**
+ * Wheel groups of a crane passing a local rail detail: the crane's wheels on one rail, those closer together than the
+ * detail's window (the clip spacing for a clip, the joint bar length for a rail joint) acting together as one group.
+ * Each group passing is one stress cycle of the detail (AISC DG7, AIST TR-13 cycle counting), so the cycles are the crane
+ * passages times the groups; the largest count of any crane governs.
+ */
+export function wheelGroups(p:ProjectInput,window:number){
+ return Math.max(1,...p.cranes.map(c=>{const x=c.wheels.map(w=>w.offset).sort((a,b)=>a-b);return x.reduce((n,v,i)=>i&&v-x[i-1]>window+1e-6?n+1:n,x.length?1:0);}));
+}

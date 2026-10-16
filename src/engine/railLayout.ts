@@ -30,8 +30,9 @@ export interface RailLayout {
 /**
  * Rail pieces and joint stations along both runways, from grid 1. Each rail runs between end stops or, at
  * an end continued by an existing bay, to a joint with the existing rail cut back 2 ft into that bay. The
- * runway A rail starts with a full piece; the runway B rail starts with a half piece so that its joints
- * fall between those of runway A.
+ * runway A rail starts with a full piece; where it has joints the runway B rail starts with a part piece (half of
+ * A's first piece, at most half a mill length) so that its joints fall between those of runway A. A run within one
+ * mill length has no joints.
  */
 export function railLayout(p:ProjectInput):RailLayout{
  const {stock,clear,minPiece}=railLayoutCriteria,L=p.spans.reduce((a,b)=>a+b,0),step=railCutStep;
@@ -64,7 +65,10 @@ export function railLayout(p:ProjectInput):RailLayout{
  };
  const a=place('A',stock,girderJoints);
  const opposite=a.joints.flatMap(j=>wheelSteps.flatMap(s=>s?[j-s,j+s]:[j]));
- const b=place('B',stock/2,[...girderJoints,...opposite]);
+ // A run within one mill length has no joints on either rail. Otherwise rail B starts with a part piece, half of rail
+ // A's first piece (at least the shortest piece, at most half a mill length), so its joints fall between those of A.
+ const half=a.joints.length?(a.joints[0]-start)/2:0,first=!a.joints.length?stock:half>=stock/2-1e-6?stock/2:Math.max(minPiece,Math.floor((half+1e-6)/step)*step);
+ const b=place('B',first,[...girderJoints,...opposite]);
  return {girderJoints,wheelSteps,rails:[a,b],existing,conflicts};
 }
 
@@ -76,7 +80,18 @@ export function railLayout(p:ProjectInput):RailLayout{
  * anchored at mid-length by an anchor clip pair (a project choice that must be stated).
  */
 export const tightJointGap=25.4/16;
-export const railJointType=(p:ProjectInput):'tight'|'open'=>p.details?.rail.jointType??'tight';
+export const railJointType=(p:ProjectInput):'tight'|'open'=>railJointKind(p)==='welded'?'tight':p.details?.rail.jointType??'tight';
+/** How the rail pieces are joined (runwayDetails rail.jointKind): welded, supplier joint bars, or joint bars detailed here. */
+export const railJointKind=(p:ProjectInput)=>p.details?.rail.jointKind??'bolted-bars';
+/**
+ * Joint kind for the crane duty: welded rail joints (thermite or flash-butt) for CMAA Class D to F cranes or an AIST
+ * Class A or B building, where bolted joints loosen and their bars and holes fatigue under the wheel passages (AIST
+ * TR-13 §5.16); otherwise the rail supplier's joint bars fitted to the rail fishing surfaces.
+ */
+export function railJointKindForDuty(p:ProjectInput):'welded'|'supplier-bars'{
+ const heavy=p.cranes.some(c=>['D','E','F'].includes(c.design?.cmaaClass??''))||['A','B'].includes(p.aist?.buildingClass??'');
+ return heavy?'welded':'supplier-bars';
+}
 /** Tight joints: the rail string floats in its clips between the girder-mounted end stops and may bear on either. */
 export const railBearsOnStops=(p:ProjectInput)=>railJointType(p)==='tight'&&stopEnds(p).length>0;
 /** Design gap at a rail joint: the entered gap for open joints, at most 1/16 in for tight joints. */
@@ -144,6 +159,11 @@ export function railMovements(p:ProjectInput,layout:RailLayout=railLayout(p)){
  });
  return {joints,ends,anchors};
 }
+/**
+ * Whether the runway has rail joints: a joint between new pieces on either rail, or the joint where a new rail continues
+ * onto an existing rail. Without one each rail is one piece and no rail joint is detailed or checked.
+ */
+export function railHasJoints(p:ProjectInput,layout:RailLayout=railLayout(p)){return layout.existing.left||layout.existing.right||layout.rails.some(r=>r.joints.length>0);}
 /** Largest closure of a rail joint, between new pieces or onto an existing rail: what each joint gap and slot takes. */
 export function railJointMovement(m:Pick<ReturnType<typeof railMovements>,'joints'|'ends'>){
  return Math.max(0,...m.joints.map(v=>v.movement),...m.ends.filter(v=>v.existing).map(v=>v.movement));
