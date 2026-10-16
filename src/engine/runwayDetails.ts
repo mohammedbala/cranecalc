@@ -88,6 +88,21 @@ export interface FatigueDetailResult {
  bins:{name:string;cycles:number;minimum:number;maximum:number;range:number;allowable:number;damage:number}[];
  damage:number;range:number;peak:number;
 }
+/**
+ * The terms of a flange's governing combined normal stress, at the stiffness of the analysis (flangeStressTerms): axial P,
+ * major M_x, lateral bending M_y = kE·I_y|v″| (k = 0.8 for strength), θM_x (zero for the coupled second-order solve, which
+ * carries it in v″) and the warping stress σ_ws = kE·W_no|θ″| at that flange's tips.
+ */
+export interface FlangeStressParts {P:number;M:number;My:number;thetaM:number;warping:number;
+ /** Twist θ (rad) and θ″ (1/mm²) at the governing station; stiffness factor k and geometric multiplier α of the solve (1 LRFD, 1.6 ASD; 0 first-order). */
+ theta?:number;warpingCurvature?:number;factor?:number;multiplier?:number;
+ /** Elastic critical load multiplier of the governing case at the analysis stiffness (the second-order amplification is about 1/(1 − α/λ)). */
+ lambda?:number;
+ /** The same beam solved first-order (multiplier 0): its lateral bending, θM_x of a first-order recovery, warping stress, θ and θ″. */
+ first?:{My:number;thetaM:number;warping:number;theta:number;warpingCurvature:number};
+ /** Lateral bending plus warping stress at this flange, second-order over first-order. */
+ amplification?:number;
+}
 export interface RunwayDetailResults {
  bracket?:BracketResults;
  existingBracket?:ExistingBracketResults;
@@ -113,9 +128,8 @@ export interface RunwayDetailResults {
  flangeNormal?:{top:number;bottom:number};
  /** Normalized warping function W_no at the tips of each flange. */
  flangeWarping?:{top:number;bottom:number};
- /** The terms of each flange's governing combined normal stress: axial P, major M_x, lateral bending M_y = E I_y v'',
-  * theta M_x and the warping stress sigma_ws at that flange's tips. */
- flangeParts?:{top:{P:number;M:number;My:number;thetaM:number;warping:number};bottom:{P:number;M:number;My:number;thetaM:number;warping:number}};
+ /** The terms of each flange's governing combined normal stress (FlangeStressParts). */
+ flangeParts?:{top:FlangeStressParts;bottom:FlangeStressParts};
  /** H1 at each flange with the governing major-axis strength M_cx (load height included): governing concurrent actions. */
  interaction?:{mcx:number;top:number;bottom:number;topCase?:import('./types').DesignCaseSummary;bottomCase?:import('./types').DesignCaseSummary;
   /** H1 of each combination with this M_cx (the larger flange). */ combinations?:{id:string;interaction:number}[]};
