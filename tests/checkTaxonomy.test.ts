@@ -34,7 +34,8 @@ describe('classification table',()=>{
    expect(classifyCheck(c).type,id).toBe('classification');expect(openKind({check:c,type:classifyCheck(c).type}),id).toBe('redesign');
   }
   const bumper=chk({id:'crane-1-bumper-stop',group:'Bumper selection',status:'fail',demand:36*kip,capacity:20*kip,utilization:1.8,quantity:'force'});
-  expect(classifyCheck(bumper)).toMatchObject({type:'design',effect:'connection'});expect(openKind({check:bumper,type:'design'})).toBe('redesign');
+  // A restatement of the end-stop checks: a bumper-selection record (not counted twice), filed as the end stop's redesign.
+  expect(classifyCheck(bumper).type).toBe('input');expect(openKind({check:bumper,type:'input'})).toBe('redesign');
  });
  it("keeps 'input' for missing data and true input checks only",()=>{
   const k=(c:CheckResult)=>openKind({check:c,type:classifyCheck(c).type});

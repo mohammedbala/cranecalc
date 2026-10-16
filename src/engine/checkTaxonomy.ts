@@ -81,9 +81,8 @@ const idRules:Rule[]=[
  T(/^(cap-development-length|cap-rail-footprint|haunch-colstiff-weld-minimum)$/,'detailing'),
  T(/^cap-angle-plate-slenderness$/,'detailing'),
  // Design: strength and serviceability, by effect
- // Thickness from strength (t_req ≤ t): the base plate in bending (AISC DG1); the bumper peak force against the end stop
- // design strength (a check of the stop, filed with its redesign).
- D(/^base-plate$/,'flexure'),D(/^crane-\d+-bumper-stop$/,'connection'),
+ // Thickness from strength (t_req ≤ t): the base plate in bending (AISC DG1).
+ D(/^base-plate$/,'flexure'),
  D(/^(cap-weld-(strength|metal|rupture)|rail-joint-plate|end-stop-bearing-(base|flange)|cap-development(-full-force)?)$/,'connection'),
  // Rail clips: the manufacturer's lateral and uplift ratings; the rail anchorage (end stops or anchor clip pair).
  D(/^(rail-clip-(lateral|uplift)|rail-anchorage)$/,'connection'),
@@ -541,6 +540,9 @@ export function openKind(t:Pick<TaxonEntry,'check'|'type'>):OpenItem['kind']{
  if(c.group==='Coordination'||c.geometry||(t.type==='detailing'&&fitRule(c)))return 'clash';
  if(c.status==='unverified'||c.status==='incomplete')return 'input';
  if(c.status==='unsupported')return 'redesign';
+ // The bumper peak force against the end stop design strength restates the end-stop checks (it stays a bumper-selection
+ // record, out of the design counts and the governing D/C): its remedy is the end stop.
+ if(/^crane-\d+-bumper-stop$/.test(c.id))return 'redesign';
  if(t.type==='input'||t.type==='load-basis'||t.type==='by-others')return 'input';
  if(t.type==='detailing')return 'detailing';
  return 'redesign';
