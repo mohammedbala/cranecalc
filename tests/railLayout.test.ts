@@ -48,9 +48,9 @@ describe('rail joint layout',()=>{
   expect(t).toContain('19\'-6"');expect(t).toContain('39\'-0"');
   expect(t).toContain('RAIL PIECES 39\'-0" MAX.');
   expect(t).toContain('STEEL SLEEVE 1 7/16" OD X 13/16" BORE');
-  // Each section is keyed on its parent view by its own detail number.
+  // Each section is keyed on its parent view by its own detail number (the tie and end stop views are on S-03).
   for(const title of [detailTitles.flangeTie,detailTitles.saddle,detailTitles.endStopSection]){
-   const cut=s02.svg.match(new RegExp(`<g data-section-cut="${title}">(.*?)</g>`))?.[1];
+   const cut=set.map(v=>v.svg.match(new RegExp(`<g data-section-cut="${title}">(.*?)</g>`))?.[1]).find(v=>v!==undefined);
    expect(cut,title).toBeDefined();expect(cut).toContain(refs.get(title));
   }
  },240000);
