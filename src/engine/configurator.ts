@@ -252,16 +252,49 @@ function skeleton(cfg:RunwayConfig){
  return {p,depth,clipWidth,spectrum,N,trial,railArea};
 }
 
+/** AIST TR-13 §5.9.2: column brackets are recommended for support reactions up to about 50 kip. */
+export const bracketReactionLimit=50*kip;
+/**
+ * The largest unfactored support reaction with all cranes present, impact and the dead load (girder, rail and the
+ * support steel): supportReactions on the project as built so far (the girder sized), the basis of the AIST
+ * column-bracket recommendation (aistChecks column-brackets: the design analysis service reaction).
+ */
+export function serviceReactionEstimate(p:ProjectInput){
+ const r=supportReactions(p,sectionProperties(p.section));
+ return Math.max(0,...r.supports.map(s=>s.D+s.Cd+s.Cv+s.Ci));
+}
+/**
+ * The configuration and its skeleton, screened against the AIST TR-13 §5.9.2 column-bracket recommendation once the
+ * girder is known: above it a new structure bears on column caps over the new crane columns (the direct column
+ * bearing TR-13 points to; normalizeConfig then drops the flange tie), with the reason; an existing structure keeps its
+ * brackets, with a warning and the remedy.
+ */
+function screened(input:RunwayConfig){
+ const {config,changes}=configOf(input);let cfg=config,sk=skeleton(cfg);
+ if(cfg.scope!=='design')return {config:cfg,changes,sk};
+ const R=serviceReactionEstimate(sk.p);
+ if(cfg.support==='column-cap'||R<=bracketReactionLimit)return {config:cfg,changes,sk,reaction:R};
+ const about=`about ${cfg.units==='SI'?`${Math.round(R/1000)} kN (${Math.round(R/kip)} kip)`:`${Math.round(R/kip)} kip`}`,limit=cfg.units==='SI'?'222 kN (50 kip)':'50 kip';
+ if(cfg.structure==='new'){
+  const n=normalizeConfig({...cfg,support:'column-cap'});
+  changes.push(`The support reaction, ${about}, exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets: the girders bear on column caps over the new crane columns (direct column bearing).`,...n.changes);
+  cfg=n.config;sk=skeleton(cfg);
+ }else changes.push(`Support reaction ${about} exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets; consider new crane columns with column caps, or obtain the engineer of record's acceptance.`);
+ return {config:cfg,changes,sk,reaction:R};
+}
+
 /** What a configuration will produce, for the configurator's summary: crane data, duty, rail and girder. */
 export function previewConfig(input:RunwayConfig){
- const {config:cfg,changes}=configOf(input),{p,depth,trial,spectrum}=skeleton(cfg);
+ const {config:cfg,changes,sk,reaction}=screened(input),{p,depth,trial,spectrum}=sk;
  const crane=estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control),structure=cfg.scope==='analysis'?undefined:cfg.structure==='new'?(cfg.columnShape??newColumnFor(cfg.capacity)):cfg.support==='by-others'?undefined:(cfg.columnShape??existingColumnFor(cfg.capacity));
- return {config:cfg,changes,crane,spectrum,railDepth:depth,girder:p.section.name,trial:trial&&{utilization:trial.utilization,deflection:trial.deflection,lateral:trial.lateral,weight:trial.weight},column:structure,verticalLimit:p.verticalLimit};
+ return {config:cfg,changes,crane,spectrum,railDepth:depth,girder:p.section.name,trial:trial&&{utilization:trial.utilization,deflection:trial.deflection,lateral:trial.lateral,weight:trial.weight},column:structure,verticalLimit:p.verticalLimit,
+  /** Largest unfactored support reaction (all cranes, impact, dead load), for the AIST column-bracket recommendation. */
+  reaction};
 }
 
 /** The configured project. Unknown supplier, survey and site data are fictitious examples, marked as such. */
 export function buildProject(input:RunwayConfig):ProjectInput{
- const cfg=configOf(input).config,{p,depth,clipWidth,spectrum,N,railArea}=skeleton(cfg),spans=p.spans;
+ const {config:cfg,sk}=screened(input),{p,depth,clipWidth,spectrum,N,railArea}=sk,spans=p.spans;
  p.configurator={...cfg};
  const scopeText=`${cfg.bays} ${cfg.system==='simple'?'simply supported':'continuous'} ${cfg.span}-ft bay${cfg.bays>1?'s':''}, ${p.section.name} girder${cfg.bays>1?'s':''}, ${cfg.cranes===2?'two':'one'} ${+cfg.capacity.toFixed(2)}-ton ${cfg.control} crane${cfg.cranes===2?'s':''}`;
  if(cfg.scope==='analysis'){
