@@ -16,6 +16,7 @@ import { aistChecks } from './aistChecks';
 import { latexNumber,withinLimit } from './math';
 import { validateRunwayDetails } from './detailValidation';
 import { completeRunwayChecks } from './detailChecks';
+import { gateCheck } from './checkTaxonomy';
 import { compressionFlangeGap } from './detailAnalysis';
 import { travelLimits } from './continuation';
 import {craneTravel,stopContacts} from './craneTravel';
@@ -155,6 +156,10 @@ export function calculate(input:ProjectInput):CalculationSnapshot {
  // Project option: a check left unverified only for missing data is omitted from this package (listed as not checked,
  // by others) instead of blocking it. Incomplete or unsupported results still block.
  if(p.omitUnverified)snapshot.checks=snapshot.checks.map(c=>c.status==='unverified'?{...c,status:'excluded',note:`Not checked here: ${c.note.trim()} Omitted from this package until these data are provided (by others).`}:c);
+ // A rule that does not apply to this arrangement is not a failure (the taxonomy gates: J2.2b maximum fillets in
+ // T-joints, J10.8 proportions of stiffeners that J10.1-J10.4 do not require, full-force development of a full-length
+ // cap, the F13.1 hole test as a capacity modifier, fatigue that need not be evaluated): not-applicable, with the reason.
+ snapshot.checks=snapshot.checks.map(c=>{if(c.status!=='fail')return c;const g=gateCheck(snapshot,c);return g.gate==='evaluated'?c:{...c,status:'not-applicable',note:`${g.reason??'Not applicable to this arrangement.'} ${c.note}`.trim()};});
  const blocking=snapshot.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status));
  // Failed engineering criteria can export; failed numerical verification cannot.
  snapshot.eligible=!blocking&&!snapshot.errors.length&&snapshot.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass');

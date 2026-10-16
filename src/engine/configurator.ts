@@ -109,41 +109,77 @@ export function seatWidthNeeded(depth:number,clipWidth:number,tolerance=.125*inc
 
 const wCandidates=()=>aiscWShapes.filter(s=>s.d>=12&&s.d<=40&&s.bf/(2*s.tf)<=.38*Math.sqrt(29000/50)&&(s.d-2*s.kdes)/s.tw<=3.76*Math.sqrt(29000/50)).sort((a,b)=>a.weight-b.weight);
 const capChannels=['C10X15.3','C12X20.7','C12X25','C15X33.9','C15X40','C15X50','MC18X42.7'];
-export interface GirderTrial {name:string;weight:number;utilization:number;deflection:number;lateral:number;shear:number;section:Section}
+export interface GirderTrial {name:string;weight:number;utilization:number;deflection:number;lateral:number;shear:number;section:Section;
+ /** The governing sizing ratio: top-flange tip stress with warping and second-order twist, the H1 top-flange interaction with the load-height LTB strength, or the elastic stability margin. */
+ governs:string}
+/**
+ * Top-flange sizing ratios of a girder section under the factored moving-load envelope (canonical units):
+ * - flange tips: M_u/S_x + M_f/S_f ≤ φF_y, with M_f the top flange's lateral moment from the rail-head side thrust
+ *   (its direct share I_yt/I_y plus the warping couple of the torque about the shear center, height y_g) and from the
+ *   rail eccentricity e (M_u e/h_0), amplified for the second-order twist by 1/(1 − M_u/(0.8M_cr));
+ * - H1 at the top flange (DG7): M_u/φM_n + M_f/φF_yS_f, M_n by F2 with C_b = M_cr/M_ocr (load height) at most 1;
+ * - elastic stability: 0.8M_cr/M_u ≥ 1/φ.
+ * M_cr is the classical elastic critical moment of the bay with the wheels at the rail head, y_g above the shear
+ * center (C1 = 1.13, C2 = 0.46, fork supports at the girder ends), the same mechanics the full analysis solves by
+ * eigenvalues; with the monosymmetry term of a capped section (C3 = 0.53); the configurator uses it to rank sections,
+ * the full analysis then checks the chosen one.
+ */
+export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:number;Mcrane:number;Hu:number;V:number;flexibleTie?:boolean},strength=girderStrength({...p,section,aist:p.aist?{...p.aist,netFlangeArea:section.bf*section.tf}:p.aist},sectionProperties(section))){
+ const pr=sectionProperties(section),E=section.E,G=E/2.6,L=p.unbracedLength,lrfd=p.method==='LRFD',phi=(v:number)=>lrfd?.9*v:v/1.67;
+ const cap=section.kind==='cap'?aiscChannelByName(section.capCatalogueId??''):undefined,Iyb=section.tf*section.bf**3/12,Iyt=Iyb+(cap?cap.Ix*inch**4:0);
+ const h0=section.d-section.tf,ysc=h0*Iyb/(Iyt+Iyb),hr=p.railHeight+(p.aist?.railPad?.25*inch:0),yg=ysc+section.tf/2+(cap?section.capTw:0)+hr;
+ // Monosymmetry (Wagner) term: positive with the larger flange on top (the cap), which raises M_cr; zero for a W.
+ const rho=Iyt/(Iyt+Iyb),betaX=.9*h0*(2*rho-1)*(1-(pr.Iy/pr.Ix)**2);
+ const pe=Math.PI**2*E*pr.Iy/L**2,base=pr.Cw/pr.Iy+L*L*G*pr.J/(Math.PI**2*E*pr.Iy),C1=1.13,C2=.46,C3=.53,arm=C2*yg-C3*betaX/2;
+ const Mcr=C1*pe*(Math.sqrt(base+arm**2)-arm),Mocr=pe*(Math.sqrt(base+(betaX/2)**2)+betaX/2);
+ const top=Iyt/(Iyt+Iyb),Mf0=demand.Hu*(top+yg/h0)+demand.Mcrane*Math.abs(p.railEccentricity)/h0;
+ const amplification=demand.Mu<.8*Mcr?1/(1-demand.Mu/(.8*Mcr)):Infinity;
+ const halfWidth=cap?section.capWidth/2:section.bf/2,Sf=Iyt/halfWidth,Stop=pr.Ix/(section.d+(cap?section.capTw:0)-pr.cy);
+ // Calibrated against the full analysis of the simulation set: a capped top flange (the channel tips) and a single
+ // flexible plate tie (less end restraint against twist) carry more warping stress than this estimate gives.
+ const tips=(demand.Mu/Stop+Mf0*amplification/Sf)/phi(section.Fy)*(cap?1.4:1)*(demand.flexibleTie?1.25:1);
+ // F2 (F4 for caps, through girderStrength) with the load-height C_b: M_n,LTB scales with C_b below M_p.
+ const cb=Math.min(1,Mcr/Mocr),Mn=strength.ltb!==undefined?Math.min(strength.major,cb*strength.major):strength.major;
+ const h1=demand.Mu/Mn+Mf0/phi(section.Fy*Sf),stability=(lrfd?1/.9:1.67)/(.8*Mcr/demand.Mu);
+ const ratios={tips,h1,stability,shear:demand.V/strength.shear};
+ const [governs,utilization]=Object.entries(ratios).sort((a,b)=>b[1]-a[1])[0];
+ return {...ratios,utilization,governs,Mcr,cb,amplification};
+}
 /**
  * Girder sizing for the moving loads: one moving-load analysis of the configured runway gives the envelope moments
  * and deflections (moments of a prismatic girder do not depend on its stiffness; deflections scale with 1/I), then
- * each catalog section (compact W, or W + channel cap whose cap web seats the rail and clips) is checked on the
- * factored crane moment and the top flange's lateral moment (DG7 biaxial check of the top flange), the vertical and
- * lateral deflection limits and the web shear. The lightest section within the targets is returned; the full
- * analysis then checks it completely (torsion, load height, fatigue, local and connection checks).
+ * each catalog section (compact W, or W + channel cap whose cap web seats the rail and clips) is checked with
+ * girderSizingRatios, the vertical and lateral deflection limits and the web shear. The lightest section within the
+ * targets is returned; the full analysis then checks it completely (fatigue, local and connection checks).
  */
-export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:number;target?:number;deflectionTarget?:number}):GirderTrial|undefined{
- const target=opts.target??.72,deflectionTarget=opts.deflectionTarget??.9;
+export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:number;minFlange?:number;capRoom?:number;flexibleTie?:boolean;target?:number;deflectionTarget?:number}):GirderTrial|undefined{
+ const target=opts.target??.85,deflectionTarget=opts.deflectionTarget??.9;
  const ref=structuredClone(p);ref.section=loadAiscSection(ref.section,'W24X104');
  const props=sectionProperties(ref.section),a=movingAnalysis(ref,props,8),L=Math.max(...p.spans),lrfd=p.method==='LRFD';
  const Md=a.deadMoment,M=a.demand.moment,H=a.demand.lateralMoment,V=a.demand.shear,dv=a.demand.deflection*props.Ix,dh=a.demand.lateralDeflection*props.Iy;
  const vLimit=L/p.verticalLimit,hLimit=L/Math.max(p.lateralLimit,400);
  const trials:GirderTrial[]=[];
  const consider=(section:Section,name:string,weight:number)=>{
-  const q={...p,section,aist:p.aist?{...p.aist,netFlangeArea:section.bf*section.tf}:p.aist},pr=sectionProperties(section),s=girderStrength(q,pr);
-  const dead=Md*(pr.weight+p.railWeight+p.deadLoad)/(props.weight+p.railWeight+p.deadLoad),Mu=lrfd?1.2*dead+1.6*(M-Md):dead+(M-Md),Hu=(lrfd?1.6:1)*H;
-  const utilization=Mu/s.major+Hu/(s.topMinor??s.flangeMinor);
-  trials.push({name,weight,utilization,deflection:dv/pr.Ix/vLimit,lateral:dh/pr.Iy/hLimit,shear:(lrfd?1.6:1)*V/s.shear,section});
+  const pr=sectionProperties(section),dead=Md*(pr.weight+p.railWeight+p.deadLoad)/(props.weight+p.railWeight+p.deadLoad),Mcrane=(lrfd?1.6:1)*(M-Md);
+  const r=girderSizingRatios(p,section,{Mu:(lrfd?1.2:1)*dead+Mcrane,Mcrane,Hu:(lrfd?1.6:1)*H,V:(lrfd?1.6:1)*V,flexibleTie:opts.flexibleTie});
+  trials.push({name,weight,utilization:r.utilization,governs:r.governs,deflection:dv/pr.Ix/vLimit,lateral:dh/pr.Iy/hLimit,shear:r.shear,section});
  };
+ // Flanges wide enough for the bearing bolts, end-stop bolts and saddles (minFlange), and for the rail and clips.
+ const minFlange=Math.max(opts.minFlange??0,kind==='rolled'?opts.minSeat:0);
  if(kind==='rolled'){
-  for(const w of wCandidates())if(w.bf*inch>=opts.minSeat-1e-6)consider(loadAiscSection(p.section,w.name),w.name,w.weight);
+  for(const w of wCandidates())if(w.bf*inch>=minFlange-1e-6)consider(loadAiscSection(p.section,w.name),w.name,w.weight);
  }else{
   for(const ch of capChannels){const c=aiscChannelByName(ch)!;
    for(const w of wCandidates()){
-    // The W flange fits between the channel flanges, the channel web seats the rail and clips, and the cap stays
-    // above the neutral axis (a deep cap on a shallow W is outside the capped-girder model).
-    if(c.d<w.bf+2*c.tf+.25||w.bf<.6*c.d||(c.d/2-c.tf)*inch*2<opts.minSeat-1e-6||w.d<1.4*c.bf+8||w.d<c.d*.9)continue;
+    // The W flange fits between the channel flanges with room for the tie gussets beside it (capRoom), the channel
+    // web seats the rail and clips, and the cap stays above the neutral axis (a deep cap on a shallow W is outside
+    // the capped-girder model).
+    if(c.d<w.bf+2*c.tf+.25+(opts.capRoom??0)/inch||w.bf*inch<minFlange-1e-6||w.bf<.6*c.d||(c.d/2-c.tf)*inch*2<opts.minSeat-1e-6||w.d<1.4*c.bf+8||w.d<c.d*.9)continue;
     consider(loadCappedSection(p.section,w.name,ch),`${w.name} + ${ch}`,w.weight+c.weight);
    }
   }
  }
- const ok=trials.filter(t=>t.utilization<=target&&t.deflection<=deflectionTarget&&t.lateral<=deflectionTarget&&t.shear<=target).sort((x,y)=>x.weight-y.weight);
+ const ok=trials.filter(t=>t.utilization<=target&&t.deflection<=deflectionTarget&&t.lateral<=deflectionTarget).sort((x,y)=>x.weight-y.weight);
  return ok[0]??trials.sort((x,y)=>Math.max(x.utilization,x.deflection)-Math.max(y.utilization,y.deflection))[0];
 }
 
@@ -182,16 +218,19 @@ function skeleton(cfg:RunwayConfig){
  const railArea=(r:{headWidth:number;headThickness:number;baseWidth:number;baseThickness:number;webThickness:number})=>r.headWidth*r.headThickness+r.baseWidth*r.baseThickness+(depth-r.headThickness-r.baseThickness)*r.webThickness;
  p.railWeight=railArea({headWidth:.55*depth,headThickness:.3*depth,baseWidth:depth,baseThickness:.17*depth,webThickness:.12*depth})*7850*g/1e9;
  const clipWidth=(up(depth,1.5875)<=4.5*inch+1e-6?2:2.5)*inch,minSeat=seatWidthNeeded(depth,clipWidth);
+ // Flanges that take the 5 1/2 in gauge of the 3/4 in end bearing bolts with the sleeved slots at the J3.4 edge
+ // distance (8 3/8 in), and caps wide enough for the tie gussets beside the W flange (a saddle tie or flexible plate).
+ const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'};
  // Girder: the named section, else sized for the moving loads.
  let trial:GirderTrial|undefined;
  if(cfg.girder==='capped'){
   if(cfg.girderShape&&cfg.capChannel)p.section=loadCappedSection(p.section,cfg.girderShape,cfg.capChannel);
-  else{trial=sizeGirder(p,'capped',{minSeat});p.section=trial?.section??loadCappedSection(p.section,'W24X94','C15X33.9');}
+  else{trial=sizeGirder(p,'capped',sizing);p.section=trial?.section??loadCappedSection(p.section,'W24X94','C15X33.9');}
   const capped=cappedDemonstrationProject().capDesign!;
   p.capDesign={...capped,cmaaClass:cfg.cmaa,dutySource:`Fictitious example: crane supplier confirms CMAA Class ${cfg.cmaa}, ${+cfg.capacity.toFixed(2)}-ton crane; ${count(N)} wheel stress fluctuations`};
  }else{
   if(cfg.girderShape)p.section=loadAiscSection(p.section,cfg.girderShape);
-  else{trial=sizeGirder(p,'rolled',{minSeat});p.section=trial?.section??loadAiscSection(p.section,'W24X104');}
+  else{trial=sizeGirder(p,'rolled',sizing);p.section=trial?.section??loadAiscSection(p.section,'W24X104');}
   delete p.capDesign;
  }
  p.section.Fy=50*ksi;p.section.Fu=65*ksi;p.section.E=29000*ksi;
@@ -253,7 +292,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
     alteration:{dcrIncrease:.06,source:'Fictitious example: evaluation of the existing bracing and frames with the runway and crane mass added (largest D/C increase 6%)'}}};
   delete p.drawing!.railElevation;
   p.drawing!.existingEvaluation='Fictitious existing structure evaluation: column line B frame, bracing, connections and foundations for the added crane loads';
-  p.longitudinalBracing={...base.longitudinalBracing!,bayWidth:cfg.span*foot,height:seat,existing:{W:6*kip,E:3*kip},wind10:3.5*kip,
+  p.longitudinalBracing={...base.longitudinalBracing!,bayWidth:cfg.span*foot,height:seat,rod:{...base.longitudinalBracing!.rod,diameter:bracingRod(p,cfg.span*foot,seat)},existing:{W:6*kip,E:3*kip},wind10:3.5*kip,
    source:'Fictitious example: existing sidewall rod bracing at grid lines 2-3 and the original wind/seismic report (10-year wind 3.5 kip on this line)',confirmed:true};
   attachBracket(p,cfg,shape,reach,false);
   p.notes=`Example configuration generated by the CraneCalc configurator; fictitious crane, supplier, survey and owner data, to be replaced with project data. Scope: ${scopeText}, on new ${bracketText(cfg)} welded to the existing ${shape} columns, with the rail, ties, bearings and end stops; the existing columns are checked with their existing load effects and the existing sidewall rod bracing takes the crane longitudinal forces.`;
@@ -271,9 +310,13 @@ export function buildProject(input:RunwayConfig):ProjectInput{
   p.existingColumn={...c,shape,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch,height:top,seatElevation:seat,Lcx:2.1*top,Lcy:top,Lcz:top,Lb:top,
    seismic:{...c.seismic!,source:'Fictitious example site data: SDS 0.20, SD1 0.08, Site Class D, Risk Category II, SDC B',building:{drift:1.5*inch,source:'Fictitious example building report: maximum inelastic displacement 1.5 in at the runway level'}},
    adjacent:{...c.adjacent!,source:'Fictitious example survey: existing column faces located at every grid, footings by test pits'}};
+  // The existing building's column lines stand far enough outboard that the new footings clear theirs by the
+  // required clear distance with 3 in to spare.
+  const adj=p.existingColumn.adjacent!,outboard=(line:NonNullable<typeof adj.A>)=>({...line,offset:Math.max(line.offset,up(baseInput.footing.B/2+line.footing.B/2+adj.footingClear+3*inch,6*inch))});
+  adj.A=adj.A&&outboard(adj.A);adj.B=adj.B&&outboard(adj.B);
   delete p.drawing!.existingEvaluation;
   const middle=Math.ceil(cfg.bays/2);
-  p.longitudinalBracing={...demo.longitudinalBracing!,bayWidth:cfg.span*foot,height:seat,rod:{...demo.longitudinalBracing!.rod,diameter:(heavy>.4?1.25:1)*inch},bays:1,
+  p.longitudinalBracing={...demo.longitudinalBracing!,bayWidth:cfg.span*foot,height:seat,rod:{...demo.longitudinalBracing!.rod,diameter:Math.max(inch,bracingRod(p,cfg.span*foot,seat))},bays:1,
    source:`Fictitious example: new crane-level rod X-bracing between the new columns at grid lines ${middle}-${middle+1}; no building wind or seismic on this line`,confirmed:true,
    design:{...structuredClone(demo.longitudinalBracing!.design!),spans:[middle]}};
   // The clevis pin is at least the rod diameter.
@@ -312,6 +355,15 @@ export function buildProject(input:RunwayConfig):ProjectInput{
   return sized;
  }
  return p;
+}
+/**
+ * Rod diameter of one braced bay of X-bracing for the crane's longitudinal forces: the bumper force plus the traction
+ * of all cranes along the diagonal, against 0.75 F_u A_b/0.75 of an A36 rod's threaded area with 25% to spare for the
+ * building's own wind and the rod's fatigue.
+ */
+function bracingRod(p:ProjectInput,bay:number,height:number){
+ const F=Math.max(...p.cranes.map(c=>c.design?.bumperForce??0))+p.cranes.reduce((n,c)=>n+c.longitudinal,0),T=1.25*F*Math.hypot(bay,height)/bay;
+ return [.75,1,1.25,1.5,1.75,2].map(d=>d*inch).find(d=>.75*.75*58*ksi*Math.PI*d*d/4>=T)??2*inch;
 }
 /** Base plate plan for a column shape: the anchor rows clear the column flange welds and plate washers. */
 function basePlatePlan(shape:string){const w=aiscShapeByName(shape)!;return {N:up(w.d*inch+9.5*inch,.5*inch),B:up(w.bf*inch+3.5*inch,.5*inch)};}

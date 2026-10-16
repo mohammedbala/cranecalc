@@ -9,6 +9,7 @@ import {railSeatDefaults,defaultRailClip} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
+import {minimumEdge} from './capAngle';
 /** Template sizing of the tapered I haunch for the project's reactions. */
 export {sizeTaperedHaunch} from './taperedHaunchSizing';
 
@@ -43,6 +44,21 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  const tieSetback=up(saddle.length/2+weld+stiffenerThickness/2+weld+.25*inch,.25*inch),bearingLength=12*inch;
  // Stop bolts clear the runway-end tie saddle and the bearing stiffener with nut clearance.
  const stopEdge=defaultEndStop.bolts.edge,C=wrenchClearance(defaultEndStop.bolts.diameter);
+ // Rail joint bars fill 95% of the clear web between head and base, to the 1/4 in below; the joint bolt is the
+ // largest that keeps the AISC J3.4 edge distance to both bar edges (holes on the bars' mid-height).
+ const jointHeight=Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35;
+ const jointBolt=[.875,.75,.625,.5].map(v=>v*inch).find(db=>2*minimumEdge(db)<=jointHeight+1e-6)??.5*inch;
+ // Bearing stiffener fillets: 5/16 in, within the edge limit t - 1/16 in of the thinner of the web and the stiffener.
+ const stiffenerWeld=Math.max(3/16*inch,Math.min(.3125*inch,Math.floor((Math.min(b.tw,stiffenerThickness)-inch/16)/(inch/16)+1e-9)*inch/16));
+ // On a narrow flange the bolt gauges narrow to keep the flange edge distances: the end bearing's sleeved slots
+ // (1.5d less half the hole plus half the slot, AISC J3.4) and the stop bolts (1.5d); the stop stiffeners close up
+ // to keep the tightening clearance at their weld toes, and the stop base keeps its 1.5d edges.
+ const bearingBolt=defaultEndBearing.bolts.diameter,slot=bearingBolt+2*.3125*inch+inch/16,bearingEdge=1.5*bearingBolt-(bearingBolt+inch/16)/2+slot/2;
+ const bearingGauge=Math.min(defaultEndBearing.bolts.gauge,down(b.bf-2*bearingEdge,.25*inch));
+ // The stop base sits on the top flange: at most the flange width, the bolts 1.5d inside its edges.
+ const sd=defaultEndStop.bolts.diameter,stopBase=Math.min(defaultEndStop.base.width,down(b.bf,.25*inch)),stopGauge=Math.min(defaultEndStop.bolts.gauge,down(stopBase-3*sd,.25*inch));
+ const stopStiffener=stopGauge<defaultEndStop.bolts.gauge?.5*inch:defaultEndStop.stiffener.thickness;
+ const stop={gauge:stopGauge,baseWidth:stopBase,thickness:stopStiffener,spacing:Math.min(defaultEndStop.stiffener.spacing,down(stopGauge-stopStiffener-2*(defaultEndStop.weldSize+C),.25*inch))};
  const stopSetback=up(Math.max(bearingLength/2-tieSetback+saddle.length/2+weld,bearingLength/2+stiffenerThickness/2+weld)+C-stopEdge,.25*inch);
  const details:RunwayDetails={
   material:{Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi},
@@ -52,7 +68,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:saddleWeld,columnFace:tieStart+tieLength+tieBarGap(saddleWeld)}}:{}),
    release:{enabled:true,travel:.125*inch,sleeveWall:.25*inch,clearance:.0625*inch}},
   end:{rows:4,gauge:2.75*inch,pitch:3*inch,edge:1.25*inch,thickness:.75*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:.3125*inch,weldLength:11.5*inch},
-  bearing:{width:up(b.bf+2*inch,.5*inch),length:bearingLength,thickness:1*inch,stiffenerWidth,stiffenerThickness,cope:up(Math.max(k1-b.tw/2,.75*inch),.125*inch),weldSize:.3125*inch},
+  bearing:{width:up(b.bf+2*inch,.5*inch),length:bearingLength,thickness:1*inch,stiffenerWidth,stiffenerThickness,cope:up(Math.max(k1-b.tw/2,.75*inch),.125*inch),weldSize:stiffenerWeld},
   // Proportions of a typical crane rail of the entered depth; replace with the supplier's section. The joint bars fill
   // 95% of that section's clear web between head and base, to the 1/4 in below.
   rail:{name:`${toBeEntered} rail designation and supplier`,headWidth:up(.55*h,1.5875),headThickness:up(.3*h,1.5875),baseWidth:up(h,1.5875),baseThickness:up(.17*h,1.5875),webThickness:up(.12*h,1.5875),Fy:60*ksi,Fu:90*ksi,padAllowable:10,padSource:`${toBeEntered} rail pad rating source`,
@@ -60,7 +76,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    // Rail clips: the manufacturer's data are entered by the engineer; until then the placeholder clip (weld-on, 3 3/4 in
    // base, 5/16 in base welds) lays out the stations and every clip check is unverified.
    clip:{...structuredClone(defaultRailClip),product:`${toBeEntered} rail clip manufacturer and series (or equal), rated lateral and uplift capacity per clip`},
-   jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35,jointBoltDiameter:.875*inch,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+   jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:jointHeight,jointBoltDiameter:jointBolt,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
   criteria:{...(p.details?.criteria.twistLimit?{twistLimit:p.details.criteria.twistLimit}:{}),railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],
@@ -73,10 +89,11 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    railAlignment:'Set the rails to the specified gauge, alignment and level tolerances and survey them after erection, before the load test.'
   },
   // Bolted bearings: each bay locates at its left end on simple spans; a continuous girder locates at one support.
-  endBearing:{...structuredClone(defaultEndBearing),enabled:true},
+  // The gauge narrows on a narrow flange so the sleeved slots keep the J3.4 edge distance.
+  endBearing:{...structuredClone(defaultEndBearing),enabled:true,bolts:{...defaultEndBearing.bolts,gauge:bearingGauge}},
   // The stop sits inboard of the runway-end tie saddle.
   // The face plate holds the whole bumper above the rail and its pad, with 1/2 in to spare, in whole inches.
-  ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,setback:stopSetback,base:{...defaultEndStop.base,length:11.5*inch},face:{...defaultEndStop.face,height:up((p.aist?.railDepth??p.railHeight)+(p.aist?.railPad?railSeatDefaults.padThickness:0)+defaultEndStop.bumperHeight-defaultEndStop.base.thickness+defaultEndStop.bumperDiameter/2+.5*inch,inch)},stiffener:{...defaultEndStop.stiffener,length:8.5*inch},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
+  ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,setback:stopSetback,base:{...defaultEndStop.base,length:11.5*inch,width:stop.baseWidth},face:{...defaultEndStop.face,height:up((p.aist?.railDepth??p.railHeight)+(p.aist?.railPad?railSeatDefaults.padThickness:0)+defaultEndStop.bumperHeight-defaultEndStop.base.thickness+defaultEndStop.bumperDiameter/2+.5*inch,inch)},stiffener:{...defaultEndStop.stiffener,length:8.5*inch,spacing:stop.spacing,thickness:stop.thickness},bolts:{...defaultEndStop.bolts,gauge:stop.gauge},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
   reviewed:false
  };
  // Sleeved slots at the column end: the bolt gauge keeps the required material between the slots of a row, and the
