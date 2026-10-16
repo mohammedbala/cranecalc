@@ -6,6 +6,7 @@
  * frame action, base flexibility and second-order effects are not modeled.
  * Canonical units: N, mm, N·mm.
  */
+import {meshNodes,meshTolerance} from './meshNodes';
 export interface ColumnBoundary {base:'pinned'|'fixed';top:'braced'|'free';}
 export interface ColumnNodalLoad {x:number;force?:number;moment?:number;}
 export interface ColumnResponse {
@@ -16,12 +17,16 @@ export interface ColumnResponse {
  reactions:{base:number;baseMoment:number;top:number};
 }
 
-/** `stations` adds unloaded nodes so that responses to different load cases share sample points. */
+/**
+ * `stations` adds unloaded nodes so that responses to different load cases share sample points. Points closer than
+ * meshTolerance share a node (a load moves onto the base, the top, a station or another load): a load 0.01 mm below a
+ * free top made an element so stiff that the solution lost every digit (the base moment came out with the wrong sign).
+ */
 export function columnResponse(height:number,EI:number,boundary:ColumnBoundary,loads:ColumnNodalLoad[],stations:number[]=[]):ColumnResponse{
  if(boundary.base==='pinned'&&boundary.top==='free')throw Error('A pinned-base column with a free top is unstable.');
  if([...loads.map(l=>l.x),...stations].some(x=>!(x>=0&&x<=height)))throw Error('Column loads must lie between the base and the top.');
- const nodes=[0,height,...loads.map(l=>l.x),...stations].sort((a,b)=>a-b).filter((x,i,s)=>!i||x-s[i-1]>1e-9),n=nodes.length,size=2*n;
- const node=(x:number)=>nodes.findIndex(v=>Math.abs(v-x)<=1e-9);
+ const mesh=meshNodes([0,height,...stations],loads.map(l=>l.x),[],meshTolerance(height)),nodes=mesh.nodes,n=nodes.length,size=2*n;
+ const node=(x:number)=>{try{return mesh.index(x);}catch{return -1;}};
  const element=(L:number)=>{const a=EI/L**3;return [[12,6*L,-12,6*L],[6*L,4*L*L,-6*L,2*L*L],[-12,-6*L,12,-6*L],[6*L,2*L*L,-6*L,4*L*L]].map(r=>r.map(v=>v*a));};
  const K=Array.from({length:size},()=>Array(size).fill(0) as number[]),F=Array(size).fill(0) as number[];
  for(let e=0;e<n-1;e++){const k=element(nodes[e+1]-nodes[e]);for(let i=0;i<4;i++)for(let j=0;j<4;j++)K[2*e+i][2*e+j]+=k[i][j];}
