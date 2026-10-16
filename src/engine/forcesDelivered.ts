@@ -3,6 +3,8 @@ import type {SupportForceSet} from './bracketForces';
 import {craneCombinations} from './aistLoads';
 import {runwayElevations} from './drawingData';
 import {capTieLine} from './capAngle';
+import {activeColumnCap} from './columnCapInputs';
+import {flangeTieGeometry} from './tieGeometry';
 
 /**
  * Forces the runway delivers to the building columns (C4): at each grid, whole concurrent sets of the factored bracket
@@ -49,7 +51,11 @@ export function deliveredForces(s:CalculationSnapshot){
  if(!r?.bracketForces?.length||!a||!props)return undefined;
  const b=p.details?.bracket,d=p.details!;
  // Reaction eccentricity from the column centerline (bracket: half the column depth, the reach and half the bearing).
- const e=b?.enabled?b.receiver.depth/2+b.reach+d.bearing.width/2:p.existingColumn?.enabled?p.existingColumn.eccentricity:undefined;
+ // A seat by others on a column this calculation does not model: from the column face, the girder web line entered for
+ // the tie (its column face) plus half the bearing; the column half depth is the building engineer's (eFrom 'face').
+ const face=!b?.enabled&&!p.existingColumn?.enabled&&!activeColumnCap(p)?d.brace.capAngle?.columnFace??d.brace.flangeAttachment?.columnFace:undefined;
+ const e=b?.enabled?b.receiver.depth/2+b.reach+d.bearing.width/2:p.existingColumn?.enabled?p.existingColumn.eccentricity:face!==undefined?face+d.bearing.width/2:undefined;
+ const eFrom:'centerline'|'face'|undefined=e===undefined?undefined:face!==undefined&&!b?.enabled&&!p.existingColumn?.enabled?'face':'centerline';
  const brace=braceImperfection(p,a,props),stops=new Set(craneCombinations(p.method,p.aist?.concurrency==='full').filter(c=>c.bumper>0).map(c=>`${p.method} ${c.id}`));
  const grids:DeliveredGrid[]=r.bracketForces.map(v=>{
   const sets:DeliveredSet[]=[];
@@ -65,19 +71,25 @@ export function deliveredForces(s:CalculationSnapshot){
   if(v.minVertical.vertical<0)add('uplift',v.minVertical);
   return {grid:v.grid,x:v.x,sets};
  });
- const el=runwayElevations(p),tie=capTieLine(p)??p.section.d-p.section.tf/2;
+ // The tie line of the girder analysis (the top flange at mid-thickness, or the cap tieback line), and where a flange
+ // tie's bars bring the force to the column: their centerline, below the flange by the saddle and its clearance.
+ const el=runwayElevations(p),tie=capTieLine(p)??p.section.d-p.section.tf/2,ft=capTieLine(p)===undefined?flangeTieGeometry(p):undefined;
+ const bars=ft?p.section.d/2+ft.topCenter:undefined;
  const stopGrids=grids.filter(g=>g.sets.some(x=>stops.has(x.combination)&&Math.abs(x.F)>=1)).map(g=>g.grid);
  const tractionGrids=grids.filter(g=>g.sets.some(x=>!stops.has(x.combination)&&Math.abs(x.F)>=1)).map(g=>g.grid);
  const traction=Math.max(0,...grids.flatMap(g=>g.sets.filter(x=>!stops.has(x.combination)).map(x=>Math.abs(x.F))));
  const stop=Math.max(0,...grids.flatMap(g=>g.sets.filter(x=>stops.has(x.combination)).map(x=>Math.abs(x.F))));
  const analysis=Math.max(0,...grids.flatMap(g=>g.sets.map(x=>Math.abs(x.top))));
- return {grids,e,brace,
-  /** The girder web line from the column centerline (bracket); e is taken at the far bearing edge beyond it. */
-  web:b?.enabled?b.receiver.depth/2+b.reach:undefined,
+ return {grids,e,eFrom,brace,
+  /** The girder web line from the column centerline (bracket) or from the column face (seat by others); e is taken at the far bearing edge beyond it. */
+  web:b?.enabled?b.receiver.depth/2+b.reach:face,
   /** The tie design force: the largest concurrent top-flange restraint force (all girder ends at a grid) plus the brace force. */
   tie:{analysis,design:r.demands.brace+brace.force,perEnd:r.demands.braceEnd},
-  /** Elevations above the floor datum: seat (top of the bracket), the tie line; undefined without elevations. */
-  elevation:el?{seat:el.seat,tie:el.seat+d.bearing.thickness+tie}:undefined,
+  /**
+   * Elevations above the floor datum: seat (top of the bracket), the tie line of the analysis and, for a flange tie, the
+   * centerline of its bars at the column (tieBars); undefined without elevations.
+   */
+  elevation:el?{seat:el.seat,tie:el.seat+d.bearing.thickness+tie,tieBars:bars===undefined?undefined:el.seat+d.bearing.thickness+bars}:undefined,
   stopGrids,tractionGrids,traction,stop};
 }
 export type DeliveredForces=NonNullable<ReturnType<typeof deliveredForces>>;

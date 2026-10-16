@@ -169,7 +169,9 @@ describe('body and page 1 (items 3-5; A1, C16)',()=>{
   expect(t.governing!.check.id).toBe('rail-twist');
  });
  it('prints the counts line',()=>{
-  expect(text(page1)).toMatch(/414 design checks evaluated, 419 screened below the fatigue threshold, 4 N\/A; 75 detailing rules \(16 with small margin, section 6\.2\)\. All results: Appendix A\./);
+  // The screened details are further checks beside the evaluated ones ("and N more"); failing design checks and
+  // detailing rules not met would be counted in the same line (none in this baseline).
+  expect(text(page1)).toMatch(/414 design checks evaluated, and 419 more screened below the fatigue threshold, 4 N\/A; 75 detailing rules \(16 with small margin, section 6\.2\)\. All results: Appendix A\./);
   expect(text(page1)).not.toMatch(/body rows?|register points?/);
  });
  it('states exactly what remains by others with the forces delivered (D34)',()=>{

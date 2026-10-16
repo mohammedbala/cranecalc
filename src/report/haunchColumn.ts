@@ -6,6 +6,7 @@ import {receiverK} from '../engine/columnStiffenerInputs';
 import type {FlangePeak,FlangeLevelStrengths} from '../engine/flangeForceSystem';
 import {plateInches} from '../components/drawingFormat';
 import {caseLabel,sig3,tidyNumbers} from './reportParts';
+import {dcText} from '../engine/checkPresentation';
 import {caseName} from '../engine/caseNames';
 
 /**
@@ -20,8 +21,11 @@ const esc=(v:unknown)=>caseLabel(tidyNumbers(String(v??''))).replace(/[&<>"']/g,
 /** The column stiffeners as specified: plates, depth, fillets and where they are welded. */
 export function columnStiffenerSpec(s:CalculationSnapshot|{input:CalculationSnapshot['input']}){
  const p=s.input,g=columnStiffenerGeometry(p);if(!g)return undefined;
- const pl=(v:number)=>plateInches(v,p.units),levels=g.levels.map(l=>l.name.replace(/^(haunch|stub) /,'')).join(' and ');
- return `2 pairs PL ${pl(g.t)} × ${pl(g.width)}, ${g.full?'full depth':'half depth'}, ${g.levels.length>1?`one pair at each ${g.rolled?'stub':'haunch'} flange`:`one pair at the ${g.rolled?'stub':'haunch'} ${levels}`}; ${pl(g.s.flangeWeld)} fillets to the flange${g.full?'s':''} and ${pl(g.s.webWeld)} to the web, both faces; ${g.field?'field welded inside the existing column':'shop welded inside the new column'}`;
+ const pl=(v:number)=>plateInches(v,p.units);
+ // Each pair where its bracket delivers force: at each flange of an I-shaped bracket (W stub, tapered haunch), at the seat
+ // and the rib bottom of a welded rib bracket, named from the force levels themselves.
+ const flanges=g.levels.every(l=>/ flange$/.test(l.name)),where=flanges?(g.levels.length>1?`one pair at each ${g.levels[0].name.replace(/ (top|bottom) flange$/,'')} flange`:`one pair at the ${g.levels[0].name}`):`one pair at the ${g.levels.map(l=>l.name).join(' and one at the ')}`;
+ return `${g.levels.length} pair${g.levels.length>1?'s':''} PL ${pl(g.t)} × ${pl(g.width)}, ${g.full?'full depth':'half depth'}, ${where}; ${pl(g.s.flangeWeld)} fillets to the flange${g.full?'s':''} and ${pl(g.s.webWeld)} to the web, both faces; ${g.field?'field welded inside the existing column':'shop welded inside the new column'}`;
 }
 
 /**
@@ -65,7 +69,7 @@ export function flangeColumnBlock(s:CalculationSnapshot){
  const fillet=withK?`; k = t<sub>f</sub>, no rolled-fillet credit for the ${column}; with the catalog k<sub>des</sub> = ${esc(L(K!.k))}, D/C ${yields.map(r=>`${withK(r).toFixed(2)}${yields.length>1?` ${r.level.split(' ')[0].toLowerCase()}`:''}`).join(', ')}`:'';
  const states=[...new Set(exceeded.map(r=>r.state))].map(st=>{const v=exceeded.filter(r=>r.state===st),cl=st.match(/^J10\.\d/)![0];
   return `${esc(st.replace(/^J10\.\d /,''))} (${cl}) is exceeded at ${v.length>1?'both flange levels':`the ${v[0].level.toLowerCase()}`} (D/C ${v.map(r=>`${dc(r)!.toFixed(2)}${v.length>1?` ${r.level.split(' ')[0].toLowerCase()}`:''}`).join(', ')}${cl==='J10.2'?fillet:''})`;});
- const decision=`<p><b>Column stiffeners required.</b> ${states.length?`Unstiffened, ${states.join('; ')}, and`:'The unstiffened J10 strengths are not exceeded, but'} the ${name} needs M<sub>f</sub> resisted at the column. ${sentence(depth)} stiffener pairs (${esc(spec)}) carry each flange's full force system with no credit for the unstiffened column: R<sub>st</sub> = T/2 ± M<sub>f</sub>/g, g = t<sub>w</sub> + b<sub>s</sub> = ${L(gauge)}${up||low?`, giving ${[up?`${F(up.demand)} at the top (D/C ${up.utilization!.toFixed(2)})`:'',low?`${F(low.demand)} at the bottom (D/C ${low.utilization!.toFixed(2)})`:''].filter(Boolean).join(' and ')}`:''}. The pairs are checked for J4.1 yielding, J4.4 buckling with the J10.8 web strip, J2.4 welds and J4.2 web shear. ${reach}; J10.5 and J10.7 do not apply to this continuous column.${panel?.demand!==undefined?` Panel shear J10.6: ${F(panel.demand)}, D/C ${panel.utilization!.toFixed(2)}; the stiffeners add no panel strength.`:''}${cs.field?` Field welding controls: section @@ref:fabrication@@.`:''}</p>`;
+ const decision=`<p><b>Column stiffeners required.</b> ${states.length?`Unstiffened, ${states.join('; ')}, and`:'The unstiffened J10 strengths are not exceeded, but'} the ${name} needs M<sub>f</sub> resisted at the column. ${sentence(depth)} stiffener pairs (${esc(spec)}) carry each flange's full force system with no credit for the unstiffened column: R<sub>st</sub> = T/2 ± M<sub>f</sub>/g, g = t<sub>w</sub> + b<sub>s</sub> = ${L(gauge)}${up||low?`, giving ${[up?`${F(up.demand)} at the top (D/C ${dcText(up.utilization,2)})`:'',low?`${F(low.demand)} at the bottom (D/C ${dcText(low.utilization,2)})`:''].filter(Boolean).join(' and ')}`:''}. The pairs are checked for J4.1 yielding, J4.4 buckling with the J10.8 web strip, J2.4 welds and J4.2 web shear. ${reach}; J10.5 and J10.7 do not apply to this continuous column.${panel?.demand!==undefined?` Panel shear J10.6: ${F(panel.demand)}, D/C ${dcText(panel.utilization,2)}; the stiffeners add no panel strength.`:''}${cs.field?` Field welding controls: section @@ref:fabrication@@.`:''}</p>`;
  return intro+table+decision;
 }
 /** The tapered haunch's block (C2); flangeColumnBlock serves the W stub too. */

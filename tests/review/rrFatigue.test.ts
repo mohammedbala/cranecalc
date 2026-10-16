@@ -89,7 +89,7 @@ describe('M7 · fatigue basis and presentation (Rev B)',()=>{
   expect(ev.length).toBe(2*pts(ev));expect(sc.length).toBe(2*pts(sc));expect(pts(ev)+pts(sc)).toBe(points);
   // With the rail clip model every register point is below F_TH (screened): the evaluated count then names no register points.
   // One count line under the summary, without bookkeeping of body rows or register points.
-  expect(body).toContain(`${tax.counts.designEvaluated} design checks evaluated, ${tax.counts.designScreened} screened below the fatigue threshold`);
+  expect(body).toMatch(new RegExp(`${tax.counts.designEvaluated} design checks evaluated( \\(\\d+ NG\\))?, and ${tax.counts.designScreened} more screened below the fatigue threshold`));
   expect(body).not.toMatch(/body rows?|register points?/);
   // All screened: one sentence names the stations (no second "all below F_TH" line).
   const stations=new Set(r.fatigue.map(v=>v.x.toFixed(0))).size;

@@ -8,7 +8,7 @@ import {braceImperfection} from '../engine/forcesDelivered';
 import {capAngleResult} from '../engine/capAngleTie';
 import {columnStiffenerGeometry,stiffenerGauge} from '../engine/columnStiffeners';
 import {dcText} from '../engine/checkPresentation';
-import {caseLabel} from './reportParts';
+import {caseLabel,texRelations} from './reportParts';
 import {caseName} from '../engine/caseNames';
 import {deflectionCriteria} from '../engine/aistChecks';
 import {effectiveBuildingClass,severeClass} from '../engine/buildingClass';
@@ -21,6 +21,9 @@ import {craneCombinations} from '../engine/aistLoads';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import {railClipResponse} from '../engine/railClip';
 import {clipGeometry,railPadThickness} from '../engine/railSeat';
+import {flangeTieResponse} from '../engine/flangeTieDesign';
+import {flangeTieGeometry} from '../engine/tieGeometry';
+import {braceSystem} from '../engine/detailAnalysis';
 
 
 /**
@@ -36,7 +39,11 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  const p=s.input,d=p.details,lrfd=p.method==='LRFD',cap=c.capacity,dem=c.demand??0,q=c.quantity??'ratio';
  const factor=(phi:number,omega:number)=>lrfd?phi:1/omega,fl=(phi:number,omega:number)=>lrfd?`${n(phi)}`:`1/${n(omega)}`;
  const lhs=lrfd?'\\phi ':'1/\\Omega\\,';
- const check=(_:number,sym:string)=>`\\ \\ge\\ ${sym}=${tx(dem,q)}\\quad D/C=${dcText(c.utilization,2)}`;
+ // Every relation follows the result: "≥ demand" from the resistance side and "≤ limit" from the demand side when the
+ // check is met, "<" and ">" with NG when it is not (texRelations).
+ const rel=texRelations(c);
+ // ASD names the required strength with the subscript a (AISC 360-16 B3.2): P_a, R_a, V_a, M_a.
+ const check=(_:number,sym:string)=>`${rel.ge}${lrfd?sym:sym.replace(/^([MVPR])_(u|\{u\})$/,'$1_a')}=${tx(dem,q)}\\quad ${rel.dc}`;
  // Girder wheel patch (m10): web local yielding over the TR-13 §5.8.6 length, which already reaches the web (no k term);
  // crippling (J10.3) with the bearing length on the W flange, 2(h_r + t_wc).
  if((c.id==='wheel-yield'||c.id==='wheel-cripple')&&p.aist&&s.designAnalysis&&s.properties){
@@ -63,7 +70,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  if(c.id==='sidesway'&&p.aist&&s.designAnalysis&&s.properties){
   const a=s.designAnalysis,str=girderStrength(p,s.properties),{tw,tf,bf}=p.section,lb=Math.max(p.unbracedLength,p.aist.bottomBraceSpacing),ratio=(str.h/tw)/(lb/bf);
   const My=Math.min(p.section.Fy,p.capDesign?.Fy??p.section.Fy)*s.properties.Sx,Mr=(lrfd?1:1.5)*a.moment,Cr=(Mr<My?960:480)*1e3*6.894757293168,R=factor(.85,1.76)*Cr*tw**3*tf/str.h**2*.4*ratio**3;
-  if(close(R,cap))return [`\\frac{h/t_w}{L_b/b_f}=\\frac{${tx(str.h,'length')}/${tx(tw,'length')}}{${tx(lb,'length')}/${tx(bf,'length')}}=${ratio.toFixed(3)}\\le1.7;\\quad ${lrfd?'M_u':'1.5M_a'}=${tx(Mr,'moment')}${Mr<My?'<':'\\ge'}M_y=F_yS_x=${tx(My,'moment')}:\\ C_r=${tx(Cr,'stress')}`,
+  if(close(R,cap))return [`\\frac{h/t_w}{L_b/b_f}=\\frac{${tx(str.h,'length')}/${tx(tw,'length')}}{${tx(lb,'length')}/${tx(bf,'length')}}=${ratio.toFixed(3)}${ratio<=1.7?'\\le':'>'}1.7;\\quad ${lrfd?'M_u':'1.5M_a'}=${tx(Mr,'moment')}${Mr<My?'<':'\\ge'}M_y=F_yS_x=${tx(My,'moment')}:\\ C_r=${tx(Cr,'stress')}`,
    `${lhs}R_n=${fl(.85,1.76)}\\times\\frac{C_rt_w^3t_f}{h^2}\\,0.4\\left(\\frac{h/t_w}{L_b/b_f}\\right)^3=${fl(.85,1.76)}\\times\\frac{${tx(Cr,'stress')}\\times(${tx(tw,'length')})^3\\times${tx(tf,'length')}}{(${tx(str.h,'length')})^2}\\times0.4\\times${ratio.toFixed(3)}^3=${tx(R,'force')}${check(R,'P_u')}`];
  }
  // Girder fitted bearing stiffeners and their welds.
@@ -81,8 +88,8 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   if(close(U,c.demand)){
    const terms=`\\frac{${tx(Math.abs(k.Mx),'moment')}}{${tx(C.Mcx,'moment')}}+\\frac{${tx(Math.abs(k.My),'moment')}}{${tx(C.Mcy,'moment')}}`;
    return [`P_r/P_c=${tx(k.P,'force')}/${tx(C.Pc,'force')}=${n(r,3)}${r>=.2?'\\ge':'<'}0.2\\quad\\text{(${caseLabel(k.id).replace(/[\\{}#%&_$^~]/g,'').replace(/−/g,'-')})}`,
-    r>=.2?`U=\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)=${n(r,3)}+\\frac89\\left(${terms}\\right)=${n(U,3)}\\le1`
-     :`U=\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}=${n(r/2,3)}+${terms}=${n(U,3)}\\le1`];
+    r>=.2?`U=\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)=${n(r,3)}+\\frac89\\left(${terms}\\right)=${n(U,3)}${rel.le}1\\quad ${rel.dc}`
+     :`U=\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}=${n(r/2,3)}+${terms}=${n(U,3)}${rel.le}1\\quad ${rel.dc}`];
   }
  }
  // Welded rib bracket: F11 plastic moment of the rectangular rib.
@@ -103,7 +110,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
    // Table J3.2 F_nt in the project's units (90 / 113 ksi, 620 / 780 MPa): the table value is printed, not a converted one.
    const table=bolt.grade==='A490'?[113*6.894757293,780]:[90*6.894757293,620];
    for(const Fnt of p.units==='US'?table:[...table].reverse()){const R=factor(.75,2)*Fnt*Ab;if(close(R,cap))return [`${lhs}R_n=${fl(.75,2)}F_{nt}A_b=${fl(.75,2)}\\times${tx(Fnt,'stress')}\\times${tx(Ab,'area')}=${tx(R,'force')}\\quad(\\text{${bolt.grade}},\\ d_b=${tx(bolt.diameter,'length')})`,
-    T!==undefined?`T_u+q=F/2+q=${tx(F,'force')}/2+${tx(dem-T,'force')}=${tx(dem,'force')}\\le${tx(R,'force')}\\quad D/C=${dcText(c.utilization,2)}`:`T_u+q_{ep}+q_c=${tx(dem,'force')}\\le${tx(R,'force')}\\quad(F=${tx(F,'force')})\\quad D/C=${dcText(c.utilization,2)}`];}}
+    T!==undefined?`T_u+q=F/2+q=${tx(F,'force')}/2+${tx(dem-T,'force')}=${tx(dem,'force')}${rel.le}${tx(R,'force')}\\quad ${rel.dc}`:`T_u+q_{ep}+q_c=${tx(dem,'force')}${rel.le}${tx(R,'force')}\\quad(F=${tx(F,'force')})\\quad ${rel.dc}`];}}
  }
  // Column stiffener plate at a tapered haunch or W stub flange: the flange force shared, its lateral moment as a couple (C2).
  const fb=/^(haunch|wbracket)-(colstiff-(upper|lower)|column-panel)$/.test(c.id)?flangeBracket(s):undefined;
@@ -152,35 +159,35 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   if(w){const Pr=w.P/w.Pc,e=Math.abs(w.x-w.xc),Mr=w.P*e/(factor(.9,1.67)*Fy*w.Z),U=Pr>=.2?Pr+8/9*Mr:Pr/2+Mr;
    const column=`A=2b_st_s+${st.interior?25:12}t_w\\,t_w=2\\times${tx(st.width,'length')}\\times${tx(st.t,'length')}+${tx(st.strip,'length')}\\times${tx(g.tw,'length')}=${tx(st.A,'area')};\\quad L_c/r=${tx(st.KL,'length')}/${tx(st.r,'length')}=${st.slender.toFixed(1)}\\ ${st.slender<=25?'\\le25\\ (\\text{J4.4}):\\ \\phi P_n=0.90F_yA':'(\\text{E3})'}=${tx(st.column,'force')}`;
    // The governing reaction bears on the stiffener (within its top tip): the column is axial.
-   if(w.bears&&close(Pr,dem))return [column,`\\frac{P_r}{P_c}=\\frac{${tx(w.P,'force')}}{${tx(w.Pc,'force')}}=${Pr.toFixed(3)}\\le1\\quad(P_c=\\phi P_n/2,\\ \\text{one stiffener; the reaction bears on it at }x=${tx(w.x,'length')})\\quad D/C=${dcText(c.utilization,2)}`];
+   if(w.bears&&close(Pr,dem))return [column,`\\frac{P_r}{P_c}=\\frac{${tx(w.P,'force')}}{${tx(w.Pc,'force')}}=${Pr.toFixed(3)}${rel.le}1\\quad(P_c=\\phi P_n/2,\\ \\text{one stiffener; the reaction bears on it at }x=${tx(w.x,'length')})\\quad ${rel.dc}`];
    if(close(U,dem))return [`A=2b_st_s+${st.interior?25:12}t_w\\,t_w=2\\times${tx(st.width,'length')}\\times${tx(st.t,'length')}+${tx(st.strip,'length')}\\times${tx(g.tw,'length')}=${tx(st.A,'area')};\\quad L_c/r=${tx(st.KL,'length')}/${tx(st.r,'length')}=${st.slender.toFixed(1)}\\ ${st.slender<=25?'\\le25\\ (\\text{J4.4}):\\ \\phi P_n=0.90F_yA':'(\\text{E3})'}=${tx(st.column,'force')}`,
     `P_c=\\phi P_n/2=${tx(w.Pc,'force')}\\ \\text{(one stiffener)};\\quad e=|x-x_c|=|${tx(w.x,'length')}-${tx(w.xc,'length')}|=${tx(e,'length')};\\quad Z=t_sb_s^2/4=${tx(w.Z,'modulus')}`,
-    `${Pr>=.2?'\\frac{P_r}{P_c}+\\frac89\\frac{P_re}{\\phi_bF_yZ}':'\\frac{P_r}{2P_c}+\\frac{P_re}{\\phi_bF_yZ}'}=${Pr>=.2?`\\frac{${tx(w.P,'force')}}{${tx(w.Pc,'force')}}+\\frac89`:`\\frac{${tx(w.P,'force')}}{2\\times${tx(w.Pc,'force')}}+`}\\frac{${tx(w.P,'force')}\\times${tx(e,'length')}}{${fl(.9,1.67)}\\times${tx(Fy,'stress')}\\times${tx(w.Z,'modulus')}}=${U.toFixed(3)}\\le1\\quad D/C=${dcText(c.utilization,2)}`];}
+    `${Pr>=.2?'\\frac{P_r}{P_c}+\\frac89\\frac{P_re}{\\phi_bF_yZ}':'\\frac{P_r}{2P_c}+\\frac{P_re}{\\phi_bF_yZ}'}=${Pr>=.2?`\\frac{${tx(w.P,'force')}}{${tx(w.Pc,'force')}}+\\frac89`:`\\frac{${tx(w.P,'force')}}{2\\times${tx(w.Pc,'force')}}+`}\\frac{${tx(w.P,'force')}\\times${tx(e,'length')}}{${fl(.9,1.67)}\\times${tx(Fy,'stress')}\\times${tx(w.Z,'modulus')}}=${U.toFixed(3)}${rel.le}1\\quad ${rel.dc}`];}
  }
  if(c.id==='haunch-stiffener-bracket'&&d?.bracket){
   const w=s.detailResults?.taperedHaunch?.strength.stiffenerBracket?.work,g=projectHaunch(p),Fy=d.material.Fy,st=haunchStiffener(g,p.section.E,Fy,p.method);
   if(w){const M=w.P*w.u,U=(M/w.Mc)**2+(w.P/w.Vc)**2;
    if(close(U,dem))return [`d_s=h_s-2c=${tx(st.height,'length')}-2\\times${tx(st.clip,'length')}=${tx(st.depth,'length')};\\quad \\phi M_n=${fl(.9,1.67)}F_yt_s\\frac{d_s^2}{4}=${fl(.9,1.67)}\\times${tx(Fy,'stress')}\\times${tx(st.t,'length')}\\times\\frac{(${tx(st.depth,'length')})^2}{4}=${tx(w.Mc,'moment')};\\quad \\phi V_n=${fl(1,1.5)}\\times0.6F_yt_sd_s=${tx(w.Vc,'force')}`,
     `M_u=Pu=P(x-t_w/2)=${tx(w.P,'force')}\\times${tx(w.u,'length')}=${tx(M,'moment')};\\quad V_u=P=${tx(w.P,'force')}`,
-    `\\left(\\frac{M_u}{\\phi M_n}\\right)^2+\\left(\\frac{V_u}{\\phi V_n}\\right)^2=\\left(\\frac{${tx(M,'moment')}}{${tx(w.Mc,'moment')}}\\right)^2+\\left(\\frac{${tx(w.P,'force')}}{${tx(w.Vc,'force')}}\\right)^2=${U.toFixed(3)}\\le1\\quad D/C=${dcText(c.utilization,2)}`];}
+    `\\left(\\frac{M_u}{\\phi M_n}\\right)^2+\\left(\\frac{V_u}{\\phi V_n}\\right)^2=\\left(\\frac{${tx(M,'moment')}}{${tx(w.Mc,'moment')}}\\right)^2+\\left(\\frac{${tx(w.P,'force')}}{${tx(w.Vc,'force')}}\\right)^2=${U.toFixed(3)}${rel.le}1\\quad ${rel.dc}`];}
  }
  // Sleeves under the bolt installation load: 1.5T_b against the sleeve yield strength, phi = 1.0.
  if((c.id==='cap-angle-sleeve'||c.id==='end-bearing-sleeve')&&d){
   const sl=c.id==='cap-angle-sleeve'?capAngleResult(s)?.g.cap.sleeve:(()=>{const e=activeEndBearing(p);if(!e)return undefined;const g=endBearingGeometry(p,e);return g.sleeve?{od:g.sleeve.od,bore:g.hole,area:g.sleeve.area}:undefined;})();
   if(sl&&close(d.material.Fy*sl.area,cap)){const Tb=dem/1.5;
    return [`A_g=\\frac{\\pi}{4}(d_o^2-d_h^2)=\\frac{\\pi}{4}\\left[(${tx(sl.od,'length')})^2-(${tx(sl.bore,'length')})^2\\right]=${tx(sl.area,'area')}\\quad(\\text{sleeve})`,
-    `1.5T_b=1.5\\times${tx(Tb,'force')}=${tx(dem,'force')}\\ \\le\\ \\phi F_yA_g=1.00\\times${tx(d.material.Fy,'stress')}\\times${tx(sl.area,'area')}=${tx(cap,'force')}\\quad D/C=${dcText(c.utilization,2)}\\quad(T_b\\ \\text{Table J3.1})`];}
+    `1.5T_b=1.5\\times${tx(Tb,'force')}=${tx(dem,'force')}${rel.le}\\phi F_yA_g=1.00\\times${tx(d.material.Fy,'stress')}\\times${tx(sl.area,'area')}=${tx(cap,'force')}\\quad ${rel.dc}\\quad(T_b\\ \\text{Table J3.1})`];}
  }
  // Slot and guide travel each way: rotation, thermal movement and the setting tolerance.
  if(c.id==='cap-angle-slot-travel'){
   const res=capAngleResult(s);
   if(res){const {loads:l,design:x,g}=res,rot=l.rotation*g.boltHeight;
-   if(close(x.travelRequired,dem)&&close(g.cap.travel,cap))return [`\\theta h_b+\\alpha L\\Delta T+t_{set}=${l.rotation.toFixed(5)}\\times${tx(g.boltHeight,'length')}+${tx(l.thermal,'length')}+${tx(x.set,'length')}=${tx(rot,'length')}+${tx(l.thermal,'length')}+${tx(x.set,'length')}=${tx(dem,'length')}\\ \\le\\ u=${tx(cap,'length')}\\quad D/C=${dcText(c.utilization,2)}`];}
+   if(close(x.travelRequired,dem)&&close(g.cap.travel,cap))return [`\\theta h_b+\\alpha L\\Delta T+t_{set}=${l.rotation.toFixed(5)}\\times${tx(g.boltHeight,'length')}+${tx(l.thermal,'length')}+${tx(x.set,'length')}=${tx(rot,'length')}+${tx(l.thermal,'length')}+${tx(x.set,'length')}=${tx(dem,'length')}${rel.le}u=${tx(cap,'length')}\\quad ${rel.dc}`];}
  }
  if(c.id==='simple-guide-travel'&&s.designAnalysis){
   const sp=simpleSupportInput(p),L=Math.max(...p.spans),dT=Math.max(sp.temperatureRise,sp.temperatureFall),th=s.designAnalysis.endRotation,thermal=12e-6*L*dT,rot=p.section.d*th;
   if(close(thermal+rot+sp.settingTolerance,dem))return [`\\alpha L\\Delta T+d\\theta+t_{set}=${p.units==='US'?'6.67\\times10^{-6}\\,\\text{/°F}':'12\\times10^{-6}\\,\\text{/°C}'}\\times${tx(L,'length')}\\times${tx(dT,'temperatureChange')}+${tx(p.section.d,'length')}\\times${th.toFixed(5)}+${tx(sp.settingTolerance,'length')}`,
-   `\\quad=${tx(thermal,'length')}+${tx(rot,'length')}+${tx(sp.settingTolerance,'length')}=${tx(dem,'length')}\\ \\le\\ u=${tx(cap,'length')}\\quad D/C=${dcText(c.utilization,2)}`];
+   `\\quad=${tx(thermal,'length')}+${tx(rot,'length')}+${tx(sp.settingTolerance,'length')}=${tx(dem,'length')}${rel.le}u=${tx(cap,'length')}\\quad ${rel.dc}`];
  }
  // End stop plies: AISC Manual Part 9 thickness for no prying under the front bolt tension.
  if((c.id==='end-stop-flange-prying'||c.id==='end-stop-base-prying')&&d){
@@ -189,7 +196,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
    const flange=c.id==='end-stop-flange-prying',b=flange?e.bolts.gauge/2-p.section.tw/2:Math.min(e.bolts.frontClear,(e.bolts.gauge-e.stiffener.spacing)/2-e.stiffener.thickness/2),pp=flange?Math.min(g.frontRow-g.backRow,3.5*b):Math.min(e.base.width/2,3.5*b),Fu=flange?p.section.Fu:d.material.Fu;
    const t=Math.sqrt(4*T*(b-db/2)/(factor(.9,1.67)*pp*Fu));
    if(close(t,dem))return [`T=\\frac{P(e+t_b)}{2d}=\\frac{${tx(P,'force')}\\times(${tx(g.contact,'length')}+${tx(tb,'length')})}{2\\times${tx(lever,'length')}}=${tx(T,'force')}\\ \\text{per front bolt}`,
-    `t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}=\\sqrt{\\frac{4\\times${tx(T,'force')}\\times(${tx(b,'length')}-${tx(db,'length')}/2)}{${fl(.9,1.67)}\\times${tx(pp,'length')}\\times${tx(Fu,'stress')}}}=${tx(t,'length')}\\ \\le\\ t=${tx(cap,'length')}\\quad D/C=${dcText(c.utilization,2)}`];}
+    `t_{min}=\\sqrt{\\frac{4Tb^\\prime}{\\phi pF_u}}=\\sqrt{\\frac{4\\times${tx(T,'force')}\\times(${tx(b,'length')}-${tx(db,'length')}/2)}{${fl(.9,1.67)}\\times${tx(pp,'length')}\\times${tx(Fu,'stress')}}}=${tx(t,'length')}${rel.le}t=${tx(cap,'length')}\\quad ${rel.dc}`];}
  }
  // Rail lateral flexure between clip pairs, with phi.
  if(c.id==='rail-flexure'&&d&&s.detailResults&&p.aist){
@@ -200,7 +207,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  // Rail clips: the manufacturer's ratings against the clip forces, and the base welds (J2.4, elastic).
  if(c.id==='rail-clip-uplift'&&d&&p.aist){
   const r=d.rail,depth=p.aist.railDepth,Hc=dem*r.baseWidth/depth;
-  return [`T_c=\\frac{H_ch_r}{b_r}=\\frac{${tx(Hc,'force')}\\times${tx(depth,'length')}}{${tx(r.baseWidth,'length')}}=${tx(dem,'force')}\\ \\le\\ R_t=${tx(cap,'force')}\\quad D/C=${dcText(c.utilization,2)}`];
+  return [`T_c=\\frac{H_ch_r}{b_r}=\\frac{${tx(Hc,'force')}\\times${tx(depth,'length')}}{${tx(r.baseWidth,'length')}}=${tx(dem,'force')}${rel.le}R_t=${tx(cap,'force')}\\quad ${rel.dc}`];
  }
  if(c.id==='rail-clip-weld'&&d&&s.detailResults&&p.aist){
   const H=s.detailResults.demands.railLateral,k=clipGeometry(d.rail,railPadThickness(p)),w=railClipResponse(p,H,k),R=factor(.75,2)*.6*d.material.Fexx;
@@ -208,20 +215,59 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   if(close(R,cap)&&close(best.weldStress,dem))return [`A_w=2t_el_w=2\\times${tx(w.throat,'length')}\\times${tx(k.weldLength,'length')}=${tx(w.A,'area')}\\quad(t_e=0.707w)`,
    best.role==='bearing'?`\\text{bearing clip: }V=H=${tx(H,'force')},\\ M=Vh_c=${tx(H,'force')}\\times${tx(k.lateralHeight,'length')}=${tx(best.moment,'moment')}`
     :`\\text{hold-down clip: }T=\\frac{Hh_r}{b_r}=${tx(best.uplift,'force')},\\ M=Te_c=${tx(best.uplift,'force')}\\times${tx(w.upliftArm,'length')}=${tx(best.moment,'moment')}`,
-   `f_w=\\frac{1}{2t_el_w}\\sqrt{V^2+\\left(T+\\frac{6M}{l_w}\\right)^2}=${tx(best.weldStress,'stress')}\\ \\le\\ ${lhs}F_n=${fl(.75,2)}\\times0.6\\times${tx(d.material.Fexx,'stress')}=${tx(R,'stress')}\\quad D/C=${dcText(c.utilization,2)}`];
+   `f_w=\\frac{1}{2t_el_w}\\sqrt{V^2+\\left(T+\\frac{6M}{l_w}\\right)^2}=${tx(best.weldStress,'stress')}${rel.le}${lhs}F_n=${fl(.75,2)}\\times0.6\\times${tx(d.material.Fexx,'stress')}=${tx(R,'stress')}\\quad ${rel.dc}`];
  }
  // Vertical deflection (m3): every criterion stated, the governing one used; two equal wheels about midspan.
  if(c.id==='vertical'&&p.system==='simple'&&s.properties&&p.cranes.length===1&&p.cranes[0].wheels.length===2){
   const cr=p.cranes[0],w=cr.wheels,Pw=w[0].loaded/(cr.includesImpact?1+cr.impact:1),sp=Math.abs(w[1].offset-w[0].offset),L=Math.max(...p.spans),a=(L-sp)/2,EI=p.section.E*s.properties.Ix,D=Pw*a*(3*L*L-4*a*a)/(24*EI),n=Math.round(L/cap);
   const k=effectiveBuildingClass(p),dc=deflectionCriteria(p),crit=`\\text{owner }L/${p.verticalLimit},\\ \\text{AIST Class ${k} }L/${severeClass(k)?1000:600},\\ \\text{${dc.classes?`CMAA ${dc.heaviest}`:'CMAA A to C'} }L/${dc.heaviestN||600}`;
   if(Math.abs(w[1].loaded-w[0].loaded)<1e-6&&a>0&&close(D,dem))return [`\\Delta_v\\le L/n_v,\\ n_v=\\max(${p.verticalLimit},\\,${severeClass(k)?1000:600},\\,${dc.heaviestN||600})=${n}:\\ L/${n}=${tx(L,'length')}/${n}=${tx(cap,'length')}\\quad(${crit})`,
-   `\\Delta_v=\\frac{Pa(3L^2-4a^2)}{24EI_x}=\\frac{${tx(Pw,'force')}\\times${tx(a,'length')}\\times[3(${tx(L,'length')})^2-4(${tx(a,'length')})^2]}{24\\times${tx(p.section.E,'stress')}\\times${tx(s.properties.Ix,'inertia')}}=${tx(D,'length')}\\ \\le\\ ${tx(cap,'length')}\\quad D/C=${dcText(c.utilization,2)}`,
+   `\\Delta_v=\\frac{Pa(3L^2-4a^2)}{24EI_x}=\\frac{${tx(Pw,'force')}\\times${tx(a,'length')}\\times[3(${tx(L,'length')})^2-4(${tx(a,'length')})^2]}{24\\times${tx(p.section.E,'stress')}\\times${tx(s.properties.Ix,'inertia')}}=${tx(D,'length')}${rel.le}${tx(cap,'length')}\\quad ${rel.dc}`,
    `\\quad(\\text{two static wheels }${tx(sp,'length')}\\text{ apart, symmetric about midspan, }a=(L-s)/2;\\ \\text{no impact})`];
  }
  // Lateral deflection: every criterion stated, the governing one used (the deflection is from the analysis).
  if(c.id==='lateral'){const L=Math.max(...p.spans),n=Math.round(L/cap);
   return [`\\Delta_h\\le L/n_h,\\ n_h=\\max(${p.lateralLimit},\\,400)=${n}:\\ L/${n}=${tx(L,'length')}/${n}=${tx(cap,'length')}\\quad(\\text{owner }L/${p.lateralLimit},\\ \\text{AIST TR-13 }L/400)`,
-   `\\Delta_h=${tx(dem,'length')}\\ \\le\\ ${tx(cap,'length')}\\quad D/C=${dcText(c.utilization,2)}\\quad(\\text{top flange, rail-head force couple, one crane})`];}
+   `\\Delta_h=${tx(dem,'length')}${rel.le}${tx(cap,'length')}\\quad ${rel.dc}\\quad(\\text{top flange, rail-head force couple, one crane})`];}
+ // The demand side of the checks that most often govern a redesign, rebuilt from the inputs and the analysis results and
+ // shown only when they reproduce the check: the restraint force with the Appendix 6 brace force, then the stress.
+ const A6=s.designAnalysis&&s.properties?braceImperfection(p,s.designAnalysis,s.properties).force:undefined,Ht=s.detailResults?.demands.brace;
+ const yieldLimit=(Fy:number)=>`${close(factor(.9,1.67)*Fy,cap)?`${lhs}F_y=${fl(.9,1.67)}\\times${tx(Fy,'stress')}=`:''}${tx(cap,'stress')}`;
+ // Bearing stiffener pair as the restraint diaphragm: a full-height cantilever for the restraint force, no web participation.
+ if(c.id==='stiffener-lateral-flexure'&&d&&A6!==undefined&&Ht!==undefined&&s.properties){
+  const b=d.bearing,H=Ht+A6,h=girderStrength(p,s.properties).h,S=2*b.stiffenerThickness*b.stiffenerWidth**2/6,f=H*h/S;
+  if(close(f,dem))return [`H=H_{top}+P_{br}=${tx(Ht,'force')}+${tx(A6,'force')}=${tx(H,'force')}\\quad(\\text{restraint force with the Appendix 6 brace force});\\quad h=${tx(h,'length')}\\ (\\text{web depth})`,
+   `f_b=\\frac{Hh}{2t_sb_s^2/6}=\\frac{${tx(H,'force')}\\times${tx(h,'length')}}{2\\times${tx(b.stiffenerThickness,'length')}\\times(${tx(b.stiffenerWidth,'length')})^2/6}=${tx(f,'stress')}${rel.le}${yieldLimit(d.material.Fy)}\\quad ${rel.dc}`];
+ }
+ // Bearing plate in bending over the longest cantilever from the stiffener footprint, uniform contact.
+ if(c.id==='bearing-plate'&&d&&s.designAnalysis){
+  const b=d.bearing,R=s.designAnalysis.reaction,fp=R/(b.width*b.length),a=Math.max((b.width-(2*b.stiffenerWidth+p.section.tw))/2,(b.length-b.stiffenerThickness)/2),m=fp*a**2/2,f=6*m/b.thickness**2,per=p.units==='US'?'\\text{-in/in}':'\\cdot\\mathrm{mm/mm}';
+  if(close(f,dem))return [`f_p=\\frac{R}{BN}=\\frac{${tx(R,'force')}}{${tx(b.width,'length')}\\times${tx(b.length,'length')}}=${tx(fp,'stress')};\\quad a=${tx(a,'length')}\\ (\\text{longest cantilever from the stiffener footprint})`,
+   `m=\\frac{f_pa^2}{2}=\\frac{${tx(fp,'stress')}\\times(${tx(a,'length')})^2}{2}=${tx(m,'force')}${per}`,
+   `f_b=\\frac{6m}{t_p^2}=\\frac{6\\times${tx(m,'force')}${per}}{(${tx(b.thickness,'length')})^2}=${tx(f,'stress')}${rel.le}${yieldLimit(d.material.Fy)}\\quad ${rel.dc}`];
+ }
+ // Stiffener web welds under the reaction with both lateral flange forces and their moment.
+ if(c.id==='stiffener-combined-weld'&&d&&A6!==undefined&&Ht!==undefined&&s.designAnalysis&&s.properties){
+  const b=d.bearing,H=Ht+A6,R=s.designAnalysis.reaction,Req=R+8*H,h=girderStrength(p,s.properties).h,Rw=factor(.75,2)*.6*d.material.Fexx*(b.weldSize/Math.SQRT2)*4*(h-2*b.cope);
+  if(close(Req,dem)&&close(Rw,cap))return [`R_{eq}=R+8H=${tx(R,'force')}+8\\times${tx(H,'force')}=${tx(Req,'force')}\\quad(H=H_{top}+P_{br})`,
+   `${lhs}R_n=${fl(.75,2)}\\times0.6F_{EXX}(0.707w)\\,4(h-2c)=${fl(.75,2)}\\times0.6\\times${tx(d.material.Fexx,'stress')}\\times0.707\\times${tx(b.weldSize,'length')}\\times4(${tx(h,'length')}-2\\times${tx(b.cope,'length')})=${tx(Rw,'force')}${check(Rw,'R_{eq}')}`];
+ }
+ // Direct flange tie: the tie design force F = (H_top + P_br)/cos θ and the elastic strip stresses it causes.
+ if(/^(flange-tie-(flange|gusset|saddle)|plate-tie-keeper-flange)$/.test(c.id)&&d&&A6!==undefined&&Ht!==undefined&&flangeTieGeometry(p)){
+  const cos=braceSystem(p).cos,F=(Ht+A6)/cos,w=flangeTieResponse(p,F),tf=p.section.tf,a=flangeTieGeometry(p)!.attachment,t=d.brace,inclined=Math.abs(cos-1)>1e-6;
+  const Fline=`F=${inclined?'(H_{top}+P_{br})/\\cos\\theta':'H_{top}+P_{br}'}=${inclined?`(${tx(Ht,'force')}+${tx(A6,'force')})/${cos.toFixed(3)}`:`${tx(Ht,'force')}+${tx(A6,'force')}`}=${tx(F,'force')}\\quad(\\text{tie design force, section 3})`;
+  const strip=(lever:number,width:number,thick:number,k=6)=>`\\frac{${k}\\times${tx(F,'force')}\\times${tx(lever,'length')}}{${tx(width,'length')}\\times(${tx(thick,'length')})^2}+\\frac{1.5\\times${tx(F,'force')}}{${tx(width,'length')}\\times${tx(thick,'length')}}`;
+  if(c.id==='flange-tie-flange'&&close(w.flange,dem))return [`${Fline};\\quad h=${tx(w.h,'length')}\\ (\\text{tie force below the flange});\\quad B=${tx(w.B,'length')}\\ (\\text{saddle length, the strip width})`,
+   `f_f=\\frac{6Fh}{Bt_f^2}+\\frac{1.5F}{Bt_f}=${strip(w.h,w.B,tf)}=${tx(6*F*w.h/(w.B*tf**2),'stress')}+${tx(1.5*F/(w.B*tf),'stress')}=${tx(w.flange,'stress')}${rel.le}${yieldLimit(p.section.Fy)}\\quad ${rel.dc}`];
+  if(c.id==='flange-tie-gusset'&&close(w.gusset,dem))return [`${Fline};\\quad H=${tx(w.H,'length')}\\ (\\text{force below the saddle});\\quad L_w=${tx(w.L,'length')}`,
+   `f_g=\\frac{6FH}{t_gL_w^2}+\\frac{1.5F}{t_gL_w}=\\frac{6\\times${tx(F,'force')}\\times${tx(w.H,'length')}}{${tx(t.gussetThickness,'length')}\\times(${tx(w.L,'length')})^2}+\\frac{1.5\\times${tx(F,'force')}}{${tx(t.gussetThickness,'length')}\\times${tx(w.L,'length')}}=${tx(w.gusset,'stress')}${rel.le}${yieldLimit(d.material.Fy)}\\quad ${rel.dc}`];
+  if(c.id==='flange-tie-saddle'&&close(w.saddle,dem))return [`${Fline};\\quad H=${tx(w.H,'length')};\\quad B=${tx(w.B,'length')};\\quad L_w=${tx(w.L,'length')}`,
+   `f_s=\\frac{9FHB}{L_w^2t_s^2}+\\frac{1.5F}{L_wt_s}=\\frac{9\\times${tx(F,'force')}\\times${tx(w.H,'length')}\\times${tx(w.B,'length')}}{(${tx(w.L,'length')})^2\\times(${tx(a.saddleThickness,'length')})^2}+\\frac{1.5\\times${tx(F,'force')}}{${tx(w.L,'length')}\\times${tx(a.saddleThickness,'length')}}=${tx(w.saddle,'stress')}${rel.le}${yieldLimit(d.material.Fy)}\\quad ${rel.dc}`];
+  if(c.id==='plate-tie-keeper-flange'&&s.detailResults){const clip=railClipResponse(p,s.detailResults.demands.railLateral).flangeStress;
+   if(close(w.flange+clip,dem))return [Fline,`f_{saddle}=\\frac{6Fh}{Bt_f^2}+\\frac{1.5F}{Bt_f}=${strip(w.h,w.B,tf)}=${tx(w.flange,'stress')}\\quad(h=${tx(w.h,'length')},\\ B=${tx(w.B,'length')})`,
+    `f=f_{saddle}+f_{clip}=${tx(w.flange,'stress')}+${tx(clip,'stress')}=${tx(w.flange+clip,'stress')}${rel.le}${yieldLimit(p.section.Fy)}\\quad ${rel.dc}`,
+    `\\quad(f_{clip}:\\ \\text{the flange strip under the rail clip, factored wheel group})`];}
+ }
  // Stress limits: weld metal, shear yielding or rupture, yielding of plates and flanges.
  if(q==='stress'){
   const fy:[string,number][]=[[p.section.name,p.section.Fy],...(d?[['plates',d.material.Fy] as [string,number]]:[]),...(d?.bracket?[['column',d.bracket.receiver.Fy] as [string,number]]:[])];

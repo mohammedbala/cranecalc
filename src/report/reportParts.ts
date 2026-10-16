@@ -191,6 +191,25 @@ export function tidyNumbers(text:string){
 export function subscripts(html:string){
  return html.replace(/(?<![\w/.&#-])([A-Za-z])_\{?([A-Za-z]{1,8}|\d)\}?(?![\w])/g,'$1<sub>$2</sub>').replace(/(?<![.\d])\.\.(?=\s|$|<)/g,'.');
 }
+/**
+ * Does the demand of a check exceed its limit? A failed check, or a ratio above 1. Every printed relation between a
+ * demand and its limit follows it: "≤" (or "≥" read from the capacity side) only when the check is met, ">" ("<")
+ * when it is not, so a failing check never prints a true-looking "capacity ≥ demand".
+ */
+export const exceedsLimit=(c:Pick<CheckResult,'status'|'utilization'>)=>c.status==='fail'||(c.status!=='pass'&&c.utilization!==undefined&&!Number.isNaN(c.utilization)&&c.utilization>1+1e-9);
+/**
+ * A maximum-type rule (a maximum weld, a part that must fit a space) compares the provided value (demand) with the
+ * limit (capacity); every other detailing rule compares the required minimum (demand) with the provided value
+ * (capacity).
+ */
+export const maximumRule=(c:CheckResult)=>/-max(imum)?$|-fit$/.test(c.id)||/\bmaximum\b|\bfits?\b/i.test(c.title);
+/** TeX relations of a demand to its limit (demand first) and of a limit to its demand (limit first), with the verdict. */
+export function texRelations(c:Pick<CheckResult,'status'|'utilization'>){
+ const over=exceedsLimit(c);
+ return {over,le:over?'\\ >\\ ':'\\ \\le\\ ',ge:over?'\\ <\\ ':'\\ \\ge\\ ',ng:over?'\\quad\\textbf{NG}':'',dc:`D/C=${dcText(c.utilization,2)}${over?'\\quad\\textbf{NG}':''}`};
+}
+/** The relation of a demand to its limit in text: "≤", or ">" where the check fails. */
+export const textRelation=(c:Pick<CheckResult,'status'|'utilization'>)=>exceedsLimit(c)?'&gt;':'≤';
 /** A check title as printed: "Existing column, axial compression", the element and test joined by a comma, not "·". */
 export const checkTitle=(t:string)=>t.replace(/\s+·\s+/g,', ');
 export const inlineMath=(tex:string)=>katex.renderToString(tex,{throwOnError:false,displayMode:false});
@@ -221,7 +240,8 @@ export function equationLines(tex:string){
  out.push(tex.slice(last));return out.map(v=>v.trim()).filter(Boolean);
 }
 export function equationCell(c:CheckResult){
- if(c.equation){const t=termsFor(c);return equationLines(c.equation).map(inlineMath).join('<br/>')+(t.length?`<small class="where">where ${t.map(([s,m])=>`${inlineMath(s)} ${esc(m)}`).join('; ')}</small>`:'');}
+ // A definition naming another symbol (I_y, h_r) prints it with its subscript, as the equations do.
+ if(c.equation){const t=termsFor(c);return equationLines(c.equation).map(inlineMath).join('<br/>')+(t.length?`<small class="where">where ${t.map(([s,m])=>`${inlineMath(s)} ${subscripts(esc(m))}`).join('; ')}</small>`:'');}
  return `<i>${c.status==='excluded'?'Outside this calculation':c.status==='not-applicable'?'Not applicable':'Recorded input'}: ${subscripts(esc(tidyNumbers(firstSentence(c.note))))}</i>`;
 }
 export interface CheckTableContext{units:ProjectInput['units'];rendered:Set<string>}
