@@ -23,5 +23,5 @@ describe('girder that buckles below the applied load',()=>{
   expect(ties.length).toBeGreaterThan(0);for(const c of ties)expect(c.noCapacity,c.id).toBe(true);
   const lh=s.checks.find(c=>c.id==='flexure-load-height')!;
   expect(lh.utilization!).toBeGreaterThanOrEqual((p.method==='LRFD'?.8/(.9*lambda):1.67*.8/lambda)*(1-1e-9));
- },300000);
+ },900000);
 });

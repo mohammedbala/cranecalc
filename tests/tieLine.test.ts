@@ -19,6 +19,8 @@ import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
  * elevation all use that line.
  */
 const p=buildProject({...defaultRunwayConfig,capacity:5,craneSpan:48,cmaa:'A',buildingClass:'D',bays:3,span:20,railElevation:26,structure:'existing',support:'by-others',tie:'flexible-plate'});
+// The direct flange saddle (the configurator may move a tie that cannot pass onto the bearing stiffener).
+if(p.details!.brace.flangeAttachment)p.details!.brace.flangeAttachment.enabled=true;
 const props=sectionProperties(p.section),s=p.section;
 // One strength case: the crane's wheels in bay 1 with side thrust, as the moving-load search hands it to the collector.
 function run(q:ProjectInput){
