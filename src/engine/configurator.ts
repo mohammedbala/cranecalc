@@ -174,7 +174,10 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
     // The W flange fits between the channel flanges with room for the tie gussets beside it (capRoom), the channel
     // web seats the rail and clips, and the cap stays above the neutral axis (a deep cap on a shallow W is outside
     // the capped-girder model).
-    if(c.d<w.bf+2*c.tf+.25+(opts.capRoom??0)/inch||w.bf*inch<minFlange-1e-6||w.bf<.6*c.d||(c.d/2-c.tf)*inch*2<opts.minSeat-1e-6||w.d<1.4*c.bf+8||w.d<c.d*.9)continue;
+    // AISC F13.2 proportions of a singly symmetric member: 0.1 <= I_yc/I_y <= 0.9 with the cap channel in the
+    // compression flange.
+    const Iyf=w.tf*w.bf**3/12,rho=(Iyf+c.Ix)/(2*Iyf+c.Ix);
+    if(c.d<w.bf+2*c.tf+.25+(opts.capRoom??0)/inch||w.bf*inch<minFlange-1e-6||w.bf<.6*c.d||(c.d/2-c.tf)*inch*2<opts.minSeat-1e-6||w.d<1.4*c.bf+8||w.d<c.d*.9||rho>.9)continue;
     consider(loadCappedSection(p.section,w.name,ch),`${w.name} + ${ch}`,w.weight+c.weight);
    }
   }
