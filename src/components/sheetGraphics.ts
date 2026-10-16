@@ -2,6 +2,7 @@ import type { CalculationSnapshot } from '../engine/types';
 import { drawingScale } from './drawingFormat';
 import { issueStatus, revisionIdentity, supportColumn } from '../engine/drawingData';
 import { sheetStamp } from './sheetRatios';
+import { holdsFor } from './detailHolds';
 import { capChannelProfile } from '../engine/channelProfile';
 /** Replaced with the sheet ordinal and count once the whole set is assembled. */
 export const sheetOrdinalToken='{{SHEET_ORDINAL}}';
@@ -210,6 +211,9 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   // report groups them, or, for a package whose analysis did not verify, that no calculation is issued (sheetRatios).
   const stamp=sheetStamp(s);
   if(stamp)svg+=`<g data-flag="${stamp.blocked?'not-verified':'failed-checks'}">${text(2360,1532,stamp.text,11,'end',700)}${stamp.detail?text(2360,1475,stamp.detail,lettering.text,'end'):''}</g>`;
+  // Details drawn with a failing check carry HOLD tags (detailHolds): the set is not for fabrication.
+  const holds=stamp&&!stamp.blocked?holdsFor(s).filter(h=>h.views).length:0;
+  if(holds)svg+=`<g data-flag="holds">${text(2360,1475,`${holds} HOLD${holds===1?'':'S'} - NOT FOR FABRICATION`,11,'end',700)}</g>`;
   return svg;
 }
 

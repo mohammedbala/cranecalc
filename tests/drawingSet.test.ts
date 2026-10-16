@@ -6,7 +6,9 @@ import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationPr
 import {drawingSheetSet,resolveSheetSet,sheetIndex,detailReferences,detailTopics} from '../src/components/planSheet';
 import {sheetsDxf,sheetEntities,drawingSetDxf,sheetLayers} from '../src/components/sheetDxf';
 import {runwayElevations,issueStatus,girderMarks} from '../src/engine/drawingData';
-import {drawingLength,plateInches} from '../src/components/drawingFormat';
+import {drawingLength,plateInches,partSize} from '../src/components/drawingFormat';
+import {sheetEntities as svgEntities} from '../src/components/svgEntities';
+import {sheetFixture,sheetFixtureNames} from './fixtures/sheets/sheetFixtures';
 import {multiLeader,textWidth,wrapToWidth,viewTitle,detailRef,sheetDrawingScale,withDetailRoom,text,line} from '../src/components/sheetGraphics';
 import {annotationClashes} from '../src/components/detailSheet';
 import {coverSheetSvgs} from '../src/components/coverSheet';
@@ -352,4 +354,24 @@ describe('drawing set DXF',()=>{
   expect(border&&border.type==='poly'&&+border.points[1][0].toFixed(2)).toBe(901.7);
   expect(()=>drawingSetDxf({...capped,eligible:false})).toThrow('validated');
  });
+});
+
+describe('no impossible geometry is printed',()=>{
+ const svgText=(svg:string)=>svgEntities(svg,'US').filter(e=>e.type==='text').map(e=>e.type==='text'?e.value:'').join(' | ');
+ it('refuses a part size of zero or less',()=>{
+  expect(partSize(-5,'US')).toBeUndefined();expect(partSize(0,'SI')).toBeUndefined();expect(partSize(25.4*.75,'US')).toBe('3/4"');
+ });
+ // A minus sign before a feet-inch value, '-0' feet, or a negative size in a part callout.
+ for(const name of sheetFixtureNames().filter(v=>/^t\d\d$/.test(v)))it(`${name}: no sheet text carries a negative foot-inch dimension`,()=>{
+  const bad:string[]=[];
+  for(const v of drawingSheetSet(sheetFixture(name)))for(const m of svgText(v.svg).matchAll(/(^|[^\w.])-\d+'-|(^|[^\w.])-0'|X -\d/g))bad.push(`${v.number}: ${svgText(v.svg).slice(Math.max(0,m.index!-40),m.index!+40)}`);
+  expect(bad).toEqual([]);
+ },300000);
+ it('draws a tie whose part cannot exist as GEOMETRY CONFLICT - NOT DETAILED, its title kept',()=>{
+  const s=structuredClone(sheetFixture('t03'));s.geometryConflicts=[{id:'tie-edge',title:'Tie bar edge distance'}];
+  const tie=detailTopics(s).find(t=>t.key==='flange-tie')!;
+  for(const v of tie.views){const r=v.render();expect(r.svg,v.title).toContain('GEOMETRY CONFLICT - NOT DETAILED');expect(r.svg).toContain('(TIE-EDGE)');}
+  const sheet=drawingSheetSet(s).find(v=>v.svg.includes('data-geometry-conflict'))!;
+  expect(sheet.svg).toContain(`data-detail-title="DIRECT FLANGE TIE / TOP TRANSVERSE SECTION"`);
+ },300000);
 });

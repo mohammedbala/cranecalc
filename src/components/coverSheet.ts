@@ -30,6 +30,7 @@ import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newCol
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
 import {deliveredRows,deliveredHeaders,deliveredNote} from '../report/deliveredTable';
 import {blockedPackage,verificationFailures} from './sheetRatios';
+import {unplacedHolds} from './detailHolds';
 import {sig3} from '../report/reportParts';
 
 /** A sheet of the set as the cover indexes it, with the titles of its details in drawing order. */
@@ -411,6 +412,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
    P(`${checked.length?`THE CALCULATION REPORT CHECKS ${checked.join(', ').replace(/, ([^,]*)$/,' AND $1')} FOR THE ADDED CRANE LOADS. `:''}THE ENGINEER OF RECORD SHALL EVALUATE THE FOLLOWING FOR THE FORCES IN THE CALCULATION REPORT AND INCLUDE THE EVALUATION IN THE PERMIT SUBMITTAL; THEY ARE NOT DEFERRED SUBMITTALS. EVALUATION: ${reference?reference.toUpperCase():'NOT REFERENCED; THE SET IS NOT ISSUED UNTIL IT IS'}.`),
    ...N(unchecked.map(c=>c.title.toUpperCase()+'.')));
  }
+ // Open items with a failing check that no detail of the set draws: listed here, as the details' HOLD tags list theirs.
+ const unplaced=unplacedHolds(s,sheets.flatMap(v=>[...(v.details??[])]));
+ if(unplaced.length&&!blockedPackage(s))blocks.push(H('OPEN ITEMS - NOT FOR FABRICATION'),P('THE CALCULATION FAILS THESE CHECKS; THEY ARE NOT TAGGED AT A DETAIL. RESOLVE THEM BEFORE FABRICATION:'),...N(unplaced.map(h=>`${h.text}${h.group.locations>1?` (${h.group.locations} LOCATIONS)`:''}: ${h.group.title.toUpperCase()}.`)));
  blocks.push(legend(t,p.units,referenceDims));
  // Only the abbreviations used on this sheet or the others.
  const used=`${written.join(' ')} ${otherWords}`,abbreviations=abbreviationList.filter(([re])=>otherWords===undefined||re.test(used)).map(([,v])=>v);

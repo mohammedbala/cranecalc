@@ -17,7 +17,8 @@ import { defaultFraming, drawnFrameStyle, type FramingSettings } from './framing
 import { planSheetGeometry } from './planSheetGeometry';
 import { drawingLength, plateInches,dimensionLength} from './drawingFormat';
 import {viewConflict,conflictView} from './detailHolds';
-import {refDim, sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
+import {supportFace} from '../engine/runwayGeometry';
+import {refDim, lettering, sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
 import { railKeeperView } from './railKeeperView';
@@ -71,7 +72,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   // Depth drawn below the bearing: the bracket designed here, or the reference bracket. The section is
   // drawn up to 240 deep, its callouts placed against the girder and bracket.
   const ws=wb?rolledUnderSeat(p):undefined,hu=wb?haunchUnderSeat(p)?.g:undefined,seat=wb?bracketSeat(wb):undefined,below=seat?seat.thickness+seat.depth:m().bracketDepth*1000;
-  const scale=drawingScale(Math.min(.18,240/(b.d+d.bearing.thickness+below)),p.units),k=scale.pointsPerMm*1000,cx=166,top=120,bottom=top+m().d*k,cy=(top+bottom)/2,inner=wb?cx+wb.reach/1000*k:266;
+  const scale=drawingScale(Math.min(.18,240/(b.d+d.bearing.thickness+below)),p.units),k=scale.pointsPerMm*1000,cx=166,top=120,bottom=top+m().d*k,cy=(top+bottom)/2,face=supportFace(p),inner=wb?cx+wb.reach/1000*k:face!==undefined?cx+face/1000*k:266;
   const pw=d.bearing.width/1000*k,pt=d.bearing.thickness/1000*k,bt=bottom+pt,bb=bt+below/1000*k,colBot=bb+18;
   const C=(y:number)=>colAt((cy-y)/k)*k;
   // Callouts right of the column outline, which widens downward on a tapered column.
@@ -116,6 +117,8 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   // leader (a long plate size in SI): lower or farther left where the leader would cross it.
   const plate=[`BEARING PL ${size(d.bearing.thickness)} X ${size(d.bearing.width)} X ${size(d.bearing.length)}`],plateY=bb+(wb?32:40),drawn=new AnnotationSpace(svg);
   svg+=drawn.pick([[111,plateY],[111,plateY+14],[60,plateY],[60,plateY+14],[111,plateY+28]].map(([x,y])=>multiLeader([[cx,bottom+pt]],[x,y],plate)));
+  // Without a designed bracket the column face is where the survey or the tie puts it (supportFace): dimensioned, to verify.
+  if(!wb&&face!==undefined)svg+=drawn.pick([plateY+40,plateY+54,plateY+68].map(y=>line([cx,y-10],[cx,y+4],'annotation')+line([inner,y-10],[inner,y+4],'annotation')+dimH(cx,inner,y-4,y,dimensionLength(face,p.units))+text((cx+inner)/2,y+14,'GIRDER C/L TO COLUMN FACE (FIELD VERIFY; ADJUST TIE LENGTH)',lettering.text,'middle')));
   return {svg:svg+'</g>',scale:scale.label};
  }});
 

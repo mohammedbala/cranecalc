@@ -4,6 +4,7 @@ import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
 import {haunchUnderSeat} from './taperedHaunchSheet';
 import {bracingOnElevation,bracingTopic,separationLength} from './bracingSheet';
+import {viewHolds} from './detailHolds';
 import {ribGeometry} from '../engine/bracketRib';
 import {flangeTieTopic} from './flangeTieSheet';
 import {capAngleTopic} from './capAngleSheet';
@@ -502,7 +503,8 @@ export function detailTopics(s:CalculationSnapshot,f:FramingSettings=defaultFram
     ...(d&&activeEndStop(p)?[endStopTopic(s)]:[]),
     ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[...(activeColumnCap(p)?[columnCapTopic(s)]:[]),newColumnTopic(s)]:[]),
     ...(s.bracingSystem?[bracingTopic(s)]:[])];
-  return topics.map(t=>({...t,views:t.views.map(clearView)}));
+  // HOLD lines of each topic's views: the open items with a failing check at the details that draw them (detailHolds).
+  return topics.map(t=>({...t,views:t.views.map(clearView),holds:[...new Set(t.views.flatMap(v=>viewHolds(s,v.title)))].map(h=>`${h.text}: ${t.views.filter(v=>h.views!.test(v.title)).map(v=>v.title).join('; ')}`)}));
 }
 /** The issued set: cover S-00 with general notes, criteria and sheet index, S-01, then detail sheets from S-02. */
 function sheetPlan(s:CalculationSnapshot,f:FramingSettings){

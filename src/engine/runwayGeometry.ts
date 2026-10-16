@@ -1,4 +1,6 @@
 import { maxRunwayBays, type ProjectInput } from './types';
+import { flangeTieGeometry, stiffenerTieGeometry } from './tieGeometry';
+import { existingColumnSection } from './existingColumn';
 
 export function spansForBayCount(spans: number[], count: number): number[] {
   if (!Number.isInteger(count) || count < 1 || count > maxRunwayBays || !spans.length) {
@@ -24,4 +26,18 @@ export function withRunwaySpans(project: ProjectInput, spans: number[]): Project
   }
   // Restraint and fatigue inputs stay explicit; validation flags any off-runway values.
   return next;
+}
+
+/**
+ * Girder web centerline to the face of the receiving column flange, mm: the designed bracket's reach, else the column
+ * face of the laid-out tie (direct flange tie, or the tie on the bearing stiffener), else the surveyed existing column
+ * (its eccentricity from the column centerline less half its depth); undefined where none is known (the reference
+ * framing's default applies). Every view that draws the column face uses it.
+ */
+export function supportFace(p:ProjectInput):number|undefined{
+ const b=p.details?.bracket;if(b?.enabled)return b.reach;
+ const ft=flangeTieGeometry(p)?.face;if(ft!==undefined)return ft;
+ const st=stiffenerTieGeometry(p)?.face;if(st!==undefined)return st;
+ if(p.existingColumn?.enabled&&p.existingColumn.eccentricity>0){const c=existingColumnSection(p).section;return p.existingColumn.eccentricity-c.d/2;}
+ return undefined;
 }
