@@ -45,7 +45,7 @@ export function integrityFields(c:CheckResult):Partial<Pick<CheckResult,'status'
  const none=(k!==undefined&&!(k>0))||(u!==undefined&&(!Number.isFinite(u)||u>noCapacityRatio));
  if(!none)return undefined;
  // Nothing to carry and nothing to carry it with (a zero demand on a zero resistance): met, with a zero ratio.
- if(c.status==='pass'&&!(finite(d)&&d>0)&&!(u!==undefined&&u>noCapacityRatio))return {rule:'no-demand',utilization:0};
+ if(c.status==='pass'&&!(finite(d)&&d>0)&&!(u!==undefined&&u>noCapacityRatio))return u===undefined?undefined:{rule:'no-demand',utilization:0};
  return {rule:'no-capacity',status:'fail',utilization:Infinity,noCapacity:true};
 }
 
