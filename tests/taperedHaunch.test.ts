@@ -105,7 +105,8 @@ describe('tapered I haunch: hand-checked mechanics',()=>{
   const s=tp1(),c=byId(s.checks,'haunch-column-flange');
   expect(c.capacity!/kip).toBeCloseTo(.9*6.25*50*.71**2,3);expect(c.status).toBe('pass');
   expect(c.demand).toBeCloseTo(s.detailResults!.taperedHaunch!.strength.pull.value,6);
- });
+ // The first test to use test project 1 runs its full calculation (77 to 108 s on a loaded machine): its own timeout.
+ },300000);
 });
 
 describe('tapered I haunch: inputs, selection and validation',()=>{

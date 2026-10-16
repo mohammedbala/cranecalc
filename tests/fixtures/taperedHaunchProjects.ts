@@ -71,7 +71,10 @@ export function existingBuildingHaunch(units:'US'|'SI'='US'):ProjectInput{
  delete b.haunch;
  p.details=selectBracketArrangement({...d,bracket:b},'tapered-haunch');
  // The top-flange tie lands on the existing 0.71 in W14X90 flange: a 6 1/2 in deep tie and column gusset and a
- // 3 1/2 in saddle set back to the girder end.
- const t=p.details.brace;t.width=6.5*inch;t.connection.weldLength=6.5*inch;t.flangeAttachment!.saddleLength=3.5*inch;t.flangeAttachment!.longitudinalSetback=4.5*inch;
+ // 3 1/2 in saddle set back toward the girder end as far as its end fillet stays on the flange (one weld size from the
+ // girder end, on the 1/4 in grid): N/2 - B/2 - w = 6.25 - 1.75 - 0.375 = 4.125 in, so 4 in. The earlier 4 1/2 in set
+ // the saddle end flush with the girder end, where the transverse end fillet has no flange to stand on.
+ const t=p.details.brace,a=t.flangeAttachment!;t.width=6.5*inch;t.connection.weldLength=6.5*inch;a.saddleLength=3.5*inch;
+ a.longitudinalSetback=Math.floor((p.details.bearing.length/2-a.saddleLength/2-a.weldSize)/(inch/4)+1e-9)*inch/4;
  return sizeTaperedHaunch(p);
 }
