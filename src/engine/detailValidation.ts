@@ -1,5 +1,5 @@
 import {activeEndBearing} from './endBearingInputs';
-import {flangeTieGeometry,flangeTieFamily,stiffenerTieGeometry} from './tieGeometry';
+import {flangeTieGeometry,flangeTieFamily,stiffenerTieGeometry,columnGussetExtension} from './tieGeometry';
 import {validatePlateTie} from './plateTie';
 import {validateCapAngle} from './capAngleTie';
 import {tieArrangement,validateConnectionOptions} from './connectionOptions';
@@ -54,6 +54,8 @@ export function validateRunwayDetails(p:ProjectInput){
    add(Math.abs(b.connection.weldLength-g.columnGusset)>1e-6,`column root weld length must equal the column gusset height (${(g.columnGusset/25.4).toFixed(3)} in).`);
    add(b.connectionLength<g.gussetEnd-g.rootStart-1e-6,'unbraced gusset length must include its full flange-to-end extension.');
    add(g.stations.some(v=>v.tieX-g.attachment.saddleLength/2<v.start-1e-6||v.tieX+g.attachment.saddleLength/2>v.finish+1e-6),'saddle must remain within its own girder end bearing region.');
+   // The transverse end fillet at the saddle end toward the girder end lies on the flange.
+   add(g.stations.some(v=>(v.end==='left'?v.tieX-g.attachment.saddleLength/2-v.start:v.finish-v.tieX-g.attachment.saddleLength/2)<g.attachment.weldSize-1e-6),'saddle end fillets must lie on the girder flange: the saddle end toward the girder end must be at least one weld size from it (reduce the tie setback or the saddle length).');
    if(g.receiver)add(g.stations.some(v=>Math.abs(v.tieX-v.station)+b.gussetThickness/2+b.connection.weldSize>g.receiver!.width/2),'column tie root welds must fit on the receiver flange.');
    if(g.sides.includes(-1)){
     add(g.topCenter-g.bottomCenter<=Math.max(b.width,g.columnGusset)+g.attachment.clearance,'top and bottom tie assemblies overlap.');
@@ -66,6 +68,12 @@ export function validateRunwayDetails(p:ProjectInput){
  // Paired bars on the bearing stiffener run just under the tied flange. On a capped girder the top bars and their girder
  // gusset must clear the cap channel's turned-down flange (its web on the W flange, its flanges reaching down past it).
  {const st=stiffenerTieGeometry(p),s=p.section;
+  // No part of the tie may come out with no length: the bars between their bolt groups, the girder gusset from the
+  // bearing stiffener through the girder-end bolt group, and the column gusset.
+  if(st){const f=(v:number)=>(v/25.4).toFixed(3),free=b.length-2*st.connection-columnGussetExtension(p);
+   add(free<=0,`tie bars require clear length between the two bolt groups (${f(free)} in): lengthen the bars with a larger column face distance (bracket reach) or shorten the bolt groups.`);
+   add(st.gussetLength<=0,`the girder tie gusset must reach from the bearing stiffener (${f(st.root)} in from the web centerline) through the girder-end bolt group: the ${f(b.length)} in bars start ${f(st.start)} in from the web centerline for a column face at ${f(st.face)} in. Shorten the bars or increase the bracket reach.`);
+   add(st.columnGussetLength<=0,'the column tie gusset must have a positive length.');}
   if(st&&s.kind==='cap'&&st.sides.includes(1)){const drop=s.capDepth-s.capTw,inner=s.capWidth/2-s.capTf;
    add(s.d/2-st.topCenter-st.height/2<drop&&st.root<s.capWidth/2&&st.face>inner,'paired tie bars and their girder gusset at the top flange pass through the turned-down cap channel flange: use the direct flange saddle, or a cap channel whose flanges stop above the bars.');}}
  add(r.Fu<r.Fy,'rail Fu must not be less than Fy.');

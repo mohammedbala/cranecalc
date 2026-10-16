@@ -33,7 +33,8 @@ import {columnCapChecks} from './columnCap';
 
 const compared=(id:string,group:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds=['aisc-connections']):CheckResult=>({id,group,title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds});
 const resolved=(id:string,title:string,note:string,referenceIds=['aisc-connections']):CheckResult=>({id,group:'Connections',title,status:'not-applicable',equation:'',note,referenceIds});
-function lapChecks(p:ProjectInput,c:LapConnection,id:string,title:string,fx:number,fy:number,centralThickness:number,centralFy:number,centralFu:number){
+/** Symmetric double-cover lap connection checks (the paired tie bars on their gusset, the girder-end cover plates). */
+export function lapChecks(p:ProjectInput,c:LapConnection,id:string,title:string,fx:number,fy:number,centralThickness:number,centralFy:number,centralFu:number){
  const m=p.details!.material,method=p.method,n=2*c.rows,points=Array.from({length:c.rows},(_,i)=>[-1,1].map(sign=>({x:sign*c.gauge/2,y:(i-(c.rows-1)/2)*c.pitch}))).flat();
  const M=fy*c.projection,forces=elasticBoltGroup(points,{x:fx,y:fy,moment:M}),demand=Math.max(...forces.map(f=>f.resultant));
  const bolt=boltCapacity({grade:c.grade,diameter:c.diameter,planes:2,surface:c.surface,shear:demand,tension:0,method,patternLength:(c.rows-1)*c.pitch});

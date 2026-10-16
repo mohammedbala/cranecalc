@@ -27,7 +27,8 @@ import {defaultColumnCap} from './columnCapInputs';
 import {capWorkPointDrop} from './columnCap';
 import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
-import {columnGussetHeight} from './tieGeometry';
+import {columnGussetHeight,flangeTieGeometry} from './tieGeometry';
+import {sizeFlangeTie,tieSizingRatios} from './flangeTieSizing';
 import {classFromCycles} from './buildingClass';
 
 const inch=25.4,foot=304.8,kip=4448.2216152605,ksi=6.894757293168,fpm=5.08,g=9.80665;
@@ -403,9 +404,17 @@ function attachBracket(p:ProjectInput,cfg:RunwayConfig,shape:string,reach:number
  // The tie spans from its girder end to the column face at the bracket reach.
  const t=p.details.brace,f=t.flangeAttachment;
  if(f?.enabled&&f.columnFace!==undefined){const shift=reach-f.columnFace;t.length+=shift;t.reach=t.length;delete f.columnFace;}
+ // Bars on the bearing stiffener (no flange saddle): from 1/4 in clear of the stiffener to the column face.
+ else if(!f?.enabled){t.length=t.reach=reach-up(p.section.tw/2+p.details.bearing.stiffenerWidth+.25*inch,.25*inch);}
 }
 
-/** The configured tieback on the details. */
+/**
+ * The configured tieback on the details. Paired bars and the flexible plate are sized for the girder's tie force and
+ * imposed movements (sizeFlangeTie): bars or plate, bolts, gussets, saddle and release slots, the column face (a
+ * designed bracket's reach, or the face of a bracket by others) moving out to at most 30 in where the flexible length
+ * needs it, unless the reach is configured. A saddle tie on a capped girder that cannot pass its checks so (the gusset
+ * clear of the cap legs, the W flange local bending) takes the cap tieback angle instead, with the reason in the notes.
+ */
 function attachTie(p:ProjectInput,cfg:RunwayConfig){
  const d=p.details!;
  if(cfg.support==='column-cap')return;
@@ -417,8 +426,17 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig){
  }else if(cfg.tie==='cap-angle'&&p.section.kind==='cap'){
   p.details=selectTieArrangement(d,'cap-angle');
   p.details.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p));
+  return;
  }else if(d.brace.arrangement!=='paired-bars'){
   d.brace.arrangement='paired-bars';delete d.brace.capAngle;
+ }
+ p.details=sizeFlangeTie(p,{reach:cfg.reach===undefined?30*inch:undefined}).details;
+ if(p.section.kind==='cap'&&flangeTieGeometry(p)){
+  const ratios=tieSizingRatios(p),worst=Object.entries(ratios).sort((a,b)=>b[1]-a[1])[0];
+  if(worst&&worst[1]>1){
+   p.details=selectTieArrangement(p.details!,'cap-angle');p.details.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p));
+   p.notes+=` The ${cfg.tie==='flexible-plate'?'flexible plate':'paired flat bars'} on a direct flange saddle do not suit this capped girder (${worst[0]} ${worst[1].toFixed(2)} for the estimated tie demands): the tie is the cap tieback angle bolted to the channel cap.`;
+  }
  }
 }
 
