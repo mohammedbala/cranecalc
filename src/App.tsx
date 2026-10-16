@@ -23,6 +23,7 @@ import { AistInputs, AistFatigueInputs, CraneAistInputs } from './components/Ais
 import DesignCombinations from './components/DesignCombinations';
 import RailFatigueSummary from './components/RailFatigueSummary';
 import SampleCalcs from './components/SampleCalcs';
+import StartPanel from './components/StartPanel';
 import CapChannelAssessment from './components/CapChannelAssessment';
 import {aiscChannels,loadCappedSection} from './data/aiscChannels';
 import { emptyAistInputs, emptyCraneDesign, type AistInputs as AistData, type CraneDesign } from './engine/aistLoads';
@@ -53,6 +54,8 @@ import {sheetIndex} from './components/planSheet';
 const RunwayViewer=lazy(()=>import('./components/RunwayViewer'));
 const storageKey='cranecalc.project.v1';
 const staticHosting=import.meta.env.VITE_STATIC_HOST==='true';
+/** A project saved on this device: the app opens on the inputs; otherwise on the templates. */
+function hasSavedProject(){try{return !!localStorage.getItem(storageKey);}catch{return false;}}
 function initialProject():ProjectInput {try{const value=localStorage.getItem(storageKey);if(value){const parsed=JSON.parse(value);if(!validateProject(parsed).length)return withImperialUnits(migrateExampleSection(parsed));}}catch{}return withImperialUnits(structuredClone(exampleProject));}
 function download(blob:Blob,name:string){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function Svg({svg}:{svg:string}){return <div className="svg-frame" dangerouslySetInnerHTML={{__html:svg}}/>;}
@@ -70,7 +73,7 @@ function WorksheetSection({name,number,title,children,project}:{name:string;numb
  </section>;
 }
 export default function App(){
- const [project,setProject]=useState(initialProject),[snapshot,setSnapshot]=useState<CalculationSnapshot|null>(null),[busy,setBusy]=useState(true),[engineError,setEngineError]=useState(''),[tab,setTab]=useState('Calculation'),[activeSection,setActiveSection]=useState('Geometry'),[jumpTarget,setJumpTarget]=useState<string|null>(null),[issuesOnly,setIssuesOnly]=useState(false),[toast,setToast]=useState(''),[exporting,setExporting]=useState(false),[report,setReport]=useState<{snapshot:CalculationSnapshot;blob:Blob;framing:FramingSettings;format:'pdf'|'html'}|null>(null),[showOutput,setShowOutput]=useState(false);
+ const [project,setProject]=useState(initialProject),[snapshot,setSnapshot]=useState<CalculationSnapshot|null>(null),[busy,setBusy]=useState(true),[engineError,setEngineError]=useState(''),[tab,setTab]=useState(()=>hasSavedProject()?'Calculation':'Templates'),[activeSection,setActiveSection]=useState('Geometry'),[jumpTarget,setJumpTarget]=useState<string|null>(null),[issuesOnly,setIssuesOnly]=useState(false),[toast,setToast]=useState(''),[exporting,setExporting]=useState(false),[report,setReport]=useState<{snapshot:CalculationSnapshot;blob:Blob;framing:FramingSettings;format:'pdf'|'html'}|null>(null),[showOutput,setShowOutput]=useState(false);
  const [framing,setFraming]=useState(initialFraming);
  useEffect(()=>{try{localStorage.setItem(framingKey,JSON.stringify(framing));}catch{}},[framing]);
  const importRef=useRef<HTMLInputElement>(null),sequence=useRef(0);
@@ -165,7 +168,7 @@ export default function App(){
   </header>
   <style>{checkFigureCss}</style><div className="calculation-workspace">
    <section className="calculation-pane" aria-label="Inputs and calculation checks">
-    <div className="worksheet-toolbar"><nav aria-label="Worksheet views">{['Calculation','Diagrams','References','Samples'].map(t=><button key={t} className={tab===t?'active':''} aria-pressed={tab===t} onClick={()=>{setTab(t);worksheetScroll.current?.scrollTo({top:0});}}>{t==='Calculation'?'Inputs & checks':t==='Diagrams'?'Drawings':t==='Samples'?'Sample calcs':t}</button>)}</nav><span className={`live-state ${busy?'busy':''}`} role="status">{busy?<LoaderCircle size={12} className="spin"/>:<span className="live-dot"/>}{busy?'Recalculating':'Live'}</span></div>
+    <div className="worksheet-toolbar"><nav aria-label="Worksheet views">{['Templates','Calculation','Diagrams','References','Samples'].map(t=><button key={t} className={tab===t?'active':''} aria-pressed={tab===t} onClick={()=>{setTab(t);worksheetScroll.current?.scrollTo({top:0});}}>{t==='Calculation'?'Inputs & checks':t==='Diagrams'?'Drawings':t==='Samples'?'Sample calcs':t}</button>)}</nav><span className={`live-state ${busy?'busy':''}`} role="status">{busy?<LoaderCircle size={12} className="spin"/>:<span className="live-dot"/>}{busy?'Recalculating':'Live'}</span></div>
     {tab==='Calculation'&&<nav className="worksheet-jumps" aria-label="Jump to calculation section">{worksheetSections.map((name,i)=><button key={name} className={activeSection===name?'selected':''} onClick={()=>setStep(name)}><span>{String(i+1).padStart(2,'0')}</span>{name==='Crane loads'?'Loads':name==='Project'?'Report':name}</button>)}</nav>}
     <div className="worksheet-scroll" ref={worksheetScroll} onScroll={()=>{if(tab!=='Calculation')return;const scroll=worksheetScroll.current;if(!scroll)return;let current='Geometry';for(const name of worksheetSections){const element=document.getElementById(sectionId(name));if(element&&element.offsetTop<=scroll.scrollTop+80)current=name;}setActiveSection(current);}}>
  <div className={`readiness-strip ${ready&&!connectionCoordination(project).length?'ready':errors.length||engineError?'invalid':'pending'}`}><span>{busy?<LoaderCircle size={13} className="spin"/>:ready&&!connectionCoordination(project).length?<CheckCircle2 size={13}/>:<TriangleAlert size={13}/>}<strong>{busy?'Calculating…':errors.length||engineError?'Inputs need correction':ready?(connectionCoordination(project).length?'Export for review · tie clashes':'Ready to export'):blockers.length?'Code design incomplete':'Numerical checks need review'}</strong></span><button onClick={()=>setStep('Validation')}>{blockers.length?`${blockers.length} pending checks`:'Review'}<ChevronRight size={12}/></button></div>
@@ -192,6 +195,7 @@ export default function App(){
  {tab==='References'&&<><div className="result-head"><div><div className="eyebrow">PROVISION REGISTER</div><h2>Traceable by design</h2></div><span className="model-tag">Edition locked</span></div><div className="source-intro"><BookOpen size={21}/><p>DG7 third edition is aligned with AISC 360-16 and ASCE 7-16. AIST checks reference AIST Technical Report 13 (published edition, 2021 printing; provisions transcribed from the February 24, 2020 committee draft and not re-read against the printed guide). Source status is maintained in the application; browser inputs cannot certify a provision.</p></div>{references.map(r=><article className="reference-card" key={r.id}><div><h3>{r.title}</h3><span className={`ref-status ${r.status}`}>{r.status==='partial'?'PARTIALLY VERIFIED':r.status.toUpperCase()}</span></div><p className="reference-clause">{r.edition} · {r.clause}</p><p>{r.evidence}</p>{r.url&&<a href={r.url} target="_blank" rel="noreferrer">Open source reference<ArrowUpRight size={12}/></a>}</article>)}</>}
 
  {tab==='Samples'&&<SampleCalcs/>}
+     {tab==='Templates'&&<StartPanel project={project} onBuild={(built,label)=>{if(hasSavedProject()&&!window.confirm(`Replace the current project with "${label}"? Save the current project first if you need it.`))return;setProject(withImperialUnits(built));setFraming({...demonstrationFraming});setStep('Geometry');setToast(`Built "${label}". Calculating the full package; open items show what to resolve.`);}}/>}
      <footer className="result-footer"><span><Activity size={12}/>{analysis?`${analysis.cases.toLocaleString()} cases · ${(analysis.convergence*100).toFixed(2)}% travel / ${(analysis.meshConvergence*100).toFixed(2)}% spatial change`:'Awaiting valid calculation'}</span><span>{validateProject(project).length?'Unsaved invalid inputs':'Saved on this device'}</span></footer>
     </div>
    </section>

@@ -154,9 +154,13 @@ export const newColumnFor=(capacity:number)=>capacity<=5?'W14X120':capacity<=12.
 
 function shapePlates(name:string){const s=aiscShapeByName(name)!;return {depth:s.d*inch,width:s.bf*inch,flangeThickness:s.tf*inch,webThickness:s.tw*inch};}
 
-/** The configured project. Unknown supplier, survey and site data are fictitious examples, marked as such. */
-export function buildProject(input:RunwayConfig):ProjectInput{
- const cfg=normalizeConfig(runwayConfigSchema.parse({...input,title:input.title?.trim()||'Crane runway'})).config;
+/** The parsed, normalized configuration (a blank title becomes 'Crane runway'). */
+export const configOf=(input:RunwayConfig)=>normalizeConfig(runwayConfigSchema.parse({...input,title:input.title?.trim()||'Crane runway'}));
+/**
+ * The project up to the girder: cranes, runway, criteria, duty, rail depth and the girder (named or sized), without
+ * connections or supports. `trial` is the sizing result when the girder was sized here.
+ */
+function skeleton(cfg:RunwayConfig){
  const p=demonstrationProject(),spans=Array.from({length:cfg.bays},()=>cfg.span*foot),L=sum(spans),longest=Math.max(...spans);
  const spectrum=exampleSpectrum(cfg.buildingClass),N=spectrum.total,count=(v:number)=>v.toLocaleString('en-US');
  p.reportPurpose='demonstration';p.reportFormat='compact';p.title=cfg.title;p.number=cfg.number;p.engineer='';
@@ -179,13 +183,15 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  p.railWeight=railArea({headWidth:.55*depth,headThickness:.3*depth,baseWidth:depth,baseThickness:.17*depth,webThickness:.12*depth})*7850*g/1e9;
  const clipWidth=(up(depth,1.5875)<=4.5*inch+1e-6?2:2.5)*inch,minSeat=seatWidthNeeded(depth,clipWidth);
  // Girder: the named section, else sized for the moving loads.
+ let trial:GirderTrial|undefined;
  if(cfg.girder==='capped'){
   if(cfg.girderShape&&cfg.capChannel)p.section=loadCappedSection(p.section,cfg.girderShape,cfg.capChannel);
-  else p.section=sizeGirder(p,'capped',{minSeat})?.section??loadCappedSection(p.section,'W24X94','C15X33.9');
+  else{trial=sizeGirder(p,'capped',{minSeat});p.section=trial?.section??loadCappedSection(p.section,'W24X94','C15X33.9');}
   const capped=cappedDemonstrationProject().capDesign!;
   p.capDesign={...capped,cmaaClass:cfg.cmaa,dutySource:`Fictitious example: crane supplier confirms CMAA Class ${cfg.cmaa}, ${+cfg.capacity.toFixed(2)}-ton crane; ${count(N)} wheel stress fluctuations`};
  }else{
-  p.section=cfg.girderShape?loadAiscSection(p.section,cfg.girderShape):sizeGirder(p,'rolled',{minSeat})?.section??loadAiscSection(p.section,'W24X104');
+  if(cfg.girderShape)p.section=loadAiscSection(p.section,cfg.girderShape);
+  else{trial=sizeGirder(p,'rolled',{minSeat});p.section=trial?.section??loadAiscSection(p.section,'W24X104');}
   delete p.capDesign;
  }
  p.section.Fy=50*ksi;p.section.Fu=65*ksi;p.section.E=29000*ksi;
@@ -193,6 +199,20 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  p.drawing={originator:'CraneCalc configurator',checker:'',datumElevation:100*foot,datumLabel:'Reference finished floor',railElevation:cfg.railElevation*foot,
   address:'Fictitious example site',code:{building:'2021 IBC as adopted by the fictitious example jurisdiction',editions:'2016',reviewed:false}};
  delete p.existingColumn;delete p.columnBase;delete p.longitudinalBracing;delete p.columnCap;
+ return {p,depth,clipWidth,spectrum,N,trial,railArea};
+}
+
+/** What a configuration will produce, for the configurator's summary: crane data, duty, rail and girder. */
+export function previewConfig(input:RunwayConfig){
+ const {config:cfg,changes}=configOf(input),{p,depth,trial,spectrum}=skeleton(cfg);
+ const crane=estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control),structure=cfg.scope==='analysis'?undefined:cfg.structure==='new'?(cfg.columnShape??newColumnFor(cfg.capacity)):cfg.support==='by-others'?undefined:(cfg.columnShape??existingColumnFor(cfg.capacity));
+ return {config:cfg,changes,crane,spectrum,railDepth:depth,girder:p.section.name,trial:trial&&{utilization:trial.utilization,deflection:trial.deflection,lateral:trial.lateral,weight:trial.weight},column:structure,verticalLimit:p.verticalLimit};
+}
+
+/** The configured project. Unknown supplier, survey and site data are fictitious examples, marked as such. */
+export function buildProject(input:RunwayConfig):ProjectInput{
+ const cfg=configOf(input).config,{p,depth,clipWidth,spectrum,N,railArea}=skeleton(cfg),spans=p.spans;
+ p.configurator={...cfg};
  const scopeText=`${cfg.bays} ${cfg.system==='simple'?'simply supported':'continuous'} ${cfg.span}-ft bay${cfg.bays>1?'s':''}, ${p.section.name} girder${cfg.bays>1?'s':''}, ${cfg.cranes===2?'two':'one'} ${+cfg.capacity.toFixed(2)}-ton ${cfg.control} crane${cfg.cranes===2?'s':''}`;
  if(cfg.scope==='analysis'){
   delete p.details;p.connections.enabled=false;
@@ -218,7 +238,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  if(cfg.support==='by-others'){
   // Brackets by others on the existing building: the tie runs to the column face, no supporting column is checked.
   p.notes=`Example configuration generated by the CraneCalc configurator; fictitious crane, supplier and owner data, to be replaced with project data. Scope: ${scopeText}, on existing column brackets by others; the rail, girders, ties to the column face, bearings and end stops. Existing building frames, column brackets, anchors and foundations are excluded.`;
-  p.drawing.existingEvaluation='Fictitious existing structure evaluation: frames, brackets, bracing, connections and foundations for the added crane loads';
+  p.drawing!.existingEvaluation='Fictitious existing structure evaluation: frames, brackets, bracing, connections and foundations for the added crane loads';
  }else if(cfg.structure==='existing'){
   const shape=cfg.columnShape??existingColumnFor(cfg.capacity),w=aiscShapeByName(shape)!,base=cappedDemonstrationProject(),k=cfg.span/25;
   const seat=seatLevel(0),scale=(v:{P:number;Mx:number;My:number;V:number})=>({P:v.P*k,Mx:v.Mx*k,My:v.My,V:v.V*k});
@@ -231,8 +251,8 @@ export function buildProject(input:RunwayConfig):ProjectInput{
    frame:{type:'braced',source:'Fictitious example: column line B braced by the roof diaphragm and the sidewall rod bracing'},
    siteSeismic:{...e.siteSeismic!,source:'Fictitious example: site data from the original building report (Site Class D, SDS 0.25, SDC B; steel system not specifically detailed for seismic, R = 3)',
     alteration:{dcrIncrease:.06,source:'Fictitious example: evaluation of the existing bracing and frames with the runway and crane mass added (largest D/C increase 6%)'}}};
-  delete p.drawing.railElevation;
-  p.drawing.existingEvaluation='Fictitious existing structure evaluation: column line B frame, bracing, connections and foundations for the added crane loads';
+  delete p.drawing!.railElevation;
+  p.drawing!.existingEvaluation='Fictitious existing structure evaluation: column line B frame, bracing, connections and foundations for the added crane loads';
   p.longitudinalBracing={...base.longitudinalBracing!,bayWidth:cfg.span*foot,height:seat,existing:{W:6*kip,E:3*kip},wind10:3.5*kip,
    source:'Fictitious example: existing sidewall rod bracing at grid lines 2-3 and the original wind/seismic report (10-year wind 3.5 kip on this line)',confirmed:true};
   attachBracket(p,cfg,shape,reach,false);
@@ -251,7 +271,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
   p.existingColumn={...c,shape,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch,height:top,seatElevation:seat,Lcx:2.1*top,Lcy:top,Lcz:top,Lb:top,
    seismic:{...c.seismic!,source:'Fictitious example site data: SDS 0.20, SD1 0.08, Site Class D, Risk Category II, SDC B',building:{drift:1.5*inch,source:'Fictitious example building report: maximum inelastic displacement 1.5 in at the runway level'}},
    adjacent:{...c.adjacent!,source:'Fictitious example survey: existing column faces located at every grid, footings by test pits'}};
-  delete p.drawing.existingEvaluation;
+  delete p.drawing!.existingEvaluation;
   const middle=Math.ceil(cfg.bays/2);
   p.longitudinalBracing={...demo.longitudinalBracing!,bayWidth:cfg.span*foot,height:seat,rod:{...demo.longitudinalBracing!.rod,diameter:(heavy>.4?1.25:1)*inch},bays:1,
    source:`Fictitious example: new crane-level rod X-bracing between the new columns at grid lines ${middle}-${middle+1}; no building wind or seismic on this line`,confirmed:true,
@@ -260,7 +280,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
   const bd=p.longitudinalBracing.design!;bd.pin={...bd.pin,diameter:Math.max(bd.pin.diameter,p.longitudinalBracing.rod.diameter)};
   if(cfg.support==='column-cap'){
    const col=p.existingColumn;d.bracket={...structuredClone(demo.details!.bracket!),enabled:false};
-   if(d.brace.flangeAttachment)d.brace.flangeAttachment.enabled=false;p.aist.supportType='column';
+   if(d.brace.flangeAttachment)d.brace.flangeAttachment.enabled=false;p.aist!.supportType='column';
    if(d.endBearing)d.endBearing.enabled=true;
    col.height=col.seatElevation;col.Lcx=2.1*col.height;col.Lcy=col.height;col.Lcz=col.height;col.Lb=col.height;
    p.columnCap={...structuredClone(defaultColumnCap),enabled:true};
