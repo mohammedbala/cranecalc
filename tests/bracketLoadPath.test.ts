@@ -7,7 +7,7 @@ import {createSupportForceEnvelope,type SupportForceSet} from '../src/engine/bra
 import {minimumFillet} from '../src/engine/connectionStrength';
 import {bracingDesign} from '../src/engine/newColumnBracing';
 import {locatingSupport} from '../src/engine/endBearingInputs';
-import {craneAtStop,craneTravel,stopContacts} from '../src/engine/craneTravel';
+import {craneAtStop,craneTravel,stopContacts,stopFace} from '../src/engine/craneTravel';
 import type {RunwayCaseEvent} from '../src/engine/designAnalysis';
 import type {ProjectInput} from '../src/engine/types';
 
@@ -25,9 +25,10 @@ describe('longitudinal force at the supports',()=>{
   // runway, even on an end bay, no stop is struck and no longitudinal force reaches a support.
   for(const origin of [30*foot,2*foot,62*foot])expect(envelope(p,[event(p,'off','LRFD 8',origin,F)]).map(v=>v.longitudinal.longitudinal)).toEqual([0,0,0,0]);
   // Without the end-truck geometry the stop contacts are the entered travel limits kept on the runway (the demo crane
-  // travels from 10 ft before grid 1, its second wheel at grid 1, to its first wheel at the far end): every wheel on it.
+  // travels from 10 ft before grid 1, its second wheel at grid 1, to its first wheel at the far end), the end wheel no
+  // farther than the stop face, where the rail ends: every wheel on the rail.
   const [l,r]=stopContacts(p,0).map(v=>v.origin);
-  expect([l,r]).toEqual([0,65*foot]);
+  expect(l).toBeCloseTo(stopFace(p,'left')!,6);expect(r).toBeCloseTo(stopFace(p,'right')!-10*foot,6);
   expect([craneAtStop(p,0,l),craneAtStop(p,0,r),craneAtStop(p,0,c.travelStart),craneAtStop(p,0,c.travelEnd),craneAtStop(p,0,2*foot)]).toEqual(['left','right',undefined,undefined,undefined]);
   // Two cranes, the second cloned with full travel as the UI adds one: the first reaches only the left stop and the
   // second only the right; each one's travel limit toward the other crane is that crane, not a stop.

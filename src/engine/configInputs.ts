@@ -22,6 +22,11 @@ export const runwayConfigSchema=z.object({
  craneSpan:z.number().finite().min(20).max(150),
  control:z.enum(['cab','pendant']),
  cmaa:z.enum(['A','B','C','D']),
+ /**
+  * AIST TR-13 Table 3.2 crane type (vertical impact and side thrust of a cab or radio operated crane); blank: a mill
+  * crane, or a maintenance (standby) crane where the CMAA class is A. Pendant cranes take 0.1(Q + T + B) whatever the type.
+  */
+ aistType:z.enum(['mill','maintenance','magnet','stacker']).optional(),
  cranes:z.union([z.literal(1),z.literal(2)]),
  buildingClass:z.enum(['A','B','C','D']),
  system:z.enum(['simple','continuous']),

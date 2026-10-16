@@ -1,3 +1,4 @@
+import {endStopResistance} from '../src/engine/endStop';
 import {describe,it,expect} from 'vitest';
 import {demonstrationProject,cappedDemonstrationProject} from '../src/engine/demonstration';
 import {railPad,railTopAboveSteel,clipGeometry,clipEntered,railInputsWithDefaults,railSeatDefaults,defaultRailClip} from '../src/engine/railSeat';
@@ -82,7 +83,8 @@ describe('rail seat: pad and rail clips',()=>{
   expect(p.details!.rail.jointType).toBeUndefined();expect(p.details!.rail.jointGap).toBeCloseTo(25.4/16,9);
   expect(anchors.every(a=>a.anchors.length===0)).toBe(true);expect(moves.joints.every(v=>v.movement===0)).toBe(true);
   for(const e of moves.ends){const rail=layout.rails.find(r=>r.side===e.side)!;expect(e.movement).toBeCloseTo(railExpansion*dT*(rail.end-rail.start),8);}
-  const anchorage=checks(p).find(v=>v.id==='rail-anchorage')!;expect(anchorage.status).toBe('pass');expect(anchorage.demand!/kip).toBeCloseTo(6.4,4);expect(anchorage.capacity!/kip).toBeCloseTo(20,4);
+  const anchorage=checks(p).find(v=>v.id==='rail-anchorage')!;expect(anchorage.status).toBe('pass');expect(anchorage.demand!/kip).toBeCloseTo(6.4,4);// The stop's resistance to the rail string bearing on its base plate (its rail-string load case), not the bumper force.
+  expect(anchorage.capacity!).toBeCloseTo(endStopResistance(p)!.rail!.resistance,6);expect(anchorage.capacity!/kip).toBeGreaterThan(20);
   const note=texts(railKeeperView(snapshot(p)).render().svg).join(' ');
   expect(note).toContain('TIGHT JOINT (AIST TR-13 §5.16.1)');expect(note).toContain('PRETENSIONED IN 15/16" STANDARD HOLES');expect(note).toContain('RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS');expect(note).not.toContain('SNUG');
   expect(note).toContain('ANCHORED BY THE END STOPS');expect(note).toContain('NO ANCHOR CLIPS OR RAIL NOTCHES');

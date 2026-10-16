@@ -119,6 +119,7 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
   const v=previewConfig({...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30});
   expect(v.config.support).toBe('twin-rib');
   expect(v.changes).toContainEqual(expect.stringMatching(/^Support reaction about \d+ kip exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets; consider new crane columns with column caps, or obtain the engineer of record's acceptance\.$/));
-  const light=previewConfig({...defaultRunwayConfig,capacity:5});expect(light.changes).toEqual([]);expect(light.reaction!).toBeLessThan(50*kip);
+  // The one statement within the limit is the assumed bumper overhang (end-truck geometry for the stop contacts).
+  const light=previewConfig({...defaultRunwayConfig,capacity:5});expect(light.changes.filter(v=>!/^Bumper overhang assumed/.test(v))).toEqual([]);expect(light.changes.at(-1)).toMatch(/^Bumper overhang assumed \d+ in/);expect(light.reaction!).toBeLessThan(50*kip);
  });
 });

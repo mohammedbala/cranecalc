@@ -81,9 +81,11 @@ describe('E35 supporting column (existing W14X90): weak-axis moment, H1 and tors
   expect(at(r0,0).My!/kft).toBeCloseTo(69.13,1);expect(at(r1,0).My!/kft).toBeCloseTo(60.70,1);
   expect(at(r0,0).U).toBeCloseTo(.3859,3);expect(at(r1,0).U).toBeCloseTo(.3548,3);
   expect(at(r0,0).Ut!).toBeCloseTo(1.171,3);expect(at(r1,0).Ut!).toBeCloseTo(1.140,3);
-  // Grid 6 (sliding end, no torsion): My 19.5 → 7.3 kip-ft, H1 0.301 → 0.269.
+  // Grid 6 (sliding end, no torsion): My 19.5 → 7.3 kip-ft, H1 0.290 → 0.259.
   expect(at(r0,5).My!/kft).toBeCloseTo(19.50,1);expect(at(r1,5).My!/kft).toBeCloseTo(7.31,1);
-  expect(at(r0,5).U).toBeCloseTo(.3005,3);expect(at(r1,5).U).toBeCloseTo(.2694,3);expect(at(r1,5).Ut).toBeUndefined();
+  // H1 at grid 6 with the crane at its stop: the end wheel stands at the stop face (no rail beyond it), 1 ft 6 in inside
+  // the travel limit, so the reaction there is less (0.3005 and 0.2694 with the wheel at the travel limit).
+  expect(at(r0,5).U).toBeCloseTo(.2897,3);expect(at(r1,5).U).toBeCloseTo(.2586,3);expect(at(r1,5).Ut).toBeUndefined();
   for(const j of [1,2,3,4])expect(at(r1,j)).toEqual(at(r0,j));
   expect(r1.support!.seat.map(v=>Math.round(v.moment/kft*100)/100)).toEqual([10.49,26.93,26.93,26.93,26.93,10.49]);
   // The governing values are at grid 5 (bumper force at the locating seat of bay 5, 27 in girder offset): unchanged.

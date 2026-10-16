@@ -5,8 +5,9 @@ import {defaultSimpleSupport} from './simpleSupports';
 import {defaultEndBearing} from './endBearingInputs';
 import {bearingLayout,applyBearingLayout} from './endBearing';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
-import {wrenchClearance} from './endStop';
-import {railSeatDefaults,defaultRailClip} from './railSeat';
+import {sizeEndStop} from './endStopSizing';
+import {railJointKindForDuty} from './railLayout';
+import {defaultRailClip} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
@@ -56,12 +57,11 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // The tie sits far enough from the bearing stiffener that the saddle end fillet clears the stiffener and its fillets by
  // 1/4 in (the flange-tie-stiffener-clearance rule, with the 5/16 in largest stiffener fillet).
  const tieSetback=up(saddle.length/2+saddleWeld+stiffenerThickness/2+weld+.25*inch,.25*inch);
- // Stop bolts clear the runway-end tie saddle and the bearing stiffener with nut clearance.
- const stopEdge=defaultEndStop.bolts.edge,C=wrenchClearance(defaultEndStop.bolts.diameter);
  // Rail joint bars fill 95% of the clear web between head and base, to the 1/4 in below; the joint bolt is the
  // largest that keeps the AISC J3.4 edge distance to both bar edges (holes on the bars' mid-height).
  const jointHeight=Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35;
  const jointBolt=[.875,.75,.625,.5].map(v=>v*inch).find(db=>2*minimumEdge(db)<=jointHeight+1e-6)??.5*inch;
+ const jointKind=railJointKindForDuty(p),jointText=jointKind==='welded'?' Rail joints thermite or flash-butt welded by the rail supplier\'s qualified procedure (preheat, grinding, inspection); no joint bars or bolts.':jointKind==='supplier-bars'?' Rail joints tight (gap 1/16 in max.) with the rail supplier\'s joint bars and bolts (deferred submittal), bolts pretensioned and re-tightened after 30 and 90 days of operation.':' Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.';
  // Bearing stiffener fillets: the J2.4 minimum by the thinner part; else 5/16 in, within the edge limit t - 1/16 in of the
  // thinner of the web and the stiffener, and no larger than the smallest fillet that develops the web in shear rupture
  // with fillets on both faces, D = t_w F_u/(1.414 F_EXX) to the next 1/16 in (t_w = 6.19D/F_u for E70, AISC J4.2): a larger
@@ -71,14 +71,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // The bolted bearing sized for the girder (bearingLayout): the slot travel for the span and end rotation, the bolt whose
  // sliding slot keeps the J3.3 long-slot proportion, the gauge narrowing on a narrow flange for the J3.4 edge distance, and
  // the plate length from the bolt layout, the J10 end bearing and the flange saddle, width and thickness.
- // On a narrow flange the stop bolts keep 1.5d edges; the stop stiffeners close up to keep the tightening clearance at
- // their weld toes, and the stop base keeps its 1.5d edges.
  const bearing=bearingLayout(p,{rotation:demands.rotation,lateral:demands.force,stiffenerThickness,stiffenerWeld,saddle:simple?{setback:tieSetback,length:saddle.length,weld:saddleWeld}:undefined}),bearingLength=bearing.length;
- // The stop base sits on the top flange: at most the flange width, the bolts 1.5d inside its edges.
- const sd=defaultEndStop.bolts.diameter,stopBase=Math.min(defaultEndStop.base.width,down(b.bf,.25*inch)),stopGauge=Math.min(defaultEndStop.bolts.gauge,down(stopBase-3*sd,.25*inch));
- const stopStiffener=stopGauge<defaultEndStop.bolts.gauge?.5*inch:defaultEndStop.stiffener.thickness;
- const stop={gauge:stopGauge,baseWidth:stopBase,thickness:stopStiffener,spacing:Math.min(defaultEndStop.stiffener.spacing,down(stopGauge-stopStiffener-2*(defaultEndStop.weldSize+C),.25*inch))};
- const stopSetback=up(Math.max(bearingLength/2-tieSetback+saddle.length/2+saddleWeld,bearingLength/2+stiffenerThickness/2+weld)+C-stopEdge,.25*inch);
+ // The end stop is sized after the details (sizeEndStop).
  const details:RunwayDetails={
   material:{Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi},
   simpleSupport:{...defaultSimpleSupport,guideTravel:bearing.travel},
@@ -95,13 +89,15 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    // Rail clips: the manufacturer's data are entered by the engineer; until then the placeholder clip (weld-on, 3 3/4 in
    // base, 5/16 in base welds) lays out the stations and every clip check is unverified.
    clip:{...structuredClone(defaultRailClip),product:`${toBeEntered} rail clip manufacturer and series (or equal), rated lateral and uplift capacity per clip`},
-   jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:jointHeight,jointBoltDiameter:jointBolt,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30},
+   jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:jointHeight,jointBoltDiameter:jointBolt,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30,
+   // Joint kind by duty: welded for CMAA D to F or an AIST Class A or B building, else the rail supplier's joint bars.
+   jointKind},
   criteria:{...(p.details?.criteria.twistLimit?{twistLimit:p.details.criteria.twistLimit}:{}),railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],
   fabrication:{
    steel:'Runway girder per the section shown; plates, bars and stiffeners ASTM A572 Grade 50 unless noted.',
-   bolting:'ASTM F3125 Grade A325, pretensioned, Class B faying surfaces, standard holes unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts pretensioned against steel sleeves. Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.',
+   bolting:'ASTM F3125 Grade A325, pretensioned, Class B faying surfaces, standard holes unless slots are detailed. Sliding-end bearing bolts and column-end tie bolts pretensioned against steel sleeves.'+jointText,
    welding:'E70XX low-hydrogen electrodes per AWS D1.1/D1.1M:2020, cyclically loaded provisions. Continuous fillets as dimensioned; no intermittent welds on cyclic load paths. Smooth starts and stops.',
    inspection:'Visual inspection of all welds; AWS D1.1/D1.1M:2020 cyclically loaded acceptance criteria; magnetic particle testing of fillets at fatigue-sensitive attachments; 100% ultrasonic testing of CJP welds; bolt pretension verification per RCSC.',
    erection:'Set and level the bearings, install the end bearings and flange ties, then set the rails. Provide temporary restraint until the permanent ties are complete.',
@@ -110,9 +106,8 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
   // Bolted bearings: each bay locates at its left end on simple spans; a continuous girder locates at one support.
   // The gauge narrows on a narrow flange so the sleeved slots keep the J3.4 edge distance.
   endBearing:{...structuredClone(defaultEndBearing),enabled:true,bolts:{...defaultEndBearing.bolts,...bearing.bolts},...(bearing.sleeveWall>5/16*inch+1e-9?{sleeveWall:bearing.sleeveWall}:{})},
-  // The stop sits inboard of the runway-end tie saddle.
-  // The face plate holds the whole bumper above the rail and its pad, with 1/2 in to spare, in whole inches.
-  ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,setback:stopSetback,base:{...defaultEndStop.base,length:11.5*inch,width:stop.baseWidth},face:{...defaultEndStop.face,height:up((p.aist?.railDepth??p.railHeight)+(p.aist?.railPad?railSeatDefaults.padThickness:0)+defaultEndStop.bumperHeight-defaultEndStop.base.thickness+defaultEndStop.bumperDiameter/2+.5*inch,inch)},stiffener:{...defaultEndStop.stiffener,length:8.5*inch,spacing:stop.spacing,thickness:stop.thickness},bolts:{...defaultEndStop.bolts,gauge:stop.gauge},source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
+  // The stop is sized below for the bumper force and the details as built (sizeEndStop).
+  ...(needsGirderStops(p)?{endStop:{...structuredClone(defaultEndStop),enabled:true,source:`${toBeEntered} crane supplier bumper force, height and contact diameter`}}:{}),
   reviewed:false
  };
  // Sleeved slots at the column end: the bolt gauge keeps the required material between the slots of a row, and the
@@ -124,6 +119,9 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // A capped girder of independent spans takes the cap tieback angle bolted to the channel cap (AISC DG7), sized in
  // standard increments for the estimated tie force; the bolted end bearings restrain the bottom flange.
  if(b.kind==='cap'&&simple){tie.arrangement='cap-angle';tie.capAngle=sizeCapAngle({...p,details},capAngleForceEstimate(p));}
+ // The runway end stop sized for the cranes' bumper force on the girder as detailed: its flange, the end bearing
+ // stiffener and the runway-end tie saddle.
+ if(details.endStop)details.endStop=sizeEndStop({...p,details}).stop;
  return details;
 }
 

@@ -69,7 +69,13 @@ export const runwayDetailsSchema=z.object({
   // Bolted rail joints: 'tight' (default, AIST TR-13 §5.16.1: gap 1/16 in or less, the rail string floats in its clips between
   // the end stops, whose rail-end gaps take the thermal movement) or 'open' (expansion gap jointGap, each piece anchored at
   // mid-length by an anchor clip pair).
-  jointType:z.enum(['tight','open']).optional()}),
+  jointType:z.enum(['tight','open']).optional(),
+  // How the rail pieces are joined: 'welded' (thermite or flash-butt welds by the rail supplier's procedure, no bars; the
+  // welded string floats like a tight-jointed one), 'supplier-bars' (the rail manufacturer's joint bars fitted to the
+  // fishing surfaces, a deferred submittal for the demands printed here), 'bolted-bars' (default: the joint bars
+  // detailed here, a bearing-type joint with pretensioned bolts, Category D) or 'slip-critical-bars' (the bars detailed
+  // here as a slip-critical Class A joint, slip checked under the cyclic shear, Category B).
+  jointKind:z.enum(['welded','supplier-bars','bolted-bars','slip-critical-bars']).optional()}),
  criteria:z.object({twistLimit:pos.optional(),railLateralLimit:pos,railGauge:pos,alignmentTolerance:pos,levelTolerance:pos,rotationClearance:pos,temperatureMaximum:z.number().finite(),corrosionProtected:z.boolean()}),
  fatigueDetails:z.array(z.object({id:z.string().min(1).max(40),name:z.string().min(1).max(120),x:nn,point:z.enum(['top-left','top-right','bottom-left','bottom-right']),category:z.enum(['A','B','B1','C','D','E','E1']),reference:z.string().min(1).max(300)})).min(1).max(16),
  spectrum:z.array(z.object({name:z.string().min(1).max(80),liftFraction:nn.max(1),cycles:pos})).min(1).max(8),

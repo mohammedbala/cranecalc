@@ -19,14 +19,20 @@ export const endStopSchema=z.object({
  base:z.object({length:pos,width:pos,thickness:pos}),
  /** Face plate height above the base plate. */
  face:z.object({thickness:pos,height:pos}),
- /** Two stiffeners behind the face plate; spacing is center to center across the runway. */
- stiffener:z.object({thickness:pos,length:pos,spacing:pos}),
+ /**
+  * Stiffeners behind the face plate; spacing is center to center across the runway. arrangement: 'inner' (default, two
+  * stiffeners between the bolt lines), 'outer' (two stiffeners at the base plate edges, the bolts between them) or
+  * 'center' (one stiffener on the stop centerline, a bolt line each side).
+  */
+ stiffener:z.object({thickness:pos,length:pos,spacing:pos,arrangement:z.enum(['inner','outer','center']).optional()}),
  /**
   * Front bolts sit frontClear (bolt C/L to the back face of the face plate) behind the face plate; back bolts sit
   * edge from the back of the base plate. The gauge straddles the stiffeners: heads clear the face plate and
   * stiffener weld toes by the socket clearance.
   */
- bolts:z.object({diameter:pos,grade:z.enum(['A325','A490']),gauge:pos,frontClear:pos,edge:pos}),
+ bolts:z.object({diameter:pos,grade:z.enum(['A325','A490']),gauge:pos,frontClear:pos,edge:pos,
+  /** Bolt rows along the girder, two bolts each: 2 (default, back and front) or 3 (a middle row halfway between). */
+  rows:z.number().int().min(2).max(3).optional()}),
  weldSize:pos,
  source:z.string().max(300)
 });
@@ -63,8 +69,25 @@ export function stopLocation(p:ProjectInput){
 }
 /** Front fillet room in front of the face plate: the weld plus 1/4 in, rounded up to the 1/4 in grid. */
 export const stopLip=(e:EndStopInput)=>snapQuarter(e.weldSize+6.35,'up');
-/** Back and front bolt rows from the girder end: back bolts edge from the base plate back, front bolts frontClear behind the face. */
-export const stopBoltRows=(e:EndStopInput)=>[e.setback+e.bolts.edge,e.setback+e.base.length-stopLip(e)-e.face.thickness-e.bolts.frontClear] as const;
+/**
+ * Bolt rows from the girder end, back to front: back bolts edge from the base plate back, front bolts frontClear behind
+ * the face, and with three rows a middle row halfway between them on the 1/4 in grid.
+ */
+export const stopBoltRows=(e:EndStopInput):number[]=>{
+ const back=e.setback+e.bolts.edge,front=e.setback+e.base.length-stopLip(e)-e.face.thickness-e.bolts.frontClear;
+ return (e.bolts.rows??2)===3?[back,snapQuarter((back+front)/2),front]:[back,front];
+};
+/** Stiffener arrangement: two between the bolt lines (inner), two at the base plate edges (outer), or one central. */
+export const stopStiffenerArrangement=(e:EndStopInput)=>e.stiffener.arrangement??'inner';
+/** Stiffener centers across the runway from the stop centerline. */
+export function stopStiffeners(e:EndStopInput):number[]{
+ const a=stopStiffenerArrangement(e),ts=e.stiffener.thickness;
+ return a==='center'?[0]:a==='outer'?[-(e.base.width-ts)/2,(e.base.width-ts)/2]:[-e.stiffener.spacing/2,e.stiffener.spacing/2];
+}
+/** Clear distance between the two stiffeners (the slot their inside fillets are laid in); none for one central stiffener. */
+export function stopStiffenerClear(e:EndStopInput){const z=stopStiffeners(e);return z.length<2?Infinity:z[1]-z[0]-e.stiffener.thickness;}
+/** Bolt C/L to the nearer stiffener face, across the runway (bolts at plus and minus half the gauge). */
+export function stopBoltToStiffener(e:EndStopInput){return Math.min(...stopStiffeners(e).map(z=>Math.abs(e.bolts.gauge/2-Math.abs(z))))-e.stiffener.thickness/2;}
 /**
  * Nearest stop steel to the rail end, from the runway end: the front edge of the base plate, which projects the lip
  * in front of the face plate (the face plate where there is no lip).

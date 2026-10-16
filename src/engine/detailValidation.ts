@@ -1,4 +1,7 @@
 import {activeEndBearing} from './endBearingInputs';
+import {stopStiffenerClear,stopStiffenerArrangement} from './endStopInputs';
+import {wrenchClearance} from './endStop';
+import {aiscShapeByName} from '../data/aiscSections';
 import {flangeTieGeometry,flangeTieFamily,stiffenerTieGeometry,columnGussetExtension} from './tieGeometry';
 import {validatePlateTie} from './plateTie';
 import {validateCapAngle} from './capAngleTie';
@@ -41,6 +44,12 @@ export function validateRunwayDetails(p:ProjectInput){
  add((p.aist?.torsionalLength??0)+1e-6<gaps.twist,'torsional effective length cannot be shorter than the spacing of stations restraining both flanges against twist.');
  add(d.criteria.temperatureMaximum>150||!d.criteria.corrosionProtected,`Appendix 3 fatigue model requires temperature at most ${p.units==='US'?'302 °F':'150 °C'} and corrosion protection.`);
  add(p.cranes.some(c=>!c.design?.bumperBypassesGirder)&&!d.endStop?.enabled,'a crane stop force reaches the girder: design the girder-mounted runway end stops, or mark the crane stops as building-mounted.');
+ // A bolted stop needs room on the flange for its bolt pair (flange edge distances, nuts clear of the web fillet with the
+ // socket clearance) and its stiffeners must not overlap; otherwise a stop by others or a welded stop is needed.
+ if(d.endStop?.enabled){const e=d.endStop,sh=aiscShapeByName(p.section.catalogueId??''),k1=p.section.tw/2+(sh?sh.kdes*25.4-p.section.tf:0),C=wrenchClearance(e.bolts.diameter);
+  add(p.section.bf-3*e.bolts.diameter<2*(k1+C)-1e-6,'the girder flange is too narrow for a bolted end stop (flange edge distances and nut clearance at the web fillet): use a building-mounted stop by others, or a welded end stop designed for the bumper force.');
+  add(stopStiffenerClear(e)<2*e.weldSize-1e-6,'the end stop stiffeners and their inside fillets overlap: space them farther apart, place them at the base plate edges, or use one central stiffener.');
+  add(stopStiffenerArrangement(e)==='outer'&&e.bolts.gauge+2*e.stiffener.thickness>e.base.width+1e-6,'the end stop bolts must lie between the edge stiffeners.');}
  add(d.material.Fu<d.material.Fy,'plate Fu must not be less than Fy.');
  // Paired flat bars and the single flexible plate share the tie dimensions, saddle, gussets and bolt groups.
  const family=flangeTieFamily(d);
