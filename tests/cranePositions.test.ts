@@ -3,6 +3,7 @@ import {calculate} from '../src/engine/calculate';
 import {exampleProject} from '../src/engine/defaults';
 import {movingAnalysis} from '../src/engine/analysis';
 import {sectionProperties} from '../src/engine/section';
+import {girderDeadLoad} from '../src/engine/newSteel';
 import {cranePositions,pairs} from '../src/engine/cranePositions';
 import type {ProjectInput} from '../src/engine/types';
 
@@ -30,6 +31,19 @@ describe('moving-load positions for several cranes',()=>{
   const p=twoCranes(),props=sectionProperties(p.section),q=p.deadLoad+p.railWeight+props.weight;
   const exact=bruteMaximum(p,q),found=movingAnalysis(p,props).demand.moment;
   expect(found).toBeLessThanOrEqual(exact*(1+1e-9));expect(found/exact).toBeGreaterThan(.999);
+ },60000);
+ it('takes the end shear with a wheel just inside the support (the supremum) and converges on it',()=>{
+  // Two cranes at closest approach over a simple span: the largest end reaction, a wheel at the support counted on the
+  // span (its limit from inside). A wheel exactly on the support used to drop out of the end shear, so the
+  // travel refinement chased the limit (case 006: 1.26% change at the finest grid).
+  const p=twoCranes(),props=sectionProperties(p.section),q=girderDeadLoad(p,props.weight),[a,b]=p.cranes;
+  const P=(c:typeof a)=>c.wheels.map(w=>w.loaded*(c.includesImpact?1:1+c.impact)),gap=a.wheels.at(-1)!.offset+Math.max(a.minSeparation,b.minSeparation);
+  const train=[...a.wheels.map((w,i)=>({d:w.offset,P:P(a)[i]})),...b.wheels.map((w,i)=>({d:gap+w.offset,P:P(b)[i]}))];
+  // The reactions are piecewise linear in the origin: the largest is with a wheel on a support.
+  let exact=0;for(const o of train.flatMap(w=>[-w.d,L-w.d])){const on=train.map(w=>({x:o+w.d,P:w.P})).filter(w=>w.x>=0&&w.x<=L);const RA=q*L/2+on.reduce((s,w)=>s+w.P*(L-w.x),0)/L,RB=q*L/2+on.reduce((s,w)=>s+w.P*w.x,0)/L;exact=Math.max(exact,RA,RB);}
+  const r=movingAnalysis(p,props);
+  expect(r.demand.shear/exact).toBeGreaterThan(1-1e-6);expect(r.demand.shear).toBeLessThanOrEqual(exact*(1+1e-6));
+  expect(r.convergence).toBeLessThanOrEqual(.01);
  },60000);
  it('pairs a coupled position only with its partner crane',()=>{
   const p=twoCranes(),stations=[0,L],sets=cranePositions(p,12,stations),gap=p.cranes[0].wheels.at(-1)!.offset+1500;
