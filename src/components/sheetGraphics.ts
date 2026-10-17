@@ -185,7 +185,7 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   // Output not yet issued under an entered revision: no revision letter, the calculation it was drawn from.
   else svg+=text(66,1591,'-',11,'middle',700)+text(110,1591,`PRELIMINARY OUTPUT · CALC ${s.revision}`.toUpperCase(),11)+text(740,1591,date,11);
   svg+='</g><g data-title-panel="originator">';
-  svg+=text(1056,1598,'CRANECALC',28,'middle',700)+text(1056,1620,'STRUCTURAL DESIGN WORKSHEET',10,'middle');
+  svg+=text(1056,1598,'CRANECALC',28,'middle',700)+text(1056,1620,p.scope==='analysis'?'GIRDER ANALYSIS RECORD':'STRUCTURAL DESIGN WORKSHEET',10,'middle');
   svg+=line([876,1640],[1236,1640])+text(1056,1660,'DIMENSIONS GOVERN / DO NOT SCALE',10,'middle');
   svg+=text(1056,1678,p.reportPurpose==='demonstration'?'FICTITIOUS DEMONSTRATION':'ENGINEERING REVIEW',10,'middle');
   svg+='</g><g data-title-panel="approvals">';

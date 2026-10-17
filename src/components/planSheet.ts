@@ -28,7 +28,7 @@ import { sheetOrdinalToken, detailNumberToken, sheetNumberToken, bearingBoltsTit
 import { activeEndBearing, continuousBearings } from '../engine/endBearingInputs';
 import { runwayElevations, girderMarks } from '../engine/drawingData';
 import { connectionTopic } from './connectionSheet';
-import { coverSheetSvgs, coverSheetCount, coverSheetTitle, coverContinuation } from './coverSheet';
+import { coverSheetSvgs, coverSheetCount, coverTitleFor, coverContinuation } from './coverSheet';
 import { endStopTopic } from './endStopSheet';
 import { activeEndStop, stopEnds } from '../engine/endStopInputs';
 import { endGridOverhang } from '../engine/simpleSupports';
@@ -157,7 +157,7 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   svg+=target(ySeat,ySeat,el(elevations?.seat,'BRG. SEAT'),'bearing-seat');
   // Callouts at runway A, between the runways; runway B is opposite hand.
   const lx=SX(uRA)+70,headW=(d?.rail.headWidth??65)/1000;
-  svg+=multiLeader([[SX(uRA+headW/2),SY(railTop-.01)]],[lx,SY(railTop)-2],[`CRANE RAIL${d?`, SEE ${detailRef(detailTitles.railKeeper)}`:''}`]);
+  svg+=multiLeader([[SX(uRA+headW/2),SY(railTop-.01)]],[lx,SY(railTop)-2],[`CRANE RAIL${d?`, SEE ${detailRef(detailTitles.railKeeper)}`:analysisOnly(p)?' BY OTHERS, SEE S-00':''}`]);
   svg+=multiLeader([[SX(m.bf/2),SY(m.d/4)]],[lx,SY(m.d/4)+3],[`${p.section.name} RUNWAY GIRDER`,'SEE RUNWAY GIRDER SCHEDULE']);
   const capped=activeColumnCap(p)?columnCapGeometry(p):undefined;
   svg+=capped?multiLeader([[SX(capped.cap.plate.width/2000),SY(seat-capped.cap.plate.thickness/2000)]],[lx,SY(seat)+16],[`COLUMN CAP, SEE ${detailRef(columnCapTitles.section)}`]):multiLeader([[SX(0),SY(seat-Math.min(.05,m.bracketDepth/3))]],[lx,SY(seat)+16],d?[`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`]:['BRACKET BY BUILDING DESIGNER (REF.)']);
@@ -392,7 +392,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const bracing=braced?bracingOnElevation(s,{EX:x=>EX(x-m.length/2),EY,ek,supports:m.supports.map(x=>x+m.length/2),columnWidth:m.column.bf,girderBottom:bottom,stub:stubLength,columnTop:capGeo?bottom+(p.details!.bearing.thickness+capGeo.cap.plate.thickness)/1000*ek:undefined}):undefined;
   svg+=`<g data-view="elevation">`;
   const bubbleY=top-44-lift,elevationFrom=svg.length;
-  svg+=text(el,bubbleY-30,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: ${sheetRef('connection')}${p.system==='simple'&&p.details&&p.spans.length>1?` / SHARED SUPPORT: ${detailRef(capGeo?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}`:''}`,lettering.text);
+  svg+=text(el,bubbleY-30,`${p.system==='continuous'?'CONTINUOUS MEMBER':'SIMPLY SUPPORTED BAYS'} / CONNECTIONS: ${analysisOnly(p)?'BY OTHERS, SEE S-00':sheetRef('connection')}${p.system==='simple'&&p.details&&p.spans.length>1?` / SHARED SUPPORT: ${detailRef(capGeo?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}`:''}`,lettering.text);
   m.supports.forEach((x,i)=>{
     // The column is beyond the girder. A new column ends at its top, at or below the top of the girder. An existing
     // building column is drawn only below the seat, a stub broken once at its foot: above the girder it continues to
@@ -468,16 +468,16 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
   const p=s.input,u=p.units,len=(mm:number)=>dimensionLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
   const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP',surveyed=newColumns?existingLayout(p):undefined,separation=s.bracingSystem?.separation;
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
-  const ends=!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LOCATES AT THE LOWER-NUMBERED GRID, SLIDES AT THE OTHER; SEE ${detailRef(activeEndBearing(p)?bearingBoltsTitle(p):detailTitles.movement)}`;
+  const ends=analysisOnly(p)?'BY OTHERS; SEE S-00 FOR REACTIONS AND RESTRAINT':!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LOCATES AT THE LOWER-NUMBERED GRID, SLIDES AT THE OTHER; SEE ${detailRef(activeEndBearing(p)?bearingBoltsTitle(p):detailTitles.movement)}`;
   const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
     return [mark,String(all.length*2),specGrade(`${p.section.name}; ${p.section.kind==='cap'&&p.capDesign?`W ${astmSpec('w-shape',p.section.Fy,p.section.Fu)}, CAP ${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource)}`:astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu)}`.toUpperCase())+`${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
   const notes=[
-    'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
+    analysisOnly(p)?'ANALYSIS ONLY - NOT FOR CONSTRUCTION. THIS SHEET RECORDS THE GIRDERS AS ANALYZED. SEE S-00 FOR THE ANALYSIS BASIS, THE SUPPORT REACTIONS AND THE LATERAL RESTRAINT AND RAIL ASSUMED, WHICH THE CONNECTIONS, SUPPORTS AND RAIL BY OTHERS SHALL PROVIDE.':'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
     newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${separationLength(separation.required,u)} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS ARE SHOWN AS CENTERLINES (DASH-DOT); COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
-    `ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`,
-    // With the detailed set the rail setting is the S-00 crane runway installation note.
-    ...(d?[]:[`SET RAIL C/L SPACING (CRANE SPAN) TO THE CRANE MANUFACTURER'S GAUGE, EACH RAIL ON ITS GIRDER WEB C/L. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${plateInches(Math.abs(p.railEccentricity),u)}; IT IS NOT A SETTING DIMENSION.`]),
+    ...(analysisOnly(p)?[]:[`ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`]),
+    // With the detailed set the rail setting is the S-00 crane runway installation note; an analysis gives the rail on S-00.
+    ...(d||analysisOnly(p)?[]:[`SET RAIL C/L SPACING (CRANE SPAN) TO THE CRANE MANUFACTURER'S GAUGE, EACH RAIL ON ITS GIRDER WEB C/L. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${plateInches(Math.abs(p.railEccentricity),u)}; IT IS NOT A SETTING DIMENSION.`]),
     p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}.`:'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
     ...adjacentBays(p).map(b=>`AT GRID ${b.end==='left'?1:p.spans.length+1} THE EXISTING RUNWAY CONTINUES (${short((p.continuation?.source??'').toUpperCase(),70)}). THE EXISTING ${len(b.length)} GIRDER BEARS ON THE SAME SUPPORT AND STAYS IN PLACE; ITS REACTION IS INCLUDED IN THE SUPPORT DESIGN. FIELD VERIFY ITS SPAN, BEARING, TIE AND RAIL JOINT BEFORE FABRICATION.`)
   ];
@@ -541,20 +541,22 @@ export function detailTopics(s:CalculationSnapshot,f:FramingSettings=defaultFram
   return topics.map(t=>({...t,views:t.views.map(clearView),holds:[...new Set(t.views.flatMap(v=>viewHolds(s,v.title)))].map(h=>`${h.text}: ${t.views.filter(v=>h.views!.test(v.title)).map(v=>v.title).join('; ')}`)}));
 }
 /** The issued set: cover S-00 with general notes, criteria and sheet index, S-01, then detail sheets from S-02. */
+const analysisOnly=(p:CalculationSnapshot['input'])=>p.scope==='analysis';
 function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
   const p=s.input;
   // A reference-only arrangement is not an issued package, so it has no cover sheet.
   if(connectionOptionChecks(p).length)return [{number:'S-02',name:'reference-connection-arrangements-arch-d',title:'CONNECTION ARRANGEMENTS / REFERENCE ONLY',render:()=>connectionConceptSheetSvg(s)}];
   // Each sheet is drawn once: the cover reads the others' text (abbreviations) before the set draws them.
   const once=<T,>(draw:()=>T)=>{let v:T|undefined;return ()=>v??=draw();};
-  const details=packDetailSheets(detailTopics(s,f),p.units).map((layout,i)=>{
+  // A supplied-load analysis details nothing: no connection or detail sheets (S-00 gives the interface requirements).
+  const details=(analysisOnly(p)?[]:packDetailSheets(detailTopics(s,f),p.units)).map((layout,i)=>{
     const number=`S-${String(i+2).padStart(2,'0')}`,title=detailSheetTitle(layout);
     return {number,name:`runway-${layout.topics.map(t=>t.key).join('-')}-sheet-arch-d`,title,details:layout.placed.flatMap(v=>[v.view.title,...(v.view.subdetails??[])]),render:once(()=>detailSheetSvg(s,number,title,layout))};
   });
   const sheets=[{number:'S-01',name:'runway-plan-sheet-arch-d',title:'GENERAL ARRANGEMENT',details:[...arrangementDetails,...(existingClearanceShown(s)?[existingClearanceTitle]:[])],render:once(()=>planSheetSvg(s,f))},...details];
   // The cover's notes continue on the sheets after it (S-00A) when they do not fit it at the lettering size.
   const pages=coverSheetCount(s,sheets),covers=once(()=>coverSheetSvgs(s,sheets,pages));
-  return [{number:'S-00',name:'cover-general-notes-sheet-arch-d',title:coverSheetTitle,render:()=>covers()[0]},
+  return [{number:'S-00',name:'cover-general-notes-sheet-arch-d',title:coverTitleFor(p),render:()=>covers()[0]},
     ...Array.from({length:pages-1},(_,i)=>({...coverContinuation(i+1),name:`general-notes-continued-${i+1}-sheet-arch-d`,render:()=>covers()[i+1]})),...sheets];
 }
 /**
@@ -563,7 +565,7 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
  */
 export function detailSheetNumbers(s:CalculationSnapshot,f:FramingSettings=defaultFraming){
   const sheets=new Map<string,string>();
-  if(!connectionOptionChecks(s.input).length)packDetailSheets(detailTopics(s,f),s.input.units).forEach((l,i)=>{for(const t of l.topics)sheets.set(t.key,`S-${String(i+2).padStart(2,'0')}`);});
+  if(!connectionOptionChecks(s.input).length&&!analysisOnly(s.input))packDetailSheets(detailTopics(s,f),s.input.units).forEach((l,i)=>{for(const t of l.topics)sheets.set(t.key,`S-${String(i+2).padStart(2,'0')}`);});
   return (topic:string)=>sheets.get(topic)??'the drawings';
 }
 /**
