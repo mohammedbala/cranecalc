@@ -11,6 +11,8 @@ import { projectSchema, type CalculationSnapshot, type CheckResult, type Project
 import { matchesAiscSection } from '../data/aiscSections';
 import { matchesCappedSection } from '../data/aiscChannels';
 import { sectionProperties } from './section';
+import { cappedElasticProperties } from './capChannel';
+import { format } from './units';
 import { movingAnalysis } from './analysis';
 import { referenceVersion } from './references';
 import { aistChecks } from './aistChecks';
@@ -120,14 +122,18 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
   for(const v of a.envelope){const i=supports.findIndex(x=>x>v.x+1e-6),bay=i<0?p.spans.length-1:Math.max(0,i-1),d=value(v),ratio=d*n/p.spans[bay];if(ratio>best.ratio)best={demand:d,limit:p.spans[bay]/n,bay,ratio};}
   return best;
  };
- const vb=byBay(v=>Math.max(Math.abs(v.deflectionMax),Math.abs(v.deflectionMin)),p.verticalLimit,d.deflection),lb=byBay(v=>Math.max(Math.abs(v.lateralDeflectionMax),Math.abs(v.lateralDeflectionMin)),p.lateralLimit,d.lateralDeflection);
+ // Lateral deflection (AISC DG7): the lateral wheel loads act at the top flange and are resisted by the top flange
+ // (with the cap channel) alone, not by the full section. The analysis model uses the full-section Iy; with rigid
+ // lateral supports the displacements scale exactly with 1/EI, so they are converted by Iy / I_top.
+ const capped=cappedElasticProperties(p.section),topI=capped?.topI??p.section.tf*p.section.bf**3/12,flangeScale=props.Iy/topI;
+ const vb=byBay(v=>Math.max(Math.abs(v.deflectionMax),Math.abs(v.deflectionMin)),p.verticalLimit,d.deflection),lb=byBay(v=>flangeScale*Math.max(Math.abs(v.lateralDeflectionMax),Math.abs(v.lateralDeflectionMin)),p.lateralLimit,flangeScale*d.lateralDeflection);
  const bayNote=(g:{bay:number})=>g.bay<0?'Shortest-span limit used for every bay.':`Governing bay ${g.bay+1}; every bay is checked against its own span.`;
  snapshot.checks=[
  check('equilibrium','Analysis','Force equilibrium',a.equilibriumError,1e-7,'ratio','\\frac{|\\Sigma R-\\Sigma P-wL|}{\\Sigma P+wL}','Residual of every crane response and dead-load model.'),
  check('convergence','Analysis','Moving-load refinement',a.convergence,0.01,'ratio','\\max|D_{2n}/D_n-1|\\ \\ \\text{(crane positions)}','Governing envelope demands must change by no more than 1% on travel-grid refinement. Sampled envelopes are not an exact analytical global optimization.'),
  check('mesh','Analysis','Spatial sampling refinement',a.meshConvergence,0.01,'ratio','\\max|D_{2n}/D_n-1|\\ \\ \\text{(stations)}','Governing demands must change by no more than 1% when doubling spatial sampling. Point-load moments and nodal deflections use exact elastic element solutions.'),
  check('vertical','Serviceability','Vertical crane-load deflection',vb.demand,vb.limit,'length','\\Delta_v\\le L/n_v',`User criterion: ${p.criteriaSource}. Crane static wheel loads only; impact and dead load excluded. ${bayNote(vb)}`,d.governing.deflection?.id,['mechanics','criteria']),
- check('lateral','Serviceability','Lateral bending deflection',lb.demand,lb.limit,'length','\\Delta_h\\le L/n_h',`User criterion: ${p.criteriaSource}. ${bayNote(lb)} Lateral braces modeled as rigid translational supports. This is flexural deflection of the section, not rail displacement including twist.`,d.governing.lateralDeflection?.id,['mechanics','criteria'])
+ check('lateral','Serviceability','Lateral bending deflection',lb.demand,lb.limit,'length','\\Delta_h\\le L/n_h',`User criterion: ${p.criteriaSource}. ${bayNote(lb)} Top-flange bending (AISC DG7): the lateral wheel loads are resisted by the ${capped?'top flange and cap channel':'top flange'} alone, I = ${format(topI,'inertia',p.units,3)} (full-section Iy = ${format(props.Iy,'inertia',p.units,3)} would give ${format(lb.demand/flangeScale,'length',p.units,3)}). Lateral braces modeled as rigid translational supports. Rail displacement from girder twist is not included.`,d.governing.lateralDeflection?.id,['mechanics','dg7','criteria'])
  ];
  if(p.scope==='design'){
   snapshot.checks=snapshot.checks.filter(c=>c.group!=='Serviceability');

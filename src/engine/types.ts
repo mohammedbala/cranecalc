@@ -36,7 +36,7 @@ export type Status = 'pass'|'fail'|'not-applicable'|'incomplete'|'unsupported'|'
 export interface ReferenceRecord { id:string; title:string; edition:string; clause:string; url:string; status:'verified'|'partial'|'unverified'; evidence:string;
  /** For a calculation method: the model in one sentence, for the report's analysis section. */
  method?:string; }
-export interface CheckResult { id:string; group:string; title:string; status:Status; demand?:number; capacity?:number; utilization?:number; quantity?:'length'|'force'|'moment'|'stress'|'ratio'|'stiffness'|'pressure'|'temperature'|'acceleration'; equation:string; substitution?:string; referenceIds:string[]; note:string; caseId?:string;
+export interface CheckResult { id:string; group:string; title:string; status:Status; demand?:number; capacity?:number; utilization?:number; quantity?:'length'|'force'|'moment'|'stress'|'ratio'|'stiffness'|'pressure'|'temperature'|'acceleration'|'lineForce'; equation:string; substitution?:string; referenceIds:string[]; note:string; caseId?:string;
  /** Set by checkIntegrity.ts: a dimensional check whose demand or capacity is negative (an impossible part or an overlap). It fails, carries no D/C (utilization undefined) and is listed in CalculationSnapshot.geometryConflicts. */
  geometry?:boolean;
  /** Set by checkIntegrity.ts: the part has no capacity for the action (capacity ≤ 0, or a ratio that is not finite or above 1000). It fails with utilization Infinity and ranks above every finite D/C; JSON writes Infinity as null, so this flag is the source of truth. */
