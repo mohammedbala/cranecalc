@@ -19,10 +19,12 @@ import {aiscChannelByName,loadCappedSection} from '../data/aiscChannels';
 import {sectionProperties} from './section';
 import {girderStrength} from './aiscStrength';
 import {movingAnalysis} from './analysis';
+import {fatigueSpectrumBin,railClipCategory} from './detailAnalysis';
 import {selectBracketArrangement,selectTieArrangement,tieArrangement,tieOptions} from './connectionOptions';
 import {sizeTaperedHaunch} from './taperedHaunchSizing';
 import {baseSizingRatios,columnDriftShare,sizeColumnBase} from './columnBaseSizing';
 import {columnTorsionRatio,sizeBracing} from './bracingSizing';
+import {longitudinalBracingAnalysis,longitudinalBracingChecks} from './longitudinalBracing';
 import {supportReactions} from './supportReactions';
 import {existingColumnAnalysis,existingColumnChecks,existingColumnSection} from './existingColumn';
 import {existingWeldingDemand} from './existingWelding';
@@ -30,7 +32,7 @@ import {baseDrift} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate,validateCapAngle} from './capAngleTie';
 import {simpleSupportInput} from './simpleSupports';
 import {seatSettingTolerance} from './fitTolerances';
-import {sizeWeldedBracket} from './bracketSizing';
+import {sizeWeldedBracket,bracketColumnFatigueRatio} from './bracketSizing';
 import {sizeRolledBracket} from './rolledBracketSizing';
 import {sizeColumnCap,columnCapSizingRatios} from './columnCapSizing';
 import {defaultRolledBracket,isRolledBracket} from './rolledBracketInputs';
@@ -137,13 +139,32 @@ export function exampleCranes(cfg:RunwayConfig,length:number):Crane[]{
 
 /** Rail depth for the maximum static wheel load (typical crane-rail selection, lighter rails for light wheels). */
 export function railDepthFor(wheel:number){const P=wheel/kip;return (P<=10?3.5:P<=20?4.25:P<=32?5.25:6)*inch;}
-/** Fictitious example rail clip for a rail base of the width: light series below a 4 1/2 in base. */
-export function exampleClip(railBase:number,depth:number,weld:number):NonNullable<RunwayDetails['rail']['clip']>{
+/** Fictitious example rail clip for a rail base of the width: light series below a 4 1/2 in base; weld-on or bolted. */
+export function exampleClip(railBase:number,depth:number,weld:number,type:'weld-on'|'bolted'='weld-on'):NonNullable<RunwayDetails['rail']['clip']>{
  const light=railBase<=4.5*inch+1e-6,across=(light?2:2.5)*inch;
- return {type:'weld-on',product:`Fictitious example data RC-W${light?'L':''}: weld-on floating crane rail clip for a ${+(depth/inch).toFixed(2)} in rail, or equal`,basis:'allowable',
+ return {type,product:type==='bolted'?`Fictitious example data RC-B${light?'L':''}: bolted floating crane rail clamp plate for a ${+(depth/inch).toFixed(2)} in rail, or equal`:`Fictitious example data RC-W${light?'L':''}: weld-on floating crane rail clip for a ${+(depth/inch).toFixed(2)} in rail, or equal`,basis:'allowable',
   lateral:(light?6:10)*kip,uplift:(light?3:5)*kip,baseLength:3.75*inch,baseWidth:across,baseThickness:.75*inch,weld,weldLength:across};
 }
 
+/**
+ * The top plate's fatigue at the weld-on rail clips before the analysis, by the project's method as the register
+ * reports it (detail-full-cycle-RC: the all-cycle bound, the rated-lift range at every one of the n_SR cycles against
+ * F_SR without the threshold; Miner's equivalent range never exceeds it): the clip base an AISC Table A-3.1 item 7.1
+ * attachment (railClipCategory, Category D for the example base). The range at the largest crane moment without impact
+ * is the vertical bending stress at the top of the girder plus the lateral bending of the top flange (with any cap
+ * channel) at its tip under the full side thrust, which bounds the fatigue side thrust with the flange warping
+ * (AIST TR-13 §3.10.2.3; AISC DG7). ratio > 1: the clips are bolted clamp plates instead, holes for pretensioned bolts
+ * through the top plate (item 2.2, Category B), as AISC DG7 and AIST TR-13 allow.
+ */
+export function railClipFatigue(p:ProjectInput){
+ const clip=p.details?.rail.clip,cycles=p.fatigue.cycles;
+ if(!clip||clip.type==='bolted'||cycles<2e4)return {ratio:0,why:''};
+ const s=p.section,pr=sectionProperties(s),a=movingAnalysis(p,pr,8),impact=Math.max(0,...p.cranes.map(c=>c.impact));
+ const cap=s.kind==='cap'?aiscChannelByName(s.capCatalogueId??''):undefined,Iyt=s.tf*s.bf**3/12+(cap?cap.Ix*inch**4:0),half=s.kind==='cap'?s.capWidth/2:s.bf/2;
+ const vertical=(a.demand.moment-a.deadMoment)/(1+impact)*(s.d+(s.kind==='cap'?s.capTw:0)-pr.cy)/pr.Ix,lateral=a.demand.lateralMoment*half/Iyt,range=vertical+lateral;
+ const category=railClipCategory(clip),allowable=fatigueSpectrumBin(category,range,cycles).allowable,ratio=range/allowable,ksiOf=(v:number)=>p.units==='SI'?`${v.toFixed(1)} MPa`:`${(v/6.894757).toFixed(2)} ksi`;
+ return {ratio,why:`Weld-on clip bases on the ${s.kind==='cap'?'cap channel web':'top flange'} are an AISC Table A-3.1 item 7.1 attachment, Category ${category==='E1'?'E′':category}: the estimated top-plate range ${ksiOf(range)} (rated-lift crane moment without impact plus the top-flange lateral bending under the side thrust) at all ${cycles.toLocaleString('en-US')} cycles exceeds F_SR = ${ksiOf(allowable)} (ratio ${ratio.toFixed(2)}, the project's all-cycle method). Bolted clamp plates leave holes for pretensioned bolts (item 2.2, Category B), as AISC DG7 and AIST TR-13 allow.`};
+}
 /** Least flange width (W, or the cap web inside the channel flanges) that seats the rail and its clips. */
 export function seatWidthNeeded(depth:number,clipWidth:number,tolerance=.125*inch){return 2*(tolerance+up(depth,1.5875)/2+clipWidth);}
 
@@ -381,9 +402,15 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  const r=d.rail;r.name=`Example ${+(depth/inch).toFixed(2)} in crane rail · idealized plate geometry (fictitious; use the rail supplier's section)`;
  r.padSource='Fictitious example RP-01 polyurethane crane-rail pad; allowable compression per the fictitious supplier rating sheet';
  r.clip=exampleClip(r.baseWidth,depth,(clipWidth<2.5*inch?.25:.3125)*inch);
+ d.spectrum=spectrum.bins;p.fatigue.cycles=N;
+ // The clip base as a fatigue detail on the top plate, by the project's method: bolted clamp plates where the weld-on
+ // base does not pass (railClipFatigue); the top-flange comparison point FT1 takes the clip's category.
+ const clipFatigue=railClipFatigue(p);
+ if(clipFatigue.ratio>1){r.clip=exampleClip(r.baseWidth,depth,r.clip.weld,'bolted');trace.clip=clipFatigue.why;}
+ const ft=d.fatigueDetails.find(v=>v.id==='FT1'),category=railClipCategory(r.clip);
+ if(ft)Object.assign(ft,{category,name:`Top flange at longest-bay midspan, category ${category==='E1'?'E′':category}`,reference:`AISC 360 Table A-3.1 · top-flange comparison point at the rail clip ${r.clip.type==='bolted'?'bolt holes (item 2.2)':'base welds (item 7.1)'}; rail clip stations are checked automatically`});
  p.railWeight=railArea(r)*7850*g/1e9;
  d.criteria.railGauge=cfg.craneSpan*foot;
- d.spectrum=spectrum.bins;p.fatigue.cycles=N;
  if(d.endStop)d.endStop.source='Fictitious example supplier data: bumper force, bumper centerline height and contact diameter';
  d.fabrication.steel=p.section.kind==='cap'?'W girder ASTM A992; cap channel and connection plates ASTM A572 Grade 50 unless noted.':'Girder ASTM A992; plates, bars and stiffeners ASTM A572 Grade 50 unless noted.';
  if(p.section.kind==='cap')d.fabrication.welding+=' Cap: continuous fillet each W top-flange edge, with the end development shown. Full cap bearing contact required. Bearing stiffeners CJP to the W top flange, bottom fitted.';
@@ -465,7 +492,7 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  // A continuous girder longer than a practical piece: bolted field splices in the inflection regions (spliceSizing.ts).
  const spliced=designSplices(q);if(spliced){q.details!.splices=spliced.splices;trace.splice=spliced;}
  q.notes+=` ${overhangNote(estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control))}`;
- return logged(cfg.structure==='new'?withCapColumn(withColumnBase(sizeBracing(q,baseTarget),cfg,trace),cfg):withLongitudinalExit(withPreheat(q),cfg,trace));
+ return logged(withBracketColumn(cfg.structure==='new'?withCapColumn(withColumnBase(sizeBracing(q,baseTarget),cfg,trace),cfg):withLongitudinalExit(withPreheat(withExistingRod(q)),cfg,trace),cfg,trace));
 }
 /**
  * Existing columns: the specified preheat of the field welds to the column is the AWS D1.1 Category B minimum for the
@@ -564,6 +591,29 @@ function withCapColumn(q:ProjectInput,cfg:RunwayConfig):ProjectInput{
 }
 const baseTarget=.9;
 /**
+ * A welded rib bracket (twin-rib, haunched seat) whose column flange at the rib weld toes exceeds the sizing target in
+ * fatigue (bracketColumnFatigueRatio: the range of the whole bracket moment on the column section, AISC Table A-3.1
+ * item 7.1, which no bracket part lowers): the project is built on the lightest heavier W14 within it, skipping those
+ * whose larger S_x alone cannot bring the ratio there; otherwise it stays and the checks report it. A configured
+ * column shape is kept.
+ */
+function withBracketColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):ProjectInput{
+ const b=q.details?.bracket,col=q.existingColumn;
+ if(cfg.columnShape||cfg.scope!=='design'||!b?.enabled||!weldedRibBracket(b)||!col?.enabled)return q;
+ const first=bracketColumnFatigueRatio(q),Sx=(name:string)=>aiscShapeByName(name)!.Sx;if(first<=bracketTarget)return q;
+ for(const shape of heavierColumns(col.shape)){
+  if(first*Sx(col.shape)/Sx(shape)>bracketTarget)continue;
+  const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner),now=bracketColumnFatigueRatio(r);
+  if(now<=bracketTarget){
+   Object.assign(trace,inner,{column:[trace.column,`The ${col.shape} column flange at the bracket rib weld toes has a fatigue ratio ${first.toFixed(2)} > ${bracketTarget} (AISC Table A-3.1 item 7.1, the bracket moment range on the column section at all cycles): the lightest heavier W14 within it, ${now.toFixed(2)}`].filter(Boolean).join('; ')});
+   return {...r,configurator:{...cfg}};
+  }
+ }
+ return q;
+}
+/** Sizing target of the welded rib brackets (withWeldedBracket) and of the column choice for their fatigue. */
+const bracketTarget=.9;
+/**
  * New columns: the base plates, anchor rods and footings sized for the reactions (sizeColumnBase), and the existing
  * building's column lines moved clear of the sized footings. Where the column chosen here is too flexible for the
  * runway drift with its footing rotating on the soil, the project is built on the lightest heavier W14 that meets the
@@ -607,6 +657,18 @@ function clearExistingFootings(p:ProjectInput){
 function bracingRod(p:ProjectInput,bay:number,height:number){
  const F=Math.max(...p.cranes.map(c=>c.design?.bumperForce??0))+p.cranes.reduce((n,c)=>n+c.longitudinal,0),T=1.25*F*Math.hypot(bay,height)/bay;
  return [.75,1,1.25,1.5,1.75,2].map(d=>d*inch).find(d=>.75*.75*58*ksi*Math.PI*d*d/4>=T)??2*inch;
+}
+/**
+ * Existing building: the example sidewall rod (bracingRod's estimate) grows by 1/4 in, to 2 1/2 in, until its own checks as
+ * the calculation reports them pass (longitudinalBracingChecks): the diagonal tension and the threaded-rod fatigue
+ * range of the unfactored traction at the project's cycles (AISC Table A-3.1 item 8.5, F_SR at n_SR, not below F_TH).
+ */
+function withExistingRod(p:ProjectInput):ProjectInput{
+ const b=p.longitudinalBracing;if(!b?.enabled||b.system!=='rod-x'||!p.existingColumn?.enabled||p.existingColumn.isNew)return p;
+ const reactions=supportReactions(p,sectionProperties(p.section));
+ const worst=()=>Math.max(0,...longitudinalBracingChecks(p,longitudinalBracingAnalysis(p,reactions)).filter(c=>c.id==='brace-tension'||c.id==='brace-rod-fatigue').map(c=>c.utilization??0));
+ for(const d of [1,1.25,1.5,1.75,2,2.25,2.5].map(v=>v*inch)){if(worst()<=1)break;if(d>b.rod.diameter+1e-6)b.rod.diameter=d;}
+ return p;
 }
 /** Base plate plan for a column shape: the anchor rows clear the column flange welds and plate washers. */
 function basePlatePlan(shape:string){const w=aiscShapeByName(shape)!;return {N:up(w.d*inch+9.5*inch,.5*inch),B:up(w.bf*inch+3.5*inch,.5*inch)};}
@@ -744,7 +806,7 @@ function fitCapAngle(p:ProjectInput):string|undefined{
  return misfit[0]?.replace(/^details\.brace\.capAngle: /,'').replace(/[:.].*$/,'');
 }
 /** Reasons the build steps record for the selection log (selectionLog). */
-export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned}
+export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned;clip?:string}
 const sizingRatioNames:Record<string,string>={tips:'top-flange tip stress (DG7, warping and second-order twist)',h1:'H1 top-flange interaction with the load-height LTB strength',stability:'elastic LTB stability margin',shear:'web shear'};
 /**
  * The configurator selection log kept on the project (configurator.selections): every member or part that differs
@@ -786,6 +848,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  if(design&&bracket?.enabled&&!activeColumnCap(p)&&entered.reach===undefined&&Math.abs(bracket.reach-20*inch)>1e-6)
   add('Column face to girder web',`${auto} (${len(20*inch)})`,len(bracket.reach),'Set by the tie sizing: the column face moves out from 20 in (to at most 30 in) until the tie passes its imposed-movement and strength checks.');
  if(design&&trace.splice)add('Girder field splices',`${auto} (none: one ${+(p.spans.reduce((a,b)=>a+b,0)/foot).toFixed(1)} ft piece)`,`${trace.splice.stations.length} bolted slip-critical splice${trace.splice.stations.length>1?'s':''}: ${trace.splice.where}`,`The continuous girder exceeds the ${+(practicalPieceLength/foot).toFixed(0)} ft practical shipping and erection piece: automatic placement 0.20 to 0.25 of the span from an interior support (the inflection region, nearest 0.22 L), every piece within ${+(trace.splice.splices.maxPiece/foot).toFixed(0)} ft. ${trace.splice.why}.`);
+ if(design&&trace.clip)add('Rail clips',`${auto} (weld-on)`,'Bolted clamp plates',trace.clip);
  if(design&&trace.exit&&!entered.longitudinalExit)add('Longitudinal force exit',`${auto} (strut at the column centerline)`,'Crane-level strut on the girder line, by others',`${trace.exit[0].toUpperCase()}${trace.exit.slice(1)}.`);
  return out;
 }
