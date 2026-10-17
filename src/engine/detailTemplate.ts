@@ -113,7 +113,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // Sleeved slots at the column end: the bolt gauge keeps the required material between the slots of a row, and the
  // bars contain that gauge and both edge distances, in 1/4 in steps.
  const tie=details.brace,c=tie.connection,release=tieRelease({...p,details});
- if(release){c.gauge=Math.max(c.gauge,release.minimumGauge);tie.width=Math.max(tie.width,up(c.gauge+2*c.edge,.25*inch));}
+ if(release){c.gauge=Math.max(c.gauge,release.minimumGauge);c.pitch=Math.max(c.pitch,release.minimumPitch);tie.width=Math.max(tie.width,up(c.gauge+2*c.edge,.25*inch));}
  // Root fillets run the full column gusset height, which contains the release slots.
  c.weldLength=columnGussetHeight({...p,details});
  // A capped girder of independent spans takes the cap tieback angle bolted to the channel cap (AISC DG7), sized in

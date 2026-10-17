@@ -46,7 +46,8 @@ export function plateDemonstration(){
  */
 export function cappedPlateDemonstration(){
  const p=cappedDemonstrationProject();p.details=selectTieArrangement(p.details!,'flexible-plate');
- Object.assign(p.details.brace,{thickness:.25*inch,width:6*inch});Object.assign(p.details.brace.connection,{thickness:.25*inch,pitch:1.75*inch,weldLength:6*inch});
+ // 1/2 in bolts at 1 3/4 in: the sleeved column-end slots keep d_b + 1/16 in between rows (tie-release-pitch).
+ Object.assign(p.details.brace,{thickness:.25*inch,width:6*inch});Object.assign(p.details.brace.connection,{thickness:.25*inch,pitch:1.75*inch,weldLength:6*inch,diameter:.5*inch});
  return p;
 }
 const check=(s:CalculationSnapshot,id:string)=>s.checks.find(c=>c.id===id)!;

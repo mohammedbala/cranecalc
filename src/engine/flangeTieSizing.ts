@@ -236,7 +236,7 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
  t.thickness=x.thickness;t.gussetThickness=x.gusset;
  if(rel)rel.travel=x.travel;
  c.gauge=up(8/3*x.diameter,inch/4);
- const release=tieRelease(p);if(release)c.gauge=Math.max(c.gauge,release.minimumGauge);
+ const release=tieRelease(p);if(release){c.gauge=Math.max(c.gauge,release.minimumGauge);c.pitch=Math.max(c.pitch,release.minimumPitch);}
  t.width=up(c.gauge+2*c.edge,inch/4)+x.widen;if(plate)t.width=Math.max(t.width,4*x.thickness);
  if(d.bracket?.enabled)setBracketReach(p,x.face);
  const connection=(c.rows-1)*c.pitch+2*c.edge;

@@ -53,12 +53,16 @@ export function tieRelease(p:ProjectInput){
  // Same clear material between the two slots of a row as standard holes at the AISC J3.3 minimum spacing, plus the
  // slot location tolerance on their spacing. The bolt gauge sets the slot spacing.
  const ligament=8/3*c.diameter-hole+slotTolerance,minimumGauge=roundUp(slot+ligament,gussetIncrement);
+ // Between the slots of adjacent rows along the tie, across which the sleeves bear (J3.10 checks that ligament): a clear
+ // distance of at least d_b (as between slotted holes), not less than 1/2 in for cutting, plus the slot location
+ // tolerance; the row pitch is the slot width plus that, on the 1/8 in pitch grid.
+ const rowLigament=Math.max(c.diameter,inch/2)+slotTolerance,minimumPitch=roundUp(width+rowLigament,inch/8);
  // The slot pattern with that edge plus a slot location tolerance beyond each end, rounded up to a cutting increment.
  const height=Math.max(t.width,roundUp(c.gauge+2*r.travel+2*(edge+slotTolerance),gussetIncrement));
  // Gusset end toward the girder, from the slot centers: the same edge plus the tolerance, rounded up to a cutting
  // increment; never shorter than the bar edge distance. The bars keep their own edge distance.
  const endEdge=Math.max(c.edge,roundUp(edge+slotTolerance,gussetIncrement));
- return {...r,hole,od,width,slot,edge,ligament,minimumGauge,endEdge,tolerance:slotTolerance,height,sleeveLength:t.gussetThickness+r.clearance,sleeveArea:Math.PI/4*(od**2-hole**2)};
+ return {...r,hole,od,width,slot,edge,ligament,rowLigament,minimumGauge,minimumPitch,endEdge,tolerance:slotTolerance,height,sleeveLength:t.gussetThickness+r.clearance,sleeveArea:Math.PI/4*(od**2-hole**2)};
 }
 
 /** Column gusset height: the bar width, or taller to contain the release slots. */
