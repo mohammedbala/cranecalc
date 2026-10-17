@@ -8,7 +8,7 @@ import {isCapAngleTie} from './capAngle';
 import {clearanceEffects,restraintClearances,secantStiffness} from './restraintClearance';
 import {railTopAboveSteel} from './railSeat';
 import {capAngleChecks} from './capAngleTie';
-import {flangeTieGeometry,stiffenerTieGeometry,tieEccentricity,tieLine,tieSides} from './tieGeometry';
+import {flangeTieGeometry,stiffenerTieGeometry,stiffenerTieJoint,tieEccentricity,tieLine,tieSides} from './tieGeometry';
 import {connectionOptionChecks} from './connectionOptions';
 import {capReady,capAttachmentChecks} from './capChecks';
 import type { CalculationSnapshot,CheckResult,ProjectInput } from './types';
@@ -101,7 +101,7 @@ export function diaphragmArrangement(p:ProjectInput):{kind:'both-flanges'|'gusse
  const at=(v:string|undefined,f:string)=>v==='direct'?(f==='top'?(isCapAngleTie(p)?'the cap tieback':`the direct flange saddle`):bolts?'the end bearing bolts':'the bottom flange saddle'):`the ${f} tie gusset on the stiffener`;
  if(top&&bottom)return top==='direct'&&bottom==='direct'
   ?{kind:'both-flanges',yg:0,text:`Both flanges are restrained directly at the support (top: ${at(top,'top')}; bottom: ${at(bottom,'bottom')}): each flange's lateral shear goes straight to its own restraint, and only the St Venant torque delivered to the support crosses the depth in the stiffener pair`}
-  :{kind:'gusset',yg,text:`The tie gusset is CJP welded to the stiffener (top: ${at(top,'top')}; bottom: ${at(bottom,'bottom')}): the tie force enters the stiffener y_g = ${format(yg,'length',p.units,3)} from the tied flange, and the pair also takes the St Venant torque across the depth`};
+  :{kind:'gusset',yg,text:`The tie gusset ${stiffenerTieJoint(p)==='integral'?'is the stiffener\'s own extension':'is CJP welded to the stiffener'} (top: ${at(top,'top')}; bottom: ${at(bottom,'bottom')}): the tie force enters the stiffener y_g = ${format(yg,'length',p.units,3)} from the tied flange, and the pair also takes the St Venant torque across the depth`};
  return {kind:'one-flange',yg:0,text:'One flange only is restrained at the support with a laid-out attachment: the stiffener pair cantilevers the restraint force over the web depth'};
 }
 /**

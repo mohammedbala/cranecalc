@@ -1,4 +1,4 @@
-import {seatSettingTolerance} from './fitTolerances';
+import {seatSettingTolerance,slidingClearance} from './fitTolerances';
 import type {CheckResult,DesignAnalysis,ProjectInput} from './types';
 import {available} from './aiscStrength';
 import {boltCapacity,boltProperties,plateBearing} from './connectionStrength';
@@ -109,7 +109,7 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   compared('end-bearing-wrench-web','Nut clearance above flange · web fillet',C,gauge/2-k1,'length','g/2-k_1\\ge C_1',shape?'k₁ from the catalog fillet.':'No fillet credited for a custom section.'),
   compared('end-bearing-wrench-stiffener','Nut clearance above flange · bearing stiffener',C,stiffClear,'length','|x_b-x_{st}|-t_{st}/2-w\\ge C_1','Bolt rows at the bearing plate ends clear the stiffeners at mid-bearing.'),
   compared('end-bearing-washer-fit','Plate washers fit on the flange',g.washer.width/2,gauge/2-k1,'length','w_w/2\\le g/2-k_1','Washers bear flat outside the web fillet.'),
-  compared('end-bearing-washer-stiffener','Plate washers clear the bearing stiffener',g.washer.length/2+g.travel,stiffClear,'length','b/2+u\\le|x_b-x_{st}|-t_{st}/2-w',`The washer covers the slot as installed (AISC J3.2), 1/4 in past each slot end. It moves with the bolt, which is fixed in the seat, while the girder and its stiffener slide by up to u = ${f(g.travel)}: the washer clears the stiffener weld toe at either extreme of travel, so it cannot jam the sliding end.`)
+  compared('end-bearing-washer-stiffener','Plate washers clear the bearing stiffener',g.washer.length/2+g.travel+slidingClearance,stiffClear,'length','b/2+u+c_f\\le|x_b-x_{st}|-t_{st}/2-w',`The washer covers the slot as installed (AISC J3.2), 1/4 in past each slot end. It moves with the bolt, which is fixed in the seat, while the girder and its stiffener slide by up to u = ${f(g.travel)}: the washer clears the stiffener weld toe at either extreme of travel, so it cannot jam the sliding end, with a margin c_f = ${f(slidingClearance)} for the fabrication tolerance of the stiffener and hole locations (AISC Code of Standard Practice §6.4) on this moving part.`)
  ];
  // Movement beyond about 1 in each way: sliding bearings with that much travel need large slots, sleeves and washers.
  {const c=simpleSupportInput(p),far=locates?Math.max(...supports.map(v=>v.distance)):Math.max(...p.spans),need=12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance;
@@ -191,7 +191,7 @@ export function bearingPlateChecks(p:ProjectInput,reaction:number):CheckResult[]
  *   slip (Class and filler factor of the seat), and whose gauge fits the flange with the J3.4 edge distance;
  * - the end edge e = max(1.5d, 1.5d − d_h/2 + L_slot/2) on the 1/4 in grid;
  * - the length N, the largest of: the bolt layout (two end edges each side of the stiffener, the tightening clearance C1,
- *   or the plate washer with the travel, to the stiffener and its fillet, a pitch of at least 8/3 d), the J10.2/J10.3
+ *   or the plate washer with the travel and a 1/8 in fabrication margin, to the stiffener and its fillet, a pitch of at least 8/3 d), the J10.2/J10.3
  *   bearing length of the unstiffened end for the factored reaction (at most 12 in; at 0.9), and the flange saddle where
  *   one is used (its setback, half its length and its end fillet from the stiffener to the girder end) or the cap
  *   tieback angle's cap bolt hardware clear of the stiffener and its fillets by 1/8 in (coord-cap-tie-stiffener);
@@ -228,7 +228,8 @@ export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickne
  };
  const sizes=[.75,.875,1,1.125,1.25].map(v=>v*inch),t=sizes.map(trial).find(v=>v.fits)??trial(e0.bolts.diameter);
  // Bolt layout: rows at e from each plate end, the stiffener at mid-length.
- const toStiffener=Math.max(t.C,t.washer.length/2+travel)+x.stiffenerThickness/2+x.stiffenerWeld;
+ // The plate washer moves with the sliding bearing: its full travel plus the fabrication margin (slidingClearance).
+ const toStiffener=Math.max(t.C,t.washer.length/2+travel+slidingClearance)+x.stiffenerThickness/2+x.stiffenerWeld;
  const layout=Math.max(2*(t.edge+toStiffener),2*t.edge+8/3*t.db);
  // J10.2 / J10.3 at the unstiffened end for the factored reaction (the support checks take no stiffener credit).
  const props=sectionProperties(b),str=girderStrength(p,props),R=supportReactions(p,props).supports.reduce((m,v)=>Math.max(m,(lrfd?1.2:1)*Math.max(0,v.D-v.Ds)+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci+Math.max(0,v.Clv))),0);

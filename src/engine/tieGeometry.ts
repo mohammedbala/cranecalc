@@ -152,6 +152,17 @@ export function stiffenerTieGeometry(p:ProjectInput){
 }
 
 /**
+ * How the girder gusset of a stiffener tie joins the tie-side bearing stiffener: 'integral' where it is as thick as the
+ * stiffener, the stiffener plate cut with the gusset as its extension past the flange tip (one plate, no weld, a 1 in
+ * ground radius at the re-entrant corner); else 'cjp', a separate gusset CJP welded to the stiffener's outer edge (an
+ * entered gusset of another thickness). Undefined without a stiffener tie.
+ */
+export function stiffenerTieJoint(p:ProjectInput):'integral'|'cjp'|undefined{
+ if(!stiffenerTieGeometry(p))return undefined;
+ const d=p.details!;return Math.abs(d.brace.gussetThickness-d.bearing.stiffenerThickness)<1e-6?'integral':'cjp';
+}
+
+/**
  * Height above the girder bottom, mm, of the line where a tie force acts on the girder (`top`, the default) and of the
  * bottom restraint line (`bottom`). A bar force F at a drop e below the flange is F at the flange plus the torque F·e, so
  * the restraint line is the bar line: the cap tieback's tie plate line (capTieLine); the bar (or flexible plate) centroid

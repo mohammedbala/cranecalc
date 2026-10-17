@@ -28,6 +28,8 @@ import {existingColumnAnalysis,existingColumnChecks,existingColumnSection} from 
 import {existingWeldingDemand} from './existingWelding';
 import {baseDrift} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
+import {simpleSupportInput} from './simpleSupports';
+import {seatSettingTolerance} from './fitTolerances';
 import {sizeWeldedBracket} from './bracketSizing';
 import {sizeRolledBracket} from './rolledBracketSizing';
 import {sizeColumnCap} from './columnCapSizing';
@@ -37,7 +39,7 @@ import {capWorkPointDrop} from './columnCap';
 import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
 import {columnGussetHeight,flangeTieGeometry} from './tieGeometry';
-import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener} from './flangeTieSizing';
+import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener,bracketServiceDeflection} from './flangeTieSizing';
 import {applyBearingLayout,bearingSeat,defaultBearingShim} from './endBearing';
 import {validateRunwayDetails} from './detailValidation';
 import {weldedRibBracket} from './bracketRib';
@@ -428,7 +430,7 @@ export function buildProject(input:RunwayConfig):ProjectInput{
  // at the reach the tie settled on, and the tie finished on that bracket.
  attachTie(p,cfg);if(cfg.support!=='column-cap')setBearings(p);
  // The supports carry the bracket (or cap) and tie before the new column bases are sized for their reactions.
- const tie=sizedTieRatios(p),q=finishTie(withHaunch(withWeldedBracket(p),cfg),tie);
+ const tie=sizedTieRatios(p),q=finishCapAngle(finishTie(withHaunch(withWeldedBracket(p),cfg),tie));
  // The end stops sized again for the crane bumper force on the finished girder end (bearing stiffener, tie saddle).
  if(q.details?.endStop)q.details.endStop=sizeEndStop(q).stop;
  q.notes+=` ${overhangNote(estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control))}`;
@@ -579,6 +581,9 @@ function attachBracket(p:ProjectInput,cfg:RunwayConfig,shape:string,reach:number
  // flange (the welded rib seats are sized after the tie).
  b.seatProjection=Math.max(b.seatProjection,up(reach+d.bearing.width/2+1.5*inch,inch));
  b.ribSpacing=Math.min(b.ribSpacing,plates.width-2*inch);
+ // The seat covers the bearing plates as laid out (their joint gap and setting tolerance), as its sizing will: the tie is
+ // sized on this bracket before the seat is (bracketSizing), and an uncovered bearing would invalidate every tie trial.
+ b.seatLength=Math.max(b.seatLength,up(2*((p.system==='simple'?simpleSupportInput(p).endGap/2:0)+d.bearing.length+seatSettingTolerance),inch/2));
  if(heavy){b.ribThickness=Math.max(b.ribThickness,1.5*inch);b.seatThickness=Math.max(b.seatThickness,2*inch);b.rootWeld=Math.max(b.rootWeld,.5*inch);}
  d.bracket=b;
  p.details=selectBracketArrangement(d,kind,p.system);b=p.details.bracket!;
@@ -635,28 +640,61 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig){
   Object.assign(t.connection,{thickness});t.connection.weldLength=columnGussetHeight(p);
  }else if(cfg.tie==='cap-angle'&&p.section.kind==='cap'){
   p.details=selectTieArrangement(d,'cap-angle');
-  p.details.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p));
+  p.details.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p));
   return;
  }else if(d.brace.arrangement!=='paired-bars'){
   d.brace.arrangement='paired-bars';delete d.brace.capAngle;
  }
  const bracket=structuredClone(p.details!.bracket),face=p.details!.brace.flangeAttachment?.columnFace;
  p.details=sizeFlangeTie(p,{reach:cfg.reach===undefined?30*inch:undefined}).details;
+ // A flexible plate still over a code limit when sized (its one ply takes the whole force with the imposed movement in
+ // the H1 sum): paired bars on the same saddle, sized from the same column face, where they exceed their limits by less.
+ if(p.details!.brace.arrangement==='flexible-plate'&&p.section.kind!=='cap'){
+  const excess=(q:ProjectInput)=>Object.values(tieSizingRatios(q)).reduce((n,v)=>n+Math.max(0,v-1),0),now=excess(p);
+  if(now>1e-9){
+   const q=structuredClone(p);q.details=selectTieArrangement(q.details!,'paired-bars');delete q.details.brace.referenceDetail;
+   if(bracket)q.details.bracket=structuredClone(bracket);if(face!==undefined)q.details.brace.flangeAttachment!.columnFace=face;
+   q.details=sizeFlangeTie(q,{reach:cfg.reach===undefined?30*inch:undefined}).details;
+   const worst=Object.entries(tieSizingRatios(p)).sort((a,b)=>b[1]-a[1])[0];
+   if(excess(q)<now-1e-9){p.details=q.details;p.notes+=` The flexible plate cannot pass as sized (${worst[0]} ${worst[1].toFixed(2)} for the estimated tie demands): the tie is paired flat bars on the same saddle, each bar taking half the force.`;}
+  }
+ }
  if(p.section.kind==='cap'&&flangeTieGeometry(p)){
   const ratios=tieSizingRatios(p),worst=Object.entries(ratios).sort((a,b)=>b[1]-a[1])[0];
   if(worst&&worst[1]>1){
    // The cap angle slides in its slots and needs no flexible length: the column face goes back where the tie started.
    if(bracket)p.details!.bracket=bracket;if(face!==undefined)p.details!.brace.flangeAttachment!.columnFace=face;
-   p.details=selectTieArrangement(p.details!,'cap-angle');p.details.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p));
+   p.details=selectTieArrangement(p.details!,'cap-angle');p.details.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p));
    p.notes+=` The ${cfg.tie==='flexible-plate'?'flexible plate':'paired flat bars'} on a direct flange saddle do not suit this capped girder (${worst[0]} ${worst[1].toFixed(2)} for the estimated tie demands): the tie is the cap tieback angle bolted to the channel cap.`;
   }
  }
  // A rolled simple-span girder whose sized saddle still exceeds a flange or saddle limit, or on a high-cycle runway: the
  // tie on the bearing stiffener instead (tieOnBearingStiffener).
  const moved=tieOnBearingStiffener(p,{reach:cfg.reach===undefined?30*inch:undefined,highCycle:highCycle(cfg)?`CMAA Class ${cfg.cmaa}, AIST Class ${cfg.buildingClass}`:undefined,bracket,face});
- if(moved){p.details=moved.details;p.notes+=` A direct flange saddle does not suit this rolled girder (${moved.why}): the ${cfg.tie==='flexible-plate'?'tie is paired flat bars, which':'paired flat bars'} bolt to a gusset CJP welded to the tie-side bearing stiffener, the full-depth stiffener pair carrying the tie force into the girder.`;}
+ if(moved){p.details=moved.details;p.notes+=` A direct flange saddle does not suit this rolled girder (${moved.why}): the ${cfg.tie==='flexible-plate'?'tie is paired flat bars, which':'paired flat bars'} bolt to the tie-side bearing stiffener, cut as one plate with its gusset extension past the flange tip (no weld at the gusset), the full-depth stiffener pair carrying the tie force into the girder.`;}
 }
 
+/**
+ * The movements the cap tieback angle is sized for (sizeCapAngle): the girder end rotations and the tie force range of
+ * the flange tie sizing (tieSizingDemands), and the support's deflection at the bearing under one crane, a designed
+ * bracket's deflection limit (it is sized to it) or its service deflection where larger, else 1/16 in for a support by
+ * others (as the flange tie's release travel allows).
+ */
+function capAngleMovementEstimate(p:ProjectInput,sized=false){
+ const m=tieSizingDemands(p),service=sized?bracketServiceDeflection(p):undefined;
+ return {support:service??m.support??inch/16,rotation:m.rotation,serviceRotation:m.serviceRotation,range:m.range};
+}
+/**
+ * The cap tieback angle finished on the sized bracket: sized again for the bracket's own service deflection under one
+ * crane (bracketServiceDeflection) where the first sizing took the deflection limit. The new set is kept where its
+ * hardware along the runway (the angle length and setback the bearings were laid out for) is no larger.
+ */
+function finishCapAngle(p:ProjectInput):ProjectInput{
+ const c=p.details?.brace.capAngle;if(!c||p.details!.brace.arrangement!=='cap-angle'||!p.details!.bracket?.enabled)return p;
+ const next=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p,true));
+ if(next.length<=c.length+1e-6&&next.setback<=c.setback+1e-6)p.details!.brace.capAngle=next;
+ return p;
+}
 /** Fill a configuration's derived values for display: the crane estimate and the building class count. */
 export function configSummary(cfg:RunwayConfig){
  const e=estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control),s=exampleSpectrum(cfg.buildingClass);
