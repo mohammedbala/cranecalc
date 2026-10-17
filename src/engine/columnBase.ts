@@ -3,6 +3,8 @@ import {columnResponse} from './columnAnalysis';
 import {existingColumnEccentricity,existingColumnRailElevation,existingColumnSection,railForce,seismicHeight} from './existingColumn';
 import {anchorGrades,anchorHardware,barSizes,columnBaseElevation,type ColumnBaseInput} from './columnBaseInputs';
 import {minimumFillet} from './connectionStrength';
+import {wrenchClearance} from './endStop';
+import {filletRootReduction,finiteLife,fatigueThresholdKsi,KSI} from './fatigueConstants';
 import {sectionProperties} from './section';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
@@ -287,6 +289,8 @@ export interface ColumnBaseResult {
  /** Braced new columns: the brace uplift against the dead load of the runway, column and footing (service). */
  uplift?:{action:BaseAction;uplift:number;resist:number;required:number};
  /** The anchor rods at the action with the largest tension-shear interaction, and at the largest tension and shear, each its own worst case. */
+ /** Fatigue of the rods, the column flange joint and the plate under the crane duty bins (columnBaseFatigue). */
+ fatigue?:BaseFatigueResult;
  anchors:ReturnType<typeof anchorStrength>&{action:BaseAction};anchorTension?:ReturnType<typeof anchorStrength>&{action:BaseAction};anchorShear?:ReturnType<typeof anchorStrength>&{action:BaseAction};
  footing:{weight:number;qMax:number;soilAction:BaseAction;overturning:number;overturningRequired:number;sliding:number;slidingRequired:number;stabilityAction:BaseAction;slidingAction:BaseAction;
   strength:ReturnType<typeof footingStrength>;shearAction:BaseAction;punchingAction:BaseAction;flexureAction:BaseAction;oneWay:number;oneWayDirection:'L'|'B';twoWay:number;flexure:number;flexureDirection:'L'|'B';
@@ -324,7 +328,7 @@ export function anchorsFor(p:ProjectInput,b:ColumnBaseInput,a:BaseAction,seismic
 }
 export function columnBaseAnalysis(p:ProjectInput,reactions:SupportReactionSet):ColumnBaseResult{
  const b=p.columnBase!,{section:c}=existingColumnSection(p),A=sectionProperties(c).A,f=b.footing,arm=f.thickness+b.grout;
- const design=columnBaseActions(p,reactions,p.method),strength=columnBaseActions(p,reactions,'LRFD'),service=columnBaseActions(p,reactions,'ASD');
+ const design=columnBaseActions(p,reactions,p.method),strength=columnBaseActions(p,reactions,'LRFD'),service=columnBaseActions(p,reactions,'ASD'),cyclic=columnBaseFatigueActions(p,reactions);
  const results=design.map((sp,j):ColumnBaseResult=>{
   const thick=worst(sp.actions,a=>basePlate(p,b,a),r=>r.tRequired),bearing=worst(sp.actions,a=>basePlate(p,b,a),r=>r.bearing);
   const weld=flangeWeldCapacity(p,b),flange=worst(sp.actions,a=>flangeWeldDemand(p,b,a,A),v=>v.demand);
@@ -346,7 +350,7 @@ export function columnBaseAnalysis(p:ProjectInput,reactions:SupportReactionSet):
   const shear=worst(strength[j].actions,a=>footingStrength(p,b,a),r=>Math.max(...ways(r).map(w=>w.Vu/w.phiVc)));
   const punching=worst(strength[j].actions,a=>footingStrength(p,b,a),r=>r.vu/r.phivc),bending=worst(strength[j].actions,a=>footingStrength(p,b,a),r=>Math.max(...ways(r).map(w=>w.Mu/w.phiMn)));
   const oneWay=ways(shear.result).reduce((x,y)=>y.Vu/y.phiVc>x.Vu/x.phiVc?y:x),flexure=ways(bending.result).reduce((x,y)=>y.Mu/y.phiMn>x.Mu/x.phiMn?y:x);
-  return {station:sp.x,
+  return {station:sp.x,fatigue:columnBaseFatigue(p,b,cyclic[j]),
    ...(lift?{uplift:{action:lift.action,...lift.result}}:{}),
    plate:{action:thick.action,bearingAction:bearing.action,Y:thick.result.Y,T:thick.result.T,couple:thick.result.couple,fp:bearing.result.fp,fpMax:bearing.result.fpMax,bearing:bearing.value,l:thick.result.l,tRequired:thick.result.tRequired,
     weld:{demand:Math.max(0,flange.value),capacity:weld,action:flange.action,Mfl:flange.result.Mfl,Ff:flange.result.Ff}},
@@ -394,6 +398,93 @@ export function plateWasherWeld(b:ColumnBaseInput){
  const size=Math.min(minimumFillet(Math.max(t,b.plate.thickness)),edgeMax),length=4*hw.washer;
  return {size,length,phiRn:.75*.6*482.6*Math.SQRT1_2*size*length};
 }
+/**
+ * Fatigue actions at each new-column base, per duty bin, unfactored (AISC 360-16 Appendix 3; the AIST TR-13 §3.10.2.3
+ * fatigue load C_d + f_i C_v + 0.5 C_ss, without impact): with the crane at the column, its reaction scaled to the
+ * bin's lifted fraction f_i at the column eccentricity e and half the side thrust at the rail, the moments adding; with
+ * the crane away, the least crane reaction at the same scale (an uplift from a crane in the next span, else none). At
+ * a braced column the service traction C_ls of each passage adds the rods' upward force at the base, and at a locating
+ * column with a warping-restrained base the bimoment of its torque at the seat. Returned per bin as the two states,
+ * crane at the column (P1, M1, bimoment B1) and away (P2, M2), each with the runway and column dead load: axial
+ * compression positive, the strong-axis moment as a magnitude. The weak-axis seat moment of uneven girder-end
+ * reactions is not included (the rod rows and flange welds take the strong axis).
+ */
+export function columnBaseFatigueActions(p:ProjectInput,reactions:SupportReactionSet){
+ const c=p.existingColumn!,{section}=existingColumnSection(p),props=sectionProperties(section),E=section.E;
+ const spectrum=p.details?.spectrum?.length?p.details.spectrum:[{name:'All cycles',liftFraction:1,cycles:p.fatigue.cycles}];
+ const e=existingColumnEccentricity(p),hs=c.seatElevation,ht=existingColumnRailElevation(p);
+ const kE=Math.abs(columnResponse(c.height,E*props.Ix,c.strong,[{x:hs,moment:1}],[Math.min(ht,c.height)]).reactions.baseMoment);
+ const kS=Math.abs(columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,ht)],[hs]).reactions.baseMoment);
+ const braced=designsBracing(p),restrained=torsionBase(p)==='warping-restrained',offset=braced?girderOffset(p):0,column=props.weight*c.height;
+ return reactions.supports.map((sp,j)=>{
+  const share=braced?braceShare(p,j):undefined,U=share?reactions.Cls*share.vertical:0;
+  const B=share?.locating&&restrained?Math.abs(baseWarping(section,reactions.Cls*offset,hs).B):0;
+  const crane=sp.Cd+sp.Cv,least=Math.min(0,sp.craneMinimum);
+  return {x:sp.x,e,bins:spectrum.map(v=>{
+   const k=crane>0?(sp.Cd+v.liftFraction*sp.Cv)/crane:0,R=k*crane,Rmin=k*least,P0=sp.D+column;
+   return {name:v.name,cycles:v.cycles,P1:P0+R-U,M1:Math.abs((sp.D+R)*e*kE)+.5*sp.Css*kS,B1:B,P2:P0+Rmin,M2:Math.abs((sp.D+Rmin)*e*kE)};
+  })};
+ });
+}
+export type BaseFatigueActions=ReturnType<typeof columnBaseFatigueActions>[number];
+/**
+ * Stress ranges of the base under one support's fatigue actions (columnBaseFatigueActions), for the base as entered:
+ * - anchor rods (Table A-3.1 item 8.5, snug-tightened, on the tensile stress area): the row tension of each state by
+ *   the elastic base plate method (elasticRowTension: triangular bearing on the concrete, the rods elastic, n = E_s/E_c),
+ *   the range shared by the rods of the row; with a base bimoment the worse half of the plate takes P/2 and
+ *   M/2 + 2B/b_f on half the rods (as basePlate);
+ * - column flange at its joint to the plate: ΔM/S_x − ΔP/A on the tension flange plus the warping stress of the
+ *   flange lateral moment ΔB/h_0 (Table A-3.1 item 5.6 for the pair of fillets: toe C, root C″ with R_FIL; item 5.4
+ *   for a CJP flange joint: C);
+ * - base plate at the toe of the flange fillets: the row tension ΔT on its lever x to the flange (the plate thickness
+ *   check's tension side), 6ΔT x/(B t²) (item 5.7 analog, Category C).
+ */
+export function columnBaseFatigue(p:ProjectInput,b:ColumnBaseInput,a:BaseFatigueActions){
+ const {section:c}=existingColumnSection(p),props=sectionProperties(c),pl=b.plate,an=b.anchors;
+ const N=pl.N,f=N/2-an.edge,x=f-c.d/2+c.tf/2,Ase=anchorArea(an.diameter),h0=c.d-c.tf;
+ const bins=a.bins.map(v=>{
+  const half=v.B1>0,rods=half?Math.max(1,an.perRow/2):an.perRow,width=half?pl.B/2:pl.B;
+  const T=(P:number,M:number)=>elasticRowTension(b,width,rods,half?P/2:P,half?M/2:M);
+  const row=Math.max(0,T(v.P1,v.M1+(half?4*v.B1/c.bf:0))-T(v.P2,v.M2)),dP=v.P1-v.P2,dM=v.M1-v.M2;
+  return {name:v.name,cycles:v.cycles,rod:row/rods/Ase,flange:Math.max(0,dM/props.Sx-dP/props.A)+(v.B1/h0)*6/(c.tf*c.bf**2),plate:6*row*Math.max(0,x)/(width*pl.thickness**2),row};
+ });
+ const cycles=a.bins.reduce((s,v)=>s+v.cycles,0),most=(k:'rod'|'flange'|'plate')=>Math.max(0,...bins.map(v=>v[k]));
+ const C=finiteLife(4.4,cycles),ksi=KSI,cjp=pl.flangeJoint==='cjp',R=cjp?1:filletRootReduction(c.tf,pl.weld);
+ return {x:a.x,cycles,bins,area:Ase,
+  // Item 8.5: Cf = 3.9 × 10^8 (the E′ constant), F_TH = 7 ksi.
+  rod:{range:most('rod'),capacity:Math.max(finiteLife(.39,cycles),7*ksi),threshold:7*ksi},
+  toe:{range:most('flange'),capacity:Math.max(C,fatigueThresholdKsi.C*ksi),threshold:fatigueThresholdKsi.C*ksi},
+  root:cjp?undefined:{range:most('flange'),capacity:R*C,R},
+  plate:{range:most('plate'),capacity:Math.max(C,fatigueThresholdKsi.C*ksi),threshold:fatigueThresholdKsi.C*ksi}};
+}
+export type BaseFatigueResult=ReturnType<typeof columnBaseFatigue>;
+/**
+ * Anchor row tension of a base plate of width w under service P (compression positive) and M by the elastic method
+ * (AISC Design Guide 1, 1st ed., §3.4; Blodgett): within the kern (e = M/P ≤ N/6) the plate bears throughout and the
+ * rods take nothing; beyond it the triangular bearing length Y solves Y³ + 3(e − N/2)Y² + K(f + e)Y − K(f + e)(N/2 + f)
+ * = 0, K = 6nA_s/w, A_s the tension row's stress area, n = E_s/E_c (E_c = 57,000√f′c psi), f the row from the column
+ * centerline, and T = P(e − N/2 + Y/3)/(N/2 − Y/3 + f). Net uplift: both rows in tension, T = −P/2 + M/(2f).
+ */
+export function elasticRowTension(b:ColumnBaseInput,w:number,rods:number,P:number,M:number){
+ const N=b.plate.N,f=N/2-b.anchors.edge,M0=Math.abs(M);
+ if(P<=0)return Math.max(0,-P/2+M0/(2*f));
+ const e=M0/P;if(e<=N/6)return 0;
+ const n=200000/(57000*sqrtPsi(b.concrete.fc)*psi),K=6*n*rods*anchorArea(b.anchors.diameter)/w;
+ const g=(Y:number)=>Y**3+3*(e-N/2)*Y**2+K*(f+e)*Y-K*(f+e)*(N/2+f);
+ let lo=0,hi=N;for(let i=0;i<80;i++){const m=(lo+hi)/2;if(g(m)>0)hi=m;else lo=m;}
+ const Y=(lo+hi)/2;return Math.max(0,P*(e-N/2+Y/3)/(N/2-Y/3+f));
+}
+/**
+ * Clearance from each anchor rod row to the column flange face, N/2 − edge − d/2, against what must fit there: the
+ * plate washer's half width, its fillet to the base plate and the column flange fillet to the plate, toe to toe; and
+ * the socket tightening clearance of the nut (wrenchClearance, AISC Manual Table 7-15, about 1.6 rod diameters)
+ * measured to the toe of the flange fillet.
+ */
+export function rodClearance(p:ProjectInput,b:ColumnBaseInput){
+ const {section:c}=existingColumnSection(p),hw=anchorHardware(b.anchors.diameter),flange=b.plate.weld,washerWeld=plateWasherWeld(b).size;
+ const washer=hw.washer/2+washerWeld+flange,wrench=wrenchClearance(b.anchors.diameter)+flange;
+ return {available:b.plate.N/2-b.anchors.edge-c.d/2,required:Math.max(washer,wrench),washer,wrench,washerWeld,flange,washerWidth:hw.washer,socket:wrenchClearance(b.anchors.diameter)};
+}
 function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
  const b=p.columnBase!,u=p.units,f=(v:number,q:Parameters<typeof format>[1]='force')=>format(v,q,u,3),checks:CheckResult[]=[];
  const add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,refs:string[],caseId?:string)=>checks.push({id:'base-'+id,group:'New column base',title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:Number.isFinite(demand)&&Number.isFinite(capacity)&&capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds:refs,caseId});
@@ -409,6 +500,16 @@ function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
  add('anchor-shear','Anchor rods · shear',as.V,as.phiVn,'force','\\phi V_n=\\min(\\phi V_{sa},\\phi V_{cbg},\\phi V_{cpg})',`${rods(as)} Largest shear of all the actions. All rods share the base shear with a grout pad (0.8) and no friction credit${as.torque?`; the base torque ${f(as.torque,'moment')} shears each rod T r/Σr² normal to its radius, added as a vector to its share of the direct shear, the most loaded rod times the rod count giving the group demand`:''}. Steel ${f(as.steelV)}, pryout ${f(as.pryout)}; breakout toward the footing edge ${f(as.breakoutV)} across the runway (Vx = ${f(as.Vx)})${as.Vy>0?` and ${f(as.breakoutVy)} along it (Vy = ${f(as.Vy)})`:''}, each direction checked separately.`,['aci-318'],as.action.id);
  {const w=plateWasherWeld(b),n=2*b.anchors.perRow;
   add('washer-weld','Plate washer · weld to base plate',as.V/n,w.phiRn,'force','\\phi R_n=0.75\\cdot0.60F_{EXX}\\cdot0.707w\\cdot4b_w',`${at}, ${as.action.id}: the most loaded rod's shear, V/${n}. ${f(w.size,'length')} fillet all around each ${f(anchorHardware(b.anchors.diameter).washer,'length')} plate washer, E70XX, L = ${f(w.length,'length')}; Table J2.4 minimum for the thicker part, within the J2.2b edge maximum.`,['aisc-connections','dg1'],as.action.id);}
+ {const g=rodClearance(p,b),L=(v:number)=>f(v,'length');
+  add('rod-clear','Anchor rods · clearance to the column flange',g.required,g.available,'length','c=\\tfrac N2-e_{edge}-\\tfrac d2\\ge\\max\\left(\\tfrac{b_w}2+w_w+w_f,\\;C_1+w_f\\right)',`Each rod row ${L(g.available)} from the column flange face. The ${L(g.washerWidth)} plate washer's half width, its ${L(g.washerWeld)} fillet to the plate and the ${L(g.flange)} column flange fillet, toe to toe: ${L(g.washer)}; the nut's socket tightening clearance C1 = ${L(g.socket)} (AISC Manual Table 7-15, about 1.6 rod diameters) to the toe of the flange fillet: ${L(g.wrench)}. The sizing moves the rod rows out (a longer plate) until both fit.`,['dg1','aisc-connections']);}
+ if(r.fatigue){
+  const z=r.fatigue,s=(v:number)=>f(v,'stress'),n=z.cycles.toLocaleString('en-US'),rated=z.bins.reduce((x,y)=>y.rod+y.flange>x.rod+x.flange?y:x);
+  const basis=`${at}: crane duty bins unfactored (AIST TR-13 §3.10.2.3: C_d + f_i C_v + 0.5 C_ss, no impact), crane at the column against crane away, the largest bin range (${rated.name}) taken for all n_SR = ${n} cycles (AISC 360-16 Appendix 3, Eq. A-3-1)`;
+  add('anchor-fatigue','Anchor rods · fatigue (A-3.1 item 8.5)',z.rod.range,z.rod.capacity,'stress','f_{sr}=\\frac{T_1-T_2}{n_rA_t},\\;T=P\\frac{e-N/2+Y/3}{N/2-Y/3+f}\\le F_{SR}=\\left(\\frac{C_f}{n_{SR}}\\right)^{0.333}\\ge F_{TH}',`${basis}. Snug-tightened rods, AISC 360-16 Table A-3.1 item 8.5 (Cf = 3.9 × 10^8, F_TH = ${s(z.rod.threshold)}) on the tensile stress area ${f(z.area,'area')}. Row tension of each state by the elastic base plate method (triangular bearing, elastic rods, n = E_s/E_c; Design Guide 1, 1st ed. §3.4), the runway and column dead load in both: range ΔT = ${f(rated.row)} per row of ${b.anchors.perRow}.`,['dg1','aisc-fatigue']);
+  add('weld-fatigue-toe','Column flange at the base plate joint · fatigue (toe)',z.toe.range,z.toe.capacity,'stress','f_{sr}=\\frac{\\Delta M}{S_x}-\\frac{\\Delta P}{A}+\\frac{6\\Delta B/h_0}{t_fb_f^2}\\le F_{SR}\\ge F_{TH}',`${basis}. Category C, the column flange at the toe of its ${b.plate.flangeJoint==='cjp'?'CJP groove weld (Table A-3.1 item 5.4)':'pair of fillets (Table A-3.1 item 5.6)'}, F_TH = ${s(z.toe.threshold)}; tension-flange stress range of the base moment less the axial range, with the warping stress of any base bimoment (a warping-restrained base).`,['aisc-fatigue']);
+  if(z.root)add('weld-fatigue-root','Column flange fillets to the base plate · fatigue (root)',z.root.range,z.root.capacity,'stress','f_{sr}\\le R_{FIL}F_{SR},\\;R_{FIL}=\\frac{0.06+0.72\\,w/t_p}{t_p^{0.167}}\\le1',`${basis}. Category C″, Table A-3.1 item 5.6, crack from the root of the ${f(b.plate.weld,'length')} fillet pair through the throat, with R_FIL = ${z.root.R.toFixed(3)} (Eq. A-3-6, t_p the flange thickness); no threshold. The flange stress range as for the toe. A CJP flange joint removes this root detail.`,['aisc-fatigue']);
+  add('plate-fatigue','Base plate at the flange fillet toe · fatigue',z.plate.range,z.plate.capacity,'stress','f_{sr}=\\frac{6\\,\\Delta T\\,x}{B\\,t^2}\\le F_{SR}\\ge F_{TH}',`${basis}. Category C (base metal at the toe of a transverse fillet), F_TH = ${s(z.plate.threshold)}: the anchor row's tension range on its lever x to the flange, the plate thickness check's tension side, over the plate width.`,['aisc-fatigue']);
+ }
  add('anchor-interaction','Anchor rods · tension and shear',a.interaction,1,'ratio','\\frac{N_{ua}}{\\phi N_n}+\\frac{V_{ua}}{\\phi V_n}\\le1.2',`${at}, ${a.action.id}: ACI 318-19 §17.8; a ratio of 0.2 or less is checked alone. Reported as a fraction of 1.2.`,['aci-318'],a.action.id);
  add('soil','Footing · soil bearing',ft.qMax,b.soil.allowable,'pressure','q_{max}=\\frac{P}{BL}\\left(1+\\frac{6e}{L}\\right)\;\\text{or}\;\\frac{2P}{3B(L/2-e)}',`${at}, ${ft.soilAction.id} (service): column load plus footing and soil ${f(ft.weight)}; base moment plus base shear times the footing and grout depth.`,['aci-318'],ft.soilAction.id);
  add('overturning','Footing · overturning',ft.overturningRequired,ft.overturning,'ratio',`FS=\\frac{W_D\\,L/2-M_{D,e}}{M_{ot}}\\ge${ft.overturningRequired}`,`${at}, ${ft.stabilityAction.id}${ft.overturningRequired<1.5?' (seismic, reduced dead load, FS 1.0)':''}: dead load of the runway, column, footing and soil about the footing edge against the side thrust (or longitudinal force) moment at the footing base. Across the runway the edge on the bracket side governs, with the runway dead reaction's eccentric moment deducted from the restoring moment; the crane vertical load is not credited.`,['aci-318'],ft.stabilityAction.id);

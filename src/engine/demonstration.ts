@@ -77,10 +77,11 @@ export function demonstrationProject():ProjectInput {
  // stiffener (stiffenerTieGeometry), the stiffener pair carrying the tie force into the girder. With the restraint at the
  // tie line, a saddle 5 in below the flange leaves the rail twist over its limit and the saddle's flange bending and
  // fatigue near theirs; the bars just under the flange keep the twist within it. Proportions as sizeFlangeTie gives
- // them for the 28 in column face: 5/16 x 4 3/4 bars, 3/4 in gussets, 5/8 in bolts at 1 3/4 in pitch, 3/16 in travel.
+ // them for the 28 in column face: 5/16 x 4 3/4 bars, 3/4 in gussets, 5/8 in bolts at 2 in pitch (the sleeved column-end
+ // slots keep d_b + 1/16 in between rows, tie-release-pitch), 3/16 in travel.
  {const t=p.details.brace;t.flangeAttachment!.enabled=false;
-  Object.assign(t,{width:4.75*inch,thickness:.3125*inch,length:22.25*inch,reach:22.25*inch,gussetThickness:.75*inch,connectionLength:4.25*inch});
-  Object.assign(t.connection,{pitch:1.75*inch,edge:inch,thickness:.3125*inch});t.release={...t.release!,travel:.1875*inch};}
+  Object.assign(t,{width:4.75*inch,thickness:.3125*inch,length:22.25*inch,reach:22.25*inch,gussetThickness:.75*inch,connectionLength:4.5*inch});
+  Object.assign(t.connection,{pitch:2*inch,edge:inch,thickness:.3125*inch});t.release={...t.release!,travel:.1875*inch};}
  // Bolted end bearings: standard holes at each bay's locating left end, long slots at its sliding right end.
  // A 1/2-in sliding allowance keeps the 3/4-in bolt slots within the AISC J3.2 long-slot limit.
  p.details.endBearing={...structuredClone(defaultEndBearing),enabled:true};p.details.simpleSupport={...p.details.simpleSupport!,guideTravel:.5*inch};
@@ -187,7 +188,8 @@ export function newColumnDemonstrationProject():ProjectInput {
  delete p.drawing!.existingEvaluation;
  const shape='W14X120',w=aiscShapeByName(shape)!,d=p.details!,cap=p.section.kind==='cap'?p.section.capTw:0;
  const base={...structuredClone(defaultColumnBase),enabled:true,
-  plate:{...defaultColumnBase.plate,N:23*inch,B:18*inch,thickness:1.25*inch},anchors:{...defaultColumnBase.anchors,diameter:inch,embedment:15*inch},
+  // 1 1/4 in rods for the thread fatigue range (base-anchor-fatigue); the rows clear the flange fillets by the nut's socket clearance.
+  plate:{...defaultColumnBase.plate,N:23.5*inch,B:18*inch,thickness:1.25*inch},anchors:{...defaultColumnBase.anchors,diameter:1.25*inch,embedment:15*inch},
   footing:{...defaultColumnBase.footing,L:6.5*foot,B:6.5*foot,thickness:24*inch,bar:'#6' as const,spacing:10*inch},
   source:'Fictitious geotechnical report GEO-02: 3,000 psf allowable (net), base friction 0.35, 120 pcf; interior heated building, frost not applicable. Concrete 4,000 psi; ASTM A615 Grade 60 bars; ASTM F1554 Grade 36 rods',confirmed:true};
  // Rail top 20 ft above the floor: the seat sits below it by the rail, girder (with cap) and bearing plate,

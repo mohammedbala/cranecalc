@@ -68,6 +68,7 @@
 .outline-button.primary:hover:not(:disabled){background:#294f3b}
 .outline-button:disabled{opacity:.6}
 .config-current{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px;color:#5f6f63;background:#fff;border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin:-8px 0 16px}
+.config-selections{flex-basis:100%;border-collapse:collapse;font-size:10px;color:#3f4a41}.config-selections caption{text-align:left;font-weight:600;padding:4px 0}.config-selections th,.config-selections td{text-align:left;vertical-align:top;border-top:1px solid var(--border);padding:4px 6px}.config-selections thead th{font-weight:600;color:#617355}
 .configurator{scroll-margin-top:12px;border-top:1px solid var(--border);padding-top:22px}
 .config-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
 .config-form fieldset{border:1px solid var(--border);border-radius:6px;background:#fff;padding:12px 14px 2px;margin:0 0 12px;min-width:0}

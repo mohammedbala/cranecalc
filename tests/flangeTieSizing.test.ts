@@ -101,16 +101,17 @@ describe('configured tie proportions',()=>{
   // t01's saddle, under the tie force at the tie line, exceeds its flange limits: the tie is on the bearing stiffener.
   const p=templateProject('t01'),t=p.details!.brace,c=t.connection,g=stiffenerTieGeometry(p)!,r=tieRelease(p)!;
   expect(validateProject(p)).toEqual([]);expect(flangeTieGeometry(p)).toBeUndefined();
-  // 1/2 in bolts: pitch 2 2/3 d = 1.33 in -> 1 3/8 in, edge 1.5 d = 0.75 in.
+  // 1/2 in bolts: pitch 2 2/3 d = 1.33 in -> 1 3/8 in, edge 1.5 d = 0.75 in; the sleeved column-end slots (1 1/8 in
+  // wide) keep d_b + 1/16 in between rows: pitch 1 3/4 in (tie-release-pitch).
   expect(tieBoltSpacing(.5*inch)).toEqual({pitch:1.375*inch,edge:.75*inch});
-  expect(c.pitch).toBeCloseTo(1.375*inch,9);expect(c.edge).toBeCloseTo(.75*inch,9);
+  expect(c.pitch).toBeCloseTo(r.minimumPitch,9);expect(c.pitch).toBeCloseTo(1.75*inch,9);expect(c.edge).toBeCloseTo(.75*inch,9);
   // Slot travel: 1/16 in bracket deflection limit x 1.25 + no setback (the tie at the bearing center) + 1/16 + 1/32 in
   // = 0.172 in -> 3/16 in.
   expect(t.release!.travel).toBeCloseTo(3/16*inch,9);
   expect(c.gauge).toBeCloseTo(r.minimumGauge,9);expect(t.width).toBeGreaterThanOrEqual(c.gauge+2*c.edge-1e-9);
-  // The reach grows to 21 in for the bars' flexible length, the bars widened for the axial share of H1 (a wider bar
-  // adds compression strength, not imposed-movement ratio): 22 in with bars at most 3 in wider than their bolt pattern.
-  expect(p.details!.bracket!.reach).toBeCloseTo(21*inch,9);expect(g.face).toBeCloseTo(21*inch,9);
+  // The reach grows to 22 in for the bars' flexible length past the longer bolt groups (the 1 3/4 in row pitch), the
+  // bars widened for the axial share of H1 (a wider bar adds compression strength, not imposed-movement ratio).
+  expect(p.details!.bracket!.reach).toBeCloseTo(22*inch,9);expect(g.face).toBeCloseTo(22*inch,9);
   const free=t.length-2*((c.rows-1)*c.pitch+2*c.edge)-columnGussetExtension(p);
   expect(free/inch).toBeGreaterThan(8);
   // Under the sizing estimates (the fatigue range 1.25 H against the analysis's 1.05 H) every ratio is near or below one;
@@ -125,9 +126,9 @@ describe('configured tie proportions',()=>{
   expect(sizingLimit(r,'tie-pitch')).toBe(1);expect(sizingLimit(r,'tie-move-strength',.95)).toBe(1);
  });
  it('sizes the tie before the bracket: the bracket at the reach the tie needs, the release travel the tie\'s own',()=>{
-  // The 1/4 in bars on the bearing stiffener pass at a 21 in reach, so the welded seats are sized there.
+  // The 1/4 in bars on the bearing stiffener pass at a 22 in reach, so the welded seats are sized there.
   const p=templateProject('t01'),b=p.details!.bracket!,t=p.details!.brace;
-  expect(b.reach).toBeCloseTo(21*inch,9);expect(stiffenerTieGeometry(p)!.face).toBeCloseTo(b.reach,9);expect(t.length).toBeCloseTo(t.reach,9);
+  expect(b.reach).toBeCloseTo(22*inch,9);expect(stiffenerTieGeometry(p)!.face).toBeCloseTo(b.reach,9);expect(t.length).toBeCloseTo(t.reach,9);
   // The slots take the bracket at its deflection limit with the cranes and impact, the end rotation over the setback
   // and the positioning allowance: the bracket sizing's release coordination holds wherever its deflection check does.
   const set=bracketSizingSet(p),rel=set.release!,r=bracketSizingRatios(p,set);

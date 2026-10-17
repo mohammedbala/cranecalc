@@ -7,7 +7,7 @@ import {format} from '../engine/units';
 import {endStopGeometry,stopBumperForce,activeEndStop,wrenchClearance} from '../engine/endStop';
 import {craneCombinations} from '../engine/aistLoads';
 import {boltProperties} from '../engine/connectionStrength';
-import {drawingLength,plateInches,dimensionLength} from './drawingFormat';
+import {drawingLength,plateInches,dimensionLength,onDimensionGrid} from './drawingFormat';
 import {refDim,dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,labelCaps,textWidth,n,breakLine,sectionCut,capChannelSection,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
@@ -90,7 +90,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // Face plate height from the top of the base plate, between the girder end and the stop: the upper extension line
   // from the top of the face plate, the lower from the back of the base plate.
   {const xh=X(g.back)-14;svg+=line([X(g.faceBack)-gap,top],[xh-over,top])+line([X(g.back)-gap,yb],[xh-over,yb])+dimLineV(top,yb,xh,dim(H));}
-  svg+=dimH(X(0),X(xs),cut+gap,cut+24,`${dim(xs)} TO BEARING STIFFENER C/L`,'left');
+  svg+=dimH(X(0),X(xs),cut+gap,cut+24,onDimensionGrid(xs,p.units)?`${dim(xs)} TO BEARING STIFFENER C/L`:'BEARING STIFFENER AT C/L OF BRG. PL','left');
   // Labels right of the rail, from above the face plate to below the girder cut, so they follow the drawn size.
   const lx=Math.max(X(shown)+48,bc[0]+br*kk+70);
   svg+=labelColumn([

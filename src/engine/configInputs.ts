@@ -5,6 +5,19 @@ import {z} from 'zod';
  * how it is supported and tied back, and whether the columns are existing or new). US customary values as the user
  * states them: US tons, feet and inches. configurator.ts turns them into a complete project.
  */
+/**
+ * One configurator selection, as recorded on the built project: a member or part that differs from the configuration
+ * as entered, or that the configurator chose where the choice was left blank, with the governing reason (the sizing
+ * check and ratio that drove it, or the configuration rule).
+ */
+export const configSelectionSchema=z.object({
+ item:z.string().max(60),
+ /** As entered; 'configurator default' where the choice was left blank. */
+ entered:z.string().max(160),
+ designed:z.string().max(200),
+ reason:z.string().max(800),
+});
+export type ConfigSelection=z.infer<typeof configSelectionSchema>;
 export const supportKinds=['by-others','twin-rib','haunched-seat','rolled-corbel','tapered-haunch','column-cap'] as const;
 export const tieKinds=['paired-bars','flexible-plate','cap-angle'] as const;
 export const runwayConfigSchema=z.object({
@@ -53,6 +66,8 @@ export const runwayConfigSchema=z.object({
   * strut, or the girder-line strut where the column fails torsion from the girder offset with it.
   */
  longitudinalExit:z.enum(['girder-strut','column-strut','eave-strut']).optional(),
+ /** Set by the configurator on the built project (buildProject), never read as a choice: its selection log. */
+ selections:z.array(configSelectionSchema).max(24).optional(),
 });
 export type RunwayConfig=z.infer<typeof runwayConfigSchema>;
 export type SupportKind=RunwayConfig['support'];

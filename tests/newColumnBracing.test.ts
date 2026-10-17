@@ -19,7 +19,9 @@ const column=existingColumnSection(p).section;
 
 describe('rod X-bracing between new freestanding columns',()=>{
  it('designs the rods, connections, strut, collector and seismic along the runway with every check passing',()=>{
-  expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
+  // Open only for the engineer of record's acceptance of the column twist (column-twist-basis, no limit applied).
+  expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);
+  expect(s.checks.filter(c=>c.status==='unverified'||c.status==='incomplete'||c.status==='unsupported').map(c=>`${c.id} ${c.status}`)).toEqual(['column-twist-basis unverified']);
   expect(s.checks.filter(c=>c.status==='fail'&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
   for(const id of ['brace-tension','brace-pin','brace-pin-bearing','brace-gusset-rupture','brace-gusset-tearout','brace-gusset-yield','brace-gusset-weld','brace-column-web',
    'brace-strut','brace-strut-slenderness','brace-strut-tension','brace-strut-slip','brace-strut-bolts','brace-strut-bearing','brace-strut-block','brace-strut-tab','brace-seat-weld','brace-collector-bearing',

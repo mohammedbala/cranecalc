@@ -111,7 +111,9 @@ describe('New freestanding column package',()=>{
   const base=s.checks.filter(c=>c.group==='New column base');
   expect(base.map(c=>c.id)).toEqual(expect.arrayContaining(['base-bearing','base-plate','base-weld','base-anchor-tension','base-anchor-shear','base-anchor-interaction','base-soil','base-overturning','base-sliding','base-frost','base-one-way','base-two-way','base-flexure','base-min-steel','base-development','base-bar-spacing']));
   expect(s.checks.filter(c=>c.status==='fail'&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
-  expect(s.eligible).toBe(true);
+  // Eligible once the engineer of record accepts the column twist (column-twist-basis).
+  expect(s.eligible).toBe(false);expect(s.checks.find(c=>c.id==='column-twist-basis')?.status).toBe('unverified');
+  p.existingColumn!.twistAcceptance='Fictitious EOR acceptance of the seat twist';expect(calculate(p).eligible).toBe(true);
   // The footing rotating on the soil adds to the fixed-base column drift at the rail.
   const drift=s.checks.find(c=>c.id==='base-drift')!,column=s.checks.find(c=>c.id==='column-drift')!;
   const d=baseDrift(p,s.existingColumn!);
@@ -128,7 +130,7 @@ describe('New freestanding column package',()=>{
   for(const view of ['base-plate-plan','footing-plan','footing-section','new-column-notes'])expect(columns.svg).toContain(`data-view="${view}"`);
   const all=set.map(v=>texts(v.svg)).join(' ');
   expect(all).not.toContain('NOT IN SET');
-  expect(texts(columns.svg)).toContain('4 - 1" DIA. ASTM F1554 GR. 36');
+  expect(texts(columns.svg)).toContain('4 - 1 1/4" DIA. ASTM F1554 GR. 36');
   expect(texts(columns.svg)).toContain(`T.O.R. EL. 120'-0"`);
   const elevation=detailReferences(set).get('NEW RUNWAY COLUMN / ELEVATION')!;
   expect(elevation).toMatch(new RegExp(`^\\d+/${columns.number}$`));

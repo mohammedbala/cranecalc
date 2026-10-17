@@ -1,5 +1,6 @@
 import {railBearsOnStops} from '../engine/railLayout';
-import type {CalculationSnapshot} from '../engine/types';
+import type {CalculationSnapshot,ProjectInput} from '../engine/types';
+import {activeColumnCap} from '../engine/columnCapInputs';
 import {deliveredForces,type DeliveredForces,type DeliveredSet} from '../engine/forcesDelivered';
 import {drawingElevation} from '../components/drawingFormat';
 import {caseLabel,sig3,tidyNumbers} from './reportParts';
@@ -13,6 +14,8 @@ import {toDisplay,unit} from '../engine/units';
  */
 const esc=(v:unknown)=>caseLabel(tidyNumbers(String(v??''))).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 export const deliveredHeaders=['Grid','Set','Combination','V','Mx = V·e','My,seat','H tie','H seat','F'];
+/** The headers for a project: on a column cap the top-flange force is the end fork's (H top), there is no tie. */
+export const deliveredHeadersOf=(p:ProjectInput)=>activeColumnCap(p)?deliveredHeaders.map(v=>v==='H tie'?'H top':v):deliveredHeaders;
 
 /** A set label in sentence case, "and" for "&": "Max V and max F". */
 const sentence=(v:string)=>{const t=v.replace(/\s*&\s*/g,' and ');return t.charAt(0).toUpperCase()+t.slice(1);};
@@ -37,7 +40,10 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
  const grids=(v:number[])=>v.length>1?`grids ${v.slice(0,-1).join(', ')} and ${v.at(-1)}`:`grid ${v[0]}`;
  const support=s.detailResults?.taperedHaunch?'haunch':s.input.details?.bracket?.enabled?'bracket':'support';
  // Where V acts: from the column centerline, or from the column face where the seat and the column are by others.
- const far=d.web!==undefined&&d.e!==undefined&&d.e-d.web>1e-3?` (the far edge of the bearing plate, a conservative reaction position; the girder web is at ${len(d.web)})`:'';
+ // The reaction beyond the web line: the far bearing edge (half the plate width), or on a new column designed here the
+ // web line plus the larger of the rail eccentricity and the bearing plate's kern (columnReactionOffset).
+ const half=(s.input.details?.bearing.width??0)/2,beyond=d.web!==undefined&&d.e!==undefined?d.e-d.web:0;
+ const far=beyond>1e-3?Math.abs(beyond-half)<1e-3?` (the far edge of the bearing plate, a conservative reaction position; the girder web is at ${len(d.web)})`:` (the girder web line at ${len(d.web)} plus ${len(beyond)}, the larger of the rail eccentricity and the bearing plate's kern b/6, for a full-contact bearing under the web's bearing stiffeners)`:'';
  const at=d.e===undefined?'; e, from the column centerline to the reaction, is not established here (the column is by others): Mx = V·e with the surveyed seat position (column strong axis).'
   :d.eFrom==='face'?`, at e = ${len(d.e)} from the column face${far}. Mx = V·e is the moment at the column face; for the column centerline add V times half the column depth (column by others).`
   :`, at e = ${len(d.e)} from the column centerline${far}. Mx = V·e (column strong axis).`;
@@ -45,8 +51,9 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
  return [`Factored ${s.input.method}. Each row is one concurrent set; do not combine rows.`,
   `V: girder reactions on the seat${d.elevation?el(d.elevation.seat):''}${at}`,
   `My,seat: moment of the unbalanced end reactions about the grid (column weak axis).`,
-  `H tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the tie line${d.elevation?el(d.elevation.tie):''}${bars!==undefined&&d.elevation?`, delivered to the column by the tie at its centerline${el(bars)}`:''}; design value ${f(d.tie.design)}.`,
-  `H seat: bottom-flange restraint force at the bearing bolts, ∓ opposite in sign to H tie.`,
+  activeColumnCap(s.input)?`H top: top-flange restraint force of the end fork plus the Appendix 6 brace force (${f(d.brace.force)}), at the girder top flange${d.elevation?el(d.elevation.tie):''}, carried by the bearing stiffeners to the bolted bottom flange and the cap (no top-flange tie); design value ${f(d.tie.design)}.`
+   :`H tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the tie line${d.elevation?el(d.elevation.tie):''}${bars!==undefined&&d.elevation?`, delivered to the column by the tie at its centerline${el(bars)}`:''}; design value ${f(d.tie.design)}.`,
+  `H seat: bottom-flange restraint force at the bearing bolts, ∓ opposite in sign to H ${activeColumnCap(s.input)?'top':'tie'}.`,
   `F: longitudinal force at the locating bearing, + toward the next grid.${d.stopGrids.length?` Stop force ${f(d.stop)} at ${grids(d.stopGrids)} only.`:''}${railBearsOnStops(s.input)?' Traction reaches the bay under the crane, or through the floating rail string an end bay at its stop.':''}`,
   ...(d.strut?[`Strut: the crane-level strut by others ${d.strut.location==='girder-line'?`on the girder line, ${len(d.strut.offset)} from the column centerline,`:'at the column centerline'} at the seat level of grids ${d.strut.grids.join(', ')}${d.strut.stiffness!==undefined?`, axial stiffness k ≥ ${sig3(d.strut.stiffness,'stiffness',u)} at each seat`:''}: design force F = ${f(d.strut.force)} (traction ${f(d.strut.traction)}${d.strut.stop?`, stop ${f(d.strut.stop)}`:''}), carried to the braced bay; the existing column check relies on it.`]:[]),
   `V includes the bearing hardware on the seat; the ${support} and other support steel (${f(Math.max(0,...(s.supportReactions?.supports??[]).map(v=>v.Ds)))} per grid, dead) goes straight into the column.`].join(separator);
@@ -54,8 +61,8 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
 
 export function deliveredTableHtml(s:CalculationSnapshot,compact=false){
  const d=deliveredForces(s),rows=deliveredRows(s,d);if(!rows.length)return '';
- const sub=(h:string)=>h.replace(/^M(x|y,seat|y)/,'M<sub>$1</sub>').replace(/^H (tie|seat)$/,'H<sub>$1</sub>');
- const head=deliveredHeaders.map(sub);
- return `<table class="delivered${compact?' compact':''}"><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map((v,i)=>`<td${i>2?' class="num"':''}>${i===0?`<b>${esc(v)}</b>`:esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table><p class="key${compact?' counts':''}">${esc(deliveredNote(s,d,'\n')).replace(/\bM(x|y,seat|y)\b/g,'M<sub>$1</sub>').replace(/\bH (tie|seat)\b/g,'H<sub>$1</sub>').replace(/\n/g,'<br/>')}</p>`;
+ const sub=(h:string)=>h.replace(/^M(x|y,seat|y)/,'M<sub>$1</sub>').replace(/^H (tie|top|seat)$/,'H<sub>$1</sub>');
+ const head=deliveredHeadersOf(s.input).map(sub);
+ return `<table class="delivered${compact?' compact':''}"><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map((v,i)=>`<td${i>2?' class="num"':''}>${i===0?`<b>${esc(v)}</b>`:esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table><p class="key${compact?' counts':''}">${esc(deliveredNote(s,d,'\n')).replace(/\bM(x|y,seat|y)\b/g,'M<sub>$1</sub>').replace(/\bH (tie|top|seat)\b/g,'H<sub>$1</sub>').replace(/\n/g,'<br/>')}</p>`;
 }
 export const deliveredCss=`table.delivered{font-size:8.5px}table.delivered th:nth-child(n+4){text-align:right}table.delivered.compact{font-size:7.5px}table.delivered td.num{text-align:right;white-space:nowrap}table.by-others.matrix{font-size:7.5px}table.by-others.compact td{padding:1px 4px}`;

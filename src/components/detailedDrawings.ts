@@ -1,3 +1,4 @@
+import {activeColumnCap} from '../engine/columnCapInputs';
 import {capChannelProfile} from '../engine/channelProfile';
 import {supportColumn} from '../engine/drawingData';
 import {bracketForceTopic} from './bracketForceTable';
@@ -32,7 +33,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  const sheetOf=detailSheetNumbers(s),sheets=(...keys:string[])=>[...new Set(keys.map(sheetOf))].join(', ');
  const output:CadDrawing[]=[];
  {
- const k=260/p.section.d,b=p.section,bs=d.bearing,dr=new Draft(s,'bearing-detail','Girder bearing / flange-restraint section','SK-04',500,1/k,`${d.bracket?.enabled?'':'Building bracket, '}${d.bracket?.enabled?'Building frame':'frame'}, anchorage and foundations: by others.`);
+ const k=260/p.section.d,b=p.section,bs=d.bearing,fork=!!activeColumnCap(p),dr=new Draft(s,'bearing-detail','Girder bearing / flange-restraint section','SK-04',500,1/k,fork?'Column cap, new column, base and foundations: designed in this calculation. No top-flange tie: the end fork restrains the top flange.':`${d.bracket?.enabled?'':'Building bracket, '}${d.bracket?.enabled?'Building frame':'frame'}, anchorage and foundations: by others.`);
  const cx=265,y=80,left=cx-b.bf*k/2,right=cx+b.bf*k/2;
  dr.rect(left,y,b.bf*k,b.tf*k);dr.rect(cx-b.tw*k/2,y+b.tf*k,b.tw*k,(b.d-2*b.tf)*k);dr.rect(left,y+(b.d-b.tf)*k,b.bf*k,b.tf*k);
  for(const sign of [-1,1])dr.poly(bearingStiffenerProfile(bs.stiffenerWidth,b.d-2*b.tf,bs.cope).map(([z,v])=>[cx+sign*(b.tw/2+z)*k,y+(b.tf+v)*k]),true);
@@ -41,7 +42,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  // The W depth from the top of the W flange; with a cap, the capped depth from the top of the channel web, further out.
  dr.dimV(y,y+b.d*k,right,430,`${b.kind==='cap'?b.name.split(' + ')[0]:b.name} / d ${f(b.d)}`);
  if(b.kind==='cap'){dr.poly(capChannelProfile(b).outline.map(([x,z])=>[cx+x*k,y-z*k]),true);dr.dimV(y-b.capTw*k,y+b.d*k,right+30,470,`${b.name} / d ${f(b.d+b.capTw)}`);}
- const notes=[`Bearing plate: ${f(bs.width)} wide × ${f(bs.length)} along girder × ${f(bs.thickness)}`,`Pair fitted stiffeners: outstand ${f(bs.stiffenerWidth)} × ${f(bs.stiffenerThickness)}`,`Web-side corner cope: ${f(bs.cope)}; web fillets: ${f(bs.weldSize)}, four lines`,b.kind==='cap'?`Fit/mill ends; top flange CJP; continuous web fillets`:`Fit/mill ends; continuous web AND flange fillets`,`Top-flange ties at x: ${flangeRestraintStations(p).top.map(f).join(', ')}${capAngleGeometry(p)?' (cap tieback angles, SK-06)':''}`,activeEndBearing(p)?'Bottom flange held by the bolted end bearings (SK-05); no bottom ties':`Bottom-flange ties at x: ${flangeRestraintStations(p).bottom.map(f).join(', ')}`,`Tie stiffness at ${activeEndBearing(p)?'the top flange':'EACH flange'}: ${format(s.detailResults?.braceStiffness??0,'stiffness',p.units,0)}`,`Grid reaction, both girder ends (factored): ${format(s.designAnalysis?.reaction??0,'force',p.units,1)}`,`End rotation clearance: ${f(d.criteria.rotationClearance)}`];
+ const notes=[`Bearing plate: ${f(bs.width)} wide × ${f(bs.length)} along girder × ${f(bs.thickness)}`,`Pair fitted stiffeners: outstand ${f(bs.stiffenerWidth)} × ${f(bs.stiffenerThickness)}`,`Web-side corner cope: ${f(bs.cope)}; web fillets: ${f(bs.weldSize)}, four lines`,b.kind==='cap'?`Fit/mill ends; top flange CJP; continuous web fillets`:`Fit/mill ends; continuous web AND flange fillets`,`${fork?'End forks (top-flange restraint, no tie)':'Top-flange ties'} at x: ${flangeRestraintStations(p).top.map(f).join(', ')}${capAngleGeometry(p)?' (cap tieback angles, SK-06)':''}`,activeEndBearing(p)?'Bottom flange held by the bolted end bearings (SK-05); no bottom ties':`Bottom-flange ties at x: ${flangeRestraintStations(p).bottom.map(f).join(', ')}`,`${fork?'Fork':'Tie'} stiffness at ${activeEndBearing(p)?'the top flange':'EACH flange'}: ${format(s.detailResults?.braceStiffness??0,'stiffness',p.units,0)}`,`Grid reaction, both girder ends (factored): ${format(s.designAnalysis?.reaction??0,'force',p.units,1)}`,`End rotation clearance: ${f(d.criteria.rotationClearance)}`];
  notes.forEach((n,i)=>dr.text(500,85+29*i,n,10));dr.text(80,55,'SECTION AT SUPPORT; STIFFENERS ALSO AT EACH RESTRAINT',10);output.push(dr.drawing);
  }
  const eb=activeEndBearing(p);
@@ -67,7 +68,8 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  // SK-06 shows the tie that is checked: the cap tieback angle is drawn from the engine's tie parts (capAngleTieParts);
  // the gusseted double-cover template applies only to the flange-tie family.
  const capTie=capAngleGeometry(p)?capAngleSketch(s):undefined;
- for(const [key,c,title,number,central] of [...(eb?[]:[['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw]] as const),...(capTie?[]:[['tie',d.brace.connection,single?'Flexible plate tie / single-shear lap connection':'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const)]){
+ // A girder on a column cap has no tie (its end fork restrains the top flange): no tie connection sketch.
+ for(const [key,c,title,number,central] of [...(eb?[]:[['end',d.end,'Girder web end / longitudinal double-cover connection','SK-05',p.section.tw]] as const),...(capTie||activeColumnCap(p)?[]:[['tie',d.brace.connection,single?'Flexible plate tie / single-shear lap connection':'Both-flange tie / symmetric double-cover connection','SK-06',d.brace.gussetThickness]] as const)]){
  const one=key==='tie'&&single,w=c.gauge+2*c.edge,h=(c.rows-1)*c.pitch+2*c.edge,k=Math.min(240/w,230/h),x=125,y=90,dr=new Draft(s,`${key}-connection-detail`,title,number,500,1/k,one?'One flexible plate on one gusset face; standard holes, pretensioned. Lap couple, bolt tension with prying and slip are checked.':'In-plane force template. Two cover plates; standard holes. Out-of-plane forces/prying require another model.');
  dr.rect(x,y,w*k,h*k);const hole=boltProperties(c.grade,c.diameter).hole;
  for(let row=0;row<c.rows;row++)for(let col=0;col<2;col++){const bx=x+(c.edge+col*c.gauge)*k,by=y+(c.edge+row*c.pitch)*k;dr.circle(bx,by,hole*k/2);dr.line(bx-8,by,bx+8,by,'CENTER');dr.line(bx,by-8,bx,by+8,'CENTER');}
@@ -123,9 +125,11 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   dr.text(485,330,'CMAA A-D ONLY / SEE CALCULATIONS FOR DUTY',10);
   output.push(dr.drawing);
  }
- if(p.system==='simple'){
-  const c=simpleSupportInput(p),b=p.section,bs=d.bearing,k=Math.min(230/b.d,370/(4*bs.length+c.endGap)),cx=265,y=100,g=c.endGap*k/2,l=bs.length*k;
-  const dr=new Draft(s,'independent-support-detail','Independent girder ends / shared column bracket','SK-09',580,1/k,'Reference AIST Technical Report 13 §5.8.1 / separate bearings and ties / receiving attachments by building designer.');
+ // Two girder ends meet only at an interior support: a single-span runway has none. On a column cap the girder ends
+ // share the cap (designed here) and each is held by its end fork, with no tie.
+ if(p.system==='simple'&&p.spans.length>1){
+  const c=simpleSupportInput(p),b=p.section,bs=d.bearing,k=Math.min(230/b.d,370/(4*bs.length+c.endGap)),cx=265,y=100,g=c.endGap*k/2,l=bs.length*k,fork=!!activeColumnCap(p);
+  const dr=new Draft(s,'independent-support-detail',fork?'Independent girder ends / shared column cap':'Independent girder ends / shared column bracket','SK-09',580,1/k,fork?'Reference AIST Technical Report 13 §5.8.1 / separate bearings and end forks on the cap / column cap designed in this calculation.':'Reference AIST Technical Report 13 §5.8.1 / separate bearings and ties / receiving attachments by building designer.');
   dr.rect(cx-(l+g+30),y+b.d*k+bs.thickness*k,2*(l+g+30),35,'HIDDEN');
   for(const side of [-1,1]){
    const x=side<0?cx-g-2*l:cx+g,bc=cx+side*(g+l/2);
@@ -137,7 +141,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   }
   dr.dimH(cx-g,cx+g,y,74,`GAP ${f(c.endGap)}`);
   dr.line(cx,60,cx,430,'CENTER');dr.text(cx,452,b.name,12,'middle');
-  [`SEPARATE BEARING PL ${f(bs.thickness)} X ${f(bs.width)} X ${f(bs.length)}`,'PAIRED BEARING STIFFENERS AT EACH END / SK-04','LEFT END OF EACH BAY: LONGITUDINAL LOCATING','RIGHT END OF EACH BAY: SLIDING',`MOVEMENT ALLOWANCE ${f(c.guideTravel)} EACH DIRECTION`,capAngleGeometry(p)?'CAP TIEBACK ANGLE AT EACH GIRDER END / SK-06':activeEndBearing(p)?'INDIVIDUAL TOP-FLANGE TIES TO COLUMN / SK-06':'INDIVIDUAL TOP / BOTTOM TIES TO COLUMN / SK-06','DO NOT SPLICE GIRDER FLANGES OR CAP ACROSS GAP',usesExistingBracket(p)?`EXISTING BRACKET / NEW SEAT: SK-10 / ${sheets('bracket')}`:d.bracket?.enabled?`${usesTaperedHaunch(p)?'TAPERED I HAUNCH':usesRolledBracket(p)?'WIDE-FLANGE BRACKET':'WELDED BRACKET / SPREADER'}: SK-10 / ${sheets('bracket')}`:'COLUMN BRACKET / SPREADER: REFERENCE ONLY','MOVEMENT-COMPATIBLE ATTACHMENTS REQUIRE DESIGN',`BRACKET DESIGN FORCES: SEE ${sheets(bracketForceTopic(s)??'support')}`].forEach((note,i)=>dr.text(520,110+i*30,note,9));
+  [`SEPARATE BEARING PL ${f(bs.thickness)} X ${f(bs.width)} X ${f(bs.length)}`,'PAIRED BEARING STIFFENERS AT EACH END / SK-04','LEFT END OF EACH BAY: LONGITUDINAL LOCATING','RIGHT END OF EACH BAY: SLIDING',`MOVEMENT ALLOWANCE ${f(c.guideTravel)} EACH DIRECTION`,fork?'END FORK AT EACH GIRDER END: BEARING STIFFENERS AND BOLTED BOTTOM FLANGE, NO TIE':capAngleGeometry(p)?'CAP TIEBACK ANGLE AT EACH GIRDER END / SK-06':activeEndBearing(p)?'INDIVIDUAL TOP-FLANGE TIES TO COLUMN / SK-06':'INDIVIDUAL TOP / BOTTOM TIES TO COLUMN / SK-06','DO NOT SPLICE GIRDER FLANGES OR CAP ACROSS GAP',usesExistingBracket(p)?`EXISTING BRACKET / NEW SEAT: SK-10 / ${sheets('bracket')}`:d.bracket?.enabled?`${usesTaperedHaunch(p)?'TAPERED I HAUNCH':usesRolledBracket(p)?'WIDE-FLANGE BRACKET':'WELDED BRACKET / SPREADER'}: SK-10 / ${sheets('bracket')}`:fork?`COLUMN CAP: ${sheets('column-cap')}`:'COLUMN BRACKET / SPREADER: REFERENCE ONLY',...(fork?[]:['MOVEMENT-COMPATIBLE ATTACHMENTS REQUIRE DESIGN']),`${fork?'COLUMN CAP':'BRACKET'} DESIGN FORCES: SEE ${sheets(bracketForceTopic(s)??'support')}`].forEach((note,i)=>dr.text(520,110+i*30,note,9));
   output.push(dr.drawing);
  }
  if(usesExistingBracket(p)){

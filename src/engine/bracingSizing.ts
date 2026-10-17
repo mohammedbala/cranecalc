@@ -3,7 +3,7 @@
  * project's forces, with the bracing's own checks (longitudinalBracingChecks, bracingSystemChecks), so every ratio is
  * the one the full calculation reports. Each member grows from the entered one in standard increments, the governing
  * ratio first, until every ratio is at most `target` or nothing helps it:
- * - rod: the next diameter, 1/4 in (to 2 in), for the diagonal tension; the clevis pin stays at least the rod;
+ * - rod: the next diameter, 1/4 in (to 2 in), for the diagonal tension and the thread fatigue range; the clevis pin stays at least the rod;
  * - clevis pin: 1/8 in larger for its double shear, and for the gusset's pin bearing once the gusset is at 1 1/4 in;
  * - gusset: 1/8 in thicker (to 1 1/4 in) for pin bearing, rupture, tear-out, yield, the offset gusset's strut lap
  *   eccentricity H e, the strut bolts' bearing and block shear, and the fillets' base metal;
@@ -72,7 +72,7 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
  const rod=()=>{const v=rods.find(x=>x>b.rod.diameter+1e-6);if(!v)return false;b.rod.diameter=v;d.pin.diameter=Math.max(d.pin.diameter,v);return true;};
  const grow=(key:string):boolean=>{
   switch(key){
-   case 'brace-tension':return rod();
+   case 'brace-tension':case 'brace-rod-fatigue':return rod();
    case 'brace-pin':return pin();
    case 'brace-pin-bearing':return gusset()||pin();
    case 'brace-gusset-rupture':case 'brace-gusset-tearout':case 'brace-gusset-yield':case 'brace-offset-gusset':return gusset();

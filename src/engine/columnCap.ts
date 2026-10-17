@@ -128,6 +128,12 @@ export interface ColumnCapGridResult {
  /** Largest factored reaction of each girder bearing at the grid, with the bearing. */
  bearings:{bearing:CapBearing;R:Peak}[];
  uplift:Peak;lateral:Peak;longitudinal:Peak;fork:Peak;boltTension:Peak;weld:Peak&{actions:{N:number;Vx:number;Vz:number;Mx:number;My:number;Mz:number}};
+ /**
+  * Concurrent bearing bolt actions of the strength sets that may govern (none exceeded in all three by another set): the
+  * bolt tension T (uplift share plus the fork couple), and the net lateral |V_z| = |H_top + H_bot| and the longitudinal
+  * |V_x| of the same set that the bolt group takes in shear.
+  */
+ boltSets:{T:number;Vz:number;Vx:number;id:string;combination:string}[];
  /** Unfactored fatigue ranges per duty bin: cap weld peak range per length, and the largest bearing reaction range. */
  fatigue:{weld:number;reaction:number}[];
 }
@@ -139,7 +145,7 @@ export interface ColumnCapResults {grids:ColumnCapGridResult[];fork:ReturnType<t
 export function createColumnCapCollector(p:ProjectInput){
  if(!activeColumnCap(p))return undefined;
  const g=columnCapGeometry(p),weld=capWeldGroup(p),t=g.cap.plate.thickness,bins=p.details!.spectrum.length;
- const grids=g.grids.map(v=>({bearings:v.bearings.map(b=>({bearing:b,R:none(v.grid)})),uplift:none(v.grid),lateral:none(v.grid),longitudinal:none(v.grid),fork:none(v.grid),boltTension:none(v.grid),
+ const grids=g.grids.map(v=>({bearings:v.bearings.map(b=>({bearing:b,R:none(v.grid)})),uplift:none(v.grid),lateral:none(v.grid),longitudinal:none(v.grid),fork:none(v.grid),boltTension:none(v.grid),boltSets:[] as ColumnCapGridResult['boltSets'],
   weld:{...none(v.grid),actions:{N:0,Vx:0,Vz:0,Mx:0,My:0,Mz:0}},
   fatigue:Array.from({length:bins},()=>({lo:{} as Record<string,number>,hi:{} as Record<string,number>}))}));
  const keep=(old:Peak,value:number,f:SupportForceSet)=>value>old.value?{value,id:f.id,combination:f.combination,grid:old.grid}:old;
@@ -161,7 +167,10 @@ export function createColumnCapCollector(p:ProjectInput){
    s.lateral=keep(s.lateral,Math.abs(a.Vz),f);s.longitudinal=keep(s.longitudinal,Math.abs(f.longitudinal),f);
    const fork=Math.abs(f.top*(g.arms.top-p.details!.bearing.thickness)+f.bottom*p.section.tf/2);
    s.fork=keep(s.fork,fork,f);
-   s.boltTension=keep(s.boltTension,Math.max(0,-Math.min(...R))/4+fork/(2*g.lever),f);
+   const T=Math.max(0,-Math.min(...R))/4+fork/(2*g.lever),Vz=Math.abs(a.Vz),Vx=Math.abs(f.longitudinal);
+   s.boltTension=keep(s.boltTension,T,f);
+   // The governing tension-with-shear and slip sets lie on the front of (T, |V_z|, |V_x|): both ratios rise with each.
+   if(!s.boltSets.some(o=>o.T>=T&&o.Vz>=Vz&&o.Vx>=Vx)){s.boltSets=s.boltSets.filter(o=>!(T>=o.T&&Vz>=o.Vz&&Vx>=o.Vx));s.boltSets.push({T,Vz,Vx,id:f.id,combination:f.combination});}
    const peak=weld.peak(a);if(peak>s.weld.value)s.weld={value:peak,id:f.id,combination:f.combination,grid:j,actions:a};
   }else if(bin>=0&&bin<bins){
    const r=s.fatigue[bin],values:Record<string,number>={N:Math.max(0,-R.reduce((u,v)=>u+v,0)),Vx:a.Vx,Vz:a.Vz,Mx:a.Mx,My:a.My,...Object.fromEntries(R.map((v,i)=>[`R${i}`,v]))};
@@ -169,7 +178,7 @@ export function createColumnCapCollector(p:ProjectInput){
   }
  }
  function finish():ColumnCapResults{
-  return {fork:capForkStiffness(p),grids:grids.map((s,j)=>({grid:j,x:g.grids[j].x,bearings:s.bearings,uplift:s.uplift,lateral:s.lateral,longitudinal:s.longitudinal,fork:s.fork,boltTension:s.boltTension,weld:s.weld,
+  return {fork:capForkStiffness(p),grids:grids.map((s,j)=>({grid:j,x:g.grids[j].x,bearings:s.bearings,uplift:s.uplift,lateral:s.lateral,longitudinal:s.longitudinal,fork:s.fork,boltTension:s.boltTension,boltSets:s.boltSets,weld:s.weld,
    fatigue:s.fatigue.map(r=>{
     const range=(k:string)=>(r.hi[k]??0)-(r.lo[k]??0),Mz=range('Vz')*Math.max(0,...g.grids[j].bearings.map(b=>Math.abs(b.center)));
     // Ranges of every component taken together; compression bears on the milled column end, uplift is welded.
@@ -213,6 +222,19 @@ export function validateColumnCap(p:ProjectInput):string[]{
  // The bearing stiffener pair of each girder end lands on the cap within the column flanges.
  add(2*bs.stiffenerWidth+p.section.tw>cl.d-2*cl.tf+1e-6,'enabled: the girder bearing stiffener pair must land between the column flanges.');
  return errors;
+}
+
+/**
+ * The bearing bolts' concurrent actions per governing strength set (ColumnCapGridResult.boltSets) with the Appendix 6
+ * brace force at the top flange: per bolt, the tension T (uplift share and the fork couple) and the shear V, the vector
+ * sum of the net lateral force at the bottom-flange interface |H_top + H_bot| (with the brace force) and the
+ * longitudinal force (orthogonal components), with the J3.7 / J3.8 capacities of that pair.
+ */
+export function capBoltSets(p:ProjectInput,r:ColumnCapResults,imperfection:number){
+ const g=columnCapGeometry(p),eb=activeEndBearing(p)!,bs=p.details!.bearing,db=eb.bolts.diameter,forkT=imperfection*(g.arms.top-bs.thickness)/(2*g.lever);
+ const raw=r.grids.flatMap(v=>v.boltSets.map(o=>({...o,grid:v.grid})));
+ return (raw.length?raw:[{T:0,Vz:0,Vx:0,id:'',combination:'',grid:0}]).map(o=>{const T=o.T+forkT,lateral=o.Vz+imperfection,V=Math.hypot(lateral,o.Vx)/4,c=boltCapacity({grade:eb.bolts.grade,diameter:db,planes:1,surface:'B',shear:V,tension:T,method:p.method});
+  return {...o,T,V,lateral,c,rt:c.tension>0?T/c.tension:Infinity,rs:c.slip>0?V/c.slip:Infinity};});
 }
 
 const group='Column cap';
@@ -278,11 +300,13 @@ export function columnCapChecks(p:ProjectInput,r:ColumnCapResults,ctx:{imperfect
   add('weld-minimum','Cap fillet · minimum size',filletMinimum([t,col.tf]),cap.weld,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined.',refs);
  }
  // Bearing bolts through the cap: tension from uplift and the fork couple with the concurrent shear (J3.7).
- {const db=eb.bolts.diameter,bolt=boltProperties(eb.bolts.grade,db),Tg=r.grids.reduce((a,c)=>c.boltTension.value>a.boltTension.value?c:a).boltTension;
-  const forkT=ctx.imperfection*(g.arms.top-bs.thickness)/(2*g.lever),T=Tg.value+forkT,lateral=Math.max(...r.grids.map(v=>v.lateral.value))+ctx.imperfection,long=Math.max(...r.grids.map(v=>v.longitudinal.value));
-  const V=Math.hypot(long,lateral)/4,cb=boltCapacity({grade:eb.bolts.grade,diameter:db,planes:1,surface:'B',shear:V,tension:T,method});
-  add('bolt-tension','Bearing bolts · tension with the fork couple',T,cb.tension,'force','T=\\frac{R_{up}}{4}+\\frac{M_t}{2e}\\le\\phi F^\\prime_{nt}A_b\\\ \\text{(J3.7)}',`Four ${eb.bolts.grade} bolts at each girder end through the bottom flange, bearing plate and cap. The fork moment of the flange forces about the bearing (${where(Tg)}) is a couple of the tension bolt line and bearing one bolt diameter inside the far flange or bearing plate edge, e = ${f(g.lever,'length')} (gauge ${f(g.gauge,'length')}), with the uplift share and the brace imperfection force ${f(ctx.imperfection)} at the top flange; concurrent shear ${f(V)} per bolt (longitudinal and lateral). Pretension not credited.`,refs,Tg.id);
-  add('bolt-slip','Locating bolts · slip with the fork tension',V,cb.slip,'force','R_n=\\mu D_uT_bk_{sc}n_s\\\ \\text{(J3.8, J3.9)}',`Class B, k_sc = ${cb.slipReduction.toFixed(3)} for the tension ${f(T)}; lateral and longitudinal forces taken together on all four bolts.`,refs,Tg.id);
+ {const db=eb.bolts.diameter,bolt=boltProperties(eb.bolts.grade,db),sets=capBoltSets(p,r,ctx.imperfection);
+  const most=(k:(x:typeof sets[number])=>number)=>sets.reduce((a,x)=>k(x)>k(a)?x:a,sets[0]);
+  const tg=most(x=>x.rt),sg=most(x=>x.rs),V=most(x=>x.V).V,T=most(x=>x.T).T,Tg={value:T,id:most(x=>x.T).id};
+  const at=(x:typeof sets[number])=>`${gridName(x.grid)}, ${x.combination}`;
+  const shearText=(x:typeof sets[number])=>`V = √(${f(x.lateral)}² + ${f(x.Vx)}²)/4 = ${f(x.V)} per bolt (net lateral force at the bottom-flange interface |H_top + H_bot|${ctx.imperfection>0?` with the brace force ${f(ctx.imperfection)}`:''}, and the concurrent longitudinal force; orthogonal components)`;
+  add('bolt-tension','Bearing bolts · tension with the fork couple',tg.T,tg.c.tension,'force','T=\\frac{R_{up}}{4}+\\frac{M_t}{2e}\\le\\phi F^\\prime_{nt}A_b,\\quad V=\\frac{\\sqrt{(H_{top}+H_{bot})^2+P^2}}{4}\\ \\text{(J3.7)}',`Four ${eb.bolts.grade} bolts at each girder end through the bottom flange, bearing plate and cap. The fork moment of the flange forces about the bearing is a couple of the tension bolt line and bearing one bolt diameter inside the far flange or bearing plate edge, e = ${f(g.lever,'length')} (gauge ${f(g.gauge,'length')}), with the uplift share and the brace imperfection force ${f(ctx.imperfection)} at the top flange. Governing ${at(tg)}: T = ${f(tg.T)} with the concurrent ${shearText(tg)}. Pretension not credited. The same bolts' end-bearing tension and prying rows refer here.`,refs,tg.id);
+  add('bolt-slip','Locating bolts · slip with the fork tension',sg.V,sg.c.slip,'force','R_n=\\mu D_uT_bk_{sc}n_s,\\quad V=\\frac{\\sqrt{(H_{top}+H_{bot})^2+P^2}}{4}\\ \\text{(J3.8, J3.9)}',`Class B. Governing ${at(sg)}: ${shearText(sg)}, with the concurrent bolt tension ${f(sg.T)} of the fork couple and uplift, k_sc = ${sg.c.slipReduction.toFixed(3)}. Each strength set is checked with its own concurrent forces; the end-bearing locating slip row refers here.`,refs,sg.id);
   const xs=g.grids.flatMap(v=>v.bolts.map(o=>Math.abs(o.x))),edge=Math.min(cap.plate.length/2-Math.max(...xs),(cap.plate.width-g.gauge)/2);
   add('bolt-bearing','Cap plate · bolt bearing and tearout',V,plateBearing(db,bolt.hole,t,m.Fu,edge,Math.min(g.gauge,Math.min(...g.bearings.map(b=>b.x1-b.x0-2*g.edge))),method).capacity,'force','R_n=\\min(1.2l_ctF_u,2.4dtF_u)\\\ \\text{(J3.10)}',`Standard holes in the ${f(t,'length')} cap; least edge distance ${f(edge,'length')} to the cap ends and edges; the force reverses.`,refs);
   add('bolt-edge','Cap plate · bolt edge distance',1.5*db,edge,'length','e\\ge1.5d_b','Standard holes; sheared or thermally cut cap edges.',refs);

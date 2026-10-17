@@ -32,7 +32,11 @@ export interface SupportReactionSet { supports:SupportReaction[]; Cls:number; }
 
 export function supportStations(p:ProjectInput){const s=[0];for(const l of p.spans)s.push(s.at(-1)!+l);return s;}
 
-export function supportReactions(p:ProjectInput,props:Properties,steps=40):SupportReactionSet{
+/**
+ * `supplied`: the crane loads as supplied (their own impact, side thrust and traction, no AIST/ASCE 7 minimums), for a
+ * supplied-load analysis whose reactions must match the loads it analyzed.
+ */
+export function supportReactions(p:ProjectInput,props:Properties,steps=40,supplied=false):SupportReactionSet{
  const di=p.aist??emptyAistInputs,stations=supportStations(p),L=stations.at(-1)!;
  const vertical=beamSystem(p.spans,p.section.E*props.Ix,p.system);
  // Net side thrust at the rail head is distributed by the top-flange lateral system (rigid braces).
@@ -45,8 +49,8 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
  const steel=newSteelTakeoff(p),D=plus(plus(at(vertical.evaluate([],girderDeadLoad(p,props.weight))),adjacentReactions(p,[],p.deadLoad+p.railWeight+props.weight)),stations.map((_,j)=>(steel.grid[j]??0)+(steel.support[j]??0))),Live=plus(at(vertical.evaluate([],di.liveLoad)),adjacentReactions(p,[],di.liveLoad));
  const positions=cranePositions(p,steps,stations);
  const responses=p.cranes.map((c,k)=>{
-  const m=craneDesignMinimum(c),impact=Math.max(c.impact,m.impact);
-  const side=c.wheels.reduce((s,w)=>s+w.lateral,0),sideFactor=side>0?Math.max(1,m.runwaySide/side):1;
+  const m=craneDesignMinimum(c),impact=supplied?c.impact:Math.max(c.impact,m.impact);
+  const side=c.wheels.reduce((s,w)=>s+w.lateral,0),sideFactor=side>0&&!supplied?Math.max(1,m.runwaySide/side):1;
   // Each wheel directly over each support gives the exact reaction maxima for point loads; neighboring
   // cranes are also placed at closest approach.
   return positions[k].flatMap(position=>{const origin=position.origin;
@@ -82,7 +86,7 @@ export function supportReactions(p:ProjectInput,props:Properties,steps=40):Suppo
   }
  }
  visit(0);
- const Cls=Math.max(0,...p.cranes.map(c=>Math.max(c.longitudinal,craneDesignMinimum(c).traction)));
+ const Cls=Math.max(0,...p.cranes.map(c=>supplied?c.longitudinal:Math.max(c.longitudinal,craneDesignMinimum(c).traction)));
  const railTop=(p.section.kind==='cap'?p.section.d+p.section.capTw:p.section.d)+railTopAboveSteel(p);
  supports.forEach((s,j)=>{s.Clv=Cls*railTop/Math.min(...[p.spans[j-1],p.spans[j]].filter(v=>v>0));});
  return {supports,Cls};

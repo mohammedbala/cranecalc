@@ -164,11 +164,13 @@ function endStopCaseChecks(p:ProjectInput,ctx?:EndStopContext):CaseCheck[]{
  const girder:CheckResult[]=[];
  if(ctx){
   const stopCombos=new Set(craneCombinations(p.method).filter(c=>c.bumper>0).map(c=>`${p.method} ${c.id}`)),records=ctx.analysis.combinations.filter(c=>stopCombos.has(c.id));
-  // The end couple can reverse the moment near the girder end: use the weaker flexural direction.
-  const weaker={...ctx.strength,major:Math.min(ctx.strength.major,ctx.strength.majorReverse??ctx.strength.major)};
-  const u=Math.max(0,...records.map(r=>interaction(r.axial,r.moment+M0,r.lateralMoment,weaker,p.method).utilization));
+  // The end couple adds to the peak moment of its own sign (taken together regardless of location), and alone reverses
+  // the moment near the girder end, where the crane moment vanishes: each sign against the flexural strength of the
+  // flange it compresses (AISC Chapter F by direction; interaction() takes the reverse strength for a negative moment).
+  const sign=(v:number)=>v<0?-1:1;
+  const u=Math.max(0,...records.flatMap(r=>[interaction(r.axial,sign(r.moment)*(Math.abs(r.moment)+M0),r.lateralMoment,ctx.strength,p.method).utilization,interaction(r.axial,-sign(r.moment)*M0,r.lateralMoment,ctx.strength,p.method).utilization]));
   const q=girderDeadLoad(p,ctx.props.weight),dead=(p.method==='LRFD'?.9:.6)*q*span/2,uplift=Math.max(0,M0/span-dead);
-  girder.push(compared('end-stop-girder','Girder · stop combinations with bumper couple',u,1,'ratio','\\frac{P_r}{P_c}+\\frac{8}{9}\\left(\\frac{M_{rx}+Py}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)\\le1',`Peak moments of the stop combinations plus the full couple P·y = ${format(M0,'moment',u2(p),3)} (y = ${f(y)} above the girder centroid), added without regard to location. Axial force includes the bumper force.`,['aisc-h','tr13-load']));
+  girder.push(compared('end-stop-girder','Girder · stop combinations with bumper couple',u,1,'ratio','\\frac{P_r}{P_c}+\\frac{8}{9}\\left(\\frac{|M_{rx}|+Py}{M_{cx}^{\\pm}}+\\frac{M_{ry}}{M_{cy}}\\right)\\le1;\\ \\ \\frac{Py}{M_{cx}^{\\mp}}',`Peak moments of the stop combinations plus the full couple P·y = ${format(M0,'moment',u2(p),3)} (y = ${f(y)} above the girder centroid), added without regard to location, against the flexural strength of that moment's sign; and the couple alone reversing the moment at the girder end, where the crane moment vanishes, against the reverse-moment strength (the flange it compresses). Axial force includes the bumper force.`,['aisc-h','tr13-load']));
   girder.push(compared('end-stop-uplift','Far support · uplift from bumper couple',uplift,ctx.holdDown,'force','R_{up}=\\frac{Py}{L}-\\gamma_D\\frac{wL}{2}',`Shortest end span ${f(span)}; ${p.method==='LRFD'?'0.9':'0.6'} × girder, rail and added dead load only, no crane dead load. Resisted by the girder end connection (hold-down).`));
  }
  // A check of both load cases reports the governing one; each case's D/C is kept for the stop resistance (rail anchorage).

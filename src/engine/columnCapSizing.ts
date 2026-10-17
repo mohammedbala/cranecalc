@@ -6,7 +6,8 @@
  *
  * Sizing set (supportReactions, strength factors 1.2/1.6 LRFD, 1.0 ASD), at every grid and each of its girder
  * bearings alone: the support's whole factored reaction on that bearing with the side thrust at the rail head as fork
- * forces of the girder end (statics of the girder end on the cap: the top-flange force T = H(h_r - a_b)/(a_t - a_b) and
+ * forces of the girder end (statics of the girder end on the cap with the torque about the shear center amplified for
+ * second-order twist at strength, B = 1/(1 - alpha/lambda): the top-flange force T = H[(h_sc - a_b) + B(h_r - h_sc)]/(a_t - a_b) and
  * the bottom-flange force H - T through the bearing bolts, both senses), and the factored longitudinal force; the crane
  * stop force with 1.2(D + C_d) + C_v; any uplift 0.9D + 1.6C_min with the side thrust; per duty bin the crane reaction
  * without impact, its own weight plus the bin's lifted fraction, with half the side thrust. The Appendix 6 brace force
@@ -24,15 +25,18 @@ import type {ProjectInput,CheckResult} from './types';
 import type {ColumnCapInput} from './columnCapInputs';
 import type {SupportForceSet} from './bracketForces';
 import {activeColumnCap} from './columnCapInputs';
-import {columnCapGeometry,createColumnCapCollector,columnCapChecks,validateColumnCap,capColumn} from './columnCap';
+import {columnCapGeometry,createColumnCapCollector,columnCapChecks,validateColumnCap,capColumn,capBoltSets} from './columnCap';
+import {available} from './aiscStrength';
 import {supportReactions,supportStations} from './supportReactions';
 import {sectionProperties} from './section';
 import {movingAnalysis} from './analysis';
 import {braceImperfection} from './forcesDelivered';
 import {railTopAboveSteel} from './railSeat';
+import {flexureCurves} from './loadHeightFlexure';
+import {cappedMechanics} from './cappedMechanics';
 import {filletMinimum,boltProperties} from './connectionStrength';
 import {activeEndBearing,slidingBolts,type EndBearingInput} from './endBearingInputs';
-import {endBearingChecks,endBearingGeometry} from './endBearing';
+import {endBearingChecks,endBearingGeometry,slotEndDistance} from './endBearing';
 import {plateSteps} from './bracketSizing';
 import {wrenchClearance} from './endStop';
 import {slidingClearance} from './fitTolerances';
@@ -48,17 +52,29 @@ export interface CapSizingSet {
  strength:{x:number;f:SupportForceSet}[];fatigue:{x:number;bin:number;f:SupportForceSet}[];
  /** Appendix 6 brace force and required stiffness at the girder end (braceImperfection of the moving-load moment). */
  ctx:{imperfection:number;required:number};
+ /** Fork model of the strength sets: the second-order amplification B of the torque about the shear center (above the cap top). */
+ fork?:{amplification:number;shearCenter:number;lambda:number};
 }
 /** The sizing set of the column cap (see the file header). */
 export function capSizingSet(p:ProjectInput):CapSizingSet{
  const d=p.details!,props=sectionProperties(p.section),r=supportReactions(p,props),lrfd=p.method==='LRFD',g=columnCapGeometry(p),stations=supportStations(p);
  const railTop=d.bearing.thickness+p.section.d+railTopAboveSteel(p),{top:at,bottom:ab}=g.arms;
- // Fork forces of a rail-head force H at a girder end on the cap: T at the top flange, H - T at the bottom flange.
- const fork=(H:number)=>{const T=H*(railTop-ab)/(at-ab);return {top:T,bottom:H-T};};
+ // Second-order torsion: the analysis amplifies the girder twist by 1/(1 - alpha/lambda) (AISC C2.3 / Appendix 1 at alpha,
+ // 0.8 stiffness). lambda is estimated from the uniform-moment elastic moment at Lb (F2-4 / F4-5) times the Commentary F1
+ // load-height factor 1.4^(2y/h) (rail head, y from mid-depth), no moment-gradient credit, at 0.8, over the girder's
+ // factored moving-load moment; the torque about the shear center is amplified, the lateral shear through it is not.
+ const a=movingAnalysis(p,props,8),Mu=(lrfd?1.2:1)*a.deadMoment+(lrfd?1.6:1)*(a.demand.moment-a.deadMoment);
+ const depth=p.section.d+(p.section.kind==='cap'?p.section.capTw:0),yLoad=-(railTopAboveSteel(p)+depth/2);
+ const lambda=Mu>0?.8*flexureCurves(p,props).positive.mocr*1.4**(2*yLoad/depth)/Mu:Infinity,alpha=lrfd?1:1.6;
+ const amplify=lambda>1.25*alpha?1/(1-alpha/lambda):5;
+ const sc=d.bearing.thickness+(cappedMechanics(p.section)?.shearCenter??p.section.d/2);
+ // Fork forces of a rail-head force H at a girder end on the cap: T at the top flange, H - T at the bottom flange, from the
+ // moment about the bottom flange of H through the shear center and the amplified torque H(h_r - h_sc).
+ const fork=(H:number,B=amplify)=>{const T=H*((sc-ab)+B*(railTop-sc))/(at-ab);return {top:T,bottom:H-T};};
  const F=(lrfd?1.6:1)*r.Cls,stop=Math.max(0,...p.cranes.map(c=>c.design&&!c.design.bumperBypassesGirder?c.design.bumperForce:0))*(lrfd?1:.67);
  const fatigueMax=Math.max(0,...r.supports.map(s=>s.Cd+s.Cv)),deadMax=Math.max(0,...r.supports.map(s=>s.Cd));
  const bins=d.spectrum.map((v,bin)=>({bin,scale:fatigueMax>0?(deadMax+v.liftFraction*(fatigueMax-deadMax))/fatigueMax:0}));
- const set:CapSizingSet={strength:[],fatigue:[],ctx:{imperfection:0,required:0}};let n=0;
+ const set:CapSizingSet={strength:[],fatigue:[],ctx:{imperfection:0,required:0},fork:{amplification:amplify,shearCenter:sc,lambda}};let n=0;
  r.supports.forEach((s,j)=>{
   const x=stations[j],D=s.D,crane=s.Cd+s.Cv+s.Ci,R=(lrfd?1.2:1)*D+(lrfd?1.6:1)*crane,H=(lrfd?1.6:1)*s.Css,Rstop=(lrfd?1.2:1)*(D+s.Cd)+s.Cv;
   const lift=(lrfd?.9:.6)*D+(lrfd?1.6:1)*Math.min(0,s.craneMinimum);
@@ -67,11 +83,11 @@ export function capSizingSet(p:ProjectInput):CapSizingSet{
     ends:b.bay!==undefined&&b.end?[{bay:b.bay,end:b.end,vertical:V,offset:b.reaction}]:[]});
    for(const sense of [1,-1]){const h=fork(sense*H);set.strength.push({x,f:on(R,h,F,'strength')});if(lift<0)set.strength.push({x,f:on(lift,h,0,'uplift')});}
    if(stop>0)set.strength.push({x,f:on(Rstop,{top:0,bottom:0},stop,'stop')});
-   for(const v of bins)for(const sense of [1,-1])set.fatigue.push({x,bin:v.bin,f:on((s.Cd+s.Cv)*v.scale,fork(sense*.5*s.Css*v.scale),0,'fatigue')});
+   for(const v of bins)for(const sense of [1,-1])set.fatigue.push({x,bin:v.bin,f:on((s.Cd+s.Cv)*v.scale,fork(sense*.5*s.Css*v.scale,1),0,'fatigue')});
   }
  });
  // The Appendix 6 point-brace force and stiffness from the girder's factored moving-load moment and longitudinal force.
- const a=movingAnalysis(p,props,8),Mu=(lrfd?1.2:1)*a.deadMoment+(lrfd?1.6:1)*(a.demand.moment-a.deadMoment),Pu=Math.max(F,stop);
+ const Pu=Math.max(F,stop);
  const A6=braceImperfection(p,{moment:Mu,axial:Pu},props);set.ctx={imperfection:A6.force,required:A6.stiffness};
  return set;
 }
@@ -83,7 +99,12 @@ export function columnCapSizingRatios(p:ProjectInput,set=capSizingSet(p)){
  if(!c)return ratios;
  for(const v of set.strength)c.observe('strength',v.x,v.f);
  for(const v of set.fatigue)c.observe('fatigue',v.x,v.f,v.bin);
- for(const k of columnCapChecks(p,c.finish(),set.ctx))if(k.utilization!==undefined&&(k.status==='pass'||k.status==='fail')&&!notSized.test(k.id))ratios[k.id.replace(/^column-cap-/,'')]=k.utilization;
+ const r=c.finish();
+ for(const k of columnCapChecks(p,r,set.ctx))if(k.utilization!==undefined&&(k.status==='pass'||k.status==='fail')&&!notSized.test(k.id))ratios[k.id.replace(/^column-cap-/,'')]=k.utilization;
+ // A bolt tension at or above the slip limit leaves no slip resistance (k_sc = 0): the ratio then measures that tension
+ // against the limit, so that a larger, stronger or wider-spaced bolt still registers as progress.
+ const bolts=capBoltSets(p,r,set.ctx.imperfection),gone=bolts.filter(v=>!(v.c.slip>0));
+ if(gone.length)ratios['bolt-slip']=1e3*Math.max(...gone.map(v=>(p.method==='LRFD'?1:1.5)*v.T/(1.13*v.c.pretension)));
  return ratios;
 }
 /** Steel weight of the cap plate and its stiffeners, N, with a pound for every bolt and fillet step (for comparing steps). */
@@ -119,7 +140,7 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
     while(Math.PI/4*((bp.hole+2*w)**2-bp.hole**2)*Fy<1.5*bp.pretension&&w<inch)w+=sixteenth;if(w>slidingBolts(v.e).wall+1e-9)v.e.sleeveWall=w;}
   }catch{return false;}
   // The girder end and bearing plate edge distances for the bolt and its slot (end-bearing-end-edge, -plate-edge).
-  try{const h=endBearingGeometry(q,v.e);b.edge=Math.max(b.edge,up(Math.max(1.5*b.diameter,1.5*b.diameter-h.hole/2+h.slot/2),eighth));}catch{return false;}
+  try{const h=endBearingGeometry(q,v.e);b.edge=Math.max(b.edge,up(slotEndDistance(b.diameter,h.hole,h.slot).required,eighth));}catch{return false;}
   // The bearing plate long enough for the bolt rows at its ends to clear the stiffener pair at mid-bearing with the nut
   // (C1) and the plate washer at either extreme of travel (end-bearing-wrench-stiffener, -washer-stiffener), as
   // bearingLayout lays it out: a larger bolt has a larger edge, wrench clearance and washer. Never shorter than laid out.
@@ -170,7 +191,9 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
    // A step must lower the governing ratio without raising another one (of those still growing) above it.
    for(const move of list){const s=step(v,move);if(!s)continue;const rs=ratios(s),drop=value-(rs[key]??0),cost=Math.max(weight(s)-weight(v),4.448);
     const others=Math.max(0,...Object.entries(rs).filter(([k])=>k!==key&&!stuck.has(k)).map(([,x])=>x));
-    if(drop>1e-9&&others<value-1e-9&&(!best||drop/cost>best.score))best={v:s,score:drop/cost,r:rs};}
+    // Nut clearances have no step of their own: a step that leaves a nut without its clearance is not taken.
+    const clears=Object.entries(rs).every(([k,x])=>!/^wrench-/.test(k)||x<=Math.max(1,r[k]??0)+1e-9);
+    if(drop>1e-9&&others<value-1e-9&&clears&&(!best||drop/cost>best.score))best={v:s,score:drop/cost,r:rs};}
    if(best){next=best.v;r=best.r;break;}
   }
   options.trace?.(i,key,value,next?.cap);
@@ -179,6 +202,12 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
  }
  // Settled again: the bearing length follows the chosen bolts, not the last step tried.
  settle(v);
+ // The plate washers over the sliding-end slots carry the bolt tension of the fork couple (end-bearing-washer-bending:
+ // f_b = 6(T/2)a/(bt^2), a = w_slot/2 - 0.8d_b): thickened in 1/16 in steps for the largest tension of the sizing set.
+ {const c=createColumnCapCollector(q);if(c){for(const x of set.strength)c.observe('strength',x.x,x.f);
+  const T=Math.max(0,...capBoltSets(q,c.finish(),set.ctx.imperfection).map(x=>x.T)),h=endBearingGeometry(q,v.e),a=Math.max(0,h.slotWidth/2-.8*v.e.bolts.diameter);
+  const need=Math.sqrt(6*(T/2)*a/(h.washer.length*available(q.details!.material.Fy,q.method,.9,1.67)));
+  if(h.sleeved&&need>v.e.washerThickness+1e-9){v.e.washerThickness=up(need,sixteenth);apply(v);}}}
  if(validateColumnCap(q).length){q.columnCap=cap0;q.details!.endBearing=e0;bs.length=length0;if(q.aist)q.aist.bearingLength=length0;}
  return q;
 }

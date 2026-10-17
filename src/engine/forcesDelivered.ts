@@ -10,8 +10,8 @@ import {craneLevelStrut,existingColumnEccentricity} from './existingColumn';
 /**
  * Forces the runway delivers to the building columns (C4): at each grid, whole concurrent sets of the factored bracket
  * design force envelope, each resolved where it acts on the column:
- * - V, the girder reactions on the seat, at the eccentricity e from the column centerline (the far bearing edge, the
- *   reaction position of the bracket and column checks): strong-axis moment M_x = V·e about the column;
+ * - V, the girder reactions on the seat, at the eccentricity e from the column centerline (the column check's:
+ *   the far bearing edge, or on a new column the web line plus columnReactionOffset): strong-axis moment M_x = V·e about the column;
  * - M_y, the seat moment ΣV·x of unbalanced girder end reactions about the grid: weak-axis moment on the column at
  *   the seat (not the girder torque about its shear center);
  * - H at the tie line, the top-flange restraint force of the set plus the Appendix 6 brace force (either way); its
@@ -86,7 +86,7 @@ export function deliveredForces(s:CalculationSnapshot){
  // The crane-level strut by others that the existing-column check relies on: location, stiffness and design force.
  const strut=s.existingColumn?craneLevelStrut(p,s.existingColumn):undefined;
  return {grids,e,eFrom,brace,strut,
-  /** The girder web line from the column centerline (bracket) or from the column face (seat by others); e is taken at the far bearing edge beyond it. */
+  /** The girder web line from the column centerline (bracket) or from the column face (seat by others); e is taken beyond it (existingColumnEccentricity: the far bearing edge, or on a new column the web plus columnReactionOffset). */
   web:b?.enabled?b.receiver.depth/2+b.reach:face,
   /** The tie design force: the largest concurrent top-flange restraint force (all girder ends at a grid) plus the brace force. */
   tie:{analysis,design:r.demands.brace+brace.force,perEnd:r.demands.braceEnd},

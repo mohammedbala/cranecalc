@@ -1,7 +1,7 @@
 import {haunchInput,isTaperedHaunch} from '../engine/taperedHaunchInputs';
 import {cantileverSystems,seismicBasis} from '../engine/runwaySeismic';
-import {astmSpec,sleeveSpec} from '../engine/materialSpecs';
-import {preheatBasis,constructionRequirements,enteredFabricationNote,addedSentences,cjpWelds,awsEdition} from '../engine/constructionNotes';
+import {astmSpec,boltSpec,sleeveSpec} from '../engine/materialSpecs';
+import {boltGrades,preheatBasis,constructionRequirements,enteredFabricationNote,addedSentences,cjpWelds,awsEdition} from '../engine/constructionNotes';
 import {codeBasis} from '../engine/drawingData';
 import {adjacentBays} from '../engine/continuation';
 import type {CalculationSnapshot,Crane,ProjectInput} from '../engine/types';
@@ -30,10 +30,11 @@ import {tieRelease,stiffenerTieGeometry,stiffenerTieJoint,flangeTieGeometry} fro
 import {bearingSurface} from '../engine/endBearing';
 import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newColumnBracing';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
-import {deliveredRows,deliveredHeaders,deliveredNote} from '../report/deliveredTable';
+import {deliveredRows,deliveredHeadersOf,deliveredNote} from '../report/deliveredTable';
 import {blockedPackage,verificationFailures} from './sheetRatios';
 import {unplacedHolds} from './detailHolds';
 import {sig3} from '../report/reportParts';
+import {supportReactions} from '../engine/supportReactions';
 
 /** A sheet of the set as the cover indexes it, with the titles of its details in drawing order. */
 export interface SheetEntry {number:string;title:string;details?:readonly string[];render?:()=>string}
@@ -56,7 +57,7 @@ const sheetWords=(svg:string)=>[...svg.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>
 // The last column stops above the seal and issue labels at the lower right.
 const columnWidth=594,columns=[0,1,2,3].map(i=>14+i*(columnWidth+40)),top=18,limits=[1494,1494,1494,1318];
 /** Symbols and line types used on the sheets, each drawn as it appears with its meaning. */
-function legend(t:Style,units:'US'|'SI',referenceDims=false):Block{
+function legend(t:Style,units:'US'|'SI',referenceDims=false,welds=true):Block{
  // A sample fillet size as the details print it: 1/4 (inches), or 6 mm.
  const leg=units==='SI'?'6 mm':'1/4';
  const sample=150,row=Math.max(22,t.leading*2.2);
@@ -68,9 +69,9 @@ function legend(t:Style,units:'US'|'SI',referenceDims=false):Block{
   [(x,y)=>rect(x,y-3,sample-20,6,'rail-line'),'CRANE RAIL'],
   [(x,y)=>bubble(x+12,y,'A',10),'GRID DESIGNATION'],
   [(x,y)=>`${circle(x+14,y,13,'divider')}${line([x+1,y],[x+27,y],'annotation')}${text(x+14,y-3,'1',10,'middle',700)}${text(x+14,y+8.5,'S-02',7,'middle')}`,'DETAIL NUMBER OVER THE SHEET WHERE IT IS DRAWN; REFERENCES READ 1/S-02'],
-  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],leg,[],false),'FILLET WELD, ARROW SIDE; SIZE LEFT OF THE SYMBOL'],
-  [(x,y)=>filletLeader([[x+2,y+8]],[x+22,y+3],leg,[],true),'FILLET WELD, BOTH SIDES'],
-  [(x,y)=>fieldFilletLeader([[x+2,y+8]],[x+22,y+3],leg,[],true),'FIELD WELD (FLAG); SHOP WELD U.N.O.'],
+  ...(welds?[[(x:number,y:number)=>filletLeader([[x+2,y+8]],[x+22,y+3],leg,[],false),'FILLET WELD, ARROW SIDE; SIZE LEFT OF THE SYMBOL'],
+  [(x:number,y:number)=>filletLeader([[x+2,y+8]],[x+22,y+3],leg,[],true),'FILLET WELD, BOTH SIDES'],
+  [(x:number,y:number)=>fieldFilletLeader([[x+2,y+8]],[x+22,y+3],leg,[],true),'FIELD WELD (FLAG); SHOP WELD U.N.O.']] as [(x:number,y:number)=>string,string][]:[]),
   [(x,y)=>`${line([x,y],[x+40,y])}<path class="leader-arrow" d="M${n(x+40)},${n(y)}l-2.4,-3.2h4.8z"/>${line([x+40,y],[x+50,y-6])}${line([x+50,y-6],[x+56,y-6])}${text(x+60,y-3,'EL.',7.5)}`,'ELEVATION DATUM'],
   ...(referenceDims?[[(x:number,y:number)=>text(x+4,y+3,units==='SI'?'(350 mm)':'(1\'-2")',9),'REFERENCE DIMENSION (SECTION DEPTH OR A SIZE SET BY OTHER DIMENSIONS); NOT A SETTING-OUT DIMENSION'] as [(x:number,y:number)=>string,string]]:[])
  ];
@@ -122,6 +123,8 @@ function flow(blocks:Block[],limit:number,overflow=false,pages=1){
 }
 
 export const coverSheetTitle='COVER, GENERAL NOTES & DESIGN CRITERIA';
+/** The cover's title: an analysis-only set has no general notes or design criteria. */
+export const coverTitleFor=(p:ProjectInput)=>p.scope==='analysis'?'COVER, ANALYSIS BASIS & INTERFACE REQUIREMENTS':coverSheetTitle;
 /** The specified field-welding requirements for the existing columns, from the calculation's welding checks. */
 function existingWeldNote(p:ProjectInput){
  if(!weldsToExistingColumn(p))return [];
@@ -168,7 +171,7 @@ export function coverSheetSvgs(s:CalculationSnapshot,sheets:SheetEntry[],pages=c
  let overflow=false;
  if(!placed){placed=flow(build(coverStyle(u,lettering.text)),limits[0],true,pages)!;overflow=true;}
  return Array.from({length:pages},(_,page)=>{
-  const number=page?coverContinuation(page).number:'S-00',title=page?coverContinuation(page).title:coverSheetTitle,here=placed!.filter(v=>v.page===page);
+  const number=page?coverContinuation(page).number:'S-00',title=page?coverContinuation(page).title:coverTitleFor(s.input),here=placed!.filter(v=>v.page===page);
   let svg=sheetStart(s,number,page?`CRANE RUNWAY / ${title}`:title)+`<g data-view="${page?'cover-continued':'cover'}">`;
   if(overflow&&page===pages-1)svg+='<g data-overflow="cover"/>';
   for(const v of here)svg+=v.b.render(v.x,v.y);
@@ -197,6 +200,17 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  const build=(t:Style)=>{
  const written:string[]=[],H=(v:string)=>{written.push(v);return heading(t,v);},N=(v:string[])=>{written.push(...v);return numbered(t,v);},P=(v:string)=>{written.push(v);return paragraph(t,v);},T=(h:string[],r:string[][],w:number[])=>{written.push(...h,...r.flat());return table(t,h,r,w);};
  const blocks:Block[]=[];
+ if(p.scope==='analysis'){
+  blocks.push(...analysisBlocks(s,{t,H,N,P,T,len,f}));
+  blocks.push(H('SHEET INDEX'),T(['SHEET','TITLE'],[['S-00',coverTitleFor(p)],...Array.from({length:pages-1},(_,i)=>[coverContinuation(i+1).number,coverContinuation(i+1).title]),...sheets.map(v=>[v.number,v.title])],[.7,3.3]));
+  const details=sheets.flatMap(v=>(v.details??[]).map(t=>[detailRef(t),t]));
+  if(details.length)blocks.push(H('DETAIL INDEX'),T(['DETAIL','TITLE'],details,[.7,3.3]));
+  blocks.push(legend(t,p.units,referenceDims,false));
+  const used=`${written.join(' ')} ${otherWords}`,abbreviations=abbreviationList.filter(([re])=>otherWords===undefined||re.test(used)).map(([,v])=>v);
+  if(abbreviations.length)blocks.push(H('ABBREVIATIONS'),P(abbreviations.join(' · ')));
+  blocks.push(H('ISSUE'),P(`${status.label}${status.reasons.length?`: ${status.reasons.join('; ')}.`:'.'} ${revisionIdentity(s).heading}.`.toUpperCase()));
+  return blocks;
+ }
  blocks.push(H('SCOPE OF WORK'),P(scope));
  blocks.push(H('GENERAL NOTES'),...N([
   ...structuralGeneralNotes(s),
@@ -297,6 +311,11 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS',`SPREAD FOOTINGS; ${format(p.columnBase.soil.allowable,'pressure',u,u==='SI'?0:3).toUpperCase()} ALLOWABLE BEARING, BASE FRICTION ${p.columnBase.soil.friction}; OVERTURNING AND SLIDING FS 1.5 (DEAD LOAD ONLY RESISTING), 1.0 IN THE ASCE 7 SEISMIC COMBINATIONS`]]:[]),
   ['ELEVATIONS',elevations?`T.O.R. ${drawingElevation(elevations.tor,u)}, T.O.S. ${drawingElevation(elevations.tos,u)} (DATUM ${drawingElevation(elevations.datum,u)})`:'NOT ENTERED']
  ],[1.4,2.6]));
+ // The configurator's selections (configurator.selections), compactly: as entered, as designed and the governing reason
+ // in its first clause without the parentheses (the full reasons are in the calculation's design summary).
+ const picks=p.configurator?.selections??[];
+ if(picks.length)blocks.push(H('CONFIGURATOR SELECTIONS'),T(['ITEM','AS ENTERED → AS DESIGNED','GOVERNING REASON'],
+  picks.map(v=>[v.item,`${v.entered} → ${v.designed}`,v.reason.split('; ')[0].replace(/\.$/,'')].map(x=>x.replace(/\s*\([^()]*\)/g,'').toUpperCase())),[.8,1.3,1.9]));
  const r=s.supportReactions;
  // The runway seismic combinations are evaluated by the engineer of record: their item in the existing structure evaluation.
  const runwaySeismic=unevaluatedStructure(s).findIndex(c=>c.id==='building-seismic-runway')+1;
@@ -315,8 +334,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  // The forces delivered to the building columns: the same concurrent sets as the calculation (page 1 and section 3.5),
  // each column as wide as its widest value so the values stay on one line (the set names wrap where the table is tight).
  const delivered=deliveredRows(s);
- // H tie is the tie design force (restraint plus the Appendix 6 brace force); the S-02 force table prints the restraint alone.
- const deliveredHeads=deliveredHeaders.map(v=>v==='H tie'?'H TIE (DESIGN)':v.toUpperCase());
+ // H tie (H top at a column cap's end fork) is the design force (restraint plus the Appendix 6 brace force); the S-02 force table prints the restraint alone.
+ const deliveredHeads=deliveredHeadersOf(p).map(v=>/^H (tie|top)$/.test(v)?`${v.toUpperCase()} (DESIGN)`:v.toUpperCase());
  if(delivered.length)blocks.push(H(`${p.existingColumn?.enabled&&p.existingColumn.isNew?'FORCES ON THE NEW RUNWAY COLUMNS (DESIGNED IN THE CALCULATION REPORT, NEW COLUMN)':'FORCES DELIVERED TO THE BUILDING COLUMNS'} · FACTORED ${p.method}, CONCURRENT SETS PER GRID`),{...T(deliveredHeads,delivered,fitColumns(t,deliveredHeads,delivered,[1])),keep:true},P(deliveredNote(s)));
  // Without bracket or support details the cover carries the factored bracket design forces.
  if(d&&s.detailResults&&!bracketForceTopic(s))blocks.push(...bracketForceBlocks(s,t));
@@ -326,7 +345,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  const details=sheets.flatMap(v=>(v.details??[]).map(t=>[detailRef(t),t]));
  if(details.length)blocks.push(H('DETAIL INDEX'),T(['DETAIL','TITLE'],details,[.7,3.3]));
  // AISC 360-16 Table J3.2 bolt groups: Group A (A325) and Group B (A490); 'Group 120 / 150' is AISC 360-22 terminology.
- const bolt=d?.end.grade==='A490'?'ASTM F3125 GRADE A490 (GROUP B)':'ASTM F3125 GRADE A325 (GROUP A)';
+ // Every bolt grade the model uses (boltGrades): one grade alone, or each with the joints that use it.
+ const grades=boltGrades(p),bolt=grades.length>1?grades.map((v,i)=>`${boltSpec(v.grade)} ${i?'ELSEWHERE':`AT THE ${v.where.join(', ')}`}`).join('; ').toUpperCase():(grades[0]?.grade??d?.end.grade)==='A490'?'ASTM F3125 GRADE A490 (GROUP B)':'ASTM F3125 GRADE A325 (GROUP A)';
  const materialsFrom=written.length;
  // Bolts in slotted sliding plies (end bearings, cap tiebacks) bear against sleeves: those plies are not clamped.
  const sleeved=!!d&&constructionRequirements(p).find(v=>v.key==='bolting')!.items.some(v=>/against steel sleeves/i.test(v));
@@ -335,7 +355,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  blocks.push(H('MATERIALS'),T(['ITEM','SPECIFICATION'],gradeRows([
   ['RUNWAY GIRDER',`${astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu).toUpperCase()}${p.section.kind==='welded'?' PLATE':''}, Fy = ${ksi(p.section.Fy)}`],
   ...(p.capDesign&&p.section.kind==='cap'?[['CAP CHANNEL',`${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource).toUpperCase()}, Fy = ${ksi(p.capDesign.Fy)}`]]:[]),
-  ...(d?[['PLATES, BARS, ANGLES, TIES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['CRANE RAIL',`${astmSpec('rail',d.rail.Fy,d.rail.Fu)} ${d.rail.name.split(" · ")[0]}, Fy = ${ksi(d.rail.Fy)}`.toUpperCase()],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface} FAYING SURFACES AT CLAMPED PLIES${activeEndBearing(p)&&bearingSurface(p)==='A'?'; CLASS A AT THE BEARING PLATES, SHIMS AND SEATS':''}${sleeved?'; BOLTS IN SLOTTED SLIDING PLIES PRETENSIONED AGAINST STEEL SLEEVES, THE SLOTTED PLY NOT CLAMPED (MATERIAL NOTE 1)':''}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`${sleeveSpec.toUpperCase()}; Fy = ${ksi(50*6.894757)} MIN. BY MILL TEST REPORT`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND BRACKETS AND TIES TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[]),...(d.rail.clip?[['RAIL CLIPS',`${d.rail.clip.product.toUpperCase()}${new RegExp(`${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}.*FLOATING`,'i').test(d.rail.clip.product)?'':`; ${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}, FLOATING`}, PER MANUFACTURER; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
+  ...(d?[[activeColumnCap(p)?'PLATES, BARS, ANGLES':'PLATES, BARS, ANGLES, TIES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['CRANE RAIL',`${astmSpec('rail',d.rail.Fy,d.rail.Fu)} ${d.rail.name.split(" · ")[0]}, Fy = ${ksi(d.rail.Fy)}`.toUpperCase()],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface} FAYING SURFACES AT CLAMPED PLIES${activeEndBearing(p)&&bearingSurface(p)==='A'?'; CLASS A AT THE BEARING PLATES, SHIMS AND SEATS':''}${sleeved?'; BOLTS IN SLOTTED SLIDING PLIES PRETENSIONED AGAINST STEEL SLEEVES, THE SLOTTED PLY NOT CLAMPED (MATERIAL NOTE 1)':''}${grades.some(v=>v.grade==='A490')?'; A490 BOLTS NOT GALVANIZED AND NOT REUSED; DO NOT SUBSTITUTE A325 FOR A490':''}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`${sleeveSpec.toUpperCase()}; Fy = ${ksi(50*6.894757)} MIN. BY MILL TEST REPORT`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND ${activeColumnCap(p)?'CAP PLATES':'BRACKETS AND TIES'} TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[]),...(d.rail.clip?[['RAIL CLIPS',`${d.rail.clip.product.toUpperCase()}${new RegExp(`${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}.*FLOATING`,'i').test(d.rail.clip.product)?'':`; ${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}, FLOATING`}, PER MANUFACTURER; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
   ...(usesRolledBracket(p)?(()=>{const w=projectStub(p);return [['COLUMN BRACKETS',`ASTM A992 ${w.name}, Fy = ${ksi(w.input.Fy)}, Fu = ${ksi(w.input.Fu)}; ${w.seat?'SEAT PL AND ':''}STIFFENERS AS PLATES`]];})():[]),
   ...(usesTaperedHaunch(p)&&d?[['COLUMN BRACKETS',`BUILT-UP TAPERED I HAUNCH PLATES, ${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}; ${p.existingColumn?.enabled&&!p.existingColumn.isNew?'FIELD WELDED TO EXISTING COLUMNS: VERIFY WELDABILITY':'SHOP WELDED'}`]]:[]),
   ...(d&&columnStiffenerGeometry(p)?[['COLUMN STIFFENERS',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()} PLATES, Fy = ${ksi(d.material.Fy)}; ${supportColumn(p).field?'FIELD WELDED INSIDE THE EXISTING COLUMNS':'SHOP WELDED INSIDE THE NEW COLUMNS'} AT THE BRACKETS`]]:[]),
@@ -426,6 +446,59 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  return blocks;};
  return build;
 }
+/**
+ * The cover of a supplied-load analysis: what was analyzed and found, and what the analysis assumed of the work by
+ * others (support reactions, lateral restraint, rail), with no construction notes, code design criteria, load
+ * combinations, materials beyond the girder analyzed, inspections or submittals: nothing else was designed.
+ */
+function analysisBlocks(s:CalculationSnapshot,o:{t:Style;H:(v:string)=>Block;N:(v:string[])=>Block[];P:(v:string)=>Block;T:(h:string[],r:string[][],w:number[])=>Block;len:(mm:number)=>string;f:(v:number|undefined,q?:Parameters<typeof format>[1])=>string}){
+ const p=s.input,u=p.units,{H,N,P,T,len,f}=o,blocks:Block[]=[];
+ const f3=(v:number)=>Math.abs(toDisplay(v,'force',u))<.1?`${Math.abs(toDisplay(v,'force',u)).toFixed(2)} ${unit('force',u)}`:sig3(v,'force',u);
+ const check=(id:string)=>s.checks.find(c=>c.id===id),ratio=(id:string,n:number)=>{const c=check(id);return c?.demand!==undefined&&c.capacity!==undefined?`${format(c.demand,'length',u,u==='US'?3:1).toUpperCase()} VS L/${n} = ${format(c.capacity,'length',u,u==='US'?3:1).toUpperCase()} (D/C ${(c.utilization??0).toFixed(2)}, ${c.status.toUpperCase()})`:'NOT EVALUATED';};
+ const restraint=p.lateralBraceSpacing>0&&p.lateralBraceSpacing<Math.max(...p.spans)-1?` AND AT LATERAL BRACES ${len(p.lateralBraceSpacing)} O.C. MAX.`:'';
+ blocks.push(H('ANALYSIS ONLY - NOT FOR CONSTRUCTION'),P(`SUPPLIED-LOAD ELASTIC ANALYSIS OF THE RUNWAY GIRDERS ONLY. NO GIRDER, CONNECTION, BEARING, STIFFENER, TIE, BRACKET, COLUMN, RAIL ATTACHMENT OR END STOP IS DESIGNED, AND STRENGTH, STABILITY, FATIGUE AND CODE COMPLIANCE ARE NOT EVALUATED (LOAD FACTORS NOT APPLIED). THESE SHEETS RECORD THE GEOMETRY ANALYZED AND THE CONDITIONS THE ANALYSIS ASSUMED OF THE WORK BY OTHERS; THEY ARE NOT CONSTRUCTION DOCUMENTS.`));
+ blocks.push(H('DRAWING NOTES'),...N([
+  'DASHED BUILDING FRAMING, COLUMNS AND BRACKETS ARE REFERENCE ONLY (ASSUMED, NOT SURVEYED OR CHECKED). OPPOSITE RUNWAY SHOWN FOR CONTEXT; THE RUNWAY AT GRID B IS TAKEN IDENTICAL AND OPPOSITE HAND.',
+  'SEE THE CALCULATION REPORT OF THE SAME CALC ID FOR THE ANALYSIS.'
+ ]));
+ blocks.push(H('ANALYSIS BASIS AND RESULTS'),T(['ITEM','VALUE'],[
+  ['GIRDER ANALYZED',specGrade(`${p.section.name}${p.section.kind==='cap'?' (CAPPED)':''}, ${astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu)}, E = ${format(p.section.E,'stress',u,0)}`.toUpperCase())],
+  ['SPANS',`${p.spans.map(len).join(' + ')} ${p.system==='continuous'?'CONTINUOUS':'SIMPLE SPANS'}`],
+  ['MODEL',`LINEAR ELASTIC BEAM; RIGID VERTICAL SUPPORT AT EACH GRID${p.system==='continuous'?', CONTINUOUS OVER INTERIOR SUPPORTS':', PINNED ENDS'}; TOP FLANGE RIGIDLY RESTRAINED LATERALLY AT EACH SUPPORT${restraint}`],
+  ['LOADS',`CRANE WHEEL LOADS AS SUPPLIED (BELOW), MOVED ALONG THE RUNWAY; GIRDER SELF WEIGHT, RAIL ${railWeight(p.railWeight,u)}${p.deadLoad>0?` AND ${f(p.deadLoad,'lineLoad')} SUPERIMPOSED`:''}. UNFACTORED.`],
+  ['VERTICAL DEFLECTION',`ONE CRANE, STATIC WHEEL LOADS, NO IMPACT: ${ratio('vertical',p.verticalLimit)}`],
+  ['LATERAL DEFLECTION',`TOP FLANGE ALONE UNDER THE SIDE THRUST: ${ratio('lateral',p.lateralLimit)}`],
+  ['CRITERIA SOURCE',p.criteriaSource.toUpperCase()]
+ ],[1.3,2.7]));
+ for(const c of p.cranes){
+  const max=Math.max(...c.wheels.map(w=>w.loaded)),side=c.wheels.reduce((a,w)=>a+w.lateral,0);
+  blocks.push(H(`CRANE DATA AS SUPPLIED · ${c.name.toUpperCase()}`),T(['ITEM','VALUE'],[
+   ['WHEELS ON RUNWAY',`${c.wheels.length} AT ${c.wheels.slice(1).map((w,i)=>len(w.offset-c.wheels[i].offset)).join(', ')}`],
+   ['MAX LOADED WHEEL',`${f(max)}${c.includesImpact?' INCLUDING IMPACT':''}`],
+   ['VERTICAL IMPACT',`${+(c.impact*100).toFixed(1)}%${c.includesImpact?' (INCLUDED IN THE WHEEL LOADS)':''}`],
+   ['SIDE THRUST, THIS RUNWAY',f(side)],
+   ['LONGITUDINAL TRACTION',f(c.longitudinal)],
+   ['LOAD SOURCE',c.loadSource.toUpperCase()]
+  ],[1.4,2.6]));
+  blocks.push(H(`WHEEL LOADS · ${c.name.toUpperCase()}`),wheelDiagram(o.t,c,{force:v=>f(v),length:len,impact:c.impact,lateral:side,traction:c.longitudinal}));
+ }
+ // Each support's own maximum (not one crane position for all), unfactored, as the analysis loads them.
+ const r=s.properties?supportReactions(p,s.properties,40,true):undefined;
+ const gridAt=(x:number)=>{let at=0;const i=[0,...p.spans.map(v=>at+=v)].findIndex(g=>Math.abs(g-x)<1);return i<0?len(x):`${i+1}`;};
+ if(r)blocks.push(H('SUPPORT REACTIONS · UNFACTORED, SUPPLIED LOADS, PER SUPPORT'),T(['GRID','D','Cd','Cv','Ci','Css (TOP FL.)'],r.supports.map(v=>[gridAt(v.x),...[v.D,v.Cd,v.Cv,v.Ci].map(f3),'±'+f3(v.Css)]),[.6,1,1,1,1,1.2]),
+  P(`D GIRDER, RAIL${p.deadLoad>0?' AND SUPERIMPOSED':''} DEAD LOAD; Cd CRANE EMPTY, Cv LIFTED LOAD, Ci IMPACT, AT THE CRANE POSITION GIVING THE LARGEST Cd + Cv + Ci AT THAT SUPPORT; Css LATERAL REACTION AT THE TOP FLANGE, EITHER DIRECTION, LARGEST AT THAT SUPPORT. MAXIMA ARE NOT CONCURRENT FROM SUPPORT TO SUPPORT. LONGITUDINAL TRACTION ${f(r.Cls)} PER RUNWAY AT THE TOP OF RAIL; BUMPER FORCE NOT ANALYZED.${r.supports.some(v=>v.craneMinimum<0)?` CRANE UPLIFT UP TO ${f3(-Math.min(...r.supports.map(v=>v.craneMinimum)))} AT A SUPPORT.`:''}`));
+ const cfg=p.configurator,chosen=cfg&&cfg.structure!=='new'&&cfg.support&&cfg.tie?` THE SUPPORT (${cfg.support.toUpperCase()}) AND TIE (${cfg.tie.toUpperCase()}) SELECTED IN THE CONFIGURATOR WERE NOT USED OR DESIGNED BY THIS ANALYSIS.`:'';
+ blocks.push(H('CONNECTIONS AND SUPPORTS BY OTHERS · REQUIREMENTS OF THE ANALYSIS'),...N([
+  `GIRDER END BEARINGS, BEARING STIFFENERS, TOP-FLANGE TIES, BRACKETS OR COLUMNS AND THEIR CONNECTIONS ARE BY OTHERS. DESIGN THEM FOR THE SUPPORT REACTIONS ABOVE WITH THE LOAD FACTORS AND COMBINATIONS OF THE GOVERNING CODE.${chosen}`,
+  `THE ANALYSIS ASSUMES A RIGID VERTICAL SUPPORT AT EACH GRID${p.system==='continuous'?' WITH THE GIRDER CONTINUOUS OVER THE INTERIOR SUPPORTS':' WITH EACH GIRDER FREE TO ROTATE AT ITS ENDS'}.`,
+  `RESTRAIN THE TOP FLANGE LATERALLY AT EACH SUPPORT${restraint} FOR THE LATERAL REACTION Css LISTED, WITHOUT RESTRAINING THE GIRDER'S LONGITUDINAL MOVEMENT AND END ROTATION (AISC DESIGN GUIDE 7 §11.2). THE LATERAL DEFLECTION ABOVE IS VALID ONLY WITH THIS RESTRAINT.`,
+  `CARRY THE LONGITUDINAL TRACTION AND THE BUMPER FORCE FROM THE GIRDERS TO THE BUILDING BY OTHERS.`
+ ]));
+ blocks.push(H('CRANE RAIL · BY OTHERS, AS ANALYZED'),P(`RAIL SIZE, CLIPS, SPLICES AND END STOPS ARE BY OTHERS. THE ANALYSIS ASSUMED A RAIL ${len(p.railHeight).replace(/^0'-/,'')} HIGH WEIGHING ${railWeight(p.railWeight,u)}, ITS C/L WITHIN ${plateInches(Math.abs(p.railEccentricity),u)} OF THE GIRDER WEB C/L, AND THE SIDE THRUST AT THE TOP FLANGE; THE RAIL FURNISHED SHALL NOT BE HEAVIER OR TALLER WITHOUT REANALYSIS.`));
+ return blocks;
+}
+/** A rail weight as it is specified: lb/ft or kg/m. */
+const railWeight=(Npmm:number,u:'US'|'SI')=>u==='US'?`${+(Npmm/0.01459390294).toFixed(1)} LB/FT`:`${+(Npmm*1000/9.80665).toFixed(1)} KG/M`;
 /** A tapered haunch whose flanges are CJP groove welded to an existing column flange (through-thickness loading). */
 function cjpToExisting(p:CalculationSnapshot['input']){
  const b=p.details?.bracket;

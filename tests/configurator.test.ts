@@ -7,6 +7,13 @@ import {craneInputChecks,craneStatics,bumperSelectionChecks} from '../src/engine
 import {buildingClassCheck,fatigueCycleCheck} from '../src/engine/buildingClass';
 import {packageContentChecks} from '../src/engine/detailTemplate';
 import {projectSchema} from '../src/engine/types';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import StartPanel from '../src/components/StartPanel';
+import {sheetFixture} from './fixtures/sheets/sheetFixtures';
+import {drawingSheetSet} from '../src/components/planSheet';
+import {annotationClashes} from '../src/components/detailSheet';
+import {selectionsTable} from '../src/report/designSummary';
 
 const kip=4448.2216152605,foot=304.8,inch=25.4;
 
@@ -87,6 +94,9 @@ describe('dependent choices',()=>{
   expect(r.changes.length).toBeGreaterThanOrEqual(2);
   expect(normalizeConfig({...defaultRunwayConfig,structure:'new',support:'by-others'}).config.support).toBe('twin-rib');
   expect(normalizeConfig({...defaultRunwayConfig,system:'continuous',tie:'flexible-plate'}).config.tie).toBe('paired-bars');
+  // Each change is kept per choice for the selection log: the field, as entered, as adjusted and the rule.
+  expect(r.rules).toContainEqual({field:'structure',from:'existing',to:'new',why:expect.stringMatching(/new freestanding columns/)});
+  expect(r.rules).toContainEqual({field:'tie',from:'cap-angle',to:'paired-bars',why:expect.any(String)});
  });
  it('previews the crane, duty, rail and sized girder without building the details',()=>{
   const v=previewConfig({...defaultRunwayConfig,capacity:5,control:'pendant',craneSpan:50});
@@ -114,6 +124,11 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
   const p=buildProject(cfg);
   expect(p.configurator?.support).toBe('column-cap');expect(p.columnCap?.enabled).toBe(true);expect(p.details!.bracket?.enabled).toBeFalsy();
   expect(validateProject(p)).toEqual([]);
+  // The selection log names the support and the tie that were replaced, each with its governing rule.
+  const log=p.configurator!.selections!,row=(item:string)=>log.find(v=>v.item===item);
+  expect(row('Girder support')).toMatchObject({entered:'Welded twin-rib seat',designed:'Column cap (new columns)',reason:expect.stringMatching(/exceeds the AIST TR-13 §5\.9\.2 recommendation/)});
+  expect(row('Top-flange tie')).toMatchObject({entered:'Flexible plate',designed:expect.stringMatching(/^None: end fork on the column cap/),reason:expect.stringMatching(/fork/)});
+  expect(row('New column')?.designed).toBe(p.existingColumn!.shape);
  },120000);
  it('keeps the brackets of an existing structure above it, with the warning; within it nothing is said',()=>{
   const v=previewConfig({...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30});
@@ -121,5 +136,40 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
   expect(v.changes).toContainEqual(expect.stringMatching(/^Support reaction about \d+ kip exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets; consider new crane columns with column caps, or obtain the engineer of record's acceptance\.$/));
   // The one statement within the limit is the assumed bumper overhang (end-truck geometry for the stop contacts).
   const light=previewConfig({...defaultRunwayConfig,capacity:5});expect(light.changes.filter(v=>!/^Bumper overhang assumed/.test(v))).toEqual([]);expect(light.changes.at(-1)).toMatch(/^Bumper overhang assumed \d+ in/);expect(light.reaction!).toBeLessThan(50*kip);
+ });
+});
+
+describe('configurator selection log',()=>{
+ it('records each choice the configurator made with its governing reason, and is not read back as a choice',()=>{
+  const p=templateProject('t01'),log=p.configurator!.selections!,row=(item:string)=>log.find(v=>v.item===item);
+  // The girder sized here: its governing sizing ratio and the lighter candidates rejected, counted by reason.
+  expect(row('Girder')).toMatchObject({entered:'configurator default (sized)',designed:p.section.name});
+  expect(row('Girder')!.reason).toMatch(/ratio \d\.\d\d, vertical deflection \d\.\d\d and lateral \d\.\d\d of their limits/);
+  expect(row('Girder')!.reason).toMatch(/lighter candidates rejected: \d+ by /);
+  expect(row('Existing column')).toMatchObject({entered:'configurator default',designed:p.existingColumn!.shape});
+  // Nothing the user entered as built is listed: support and tie are as configured.
+  expect(row('Girder support')).toBeUndefined();
+  expect(projectSchema.parse(JSON.parse(JSON.stringify(p))).configurator?.selections).toEqual(log);
+  // Rebuilt from its configurator record (log included), the project and the log come back the same.
+  const q=buildProject(p.configurator!);
+  expect(q.section.name).toBe(p.section.name);expect(q.configurator!.selections).toEqual(log);
+  // The start panel shows the log of the project it built.
+  const html=renderToStaticMarkup(createElement(StartPanel,{project:p,onBuild:()=>{}}));
+  expect(html).toContain('Configurator selections');expect(html).toContain(`<td>${p.section.name}</td>`);
+  // A girder named in the configuration is used as entered and is not listed.
+  expect(buildProject({...p.configurator!,girderShape:'W24X104'}).configurator!.selections!.find(v=>v.item==='Girder')).toBeUndefined();
+ },120000);
+ it('prints the log in the design summary and compactly on S-00, clear of other text',()=>{
+  const s=sheetFixture('t07'),log=[{item:'Girder support',entered:'Welded twin-rib seat',designed:'Column cap (new columns)',reason:'The support reaction, about 117 kip, exceeds the AIST TR-13 §5.9.2 recommendation of 50 kip for column brackets: the girders bear on column caps.'},
+   {item:'Girder',entered:'configurator default (sized)',designed:s.input.section.name,reason:'Lightest compact W within the sizing targets (ratio ≤ 0.85): top-flange tip stress ratio 0.83; next lighter, W14X426: tips ratio 1.14 > 0.85.'}];
+  expect(selectionsTable(s.input)).toBe('');
+  s.input.configurator={...s.input.configurator!,selections:log};
+  const html=selectionsTable(s.input);
+  expect(html).toContain('<h3>Configurator selections</h3>');expect(html).toContain('next lighter, W14X426');
+  const cover=drawingSheetSet(s).find(v=>v.number==='S-00')!.svg;
+  expect(cover).toContain('CONFIGURATOR SELECTIONS');expect(cover).toContain('WELDED TWIN-RIB SEAT →');
+  // The cover keeps the first clause of each reason; the full reason is in the calculation.
+  expect(cover).not.toContain('NEXT LIGHTER');
+  expect(annotationClashes(cover)).toBe(0);expect(cover).not.toMatch(/data-overflow/);
  });
 });

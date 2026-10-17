@@ -1,3 +1,4 @@
+import { snapQuarter } from '../engine/quarterInch';
 import * as THREE from 'three';
 import { capChannelGeometry } from './capChannelGeometry';
 import {bracketModelDepth} from '../engine/connectionOptions';
@@ -67,10 +68,11 @@ export function planSheetGeometry(input: ProjectInput, settings: FramingSettings
   const material = new THREE.MeshBasicMaterial(), edge = new THREE.LineBasicMaterial();
   const materials = { column: material, beam: material, plate: material, foundation: material, brace: material, crane: material, edge };
   const railBase = d / 2 + (s.kind === 'cap' ? s.capTw / 1000 : 0), railH = Math.max(.025, input.railHeight / 1000);
-  // Runway centers follow the project rail gauge when detailed inputs exist; otherwise the reference building width.
+  // Runway centers follow the project rail gauge when detailed inputs exist, else the crane span the configurator was
+  // given (an analysis-only project has no details); otherwise the reference building width.
   // The rail is set on the girder web C/L; the rail eccentricity is a design allowance for setting and
   // wear, not a setting offset, so girders are at the crane span.
-  const railZ = 0, width = input.details ? input.details.criteria.railGauge / 1000 : f.width / 1000;
+  const railZ = 0, width = input.details ? input.details.criteria.railGauge / 1000 : input.configurator?.craneSpan ? input.configurator.craneSpan * .3048 : f.width / 1000;
   const newColumn = newColumnFraming(input);
   const reference = buildReferenceFraming({newColumn,columnFace:input.details?.bracket?.enabled?undefined:tieFaceMeters(input), bracket:input.details?.bracket,continuousBearing:input.system==='continuous'&&input.details?.bracket?.enabled?{width:input.details.bearing.width/1000,length:input.details.bearing.length/1000,thickness:input.details.bearing.thickness/1000}:undefined,independentBearing:independentBearingSettings(input), supports, girderDepth: d, girderWidth: bf, girderFlangeT: tf, columnHeight: f.height / 1000,
     roofBottom: railBase + railH + .0125 + f.roofClearance / 1000, column, crosshead, materials, frameStyle: f.frameStyle });
@@ -120,6 +122,8 @@ export function planSheetGeometry(input: ProjectInput, settings: FramingSettings
   const geometries = new Set<THREE.BufferGeometry>();
   for (const group of [building, runway]) group.traverse(o => { const geometry = (o as THREE.Mesh).geometry; if (geometry) geometries.add(geometry); });
   geometries.forEach(g => g.dispose()); material.dispose(); edge.dispose();
-  return { referenceLines, runwayLines, length, supports, width, d, bf, tf, railZ, railBase, columnOffset: reference.columnOffset,
+  // The grid to girder C/L distance on the 1/4 in grid, as it is dimensioned, so the grid-to-rail, crane span and
+  // grid-to-grid dimensions of the section add up (the framing's column depth need not be on the grid).
+  return { referenceLines, runwayLines, length, supports, width, d, bf, tf, railZ, railBase, columnOffset: snapQuarter(reference.columnOffset*1000)/1000,
     column: newColumn?.cap?shapeMeters(newColumn.cap.column):input.details?.bracket?.enabled?{d:input.details.bracket.receiver.depth/1000,bf:input.details.bracket.receiver.width/1000,tf:input.details.bracket.receiver.flangeThickness/1000,tw:input.details.bracket.receiver.webThickness/1000}:shapeMeters(column), columnDepthAt: (y:number) => reference.columnOuter(y)-reference.columnFace, bracketDepth: newColumn?.cap?newColumn.cap.thickness+Math.max(newColumn.cap.stiffener.height,.1):input.details?.bracket?.enabled?bracketModelDepth(input.details.bracket)/1000:shapeMeters(crosshead).d, floor: reference.floor, membersPerRunway: members.length, members, section };
 }

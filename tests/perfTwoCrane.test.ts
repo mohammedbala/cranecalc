@@ -96,7 +96,7 @@ describe('two-crane runways within the browser memory',()=>{
   // calculate(input, {onProgress}): both searches report, each fraction in (0, 1].
   expect(r.progress.design).toBeGreaterThan(0);expect(r.progress.detailed).toBeGreaterThan(0);expect(r.progress.bad).toBe(0);
  },1000000);
- it.runIf(process.env.CRANECALC_PERF==='1')('calculates template t09 (two 10-ton cranes, five bays) in under 5 minutes below 2 GB',()=>{
+ it.runIf(process.env.CRANECALC_PERF==='1')('calculates template t09 (two 5-ton cranes, five bays) in under 5 minutes below 2 GB',()=>{
   const r=calculateInChild({template:'t09'},1800);
   expect(r.errors).toEqual([]);
   expect(r.seconds).toBeLessThan(300);expect(r.peakMB).toBeLessThan(2048);

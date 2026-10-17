@@ -10,7 +10,7 @@ import {existingColumnRailElevation} from '../src/engine/existingColumn';
 import {baseSizingRatios,exactBaseSizingRatios,sizeColumnBase} from '../src/engine/columnBaseSizing';
 import type {ProjectInput} from '../src/engine/types';
 
-const inch=25.4,foot=304.8,target=.9,codeLimits=['frost','bar-spacing','min-steel'];
+const inch=25.4,foot=304.8,target=.9,codeLimits=['frost','bar-spacing','min-steel','rod-clear'];
 /** Every size of the base, each of which the sizing may only keep or increase (bottom steel as area per width). */
 const sizes=(p:ProjectInput)=>{const b=p.columnBase!,{plate:pl,anchors:a,footing:f}=b;
  return {N:pl.N,B:pl.B,thickness:pl.thickness,weld:pl.weld,diameter:a.diameter,grade:anchorGrades.indexOf(a.grade),perRow:a.perRow,edge:a.edge,gauge:a.gauge,embedment:a.embedment,

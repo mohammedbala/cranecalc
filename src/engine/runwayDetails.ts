@@ -79,7 +79,9 @@ export const runwayDetailsSchema=z.object({
  criteria:z.object({twistLimit:pos.optional(),railLateralLimit:pos,railGauge:pos,alignmentTolerance:pos,levelTolerance:pos,rotationClearance:pos,temperatureMaximum:z.number().finite(),corrosionProtected:z.boolean()}),
  fatigueDetails:z.array(z.object({id:z.string().min(1).max(40),name:z.string().min(1).max(120),x:nn,point:z.enum(['top-left','top-right','bottom-left','bottom-right']),category:z.enum(['A','B','B1','C','D','E','E1']),reference:z.string().min(1).max(300)})).min(1).max(16),
  spectrum:z.array(z.object({name:z.string().min(1).max(80),liftFraction:nn.max(1),cycles:pos})).min(1).max(8),
- fabrication:z.object({steel:z.string().min(1).max(200),bolting:z.string().min(1).max(400),welding:z.string().min(1).max(400),inspection:z.string().min(1).max(700),erection:z.string().min(1).max(700),railAlignment:z.string().min(1).max(700)})
+ fabrication:z.object({steel:z.string().min(1).max(200),bolting:z.string().min(1).max(400),welding:z.string().min(1).max(400),inspection:z.string().min(1).max(700),erection:z.string().min(1).max(700),railAlignment:z.string().min(1).max(700)}),
+ /** A continuous girder longer than a practical piece (girderPieceChecks): the erector's confirmation of shipping and erecting it in one length, with its source. */
+ girderPiece:z.string().max(300).optional()
 });
 export type RunwayDetails=z.infer<typeof runwayDetailsSchema>;
 export type LapConnection=z.infer<typeof lapConnectionSchema>;
@@ -124,10 +126,12 @@ export interface RunwayDetailResults {
  /** Column cap on new freestanding columns: per-grid cap, stiffener, bolt and weld demands, and the fork restraint. */
  columnCap?:ColumnCapResults;
  cap?:{longitudinalFlow:number;fatigueFlows:number[]};
- /** Major flexure with the load-height elastic critical moment: Cb = Mcr / Mocr in F2 / F4 / F5 (never above 1), with the
+ /** Major flexure with the load-height elastic critical moment entered at its equivalent unbraced length, with the
   * AISC 360-16 Commentary F1 load-height Cb of the same case for comparison. */
  loadHeight?:{utilization:number;demand:number;capacity:number;length:number;critical:number;id:string;combination:string;x:number;
-  /** Cb = Mcr / Mocr (1 when the eigenvalue does not reduce the strength); Mocr the uniform-moment F2-4 / F4-5 / F5-4 moment at Lb. */
+  /** length: the equivalent unbraced length L_e >= Lb at which the Cb = 1 elastic moment equals M_cr (the strength is the
+   * F2 / F4 / F5 curve at L_e); cb = Mcr / Mocr (1 when the eigenvalue does not reduce the strength), printed only; Mocr the
+   * uniform-moment F2-4 / F4-5 / F5-4 moment at Lb. */
   cb:number;mocr:number;sign?:number;
   /** Height of the rail head above the shear center (load height in the eigen model). */
   height:number;

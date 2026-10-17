@@ -16,7 +16,7 @@ import {drawingLength,holeInches,plateInches,dimensionLength,limitLength} from '
 import {refDim,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import type {DetailTopic,DetailView} from './detailSheet';
-import {AnnotationSpace} from './annotationSpace';
+import {AnnotationSpace,dimHClear} from './annotationSpace';
 
 const inch=25.4;
 type Pt=[number,number];
@@ -139,8 +139,11 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   const notes=['RODS CROSS, NOT CONNECTED;',`ROD ${gridB}-${gridA} BEYOND, ${dim(cr.offset)} OFF;`,`SEE ${detailRef(rodCrossingTitle)}`],nw=Math.max(...notes.map(v=>textWidth(v,8)));
   svg+=text(cross[0],Y(h*.78),`ROD W.P. TO W.P. ${dim(L.diagonal)}`,8,'middle');
   svg+=multiLeader([[cross[0],cross[1]+2]],[cross[0]-nw/2,Y(h*.2)],notes,8);
-  // Section at mid-bay, from above the strut, looking toward the lower-numbered grid.
-  svg+=sectionCut([cross[0],Y(h+half)-6],[cross[0],cross[1]+10],[-1,0],rodCrossingTitle,['b']);
+  // Section at mid-bay, from above the strut, looking toward the lower-numbered grid: its end below the crossing where
+  // the reference reads clear of the rods (lower where a steep X keeps them close), else above the strut.
+  {const space=new AnnotationSpace(svg),labels=['tail','tip'] as const;
+   svg+=space.pick([...[10,22,34,48,64,80].flatMap(d=>labels.map(v=>sectionCut([cross[0],Y(h+half)-6],[cross[0],cross[1]+d],[-1,0],rodCrossingTitle,['b'],v))),
+    ...labels.map(v=>sectionCut([cross[0],Y(h+half)-6],[cross[0],cross[1]+10],[-1,0],rodCrossingTitle,['a'],v))]);}
   // Callouts in a column at the right, ordered by height.
   const [ra]=rods,at=(t:number):XY=>[ra.from[0]+(ra.to[0]-ra.from[0])*t,ra.from[1]+(ra.to[1]-ra.from[1])*t];
   const lx=X(xMax)+16,items:{at:XY;labels:string[]}[]=[
@@ -200,9 +203,11 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   const dimY=lower?Y(-base.plate.thickness-base.grout-inch)+16:Y(sg.d/2)-14;
   if(lower)svg+=dimH(X(0),X(pin[0]),Y(-base.plate.thickness-base.grout),dimY,dim(pin[0]),'right');
   else{
-   // The short edge distance on its own tier, its text beside its segment.
-   svg+=dimH(X(0),X(sg.end),Y(sg.d/2),dimY,dim(sg.end),'left')+dimH(X(sg.bolts[0]),X(sg.bolts[1]),Y(sg.d/2),dimY,dim(sg.pitch),'right');
-   svg+=dimH(X(sg.end),X(sg.bolts[0]),Y(sg.d/2),dimY-14,dim(sg.edge),'right');
+   // The short edge distance on its own tier, its text beside its segment; the tiers raised where the column's break
+   // above the strut would run through their text.
+   const space=new AnnotationSpace(svg);
+   svg+=space.pick([0,-8,-16,-24,-32,6].map(o=>dimH(X(0),X(sg.end),Y(sg.d/2),dimY+o,dim(sg.end),'left')+dimH(X(sg.bolts[0]),X(sg.bolts[1]),Y(sg.d/2),dimY+o,dim(sg.pitch),'right')
+    +dimH(X(sg.end),X(sg.bolts[0]),Y(sg.d/2),dimY-14+o,dim(sg.edge),'right')));
    svg+=dimH(X(0),X(pin[0]),Y(pin[1]),Y(zBot)+6,dim(pin[0]),'right');
   }
   const weld=lower?r.outlines.welds.lower:undefined,upper=r.outlines.welds.upper,welds=lower?`${dim(weld!.web)} TO WEB, ${dim(weld!.plate-g.x0)} TO BASE PL`:`${dim(upper.to-upper.from)} TO COLUMN WEB`;
@@ -316,7 +321,10 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   svg+=ellipse(0)+ellipse(cr.offset);
   // Planes of the gussets through the rods, up through the strut.
   for(const y of [0,cr.offset])svg+=line([X(y),top-10],[X(y),yr+ry+8],'grid-line');
-  svg+=dimH(X(0),X(cr.offset),yr+ry+2,yr+ry+18,dim(cr.offset),'left')+refDim(dimH(X(rd/2),X(cr.offset-rd/2),yr+ry+2,yr+ry+34,drawingLength(cr.clear,u)+' CLEAR','left'));// The clearance follows from the gusset, strut web and filler thicknesses.
+  // The clearance follows from the gusset, strut web and filler thicknesses. Its extension lines pass the offset's tier:
+  // the offset's value reads where they leave it clear.
+  const clearDim=refDim(dimH(X(rd/2),X(cr.offset-rd/2),yr+ry+2,yr+ry+34,drawingLength(cr.clear,u)+' CLEAR','left'));
+  svg+=dimHClear(new AnnotationSpace(svg+clearDim),X(0),X(cr.offset),yr+ry+2,yr+ry+18,dim(cr.offset))+clearDim;
   const items:{at:XY;labels:string[]}[]=[
    {at:[X(wc+sbf/2),top+stf*kk/2],labels:[`${sg.shape} STRUT, CUT AT MID-BAY:`,'WEB BETWEEN THE GUSSET PLANES']},
    {at:[X(cr.offset)+rd/2*kk,yr],labels:[`ROD ${gridB}-${gridA}, IN THE PLANE OF ITS`,`GUSSETS, ${dim(cr.offset)} TOWARD GIRDER`,'RODS NOT CONNECTED']}
@@ -377,13 +385,40 @@ export function bracingOnElevation(s:CalculationSnapshot,o:{EX:(x:number)=>numbe
  // Below a column cap the whole strut shows, between the column flanges.
  const capped=capWorkPointDrop(p)>0,seat=capped?half:(br?bracketSeat(br).length:0)*mm/2,sb=EY(wp-g.strut.d*mm/2),st=EY(wp+g.strut.d*mm/2);
  for(let i=1;i<o.supports.length;i++)svg+=line([EX(o.supports[i-1]+seat),sb],[EX(o.supports[i]-seat),sb],'runway-line')+(capped?line([EX(o.supports[i-1]+seat),st],[EX(o.supports[i]-seat),st],'runway-line'):'');
- // The callout in the first braced span, below the girder marks, pointing at the strut there.
- const i=L.spans[0],cx=(EX(o.supports[i-1])+EX(o.supports[i]))/2,labels=[`${plateInches(p.longitudinalBracing!.rod.diameter,p.units)} DIA. ROD X-BRACING BELOW, GRIDS ${L.spans.map(v=>`${v}-${v+1}`).join(', ')}, BOTH RUNWAYS`,`${g.strut.shape} STRUT ON COLUMN LINE, ALL SPANS; SEE ${detailRef(detailTitles.bracedBay)}`];
- const w=Math.max(...labels.map(v=>textWidth(v.toUpperCase(),lettering.text)));
- // The leader lands on the strut a quarter span in, clear of the girder mark at mid-span.
- const q=EX(o.supports[i-1]*.75+o.supports[i]*.25),drawn=new AnnotationSpace(svg),at:XY=[q,sb];
- // An unbraced span beside it is the last resort.
- const spans=o.supports.slice(1).map((x,k)=>k+1).filter(k=>!L.spans.includes(k)).map(k=>(EX(o.supports[k-1])+EX(o.supports[k]))/2-w/2);
- svg+=drawn.pick([end-14,end-20,end-26,end-32,end-46,end-6].flatMap(y=>[cx-w/2,q+14,q-14-w,cx+14,cx-14-w,...spans].map(x=>multiLeader([at],[x,y],labels,lettering.text))));
  return svg+'</g>';
+}
+/**
+ * The bracing callout on the girder elevation (options as bracingOnElevation), placed where it reads clear of the
+ * elevation drawn so far (`drawn`, its grid lines, girder marks and dimensions included) and inside [left, right]: in the
+ * first braced span below the girder marks, else another span, on two lines or wrapped to four where a span is narrow;
+ * else beyond a runway end (the nearer first), level with the column stubs or below them. The leader lands on the strut a
+ * quarter span into the first braced span, clear of the girder mark at mid-span.
+ */
+export function bracingElevationCallout(s:CalculationSnapshot,o:Parameters<typeof bracingOnElevation>[1],drawn:string,[left,right]:[number,number]){
+ const p=s.input,r=s.bracingSystem!,g=r.geometry,L=r.layout,dt=p.details!;
+ const mm=.001,wp=-p.section.d/2*mm-dt.bearing.thickness*mm-capWorkPointDrop(p)*mm,{EX,EY}=o,end=o.girderBottom+o.stub,sb=EY(wp-g.strut.d*mm/2);
+ const i=L.spans[0],cx=(EX(o.supports[i-1])+EX(o.supports[i]))/2,rod=`${plateInches(p.longitudinalBracing!.rod.diameter,p.units)} DIA. ROD X-BRACING BELOW`,grids=`GRIDS ${L.spans.map(v=>`${v}-${v+1}`).join(', ')}, BOTH RUNWAYS`;
+ const strut=`${g.strut.shape} STRUT ON COLUMN LINE`,see=`SEE ${detailRef(detailTitles.bracedBay)}`;
+ const two=[`${rod}, ${grids}`,`${strut}, ALL SPANS; ${see}`],four=[`${rod},`,`${grids};`,`${strut},`,`ALL SPANS; ${see}`];
+ const width=(labels:string[])=>Math.max(...labels.map(v=>textWidth(v.toUpperCase(),lettering.text)));
+ const q=EX(o.supports[i-1]*.75+o.supports[i]*.25),space=new AnnotationSpace(drawn),at:XY=[q,sb];
+ const first=EX(o.supports[0])-o.columnWidth/2*o.ek,last=EX(o.supports[o.supports.length-1])+o.columnWidth/2*o.ek;
+ const inside=(x:number,labels:string[])=>x>=left&&x+width(labels)<=right;
+ const options:string[]=[];
+ // Within the spans: the braced span first, an unbraced span beside it the last resort.
+ for(const labels of [two,four]){
+  const w=width(labels),h=(labels.length-1)*lettering.leading;
+  const spans=o.supports.slice(1).map((x,k)=>k+1).filter(k=>!L.spans.includes(k)).map(k=>(EX(o.supports[k-1])+EX(o.supports[k]))/2-w/2);
+  const ys=labels.length===2?[end-14,end-20,end-26,end-32,end-46,end-6]:[end-6-h,end-h,end+6-h,end-12-h];
+  options.push(...ys.flatMap(y=>[cx-w/2,q+14,q-14-w,cx+14,cx-14-w,...spans].filter(x=>inside(x,labels)).map(x=>multiLeader([at],[x,y],labels,lettering.text))));
+ }
+ // Beyond the runway ends, the nearer end first, below the strut: the strut runs every span, so the leader lands on it a
+ // quarter span into the end span.
+ const n=o.supports.length,nearLeft=q-first<=last-q,ends:{x:(w:number)=>number;at:XY}[]=[
+  {x:w=>first-24-w,at:[EX(o.supports[0]*.75+o.supports[1]*.25),sb]},{x:()=>last+24,at:[EX(o.supports[n-2]*.25+o.supports[n-1]*.75),sb]}];
+ for(const labels of [two,four]){
+  const w=width(labels),ys=Array.from({length:12},(_,j)=>sb+lettering.leading+j*6);
+  for(const e of nearLeft?ends:[ends[1],ends[0]])if(inside(e.x(w),labels))options.push(...ys.map(y=>multiLeader([e.at],[e.x(w),y],labels,lettering.text)));
+ }
+ return options.length?space.pick(options):'';
 }

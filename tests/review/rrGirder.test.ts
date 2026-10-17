@@ -34,16 +34,20 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
   expect(buildTaxonomy(s,summaryElements(s.input)).openItems).toEqual([]);
  });
 
- it('M2: load-height LTB enters F4 as Cb = Mcr/Mocr, agrees with the Commentary F1 bound, and is the Mcx H1 uses',()=>{
+ it('M2: load-height LTB enters F4 at the equivalent length of the eigen Mcr, agrees with the Commentary F1 bound, and is the Mcx H1 uses',()=>{
   const lh=s.detailResults!.loadHeight!,c=check('flexure-load-height'),props=sectionProperties(p.section),st=girderStrength(p,props),curve=flexureCurves(p,props).positive;
   expect(c.capacity).toBeCloseTo(lh.capacity,6);
   expect(lh.mocr).toBeCloseTo(curve.mcr(p.unbracedLength),6);expect(lh.cb).toBeCloseTo(lh.critical/lh.mocr,9);
-  expect(lh.capacity).toBeCloseTo(Math.min(st.major,.9*lh.cb*st.ltb!,.9*lh.critical),6);
+  // M_cr enters F4 at its equivalent unbraced length (F4-5 with Cb = 1 solved for M_cr, never below Lb): no Cb < 1
+  // factor on the inelastic F4-2 strength, which is never below that product.
+  expect(lh.length).toBeGreaterThanOrEqual(p.unbracedLength);expect(curve.mcr(lh.length)/lh.critical).toBeCloseTo(1,6);
+  expect(lh.capacity).toBeCloseTo(Math.min(st.major,curve.available(lh.length),.9*lh.critical),6);
+  expect(lh.capacity).toBeGreaterThan(Math.min(st.major,.9*lh.cb*st.ltb!));
   // The reviewer's Commentary F1 bound: the eigenvalue takes the restraints with their play at the secant stiffness, which
   // the Commentary ignores, so its Cb is the lower one (more conservative), within 30 %.
   const cm=lh.commentary!;expect(cm.factor).toBeCloseTo(1.4**(2*cm.y/cm.h),9);
-  expect(lh.cb).toBeLessThan(cm.cb);expect(cm.cb/lh.cb-1).toBeLessThan(.3);expect(lh.demand/cm.capacity).toBeGreaterThan(.38);expect(lh.demand/cm.capacity).toBeLessThan(.5);
-  expect(c.utilization!).toBeGreaterThan(check('major').utilization!);expect(c.utilization!).toBeGreaterThan(.4);
+  expect(lh.cb).toBeLessThan(cm.cb);expect(cm.cb/lh.cb-1).toBeLessThan(.3);expect(cm.capacity).toBeGreaterThanOrEqual(lh.capacity);expect(lh.demand/cm.capacity).toBeGreaterThan(.25);expect(lh.demand/cm.capacity).toBeLessThan(.5);
+  expect(c.utilization!).toBeGreaterThan(check('major').utilization!);expect(c.utilization!).toBeGreaterThan(.25);
   // Basis: AISC F4 and Commentary F1, not the constant-moment EJ benchmark.
   expect(c.referenceIds).toContain('aisc-f4');expect(c.referenceIds).not.toContain('ltb-energy');
   expect(c.note).toMatch(/Commentary F1 comparison/);
@@ -52,8 +56,10 @@ describe('Rev B after the peer review, group B (girder and loads)',()=>{
   // On the girder page: the LTB line is printed (not in "other limit states"), worked with its inputs.
   const tax=buildTaxonomy(s,summaryElements(s.input));
   expect(tax.shown.some(l=>l.controlling.id==='flexure-load-height')).toBe(true);
-  const cb=numbers(line(/^C_b=\\frac\{M_\{cr\}\}\{F_\{cr\}S_\{xc\}\}=/));near(cb[0]/cb[1],cb[2],2e-3);
-  const mn=numbers(line(/^\\phi_bM_n=0\.90\\times\\min\(/));near(mn[0]*Math.min(mn[1],mn[2]*mn[3]),mn[4]);near(mn[4],c.capacity!/kipft);
+  const le=numbers(line(/^F_\{cr\}\(L_e\)S_\{xc\}=M_\{cr\}/));near(le[0],lh.length/25.4,2e-3);
+  // The worked result 0.90 M_n(L_e) = phi M_n (part a prints the same form for C_b = 1).
+  const mns=tex.filter(v=>/^\\phi_bM_n=0\.90\\times/.test(v)).map(numbers);
+  expect(mns.some(m=>Math.abs(m[0]*m[1]-m[2])<=5e-3*m[2]&&Math.abs(m[2]-c.capacity!/kipft)<=5e-3*m[2])).toBe(true);
   const mcr=numbers(line(/^M_\{cr\}=\\lambda M_u\/0\.8=/));near(mcr[1]*mcr[2]/mcr[3],mcr[4]);
   const f1=numbers(line(/^\\text\{Cross-check, AISC Commentary F1: \}/));near(f1[5]*f1[6]/(f1[7]*f1[8]+f1[9]*f1[10]+f1[11]*f1[12]+f1[13]*f1[14]),f1[15]);near(f1[15],cm.gradient,2e-3);
  });

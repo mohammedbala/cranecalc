@@ -92,7 +92,8 @@ export function longitudinalBracingAnalysis(p:ProjectInput,reactions:SupportReac
  // unfactored traction range on their tensile stress area (AISC Table A-3.1 item 8.5, Cf = 3.9 × 10^8, 7 ksi threshold).
  const review=!designed&&!!p.aist,c=p.existingColumn,top=c?.enabled?c.seatElevation+(p.details?.bearing.thickness??0)+p.section.d+(p.section.kind==='cap'?p.section.capTw:0):geometry.height+p.section.d;
  const tr13=review?{height:top,...(b.wind10!==undefined?{wind10:elongation(force(b.wind10))}:{})}:undefined,limit=tr13?Math.min(top/400,2*25.4,b.driftLimit>400?geometry.height/b.driftLimit:Infinity):geometry.height/b.driftLimit;
- const rodFatigue=review&&b.system==='rod-x'?(()=>{const area=rodStressArea(b.rod.diameter),range=service/area,cycles=p.fatigue.cycles;return {force:service,area,range,cycles,allowable:6900*(.39/cycles)**(1/3),threshold:7*6.894757293};})():undefined;
+ // New-column rod bracing designed here takes the same rod-thread fatigue check (its turnbuckle and clevis threads).
+ const rodFatigue=(review||!!designed)&&b.system==='rod-x'?(()=>{const area=rodStressArea(b.rod.diameter),range=service/area,cycles=p.fatigue.cycles;return {force:service,area,range,cycles,allowable:6900*(.39/cycles)**(1/3),threshold:7*6.894757293};})():undefined;
  return {Cls,Cbs,length,cos,diagonals,member,geometry,combinations,governing,deflection:{value:deflection,limit},...(tr13?{tr13}:{}),...(rodFatigue?{rodFatigue}:{}),
   foundation:{shear:governing.H/geometry.bays,axial:governing.H/geometry.bays*geometry.height/geometry.bayWidth}};
 }
@@ -115,7 +116,7 @@ export function longitudinalBracingChecks(p:ProjectInput,r:LongitudinalBracingRe
  if(r.rodFatigue){
   const f=r.rodFatigue,below=f.range<=f.threshold,stress=(v:number)=>format(v,'stress',u,3);
   add('rod-fatigue','Longitudinal bracing · threaded rod fatigue (A-3.1 item 8.5)',f.range,Math.max(f.allowable,f.threshold),'stress','f_{sr}=\\frac{\\Delta T}{A_t}\\le F_{SR}=\\left(\\frac{C_f}{n_{SR}}\\right)^{0.333}\\ge F_{TH}',
-   `AISC 360-16 Table A-3.1 item 8.5 (threaded rods, Cf = 3.9 × 10^8 ksi³, threshold ${stress(f.threshold)}): unfactored single-crane traction ${format(r.Cls,'force',u,3)} gives ${format(f.force,'force',u,3)} in one tension-only rod each time the crane starts or stops (0 to T), on the tensile stress area ${format(f.area,'area',u,3)} of the threaded end and its nut. Stress range f_sr = ${stress(f.range)} against F_TH = ${stress(f.threshold)}: ${below?'below the threshold, no cycle limit (constant amplitude).':'above the threshold, so the cycle count matters.'} ${f.cycles.toExponential(2)} cycles (the runway fatigue count) give F_SR = ${stress(f.allowable)}. Tighten the rods and keep them tight; loose tension-only rods take impact.`);
+   `AISC 360-16 Table A-3.1 item 8.5 (threaded rods, Cf = 3.9 × 10^8 ksi³, threshold ${stress(f.threshold)}): unfactored single-crane traction ${format(r.Cls,'force',u,3)} gives ${format(f.force,'force',u,3)} in one tension-only rod each time the crane starts or stops (0 to T), on the tensile stress area ${format(f.area,'area',u,3)} of the threaded end and its nut${G.spans?' (the clevis and turnbuckle threads alike)':''}. Stress range f_sr = ${stress(f.range)} against F_TH = ${stress(f.threshold)}: ${below?'below the threshold, no cycle limit (constant amplitude).':'above the threshold, so the cycle count matters.'} ${f.cycles.toExponential(2)} cycles (the runway fatigue count) give F_SR = ${stress(f.allowable)}. Tighten the rods and keep them tight; loose tension-only rods take impact.`);
  }
  // An existing brace that fails: reinforce or replace it (by the engineer of record), with the rod the forces need.
  if(!G.spans){
