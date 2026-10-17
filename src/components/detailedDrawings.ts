@@ -20,7 +20,8 @@ import { format } from '../engine/units';
 import { plateInches } from './drawingFormat';
 import { detailSheetNumbers } from './planSheet';
 import {railSeat,clipOutline} from '../engine/railSeat';
-import {railJointType,railJointGap,railJointBars,railJointDetail} from '../engine/railLayout';
+import {railJointType,railJointGap,railJointBars,railJointDetail,supplierRailJoint} from '../engine/railLayout';
+import {supplierRailJointText} from '../engine/railChecks';
 import {capAngleGeometry,capAngleTieParts,capBoltNutEnvelope,boltHardware} from '../engine/capAngle';
 import {capChannelProfile as channelOutline} from '../engine/channelProfile';
 export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
@@ -95,8 +96,15 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  dr.rect(jx,jy,barLength*k,r.jointPlateHeight*k);dr.line(jx+barLength*k/2-jGap*k/2,jy-8,jx+barLength*k/2-jGap*k/2,jy+r.jointPlateHeight*k+8,'CENTER');dr.line(jx+barLength*k/2+jGap*k/2,jy-8,jx+barLength*k/2+jGap*k/2,jy+r.jointPlateHeight*k+8,'CENTER');
  const dh=boltProperties('A325',r.jointBoltDiameter).hole;
  for(const at of joint.bolts){if(tightJoint)dr.circle(jx+at*k,jy+r.jointPlateHeight*k/2,dh*k/2,'HIDDEN');else dr.rect(jx+(at-.75*r.jointBoltDiameter)*k,jy+(r.jointPlateHeight-dh)*k/2,1.5*r.jointBoltDiameter*k,dh*k,'HIDDEN');dr.circle(jx+at*k,jy+r.jointPlateHeight*k/2,r.jointBoltDiameter*k/2);}
+ // The rail supplier's bars: schematic, the demands instead of a size (a deferred submittal).
+ const supplierText=supplierRailJoint(p)?supplierRailJointText(s):undefined;
+ if(supplierText){dr.text(jx,jy+r.jointPlateHeight*k+40,'Joint bars and bolts by the rail supplier (deferred submittal) · schematic',10);
+  const words=`Design for the ${supplierText}.`.split(' '),rows:string[]=[];for(const w of words){const last=rows.at(-1);if(last&&(last+' '+w).length<=60)rows[rows.length-1]=last+' '+w;else rows.push(w);}
+  rows.forEach((v,i)=>dr.text(620,370+25*i,v,10));
+ }else{
  dr.dimH(jx,jx+barLength*k,jy+r.jointPlateHeight*k,520,`JOINT BARS ${f(barLength)} LONG × ${f(r.jointPlateHeight)} HIGH × ${f(r.jointPlateThickness)} EACH`);
  dr.text(620,370,`4 A325 bolts, diameter ${f(r.jointBoltDiameter)}`,10);dr.text(620,395,`2 bolts each side; pitch ${f(r.jointPitch)}`,10);dr.text(620,420,`Edge ${f(r.jointEdge)}; ${f(joint.centerEdge)} to joint C/L; two shear planes`,10);dr.text(620,445,tightJoint?`Joint bars: ${f(dh)} standard holes`:`Joint bars slotted ${f(1.5*r.jointBoltDiameter)} × ${f(dh)} along rail`,10);dr.text(620,470,`Rail web: ${f(dh)} drilled holes; pretensioned`,10);dr.text(620,520,'Joint bolts re-tightened per the bolting notes',10);dr.text(620,495,'Rail clip pair on each cut rail end',10);
+ }
  }
  output.push(dr.drawing);
  }

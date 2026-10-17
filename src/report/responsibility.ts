@@ -13,6 +13,7 @@ import {deliveredForces} from '../engine/forcesDelivered';
 import {runwayMass,runwaySeismicBound} from '../engine/columnSupport';
 import {drawingElevation} from '../components/drawingFormat';
 import {caseLabel,sig3,tidyNumbers} from './reportParts';
+import {supplierRailJointText} from '../engine/railChecks';
 
 /**
  * The responsibility matrix (M10): every item this package needs from others, what is needed, the acceptance
@@ -88,6 +89,11 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
   needed:`A seat at least ${len(p.system==='simple'?2*bs.length+gap:bs.length)} along the runway${p.system==='simple'?` at a shared grid (two bearing plates ${len(bs.length)} long and the ${len(gap)} joint gap; ${len(bs.length)} at a runway end)`:''} by ${len(bs.width)} across, with standard holes matching the bearing bolts and nut clearance below the seat; it carries the bolt forces reported here.`,
   criterion:'Seat plan position and elevation within ±1/8 in (AIST TR-13 §5.18); holes matching the bearing plate holes; seat strength and stiffness by the building engineer of record.',
   forces:`V, H seat and F per grid at the seat${el(dl?.elevation?.seat)}, section @@ref:interfaces@@.`,party:EOR});
+ // The rail supplier's joint bars and bolts: one deferred-submittal row for all their checks, by the rail supplier.
+ const jointText=supplierRailJointText(s),joint=[...byId.values()].filter(c=>/^rail-joint-/.test(c.id));
+ if(jointText&&joint.length){for(const c of joint)byId.delete(c.id);
+  rows.push({item:'Rail joint bars and bolts (deferred submittal)',needed:'Joint bars and bolts fitted to the rail fishing surfaces, with their holes in the rail web, designed by the rail supplier; the joint detail on the drawings is schematic.',
+   criterion:'AISC 360-16 Chapter J (bolts, bars, block shear) and Appendix 3 fatigue of the bars and bolts at the stated range and cycles; tight joint, gap 1/16 in or less (AIST TR-13 §5.16.1).',forces:jointText.charAt(0).toUpperCase()+jointText.slice(1)+'.',party:'Rail supplier',check:joint[0]});}
  // Any other check left to others.
  for(const c of byId.values()){const rest=sentences(c.note.replace(/^Not checked here:\s*/,''))[0]??'';const force=sentences(c.note).find(x=>/\d\s*(kip|kN)\b/.test(x));
   rows.push({item:c.title,needed:rest.charAt(0).toUpperCase()+rest.slice(1),criterion:'As stated in the check (Appendix A).',forces:force?.trim()??'See section @@ref:interfaces@@.',party:EOR,check:c});}

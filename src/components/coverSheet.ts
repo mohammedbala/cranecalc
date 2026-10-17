@@ -1,6 +1,6 @@
 import {haunchInput,isTaperedHaunch} from '../engine/taperedHaunchInputs';
 import {cantileverSystems,seismicBasis} from '../engine/runwaySeismic';
-import {astmSpec} from '../engine/materialSpecs';
+import {astmSpec,sleeveSpec} from '../engine/materialSpecs';
 import {preheatBasis,constructionRequirements,enteredFabricationNote,addedSentences,cjpWelds,awsEdition} from '../engine/constructionNotes';
 import {codeBasis} from '../engine/drawingData';
 import {adjacentBays} from '../engine/continuation';
@@ -13,6 +13,7 @@ import {buildingClassBasis} from '../engine/buildingClass';
 import {runwayElevations,issueStatus,revisionIdentity,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {railJointType} from '../engine/railLayout';
+import {supplierRailJointText} from '../engine/railChecks';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
@@ -25,7 +26,7 @@ import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheet
 import {heading,paragraph,numbered,table,capsFor,flowBlocks,fitColumns,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
 import {existingLayout} from '../engine/existingLayout';
-import {tieRelease,stiffenerTieGeometry,flangeTieGeometry} from '../engine/tieGeometry';
+import {tieRelease,stiffenerTieGeometry,stiffenerTieJoint,flangeTieGeometry} from '../engine/tieGeometry';
 import {bearingSurface} from '../engine/endBearing';
 import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newColumnBracing';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
@@ -334,7 +335,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  blocks.push(H('MATERIALS'),T(['ITEM','SPECIFICATION'],gradeRows([
   ['RUNWAY GIRDER',`${astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu).toUpperCase()}${p.section.kind==='welded'?' PLATE':''}, Fy = ${ksi(p.section.Fy)}`],
   ...(p.capDesign&&p.section.kind==='cap'?[['CAP CHANNEL',`${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource).toUpperCase()}, Fy = ${ksi(p.capDesign.Fy)}`]]:[]),
-  ...(d?[['PLATES, BARS, ANGLES, TIES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['CRANE RAIL',`${astmSpec('rail',d.rail.Fy,d.rail.Fu)} ${d.rail.name.split(" · ")[0]}, Fy = ${ksi(d.rail.Fy)}`.toUpperCase()],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface} FAYING SURFACES AT CLAMPED PLIES${activeEndBearing(p)&&bearingSurface(p)==='A'?'; CLASS A AT THE BEARING PLATES, SHIMS AND SEATS':''}${sleeved?'; BOLTS IN SLOTTED SLIDING PLIES PRETENSIONED AGAINST STEEL SLEEVES, THE SLOTTED PLY NOT CLAMPED (MATERIAL NOTE 1)':''}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`${astmSpec('tube',50*6.894757293168).toUpperCase()} STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND BRACKETS AND TIES TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[]),...(d.rail.clip?[['RAIL CLIPS',`${d.rail.clip.product.toUpperCase()}${new RegExp(`${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}.*FLOATING`,'i').test(d.rail.clip.product)?'':`; ${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}, FLOATING`}, PER MANUFACTURER; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
+  ...(d?[['PLATES, BARS, ANGLES, TIES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['CRANE RAIL',`${astmSpec('rail',d.rail.Fy,d.rail.Fu)} ${d.rail.name.split(" · ")[0]}, Fy = ${ksi(d.rail.Fy)}`.toUpperCase()],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface} FAYING SURFACES AT CLAMPED PLIES${activeEndBearing(p)&&bearingSurface(p)==='A'?'; CLASS A AT THE BEARING PLATES, SHIMS AND SEATS':''}${sleeved?'; BOLTS IN SLOTTED SLIDING PLIES PRETENSIONED AGAINST STEEL SLEEVES, THE SLOTTED PLY NOT CLAMPED (MATERIAL NOTE 1)':''}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`${sleeveSpec.toUpperCase()}; Fy = ${ksi(50*6.894757)} MIN. BY MILL TEST REPORT`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND BRACKETS AND TIES TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[]),...(d.rail.clip?[['RAIL CLIPS',`${d.rail.clip.product.toUpperCase()}${new RegExp(`${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}.*FLOATING`,'i').test(d.rail.clip.product)?'':`; ${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}, FLOATING`}, PER MANUFACTURER; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
   ...(usesRolledBracket(p)?(()=>{const w=projectStub(p);return [['COLUMN BRACKETS',`ASTM A992 ${w.name}, Fy = ${ksi(w.input.Fy)}, Fu = ${ksi(w.input.Fu)}; ${w.seat?'SEAT PL AND ':''}STIFFENERS AS PLATES`]];})():[]),
   ...(usesTaperedHaunch(p)&&d?[['COLUMN BRACKETS',`BUILT-UP TAPERED I HAUNCH PLATES, ${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}; ${p.existingColumn?.enabled&&!p.existingColumn.isNew?'FIELD WELDED TO EXISTING COLUMNS: VERIFY WELDABILITY':'SHOP WELDED'}`]]:[]),
   ...(d&&columnStiffenerGeometry(p)?[['COLUMN STIFFENERS',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()} PLATES, Fy = ${ksi(d.material.Fy)}; ${supportColumn(p).field?'FIELD WELDED INSIDE THE EXISTING COLUMNS':'SHOP WELDED INSIDE THE NEW COLUMNS'} AT THE BRACKETS`]]:[]),
@@ -366,7 +367,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  // AISC 360 Chapter N assigns steel tasks to observe (O) or perform (P); IBC Table 1705.3 rates concrete
  // tasks continuous (C) or periodic (P).
  // CJP joints in the set: capped-girder bearing stiffeners to the W top flange, and the paired-bar tie gusset to its stiffener.
- const cjpList=cjpWelds(p),cjpPresent=!!d&&(cjpList.length>0||!!stiffenerTieGeometry(p));
+ const cjpList=cjpWelds(p),cjpPresent=!!d&&(cjpList.length>0||stiffenerTieJoint(p)==='cjp');
  const fieldWelds=!!d&&supportColumn(p).field&&(!!d.brace.flangeAttachment?.enabled||!!d.bracket?.enabled);
  // The project's own inspection requirements, less what the table and the notes already require.
  const withProject=(rows:string[][])=>{const extra=d?addedSentences(enteredFabricationNote(p,'inspection'),[...written,...rows.flat()]):[];return extra.length?[...rows,['PROJECT REQUIREMENTS',extra.join(' ').toUpperCase(),'-']]:rows;};
@@ -402,7 +403,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!d?.bracket?.enabled&&!activeColumnCap(p)?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${limitLength(support.capacity,u,'max')} MAX.`:'.'}`]:[]),
   ...(p.system==='simple'&&d&&!activeEndBearing(p)?[`COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (${detailRef(detailTitles.movement)}) FOR THE LONGITUDINAL, LATERAL AND UPLIFT FORCES IN THE ${bracketForcesAt(s,'cover','ON THIS SHEET')}.`]:[]),
-  ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`)
+  ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`),
+  ...(()=>{const t=supplierRailJointText(s);return t?[`RAIL JOINT BARS AND BOLTS: RAIL SUPPLIER, FITTED TO THE RAIL FISHING SURFACES (${detailRef(detailTitles.railJoint)}), DESIGNED FOR THE ${t.toUpperCase()}.`]:[];})()
  ];
  blocks.push(H('DEFERRED SUBMITTALS / BY OTHERS'),P('SUBMIT THE FOLLOWING TO THE ENGINEER OF RECORD FOR REVIEW AND TO THE BUILDING OFFICIAL FOR APPROVAL BEFORE INSTALLATION:'),...N(deferred));
  // Structure the calculation does not check is evaluated for the permit; it is not a deferred submittal.

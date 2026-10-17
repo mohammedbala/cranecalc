@@ -1,7 +1,8 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {railSeat,clipOutline} from '../engine/railSeat';
 import {boltProperties} from '../engine/connectionStrength';
-import {railJointType,railJointGap,railJointBars,railJointDetail,weldedRailJointNote} from '../engine/railLayout';
+import {railJointType,railJointGap,railJointBars,railJointDetail,weldedRailJointNote,supplierRailJoint} from '../engine/railLayout';
+import {supplierRailJointText} from '../engine/railChecks';
 import {format} from '../engine/units';
 import {drawingLength,dimensionLength,plateInches} from './drawingFormat';
 import {refDim,dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,breakLine,detailRef,detailTitles,textWidth,labelCaps,wrapToWidth,n,capChannelSection,subdetailTitle,lettering,type XY} from './sheetGraphics';
@@ -110,7 +111,7 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
 
   // Notes wrapped to a width in capitals, an SI value kept on one line with its unit.
   const wrap=(v:string,width:number,size:number)=>wrapToWidth(labelCaps(v).replace(/(\d) mm\b/g,'$1\u0001mm'),width,size).map(row=>row.replaceAll('\u0001',' '));
-  const tight=railJointType(p)==='tight';
+  const tight=railJointType(p)==='tight',supplier=supplierRailJoint(p);
   let svg='<g data-view="rail-connection">'+section.svg,rowY=section.h+14,W=560;
   if(bars){
   // ---- 4. Bolted rail joint, elevation; edge distances and pitch on the left half, symmetric about the joint.
@@ -127,9 +128,11 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   for(const x of bolts)jv+=(tight?circle(x,by,J(hole)/2,'reference-line'):rect(x-J(.75*r.jointBoltDiameter),by-J(hole)/2,J(1.5*r.jointBoltDiameter),J(hole),'reference-line'))+circle(x,by,J(r.jointBoltDiameter)/2,'runway-line');
   const yd=jb+12,pitchFits=textWidth(size(r.jointPitch),9)+6<=J(r.jointPitch);
   // The string closes on the joint centerline: the rail ends stand half the gap either side of it.
-  jv+=line([jc,jb+2],[jc,yd+5],'grid-line')+dimChain('h',[jl,bolts[0],bolts[1],jc],[jb,jb,jb,jb],yd,[size(r.jointEdge),size(r.jointPitch),size(jb0.centerEdge)]);
+  jv+=line([jc,jb+2],[jc,yd+5],'grid-line');
+  // The rail supplier's bars are schematic (a deferred submittal): no dimensions that would read as a design.
+  if(!supplier)jv+=dimChain('h',[jl,bolts[0],bolts[1],jc],[jb,jb,jb,jb],yd,[size(r.jointEdge),size(r.jointPitch),size(jb0.centerEdge)])
   // The overall string stands clear of the chain's extension lines, which run 5 pt past the chain.
-  jv+=dimH(jl,jl+J(bar),jb+2,yd+(pitchFits?22:30),barLabel);
+   +dimH(jl,jl+J(bar),jb+2,yd+(pitchFits?22:30),barLabel);
   jv+='</g>';
   const joint=place(jv,0,0);
 
@@ -140,7 +143,8 @@ export function railKeeperView(s:CalculationSnapshot):DetailView{
   const tk=13/14,titleLeft=joint.w/2+10-textWidth(detailTitles.railJoint,13.5*tk,true)/2-37*tk;
   const jx=section.w+24+Math.max(0,-titleLeft),noteW=Math.max(joint.w,660-jx);
   // The bars carry the slots (their net section and block shear are checked with them); the rail web is drilled.
-  const jointNotes=wrap(tight?`TIGHT JOINT (AIST TR-13 §5.16.1): 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}; 4 - ${size(r.jointBoltDiameter)} A325 PRETENSIONED IN ${size(hole)} STANDARD HOLES IN THE BARS AND THE RAIL WEB. RAIL ENDS BUTTED, GAP 1/16" MAX.; RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS OF OPERATION. SYMMETRIC`:`OPEN JOINT: 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}, SLOTTED ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG THE RAIL; 4 - ${size(r.jointBoltDiameter)} A325 IN ${size(hole)} DRILLED HOLES IN THE RAIL WEB. GAP ${size(gap)}. RE-TIGHTEN AFTER 30 AND 90 DAYS. SYMMETRIC`,noteW,lettering.text);
+  const supplierText=supplier?supplierRailJointText(s):undefined;
+  const jointNotes=wrap(supplier?`SCHEMATIC, NOT FOR FABRICATION: JOINT BARS AND BOLTS BY THE RAIL SUPPLIER (DEFERRED SUBMITTAL), FITTED TO THE RAIL FISHING SURFACES; BAR SIZE, BOLTS AND HOLES PER THE SUPPLIER${supplierText?`, DESIGNED FOR THE ${supplierText}`:''}. ${tight?'TIGHT JOINT (AIST TR-13 §5.16.1): RAIL ENDS BUTTED, GAP 1/16" MAX.; BOLTS PRETENSIONED AND RE-TIGHTENED AFTER 30 AND 90 DAYS OF OPERATION.':`OPEN JOINT: GAP ${size(gap)}; RE-TIGHTEN AFTER 30 AND 90 DAYS.`}`:tight?`TIGHT JOINT (AIST TR-13 §5.16.1): 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}; 4 - ${size(r.jointBoltDiameter)} A325 PRETENSIONED IN ${size(hole)} STANDARD HOLES IN THE BARS AND THE RAIL WEB. RAIL ENDS BUTTED, GAP 1/16" MAX.; RE-TIGHTEN THE BOLTS AFTER 30 AND 90 DAYS OF OPERATION. SYMMETRIC`:`OPEN JOINT: 2 BARS ${size(r.jointPlateThickness)} X ${size(r.jointPlateHeight)} X ${barLabel}, SLOTTED ${size(1.5*r.jointBoltDiameter)} X ${size(hole)} ALONG THE RAIL; 4 - ${size(r.jointBoltDiameter)} A325 IN ${size(hole)} DRILLED HOLES IN THE RAIL WEB. GAP ${size(gap)}. RE-TIGHTEN AFTER 30 AND 90 DAYS. SYMMETRIC`,noteW,lettering.text);
   // The joint carries its own detail title (bubble numbered with the set), a little smaller than the cell title: its
   // sheet number stays at the 6.5 pt minimum text height.
   const jt=joint.h+22,notesY=jt+28;rowY=Math.max(section.h,notesY+jointNotes.length*lettering.noteLeading)+14;

@@ -6,12 +6,12 @@ import {usesTaperedHaunch} from './taperedHaunch';
 import {haunchInput} from './taperedHaunchInputs';
 import {usesRolledBracket} from './rolledBracket';
 import {rolledStub} from './rolledBracketInputs';
-import {railJointType,railJointDetail,weldedRailJointNote} from './railLayout';
+import {railJointType,railJointDetail,weldedRailJointNote,supplierRailJoint} from './railLayout';
 import {runwayBoltingBasis} from './boltingBasis';
 import {capAngleGeometry} from './capAngle';
 import {activeEndBearing} from './endBearingInputs';
 import {bearingSeat,bearingShim,bearingSurface} from './endBearing';
-import {flangeTieFamily,stiffenerTieGeometry} from './tieGeometry';
+import {flangeTieFamily,stiffenerTieGeometry,stiffenerTieJoint} from './tieGeometry';
 
 /**
  * One AWS D1.1 edition for the whole package: the 2020 edition, whose clause and table numbers the calculation cites
@@ -46,7 +46,7 @@ export function cjpWelds(p:ProjectInput):string[]{
  const d=p.details;if(!d)return [];
  const out:string[]=[];
  if(p.section.kind==='cap'&&p.capDesign?.topStiffenerCjp)out.push('girder bearing stiffeners to the W top flange');
- if(stiffenerTieGeometry(p))out.push('tie gussets to the girder bearing stiffeners');
+ if(stiffenerTieJoint(p)==='cjp')out.push('tie gussets to the girder bearing stiffeners');
  if(d.bracket?.enabled&&usesTaperedHaunch(p)&&haunchInput(d.bracket).flangeJoint==='cjp')out.push(`haunch flanges to the ${p.existingColumn?.isNew?'new':'existing'} column flange (field)`);
  if(d.bracket?.enabled&&usesRolledBracket(p)&&d.bracket.rolled?.flangeJoint==='cjp'&&rolledStub(d.bracket))out.push('bracket flanges to the column flange');
  return out;
@@ -84,7 +84,7 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
   ...(activeEndBearing(p)||capAngleGeometry(p)?['Bolts in slotted sliding plies are pretensioned against steel sleeves so the slotted ply is not clamped; plate washers cover the slots.']:[]),
   ...(activeEndBearing(p)?[bearingFaying(p)]:[]),
   // Rail joints by the layout and the joint kind: bolted joint bars here; welded joints under welding; none for one-piece rails.
-  ...(joint!=='bars'?[]:[tight?'Rail joints: tight joints, rail ends butted with a gap of 1/16 in or less, staggered across the runway; joint bolts pretensioned in standard holes and re-tightened after 30 and 90 days of crane operation (AIST TR-13 §5.16.1). The rail floats in its clips between the end stops, which anchor it; the clearance gaps at the stops take its thermal movement.'
+  ...(joint!=='bars'?[]:[tight?`Rail joints: tight joints, rail ends butted with a gap of 1/16 in or less, staggered across the runway; ${supplierRailJoint(p)?'the rail supplier\'s joint bars and bolts (deferred submittal), bolts':'joint bolts'} pretensioned in standard holes and re-tightened after 30 and 90 days of crane operation (AIST TR-13 §5.16.1). The rail floats in its clips between the end stops, which anchor it; the clearance gaps at the stops take its thermal movement.`
    :'Rail joints: open joints with the expansion gap shown (project choice); joint bolts re-tightened after 30 and 90 days of crane operation.'])];
  const welding=[
   `E70XX low-hydrogen weld metal, ${awsCode}, cyclically loaded provisions (Clause 4 Part C); qualified or prequalified WPS and qualified welders.`,
