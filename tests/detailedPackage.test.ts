@@ -26,13 +26,16 @@ describe('representative runway package',()=>{
   expect(snapshot.detailResults!.fatigue.length).toBeGreaterThan(20);
   expect(snapshot.detailResults!.travelChange).toBeLessThan(.01);expect(snapshot.detailResults!.meshChange).toBeLessThan(.01);
  });
- it('reduces F2 flexure for wheels at the rail head through Cb = Mcr/Mocr (AISC F1, Commentary F1)',()=>{
+ it('reduces F2 flexure for wheels at the rail head at the equivalent length of the eigen Mcr (AISC F2, Commentary F1)',()=>{
   const lh=snapshot.detailResults!.loadHeight!,p=snapshot.input,check=snapshot.checks.find(c=>c.id==='flexure-load-height')!;
   expect(check.status).toBe('pass');expect(lh.cb).toBeLessThan(1);
   const props=sectionProperties(p.section),st=girderStrength(p,props),curve=flexureCurves(p,props).positive;
-  // Cb from the buckling analysis multiplies the F2-2 / F2-3 moment; the strength never exceeds phi Mcr.
+  // The buckling analysis M_cr enters F2 at its equivalent unbraced length (F2-4 with Cb = 1 solved for M_cr, never
+  // below Lb); the strength never exceeds phi Mcr, and no Cb < 1 multiplies the inelastic strength.
   expect(lh.cb).toBeCloseTo(lh.critical/curve.mcr(p.unbracedLength),9);
-  expect(lh.capacity).toBeCloseTo(Math.min(st.major,.9*lh.cb*st.ltb!,.9*lh.critical),3);
+  expect(lh.length).toBeGreaterThanOrEqual(p.unbracedLength);expect(curve.mcr(lh.length)/lh.critical).toBeCloseTo(1,6);
+  expect(lh.capacity).toBeCloseTo(Math.min(st.major,curve.available(lh.length),.9*lh.critical),3);
+  expect(lh.capacity).toBeGreaterThanOrEqual(Math.min(st.major,.9*lh.cb*st.ltb!)-1e-6);
   expect(check.utilization!).toBeGreaterThan(lh.demand/st.major);
   // The Commentary F1 load-height Cb of the same case is recorded for comparison.
   expect(lh.commentary!.factor).toBeLessThan(1);expect(lh.commentary!.gradient).toBeGreaterThanOrEqual(1);

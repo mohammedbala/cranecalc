@@ -124,10 +124,12 @@ export interface RunwayDetailResults {
  /** Column cap on new freestanding columns: per-grid cap, stiffener, bolt and weld demands, and the fork restraint. */
  columnCap?:ColumnCapResults;
  cap?:{longitudinalFlow:number;fatigueFlows:number[]};
- /** Major flexure with the load-height elastic critical moment: Cb = Mcr / Mocr in F2 / F4 / F5 (never above 1), with the
+ /** Major flexure with the load-height elastic critical moment entered at its equivalent unbraced length, with the
   * AISC 360-16 Commentary F1 load-height Cb of the same case for comparison. */
  loadHeight?:{utilization:number;demand:number;capacity:number;length:number;critical:number;id:string;combination:string;x:number;
-  /** Cb = Mcr / Mocr (1 when the eigenvalue does not reduce the strength); Mocr the uniform-moment F2-4 / F4-5 / F5-4 moment at Lb. */
+  /** length: the equivalent unbraced length L_e >= Lb at which the Cb = 1 elastic moment equals M_cr (the strength is the
+   * F2 / F4 / F5 curve at L_e); cb = Mcr / Mocr (1 when the eigenvalue does not reduce the strength), printed only; Mocr the
+   * uniform-moment F2-4 / F4-5 / F5-4 moment at Lb. */
   cb:number;mocr:number;sign?:number;
   /** Height of the rail head above the shear center (load height in the eigen model). */
   height:number;
