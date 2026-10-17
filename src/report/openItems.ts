@@ -110,6 +110,8 @@ const sentenceStart=(v:string)=>v.charAt(0).toUpperCase()+v.slice(1);
  * reduction the D/C gives (a fillet scales with D/C, a plate in bending with √(D/C), a saddle strip with D/C), or what to
  * refine or supply. Sizes are first estimates for the redesign; the revised design is recalculated.
  */
+/** The increase a ratio u calls for, in whole percent (u = 2.1: 110%). */
+const more=(u:number)=>Math.ceil((u-1)*100-1e-9);
 const remedies:Remedy[]=[
  // Fatigue register points, by detail family (the register id prefix).
  // Saddle end fillets: the toe on the flange under the girder's longitudinal stress (SA), and the fillet terminations under
@@ -155,7 +157,16 @@ const remedies:Remedy[]=[
  [/^(column-brackets|(bracket|haunch|wbracket)-tr13-load)$/,x=>`The support reaction${x.c.demand!==undefined?` ${value(x.c.demand,'force',x.units)}`:''} exceeds the AIST TR-13 §5.9.2 recommendation of ${value(50*4448.2216152605,'force',x.units)} for column brackets; no bracket proportion changes it: carry the girders on crane columns or a stepped column, or record the engineer of record’s acceptance of brackets for this load with the surveyed capacity of the building column (in the configurator, new columns with the column cap support give direct column bearing).`],
  [/^crane-\d+-bumper-stop$/,x=>x.c.utilization===undefined?'Resolve the end stop first (its own checks): this item restates them and closes with them.':`The end stop is the part to redesign: raise its design strength by at least ${Math.ceil((x.u-1)*100)}% (the end stop checks, section on end stops), or select a bumper with a peak force within the present strength.`],
  [/^column-torsion$/,()=>'Take the longitudinal force out at the girder line: a crane-level strut at the locating columns (by others), or a bracket that brings the force to the column centerline.'],
- [/^column-/,x=>`Existing column exceeded by ${Math.ceil((x.u-1)*100)}%: reinforce the column or reduce its demand; confirm the restraint assumptions with the building engineer of record.`],
+ // Column caps: new parts designed here, each with the remedy of its own part.
+ [/^column-cap-bolt-slip$/,x=>`Raise the locating bolts' slip resistance by at least ${more(x.u)}%: more or larger bearing bolts, Class B faying surfaces, bearing-type bolts with a shear lug on the cap for the longitudinal force, or a top-flange tie that takes the fork force off the bearing bolts.`],
+ [/^column-cap-bolt-tension$/,x=>`Raise the bearing bolt tension resistance by at least ${more(x.u)}%: more or larger bolts, a higher grade, or a wider bolt gauge (a longer lever for the fork couple).`],
+ [/^column-cap-(prying|flange-prying|plate|plate-shear|bolt-bearing)$/,x=>`Thicker ${/flange/.test(x.c.id)?'girder bottom flange (a heavier girder) or a bearing plate under it':'cap plate'}: ${more(x.u)}% more resistance is needed.`],
+ [/^column-cap-(weld|weld-base|stiffener-weld|weld-fatigue)$/,x=>`Larger cap fillets, or a cap stiffener under the bearing: ${more(x.u)}% more resistance is needed.`],
+ [/^column-cap-(web-yield|web-cripple|stiffener-bearing)$/,()=>'A cap stiffener between the column flanges under the bearing stiffener line, or a column with a thicker web.'],
+ [/^column-cap-fork-stiffness$/,()=>'Stiffer end fork: thicker or wider bearing stiffeners, more bearing bolts at a wider gauge, or a top-flange tie.'],
+ [/^column-cap-/,x=>`Column cap (new, designed here): ${more(x.u)}% more resistance is needed in the part this check names.`],
+ [/^column-/,x=>x.p.existingColumn?.isNew?`New column exceeded by ${more(x.u)}%: a heavier column shape, or a smaller demand (bracing, a shorter unbraced length).`
+  :`Existing column exceeded by ${more(x.u)}%: reinforce the column or reduce its demand; confirm the restraint assumptions with the building engineer of record.`],
  [/fatigue/,x=>`${sentenceStart(range(x))}: a better detail category, a larger section at the detail, or a smaller cyclic force.`],
  // Rail and end stops
  [/^rail-anchorage$/,x=>`Anchor the rail for ${Math.ceil((x.u-1)*100)}% more longitudinal force: more anchor clip pairs (at least ${Math.ceil(x.u)}× the present), or anchor the rail at the end stops.`],

@@ -8,6 +8,10 @@ import {activeColumnCap} from '../src/engine/columnCapInputs';
 import {tieLine} from '../src/engine/tieGeometry';
 import {constructionRequirements,cjpWelds,enteredFabricationNote} from '../src/engine/constructionNotes';
 import {deliveredHeadersOf,deliveredNote} from '../src/report/deliveredTable';
+import {boltGrades} from '../src/engine/constructionNotes';
+import {buildTaxonomy} from '../src/engine/checkTaxonomy';
+import {summaryElements} from '../src/report/designSummary';
+import {openItemGroups} from '../src/report/openItems';
 
 /**
  * A girder on a column cap is restrained at its ends by a fork (the bearing stiffener pair and the bolted bottom flange):
@@ -36,5 +40,18 @@ describe('column cap: the restraint analysed is the restraint drawn and describe
   expect(figure.title).not.toMatch(tieWord);
   expect(deliveredHeadersOf(p)).toContain('H top');expect(deliveredHeadersOf(p)).not.toContain('H tie');
   expect(ghosts([...sheets,...notes,...entered,...sketches,deliveredNote(s)])).toEqual([]);
+ });
+ it('names every bolt grade, and keys open-item remedies to the new column cap',()=>{
+  const q=structuredClone(s);q.input.details!.endBearing!.bolts.grade='A490';
+  expect(boltGrades(q.input)).toContainEqual({grade:'A490',where:['girder bearings on the column caps']});
+  const materials=sheetEntities(drawingSheetSet(q).find(v=>v.number==='S-00A')?.svg??drawingSheetSet(q)[0].svg,'US').flatMap(e=>e.type==='text'?[e.value]:[]).join(' ');
+  expect(materials).toMatch(/GR\. A490 \(GROUP B\) AT THE GIRDER BEARINGS ON THE COLUMN CAPS/);
+  expect(constructionRequirements(q.input).find(v=>v.key==='bolting')!.items.join(' ')).toMatch(/Bolt grades: .*A490.*A325/);
+  // An entered note giving one grade for every bolt gives way to the grade list.
+  expect(enteredFabricationNote(q.input,'bolting')).not.toMatch(/\bA325\b/);
+  // A failing cap bolt check: the remedy is for the new cap's bolt group, never an existing column.
+  const slip=q.checks.find(c=>c.id==='column-cap-bolt-slip')!;Object.assign(slip,{status:'fail',demand:2.1,capacity:1,utilization:2.1});
+  const tax=buildTaxonomy(q,summaryElements(q.input)),g=openItemGroups(tax,q).groups.find(v=>v.governing.id==='column-cap-bolt-slip')!;
+  expect(g.remedy).toMatch(/^Raise the locating bolts' slip resistance by at least 110%/);expect(g.remedy).not.toMatch(/existing/i);
  });
 });
