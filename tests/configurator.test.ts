@@ -10,6 +10,10 @@ import {projectSchema} from '../src/engine/types';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import StartPanel from '../src/components/StartPanel';
+import {sheetFixture} from './fixtures/sheets/sheetFixtures';
+import {drawingSheetSet} from '../src/components/planSheet';
+import {annotationClashes} from '../src/components/detailSheet';
+import {selectionsTable} from '../src/report/designSummary';
 
 const kip=4448.2216152605,foot=304.8,inch=25.4;
 
@@ -155,4 +159,17 @@ describe('configurator selection log',()=>{
   // A girder named in the configuration is used as entered and is not listed.
   expect(buildProject({...p.configurator!,girderShape:'W24X104'}).configurator!.selections!.find(v=>v.item==='Girder')).toBeUndefined();
  },120000);
+ it('prints the log in the design summary and compactly on S-00, clear of other text',()=>{
+  const s=sheetFixture('t07'),log=[{item:'Girder support',entered:'Welded twin-rib seat',designed:'Column cap (new columns)',reason:'The support reaction, about 117 kip, exceeds the AIST TR-13 §5.9.2 recommendation of 50 kip for column brackets: the girders bear on column caps.'},
+   {item:'Girder',entered:'configurator default (sized)',designed:s.input.section.name,reason:'Lightest compact W within the sizing targets (ratio ≤ 0.85): top-flange tip stress ratio 0.83; next lighter, W14X426: tips ratio 1.14 > 0.85.'}];
+  expect(selectionsTable(s.input)).toBe('');
+  s.input.configurator={...s.input.configurator!,selections:log};
+  const html=selectionsTable(s.input);
+  expect(html).toContain('<h3>Configurator selections</h3>');expect(html).toContain('next lighter, W14X426');
+  const cover=drawingSheetSet(s).find(v=>v.number==='S-00')!.svg;
+  expect(cover).toContain('CONFIGURATOR SELECTIONS');expect(cover).toContain('WELDED TWIN-RIB SEAT →');
+  // The cover keeps the first clause of each reason; the full reason is in the calculation.
+  expect(cover).not.toContain('NEXT LIGHTER');
+  expect(annotationClashes(cover)).toBe(0);expect(cover).not.toMatch(/data-overflow/);
+ });
 });

@@ -296,6 +296,11 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS',`SPREAD FOOTINGS; ${format(p.columnBase.soil.allowable,'pressure',u,u==='SI'?0:3).toUpperCase()} ALLOWABLE BEARING, BASE FRICTION ${p.columnBase.soil.friction}; OVERTURNING AND SLIDING FS 1.5 (DEAD LOAD ONLY RESISTING), 1.0 IN THE ASCE 7 SEISMIC COMBINATIONS`]]:[]),
   ['ELEVATIONS',elevations?`T.O.R. ${drawingElevation(elevations.tor,u)}, T.O.S. ${drawingElevation(elevations.tos,u)} (DATUM ${drawingElevation(elevations.datum,u)})`:'NOT ENTERED']
  ],[1.4,2.6]));
+ // The configurator's selections (configurator.selections), compactly: as entered, as designed and the governing reason
+ // in its first clause without the parentheses (the full reasons are in the calculation's design summary).
+ const picks=p.configurator?.selections??[];
+ if(picks.length)blocks.push(H('CONFIGURATOR SELECTIONS'),T(['ITEM','AS ENTERED → AS DESIGNED','GOVERNING REASON'],
+  picks.map(v=>[v.item,`${v.entered} → ${v.designed}`,v.reason.split('; ')[0].replace(/\.$/,'')].map(x=>x.replace(/\s*\([^()]*\)/g,'').toUpperCase())),[.8,1.3,1.9]));
  const r=s.supportReactions;
  // The runway seismic combinations are evaluated by the engineer of record: their item in the existing structure evaluation.
  const runwaySeismic=unevaluatedStructure(s).findIndex(c=>c.id==='building-seismic-runway')+1;
