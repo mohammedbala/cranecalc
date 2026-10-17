@@ -78,7 +78,10 @@ export function supportBearings(p:ProjectInput){
  *   side thrust as the bottom-flange force through the bearing bolts (both senses), its support torque about the seat
  *   (side thrust times the rail top height: the top-flange restraint force on torqueArm) and the factored crane
  *   longitudinal force; the crane stop force with 1.2(D + C_d) + C_v (factor 1.0 LRFD, 0.67 ASD, as the haunch);
- *   any uplift 0.9D + 1.6 C_min;
+ *   any uplift 0.9D + 1.6 C_min; and the dead load alone with the factored top-flange force: the analysis envelope has
+ *   sets with a crane's top-flange restraint force at a support whose crane reaction there is small (the crane in
+ *   the next bay), whose support torque moves the reaction to the flange-tip bound of the eccentricity
+ *   (seatEccentricity); the haunched rib checks take their critical section at that largest eccentricity;
  * - fatigue, per duty bin: the crane reaction without impact, its own weight plus the bin's lifted fraction, on each
  *   girder end in turn (the crane crossing the grid), with half the side thrust (C_d + C_v + 0.5 C_ss);
  * - service: the crane reaction with impact on each girder end.
@@ -103,6 +106,7 @@ export function bracketSizingSet(p:ProjectInput,rotation?:number):BracketSizingS
    push(set.strength,{x,loads:at(R,v.reaction),horizontal:{longitudinal:F,bottom:H,top:top(H),offset:v.center}},'s');
    if(stop>0)push(set.strength,{x,loads:at(Rstop,v.reaction),horizontal:{longitudinal:stop,bottom:0,top:0,offset:v.center}},'s');
    if(lift<0)push(set.strength,{x,loads:at(lift,v.reaction),horizontal:{longitudinal:0,bottom:H,top:top(H),offset:v.center}},'s');
+   push(set.strength,{x,loads:at((lrfd?1.2:1)*D,v.reaction),horizontal:{longitudinal:0,bottom:H,top:top(H),offset:v.center}},'s');
    for(const b of bins){const Hf=.5*s.Css*b.scale;push(set.fatigue,{x,bin:b.bin,loads:at((s.Cd+s.Cv)*b.scale,v.reaction),horizontal:{longitudinal:0,bottom:Hf,top:top(Hf),offset:v.center}},'f');}
    push(set.service,{x,loads:at(crane,v.reaction),horizontal:{longitudinal:0,bottom:s.Css,top:top(s.Css),offset:v.center}},'v');
   }
@@ -128,6 +132,16 @@ export function bracketSizingRatios(p:ProjectInput,set=bracketSizingSet(p)){
  const nuts=nutClearance(p,p.details!.bracket!);if(nuts)ratios.nuts=nuts.required/Math.max(1e-9,nuts.clear);
  if(set.release)ratios.release=((c.result.service.deflection?.value??0)*set.release.factor+set.release.other)/set.release.travel;
  return ratios;
+}
+/**
+ * The receiving column's own fatigue ratio under the sizing set's duty bins, which the bracket sizing does not drive
+ * (notSized): bracket-fatigue-column, the column flange at the rib weld toes (AISC Table A-3.1 item 7.1, the whole
+ * bracket moment on the column section), by the check's method and cycles. The column choice answers it.
+ */
+export function bracketColumnFatigueRatio(p:ProjectInput,set=bracketSizingSet(p)){
+ const c=createBracketCollector(p);if(!c)return 0;
+ for(const v of set.fatigue)c.observe('fatigue','sizing',v.x,v.loads,v.bin,v.horizontal);
+ return bracketChecks(p,c.result,set.serviceReaction).find(k=>k.id==='bracket-fatigue-column')?.utilization??0;
 }
 /** Clear distance from the bearing bolts to the rib faces' seat fillets below the seat, and the tightening clearance it needs (end-bearing-wrench-rib). */
 export function nutClearance(p:ProjectInput,b:BracketInput){
