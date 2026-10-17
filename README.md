@@ -55,12 +55,15 @@ The **Templates** tab (opened first when no project is saved on the device) is t
   It generates every dependent input:
   - crane wheel loads with consistent statics (both runways sum to the crane weight; TR-13 §1.5.6.1 data), bridge speed and a bumper selected for the 16 ft/s² limit;
   - the rail for the wheel load;
-  - a duty spectrum whose total matches the building class;
+  - the fatigue cycles of the building class, checked by the TR-13 all-cycle method (no assumed duty spectrum; a Miner sum is shown for comparison only);
   - the girder, sized for the moving loads with the top flange's lateral bending, warping, load height and second-order twist;
-  - bearings, ties, end stops and the bracket or column cap, sized by the engine's own sizing routines;
-  - the existing or new columns, their bases and the longitudinal bracing.
+  - bearings, ties (sized for the imposed end movement as well as the tie force, with a released column end or another tie type when one cannot pass), end stops and the bracket or column cap, sized by the engine's own sizing routines;
+  - bolted slip-critical field splices for continuous girders longer than a 60 ft piece;
+  - the existing or new columns, their bases (with anchor rod, base weld and brace rod fatigue) and the longitudinal bracing.
 
-  Choices that cannot go together are adjusted at once, with the reason shown. The summary shows the crane data, duty, rail and sized girder before you build.
+  Choices that cannot go together are adjusted at once, with the reason shown. A support reaction above the AIST TR-13 §5.9.2 recommendation for column brackets (about 50 kip) moves new structures to column caps and warns on existing ones. The summary shows the crane data, duty, rail and sized girder before you build.
+- **Configurator selections.** Every member or part the configurator chose or changed (girder, support, tie, column, reach, splices) is listed with the configuration as entered, the design and the governing reason: under the project on the Templates tab, near the top of the report and on S-00.
+- **Analysis only.** The girder-only template produces an analysis record (S-00 and S-01, ANALYSIS ONLY - NOT FOR CONSTRUCTION) with the support reactions and the restraint the analysis assumed as requirements for the connections by others.
 - **Template data.** Supplier, survey and site data are fictitious examples, marked as such. A template builds a demonstration-purpose project. Switching the report purpose to a project blocks issue until every example item is replaced.
 - **Rebuilding.** The choices are stored with the project (`configurator`), so **Edit its choices** on the Templates tab rebuilds it after a change. Detailed edits made under Inputs & checks are not kept by a rebuild.
 
