@@ -2,6 +2,7 @@ import type {CalculationSnapshot,ProjectInput} from './types';
 import {girderSegments} from './simpleSupports';
 import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
+import {girderPieces} from './spliceInputs';
 
 /**
  * Runway elevations above the floor datum, from project data only: the
@@ -77,11 +78,13 @@ export function issueStatus(s:CalculationSnapshot){
  */
 export function girderMarks(p:ProjectInput){
  const segments=girderSegments(p),last=segments.length-1,marks:{mark:string;length:number;key:string}[]=[];
- return segments.map((g,i)=>{
-  const length=g.end-g.start,ends=p.system==='continuous'?'continuous':i===0&&i===last?'single':i===0?'first':i===last?'last':'interior';
-  const key=`${Math.round(length)}|${ends}`;let m=marks.find(v=>v.key===key);
+ // A spliced girder is furnished in pieces between its ends and its field splices, each piece marked.
+ const pieces=girderPieces(p);
+ return pieces.map(piece=>{
+  const i=piece.segment,g=segments[i],length=piece.end-piece.start,ends=p.system==='continuous'?'continuous':i===0&&i===last?'single':i===0?'first':i===last?'last':'interior';
+  const key=`${Math.round(length)}|${ends}|${piece.left}|${piece.right}`;let m=marks.find(v=>v.key===key);
   if(!m){m={mark:`RG${marks.length+1}`,length,key};marks.push(m);}
-  return {...g,mark:m.mark,length,ends};
+  return {...g,start:piece.start,end:piece.end,mark:m.mark,length,ends,...(piece.leftSplice!==undefined?{leftSplice:piece.leftSplice}:{}),...(piece.rightSplice!==undefined?{rightSplice:piece.rightSplice}:{})};
  });
 }
 

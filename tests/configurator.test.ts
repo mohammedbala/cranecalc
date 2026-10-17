@@ -14,6 +14,8 @@ import {sheetFixture} from './fixtures/sheets/sheetFixtures';
 import {drawingSheetSet} from '../src/components/planSheet';
 import {annotationClashes} from '../src/components/detailSheet';
 import {selectionsTable} from '../src/report/designSummary';
+import {spliceLayout} from '../src/engine/spliceInputs';
+import {girderPieceChecks} from '../src/engine/girderPieces';
 
 const kip=4448.2216152605,foot=304.8,inch=25.4;
 
@@ -158,6 +160,20 @@ describe('configurator selection log',()=>{
   expect(html).toContain('Configurator selections');expect(html).toContain(`<td>${p.section.name}</td>`);
   // A girder named in the configuration is used as entered and is not listed.
   expect(buildProject({...p.configurator!,girderShape:'W24X104'}).configurator!.selections!.find(v=>v.item==='Girder')).toBeUndefined();
+ },120000);
+ it('splices a continuous girder longer than a 60 ft piece in its inflection region and logs the splice design',()=>{
+  const p=templateProject('t08'),l=spliceLayout(p),row=p.configurator!.selections!.find(v=>v.item==='Girder field splices')!;
+  expect(validateProject(p)).toEqual([]);expect(l.errors).toEqual([]);expect(l.stations.length).toBeGreaterThan(0);
+  expect(Math.max(...l.pieces.map(v=>v.length))).toBeLessThanOrEqual(60*foot+1e-6);
+  // Each joint 0.20 to 0.25 of the span from an interior support (the 25 ft spans of t08).
+  for(const x of l.stations){const t=Math.min(...[25,50,75].map(g=>Math.abs(x-g*foot)))/(25*foot);expect(t).toBeGreaterThanOrEqual(.2-1e-9);expect(t).toBeLessThanOrEqual(.25+1e-9);}
+  expect(p.details!.splices).toMatchObject({enabled:true,placement:'auto',basis:'minimum',top:{plates:'inner'},bottom:{plates:'inner-outer'}});
+  expect(row.designed).toMatch(/^1 bolted slip-critical splice: SP1 [\d.]+ ft \(0\.2\d\d L\) (before|past) grid \d/);
+  expect(row.reason).toMatch(/A490 .* slip-critical bolts .* 50% of the flange strength/);
+  // The open item for an unspliced one-piece girder does not apply; a girder within a piece takes no splices.
+  expect(girderPieceChecks(p)).toEqual([]);
+  expect(templateProject('t01').details!.splices).toBeUndefined();
+  expect(buildProject(p.configurator!).details!.splices).toEqual(p.details!.splices);
  },120000);
  it('prints the log in the design summary and compactly on S-00, clear of other text',()=>{
   const s=sheetFixture('t07'),log=[{item:'Girder support',entered:'Welded twin-rib seat',designed:'Column cap (new columns)',reason:'The support reaction, about 117 kip, exceeds the AIST TR-13 §5.9.2 recommendation of 50 kip for column brackets: the girders bear on column caps.'},

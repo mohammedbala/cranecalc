@@ -44,6 +44,9 @@ it('preserves cap-weld failures and invalidates the previous input fingerprint',
 });
 it('completes the ASD continuous capped branch with signed support moments',()=>{
  const p=cappedDemonstrationProject();p.method='ASD';p.system='continuous';p.details!.brace.flangeAttachment!.enabled=false;
+ // One 75 ft capped piece: a capped girder's field splice (the cap channel too) is not designed here (validateSplices),
+ // so the fictitious erector's confirmation of the one-piece length closes girder-piece-basis.
+ p.details!.girderPiece='Fictitious example erector: one 75 ft capped piece per runway, permitted load and two-crane pick';
  const r=calculate(p);
  expect(r.errors).toEqual([]);expect(r.eligible).toBe(true);
  expect(r.analysis!.envelope.some(v=>v.momentMin<0)).toBe(true);

@@ -39,6 +39,8 @@ import { activeColumnCap } from '../engine/columnCapInputs';
 import { columnCapGeometry } from '../engine/columnCap';
 import { columnCapTitles,columnCapTopic } from './columnCapSheet';
 import { existingClearancePlan,existingClearanceShown,existingClearanceTitle,governingPair } from './existingClearancePlan';
+import { spliceLayout,spliceMark,activeSplices,spliceGeometry } from '../engine/spliceInputs';
+import { spliceTopic,spliceTitles } from './spliceSheet';
 export { planSheetGeometry } from './planSheetGeometry';
 export { connectionSheetSvg } from './connectionSheet';
 
@@ -206,9 +208,11 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   // Each girder mark at its girder's mid-length, or mid-span of the bay before when that is at or near a grid (a continuous
   // girder over an even number of spans), so the mark never sits on a grid line, bracket or bearing.
   const stations=p.spans.reduce((a,v)=>[...a,a.at(-1)!+v],[0]);
+  const splices=spliceLayout(p).errors.length?[]:spliceLayout(p).stations;
   const marks=girderMarks(p),mid=(g:typeof marks[number])=>{
-   const c=(g.start+g.end)/2,i=stations.findIndex(x=>x>g.start+1&&x<g.end-1&&Math.abs(x-c)<.15*Math.min(...p.spans));
-   return (i>0?(stations[i-1]+stations[i])/2:c)/1000-m.length/2;
+   const c=(g.start+g.end)/2,i=stations.findIndex(x=>x>g.start+1&&x<g.end-1&&Math.abs(x-c)<.15*Math.min(...p.spans)),at=i>0?(stations[i-1]+stations[i])/2:c;
+   // A spliced piece keeps its mark on itself.
+   return (at>g.start&&at<g.end?at:c)/1000-m.length/2;
   };
   svg+=viewTitle(gaLayout.iso.x+gaLayout.iso.w/2,gaLayout.iso.y+gaLayout.iso.h+44,'ISOMETRIC VIEW','NOT TO SCALE',ga)+'</g>';
 
@@ -241,6 +245,8 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   rows.forEach((z,i)=>{svg+=line([gridLeft-18,Y(z)],[gridRight+12,Y(z)],'grid-line')+gridBubble(gridLeft-30,Y(z),i?'B':'A');});
   for(const [side,z] of [0,-m.width].entries()){
     for(const member of m.members)svg+=rect(X(member.start/1000-m.length/2),Y(z-m.bf/2),(member.end-member.start)/1000*k,m.bf*k,'runway-line');
+    // Girder field splices: the joint across the girder (its mark is placed with the girder marks).
+    for(const [i,x] of splices.entries())svg+=`<g data-splice="${spliceMark(i)}">${line([X(x/1000-m.length/2),Y(z-m.bf/2)-3],[X(x/1000-m.length/2),Y(z+m.bf/2)+3],'runway-line')}</g>`;
     const rz=z+(side?-m.railZ:m.railZ),head=(p.details?.rail.headWidth??65)/1000;
     svg+=rect(left+railInset('left')*k,Y(rz-head/2),(m.length-railInset('left')-railInset('right'))*k,head*k,'rail-line');
     for(const b of adjacent){
@@ -336,6 +342,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   // what is drawn: beside the girder at mid-length first, else further inboard past the new footings, or off mid-length;
   // the section, where it reads clear nowhere, is left to the schedule.
   {const foot=(eb?Math.max(0,...eb.footings.map(b=>(b.u1-b.u0)/2000))-m.columnOffset:0)*k;
+   // Splice marks at their joints, inboard of each runway, ahead of the girder marks so those read clear of them.
+   for(const [side,z] of [0,-m.width].entries())for(const [i,x] of splices.entries()){const xs=X(x/1000-m.length/2),steps=[0,6,12,18,24,30];
+    svg+=drawn.pick([...steps.map(d=>side?Y(z)+15+d:Y(z)-10-d),...steps.map(d=>side?Y(z)-10-d:Y(z)+15+d)].map(y=>`<g data-splice-mark="${spliceMark(i)}">${text(xs,y,spliceMark(i),lettering.text,'middle',700)}</g>`));}
    for(const [side,z] of [0,-m.width].entries())for(const g of marks){
     const len=(g.end-g.start)/1000*k,room=len-10,name=p.section.name,parts=name.split(' + ');
     const variants=[...(textWidth(name,lettering.text)<=room?[[name]]:[]),...(parts.length===2&&parts.every(v=>textWidth(`${v} +`,lettering.text)<=room)?[[`${parts[0]} +`,parts[1]]]:[]),[]];
@@ -479,6 +488,22 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   }
   // On column caps the strut runs just below the girder: the section name goes on the girder.
   for(const g of marks)svg+=text(EX(mid(g)),top-14-lift,g.mark,lettering.text,'middle',700)+text(EX(mid(g)),capGeo?(top+bottom)/2+3:bottom+17,p.section.name,lettering.text,'middle',700);
+  // Girder field splices: the joint, the splice plates, and the mark with its detail below the girder where it reads clear.
+  {const sp=activeSplices(p);if(sp&&splices.length){const sg=spliceGeometry(p,sp),T=sg.top,B=sg.bottom,tf=m.tf*ek,k=ek/1000;
+   for(const [i,x] of splices.entries()){
+    const xs=EX(x/1000-m.length/2),ti=T.inner?T.input.innerThickness*k:0,to=T.outer?T.input.outerThickness*k:0,bo=B.outer?B.input.outerThickness*k:0,bi=B.inner?B.input.innerThickness*k:0,gap=Math.max(.6,sp.gap/2*k);
+    let g=`<g data-splice="${spliceMark(i)}">`+[-1,1].map(sd=>line([xs+sd*gap,top],[xs+sd*gap,bottom],'runway-line')).join('');
+    if(ti)g+=rect(xs-T.half*k,top+tf,2*T.half*k,ti,'runway-line');
+    if(to)g+=rect(xs-T.half*k,top-to,2*T.half*k,to,'runway-line');
+    if(bi)g+=rect(xs-B.half*k,bottom-tf-bi,2*B.half*k,bi,'runway-line');
+    if(bo)g+=rect(xs-B.half*k,bottom,2*B.half*k,bo,'runway-line');
+    g+=rect(xs-sg.web.half*k,(top+bottom)/2-sp.web.height*k/2,2*sg.web.half*k,sp.web.height*k,'runway-line');
+    svg+=g+'</g>';
+   }
+   const drawn=new AnnotationSpace(svg.slice(elevationFrom));
+   for(const [i,x] of splices.entries()){const xs=EX(x/1000-m.length/2),label=`${spliceMark(i)} / ${detailRef(spliceTitles.elevation)}`,lowest=bottom+(capGeo?17:17+lettering.leading);
+    svg+=drawn.pick([bottom+17,lowest,lowest+lettering.leading,top-14-lift].map(y=>`<g data-splice-mark="${spliceMark(i)}">${text(xs,y,label,lettering.text,'middle',700)}</g>`));}
+  }}
   if(stop){const sh=(stop.base.thickness+stop.face.height)/1000;for(const end of stopIdx){const face=end?er-(stopGeom!.faceFront/1000)*ek:el+(stopGeom!.faceBack/1000)*ek;svg+=`<g data-end-stop="elevation">${rect(face,EY(m.railBase+sh),stop.face.thickness/1000*ek,(sh-stop.base.thickness/1000)*ek,'runway-line')}${rect(end?er-stopGeom!.front/1000*ek:el+stopGeom!.back/1000*ek,EY(m.railBase+stop.base.thickness/1000),stop.base.length/1000*ek,stop.base.thickness/1000*ek,'runway-line')}</g>`;}
    // The label stands where it reads clear of the drawn elevation: inboard of the stop above the rail, higher toward
    // the grid bubbles, or outboard of the runway end; the arrow lands on the stop's face plate.
@@ -511,10 +536,14 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
 function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:number;height:number}){
   const p=s.input,u=p.units,len=(mm:number)=>dimensionLength(mm,u),marks=girderMarks(p),d=p.details,camber=p.aist?.camber??0;
   const newColumns=!!(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled),columnName=p.existingColumn?.shape||'BUILT-UP',surveyed=newColumns?existingLayout(p):undefined,separation=s.bracingSystem?.separation;
+  const spliced=spliceLayout(p).errors.length?[]:spliceLayout(p).stations,grids=p.spans.reduce((a,v)=>[...a,a.at(-1)!+v],[0]),nearestGrid=(x:number)=>grids.reduce((a,v)=>Math.abs(v-x)<Math.abs(a-x)?v:a);
   const grid=(station:number)=>String(p.spans.reduce((acc,_,i)=>{const at=p.spans.slice(0,i+1).reduce((a,b)=>a+b,0);return Math.abs(at-station)<1?i+2:acc;},station<1?1:0)||'-');
   const ends=analysisOnly(p)?'BY OTHERS; SEE S-00 FOR REACTIONS AND RESTRAINT':!d?`SEE ${sheetRef('connection')}`:p.system==='continuous'?activeEndBearing(p)?`BOLTED AT EACH SUPPORT; GRID ${continuousBearings(p).find(v=>v.role==='LOCATING')?.grid} LOCATES, OTHERS SLIDE; SEE ${detailRef(bearingBoltsTitle(p))}`:`BEARS ON EACH SUPPORT; SEE ${detailRef(detailTitles.bearing)}`:`LOCATES AT THE LOWER-NUMBERED GRID, SLIDES AT THE OTHER; SEE ${detailRef(activeEndBearing(p)?bearingBoltsTitle(p):detailTitles.movement)}`;
   const rows=[...new Set(marks.map(g=>g.mark))].map(mark=>{const all=marks.filter(g=>g.mark===mark),g=all[0];
-    return [mark,String(all.length*2),specGrade(`${p.section.name}; ${p.section.kind==='cap'&&p.capDesign?`W ${astmSpec('w-shape',p.section.Fy,p.section.Fu)}, CAP ${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource)}`:astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu)}`.toUpperCase())+`${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${grid(v.leftGrid)}-${grid(v.rightGrid)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',ends];});
+    // A spliced piece runs from a grid or a splice to a grid or a splice.
+    const from=(v:typeof g)=>v.leftSplice!==undefined?spliceMark(v.leftSplice):grid(v.leftGrid),to=(v:typeof g)=>v.rightSplice!==undefined?spliceMark(v.rightSplice):grid(v.rightGrid);
+    const pieced=all.some(v=>v.leftSplice!==undefined||v.rightSplice!==undefined);
+    return [mark,String(all.length*2),specGrade(`${p.section.name}; ${p.section.kind==='cap'&&p.capDesign?`W ${astmSpec('w-shape',p.section.Fy,p.section.Fu)}, CAP ${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource)}`:astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu)}`.toUpperCase())+`${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${from(v)}-${to(v)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',pieced?`${ends}; FIELD SPLICE PER ${detailRef(spliceTitles.elevation)}`:ends];});
   const notes=[
     analysisOnly(p)?'ANALYSIS ONLY - NOT FOR CONSTRUCTION. THIS SHEET RECORDS THE GIRDERS AS ANALYZED. SEE S-00 FOR THE ANALYSIS BASIS, THE SUPPORT REACTIONS AND THE LATERAL RESTRAINT AND RAIL ASSUMED, WHICH THE CONNECTIONS, SUPPORTS AND RAIL BY OTHERS SHALL PROVIDE.':'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
     newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${separationLength(separation.required,u)} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS ARE SHOWN AS CENTERLINES (DASH-DOT); COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
@@ -522,7 +551,8 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
     ...(analysisOnly(p)?[]:[`ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`]),
     // With the detailed set the rail setting is the S-00 crane runway installation note; an analysis gives the rail on S-00.
     ...(d||analysisOnly(p)?[]:[`SET RAIL C/L SPACING (CRANE SPAN) TO THE CRANE MANUFACTURER'S GAUGE, EACH RAIL ON ITS GIRDER WEB C/L. THE DESIGN ALLOWS A RAIL-TO-WEB ECCENTRICITY OF ${plateInches(Math.abs(p.railEccentricity),u)}; IT IS NOT A SETTING DIMENSION.`]),
-    p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}.`:'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
+    p.system==='simple'&&d?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}; SEE ${detailRef(activeColumnCap(p)?columnCapTitles.section:detailTitles.supportEnd(p.spans.length>1))}.`:p.system==='simple'?`GIRDER LENGTHS ARE OUT-TO-OUT OF STEEL${p.spans.length>1?' WITH THE END GAP AT EACH SHARED SUPPORT':''}.`:spliced.length?'GIRDER PIECE LENGTHS ARE OUT-TO-OUT OF STEEL, EACH PIECE ENDING AT A GRID OR AT ITS FIELD SPLICE.':'GIRDER LENGTH IS OUT-TO-OUT OF STEEL; FIELD SPLICES ARE NOT PERMITTED WITHOUT ENGINEER APPROVAL.',
+    ...(spliced.length?[`BOLTED SLIP-CRITICAL FIELD SPLICES ${spliced.map((x,i)=>`${spliceMark(i)} AT ${len(Math.abs(x-nearestGrid(x)))} ${x<nearestGrid(x)?'BEFORE':'PAST'} GRID ${grids.indexOf(nearestGrid(x))+1}`).join(', ')} (JOINT C/L), MARKED ON THE PLAN AND ELEVATION; SEE ${detailRef(spliceTitles.elevation)}. GIRDER PIECES ${len(activeSplices(p)!.maxPiece)} MAX.; NO OTHER FIELD SPLICES WITHOUT ENGINEER APPROVAL.`]:[]),
     ...adjacentBays(p).map(b=>`AT GRID ${b.end==='left'?1:p.spans.length+1} THE EXISTING RUNWAY CONTINUES (${short((p.continuation?.source??'').toUpperCase(),70)}). THE EXISTING ${len(b.length)} GIRDER BEARS ON THE SAME SUPPORT AND STAYS IN PLACE; ITS REACTION IS INCLUDED IN THE SUPPORT DESIGN. FIELD VERIFY ITS SPAN, BEARING, TIE AND RAIL JOINT BEFORE FABRICATION.`)
   ];
   return noteStack([(t:Style)=>[heading(t,'RUNWAY GIRDER SCHEDULE'),table(t,['MARK','QTY','SECTION','LENGTH','GRIDS','CAMBER','ENDS'],rows,[.55,.45,1.6,.8,.75,.65,1.9]),heading(t,'SHEET NOTES'),...numbered(t,notes)]],u,box);
@@ -579,6 +609,7 @@ export function detailTopics(s:CalculationSnapshot,f:FramingSettings=defaultFram
     ...(p.section.kind==='cap'&&p.capDesign&&d?[capTopic(s)]:[]),
     ...(supports?[supports]:[]),...(bracket?[bracket]:[]),...(ties?[ties]:[]),...(capAngle?[capAngle]:[]),
     ...(d&&activeEndStop(p)?[endStopTopic(s)]:[]),
+    ...(d&&!spliceLayout(p).errors.length&&spliceLayout(p).stations.length?[spliceTopic(s)]:[]),
     ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[...(activeColumnCap(p)?[columnCapTopic(s)]:[]),newColumnTopic(s)]:[]),
     ...(s.bracingSystem?[bracingTopic(s)]:[])];
   // HOLD lines of each topic's views: the open items with a failing check at the details that draw them (detailHolds).

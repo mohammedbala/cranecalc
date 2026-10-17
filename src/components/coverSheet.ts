@@ -19,6 +19,8 @@ import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
 import {usesTaperedHaunch} from '../engine/taperedHaunch';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {spliceLayout,activeSplices} from '../engine/spliceInputs';
+import {spliceTitles} from './spliceSheet';
 import {drawingLength,drawingElevation,electrodeClass,plateInches,dimensionLength,specGrade,limitLength} from './drawingFormat';
 import {railPad} from '../engine/railSeat';
 import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheetStart,titleBlock,detailRef,detailTitles,wrapToWidth,textWidth,lettering} from './sheetGraphics';
@@ -121,6 +123,8 @@ function flow(blocks:Block[],limit:number,overflow=false,pages=1){
  return flowBlocks(blocks,lanes,limit,overflow)?.map(v=>({...v,page:Math.floor(v.lane/4)}));
 }
 
+/** The girder is spliced in the field: splices are active and placed. */
+const spliced=(p:ProjectInput)=>{const l=spliceLayout(p);return !l.errors.length&&l.stations.length>0;};
 export const coverSheetTitle='COVER, GENERAL NOTES & DESIGN CRITERIA';
 /** The cover's title: an analysis-only set has no general notes or design criteria. */
 export const coverTitleFor=(p:ProjectInput)=>p.scope==='analysis'?'COVER, ANALYSIS BASIS & INTERFACE REQUIREMENTS':coverSheetTitle;
@@ -241,6 +245,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   // The rail setting clause of the TR-13 list is the note above.
   ...constructionRequirements(p).filter(v=>v.key==='tolerances').map(v=>v.items.filter(i=>!/^rail centerline set on/i.test(i)).join(' ').replace(/; (Survey)/,'. $1')),
   ...(constructionRequirements(p).find(v=>v.key==='erection')?.items.slice(1)??[]),
+  ...(spliced(p)?[`COMPLETE THE GIRDER FIELD SPLICES (${detailRef(spliceTitles.elevation)}) WITH EVERY BOLT PRETENSIONED BEFORE THE RAIL IS SET; WELD THE RAIL CLIPS AT THE SPLICES AFTERWARD AND RE-VERIFY THE PRETENSION OF THE TOP FLANGE BOLTS NEAREST THE WELDS.`]:[]),
   ...(activeEndStop(p)?[`INSTALL THE RUNWAY END STOPS (${detailRef(detailTitles.endStop)}) AT ${stopLocation(p).toUpperCase()} BEFORE THE CRANE IS OPERATED OR LOAD TESTED.`]:[]),
   // The flexible plate tie works only while it can flex: no forced fit, no welds or stiffeners on its clear length.
   ...(flangeTieGeometry(p)?.plies===1?[`FLEXIBLE PLATE TIES (${detailRef(detailTitles.flangeTie)}): BOLT THE PLATE WITHOUT JACKING, HEATING OR SHIMMING TO FORCE FIT; DO NOT WELD, DRILL OR STIFFEN IT BETWEEN ITS BOLT GROUPS. INSPECT THE PLATE AND ITS BOLTS AT THE CRANE INSPECTION INTERVALS.`]:[]),
@@ -355,6 +360,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ['RUNWAY GIRDER',`${astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu).toUpperCase()}${p.section.kind==='welded'?' PLATE':''}, Fy = ${ksi(p.section.Fy)}`],
   ...(p.capDesign&&p.section.kind==='cap'?[['CAP CHANNEL',`${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource).toUpperCase()}, Fy = ${ksi(p.capDesign.Fy)}`]]:[]),
   ...(d?[[activeColumnCap(p)?'PLATES, BARS, ANGLES':'PLATES, BARS, ANGLES, TIES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}`],['CRANE RAIL',`${astmSpec('rail',d.rail.Fy,d.rail.Fu)} ${d.rail.name.split(" · ")[0]}, Fy = ${ksi(d.rail.Fy)}`.toUpperCase()],['BOLTS',`${bolt}, PRETENSIONED; SLIP-CRITICAL CLASS ${d.end.surface} FAYING SURFACES AT CLAMPED PLIES${activeEndBearing(p)&&bearingSurface(p)==='A'?'; CLASS A AT THE BEARING PLATES, SHIMS AND SEATS':''}${sleeved?'; BOLTS IN SLOTTED SLIDING PLIES PRETENSIONED AGAINST STEEL SLEEVES, THE SLOTTED PLY NOT CLAMPED (MATERIAL NOTE 1)':''}${grades.some(v=>v.grade==='A490')?'; A490 BOLTS NOT GALVANIZED AND NOT REUSED; DO NOT SUBSTITUTE A325 FOR A490':''}`],['NUTS AND WASHERS','ASTM A563 GRADE DH HEAVY HEX NUTS; ASTM F436 HARDENED WASHERS; PLATE WASHERS ASTM A572 GR. 50'],['BOLT SLEEVES',`${astmSpec('tube',50*6.894757293168).toUpperCase()} STEEL TUBE, Fy = ${ksi(50*6.894757)} MIN.`],['WELD METAL',`${electrodeClass(d.material.Fexx,u)}, AWS D1.1`],...(seismic341?[['SEISMIC WELDS',`NEW COLUMN TO BASE PLATE, AND ${activeColumnCap(p)?'CAP PLATES':'BRACKETS AND TIES'} TO THE NEW COLUMNS: FILLER METAL WITH CVN TOUGHNESS PER AWS D1.8 CLAUSE 6.3 (AISC 341 §A3.4a); ALSO THE ANCHOR ROD PLATE WASHER WELDS`]]:[]),...(railPad(p)?[['RAIL PAD',`${d.rail.padSource}; ${plateInches(railPad(p)!.thickness,u)} THICK X ${plateInches(railPad(p)!.width,u)} WIDE, CONTINUOUS UNDER THE RAIL BASE; ALLOWABLE COMPRESSION ${ksi(d.rail.padAllowable)}; SEE ${detailRef(detailTitles.railKeeper)}`]]:[]),...(d.rail.clip?[['RAIL CLIPS',`${d.rail.clip.product.toUpperCase()}${new RegExp(`${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}.*FLOATING`,'i').test(d.rail.clip.product)?'':`; ${d.rail.clip.type==='weld-on'?'WELD-ON':'BOLTED'}, FLOATING`}, PER MANUFACTURER; SEE ${detailRef(detailTitles.railKeeper)}`]]:[])]:[]),
+  // Bolted field splices of the runway girder (spliceSheet.ts).
+  ...(d&&spliced(p)?(()=>{const sp=activeSplices(p)!;return [['GIRDER SPLICE PLATES',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}; FAYING SURFACES CLASS ${sp.surface}${sp.surface==='B'?', BLAST-CLEANED AND UNCOATED':', CLEAN MILL SCALE'}`],['GIRDER SPLICE BOLTS',`${boltSpec(sp.grade).toUpperCase()}, ${plateInches(sp.diameter,u)} DIA., PRETENSIONED, SLIP-CRITICAL; ASTM A563 DH HEAVY HEX NUTS, F436 WASHERS; ${detailRef(spliceTitles.elevation)}`]];})():[]),
   ...(usesRolledBracket(p)?(()=>{const w=projectStub(p);return [['COLUMN BRACKETS',`ASTM A992 ${w.name}, Fy = ${ksi(w.input.Fy)}, Fu = ${ksi(w.input.Fu)}; ${w.seat?'SEAT PL AND ':''}STIFFENERS AS PLATES`]];})():[]),
   ...(usesTaperedHaunch(p)&&d?[['COLUMN BRACKETS',`BUILT-UP TAPERED I HAUNCH PLATES, ${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()}, Fy = ${ksi(d.material.Fy)}, Fu = ${ksi(d.material.Fu)}; ${p.existingColumn?.enabled&&!p.existingColumn.isNew?'FIELD WELDED TO EXISTING COLUMNS: VERIFY WELDABILITY':'SHOP WELDED'}`]]:[]),
   ...(d&&columnStiffenerGeometry(p)?[['COLUMN STIFFENERS',`${astmSpec('plate',d.material.Fy,d.material.Fu).toUpperCase()} PLATES, Fy = ${ksi(d.material.Fy)}; ${supportColumn(p).field?'FIELD WELDED INSIDE THE EXISTING COLUMNS':'SHOP WELDED INSIDE THE NEW COLUMNS'} AT THE BRACKETS`]]:[]),
@@ -404,6 +411,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(d?[['FIELD WELDS',`RAIL CLIP BASE WELDS${p.columnBase?.enabled&&p.existingColumn?.isNew?', ANCHOR ROD PLATE WASHERS':''}: VISUAL OF EVERY WELD${d.rail.clip?.type==='bolted'?'':`; MT AT THE RAIL CLIP WELD TERMINATIONS (CYCLIC ATTACHMENTS ON THE ${p.section.kind==='cap'?'CAP CHANNEL':'GIRDER TOP FLANGE'}, NDT ABOVE)`}`,'P']]:[]),
   ...(seismic341?[['SEISMIC (IBC 1705.12.1.1, 1705.13.1.1)','NEW COLUMNS, BASE PLATES AND THEIR WELDS: QUALITY ASSURANCE PER AISC 341 CHAPTER J; CRANE-LEVEL ROD BRACING EXEMPT (R = 3)','O / P']]:[]),
   ...(p.columnBase?.enabled&&p.existingColumn?.isNew?[['FOUNDATIONS (IBC 1705.3, 1705.6)','REINFORCEMENT AND ANCHOR ROD PLACEMENT; BEARING SOIL VERIFIED BEFORE CONCRETE','P'],['CONCRETE (IBC 1705.3)','SAMPLING AND TESTING OF FRESH CONCRETE; PLACEMENT','C']]:[]),
+  ...(d&&spliced(p)?[['SLIP-CRITICAL GIRDER SPLICES',`PRE-INSTALLATION VERIFICATION OF THE BOLT ASSEMBLIES AND PRETENSIONING METHOD (RCSC §7); FAYING SURFACES BEFORE ASSEMBLY; ROUTINE OBSERVATION OF PRETENSIONING, EVERY BOLT MATCH-MARKED OR DTI CHECKED (AISC 360 N5.6); ${detailRef(spliceTitles.elevation)}`,'P']]:[]),
   ['RAIL / RUNWAY','ALIGNMENT, GAUGE AND LEVEL SURVEY AFTER ERECTION','P']
  ]),[1.05,2.45,.5]),P(`STEEL: O OBSERVE, P PERFORM (AISC 360 N5).${p.columnBase?.enabled&&p.existingColumn?.isNew?' CONCRETE AND SOILS: C CONTINUOUS, P PERIODIC (IBC TABLE 1705.3).':''}`));
  blocks.push(H('SUBMITTALS'),...N([

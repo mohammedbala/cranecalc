@@ -31,6 +31,7 @@ import {endStopChecks} from './endStop';
 import {endBearingChecks,bearingPlateChecks,activeEndBearing} from './endBearing';
 import {activeColumnCap} from './columnCapInputs';
 import {columnCapChecks,capBoltSets} from './columnCap';
+import {spliceChecks} from './girderSplice';
 
 const compared=(id:string,group:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds=['aisc-connections']):CheckResult=>({id,group,title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds});
 const resolved=(id:string,title:string,note:string,referenceIds=['aisc-connections']):CheckResult=>({id,group:'Connections',title,status:'not-applicable',equation:'',note,referenceIds});
@@ -341,6 +342,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  checks.push(...restraint(tieMovementChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,member:brace.member})));
  if(plate)checks.push(...restraint(plateTieChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,cos:brace.cos,member:brace.member})));
  }
+ checks.push(...spliceChecks(s));
  checks.push(...railChecks(s),...capAttachmentChecks(s),...simpleSupportChecks(p,a.endRotation),...endStopChecks(p,{analysis:a,strength:{...strength,major:Math.min(strength.major,mcx)},props,holdDown:checks.find(c=>c.id==='hold-down-model')?.capacity??0}));
 
  // A restraint component past its strength (flange-tie-*, D/C > 1) yields before the analysis' elastic restraint

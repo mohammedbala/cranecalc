@@ -10,6 +10,8 @@ import type {BracketResults} from './bracketDesign';
 import type {ExistingBracketResults} from './existingBracket';
 import type {SupportForceEnvelope} from './bracketForces';
 import type {ColumnCapResults} from './columnCap';
+import {spliceSchema} from './spliceInputs';
+import type {SpliceResults} from './girderSplice';
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
 const material=z.object({Fy:pos,Fu:pos,Fexx:pos});
 /**
@@ -41,6 +43,8 @@ export const runwayDetailsSchema=z.object({
  simpleSupport:simpleSupportSchema.optional(),
  endStop:endStopSchema.optional(),
  endBearing:endBearingSchema.optional(),
+ /** Bolted field splices of girders longer than the maximum piece length (spliceInputs.ts). */
+ splices:spliceSchema.optional(),
  /** False while template-generated inputs await the engineer's review. */
  reviewed:z.boolean().optional(),
  // Two identical flat bars, one each side of the gusset, at EACH flange.
@@ -125,6 +129,8 @@ export interface RunwayDetailResults {
  bracketForces?:SupportForceEnvelope[];
  /** Column cap on new freestanding columns: per-grid cap, stiffener, bolt and weld demands, and the fork restraint. */
  columnCap?:ColumnCapResults;
+ /** Girder field splices: governing design forces, bolt and plate demands and fatigue ranges at the splice stations. */
+ splices?:SpliceResults;
  cap?:{longitudinalFlow:number;fatigueFlows:number[]};
  /** Major flexure with the load-height elastic critical moment entered at its equivalent unbraced length, with the
   * AISC 360-16 Commentary F1 load-height Cb of the same case for comparison. */
