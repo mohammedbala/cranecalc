@@ -30,7 +30,7 @@ import {baseDrift} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
 import {sizeWeldedBracket} from './bracketSizing';
 import {sizeRolledBracket} from './rolledBracketSizing';
-import {sizeColumnCap} from './columnCapSizing';
+import {sizeColumnCap,columnCapSizingRatios} from './columnCapSizing';
 import {defaultRolledBracket,isRolledBracket} from './rolledBracketInputs';
 import {activeColumnCap,defaultColumnCap} from './columnCapInputs';
 import {capWorkPointDrop} from './columnCap';
@@ -278,9 +278,10 @@ function skeleton(cfg:RunwayConfig){
  p.aist={...p.aist!,buildingClass:cfg.buildingClass,classConfirmed:true,buildingCycles:spectrum.repetitions,railDepth:depth,netFlangeArea:0,bottomBraceSpacing:longest,axialLength:longest,torsionalLength:longest,
   runwayOnly:true,supportType:cfg.support==='column-cap'?'column':'bracket',clipSpacing:24*inch,railPad:depth>=5*inch,fastener:'clips',camber:0,fatiguePoint:'bottom-left',
   fatigueReference:'AISC 360 Table A-3.1, 1.1 · plain rolled bottom flange; full detail register in the package',
-  cycleSource:`Fictitious example duty: ${count(N)} wheel-induced stress fluctuations in three duty bins (rated, half and light lifts), loaded and empty passes included.`};
+  cycleSource:`Fictitious example duty: ${count(N)} wheel-induced stress fluctuations in three duty bins (rated, half and light lifts), loaded and empty passes included. The bins are an assumed general-service proportion, not crane or owner data, so the fatigue checks govern by the all-cycle bound (the full fatigue load at every one of the ${count(N)} cycles); Miner's sum over the bins is listed for comparison until a sourced duty spectrum is entered.`};
  delete p.aist.classBasis;
- p.fatigue={category:'A',cycles:N,detail:'Plain rolled bottom flange; welded attachments are checked separately in the detail register.',location:spans[0]/2};
+ // No owner or crane-supplier duty spectrum: the TR-13 class method, the full fatigue load at all class cycles, governs.
+ p.fatigue={category:'A',cycles:N,detail:'Plain rolled bottom flange; welded attachments are checked separately in the detail register.',location:spans[0]/2,method:'all-cycle'};
  // Rail weight per the rail section the details proportion (placeholder until the details are built).
  const railArea=(r:{headWidth:number;headThickness:number;baseWidth:number;baseThickness:number;webThickness:number})=>r.headWidth*r.headThickness+r.baseWidth*r.baseThickness+(depth-r.headThickness-r.baseThickness)*r.webThickness;
  p.railWeight=railArea({headWidth:.55*depth,headThickness:.3*depth,baseWidth:depth,baseThickness:.17*depth,webThickness:.12*depth})*7850*g/1e9;
@@ -458,7 +459,7 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  // The end stops sized again for the crane bumper force on the finished girder end (bearing stiffener, tie saddle).
  if(q.details?.endStop)q.details.endStop=sizeEndStop(q).stop;
  q.notes+=` ${overhangNote(estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control))}`;
- return logged(cfg.structure==='new'?withColumnBase(sizeBracing(q,baseTarget),cfg,trace):withLongitudinalExit(withPreheat(q),cfg,trace));
+ return logged(cfg.structure==='new'?withCapColumn(withColumnBase(sizeBracing(q,baseTarget),cfg,trace),cfg):withLongitudinalExit(withPreheat(q),cfg,trace));
 }
 /**
  * Existing columns: the specified preheat of the field welds to the column is the AWS D1.1 Category B minimum for the
@@ -537,6 +538,24 @@ function withHaunch(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):Pro
  return sized;
 }
 /** Sizing target of the new column bases. */
+/**
+ * A column cap whose sized bolts, welds or plates still exceed a ratio of 1 on the chosen column (the fork couple
+ * through the bearing bolts and the all-around cap fillets grow with the column depth and flange width): the project is
+ * built on the lightest heavier W14 on which the cap sizing passes; otherwise (or when a heavier W14 barely lowers the
+ * governing ratio) it stays, and the checks report the cap.
+ */
+function withCapColumn(q:ProjectInput,cfg:RunwayConfig):ProjectInput{
+ if(cfg.support!=='column-cap'||cfg.columnShape||!activeColumnCap(q))return q;
+ const worst=(r:ProjectInput)=>Math.max(0,...Object.values(columnCapSizingRatios(r)));
+ let last=worst(q);if(last<=1)return q;
+ for(const shape of heavierColumns(q.existingColumn!.shape)){
+  const r=buildProject({...cfg,columnShape:shape}),now=worst(r);
+  // A heavier W14 that barely changes the governing cap ratio will not bring it to 1: the fork needs another restraint.
+  if(now>1&&now>.97*last)break;last=now;
+  if(now<=1){r.notes+=` The column cap on the ${q.existingColumn!.shape} column leaves a cap ratio above 1 (the fork couple through the bearing bolts and the cap fillets): the columns are ${shape}.`;return {...r,configurator:{...cfg}};}
+ }
+ return q;
+}
 const baseTarget=.9;
 /**
  * New columns: the base plates, anchor rods and footings sized for the reactions (sizeColumnBase), and the existing
@@ -613,7 +632,7 @@ function attachBracket(p:ProjectInput,cfg:RunwayConfig,shape:string,reach:number
  if(kind==='rolled-corbel'){
   b.corbelShape=cfg.capacity<=10?'W12X65':cfg.capacity<=20?'W12X87':'W12X106';b.seatThickness=1.5*inch;b.seatWeld=.375*inch;
   b.rolled={...defaultRolledBracket,flangeJoint:'cjp',webWeld:.3125*inch,stiffenerThickness:.5*inch,stiffenerWeld:.25*inch,seatPlate:true};
-  p.details.endBearing!.bolts.edge=2.125*inch;
+  p.details.endBearing!.bolts.edge=Math.max(p.details.endBearing!.bolts.edge,2.125*inch);
  }
  if(kind==='tapered-haunch'){delete b.haunch;p.details=selectBracketArrangement(p.details,'tapered-haunch',p.system);b=p.details.bracket!;}
  // The welded rib seats are sized once the tie has set the reach (withWeldedBracket).

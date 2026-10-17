@@ -13,7 +13,7 @@ import {seatSettingTolerance} from './fitTolerances';
 import type {ProjectInput,CheckResult} from './types';
 import type {BracketLoads,SeatHorizontal} from './bracketDesign';
 import type {EndBearingInput} from './endBearingInputs';
-import {seatStrip} from './bracketDesign';
+import {seatStrip,attachmentCategory} from './bracketDesign';
 import {available} from './aiscStrength';
 import {filletMinimum,filletEffectiveSize,compressionResistance,transverseFilletFatigue,plateBearing,boltCapacity} from './connectionStrength';
 import {format} from './units';
@@ -516,7 +516,7 @@ export function rolledBracketChecks(p:ProjectInput,res:RolledBracketResults,serv
  else miner('fatigue-flange','Stub flanges at the column fillets · fatigue','flange',4.4,rFlange<1?'C}^{\\prime\\prime}\\text{':'C',`Table A-3.1 item 5.6: the flanges are tension-loaded plate elements with a pair of transverse fillets; toe crack Category C, root crack Category C″ with R_FIL = ${rFlange.toFixed(3)} (Eq. A-3-6) for tf = ${fmt(st.tf)}, w = ${fmt(r.flangeWeld)}. Range of the flange-tip stress per bin.`,rFlange);
  miner('fatigue-web','Stub web at the column fillets · fatigue','web',4.4,rWeb<1?'C}^{\\prime\\prime}\\text{':'C',`Table A-3.1 item 5.6 for the web with its pair of fillets: web normal stress range at the ends of the web fillets, root crack Category C″ with R_FIL = ${rWeb.toFixed(3)} for tw = ${fmt(st.tw)}, w = ${fmt(r.webWeld)}.`,rWeb);
  add('fatigue-web-weld','Stub web fillets · throat fatigue',Math.max(0,...F.map(v=>v.webWeld)),weldF,'stress','f_{sr}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}','Table A-3.1 item 8.2, Category F on the throat; the largest unfactored range over the bins, from the ranges of the three throat components, assigned to all project cycles.',undefined,fatRefs);
- miner('fatigue-column','Column flange at the stub weld toes · fatigue','column',.39,'E}^{\\prime}\\text{','Table A-3.1 item 7.2, Category E-prime: the web fillets are attachments longer than 4 in along the column. Range of the column flange stress from V·e_c on the receiving section; other building stress ranges excluded.',1,';\\ \\ f_{sr}=\\Delta Ve_c/S_c');
+ {const k=attachmentCategory(st.d,st.tw);miner('fatigue-column','Column flange at the stub weld toes · fatigue','column',k.Cf,k.tex.replace('^\\prime','}^{\\prime}\\text{'),`Table A-3.1 item 7.1, Category ${k.name}: the stub web fillets are an attachment without a transition radius, a = ${fmt(st.d)} along the column and b = t_w = ${fmt(st.tw)} (a ${k.range}). Range of the column flange stress from V·e_c on the receiving section; other building stress ranges excluded.`,1,';\\ \\ f_{sr}=\\Delta Ve_c/S_c');}
  if(stiff){
   add('fatigue-stiffener-weld','Stiffener fillets · throat fatigue',Math.max(0,...F.map(v=>v.stiffenerWeld)),weldF,'stress','f_{sr}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}','Table A-3.1 item 8.2, Category F on the throat of the stiffener-to-web and bottom-flange fillets; the largest range for all project cycles.',undefined,fatRefs);
   miner('fatigue-stiffener-toe','Stub at the stiffener weld toes · fatigue','stiffenerToe',4.4,'C','Table A-3.1 item 5.7, Category C: stub flange and web at the toes of the transverse stiffener fillets, range of the stub bending stress at the stiffener. The stiffener itself is in compression.');

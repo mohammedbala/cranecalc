@@ -21,9 +21,12 @@ describe('column cap sizing',()=>{
   expect(at).toHaveLength(2*g.grids[1].bearings.length);
   for(const v of at){
    expect(v.f.vertical).toBeCloseTo(1.2*s.D+1.6*(s.Cd+s.Cv+s.Ci),6);expect(v.f.ends).toHaveLength(1);
-   // The fork forces add up to the side thrust and their moment about the cap top is its moment at the rail head.
+   // The fork forces add up to the side thrust; their moment about the cap top is that of the side thrust through the
+   // shear center plus the torque about it amplified for second-order twist, B = 1/(1 - 1/lambda) >= 1 (LRFD).
    expect(Math.abs(v.f.top+v.f.bottom)).toBeCloseTo(H,6);
-   const h=p.details!.bearing.thickness+p.section.d+railTopAboveSteel(p);expect(Math.abs(v.f.top*g.arms.top+v.f.bottom*g.arms.bottom)).toBeCloseTo(H*h,3);
+   const h=p.details!.bearing.thickness+p.section.d+railTopAboveSteel(p),{amplification:B,shearCenter:sc,lambda}=set.fork!;
+   expect(B).toBeCloseTo(1/(1-1/lambda),9);expect(B).toBeGreaterThan(1);
+   expect(Math.abs(v.f.top*g.arms.top+v.f.bottom*g.arms.bottom)).toBeCloseTo(H*(sc+B*(h-sc)),3);
   }
   expect(set.ctx.imperfection).toBeGreaterThan(0);expect(set.ctx.required).toBeGreaterThan(0);
  });

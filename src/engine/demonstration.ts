@@ -77,10 +77,11 @@ export function demonstrationProject():ProjectInput {
  // stiffener (stiffenerTieGeometry), the stiffener pair carrying the tie force into the girder. With the restraint at the
  // tie line, a saddle 5 in below the flange leaves the rail twist over its limit and the saddle's flange bending and
  // fatigue near theirs; the bars just under the flange keep the twist within it. Proportions as sizeFlangeTie gives
- // them for the 28 in column face: 5/16 x 4 3/4 bars, 3/4 in gussets, 5/8 in bolts at 1 3/4 in pitch, 3/16 in travel.
+ // them for the 28 in column face: 5/16 x 4 3/4 bars, 3/4 in gussets, 5/8 in bolts at 2 in pitch (the sleeved column-end
+ // slots keep d_b + 1/16 in between rows, tie-release-pitch), 3/16 in travel.
  {const t=p.details.brace;t.flangeAttachment!.enabled=false;
-  Object.assign(t,{width:4.75*inch,thickness:.3125*inch,length:22.25*inch,reach:22.25*inch,gussetThickness:.75*inch,connectionLength:4.25*inch});
-  Object.assign(t.connection,{pitch:1.75*inch,edge:inch,thickness:.3125*inch});t.release={...t.release!,travel:.1875*inch};}
+  Object.assign(t,{width:4.75*inch,thickness:.3125*inch,length:22.25*inch,reach:22.25*inch,gussetThickness:.75*inch,connectionLength:4.5*inch});
+  Object.assign(t.connection,{pitch:2*inch,edge:inch,thickness:.3125*inch});t.release={...t.release!,travel:.1875*inch};}
  // Bolted end bearings: standard holes at each bay's locating left end, long slots at its sliding right end.
  // A 1/2-in sliding allowance keeps the 3/4-in bolt slots within the AISC J3.2 long-slot limit.
  p.details.endBearing={...structuredClone(defaultEndBearing),enabled:true};p.details.simpleSupport={...p.details.simpleSupport!,guideTravel:.5*inch};
