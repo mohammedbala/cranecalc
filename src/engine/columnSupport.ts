@@ -4,6 +4,7 @@ import {asceCombinations,type AsceCombination} from './asceCombinations';
 import {seatOffset} from './bracketForces';
 import {independentBearings} from './simpleSupports';
 import {stopEnds} from './endStopInputs';
+import {activeEndBearing,locatingSupport} from './endBearingInputs';
 import {sectionProperties} from './section';
 import type {CraneCombination} from './aistLoads';
 import type {ProjectInput,Section} from './types';
@@ -68,12 +69,20 @@ export function seatMoment(ends:SeatEnd[],f:SeatFactors){
  const base=ends.reduce((a,v)=>a+(f.D*v.D+f.L*v.L)*v.offset,0);
  return Math.max(Math.abs(base),...ends.map(v=>Math.abs(base+(f.Cd*v.Cd+f.Cv*(v.Cv+v.Ci))*v.offset)));
 }
-/** Grids that locate a girder longitudinally: the left end of each simple span; every grid of a continuous girder (conservative). */
-export function locatingGrids(p:ProjectInput){return p.spans.map((_,i)=>i).concat(p.system==='continuous'?[p.spans.length]:[]);}
+/**
+ * Grids that locate a girder longitudinally: the left end of each simple span; the locating support of a continuous
+ * girder on bolted bearings (the others slide in sleeved slots: the bearing and bracket design, longitudinalPaths);
+ * otherwise every grid of a continuous girder (conservative).
+ */
+export function locatingGrids(p:ProjectInput){
+ if(p.system==='continuous'&&activeEndBearing(p))return [locatingSupport(p)];
+ return p.spans.map((_,i)=>i).concat(p.system==='continuous'?[p.spans.length]:[]);
+}
 /** Crane stop force reaching each grid through the girder: girder-mounted stops on the end spans, delivered at their locating seats. */
 export function bumperAtGrids(p:ProjectInput){
  const n=p.spans.length,Cbs=Math.max(0,...p.cranes.map(c=>c.design&&!c.design.bumperBypassesGirder?c.design.bumperForce:0)),ends=stopEnds(p);
- const grids=new Set<number>();if(Cbs>0)for(const e of ends)grids.add(p.system==='continuous'?(e==='left'?0:n):(e==='left'?0:n-1));
+ // A continuous girder on bolted bearings takes the stop force through the girder to its locating support.
+ const grids=new Set<number>();if(Cbs>0)for(const e of ends)grids.add(p.system==='continuous'?(activeEndBearing(p)?locatingSupport(p):e==='left'?0:n):(e==='left'?0:n-1));
  return {Cbs,grids};
 }
 
