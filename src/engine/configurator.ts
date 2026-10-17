@@ -58,6 +58,12 @@ export function normalizeConfig(input:RunwayConfig):{config:RunwayConfig;changes
   for(const [field,to] of Object.entries(patch) as [ConfigRule['field'],string][])if(c[field]!==to)rules.push({field,from:String(c[field]),to,why});
   Object.assign(c,patch);changes.push(why);}};
  if(c.scope==='analysis')return {config:c,changes,rules};
+ // A capped girder longer than a practical piece has no designed field splice (spliceInputs.ts: the cap channel would
+ // need its own splice): its web is the rail seat, so splice plates and bolt heads on it clash with the rail and clips,
+ // and a staggered field CJP splice of the channel and the W top flange lies under the wheels (a transverse groove weld
+ // in the fatigue-loaded top flange, AISC 360 App. 3 Table A-3.1 Section 5). Simple spans keep every piece one bay
+ // long (AISC DG7 favours simple-span runway girders).
+ fix(c.girder==='capped'&&c.system==='continuous'&&c.bays*c.span*foot>practicalPieceLength+1e-6,{system:'simple'},`A continuous capped girder over ${+(practicalPieceLength/foot).toFixed(0)} ft needs field splices of the W and the cap channel, which this calculation does not design (the channel web is the rail seat, so splice plates clash with the rail and clips, and a field CJP splice of the cap lies in the fatigue-loaded top flange under the wheels): the capped girders are simple spans, one bay long (AISC DG7 favours simple-span runway girders).`);
  fix(c.support==='column-cap'&&c.structure!=='new',{structure:'new'},'A column cap sits on new freestanding columns: the columns are new.');
  fix(c.structure==='new'&&c.support==='by-others',{support:'twin-rib'},'New columns carry a bracket designed here: the support is the welded twin-rib seat.');
  fix(c.tie==='cap-angle'&&c.girder!=='capped',{tie:'paired-bars'},'The cap tieback angle bolts to a channel cap: the tie is paired flat bars on this rolled girder.');
@@ -67,7 +73,7 @@ export function normalizeConfig(input:RunwayConfig):{config:RunwayConfig;changes
  return {config:c,changes,rules};
 }
 /** One configuration choice a rule changed (normalizeConfig, or the AIST column-bracket screen): the field, as it was, as it became and why. */
-export interface ConfigRule {field:'structure'|'support'|'tie';from:string;to:string;why:string}
+export interface ConfigRule {field:'structure'|'support'|'tie'|'system';from:string;to:string;why:string}
 
 /** Building class from the TR-13 Table 1.1 count; the duty spectrum totals sit at the top of each range. */
 const classTotals={A:2000000,B:500000,C:100000,D:20000} as const;
@@ -742,6 +748,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  const structureLabel=(v:RunwayConfig['structure'])=>v==='new'?'New freestanding columns':'Existing building columns';
  if(design&&entered.structure!==cfg.structure)add('Structure',structureLabel(entered.structure),structureLabel(cfg.structure),why('structure'));
  if(design&&entered.support!==cfg.support)add('Girder support',supportLabels[entered.support],supportLabels[cfg.support],why('support'));
+ if(design&&entered.system!==cfg.system)add('Girder system',`${entered.bays} × ${entered.span} ft ${entered.system}`,`${cfg.bays} × ${cfg.span} ft ${cfg.system}`,why('system'));
  if(design&&p.details){
   const cap=!!activeColumnCap(p),arrangement=tieArrangement(p.details);
   const now=cap?'None: end fork on the column cap (bearing stiffeners and bolted bottom flange)':`${tieLabels[arrangement as keyof typeof tieLabels]??tieOptions.find(o=>o.id===arrangement)?.name??arrangement}${stiffenerTieGeometry(p)?' on a bearing-stiffener gusset':''}`;
