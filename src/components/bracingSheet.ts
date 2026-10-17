@@ -16,7 +16,7 @@ import {drawingLength,holeInches,plateInches,dimensionLength,limitLength} from '
 import {refDim,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import type {DetailTopic,DetailView} from './detailSheet';
-import {AnnotationSpace} from './annotationSpace';
+import {AnnotationSpace,dimHClear} from './annotationSpace';
 
 const inch=25.4;
 type Pt=[number,number];
@@ -139,8 +139,11 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   const notes=['RODS CROSS, NOT CONNECTED;',`ROD ${gridB}-${gridA} BEYOND, ${dim(cr.offset)} OFF;`,`SEE ${detailRef(rodCrossingTitle)}`],nw=Math.max(...notes.map(v=>textWidth(v,8)));
   svg+=text(cross[0],Y(h*.78),`ROD W.P. TO W.P. ${dim(L.diagonal)}`,8,'middle');
   svg+=multiLeader([[cross[0],cross[1]+2]],[cross[0]-nw/2,Y(h*.2)],notes,8);
-  // Section at mid-bay, from above the strut, looking toward the lower-numbered grid.
-  svg+=sectionCut([cross[0],Y(h+half)-6],[cross[0],cross[1]+10],[-1,0],rodCrossingTitle,['b']);
+  // Section at mid-bay, from above the strut, looking toward the lower-numbered grid: its end below the crossing where
+  // the reference reads clear of the rods (lower where a steep X keeps them close), else above the strut.
+  {const space=new AnnotationSpace(svg),labels=['tail','tip'] as const;
+   svg+=space.pick([...[10,22,34,48,64,80].flatMap(d=>labels.map(v=>sectionCut([cross[0],Y(h+half)-6],[cross[0],cross[1]+d],[-1,0],rodCrossingTitle,['b'],v))),
+    ...labels.map(v=>sectionCut([cross[0],Y(h+half)-6],[cross[0],cross[1]+10],[-1,0],rodCrossingTitle,['a'],v))]);}
   // Callouts in a column at the right, ordered by height.
   const [ra]=rods,at=(t:number):XY=>[ra.from[0]+(ra.to[0]-ra.from[0])*t,ra.from[1]+(ra.to[1]-ra.from[1])*t];
   const lx=X(xMax)+16,items:{at:XY;labels:string[]}[]=[
@@ -200,9 +203,11 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   const dimY=lower?Y(-base.plate.thickness-base.grout-inch)+16:Y(sg.d/2)-14;
   if(lower)svg+=dimH(X(0),X(pin[0]),Y(-base.plate.thickness-base.grout),dimY,dim(pin[0]),'right');
   else{
-   // The short edge distance on its own tier, its text beside its segment.
-   svg+=dimH(X(0),X(sg.end),Y(sg.d/2),dimY,dim(sg.end),'left')+dimH(X(sg.bolts[0]),X(sg.bolts[1]),Y(sg.d/2),dimY,dim(sg.pitch),'right');
-   svg+=dimH(X(sg.end),X(sg.bolts[0]),Y(sg.d/2),dimY-14,dim(sg.edge),'right');
+   // The short edge distance on its own tier, its text beside its segment; the tiers raised where the column's break
+   // above the strut would run through their text.
+   const space=new AnnotationSpace(svg);
+   svg+=space.pick([0,-8,-16,-24,-32,6].map(o=>dimH(X(0),X(sg.end),Y(sg.d/2),dimY+o,dim(sg.end),'left')+dimH(X(sg.bolts[0]),X(sg.bolts[1]),Y(sg.d/2),dimY+o,dim(sg.pitch),'right')
+    +dimH(X(sg.end),X(sg.bolts[0]),Y(sg.d/2),dimY-14+o,dim(sg.edge),'right')));
    svg+=dimH(X(0),X(pin[0]),Y(pin[1]),Y(zBot)+6,dim(pin[0]),'right');
   }
   const weld=lower?r.outlines.welds.lower:undefined,upper=r.outlines.welds.upper,welds=lower?`${dim(weld!.web)} TO WEB, ${dim(weld!.plate-g.x0)} TO BASE PL`:`${dim(upper.to-upper.from)} TO COLUMN WEB`;
@@ -316,7 +321,10 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   svg+=ellipse(0)+ellipse(cr.offset);
   // Planes of the gussets through the rods, up through the strut.
   for(const y of [0,cr.offset])svg+=line([X(y),top-10],[X(y),yr+ry+8],'grid-line');
-  svg+=dimH(X(0),X(cr.offset),yr+ry+2,yr+ry+18,dim(cr.offset),'left')+refDim(dimH(X(rd/2),X(cr.offset-rd/2),yr+ry+2,yr+ry+34,drawingLength(cr.clear,u)+' CLEAR','left'));// The clearance follows from the gusset, strut web and filler thicknesses.
+  // The clearance follows from the gusset, strut web and filler thicknesses. Its extension lines pass the offset's tier:
+  // the offset's value reads where they leave it clear.
+  const clearDim=refDim(dimH(X(rd/2),X(cr.offset-rd/2),yr+ry+2,yr+ry+34,drawingLength(cr.clear,u)+' CLEAR','left'));
+  svg+=dimHClear(new AnnotationSpace(svg+clearDim),X(0),X(cr.offset),yr+ry+2,yr+ry+18,dim(cr.offset))+clearDim;
   const items:{at:XY;labels:string[]}[]=[
    {at:[X(wc+sbf/2),top+stf*kk/2],labels:[`${sg.shape} STRUT, CUT AT MID-BAY:`,'WEB BETWEEN THE GUSSET PLANES']},
    {at:[X(cr.offset)+rd/2*kk,yr],labels:[`ROD ${gridB}-${gridA}, IN THE PLANE OF ITS`,`GUSSETS, ${dim(cr.offset)} TOWARD GIRDER`,'RODS NOT CONNECTED']}
