@@ -1,14 +1,36 @@
-import type {CalculationSnapshot,CheckResult} from './types';
+import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import {available} from './aiscStrength';
-import {boltCapacity,blockShear,transverseFilletFatigue} from './connectionStrength';
+import {boltCapacity,blockShear,compressionResistance,transverseFilletFatigue} from './connectionStrength';
 import {fatigueSpectrumBin} from './detailAnalysis';
-import {flangeTieGeometry,stiffenerTieGeometry,tieRelease,columnGussetHeight,columnGussetExtension,tiePlies,tieEccentricity} from './tieGeometry';
+import {flangeTieGeometry,stiffenerTieGeometry,tieRelease,columnGussetHeight,columnGussetExtension,tiePlies,tieEccentricity,tieLine} from './tieGeometry';
+import {supportReactions} from './supportReactions';
+import {sectionProperties} from './section';
 import {simpleSupportInput} from './simpleSupports';
 import {activeEndBearing,continuousBearings} from './endBearingInputs';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 
 const inch=25.4,alpha=12e-6,install=1/16*inch;
+/**
+ * Friction that holds the slide locked under a crane pass, as a resistance: the AISC J3.8 Class A slip coefficient 0.30
+ * with the long-slot φ = 0.70 (Ω = 2.14).
+ */
+export const slideFrictionLow=(method:ProjectInput['method'])=>available(.3,method,.7,2.14);
+/**
+ * Upper bound of the static friction coefficient of the steel sleeves on the column gusset slot edges (unpainted steel on
+ * steel), for the force a slide can deliver before it slips: the AISC J3.8 Class B slip coefficient, the higher class.
+ */
+export const slideFriction=.5;
+/**
+ * Tie force that stays on the tie between crane passes, N, unfactored: the largest dead load and parked crane (no impact)
+ * support reaction at the rail eccentricity, as a torque over the restraint couple between the tie lines (or the bottom
+ * flange). The column-end slide releases thermal travel only down to the friction under this force.
+ */
+export function sustainedTieForce(p:ProjectInput){
+ const e=Math.abs(p.railEccentricity??0);if(!(e>0))return 0;
+ const R=supportReactions(p,sectionProperties(p.section)).supports.reduce((m,v)=>Math.max(m,Math.max(0,v.D-v.Ds)+Math.max(0,v.Cd+v.Cv)),0);
+ return R*e/Math.max(tieLine(p,'top')-tieLine(p,'bottom'),p.section.tf);
+}
 const compared=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds=['aisc-connections','tieback-practice']):CheckResult=>({id,group:'Tie movement',title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds});
 
 /** Movements imposed on the paired tie bars between the girder and the column, mm and rad. */
@@ -25,6 +47,8 @@ export function tieMovements(s:CalculationSnapshot){
  const cranes=p.cranes.length,impact=Math.max(...p.cranes.map(c=>c.impact));
  return {setback,cyclicLongitudinal:cyclicRotation*depth,longitudinal:rotation*depth+thermal,thermal,cyclicRotation,rotation,
   support,supportSource,cranes,impact,
+  // Column-end slide: the tie force left between crane passes, which holds the slide against thermal travel by friction.
+  sustained:release?.slide?(r.demands as {braceSustained?:number}).braceSustained??sustainedTieForce(p):0,
   // Static vertical movement at the tie: every crane at once with impact, plus end rotation over the setback.
   vertical:(support??0)*cranes*(1+impact)+rotation*setback,cyclicVertical:(support??0)+cyclicRotation*setback,release,
   // Clear bar length between the gussets: both bolt groups and the column gusset's longer slotted end edge.
@@ -53,10 +77,14 @@ export function tieMovementChecks(s:CalculationSnapshot,ctx:{force:number;member
  const checks:CheckResult[]=[];
  // Cyclic range: tie force range plus the crane-induced rotation; vertical movement only when not released. The single
  // plate also carries its share of the lap couple range ΔF·e at the bolt groups.
- const axialRange=r.demands.braceFatigue/(plies*A),lapRange=single?share*r.demands.braceFatigue*e/Sy:0,outRange=bend(t.thickness,mv.cyclicLongitudinal),inRange=rel?0:bend(t.width,mv.cyclicVertical);
+ // Column-end slide: over a crane pass the bar end shear is at most the sleeve friction μ(F_s + ΔF)/n, so the bar moment
+ // range is at most twice μ(F_s + ΔF)L/n (taken as the equivalent movement in double curvature).
+ const slideFatigue=rel?.slide?2*slideFriction*(mv.sustained+r.demands.braceFatigue)/plies*L:Infinity;
+ const cyclic=Math.min(mv.cyclicLongitudinal,slideFatigue*L**2/(6*E*Iy));
+ const axialRange=r.demands.braceFatigue/(plies*A),lapRange=single?share*r.demands.braceFatigue*e/Sy:0,outRange=bend(t.thickness,cyclic),inRange=rel?0:bend(t.width,mv.cyclicVertical);
  const catB=fatigueSpectrumBin('B',1,totalCycles).allowable;
  checks.push(compared('tie-move-fatigue',single?'Flexible plate at bolt groups · fatigue with imposed movement':'Tie bars at bolt groups · fatigue with imposed movement',axialRange+lapRange+outRange+inRange,catB,'stress',(single?'f_{sr}=\\frac{\\Delta F}{A_g}+\\frac{\\eta\\Delta Fe}{S_y}':'f_{sr}=\\frac{\\Delta F}{2A_g}')+'+\\frac{3Et\\,\\theta_sd}{L^2}'+(rel?'':'+\\frac{3Ew\\,\\Delta_v}{L^2}')+'\\le F_{SR}\\ \\ \\text{(Cat. B)}',
-  `AISC Table A-3.1 item 2.1 (gross section at pretensioned bolted joints), Category B, all ${totalCycles.toExponential(2)} duty cycles without threshold credit. Single-crane static support rotation ${mv.cyclicRotation.toExponential(3)} rad moves ${bars} ${fmt(mv.cyclicLongitudinal)} along the runway (θ·d about the bearing; this bounds the θ·d/2 of rotation about mid-depth); clear ${bar} length ${fmt(L)}, both ends fixed. Axial ${stress(axialRange)}${single?`, lap couple share η = ${share.toFixed(3)} of ΔF·e ${stress(lapRange)}`:''}, out-of-plane ${stress(outRange)}${rel?'; vertical movement released at the column gusset':`, in-plane ${stress(inRange)} from ${fmt(mv.cyclicVertical)} vertical movement`}. Thermal travel cycles are few; their range is bounded by the strength check.`,['aisc-fatigue','tieback-practice']));
+  `AISC Table A-3.1 item 2.1 (gross section at pretensioned bolted joints), Category B, all ${totalCycles.toExponential(2)} duty cycles without threshold credit. Single-crane static support rotation ${mv.cyclicRotation.toExponential(3)} rad moves ${bars} ${fmt(mv.cyclicLongitudinal)} along the runway (θ·d about the bearing; this bounds the θ·d/2 of rotation about mid-depth); clear ${bar} length ${fmt(L)}, both ends fixed. Axial ${stress(axialRange)}${single?`, lap couple share η = ${share.toFixed(3)} of ΔF·e ${stress(lapRange)}`:''}, out-of-plane ${stress(outRange)}${rel?'; vertical movement released at the column gusset':`, in-plane ${stress(inRange)} from ${fmt(mv.cyclicVertical)} vertical movement`}. Thermal travel cycles are few; their range is bounded by the strength check.${rel?.slide?` Column-end slide: the bar end shear cannot exceed the sleeve friction μ(F_s + ΔF)/2 (μ = ${slideFriction}, sustained tie force F_s = ${format(mv.sustained,'force',u,3)}), so the moment range is at most 2μ(F_s + ΔF)L/2${cyclic<mv.cyclicLongitudinal-1e-9?`, the equivalent of ${fmt(cyclic)} of movement, which governs`:', more than the rotation movement gives'}.`:''}`,['aisc-fatigue','tieback-practice']));
  checks.push(compared('tie-slenderness',single?'Flexible plate · slenderness':'Tie bars · slenderness',ctx.member.bucklingLength/ctx.member.r,200,'ratio','L_c/r\\le200;\\quad L_c=0.8L','AISC E2 user note. Out-of-plane buckling between the innermost bolt rows; both ends fixed in their bolt groups, K = 0.8 (AISC Commentary Table C-A-7.1: 0.65 recommended for fixed ends, 0.8 allows for the flexible column gusset), the same length as for P_c and P_e1.',['aisc-e']));
  // Strength: AISC H1-1 with the moments from the imposed movements. Thermal is a self-straining load T with factor 1.0 (ASCE 7 §2.3.4/§2.4.4).
  const P=ctx.force/plies,Pc=ctx.member.compression.capacity,phiB=(v:number)=>available(v,method,.9,1.67);
@@ -69,27 +97,53 @@ export function tieMovementChecks(s:CalculationSnapshot,ctx:{force:number;member
  // no capacity, never a clamped amplifier.
  const alphaP=(method==='LRFD'?1:1.6)*P,Pe1=Math.PI**2*E*Iy/Math.max(ctx.member.bucklingLength,t.thickness)**2,unstable=single&&alphaP>=Pe1;
  const B1=single?unstable?Infinity:1/(1-alphaP/Pe1):1,lapMoment=single&&share>0?unstable?Infinity:B1*share*P*e:0;
- const My=6*E*Iy*(mv.longitudinal+fit)/L**2+lapMoment,Mcy=phiB(m.Fy*t.width*t.thickness**2/4);
+ // Column-end slide (paired bars): the gusset floats along the runway on the sleeves, which bear on the slot sides with
+ // the tie force. Thermal travel builds up slowly and slips out whenever the tie force drops between crane passes, down
+ // to the friction under the sustained tie force F_s: the bars hold at most the end shear μ_uF_s (moment μ_uF_sL/n with
+ // the column end free to rotate). Under a crane pass the sleeves lock while the friction μ_lF (lower bound) carries the
+ // bars' end shear from the rotation movement θ·d and the held thermal travel, V_m, plus the AISC Appendix 6.2 nodal
+ // brace force 0.01F: the bars are then braced at the column end (L_c as without the slide) and follow θ·d in double
+ // curvature. Below the tie force F* = V_m/(μ_l − 0.01) the slide may slip: the bar ends are then free to translate at
+ // the column but still held against rotation there, since turning the bar ends drives one sleeve row against the
+ // slip, where it meets up to twice the friction (fixed-guided, L_c = 1.2 × the length between the innermost bolt rows,
+ // Table C-A-7.1 case (c)), with at most the moment of the friction μ_u it delivers, μ_uP_rL + P_rΔ. H1 is the larger of
+ // the two states.
+ const slide=rel?.slide??0,rotationMove=mv.longitudinal-mv.thermal,mu=slideFriction,muLow=slideFrictionLow(method);
+ const thermalHeld=slide?Math.min(6*E*Iy*mv.thermal/L**2,mu*mv.sustained*L/plies):0,slideElastic=6*E*Iy*rotationMove/L**2+thermalHeld;
+ const lockShear=slide?plies*12*E*Iy*rotationMove/L**3+Math.min(plies*12*E*Iy*mv.thermal/L**3,mu*mv.sustained):0,lockForce=lockShear/(muLow-.01);
+ const PcSlip=slide?compressionResistance(t.width*t.thickness,ctx.member.r,1.2*ctx.member.bucklingLength/.8,E,m.Fy,method).capacity:Pc;
+ const Mcy=phiB(m.Fy*t.width*t.thickness**2/4);
  const Mx=rel?0:6*E*Ix*mv.vertical/L**2,Mcx=phiB(m.Fy*t.thickness*t.width**2/6);
- const ratio=P/Pc,moments=My/Mcy+Mx/Mcx,h1=ratio>=.2?ratio+8/9*moments:ratio/2+moments;
+ const interaction=(force:number,capacity:number,moment:number)=>{const ratio=force/capacity,moments=moment/Mcy+Mx/Mcx;return ratio>=.2?ratio+8/9*moments:ratio/2+moments;};
+ // Slide states: locked at the full force where it exceeds F*, slipping up to the force F* (or the full force).
+ const locked=slide>0&&ctx.force>lockForce,slipP=Math.min(ctx.force,lockForce)/plies,slipMoment=Math.min(slideElastic,mu*slipP*L+slipP*mv.longitudinal);
+ const lockedH1=locked?interaction(P,Pc,slideElastic):0,slipH1=slide?interaction(slipP,PcSlip,slipMoment):0;
+ const My=(slide?locked?slideElastic:Math.min(slideElastic,mu*P*L+P*mv.longitudinal):6*E*Iy*(mv.longitudinal+fit)/L**2)+lapMoment;
+ const h1=slide?Math.max(lockedH1,slipH1):interaction(P,Pc,My);
  checks.push(compared('tie-move-strength',single?'Flexible plate · axial force with imposed movement':'Tie bars · axial force with imposed movement',h1,1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{ry}}{M_{cy}}+\\frac{M_{rx}}{M_{cx}}\\right)\\le1;\\quad M_r=\\frac{6EI\\Delta}{L^2}'+(single?'+B_1\\eta P_re':''),
-  `AISC H1-1 ${single?'for the single plate':'per bar'}: P_r = ${format(P,'force',u,3)} of compression or tension, P_c = ${format(Pc,'force',u,3)} (compression governs). Out-of-plane movement ${fmt(mv.longitudinal+fit)} = factored end rotation ${mv.rotation.toExponential(3)} rad × d${mv.thermal?` + thermal travel ${fmt(mv.thermal)} at the sliding ends (12 × 10⁻⁶/°C over ${p.system==='simple'?'the longest bay':'the farthest support from the locating support'}, temperature change from erection)`:''}${single?` + fit-up offset ${fmt(fit)} (${rel?'half the sleeve clearance, the sleeve projection at the plate, and ':''}1/16 in column gusset position along the runway)`:''}. Weak-axis M_c = φF_yZ_y.${single?` Lap couple P_r·e with e = ${fmt(e)}: the plate takes the share η = ${share.toFixed(3)} by end stiffness 2EI_p/L against the gusset cantilever EI_g/L_g, ${unstable?`but the plate is elastically unstable under it: elastic instability, αP_r/P_e1 = ${(alphaP/Pe1).toFixed(2)} ≥ 1 (P_e1 = ${format(Pe1,'force',u,3)} over L_c = ${fmt(ctx.member.bucklingLength)}), no capacity`:`with B1 = ${B1.toFixed(3)} (C_m = 1, P_e1 = ${format(Pe1,'force',u,3)} over L_c = ${fmt(ctx.member.bucklingLength)}, the length of P_c), adding ${format(lapMoment,'moment',u,3)}`}; the gussets are checked for the whole couple.`:''}${rel?' Vertical movement is released at the column gusset.':` In-plane movement ${fmt(mv.vertical)}; strong-axis M_c = φF_yS_x.`} Both ends are fixed in their bolt groups (movement moment 6EIΔ/L², L_c = 0.8 × the length between the innermost bolt rows for P_c and P_e1). Reverse-curvature moments from end movement need no B1 amplification (C_m = 0.2).`,['aisc-h','asce','tieback-practice']));
+  `AISC H1-1 ${single?'for the single plate':'per bar'}: P_r = ${format(P,'force',u,3)} of compression or tension, P_c = ${format(Pc,'force',u,3)} (compression governs). ${slide?`Column-end slide ${fmt(slide)} each way along the runway; θd = ${fmt(rotationMove)} from the factored end rotation ${mv.rotation.toExponential(3)} rad; thermal travel Δ_T = ${fmt(mv.thermal)} slips out between crane passes down to the friction μ_uF_s = ${format(mu*mv.sustained,'force',u,3)} under the sustained tie force F_s = ${format(mv.sustained,'force',u,3)} (dead load and a parked crane at the rail eccentricity; μ_u = ${mu}, AISC J3.8 Class B, upper bound). Locked under a crane pass while μ_lF ≥ V_m + 0.01F (μ_l = ${muLow.toFixed(3)}: Class A μ = 0.30 with the J3.8 long-slot ${method==='LRFD'?'φ = 0.70':'Ω = 2.14'}; V_m = ${format(lockShear,'force',u,3)}, the bars' end shear from θd and the held thermal travel; Appendix 6.2 nodal brace force 0.01F), i.e. above F* = ${format(lockForce,'force',u,3)}: ${locked?`H1 = ${lockedH1.toFixed(3)} with M_ry = 6EI·θd/L² + min(6EI·Δ_T/L², μ_uF_sL/2) = ${format(slideElastic,'moment',u,3)} and the P_c above`:'the tie force does not reach it'}. Slipping up to ${locked?'F*':'the full force'}: P_r = ${format(slipP,'force',u,3)}, P_c = ${format(PcSlip,'force',u,3)} with the bar ends free to translate at the column, still held against rotation by the two sleeve rows (L_c = 1.2 × the length between the innermost bolt rows, fixed-guided), M_ry = min(the locked moment, μ_uP_rL + P_r(θd + Δ_T)) = ${format(slipMoment,'moment',u,3)}: H1 = ${slipH1.toFixed(3)}. The larger governs.`:`Out-of-plane movement ${fmt(mv.longitudinal+fit)} = factored end rotation ${mv.rotation.toExponential(3)} rad × d${mv.thermal?` + thermal travel ${fmt(mv.thermal)} at the sliding ends (12 × 10⁻⁶/°C over ${p.system==='simple'?'the longest bay':'the farthest support from the locating support'}, temperature change from erection)`:''}${single?` + fit-up offset ${fmt(fit)} (${rel?'half the sleeve clearance, the sleeve projection at the plate, and ':''}1/16 in column gusset position along the runway)`:''}.`} Weak-axis M_c = φF_yZ_y.${single?` Lap couple P_r·e with e = ${fmt(e)}: the plate takes the share η = ${share.toFixed(3)} by end stiffness 2EI_p/L against the gusset cantilever EI_g/L_g, ${unstable?`but the plate is elastically unstable under it: elastic instability, αP_r/P_e1 = ${(alphaP/Pe1).toFixed(2)} ≥ 1 (P_e1 = ${format(Pe1,'force',u,3)} over L_c = ${fmt(ctx.member.bucklingLength)}), no capacity`:`with B1 = ${B1.toFixed(3)} (C_m = 1, P_e1 = ${format(Pe1,'force',u,3)} over L_c = ${fmt(ctx.member.bucklingLength)}, the length of P_c), adding ${format(lapMoment,'moment',u,3)}`}; the gussets are checked for the whole couple.`:''}${rel?' Vertical movement is released at the column gusset.':` In-plane movement ${fmt(mv.vertical)}; strong-axis M_c = φF_yS_x.`}${slide?' The imposed-movement moment needs no amplification (displacement controlled); the slip bound carries its own P_rΔ.':' Both ends are fixed in their bolt groups (movement moment 6EIΔ/L², L_c = 0.8 × the length between the innermost bolt rows for P_c and P_e1). Reverse-curvature moments from end movement need no B1 amplification (C_m = 0.2).'}`,['aisc-h','asce','tieback-practice']));
  // Gussets: the plies deliver their end shear and moment about the vertical axis; the plates bend out of plane. A single
  // plate adds its lap couple F·e (e from the plate centroid to the gusset mid-plane) at both gussets.
  const V=(delta:number)=>plies*12*E*Iy*delta/L**3,M=(delta:number)=>plies*6*E*Iy*delta/L**2,lap=(force:number)=>force*e;
- const longitudinal=mv.longitudinal+fit;
- const girderRoot=g?{b:g.rootLength,arm:g.topDrop-g.attachment.saddleThickness,weld:g.attachment.weldSize,name:'flange saddle gusset'}:{b:c.weldLength,arm:c.projection,weld:c.weldSize,name:'girder gusset'};
+ // With the slide, the movement that gives the bars' moment M_ry in double curvature (its end shear 2M/L bounds μP_r).
+ const longitudinal=slide?(My-lapMoment)*L**2/(6*E*Iy):mv.longitudinal+fit;
+ const girderRoot=g?{b:g.rootLength,arm:g.topDrop-g.attachment.saddleThickness,weld:g.attachment.weldSize,name:'flange saddle gusset',column:false}:{b:c.weldLength,arm:c.projection,weld:c.weldSize,name:'girder gusset',column:false};
  // The column gusset spans the bolt group and the clear gap from the bar ends to the column flange.
- const roots=[girderRoot,{b:hg,arm:g?.columnGussetLength??stiffenerTieGeometry(p)?.columnGussetLength??(c.rows-1)*c.pitch+2*c.edge,weld:c.weldSize,name:'column gusset'}];
+ const roots=[girderRoot,{b:hg,arm:g?.columnGussetLength??stiffenerTieGeometry(p)?.columnGussetLength??(c.rows-1)*c.pitch+2*c.edge,weld:c.weldSize,name:'column gusset',column:true}];
  const tg=t.gussetThickness,F=ctx.force;
- const plate=(x:typeof roots[number],delta:number,force:number)=>6*(M(delta)+V(delta)*x.arm+lap(force))/(x.b*tg**2)+force/(x.b*tg);
- const weld=(x:typeof roots[number],delta:number,force:number)=>(force/(2*x.b)+(M(delta)+V(delta)*x.arm+lap(force))/(tg*x.b)+V(delta)/(2*x.b))/(x.weld/Math.SQRT2);
+ // End shear and moment about the vertical axis delivered at a root, the shear over the arm included. With the slide the
+ // force along the runway at the sleeves is at most the friction μF (`friction`): it bounds the bars' end shear, and the
+ // column gusset takes the bars' end moment only as the friction couple of the two sleeve rows, μF·s/2.
+ const act=(x:typeof roots[number],delta:number,friction=Infinity)=>{const v=Math.min(V(delta),friction),m=x.column?Math.min(M(delta),friction*c.pitch/2):M(delta);return {v,m:m+v*x.arm};};
+ const strengthFriction=slide?slideFriction*F:Infinity,fatigueFriction=slide?2*slideFriction*(mv.sustained+r.demands.braceFatigue):Infinity;
+ const plate=(x:typeof roots[number],delta:number,force:number)=>6*(act(x,delta,strengthFriction).m+lap(force))/(x.b*tg**2)+force/(x.b*tg);
+ const weld=(x:typeof roots[number],delta:number,force:number)=>{const a=act(x,delta,strengthFriction);return (force/(2*x.b)+(a.m+lap(force))/(tg*x.b)+a.v/(2*x.b))/(x.weld/Math.SQRT2);};
  const worst=(f:(x:typeof roots[number])=>number)=>roots.reduce((a,x)=>f(x)>f(a)?x:a,roots[0]);
  const gp=worst(x=>plate(x,longitudinal,F)),gw=worst(x=>weld(x,longitudinal,F));
  checks.push(compared('tie-move-gusset','Tie gussets · out-of-plane bending from movement',plate(gp,longitudinal,F),phiB(m.Fy),'stress',single?'f=\\frac{6(M+Va+Fe)}{bt_g^2}+\\frac{F}{bt_g};\\quad V=\\frac{12EI\\Delta}{L^3},\\;M=\\frac{6EI\\Delta}{L^2}':'f=\\frac{6(M+Va)}{bt_g^2}+\\frac{F}{bt_g};\\quad V=\\frac{24EI\\Delta}{L^3},\\;M=\\frac{12EI\\Delta}{L^2}',
   `Governing ${gp.name}: root length ${fmt(gp.b)}, arm ${fmt(gp.arm)}. ${single?`One plate on one gusset face, both ends fixed, imposed movement ${fmt(longitudinal)} including the fit-up offset; lap couple F·e with e = ${fmt(e)}`:`Two bars, both ends fixed, imposed movement ${fmt(longitudinal)}`}; full tie force added.`));
  checks.push(compared('tie-move-weld','Tie gusset root welds · tie force with movement',weld(gw,longitudinal,F),available(.6*m.Fexx,method,.75,2),'stress',single?'f_w=\\left[\\frac{F}{2b}+\\frac{M+Va+Fe}{t_gb}+\\frac{V}{2b}\\right]/(0.707w)':'f_w=\\left[\\frac{F}{2b}+\\frac{M+Va}{t_gb}+\\frac{V}{2b}\\right]/(0.707w)',`Governing ${gw.name}. The moment about the vertical axis${single?', including the lap couple,':''} is taken as a couple on the two fillet lines at the gusset thickness; forces added by magnitude.`));
- const fatigueRoot=roots.reduce((a,x)=>{const range=r.demands.braceFatigue/(x.b*tg)+6*(M(mv.cyclicLongitudinal)+V(mv.cyclicLongitudinal)*x.arm+lap(r.demands.braceFatigue))/(x.b*tg**2),cap=Math.min(fatigueSpectrumBin('C',1,totalCycles).allowable,transverseFilletFatigue(tg,x.weld,totalCycles).capacity);return range/cap>a.range/a.cap?{x,range,cap}:a;},{x:roots[0],range:0,cap:1});
+ const fatigueRoot=roots.reduce((a,x)=>{const range=r.demands.braceFatigue/(x.b*tg)+6*(act(x,cyclic,fatigueFriction).m+lap(r.demands.braceFatigue))/(x.b*tg**2),cap=Math.min(fatigueSpectrumBin('C',1,totalCycles).allowable,transverseFilletFatigue(tg,x.weld,totalCycles).capacity);return range/cap>a.range/a.cap?{x,range,cap}:a;},{x:roots[0],range:0,cap:1});
  checks.push(compared('tie-move-root-fatigue','Tie gusset roots · fatigue with imposed movement',fatigueRoot.range,fatigueRoot.cap,'stress',single?'f_{sr}=\\frac{\\Delta F}{bt_g}+\\frac{6(M_s+V_sa+\\Delta Fe)}{bt_g^2}\\le F_{SR}':'f_{sr}=\\frac{\\Delta F}{bt_g}+\\frac{6(M_s+V_sa)}{bt_g^2}\\le F_{SR}',`Governing ${fatigueRoot.x.name}. Tie force range plus the single-crane rotation movement${single?' and the lap couple range ΔF·e':''}, every cycle; transverse fillet root (AISC A-3.1 item 8.2 with R_FIL) bounded by Category C.`,['aisc-fatigue']));
  // Vertical movement at the column gusset.
  const byOthers=!mv.supportSource;
@@ -111,6 +165,17 @@ export function tieMovementChecks(s:CalculationSnapshot,ctx:{force:number;member
   checks.push(compared('tie-release-pitch','Column gusset · material between slots of adjacent rows',rel.rowLigament,c.pitch-rel.width,'length','s-w_{slot}\\ge\\max(d_b,\\tfrac12\\,\\mathrm{in})+\\tfrac1{16}\\,\\mathrm{in}',`Along the tie, between the slots of adjacent bolt rows (pitch ${fmt(c.pitch)}, slots ${fmt(rel.width)} wide for the sleeves): a clear distance of at least the bolt diameter between slotted holes (AISC J3.3), not less than 1/2 in for cutting, plus a 1/16 in slot location tolerance; a pitch of at least ${fmt(rel.minimumPitch)}. The sleeves bear across this material toward the girder, checked by J3.10 tearout (tie-release-bearing).`));
   checks.push(compared('tie-release-edge','Column gusset · edge beyond slot ends',rel.edge+rel.tolerance,(rel.height-c.gauge)/2-rel.travel,'length','(h_g-g)/2-u\\ge1.5d_b-d_h/2+w_{slot}/2+\\tfrac1{16}\\,\\mathrm{in}','Same clear material as a standard hole at the AISC J3.4 minimum edge distance, plus a 1/16 in slot location tolerance at each slot end. The gusset height is that requirement rounded up to a 1/4 in cutting increment, and the root welds run the full height.'));
   checks.push(compared('tie-release-end-edge','Column gusset · end edge beyond slots',rel.edge+rel.tolerance,rel.endEdge,'length','e_g\\ge1.5d_b-d_h/2+w_{slot}/2+\\tfrac1{16}\\,\\mathrm{in}',`Toward the girder; the tie force pulls the sleeves toward this edge. Same clear material as a standard hole at the AISC J3.4 minimum edge distance, plus a 1/16 in slot location tolerance. The gusset end edge is that requirement rounded up to a 1/4 in cutting increment, and not less than the bar edge distance ${fmt(c.edge)}; the gusset runs ${fmt(rel.endEdge-c.edge)} past the bars' bolt group toward the girder.`));
+  if(slide){
+   // The gusset must never reach a bar: the whole factored movement each way, with the gusset's positioning allowance.
+   checks.push(compared('tie-slide-travel','Column-end slide · travel along the runway',mv.longitudinal+install,slide,'length','\\theta d+\\Delta_T+1/16\\,\\mathrm{in}\\le u_s',`The column gusset floats ${fmt(slide)} each way along the runway between the bars on sleeves ${fmt(rel.sleeveLength)} long (gusset ${fmt(tg)}). Factored end rotation × d ${fmt(rotationMove)}${mv.thermal?` plus thermal travel ${fmt(mv.thermal)}`:''} and a 1/16 in positioning allowance for the field-welded gusset, so the gusset never bears on a bar.`));
+   // Each sleeve spans between the bars, clamped by the pretensioned bolt, and takes its share of the tie force from the
+   // gusset anywhere along the float.
+   const Vs=F/(2*c.rows),span=rel.sleeveLength,Ms=4*Vs*span/27,Ss=Math.PI*(rel.od**4-hole**4)/(32*rel.od);
+   checks.push(compared('tie-slide-sleeve','Slide sleeves · bending across the float with bolt pretension',bolt.pretension/rel.sleeveArea+Ms/Ss,phiB(m.Fy),'stress','f=\\frac{T_b}{A_s}+\\frac{4V_sL_s}{27S_s}\\le\\phi F_y',`Each sleeve spans ${fmt(span)} between the bars, both ends clamped by the pretensioned bolt, and takes V_s = F/${2*c.rows} = ${format(Vs,'force',u,3)} from the gusset anywhere along the float: largest fixed-end moment 4V_sL_s/27 (load at a third point). Sleeve ${fmt(rel.od)} OD × ${fmt(hole)} bore alone (the bolt inside is not counted), with the pretension T_b = ${format(bolt.pretension,'force',u,3)} on its area.`));
+   // The bars stand off both gusset faces by the slide: fillers of that thickness at the girder gusset, one per shear plane.
+   const filler=rel.barOffset,tf=filler/inch,factor=tf>.75+1e-9?0:tf<=.25?1:1-.4*(tf-.25);
+   checks.push(compared('tie-slide-filler','Girder-end fillers · bolt shear through the fillers',F/(2*c.rows),factor*bolt.shear,'force','r_v\\le[1-0.4(t_f-0.25)]\\,\\phi r_n\\ \\ (t_f\\ \\text{in in.})',`Fillers ${fmt(filler)} between each bar and the girder gusset keep the bars parallel at the slide. AISC J5.2(b)(1): fillers over 1/4 in reduce the bolt shear strength by 1 − 0.4(t − 0.25) (t in in, fillers to 3/4 in): factor ${factor.toFixed(3)}. One filler in each slip plane: h_f = 1.0 for the slip check (J3.8); the fillers have the Class ${c.surface} faying surfaces of the bars.`));
+  }
   if(byOthers)checks.push({id:'tie-move-support',group:'Tie movement',title:'Bracket by others · vertical deflection limit for the tie slots',status:'excluded',equation:'\\Delta_s\\le u-\\theta e-1/16\\,\\mathrm{in}',demand:undefined,capacity:Math.max(0,rel.travel-mv.vertical-install),quantity:'length',note:`Criterion for the bracket designer: vertical deflection at the bearing under all crane loads with impact at most ${fmt(Math.max(0,rel.travel-mv.vertical-install))}, within the column gusset slot travel.`,referenceIds:['tieback-practice']});
  }else if(byOthers){
   const left=catB-axialRange-lapRange-outRange,allowance=Math.max(0,left)*L**2/(3*E*t.width);

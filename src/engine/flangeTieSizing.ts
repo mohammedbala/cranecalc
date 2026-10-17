@@ -28,7 +28,7 @@ import {craneTravel} from './craneTravel';
 import {railTopAboveSteel} from './railSeat';
 import {braceSystem,fatigueSpectrumBin} from './detailAnalysis';
 import {columnFlangeWidth,flangeTieChecks,flangeTieResponse,stiffenerTieChecks} from './flangeTieDesign';
-import {tieMovementChecks} from './tieMovement';
+import {tieMovementChecks,tieMovements} from './tieMovement';
 import {isPlateTie,plateTieChecks} from './plateTie';
 import {lapChecks} from './detailChecks';
 import {flangeTieFamily,flangeTieGeometry,stiffenerTieGeometry,tieBarGap,tieRelease,columnGussetHeight} from './tieGeometry';
@@ -127,6 +127,8 @@ export interface TieSizingDemands {
  railLateral:number;
  /** AISC Appendix 6 point-brace force and stiffness for the top flange restraint, N and N/mm. */
  braceForce:number;braceStiffness:number;
+ /** Unfactored tie force between crane passes (dead load and a parked crane at the rail eccentricity), N (sustainedTieForce). */
+ sustained:number;
 }
 /**
  * The sizing demands. Force: the factored side thrust reaction at a support (girderEndEstimate), carried to the top
@@ -149,18 +151,19 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
  const railHead=s.d/2+(s.kind==='cap'?s.capTw:0)+railTopAboveSteel(p),torsion=1+Math.max(0,railHead-top)/Math.max(top-bottom,s.tf);
  // The rail eccentricity e: the factored vertical reaction R_v at e from the web is a torque R_v·e at the support, taken
  // by the restraint couple over h_r (the analysis's restraint at the tie line carries it with the side thrust).
- const Rv=supportReactions(p,props).supports.reduce((m,v)=>Math.max(m,(lrfd?1.2:1)*Math.max(0,v.D-v.Ds)+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci)),0),eccentric=Rv*Math.abs(p.railEccentricity)/Math.max(top-bottom,s.tf);
+ const reactions=supportReactions(p,props).supports,Rv=reactions.reduce((m,v)=>Math.max(m,(lrfd?1.2:1)*Math.max(0,v.D-v.Ds)+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci)),0),eccentric=Rv*Math.abs(p.railEccentricity)/Math.max(top-bottom,s.tf);
+ const sustained=reactions.reduce((m,v)=>Math.max(m,Math.max(0,v.D-v.Ds)+Math.max(0,v.Cd+v.Cv)),0)*Math.abs(p.railEccentricity??0)/Math.max(top-bottom,s.tf);
  // Calibrated against the full analysis, whose restraint acts at the tie line on the twisting girder (t01, t03, t05,
  // t10, simulation cases 5 and 15 after the restraint change): the statics estimate was 0.87 to 0.97 of the analysis
  // tie force, so it is raised by 12%.
  return {force:tieForceCalibration*((lrfd?1.6:1)*r.lateral*torsion+eccentric+braceForce),range:1.25*H,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
-  braceForce,braceStiffness:(lrfd?1/.75:2)*(10*r.moment*Cd/props.h0+8*P)/Lbr};
+  braceForce,braceStiffness:(lrfd?1/.75:2)*(10*r.moment*Cd/props.h0+8*P)/Lbr,sustained};
 }
 
 /** A calculation snapshot carrying only the sizing demands, for the tie check functions. */
 function sizingSnapshot(p:ProjectInput,demand:TieSizingDemands):CalculationSnapshot{
  return {input:p,designAnalysis:{endRotation:demand.rotation,serviceRotation:demand.serviceRotation},
-  detailResults:{demands:{brace:demand.force,braceFatigue:demand.range,railLateral:demand.railLateral},...(demand.support!==undefined?{bracket:{service:{deflection:{value:demand.support}}}}:{})}} as unknown as CalculationSnapshot;
+  detailResults:{demands:{brace:demand.force,braceFatigue:demand.range,railLateral:demand.railLateral,braceSustained:demand.sustained},...(demand.support!==undefined?{bracket:{service:{deflection:{value:demand.support}}}}:{})}} as unknown as CalculationSnapshot;
 }
 
 /**
@@ -201,7 +204,11 @@ export function tieSizingRatios(p:ProjectInput,demand=tieSizingDemands(p)):Recor
 /** Tie proportions the sizing chooses; the rest follows (applyTieProportions). */
 export interface TieProportions {diameter:number;thickness:number;gusset:number;travel:number;face:number;
  /** Extra bar width beyond the gauge and edge distances, mm. */
- widen:number;saddleThickness:number;saddleWeld:number;setback:number}
+ widen:number;saddleThickness:number;saddleWeld:number;setback:number;
+ /** Column-end slide each way along the runway, mm (paired bars with the release; 0: none). */
+ slide?:number;
+ /** Wall of the release sleeves, mm. */
+ wall?:number}
 
 /** Bolt pitch and edge distance on the 1/8 in grid: AISC J3.3 minimum spacing 2 2/3 d, and the 1.5d edge the tie checks use. */
 export const tieBoltSpacing=(db:number)=>({pitch:up(8/3*db,inch/8),edge:up(1.5*db,inch/8)});
@@ -234,7 +241,7 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
  const edge=plate?Math.max(spacing.edge,up(wrenchClearance(x.diameter)-tieBarGap(weld)+weld,inch/8)):spacing.edge;
  Object.assign(c,{diameter:x.diameter,pitch:spacing.pitch,edge,rows:2,thickness:x.thickness,weldSize:weld});
  t.thickness=x.thickness;t.gussetThickness=x.gusset;
- if(rel)rel.travel=x.travel;
+ if(rel){rel.travel=x.travel;if(x.wall)rel.sleeveWall=x.wall;if(x.slide&&!plate)rel.slide=x.slide;else delete rel.slide;}
  c.gauge=up(8/3*x.diameter,inch/4);
  const release=tieRelease(p);if(release){c.gauge=Math.max(c.gauge,release.minimumGauge);c.pitch=Math.max(c.pitch,release.minimumPitch);}
  t.width=up(c.gauge+2*c.edge,inch/4)+x.widen;if(plate)t.width=Math.max(t.width,4*x.thickness);
@@ -262,7 +269,7 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
 export function tieProportions(p:ProjectInput):TieProportions{
  const d=p.details!,t=d.brace,a=t.flangeAttachment,g=flangeTieGeometry(p),st=stiffenerTieGeometry(p);
  return {diameter:t.connection.diameter,thickness:t.thickness,gusset:t.gussetThickness,travel:t.release?.travel??inch/8,face:g?.face??st?.face??t.length,widen:0,
-  saddleThickness:a?.saddleThickness??1.5*inch,saddleWeld:a?.weldSize??.375*inch,setback:a?.longitudinalSetback??0};
+  saddleThickness:a?.saddleThickness??1.5*inch,saddleWeld:a?.weldSize??.375*inch,setback:a?.longitudinalSetback??0,slide:t.release?.slide??0,wall:t.release?.sleeveWall};
 }
 
 /** The fit and detailing limits among a set of sizing ratios (tieSizingRatios). */
@@ -271,7 +278,7 @@ export const sizingLimits=(ratios:Record<string,number>):Set<string>=>(ratios as
 const movementChecks=new Set(['tie-move-strength','tie-move-gusset','tie-move-weld','tie-move-root-fatigue','tie-move-fatigue','plate-tie-bolt-fatigue','tie-prying']);
 /** Checks a thicker gusset or a larger bolt relieves. */
 const gussetChecks=new Set(['tie-move-gusset','tie-move-weld','tie-move-root-fatigue','flange-tie-gusset','flange-tie-gusset-weld','flange-tie-gusset-fatigue','flange-tie-column-weld','flange-tie-column-root-fatigue','tie-gusset-compression','tie-net','tie-block','tie-weld','tie-release-net','tie-release-block','tie-release-bearing']);
-const boltChecks=new Set(['tie-bolt','tie-slip','tie-prying','tie-bearing','plate-tie-bolt-fatigue','tie-release-sleeve']);
+const boltChecks=new Set(['tie-bolt','tie-slip','tie-prying','tie-bearing','plate-tie-bolt-fatigue','tie-release-sleeve','tie-slide-sleeve','tie-slide-filler']);
 
 /** Sizing target of the strength and fatigue ratios of the tie (the fit and detailing limits are held at one). */
 export const tieSizingTarget=.9;
@@ -327,7 +334,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  const minSaddle=Math.max(inch,up(p.section.tf,inch/8));
  type Trial={q:ProjectInput;face:number;ratios:Record<string,number>;worst:number;excess:number;fails:number;score:number;governs:string;compression:number};
  // At most this many trial sets are checked.
- let best:Trial|undefined,evaluations=0;const budget=400;
+ let best:Trial|undefined,evaluations=0,budget=400;
  // The best set: the least total excess of the checks over one (failing), then the least total excess over the sizing
  // limits (sizingLimit) with each inch of column face beyond the start counted as 0.01 (a longer bracket for a real
  // gain only), then the least largest ratio.
@@ -374,6 +381,8 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
    }
   }
   if(gussetChecks.has(k)&&x.gusset<1.25*inch-1e-6){x.gusset+=inch/8;return true;}
+  // The release sleeves under the bolt pretension (and, at a slide, bending across the float): a thicker wall, to 1/2 in.
+  if((k==='tie-release-sleeve'||k==='tie-slide-sleeve')&&x.wall!==undefined&&x.wall<inch/2-1e-6){x.wall+=sixteenth;return true;}
   if(boltChecks.has(k)){const next=bolts.find(v=>v>x.diameter+1e-6);if(next){x.diameter=next;trial.grown=true;return true;}}
   // The receiving column flange: a taller column gusset, by longer slot travel first (the slot pattern sets the gusset
   // height and widens the bars only half as much), then wider bars; only where the taller gusset left can bring the
@@ -408,8 +417,8 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // The largest ratio over its limit that a step may still relieve.
  const governing=(r:Trial,stuck:Set<string>)=>Object.entries(r.ratios).map(([k,v])=>[k,v/sizingLimit(r.ratios,k,target)] as const).filter(([k,v])=>v>1&&!stuck.has(k)).sort((u,v)=>v[1]-u[1])[0]?.[0];
  // One bar or plate thickness at one column face, stepped until every ratio is within its limit or no step helps.
- const sizeAt=(face:number,thickness:number)=>{
-  const x:TieProportions={...base,face,thickness,travel:faceDemand(face).travel,diameter:.625*inch,gusset:stiffenerGusset!==undefined?Math.min(stiffenerGusset,.75*inch):Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0};
+ const sizeAt=(face:number,thickness:number,slide=0)=>{
+  const x:TieProportions={...base,face,thickness,travel:faceDemand(face).travel,diameter:.625*inch,gusset:stiffenerGusset!==undefined?Math.min(stiffenerGusset,.75*inch):Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0,slide};
   let r=evaluate(x);
   // A ratio no step relieves is set aside (the checks report it), so the others are still sized.
   const stuck=new Set<string>(),trial={grown:false,movement:false};
@@ -454,6 +463,36 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   if(evaluations>budget)break;
   const {r}=sizeAt(face,3*sixteenth);
   if(r&&r.worst<=1)return r.q;
+ }
+ // The imposed movement still over its limit on paired bars with the column-end release: the column-end slide
+ // (tieRelease), its travel the whole factored movement along the runway (end rotation × d and thermal travel) with
+ // the 1/16 in positioning allowance and a 1/32 in tolerance, on the 1/16 in grid, its fillers at most 3/4 in (AISC
+ // J5.2(b)(1)). The bars are then free at the column end (L_c = 2.1L) and carry the rotation movement and the friction
+ // the slide holds, so every thickness is tried at each face reached, nearest first; the first passing set is taken,
+ // else the slide set only where it exceeds the limits by less than the set kept.
+ const over=(r:Trial)=>Object.entries(r.ratios).some(([k,v])=>movementChecks.has(k)&&v>sizingLimit(r.ratios,k,target)+1e-9);
+ if(kept&&kept.worst>1&&over(kept)&&release&&!plate){
+  const mv=tieMovements(sizingSnapshot(applyTieProportions(structuredClone(p),{...base,slide:0}),demand)),clearance=d.brace.release!.clearance;
+  const slide=Math.max(inch/8,up(mv.longitudinal+sixteenth+inch/32,sixteenth));
+  if(slide+clearance/2<=.75*inch+1e-9){
+   // The flexible length helps the bars here too: the farthest face reached first, then nearer while a set passes, so
+   // the reach is the shortest at which the slide passes.
+   let found:Trial|undefined,passing:Trial|undefined;budget=evaluations+300;
+   for(const face of [...tried].reverse()){
+    let here:Trial|undefined;
+    for(const thickness of thicknesses){
+     if(evaluations>budget)break;
+     const {r}=sizeAt(face,thickness,slide);
+     if(!r)continue;
+     if(r.worst<=1){here=r;break;}
+     if(better(r,found))found=r;
+    }
+    if(!here)break;
+    passing=here;
+   }
+   if(passing)return passing.q;
+   if(found&&better(found,kept))return found.q;
+  }
  }
  return kept?.q??p;
 }

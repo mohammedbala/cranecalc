@@ -2,7 +2,7 @@ import {finiteLife,fatigueCoefficient,fatigueThreshold,KSI} from './fatigueConst
 import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
-import {flangeTieGeometry,tieLine,tiePlies} from './tieGeometry';
+import {flangeTieGeometry,tieLine,tiePlies,tieRelease} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
 import {createBracketCollector} from './bracketDesign';
@@ -54,13 +54,15 @@ export function braceSystem(p:ProjectInput){
  const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875),plies=tiePlies(p);
  const plate=plateMember(b.width,b.thickness,b.length,p.section.E,m.Fy,m.Fu,b.width-holes,p.method),cos=b.reach/b.length;
  // Each bar buckles out of plane between the innermost bolt rows, fixed in the girder bolt group and
- // pinned at the column end: K = 0.8 (AISC Commentary Table C-A-7.1 recommended value).
+ // pinned at the column end: K = 0.8 (AISC Commentary Table C-A-7.1 recommended value). With the column-end slide that
+ // holds while the slide is locked by friction; tieMovementChecks checks the slipping state (K = 2.1).
+ const slide=tieRelease(p)?.barOffset??0;
  const between=b.length-2*(b.connection.edge+(b.connection.rows-1)*b.connection.pitch),bucklingLength=.8*Math.max(between,b.thickness);
  const member={...plate,bucklingLength,compression:compressionResistance(plate.A,plate.r,bucklingLength,p.section.E,m.Fy,p.method)};
  // Two flat bars (or one flexible plate in single shear) in parallel, two end connections in series. The connection
  // model includes gusset axial strain and conservative bolt shear deformation;
  // no stiffness from the excluded supporting building is inferred.
- const n=2*b.connection.rows,G=p.section.E/2.6,grip=plies*b.thickness+b.gussetThickness;
+ const n=2*b.connection.rows,G=p.section.E/2.6,grip=plies*b.thickness+b.gussetThickness+2*slide;
  const plateK=p.section.E*b.gussetThickness*(b.connection.gauge+2*b.connection.edge)/b.connectionLength;
  const boltK=n*plies*G*bolt.area/grip;
  const weldArea=2*b.connection.weldLength*b.connection.weldSize/Math.sqrt(2);

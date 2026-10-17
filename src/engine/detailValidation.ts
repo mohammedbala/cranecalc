@@ -107,7 +107,7 @@ export function validateRunwayDetails(p:ProjectInput){
  add(d.bearing.length<(p.aist?.bearingLength??0),'bearing plate length must cover the entered effective bearing length.');
  if(family){
   add(Math.abs(b.connection.thickness-b.thickness)>1e-6,tieArrangement(d)==='flexible-plate'?'tie connection plate thickness must equal the flexible plate thickness.':'tie cover-plate thickness must equal the paired tie-bar thickness in this template.');
-  add(b.width<b.connection.gauge+2*b.connection.edge,'brace bar width must contain the two bolt lines and edge distances.');
+  add(b.width<b.connection.gauge+2*b.connection.edge-1e-6,'brace bar width must contain the two bolt lines and edge distances.');
  }
  if(webEnd)add((d.end.rows-1)*d.end.pitch+2*d.end.edge>p.section.d-2*p.section.tf,'end bolt pattern must fit within the clear girder web.');
  add(d.bearing.cope*2>=p.section.d-2*p.section.tf,'stiffener copes must leave a positive effective web-weld length.');
