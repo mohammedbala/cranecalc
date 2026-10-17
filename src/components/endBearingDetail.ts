@@ -1,6 +1,7 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {activeEndBearing,endBearingGeometry,continuousBearings,bearingShim} from '../engine/endBearing';
-import {simpleSupportInput} from '../engine/simpleSupports';
+import {endGridOverhang,simpleSupportInput} from '../engine/simpleSupports';
+import {runwayEnds} from '../engine/continuation';
 import {weldedRibBracket} from '../engine/bracketRib';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {capSeat} from '../engine/columnCap';
@@ -24,23 +25,30 @@ function slot(cx:number,cy:number,length:number,width:number,cls:string){const r
 /**
  * Connection detail with bolted end bearings: a shared interior support with the
  * sliding right end of one bay and the locating left end of the next, in
- * elevation and in plan on the bottom flange.
+ * elevation and in plan on the bottom flange; on a single-span runway its two
+ * ends, each at its own grid (sliding at grid 2, locating at grid 1).
  */
 export function endBearingView(s:CalculationSnapshot):ViewRender{
  if(s.input.system==='continuous')return continuousBearingView(s);
  const p=s.input,d=p.details!,e=activeEndBearing(p)!,b=p.section,bs=d.bearing,g=endBearingGeometry(p,e),ss=simpleSupportInput(p);
  const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units),db=e.bolts.diameter,gauge=e.bolts.gauge,gap=ss.endGap,hx=heavyHex(db);
  // On a column cap the bolts pass through the cap plate, the seat.
- const cs=capSeat(p),wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),seatL=cs?.length??(wb?bracketSeat(wb).length:2*bs.length+gap+2*inch),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
- const extent=gap/2+bs.length+2.5*inch,k=drawingScale(Math.min(.36,290/(2*extent),80/(b.tf+2.5*inch+bs.thickness+seatT+1.5*inch),125/Math.max(b.bf,bs.width)),p.units),kk=k.pointsPerMm;
+ const cs=capSeat(p),wb=d.bracket?.enabled?d.bracket:undefined,twin=wb&&weldedRibBracket(wb),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),seatL=cs?.length??(wb?bracketSeat(wb).length:p.spans.length===1&&runwayEnds(p).length===2?bs.length+2*inch:2*bs.length+gap+2*inch),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
+ // A single-span runway has no shared support: its locating end (grid 1) and sliding end (grid 2) are drawn apart, each
+ // girder end on its own grid and seat (the girder running past the grid by the end-grid overhang), not as two ends at one
+ // grid. Otherwise the shared interior support: the sliding right end of one bay and the locating left end of the next.
+ const separate=p.spans.length===1&&runwayEnds(p).length===2,o=separate?endGridOverhang(p,'right'):0;
+ // The two ends 3 in apart at least; each seat is broken 3/4 in past its girder end, toward the other grid.
+ const h=separate?Math.max(gap/2,1.5*inch):gap/2,centers=separate?[-(h+o),h+o]:[0],inner=h-.75*inch;
+ const extent=h+bs.length+2.5*inch,k=drawingScale(Math.min(.36,290/(2*extent),80/(b.tf+2.5*inch+bs.thickness+seatT+1.5*inch),125/Math.max(b.bf,bs.width)),p.units),kk=k.pointsPerMm;
  const X0=770,X=(x:number)=>X0+x*kk,yB=118+(b.tf+2.5*inch)*kk,Y=(h:number)=>yB-h*kk;
  const yTop=Y(b.tf+2.5*inch),yBearing=yB+bs.thickness*kk,ySeat=yBearing+seatT*kk;
  let svg='<g data-view="end-bearing">';
- // Grid at the shared support.
- svg+=line([X0,yTop-14],[X0,ySeat+20],'grid-line')+bubble(X0,yTop-22,'2');
+ // Grid at the shared support, or at each runway end of a single span (sliding end at grid 2, locating end at grid 1).
+ for(const [i,c] of centers.entries())svg+=line([X(c),yTop-14],[X(c),ySeat+20],'grid-line')+bubble(X(c),yTop-22,separate?(i?'1':'2'):'2');
  const ends=[{side:-1,role:'SLIDING'},{side:1,role:'LOCATING'}] as const;
  for(const {side} of ends){
-  const near=side*gap/2,far=side*extent,lo=Math.min(X(near),X(far)),hi=Math.max(X(near),X(far));
+  const near=side*h,far=side*extent,lo=Math.min(X(near),X(far)),hi=Math.max(X(near),X(far));
   // Girder bottom flange and web stub, broken above and away from the support.
   svg+=line([lo,yB],[hi,yB],'runway-line')+line([lo,Y(b.tf)],[hi,Y(b.tf)],'runway-line')+line([X(near),yB],[X(near),yTop],'runway-line');
   svg+=breakX(X(far),yTop-4,yB+4)+breakY(yTop,lo,hi);
@@ -54,20 +62,25 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
    if(side<0&&g.sleeve)svg+=rect(x-g.sleeve.od*kk/2,yB-g.sleeve.length*kk,g.sleeve.od*kk,g.sleeve.length*kk,'hidden-line');
    if(side<0)svg+=rect(x-g.washer.length*kk/2,Y(b.tf)-lift-e.washerThickness*kk,g.washer.length*kk,e.washerThickness*kk,'runway-line');
    const top=Y(b.tf)-(side<0?e.washerThickness*kk+lift:0);
-   const nut=ySeat+(ws?.drop(near+side*r)??0)*kk;
+   const nut=ySeat+(ws?.drop(near+side*r-(separate?side*(h+o):0))??0)*kk;
    svg+=hexSide(x,top,hx.corners*kk,hx.head*kk,-1)+hexSide(x,nut,hx.corners*kk,hx.nut*kk,1)+line([x,top-hx.head*kk-3],[x,nut+hx.nut*kk+3],'grid-line');
   }
  }
- // Bracket seat and ribs under the bearings.
- svg+=rect(X(-seatL/2),yBearing,seatL*kk,seatT*kk,wb||cs?'runway-line':'reference-line');
- if(twin)for(const side of [-1,1]){const x=X(side*wb!.ribSpacing/2);svg+=rect(x-wb!.ribThickness*kk/2,ySeat,wb!.ribThickness*kk,1.5*inch*kk,'runway-line');}
- if(ws)svg+=ws.draw(X,ySeat,kk,-seatL/2,seatL/2,1.5*inch);
- svg+=breakY(ySeat+1.5*inch*kk,X(-seatL/2),X(seatL/2));
+ // Bracket seat and ribs under the bearings: one seat at the shared support, one at each grid of a single span.
+ for(const c of centers){
+  // From c + lo to c + hi about the seat center; at a single span's grid the inner side stops at its break.
+  const Xc=(x:number)=>X(x+c),lo=separate&&c>0?Math.max(-seatL/2,inner-c):-seatL/2,hi=separate&&c<0?Math.min(seatL/2,-inner-c):seatL/2;
+  svg+=rect(Xc(lo),yBearing,(hi-lo)*kk,seatT*kk,wb||cs?'runway-line':'reference-line');
+  if(separate&&(lo>-seatL/2||hi<seatL/2)){const x=c>0?Xc(lo):Xc(hi);svg+=breakX(x,yBearing-4,ySeat+4);}
+  if(twin)for(const side of [-1,1]){const r=side*wb!.ribSpacing/2;if(r<lo||r>hi)continue;const x=Xc(r);svg+=rect(x-wb!.ribThickness*kk/2,ySeat,wb!.ribThickness*kk,1.5*inch*kk,'runway-line');}
+  if(ws)svg+=ws.draw(Xc,ySeat,kk,lo,hi,1.5*inch);
+  svg+=breakY(ySeat+1.5*inch*kk,Xc(lo),Xc(hi));
+ }
  // Plan on the bottom flange: standard holes at the locating end, slots under plate washers at the sliding end.
  const Z0=ySeat+1.5*inch*kk+16+Math.max(b.bf,bs.width)/2*kk,Z=(z:number)=>Z0+z*kk;
  svg+='<g data-view="end-bearing-plan">';
  for(const {side} of ends){
-  const near=side*gap/2,far=side*extent,lo=Math.min(X(near),X(far)),hi=Math.max(X(near),X(far));
+  const near=side*h,far=side*extent,lo=Math.min(X(near),X(far)),hi=Math.max(X(near),X(far));
   svg+=line([lo,Z(-b.bf/2)],[hi,Z(-b.bf/2)],'runway-line')+line([lo,Z(b.bf/2)],[hi,Z(b.bf/2)],'runway-line')+line([X(near),Z(-b.bf/2)],[X(near),Z(b.bf/2)],'runway-line')+breakX(X(far),Z(-b.bf/2)-4,Z(b.bf/2)+4);
   svg+=rect(lo,Z(-b.tw/2),hi-lo,b.tw*kk,'runway-line');
   const xs=near+side*g.stiffener;for(const zs of [-1,1])svg+=rect(X(xs)-bs.stiffenerThickness*kk/2,zs<0?Z(-b.tw/2-bs.stiffenerWidth):Z(b.tw/2),bs.stiffenerThickness*kk,bs.stiffenerWidth*kk,'runway-line');
@@ -79,31 +92,35 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
    svg+=line([c[0]-db*kk*.7,c[1]],[c[0]+db*kk*.7,c[1]])+line([c[0],c[1]-db*kk*.7],[c[0],c[1]+db*kk*.7]);
   }
  }
- svg+=line([X0,Z(-b.bf/2)-10],[X0,Z(b.bf/2)+10],'grid-line');
  // Dimensions: bolt positions from each girder end, gauge, slot and girder gap.
  const zb=Z(Math.max(b.bf,bs.width)/2);
+ // A runway-end grid line stops short of the bolt dimensions below the plan.
+ for(const c of centers)svg+=line([X(c),Z(-b.bf/2)-10],[X(c),separate?Math.min(Z(b.bf/2)+10,zb+2):Z(b.bf/2)+10],'grid-line');
  // Baseline dimensions from the locating girder end; each label sits past the end of its own line. The bolt
  // extension lines start just clear of the holes.
  // The inner label drops its noun when the full text would reach the outer row's extension line.
- g.rows.slice(0,2).forEach((x,i)=>{const y=zb+9+9*i,xb=X(gap/2+x),next=i?Infinity:X(gap/2+g.rows[1])-3,full=`${dim(x)} BOLTS`;
-  svg+=line([xb,Z(gauge/2)+g.hole*kk/2+2],[xb,zb])+dimH(X(gap/2),xb,zb,y,'')+text(xb+4,y+3,xb+4+textWidth(full,7.2)<next?full:dim(x),7.2);});
- const zt=Z(-Math.max(b.bf,bs.width)/2);svg+=dimH(X(-gap/2),X(gap/2),zt,zt-7,'')+text(X(gap/2)+4,zt-4,`${dim(gap)} GAP`,7.2);
+ g.rows.slice(0,2).forEach((x,i)=>{const y=zb+9+9*i,xb=X(h+x),next=i?Infinity:X(h+g.rows[1])-3,full=`${dim(x)} BOLTS`;
+  svg+=line([xb,Z(gauge/2)+g.hole*kk/2+2],[xb,zb])+dimH(X(h),xb,zb,y,'')+text(xb+4,y+3,xb+4+textWidth(full,7.2)<next?full:dim(x),7.2);});
+ // The girder end gap at a shared support; a single span's two ends are not dimensioned to each other.
+ const zt=Z(-Math.max(b.bf,bs.width)/2);if(!separate)svg+=dimH(X(-gap/2),X(gap/2),zt,zt-7,'')+text(X(gap/2)+4,zt-4,`${dim(gap)} GAP`,7.2);
  // Gauge beyond the locating end, so the sliding end carries the cut for the sliding bolt section. Its value reads
  // left of its line (about 7 pt of glyph height) and, when too long for the gauge, below it beside the BOLTS labels.
- const gx=Math.max(X(extent)+22,X(gap/2+g.rows[1])+4+textWidth(`${dim(g.rows[1])} BOLTS`,7.2)+20);
- svg+=dimV(Z(-gauge/2),Z(gauge/2),X(gap/2+g.rows[1])+g.hole*kk/2+2,gx,dim(gauge));
+ const gx=Math.max(X(extent)+22,X(h+g.rows[1])+4+textWidth(`${dim(g.rows[1])} BOLTS`,7.2)+20);
+ svg+=dimV(Z(-gauge/2),Z(gauge/2),X(h+g.rows[1])+g.hole*kk/2+2,gx,dim(gauge));
  // Section along the runway through the far-side sliding bolts, looking outboard: x reads as on this plan.
- if(g.sleeve)svg+=sectionCut([X(-gap/2),Z(-gauge/2)],[X(-extent)-4,Z(-gauge/2)],[0,-1],detailTitles.slidingBolt,['b']);
+ if(g.sleeve)svg+=sectionCut([X(-h),Z(-gauge/2)],[X(-extent)-4,Z(-gauge/2)],[0,-1],detailTitles.slidingBolt,['b']);
  svg+='</g>';
- for(const {side,role} of ends){const cx=X(side*(gap/2+bs.length/2));svg+=text(cx,yTop-6,`${role} END`,8,'middle',700);}
+ // Over each end; at a single span's runway-end grids, over the grid bubble and outward (the grid runs through the
+ // bearing, and the two grids may be close).
+ for(const {side,role} of ends){const cx=X(side*(h+bs.length/2));svg+=separate?text(X(side*(h+o))-side*6,yTop-36,`${role} END`,8,side<0?'end':'start',700):text(cx,yTop-6,`${role} END`,8,'middle',700);}
  const lx=gx+34;
  // The sliding callout sits above the far-side bolt line, so its leader passes over the gauge dimension.
- const slideAt:XY=[X(-gap/2-g.rows[0])+g.washer.length*kk/2-3,Z(-gauge/2)-g.washer.width*kk/2],slideY=slideAt[1]-2;
+ const slideAt:XY=[X(-h-g.rows[0])+g.washer.length*kk/2-3,Z(-gauge/2)-g.washer.width*kk/2],slideY=slideAt[1]-2;
  svg+=labelColumn([
-  {at:[X(gap/2+g.stiffener)+bs.stiffenerThickness*kk/2,(yTop+Y(b.tf))/2],labels:['BEARING STIFFENERS',`SEE ${detailRef(girderBearingTitle(p))}`]},
-  {at:[X(gap/2+g.rows[1])+hx.corners*kk/2,Y(b.tf)-hx.head*kk/2],labels:[`LOCATING: 4 - ${size(db)} ${e.bolts.grade} SC,`,`PRETENSIONED; ${size(g.hole)} STD HOLES`]},
-  {at:[X(gap/2+bs.length*.85),yB+bs.thickness*kk/2],labels:[`BEARING PL ${size(bs.thickness)} X ${size(bs.width)} X ${size(bs.length)}`,...shimLabel(p,size)]},
-  {at:[X(seatL/2)-4,yBearing+seatT*kk/2],labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS: SURVEY, SHIM,','FIELD DRILL TO THE SET GIRDER'])}
+  {at:[X(h+g.stiffener)+bs.stiffenerThickness*kk/2,(yTop+Y(b.tf))/2],labels:['BEARING STIFFENERS',`SEE ${detailRef(girderBearingTitle(p))}`]},
+  {at:[X(h+g.rows[1])+hx.corners*kk/2,Y(b.tf)-hx.head*kk/2],labels:[`LOCATING: 4 - ${size(db)} ${e.bolts.grade} SC,`,`PRETENSIONED; ${size(g.hole)} STD HOLES`]},
+  {at:[X(h+bs.length*.85),yB+bs.thickness*kk/2],labels:[`BEARING PL ${size(bs.thickness)} X ${size(bs.width)} X ${size(bs.length)}`,...shimLabel(p,size)]},
+  {at:[X(centers.at(-1)!+seatL/2)-4,yBearing+seatT*kk/2],labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`]:['BRACKET SEAT BY OTHERS: SURVEY, SHIM,','FIELD DRILL TO THE SET GIRDER'])}
  ],lx,Math.min(92,slideY-38-79),Math.min(200,slideY-38));
  svg+=labelColumn([
   {at:slideAt,labels:g.sleeve?[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} PRETENSIONED AGAINST`,`STEEL SLEEVES ${size(g.sleeve.od)} OD X ${size(g.sleeve.length)}; ${size(g.slotWidth)} X`,`${size(g.slot)} SLOT IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]:[`SLIDING: 4 - ${size(db)} ${e.bolts.grade} SNUG-TIGHT`,`(NOT PERMITTED: PRETENSION, SEE CALC); ${size(g.hole)} X`,`${size(g.slot)} LSL IN FLANGE FOR ${size(g.travel)} EA. WAY`,`PL WASHER ${size(e.washerThickness)} X ${size(g.washer.width)} X ${size(g.washer.length)}`]}
