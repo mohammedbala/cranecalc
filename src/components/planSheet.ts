@@ -387,17 +387,25 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    const labels=[...(cls?['CRANE-LEVEL STRUT BY OTHERS -',`${cls.stiffness!==undefined?`k >= ${up(format(cls.stiffness,'stiffness',p.units,2))}, `:''}F = ${up(format(cls.force,'force',p.units,2))} (EOR),`,
      `${cls.location==='girder-line'?'ON GIRDER LINE':'ON COLUMN C/L'}, ${cls.grids.length===m.supports.length?'EVERY GRID':`GRID${cls.grids.length>1?'S':''} ${cls.grids.join(', ')}`} TO BRACED BAY`]:[]),
     ...(ebSpans.length?[`(E) BRACED BAY, GRIDS ${ebSpans.map(v=>`${v}-${v+1}`).join(', ')}`,...(fails?['REINFORCE OR REPLACE - EOR']:[])]:[])];
-   const w=width(labels),i=ebSpans[0]??Math.ceil(p.spans.length/2),cx=X((m.supports[i-1]+m.supports[i])/2),zs=cls?.location==='girder-line'?0:rows[0];
+   const i=ebSpans[0]??Math.ceil(p.spans.length/2),cx=X((m.supports[i-1]+m.supports[i])/2),zs=cls?.location==='girder-line'?0:rows[0];
    // Between the runways, in the braced (or middle) span first, then the other spans; beyond the runway ends last.
    // The leader lands a quarter span in, clear of the girder mark at mid-span: on the strut, else on the braced bay's X.
    // The strut runs every span, so its leader may land in any (the braced span first); the braced bay's only in its own.
    const order=[i,...m.supports.slice(1).map((_,k)=>k+1).filter(k=>k!==i)],quarter=(k:number)=>X(m.supports[k-1]*.75+m.supports[k]*.25);
    const targets:XY[]=cls?order.map(k=>[quarter(k),Y(zs)]):[[quarter(i),Y(rows[0])-cross/2]],centre=(t:XY)=>{const k=m.supports.findIndex(x=>X(x)>t[0]);return k>0?(X(m.supports[k-1])+X(m.supports[k]))/2:t[0];};
-   const half=Math.abs(Y(-m.width)-Y(0))/2-lettering.leading*labels.length-12,steps=Array.from({length:Math.max(1,Math.floor(half/12))},(_,j)=>(j+1)*12).flatMap(d=>[-d,d]);
-   const options=[...targets.flatMap(at=>[0,...steps].map(dy=>midY+dy).flatMap(y=>[centre(at)-w/2,at[0]-w/2,at[0]+10,at[0]-10-w].map(x=>multiLeader([at],[x,y],labels,lettering.text)))),
-    ...shifts.flatMap(dy=>[multiLeader([targets[0]],[outLeft(w),midY+dy],labels,lettering.text),multiLeader([targets[0]],[outRight,midY+dy],labels,lettering.text)]),
+   const layouts=(labels:string[])=>{const w=width(labels),half=Math.abs(Y(-m.width)-Y(0))/2-lettering.leading*labels.length-12,steps=Array.from({length:Math.max(1,Math.floor(half/12))},(_,j)=>(j+1)*12).flatMap(d=>[-d,d]);
+    const inside=targets.flatMap(at=>[0,...steps].map(dy=>midY+dy).flatMap(y=>[centre(at)-w/2,at[0]-w/2,at[0]+10,at[0]-10-w].map(x=>multiLeader([at],[x,y],labels,lettering.text))));
+    const outside=[...shifts.flatMap(dy=>[multiLeader([targets[0]],[outLeft(w),midY+dy],labels,lettering.text),multiLeader([targets[0]],[outRight,midY+dy],labels,lettering.text)]),
     // Beyond the runway ends, level with the strut, the leader to the end span (narrow bays with full-width girder marks).
     ...(cls?Array.from({length:21},(_,j)=>(j-10)*6).flatMap(dy=>[multiLeader([[quarter(1),Y(zs)]],[outLeft(w),Y(zs)+dy],labels,lettering.text),multiLeader([[quarter(m.supports.length-1),Y(zs)]],[outRight,Y(zs)+dy],labels,lettering.text)]):[])];
+    return {inside,outside};};
+   // On its lines, else with the strut's location ("ON ... LINE, GRIDS ... TO BRACED BAY") over two or three lines at its
+   // phrases, else with the long lines wrapped: to the width of the strut's first lines, or of the narrowest bay.
+   const located=(f:(on:string,grids:string)=>string[])=>labels.flatMap(l=>{const q=/^(ON [^,]+), (.+) TO BRACED BAY$/.exec(l);return q?f(q[1],q[2]):[l];});
+   const phrased=[located((on,g)=>[`${on}, ${g}`,'TO BRACED BAY']),located((on,g)=>[`${on},`,`${g} TO BRACED BAY`]),located((on,g)=>[`${on},`,g,'TO BRACED BAY'])];
+   const bay=Math.max(130,Math.min(...m.supports.slice(1).map((x,g)=>X(x)-X(m.supports[g])))-24),head=width(labels.slice(0,2));
+   const variants=[labels,...phrased,...[head,bay].map(v=>phrased[2].flatMap(l=>wrapToWidth(l,v,lettering.text)))].filter((v,j,all)=>all.findIndex(o=>o.join('|')===v.join('|'))===j).map(layouts);
+   const options=[...variants.flatMap(v=>v.inside),...variants.flatMap(v=>v.outside)];
    svg+=`<g data-strut-label="plan">${drawn.pickUncrossed(options)}</g>`;
   }
   svg+=later;
