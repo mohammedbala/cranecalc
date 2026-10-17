@@ -87,6 +87,9 @@ describe('dependent choices',()=>{
   expect(r.changes.length).toBeGreaterThanOrEqual(2);
   expect(normalizeConfig({...defaultRunwayConfig,structure:'new',support:'by-others'}).config.support).toBe('twin-rib');
   expect(normalizeConfig({...defaultRunwayConfig,system:'continuous',tie:'flexible-plate'}).config.tie).toBe('paired-bars');
+  // Each change is kept per choice for the selection log: the field, as entered, as adjusted and the rule.
+  expect(r.rules).toContainEqual({field:'structure',from:'existing',to:'new',why:expect.stringMatching(/new freestanding columns/)});
+  expect(r.rules).toContainEqual({field:'tie',from:'cap-angle',to:'paired-bars',why:expect.any(String)});
  });
  it('previews the crane, duty, rail and sized girder without building the details',()=>{
   const v=previewConfig({...defaultRunwayConfig,capacity:5,control:'pendant',craneSpan:50});
@@ -114,6 +117,11 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
   const p=buildProject(cfg);
   expect(p.configurator?.support).toBe('column-cap');expect(p.columnCap?.enabled).toBe(true);expect(p.details!.bracket?.enabled).toBeFalsy();
   expect(validateProject(p)).toEqual([]);
+  // The selection log names the support and the tie that were replaced, each with its governing rule.
+  const log=p.configurator!.selections!,row=(item:string)=>log.find(v=>v.item===item);
+  expect(row('Girder support')).toMatchObject({entered:'Welded twin-rib seat',designed:'Column cap (new columns)',reason:expect.stringMatching(/exceeds the AIST TR-13 §5\.9\.2 recommendation/)});
+  expect(row('Top-flange tie')).toMatchObject({entered:'Flexible plate',designed:expect.stringMatching(/^None: end fork on the column cap/),reason:expect.stringMatching(/fork/)});
+  expect(row('New column')?.designed).toBe(p.existingColumn!.shape);
  },120000);
  it('keeps the brackets of an existing structure above it, with the warning; within it nothing is said',()=>{
   const v=previewConfig({...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30});
@@ -122,4 +130,23 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
   // The one statement within the limit is the assumed bumper overhang (end-truck geometry for the stop contacts).
   const light=previewConfig({...defaultRunwayConfig,capacity:5});expect(light.changes.filter(v=>!/^Bumper overhang assumed/.test(v))).toEqual([]);expect(light.changes.at(-1)).toMatch(/^Bumper overhang assumed \d+ in/);expect(light.reaction!).toBeLessThan(50*kip);
  });
+});
+
+describe('configurator selection log',()=>{
+ it('records each choice the configurator made with its governing reason, and is not read back as a choice',()=>{
+  const p=templateProject('t01'),log=p.configurator!.selections!,row=(item:string)=>log.find(v=>v.item===item);
+  // The girder sized here: its governing sizing ratio and the lighter candidates rejected, counted by reason.
+  expect(row('Girder')).toMatchObject({entered:'configurator default (sized)',designed:p.section.name});
+  expect(row('Girder')!.reason).toMatch(/ratio \d\.\d\d, vertical deflection \d\.\d\d and lateral \d\.\d\d of their limits/);
+  expect(row('Girder')!.reason).toMatch(/lighter candidates rejected: \d+ by /);
+  expect(row('Existing column')).toMatchObject({entered:'configurator default',designed:p.existingColumn!.shape});
+  // Nothing the user entered as built is listed: support and tie are as configured.
+  expect(row('Girder support')).toBeUndefined();
+  expect(projectSchema.parse(JSON.parse(JSON.stringify(p))).configurator?.selections).toEqual(log);
+  // Rebuilt from its configurator record (log included), the project and the log come back the same.
+  const q=buildProject(p.configurator!);
+  expect(q.section.name).toBe(p.section.name);expect(q.configurator!.selections).toEqual(log);
+  // A girder named in the configuration is used as entered and is not listed.
+  expect(buildProject({...p.configurator!,girderShape:'W24X104'}).configurator!.selections!.find(v=>v.item==='Girder')).toBeUndefined();
+ },120000);
 });
