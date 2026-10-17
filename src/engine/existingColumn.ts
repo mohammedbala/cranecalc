@@ -311,7 +311,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
   const rows=all.flatMap(v=>v.combinations.filter(x=>x.Ut!==undefined).map(k=>({station:v.station,k})));
   if(rows.length){
    const g=rows.reduce((a,b)=>b.k.Ut!>a.k.Ut!?b:a),T=Math.max(...rows.map(v=>v.k.torque??0));
-   const twist=unitTorsion.twist*T,Ts=reactions.Cls*offset,ts=unitTorsion.twist*Ts;
+   const twist=unitTorsion.twist*T,Ts=keep*reactions.Cls*offset,ts=unitTorsion.twist*Ts;
    torsion={U:g.k.Ut!,shear:unitTorsion.shear*T,shearCapacity:available(.6*section.Fy,p.method,.9,1.67),T:g.k.torque??0,stress:g.k.warping??0,a:unitTorsion.a,offset,station:g.station,case:g.k,model,twist,slip:twist*offset,
     service:{T:Ts,twist:ts,slip:ts*offset,lateral:offset*(1-Math.cos(ts))},lateral:offset*(1-Math.cos(twist))};
   }
