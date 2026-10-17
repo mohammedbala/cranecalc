@@ -343,7 +343,7 @@ export const mergeDefs:MergeDef[]=[
  {key:'cap-angle-cap-bolts',effect:'connection',title:'Cap tie cap bolts · tension with prying (bolts, angle leg, channel flange)',re:/^cap-angle-(cap-bolt|leg-prying|channel-flange)$/,prefer:/^cap-angle-cap-bolt$/},
  {key:'cap-angle-col-bolts',effect:'connection',title:'Cap tie column bolts · tension with prying (bolts, end plate, column flange)',re:/^cap-angle-(col-bolt|endplate-prying|column-flange)$/,prefer:/^cap-angle-col-bolt$/},
  {key:'cap-angle-plate',effect:'axial',title:'Cap tie plate · tension, compression and block shear',re:/^cap-angle-(plate-yield|plate-rupture|plate-compression|block|leg-tension)$/},
- {key:'cap-angle-sleeves',effect:'connection',title:'Cap tie sleeves and plate washers',re:/^cap-angle-(sleeve|sleeve-bearing|washer-bending)$/},
+ {key:'cap-angle-sleeves',effect:'connection',title:'Cap tie sleeves and plate washers',re:/^cap-angle-(sleeve|sleeve-bearing|washer-bending|endplate-sleeve)$/},
  {key:'end-stop-bolts',effect:'connection',title:'End stop bolt group (tension, shear, slip, bearing/tearout)',re:/^end-stop-(bolt-tension|bolt-shear|slip|bearing-base|bearing-flange)$/},
  {key:'end-stop-welds',effect:'connection',title:'End stop welds',re:/^end-stop-(weld|stiffener-weld)$/},
  {key:'end-stop-prying',title:'End stop plies · thickness for no prying (ratio t_min/t)',re:/^end-stop-(base-prying|flange-prying)$/},

@@ -127,13 +127,24 @@ export function capAngleGeometry(p:ProjectInput){
    // Clear span from the lap bolt line to the end plate; and from the angle toe to the end plate.
    span:endPlateBack-yLap,gap:endPlateBack-(y0+bh)},
   endPlate:{...ep,y0:endPlateBack,y1:endPlateFace,z0:zTie-ep.height/2,z1:zTie+ep.height/2},
-  column:{...colb,hole:colBolt.hole,zs:[zTie+colb.gauge,zTie-colb.gauge] as [number,number],receiver:capAngleColumn(p)},
+  column:{...colb,hole:colBolt.hole,zs:[zTie+colb.gauge,zTie-colb.gauge] as [number,number],receiver:capAngleColumn(p),slot:columnReleaseSlot(c,colBolt.hole,ep.thickness)},
   shim:{max:c.shimMax,nominal:shim,y0:endPlateFace,y1:face},
   weld:c.weldSize,stations,
   // Height of the cap bolt line above the girder bearing (bottom of the W), for end rotation.
   boltHeight:s.d+s.capTw-cb.gauge,capTop:s.d/2+s.capTw};
 }
 export type CapAngleGeometry=NonNullable<ReturnType<typeof capAngleGeometry>>;
+/**
+ * The vertical slots of a released end plate (columnRelease): a steel sleeve one bore (the standard hole) plus two walls
+ * in diameter, cut to the end plate plus the clearance; the slot 1/16 in wider than the sleeve and the travel longer each
+ * way; a plate washer under each bolt head covering the slot at either extreme of travel (1/4 in past it).
+ */
+export function columnReleaseSlot(c:CapAngleInput,hole:number,endPlate:number){
+ const r=c.columnRelease;if(!r)return undefined;
+ const od=hole+2*c.sleeveWall,width=od+inch/16,length=width+2*r.travel;
+ return {travel:r.travel,width,length,sleeve:{od,bore:hole,length:sleeveLength(endPlate+c.sleeveClearance),area:Math.PI/4*(od**2-hole**2)},
+  washer:{length:length+2*r.travel+inch/2,width:Math.max(2.5*c.columnBolts.diameter,width+inch),thickness:c.washerThickness}};
+}
 /**
  * Height of the cap tieback's force line above the bottom of the W (mm): the tie plate centerline, lapped on the
  * angle's long leg at the top of the cap. By statics the tie's pull or push acts on the girder along this line, above

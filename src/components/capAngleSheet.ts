@@ -91,6 +91,8 @@ export function capAngleSection(s:CalculationSnapshot):ViewRender{
   svg+=rect(X(ep.y0-hw.washer.t),Z(zb+hw.washer.od/2),hw.washer.t*k,hw.washer.od*k,'runway-line')+rect(X(ep.y0-hw.washer.t-hw.head),Z(zb+hw.corners/2),hw.head*k,hw.corners*k,'runway-line');
   svg+=rect(X(colBack),Z(zb+hw.washer.od/2),hw.washer.t*k,hw.washer.od*k,'runway-line')+rect(X(colBack+hw.washer.t),Z(zb+hw.corners/2),hw.nut*k,hw.corners*k,'runway-line')+rect(X(colBack+hw.washer.t+hw.nut),Z(zb+cl.diameter/2),hw.stick*k,cl.diameter*k,'runway-line');
   for(const e of [-1,1])svg+=line([X(ep.y0),Z(zb+e*cl.diameter/2)],[X(colBack),Z(zb+e*cl.diameter/2)],'hidden-line');
+  // A released end plate: the vertical slot ends in the end plate (hidden), the sleeve through it.
+  if(cl.slot)for(const e of [-1,1])svg+=line([X(ep.y0),Z(zb+e*cl.slot.length/2)],[X(ep.y1),Z(zb+e*cl.slot.length/2)],'hidden-line');
  }
  // Shop fillets, end plate to tie plate, on both faces of the tie plate.
  const w=g.weld;
@@ -125,7 +127,7 @@ export function capAngleSection(s:CalculationSnapshot):ViewRender{
  // the end plate, then drops to the top fillet left of the bolt heads, clear of the gauge dimension between the bolts.
  const weldItem:Callout={at:[X(ep.y0-w/3),Z(tp+w/3)],weld:{size:sz(w),length:weldLength(g.plate.width,u),both:true},labels:['END PL TO TIE PL (SHOP)']};
  const belowRight:Callout[]=[
-  {at:[X(colBack+hw.washer.t+hw.nut/2),lower],labels:[`2 - ${sz(cl.diameter)} ${cl.grade} BOLTS, PRETENSIONED,`,`${sz(cl.gauge)} EACH SIDE OF TIE PL; FIELD-`,`DRILL ${sz(cl.hole)} HOLES IN COLUMN FLANGE`]}];
+  {at:[X(colBack+hw.washer.t+hw.nut/2),lower],labels:[`2 - ${sz(cl.diameter)} ${cl.grade} BOLTS, PRETENSIONED,`,`${sz(cl.gauge)} EACH SIDE OF TIE PL; FIELD-`,`DRILL ${sz(cl.hole)} HOLES IN COLUMN FLANGE`,...(cl.slot?[`SLEEVED IN ${sz(cl.slot.width)} X ${sz(cl.slot.length)} VERT. SLOTS IN END PL`]:[])]}];
  const aboveTop=Math.min(upper-14,Z(ep.z1)+10)-columnHeight(above)+11;
  svg+=callouts(above,cx,aboveTop).svg;
  if(stiff)svg+=weldLeader([[X(colBack+12),Z(g.plate.zc-stiff.thickness/2)]],[cx,Z(g.plate.zc)+40],{size:sz(stiff.flangeWeld),length:weldLength(stiff.contact,u),both:true,field:!tc.isNew},[`STIFFENER PL ${sz(stiff.thickness)} X ${sz(stiff.width)} X ${sz(stiff.length)}`]);
@@ -219,6 +221,7 @@ export function capAngleTopic(s:CalculationSnapshot):DetailTopic|undefined{
    :`CAP BOLTS: SNUG-TIGHT WITH JAM NUTS IN ${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZONTAL SLOTS IN THE ANGLE, UNDER ${sz(cb.washer.thickness)} PLATE WASHERS (NOT PERMITTED: PRETENSIONED BOLTS REQUIRED, AIST TR-13 §5.14; SEE CALCULATION). THE GIRDER SLIDES ${sz(c.travel)} EACH WAY.`,
   `DRILL STANDARD HOLES IN THE CAP CHANNEL FLANGE AT THE TIE ONLY; DO NOT WELD THE TIE TO THE CAP OR GIRDER.${beveledCapWasher(p.section)?' F436 1:6 BEVELED WASHERS UNDER THE CAP BOLT NUTS ON THE SLOPED INSIDE FACE OF THE CHANNEL FLANGE.':''} INSTALL AND TENSION THE CAP BOLTS BEFORE THE TIE PLATE AND LAP BOLTS.`,
   `LAP BOLTS: PRETENSIONED, SLIP-CRITICAL, CLASS ${g.lap.surface} FAYING SURFACES, IN SHORT SLOTS ACROSS THE RUNWAY IN THE TIE PLATE FOR FIT-UP; F436 WASHERS OVER THE SLOTS.`,
+  ...(g.column.slot?[`END PLATE RELEASED VERTICALLY: COLUMN BOLTS PRETENSIONED AGAINST STEEL SLEEVES ${sz(g.column.slot.sleeve.od)} OD X ${sz(g.column.slot.sleeve.bore)} BORE X ${sz(g.column.slot.sleeve.length)} LONG THROUGH ${sz(g.column.slot.width)} X ${sz(g.column.slot.length)} VERTICAL SLOTS IN THE END PLATE (${sz(g.column.slot.travel)} TRAVEL EACH WAY), UNDER ${sz(g.column.slot.washer.thickness)} X ${sz(g.column.slot.washer.width)} X ${sz(g.column.slot.washer.length)} PLATE WASHERS; THE END PLATE SLIDES WITH THE GIRDER'S VERTICAL MOVEMENT. CENTER THE SLEEVES IN THE SLOTS AT ERECTION.`]:[]),
   `END PLATE: SHOP WELD TO THE TIE PLATE. FIELD-DRILL ${sz(g.column.hole)} HOLES IN THE ${tc.isNew?'COLUMN':'EXISTING COLUMN'} FLANGE TO MATCH; NO FIELD WELDING TO THE COLUMN FOR THE TIE. FINGER SHIMS 0 TO ${sz(c.shimMax)} TAKE UP THE FIT-UP; PRETENSION THE COLUMN BOLTS.`,
   ...(res?.stiffener.provided?[`COLUMN STIFFENER AT THE TIE LEVEL, ON THE TIE SIDE OF THE COLUMN WEB: ${tc.isNew?'SHOP':'FIELD'} WELD TO THE COLUMN FLANGE AND WEB (SEE EXISTING COLUMN WELDING).`]:[]),
   ...(shared?['AT A SHARED COLUMN THE TWO TIES SIT SIDE BY SIDE ON THE COLUMN FLANGE, EACH WITH ITS OWN END PLATE.']:[])];

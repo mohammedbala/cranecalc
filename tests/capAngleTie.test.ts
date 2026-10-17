@@ -7,7 +7,7 @@ import {cappedDemonstrationProject,demonstrationProject} from '../src/engine/dem
 import {calculate,validateProject} from '../src/engine/calculate';
 import {selectTieArrangement,tieOptions,connectionOptionChecks} from '../src/engine/connectionOptions';
 import {capAngleGeometry,capAngleTieParts,capAngleStiffenerGeometry,isCapAngleTie} from '../src/engine/capAngle';
-import {tStubPrying,capAngleDesign,capAngleBraceSystem,capAngleResult,capAngleFatigueDetails,validateCapAngle,fillerFactor,sizeCapAngle,capAngleForceEstimate} from '../src/engine/capAngleTie';
+import {tStubPrying,capAngleDesign,capAngleBraceSystem,capAngleResult,capAngleFatigueDetails,validateCapAngle,fillerFactor,sizeCapAngle,capAngleForceEstimate,capAngleFatigue,capAngleSizingRatios} from '../src/engine/capAngleTie';
 import {braceSystem} from '../src/engine/detailAnalysis';
 import {startDetailedDesign} from '../src/engine/detailTemplate';
 import {simpleSupportInput} from '../src/engine/simpleSupports';
@@ -158,6 +158,32 @@ describe('cap tieback angle: components hand-checked on the capped demonstration
   const plate=fam('Cap tieback tie plate')[0],bounds=new THREE.Box3().setFromObject(plate),top=(p.section.d/2+p.section.capTw)/1000;
   close(bounds.max.y,top+.5*inch/1000,1e-6);close(bounds.max.z,(20-.75)*inch/1000,1e-6);
   expect(meshes.filter(m=>m.userData.part?.weld?.kind==='fillet')).toHaveLength(2*g.stations.length);
+ });
+});
+
+describe('cap tieback angle: displacement-controlled sizing and the vertical release',()=>{
+ const movement={support:.05*inch,rotation:.003,serviceRotation:.0015,range:2*kip};
+ const cycles=(p:ProjectInput)=>p.details!.spectrum.reduce((n,v)=>n+v.cycles,0);
+ const worst=(p:ProjectInput)=>{const g=capAngleGeometry(p)!,r=capAngleSizingRatios(p,g,capAngleForceEstimate(p),movement,cycles(p));
+  return Math.max(...['cap-angle-plate-fatigue','cap-angle-weld-toe-fatigue','cap-angle-weld-root-fatigue','cap-angle-plate-movement'].map(k=>r[k]));};
+ it('splits the plate fatigue range into its axial and imposed-movement parts; the movement part grows with the plate thickness',()=>{
+  const p=capAngleDemonstration(),g=capAngleGeometry(p)!,loads={...zero,F:3*kip,range:kip,vertical:.08*inch,cyclicVertical:.04*inch};
+  const f=capAngleFatigue(g,capAngleDesign(p,g,loads),kip,1e6);
+  close(f.toe.f,f.toe.axial+f.toe.movement);expect(f.toe.movement).toBeGreaterThan(f.toe.axial);
+  const q=structuredClone(p);q.details!.brace.capAngle!.plateThickness*=1.5;const gq=capAngleGeometry(q)!;
+  const fq=capAngleFatigue(gq,capAngleDesign(q,gq,loads),kip,1e6);
+  // σ = 3Etδ/L²: a thicker plate raises the movement stress (the span is the same).
+  expect(gq.plate.span).toBeCloseTo(g.plate.span,6);close(fq.toe.movement,1.5*f.toe.movement,.01);
+ });
+ it('sizes the plate for the imposed movement: never heavier for it, thinner or released where needed',()=>{
+  const p=capAngleDemonstration(),plain=sizeCapAngle(p,capAngleForceEstimate(p)),sized=sizeCapAngle(p,capAngleForceEstimate(p),.9,movement);
+  expect(sized.plateThickness).toBeLessThanOrEqual(plain.plateThickness+1e-9);
+  const q=structuredClone(p);q.details!.brace.capAngle=sized;expect(validateCapAngle(q)).toEqual([]);
+  expect(worst(q)).toBeLessThanOrEqual(1);
+  // The released end plate: vertical slots with sleeves, no movement moment in the tie plate.
+  const r=structuredClone(p);r.details!.brace.capAngle={...r.details!.brace.capAngle!,columnRelease:{travel:inch/4}};
+  const g=capAngleGeometry(r)!,x=capAngleDesign(r,g,{...zero,F:3*kip,vertical:.1*inch,cyclicVertical:.05*inch});
+  expect(g.column.slot?.travel).toBeCloseTo(inch/4,9);expect(x.Mv).toBe(0);expect(x.Mvc).toBe(0);
  });
 });
 
