@@ -22,7 +22,7 @@ import type { CalculationSnapshot } from '../engine/types';
 import { defaultFraming, framingSchema, type FramingSettings } from './framingSettings';
 import { planSheetGeometry, type Point, type Segment } from './planSheetGeometry';
 import { drawingLength, drawingElevation,dimensionLength,plateInches,specGrade} from './drawingFormat';
-import {refDim,dimText, sheetDrawingScale as drawingScale, sheetArea, n, text, rect, line, bubble, dimH, dimV, short, titleBlock, sheetStart, viewTitle, multiLeader, detailRef, detailTitles, sheetRef, breakLine, textWidth, lettering, type XY } from './sheetGraphics';
+import {refDim,dimText, sheetDrawingScale as drawingScale, sheetArea, n, text, rect, line, bubble, dimH, dimV, short, titleBlock, sheetStart, viewTitle, multiLeader, detailRef, detailTitles, sheetRef, breakLine, textWidth, wrapToWidth, lettering, type XY } from './sheetGraphics';
 import { heading, table, numbered, noteStack, type Style } from './noteBlocks';
 import { sheetOrdinalToken, detailNumberToken, sheetNumberToken, bearingBoltsTitle } from './sheetGraphics';
 import { activeEndBearing, continuousBearings } from '../engine/endBearingInputs';
@@ -171,8 +171,10 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   svg+=multiLeader([[SX(m.bf/2),SY(m.d/4)]],[lx,SY(m.d/4)+3],[`${p.section.name} RUNWAY GIRDER`,'SEE RUNWAY GIRDER SCHEDULE']);
   const capped=activeColumnCap(p)?columnCapGeometry(p):undefined;
   svg+=capped?multiLeader([[SX(capped.cap.plate.width/2000),SY(seat-capped.cap.plate.thickness/2000)]],[lx,SY(seat)+16],[`COLUMN CAP, SEE ${detailRef(columnCapTitles.section)}`]):multiLeader([[SX(0),SY(seat-Math.min(.05,m.bracketDepth/3))]],[lx,SY(seat)+16],d?[`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`]:['BRACKET BY BUILDING DESIGNER (REF.)']);
-  svg+=multiLeader([[SX(uA+m.column.d/2),SY(vBottom+.2)]],[lx,SY(vBottom+.2)+3],o.newColumns?[`NEW ${o.columnName} COLUMN, SEE ${detailRef(detailTitles.newColumn)}`]:['EXISTING BUILDING COLUMN (REF.), FIELD VERIFY']);
-  svg+=text(SX(uRB)-70,SY(vBottom+.2)+3,'RUNWAY AT GRID B OPPOSITE HAND',8.5,'end');
+  // The column callout a line below the bracket's or cap's where a shallow band brings them together.
+  const columnY=Math.max(SY(vBottom+.2)+3,SY(seat)+16+lettering.leading+2);
+  svg+=multiLeader([[SX(uA+m.column.d/2),SY(vBottom+.2)]],[lx,columnY],o.newColumns?[`NEW ${o.columnName} COLUMN, SEE ${detailRef(detailTitles.newColumn)}`]:['EXISTING BUILDING COLUMN (REF.), FIELD VERIFY']);
+  svg+=text(SX(uRB)-70,columnY,'RUNWAY AT GRID B OPPOSITE HAND',8.5,'end');
   svg+=viewTitle(box.x+box.w/2,below+92,typicalSectionTitle,scale.label,ga)+'</g>';
   return svg;
 }
@@ -275,7 +277,10 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   }
   // Section cut at mid-bay, both ends outside the grids, arrows looking back at the frame on the grid; the tag beside the
   // stem, else beside the arrow, and beyond the grid bubbles where a short bay puts them in its way.
-  {const cutSpace=new AnnotationSpace(svg.slice(planFrom)),xc=X(m.section.at),label=detailRef(typicalSectionTitle),tw=textWidth(label,lettering.text,true);
+  // The panel's edges bound the annotation placed on the plan: the dividers at the left and below, the drawing area's
+  // edges above and at the right.
+  const panel={x0:g.x+6,y0:6,x1:sheetArea.width-20,y1:g.y-6};
+  {const cutSpace=new AnnotationSpace(svg.slice(planFrom));cutSpace.bounds=panel;const xc=X(m.section.at),label=detailRef(typicalSectionTitle),tw=textWidth(label,lettering.text,true);
    for(const [y0,ends] of [[gTop-8,[gTop-24,gTop-54]],[gBottom+8,[gBottom+24]]] as const){
     svg+=cutSpace.pick(ends.flatMap(y1=>[xc+4,xc-20-tw].map(tx=>`<g data-section-cut="${typicalSectionTitle}">${line([xc,y0],[xc,y1],'divider')}${line([xc,y1],[xc-14,y1],'divider')}<path class="leader-arrow" d="M${n(xc-16)},${n(y1)}l5,-2.2v4.4z"/>${text(tx,y1+(y1<y0?-3:9),label,lettering.text,'start',700)}</g>`)));
    }}
@@ -342,8 +347,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   const shifts=[0,-30,30,-60,60],stack=(labels:string[],order=[0,-1,1,-2,2,-3,3])=>order.map(i=>i*(labels.length*lettering.leading+6));
   // Beyond the runway ends: left of the grid bubbles, right of the dimensions across the runways.
   const outLeft=(w:number)=>gridLeft-48-w,outRight=(eb?Math.max(right+13,X(xHi)+6)+35:right+48)+16;
-  // The panel's edges bound the callouts: the dividers at the left and below, the drawing area's edge at the right.
-  drawn.add(line([g.x,20],[g.x,g.y],'divider')+line([g.x,g.y],[sheetArea.width-20,g.y],'divider')+line([sheetArea.width-20,20],[sheetArea.width-20,g.y],'divider'));
+  drawn.bounds=panel;
   // The end stop callout within the end bay, clear of the next grid line where the bay draws short.
   // Stops at both ends: at the other end where the first end's callout would cross a leader drawn there.
   if(stop){const labels=[`END STOP, TYP. ${2*ends.length}`,`SEE ${detailRef('END STOP / ELEVATION')}`],w=width(labels);
@@ -357,10 +361,13 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   if(newColumns&&s.bracingSystem){
    const r=s.bracingSystem,i=strutSpan,cx=X(m.supports[i-1]*.75+m.supports[i]*.25),every=r.layout.spans.length===p.spans.length&&p.spans.length>1,labels=[every?`${r.geometry.strut.shape} STRUT, ALL SPANS`:`${r.geometry.strut.shape} STRUT ON COLUMN LINE, ALL SPANS`,every?'ROD X-BRACING, EVERY SPAN (X)':`ROD X-BRACING AT ${r.layout.spans.map(v=>`GRIDS ${v}-${v+1}`).join(', ')} (X)`,`SEE ${detailRef(detailTitles.bracedBay)}`];
    const foot=eb?Math.max(0,...eb.footings.map(b=>(b.u1-b.u0)/2000)):0,ly=Math.min(Y(rows[0])-62,Y(rows[0]-foot)-28),at:XY=[cx-cross,Y(rows[0])-cross];
-   const w=width(labels),up=stack(labels,[0,-1,-2,1,-3]),options=[i-1,...m.supports.map((_,g)=>g).filter(g=>g!==i-1&&g<m.supports.length-1)].flatMap(g=>{const x0=X(m.supports[g]);return up.map(dy=>multiLeader([at],[x0+8,ly+dy],labels,lettering.text,[[[x0-6,Y(rows[0])-cross]]]));});
+   // On its lines, else wrapped to the width of the narrowest bay where a line is wider than the bay it stands in.
+   const bay=Math.min(...m.supports.slice(1).map((x,g)=>X(x)-X(m.supports[g])))-24,wrapped=labels.flatMap(v=>wrapToWidth(v,Math.max(bay,130),lettering.text));
+   const variants=wrapped.length>labels.length?[labels,wrapped]:[labels];
+   const inside=(labels:string[])=>{const up=stack(labels,[0,-1,-2,1,-3]);return [i-1,...m.supports.map((_,g)=>g).filter(g=>g!==i-1&&g<m.supports.length-1)].flatMap(g=>{const x0=X(m.supports[g]);return up.map(dy=>multiLeader([at],[x0+8,ly+dy],labels,lettering.text,[[[x0-6,Y(rows[0])-cross]]]));});};
    // Narrow bays: beyond the runway ends, the leader straight to the brace.
-   options.push(...up.flatMap(dy=>[multiLeader([at],[outLeft(w),ly+dy],labels,lettering.text),multiLeader([at],[outRight,ly+dy],labels,lettering.text)]));
-   svg+=`<g data-bracing-label="plan">${drawn.pickUncrossed(options)}</g>`;
+   const outside=(labels:string[])=>{const w=width(labels);return stack(labels,[0,-1,-2,1,-3]).flatMap(dy=>[multiLeader([at],[outLeft(w),ly+dy],labels,lettering.text),multiLeader([at],[outRight,ly+dy],labels,lettering.text)]);};
+   svg+=`<g data-bracing-label="plan">${drawn.pickUncrossed([...variants.flatMap(inside),...variants.flatMap(outside)])}</g>`;
   }
   // The column callout, last of the callouts at the runways' columns: at a grid clear of the strut callout (at the first
   // braced span's left grid), its leader to a column of runway A, else of runway B, where it crosses no leader drawn.

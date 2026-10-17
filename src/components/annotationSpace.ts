@@ -66,12 +66,15 @@ function cross([a,b]:[XY,XY],[c,d]:[XY,XY]){
 /** Content already drawn, against which further annotation is placed. */
 export class AnnotationSpace{
  boxes:TextBox[];segments:Segment[];leaders:[XY,XY][];
+ /** The area annotation must stay inside, where it is bounded: each text outside it counts as a clash. */
+ bounds?:{x0:number;y0:number;x1:number;y1:number};
  constructor(svg=''){const v=annotationItems(svg);this.boxes=v.boxes;this.segments=v.segments;this.leaders=leaderSegments(svg);}
  /** Leaders of a fragment crossing the leaders drawn. */
  crossings(fragment:string){return leaderSegments(fragment).reduce((n,s)=>n+this.leaders.filter(t=>cross(s,t)).length,0);}
  /** Clashes a fragment would add: its text against the text and lines drawn, its lines through the text drawn, and its own. */
  cost(fragment:string){
-  const v=annotationItems(fragment);let count=countClashes(v);
+  const v=annotationItems(fragment),r=this.bounds;let count=countClashes(v);
+  if(r)count+=v.boxes.filter(b=>b.x0<r.x0||b.x1>r.x1||b.y0<r.y0||b.y1>r.y1).length;
   for(const b of v.boxes)count+=this.boxes.filter(o=>overlap(b,o)).length+this.segments.filter(s=>crosses(b,s)).length;
   for(const s of v.segments)count+=this.boxes.filter(b=>crosses(b,s)).length;
   return count;
