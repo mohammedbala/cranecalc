@@ -115,6 +115,16 @@ const glyphWidths:Record<string,number>={' ':.278,'!':.278,'"':.355,'#':.556,'$'
 /** Estimated rendered width of Arial text; bold is about 6% wider. */
 export function textWidth(value:string,size:number,bold=false){let w=0;for(const c of resolvedLength(value))w+=glyphWidths[c]??(/[0-9]/.test(c)?.556:.6);return w*legibleSize(size)*(bold?1.06:1);}
 /** Break text into rows that fit the given width. */
+/** Rows of a flag of phrases joined by " - " no wider than `width`: whole phrases where they fit, else words. */
+function phraseRows(value:string,width:number,size:number,bold=false){
+  const rows:string[]=[];
+  for(const [i,phrase] of value.split(' - ').entries()){
+    const last=rows.length?rows[rows.length-1]:'',joined=`${last} - ${phrase}`;
+    if(i&&textWidth(joined,size,bold)<=width)rows[rows.length-1]=joined;
+    else{if(i)rows[rows.length-1]+=' -';rows.push(...wrapToWidth(phrase,width,size,bold));}
+  }
+  return rows;
+}
 export function wrapToWidth(value:string,width:number,size:number,bold=false){
   const rows:string[]=[];let row='';
   for(const word of value.split(/\s+/).filter(Boolean)){const next=row?`${row} ${word}`:word;if(row&&textWidth(next,size,bold)>width){rows.push(row);row=word;}else row=next;}
@@ -206,14 +216,17 @@ export function titleBlock(s: CalculationSnapshot, number: string, title: string
   svg+='</g></g>';
   const status=issueStatus(s);
   svg+=`<g data-stamp="${status.issued?'seal':'blank'}">${rect(2376,1368,180,180,'divider')}${text(2466,1385,'ENGINEER STAMP / SEAL',10,'middle',700)}${eor?.firm.trim()?text(2466,1520,short(eor.firm.toUpperCase(),26),lettering.text,'middle'):''}${text(2466,1534,status.issued?'SEAL AND SIGNATURE REQUIRED':'NOT SEALED',lettering.text,'middle')}</g>`;
-  svg+=`<g data-issue-status="${status.issued?'issued':'preliminary'}">${text(2360,1494,status.label,11,'end',700)}</g>`+text(2360,1513,'REFERENCE FRAMING SHOWN DASHED',10,'end');
   // A detail on a sheet must never be read as acceptable while any calculation check fails: the open items as the
   // report groups them, or, for a package whose analysis did not verify, that no calculation is issued (sheetRatios).
-  const stamp=sheetStamp(s);
-  if(stamp)svg+=`<g data-flag="${stamp.blocked?'not-verified':'failed-checks'}">${text(2360,1532,stamp.text,11,'end',700)}${stamp.detail?text(2360,1475,stamp.detail,lettering.text,'end'):''}</g>`;
+  // The flags read within the last notes lane of a detail sheet (its edge at 2076), on more lines where they are longer,
+  // the lines above them raised to suit.
+  const stamp=sheetStamp(s),flagWidth=2360-2076-12;
+  const stampRows=stamp?phraseRows(stamp.text,flagWidth,11,true):[],detailRows=stamp?.detail?phraseRows(stamp.detail,flagWidth,lettering.text):[],lift=Math.max(0,stampRows.length-1)*19;
+  svg+=`<g data-issue-status="${status.issued?'issued':'preliminary'}">${text(2360,1494-lift,status.label,11,'end',700)}</g>`+text(2360,1513-lift,'REFERENCE FRAMING SHOWN DASHED',10,'end');
+  if(stamp)svg+=`<g data-flag="${stamp.blocked?'not-verified':'failed-checks'}">${stampRows.map((v,i)=>text(2360,1532-(stampRows.length-1-i)*19,v,11,'end',700)).join('')}${detailRows.map((v,i)=>text(2360,1475-lift-(detailRows.length-1-i)*16,v,lettering.text,'end')).join('')}</g>`;
   // Details drawn with a failing check carry HOLD tags (detailHolds): the set is not for fabrication.
   const holds=stamp&&!stamp.blocked?holdsFor(s).filter(h=>h.views).length:0;
-  if(holds)svg+=`<g data-flag="holds">${text(2360,1475,`${holds} HOLD${holds===1?'':'S'} - NOT FOR FABRICATION`,11,'end',700)}</g>`;
+  if(holds)svg+=`<g data-flag="holds">${text(2360,1475-lift,`${holds} HOLD${holds===1?'':'S'} - NOT FOR FABRICATION`,11,'end',700)}</g>`;
   return svg;
 }
 
