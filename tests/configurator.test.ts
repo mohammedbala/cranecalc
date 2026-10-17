@@ -7,6 +7,9 @@ import {craneInputChecks,craneStatics,bumperSelectionChecks} from '../src/engine
 import {buildingClassCheck,fatigueCycleCheck} from '../src/engine/buildingClass';
 import {packageContentChecks} from '../src/engine/detailTemplate';
 import {projectSchema} from '../src/engine/types';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import StartPanel from '../src/components/StartPanel';
 
 const kip=4448.2216152605,foot=304.8,inch=25.4;
 
@@ -146,6 +149,9 @@ describe('configurator selection log',()=>{
   // Rebuilt from its configurator record (log included), the project and the log come back the same.
   const q=buildProject(p.configurator!);
   expect(q.section.name).toBe(p.section.name);expect(q.configurator!.selections).toEqual(log);
+  // The start panel shows the log of the project it built.
+  const html=renderToStaticMarkup(createElement(StartPanel,{project:p,onBuild:()=>{}}));
+  expect(html).toContain('Configurator selections');expect(html).toContain(`<td>${p.section.name}</td>`);
   // A girder named in the configuration is used as entered and is not listed.
   expect(buildProject({...p.configurator!,girderShape:'W24X104'}).configurator!.selections!.find(v=>v.item==='Girder')).toBeUndefined();
  },120000);

@@ -82,8 +82,11 @@ const channels=['C10X15.3','C12X20.7','C12X25','C15X33.9','C15X40','C15X50','MC1
 const classCycles={A:'more than 500,000',B:'100,000–500,000',C:'20,000–100,000',D:'up to 20,000'} as const;
 
 /** Templates and the quick configurator: the shortest way from a few choices to a complete runway package. */
+/** The configuration choices of a built project's configurator record, without its selection log (an output). */
+const choicesOf=(c:RunwayConfig):RunwayConfig=>{const {selections:_log,...choices}=c;return {...defaultRunwayConfig,...choices};};
+
 export default function StartPanel({project,onBuild}:{project:ProjectInput;onBuild:(p:ProjectInput,label:string)=>void}){
- const [config,setConfig]=useState<RunwayConfig>(()=>project.configurator?{...defaultRunwayConfig,...project.configurator}:{...runwayTemplates[0].config});
+ const [config,setConfig]=useState<RunwayConfig>(()=>project.configurator?choicesOf(project.configurator):{...runwayTemplates[0].config});
  const [notes,setNotes]=useState<string[]>([]),[preview,setPreview]=useState<Preview|null>(null),[previewError,setPreviewError]=useState(''),[building,setBuilding]=useState('');
  const formRef=useRef<HTMLElement>(null),run=useConfigRunner();
  useEffect(()=>{let live=true;const t=setTimeout(()=>{run('preview',config).then(r=>{if(live){setPreview(r as Preview);setPreviewError('');}},e=>{if(live)setPreviewError(e instanceof Error?e.message:String(e));});},350);return ()=>{live=false;clearTimeout(t);};},[config]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -106,7 +109,10 @@ export default function StartPanel({project,onBuild}:{project:ProjectInput;onBui
  return <>
   <div className="result-head"><div><div className="eyebrow">START</div><h2>Templates & quick setup</h2></div><span className="model-tag">{runwayTemplates.length} templates</span></div>
   <div className="source-intro"><LayoutTemplate size={21}/><p>Pick the template closest to your runway, or set the choices below, then build. The configurator generates every dependent input: crane wheel loads and bumper data from the capacity and span, the rail, the girder size, bearings, ties, the bracket or cap, the columns and their foundations. Supplier, survey and site data are fictitious examples, marked for replacement before a project is issued. Everything stays editable under Inputs & checks.</p></div>
-  {project.configurator&&<div className="config-current"><span>Current project built from {project.configurator.template?runwayTemplates.find(t=>t.id===project.configurator!.template)?.name??'a template':'the configurator'}: {project.configurator.title}</span><button className="text-button" onClick={()=>{setConfig({...defaultRunwayConfig,...project.configurator!});setNotes([]);formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});}}><RotateCcw size={12}/>Edit its choices</button></div>}
+  {project.configurator&&<div className="config-current"><span>Current project built from {project.configurator.template?runwayTemplates.find(t=>t.id===project.configurator!.template)?.name??'a template':'the configurator'}: {project.configurator.title}</span><button className="text-button" onClick={()=>{setConfig(choicesOf(project.configurator!));setNotes([]);formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});}}><RotateCcw size={12}/>Edit its choices</button>
+   {!!project.configurator.selections?.length&&<table className="config-selections" aria-label="Configurator selections"><caption>Configurator selections: what was built in place of the choices as entered or left blank, and why</caption>
+    <thead><tr><th>Item</th><th>As entered</th><th>As designed</th><th>Governing reason</th></tr></thead>
+    <tbody>{project.configurator.selections.map(v=><tr key={v.item}><th>{v.item}</th><td>{v.entered}</td><td>{v.designed}</td><td>{v.reason}</td></tr>)}</tbody></table>}</div>}
   <div className="template-grid">{runwayTemplates.map(t=><TemplateCard key={t.id} t={t} busy={building===t.name} onCustomize={()=>customize(t)} onBuild={()=>void build(t.config,t.name)}/>)}</div>
   <section ref={formRef} className="configurator" aria-label="Quick configurator">
    <div className="result-head"><div><div className="eyebrow">QUICK CONFIGURATOR</div><h2>Set up a runway</h2></div><span className="model-tag">{c.template?`From ${runwayTemplates.find(t=>t.id===c.template)?.name.split(' · ')[0]??c.template}`:'Custom'}</span></div>
