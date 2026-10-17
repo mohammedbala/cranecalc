@@ -31,6 +31,7 @@ import { longitudinalBracingAnalysis,longitudinalBracingChecks,validateLongitudi
 import { existingLayoutChecks,validateAdjacentBuilding } from './existingLayout';
 import { validateColumnCap } from './columnCap';
 import { bumperSelectionChecks,craneInputChecks,craneInputWarnings } from './craneInput';
+import { girderPieceChecks } from './girderPieces';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
@@ -143,6 +144,8 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
    if(p.existingColumn?.enabled){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn));}
    if(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled){snapshot.columnBase=columnBaseAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...columnBaseChecks(p,snapshot.columnBase,snapshot.existingColumn));}
    // Drawings print elevations from project data only.
+   // A continuous girder longer than a practical piece: shipping and erection, or field splices (open until confirmed).
+   snapshot.checks.push(...girderPieceChecks(p));
    if(p.details&&!runwayElevations(p))snapshot.checks.push({id:'drawing-elevation',group:'Detailing',title:'Runway elevation for drawings',status:'incomplete',equation:'',note:'Enter the top-of-rail elevation above the datum under Project, or check the existing column with its surveyed seat elevation. Drawing elevations are not taken from the 3D reference model.',referenceIds:['criteria']});
    if(snapshot.longitudinalBracing){
     snapshot.checks.push(...longitudinalBracingChecks(p,snapshot.longitudinalBracing));
