@@ -5,7 +5,9 @@
  * - the plate under the design-method actions: concrete bearing and thickness (basePlate, AISC Design Guide 1) and
  *   the column flange fillets;
  * - the anchor rods at strength level: tension, shear, their interaction and the plate washer welds (anchorStrength,
- *   ACI 318-19 Chapter 17), the row tension from the bearing block;
+ *   ACI 318-19 Chapter 17), the row tension from the bearing block; their clearance to the column flange (rodClearance);
+ * - fatigue (AISC 360-16 Appendix 3) of the rods, the column flange joint to the plate and the plate at its toe under
+ *   the crane duty bins (columnBaseFatigue);
  * - the footing at service level: soil bearing, overturning, sliding and the brace uplift, the dead load of the
  *   runway, column, footing and soil resisting them; at strength level: one-way and two-way shear, flexure, minimum
  *   reinforcement and bar development (footingStrength); the frost depth and the bar spacing;
@@ -16,7 +18,7 @@ import type {ProjectInput} from './types';
 import {sectionProperties} from './section';
 import {supportReactions,type SupportReactionSet} from './supportReactions';
 import {existingColumnAnalysis,existingColumnSection} from './existingColumn';
-import {anchorsFor,anchorStrength,barArea,barDiameter,baseDrift,basePlate,columnBaseActions,columnBaseAnalysis,columnBaseChecks,flangeWeldCapacity,flangeWeldDemand,footingStrength,footingWeight,plateWasherWeld,soilPressure} from './columnBase';
+import {anchorsFor,anchorStrength,barArea,barDiameter,baseDrift,basePlate,columnBaseActions,columnBaseAnalysis,columnBaseFatigue,columnBaseFatigueActions,rodClearance,columnBaseChecks,flangeWeldCapacity,flangeWeldDemand,footingStrength,footingWeight,plateWasherWeld,soilPressure} from './columnBase';
 import {anchorHardware,barSizes} from './columnBaseInputs';
 import {seismicBasis} from './runwaySeismic';
 
@@ -24,7 +26,7 @@ const inch=25.4,foot=304.8,psi=0.006894757293168,up=(v:number,step:number)=>Math
 /** The next multiple of `step` above `v`, and the last one below it: sizes stay on their standard increments. */
 const next=(v:number,step:number)=>(Math.floor(v/step+1e-6)+1)*step,previous=(v:number,step:number)=>(Math.ceil(v/step-1e-6)-1)*step;
 /** Prescriptive limits held to their code value rather than the sizing target. */
-const codeLimits=new Set(['frost','bar-spacing','min-steel']);
+const codeLimits=new Set(['frost','bar-spacing','min-steel','rod-clear']);
 /** Standard anchor rod diameters, 3/4 to 2 in. */
 const rodDiameters=[.75,1,1.25,1.5,1.75,2].map(v=>v*inch);
 /** Largest footing (square, plan and depth), plate, plate thickness and rod embedment the sizing goes to. */
@@ -43,7 +45,7 @@ const finite=(v:number)=>Number.isNaN(v)?Infinity:v;
  * overturning, sliding and uplift. Only the column geometry changes them; the reactions do not depend on the base.
  */
 export function baseSizingSet(p:ProjectInput,reactions:SupportReactionSet=supportReactions(p,sectionProperties(p.section))){
- return {reactions,column:existingColumnAnalysis(p,reactions),design:columnBaseActions(p,reactions,p.method),strength:columnBaseActions(p,reactions,'LRFD'),service:columnBaseActions(p,reactions,'ASD')};
+ return {reactions,column:existingColumnAnalysis(p,reactions),design:columnBaseActions(p,reactions,p.method),strength:columnBaseActions(p,reactions,'LRFD'),service:columnBaseActions(p,reactions,'ASD'),fatigue:columnBaseFatigueActions(p,reactions)};
 }
 export type BaseSizingSet=ReturnType<typeof baseSizingSet>;
 export interface BaseSizingRatios{
@@ -99,6 +101,9 @@ export function baseSizingRatios(p:ProjectInput,set:BaseSizingSet=baseSizingSet(
   const r=footingStrength(p,b,a);put('two-way',r.vu/r.phivc);
   for(const w of [r.along,r.across]){put('one-way',w.Vu/w.phiVc);put('flexure',w.Mu/w.phiMn);put('min-steel',w.AsMin/w.As);put('development',w.available>0?w.ld/w.available:Infinity);}
  }
+ // Fatigue of the rods, the flange joint and the plate under the duty bins (columnBaseFatigue); the rods' clearance to the flange.
+ for(const a of set.fatigue){const z=columnBaseFatigue(p,b,a);put('anchor-fatigue',z.rod.range/z.rod.capacity);put('weld-fatigue-toe',z.toe.range/z.toe.capacity);if(z.root)put('weld-fatigue-root',z.root.range/z.root.capacity);put('plate-fatigue',z.plate.range/z.plate.capacity);}
+ {const g=rodClearance(p,b);put('rod-clear',g.required/g.available);}
  put('frost',b.soil.frost/(f.soil+f.thickness));
  put('bar-spacing',f.spacing/Math.min(3*f.thickness,18*inch));
  const d=baseDrift(p,set.column);put('drift',d.total/d.limit);
@@ -136,7 +141,11 @@ function lowerColumn(p:ProjectInput,delta:number){
  *   a third and a fourth rod per row; then a 1/2 in longer plate for the tension lever. The edge distance (1.5
  *   diameters, the washer on the plate), gauge (four diameters and a washer between rods), plate (washers clear of the
  *   flange welds, rods inside its width) and footing depth (the heads above the bottom bars) follow the rods, as
- *   validateColumnBase requires;
+ *   validateColumnBase requires, and the rod rows stay clear of the flange fillets by the washer and its fillet and by
+ *   the nut's socket clearance (rodClearance);
+ * - fatigue under the crane duty bins (columnBaseFatigue): the rods' thread range by the next diameter, then more
+ *   rods, then a longer plate; the flange fillet root by larger fillets, then a CJP flange joint; the plate at the
+ *   fillet toe 1/8 in thicker;
  * - footing, square (L = B): 6 in larger for soil bearing, overturning, drift, bar development and the rods' edge
  *   distances; 2 in deeper for one-way and two-way shear and the frost depth; for sliding and the brace uplift,
  *   which only the dead load resists, deeper while its depth is less than half its projection past the plate, else
@@ -165,7 +174,8 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
   while(a.edge<1.5*a.diameter||a.edge<hw.washer/2)a.edge=next(a.edge,inch/4);
   while(a.perRow>2&&a.gauge/(a.perRow-1)<Math.max(4*a.diameter,hw.washer))a.gauge=next(a.gauge,inch/2);
   while(pl.B<section.bf||a.gauge>pl.B-2*a.edge+1e-6)pl.B=next(pl.B,inch/2);
-  while(pl.N<section.d+2*a.edge+2*a.diameter||pl.N/2-a.edge-hw.washer/2<section.d/2+pl.weld)pl.N=next(pl.N,inch/2);
+  // The rod rows clear the flange fillets by the washer and its fillet, and by the nut's socket clearance (rodClearance).
+  while(pl.N<section.d+2*a.edge+2*a.diameter||rodClearance(q,b).required>rodClearance(q,b).available+1e-6)pl.N=next(pl.N,inch/2);
   fitFooting();
  };
  const wider=()=>{const L=next(ft.L,6*inch);if(L>caps.footing+1e-6)return false;ft.L=ft.B=L;return true;};
@@ -196,6 +206,12 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
   switch(key){
    case 'plate':{const t=Math.max(next(pl.thickness,inch/8),up(s.tRequired/target,inch/8));if(!Number.isFinite(t))return longer();if(t>caps.thickness+1e-6)return false;pl.thickness=t;return true;}
    case 'bearing':return larger();
+   // Fatigue: the rods by a larger diameter (more stress area), then more rods, then a longer plate (a longer lever);
+   // the flange fillet root by larger fillets, then a CJP flange joint (as 'weld'); the plate thicker. The column
+   // flange toe is the column's.
+   case 'anchor-fatigue':{const d=nextRod();if(d){a.diameter=d;return true;}return moreRods()||longer();}
+   case 'plate-fatigue':{const t=next(pl.thickness,inch/8);if(t>caps.thickness+1e-6)return false;pl.thickness=t;return true;}
+   case 'weld-fatigue-root':{if(pl.flangeJoint==='cjp')return false;const w=next(pl.weld,inch/16);if(w>Math.min(section.tf,pl.thickness)+1e-6){pl.flangeJoint='cjp';return true;}pl.weld=w;return true;}
    // Fillets up to the flange and plate thickness, then CJP flanges (the web keeps its fillets).
    case 'weld':{if(pl.flangeJoint==='cjp')return false;const w=Math.max(next(pl.weld,inch/16),up(pl.weld*s.ratios.weld/target,inch/16));
     if(w>Math.min(section.tf,pl.thickness)+1e-6){pl.flangeJoint='cjp';return true;}pl.weld=w;return true;}

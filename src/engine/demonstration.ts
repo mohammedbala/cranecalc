@@ -187,7 +187,8 @@ export function newColumnDemonstrationProject():ProjectInput {
  delete p.drawing!.existingEvaluation;
  const shape='W14X120',w=aiscShapeByName(shape)!,d=p.details!,cap=p.section.kind==='cap'?p.section.capTw:0;
  const base={...structuredClone(defaultColumnBase),enabled:true,
-  plate:{...defaultColumnBase.plate,N:23*inch,B:18*inch,thickness:1.25*inch},anchors:{...defaultColumnBase.anchors,diameter:inch,embedment:15*inch},
+  // 1 1/4 in rods for the thread fatigue range (base-anchor-fatigue); the rows clear the flange fillets by the nut's socket clearance.
+  plate:{...defaultColumnBase.plate,N:23.5*inch,B:18*inch,thickness:1.25*inch},anchors:{...defaultColumnBase.anchors,diameter:1.25*inch,embedment:15*inch},
   footing:{...defaultColumnBase.footing,L:6.5*foot,B:6.5*foot,thickness:24*inch,bar:'#6' as const,spacing:10*inch},
   source:'Fictitious geotechnical report GEO-02: 3,000 psf allowable (net), base friction 0.35, 120 pcf; interior heated building, frost not applicable. Concrete 4,000 psi; ASTM A615 Grade 60 bars; ASTM F1554 Grade 36 rods',confirmed:true};
  // Rail top 20 ft above the floor: the seat sits below it by the rail, girder (with cap) and bearing plate,

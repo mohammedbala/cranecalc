@@ -89,6 +89,12 @@ export const existingColumnSchema=z.object({
   */
  torsionBase:z.enum(['warping-free','warping-restrained']).optional(),
  /**
+  * New braced columns: the engineer of record's acceptance of the column twist at the seat from the girder's offset
+  * longitudinal force and the bearing and rail movement it causes (column-twist-basis), with its source; no twist
+  * limit is applied in the calculation.
+  */
+ twistAcceptance:z.string().max(300).optional(),
+ /**
   * Frame type of the building at this column line across the runway (review B9). A sway (portal) frame needs the
   * frame's sway amplification B2 (AISC Appendix 8) from its analysis; without it the column check is provisional.
   */
