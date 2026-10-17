@@ -47,6 +47,26 @@ describe('tie movement compatibility',()=>{
   expect(byId(checks,'tie-move-gusset').status).toBe('fail');
   expect(byId(checks,'tie-move-weld').status).toBe('fail');
  });
+ it('releases thermal travel at the column-end slide and bounds the bars by the sleeve friction',()=>{
+  const s=structuredClone(demo),b=s.input.details!.brace;
+  Object.assign(b,{thickness:.625*inch,length:24*inch,reach:24*inch});
+  const fixed=movement(s),mv=tieMovements(s),slide=Math.ceil((mv.longitudinal+3/32*inch)/(inch/16))*inch/16;
+  b.release={...b.release!,slide};
+  const rel=tieRelease(s.input)!,slid=movement(s);
+  // Longer sleeves (the gusset plus the slide each way) and a filler as thick as the slide on each girder gusset face.
+  expect(rel.sleeveLength).toBeCloseTo(b.gussetThickness+2*slide,9);
+  expect(rel.barOffset).toBeCloseTo(slide,9);
+  expect(byId(slid,'tie-slide-travel').status).toBe('pass');
+  expect(byId(slid,'tie-slide-sleeve').status).toBe('pass');
+  // Fillers over 1/4 in reduce the bolt shear strength (AISC J5.2(b)(1)).
+  const filler=byId(slid,'tie-slide-filler'),bolt=boltCapacity({grade:b.connection.grade,diameter:b.connection.diameter,planes:2,surface:b.connection.surface,shear:0,tension:0,method:s.input.method});
+  expect(filler.capacity!).toBeCloseTo(bolt.shear*(slide>inch/4?1-.4*(slide/inch-.25):1),6);
+  // The thermal travel slips out: less bending in the bars, gussets and root welds than with both ends fixed.
+  for(const id of ['tie-move-strength','tie-move-gusset','tie-move-weld'])expect(byId(slid,id).demand!).toBeLessThan(byId(fixed,id).demand!);
+  expect(byId(slid,'tie-move-strength').note).toContain('Column-end slide');
+  // The bar compression strength of the locked slide is the fixed tie's; the slipping state is checked in H1.
+  const c=b.connection;expect(braceSystem(s.input).member.bucklingLength).toBeCloseTo(.8*(b.length-2*(c.edge+(c.rows-1)*c.pitch)),6);
+ });
  it('sizes the sleeved column-end slots and gusset from the bolt',()=>{
   const p=capped.input,r=tieRelease(p)!;
   // 5/8 in bolt: 11/16 in bore, 1/4 in wall, 1/16 in clearance; 1/8 in travel each way.

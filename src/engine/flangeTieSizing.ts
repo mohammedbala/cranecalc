@@ -14,7 +14,9 @@
  *   and the bolts have the strength;
  * - the flexible length: where the movement still needs it, the column face (the designed bracket's reach, or the
  *   column face of a support by others) moves out in 1 in steps, so the reach is the shortest the tie allows; the
- *   configurator then sizes a welded bracket at that reach.
+ *   configurator then sizes a welded bracket at that reach;
+ * - paired bars that still cannot follow the movement: the column-end slide (the column gusset floating along the
+ *   runway on longer sleeves, fillers at the girder gusset; tieRelease, tieMovementChecks).
  * Strength and fatigue ratios are held to 0.9, the imposed-movement checks to 0.97 and the fit and detailing limits to
  * one (sizingLimit). Canonical units N, mm, MPa.
  */
@@ -135,7 +137,7 @@ export interface TieSizingDemands {
  * restraint with its torsional share (the rail head y_r above the tie line, over the depth h_r from the tie line to the
  * bottom restraint: R(1 + y_r/h_r)), the torque of the factored vertical reaction at the rail eccentricity over h_r, plus the Appendix 6 brace force 0.02M_rC_d/h_o + 0.01P_r with P_r the factored
  * traction or the bumper force. Range: 1.25 times the unfactored side thrust of the crane (it reverses; the torsional
- * share). Rotations and the largest factored moment: girderEndEstimate. A designed support: its deflection limit, or
+ * share), or the unfactored force model with the crane reaction torque where larger. Rotations and the largest factored moment: girderEndEstimate. A designed support: its deflection limit, or
  * its service deflection where larger (a bracket that is not sized to its limit, bracketServiceDeflection). Appendix 6
  * stiffness: (1/φ)(10M_rC_d/h_o + 8P_r)/L_br. Rail clip: the factored side thrust of the wheels in one clip window.
  */
@@ -154,12 +156,14 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
  const reactions=supportReactions(p,props).supports,Rv=reactions.reduce((m,v)=>Math.max(m,(lrfd?1.2:1)*Math.max(0,v.D-v.Ds)+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci)),0),eccentric=Rv*Math.abs(p.railEccentricity)/Math.max(top-bottom,s.tf);
  const sustained=reactions.reduce((m,v)=>Math.max(m,Math.max(0,v.D-v.Ds)+Math.max(0,v.Cd+v.Cv)),0)*Math.abs(p.railEccentricity??0)/Math.max(top-bottom,s.tf);
  // The crane's vertical reaction at the rail eccentricity comes and goes with each pass: its torque over h_r adds to the
- // tie force range (the analysis's fatigue range of the restraint reactions includes it).
+ // tie force range. The range is the force estimate's own model, unfactored (the side thrust reaction with its torsional
+ // share and that torque, with the same calibration), at least 1.25H: 1.03 to 1.20 times the analysis's fatigue range of
+ // the restraint reactions on case 085 and t01, where 1.25H alone was 0.66 times it on case 085.
  const eccentricRange=reactions.reduce((m,v)=>Math.max(m,Math.max(0,v.Cd+v.Cv)),0)*Math.abs(p.railEccentricity??0)/Math.max(top-bottom,s.tf);
  // Calibrated against the full analysis, whose restraint acts at the tie line on the twisting girder (t01, t03, t05,
  // t10, simulation cases 5 and 15 after the restraint change): the statics estimate was 0.87 to 0.97 of the analysis
  // tie force, so it is raised by 12%.
- return {force:tieForceCalibration*((lrfd?1.6:1)*r.lateral*torsion+eccentric+braceForce),range:Math.max(1.25,torsion)*H+eccentricRange,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
+ return {force:tieForceCalibration*((lrfd?1.6:1)*r.lateral*torsion+eccentric+braceForce),range:Math.max(1.25*H,tieForceCalibration*(r.lateral*torsion+eccentricRange)),rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
   braceForce,braceStiffness:(lrfd?1/.75:2)*(10*r.moment*Cd/props.h0+8*P)/Lbr,sustained};
 }
 
@@ -470,9 +474,10 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // The imposed movement still over its limit on paired bars with the column-end release: the column-end slide
  // (tieRelease), its travel the whole factored movement along the runway (end rotation × d and thermal travel) with
  // the 1/16 in positioning allowance and a 1/32 in tolerance, on the 1/16 in grid, its fillers at most 3/4 in (AISC
- // J5.2(b)(1)). The bars are then free at the column end (L_c = 2.1L) and carry the rotation movement and the friction
- // the slide holds, so every thickness is tried at each face reached, nearest first; the first passing set is taken,
- // else the slide set only where it exceeds the limits by less than the set kept.
+ // J5.2(b)(1)). The bars then carry the rotation movement while the slide is locked, and buckle fixed-guided where it
+ // slips (tieMovementChecks), so a thicker bar can serve: every thickness is tried at each face reached, from the
+ // farthest in while a set passes; the nearest passing set is taken, else the slide set only where it exceeds the
+ // limits by less than the set kept.
  const over=(r:Trial)=>Object.entries(r.ratios).some(([k,v])=>movementChecks.has(k)&&v>sizingLimit(r.ratios,k,target)+1e-9);
  if(kept&&kept.worst>1&&over(kept)&&release&&!plate){
   const mv=tieMovements(sizingSnapshot(applyTieProportions(structuredClone(p),{...base,slide:0}),demand));
