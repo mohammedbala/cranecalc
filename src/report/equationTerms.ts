@@ -29,7 +29,7 @@ const terms:[RegExp,Term[]|((c:CheckResult)=>Term[])][]=[
  [/^torsion-shear$/,[['\\tau_b','shear stress from flexural shear, VQ/(It)']]],
  [/^torsion-stability$/,[['\\lambda','elastic buckling load factor of the strength case (0.8 stiffness)']]],
  [/^flexure-load-height$/,[['M_{cr}','elastic critical moment from the buckling analysis with the wheels at the rail head'],['F_{cr}','F4-5 (F2-4) elastic stress at Lb with Cb = 1'],['M_{n,LTB}','F4-2 / F4-3 (F2-2 / F2-3) moment with Cb = 1']]],
- [/^rail-head$/,[['y_r','height of the rail head'],['y_o','height of the shear center'],['g_t','play of the top-flange tie across the runway'],['g_b','play of the sliding bearing across its slot'],['h_r','height from the bottom flange to the tie line'],['y_t','height of the tie line']]],
+ [/^rail-head$/,[['y_r','height of the rail head'],['y_o','height of the shear center'],['g_t','play of the top-flange restraint across the runway (zero at a column cap fork)'],['g_b','play of the sliding bearing across its slot'],['h_r','height from the bottom flange to the top-flange restraint line'],['y_t','height of the top-flange restraint line (tie, or the top flange at a fork)']]],
  [/^brace-member$/,[['H','horizontal reaction at the flange restraint']]],
  [/^brace-stiffness$/,[['\\beta','stiffness of the restraint provided'],['k_i','stiffness of each element of the restraint in series (tabulated)'],['\\beta_{sec}','secant stiffness of the restraint with its play taken up at P_br'],['g_t','play of the tie across the runway before it bears']]],
  [/^stiffener-(fatigue|weld-fatigue)$/,[['\\Delta R','support reaction range']]],

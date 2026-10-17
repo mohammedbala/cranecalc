@@ -12,6 +12,7 @@ import {capAngleGeometry} from './capAngle';
 import {activeEndBearing} from './endBearingInputs';
 import {bearingSeat,bearingShim,bearingSurface} from './endBearing';
 import {flangeTieFamily,stiffenerTieGeometry} from './tieGeometry';
+import {activeColumnCap} from './columnCapInputs';
 
 /**
  * One AWS D1.1 edition for the whole package: the 2020 edition, whose clause and table numbers the calculation cites
@@ -46,7 +47,8 @@ export function cjpWelds(p:ProjectInput):string[]{
  const d=p.details;if(!d)return [];
  const out:string[]=[];
  if(p.section.kind==='cap'&&p.capDesign?.topStiffenerCjp)out.push('girder bearing stiffeners to the W top flange');
- if(stiffenerTieGeometry(p))out.push('tie gussets to the girder bearing stiffeners');
+ // A girder on a column cap has no tie (its end fork restrains the top flange): no tie gusset.
+ if(stiffenerTieGeometry(p)&&!activeColumnCap(p))out.push('tie gussets to the girder bearing stiffeners');
  if(d.bracket?.enabled&&usesTaperedHaunch(p)&&haunchInput(d.bracket).flangeJoint==='cjp')out.push(`haunch flanges to the ${p.existingColumn?.isNew?'new':'existing'} column flange (field)`);
  if(d.bracket?.enabled&&usesRolledBracket(p)&&d.bracket.rolled?.flangeJoint==='cjp'&&rolledStub(d.bracket))out.push('bracket flanges to the column flange');
  return out;
@@ -100,9 +102,11 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
   'Record the baseline rail and connection condition before commissioning.'];
  const erection=[
   ...(joint==='none'?[`Rail: each rail is one piece, no rail joint. ${tight?floating:'An anchor clip pair at mid-length holds it (rail layout); it moves thermally from there toward the stops.'}`]:[]),
-  'Provide temporary lateral and torsional restraint of each girder until its ties are complete. Set bearings level and fit bearing stiffeners before welding.',
+  // On a column cap the end fork (bearing stiffeners and the pretensioned bottom-flange bolts) is the top-flange restraint.
+  activeColumnCap(p)?'Provide temporary lateral and torsional restraint of each girder until all its bearing bolts are installed and pretensioned: the bearing stiffeners and the bolted bottom flange form the end fork that restrains the top flange (no top-flange tie). Set bearings level and fit bearing stiffeners before welding.'
+   :'Provide temporary lateral and torsional restraint of each girder until its ties are complete. Set bearings level and fit bearing stiffeners before welding.',
   ...(activeEndBearing(p)&&bearingSeat(p)!=='shop'?[seatSurvey(p)]:[]),
-  ...(flangeTieFamily(d)&&d.brace.release?.enabled&&(d.bracket?.enabled||p.existingColumn?.enabled||d.brace.flangeAttachment?.columnFace!==undefined)?[tieSequence]:[]),
+  ...(flangeTieFamily(d)&&!activeColumnCap(p)&&d.brace.release?.enabled&&(d.bracket?.enabled||p.existingColumn?.enabled||d.brace.flangeAttachment?.columnFace!==undefined)?[tieSequence]:[]),
   // One clearance note: in an existing building the test also covers the existing framing and services.
   `Runway clearance test before the load test (AIST TR-13 §1.5.6.2): crane unloaded, hook fully up, run the crane the full length of the runway three times, with the trolley at each end of the bridge and at center; check the Fig. 1.1 clearances, including the clearance to the roof trusses deflected under snow${p.existingColumn?.enabled&&!p.existingColumn.isNew?', and to the existing roof framing, bracing, lights, piping and other obstructions; report any shortfall to the engineer of record before commissioning':''}.`];
  // (Re-tightening of the rail joint bolts after 30 and 90 days is stated once, with the rail joints under bolting.)
@@ -156,7 +160,9 @@ export function enteredFabricationNote(p:ProjectInput,field:keyof NonNullable<Pr
  const d=p.details;if(!d)return '';
  const bad=supersededFabricationNotes(p).filter(v=>v.field===field);
  if(bad.some(v=>v.sentence===d.fabrication[field]))return '';
- return d.fabrication[field].split(/(?<=\.)\s+/).filter(v=>!bad.some(b=>b.sentence===v)).join(' ');
+ // A girder on a column cap has no tie: entered sentences about ties describe no part of this project.
+ const noTie=!!activeColumnCap(p),tieSentence=(v:string)=>noTie&&/\bties?\b/i.test(v);
+ return d.fabrication[field].split(/(?<=\.)\s+/).filter(v=>!bad.some(b=>b.sentence===v)&&!tieSentence(v)).join(' ');
 }
 
 /**
