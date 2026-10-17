@@ -17,7 +17,7 @@ const variant=(f:(p:ProjectInput)=>void)=>{const p=cappedDemonstrationProject();
 
 describe('Hairline isometric report figures',()=>{
  it('draws every physical topic of the capped demonstration as an isometric view of its parts, numbered as captioned',()=>{
-  const p=cappedDemonstrationProject(),abstract=['Criteria','Fatigue','Detailing','Project','Column cap'];
+  const p=cappedDemonstrationProject(),abstract=['Criteria','Fatigue','Detailing','Project','Column cap','Girder splice'];
   for(const topic of [...Object.keys(checkGroupPurpose),'Geometry','Interfaces']){
    const f=checkFigure(topic,p);
    expect(f.view,topic).toBe(abstract.includes(topic)?'schematic':'isometric');
