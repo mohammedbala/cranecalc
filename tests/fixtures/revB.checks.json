@@ -218,7 +218,7 @@
 {"id":"end-bearing-wrench-web","status":"pass","utilization":0.6353240152477765},
 {"id":"end-bearing-wrench-stiffener","status":"pass","utilization":0.3921568627450982},
 {"id":"end-bearing-washer-fit","status":"pass","utilization":0.6353240152477764},
-{"id":"end-bearing-washer-stiffener","status":"pass","utilization":0.6274509803921571},
+{"id":"end-bearing-washer-stiffener","status":"pass","utilization":0.647058823529412},
 {"id":"end-bearing-seat-bearing","status":"pass","utilization":0.034110301795133836},
 {"id":"end-bearing-seat-prying","status":"pass","utilization":0},
 {"id":"end-bearing-haunch-edge","status":"pass","utilization":0.4999999999999996},

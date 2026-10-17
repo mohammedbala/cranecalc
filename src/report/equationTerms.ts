@@ -101,6 +101,7 @@ const terms:[RegExp,Term[]|((c:CheckResult)=>Term[])][]=[
  [/^end-bearing-locating-shear$/,[['P','longitudinal force at the girder end'],['H','lateral force at the bottom flange']]],
  [/^end-bearing-(locating-tension|uplift)$/,[['R_{up}','uplift reaction']]],
  [/^end-bearing-(wrench-stiffener|washer-stiffener)$|^end-stop-wrench-bearing$/,[['x_b','bolt row position along the girder'],['x_{st}','bearing stiffener position'],['t_{st}','stiffener thickness'],['b','plate washer length']]],
+ [/^end-bearing-washer-stiffener$/,[['c_f','fabrication margin of the sliding washer to the stiffener (hole and stiffener location tolerance)']]],
  [/^end-bearing-washer-fit$/,[['w_w','plate washer width']]],
  [/^end-bearing-wrench-haunch-(column|depth)$/,[['y_b','bolt row from the column face'],['h(y_b)','clear depth of the haunch at that row']]],
  [/^end-bearing-wrench-haunch-web$/,[['x_b','bolt from the web plane']]],
