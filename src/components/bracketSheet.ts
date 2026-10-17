@@ -1,7 +1,7 @@
 import {supportColumn} from '../engine/drawingData';
 import {heading,numbered,type Style} from './noteBlocks';
 import type {CalculationSnapshot} from '../engine/types';
-import {drawingLength,electrodeClass,plateInches,dimensionLength} from './drawingFormat';
+import {drawingLength,electrodeClass,plateInches,dimensionLength,onDimensionGrid} from './drawingFormat';
 import {sheetDrawingScale,line,rect,text,circle,dimH,dimV,multiLeader,filletLeader,fieldFilletLeader,detailRef,detailTitles,columnReference,sectionCut,bearingBoltsTitle,labelColumn,textWidth,lettering,type XY} from './sheetGraphics';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {format} from '../engine/units';
@@ -85,7 +85,10 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    if(g)for(const row of g.rows){const x=v.end+v.dir*row;holesX.push(x);for(const y of rowsY)svg+=circle(X(x),Y(y),g.hole/2*k,'runway-line')+line([X(x)-2.5,Y(y)],[X(x)+2.5,Y(y)])+line([X(x),Y(y)-2.5],[X(x),Y(y)+2.5]);}
   }
   // The hole ordinates read down from the seat tip; the end labels and the notes stand below the longest of them.
-  const ordinates=g&&eb?[0,...holesX].sort((a,c)=>a-c):[],ordinateFoot=tip+14+Math.max(0,...ordinates.map(x=>textWidth(x?dim(Math.abs(x)):'0',lettering.text)));
+  // Two hole columns centered on the grid whose half spacing is off the dimension grid read EQ, with their spacing in the
+  // note: the same value as the bearing plate on the girder sheet and the calculation.
+  const ordinates=g&&eb?[0,...holesX].sort((a,c)=>a-c):[],centered=holesX.length===2&&Math.abs(holesX[0]+holesX[1])<.01&&!onDimensionGrid(Math.abs(holesX[0]),p.units);
+  const ordinateText=(x:number)=>x?centered?'EQ':dim(Math.abs(x)):'0',ordinateFoot=tip+14+Math.max(0,...ordinates.map(x=>textWidth(ordinateText(x),lettering.text)));
   let notesY=ordinateFoot+lettering.leading;
   for(const v of plates){
    // Each label centered under its plate, on two lines when the pair would run together on one.
@@ -102,8 +105,8 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   // the hole columns as ordinates from the grid below the seat, the rows at the gauge on the girder C/L.
   svg+=dimV(face,Y(b.reach),left-2,left-16,dim(b.reach))+dimV(face,tip,left-2,left-34,dim(b.seatProjection));
   if(g&&eb){
-   for(const x of ordinates)svg+=line([X(x),tip+3],[X(x),tip+12])+text(X(x)+3,tip+14,x?dim(Math.abs(x)):'0',lettering.text,'end',400,-90);
-   svg+=text(left,notesY,`HOLES: ORDINATES FROM THE GRID; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,lettering.text);
+   for(const x of ordinates)svg+=line([X(x),tip+3],[X(x),tip+12])+text(X(x)+3,tip+14,ordinateText(x),lettering.text,'end',400,-90);
+   svg+=text(left,notesY,`HOLES: ${centered?`${dim(Math.abs(holesX[1]-holesX[0]))} APART, CENTERED ON THE GRID`:'ORDINATES FROM THE GRID'}; ROWS AT ${dim(eb.bolts.gauge)} GAUGE ON THE GIRDER C/L.`,lettering.text);
    svg+=text(left,notesY+lettering.noteLeading,p.system==='simple'?endGridBearingNote(p,g.rows,dim):`AT A RUNWAY-END GRID: THE GIRDER END ON THE GRID, ITS BEARING INBOARD; HOLES ${dim(g.rows[0])} AND ${dim(g.rows[1])} FROM IT.`,lettering.text);
   }
   // Keys: the transverse section between the rib and the outer hole column, the elevation from the runway side.

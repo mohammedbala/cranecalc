@@ -37,6 +37,12 @@ export function dimensionLength(mm:number,units:ProjectInput['units']){
  if(dimensionAudit&&Math.abs(snapped-mm)>25.4/64)dimensionAudit.push({mm,text,site:(new Error().stack??'').split('\n').slice(2,5).map(v=>v.trim()).join(' < ')});
  return text;
 }
+/**
+ * Whether a length prints exactly as a dimension string (US: already on the 1/4 in grid). The half of a dimensioned
+ * length (a stiffener at the middle of a plate, the holes of a pattern centered on a grid) need not be: it is then
+ * given as centered (EQ), never re-rounded to a value that contradicts the length it halves.
+ */
+export function onDimensionGrid(mm:number,units:ProjectInput['units']){return units!=='US'||Math.abs(snapQuarter(mm)-mm)<=25.4/64;}
 /** A reference size that follows from dimensioned geometry (the depth of a taper at a section cut): US to the nearest 1/4 in. */
 export function referenceLength(mm:number,units:ProjectInput['units']){return units==='US'?feetInches(snapQuarter(mm)):drawingLength(mm,units);}
 /** Elevations: feet and inches, or meters to three decimals in SI. */
