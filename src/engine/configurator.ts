@@ -27,7 +27,7 @@ import {supportReactions} from './supportReactions';
 import {existingColumnAnalysis,existingColumnChecks,existingColumnSection} from './existingColumn';
 import {existingWeldingDemand} from './existingWelding';
 import {baseDrift} from './columnBase';
-import {sizeCapAngle,capAngleForceEstimate} from './capAngleTie';
+import {sizeCapAngle,capAngleForceEstimate,validateCapAngle} from './capAngleTie';
 import {simpleSupportInput} from './simpleSupports';
 import {seatSettingTolerance} from './fitTolerances';
 import {sizeWeldedBracket} from './bracketSizing';
@@ -681,7 +681,7 @@ const highCycle=(cfg:RunwayConfig)=>['D','E','F'].includes(cfg.cmaa)||cfg.buildi
  * clear of the cap legs, the W flange local bending) takes the cap tieback angle instead, with the reason in the notes.
  */
 function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
- const d=p.details!;
+ const d=p.details!;let capMisfit:string|undefined;
  if(cfg.support==='column-cap')return;
  if(cfg.tie==='flexible-plate'){
   p.details=selectTieArrangement(d,'flexible-plate');
@@ -689,9 +689,12 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
   Object.assign(t,{thickness,width:Math.max(t.width,6*inch),gussetThickness:Math.max(t.gussetThickness,2*thickness)});
   Object.assign(t.connection,{thickness});t.connection.weldLength=columnGussetHeight(p);
  }else if(cfg.tie==='cap-angle'&&p.section.kind==='cap'){
+  const before=structuredClone(d);
   p.details=selectTieArrangement(d,'cap-angle');
-  p.details.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p));
-  return;
+  capMisfit=fitCapAngle(p);if(!capMisfit)return;
+  // No cap angle of the sizing steps fits this girder end and column: paired flat bars on a top-flange saddle.
+  p.details=before;p.details.brace.arrangement='paired-bars';delete p.details.brace.capAngle;
+  trace.tie=`No cap tieback angle of the sizing steps fits this girder end and column (${capMisfit}): the tie is paired flat bars on a top-flange saddle.`;p.notes+=` ${trace.tie}`;
  }else if(d.brace.arrangement!=='paired-bars'){
   d.brace.arrangement='paired-bars';delete d.brace.capAngle;
  }
@@ -711,11 +714,15 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
  }
  if(p.section.kind==='cap'&&flangeTieGeometry(p)){
   const ratios=tieSizingRatios(p),worst=Object.entries(ratios).sort((a,b)=>b[1]-a[1])[0];
-  if(worst&&worst[1]>1){
+  if(worst&&worst[1]>1&&!capMisfit){
    // The cap angle slides in its slots and needs no flexible length: the column face goes back where the tie started.
+   const saddle=structuredClone(p.details!);
    if(bracket)p.details!.bracket=bracket;if(face!==undefined)p.details!.brace.flangeAttachment!.columnFace=face;
-   p.details=selectTieArrangement(p.details!,'cap-angle');p.details.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p));
-   trace.tie=`The ${cfg.tie==='flexible-plate'?'flexible plate':'paired flat bars'} on a direct flange saddle do not suit this capped girder (tie sizing ratio ${worst[0]} ${worst[1].toFixed(2)} > 1.00 for the estimated tie demands): the tie is the cap tieback angle bolted to the channel cap.`;
+   p.details=selectTieArrangement(p.details!,'cap-angle');
+   const misfit=fitCapAngle(p),why=`The ${cfg.tie==='flexible-plate'?'flexible plate':'paired flat bars'} on a direct flange saddle do not suit this capped girder (tie sizing ratio ${worst[0]} ${worst[1].toFixed(2)} > 1.00 for the estimated tie demands)`;
+   // A cap angle that does not fit the girder end and column: the saddle tie stays, its checks report it.
+   if(misfit)p.details=saddle;
+   trace.tie=misfit?`${why}, and no cap tieback angle of the sizing steps fits this girder end and column (${misfit}): the saddle tie stays as sized.`:`${why}: the tie is the cap tieback angle bolted to the channel cap.`;
    p.notes+=` ${trace.tie}`;
   }
  }
@@ -725,6 +732,17 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
  if(moved){p.details=moved.details;trace.tie=`A direct flange saddle does not suit this rolled girder (${moved.why}): the ${cfg.tie==='flexible-plate'?'tie is paired flat bars, which':'paired flat bars'} bolt to the tie-side bearing stiffener, cut as one plate with its gusset extension past the flange tip (no weld at the gusset), the full-depth stiffener pair carrying the tie force into the girder.`;p.notes+=` ${trace.tie}`;}
 }
 
+/**
+ * The cap tieback angle sized on the project (sizeCapAngle, held to the validateCapAngle fit). A girder end at a
+ * runway-end grid whose centered bearing puts every angle's column end plate on the column web stays on the grid (as
+ * setBearings does), and the angle is sized again. Returns the first fit rule no sized angle meets, else undefined.
+ */
+function fitCapAngle(p:ProjectInput):string|undefined{
+ const d=p.details!,size=()=>{d.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p));return validateCapAngle(p);};
+ let misfit=size();
+ if(misfit.length&&p.system==='simple'&&d.simpleSupport?.endGridBearing==='centered'){d.simpleSupport.endGridBearing='on-grid';misfit=size();}
+ return misfit[0]?.replace(/^details\.brace\.capAngle: /,'').replace(/[:.].*$/,'');
+}
 /** Reasons the build steps record for the selection log (selectionLog). */
 export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned}
 const sizingRatioNames:Record<string,string>={tips:'top-flange tip stress (DG7, warping and second-order twist)',h1:'H1 top-flange interaction with the load-height LTB strength',stability:'elastic LTB stability margin',shear:'web shear'};
@@ -790,7 +808,11 @@ function capAngleMovementEstimate(p:ProjectInput,sized=false){
 function finishCapAngle(p:ProjectInput):ProjectInput{
  const c=p.details?.brace.capAngle;if(!c||p.details!.brace.arrangement!=='cap-angle'||!p.details!.bracket?.enabled)return p;
  const next=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p,true));
- if(next.length<=c.length+1e-6&&next.setback<=c.setback+1e-6)p.details!.brace.capAngle=next;
+ if(next.length<=c.length+1e-6&&next.setback<=c.setback+1e-6){
+  p.details!.brace.capAngle=next;
+  // The new set is kept only where it fits as the first did (validateCapAngle).
+  if(validateCapAngle(p).length)p.details!.brace.capAngle=c;
+ }
  return p;
 }
 /** Fill a configuration's derived values for display: the crane estimate and the building class count. */
