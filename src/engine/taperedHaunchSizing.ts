@@ -1,4 +1,4 @@
-import {categoryF,fatigueCoefficient} from './fatigueConstants';
+import {categoryF,fatigueCoefficient,filletRootReduction} from './fatigueConstants';
 /**
  * Template sizing of the tapered I haunch for the project's support reactions. The largest reaction at a grid is put
  * on one girder end at its bearing offset (the torsion of a runway-end grid or of one loaded bay), with one crane's
@@ -21,7 +21,7 @@ import {supportReactions} from './supportReactions';
 import {minimumFillet} from './connectionStrength';
 import {simpleSupportInput} from './simpleSupports';
 import {seatOffset} from './bracketForces';
-import {haunchGeometry,isTaperedHaunch,selectTaperedHaunch,haunchSlopeLimit,type TaperedHaunchInput} from './taperedHaunchInputs';
+import {defaultTaperedHaunch,haunchGeometry,isTaperedHaunch,selectTaperedHaunch,haunchSlopeLimit,type TaperedHaunchInput} from './taperedHaunchInputs';
 import {haunchStations,haunchActions,haunchWebShear,haunchStiffener,haunchStiffenerWeldStress,haunchWeldGroup,haunchWeldStress,haunchCjpRatios,topFlangeStrip,stationMoment,haunchTipStresses,haunchColumnForces,haunchColumnStrengths,haunchService,stiffenerLoadPoint,receiverModulus} from './taperedHaunch';
 import {activeColumnStiffeners,initialColumnStiffeners,receiverK} from './columnStiffenerInputs';
 import {columnStiffenerChecks,columnStiffenerGeometry,stiffenerGauge} from './columnStiffeners';
@@ -50,6 +50,7 @@ export function haunchSizingSet(p:ProjectInput){
 export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
  const d=p.details!,b=d.bracket!,c=b.receiver,g=haunchGeometry(b,d.bearing.width),E=p.section.E,Fy=d.material.Fy,m=p.method,W=d.bearing.width,e=b.reach+W/2;
  const stations=haunchStations(g,E,Fy,e,W,24),root=stations[0].s,sf=haunchStiffener(g,E,Fy,m),grp=haunchWeldGroup(g),phiW=available(.6*d.material.Fexx,m,.75,2),phiFy=available(Fy,m,.9,1.67);
+ const baseCap=Math.min(available(.6*Math.min(Fy,c.Fy),m,1,1.5),available(.6*Math.min(d.material.Fu,c.Fu),m,.75,2));
  const ratios:Record<string,number>={},column:Record<string,number>={};const put=(k:string,v:number)=>{ratios[k]=Math.max(ratios[k]??0,v);},info=(k:string,v:number)=>{column[k]=Math.max(column[k]??0,v);};
  const J=haunchColumnStrengths(p,g),cs=activeColumnStiffeners(b),demand:Record<string,{value:number;caseId:string;x:number;P?:number;M?:number}>={};
  const csg=cs?columnStiffenerGeometry(p):undefined,gauge=csg?stiffenerGauge(csg):undefined;
@@ -60,10 +61,14 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
    put('flangeWeb',Math.abs(f.V)*Math.max(st.s.Qt,st.s.Qb)/st.s.Ix/(2*g.flangeWebWeld/Math.SQRT2)/phiW);}
   put('topFlange',(Math.max(0,f.Tt)/(g.btr*g.tt)+Math.abs(f.Mtop)/(g.tt*g.btr**2/6))/phiFy);
   put('bottomFlange',(Math.max(0,f.C)/(g.bb*g.tb)+Math.abs(f.Mbot)/(g.tb*g.bb**2/6))/phiFy);
+  // Table B4.1a case 2: the sloping bottom flange in compression stays nonslender (the bottom-flange-slenderness check).
+  put('bottomSlender',g.bb/(2*g.tb)/(.64*Math.sqrt(Math.min(.76,Math.max(.35,4/Math.sqrt(root.hw/g.tw)))*E/Fy)));
   put('strip',topFlangeStrip(g,v.loads,W,d.bearing.thickness,d.bearing.length).moment/available(Fy*g.tt**2/4,m,.9,1.67));
   for(const s of f.sides){const P=Math.abs(s.P);if(!P)continue;const x=stiffenerLoadPoint(g,s.x),Pr=P/sf.half,Mr=P*Math.abs(x-sf.xc)/available(Fy*sf.Z,m,.9,1.67),u=Math.max(0,x-g.tw/2);
    put('stiffener',x<=sf.tip+1e-6?Pr:Pr>=.2?Pr+8/9*Mr:Pr/2+Mr);put('stiffenerBracket',(P*u/sf.Mc)**2+(P/sf.Vc)**2);put('stiffenerWeld',haunchStiffenerWeldStress(g,sf,P,x)/phiW);}
-  put('webWeld',haunchWeldStress(g,grp,root,f).web/phiW);
+  const ws=haunchWeldStress(g,grp,root,f);put('webWeld',ws.web/phiW);
+  // Fillet flange joints: the flange lines of the elastic group and the connected metal (as the full checks).
+  if(!grp.cjp){put('flangeWeld',ws.flange/phiW);put('flangeBase',2*ws.flange*g.flangeWeld/Math.SQRT2/Math.min(g.tt,g.tb,c.flangeThickness)/baseCap);}
   if(grp.cjp){const r=haunchCjpRatios(g,root,f,m,Fy);put('cjp',Math.max(r.top,r.bottom));}
   // The receiving column under the two flange forces, unstiffened, and the stiffener forces at both levels.
   // One force system per flange: the same equivalent concentrated force in every unstiffened J10 limit state at a
@@ -78,7 +83,10 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
  const N=d.spectrum.reduce((n,v)=>n+v.cycles,0),Fw=categoryF(N),miner=(range:number)=>Math.cbrt(set.bins.reduce((sum,v)=>sum+v.cycles*(range*v.scale)**3,0)/(fatigueCoefficient**3*4.4));
  const [fa,fb]=set.fatigue.map(loads=>haunchActions(g,root,e,loads,{longitudinal:0,bottom:0,offset:0})),ta=haunchTipStresses(g,root,fa),tb=haunchTipStresses(g,root,fb);
  const tipRange=(i:number)=>Math.max(Math.abs(ta[i]),Math.abs(tb[i]),Math.abs(ta[i]-tb[i]));
- put('fatigueTop',miner(Math.max(tipRange(0),tipRange(1))));put('fatigueBottom',miner(Math.max(tipRange(2),tipRange(3))));
+ // A fillet flange joint's root crack (Table A-3.1 item 5.6, C″): the Category C curve times R_FIL; its throats Category F.
+ const rTop=grp.cjp?1:filletRootReduction(g.tt,g.flangeWeld);
+ put('fatigueTop',miner(Math.max(tipRange(0),tipRange(1)))/rTop);
+ if(!grp.cjp){const wa=haunchWeldStress(g,grp,root,fa).flange,wb=haunchWeldStress(g,grp,root,fb).flange;put('flangeWeldFatigue',Math.max(wa,wb)/Fw);}put('fatigueBottom',miner(Math.max(tipRange(2),tipRange(3))));
  for(const s of fa.sides)if(s.P)put('stiffenerFatigue',haunchStiffenerWeldStress(g,sf,Math.abs(s.P),stiffenerLoadPoint(g,s.x))/Fw);
  // Column stiffeners: their own checks (J10.8, J4, Appendix 3) under the sizing peaks and the per-bin ranges of the
  // force on one plate (either girder end loaded), without the geometric checks a selection sets once.
@@ -98,7 +106,8 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
  return ratios;
 }
 /**
- * The project with its tapered haunch sized for the reactions: the selection's starting plates, then 1/8 in steps on
+ * The project with its tapered haunch sized for the reactions: the selection's starting plates (or, `light`, 1/2 in
+ * flanges fillet welded to the column, the fillets 1/16 in larger where they govern, then CJP), then 1/8 in steps on
  * the flanges (the top flange alone where its seat bending governs), 1/16 in on the web, stiffeners and fillets, and
  * 1 in on the root and tip depths where the deflection or the flanges (once 2 in thick) govern;
  * the tip follows the root at half its depth. Where the unstiffened receiving column does not carry the flange forces,
@@ -107,10 +116,18 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
  * governs; past those field-welded sizes inside the column, a deeper haunch (shop steel) lowers the flange forces. Stops when every ratio is at most `target`,
  * or after 160 steps.
  */
-export function sizeTaperedHaunch(p:ProjectInput,target=.9):ProjectInput{
+export function sizeTaperedHaunch(p:ProjectInput,target=.9,opts:{light?:boolean}={}):ProjectInput{
  const q=structuredClone(p),d=q.details!,b=d.bracket;
  if(!b?.enabled||!isTaperedHaunch(b))return q;
  if(!b.haunch)Object.assign(b,selectTaperedHaunch(d,b,q.system));
+ // A light start (the configurator's haunch): 1/2 in flanges fillet welded to the column flange with the Table J2.4
+ // minimum, so the flanges grow to the demand and the joint becomes CJP only where the fillets do not suffice. The
+ // welded flanges narrow so a 5/16 in fillet and its 1/4 in run-out fit each side on the column flange (flangeRunout).
+ if(opts.light){
+  const h=b.haunch!,narrow=defaultTaperedHaunch({seatProjection:b.seatProjection,receiver:{width:b.receiver.width-2*5/16*inch}},h.topWidth);
+  Object.assign(h,{rootWidth:narrow.rootWidth,bottomWidth:narrow.bottomWidth,stiffener:{...h.stiffener,...narrow.stiffener,thickness:h.stiffener.thickness},
+   topThickness:inch/2,bottomThickness:inch/2,flangeJoint:'fillet',flangeWeld:minimumFillet(Math.min(inch/2,b.receiver.flangeThickness))});
+ }
  // Deeper, never past the model's 45° bottom flange slope (the tip follows the root at half its depth): at the
  // limit the sizing stops and the checks report what remains.
  let atSlopeLimit=false;
@@ -133,6 +150,12 @@ export function sizeTaperedHaunch(p:ProjectInput,target=.9):ProjectInput{
    else if(key==='colstiff-fatigue-weld'){const a=weld('flangeWeld'),w=weld('webWeld');if(!a&&!w)thicker();}
    else thicker();
   }
+  else if(key==='flangeWeld'||key==='flangeWeldFatigue'||(key==='fatigueTop'&&h.flangeJoint==='fillet')){
+   // Fillets to the flange thickness less 1/16 in (J2.2b), then the CJP joint.
+   const w=h.flangeWeld+inch/16,fits=Math.max(Math.min(h.rootWidth??h.topWidth,h.topWidth),h.bottomWidth)+2*(w+inch/4)<=b.receiver.width+1e-6;
+   if(fits&&w<=Math.min(h.topThickness,h.bottomThickness,b.receiver.flangeThickness)-inch/16+1e-6)h.flangeWeld=w;else h.flangeJoint='cjp';
+  }
+  else if(key==='flangeBase')grow({topThickness:h.topThickness+inch/8,bottomThickness:h.bottomThickness+inch/8});
   else if(key==='shear')grow({webThickness:h.webThickness+inch/16});
   else if(key==='strip')grow({topThickness:h.topThickness+inch/8});
   else if(key==='stiffener'||key==='stiffenerBracket'||key==='stiffenerWeld'||key==='stiffenerFatigue'){h.stiffener.thickness+=h.stiffener.thickness<inch/2?inch/16:inch/8;if(key!=='stiffener')h.stiffener.weld+=inch/16;
@@ -141,7 +164,7 @@ export function sizeTaperedHaunch(p:ProjectInput,target=.9):ProjectInput{
   else if(key==='webWeld'){if(b.rootWeld+inch/16<=h.webThickness-inch/16)b.rootWeld+=inch/16;else grow({webThickness:h.webThickness+inch/16});}
   else if(key==='deflection'||thick)deeper();
   else if(key==='fatigueTop'||key==='topFlange')grow({topThickness:h.topThickness+inch/8});
-  else if(key==='fatigueBottom'||key==='bottomFlange')grow({bottomThickness:h.bottomThickness+inch/8});
+  else if(key==='fatigueBottom'||key==='bottomFlange'||key==='bottomSlender')grow({bottomThickness:h.bottomThickness+inch/8});
   else grow({topThickness:h.topThickness+inch/8,bottomThickness:h.bottomThickness+inch/8});
   // Keep the J10.8 stiffener thickness (and a wing's outstand within 0.56 sqrt(E/Fy) t), the fillet minimums and the
   // web slenderness with the plates.
@@ -150,6 +173,7 @@ export function sizeTaperedHaunch(p:ProjectInput,target=.9):ProjectInput{
   const need=b.reach+d.bearing.width/2+(h.endPlate?h.stiffener.thickness:0);if(b.seatProjection<need-1e-6)b.seatProjection=up(need,inch/4);
   h.stiffener.weld=Math.max(h.stiffener.weld,minimumFillet(Math.max(h.stiffener.thickness,h.webThickness,h.bottomThickness)));
   h.flangeWebWeld=Math.max(h.flangeWebWeld,minimumFillet(Math.max(h.webThickness,h.topThickness,h.bottomThickness)));
+  if(h.flangeJoint==='fillet')h.flangeWeld=Math.max(h.flangeWeld,minimumFillet(Math.min(h.topThickness,h.bottomThickness,b.receiver.flangeThickness)));
   b.rootWeld=Math.max(b.rootWeld,minimumFillet(Math.max(h.webThickness,b.receiver.flangeThickness)));
   const s=b.columnStiffeners;
   if(s?.enabled){s.flangeWeld=Math.max(s.flangeWeld,minimumFillet(Math.max(s.thickness,b.receiver.flangeThickness)));s.webWeld=Math.max(s.webWeld,minimumFillet(Math.max(s.thickness,b.receiver.webThickness)));}
