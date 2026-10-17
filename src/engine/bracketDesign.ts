@@ -398,10 +398,10 @@ export function seatFatigueCategory(b:BracketInput){return attachmentCategory(b.
 /**
  * AISC 360-16 Table A-3.1 item 7.1, base metal at a welded attachment without a transition radius, by the detail length a
  * in the direction of stress and the attachment thickness b: C for a < 2 in; D for 2 in <= a <= min(12b, 4 in); beyond
- * that E for b <= 1 in and E' for a thicker attachment.
+ * that E for b <= 0.8 in [20 mm] and E' for a thicker attachment (as the rail clip bases, detailAnalysis).
  */
 export function attachmentCategory(a:number,b:number){
- return a<2*inch?{name:'C',tex:'C',Cf:4.4,range:'< 2 in'}:a<=Math.min(12*b,4*inch)?{name:'D',tex:'D',Cf:2.2,range:'from 2 in to 4 in'}:b<=inch?{name:'E',tex:'E',Cf:1.1,range:'> 4 in, b ≤ 1 in'}:{name:"E'",tex:'E^\\prime',Cf:.39,range:'> 4 in, b > 1 in'};
+ return a<2*inch?{name:'C',tex:'C',Cf:4.4,range:'< 2 in'}:a<=Math.min(12*b,4*inch)?{name:'D',tex:'D',Cf:2.2,range:'from 2 in to 4 in'}:b<=.8*inch?{name:'E',tex:'E',Cf:1.1,range:'> 4 in, b ≤ 0.8 in'}:{name:"E'",tex:'E^\\prime',Cf:.39,range:'> 4 in, b > 0.8 in'};
 }
 type Add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,caseId?:string,refs?:string[])=>void;
 /**
