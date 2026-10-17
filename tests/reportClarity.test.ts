@@ -117,11 +117,14 @@ describe('failing checks: true relations and their substitutions',()=>{
   expect(worked).toBeGreaterThan(5);
  });
  it('works the governing girder check term by term, with the twist and the second-order amplification',()=>{
-  const t=text(html),at=t.indexOf('e. Normal stress with warping torsion');
+  // The stored SIM-002 snapshot predates the equivalent-length load-height LTB, whose worked part is printed only when
+  // it reproduces the check: the parts are lettered as printed, and the H1 reference follows its letter.
+  const t=text(html),m=t.match(/([a-h])\. Normal stress with warping torsion/),h=t.match(/([a-h])\. Combined flexure and axial force at each flange/);
+  expect(m&&h).toBeTruthy();const at=t.indexOf(m![0]);
   expect(at).toBeGreaterThan(0);
   const part=t.slice(at,at+2500);
   expect(part).toMatch(/λ = 2\.39 \(0\.8 stiffness\), so the twist and lateral bending are amplified about 1\/\(1 − α\/λ\) = 1\/\(1 − 1\.6\/2\.39\) = 3\.0/);
-  expect(part).toMatch(/This check governs over H1 \(part d, 0\.90\)/);
+  expect(part).toContain(`This check governs over H1 (part ${h![1]}, 0.90)`);
   expect(part).toMatch(/The twist at the governing station, θ = 0\.061 rad, is above 0\.05 rad/);
  });
  it('prints the design checks of a table as demand and limit, plain; the requirement with its sense for a detailing rule',()=>{
