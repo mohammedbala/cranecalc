@@ -12,12 +12,13 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {capAngleGeometry} from '../engine/capAngle';
 import {activeEndStop} from '../engine/endStopInputs';
 import {railJointDetail,supplierRailJoint} from '../engine/railLayout';
+import {activeSplices,spliceStations} from '../engine/spliceInputs';
 
 /**
  * The specified detail of each runway component, in words, from the project inputs: what a figure or a summary
  * row refers to. Sizes print as on the drawings (fractions of an inch, or mm).
  */
-export type Component='girder'|'rail'|'bearing'|'tie'|'support'|'column'|'base'|'bracing'|'end-stop'|'crane'|'criteria'|'duty'|'limits';
+export type Component='girder'|'splice'|'rail'|'bearing'|'tie'|'support'|'column'|'base'|'bracing'|'end-stop'|'crane'|'criteria'|'duty'|'limits';
 
 const plate=(p:ProjectInput,...v:number[])=>`PL ${v.map(x=>plateInches(x,p.units)).join(' × ')}`;
 const len=(p:ProjectInput,v:number)=>dimensionLength(v,p.units);
@@ -80,6 +81,13 @@ function endStop(p:ProjectInput){
  const s=activeEndStop(p);if(!s)return 'Crane stops by others';
  return `Bolted stop: base ${plate(p,s.base.thickness,s.base.width,s.base.length)}, face PL ${plateInches(s.face.thickness,p.units)}, stiffeners PL ${plateInches(s.stiffener.thickness,p.units)}, ${bolt(p,s.bolts.diameter,s.bolts.grade)} bolts`;
 }
+/** Girder field splices: where they are, the bolts and the plates; or the one-piece girder. */
+function splice(p:ProjectInput){
+ const sp=activeSplices(p),n=sp&&p.details?spliceStations(p).length:0,len=(v:number)=>drawingLength(v,p.units),L=p.spans.reduce((a,b)=>a+b,0);
+ if(!sp||!n)return `No field splice: each girder furnished in one piece, ${len(p.system==='continuous'?L:Math.max(...p.spans))} long`;
+ const t=(v:number)=>plateInches(v,p.units);
+ return `${n} bolted slip-critical field splice${n>1?'s':''} per runway, ${bolt(p,sp.diameter,sp.grade)} bolts, Class ${sp.surface}; top flange ${2*sp.top.rows*sp.top.lines} bolts each side on inner PL ${t(sp.top.innerThickness)}, bottom flange ${2*sp.bottom.rows*sp.bottom.lines}${sp.bottom.plates!=='inner'?` on outer PL ${t(sp.bottom.outerThickness)}`:''}${sp.bottom.plates!=='outer'?` and inner PL ${t(sp.bottom.innerThickness)}`:''}, web ${sp.web.rows*sp.web.columns} on 2 PL ${t(sp.web.thickness)}`;
+}
 function crane(p:ProjectInput){
  return p.cranes.map(c=>{const max=Math.max(...c.wheels.map(w=>w.loaded));return `${c.name}: ${c.wheels.length} wheels per runway; per wheel ${format(max,'force',p.units,1)} maximum, ${format(Math.max(...c.wheels.map(w=>w.lateral)),'force',p.units,2)} side thrust`;}).join('; ');
 }
@@ -90,7 +98,7 @@ const limits=(p:ProjectInput)=>`Vertical L/${p.aist?deflectionCriteria(p).nv:p.v
 function criteria(p:ProjectInput){return `${duty(p)}; ${limits(p).replace(/^V/,'v')}`;}
 export function componentDetail(kind:Component,p:ProjectInput):string{
  switch(kind){
-  case 'girder':return girder(p);case 'rail':return rail(p);case 'bearing':return bearing(p);case 'tie':return tie(p);
+  case 'girder':return girder(p);case 'splice':return splice(p);case 'rail':return rail(p);case 'bearing':return bearing(p);case 'tie':return tie(p);
   case 'support':return support(p);case 'column':return column(p);case 'base':return base(p);case 'bracing':return bracing(p);
   case 'end-stop':return endStop(p);case 'crane':return crane(p);case 'criteria':return criteria(p);case 'duty':return duty(p);case 'limits':return limits(p);
  }
