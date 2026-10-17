@@ -25,6 +25,13 @@ export function astmSpec(form:ProductForm,Fy:number,Fu?:number,entered?:string):
  if(near(fy,65))return 'ASTM A572 Gr. 65';
  return `ASTM A572 (Fy ${fy.toFixed(0)} ksi)`;
 }
+/**
+ * Bolt sleeves (sliding bearings, column-end tie releases, cap tieback slots): thick-walled small sleeves exist in no
+ * structural tube specification (ASTM A1085 and A500 list HSS sizes only), so they are machined from cold-finished bar
+ * to the OD, bore and length on the details, with the yield strength the sleeve checks use certified by the mill test
+ * report (ASTM A108 lists no mechanical properties of its own).
+ */
+export const sleeveSpec='Machined from ASTM A108 cold-finished carbon steel bar (Grade 1018 or 1045) to the OD, bore and length detailed';
 /** Hardware that has no strength input: bolts, nuts, washers. */
 /** AISC 360-16 Table J3.2 names the bolt groups Group A (A325) and Group B (A490). */
 export const boltSpec=(grade:string|undefined)=>grade==='A490'?'ASTM F3125 Gr. A490 (Group B)':'ASTM F3125 Gr. A325 (Group A)';

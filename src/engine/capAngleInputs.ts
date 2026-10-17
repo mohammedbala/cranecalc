@@ -46,7 +46,11 @@ export const capAngleSchema=z.object({
   * column flange cannot take the bolt pull; the levels and offsets of the bracket pairs do not apply. */
  stiffener:columnStiffenerSchema.optional(),
  /** Girder web centerline to the column face where no bracket is designed here. */
- columnFace:pos.optional()
+ columnFace:pos.optional(),
+ /** Vertical release at the column: the column bolts pass through vertical long slots in the end plate, pretensioned
+  * against steel sleeves (sleeveWall, sleeveClearance) under plate washers, so the end plate slides with the girder's
+  * vertical movement at the tie and the tie plate is not bent by it; `travel` each way. */
+ columnRelease:z.object({travel:pos}).optional()
 });
 export type CapAngleInput=z.infer<typeof capAngleSchema>;
 const inch=25.4;

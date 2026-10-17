@@ -24,6 +24,32 @@ export function railJointBearing(p:ProjectInput){
  const web=available(2.4*r.jointBoltDiameter*r.webThickness*r.Fu,method,.75,2)*slotted;
  return {bars,web,capacity:Math.min(bars,web),governs:bars<=web?'bars' as const:'web' as const};
 }
+/** Each wheel group crossing a rail joint is one cycle of its bars and bolts: crane passages × wheel groups per rail. */
+export function railJointCycles(p:ProjectInput){
+ const passes=p.details!.spectrum.reduce((n,b)=>n+b.cycles,0),groups=wheelGroups(p,railJointBars(p).length);
+ return {passes,groups,cycles:passes*groups};
+}
+/**
+ * The demands the rail supplier's joint bars and bolts are designed for (a deferred submittal, jointKind
+ * 'supplier-bars'): the factored wheel force across the joint and the bar moment it gives over the bolt group, and the
+ * service wheel force range with its cycles. Undefined where the joint is not by the rail supplier or there is none.
+ */
+export function supplierRailJointDemands(s:CalculationSnapshot){
+ const p=s.input;if(!p.details||railJointKind(p)!=='supplier-bars'||!railHasJoints(p))return undefined;
+ const c=(id:string)=>s.checks.find(v=>v.id===id&&v.status==='excluded')?.demand;
+ const shear=c('rail-joint-net'),moment=c('rail-joint-plate'),range=s.detailResults?.demands.railFatigueVertical;
+ return shear===undefined?undefined:{shear,moment,range,cycles:railJointCycles(p).cycles};
+}
+/**
+ * The supplier joint's design demands in words, for the drawings, notes and report: the factored wheel force across the
+ * joint (the bars' shear, the bar moment being this force times the supplier's distance from the joint to the first bolt
+ * line) and the service wheel force range with its cycles (the bars' and bolts' fatigue).
+ */
+export function supplierRailJointText(s:CalculationSnapshot){
+ const d=supplierRailJointDemands(s);if(!d)return undefined;
+ const u=s.input.units,f=(v:number)=>format(v,'force',u,1);
+ return `factored wheel force across the joint ${f(d.shear)} (bar moment = this force × the distance from the joint to the first bolt line)${d.range!==undefined?`; service wheel force range ${f(d.range)} at ${Math.round(d.cycles).toLocaleString('en-US')} cycles`:''}`;
+}
 export function railChecks(s:CalculationSnapshot):CheckResult[]{
  const p=s.input,d=p.details!,r=d.rail,m=d.material,a=s.detailResults!,depth=p.aist!.railDepth,spacing=p.aist!.clipSpacing;
  const receivingThickness=clipSeatThickness(p);
@@ -125,7 +151,7 @@ export function railChecks(s:CalculationSnapshot):CheckResult[]{
  else out.push({id:'rail-anchorage',group:'Rail details',title:'Rail anchor clip pair · longitudinal',status:'unverified',equation:'',note:"Open joints: each rail piece needs an anchor clip pair (fixed clips); enter the manufacturer's rated longitudinal resistance of the pair.",referenceIds:['dg7']});
  // Each wheel crossing the joint reverses the bar moment and the bolt shear: one cycle per wheel group passing (wheels
  // within the joint bar length act together), times the crane passages of the duty spectrum.
- const jointPasses=d.spectrum.reduce((n,b)=>n+b.cycles,0),jointGroups=wheelGroups(p,railJointBars(p).length),jointCycles=jointPasses*jointGroups,F=categoryF(jointCycles),cyclicP=a.demands.railFatigueVertical;
+ const {passes:jointPasses,groups:jointGroups,cycles:jointCycles}=railJointCycles(p),F=categoryF(jointCycles),cyclicP=a.demands.railFatigueVertical;
  const slipCritical=railJointKind(p)==='slip-critical-bars',jointCategory=slipCritical?'B':'D';
  const cycleText=`Cycles n = ${count(jointPasses)} crane passages × ${jointGroups} wheel group${jointGroups>1?'s':''} per rail (wheels farther apart than the ${len(railJointBars(p).length)} joint bars cross the joint separately) = ${count(jointCycles)} (AISC DG7 and AIST TR-13 cycle counting).`;
  check('rail-joint-fatigue','Rail joint bars · fatigue',cyclicP*railJointBars(p).centerEdge/(2*r.jointPlateThickness*(r.jointPlateHeight**3-dh**3)/(6*r.jointPlateHeight)),fatigueSpectrumBin(jointCategory,1,jointCycles).allowable,'stress','f_{sr}=\\Delta M/S_n',`${slipCritical?'Category B (AISC 360-16 Table A-3.1 items 2.1 and 2.2): net section of a slip-critical joint, Class A faying surfaces, bolts pretensioned':'Category D (AISC 360-16 Table A-3.1 item 2.3): net section of a bearing-type joint with pretensioned bolts and unspecified faying surfaces; Category B needs a slip-critical joint with a specified faying class'}, no impact. ${cycleText} The two rail ends bear on the same girder, so by compatibility the bars carry about P/2 from the loaded end while the wheel is on one side of the gap and −P/2 once it crosses: the range is the full wheel load P over the arm g/2 + e_j at every passage. Net section modulus of the two bars through the bolt holes on their mid-height, t(h³ − d_h³)/(6h) each.`,'Fatigue');

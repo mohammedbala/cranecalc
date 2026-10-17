@@ -39,6 +39,7 @@ import {activeEndBearing,slidingBolts,type EndBearingInput} from './endBearingIn
 import {endBearingChecks,endBearingGeometry,slotEndDistance} from './endBearing';
 import {plateSteps} from './bracketSizing';
 import {wrenchClearance} from './endStop';
+import {slidingClearance} from './fitTolerances';
 import type {DesignAnalysis} from './types';
 
 const inch=25.4,eighth=inch/8,sixteenth=inch/16,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
@@ -143,7 +144,7 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
   // The bearing plate long enough for the bolt rows at its ends to clear the stiffener pair at mid-bearing with the nut
   // (C1) and the plate washer at either extreme of travel (end-bearing-wrench-stiffener, -washer-stiffener), as
   // bearingLayout lays it out: a larger bolt has a larger edge, wrench clearance and washer. Never shorter than laid out.
-  try{const h=endBearingGeometry(q,v.e),toStiffener=Math.max(wrenchClearance(b.diameter),h.washer.length/2+h.travel)+bs.stiffenerThickness/2+bs.weldSize;
+  try{const h=endBearingGeometry(q,v.e),toStiffener=Math.max(wrenchClearance(b.diameter),h.washer.length/2+h.travel+slidingClearance)+bs.stiffenerThickness/2+bs.weldSize;
    bs.length=Math.max(length0,up(2*(b.edge+toStiffener),inch/4));if(q.aist)q.aist.bearingLength=bs.length;}catch{return false;}
   c.weld=Math.max(c.weld,filletMinimum([c.plate.thickness,col.tf]));
   c.stiffener.weld=Math.max(c.stiffener.weld,filletMinimum([c.stiffener.thickness,col.tf]));

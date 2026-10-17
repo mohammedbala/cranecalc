@@ -1,6 +1,6 @@
 import {categoryF,finiteLife} from './fatigueConstants';
 import type {ProjectInput,CheckResult,CalculationSnapshot} from './types';
-import {flangeTieGeometry,stiffenerTieGeometry,gussetRotation} from './tieGeometry';
+import {flangeTieGeometry,stiffenerTieGeometry,stiffenerTieJoint,gussetRotation} from './tieGeometry';
 import {format} from './units';
 import {available} from './aiscStrength';
 import {filletMinimum,parallelWeldGroup,transverseFilletFatigue} from './connectionStrength';
@@ -166,11 +166,18 @@ export function stiffenerTieChecks(s:CalculationSnapshot,force:number):CheckResu
  const t=d.brace,bs=d.bearing,m=d.material,f=(v:number)=>format(v,'length',p.units,3),tMin=Math.min(t.gussetThickness,bs.stiffenerThickness),A=tMin*g.height;
  const cycles=d.spectrum.reduce((n,v)=>n+v.cycles,0),range=s.detailResults.demands.braceFatigue;
  const out:CheckResult[]=[],add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string)=>out.push({id:`tie-stiffener-${id}`,group:'Connections',title,demand,capacity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&demand<=capacity*(1+1e-9)?'pass':'fail',quantity,equation,note,referenceIds:['aisc-connections','aisc-fatigue']});
- const note=`Girder gusset PL ${f(t.gussetThickness)} × ${f(g.height)} in the plane of the tie-side bearing stiffener, CJP to its outer edge ${f(g.root)} from the web centerline; the bars start ${f(g.start)} from it. Full tie force including bracing imperfection, on the thinner of the gusset and stiffener.`;
+ if(stiffenerTieJoint(p)==='integral'){
+  // One plate: the tie-side stiffener cut with the gusset as its extension past the flange tip, no weld at the gusset.
+  const note=`Tie-side bearing stiffener PL ${f(bs.stiffenerThickness)} extended past its outer edge ${f(g.root)} from the web centerline as the girder gusset, ${f(g.height)} high (one plate, no weld); the bars start ${f(g.start)} from the web centerline. Full tie force including bracing imperfection.`;
+  add('cjp','Girder gusset · stiffener extension at the stiffener edge',force,available(m.Fy*A,p.method,.9,1.67),'force','R_n=F_yth_g',`${note} AISC J4.1(a) and J4.4 (gross section yielding in tension, compression with KL/r ≤ 25) of the extension at the stiffener's outer edge.`);
+  add('cjp-fatigue','Girder gusset · re-entrant corner of the stiffener extension, all-cycle fatigue bound',range/A,finiteLife(4.4,cycles),'stress','f_{sr}=\\Delta F/(th_g)\\le6900(4.4/n_{SR})^{0.333}','AISC Table A-3.1 item 1.3, Category C: re-entrant corner of the cut plate with a radius of at least 1 in, thermally cut and ground to bright metal (J1.6). Full tie force range at all cycles, no threshold credit.');
+ }else{
+ const note=`Girder gusset PL ${f(t.gussetThickness)} × ${f(g.height)} in the plane of the tie-side bearing stiffener, CJP to its outer edge ${f(g.root)} from the web centerline; the bars start ${f(g.start)} from it. Full tie force including bracing imperfection, on the thinner of the gusset and stiffener.${t.gussetThickness>bs.stiffenerThickness+1e-6?` The entered gusset is thicker than the ${f(bs.stiffenerThickness)} stiffener: the joint needs the AWS D1.1 thickness transition (1 in 2.5 taper); a gusset of the stiffener's thickness, cut as one plate with it, needs no weld.`:''}`;
  add('cjp','Girder gusset · CJP to bearing stiffener',force,available(m.Fy*A,p.method,.9,1.67),'force','R_n=F_yt_{min}h_g',`${note} AISC J2.6: CJP groove weld in tension or compression normal to its axis; the base metal governs.`);
  add('cjp-fatigue','Girder gusset CJP · all-cycle fatigue bound',range/A,finiteLife(4.4,cycles),'stress','f_{sr}=\\Delta F/(th_g)\\le6900(4.4/n_{SR})^{0.333}','AISC Table A-3.1 item 5.4, Category C: transverse CJP with the reinforcement left in place. Full tie force range at all cycles, no threshold credit.');
+ }
  add('fit','Girder gussets fit between the flanges',g.sides.length*(g.height+g.clear),p.section.d-2*p.section.tf,'length','n(h_g+c)\\le d-2t_f',`${g.sides.length>1?'Top and bottom gussets each sit':'The gusset sits'} ${f(g.clear)} inside the tied flange, clear of the stiffener-to-flange fillets.`);
- add('bar-clearance','Tie bars clear the bearing stiffener',g.clear,g.start-g.root,'length','x_{bar}-x_{st}\\ge c','Bars and their bolt heads stay outboard of the stiffener and of the CJP reinforcement.');
+ add('bar-clearance','Tie bars clear the bearing stiffener',g.clear,g.start-g.root,'length','x_{bar}-x_{st}\\ge c',`Bars and their bolt heads stay outboard of the stiffener${stiffenerTieJoint(p)==='integral'?' and of the corner radius of its extension':' and of the CJP reinforcement'}.`);
  add('gusset-length','Unbraced gusset length covers the stiffener extension',g.gussetLength,t.connectionLength,'length','L_g\\ge x_{end}-x_{st}','The gusset compression check uses the entered unbraced gusset length; it must reach from the CJP to the last bolt row edge.');
  return out;
 }

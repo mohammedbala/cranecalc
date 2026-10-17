@@ -70,6 +70,15 @@ describe('continuous girder bearings, ties and end connection',()=>{
   // The gusset is as tall as the 5 1/4 in bars; the slotted column gusset runs 1/4 in past its bolt group.
   expect(t).toContain('GIRDER GUSSET PL 7/8" X 5 1/4" X 5"');expect(t).toContain('COLUMN GUSSET PL 7/8" X 5 3/4" X 5"');
  });
+ it('cuts the girder gusset from the tie-side stiffener where it is as thick, and draws the tie elevation clash-free',()=>{
+  const s=continuous(),d=s.input.details!;d.brace.gussetThickness=d.bearing.stiffenerThickness;
+  const checks=Object.fromEntries(stiffenerTieChecks(s,10*kip).map(c=>[c.id,c]));
+  expect(checks['tie-stiffener-cjp'].title).toContain('stiffener extension');expect(checks['tie-stiffener-cjp-fatigue'].note).toContain('item 1.3');
+  const plan=view(s,'FLANGE TIE / COLUMN CONNECTION').render().svg;
+  expect(plan).not.toContain('data-weld="cjp"');expect(texts(plan).join(' ')).toContain('CUT FROM ONE PLATE');
+  for(const units of ['US','SI'] as const){const q={...s,input:{...s.input,units}},svg=view(q,'FLANGE TIE / ELEVATION').render().svg,t=texts(svg).join(' | ');
+   expect(annotationClashes(svg)).toBe(0);expect(t).toContain('TIE C/L');expect(t).toMatch(/SLEEVES .* OD X .* BORE X/);}
+ });
  it('names the mating part of every weld of the girder web end connection',()=>{
   const t=texts(view(continuous(false),'GIRDER WEB / END CONNECTION').render().svg).join(' | ');
   expect(t).toContain('BOLTS THRU GIRDER WEB');expect(t).toContain('ONE EACH SIDE OF GIRDER WEB');

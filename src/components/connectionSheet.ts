@@ -8,7 +8,7 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {endBearingView} from './endBearingDetail';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {flangeTieSection} from './flangeTieSheet';
-import {tieSides,tieRelease,columnGussetHeight,stiffenerTieGeometry} from '../engine/tieGeometry';
+import {tieSides,tieRelease,columnGussetHeight,stiffenerTieGeometry,stiffenerTieJoint} from '../engine/tieGeometry';
 import type { CalculationSnapshot } from '../engine/types';
 import { referenceCrossheads } from '../data/aiscReferenceShapes';
 import { bearingStiffenerProfile } from './bearingStiffenerGeometry';
@@ -18,7 +18,7 @@ import { planSheetGeometry } from './planSheetGeometry';
 import { drawingLength, plateInches,dimensionLength,limitLength} from './drawingFormat';
 import {viewConflict,conflictView} from './detailHolds';
 import {supportFace} from '../engine/runwayGeometry';
-import {refDim, lettering, sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
+import {refDim, lettering, textWidth, wrapToWidth, sheetDrawingScale as drawingScale, text, line, rect, circle, dimH, dimV, multiLeader, filletLeader, fieldFilletLeader, detailRef, detailTitles, bearingBoltsTitle, columnReference, breakLine, labelCaps, capChannelSection,type XY } from './sheetGraphics';
 import { topicSheetSvg, type DetailTopic, type DetailView } from './detailSheet';
 import { railLayoutView } from './railLayoutView';
 import { railKeeperView } from './railKeeperView';
@@ -180,7 +180,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  else if(!capped)views.push({title:detailTitles.tie,render:()=>{
   let svg='<g data-view="tie-connection">';
   // Across the runway (down the sheet) from the web centerline; along the runway from the tie-side bearing stiffener.
-  const c=d.brace.connection,t=d.brace,bs=d.bearing,g=stiffenerTieGeometry(p)!,rel=tieRelease(p),hg=columnGussetHeight(p),hole=boltProperties(c.grade,c.diameter).hole;
+  const c=d.brace.connection,t=d.brace,bs=d.bearing,g=stiffenerTieGeometry(p)!,integral=stiffenerTieJoint(p)==='integral',rel=tieRelease(p),hg=columnGussetHeight(p),hole=boltProperties(c.grade,c.diameter).hole;
   // A part that cannot be built as dimensioned is not drawn (detailHolds.viewConflict).
   const conflict=viewConflict(s,{sizes:[g.gussetLength,g.columnGussetLength,g.clear,t.length,g.face,hg],fits:/^tie-stiffener-(bar-clearance|fit)$/,checks:/^tie-/});
   if(conflict)return conflictView(conflict);
@@ -218,11 +218,12 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   // Callouts in a column right of the girder, in the order of their targets down the sheet.
   const lx=X(half)+50,items:{at:XY;labels:string[];weld?:'cjp'|'fillet'}[]=[
    {at:[X(half*.6),Z(-b.bf/2)],labels:[`${b.name} RUNWAY GIRDER`,`PLAN; TIE AT ${g.sides.length>1?'BOTH FLANGES':'TOP FLANGE'}`]},
-   {at:[X(tg/2),Z(g.root)],labels:['GIRDER GUSSET TO TIE-SIDE BEARING','STIFFENER, EACH TIED FLANGE'],weld:'cjp'},
-   {at:[X(tg/2),Z((Math.max(b.bf/2,g.root)+g.gussetEnd)/2)],labels:[`GIRDER GUSSET PL ${size(tg)} X ${size(g.height)} X ${size(g.gussetLength)}`,`${size(g.clear)} INSIDE FLANGE; BARS ${size(g.clear)} CLEAR`,'OF STIFFENER']},
+   integral?{at:[X(tg/2),Z(g.root)],labels:['TIE-SIDE BEARING STIFFENER AND GIRDER','GUSSET CUT FROM ONE PLATE, EACH TIED',`FLANGE; ${size(inch)} R GROUND AT THE CORNER`]}
+    :{at:[X(tg/2),Z(g.root)],labels:['GIRDER GUSSET TO TIE-SIDE BEARING','STIFFENER, EACH TIED FLANGE'],weld:'cjp'},
+   {at:[X(tg/2),Z((Math.max(b.bf/2,g.root)+g.gussetEnd)/2)],labels:[`${integral?'STIFFENER EXTENSION':'GIRDER GUSSET PL'} ${size(tg)} X ${size(g.height)} X ${size(g.gussetLength)}`,`${size(g.clear)} INSIDE FLANGE; BARS ${size(g.clear)} CLEAR`,'OF STIFFENER']},
    {at:[X(tg/2)+tbk+3,Z(girderRows.at(-1)!)],labels:[`EACH END: ${2*c.rows} - ${size(c.diameter)} ${c.grade}, ${c.rows} ROWS`,`X 2 AT ${size(c.gauge)} VERT. GAUGE; CLASS ${c.surface}`,`${size(hole)} STD HOLES${rel?' AT THE GIRDER END':''}`]},
    {at:[X(tg/2)+tbk,Z(cut?z1:(g.gussetEnd+g.face-g.connection)/2)-4],labels:[`2 FB ${size(tb)} X ${size(t.width)} (VERTICAL) X ${dim(t.length)}`,'ONE EACH SIDE OF THE GUSSETS']},
-   ...(rel?[{at:[X(tg/2)+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`,
+   ...(rel?[{at:[X(tg/2)+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`,`SLEEVES ${size(rel.od)} OD X ${size(rel.hole)} BORE X ${size(rel.sleeveLength)}`,
     // The slots take the support's deflection limit handed to its designer (S-00): the same words as there.
     ...(()=>{const lim=s.checks.find(v=>v.id==='tie-move-support')?.capacity;return lim!==undefined&&lim>0?['SLOTS TAKE THE BRACKET\'S VERTICAL','DEFLECTION AT THE BEARING UNDER CRANE',`LOADS ${limitLength(lim,p.units,'max')} MAX.`]:[];})()]}]:[]),
    {at:[X(tg/2),colZ],labels:[`COLUMN GUSSET PL ${size(tg)} X ${size(hg)} X ${size(g.columnGussetLength)}`,`2 ROOT FILLETS X ${dim(c.weldLength)}, ${sc.weld}`],weld:'fillet'},
@@ -249,6 +250,62 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   }
   return {svg:svg+'</g>',scale:scale.label};
  }});
+
+ // 3a: Elevation of the stiffener tie looking along the runway: the tie line below the top of steel, the gusset, bars,
+ // bolt gauge, the column gusset with its vertical slots and sleeves, and where the tie sits at the runway-end grids.
+ if(!capped&&!isCapAngleTie(p)&&!d.brace.flangeAttachment?.enabled&&stiffenerTieGeometry(p))views.push({title:detailTitles.tieElevation,render:()=>tieElevation()});
+ function tieElevation(){
+  const c=d!.brace.connection,t=d!.brace,bs=d!.bearing,g=stiffenerTieGeometry(p)!,rel=tieRelease(p),hg=columnGussetHeight(p),integral=stiffenerTieJoint(p)==='integral',inch=25.4;
+  const conflict=viewConflict(s,{sizes:[g.gussetLength,g.columnGussetLength,g.clear,t.length,g.face,hg],fits:/^tie-stiffener-(bar-clearance|fit)$/,checks:/^tie-/});
+  if(conflict)return conflictView(conflict);
+  const colT=m().column.tf*1000,drop=b.d/2-g.topCenter,low=Math.max(drop+Math.max(hg,t.width)/2,drop+t.width/2)+2*inch;
+  const scale=drawingScale(Math.min(.36,250/(b.bf/2+g.face+colT+inch),200/low),p.units),k=scale.pointsPerMm,cx=120,top=60;
+  // Across the runway (right) from the web centerline; down the sheet from the top of steel.
+  const X=(y:number)=>cx+y*k,Z=(z:number)=>top+z*k;
+  let svg='<g data-view="tie-elevation">';
+  // Girder top flange, web and the tie-side bearing stiffener, broken below the tie.
+  svg+=rect(X(-b.bf/2),Z(0),b.bf*k,b.tf*k,'runway-line')+rect(X(-b.tw/2),Z(b.tf),b.tw*k,(low-b.tf)*k,'runway-line');
+  svg+=rect(X(b.tw/2),Z(b.tf),bs.stiffenerWidth*k,(low-b.tf)*k,'runway-line')+breakLine([X(-b.tw/2)-6,Z(low)],[X(g.root)+6,Z(low)]);
+  // Girder gusset (the stiffener's own extension, or a CJP gusset), bars, column gusset and the column flange.
+  const z0=drop-g.height/2,zb0=drop-t.width/2,zc0=drop-hg/2;
+  svg+=rect(X(g.root),Z(z0),(g.start-g.root)*k,g.height*k,'runway-line')+rect(X(g.start),Z(z0),(g.gussetEnd-g.start)*k,g.height*k,'hidden-line');
+  svg+=rect(X(g.start),Z(zb0),(g.face-g.start)*k,t.width*k,'runway-line');
+  svg+=rect(X(g.columnGussetStart),Z(zc0),g.columnGussetLength*k,hg*k,'hidden-line');
+  const colTop=Math.min(0,zc0)-inch,colBot=Math.max(low,zc0+hg+inch);
+  svg+=rect(X(g.face),Z(colTop),colT*k,(colBot-colTop)*k,sc.isNew?'runway-line':'reference-line')+breakLine([X(g.face)-4,Z(colTop)],[X(g.face+colT)+4,Z(colTop)])+breakLine([X(g.face)-4,Z(colBot)],[X(g.face+colT)+4,Z(colBot)]);
+  // Bolts: two at the vertical gauge in each row; at the column end in vertical slots with their sleeves.
+  const rows=(y0:number)=>Array.from({length:c.rows},(_,i)=>y0+c.edge+i*c.pitch),girderRows=rows(g.start),columnRows=rows(g.face-g.connection),zs=[drop-c.gauge/2,drop+c.gauge/2];
+  for(const y of girderRows)for(const z of zs)svg+=circle(X(y),Z(z),c.diameter*k/2,'runway-line');
+  for(const y of columnRows)for(const z of zs){
+   svg+=circle(X(y),Z(z),(rel?rel.od:c.diameter)*k/2,'runway-line');
+   if(rel)svg+=rect(X(y-rel.width/2),Z(z-rel.slot/2),rel.width*k,rel.slot*k,'hidden-line');
+  }
+  // Dimensions left of the girder: the tie centerline below the top of steel; right of the column: the gauge and the
+  // column gusset height.
+  const xl=X(-b.bf/2)-10,xr=X(g.face+colT)+18;
+  svg+=line([X(-b.bf/2)-4,Z(drop)],[X(g.face)+2,Z(drop)],'grid-line');
+  svg+=dimV(Z(0),Z(drop),X(-b.bf/2),xl,`${size(drop)} TIE C/L`);
+  // Callouts below the view, in the order of their targets across the sheet.
+  const ends=g.stations.filter(v=>v.station===0||Math.abs(v.station-p.spans.reduce((a,v)=>a+v,0))<1e-6).map(v=>Math.abs(v.offset)),inner=g.stations.filter(v=>!ends.includes(Math.abs(v.offset))).map(v=>Math.abs(v.offset));
+  const items:{at:XY;labels:string[]}[]=[
+   {at:[X((g.root+b.tw/2)/2),Z(low-inch)],labels:integral?['TIE-SIDE BEARING STIFFENER, EXTENDED',`AS THE GIRDER GUSSET ${size(g.height)} HIGH`]:[`GIRDER GUSSET PL ${size(t.gussetThickness)} X ${size(g.height)},`,'CJP TO THE TIE-SIDE BEARING STIFFENER']},
+   {at:[X((g.start+g.gussetEnd)/2),Z(zb0+t.width)],labels:[`2 FB ${size(t.thickness)} X ${size(t.width)} (VERTICAL),`,`${size(g.clear)} BELOW THE FLANGE`]},
+   {at:[X(girderRows[0]),Z(zs[1])],labels:[`${size(c.diameter)} ${c.grade} AT ${size(c.gauge)} VERT. GAUGE`]},
+   {at:[X(columnRows.at(-1)!),Z(zs[1])],labels:rel?[`SLEEVES ${size(rel.od)} OD X ${size(rel.hole)} BORE X ${size(rel.sleeveLength)}`,`IN ${size(rel.width)} X ${size(rel.slot)} VERT. SLOTS`]:[`${size(boltProperties(c.grade,c.diameter).hole)} STD HOLES`]}];
+  // Callouts in a column right of the dimensions, in the order of their targets down the sheet, each level with its
+  // target where the column has room.
+  const lx=xr+48;let ly=Z(colTop);
+  items.sort((u,v)=>u.at[1]-v.at[1]||u.at[0]-v.at[0]);
+  for(const v of items){const y=Math.max(ly,v.at[1]-4);svg+=multiLeader([v.at],[lx,y],v.labels,8.5);ly=y+v.labels.length*11+10;}
+  // The gauge and column gusset height read where they are clear of the leaders drawn.
+  const drawn=new AnnotationSpace(svg);
+  svg+=dimVClear(drawn,Z(zc0),Z(zc0+hg),X(g.face+colT),xr,size(hg))+dimVClear(drawn,Z(zs[0]),Z(zs[1]),X(columnRows.at(-1)!)+6,xr+22,size(c.gauge));
+  const yL=Math.max(ly,Z(colBot))+6,lw=lx+Math.max(...items.flatMap(v=>v.labels.map(l=>textWidth(l,8.5))))-X(-b.bf/2);
+  // Where the tie sits along the runway: on the tie-side stiffener at the bearing center, the column gusset with it.
+  const note=wrapToWidth(labelCaps(`Column gusset on the column flange in line with the tie-side bearing stiffener, at the bearing center: ${ends.length?Math.max(...ends)<1?'on the grid line at the runway-end grids':`${dim(Math.max(...ends))} inboard of the grid at the runway-end grids`:''}${ends.length&&inner.length?', ':''}${inner.length?`${dim(Math.max(...inner))} each side of the shared grids`:''}. The tie centerline is ${dim(drop)} below the top of steel.`),Math.max(260,lw),lettering.text);
+  note.forEach((v,i)=>{svg+=text(X(-b.bf/2),yL+14+i*lettering.noteLeading,v,lettering.text);});
+  return {svg:svg+'</g>',scale:scale.label};
+ }
 
  // 4: Rail clips and pad on the cap web or the bare W top flange; the bolted rail joint; the rail layout.
  views.push(railKeeperView(s));

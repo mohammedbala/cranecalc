@@ -34,8 +34,10 @@ export function codeBasis(p:ProjectInput){
 
 /** Excluded checks that are delegated components (brackets and attachments by a bracket designer), listed as deferred submittals. */
 export const delegatedChecks=new Set(['bracket-load-path','tie-move-support','end-bearing-seat']);
+/** Excluded checks of the rail supplier's joint bars and bolts: new runway parts by the rail supplier, a deferred submittal. */
+export const supplierJointCheck=(id:string)=>/^rail-joint-/.test(id);
 /** Structure the calculation does not check, which the engineer of record evaluates for the permit submittal. */
-export const unevaluatedStructure=(s:CalculationSnapshot)=>s.checks.filter(c=>c.status==='excluded'&&!delegatedChecks.has(c.id));
+export const unevaluatedStructure=(s:CalculationSnapshot)=>s.checks.filter(c=>c.status==='excluded'&&!delegatedChecks.has(c.id)&&!supplierJointCheck(c.id));
 /**
  * A sheet is issued only for a validated project package with an engineer of record, an issue purpose, the
  * adopted code and, where the calculation leaves structure unchecked, a reference to the engineer's evaluation.

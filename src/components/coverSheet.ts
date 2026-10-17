@@ -1,6 +1,6 @@
 import {haunchInput,isTaperedHaunch} from '../engine/taperedHaunchInputs';
 import {cantileverSystems,seismicBasis} from '../engine/runwaySeismic';
-import {astmSpec,boltSpec} from '../engine/materialSpecs';
+import {astmSpec,boltSpec,sleeveSpec} from '../engine/materialSpecs';
 import {boltGrades,preheatBasis,constructionRequirements,enteredFabricationNote,addedSentences,cjpWelds,awsEdition} from '../engine/constructionNotes';
 import {codeBasis} from '../engine/drawingData';
 import {adjacentBays} from '../engine/continuation';
@@ -13,6 +13,7 @@ import {buildingClassBasis} from '../engine/buildingClass';
 import {runwayElevations,issueStatus,revisionIdentity,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {railJointType} from '../engine/railLayout';
+import {supplierRailJointText} from '../engine/railChecks';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
@@ -27,7 +28,7 @@ import {line,text,circle,rect,bubble,filletLeader,fieldFilletLeader,dimH,n,sheet
 import {heading,paragraph,numbered,table,capsFor,flowBlocks,fitColumns,type Block,type Style} from './noteBlocks';
 import {structuralGeneralNotes} from './structuralNotes';
 import {existingLayout} from '../engine/existingLayout';
-import {tieRelease,stiffenerTieGeometry,flangeTieGeometry} from '../engine/tieGeometry';
+import {tieRelease,stiffenerTieGeometry,stiffenerTieJoint,flangeTieGeometry} from '../engine/tieGeometry';
 import {bearingSurface} from '../engine/endBearing';
 import {designsBracing,bracingDesign,bracedSeismicSystem} from '../engine/newColumnBracing';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
@@ -393,7 +394,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
  // AISC 360 Chapter N assigns steel tasks to observe (O) or perform (P); IBC Table 1705.3 rates concrete
  // tasks continuous (C) or periodic (P).
  // CJP joints in the set: capped-girder bearing stiffeners to the W top flange, and the paired-bar tie gusset to its stiffener.
- const cjpList=cjpWelds(p),cjpPresent=!!d&&(cjpList.length>0||!!stiffenerTieGeometry(p));
+ const cjpList=cjpWelds(p),cjpPresent=!!d&&(cjpList.length>0||stiffenerTieJoint(p)==='cjp');
  const fieldWelds=!!d&&supportColumn(p).field&&(!!d.brace.flangeAttachment?.enabled||!!d.bracket?.enabled);
  // The project's own inspection requirements, less what the table and the notes already require.
  const withProject=(rows:string[][])=>{const extra=d?addedSentences(enteredFabricationNote(p,'inspection'),[...written,...rows.flat()]):[];return extra.length?[...rows,['PROJECT REQUIREMENTS',extra.join(' ').toUpperCase(),'-']]:rows;};
@@ -430,7 +431,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(!bypass&&!activeEndStop(p)?['RUNWAY END STOPS AT EACH END OF EACH RUNWAY FOR THE BUMPER FORCE IN THE CRANE DATA.']:[]),
   ...(!d?.bracket?.enabled&&!activeColumnCap(p)?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${limitLength(support.capacity,u,'max')} MAX.`:'.'}`]:[]),
   ...(p.system==='simple'&&d&&!activeEndBearing(p)?[`COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (${detailRef(detailTitles.movement)}) FOR THE LONGITUDINAL, LATERAL AND UPLIFT FORCES IN THE ${bracketForcesAt(s,'cover','ON THIS SHEET')}.`]:[]),
-  ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`)
+  ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`),
+  ...(()=>{const t=supplierRailJointText(s);return t?[`RAIL JOINT BARS AND BOLTS: RAIL SUPPLIER, FITTED TO THE RAIL FISHING SURFACES (${detailRef(detailTitles.railJoint)}), DESIGNED FOR THE ${t.toUpperCase()}.`]:[];})()
  ];
  blocks.push(H('DEFERRED SUBMITTALS / BY OTHERS'),P('SUBMIT THE FOLLOWING TO THE ENGINEER OF RECORD FOR REVIEW AND TO THE BUILDING OFFICIAL FOR APPROVAL BEFORE INSTALLATION:'),...N(deferred));
  // Structure the calculation does not check is evaluated for the permit; it is not a deferred submittal.

@@ -5,6 +5,7 @@ import {noteLength} from '../engine/units';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
 import {columnFlangeWidth,flangeEffectiveWidth} from '../engine/flangeTieDesign';
 import {flangeTieGeometry} from '../engine/tieGeometry';
+import {capAngleFatigue,capAngleResult} from '../engine/capAngleTie';
 import {maximumRule,sig3,statusLabel,value} from './reportParts';
 
 /**
@@ -167,6 +168,14 @@ const remedies:Remedy[]=[
  [/^column-cap-/,x=>`Column cap (new, designed here): ${more(x.u)}% more resistance is needed in the part this check names.`],
  [/^column-/,x=>x.p.existingColumn?.isNew?`New column exceeded by ${more(x.u)}%: a heavier column shape, or a smaller demand (bracing, a shorter unbraced length).`
   :`Existing column exceeded by ${more(x.u)}%: reinforce the column or reduce its demand; confirm the restraint assumptions with the building engineer of record.`],
+ // The cap tieback plate: its range is split into the axial part (force controlled) and the imposed vertical movement
+ // (displacement controlled, ∝ t_p·Δ/L²), where a larger section raises the stress instead of lowering it.
+ [/^cap-angle-(plate|weld-toe|weld-root)-fatigue$/,x=>{
+  const r=capAngleResult(x.s);if(!r)return undefined;
+  const f=capAngleFatigue(r.g,r.design,r.loads.range,x.p.details!.spectrum.reduce((n,v)=>n+v.cycles,0)),v=/plate/.test(x.c.id)?f.plate:/toe/.test(x.c.id)?f.toe:f.root;
+  if(v.movement<=v.axial)return undefined;
+  const share=Math.round(100*v.movement/(v.movement+v.axial));
+  return `${sentenceStart(range(x))}. ${share}% of it comes from the imposed vertical movement of the girder at the tie, which is displacement controlled (the stress varies as t_p·Δ/L²): make the tie plate more flexible out of plane (thinner, or a longer clear span to the end plate), release the vertical movement (vertically slotted end plate holes), or improve the weld${/root/.test(x.c.id)?' (larger end plate fillets raise R_FIL; a CJP groove weld removes the root crack site)':' category'}. A thicker or deeper plate raises this stress.`;}],
  [/fatigue/,x=>`${sentenceStart(range(x))}: a better detail category, a larger section at the detail, or a smaller cyclic force.`],
  // Rail and end stops
  [/^rail-anchorage$/,x=>`Anchor the rail for ${Math.ceil((x.u-1)*100)}% more longitudinal force: more anchor clip pairs (at least ${Math.ceil(x.u)}× the present), or anchor the rail at the end stops.`],

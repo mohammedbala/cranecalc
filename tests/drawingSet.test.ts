@@ -223,6 +223,18 @@ describe('drawings agree with the calculation',()=>{
  },120000);
 });
 
+describe('rail supplier joint bars (deferred submittal)',()=>{
+ it('draws the joint schematically with its demands and lists it as a deferred submittal, not as existing structure',()=>{
+  const s=sheetFixture('t01');expect(s.input.details!.rail.jointKind).toBe('supplier-bars');
+  const cover=coverSheetSvgs(s,[]).map(v=>texts(v).join(' ')).join(' ');
+  expect(cover).toMatch(/RAIL JOINT BARS AND BOLTS: RAIL SUPPLIER, FITTED TO THE RAIL FISHING SURFACES[^]*FACTORED WHEEL FORCE ACROSS THE JOINT/);
+  const at=cover.indexOf('EXISTING STRUCTURE EVALUATION · WITH THE PERMIT SUBMITTAL'),existing=cover.slice(at,cover.indexOf('SYMBOLS AND LINE TYPES',at));
+  expect(at).toBeGreaterThan(0);expect(existing).not.toMatch(/RAIL JOINT/);
+  const joint=detailTopics(s).flatMap(t=>t.views).find(v=>v.title.startsWith('RAIL CLIP'))!.render().svg,t=texts(joint).join(' ');
+  expect(t).toContain('SCHEMATIC, NOT FOR FABRICATION');expect(t).not.toMatch(/2 BARS \d/);
+ });
+});
+
 describe('welded bracket, new-column and bracing details',()=>{
  // A detail's own drawing, from its view group to the next view group on the sheet.
  const view=(svg:string,name:string)=>{const i=svg.indexOf(`data-view="${name}"`);expect(i,name).toBeGreaterThan(0);const j=svg.indexOf('data-view="',i+12);return svg.slice(i,j<0?undefined:j);};

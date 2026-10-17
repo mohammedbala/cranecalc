@@ -66,8 +66,9 @@ export function capAngleDesign(p:ProjectInput,g:CapAngleGeometry,f:CapAngleLoads
  const capFu=cf?.Fu??m.Fu,capFy=cf?.Fy??m.Fy,F=f.F;
  const A=(n:number,phi:number,omega:number)=>available(n,method,phi,omega);
  // Tie plate weak-axis bending from the vertical movement, both ends fixed: M = 6EIΔ/L², V = 12EIΔ/L³.
- const tp=g.plate.thickness,wp=g.plate.width,L=g.plate.span,I=wp*tp**3/12;
- const Mv=6*E*I*f.vertical/L**2,Vv=12*E*I*f.vertical/L**3,Mvc=6*E*I*f.cyclicVertical/L**2,Vvc=12*E*I*f.cyclicVertical/L**3;
+ // A released end plate (vertical slots, columnRelease) slides with the girder: the tie plate takes no vertical movement.
+ const tp=g.plate.thickness,wp=g.plate.width,L=g.plate.span,I=wp*tp**3/12,dv=g.column.slot?0:f.vertical,dvc=g.column.slot?0:f.cyclicVertical;
+ const Mv=6*E*I*dv/L**2,Vv=12*E*I*dv/L**3,Mvc=6*E*I*dvc/L**2,Vvc=12*E*I*dvc/L**3;
  // ---- Cap bolts: two bolts through the angle's short leg and the channel flange, pulled by T = F/2 each.
  const cb=g.cap,nCap=2,T=F/nCap,contact=Math.min(g.dv,s.capDepth)-cb.gauge;
  const pa=c.length/nCap,pc=Math.min(3.5*(cb.gauge-s.capTw),cb.pitch/2+1.75*(cb.gauge-s.capTw));
@@ -107,7 +108,7 @@ export function capAngleDesign(p:ProjectInput,g:CapAngleGeometry,f:CapAngleLoads
  const blockPlate=block(tp,lb.edge,lb.slot.length+inch/16,slotNet,wp,lb.pitch),blockLeg=block(g.ta,toeEdge,lb.hole+inch/16,lb.hole+inch/16,wa,lb.pitch);
  // ---- End plate and column flange: two bolts, one above and one below the tie plate. The movement moment adds a couple.
  const cl=g.column,nCol=2,ep=g.endPlate,Tc=F/nCol+Mv/(2*cl.gauge);
- const endP=tStubPrying({T:Tc,t:ep.thickness,b:cl.gauge-tp/2,a:ep.height/2-cl.gauge,p:ep.width,db:cl.diameter,dPrime:cl.hole,Fu:m.Fu,method});
+ const endP=tStubPrying({T:Tc,t:ep.thickness,b:cl.gauge-tp/2,a:ep.height/2-cl.gauge,p:ep.width,db:cl.diameter,dPrime:cl.slot?.width??cl.hole,Fu:m.Fu,method});
  const col=cl.receiver;
  const offsets=g.stations.map(v=>Math.abs(v.offset)),ez=offsets.length?Math.max(...offsets):0,ezMin=offsets.length?Math.min(...offsets):0;
  const colSpacing=2*cl.gauge;
@@ -158,14 +159,36 @@ export type CapAngleDesign=ReturnType<typeof capAngleDesign>;
 
 /** Imposed movements at the cap tieback angle from the analysis (as for the other ties: tieMovement.ts). */
 export function capAngleLoads(s:CalculationSnapshot,F:number):CapAngleLoads{
- const p=s.input,a=s.designAnalysis!,r=s.detailResults!,g=capAngleGeometry(p)!,ss=simpleSupportInput(p);
+ const p=s.input,a=s.designAnalysis!,r=s.detailResults!,g=capAngleGeometry(p)!;
  const support=r.bracket?.service.deflection?.value??r.rolledBracket?.service.deflection?.value??r.existingBracket?.service.seatDeflection?.value??0;
- const cranes=p.cranes.length,impact=Math.max(...p.cranes.map(c=>c.impact));
+ return {F,range:r.demands.braceFatigue,...capAngleMovement(p,g,{support,rotation:a.endRotation,serviceRotation:a.serviceRotation??0})};
+}
+/**
+ * Movements imposed at the tie from the support's single-crane deflection at the bearing and the girder end rotations
+ * (factored and single-crane service): vertical = support × cranes × (1 + impact) + θ × arm, cyclic = support + θ_s × arm,
+ * the arm being the tie's distance from the bearing center; the thermal travel of the longest bay.
+ */
+export function capAngleMovement(p:ProjectInput,g:CapAngleGeometry,m:{support:number;rotation:number;serviceRotation:number}){
+ const ss=simpleSupportInput(p),cranes=p.cranes.length,impact=Math.max(...p.cranes.map(c=>c.impact));
  // Rotation about the bearing also moves the tie vertically by θ times its distance from the bearing center.
  const arm=Math.max(0,...g.stations.map(v=>Math.abs(v.x-v.bearingCenter)));
- return {F,range:r.demands.braceFatigue,rotation:a.endRotation,cyclicRotation:a.serviceRotation??0,
-  thermal:alpha*Math.max(...p.spans)*Math.max(ss.temperatureRise,ss.temperatureFall),
-  vertical:support*cranes*(1+impact)+a.endRotation*arm,cyclicVertical:support+(a.serviceRotation??0)*arm};
+ return {rotation:m.rotation,cyclicRotation:m.serviceRotation,thermal:alpha*Math.max(...p.spans)*Math.max(ss.temperatureRise,ss.temperatureFall),
+  vertical:m.support*cranes*(1+impact)+m.rotation*arm,cyclicVertical:m.support+m.serviceRotation*arm};
+}
+/**
+ * Fatigue stress ranges of the tie plate (AISC Appendix 3, all cycles at the largest range, no threshold credit), each
+ * split into the axial part from the tie force range ΔF and the part from the imposed single-crane vertical movement
+ * (6EIΔ/L² at the end plate): the net section at the slip-critical lap (Category B, with the lap moment range), and the
+ * end plate fillets, toe (Category C) and root (Eq. A-3-5 with R_FIL). The movement part is displacement controlled: it
+ * varies as t_p·Δ/L², so a thinner or longer plate lowers it and a heavier one raises it.
+ */
+export function capAngleFatigue(g:CapAngleGeometry,x:CapAngleDesign,range:number,cycles:number){
+ const lb=g.lap,tp=g.plate.thickness,wp=g.plate.width,Mvr=x.Mvc;
+ const Sn=(wp-2*(lb.slot.width+inch/16))*tp**2/6,S=wp*tp**2/6,root=transverseFilletFatigue(tp,g.weld,cycles);
+ const plate={axial:range/x.Ae+range*tp/2/Sn,movement:Mvr/Sn,allowable:finiteLife(12,cycles)};
+ const toe={axial:range/(wp*tp),movement:Mvr/S,allowable:finiteLife(4.4,cycles)};
+ return {Mvr,plate:{...plate,f:plate.axial+plate.movement},toe:{...toe,f:toe.axial+toe.movement},
+  root:{...toe,f:toe.axial+toe.movement,allowable:root.capacity,reduction:root.reduction}};
 }
 
 /** Restraint for the girder lateral/torsional model and the Appendix 6 brace checks: the tie plate member and the series stiffness. */
@@ -257,9 +280,17 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  const colName=col?`${col.shape?`${col.shape} `:''}column flange (${col.source}, t_f = ${len(col.tf)})`:'column flange';
  add('cap-angle-col-bolt',G,'Column bolts · tension with prying',x.Tc+x.Qc,x.colBolt.tension,'force','T_u+q_{ep}+q_c\\le\\phi F^{\\prime}_{nt}A_b;\\quad T_u=\\frac F2+\\frac{M_v}{2g}',`${pull} One ${len(cl.diameter)} ${cl.grade} bolt above and one below the tie plate, through the end plate, shims and the ${colName}. T = ${force(x.Tc)} includes the movement moment ${moment(x.Mv)} as a couple over the bolts. Prying of the end plate (${force(x.endP.q)}) and of the column flange are added (AISC Manual Part 9). J3.7 with the vertical shear ${force(x.colShear)} per bolt${x.filler<1?`, the bolt shear strength reduced by the J5.2 filler factor ${x.filler.toFixed(3)}`:''}.`,['cap-angle-basis','aisc-manual-prying','aisc-connections']);
  add('cap-angle-endplate-prying',G,'End plate · bending with prying (fitting strength)',x.Tc,x.endP.fitting,'force','T\\le\\frac{\\phi pF_ut^2(1+\\delta)}{4b^{\\prime}};\\quad b=g-t_p/2',`${pull} AISC Manual Part 9: the end plate PL ${len(ep.thickness)} × ${len(ep.width)} × ${len(ep.height)} is a T-stub flange with the tie plate as its stem. ${pryNote(x.endP,'End plate',ep.thickness)}`,['cap-angle-basis','aisc-manual-prying']);
- add('cap-angle-endplate-edge',G,'Column bolts · end plate edge distance',minimumEdge(cl.diameter)+oversizedEdgeIncrement(cl.diameter),ep.height/2-cl.gauge,'length','h/2-g\\ge e_{min}+C_2',`AISC J3.4 minimum ${len(minimumEdge(cl.diameter))} for a standard hole, plus C₂ = ${len(oversizedEdgeIncrement(cl.diameter))} (Table J3.5, oversized hole): the column holes are field-drilled to match, and an end-plate hole that does not line up is reamed to an oversized hole (Table J3.3) at fit-up.`);
+ if(cl.slot)add('cap-angle-endplate-edge',G,'Column bolts · end plate edge beyond the vertical slots',Math.max(minimumEdge(cl.diameter)+slotEdgeIncrement(cl.diameter,'long'),cl.slot.length/2+minimumEdge(cl.diameter)-cl.hole/2),ep.height/2-cl.gauge,'length','h/2-g\\ge\\max(e_{min}+C_2,\\;l_{slot}/2+e_{min}-d_h/2)',`AISC J3.4 with Table J3.5 C₂ for long slots perpendicular to the edge, and not less than the clear material of a standard hole at the minimum edge distance beyond the slot end (slot ${len(cl.slot.width)} × ${len(cl.slot.length)} for the sleeve). The slots take the field fit-up of the column holes.`);
+ else add('cap-angle-endplate-edge',G,'Column bolts · end plate edge distance',minimumEdge(cl.diameter)+oversizedEdgeIncrement(cl.diameter),ep.height/2-cl.gauge,'length','h/2-g\\ge e_{min}+C_2',`AISC J3.4 minimum ${len(minimumEdge(cl.diameter))} for a standard hole, plus C₂ = ${len(oversizedEdgeIncrement(cl.diameter))} (Table J3.5, oversized hole): the column holes are field-drilled to match, and an end-plate hole that does not line up is reamed to an oversized hole (Table J3.3) at fit-up.`);
  const C1c=wrenchClearance(cl.diameter);
- add('cap-angle-endplate-wrench',G,'Column bolt heads · socket clearance to the tie plate',C1c,cl.gauge-g.plate.thickness/2-g.weld,'length','g-t_p/2-w\\ge C_1',`AISC Manual Table 7-15 C1 = ${len(C1c)} from the bolt axis to the tie plate and its fillets.`);
+ add('cap-angle-endplate-wrench',G,'Column bolt heads · socket clearance to the tie plate',C1c,cl.gauge-(cl.slot?.travel??0)-g.plate.thickness/2-g.weld,'length',cl.slot?'g-u-t_p/2-w\\ge C_1':'g-t_p/2-w\\ge C_1',`AISC Manual Table 7-15 C1 = ${len(C1c)} from the bolt axis to the tie plate and its fillets${cl.slot?`, with the end plate slid by its travel u = ${len(cl.slot.travel)} toward the bolt`:''}.`);
+ if(cl.slot){
+  // The released end plate: the bolts, fixed in the column, keep their sleeves and plate washers while the end plate slides.
+  const sl=cl.slot,colBolt=boltProperties(cl.grade,cl.diameter),install=inch/16;
+  add('cap-angle-endplate-travel',MG,'End plate vertical slots · travel each way',loads.vertical+install,sl.travel,'length','\\Delta_sn(1+I)+\\theta a+1/16\\,\\mathrm{in}\\le u',`The end plate slides with the girder: the vertical movement at the tie ${len(loads.vertical)} (support deflection times the cranes and 1 + impact, plus the end rotation over the tie's distance from the bearing) plus a 1/16 in positioning allowance, against the travel each way in the ${len(sl.width)} × ${len(sl.length)} vertical slots. The tie plate then takes no bending from it.`);
+  add('cap-angle-endplate-sleeve',MG,'End plate slots · steel sleeves under the bolt installation load',1.5*colBolt.pretension,m.Fy*sl.sleeve.area,'force','1.5T_b\\le\\phi F_yA_g;\\ \\phi=1.0\\ \\text{(sleeve)}',`Sleeve ${len(sl.sleeve.od)} OD × ${len(sl.sleeve.bore)} bore × ${len(sl.sleeve.length)} long, F_y as the plate material; 1.5 × the minimum pretension bounds turn-of-nut overshoot (RCSC commentary). The sleeve projects past the end plate so the plate is not clamped.`);
+  add('cap-angle-endplate-washer',MG,'End plate slots · plate washers clear the tie plate fillets',g.plate.thickness/2+g.weld+sl.washer.length/2+sl.travel,cl.gauge,'length','t_p/2+w+L_w/2+u\\le g',`Plate washer ${len(sl.washer.thickness)} × ${len(sl.washer.width)} × ${len(sl.washer.length)} under each bolt head covers the slot at either extreme of travel (AISC J3.2); it stays with the bolt while the end plate slides by u, clear of the tie plate fillets.`);
+ }
  const filletMin=filletMinimum([ep.thickness,g.plate.thickness]);
  add('cap-angle-endplate-weld',G,'End plate to tie plate · shop fillets',x.weld.demand,x.weld.capacity,'stress','f_w=\\sqrt{(V/A_{we})^2+(F/A_{we}+M_vy/I_w)^2}\\le\\phi0.6F_{EXX}',`AISC J2.4: two ${len(g.weld)} fillets × ${len(g.plate.width)}, one on each face of the tie plate. The tie force ${force(x.F)} normal to the welds, the movement moment ${moment(x.Mv)} as a couple across the plate thickness and the shear ${force(x.Vv)}; all weld ends, no directional strength increase.`);
  add('cap-angle-endplate-weld-min',G,'End plate to tie plate · minimum fillet',filletMin,g.weld,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined (the tie plate or the end plate).');
@@ -314,7 +345,7 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  // ---------------- Movement
  add('cap-angle-slot-travel',MG,'Angle slots · travel each way along the runway',x.travelRequired,cb.travel,'length','\\theta h_b+\\alpha L\\Delta T+t_{set}\\le u',`Factored end rotation ${loads.rotation.toExponential(3)} rad about the bearing over the ${len(g.boltHeight)} height of the cap bolts, thermal travel ${len(loads.thermal)} at a sliding end (12 × 10⁻⁶/°C over the longest bay) and the ${len(x.set)} setting tolerance. The single-crane service rotation needs ${len(x.cyclicTravel)}. Horizontal long slots ${len(cb.slotWidth)} × ${len(cb.slotLength)} in the vertical leg (AISC Table J3.3; DG7 §11.2: the tie releases the girder end rotation and longitudinal movement).`,['cap-angle-basis','tieback-practice','dg7']);
  add('cap-angle-plate-movement',MG,'Tie plate · axial force with lap moment and support movement (H1-1)',x.h1,1,'ratio','\\frac{P_r}{P_c}+\\frac89\\frac{B_1Fe+6EI\\Delta_v/L^2}{\\phi F_yZ_y}\\le1',
-  `AISC H1-1 for ${plateName}: P_r = ${force(x.F)} against P_c = ${force(x.Pc)} (compression governs). ${Number.isFinite(x.B1)?`Lap moment F·t_p/2 at the faying surface amplified by B1 = ${x.B1.toFixed(3)} (C_m = 1, P_e1 over the K·L of P_c) gives ${moment(x.lapMoment)}.`:`Lap moment F·t_p/2 at the faying surface: elastic instability, αP_r/P_e1 = ${((p.method==='LRFD'?1:1.6)*x.F/x.Pe1).toFixed(2)} ≥ 1 (P_e1 = ${force(x.Pe1)} over the K·L of P_c), no capacity.`} Vertical movement of the girder at the tie ${len(loads.vertical)} (support deflection times the cranes and 1 + impact, plus rotation over the tie's distance from the bearing) bends the plate about its weak axis, both ends fixed: ${moment(x.Mv)}. The slots release movement along the runway only.`,['cap-angle-basis','aisc-h']);
+  `AISC H1-1 for ${plateName}: P_r = ${force(x.F)} against P_c = ${force(x.Pc)} (compression governs). ${Number.isFinite(x.B1)?`Lap moment F·t_p/2 at the faying surface amplified by B1 = ${x.B1.toFixed(3)} (C_m = 1, P_e1 over the K·L of P_c) gives ${moment(x.lapMoment)}.`:`Lap moment F·t_p/2 at the faying surface: elastic instability, αP_r/P_e1 = ${((p.method==='LRFD'?1:1.6)*x.F/x.Pe1).toFixed(2)} ≥ 1 (P_e1 = ${force(x.Pe1)} over the K·L of P_c), no capacity.`} Vertical movement of the girder at the tie ${len(loads.vertical)} (support deflection times the cranes and 1 + impact, plus rotation over the tie's distance from the bearing) ${g.column.slot?'is released: the end plate slides in its vertical slots (columnRelease), so it does not bend the plate (0).':`bends the plate about its weak axis, both ends fixed: ${moment(x.Mv)}.`} The slots release movement along the runway only.`,['cap-angle-basis','aisc-h']);
  if(cb.sleeve){
   const bolt=boltCapacity({grade:cb.grade,diameter:cb.diameter,planes:1,surface:'B',shear:0,tension:0,method});
   add('cap-angle-sleeve',MG,'Steel sleeves · bolt installation load',1.5*bolt.pretension,m.Fy*cb.sleeve.area,'force','1.5T_b\\le\\phi F_yA_g;\\ \\phi=1.0\\ \\text{(sleeve)}',`Sleeve ${len(cb.sleeve.od)} OD × ${len(cb.sleeve.bore)} bore × ${len(cb.sleeve.length)} long, F_y as the plate material. 1.5 × the minimum pretension bounds turn-of-nut overshoot (RCSC commentary). The bolt clamps the sleeve to the channel flange; the angle is not clamped (pretensioned per AIST TR-13 §5.14).`,['cap-angle-basis','aisc-connections']);
@@ -338,11 +369,12 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  const colF=col?tStubPrying({T:Tcr,t:col.tf,b:x.ez-col.tw/2,a:col.width/2-x.ez,p:x.columnP!.p,db:cl.diameter,dPrime:cl.hole,Fu:col.Fu,method}):undefined;
  const colRange=.2*(Tcr+endF.q+(colF?.q??0))/colAt;
  add('cap-angle-col-bolt-fatigue',G,'Column bolts · axial tension fatigue',colRange,boltAllow(cyc),'stress','f_{sr}=0.2(\\Delta T+\\Delta q)/A_t\\le F_{SR}=(C_f/n_{SR})^{0.333}\\ge F_{TH}',`AISC Appendix 3.4: pretensioned bolts with only steel in the grip (end plate, shims, column flange) take 20% of the applied tension range including prying. ΔT = ${force(Tcr)} with the cyclic movement couple. C_f = 3.9 × 10⁸, F_TH = 7 ksi.`,['cap-angle-basis','aisc-fatigue']);
- const Sn=(g.plate.width-2*(lb.slot.width+inch/16))*g.plate.thickness**2/6,plateRange=range/x.Ae+(range*g.plate.thickness/2+Mvr)/Sn;
- add('cap-angle-plate-fatigue',G,'Tie plate · net section at the slip-critical lap',plateRange,finiteLife(12,cyc),'stress','f_{sr}=\\frac{\\Delta F}{A_e}+\\frac{\\Delta M}{S_n}\\le F_{SR}\\ \\ \\text{(Cat. B)}',`AISC Table A-3.1 item 2.2, Category B (net section of a joint installed as slip-critical); all ${cyc.toExponential(2)} cycles at the largest range, no threshold credit. Includes the lap moment range and the single-crane support movement moment ${moment(Mvr)}.`,['cap-angle-basis','aisc-fatigue']);
- const toeRange=range/(g.plate.width*g.plate.thickness)+6*Mvr/(g.plate.width*g.plate.thickness**2),root=transverseFilletFatigue(g.plate.thickness,g.weld,cyc);
- add('cap-angle-weld-toe-fatigue',G,'Tie plate at the end plate fillets · toe',toeRange,finiteLife(4.4,cyc),'stress','f_{sr}=\\frac{\\Delta F}{bt_p}+\\frac{6\\Delta M}{bt_p^2}\\le F_{SR}\\ \\ \\text{(Cat. C)}','AISC Table A-3.1 item 5.5: tension plate with a pair of transverse fillets, crack from the toe, Category C; all cycles, no threshold credit.',['cap-angle-basis','aisc-fatigue']);
- add('cap-angle-weld-root-fatigue',G,'Tie plate at the end plate fillets · root',toeRange,root.capacity,'stress','F_{SR}=6900R_{FIL}(4.4/n_{SR})^{0.333};\\;R_{FIL}=\\frac{0.103+1.24w/t_p}{t_p^{0.167}}\\le1',`AISC Table A-3.1 item 5.5, crack from the root (Eq. A-3-5), R_FIL = ${root.reduction.toFixed(3)}.`,['cap-angle-basis','aisc-fatigue']);
+ const fat=capAngleFatigue(g,x,range,cyc);
+ // The split of each range: the axial part from ΔF and the displacement-controlled part from the imposed vertical movement.
+ const split=(v:{axial:number;movement:number})=>g.column.slot?`Axial part ${stress(v.axial)} from ΔF = ${force(range)}; the vertical movement is released at the column (vertical slots in the end plate), so it adds no range.`:`Axial part ${stress(v.axial)} from ΔF = ${force(range)}; imposed-movement part ${stress(v.movement)} from the single-crane vertical movement ${len(loads.cyclicVertical)} (M = 6EIΔ/L² = ${moment(Mvr)} over the clear span ${len(g.plate.span)}), which is displacement controlled (∝ t_p·Δ/L²: a thinner or longer plate lowers it, a heavier one raises it).`;
+ add('cap-angle-plate-fatigue',G,'Tie plate · net section at the slip-critical lap',fat.plate.f,fat.plate.allowable,'stress','f_{sr}=\\frac{\\Delta F}{A_e}+\\frac{\\Delta M}{S_n}\\le F_{SR}\\ \\ \\text{(Cat. B)}',`AISC Table A-3.1 item 2.2, Category B (net section of a joint installed as slip-critical); all ${cyc.toExponential(2)} cycles at the largest range, no threshold credit. Includes the lap moment range. ${split(fat.plate)}`,['cap-angle-basis','aisc-fatigue']);
+ add('cap-angle-weld-toe-fatigue',G,'Tie plate at the end plate fillets · toe',fat.toe.f,fat.toe.allowable,'stress','f_{sr}=\\frac{\\Delta F}{bt_p}+\\frac{6\\Delta M}{bt_p^2}\\le F_{SR}\\ \\ \\text{(Cat. C)}',`AISC Table A-3.1 item 5.5: tension plate with a pair of transverse fillets, crack from the toe, Category C; all cycles, no threshold credit. ${split(fat.toe)}`,['cap-angle-basis','aisc-fatigue']);
+ add('cap-angle-weld-root-fatigue',G,'Tie plate at the end plate fillets · root',fat.root.f,fat.root.allowable,'stress','F_{SR}=6900R_{FIL}(4.4/n_{SR})^{0.333};\\;R_{FIL}=\\frac{0.103+1.24w/t_p}{t_p^{0.167}}\\le1',`AISC Table A-3.1 item 5.5, crack from the root (Eq. A-3-5), R_FIL = ${fat.root.reduction.toFixed(3)} for ${len(g.weld)} fillets on the ${len(g.plate.thickness)} plate. ${split(fat.root)}`,['cap-angle-basis','aisc-fatigue']);
  // Local plate bending at the rolled roots: the angle heel, the channel flange at its web and the column flange at its web.
  const localA=finiteLife(25,cyc);
  const locals=[{name:'angle heel',f:6*Tr*Math.max(angleF.bPrime,0)/(1+angleF.delta*Math.min(angleF.alpha,1))/(x.pa*g.ta**2)},{name:'channel flange root',f:6*Tr*Math.max(chanF.bPrime,0)/(1+chanF.delta*Math.min(chanF.alpha,1))/(x.pc*cb.seat.thickness**2)},
@@ -413,9 +445,13 @@ const roundUp=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
  * Proportions of the cap tieback angle for a bolt diameter, angle, tie plate and end plate thickness: pitches, slots,
  * edge distances, gauges and widths that satisfy the detailing checks on the given capped section, in 1/8 in steps.
  */
-export function capAngleProportions(p:ProjectInput,size:{shape:string;diameter:number;plate:number;endPlate:number},base:CapAngleInput=defaultCapAngle):CapAngleInput{
+export function capAngleProportions(p:ProjectInput,size:{shape:string;diameter:number;plate:number;endPlate:number;release?:number},base0:CapAngleInput=defaultCapAngle):CapAngleInput{
  const s=p.section,L=aiscAngleByName(size.shape)!,db=size.diameter,hole=boltProperties('A325',db).hole,eMin=minimumEdge(db),step=inch/8;
  const ta=L.t*inch,ka=L.kdes*inch,dv=L.d*inch,bh=L.b*inch,hw=boltHardware(db);
+ // Sleeve walls that take 1.5 times the bolt pretension at the plate F_y (cap-angle-sleeve), from the base wall in 1/16 in steps.
+ const Tb=boltProperties('A325',db).pretension,Fs=p.details?.material.Fy??345;let wall=base0.sleeveWall;
+ while(wall<inch/2&&Fs*Math.PI/4*((hole+2*wall)**2-hole**2)<1.5*Tb)wall+=inch/16;
+ const base:CapAngleInput={...base0,sleeveWall:wall};
  const sleeveOd=hole+2*base.sleeveWall,slotWidth=base.mode==='sleeved'?sleeveOd+inch/16:hole,slotLength=slotWidth+2*base.travel;
  const washerHeight=Math.max(2.5*db,slotWidth+inch);
  const channel=s.kind==='cap'?s:undefined,kc=channel?(()=>{const c=(p.section.capCatalogueId&&aiscChannelKdes(p.section.capCatalogueId))||s.capTw+inch/2;return c;})():inch;
@@ -427,10 +463,14 @@ export function capAngleProportions(p:ProjectInput,size:{shape:string;diameter:n
  // Fillets about 0.6 t_p: the root of the pair (A-3.1 item 5.5) governs their fatigue. The column bolt gauge clears the
  // fillets as sized (socket C1 and washer), not the base fillet.
  const weldSize=Math.max(base.weldSize,minimumFillet(Math.max(size.plate,size.endPlate)),roundUp(.6*size.plate,inch/16));
- const colGauge=roundUp(Math.max(size.plate/2+weldSize+wrenchOf(db),size.plate/2+weldSize+hw.washer.od/2+inch/16),step);
- // End plate edge: the J3.4 minimum plus C2 for a hole reamed oversized at fit-up to the field-drilled column holes.
- const epHeight=roundUp(2*(colGauge+eMin+oversizedEdgeIncrement(db)),inch/4);
- return {...base,shape:size.shape,length,setback:Math.max(base.setback,roundUp(length/2+inch/4,inch/4)),
+ // A released end plate (vertical slots, `release` the travel each way): the bolt keeps its clearances with the plate
+ // slid by the travel toward it, and its plate washer clears the tie plate fillets at either extreme.
+ const u=size.release??0,relSlot=u?(()=>{const w=hole+2*base.sleeveWall+inch/16,l=w+2*u;return {length:l,washer:l+2*u+inch/2};})():undefined;
+ const colGauge=roundUp(Math.max(size.plate/2+weldSize+wrenchOf(db)+u,size.plate/2+weldSize+hw.washer.od/2+inch/16+u,relSlot?size.plate/2+weldSize+relSlot.washer/2+u+inch/16:0),step);
+ // End plate edge: the J3.4 minimum plus C2 for a hole reamed oversized at fit-up to the field-drilled column holes; beyond
+ // a vertical slot, the clear material of a standard hole at the minimum edge distance.
+ const epHeight=roundUp(2*(colGauge+(relSlot?Math.max(eMin+slotEdgeIncrement(db,'long'),relSlot.length/2+eMin-hole/2):eMin+oversizedEdgeIncrement(db))),inch/4);
+ return {...base,...(u?{columnRelease:{travel:u}}:{}),shape:size.shape,length,setback:Math.max(base.setback,roundUp(length/2+inch/4,inch/4)),
   capBolts:{...base.capBolts,diameter:db,gauge,pitch},plateThickness:size.plate,plateWidth,
   lapBolts:{...base.lapBolts,diameter:db,gauge:Math.min(lapGauge,bh-eMin),pitch:lapPitch,edge:roundUp(eMin+slotEdgeIncrement(db,'short'),step)},
   endPlate:{thickness:size.endPlate,height:epHeight,width:plateWidth},columnBolts:{...base.columnBolts,diameter:db,gauge:colGauge},
@@ -440,11 +480,52 @@ const wrenchOf=(db:number)=>wrenchClearance(db);
 function aiscChannelKdes(name:string){const c=channelData(name);return c?c.kdes*inch:undefined;}
 
 
+/** Fit ratios of the sizing, held at one. */
+const capAngleFits=new Set(['cap-angle-cap-edge','cap-angle-rail-clear']);
+/** Sizing ratios of the plate's displacement-controlled checks (held nearer one where the movement part governs). */
+const capAngleMovementRatio=new Set(['cap-angle-plate-fatigue','cap-angle-weld-toe-fatigue','cap-angle-weld-root-fatigue']);
+/**
+ * The cap tieback's strength and fatigue ratios for sizing, by check id, under the tie force F and the estimated
+ * movement (none: a 0.002 rad rotation and no vertical movement); `movementControlled` (not enumerable) lists the
+ * fatigue checks whose range is mostly the imposed movement.
+ */
+export function capAngleSizingRatios(q:ProjectInput,g:CapAngleGeometry,F:number,movement:CapAngleSizingMovement|undefined,cycles:number){
+ const ss=simpleSupportInput(q),thermal=alpha*Math.max(...q.spans)*Math.max(ss.temperatureRise,ss.temperatureFall);
+ const loads:CapAngleLoads=movement?{F,range:movement.range,...capAngleMovement(q,g,movement)}:{F,range:F/2,rotation:.002,cyclicRotation:.001,thermal,vertical:0,cyclicVertical:0};
+ const x=capAngleDesign(q,g,loads);
+ const r:Record<string,number>={'cap-angle-cap-bolt':(x.T+x.Q)/x.capBolt.tension,'cap-angle-leg-prying':x.T/x.angleP.fitting,'cap-angle-channel-flange':x.T/x.channelP.fitting,'cap-angle-plate-rupture':x.F/x.ruptureCap,
+  'cap-angle-plate-compression':x.F/x.compression.capacity,'cap-angle-plate-movement':x.h1,'cap-angle-lap-slip':x.lapShear/x.slip,'cap-angle-col-bolt':(x.Tc+x.Qc)/x.colBolt.tension,'cap-angle-endplate-prying':x.Tc/x.endP.fitting,
+  'cap-angle-endplate-weld':x.weld.demand/x.weld.capacity,'cap-angle-heel':x.heel,
+  // Fits held at one (capAngleFits): the cap bolts within the channel flange depth, the hardware below the top of the rail.
+  'cap-angle-cap-edge':minimumEdge(g.cap.diameter)/Math.max(q.section.capDepth-g.cap.gauge,1e-6),
+  'cap-angle-rail-clear':Math.max(g.endPlate.z1,g.plate.z1+boltHardware(g.lap.diameter).head+boltHardware(g.lap.diameter).washer.t)/Math.max(railTopAboveSteel(q),1e-6)};
+ const controlled=new Set<string>();Object.defineProperty(r,'movementControlled',{value:controlled,enumerable:false});
+ if(movement){
+  r['cap-angle-lap-tension']=x.lapTension/x.lapBolt.tension;
+  const f=capAngleFatigue(g,x,movement.range,cycles);
+  for(const [k,v] of [['cap-angle-plate-fatigue',f.plate],['cap-angle-weld-toe-fatigue',f.toe],['cap-angle-weld-root-fatigue',f.root]] as const){r[k]=v.f/v.allowable;if(v.movement>v.axial)controlled.add(k);}
+ }
+ return r as Record<string,number>&{movementControlled?:Set<string>};
+}
+/** Estimated movements for sizing the cap tieback before the analysis (the configurator: flangeTieSizing.tieSizingDemands). */
+export interface CapAngleSizingMovement {
+ /** Single-crane deflection of the support at the bearing, mm; factored and single-crane girder end rotations, rad. */
+ support:number;rotation:number;serviceRotation:number;
+ /** Unfactored tie force range, N. */
+ range:number;
+}
 /**
  * Template sizing: the lightest arrangement, in standard increments, whose local strength ratios are at most `target`
  * under the estimated tie force F (N); the slots take the setting tolerance, thermal travel and a 0.002 rad rotation.
+ * With the estimated `movement` the imposed vertical movement is sized too: the plate's H1 sum with the movement moment,
+ * the bolts with its couple, and the tie plate fatigue at the lap and at the end plate fillets (toe and root) with the
+ * movement part, which is displacement controlled (∝ t_p·Δ/L²) and held to the target plus 0.07 as the flange ties'
+ * imposed movement (flangeTieSizing.sizingLimit). At each angle and bolt size the step's plate is tried first, then
+ * thinner plates down to 1/4 in (more flexible out of plane, the stress falls with t_p), then end plate fillets larger
+ * in 1/16 in steps up to the plate thickness (R_FIL of the root rises with w/t_p); never a heavier plate for the
+ * movement. Returns the first set within its limits, else the one with the least largest ratio.
  */
-export function sizeCapAngle(p:ProjectInput,F:number,target=.9):CapAngleInput{
+export function sizeCapAngle(p:ProjectInput,F:number,target=.9,movement?:CapAngleSizingMovement):CapAngleInput{
  const steps=[
   {shape:'L4X4X1/2',diameter:.625*inch,plate:.5*inch,endPlate:.625*inch},
   {shape:'L4X4X5/8',diameter:.625*inch,plate:.625*inch,endPlate:.75*inch},
@@ -454,15 +535,38 @@ export function sizeCapAngle(p:ProjectInput,F:number,target=.9):CapAngleInput{
   {shape:'L5X5X7/8',diameter:inch,plate:1.25*inch,endPlate:1.5*inch}
  ];
  const ss=simpleSupportInput(p),thermal=alpha*Math.max(...p.spans)*Math.max(ss.temperatureRise,ss.temperatureFall);
- let chosen=capAngleProportions(p,steps[0]);
- for(const size of steps){
-  const c=capAngleProportions(p,size),travel=roundUp(.002*(p.section.d+p.section.capTw)+thermal+ss.settingTolerance,inch/16);
-  const input={...c,travel:Math.max(c.travel,travel)};
+ const cycles=p.details!.spectrum.reduce((a,v)=>a+v.cycles,0),movementLimit=Math.min(1,target+.07);
+ let chosen=capAngleProportions(p,steps[0]),least=Infinity;
+ const trial=(size:typeof steps[number]&{released?:boolean},weld?:number)=>{
+  // The slot travel along the runway: the factored end rotation (estimated, else 0.002 rad) over the cap bolt height.
+  // The slot proportions (pitch, edges, washers) are laid out for that travel.
+  const travel=Math.max(defaultCapAngle.travel,roundUp((movement?.rotation??.002)*(p.section.d+p.section.capTw)+thermal+ss.settingTolerance,inch/16)),base={...defaultCapAngle,travel};
+  let c=capAngleProportions(p,size,base);
+  // Released: the vertical slot travel for the estimated movement plus 1/16 in positioning and 1/32 in tolerance, at least 1/8 in.
+  if(size.released&&movement){
+   const q0:ProjectInput={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:c}}},g0=capAngleGeometry(q0);
+   if(g0)c=capAngleProportions(p,{...size,release:Math.max(inch/8,roundUp(capAngleMovement(q0,g0,movement).vertical+inch/16+inch/32,inch/16))},base);
+  }
+  const input={...c,...(weld!==undefined?{weldSize:weld}:{})};
   const q:ProjectInput={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:input}}};
-  const g=capAngleGeometry(q);chosen=input;if(!g)continue;
-  const x=capAngleDesign(q,g,{F,range:F/2,rotation:.002,cyclicRotation:.001,thermal,vertical:0,cyclicVertical:0});
-  const ratios=[(x.T+x.Q)/x.capBolt.tension,x.T/x.angleP.fitting,x.T/x.channelP.fitting,x.F/x.ruptureCap,x.F/x.compression.capacity,x.h1,x.lapShear/x.slip,(x.Tc+x.Qc)/x.colBolt.tension,x.Tc/x.endP.fitting,x.weld.demand/x.weld.capacity,x.heel];
-  if(Math.max(...ratios)<=target)return input;
+  const g=capAngleGeometry(q);if(!g)return {input,worst:Infinity};
+  const r=capAngleSizingRatios(q,g,F,movement,cycles);
+  return {input,worst:Math.max(...Object.entries(r as Record<string,number>).map(([k,v])=>v/(capAngleFits.has(k)?1:capAngleMovementRatio.has(k)&&r.movementControlled?.has(k)?movementLimit:target)))};
+ };
+ // Unreleased first; then, with the movement estimated, the end plate released in vertical slots (no movement bending).
+ for(const release of movement?[false,true]:[false])for(const size0 of steps){
+  const size={...size0,released:release};
+  // The step's plate, then thinner ones (more flexible for the imposed movement), each with its default fillets; then
+  // larger fillets on each.
+  const plates=movement?[size.plate,...[.4375,.375,.3125,.25].map(v=>v*inch).filter(v=>v<size.plate-1e-6)]:[size.plate];
+  const sets=plates.map(plate=>({size:{...size,plate},weld:undefined as number|undefined}));
+  if(movement)for(const plate of plates){const w0=capAngleProportions(p,{...size0,plate}).weldSize;for(let w=w0+inch/16;w<=plate+1e-6;w+=inch/16)sets.push({size:{...size,plate},weld:w});}
+  for(const v of sets){
+   const r=trial(v.size,v.weld);
+   if(r.worst<=1)return r.input;
+   // Without the movement the heaviest set is kept where none passes (the template sizing as before).
+   if(!movement||r.worst<least){least=r.worst;chosen=r.input;}
+  }
  }
  return chosen;
 }

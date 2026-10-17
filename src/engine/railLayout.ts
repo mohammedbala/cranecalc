@@ -182,6 +182,8 @@ export function railJointDetail(p:ProjectInput,layout?:RailLayout):'none'|'welde
  if(!railHasJoints(p,layout??railLayout(p)))return 'none';
  return railJointKind(p)==='welded'?'welded':'bars';
 }
+/** The rail supplier's joint bars and bolts (a deferred submittal): drawn schematically, with the demands, never dimensioned here. */
+export const supplierRailJoint=(p:ProjectInput)=>!!p.details&&railJointKind(p)==='supplier-bars'&&railJointDetail(p)==='bars';
 /** The welded rail joint, stated once for the notes and the rail details. */
 export const weldedRailJointNote='Rail joints: thermite or flash-butt welded by the rail supplier\'s qualified procedure (preheat, finish grinding of the head and inspection per the supplier), rail ends set to the supplier\'s weld gap and staggered across the runway; no joint bars, bolts or drilled holes in the rail.';
 /** Largest closure of a rail joint, between new pieces or onto an existing rail: what each joint gap and slot takes. */
