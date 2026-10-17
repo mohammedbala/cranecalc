@@ -32,6 +32,7 @@ import {craneCombinations} from './aistLoads';
 import {runwayEnds} from './continuation';
 import {activeColumnCap} from './columnCapInputs';
 import {capForkStiffness,createColumnCapCollector} from './columnCap';
+import {createSpliceCollector} from './girderSplice';
 import {capAngleBraceSystem,capAngleFatigueDetails} from './capAngleTie';
 
 /**
@@ -184,6 +185,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const rolledBracket=createRolledBracketCollector(p);
  const taperedHaunch=createTaperedHaunchCollector(p);
  const capCollector=createColumnCapCollector(p);
+ // Girder field splices: their stations are nodes of the lateral/torsional mesh.
+ const splice=createSpliceCollector(p,props);
  const details=p.details!,brace=braceSystem(p),E=p.section.E,G=E/2.6,L=p.spans.reduce((s,l)=>s+l,0),cap=cappedMechanics(p.section),z=cap?p.section.d+p.section.capTw+railTopAboveSteel(p)-cap.shearCenter:railTopAboveSteel(p)+p.section.d/2,allStations=restraintStations(p),flanges=flangeRestraintStations(p),restrains=(xs:number[],x:number)=>xs.some(v=>Math.abs(v-x)<=1e-6);
  const supports=[0];for(const l of p.spans)supports.push(supports.at(-1)!+l);
  const groups=p.system==='continuous'?[[0,L]]:p.spans.map((_,i)=>[supports[i],supports[i+1]]);
@@ -320,7 +323,8 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    const brScale=strength&&gapped?braceForce??0:0;
    const restraintsAt=(secant:boolean)=>stations.map(x=>({x:x-start,top:restrains(flanges.top,x)?gapK(topK(x),secant&&atSupport(x)?clearance.top.gap:0,brScale)*stiffnessFactor:0,bottom:restrains(flanges.bottom,x)?gapK(bottomK(x),secant&&ebK&&Math.abs(x-end)<1e-6?clearance.bottom.gap:0,brScale)*stiffnessFactor:0}));
    const beamWith=(restraints:ReturnType<typeof restraintsAt>)=>new LateralTorsionBeam({length:end-start,E:E*stiffnessFactor,G:G*stiffnessFactor,Iy:props.Iy,J:props.J,Cw:props.Cw,h0:props.h0,polarRadiusSquared:(props.Ix+props.Iy)/props.A,subdivisions:memberSubdivisions,...mechanics,
-    loads:wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),
+    // Girder splice stations are nodes of the mesh (zero loads), where the splice collector recovers the actions.
+    loads:[...wheels.map(w=>({x:Math.max(0,w.x-start),lateral:w.h,torque:w.p*p.railEccentricity+w.h*z,vertical:w.p,height:z})),...(splice?.nodes??[]).filter(x=>x>start+1e-6&&x<end-1e-6).map(x=>({x:x-start,lateral:0,torque:0}))],
     restraints,
     axial:strength?e.axial:0,moment:strength?x=>moment(x+start):undefined,
     distributedTorque:e.railTorquePerLength,
@@ -380,6 +384,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
    if(p.system==='simple'&&bayIndex)joints.push({bay:bayIndex+1,p:wheels.filter(w=>Math.abs(w.x-start)<=1e-6).reduce((a,w)=>a+w.p,0)});
    for(const re of restraintForces){const x=snap(re.x+start),old=reactions.get(x)??{top:0,bottom:0};reactions.set(x,{top:old.top+re.top,bottom:old.bottom+re.bottom});}
    if(!r)continue;
+   splice?.observe(e,bin,r,start,end,moment);
    for(const s of r.stations){
     const x=s.x+start,M=moment(x);
     if(strength){
@@ -600,6 +605,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   if(rolledBracket)result.rolledBracket=rolledBracket.result;
   if(taperedHaunch)result.taperedHaunch=taperedHaunch.result;
   if(capCollector)result.columnCap=capCollector.finish();
+  if(splice)result.splices=splice.finish();
   // Not serialized: calculate() keeps only the cases a printed result names (caseIndex).
   Object.defineProperty(result,'caseRegistry',{value:registry,enumerable:false});
   return result;

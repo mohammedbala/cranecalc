@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import type { simpleSupportSchema } from './runwayDetails';
 import { activeEndStop, stopRailEnd, stopEnds } from './endStopInputs';
 import { runwayEnds } from './continuation';
+import { spliceClipZones, clipStationsAvoiding } from './spliceInputs';
 
 // Internal units: mm, N, degrees C. Left end locates each independent bay
 // longitudinally; right end slides. Neither end provides moment continuity.
@@ -51,7 +52,7 @@ export function independentBearings(p:ProjectInput){
  * Distance from each girder end within which no rail clip stands where a direct flange saddle is welded under the top
  * flange (paired bars or a flexible plate on simple spans): past the saddle, its end fillet and the clip's reach (half
  * its base, its end weld and a spread through the flange thickness), so the clip's local flange bending is not added to
- * the saddle's (plate-tie-keeper-flange). Zero without a saddle.
+ * the saddle's (plate-tie-clip-flange). Zero without a saddle.
  */
 function saddleClipSetback(p:ProjectInput,clip:ReturnType<typeof railClipInput>){
  const d=p.details,a=d?.brace.flangeAttachment,kind=d?.brace.arrangement??'paired-bars';
@@ -66,11 +67,14 @@ function saddleClipSetback(p:ProjectInput,clip:ReturnType<typeof railClipInput>)
 export function railClipStations(p:ProjectInput){
  const L=p.spans.reduce((a,b)=>a+b,0),spacing=p.aist?.clipSpacing??600,stop=activeEndStop(p),railEnd=stop?stopRailEnd(stop):0;
  // With girder-mounted stops the rail, and so its clips, stops short of each runway end.
- if(p.system!=='simple'||!p.details){const a=railEnd+(stop?railClipInput(p.details!.rail).baseLength/2:0),z=L-(a),stations=[];for(let x=a;x<z;x+=spacing)stations.push(x);return [...stations,z];}
+ // At a girder field splice the clips stop clear of the joint and the top flange bolt heads (spliceInputs.ts).
+ const splices=p.details?spliceClipZones(p):[];
+ if(p.system!=='simple'||!p.details){const a=railEnd+(stop?railClipInput(p.details!.rail).baseLength/2:0),z=L-(a);if(splices.length)return clipStationsAvoiding(a,z,spacing,splices);const stations=[];for(let x=a;x<z;x+=spacing)stations.push(x);return [...stations,z];}
  const ends=stopEnds(p);
  const clip=railClipInput(p.details.rail),half=clip.baseLength/2,last=p.spans.length,keep=saddleClipSetback(p,clip);
  return girderSegments(p).flatMap(m=>{
   const a=Math.max(m.start+half+(m.bay===1&&ends.includes('left')?railEnd:0),m.start+keep),z=Math.min(m.end-half-(m.bay===last&&ends.includes('right')?railEnd:0),m.end-keep);if(z<a)return [];
+  if(splices.some(v=>v[1]>a&&v[0]<z))return clipStationsAvoiding(a,z,spacing,splices);
   const count=Math.max(1,Math.ceil((z-a)/spacing));
   return Array.from({length:count+1},(_,i)=>a+(z-a)*i/count);
  });

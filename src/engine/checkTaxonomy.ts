@@ -52,6 +52,13 @@ const T=(re:RegExp,type:Exclude<CheckType,'design'>):Rule=>({re,type});
 const idRules:Rule[]=[
  // Verification
  T(/^(design-|detail-)?(equilibrium|convergence|mesh|travel)$/,'verification'),
+ // Girder field splices (girderSplice.ts): the analysis record, the dimensional rules and the strength limit states.
+ T(/^splice-analysis$/,'verification'),
+ T(/^splice-(piece-length|spacing|spacing-max|edge|edge-max|rail-clearance|wrench|web-wrench|clips|rail-joints|clearances)$/,'detailing'),
+ D(/^splice-(girder-flexure|web-plate-flexure|web-plate-rupture|web-plate-interaction)$/,'flexure'),
+ D(/^splice-[a-z]+-(slip|bolt-shear|bearing|block-shear)$/,'connection'),D(/^splice-web-block-shear$/,'connection'),
+ D(/^splice-[a-z]+-(plate-yield|plate-rupture|plate-compression|girder-net)$/,'axial'),
+ D(/^splice-web-plate-shear-(yield|rupture)$/,'shear'),
  // Load basis: supplied load against the code minimum
  T(/^crane-\d+-(split|impact|side|traction|bumper)$/,'load-basis'),T(/^(load-basis|design-scope)$/,'load-basis'),
  // Inputs and input consistency (crane statics, cycle count, class), survey and material records

@@ -6,6 +6,7 @@ import { interaction, type GirderStrength } from './aiscStrength';
 import type { ProjectInput, Properties, DesignAnalysis, DesignCaseSummary } from './types';
 import {cappedElasticProperties} from './capChannel';
 import {railClipStations,girderSegments} from './simpleSupports';
+import {spliceCriticalStations} from './spliceInputs';
 import {adjacentReactions} from './continuation';
 import {railTopAboveSteel} from './railSeat';
 import {craneAtStop} from './craneTravel';
@@ -87,6 +88,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
   // A girder end or rail clip past a runway-end grid (bearing centered on the support web) is outside the spans: the
   // model samples the grids, where that overhang meets the span.
   criticalStations.push(...[...railClipStations(p),...girderSegments(p).flatMap(m=>[m.start,m.end])].map(x=>Math.min(L,Math.max(0,x))));
+  criticalStations.push(...spliceCriticalStations(p));
  }
  const samples=[...new Set([...v0.x,...t0.x,...b0.x])].sort((a,b)=>a-b);
  const supportNodes=v0.x.flatMap((x,i)=>stations.some(s=>Math.abs(s-x)<1e-6)?[i]:[]);
