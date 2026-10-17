@@ -78,12 +78,15 @@ export function supportBearings(p:ProjectInput){
  *   side thrust as the bottom-flange force through the bearing bolts (both senses), its support torque about the seat
  *   (side thrust times the rail top height: the top-flange restraint force on torqueArm) and the factored crane
  *   longitudinal force; the crane stop force with 1.2(D + C_d) + C_v (factor 1.0 LRFD, 0.67 ASD, as the haunch);
- *   any uplift 0.9D + 1.6 C_min; and the dead load alone with the factored top-flange force: the analysis envelope has
- *   sets with a crane's top-flange restraint force at a support whose crane reaction there is small (the crane in
- *   the next bay), whose support torque moves the reaction to the flange-tip bound of the eccentricity
- *   (seatEccentricity); the haunched rib checks take their critical section at that largest eccentricity;
+ *   the same reaction without side thrust (no support torque: the reaction at the web line, where a tapered rib's
+ *   own critical section is nearest the root and its moment the largest); any uplift 0.9D + 1.6 C_min; the dead load
+ *   alone with the factored top-flange force: the analysis envelope has sets with a crane's top-flange restraint
+ *   force at a support whose crane reaction there is small (the crane in the next bay), whose support torque moves
+ *   the reaction to the flange-tip bound of the eccentricity (seatEccentricity); the haunched rib checks take their
+ *   critical section at that largest eccentricity;
  * - fatigue, per duty bin: the crane reaction without impact, its own weight plus the bin's lifted fraction, on each
- *   girder end in turn (the crane crossing the grid), with half the side thrust (C_d + C_v + 0.5 C_ss);
+ *   girder end in turn (the crane crossing the grid), with half the side thrust (C_d + C_v + 0.5 C_ss), and the bin's
+ *   share of the least crane reaction where it lifts the support (the signed range spans both);
  * - service: the crane reaction with impact on each girder end.
  */
 export function bracketSizingSet(p:ProjectInput,rotation?:number):BracketSizingSet{
@@ -101,13 +104,17 @@ export function bracketSizingSet(p:ProjectInput,rotation?:number):BracketSizingS
  r.supports.forEach((s,j)=>{
   const x=stations[j],D=s.D-s.Ds,crane=s.Cd+s.Cv+s.Ci,R=(lrfd?1.2:1)*D+(lrfd?1.6:1)*crane,H=(lrfd?1.6:1)*s.Css,Rstop=(lrfd?1.2:1)*(D+s.Cd)+s.Cv;
   const lift=(lrfd?.9:.6)*D+(lrfd?1.6:1)*Math.min(0,s.craneMinimum);
+  // The least crane reaction without impact (a continuous girder's support lifts with the crane in the next span).
+  const least=s.craneMinimum<0&&crane>0?s.craneMinimum*(s.Cd+s.Cv)/crane:0;
   set.serviceReaction=Math.max(set.serviceReaction,s.D+crane);
   for(const v of bearings[j]){
    push(set.strength,{x,loads:at(R,v.reaction),horizontal:{longitudinal:F,bottom:H,top:top(H),offset:v.center}},'s');
+   push(set.strength,{x,loads:at(R,v.reaction),horizontal:{longitudinal:F,bottom:0,top:0,offset:v.center}},'s');
    if(stop>0)push(set.strength,{x,loads:at(Rstop,v.reaction),horizontal:{longitudinal:stop,bottom:0,top:0,offset:v.center}},'s');
    if(lift<0)push(set.strength,{x,loads:at(lift,v.reaction),horizontal:{longitudinal:0,bottom:H,top:top(H),offset:v.center}},'s');
    push(set.strength,{x,loads:at((lrfd?1.2:1)*D,v.reaction),horizontal:{longitudinal:0,bottom:H,top:top(H),offset:v.center}},'s');
-   for(const b of bins){const Hf=.5*s.Css*b.scale;push(set.fatigue,{x,bin:b.bin,loads:at((s.Cd+s.Cv)*b.scale,v.reaction),horizontal:{longitudinal:0,bottom:Hf,top:top(Hf),offset:v.center}},'f');}
+   for(const b of bins){const Hf=.5*s.Css*b.scale;push(set.fatigue,{x,bin:b.bin,loads:at((s.Cd+s.Cv)*b.scale,v.reaction),horizontal:{longitudinal:0,bottom:Hf,top:top(Hf),offset:v.center}},'f');
+    if(least<0)push(set.fatigue,{x,bin:b.bin,loads:at(least*b.scale,v.reaction),horizontal:{longitudinal:0,bottom:0,top:0,offset:v.center}},'f');}
    push(set.service,{x,loads:at(crane,v.reaction),horizontal:{longitudinal:0,bottom:s.Css,top:top(s.Css),offset:v.center}},'v');
   }
  });
