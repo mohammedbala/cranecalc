@@ -40,7 +40,10 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
  const grids=(v:number[])=>v.length>1?`grids ${v.slice(0,-1).join(', ')} and ${v.at(-1)}`:`grid ${v[0]}`;
  const support=s.detailResults?.taperedHaunch?'haunch':s.input.details?.bracket?.enabled?'bracket':'support';
  // Where V acts: from the column centerline, or from the column face where the seat and the column are by others.
- const far=d.web!==undefined&&d.e!==undefined&&d.e-d.web>1e-3?` (the far edge of the bearing plate, a conservative reaction position; the girder web is at ${len(d.web)})`:'';
+ // The reaction beyond the web line: the far bearing edge (half the plate width), or on a new column designed here the
+ // web line plus the larger of the rail eccentricity and the bearing plate's kern (columnReactionOffset).
+ const half=(s.input.details?.bearing.width??0)/2,beyond=d.web!==undefined&&d.e!==undefined?d.e-d.web:0;
+ const far=beyond>1e-3?Math.abs(beyond-half)<1e-3?` (the far edge of the bearing plate, a conservative reaction position; the girder web is at ${len(d.web)})`:` (the girder web line at ${len(d.web)} plus ${len(beyond)}, the larger of the rail eccentricity and the bearing plate's kern b/6, for a full-contact bearing under the web's bearing stiffeners)`:'';
  const at=d.e===undefined?'; e, from the column centerline to the reaction, is not established here (the column is by others): Mx = V·e with the surveyed seat position (column strong axis).'
   :d.eFrom==='face'?`, at e = ${len(d.e)} from the column face${far}. Mx = V·e is the moment at the column face; for the column centerline add V times half the column depth (column by others).`
   :`, at e = ${len(d.e)} from the column centerline${far}. Mx = V·e (column strong axis).`;

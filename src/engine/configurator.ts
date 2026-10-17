@@ -522,7 +522,7 @@ function finishTie(p:ProjectInput,sized?:Record<string,number>):ProjectInput{
 function withHaunch(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  const b=p.details?.bracket;
  if(!b?.enabled||b.arrangement!=='tapered-haunch')return p;
- const sized=sizeTaperedHaunch(p);
+ const sized=sizeTaperedHaunch(p,.9,{light:true});
  if(cfg.structure!=='new'||cfg.columnShape||!sized.details!.bracket!.columnStiffeners?.enabled)return sized;
  for(const shape of heavierColumns(p.existingColumn!.shape)){
   const q=structuredClone(p),w=aiscShapeByName(shape)!,c=q.existingColumn!;
@@ -531,7 +531,7 @@ function withHaunch(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):Pro
   if(q.columnBase)q.columnBase.plate={...q.columnBase.plate,...basePlatePlan(shape)};
   delete q.details!.bracket!.haunch;delete q.details!.bracket!.columnStiffeners;
   q.details=selectBracketArrangement(q.details!,'tapered-haunch',q.system);
-  const r=sizeTaperedHaunch(q);
+  const r=sizeTaperedHaunch(q,.9,{light:true});
   if(!r.details!.bracket!.columnStiffeners?.enabled){r.notes=r.notes.replaceAll(p.existingColumn!.shape,shape);trace.column=`The tapered haunch on the ${p.existingColumn!.shape} needs column continuity plates, which clash with the bracing gussets on a new column web: the lightest heavier W14 that needs none`;return r;}
  }
  return sized;

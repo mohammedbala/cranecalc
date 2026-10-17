@@ -79,7 +79,9 @@ export const runwayDetailsSchema=z.object({
  criteria:z.object({twistLimit:pos.optional(),railLateralLimit:pos,railGauge:pos,alignmentTolerance:pos,levelTolerance:pos,rotationClearance:pos,temperatureMaximum:z.number().finite(),corrosionProtected:z.boolean()}),
  fatigueDetails:z.array(z.object({id:z.string().min(1).max(40),name:z.string().min(1).max(120),x:nn,point:z.enum(['top-left','top-right','bottom-left','bottom-right']),category:z.enum(['A','B','B1','C','D','E','E1']),reference:z.string().min(1).max(300)})).min(1).max(16),
  spectrum:z.array(z.object({name:z.string().min(1).max(80),liftFraction:nn.max(1),cycles:pos})).min(1).max(8),
- fabrication:z.object({steel:z.string().min(1).max(200),bolting:z.string().min(1).max(400),welding:z.string().min(1).max(400),inspection:z.string().min(1).max(700),erection:z.string().min(1).max(700),railAlignment:z.string().min(1).max(700)})
+ fabrication:z.object({steel:z.string().min(1).max(200),bolting:z.string().min(1).max(400),welding:z.string().min(1).max(400),inspection:z.string().min(1).max(700),erection:z.string().min(1).max(700),railAlignment:z.string().min(1).max(700)}),
+ /** A continuous girder longer than a practical piece (girderPieceChecks): the erector's confirmation of shipping and erecting it in one length, with its source. */
+ girderPiece:z.string().max(300).optional()
 });
 export type RunwayDetails=z.infer<typeof runwayDetailsSchema>;
 export type LapConnection=z.infer<typeof lapConnectionSchema>;
