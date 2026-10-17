@@ -38,6 +38,8 @@ import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
 import {columnGussetHeight,flangeTieGeometry,stiffenerTieGeometry} from './tieGeometry';
 import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener} from './flangeTieSizing';
+import {designSplices,type SplicesDesigned} from './spliceSizing';
+import {practicalPieceLength} from './girderPieces';
 import {applyBearingLayout,bearingSeat,defaultBearingShim} from './endBearing';
 import {validateRunwayDetails} from './detailValidation';
 import {weldedRibBracket} from './bracketRib';
@@ -458,6 +460,8 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  const tie=sizedTieRatios(p),q=finishTie(withHaunch(withWeldedBracket(p),cfg,trace),tie);
  // The end stops sized again for the crane bumper force on the finished girder end (bearing stiffener, tie saddle).
  if(q.details?.endStop)q.details.endStop=sizeEndStop(q).stop;
+ // A continuous girder longer than a practical piece: bolted field splices in the inflection regions (spliceSizing.ts).
+ const spliced=designSplices(q);if(spliced){q.details!.splices=spliced.splices;trace.splice=spliced;}
  q.notes+=` ${overhangNote(estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control))}`;
  return logged(cfg.structure==='new'?withCapColumn(withColumnBase(sizeBracing(q,baseTarget),cfg,trace),cfg):withLongitudinalExit(withPreheat(q),cfg,trace));
 }
@@ -705,7 +709,7 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
 }
 
 /** Reasons the build steps record for the selection log (selectionLog). */
-export interface SelectionTrace {tie?:string;column?:string;exit?:string}
+export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned}
 const sizingRatioNames:Record<string,string>={tips:'top-flange tip stress (DG7, warping and second-order twist)',h1:'H1 top-flange interaction with the load-height LTB strength',stability:'elastic LTB stability margin',shear:'web shear'};
 /**
  * The configurator selection log kept on the project (configurator.selections): every member or part that differs
@@ -746,6 +750,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  const bracket=p.details?.bracket;
  if(design&&bracket?.enabled&&!activeColumnCap(p)&&entered.reach===undefined&&Math.abs(bracket.reach-20*inch)>1e-6)
   add('Column face to girder web',`${auto} (${len(20*inch)})`,len(bracket.reach),'Set by the tie sizing: the column face moves out from 20 in (to at most 30 in) until the tie passes its imposed-movement and strength checks.');
+ if(design&&trace.splice)add('Girder field splices',`${auto} (none: one ${+(p.spans.reduce((a,b)=>a+b,0)/foot).toFixed(1)} ft piece)`,`${trace.splice.stations.length} bolted slip-critical splice${trace.splice.stations.length>1?'s':''}: ${trace.splice.where}`,`The continuous girder exceeds the ${+(practicalPieceLength/foot).toFixed(0)} ft practical shipping and erection piece: automatic placement 0.20 to 0.25 of the span from an interior support (the inflection region, nearest 0.22 L), every piece within ${+(trace.splice.splices.maxPiece/foot).toFixed(0)} ft. ${trace.splice.why}.`);
  if(design&&trace.exit&&!entered.longitudinalExit)add('Longitudinal force exit',`${auto} (strut at the column centerline)`,'Crane-level strut on the girder line, by others',`${trace.exit[0].toUpperCase()}${trace.exit.slice(1)}.`);
  return out;
 }
