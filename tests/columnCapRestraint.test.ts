@@ -12,6 +12,8 @@ import {boltGrades} from '../src/engine/constructionNotes';
 import {buildTaxonomy} from '../src/engine/checkTaxonomy';
 import {summaryElements} from '../src/report/designSummary';
 import {openItemGroups} from '../src/report/openItems';
+import {endBearingView} from '../src/components/endBearingDetail';
+import {annotationClashes} from '../src/components/detailSheet';
 
 /**
  * A girder on a column cap is restrained at its ends by a fork (the bearing stiffener pair and the bolted bottom flange):
@@ -53,5 +55,18 @@ describe('column cap: the restraint analysed is the restraint drawn and describe
   const slip=q.checks.find(c=>c.id==='column-cap-bolt-slip')!;Object.assign(slip,{status:'fail',demand:2.1,capacity:1,utilization:2.1});
   const tax=buildTaxonomy(q,summaryElements(q.input)),g=openItemGroups(tax,q).groups.find(v=>v.governing.id==='column-cap-bolt-slip')!;
   expect(g.remedy).toMatch(/^Raise the locating bolts' slip resistance by at least 110%/);expect(g.remedy).not.toMatch(/existing/i);
+ });
+ it('draws the bearings of a single-span runway at their own grids, not two girder ends at one grid',()=>{
+  const text=(svg:string)=>sheetEntities(`<g data-sheet-content="detail">${svg}</g>`,'US').flatMap(e=>e.type==='text'?[e.value]:[]);
+  // Three bays: the shared support, sliding and locating ends at grid 2 with the girder gap between them.
+  const shared=endBearingView(s).svg;expect(text(shared)).toContainEqual(expect.stringMatching(/ GAP$/));
+  const q=structuredClone(s);q.input.spans=[q.input.spans[0]];
+  const v=endBearingView(q).svg,t=text(v);
+  expect(t.filter(x=>x==='1'||x==='2').sort()).toEqual(['1','2']);
+  expect(t).toContain('SLIDING END');expect(t).toContain('LOCATING END');
+  expect(t.some(x=>/ GAP$/.test(x))).toBe(false);
+  expect(annotationClashes(v)).toBe(0);
+  // Erection adjustment of the shop-drilled cap: at the column base, stated with its basis.
+  expect(constructionRequirements(p).find(x=>x.key==='erection')!.items.join(' ')).toMatch(/erection adjustment: set each column to line, elevation and plumb at its base.*J3\.8/);
  });
 });
