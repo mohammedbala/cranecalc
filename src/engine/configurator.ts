@@ -723,6 +723,16 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
  // tie on the bearing stiffener instead (tieOnBearingStiffener).
  const moved=tieOnBearingStiffener(p,{reach:cfg.reach===undefined?30*inch:undefined,highCycle:highCycle(cfg)?`CMAA Class ${cfg.cmaa}, AIST Class ${cfg.buildingClass}`:undefined,bracket,face});
  if(moved){p.details=moved.details;trace.tie=`A direct flange saddle does not suit this rolled girder (${moved.why}): the ${cfg.tie==='flexible-plate'?'tie is paired flat bars, which':'paired flat bars'} bolt to the tie-side bearing stiffener, cut as one plate with its gusset extension past the flange tip (no weld at the gusset), the full-depth stiffener pair carrying the tie force into the girder.`;p.notes+=` ${trace.tie}`;}
+ // A configured reach holds the column face: where the sized tie still exceeds an imposed-movement limit there, the log
+ // says so (the sizing moves the face out only where the reach is left to it).
+ const movement=['tie-move-strength','tie-move-weld','tie-move-gusset','tie-move-fatigue','tie-move-root-fatigue'];
+ if(cfg.reach!==undefined&&(tieArrangement(p.details)==='paired-bars'||tieArrangement(p.details)==='flexible-plate')){
+  const over=Object.entries(tieSizingRatios(p)).filter(([k,v])=>movement.includes(k)&&v>1+1e-9).sort((a,b)=>b[1]-a[1]);
+  if(over.length){const why=`The configured reach ${cfg.units==='SI'?`${Math.round(cfg.reach*inch)} mm`:`${cfg.reach} in`} holds the column face, and the tie at it still exceeds ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands: the girder end movement needs a longer flexible length (a longer reach, left blank for the configurator to choose).`;trace.tie=trace.tie?`${trace.tie} ${why}`:why;p.notes+=` ${why}`;}
+ }
+ // Paired bars that cannot follow the girder end movement with both ends fixed take the column-end slide (sizeFlangeTie).
+ const slide=p.details!.brace.release?.slide;
+ if(slide&&tieArrangement(p.details)==='paired-bars'){const why=`Fixed at both ends at this reach, the paired bars cannot follow the girder end rotation and thermal travel along the runway (the tie movement checks over their limits): the column gusset slides ${cfg.units==='SI'?`${Math.round(slide)} mm`:`${+(slide/inch).toFixed(3)} in`} each way along the runway on longer sleeves (column-end slide, fillers at the girder gusset; checks tie-slide-*).`;trace.tie=trace.tie?`${trace.tie} ${why}`:why;p.notes+=` ${why}`;}
 }
 
 /** Reasons the build steps record for the selection log (selectionLog). */

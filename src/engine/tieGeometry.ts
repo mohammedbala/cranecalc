@@ -44,9 +44,10 @@ export const tieBarGap=(rootWeld:number)=>Math.max(inch/2,roundUp(rootWeld+inch/
  * steel sleeve passing through a vertical slot in the column gusset, so the
  * bars and sleeves translate vertically with the girder while the gusset is
  * not clamped. The sleeve bears on the slot sides to carry the tie force.
- * Slide (paired bars only, `slide` > 0): the sleeves are longer than the gusset by the slide each way, so the column
- * gusset also floats along the runway on them; the bars stay parallel, each off the gusset faces by `barOffset`, with a
- * filler of that thickness on each face of the girder gusset (tieMovementChecks, tie-slide-*).
+ * Slide (paired bars only, `slide` > 0): the sleeves are longer than the gusset by the slide each way (in place of the
+ * clearance), so the column gusset also floats along the runway on them, centered at erection; the bars stay parallel,
+ * each off the gusset faces by `barOffset` (the slide), with a filler of that thickness on each face of the girder gusset
+ * (tieMovementChecks, tie-slide-*).
  */
 export function tieRelease(p:ProjectInput){
  const t=p.details?.brace,r=t?.release;if(!t||!r?.enabled)return undefined;
@@ -66,7 +67,7 @@ export function tieRelease(p:ProjectInput){
  // increment; never shorter than the bar edge distance. The bars keep their own edge distance.
  const endEdge=Math.max(c.edge,roundUp(edge+slotTolerance,gussetIncrement));
  const slide=tiePlies(p)===2?r.slide??0:0;
- return {...r,slide,barOffset:slide>0?slide+r.clearance/2:0,hole,od,width,slot,edge,ligament,rowLigament,minimumGauge,minimumPitch,endEdge,tolerance:slotTolerance,height,sleeveLength:t.gussetThickness+r.clearance+2*slide,sleeveArea:Math.PI/4*(od**2-hole**2)};
+ return {...r,slide,barOffset:slide,hole,od,width,slot,edge,ligament,rowLigament,minimumGauge,minimumPitch,endEdge,tolerance:slotTolerance,height,sleeveLength:t.gussetThickness+(slide>0?2*slide:r.clearance),sleeveArea:Math.PI/4*(od**2-hole**2)};
 }
 
 /** Column gusset height: the bar width, or taller to contain the release slots. */

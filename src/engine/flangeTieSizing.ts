@@ -153,10 +153,13 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
  // by the restraint couple over h_r (the analysis's restraint at the tie line carries it with the side thrust).
  const reactions=supportReactions(p,props).supports,Rv=reactions.reduce((m,v)=>Math.max(m,(lrfd?1.2:1)*Math.max(0,v.D-v.Ds)+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci)),0),eccentric=Rv*Math.abs(p.railEccentricity)/Math.max(top-bottom,s.tf);
  const sustained=reactions.reduce((m,v)=>Math.max(m,Math.max(0,v.D-v.Ds)+Math.max(0,v.Cd+v.Cv)),0)*Math.abs(p.railEccentricity??0)/Math.max(top-bottom,s.tf);
+ // The crane's vertical reaction at the rail eccentricity comes and goes with each pass: its torque over h_r adds to the
+ // tie force range (the analysis's fatigue range of the restraint reactions includes it).
+ const eccentricRange=reactions.reduce((m,v)=>Math.max(m,Math.max(0,v.Cd+v.Cv)),0)*Math.abs(p.railEccentricity??0)/Math.max(top-bottom,s.tf);
  // Calibrated against the full analysis, whose restraint acts at the tie line on the twisting girder (t01, t03, t05,
  // t10, simulation cases 5 and 15 after the restraint change): the statics estimate was 0.87 to 0.97 of the analysis
  // tie force, so it is raised by 12%.
- return {force:tieForceCalibration*((lrfd?1.6:1)*r.lateral*torsion+eccentric+braceForce),range:1.25*H,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
+ return {force:tieForceCalibration*((lrfd?1.6:1)*r.lateral*torsion+eccentric+braceForce),range:Math.max(1.25,torsion)*H+eccentricRange,rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
   braceForce,braceStiffness:(lrfd?1/.75:2)*(10*r.moment*Cd/props.h0+8*P)/Lbr,sustained};
 }
 
@@ -472,9 +475,9 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // else the slide set only where it exceeds the limits by less than the set kept.
  const over=(r:Trial)=>Object.entries(r.ratios).some(([k,v])=>movementChecks.has(k)&&v>sizingLimit(r.ratios,k,target)+1e-9);
  if(kept&&kept.worst>1&&over(kept)&&release&&!plate){
-  const mv=tieMovements(sizingSnapshot(applyTieProportions(structuredClone(p),{...base,slide:0}),demand)),clearance=d.brace.release!.clearance;
+  const mv=tieMovements(sizingSnapshot(applyTieProportions(structuredClone(p),{...base,slide:0}),demand));
   const slide=Math.max(inch/8,up(mv.longitudinal+sixteenth+inch/32,sixteenth));
-  if(slide+clearance/2<=.75*inch+1e-9){
+  if(slide<=.75*inch+1e-9){
    // The flexible length helps the bars here too: the farthest face reached first, then nearer while a set passes, so
    // the reach is the shortest at which the slide passes.
    let found:Trial|undefined,passing:Trial|undefined;budget=evaluations+300;
