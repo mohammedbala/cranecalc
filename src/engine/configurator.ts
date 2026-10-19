@@ -67,11 +67,15 @@ export function normalizeConfig(input:RunwayConfig):{config:RunwayConfig;changes
  // long (AISC DG7 favours simple-span runway girders).
  fix(c.girder==='capped'&&c.system==='continuous'&&c.bays*c.span*foot>practicalPieceLength+1e-6,{system:'simple'},`A continuous capped girder over ${+(practicalPieceLength/foot).toFixed(0)} ft needs field splices of the W and the cap channel, which this calculation does not design (the channel web is the rail seat, so splice plates clash with the rail and clips, and a field CJP splice of the cap lies in the fatigue-loaded top flange under the wheels): the capped girders are simple spans, one bay long (AISC DG7 favours simple-span runway girders).`);
  fix(c.support==='column-cap'&&c.structure!=='new',{structure:'new'},'A column cap sits on new freestanding columns: the columns are new.');
+ // New freestanding columns are crane columns themselves: there is no building column to tie to or column step to bear on.
+ fix(c.structure==='new'&&(c.support==='crane-column'||c.support==='stepped-column'),{support:'column-cap'},`New freestanding columns are crane columns themselves, with no existing building column to ${c.support==='crane-column'?'tie a crane column to':'bear on at a column step'}: the girders bear on column caps over the new columns.`);
  fix(c.structure==='new'&&c.support==='by-others',{support:'twin-rib'},'New columns carry a bracket designed here: the support is the welded twin-rib seat.');
  fix(c.tie==='cap-angle'&&c.girder!=='capped',{tie:'paired-bars'},'The cap tieback angle bolts to a channel cap: the tie is paired flat bars on this rolled girder.');
  fix(c.tie!=='paired-bars'&&c.system==='continuous',{tie:'paired-bars'},'Continuous girders are tied at the bearing stiffeners: the tie is paired flat bars.');
  fix(c.support==='column-cap'&&c.tie!=='paired-bars',{tie:'paired-bars'},'A girder on a column cap is held by the cap stiffeners (fork support): no flange tie.');
  fix(c.support==='by-others'&&c.system==='continuous',{support:'twin-rib'},'A continuous girder needs a seat designed here for the stiffener ties: the support is the welded twin-rib seat.');
+ // The girder web over the lower shaft's crane-side flange sets a stepped column's reach (the step geometry).
+ if(c.support==='stepped-column'&&c.reach!==undefined){delete c.reach;changes.push('On a column step the girder bears over the lower shaft\'s crane-side flange: the reach comes from the column geometry, not the entered reach.');}
  return {config:c,changes,rules};
 }
 /** One configuration choice a rule changed (normalizeConfig, or the AIST column-bracket screen): the field, as it was, as it became and why. */
@@ -361,7 +365,8 @@ function screened(input:RunwayConfig){
  const {config,changes,rules,entered}=configOf(input);let cfg=config,sk=skeleton(cfg);
  if(cfg.scope!=='design')return {config:cfg,changes,sk,rules,entered};
  const R=serviceReactionEstimate(sk.p);
- if(cfg.support==='column-cap'||R<=bracketReactionLimit)return {config:cfg,changes,sk,reaction:R,rules,entered};
+ // Column caps, crane columns and column steps are direct column bearing, not brackets: the recommendation does not apply.
+ if(cfg.support==='column-cap'||cfg.support==='crane-column'||cfg.support==='stepped-column'||R<=bracketReactionLimit)return {config:cfg,changes,sk,reaction:R,rules,entered};
  const about=`about ${cfg.units==='SI'?`${Math.round(R/1000)} kN (${Math.round(R/kip)} kip)`:`${Math.round(R/kip)} kip`}`,limit=cfg.units==='SI'?'222 kN (50 kip)':'50 kip';
  if(cfg.structure==='new'){
   const n=normalizeConfig({...cfg,support:'column-cap'});
@@ -388,6 +393,8 @@ export function previewConfig(input:RunwayConfig){
 /** The configured project. Unknown supplier, survey and site data are fictitious examples, marked as such. */
 export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  const {config:cfg,sk,rules,entered}=screened(input),{p,depth,clipWidth,spectrum,N,railArea}=sk,spans=p.spans;
+ // WP-0: the crane-column and stepped-column supports have their schema and engine hooks; the configurator builds them in WP-4.
+ if(cfg.scope==='design'&&(cfg.support==='crane-column'||cfg.support==='stepped-column'))throw Error(`The configurator does not build the ${supportLabels[cfg.support].toLowerCase()} support yet; choose another support.`);
  p.configurator={...cfg};
  const logged=(q:ProjectInput)=>{q.configurator={...cfg,selections:selectionLog(entered,cfg,rules,sk.trial,q,trace)};return q;};
  const scopeText=`${cfg.bays} ${cfg.system==='simple'?'simply supported':'continuous'} ${cfg.span}-ft bay${cfg.bays>1?'s':''}, ${p.section.name} girder${cfg.bays>1?'s':''}, ${cfg.cranes===2?'two':'one'} ${+cfg.capacity.toFixed(2)}-ton ${cfg.control} crane${cfg.cranes===2?'s':''}`;
@@ -681,7 +688,7 @@ function basePlatePlan(shape:string){const w=aiscShapeByName(shape)!;return {N:u
 /** W14 column shapes heavier than the given one, lightest first. */
 const heavierColumns=(shape:string)=>{const w=aiscShapeByName(shape)!;return aiscWShapes.filter(s=>s.name.startsWith('W14X')&&s.weight>w.weight&&s.weight<=398).sort((a,b)=>a.weight-b.weight).map(s=>s.name).slice(0,8);};
 
-const bracketText=(cfg:RunwayConfig)=>({'twin-rib':'welded twin-rib bracket seats','haunched-seat':'welded haunched rib seats','rolled-corbel':'rolled W-stub brackets','tapered-haunch':'built-up tapered I haunches','by-others':'brackets by others','column-cap':'column caps'})[cfg.support];
+const bracketText=(cfg:RunwayConfig)=>({'twin-rib':'welded twin-rib bracket seats','haunched-seat':'welded haunched rib seats','rolled-corbel':'rolled W-stub brackets','tapered-haunch':'built-up tapered I haunches','by-others':'brackets by others','column-cap':'column caps','crane-column':'column caps on new crane columns tied to the building columns','stepped-column':'the steps of the existing stepped columns'})[cfg.support];
 
 /**
  * The welded bracket of the configured kind on the supporting column: the receiving column is the column shape, the
@@ -691,7 +698,7 @@ function attachBracket(p:ProjectInput,cfg:RunwayConfig,shape:string,reach:number
  const d=p.details!,plates=shapePlates(shape),col=p.existingColumn!,heavy=cfg.capacity>10;
  const receiver={...plates,Fy:col.Fy,Fu:col.Fu,unbracedLength:isNew?col.height:8*foot,axialDemand:isNew?0:Math.round(1.2*col.existing.D.P+1.6*col.existing.S.P),confirmed:true,
   source:isNew?`New ${shape} column designed here; no other loads`:`Fictitious example survey: existing ${shape} column, ASTM A992 per mill certificates; 8 ft flange unbraced length (girts); factored existing gravity axial 1.2D + 1.6S from the building records for the panel zone.`};
- const kind=cfg.support as Exclude<RunwayConfig['support'],'by-others'|'column-cap'>;
+ const kind=cfg.support as Exclude<RunwayConfig['support'],'by-others'|'column-cap'|'crane-column'|'stepped-column'>;
  const base=cappedDemonstrationProject().details!.bracket!;
  let b={...structuredClone(base),reach,receiver,loadPathConfirmed:true};
  delete b.columnStiffeners;
@@ -798,6 +805,16 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
  // tie on the bearing stiffener instead (tieOnBearingStiffener).
  const moved=tieOnBearingStiffener(p,{reach:cfg.reach===undefined?30*inch:undefined,highCycle:highCycle(cfg)?`CMAA Class ${cfg.cmaa}, AIST Class ${cfg.buildingClass}`:undefined,bracket,face});
  if(moved){p.details=moved.details;trace.tie=`A direct flange saddle does not suit this rolled girder (${moved.why}): the ${cfg.tie==='flexible-plate'?'tie is paired flat bars, which':'paired flat bars'} bolt to the tie-side bearing stiffener, cut as one plate with its gusset extension past the flange tip (no weld at the gusset), the full-depth stiffener pair carrying the tie force into the girder.`;p.notes+=` ${trace.tie}`;}
+ // A configured reach holds the column face: where the sized tie still exceeds an imposed-movement limit there, the log
+ // says so (the sizing moves the face out only where the reach is left to it).
+ const movement=['tie-move-strength','tie-move-weld','tie-move-gusset','tie-move-fatigue','tie-move-root-fatigue'];
+ if(cfg.reach!==undefined&&(tieArrangement(p.details)==='paired-bars'||tieArrangement(p.details)==='flexible-plate')){
+  const over=Object.entries(tieSizingRatios(p)).filter(([k,v])=>movement.includes(k)&&v>1+1e-9).sort((a,b)=>b[1]-a[1]);
+  if(over.length){const why=`The configured reach ${cfg.units==='SI'?`${Math.round(cfg.reach*inch)} mm`:`${cfg.reach} in`} holds the column face, and the tie at it still exceeds ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands: the girder end movement needs a longer flexible length (a longer reach, left blank for the configurator to choose).`;trace.tie=trace.tie?`${trace.tie} ${why}`:why;p.notes+=` ${why}`;}
+ }
+ // Paired bars that cannot follow the girder end movement with both ends fixed take the column-end slide (sizeFlangeTie).
+ const slide=p.details!.brace.release?.slide;
+ if(slide&&tieArrangement(p.details)==='paired-bars'){const why=`Fixed at both ends at this reach, the paired bars cannot follow the girder end rotation and thermal travel along the runway (the tie movement checks over their limits): the column gusset slides ${cfg.units==='SI'?`${Math.round(slide)} mm`:`${+(slide/inch).toFixed(3)} in`} each way along the runway on longer sleeves (column-end slide, fillers at the girder gusset; checks tie-slide-*).`;trace.tie=trace.tie?`${trace.tie} ${why}`:why;p.notes+=` ${why}`;}
 }
 
 /**

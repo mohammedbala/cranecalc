@@ -100,7 +100,7 @@ export default function StartPanel({project,onBuild}:{project:ProjectInput;onBui
  };
  const customize=(t:RunwayTemplate)=>{setConfig({...t.config});setNotes([]);formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});};
  const c=config,design=c.scope==='design',supports:{value:SupportKind;label:string;disabled?:string}[]=(Object.keys(supportLabels) as SupportKind[]).map(v=>({value:v,label:supportLabels[v],
-  disabled:v==='by-others'&&c.structure==='new'?'new columns carry a bracket designed here':v==='column-cap'&&c.structure!=='new'?'column caps sit on new columns':v==='by-others'&&c.system==='continuous'?'continuous girders need a seat designed here':undefined}));
+  disabled:v==='crane-column'||v==='stepped-column'?'not yet built by the configurator':v==='by-others'&&c.structure==='new'?'new columns carry a bracket designed here':v==='column-cap'&&c.structure!=='new'?'column caps sit on new columns':v==='by-others'&&c.system==='continuous'?'continuous girders need a seat designed here':undefined}));
  const ties:{value:TieKind;label:string;disabled?:string}[]=(Object.keys(tieLabels) as TieKind[]).map(v=>({value:v,label:tieLabels[v],
   disabled:c.support==='column-cap'&&v!=='paired-bars'?'a column cap holds the girder without a flange tie':v==='cap-angle'&&c.girder!=='capped'?'bolts to a channel cap':v!=='paired-bars'&&c.system==='continuous'?'simple spans only':undefined}));
  const p=preview,crane=p?.crane;

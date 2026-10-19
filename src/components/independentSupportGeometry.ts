@@ -67,11 +67,17 @@ export function buildIndependentSupports(p:ProjectInput,columnFace:number,materi
     mesh.position.set(tx,rootY,(rootStart+rootEnd)/2);mesh.name=`${id}-tie-gusset-${side>0?'top':'bottom'}-${rootIndex+1}`;mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),edge));
     mesh.userData.part={id:mesh.name,family:'Tie receiving gusset (interface)',support:{x:end.station/1000-L/2,z:0},description:rootIndex===1&&release?'Column gusset with vertical slots; bolts pretensioned against steel sleeves release support deflection. Local strength, fatigue and movement checked.':layout?'Direct flange saddle gusset; local strength, fatigue and imposed movement checked.':'Drilled central ply. Girder-side in-plane strength and imposed movement checked; the girder attachment requires project design.'} satisfies PartInfo;group.add(mesh);
    }
+   // Column-end slide: the bars stand off both gusset faces, with fillers between them and the girder gusset.
+   const off=(release?.barOffset??0)/1000;
+   if(off)for(const ply of [-1,1]){
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(off,width,conn),material);mesh.position.set(tx+ply*(gw+off)/2,y,z0+conn/2);mesh.name=`${id}-tie-filler-${side}-${ply}`;mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),edge));
+    mesh.userData.part={id:mesh.name,family:'Independent flange tie',description:'Filler between a tie bar and the girder gusset: the bars stand off the gussets by the column-end slide.',support:{x:end.station/1000-L/2,z:0}};group.add(mesh);
+   }
    for(const ply of [-1,1]){
     const holes=[];for(const offset of [0,length-conn])for(let row=0;row<c.rows;row++)for(const line of [-1,1])holes.push({x:offset+c.edge/1000+row*c.pitch/1000-length/2,z:line*c.gauge/2000,diameter:boltProperties(c.grade,c.diameter).hole/1000});
     const mesh=new THREE.Mesh(horizontalPlateGeometry(length,width,th,holes),material);
     mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0,0,1),new THREE.Vector3(1,0,0),new THREE.Vector3(0,1,0)));
-    mesh.position.set(tx+ply*(gw+th)/2,y,z0+length/2);mesh.name=`${id}-tie-${side}-${ply}`;mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),edge));
+    mesh.position.set(tx+ply*((gw+th)/2+off),y,z0+length/2);mesh.name=`${id}-tie-${side}-${ply}`;mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),edge));
     mesh.userData.part={id:mesh.name,family:'Independent flange tie',description:'Paired vertical flat bars to the column, separate for each girder. Lateral strength and stiffness, and out-of-plane flexure from end rotation and thermal travel, are checked.',support:{x:end.station/1000-L/2,z:0}} satisfies PartInfo;group.add(mesh);
    }
    if(hardware)for(const [rootIndex,offset] of [0,length-conn].entries())for(let row=0;row<c.rows;row++)for(const line of [-1,1])hardware.bolt(group,{id:`${id}-tie-bolt-${side>0?'top':'bottom'}-${rootIndex+1}-${row+1}-${line>0?2:1}`,family:'Independent tie bolt',description:'Two cover bars and central gusset; separate bolt group for each girder end.',diameter:c.diameter/1000,grip:2*th+gw+(release?release.clearance/1000:0),support:{x:end.station/1000-L/2,z:0}},new THREE.Vector3(tx-th-gw/2,y+line*c.gauge/2000,z0+offset+c.edge/1000+row*c.pitch/1000),new THREE.Vector3(1,0,0));

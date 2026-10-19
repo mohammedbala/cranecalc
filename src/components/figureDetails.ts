@@ -43,7 +43,7 @@ function tie(p:ProjectInput){
  const d=p.details;if(!d)return 'Lateral restraint at each support';
  const t=d.brace,c=t.connection,kind=t.arrangement??'paired-bars',bolts=`${c.rows*2}-${bolt(p,c.diameter,c.grade)} bolts`;
  const saddle=t.flangeAttachment?.enabled?`; saddle ${plate(p,t.flangeAttachment.saddleThickness,t.flangeAttachment.saddleLength)} welded to the flange, ${fillet(p,t.flangeAttachment.weldSize)}`:'';
- const release=t.release?.enabled?'; column end sleeved in vertical slots':'';
+ const release=t.release?.enabled?`; column end sleeved in vertical slots${t.release.slide&&kind==='paired-bars'?`, sliding ${plateInches(t.release.slide,p.units)} each way along the runway`:''}`:'';
  const flanges=activeEndBearing(p)?'top flange':'each flange';
  if(kind==='flexible-plate')return `Flexible ${plate(p,t.thickness,t.width,t.length)} at the ${flanges}, single shear; gusset PL ${plateInches(t.gussetThickness,p.units)}${saddle}${release}`;
  if(kind==='cap-angle'){const g=capAngleGeometry(p);if(!g)return 'Cap tieback angle at the top flange';

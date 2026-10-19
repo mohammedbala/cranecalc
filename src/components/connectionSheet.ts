@@ -196,8 +196,11 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   svg+=line([X(-half)-10,Z(0)],[X(half)+10,Z(0)],'grid-line');
   for(const side of [-1,1])svg+=line([X(-half),Z(side*b.tw/2)],[X(half),Z(side*b.tw/2)],'hidden-line')+rect(X(-bs.stiffenerThickness/2),side<0?Z(-g.root):Z(b.tw/2),bs.stiffenerThickness*k,bs.stiffenerWidth*k,'hidden-line');
   svg+=plate(X(-tg/2),g.root,tgk,g.gussetEnd);
-  const bars=(z0:number,z1:number)=>[-1,1].map(side=>plate(side<0?X(-tg/2)-tbk:X(tg/2),z0,tbk,z1)).join('');
-  if(cut)svg+=bars(g.start,z1)+bars(z2,g.face)+[Z(z1),Z(z2)].map(y=>breakLine([X(-tg/2)-tbk-6,y],[X(tg/2)+tbk+6,y])).join('');
+  // With the column-end slide the bars stand off both gusset faces by the filler at the girder gusset.
+  const off=rel?.barOffset??0,offk=off*k;
+  const bars=(z0:number,z1:number)=>[-1,1].map(side=>plate(side<0?X(-tg/2)-offk-tbk:X(tg/2)+offk,z0,tbk,z1)).join('');
+  if(off)for(const side of [-1,1])svg+=plate(side<0?X(-tg/2)-offk:X(tg/2),g.start,offk,g.gussetEnd);
+  if(cut)svg+=bars(g.start,z1)+bars(z2,g.face)+[Z(z1),Z(z2)].map(y=>breakLine([X(-tg/2)-offk-tbk-6,y],[X(tg/2)+offk+tbk+6,y])).join('');
   else svg+=bars(g.start,g.face);
   // Column inner flange at the face, its web broken below.
   const colZ=Z(g.face),colB=colZ+below*k;
@@ -206,9 +209,9 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   // Bolts run along the runway through bar, gusset and bar; heads and nuts outside the bars.
   const rows=(z0:number)=>Array.from({length:c.rows},(_,i)=>z0+c.edge+i*c.pitch),girderRows=rows(g.start),columnRows=rows(g.face-g.connection);
   for(const z of [...girderRows,...columnRows]){const cls=z<b.bf/2?'hidden-line':'runway-line',head=hole*k*.9,y=Z(z);
-   svg+=line([X(-tg/2)-tbk-3,y],[X(tg/2)+tbk+3,y],cls)+rect(X(-tg/2)-tbk-5,y-head/2,2,head,cls)+rect(X(tg/2)+tbk+3,y-head/2,2,head,cls);}
+   svg+=line([X(-tg/2)-offk-tbk-3,y],[X(tg/2)+offk+tbk+3,y],cls)+rect(X(-tg/2)-offk-tbk-5,y-head/2,2,head,cls)+rect(X(tg/2)+offk+tbk+3,y-head/2,2,head,cls);}
   // Girder-end bolt group, bar length and centerline to column face left of the bars, each on its own line.
-  const xb=X(-tg/2)-tbk-8;
+  const xb=X(-tg/2)-offk-tbk-8;
   // Pitch nearest the bars and the edge outside it, so neither carried text crosses the other's extension lines.
   // A value too long for its dimension reads where it is clear of the drawn girder and ties.
   const drawn=new AnnotationSpace(svg);
@@ -221,9 +224,9 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
    integral?{at:[X(tg/2),Z(g.root)],labels:['TIE-SIDE BEARING STIFFENER AND GIRDER','GUSSET CUT FROM ONE PLATE, EACH TIED',`FLANGE; ${size(inch)} R GROUND AT THE CORNER`]}
     :{at:[X(tg/2),Z(g.root)],labels:['GIRDER GUSSET TO TIE-SIDE BEARING','STIFFENER, EACH TIED FLANGE'],weld:'cjp'},
    {at:[X(tg/2),Z((Math.max(b.bf/2,g.root)+g.gussetEnd)/2)],labels:[`${integral?'STIFFENER EXTENSION':'GIRDER GUSSET PL'} ${size(tg)} X ${size(g.height)} X ${size(g.gussetLength)}`,`${size(g.clear)} INSIDE FLANGE; BARS ${size(g.clear)} CLEAR`,'OF STIFFENER']},
-   {at:[X(tg/2)+tbk+3,Z(girderRows.at(-1)!)],labels:[`EACH END: ${2*c.rows} - ${size(c.diameter)} ${c.grade}, ${c.rows} ROWS`,`X 2 AT ${size(c.gauge)} VERT. GAUGE; CLASS ${c.surface}`,`${size(hole)} STD HOLES${rel?' AT THE GIRDER END':''}`]},
-   {at:[X(tg/2)+tbk,Z(cut?z1:(g.gussetEnd+g.face-g.connection)/2)-4],labels:[`2 FB ${size(tb)} X ${size(t.width)} (VERTICAL) X ${dim(t.length)}`,'ONE EACH SIDE OF THE GUSSETS']},
-   ...(rel?[{at:[X(tg/2)+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`,
+   {at:[X(tg/2)+offk+tbk+3,Z(girderRows.at(-1)!)],labels:[`EACH END: ${2*c.rows} - ${size(c.diameter)} ${c.grade}, ${c.rows} ROWS`,`X 2 AT ${size(c.gauge)} VERT. GAUGE; CLASS ${c.surface}`,`${size(hole)} STD HOLES${rel?' AT THE GIRDER END':''}`]},
+   {at:[X(tg/2)+offk+tbk,Z(cut?z1:(g.gussetEnd+g.face-g.connection)/2)-4],labels:[`2 FB ${size(tb)} X ${size(t.width)} (VERTICAL) X ${dim(t.length)}`,'ONE EACH SIDE OF THE GUSSETS']},
+   ...(rel?[{at:[X(tg/2)+offk+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,...(rel.slide?[`${size(rel.slot)} VERT. SLOTS; GUSSET SLIDES ${size(rel.slide)}`,`EACH WAY ALONG THE RUNWAY; ${size(rel.barOffset)} FILLER`,'EACH FACE AT GIRDER GUSSET']:[`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`]),
     // The slots take the support's deflection limit handed to its designer (S-00): the same words as there.
     ...(()=>{const lim=s.checks.find(v=>v.id==='tie-move-support')?.capacity;return lim!==undefined&&lim>0?['SLOTS TAKE THE BRACKET\'S VERTICAL','DEFLECTION AT THE BEARING UNDER CRANE',`LOADS ${limitLength(lim,p.units,'max')} MAX.`]:[];})()]}]:[]),
    {at:[X(tg/2),colZ],labels:[`COLUMN GUSSET PL ${size(tg)} X ${size(hg)} X ${size(g.columnGussetLength)}`,`2 ROOT FILLETS X ${dim(c.weldLength)}, ${sc.weld}`],weld:'fillet'},

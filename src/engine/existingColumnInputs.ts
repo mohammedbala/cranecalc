@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {stepSchema} from './steppedColumnInputs';
 const pos=z.number().finite().positive(),num=z.number().finite();
 /** Existing load effect at the column's governing section: axial (compression positive), strong- and weak-axis moments, strong-axis shear. */
 const effect=z.object({P:num,Mx:num,My:num,V:num});
@@ -118,6 +119,8 @@ export const existingColumnSchema=z.object({
   alteration:z.object({dcrIncrease:z.number().finite().nonnegative(),source:z.string().max(300)}).optional()}).optional(),
  /** Welding new brackets, gussets or plates to this existing column. */
  welding:existingWeldingSchema.optional(),
+ /** An existing stepped column whose step carries the girder (steppedColumnInputs.ts): this column's plates are then the lower shaft's. */
+ step:stepSchema.optional(),
  source:z.string().max(500),confirmed:z.boolean()
 });
 export type ExistingColumnInput=z.infer<typeof existingColumnSchema>;

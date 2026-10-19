@@ -93,7 +93,7 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  if(joint)svg+=multiLeader([[px-pg-pl/2+(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[643,247],['LEFT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieRef}`],8.5,[[[629,py+d.brace.length*pk*.55]]]);
  svg+=multiLeader([[px+pg+pl/2-(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[1025,247],['RIGHT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieRef}`]);
  svg+=text(918,colY+48,sc.isNew?columnReference(p):'BUILDING COLUMN (REF.)',8,'middle');
- svg+=text(635,Math.max(335,colY+62),tieRelease(p)?'COLUMN GUSSETS: SLEEVED BOLTS IN VERTICAL SLOTS. BARS FLEX WITH END ROTATION AND THERMAL TRAVEL.':'COLUMN-SIDE ATTACHMENTS: BARS FLEX WITH END ROTATION, THERMAL TRAVEL AND SUPPORT DEFLECTION.',7.6);
+ svg+=text(635,Math.max(335,colY+62),tieRelease(p)?.slide?'COLUMN GUSSETS: SLEEVED BOLTS IN VERTICAL SLOTS; GUSSETS SLIDE ALONG THE RUNWAY. BARS FLEX WITH END ROTATION.':tieRelease(p)?'COLUMN GUSSETS: SLEEVED BOLTS IN VERTICAL SLOTS. BARS FLEX WITH END ROTATION AND THERMAL TRAVEL.':'COLUMN-SIDE ATTACHMENTS: BARS FLEX WITH END ROTATION, THERMAL TRAVEL AND SUPPORT DEFLECTION.',7.6);
  return {svg:svg+'</g>',scale:ps.label};
  }});
 

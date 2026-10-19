@@ -56,8 +56,9 @@ export const runwayDetailsSchema=z.object({
   flangeAttachment:z.object({enabled:z.boolean(),longitudinalSetback:pos,saddleLength:pos,saddleThickness:pos,webGap:pos,clearance:pos,weldSize:pos,
    /** Girder web centerline to the column face where the bracket is by others; a designed bracket sets it from its reach. */
    columnFace:pos.optional()}).optional(),
-  /** Column-end movement release: bolts pretensioned against steel sleeves in vertical slots of the column gusset. */
-  release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
+  /** Column-end movement release: bolts pretensioned against steel sleeves in vertical slots of the column gusset.
+   * slide: paired bars only, the column gusset's float along the runway each way on longer sleeves (tieRelease). */
+  release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos,slide:pos.optional()}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
  end:lapConnectionSchema,
  bearing:z.object({width:pos,length:pos,thickness:pos,stiffenerWidth:pos,stiffenerThickness:pos,cope:nn,weldSize:pos,
   /** Steel shims under the bearing plate, full bearing, drilled to the bolt pattern: the largest stack (max, mm) and its
