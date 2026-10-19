@@ -236,7 +236,11 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  * the reader; the note says what the responsible party must demonstrate.
  */
 export function reopenedByOthers(c:CheckResult):CheckResult{
- const u=c.utilization;
- if(c.status!=='excluded'||u===undefined||!Number.isFinite(u)||u<=1+1e-9)return c;
+ // A reference D/C: a demand against a capacity of the same check (not a stated requirement such as a stiffness ratio
+ // a by-others member must meet).
+ const u=c.utilization,ratio=c.demand!==undefined&&c.capacity!==undefined&&c.capacity>0&&c.quantity!=='stiffness'&&Math.abs(c.demand/c.capacity-(u??NaN))<=1e-6*Math.max(1,u??0);
+ // The crane-level strut record states what the column alone would carry without the strut (its dependency), not an
+ // estimate of the strut.
+ if(c.status!=='excluded'||u===undefined||!Number.isFinite(u)||u<=1+1e-9||!ratio||c.id==='crane-level-strut')return c;
  return {...c,status:'unverified',byOthers:true,note:`APP ESTIMATE EXCEEDS THE LIMIT (D/C ${u.toFixed(2)}): this item is by others, and this calculation's reference estimate for it does not pass. The responsible party (supplier or engineer of record) shall demonstrate it before fabrication, or the detail shall be changed (heavier parts, another joint type or a reduced stress range); until then it is an open item. ${c.note}`};
 }
