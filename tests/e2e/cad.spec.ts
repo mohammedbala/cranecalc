@@ -198,3 +198,37 @@ test('associativity: a schedule placed from the design model',async({page})=>{
  expect(text).toContain('WELD SCHEDULE');expect(text).toContain('ELECTRODE');
  expect(errors).toEqual([]);
 });
+
+test('performance and UX: command AutoComplete, history, palette keys and a large drawing',async({page})=>{
+ const errors=watch(page);
+ const {line,type,objects}=await openEditor(page);
+ const start=await objects();
+ // AutoComplete: typing lists matching commands; the arrows choose and Enter runs the one highlighted.
+ await line.fill('DIMA');
+ await expect(page.getByRole('listbox',{name:'Matching commands'})).toContainText('DIMALIGNED');
+ await line.press('ArrowDown');await line.press('Enter');
+ await expect(page.locator('.cad-cmd span')).toContainText('DIMALIGNED');
+ await line.press('Escape');
+ // History: the arrows recall earlier input.
+ await type('C','50,50','2');
+ await line.press('ArrowUp');await expect(line).toHaveValue('2');await line.press('ArrowUp');await expect(line).toHaveValue('50,50');
+ await line.fill('');
+ await page.keyboard.press('F2');await expect(page.getByRole('dialog',{name:'Command history'})).toContainText('Command: CIRCLE');
+ await page.keyboard.press('F2');await expect(page.getByRole('dialog',{name:'Command history'})).toHaveCount(0);
+ // Palette keys.
+ await page.keyboard.press('Control+1');await expect(page.getByRole('region',{name:'Properties'})).toHaveCount(0);
+ await page.keyboard.press('Control+1');await expect(page.getByRole('region',{name:'Properties'})).toBeVisible();
+ // Ribbon tabs follow the arrow keys.
+ await page.getByRole('tab',{name:'Home'}).focus();await page.keyboard.press('ArrowRight');
+ await expect(page.getByRole('tab',{name:'Annotate'})).toHaveAttribute('aria-selected','true');
+ // A large drawing: 10,000 circles stay quick to redraw while zooming.
+ await line.focus();await type('C','10,10','0.2','ARRAYRECT','L','');
+ await expect(page.locator('.cad-cmd span')).toContainText('columns');
+ await type('100','100','0.5','0.5');
+ await expect.poll(objects,{timeout:30000}).toBe(start+10001);
+ const box=(await page.getByTestId('cad-canvas').boundingBox())!;
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+ const t0=Date.now();for(let i=0;i<10;i++){await page.mouse.wheel(0,i<5?-200:200);await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));}
+ expect((Date.now()-t0)/10).toBeLessThan(400);
+ expect(errors).toEqual([]);
+});

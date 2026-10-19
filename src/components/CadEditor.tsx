@@ -12,6 +12,8 @@ import {
 } from '../cad/model';
 import {CadStore} from '../cad/store';
 import {commandNames,defaultHeights,makeCommand,placeCmd,type Command,type Env,type Preview} from '../cad/commands';
+import {spatialIndex} from '../cad/spatial';
+import {History,copyBaseCmd,pasteBlockCmd,suggestCommands} from '../cad/commandLine';
 import {aci,aciPalette,cachedBox,drawOverlay,drawScene,snapNames,toWorld,type Theme,type View} from '../cad/render';
 import {acquirable,allSnapModes,defaultSnapModes,resolveSnap,type Acquired} from '../cad/snap';
 import {hatchArea,patternNames} from '../cad/hatch';
@@ -65,6 +67,12 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const [panel,setPanel]=useState<{props:boolean;layers:boolean;blocks?:boolean}>({props:true,layers:true});
  const [currentLayer,setCurrentLayer]=useState(()=>doc.layers.some(l=>l.name==='S-ANNO')?'S-ANNO':doc.layers.some(l=>l.name==='OUTLINE')?'OUTLINE':'0');
  const [input,setInput]=useState('');
+ const [pick,setPick]=useState(-1);
+ /** Ctrl+9 hides the command line, Ctrl+0 clears the screen of the ribbon and panels, F2 opens the command history. */
+ const [cmdLine,setCmdLine]=useState(true);
+ const [clean,setClean]=useState(false);
+ const [textWin,setTextWin]=useState(false);
+ const history=useRef(new History());
  const [log,setLog]=useState<string[]>(['CAD editor ready. Type a command (L, PL, C, T, DLI, M, CO, RO, TR, O …) or pick a tool. Esc cancels; Enter or Space repeats.']);
  const [stale,setStale]=useState(!!source.record&&source.record.base!==source.base);
  const [underlay,setUnderlay]=useState(false);
@@ -93,7 +101,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const dynLock=useRef<number|null>(null),prevSelection=useRef<number[]>([]);
  const selMode=useRef<{kind:'W'|'C'|'F'|'G';pts:Pt[]}|null>(null),removing=useRef(false);
  const dirty=useRef({scene:true,overlay:true}),frame=useRef(0);
- const say=useCallback((m:string)=>setLog(l=>[...l.slice(-60),m]),[]);
+ const say=useCallback((m:string)=>setLog(l=>[...l.slice(-400),m]),[]);
 
  // ---- drawing ----
  const paint=useCallback(()=>{
@@ -210,8 +218,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const pickable=(e:Ent)=>{const l=layerOf(e.layer);return !!l&&l.visible&&!l.locked;};
  const visible=(e:Ent)=>!!layerOf(e.layer)?.visible;
  function candidates(p:Pt,r:number,filter:(e:Ent)=>boolean){
-  const out:Ent[]=[];for(const e of store.doc.entities){const b=cachedBox(e,store.doc);if(p[0]<b[0]-r||p[0]>b[2]+r||p[1]<b[1]-r||p[1]>b[3]+r)continue;if(filter(e))out.push(e);}
-  return out;
+  return spatialIndex(store.doc.entities,store.doc).query([p[0]-r,p[1]-r,p[0]+r,p[1]+r]).filter(filter);
  }
  function entityAt(p:Pt){
   const r=PICKBOX/view.current.scale;let best:Ent|undefined,bd=Infinity;
@@ -249,7 +256,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   store,layer:()=>layerOf(currentLayer)?.locked?'0':currentLayer,
   textHeight:()=>textHeight.current,setTextHeight:h=>{textHeight.current=h;},dimHeight:()=>heights.dim,
   offsetDistance:()=>offsetDistance.current,setOffsetDistance:d=>{offsetDistance.current=d;},
-  log:say,neighbors:e=>{const b=cachedBox(e,store.doc);return store.doc.entities.filter(o=>o.id!==e.id&&visible(o)&&(()=>{const c=cachedBox(o,store.doc);return c[0]<=b[2]&&c[2]>=b[0]&&c[1]<=b[3]&&c[3]>=b[1];})());},
+  log:say,neighbors:e=>spatialIndex(store.doc.entities,store.doc).query(cachedBox(e,store.doc)).filter(o=>o.id!==e.id&&visible(o)),
   zoomExtents,zoomWindow:(a,b)=>zoomTo([Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])],1.02),
   openPanel:p=>setPanel(v=>({...v,[p==='layers'?'layers':'props']:true})),length:lengthText,
   vars:vars.current,lastWindow:()=>lastWindow.current,
@@ -260,6 +267,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(m?.kind==='F')return `${n} Specify ${m.pts.length?'next fence point or <done>':'first fence point'}:`;
   if(m?.kind==='G')return `${n} Enter group name:`;
   return `${n} Select objects${removing.current?' to remove':''} or [ALL/Last/Previous/Window/Crossing/Fence/Group/Add/Remove] (Enter when done):`;};
+ const suggestions=!active.current&&!grip.current&&!selecting.current?suggestCommands(input):[];
  const prompt=()=>grip.current?'** STRETCH ** Specify stretch point:':active.current?(selecting.current?selPrompt():active.current.prompt()):'Command:';
  function endCommand(clear=true){
   const cmd=active.current;if(cmd&&clear&&cmd.selectFirst&&!cmd.keepSelection)store.clearSelection();
@@ -296,6 +304,9 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  }
  function cancel(){
   if(textEdit){setTextEdit(null);return;}
+  if(textWin){setTextWin(false);return;}
+  if(settings){setSettings(null);return;}
+  if(help&&!active.current){setHelp(false);return;}
   if(active.current||grip.current){say('*Cancel*');endCommand(true);return;}
   if(windowSel.current){windowSel.current=null;schedule();return;}
   store.clearSelection();setInput('');schedule();
@@ -313,7 +324,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   cmd.enter?.();if(!cmd.enter)cmd.done=true;step();
  }
  function submit(value:string){
-  const v=value;setInput('');
+  const v=value;setInput('');setPick(-1);history.current.push(v);
   if(!active.current&&!grip.current){if(!v.trim())enter();else run(v);return;}
   if(grip.current){const p=parsePoint(v,grip.current.from,cursor.current.world);if(p)commitGrip(p);else say('Point or option keyword required.');return;}
   const cmd=active.current!;
@@ -347,7 +358,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  function selectPoint(p:Pt){
   const m=selMode.current!;m.pts.push(p);
   if((m.kind==='W'||m.kind==='C')&&m.pts.length===2){
-   const [a,b]=m.pts,box:Box=[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])],ids=store.doc.entities.filter(e=>pickable(e)&&inWindow(e,box,m.kind==='C',store.doc)).map(e=>e.id);
+   const [a,b]=m.pts,box:Box=[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])],ids=spatialIndex(store.doc.entities,store.doc).query(box).filter(e=>pickable(e)&&inWindow(e,box,m.kind==='C',store.doc)).map(e=>e.id);
    lastWindow.current={box,crossing:m.kind==='C'};addToSelection(ids,false);say(`${ids.length} found, ${store.selection.size} total`);selMode.current=null;
   }
   refresh();schedule();
@@ -362,7 +373,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  function finishWindow(b:Pt,shift:boolean){
   const w=windowSel.current!;windowSel.current=null;
   const box:Box=[Math.min(w.a[0],b[0]),Math.min(w.a[1],b[1]),Math.max(w.a[0],b[0]),Math.max(w.a[1],b[1])],crossing=b[0]<w.a[0];
-  const ids=store.doc.entities.filter(e=>pickable(e)&&inWindow(e,box,crossing,store.doc)).map(e=>e.id);
+  const ids=spatialIndex(store.doc.entities,store.doc).query(box).filter(e=>pickable(e)&&inWindow(e,box,crossing,store.doc)).map(e=>e.id);
   lastWindow.current={box,crossing};
   addToSelection(ids,shift);
   if(selecting.current)say(`${ids.length} found, ${store.selection.size} total`);
@@ -434,24 +445,32 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  // ---- keyboard ----
  useEffect(()=>{
   const onKey=(e:KeyboardEvent)=>{
-   const target=e.target as HTMLElement,inField=target&&target!==cmdRef.current&&['INPUT','SELECT','TEXTAREA'].includes(target.tagName);
+   const target=e.target as HTMLElement,inField=target&&target!==cmdRef.current&&['INPUT','SELECT','TEXTAREA'].includes(target.tagName),onControl=!!target?.closest?.('button,a,[role=tab],[role=option],summary');
    const mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
    if(e.key==='F1'){e.preventDefault();setHelp(v=>!v);return;}
    const fkeys={F3:'osnap',F7:'grid',F8:'ortho',F9:'snap',F10:'polar',F11:'otrack',F12:'dyn'} as const;
    if(e.key in fkeys){e.preventDefault();const name=fkeys[e.key as keyof typeof fkeys],on=!togglesRef.current[name];
     // Ortho and polar tracking exclude each other, as in AutoCAD.
     setToggles(t=>({...t,[name]:on,...(on&&name==='ortho'?{polar:false}:on&&name==='polar'?{ortho:false}:{})}));say(`<${({osnap:'Osnap',grid:'Grid',ortho:'Ortho',snap:'Snap',polar:'Polar',otrack:'Object Snap Tracking',dyn:'Dynamic Input'} as const)[name]} ${on?'on':'off'}>`);return;}
+   if(e.key==='F2'){e.preventDefault();setTextWin(v=>!v);return;}
+   // Palette keys (where the browser leaves them to the page): Ctrl+1 properties, Ctrl+2 blocks, Ctrl+3 layers, Ctrl+9 command line, Ctrl+0 clean screen.
+   if(mod&&!e.shiftKey&&!e.altKey&&['1','2','3','9','0'].includes(e.key)){e.preventDefault();
+    if(e.key==='1')setPanel(v=>({...v,props:!v.props}));else if(e.key==='2')setPanel(v=>({...v,blocks:!v.blocks}));else if(e.key==='3')setPanel(v=>({...v,layers:!v.layers}));
+    else if(e.key==='9')setCmdLine(v=>{say(`<Command line ${v?'hidden':'shown'}>`);return !v;});else setClean(v=>!v);
+    setTimeout(()=>cmdRef.current?.focus(),0);return;}
    if(mod&&e.shiftKey&&k==='a'){e.preventDefault();setPickGroups(v=>{say(`<Groups ${v?'off':'on'}>`);return !v;});return;}
    if(inField)return;
    if(mod&&k==='z'&&!e.shiftKey){e.preventDefault();run('UNDO');return;}
    if(mod&&(k==='y'||(k==='z'&&e.shiftKey))){e.preventDefault();run('REDO');return;}
    if(mod&&k==='a'){e.preventDefault();store.select(store.doc.entities.filter(pickable).map(v=>v.id));schedule();return;}
+   if(mod&&e.shiftKey&&k==='c'){e.preventDefault();const sel=store.selected().filter(pickable);if(active.current)endCommand(false);active.current=copyBaseCmd(env,sel,(ents,base)=>{clipboard.current={ents,base};});say('Command: COPYBASE');step();return;}
+   if(mod&&e.shiftKey&&k==='v'){if(!clipboard.current)return;e.preventDefault();if(active.current)endCommand(false);active.current=pasteBlockCmd(env,clipboard.current.ents,clipboard.current.base);say('Command: PASTEBLOCK');refresh();schedule();return;}
    if(mod&&(k==='c'||k==='x')){const sel=store.selected().filter(pickable);if(!sel.length)return;e.preventDefault();const b=sel.map(v=>bbox(v,store.doc));clipboard.current={ents:sel.map(stripId),base:[Math.min(...b.map(v=>v[0])),Math.min(...b.map(v=>v[1]))]};if(k==='x')store.commit('Cut',{del:sel.map(v=>v.id)});say(`${sel.length} ${k==='x'?'cut':'copied'} to the clipboard.`);schedule(true);return;}
    if(mod&&k==='v'){if(!clipboard.current)return;e.preventDefault();if(active.current)endCommand(false);active.current=placeCmd(env,'PASTE',clipboard.current.ents,clipboard.current.base);say('Command: PASTE');refresh();schedule();return;}
    if(e.key==='Delete'&&!active.current&&store.selection.size&&!input){e.preventDefault();run('ERASE');return;}
    if(e.key==='Escape'){e.preventDefault();cancel();return;}
    // Enter and Space answer the command line wherever the focus is (AutoCAD).
-   if(target!==cmdRef.current&&!mod&&(e.key==='Enter'||(e.key===' '&&(selecting.current||!active.current?.freeText?.())))){e.preventDefault();cmdRef.current?.focus();submit(input);return;}
+   if(target!==cmdRef.current&&!onControl&&!mod&&(e.key==='Enter'||(e.key===' '&&(selecting.current||!active.current?.freeText?.())))){e.preventDefault();cmdRef.current?.focus();submit(input);return;}
    if(target!==cmdRef.current&&!mod&&e.key.length===1&&/[\w@.,<'"/ -]/.test(e.key)){cmdRef.current?.focus();}
   };
   window.addEventListener('keydown',onKey);return ()=>window.removeEventListener('keydown',onKey);
@@ -460,10 +479,21 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   const free=!selecting.current&&!!active.current?.freeText?.();
   // Dynamic input: Tab locks a typed length; the angle follows the cursor or is typed next.
   if(e.key==='Tab'&&togglesRef.current.dyn&&wantsPoint()&&currentBase()){const v=parseLength(input);if(v!==undefined&&v>0){e.preventDefault();dynLock.current=v;setInput('');say(`Length ${lengthText(v)}: type the angle, or click.`);schedule();return;}}
+  // AutoComplete: the arrows walk the suggestions, Tab completes, Enter runs the one highlighted; with none, the arrows recall earlier input.
+  if(suggestions.length&&(e.key==='ArrowDown'||e.key==='ArrowUp')){e.preventDefault();setPick(i=>e.key==='ArrowDown'?(i+1)%suggestions.length:(i<=0?suggestions.length:i)-1);return;}
+  if(suggestions.length&&e.key==='Tab'){e.preventDefault();setInput(suggestions[Math.max(0,pick)].name);setPick(-1);return;}
+  if(suggestions.length&&pick>=0&&(e.key==='Enter'||e.key===' ')){e.preventDefault();const n=suggestions[pick].name;setInput('');setPick(-1);history.current.push(n);run(n);return;}
+  if(!suggestions.length&&(e.key==='ArrowUp'||e.key==='ArrowDown')&&!free){e.preventDefault();const h=history.current.recall(e.key==='ArrowUp'?-1:1);setInput(h??'');return;}
   if(e.key==='Enter'||(e.key===' '&&!free)){e.preventDefault();submit(input);return;}
-  if(e.key==='Escape'){e.preventDefault();cancel();}
+  if(e.key==='Escape'){e.preventDefault();if(suggestions.length&&input){setInput('');setPick(-1);return;}cancel();}
  }
 
+ /** Arrow keys move the focus along a toolbar (ARIA toolbar pattern); Tab leaves it. */
+ function rovingKeys(e:React.KeyboardEvent<HTMLElement>){
+  const step=e.key==='ArrowRight'||e.key==='ArrowDown'?1:e.key==='ArrowLeft'||e.key==='ArrowUp'?-1:0;if(!step&&e.key!=='Home'&&e.key!=='End')return;
+  const items=[...e.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled])')],i=items.indexOf(document.activeElement as HTMLElement);if(!items.length)return;
+  e.preventDefault();e.stopPropagation();items[e.key==='Home'?0:e.key==='End'?items.length-1:(i+step+items.length)%items.length].focus();
+ }
  // ---- property edits ----
  const selected=store.selected();
  function putEnt(e:Ent,label='Properties'){store.commit(label,{put:[e]});schedule(true);}
@@ -576,18 +606,19 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   {stale&&<div className="cad-stale"><TriangleAlert size={15}/><p><strong>The design changed after this drawing was edited</strong> ({new Date(source.record!.savedAt).toLocaleString()}). Your edited drawing is open; the generated drawing for the current design differs.</p>
    {carried&&<button className="cad-primary" title={`${carried.carried.added} added, ${carried.carried.modified} modified, ${carried.carried.deleted} deleted objects carry over${carried.conflicts.length?`; ${carried.conflicts.length} need review`:''}`} onClick={carryEdits}>Carry my edits onto the current design{carried.conflicts.length?` (${carried.conflicts.length} to review)`:''}</button>}
    <button onClick={()=>setUnderlay(v=>!v)}>{underlay?'Hide':'Show'} current design underneath</button><button onClick={()=>resolveStale(true)}>Keep my edits</button><button onClick={()=>{if(window.confirm('Discard your edits and start from the drawing generated for the current design?'))resolveStale(false);}}>Start from the current design</button></div>}
-  <div className="cad-ribbon">
-   <div className="cad-tabs" role="tablist" aria-label="Ribbon">{ribbon.map(r=><button key={r.tab} role="tab" aria-selected={ribbonTab===r.tab} className={ribbonTab===r.tab?'on':''} onClick={()=>setRibbonTab(r.tab)}>{r.tab}</button>)}</div>
-   <div className="cad-panels" role="toolbar" aria-label={`${ribbonTab} tools`}>
+  {!clean&&<div className="cad-ribbon">
+   <div className="cad-tabs" role="tablist" aria-label="Ribbon" onKeyDown={e=>{const i=ribbon.findIndex(r=>r.tab===ribbonTab),n=e.key==='ArrowRight'?i+1:e.key==='ArrowLeft'?i-1:e.key==='Home'?0:e.key==='End'?ribbon.length-1:undefined;if(n===undefined)return;e.preventDefault();const t=ribbon[(n+ribbon.length)%ribbon.length].tab;setRibbonTab(t);(e.currentTarget.querySelector(`[data-tab="${t}"]`) as HTMLElement|null)?.focus();}}>
+    {ribbon.map(r=><button key={r.tab} data-tab={r.tab} id={`cad-tab-${r.tab}`} role="tab" aria-selected={ribbonTab===r.tab} aria-controls="cad-ribbon-tools" tabIndex={ribbonTab===r.tab?0:-1} className={ribbonTab===r.tab?'on':''} onClick={()=>setRibbonTab(r.tab)}>{r.tab}</button>)}</div>
+   <div className="cad-panels" id="cad-ribbon-tools" role="toolbar" aria-label={`${ribbonTab} tools`} onKeyDown={rovingKeys}>
     <button title="Select (Esc)" aria-label="Select (Esc)" className={!active.current&&!panMode?'on':''} onClick={()=>{cancel();setPanMode(false);}}><MousePointer2 size={16}/></button>
     {ribbon.find(r=>r.tab===ribbonTab)!.panels.map(p=><div key={p.name} className="cad-panelgroup" role="group" aria-label={p.name}><div>{p.tools.map(([name,title,icon])=><button key={name} title={title} aria-label={title} className={active.current?.name===name?'on':''} onClick={()=>run(name)}>{icon}</button>)}</div><span>{p.name}</span></div>)}
    </div>
-  </div>
+  </div>}
   <div className="cad-body">
    <div className="cad-canvas" ref={wrapRef}>
     <canvas ref={sceneRef} aria-hidden="true"/>
     <input ref={fileRef} type="file" accept=".dxf,application/dxf,image/vnd.dxf" hidden aria-label="DXF file to import" onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void importFile(f);}}/>
-    <canvas ref={overlayRef} className={panMode||pan.current?'panning':''} data-testid="cad-canvas" onPointerDown={onPointerDown} onMouseDown={e=>e.preventDefault()} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+    <canvas ref={overlayRef} className={panMode||pan.current?'panning':''} data-testid="cad-canvas" aria-label="Drawing area" onPointerDown={onPointerDown} onMouseDown={e=>e.preventDefault()} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
      onPointerLeave={()=>{cursor.current={...cursor.current,screen:undefined};hover.current=undefined;schedule();}} onDoubleClick={onDoubleClick} onAuxClick={onAuxClick} onContextMenu={e=>e.preventDefault()}/>
     {textEdit&&<div className="cad-text-edit" style={{left:Math.min(textEdit.x,view.current.w-300),top:Math.max(4,textEdit.y-(textEdit.multi?96:44))}}>
      {textEdit.multi?<textarea autoFocus aria-label={textEdit.cell?'Cell text':'Text'} rows={4} value={textEdit.value} onChange={e=>setTextEdit({...textEdit,value:e.target.value})}
@@ -596,6 +627,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
        onKeyDown={e=>{if(e.key==='Enter')applyTextEdit();if(e.key==='Escape'){setTextEdit(null);cmdRef.current?.focus();}}}/>}
      <small>{textEdit.multi?(textEdit.cell?'Enter applies · Shift+Enter new line':'Ctrl+Enter applies · Enter new line'):'Enter to apply'} · Esc to cancel{store.get(textEdit.id)?.type==='dim'?' · empty measures the distance':''}</small></div>}
     {help&&<HelpCard onClose={()=>setHelp(false)}/>}
+    {textWin&&<TextWindow log={log} onClose={()=>{setTextWin(false);cmdRef.current?.focus();}}/>}
     {settings==='osnap'&&<div className="cad-pop" role="dialog" aria-label="Object snap settings"><h3>Object snaps<button aria-label="Close" onClick={()=>setSettings(null)}><X size={12}/></button></h3>
      {allSnapModes.map(m=><label key={m}><input type="checkbox" checked={snapModes.has(m)} onChange={ev=>{const n=new Set(snapModes);if(ev.target.checked)n.add(m);else n.delete(m);setSnapModes(n);savePref('cad-osnap',[...n]);}}/>{snapNames[m]}</label>)}
      <div className="cad-pop-row"><button onClick={()=>{const n=new Set(allSnapModes);setSnapModes(n);savePref('cad-osnap',[...n]);}}>All</button><button onClick={()=>{setSnapModes(new Set());savePref('cad-osnap',[]);}}>None</button><button onClick={()=>{setSnapModes(new Set(defaultSnapModes));savePref('cad-osnap',defaultSnapModes);}}>Default</button></div></div>}
@@ -611,7 +643,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
     {toggles.dyn&&cursor.current.screen&&(active.current||input)&&!textEdit&&<div className="cad-dyn" aria-hidden="true" style={{left:Math.min(cursor.current.screen[0]+20,view.current.w-260),top:Math.min(cursor.current.screen[1]+24,view.current.h-48)}}>
      <span>{prompt().replace(/^\S+ /,'').replace(/^\*\* STRETCH \*\* /,'')}</span><b>{input||'\u00a0'}</b>{dynLock.current!==null&&<em>length {lengthText(dynLock.current)} locked</em>}</div>}
    </div>
-   {(panel.props||panel.layers||panel.blocks)&&<aside className="cad-side">
+   {!clean&&(panel.props||panel.layers||panel.blocks)&&<aside className="cad-side" aria-label="Palettes">
     {panel.props&&<section className="cad-panel" aria-label="Properties"><h3><SlidersHorizontal size={13}/>Properties<button aria-label="Hide properties" onClick={()=>setPanel(v=>({...v,props:false}))}><X size={12}/></button></h3>
      <Properties doc={doc} selected={selected} layers={doc.layers} onPut={putEnt} onLayer={changeLayerOfSelection} onAll={changeSelection} lengthText={lengthText}/></section>}
     {panel.blocks&&<section className="cad-panel" aria-label="Blocks"><h3><Blocks size={13}/>Blocks<button aria-label="Hide blocks" onClick={()=>setPanel(v=>({...v,blocks:false}))}><X size={12}/></button></h3>
@@ -632,8 +664,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
    </aside>}
   </div>
   <footer className="cad-bottom">
-   <div className="cad-log" aria-live="polite">{log.slice(-3).map((m,i)=><p key={i}>{m}</p>)}</div>
-   <label className="cad-cmd"><span>{prompt()}</span><input ref={cmdRef} aria-label="Command line" autoFocus spellCheck={false} autoComplete="off" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={onCmdKey}/></label>
+   {cmdLine&&<div className="cad-log" aria-live="polite">{log.slice(-3).map((m,i)=><p key={i}>{m}</p>)}</div>}
+   <label className={`cad-cmd${cmdLine?'':' cad-hidden'}`}><span>{prompt()}</span><input ref={cmdRef} aria-label="Command line" autoFocus spellCheck={false} autoComplete="off" value={input} onChange={e=>{setInput(e.target.value);setPick(-1);history.current.reset();}} onKeyDown={onCmdKey}
+    role="combobox" aria-autocomplete="list" aria-expanded={suggestions.length>0} aria-controls="cad-suggest" aria-activedescendant={pick>=0?`cad-suggest-${pick}`:undefined}/>
+    {suggestions.length>0&&<ul id="cad-suggest" className="cad-suggest" role="listbox" aria-label="Matching commands">{suggestions.map((v,i)=><li key={v.name} id={`cad-suggest-${i}`} role="option" aria-selected={i===pick} className={i===pick?'on':''}
+     onMouseDown={e=>{e.preventDefault();setInput('');setPick(-1);history.current.push(v.name);run(v.name);}}>{v.name}{v.alias&&<small>{v.alias}</small>}</li>)}</ul>}</label>
    <div className="cad-status">
     <span className="cad-coords">{fmtNum(coords[0])}, {fmtNum(coords[1])} {doc.unit==='unit'?'':doc.unit}</span>
     {(['grid','snap','ortho','polar','osnap','otrack','dyn','lwt'] as const).map(t=><span key={t} className="cad-toggle"><button className={toggles[t]?'on':''} aria-pressed={toggles[t]}
@@ -687,8 +722,16 @@ const helpRows:[string,string][]=[
  ['Select objects','ALL, L last, P previous, W window, C crossing, F fence, G group, R remove, A add'],
  ['QSELECT · SELECTSIMILAR','Select by type and property; select objects like the selection'],['G · GROUP / UNGROUP','Name a group of the selection; picking a member selects the group (Ctrl+Shift+A)'],
  ['OS · OSNAP','Choose the running object snaps'],
- ['Keys','Enter or Space repeats or ends; Esc cancels; F3 snaps, F7 grid, F8 ortho, F9 grid snap, F10 polar, F11 snap tracking, F12 dynamic input (Tab locks a length); Ctrl+C / Ctrl+X / Ctrl+V; double-click text to edit'],
+ ['Keys','Enter or Space repeats or ends; Esc cancels; F3 snaps, F7 grid, F8 ortho, F9 grid snap, F10 polar, F11 snap tracking, F12 dynamic input (Tab locks a length); Ctrl+C / Ctrl+X / Ctrl+V, Ctrl+Shift+C copy with base point, Ctrl+Shift+V paste as block; double-click text to edit'],
+ ['Command line','Suggestions appear as you type: arrows choose, Tab completes, Enter runs; with no suggestions the arrows recall earlier input. F2 command history; Ctrl+1 properties, Ctrl+2 blocks, Ctrl+3 layers, Ctrl+9 command line, Ctrl+0 clean screen (where the browser leaves those keys to the page)'],
 ];
+/** F2: the command history, newest at the bottom. */
+function TextWindow({log,onClose}:{log:string[];onClose:()=>void}){
+ const ref=useRef<HTMLDivElement>(null);
+ useEffect(()=>{const el=ref.current;if(el)el.scrollTop=el.scrollHeight;},[log]);
+ return <div className="cad-help cad-textwin" role="dialog" aria-label="Command history"><h3>Command history (F2)<button aria-label="Close command history" onClick={onClose}><X size={12}/></button></h3>
+  <div ref={ref} className="cad-textlog" tabIndex={0} role="log">{log.map((m,i)=><p key={i}>{m}</p>)}</div></div>;
+}
 function HelpCard({onClose}:{onClose:()=>void}){
  return <div className="cad-help" role="dialog" aria-label="CAD commands"><h3>Commands and shortcuts<button aria-label="Close help" onClick={onClose}><X size={12}/></button></h3>
   <dl>{helpRows.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>;

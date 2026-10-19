@@ -4,6 +4,7 @@ import {fonts,primitives,textStyleOf,type TextStyle} from './annotation';
 import {children} from './blocks';
 import {viewportContents} from './layout';
 import {dashPattern} from './convert';
+import {spatialIndex} from './spatial';
 
 /** Screen view: world point (cx, cy) at the canvas center, scale pixels per drawing unit, canvas w × h CSS pixels. */
 export interface View{cx:number;cy:number;scale:number;w:number;h:number}
@@ -114,13 +115,15 @@ export function drawScene(ctx:CanvasRenderingContext2D,o:SceneOptions){
  }
  if(o.underlay){
   ctx.strokeStyle=c.underlay;ctx.fillStyle=c.underlay;ctx.lineWidth=1;ctx.setLineDash([]);ctx.beginPath();
-  for(const e of o.underlay.entities)if(overlaps(cachedBox(e,doc),vb))strokePath(ctx,v,e,doc);
+  for(const e of spatialIndex(o.underlay.entities,o.underlay).query(vb))strokePath(ctx,v,e,doc);
   ctx.stroke();
  }
  drawEntities(ctx,doc.entities,o,vb);
  ctx.setLineDash([]);
 }
 
+/** True when an object's extents are under a pixel on screen. */
+export const isDot=(b:Box,scale:number)=>(b[2]-b[0])*scale<1&&(b[3]-b[1])*scale<1;
 /** Entities batched by layer and object properties; viewports draw what they show, clipped, before their border. */
 function drawEntities(ctx:CanvasRenderingContext2D,ents:Ent[],o:SceneOptions,vb:Box){
  const {doc,view:v,theme}=o;
@@ -132,8 +135,7 @@ function drawEntities(ctx:CanvasRenderingContext2D,ents:Ent[],o:SceneOptions,vb:
  }
  const byLayer=new Map<string,Ent[]>();
  const names=new Set(doc.layers.map(l=>l.name)),put=(e:Ent,layer:string)=>{let list=byLayer.get(layer);if(!list)byLayer.set(layer,list=[]);list.push(e);};
- for(const e of ents){
-  if(!overlaps(cachedBox(e,doc),vb))continue;
+ for(const e of spatialIndex(ents,doc).query(vb)){
   // A reference draws its children on their own layers (layers this drawing lacks fall back to the reference's).
   if(e.type==='insert'||e.type==='xref'){for(const c of children(e,doc))if(overlaps(cachedBox(c,doc),vb))put(c,names.has(c.layer)?c.layer:e.layer);continue;}
   put(e,e.layer);
@@ -148,12 +150,15 @@ function drawEntities(ctx:CanvasRenderingContext2D,ents:Ent[],o:SceneOptions,vb:
    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=o.lwt?Math.max(1,f.weight/24):1;ctx.lineCap='round';ctx.lineJoin='round';
    const dash=dashPattern(f.ltype,doc.unit,f.ltscale*(doc.ltscale??1)).map(d=>d*v.scale),longest=Math.max(0,...dash);
    ctx.setLineDash(dash.length&&longest>=1.5?dash.map(d=>Math.max(d,.01)):[]);
-   ctx.beginPath();for(const e of list)if(e.type!=='text'&&e.type!=='solid')strokePath(ctx,v,e,doc);ctx.stroke();
+   // Objects smaller than a pixel at this zoom draw as a dot (as AutoCAD's display does), not as their geometry.
+   const dots:Ent[]=[],full:Ent[]=[];for(const e of list)(isDot(cachedBox(e,doc),v.scale)?dots:full).push(e);
+   ctx.beginPath();for(const e of full)if(e.type!=='text'&&e.type!=='solid')strokePath(ctx,v,e,doc);ctx.stroke();
    ctx.setLineDash([]);
-   ctx.beginPath();for(const e of list)if(e.type==='solid'||isComposite(e))fillShapes(ctx,v,e,doc);ctx.fill();
+   if(dots.length){ctx.beginPath();for(const e of dots){const b=cachedBox(e,doc),p=toScreen(v,[(b[0]+b[2])/2,(b[1]+b[3])/2]);ctx.rect(Math.floor(p[0]),Math.floor(p[1]),1,1);}ctx.fill();}
+   ctx.beginPath();for(const e of full)if(e.type==='solid'||isComposite(e))fillShapes(ctx,v,e,doc);ctx.fill();
    // Solid hatches fill by the even-odd rule, one at a time so islands stay open.
-   for(const e of list)if(e.type==='hatch'&&e.pattern==='SOLID'){ctx.beginPath();fillShapes(ctx,v,e,doc);ctx.fill('evenodd');}
-   for(const e of list)for(const t of textsOf(e,doc))drawText(ctx,v,t);
+   for(const e of full)if(e.type==='hatch'&&e.pattern==='SOLID'){ctx.beginPath();fillShapes(ctx,v,e,doc);ctx.fill('evenodd');}
+   for(const e of full)for(const t of textsOf(e,doc))drawText(ctx,v,t);
   }
  }
  ctx.setLineDash([]);
@@ -185,7 +190,7 @@ export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
   }
   ctx.stroke();ctx.setLineDash([]);
  };
- if(o.selected.length)outline(o.selected.slice(0,4000),c.select,1.6,[6,4]);
+ if(o.selected.length)outline(o.selected.filter(e=>overlaps(cachedBox(e,doc),vb)).slice(0,4000),c.select,1.6,[6,4]);
  if(o.hover)outline([o.hover],c.hover,4,[]);
  if(o.preview?.length){
   outline(o.preview,c.preview,1.2,[]);

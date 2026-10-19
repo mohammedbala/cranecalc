@@ -67,6 +67,13 @@
 .cad-cmd{display:flex;align-items:center;gap:8px;padding:3px 10px;font:12px ui-monospace,Menlo,Consolas,monospace}
 .cad-cmd span{white-space:nowrap;color:var(--cad-text);max-width:62%;overflow:hidden;text-overflow:ellipsis}
 .cad-cmd input{flex:1;border:0;background:transparent;outline:none;padding:3px 0;font:inherit}
+.cad-cmd{position:relative}
+.cad-cmd.cad-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);padding:0}
+.cad-suggest{position:absolute;bottom:100%;left:10px;margin:0 0 2px;padding:3px 0;list-style:none;min-width:200px;background:var(--cad-panel);border:1px solid var(--cad-line);border-radius:5px;box-shadow:0 8px 22px rgba(0,0,0,.35);z-index:3}
+.cad-suggest li{display:flex;gap:12px;align-items:baseline;padding:3px 10px;cursor:pointer}
+.cad-suggest li small{margin-left:auto;color:var(--cad-muted)}
+.cad-suggest li.on,.cad-suggest li:hover{background:var(--cad-on);color:var(--cad-text)}
+.cad-suggest li.on small,.cad-suggest li:hover small{color:var(--cad-text)}
 .cad-status{display:flex;align-items:center;gap:2px;padding:3px 8px 5px;flex-wrap:wrap;border-top:1px solid var(--cad-line);font-size:11px}
 .cad-status button{font-size:10.5px;letter-spacing:.04em;padding:2px 7px;border-color:var(--cad-line)}
 .cad-coords{font:11px ui-monospace,Menlo,Consolas,monospace;color:var(--cad-muted);min-width:170px}
@@ -83,6 +90,8 @@
 .cad-help h3 button{margin-left:auto;padding:2px}
 .cad-help dl{margin:0}.cad-help dl>div{display:grid;grid-template-columns:150px 1fr;gap:10px;padding:3px 0}
 .cad-help dt{font:11px ui-monospace,Menlo,Consolas,monospace;color:var(--cad-accent)}.cad-help dd{margin:0}
+.cad-textwin{left:12px;right:auto;top:auto;bottom:12px;width:min(720px,calc(100% - 24px))}
+.cad-textlog{max-height:40vh;overflow:auto;font:12px ui-monospace,Menlo,Consolas,monospace}.cad-textlog p{margin:1px 0}
 /* Drafting viewer: edit button and edited / out-of-date badges. */
 .drafting-edit{display:inline-flex;align-items:center;gap:5px;font-weight:600}
 .drafting-badge{font-size:9px;letter-spacing:.06em;text-transform:uppercase;border-radius:9px;padding:1px 7px;background:#e3efe0;color:#3d6b34;white-space:nowrap}
