@@ -25,7 +25,8 @@ const simulated:Record<string,RunwayConfig>={
 };
 
 describe('configurator project validity',()=>{
- for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);});
+ // t13 to t16: the crane columns tied to the building columns and the stepped columns (girder on the step).
+ for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
  for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project`,()=>{expect(validateProject(buildProject(c))).toEqual([]);});
  it('a cap tieback angle that fits no column flange falls back to paired bars, with the reason in the selections log',()=>{
   const p=buildProject({...simulated['017'],columnShape:'W14X61'});

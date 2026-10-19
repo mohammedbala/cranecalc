@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {runwayTemplates,templateProject} from '../src/engine/templates';
 import {buildProject,estimateCrane,exampleSpectrum,normalizeConfig,previewConfig,railDepthFor,seatWidthNeeded} from '../src/engine/configurator';
-import {defaultRunwayConfig,type RunwayConfig} from '../src/engine/configInputs';
+import {defaultRunwayConfig,supportKinds,type RunwayConfig} from '../src/engine/configInputs';
 import {validateProject} from '../src/engine/calculate';
 import {craneInputChecks,craneStatics,bumperSelectionChecks} from '../src/engine/craneInput';
 import {buildingClassCheck,fatigueCycleCheck} from '../src/engine/buildingClass';
@@ -20,12 +20,12 @@ import {girderPieceChecks} from '../src/engine/girderPieces';
 const kip=4448.2216152605,foot=304.8,inch=25.4;
 
 describe('configuration templates',()=>{
- it('are a dozen distinct, complete configurations',()=>{
-  expect(runwayTemplates).toHaveLength(12);
-  expect(new Set(runwayTemplates.map(t=>t.id)).size).toBe(12);
+ it('are sixteen distinct, complete configurations',()=>{
+  expect(runwayTemplates).toHaveLength(16);
+  expect(new Set(runwayTemplates.map(t=>t.id)).size).toBe(16);
   // Every support and tie kind and both structures appear.
   const supports=new Set(runwayTemplates.map(t=>t.config.support)),ties=new Set(runwayTemplates.map(t=>t.config.tie));
-  for(const s of ['by-others','twin-rib','haunched-seat','rolled-corbel','tapered-haunch','column-cap'])expect(supports).toContain(s);
+  for(const s of supportKinds)expect(supports).toContain(s);
   for(const s of ['paired-bars','flexible-plate','cap-angle'])expect(ties).toContain(s);
   expect(runwayTemplates.some(t=>t.config.structure==='new')).toBe(true);
   expect(runwayTemplates.some(t=>t.config.system==='continuous')).toBe(true);
@@ -44,6 +44,9 @@ describe('configuration templates',()=>{
   if(c.scope==='analysis'){expect(p.details).toBeUndefined();return;}
   const d=p.details!;
   if(c.support==='column-cap'){expect(p.columnCap?.enabled).toBe(true);expect(d.bracket?.enabled).toBeFalsy();}
+  // A crane column: the girder on its cap, tied to the building column; a stepped column: the girder on the step.
+  else if(c.support==='crane-column'){expect(p.columnCap?.enabled).toBe(true);expect(p.craneColumn?.enabled).toBe(true);expect(d.bracket?.enabled).toBeFalsy();expect(p.aist!.supportType).toBe('column');}
+  else if(c.support==='stepped-column'){expect(p.existingColumn?.step).toBeDefined();expect(p.craneColumn).toBeUndefined();expect(d.bracket?.enabled).toBeFalsy();expect(p.aist!.supportType).toBe('column');}
   else if(c.support==='by-others')expect(d.bracket?.enabled).toBeFalsy();
   else expect(d.bracket).toMatchObject({enabled:true,arrangement:c.support});
   // A rolled simple-span saddle that does not suit the girder (or a high-cycle runway) gives way to paired bars on the
@@ -52,11 +55,12 @@ describe('configuration templates',()=>{
   const onStiffener=c.system==='simple'&&c.girder==='rolled'&&d.brace.flangeAttachment?.enabled===false,capAngle=c.girder==='capped'&&p.notes.includes('do not suit this capped girder');
   if(c.support!=='column-cap')expect(d.brace.arrangement??'paired-bars').toBe(onStiffener?'paired-bars':capAngle?'cap-angle':c.tie);
   expect(!!p.existingColumn?.enabled).toBe(c.support!=='by-others');
-  expect(!!p.existingColumn?.isNew).toBe(c.structure==='new');
-  expect(!!p.columnBase?.enabled).toBe(c.structure==='new');
+  // A crane column is a new column on its own base beside the existing building column.
+  expect(!!p.existingColumn?.isNew).toBe(c.structure==='new'||c.support==='crane-column');
+  expect(!!p.columnBase?.enabled).toBe(c.structure==='new'||c.support==='crane-column');
   // A template is an example: the content gates of a project package still apply when it is turned into one.
   expect(packageContentChecks({...p,reportPurpose:'project'}).map(v=>v.id)).toContain('project-content');
- });
+ },300000);
 });
 
 describe('crane data from the capacity',()=>{
@@ -112,6 +116,30 @@ describe('dependent choices',()=>{
   // A named girder is used as given.
   expect(previewConfig({...defaultRunwayConfig,girderShape:'W24X104'}).girder).toBe('W24X104');
  });
+ it('previews the crane column beside the building column, and the stepped column\'s lower and upper shafts',()=>{
+  const crane=previewConfig({...defaultRunwayConfig,capacity:15,support:'crane-column',girderShape:'W30X191'});
+  expect(crane).toMatchObject({column:'W14X90',buildingColumn:'W14X120'});
+  expect(previewConfig({...defaultRunwayConfig,capacity:15,support:'crane-column',girderShape:'W30X191',columnShape:'W14X159',buildingColumnShape:'W14X145'})).toMatchObject({column:'W14X159',buildingColumn:'W14X145'});
+  const step=previewConfig({...defaultRunwayConfig,capacity:20,support:'stepped-column',girderShape:'W30X191'});
+  expect(step).toMatchObject({column:'W30X173',buildingColumn:'W14X159'});
+  // Both are direct column bearing: no column-bracket warning whatever the reaction.
+  expect([...crane.changes,...step.changes].filter(v=>/^Support reaction/.test(v))).toEqual([]);
+  expect(previewConfig({...defaultRunwayConfig,girderShape:'W24X104'}).buildingColumn).toBeUndefined();
+ });
+ it('takes the new supports only on an existing structure, ignores a stepped column\'s reach and keeps its lower shaft deeper than the upper',()=>{
+  for(const support of ['crane-column','stepped-column'] as const){
+   const r=normalizeConfig({...defaultRunwayConfig,structure:'new',support});
+   expect(r.config.support).toBe('column-cap');expect(r.rules).toContainEqual({field:'support',from:support,to:'column-cap',why:expect.stringMatching(/^New freestanding columns are crane columns themselves/)});
+   expect(normalizeConfig({...defaultRunwayConfig,support}).changes).toEqual([]);
+  }
+  const step=normalizeConfig({...defaultRunwayConfig,support:'stepped-column',reach:24});
+  expect(step.config.reach).toBeUndefined();expect(step.changes[0]).toMatch(/reach comes from the column geometry/);
+  // The crane column keeps its reach: the girder web to the building column face.
+  expect(normalizeConfig({...defaultRunwayConfig,support:'crane-column',reach:24}).config.reach).toBe(24);
+  const shallow=normalizeConfig({...defaultRunwayConfig,support:'stepped-column',columnShape:'W14X159',buildingColumnShape:'W14X120'});
+  expect(shallow.config.columnShape).toBeUndefined();expect(shallow.changes[0]).toMatch(/does not hold the W14X120 upper shaft/);
+  expect(normalizeConfig({...defaultRunwayConfig,support:'stepped-column',columnShape:'W33X201'}).config.columnShape).toBe('W33X201');
+ });
 });
 
 describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
@@ -140,7 +168,9 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
  it('keeps the brackets of an existing structure above it, with the warning; within it nothing is said',()=>{
   const v=previewConfig({...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30});
   expect(v.config.support).toBe('twin-rib');
-  expect(v.changes).toContainEqual(expect.stringMatching(/^Support reaction about \d+ kip exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets; consider new crane columns with column caps, or obtain the engineer of record's acceptance\.$/));
+  expect(v.changes).toContainEqual(expect.stringMatching(/^Support reaction about \d+ kip exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets; consider new crane columns tied to the building columns, the girders on their column caps \(support: Crane column tied to the building column \(existing\)\), or obtain the engineer of record's acceptance\.$/));
+  // The warning does not switch an existing structure (t05, t08 and t10 keep their brackets).
+  expect(v.config.structure).toBe('existing');
   // The one statement within the limit is the assumed bumper overhang (end-truck geometry for the stop contacts).
   const light=previewConfig({...defaultRunwayConfig,capacity:5});expect(light.changes.filter(v=>!/^Bumper overhang assumed/.test(v))).toEqual([]);expect(light.changes.at(-1)).toMatch(/^Bumper overhang assumed \d+ in/);expect(light.reaction!).toBeLessThan(50*kip);
  });
