@@ -48,8 +48,8 @@ describe('new column base fatigue (AISC 360-16 Appendix 3)',()=>{
  it('keeps the plate washers, their fillets and the nut socket clear of the column flange fillets',()=>{
   const p=column(),g=rodClearance(p,p.columnBase!),d=existingColumnSection(p).section.d;
   expect(g.available).toBeCloseTo(10*inch-2*inch-d/2,6);
-  // 3 in washer: 1 1/2 + 5/16 washer fillet + 5/16 flange fillet; socket 1.6 x 1 in + 5/16.
-  expect(g.washer/inch).toBeCloseTo(2.125,6);expect(g.wrench/inch).toBeCloseTo(1.9125,6);expect(g.required).toBe(g.washer);
+  // 3 in washer: 1 1/2 + 5/16 washer fillet + 5/16 flange fillet; socket 1.6 x 1 in + 5/16 + the 1/16 in fabrication tolerance.
+  expect(g.washer/inch).toBeCloseTo(2.125,6);expect(g.wrench/inch).toBeCloseTo(1.975,6);expect(g.required).toBe(g.washer);
  });
 });
 

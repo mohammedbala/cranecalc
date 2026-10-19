@@ -83,7 +83,8 @@ describe('every template sheet set',()=>{
   }
   // Every failing check is named on a sheet: by its id, or by the governing check of its open item.
   const groups=sheetOpenGroups(s);
-  for(const c of s.checks.filter(v=>v.status==='fail')){
+  // An advisory recommendation (e.g. the TR-13 bracket guideline) is listed apart, not an open item to name on a sheet.
+  for(const c of s.checks.filter(v=>v.status==='fail'&&tax.entries.get(v.id)?.gate!=='advisory')){
    const g=groups.find(v=>v.members.includes(c)||v.folded.includes(c));
    expect(all.includes(c.id.toUpperCase())||(!!g&&all.includes(g.governing.id.toUpperCase())),`${name} ${c.id}`).toBe(true);
   }
