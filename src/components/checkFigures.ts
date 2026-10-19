@@ -27,7 +27,6 @@ export const checkGroupPurpose:Record<string,string>={
  Analysis:'Verify equilibrium and numerical convergence before relying on calculated demands.',
  'Existing column':'Check the receiving column for the crane reactions combined with the loads it already carries.',
  'New column':'Design the new freestanding runway column for the crane and runway reactions.',
- 'Stepped column':'Check the existing stepped column, both shafts and the step, for the girder reaction on the step and the tie force on the upper shaft with the loads it already carries.',
  'New column base':'Carry the column base reactions through the base plate, anchor rods and footing to the soil.',
  'Supporting structure':'Identify building elements that must be verified outside this calculation for the reported forces.',
  'Longitudinal bracing':'Carry crane traction and stop forces, with the building\'s own wind and seismic forces, to the foundation.',
