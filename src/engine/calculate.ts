@@ -48,13 +48,23 @@ export function fingerprint(input:unknown):string {const text=JSON.stringify(inp
  * The configurator's members beyond its catalog (configurator.beyondCatalog: a plate girder, a built-up crane column, a
  * top-flange tie its sizing could not resolve), while the project still has the member it could not size: one open item
  * each, status 'incomplete' (the member is not designed), so the package is a review draft, never an issued design. The
- * closest catalog member is built and checked; its own failing checks are reported as they are.
+ * closest catalog member is built and checked; its own failing checks are reported as they are. The configurator judged
+ * it on its screening estimates: given the calculation's checks (`checks`), an item whose member's own checks all pass
+ * is closed (status 'pass', the calculation's checks decide; e.g. case 014, a cap tieback angle at estimated lap slip
+ * 1.64 that the calculation passes), and stays open while any of them fails.
  */
-export function configuratorOpenItems(p:ProjectInput):CheckResult[]{
+const memberChecks:Record<'girder'|'tie'|'crane-column',RegExp>={
+ girder:/^(vertical|lateral|major|minor|combined|combined-bottom|torsion-normal|torsion-normal-bottom|torsion-shear|torsion-stability|flexure-load-height|shear|sidesway)$/,
+ tie:/^(tie-|flange-tie-|plate-tie-|cap-angle-|brace-member$|brace-stiffness$|coord-tie-|coord-cap-tie-)/,
+ 'crane-column':/^column-/};
+export function configuratorOpenItems(p:ProjectInput,checks?:CheckResult[]):CheckResult[]{
  const titles={girder:'Plate girder required (outside the rolled/capped catalog)','crane-column':'Built-up crane column required (outside the rolled catalog)',tie:'Top-flange tie not resolved by the configurator'};
  return (p.configurator?.beyondCatalog??[]).filter(v=>v.member==='girder'?p.section.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)
-  .map(v=>({id:`configurator-${v.member}`,group:'Detailing',title:titles[v.member],status:'incomplete',equation:'',referenceIds:['criteria'],
-   note:`${v.reason} The closest ${v.member==='tie'?'tie':'catalog member'} (${v.shape}) is built and checked here so the package can be reviewed; its failing checks are listed as they are. Open item: the package is a review draft until the member is designed.`}));
+  .map(v=>{
+   const own=checks?.filter(c=>memberChecks[v.member].test(c.id)),failing=own?.filter(c=>c.status==='fail'),closed=!!own?.length&&!failing!.length;
+   return {id:`configurator-${v.member}`,group:'Detailing',title:titles[v.member],status:closed?'pass':'incomplete',equation:'',referenceIds:['criteria'],
+    note:closed?`${v.reason} The configurator's screening estimates did not confirm the ${v.member==='tie'?'tie':'member'} (${v.shape}); the calculation checks it, and its ${own!.length} checks of this ${v.member==='tie'?'tie':'member'} pass: closed by the calculation.`
+     :`${v.reason} The closest ${v.member==='tie'?'tie':'catalog member'} (${v.shape}) is built and checked here so the package can be reviewed; its failing checks are listed as they are${failing?.length?` (${failing.slice(0,4).map(c=>c.id).join(', ')}${failing.length>4?', …':''})`:''}. Open item: the package is a review draft until the member is designed.`} as CheckResult;});
 }
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
@@ -212,7 +222,7 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  snapshot.warnings.push(...connectionCoordination(p));
  snapshot.warnings.push(snapshot.detailResults?'The detailed rail-head check includes lateral bending, Saint-Venant/warping torsion and girder-side tie flexibility. Supplied-load diagram envelopes remain a separate first-order display.':'Supplied-load diagram lateral results represent weak-axis section bending under supplied forces. Rail displacement from twist and top-flange force distribution is not established.');
  snapshot.warnings.push(snapshot.detailResults?'Vertical bending uses Euler-Bernoulli theory. Detailed lateral/torsion response includes geometric stiffness and girder-side connection flexibility; material nonlinearity, section distortion, shear deformation and building-interface flexibility are excluded.':'Euler-Bernoulli small-deflection analysis; shear deformation, nonlinear behavior and support flexibility are excluded.');
- snapshot.checks.push(...packageContentChecks(p),...configuratorOpenItems(p));
+ snapshot.checks.push(...packageContentChecks(p));
  // Clashes and layout conflicts: open items (status 'fail') until the arrangement is revised.
  snapshot.checks.push(...coordinationChecks(p),...constructionNoteChecks(snapshot));
  const optionChecks=connectionOptionChecks(p);
@@ -227,6 +237,8 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  snapshot.checks=snapshot.checks.map(reopenedByOthers);
  // The one-count check names the cycles of every wheel-local detail family, derived from the one count (fatigueCycleFamilies).
  if(p.details)snapshot.checks=snapshot.checks.map(c=>c.id==='fatigue-cycles'?fatigueCycleCheck(p,fatigueCycleFamilies(p)):c);
+ // Members beyond the configurator's catalog, judged by the calculation's own checks of the member (configuratorOpenItems).
+ snapshot.checks.push(...configuratorOpenItems(p,snapshot.checks));
  integrityAndGates(snapshot);
  snapshot.checks=snapshot.checks.map(recorded).map(toleranceStated);
  const blocking=snapshot.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status));
