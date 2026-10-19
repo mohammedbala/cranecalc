@@ -120,10 +120,10 @@ describe('configured tie proportions',()=>{
   expect(Math.max(...Object.values(ratios))).toBeLessThan(1.1);
   for(const id of ['tie-move-strength','tie-move-gusset','tie-move-weld','tie-move-root-fatigue'])expect(ratios[id],id).toBeLessThan(1);
  });
- it('holds strength and fatigue to 0.9, the imposed movement to 0.97 and fit limits to one',()=>{
+ it('holds strength and fatigue to 0.9, the imposed movement to 0.93 and fit limits to one',()=>{
   const r=tieSizingRatios(templateProject('t01'));
-  expect(sizingLimit(r,'flange-tie-flange')).toBe(.9);expect(sizingLimit(r,'tie-move-strength')).toBeCloseTo(.97,12);
-  expect(sizingLimit(r,'tie-pitch')).toBe(1);expect(sizingLimit(r,'tie-move-strength',.95)).toBe(1);
+  expect(sizingLimit(r,'flange-tie-flange')).toBe(.9);expect(sizingLimit(r,'tie-move-strength')).toBeCloseTo(.93,12);
+  expect(sizingLimit(r,'tie-pitch')).toBe(1);expect(sizingLimit(r,'tie-move-strength',.97)).toBe(1);
  });
  it('sizes the tie before the bracket: the bracket at the reach the tie needs, the release travel the tie\'s own',()=>{
   // The 1/4 in bars on the bearing stiffener pass at a 22 in reach, so the welded seats are sized there.

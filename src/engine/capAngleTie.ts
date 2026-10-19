@@ -530,7 +530,9 @@ export interface CapAngleSizingMovement {
  * thinner plates down to 1/4 in (more flexible out of plane, the stress falls with t_p), then end plate fillets larger
  * in 1/16 in steps up to the plate thickness (R_FIL of the root rises with w/t_p); never a heavier plate for the
  * movement. Every set is also held to the detailing rules of validateCapAngle on the project as it stands (the end
- * plates on the column flange, the nuts clear of the column web, the angle on its own girder end): returns the first
+ * plates on the column flange, the nuts clear of the column web, the angle on its own girder end) and to the fit
+ * ratios (capAngleFits: the cap bolt edge, the hardware below the top of the rail, the column nuts clear of the web
+ * fillet, the setback lengthened for the last): returns the first
  * set that fits and is within its limits, else the fitting one with the least largest ratio; where no set fits, the
  * one with the least largest ratio (the caller checks the fit with validateCapAngle and chooses another tie).
  */
@@ -556,10 +558,16 @@ export function sizeCapAngle(p:ProjectInput,F:number,target=.9,movement?:CapAngl
    const q0:ProjectInput={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:c}}},g0=capAngleGeometry(q0);
    if(g0)c=capAngleProportions(p,{...size,release:Math.max(inch/8,roundUp(capAngleMovement(q0,g0,movement).vertical+inch/16+inch/32,inch/16))},base);
   }
-  const input={...c,...(weld!==undefined?{weldSize:weld}:{})};
-  const q:ProjectInput={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:input}}};
-  const g=capAngleGeometry(q);if(!g)return {input,worst:Infinity,fits:false};
-  const r=capAngleSizingRatios(q,g,F,movement,cycles),fits=validateCapAngle(q).length===0;
+  let input={...c,...(weld!==undefined?{weldSize:weld}:{})};
+  let q:ProjectInput={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:input}}};
+  let g=capAngleGeometry(q);if(!g)return {input,worst:Infinity,fits:false};
+  // The column bolt nuts inside the column flange clear the web fillet by the socket clearance (cap-angle-column-wrench):
+  // the tie nearest the column centerline (a girder end at a grid) moves farther along its girder, the setback
+  // lengthened in 1/4 in steps (validateCapAngle then holds the end plate on the column flange and the angle on its girder).
+  const rc=g.column.receiver;
+  if(rc){const near=Math.min(...g.stations.map(v=>Math.abs(v.offset))),need=rc.k1+wrenchClearance(input.columnBolts.diameter);
+   if(g.stations.length&&near<need-1e-6){input={...input,setback:input.setback+roundUp(need-near,inch/4)};q={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:input}}};g=capAngleGeometry(q);if(!g)return {input,worst:Infinity,fits:false};}}
+  const r=capAngleSizingRatios(q,g,F,movement,cycles),fits=validateCapAngle(q).length===0&&[...capAngleFits].every(k=>!((r as Record<string,number>)[k]>1+1e-9));
   return {input,fits,worst:Math.max(...Object.entries(r as Record<string,number>).map(([k,v])=>v/(capAngleFits.has(k)?1:capAngleMovementRatio.has(k)&&r.movementControlled?.has(k)?movementLimit:target)))};
  };
  // Unreleased first; then, with the movement estimated, the end plate released in vertical slots (no movement bending).

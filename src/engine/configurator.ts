@@ -31,7 +31,7 @@ import {supportReactions} from './supportReactions';
 import {existingColumnAnalysis,existingColumnChecks,existingColumnSection} from './existingColumn';
 import {existingWeldingDemand} from './existingWelding';
 import {baseDrift,footingsOf} from './columnBase';
-import {sizeCapAngle,capAngleForceEstimate,validateCapAngle} from './capAngleTie';
+import {sizeCapAngle,capAngleForceEstimate,validateCapAngle,capAngleSizingRatios} from './capAngleTie';
 import {simpleSupportInput,railClipStations} from './simpleSupports';
 import {seatSettingTolerance} from './fitTolerances';
 import {sizeWeldedBracket,bracketColumnFatigueRatio} from './bracketSizing';
@@ -54,7 +54,7 @@ import {classFromCycles} from './buildingClass';
 import {tiedToBuilding,type ColumnTieInput} from './craneColumnInputs';
 import {buildingColumnProject,columnPlates,columnShortening,columnTieCapacities,columnTieGeometry,craneColumnLayout,girderTieFace} from './craneColumn';
 import {validateColumnCap} from './columnCap';
-import {minimumEdge} from './capAngle';
+import {minimumEdge,capAngleGeometry} from './capAngle';
 import {transverseFilletFatigue} from './connectionStrength';
 import {finiteLife,fatigueThreshold} from './fatigueConstants';
 import {columnReactionOffset} from './existingColumn';
@@ -1162,6 +1162,19 @@ function fitCapAngle(p:ProjectInput):string|undefined{
  if(misfit.length&&p.system==='simple'&&d.simpleSupport?.endGridBearing==='centered'){d.simpleSupport.endGridBearing='on-grid';misfit=size();}
  return misfit[0]?.replace(/^details\.brace\.capAngle: /,'').replace(/[:.].*$/,'');
 }
+/**
+ * The ratios by which the sized cap tieback angle clearly fails under the estimated tie force and movements, beyond
+ * what the estimate's conservatism can explain: a strength or fit ratio past 1.5 (the tie force estimate, 2 × 1.6 times
+ * the side thrust, bounds the calculated force), or a fatigue ratio the imposed movement controls past 2 (bounds of
+ * the estimate; case 031, 1.38 estimated, is within its limit calculated). Undefined where the angle may pass; the
+ * calculation then checks it. beyondCatalog stops the build otherwise (case 047: lap slip 11.5, no capacity).
+ */
+function capAngleUnresolved(p:ProjectInput):string|undefined{
+ const d=p.details!,g=capAngleGeometry(p);if(!g)return 'no cap angle geometry';
+ const r=capAngleSizingRatios(p,g,capAngleForceEstimate(p),capAngleMovementEstimate(p,!!d.bracket?.enabled),d.spectrum.reduce((a,v)=>a+v.cycles,0));
+ const moved=r.movementControlled??new Set<string>(),over=Object.entries(r as Record<string,number>).filter(([k,v])=>v>(moved.has(k)?2:1.5)).sort((a,b)=>b[1]-a[1]);
+ return over.length?`sized ${d.brace.capAngle?.shape} still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${Number.isFinite(v)?v.toFixed(2):'no capacity'}`).join(', ')}`:undefined;
+}
 /** Reasons the build steps record for the selection log (selectionLog). */
 export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned;clip?:string;
  /** Crane columns: the footing arrangement chosen by the clearance to the building-column footing (combinedWhereOverlapping). */
@@ -1202,6 +1215,11 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
   const over=Object.entries(tieSizingRatios(p)).filter(([k,v])=>!k.startsWith('column-')&&v>1+1e-6).sort((a,b)=>b[1]-a[1]);
   if(over.length)out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:`Top-flange tie not resolved: the ${tieLabels[tieArrangement(d) as keyof typeof tieLabels]??tieArrangement(d)}${stiffenerTieGeometry(p)?' on the bearing stiffener':' on a flange saddle'}, as sized for the estimated tie demands, still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')}, and no other tie arrangement the configurator tries fits and passes here. Choose another tie or support (a capped girder with the cap tieback angle, column caps, a stiffer support), or design the tie connection by hand.`});
  }
+ // The cap tieback angle as sized still past its limits (capAngleUnresolved) where no other tie was taken: no set of
+ // the sizing steps carries this tie, so the build stops rather than issuing a tie its own sizing rejects (case 047).
+ const cg=d?.brace.arrangement==='cap-angle'&&cfg.support!=='column-cap'&&cfg.support!=='stepped-column'?capAngleGeometry(p):undefined;
+ const unresolved=cg?capAngleUnresolved(p):undefined;
+ if(unresolved)out.push({member:'tie',shape:'cap-angle',reason:`Top-flange tie not resolved: the cap tieback angle, as sized for the estimated tie force ${formatUnits(capAngleForceEstimate(p),'force',p.units,3)} and movements (the largest set of its sizing steps that fits this girder end and column), ${unresolved}, and no other tie arrangement the configurator tries fits and passes here. Choose another tie or support (a column cap or crane column with the girder end fork, a heavier cap channel), or design the tie by hand.`});
  const col=p.existingColumn,w=col?.shape?aiscShapeByName(col.shape):undefined;
  if(cfg.support==='crane-column'&&!entered.columnShape&&w&&w.weight>398+1e-9)
   out.push({member:'crane-column',shape:col!.shape,reason:`Built-up crane column required: the crane column sizing needs ${col!.shape}, past the W14X398 the rolled crane columns stop at (jumbo W14 shapes are heavy-shape material, AISC 360 A3.1c). Design a built-up or laced crane column, or reduce the crane column demand.`});
