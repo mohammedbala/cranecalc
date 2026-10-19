@@ -196,6 +196,19 @@ describe('configurator selection log',()=>{
   // A girder named in the configuration is used as entered and is not listed.
   expect(buildProject({...p.configurator!,girderShape:'W24X104'}).configurator!.selections!.find(v=>v.item==='Girder')).toBeUndefined();
  },120000);
+ it('offers the crane-column and stepped-column choices in the start panel, with their own column inputs and sketches',()=>{
+  const base=sheetFixture('t07').input,render=(id:string)=>renderToStaticMarkup(createElement(StartPanel,{project:{...base,configurator:{...runwayTemplates.find(t=>t.id===id)!.config}},onBuild:()=>{}}));
+  const crane=render('t13');
+  for(const v of ['Crane column (new)','Building column (existing)','Crane column base','Building column face to girder web'])expect(crane).toContain(v);
+  // Both new supports are offered on an existing structure (no "(n/a)" on them).
+  expect(crane).toMatch(/<option value="crane-column"[^>]*>Crane column tied to the building column \(existing\)<\/option>/);
+  expect(crane).toMatch(/<option value="stepped-column"[^>]*>Girder on the column step \(existing stepped column\)<\/option>/);
+  const step=render('t15');
+  for(const v of ['Lower shaft (existing)','Upper shaft (existing)','W40X199'])expect(step).toContain(v);
+  expect(step).not.toContain('Column face to girder web');expect(step).not.toContain('Crane column base');
+  // Each template card sketches its support: a crane column has a column tie with its slot, a stepped column its step cap.
+  expect(crane.match(/class="support-sketch"/g)!.length).toBe(runwayTemplates.length);
+ });
  it('splices a continuous girder longer than a 60 ft piece in its inflection region and logs the splice design',()=>{
   const p=templateProject('t08'),l=spliceLayout(p),row=p.configurator!.selections!.find(v=>v.item==='Girder field splices')!;
   expect(validateProject(p)).toEqual([]);expect(l.errors).toEqual([]);expect(l.stations.length).toBeGreaterThan(0);

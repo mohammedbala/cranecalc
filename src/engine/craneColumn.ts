@@ -246,9 +246,9 @@ export function footingReactions(p:ProjectInput,reactions:SupportReactionSet):Fo
   return {Pmax:Math.max(0,...a.map(v=>v.P)),Pmin:Math.min(...a.map(v=>v.P-(v.uplift??0))),V:Math.max(0,...a.map(v=>Math.hypot(v.Vx,v.Vy))),M:Math.max(0,...a.map(v=>Math.hypot(v.Mx,v.My)))};};
  return {service:of('ASD'),factored:of('LRFD')};
 }
-/** "P 120 kip max, 35 kip min; V 4.1 kip; M 0 (service); P 168 kip, ... (factored)". */
+/** "P 63.0 kip max, -16.1 kip min (uplift); V 13.9 kip; M 0.0 kip-ft (service, ...); ... (factored, LRFD)". */
 export function footingReactionText(r:FootingReactions,u:ProjectInput['units']){
- const f=(v:number)=>format(v,'force',u,3),m=(v:number)=>format(v,'moment',u,3),one=(x:FootingReactions['service'])=>`P ${f(x.Pmax)} max, ${f(x.Pmin)} min; V ${f(x.V)}; M ${m(x.M)}`;
+ const f=(v:number)=>format(v,'force',u,1),m=(v:number)=>format(v,'moment',u,1),one=(x:FootingReactions['service'])=>`P ${f(x.Pmax)} max, ${f(x.Pmin)} min${x.Pmin<0?' (uplift)':''}; V ${f(x.V)}; M ${m(x.M)}`;
  return `crane-column base, per column, ${one(r.service)} (service, ASD combinations); ${one(r.factored)} (factored, LRFD)`;
 }
 /**
