@@ -3,7 +3,7 @@ import {
  ArrowRightToLine,Circle,Copy,CopyPlus,Download,Eraser,Eye,EyeOff,FlipHorizontal2,Hand,Layers,Lock,LockOpen,Maximize2,Move,
  MoveHorizontal,MousePointer2,Plus,Redo2,RectangleHorizontal,RotateCw,Ruler,Scaling,Scissors,SlidersHorizontal,Spline,TriangleAlert,Type,
  Undo2,Ungroup,Waypoints,X,Slash,Egg,Activity,Hexagon,MoveDiagonal,CornerDownRight,Diamond,StretchHorizontal,Grid3x3,RotateCcw,Unlink,Link,MoveRight,
- AlignHorizontalJustifyStart,PenLine,Paintbrush,
+ AlignHorizontalJustifyStart,PenLine,Paintbrush,PaintBucket,
 } from 'lucide-react';
 import {
  DEG,add,angleOf,bbox,curveLength,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,lineTypes,nearest,parseLength,
@@ -13,6 +13,7 @@ import {CadStore} from '../cad/store';
 import {commandNames,defaultHeights,makeCommand,placeCmd,type Command,type Env,type Preview} from '../cad/commands';
 import {aci,aciPalette,cachedBox,drawOverlay,drawScene,snapNames,toWorld,type Theme,type View} from '../cad/render';
 import {acquirable,allSnapModes,defaultSnapModes,resolveSnap,type Acquired} from '../cad/snap';
+import {hatchArea,patternNames} from '../cad/hatch';
 import {expandGroups,fenceSelect,propValue,quickSelect,type QuickProp,type QuickSpec} from '../cad/select';
 import {docToDxf,docToSvg} from '../cad/convert';
 import {cadPersistent,deleteCadRecord,saveCadRecord,type CadRecord} from '../cad/storage';
@@ -30,7 +31,7 @@ const scales=(unit:CadDoc['unit']):[string,number][]=>unit==='in'
  ?[['1:1 (paper)',25.4],['3" = 1\'-0"',4*25.4],['1 1/2" = 1\'-0"',8*25.4],['1" = 1\'-0"',12*25.4],['3/4" = 1\'-0"',16*25.4],['1/2" = 1\'-0"',24*25.4],['3/8" = 1\'-0"',32*25.4],['1/4" = 1\'-0"',48*25.4],['3/16" = 1\'-0"',64*25.4],['1/8" = 1\'-0"',96*25.4]]
  :unit==='mm'?[['1:1 (paper)',1],['1:5',5],['1:10',10],['1:20',20],['1:25',25],['1:50',50],['1:100',100],['1:200',200]]:[];
 const fmtNum=(v:number)=>String(Number(v.toFixed(4)));
-const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray'};
+const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray',hatch:'Hatch'};
 
 export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=>void}){
  const store=useMemo(()=>new CadStore(structuredClone(source.record?.doc??source.generated)),[]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -137,7 +138,8 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  }
  function entityAt(p:Pt){
   const r=PICKBOX/view.current.scale;let best:Ent|undefined,bd=Infinity;
-  for(const e of candidates(p,r,pickable)){const d=nearest(e,p,store.doc).d;if(d<=r&&d<=bd){bd=d;best=e;}}
+  // A hatch picks from inside its area but gives way to the objects drawn over it.
+  for(const e of candidates(p,r,pickable)){const d=nearest(e,p,store.doc).d+(e.type==='hatch'?r*.6:0);if(d<=r&&d<=bd){bd=d;best=e;}}
   return best;
  }
  const aperture=()=>APERTURE/view.current.scale;
@@ -391,7 +393,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   ['LINE','Line (L)',<Slash key="l" size={16}/>],['PLINE','Polyline (PL)',<Waypoints key="pl" size={16}/>],['RECTANG','Rectangle (REC)',<RectangleHorizontal key="r" size={16}/>],
   ['CIRCLE','Circle (C)',<Circle key="c" size={16}/>],['ARC','Arc (A): 3 points, or start, center, end and the other AutoCAD variants',<Spline key="a" size={16}/>],
   ['ELLIPSE','Ellipse (EL)',<Egg key="el" size={16}/>],['SPLINE','Spline (SPL)',<Activity key="spl" size={16}/>],['POLYGON','Polygon (POL)',<Hexagon key="pol" size={16}/>],
-  ['XLINE','Construction line (XL)',<MoveDiagonal key="xl" size={16}/>],['TEXT','Text (T)',<Type key="t" size={16}/>],
+  ['XLINE','Construction line (XL)',<MoveDiagonal key="xl" size={16}/>],['HATCH','Hatch (H): pick inside a closed area',<PaintBucket key="h" size={16}/>],['TEXT','Text (T)',<Type key="t" size={16}/>],
   ['DIMLINEAR','Linear dimension (DLI)',<Ruler key="d" size={16}/>],['DIMALIGNED','Aligned dimension (DAL)',<Ruler key="da" size={16} style={{transform:'rotate(-35deg)'}}/>],
  ];
  const modify:[string,string,ReactNode][]=[
@@ -495,6 +497,7 @@ const helpRows:[string,string][]=[
  ['C · CIRCLE','Center, then radius (or D for diameter)'],['A · ARC','3 points; C center, E end, then A angle, L chord, R radius, D direction; Enter continues tangent'],
  ['EL · ELLIPSE','Axis endpoints and the other half-axis; C from the center; A for an elliptical arc'],['SPL · SPLINE','Fit points (M for control vertices); C closes'],
  ['XL · XLINE / RAY','Construction lines: through points, H, V, A angle, B bisect, O offset'],['POL · POLYGON','Sides, center, inscribed or circumscribed, radius; E on an edge'],['DO · DONUT','Inside and outside diameters, then centers'],
+ ['H · HATCH','Pick inside closed areas (islands stay open), or S to select closed objects; P pattern, SC scale, A angle; Enter makes the hatch'],
  ['T · TEXT','Start point, height, rotation, then the text; Enter on an empty line ends'],
  ['DLI · DIMLINEAR','Two points, then the dimension line (H or V to force)'],['DAL · DIMALIGNED','A dimension parallel to the two points'],
  ['M · MOVE / CO · COPY','Select, base point, second point (COPY repeats)'],['RO · ROTATE','Select, base point, angle'],['SC · SCALE','Select, base point, factor'],
@@ -563,6 +566,9 @@ function Properties({doc,selected,layers,onPut,onLayer,onAll,lengthText}:{doc:Ca
   {e.type==='dim'&&<><dt>Type</dt><dd><select value={e.kind} onChange={ev=>onPut({...e,kind:ev.target.value as typeof e.kind})}><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option><option value="aligned">Aligned</option></select></dd>
    <dt>Measurement</dt><dd>{dimGeometry({...e,text:undefined},doc).text.value}</dd><dt>Text override</dt><dd><TextField value={e.text??''} onCommit={t=>onPut({...e,text:t.trim()||undefined})}/></dd>{num('Text height',e.height,height=>height>0?{...e,height}:undefined)}</>}
   {e.type==='solid'&&<><dt>Vertices</dt><dd>{e.points.length}</dd></>}
+  {e.type==='hatch'&&<><dt>Pattern</dt><dd><select aria-label="Hatch pattern" value={e.pattern} onChange={ev=>onPut({...e,pattern:ev.target.value})}>{patternNames.map(n=><option key={n} value={n}>{n}</option>)}</select></dd>
+   {e.pattern!=='SOLID'&&<>{num('Scale',e.scale,scale=>scale>0?{...e,scale}:undefined)}{num('Angle',e.angle,angle=>({...e,angle}))}</>}
+   <dt>Loops</dt><dd>{e.loops.length}</dd><dt>Area</dt><dd>{fmtNum(hatchArea(e.loops))} {doc.unit==='unit'?'sq units':`sq ${doc.unit}`}</dd></>}
  </dl>;
 }
 /** QSELECT: objects by type and property (layer, color, linetype, lineweight). */

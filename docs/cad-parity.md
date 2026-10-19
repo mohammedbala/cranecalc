@@ -61,8 +61,9 @@ UNGROUP (picking one member selects the group).
 
 HATCH with boundary detection: pick an internal point and the editor finds the smallest closed region from
 lines, arcs, circles, polylines, ellipses and splines (with islands), or select closed objects. Patterns:
-SOLID, ANSI31, ANSI32, ANSI37, ANSI38, STEEL, AR-CONC, EARTH, GRAVEL-like dots, NET, BRICK; scale, angle, and
-associativity-free editing in Properties.
+SOLID, ANSI31, ANSI32, ANSI33, ANSI37, ANSI38, STEEL, NET, LINE, BRICK, EARTH, AR-CONC, AR-SAND, GRAVEL, DOTS, HONEY,
+INSUL; scale, angle and origin, edited in Properties. Hatches are not associative (they keep their loops when the
+boundary objects change), as AutoCAD's HPASSOC=0.
 
 ### Increment 4: annotation (parity item 2)
 
@@ -130,7 +131,7 @@ and accessible panels (labels, focus order, keyboard reachable).
 | --- | --- |
 | 1 Drafting core | done: model, draw and modify commands; tests in `tests/cadDrafting.test.ts`, browser check in `tests/e2e/cad.spec.ts` |
 | 2 Precision and selection | done: `src/cad/snap.ts`, `src/cad/select.ts`; tests in `tests/cadPrecision.test.ts` and `tests/e2e/cad.spec.ts` |
-| 3 Hatching | planned |
+| 3 Hatching | done: `src/cad/hatch.ts` (patterns, even-odd clipping, solid fills, boundary detection with islands); tests in `tests/cadHatch.test.ts` |
 | 4 Annotation | planned |
 | 5 Blocks | planned |
 | 6 Layouts | planned |

@@ -1,3 +1,4 @@
+import {hatchPatterns} from './hatch';
 import {lineTypes,type CadDoc,type CadGroup,type CadLayer,type Ent,type EntProps,type Pt} from './model';
 
 /**
@@ -40,6 +41,10 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
     const k=e.knots,c=(e.ctrl as Pt[]).length;if(!Array.isArray(k)||k.length!==c+e.degree+1||!k.every(n)||k.some((v,i)=>i&&v<k[i-1]))return undefined;
     if(e.fit!==undefined&&!pts(e.fit,2))return undefined;
     entities.push({...base,type:'spline',degree:e.degree,ctrl:e.ctrl,knots:k as number[],closed:e.closed,...(e.fit?{fit:e.fit as Pt[]}:{})});break;
+   }
+   case 'hatch':{
+    const ls=e.loops;if(!Array.isArray(ls)||!ls.length||ls.length>2000||!ls.every(l=>pts(l,3))||typeof e.pattern!=='string'||!(e.pattern in hatchPatterns)||!n(e.scale)||e.scale<=0||!n(e.angle)||(e.origin!==undefined&&!pt(e.origin)))return undefined;
+    entities.push({...base,type:'hatch',loops:ls as Pt[][],pattern:e.pattern,scale:e.scale,angle:e.angle,...(e.origin?{origin:e.origin as Pt}:{})});break;
    }
    case 'xline':case 'ray':if(!pt(e.base)||!pt(e.dir)||Math.abs(Math.hypot(e.dir[0],e.dir[1])-1)>1e-6)return undefined;entities.push({...base,type:e.type,base:e.base,dir:e.dir});break;
    case 'solid':if(!pts(e.points,3)||(e.points as Pt[]).length>4)return undefined;entities.push({...base,type:'solid',points:e.points});break;

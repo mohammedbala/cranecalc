@@ -1,5 +1,5 @@
 import {bulgeArc} from './curves';
-import {DEG,bbox,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,pieces,textBox,textWidthPerHeight,type Box,type CadDoc,type Ent,type Grip,type NewEnt,type Pt,type SnapKind} from './model';
+import {DEG,bbox,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,hatchLines,pieces,textBox,textWidthPerHeight,type Box,type CadDoc,type Ent,type Grip,type NewEnt,type Pt,type SnapKind} from './model';
 import {dashPattern} from './convert';
 
 /** Screen view: world point (cx, cy) at the canvas center, scale pixels per drawing unit, canvas w × h CSS pixels. */
@@ -29,7 +29,7 @@ export function cachedBox(e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>)
 const overlaps=(a:Box,b:Box)=>a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1];
 
 /** Add an entity's strokes to the current path (solids and text are filled separately). */
-function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>){
+function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'|'unit'>){
  const S=(p:Pt)=>toScreen(v,p);
  switch(e.type){
   case 'line':{const a=S(e.a),b=S(e.b);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);break;}
@@ -46,12 +46,13 @@ function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<Ca
    ctx.moveTo(s[0],s[1]);ctx.ellipse(c[0],c[1],rx,rx*e.ratio,rot,-e.start*DEG,full?-e.start*DEG-2*Math.PI:-(e.start+ellipseSweep(e))*DEG,true);break;
   }
   case 'spline':{const p=curveSamples(e).map(q=>S(q.p));ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);break;}
+  case 'hatch':{if(e.pattern==='SOLID')break;const vb=viewBox(v);for(const [a,b] of hatchLines(e,doc.unit)){if(Math.max(a[0],b[0])<vb[0]||Math.min(a[0],b[0])>vb[2]||Math.max(a[1],b[1])<vb[1]||Math.min(a[1],b[1])>vb[3])continue;const p=S(a),q=S(b);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}break;}
   case 'xline':case 'ray':{const pc=pieces(e as Ent)[0],vb=viewBox(v),m=(vb[2]-vb[0])*.05;if(pc.k!=='seg')break;const k=clipSegment(pc.a,pc.b,[vb[0]-m,vb[1]-m,vb[2]+m,vb[3]+m]);if(k){const a=S(k[0]),b=S(k[1]);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}break;}
   case 'dim':for(const [a,b] of dimGeometry(e as Ent&{type:'dim'},doc).lines){const p=S(a),q=S(b);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}break;
  }
 }
 function fillShapes(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>){
- const polys=e.type==='solid'?[e.points]:e.type==='dim'?dimGeometry(e as Ent&{type:'dim'},doc).arrows:[];
+ const polys=e.type==='solid'?[e.points]:e.type==='dim'?dimGeometry(e as Ent&{type:'dim'},doc).arrows:e.type==='hatch'&&e.pattern==='SOLID'?e.loops:[];
  for(const pts of polys){const p=pts.map(q=>toScreen(v,q));ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);ctx.closePath();}
 }
 function drawText(ctx:CanvasRenderingContext2D,v:View,at:Pt,height:number,value:string,angle:number,align:number,bold:boolean){
@@ -107,6 +108,8 @@ export function drawScene(ctx:CanvasRenderingContext2D,o:SceneOptions){
    ctx.beginPath();for(const e of list)if(e.type!=='text'&&e.type!=='solid')strokePath(ctx,v,e,doc);ctx.stroke();
    ctx.setLineDash([]);
    ctx.beginPath();for(const e of list)if(e.type==='solid'||e.type==='dim')fillShapes(ctx,v,e,doc);ctx.fill();
+   // Solid hatches fill by the even-odd rule, one at a time so islands stay open.
+   for(const e of list)if(e.type==='hatch'&&e.pattern==='SOLID'){ctx.beginPath();fillShapes(ctx,v,e,doc);ctx.fill('evenodd');}
    for(const e of list){const t=textOf(e,doc);if(t)drawText(ctx,v,t.at,t.height,t.value,t.angle,t.align,t.bold);}
   }
  }
@@ -131,6 +134,7 @@ export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
   for(const e of list){
    if(!overlaps(cachedBox(e,doc),vb))continue;
    if(e.type==='text'){const b=textBox(e as Ent&{type:'text'}).map(p=>toScreen(v,p));ctx.moveTo(b[0][0],b[0][1]);for(let i=1;i<4;i++)ctx.lineTo(b[i][0],b[i][1]);ctx.closePath();}
+   else if(e.type==='hatch'){for(const l of e.loops){const b=l.map(p=>toScreen(v,p));ctx.moveTo(b[0][0],b[0][1]);for(const q of b.slice(1))ctx.lineTo(q[0],q[1]);ctx.closePath();}}
    else if(e.type==='solid')fillShapes(ctx,v,e,doc);
    else strokePath(ctx,v,e,doc);
   }
@@ -140,7 +144,9 @@ export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
  if(o.hover)outline([o.hover],c.hover,4,[]);
  if(o.preview?.length){
   outline(o.preview,c.preview,1.2,[]);
+  ctx.strokeStyle=c.preview;ctx.lineWidth=1;ctx.beginPath();for(const e of o.preview)if(e.type==='hatch')strokePath(ctx,v,e,doc);ctx.stroke();
   ctx.fillStyle=c.preview;ctx.beginPath();for(const e of o.preview)if(e.type==='solid'||e.type==='dim')fillShapes(ctx,v,e,doc);ctx.fill();
+  for(const e of o.preview)if(e.type==='hatch'&&e.pattern==='SOLID'){ctx.globalAlpha=.35;ctx.beginPath();fillShapes(ctx,v,e,doc);ctx.fill('evenodd');ctx.globalAlpha=1;}
   for(const e of o.preview){const t=textOf(e,doc);if(t)drawText(ctx,v,t.at,t.height,t.value,t.angle,t.align,t.bold);}
  }
  if(o.rubber){const a=toScreen(v,o.rubber[0]),b=toScreen(v,o.rubber[1]);ctx.strokeStyle=c.preview;ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.setLineDash([]);}

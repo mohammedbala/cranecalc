@@ -1,6 +1,7 @@
 import {bulgeArc,bulgeTangent,ellipseParamAtAngle,splineThrough,type SplineGeom} from './curves';
+import {findBoundary,hatchPatterns,insideLoops,patternNames} from './hatch';
 import {
- DEG,add,angleOf,arcPoint,dist,len,mid,mul,norm360,polar,sub,sweep,type EllipseEnt,type Ent,type NewEnt,type Pt,
+ DEG,add,angleOf,arcChords,arcPoint,bbox,curveSamples,dist,ellipseSweep,len,mid,mul,norm360,pieces,polar,polyOutline,sub,sweep,type Box,type EllipseEnt,type Ent,type NewEnt,type Pt,
 } from './model';
 import {angleText,fmtAngle,isKey,key,lockedPick,num,type Command,type Env} from './cmdkit';
 
@@ -302,7 +303,79 @@ function donutCmd(env:Env):Command{
  return cmd;
 }
 
+// ---- HATCH ---------------------------------------------------------------------------------------------------------
+/** The closed outline of a closed object (circle, closed polyline, full ellipse, closed spline), for islands and selection. */
+export function closedOutline(e:Ent):Pt[]|undefined{
+ if(e.type==='circle')return arcChords({k:'arc',c:e.center,r:e.radius,s:0,e:360},3).slice(0,-1);
+ if(e.type==='poly'&&e.closed&&e.points.length>2)return polyOutline(e);
+ if(e.type==='ellipse'&&ellipseSweep(e)>=360)return curveSamples(e).map(s=>s.p).slice(0,-1);
+ if(e.type==='spline'&&e.closed)return curveSamples(e).map(s=>s.p).slice(0,-1);
+ return undefined;
+}
+/** The hatch loops around p from the visible objects: the smallest enclosing region and the closed objects inside it (islands). */
+export function boundaryAt(p:Pt,ents:Ent[]):Pt[][]|undefined{
+ const curves=ents.filter(e=>e.type!=='text'&&e.type!=='dim'&&e.type!=='hatch'),boxes=curves.map(e=>bbox(e));
+ if(!curves.length)return undefined;
+ const all:Box=[Math.min(...boxes.map(b=>b[0])),Math.min(...boxes.map(b=>b[1])),Math.max(...boxes.map(b=>b[2])),Math.max(...boxes.map(b=>b[3]))];
+ // Search a growing window: a region found inside the window cannot be cut by anything outside it.
+ for(let r=Math.hypot(all[2]-all[0],all[3]-all[1])/60;;r*=3){
+  const w:Box=[p[0]-r,p[1]-r,p[0]+r,p[1]+r],whole=w[0]<=all[0]&&w[1]<=all[1]&&w[2]>=all[2]&&w[3]>=all[3];
+  const inWin=curves.filter((_,i)=>{const b=boxes[i];return b[0]<=w[2]&&b[2]>=w[0]&&b[1]<=w[3]&&b[3]>=w[1];});
+  const segs:[Pt,Pt][]=[];
+  for(const e of inWin)for(const pc of pieces(e)){if(pc.k==='seg')segs.push([pc.a,pc.b]);else{const c=arcChords(pc,3);for(let i=1;i<c.length;i++)segs.push([c[i-1],c[i]]);}}
+  const outer=findBoundary(p,segs);
+  if(outer&&(whole||outer.every(q=>q[0]>w[0]&&q[0]<w[2]&&q[1]>w[1]&&q[1]<w[3]))){
+   const loops=[outer];
+   for(const e of inWin){const o=closedOutline(e);if(o&&!insideLoops(p,[o])&&o.every(q=>insideLoops(q,[outer])))loops.push(o);}
+   return loops;
+  }
+  if(whole)return undefined;
+ }
+}
+function hatchCmd(env:Env):Command{
+ type Step='pick'|'select'|'pattern'|'scale'|'angle'|'origin';
+ const v=env.vars;let step:Step='pick';const loops:Pt[][]=[];
+ const pattern=()=>String(v.HPNAME??'ANSI31'),scale=()=>+(v.HPSCALE??1),angle=()=>+(v.HPANG??0),origin=()=>(v.HPORIGINX!==undefined?[+v.HPORIGINX,+(v.HPORIGINY??0)]:undefined) as Pt|undefined;
+ const visible=()=>env.store.doc.entities.filter(e=>env.store.layer(e.layer)?.visible);
+ const ent=():NewEnt=>({type:'hatch',layer:env.layer(),loops:[...loops],pattern:pattern(),scale:scale(),angle:angle(),...(origin()?{origin:origin()}:{})});
+ const cmd:Command={name:'HATCH',done:false,
+  prompt:()=>({pick:`HATCH Pick internal point or [Select objects/Pattern/Scale/Angle/Origin] (${pattern()}${pattern()==='SOLID'?'':`, scale ${scale()}, ${angle()}°`}${loops.length?`, ${loops.length} loop${loops.length>1?'s':''}`:''}):`,
+   select:'HATCH Select closed objects (Enter when done):',pattern:`HATCH Enter a pattern name (${patternNames.join(', ')}) <${pattern()}>:`,scale:`HATCH Specify the pattern scale <${scale()}>:`,angle:`HATCH Specify the pattern angle <${angle()}>:`,origin:'HATCH Specify the pattern origin:'} as Record<Step,string>)[step],
+  wantsPick:()=>step==='select',
+  pick(e){if(!e)return;const o=closedOutline(e);if(!o){env.log('Select closed objects: circles, closed polylines, ellipses or closed splines.');return;}loops.push(o);},
+  point(p){
+   if(step==='origin'){v.HPORIGINX=p[0];v.HPORIGINY=p[1];step='pick';return;}
+   if(step!=='pick')return;
+   const found=boundaryAt(p,visible());
+   if(!found){env.log('No closed boundary around that point (gaps close only where objects meet).');return;}
+   loops.push(...found);env.log(`Boundary found: ${found.length} loop${found.length>1?'s':''}${found.length>1?` (${found.length-1} island${found.length>2?'s':''})`:''}.`);
+  },
+  text(t){
+   const k=t.trim().toUpperCase();
+   if(step==='pick'){
+    if(isKey(t,'Select objects')){step='select';return true;}
+    if(isKey(t,'Pattern')){step='pattern';return true;}
+    if(isKey(t,'Scale')||k==='SC'){step='scale';return true;}
+    if(isKey(t,'Angle')||k==='AN'){step='angle';return true;}
+    if(isKey(t,'Origin')){step='origin';return true;}
+    if(k in hatchPatterns){v.HPNAME=k;return true;}
+   }
+   if(step==='pattern'){if(!(k in hatchPatterns))return false;v.HPNAME=k;step='pick';return true;}
+   if(step==='scale'){const x=num(t);if(x===undefined||x<=0)return false;v.HPSCALE=x;step='pick';return true;}
+   if(step==='angle'){const x=angleText(t);if(x===undefined)return false;v.HPANG=x;step='pick';return true;}
+   return false;
+  },
+  enter(){
+   if(step!=='pick'){step='pick';return;}
+   if(loops.length)env.store.commit('Hatch',{add:[ent()]});
+   cmd.done=true;
+  },
+  preview:()=>loops.length?{ents:[ent()]}:undefined};
+ return cmd;
+}
+
 export const drawNames:Record<string,string>={
+ H:'HATCH',BH:'HATCH',HATCH:'HATCH',BHATCH:'HATCH',
  EL:'ELLIPSE',ELLIPSE:'ELLIPSE',SPL:'SPLINE',SPLINE:'SPLINE',XL:'XLINE',XLINE:'XLINE',RAY:'RAY',POL:'POLYGON',POLYGON:'POLYGON',DO:'DONUT',DONUT:'DONUT',
 };
-export const drawCommands:Record<string,(env:Env)=>Command>={ARC:arcCmd,ELLIPSE:ellipseCmd,SPLINE:splineCmd,XLINE:xlineCmd,RAY:rayCmd,POLYGON:polygonCmd,DONUT:donutCmd};
+export const drawCommands:Record<string,(env:Env)=>Command>={HATCH:hatchCmd,ARC:arcCmd,ELLIPSE:ellipseCmd,SPLINE:splineCmd,XLINE:xlineCmd,RAY:rayCmd,POLYGON:polygonCmd,DONUT:donutCmd};

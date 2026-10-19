@@ -40,7 +40,7 @@ export function objectSnap(raw:Pt,near:Ent[],doc:Pick<CadDoc,'display'|'realPerU
  const under:Piece[]=[],lines:Extract<Piece,{k:'seg'}>[]=[];
  for(const e of near){
   if(under.length>=120)break;
-  if(e.type==='text')continue;
+  if(e.type==='text'||e.type==='hatch')continue;
   for(const pc of pieces(e,doc)){
    const d=dist(raw,pieceNearest(pc,raw));
    if(d<=aperture)under.push(pc);

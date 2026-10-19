@@ -2,6 +2,7 @@
  * The CAD editor's drawing model: entities on layers in drawing units (paper inches or millimeters for the issued
  * sheets, sketch units for the engineering sketches), y up, origin at the lower-left corner of the sheet.
  */
+import {hatchSegments,insideLoops} from './hatch';
 import {bulgeArc,bulgePoint,bulgeThrough,ellipseParam,ellipsePoint,splineParam,splineParams,splinePoint,splineRange,splineThrough,subBulge,subSpline,type BulgeArc,type SplineGeom} from './curves';
 
 export type Pt=[number,number];
@@ -22,6 +23,8 @@ export interface EllipseEnt extends Base{type:'ellipse';center:Pt;major:Pt;ratio
 export interface SplineEnt extends Base{type:'spline';degree:number;ctrl:Pt[];knots:number[];fit?:Pt[];closed:boolean}
 /** A construction line through base along dir (unit), infinite both ways (xline) or one way (ray). */
 export interface XlineEnt extends Base{type:'xline'|'ray';base:Pt;dir:Pt}
+/** A hatch: closed boundary loops (filled by the even-odd rule) with a pattern at a scale and angle about an origin. */
+export interface HatchEnt extends Base{type:'hatch';loops:Pt[][];pattern:string;scale:number;angle:number;origin?:Pt}
 /** A filled triangle or quadrilateral (arrowheads, dots). */
 export interface SolidEnt extends Base{type:'solid';points:Pt[]}
 export interface CircleEnt extends Base{type:'circle';center:Pt;radius:number}
@@ -31,7 +34,7 @@ export interface ArcEnt extends Base{type:'arc';center:Pt;radius:number;start:nu
 export interface TextEnt extends Base{type:'text';at:Pt;height:number;value:string;angle:number;align:Align;bold:boolean}
 /** A dimension measuring a to b; at is a point on the dimension line. */
 export interface DimEnt extends Base{type:'dim';kind:'aligned'|'horizontal'|'vertical';a:Pt;b:Pt;at:Pt;height:number;text?:string}
-export type Ent=LineEnt|PolyEnt|SolidEnt|CircleEnt|ArcEnt|TextEnt|DimEnt|EllipseEnt|SplineEnt|XlineEnt;
+export type Ent=LineEnt|PolyEnt|SolidEnt|CircleEnt|ArcEnt|TextEnt|DimEnt|EllipseEnt|SplineEnt|XlineEnt|HatchEnt;
 /** An entity before it has an id. */
 export type NewEnt=Ent extends infer E?E extends Ent?Omit<E,'id'>:never:never;
 
@@ -57,6 +60,14 @@ export const effective=(e:EntProps,l?:CadLayer)=>({color:e.color??l?.color??7,lt
 export const propsOf=(e:EntProps):EntProps=>{const o:EntProps={layer:e.layer};if(e.color!==undefined)o.color=e.color;if(e.ltype!==undefined)o.ltype=e.ltype;if(e.weight!==undefined)o.weight=e.weight;if(e.ltscale!==undefined)o.ltscale=e.ltscale;return o;};
 
 export const DEG=Math.PI/180;
+/** Drawing units per paper inch: patterns and linetypes are defined in inches. */
+export const unitScale=(unit:CadDoc['unit'])=>unit==='in'?1:unit==='mm'?25.4:72;
+const hatchCache=new WeakMap<object,{unit:string;segs:[Pt,Pt][]}>();
+/** A hatch's pattern lines in drawing units (cached: entities are immutable). */
+export function hatchLines(e:Omit<HatchEnt,'id'>,unit:CadDoc['unit']):[Pt,Pt][]{
+ const c=hatchCache.get(e);if(c&&c.unit===unit)return c.segs;
+ const segs=hatchSegments(e,unitScale(unit));hatchCache.set(e,{unit,segs});return segs;
+}
 export const add=(a:Pt,b:Pt):Pt=>[a[0]+b[0],a[1]+b[1]];
 export const sub=(a:Pt,b:Pt):Pt=>[a[0]-b[0],a[1]-b[1]];
 export const mul=(a:Pt,k:number):Pt=>[a[0]*k,a[1]*k];
@@ -159,6 +170,7 @@ export function pieces(e:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):Piece[]{
   case 'xline':return [{k:'seg',a:add(e.base,mul(e.dir,-XLINE_REACH)),b:add(e.base,mul(e.dir,XLINE_REACH))}];
   case 'ray':return [{k:'seg',a:e.base,b:add(e.base,mul(e.dir,XLINE_REACH))}];
   case 'dim':return dimGeometry(e,doc??{display:'US',realPerUnit:1}).lines.map(([a,b])=>({k:'seg',a,b}));
+  case 'hatch':return e.loops.flatMap(l=>l.map((a,i)=>({k:'seg' as const,a,b:l[(i+1)%l.length]})));
   case 'text':return [];
  }
 }
@@ -194,6 +206,7 @@ export function bbox(e:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):Box{
   case 'circle':return [e.center[0]-e.radius,e.center[1]-e.radius,e.center[0]+e.radius,e.center[1]+e.radius];
   case 'arc':return boxOf(arcExtremes(e,e.start,e.end));
   case 'ellipse':case 'spline':case 'xline':case 'ray':return boxOf(piecePoints(pieces(e)));
+  case 'hatch':return boxOf(e.loops.flat());
   case 'text':return boxOf(textBox(e));
   case 'dim':{const g=dimGeometry(e,doc??{display:'US',realPerUnit:1});return boxOf([...g.lines.flat(),...textBox({type:'text',id:0,layer:'',at:g.text.at,height:g.text.height,value:g.text.value,angle:g.text.angle,align:1,bold:false})]);}
  }
@@ -214,6 +227,7 @@ function inPolygon(p:Pt,poly:Pt[]){let inside=false;for(let i=0,j=poly.length-1;
 export function nearest(e:Ent,p:Pt,doc?:Pick<CadDoc,'display'|'realPerUnit'>):{point:Pt;d:number}{
  if(e.type==='text'){const box=textBox(e);if(inPolygon(p,box))return {point:e.at,d:0};}
  if(e.type==='solid'&&inPolygon(p,e.points))return {point:p,d:0};
+ if(e.type==='hatch'&&insideLoops(p,e.loops))return {point:p,d:0};
  let best={point:p,d:Infinity};
  for(const pc of pieces(e,doc)){const q=pieceNearest(pc,p),d=dist(p,q);if(d<best.d)best={point:q,d};}
  if(e.type==='text'){const box=textBox(e);for(let i=0;i<4;i++){const q=nearestOnSegment(p,box[i],box[(i+1)%4]).point,d=dist(p,q);if(d<best.d)best={point:q,d};}}
@@ -242,6 +256,7 @@ export function inWindow(e:Ent,r:Box,crossing:boolean,doc?:Pick<CadDoc,'display'
  if(b[0]>=r[0]&&b[1]>=r[1]&&b[2]<=r[2]&&b[3]<=r[3])return true;
  if(!crossing||b[2]<r[0]||b[0]>r[2]||b[3]<r[1]||b[1]>r[3])return false;
  if(e.type==='text'||e.type==='dim'||e.type==='solid')return true;
+ if(e.type==='hatch'&&insideLoops([(r[0]+r[2])/2,(r[1]+r[3])/2],e.loops))return true;
  return pieces(e,doc).some(p=>{if(p.k==='seg')return segBox(p.a,p.b,r);const c=arcChords(p,7.5);for(let i=1;i<c.length;i++)if(segBox(c[i-1],c[i],r))return true;return false;});
 }
 
@@ -291,7 +306,7 @@ export function circleCircle(c1:Pt,r1:number,c2:Pt,r2:number):Pt[]{
 }
 /** All intersection points between two entities (text has none). */
 export function intersections(e:Ent,f:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):Pt[]{
- if(e.type==='text'||f.type==='text')return [];
+ if(e.type==='text'||f.type==='text'||e.type==='hatch'||f.type==='hatch')return [];
  const out:Pt[]=[],pe=pieces(e,doc),pf=pieces(f,doc);
  for(const p of pe)for(const q of pf)for(const x of pieceIntersections(p,q))if(!out.some(o=>close(o,x,1e-9)))out.push(x);
  return out;
@@ -444,6 +459,8 @@ export function transformEnt<E extends Ent>(e:E,m:Affine):E{
   case 'ellipse':{const full=ellipseSweep(e)>=360;return {...e,center:P(e.center),major:applyLinear(m,e.major),...(mirror&&!full?{start:norm360(-e.end),end:norm360(-e.start)}:{})};}
   case 'spline':return {...e,ctrl:e.ctrl.map(P),...(e.fit?{fit:e.fit.map(P)}:{})};
   case 'xline':case 'ray':{const d=applyLinear(m,e.dir),l=len(d)||1;return {...e,base:P(e.base),dir:[d[0]/l,d[1]/l]};}
+  // The pattern turns and scales with the hatch; a mirrored hatch keeps its pattern reading the same way.
+  case 'hatch':return {...e,loops:e.loops.map(l=>l.map(P)),origin:P(e.origin??[0,0]),scale:e.scale*k,angle:mirror?e.angle:clean(norm360(e.angle+rot))};
   case 'text':{
    if(!mirror)return {...e,at:P(e.at),height:e.height*k,angle:clean(norm360(e.angle+rot+180)-180)};
    // Mirrored text keeps reading left to right: mirror the box, then place the text in it.
@@ -475,6 +492,7 @@ export function grips(e:Ent):Grip[]{
   case 'ellipse':{const sw=ellipseSweep(e),g:Grip[]=[{p:e.center,role:'center'}];for(const q of [0,90,180,270])if(sw>=360||norm360(q-e.start)<=sw)g.push({p:ellipsePoint(e,q),role:`q${q}`});if(sw<360)g.push({p:ellipsePoint(e,e.start),role:'start'},{p:ellipsePoint(e,e.end),role:'end'});return g;}
   case 'spline':return e.fit?e.fit.map((p,i)=>({p,role:`f${i}`})):e.ctrl.map((p,i)=>({p,role:`c${i}`}));
   case 'xline':case 'ray':return [{p:e.base,role:'base'}];
+  case 'hatch':{const b=boxOf(e.loops.flat());return [{p:[(b[0]+b[2])/2,(b[1]+b[3])/2],role:'center'},...e.loops.flatMap((l,i)=>l.map((p,j)=>({p,role:`l${i}v${j}`})))];}
   case 'text':return [{p:e.at,role:'at'}];
   case 'dim':return [{p:e.a,role:'a'},{p:e.b,role:'b'},{p:e.at,role:'at'}];
  }
@@ -510,6 +528,7 @@ export function stretchGrip(e:Ent,role:string,from:Pt,p:Pt):Ent{
    const ctrl=e.ctrl.map(q=>[...q] as Pt);ctrl[+role.slice(1)]=p;const {fit:_,...rest}=e;return {...rest,ctrl};
   }
   case 'xline':case 'ray':return {...e,base:p};
+  case 'hatch':{if(role==='center')return transformEnt(e,translation(d));const [i,j]=role.slice(1).split('v').map(Number);return {...e,loops:e.loops.map((l,a)=>a===i?l.map((q,b)=>b===j?p:q):l)};}
   case 'text':return {...e,at:p};
   case 'dim':return role==='a'?{...e,a:p}:role==='b'?{...e,b:p}:{...e,at:p};
  }
@@ -547,7 +566,7 @@ export function breakEnt(e:Ent,t0:number,t1:number):NewEnt[]|undefined{
 }
 /** A line, open polyline or arc with the end nearer p extended to the nearest boundary ahead of it. */
 export function extendEnt(e:Ent,p:Pt,others:Ent[],doc?:Pick<CadDoc,'display'|'realPerUnit'>):Ent|undefined{
- const bounds=others.filter(o=>o.id!==e.id&&o.type!=='text').flatMap(o=>pieces(o,doc));
+ const bounds=others.filter(o=>o.id!==e.id&&o.type!=='text'&&o.type!=='hatch').flatMap(o=>pieces(o,doc));
  if(e.type==='arc'){
   const atEnd=dist(p,arcPoint(e,e.end))<dist(p,arcPoint(e,e.start)),sw=sweep(e.start,e.end),gap=360-sw;
   const circle:Piece={k:'arc',c:e.center,r:e.radius,s:0,e:360};let best=Infinity;
@@ -613,9 +632,10 @@ function offsetPoly(e:PolyEnt,d:number,p:Pt):NewEnt|undefined{
  const {id:_,...rest}=e;
  return bulges.some(b=>b)?{...rest,points:verts,bulges:closed?bulges:[...bulges,0]}:{...rest,points:verts,bulges:undefined};
 }
-/** Lines and arcs from a polyline; lines, arrowheads and text from a dimension. */
-export function explodeEnt(e:Ent,doc:Pick<CadDoc,'display'|'realPerUnit'>):NewEnt[]|undefined{
+/** Lines and arcs from a polyline; lines, arrowheads and text from a dimension; lines from a patterned hatch. */
+export function explodeEnt(e:Ent,doc:Pick<CadDoc,'display'|'realPerUnit'>&Partial<Pick<CadDoc,'unit'>>):NewEnt[]|undefined{
  const pr=propsOf(e);
+ if(e.type==='hatch')return e.pattern==='SOLID'?undefined:hatchLines(e,doc.unit??'in').map(([a,b])=>({...pr,type:'line',a,b}) as NewEnt);
  if(e.type==='poly')return pieces(e).map(p=>p.k==='seg'?{...pr,type:'line',a:p.a,b:p.b} as NewEnt:{...pr,type:'arc',center:p.c,radius:p.r,start:norm360(p.s),end:norm360(p.e)} as NewEnt);
  if(e.type==='dim'){const g=dimGeometry(e,doc);return [...g.lines.map(([a,b])=>({...pr,type:'line',a,b}) as NewEnt),...g.arrows.map(points=>({...pr,type:'solid',points}) as NewEnt),{...pr,type:'text',at:g.text.at,height:g.text.height,value:g.text.value,angle:g.text.angle,align:1,bold:false}];}
  return undefined;

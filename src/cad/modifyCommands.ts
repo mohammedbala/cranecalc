@@ -173,6 +173,7 @@ export function stretchEnt(e:Ent,box:Box,d:Pt):Ent{
    return {...e,ctrl:e.ctrl.map(mv)};
   }
   case 'dim':return {...e,a:mv(e.a),b:mv(e.b),at:mv(e.at)};
+  case 'hatch':return {...e,loops:e.loops.map(l=>l.map(mv))};
  }
 }
 function stretchCmd(env:Env):Command{

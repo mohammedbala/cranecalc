@@ -3,7 +3,8 @@ import {sheetFormat} from '../components/sheetGraphics';
 import {cadLayers,type CadDrawing} from '../components/drafting';
 import {dxfDocument,type DxfEntity,type DxfLayer} from '../components/sheetDxf';
 import {bulgeArc} from './curves';
-import {DEG,arcPoint,polyOutline,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,pieces,sweep,type Box,type CadDoc,type CadLayer,type Ent,type LineType,type Pt} from './model';
+import {fillTrapezoids} from './hatch';
+import {DEG,arcPoint,hatchLines,polyOutline,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,pieces,sweep,type Box,type CadDoc,type CadLayer,type Ent,type LineType,type Pt} from './model';
 
 const layer=(name:string,color:number,ltype:LineType,weight:number):CadLayer=>({name,color,ltype,weight,visible:true,locked:false});
 
@@ -108,6 +109,10 @@ export function docToSvg(doc:CadDoc){
     out+=`<path d="M${X(p0)}A${r(rx/k)},${r(ry/k)} ${rot} ${ellipseSweep(e)>180?1:0} 0 ${X(p1)}"${o}/>`;break;
    }
    case 'spline':out+=`<polyline points="${curveSamples(e).map(s=>X(s.p)).join(' ')}"${o}/>`;break;
+   case 'hatch':{
+    if(e.pattern==='SOLID'){out+=`<path d="${e.loops.map(l=>`M${l.map(X).join('L')}Z`).join('')}" fill="currentColor" fill-rule="evenodd" stroke="none"${o}/>`;break;}
+    const segs=hatchLines(e,doc.unit);if(segs.length)out+=`<path d="${segs.map(([a,b])=>`M${X(a)}L${X(b)}`).join('')}"${o}/>`;break;
+   }
    case 'xline':case 'ray':{const pc=pieces(e)[0];if(pc.k==='seg'){const c=clipSegment(pc.a,pc.b,sheetBox);if(c)out+=line(c[0],c[1]);}break;}
    case 'text':out+=wrap(text(e.at,e.height,e.value,e.angle,e.align,e.bold));break;
    case 'dim':{const g=dimGeometry(e,doc);out+=wrap(g.lines.map(([a,b])=>line(a,b)).join('')+g.arrows.map(p=>`<path d="M${p.map(X).join('L')}Z" fill="currentColor" stroke="none"/>`).join('')+text(g.text.at,g.text.height,g.text.value,g.text.angle,1,false));break;}
@@ -137,6 +142,7 @@ export function docDxfEntities(doc:CadDoc,k=1):DxfEntity[]{
    }
    case 'ellipse':case 'spline':{const s=curveSamples(e).map(v=>P(v.p)),full=e.type==='ellipse'?ellipseSweep(e)>=360:e.closed;if(full)s.pop();out.push({type:'poly',layer:e.layer,points:s,closed:full});break;}
    case 'xline':case 'ray':{const pc=pieces(e)[0];if(pc.k==='seg'){const c=clipSegment(pc.a,pc.b,[0,0,doc.width,doc.height]);if(c)out.push({type:'line',layer:e.layer,a:P(c[0]),b:P(c[1])});}break;}
+   case 'hatch':if(e.pattern==='SOLID')for(const t of fillTrapezoids(e.loops))out.push({type:'solid',layer:e.layer,points:t.map(P)});else for(const [a,b] of hatchLines(e,doc.unit))out.push({type:'line',layer:e.layer,a:P(a),b:P(b)});break;
    case 'solid':out.push({type:'solid',layer:e.layer,points:e.points.map(P)});break;
    case 'circle':out.push({type:'circle',layer:e.layer,center:P(e.center),radius:e.radius*k});break;
    case 'arc':out.push({type:'arc',layer:e.layer,center:P(e.center),radius:e.radius*k,start:e.start,end:e.end});break;

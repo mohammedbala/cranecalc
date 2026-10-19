@@ -33,9 +33,13 @@ test('drafting core: new draw and modify commands from the command line',async({
  await type('SPL','100,300','150,330','200,300','');
  await type('XL','H','0,250','');
  expect(await objects()).toBe(start+7);
+ // A rectangle hatched from a point inside it (boundary detection), then a solid fill.
+ await type('REC','700,200','800,260','H','750,230','','H','P','SOLID','720,210','');
+ await expect(page.locator('.cad-log')).toContainText('Boundary found');
+ expect(await objects()).toBe(start+10);
  const svg=page.waitForEvent('download');await page.getByRole('button',{name:'SVG'}).click();
  const text=await fs.readFile((await (await svg).path())!,'utf8');
- expect(text).toContain('<ellipse');
+ expect(text).toContain('<ellipse');expect(text).toContain('fill-rule="evenodd"');
  expect((text.match(/<polyline/g)??[]).length).toBeGreaterThan(1);
  expect(errors).toEqual([]);
 });
