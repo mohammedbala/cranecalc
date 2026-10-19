@@ -37,6 +37,7 @@ import {blockedPackage,verificationFailures} from './sheetRatios';
 import {unplacedHolds} from './detailHolds';
 import {sig3} from '../report/reportParts';
 import {supportReactions} from '../engine/supportReactions';
+import {footingReactionText} from '../engine/craneColumn';
 
 /** A sheet of the set as the cover indexes it, with the titles of its details in drawing order. */
 export interface SheetEntry {number:string;title:string;details?:readonly string[];render?:()=>string}
@@ -432,7 +433,10 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew);
   ...(!d?.bracket?.enabled&&!activeColumnCap(p)?[`COLUMN BRACKETS AND THEIR ATTACHMENT TO THE BUILDING COLUMNS FOR THE ${d&&s.detailResults?`${bracketForcesAt(s,'cover','ON THIS SHEET')} AND THE UNFACTORED SUPPORT REACTIONS LISTED`:'SUPPORT REACTIONS LISTED'}${support?.capacity!==undefined?`, WITH VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${limitLength(support.capacity,u,'max')} MAX.`:'.'}`]:[]),
   ...(p.system==='simple'&&d&&!activeEndBearing(p)?[`COLUMN-SIDE LOCATING AND GUIDED HOLD-DOWN ATTACHMENTS AT GIRDER ENDS (${detailRef(detailTitles.movement)}) FOR THE LONGITUDINAL, LATERAL AND UPLIFT FORCES IN THE ${bracketForcesAt(s,'cover','ON THIS SHEET')}.`]:[]),
   ...s.checks.filter(c=>c.status==='excluded'&&delegatedChecks.has(c.id)&&c.id!=='bracket-load-path'&&c.id!=='tie-move-support').map(c=>`${c.title}: BY THE BRACKET DESIGNER FOR THE REPORTED FORCES.`),
-  ...(()=>{const t=supplierRailJointText(s);return t?[`RAIL JOINT BARS AND BOLTS: RAIL SUPPLIER, FITTED TO THE RAIL FISHING SURFACES (${detailRef(detailTitles.railJoint)}), DESIGNED FOR THE ${t.toUpperCase()}.`]:[];})()
+  ...(()=>{const t=supplierRailJointText(s);return t?[`RAIL JOINT BARS AND BOLTS: RAIL SUPPLIER, FITTED TO THE RAIL FISHING SURFACES (${detailRef(detailTitles.railJoint)}), DESIGNED FOR THE ${t.toUpperCase()}.`]:[];})(),
+  // Crane-column footings that overlap the existing building-column footings: an open foundation coordination item.
+  ...(()=>{const c=s.checks.find(v=>v.id==='crane-column-footing-clearance'&&v.status==='unverified'),r=s.craneColumn?.footing?.reactions;
+   return c?[`OPEN ITEM, FOUNDATION COORDINATION: THE CRANE-COLUMN FOOTINGS OVERLAP THE EXISTING BUILDING-COLUMN FOOTINGS. COMBINED OR ENLARGED FOOTINGS BY THE FOUNDATION ENGINEER FOR THE REACTIONS GIVEN${r?` (${footingReactionText(r,u).toUpperCase()})`:''}; THE ISOLATED FOOTINGS SHOWN ARE NOT BUILT UNTIL THEN.`]:[];})()
  ];
  blocks.push(H('DEFERRED SUBMITTALS / BY OTHERS'),P('SUBMIT THE FOLLOWING TO THE ENGINEER OF RECORD FOR REVIEW AND TO THE BUILDING OFFICIAL FOR APPROVAL BEFORE INSTALLATION:'),...N(deferred));
  // Structure the calculation does not check is evaluated for the permit; it is not a deferred submittal.

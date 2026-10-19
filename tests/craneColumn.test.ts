@@ -122,13 +122,12 @@ describe('crane column: configured builds and full calculations',()=>{
   // And the real building column and column tie are softer restraints: the tie force changes with them.
   const real=detailRun(p13);expect(real.braceStiffness).toBeLessThan(brace.stiffness);
  },600000);
+ // No check fails. The footing overlap is a foundation coordination open item ('unverified', not a failed design): a
+ // combined or enlarged footing by the foundation engineer for the crane-column base reactions given. At CMAA D Class B
+ // the cap fillets grow past 5/8 in for their fatigue and the rail clips are bolted for the base weld strength (WP-4).
  for(const [name,which,allowed] of [
-  // Footing overlap: a coordination open item (combined or extended footing by the foundation engineer, plan §2).
-  ['15 t cab, 4 × 25 ft, rolled girder, flexible plate',()=>p13,['crane-column-footing-clearance']],
-  // CMAA D Class B: the cap fillet fatigue (Category F with the girder end reactions along the runway) and the weld-on
-  // rail clip base welds fail identically with a new column cap and with twin-rib brackets for this crane: not
-  // crane-column checks (configurator limits outside this arrangement).
-  ['25 t CMAA D, Class B, 4 × 30 ft, paired bars',()=>p14,['crane-column-footing-clearance','column-cap-weld-fatigue','rail-clip-weld']]] as const){
+  ['15 t cab, 4 × 25 ft, rolled girder, flexible plate',()=>p13,[]],
+  ['25 t CMAA D, Class B, 4 × 30 ft, paired bars',()=>p14,[]]] as const){
   it(`calculates ${name}: only the known open items fail`,()=>{
    const s=calculate(which());
    expect(s.errors).toEqual([]);
@@ -142,6 +141,9 @@ describe('crane column: configured builds and full calculations',()=>{
    for(const id of ['crane-column-brace-stiffness','crane-column-brace-strength','crane-column-tie-slot-travel','building-column-interaction','column-interaction','column-cap-weld'])expect(s.checks.find(c=>c.id===id)?.status,id).toBe('pass');
    expect(s.checks.find(c=>c.id==='column-cap-fork-stiffness')?.status).toBe('not-applicable');
    expect(s.checks.find(c=>c.id==='brace-stiffness')?.status).toBe('pass');
+   const footing=s.checks.find(c=>c.id==='crane-column-footing-clearance')!;
+   expect(footing.status).toBe('unverified');expect(footing.note).toMatch(/^Combined or enlarged footing by the foundation engineer for the reactions given: crane-column base, per column, P [\d.]+ kip max/);
+   expect(s.craneColumn!.footing!.reactions!.factored.Pmax).toBeGreaterThan(s.craneColumn!.footing!.reactions!.service.Pmax);
   },600000);
  }
 });
