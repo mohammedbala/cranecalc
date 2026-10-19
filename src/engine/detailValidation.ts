@@ -86,9 +86,8 @@ export function validateRunwayDetails(p:ProjectInput){
    add(free<=0,`tie bars require clear length between the two bolt groups (${f(free)} in): lengthen the bars with a larger column face distance (bracket reach) or shorten the bolt groups.`);
    add(st.gussetLength<=0,`the girder tie gusset must reach from the bearing stiffener (${f(st.root)} in from the web centerline) through the girder-end bolt group: the ${f(b.length)} in bars start ${f(st.start)} in from the web centerline for a column face at ${f(st.face)} in. Shorten the bars or increase the bracket reach.`);
    add(st.columnGussetLength<=0,'the column tie gusset must have a positive length.');
-   // Simple spans: each girder end has its own tie at its bearing stiffener, its column gusset on the receiving column
-   // flange at the bearing center's offset from the grid (both girder ends at a shared grid).
-   if(p.system==='simple'&&st.receiver)add(st.stations.some(v=>Math.abs(v.offset)+b.gussetThickness/2+b.connection.weldSize>st.receiver!.width/2+1e-6),`the column tie gussets at the bearing stiffeners must fit on the receiving column flange with their root fillets: each girder end's bearing center lies ${f(Math.max(...st.stations.map(v=>Math.abs(v.offset))))} in from the grid, on a ${f(st.receiver.width)} in flange. Shorten the bearings or the girder end gap.`);
+   // Simple spans: the column gussets at the bearing stiffeners on the receiving column flange are a coordination check
+   // (connectionCoordination.ts, coord-tie-gusset-flange): an open item of the calculation, not a validation stop.
    // The end stop bolts' nuts hang below the top flange: they stay clear of the girder gusset and the bars with their bolt
    // hardware (head, nut, washer and stick-out along the runway) at the runway-end ties.
    const stop=activeEndStop(p);

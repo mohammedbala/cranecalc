@@ -40,6 +40,7 @@ import {minimumFillet} from './connectionStrength';
 import {wrenchClearance} from './endStop';
 import {restraintClearances,secantStiffness} from './restraintClearance';
 import {snapQuarter} from './quarterInch';
+import {stiffenerGussetMisfit} from './connectionCoordination';
 import {validateRunwayDetails} from './detailValidation';
 import {bracketSizingSet} from './bracketSizing';
 import {createBracketCollector} from './bracketDesign';
@@ -570,7 +571,7 @@ export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCyc
  t.length=t.reach=reach-up(q.section.tw/2+qd.bearing.stiffenerWidth+inch/4,inch/4);
  q.details=sizeFlangeTie(q,{reach:opts.reach}).details;
  const excess=(r:Record<string,number>)=>Object.entries(r).reduce((n,[k,v])=>n+Math.max(0,v-sizingLimit(r,k)),0);
- if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||(!opts.misfit&&excess(tieSizingRatios(q))>excess(ratios)+1e-9))return undefined;
+ if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||stiffenerGussetMisfit(q)||(!opts.misfit&&excess(tieSizingRatios(q))>excess(ratios)+1e-9))return undefined;
  const why=[...(over.length?[`the sized saddle leaves ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
   ...(!over.length&&failing.length?[`the sized saddle tie leaves ${failing.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
   ...(opts.highCycle?[`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (${opts.highCycle})`]:[]),...(opts.prefer?[opts.prefer]:[]),...(opts.misfit?[opts.misfit]:[])].join('; ');

@@ -50,6 +50,7 @@ import {designSplices,type SplicesDesigned} from './spliceSizing';
 import {practicalPieceLength} from './girderPieces';
 import {applyBearingLayout,bearingSeat,defaultBearingShim} from './endBearing';
 import {validateRunwayDetails} from './detailValidation';
+import {stiffenerGussetMisfit} from './connectionCoordination';
 import {weldedRibBracket} from './bracketRib';
 import {classFromCycles} from './buildingClass';
 import {tiedToBuilding,type ColumnTieInput} from './craneColumnInputs';
@@ -531,6 +532,7 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
    q=r;Object.assign(trace,inner);target=next;
    if(stuck)break;
   }
+  ({q,target}=withGussetFitColumn(q,input,trace,target));
   return titleAsDesigned(withTwistLimit(q,configOf(input).config,trace,target),configOf(input).entered);
  }finally{buildDepth--;}
 }
@@ -553,6 +555,36 @@ function titleAsDesigned(q:ProjectInput,entered:RunwayConfig):ProjectInput{
  return q;
 }
 let buildDepth=0;
+/**
+ * New columns whose flange cannot take the tie's column gussets at the bearing stiffeners (each girder end's bearing
+ * center plus half the gusset and its fillet past the flange tip, stiffenerGussetMisfit, a coordination clash of the
+ * calculation where it stays): first the torsion brace where the column twists unbraced, then the layout built again on the
+ * lightest heavier W14 that takes them (a wider flange, and a torsionally stiffer column whose smaller twist shortens
+ * the bearing slots); the configuration keeps its blank column choice, and the log says why.
+ */
+function withGussetFitColumn(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace,target:number):{q:ProjectInput;target:number}{
+ const cfg=configOf(input).config,col=q.existingColumn,misfit=(r:ProjectInput)=>!!stiffenerGussetMisfit(r);
+ if(cfg.columnShape||cfg.scope!=='design'||cfg.structure!=='new'||!col?.enabled||!col.isNew||!misfit(q))return {q,target};
+ const tieOpen=(r:ProjectInput)=>!!r.configurator?.beyondCatalog?.some(v=>v.member==='tie');
+ const accept=(r:ProjectInput,inner:SelectionTrace,why:string)=>{Object.assign(trace,inner);r.notes+=` ${why}`;return r;};
+ // The column twist lengthens the bearing slots (the bearings, so the gusset offset): first the torsion brace on the same
+ // column, where the column twists at the seat and has none.
+ if(!torsionBraceActive(q)&&twistsAtSeat(q)){
+  const inner:SelectionTrace={},r=withForcedTorsionBrace(()=>withTwistMovementTarget(inch/8,()=>buildLayout(input,inner)));
+  if(torsionBraceActive(r)&&!misfit(r)&&!validateRunwayDetails(r).length)return {q:accept(r,inner,`The tie's column gussets at the bearing stiffeners do not fit on the ${col.shape} flange with the bearing slots the column twist needs: the crane-level strut is moment-connected in plan at the locating columns (torsion brace), and the shorter slots bring the gussets onto the flange.`),target:inch/8};
+ }
+ const braced=torsionBraceActive(q)&&forcedBrace(q);
+ for(const shape of heavierColumns(col.shape)){
+  const inner:SelectionTrace={},build=()=>withTwistMovementTarget(target,()=>buildLayout({...input,columnShape:shape},inner)),r=braced?withForcedTorsionBrace(build):build();
+  // Not where the tie that passed its sizing on the lighter column no longer does (the clash stays the open item).
+  if(misfit(r)||validateRunwayDetails(r).length||tieOpen(r)&&!tieOpen(q))continue;
+  const why=`The tie's column gussets at the bearing stiffeners do not fit on the ${col.shape} flange (${aiscShapeByName(col.shape)!.bf} in wide) with their fillets: the lightest heavier W14 whose flange takes them, ${shape}.`;
+  accept(r,inner,why);
+  if(r.configurator){delete r.configurator.columnShape;r.configurator.selections=[...(r.configurator.selections??[]).filter(v=>v.item!=='New column'),{item:'New column',entered:'configurator default',designed:shape,reason:why}].slice(0,24);}
+  return {q:r,target};
+ }
+ return {q,target};
+}
 function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
  const {config:cfg,sk,rules,entered}=screened(input),{p,depth,clipWidth,spectrum,N,railArea}=sk,spans=p.spans;
  // Both new supports are built: the crane column (craneColumnSupport) and the stepped column (withSteppedColumn).
