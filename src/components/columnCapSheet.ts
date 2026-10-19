@@ -13,6 +13,8 @@ import {heavyHex,hexSide} from './heavyHex';
 import {bearingStiffenerProfile} from './bearingStiffenerGeometry';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {bracketForceBlocks,bracketForceTopic} from './bracketForceTable';
+import {tiedToBuilding} from '../engine/craneColumnInputs';
+import {craneColumnTitles} from './craneColumnSheet';
 
 const inch=25.4;
 /** Detail titles of the column cap, referenced from the general arrangement and the new column details. */
@@ -196,13 +198,14 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   ['RATIOS: CAP PL / WELDS / BOLTS / STIFFENER / WEB',`${ratio('column-cap-plate')} / ${ratio('column-cap-weld')} / ${ratio('column-cap-bolt-tension')} / ${g.stiffened?ratio('column-cap-stiffener-weld'):'-'} / ${ratio('column-cap-web-yield')}`],
   // The largest D/C over every check of the column cap, and the failing ones by name (sheetRatios).
   ...(()=>{const e=elementSummary(s,(c,e)=>e==='support'&&c.group==='Column cap'),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL COLUMN CAP CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})(),
-  ['FORK RESTRAINT / REQUIRED',r&&check('column-cap-fork-stiffness')?`${force(r.fork.k,'stiffness')} / ${force(check('column-cap-fork-stiffness')!.demand!,'stiffness')}`:'-']
+  // A crane column tied to the building column: the girder tie, not the end fork, holds the girder top (craneColumn.ts).
+  tiedToBuilding(p)?['TOP FLANGE RESTRAINT','GIRDER TIE TO THE BUILDING COLUMN (END FORK NOT RELIED ON)']:['FORK RESTRAINT / REQUIRED',r&&check('column-cap-fork-stiffness')?`${force(r.fork.k,'stiffness')} / ${force(check('column-cap-fork-stiffness')!.demand!,'stiffness')}`:'-']
  ];
  const notes=[
   `THE RUNWAY GIRDERS BEAR DIRECTLY ON THE NEW COLUMNS, CENTERED ON THEM (AIST TR-13 §5.9.2): NO BRACKETS. MILL THE COLUMN TOP SQUARE AND FIT THE CAP PLATE TO FULL BEARING BEFORE WELDING (AISC 360 J1.4).`,
   `CAP PLATE ASTM A572 GR. 50, SHOP WELDED ALL AROUND THE COLUMN WITH ${weld(cap.weld)} FILLETS, E70XX LOW HYDROGEN. DRILL OR SUB-PUNCH AND REAM THE ${size(hole)} BEARING BOLT HOLES TO A TEMPLATE MATCHING THE GIRDER FLANGE AND BEARING PLATE; ERECTION ADJUSTMENT AT THE COLUMN BASE (S-00, CRANE RUNWAY INSTALLATION); NO OVERSIZED OR SLOTTED HOLES OR SHIMS AT THE CAP.`,
   ...(g.stiffened?[`CAP STIFFENERS UNDER EACH GIRDER BEARING STIFFENER NOT OVER THE COLUMN WEB: FIT TO BEAR AGAINST THE CAP, CLIP THE TOP CORNERS ${size(g.clip)} TO CLEAR THE CAP FILLETS, WELD TO BOTH FLANGES BEFORE THE CAP IS WELDED.`]:[]),
-  `THE GIRDER ENDS ARE HELD AGAINST TWIST BY THEIR BEARING STIFFENERS AND THE BOLTED BOTTOM FLANGE; NO TOP FLANGE TIE. INSTALL ALL BEARING BOLTS, PRETENSIONED${slidingNote(p)}, BEFORE THE CRANE IS OPERATED.`,
+  `THE GIRDER ENDS ARE HELD AGAINST TWIST BY THEIR BEARING STIFFENERS AND THE BOLTED BOTTOM FLANGE; ${tiedToBuilding(p)?`THE TOP FLANGE BY THE GIRDER TIE TO THE BUILDING COLUMN AND THE COLUMN TOP BY THE COLUMN TIE (${detailRef(craneColumnTitles.elevation)})`:'NO TOP FLANGE TIE'}. INSTALL ALL BEARING BOLTS, PRETENSIONED${slidingNote(p)}, BEFORE THE CRANE IS OPERATED.`,
   `KEEP THE AREA UNDER THE CAP AROUND EACH BOLT CLEAR FOR THE WRENCH; INSTALL NUTS FROM BELOW.`,
   `CAP WELDS AND CAP STIFFENER WELDS: VISUAL INSPECTION OF ALL WELDS; PERIODIC SPECIAL INSPECTION PER IBC 1705.2 AND AISC 360 CHAPTER N.`
  ];

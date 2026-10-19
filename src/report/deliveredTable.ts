@@ -5,6 +5,8 @@ import {deliveredForces,type DeliveredForces,type DeliveredSet} from '../engine/
 import {drawingElevation} from '../components/drawingFormat';
 import {caseLabel,sig3,tidyNumbers} from './reportParts';
 import {toDisplay,unit} from '../engine/units';
+import {tiedToBuilding} from '../engine/craneColumnInputs';
+import {columnBaseElevation} from '../engine/columnBaseInputs';
 
 /**
  * The forces delivered to the building columns (C4), one table printed identically on page 1, in section 3.5 and
@@ -15,7 +17,12 @@ import {toDisplay,unit} from '../engine/units';
 const esc=(v:unknown)=>caseLabel(tidyNumbers(String(v??''))).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 export const deliveredHeaders=['Grid','Set','Combination','V','Mx = V·e','My,seat','H tie','H seat','F'];
 /** The headers for a project: on a column cap the top-flange force is the end fork's (H top), there is no tie. */
-export const deliveredHeadersOf=(p:ProjectInput)=>activeColumnCap(p)?deliveredHeaders.map(v=>v==='H tie'?'H top':v):deliveredHeaders;
+/**
+ * A crane column tied to the building column (craneColumn.ts): the building column takes H only, the girder tie design force
+ * at the girder tie and the column tie design force at the crane-column top (V, M and F go to the crane column).
+ */
+export const craneColumnDeliveredHeaders=['Grid','Set','Combination','H girder tie','H column tie'];
+export const deliveredHeadersOf=(p:ProjectInput)=>tiedToBuilding(p)?craneColumnDeliveredHeaders:activeColumnCap(p)?deliveredHeaders.map(v=>v==='H tie'?'H top':v):deliveredHeaders;
 
 /** A set label in sentence case, "and" for "&": "Max V and max F". */
 const sentence=(v:string)=>{const t=v.replace(/\s*&\s*/g,' and ');return t.charAt(0).toUpperCase()+t.slice(1);};
@@ -28,6 +35,10 @@ export function deliveredRows(s:CalculationSnapshot,d:DeliveredForces|undefined=
  // Mx is never a dash: V·e where e is known (from the column face where the seat is by others), else the product to form.
  const row=(grid:number,i:number,x:DeliveredSet)=>[i?'':String(grid),sentence(x.label),x.combination,f(x.V),x.Mx===undefined?'V·e':m(x.Mx),Math.abs(x.My)<1?'—':x.mirrored?`±${m(Math.abs(x.My))}`:`${x.My>=0?'+':'−'}${m(Math.abs(x.My))}`,
   `±${f(x.Htie)}`,Math.abs(x.Hseat)<1?'—':`${Math.sign(x.Hseat)===Math.sign(x.top)||Math.abs(x.top)<1?'±':'∓'}${f(Math.abs(x.Hseat))}`,sign(x.F,f(Math.abs(x.F)))];
+ // A crane column: the girder tie design force and the column tie design force (the bottom-flange force with the crane
+ // column's eccentric top reaction and its Appendix 6 brace force, deliveredForces craneColumn), either way.
+ const k=d.craneColumn;
+ if(k)return d.grids.flatMap(g=>g.sets.map((x,i)=>[i?'':String(g.grid),sentence(x.label),x.combination,`±${f(x.Htie)}`,`±${f(Math.abs(x.Hseat)+k.eccentric+k.braceForce)}`]));
  // The crane-level strut by others the column check relies on: its design force along the runway at the seat level.
  const z=d.strut,strut=z?[['Strut',`Crane-level strut by others, ${z.location==='girder-line'?'girder line':'column C/L'}`,`traction / stop`,'—','—','—','—','—',`±${f(z.force)}`]]:[];
  return [...d.grids.flatMap(g=>g.sets.map((x,i)=>row(g.grid,i,x))),...strut];
@@ -47,7 +58,13 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
  const at=d.e===undefined?'; e, from the column centerline to the reaction, is not established here (the column is by others): Mx = V·e with the surveyed seat position (column strong axis).'
   :d.eFrom==='face'?`, at e = ${len(d.e)} from the column face${far}. Mx = V·e is the moment at the column face; for the column centerline add V times half the column depth (column by others).`
   :`, at e = ${len(d.e)} from the column centerline${far}. Mx = V·e (column strong axis).`;
- const bars=d.elevation?.tieBars;
+ const bars=d.elevation?.tieBars,k=d.craneColumn,b=s.input.columnBase;
+ // Elevations from the crane-column base (craneColumnLayout) on the drawing datum, as runwayElevations.
+ const elAt=(z:number)=>(s.input.drawing?.datumElevation??0)+(b?.enabled?columnBaseElevation(b):0)+z;
+ if(k)return [`Factored ${s.input.method}. Each row is one concurrent set; do not combine rows. The building column takes these horizontal forces only, across the runway and in either direction; the runway vertical reactions, My and the longitudinal force go to the crane column, its footing and the crane-level bracing.`,
+  `H girder tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the girder tie, El. ${drawingElevation(elAt(k.elevation.girderTie),u)}, at the building column face; design value ${f(d.tie.design)}.`,
+  `H column tie: bottom-flange restraint force through the bearing bolts and the cap, plus the crane column's eccentric top reaction (${f(k.eccentric)}) and its Appendix 6 nodal brace force 0.01P_r (${f(k.braceForce)}), at the column tie, El. ${drawingElevation(elAt(k.elevation.columnTie),u)}; design value ${f(k.columnTie)}.`,
+  `The two ties act together in each set; their connections to the building column (tie gusset, tab) are by others for these forces.`].join(separator);
  return [`Factored ${s.input.method}. Each row is one concurrent set; do not combine rows.`,
   `V: girder reactions on the seat${d.elevation?el(d.elevation.seat):''}${at}`,
   `My,seat: moment of the unbalanced end reactions about the grid (column weak axis).`,

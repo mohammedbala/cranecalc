@@ -1,4 +1,6 @@
 import {newColumnTopic} from './newColumnSheet';
+import {craneColumnTopic,craneColumnSectionTies,craneColumnPlanNote,craneColumnTitles} from './craneColumnSheet';
+import {tiedToBuilding} from '../engine/craneColumnInputs';
 import {astmSpec} from '../engine/materialSpecs';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
@@ -133,13 +135,15 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   }
   const below=SY(vBottom);
   // Existing columns dashed and broken where they leave the band, each with its clear distance to the new column.
-  const sep=s.bracingSystem?.separation;
+  const sep=s.bracingSystem?.separation,tied=tiedToBuilding(p);
   for(const e of existing){
    svg+=`<g data-existing-column="${e.line}">`+[e.u0,e.u1].map(u=>line([SX(u),SY(vTop)],[SX(u),SY(vBottom)],'reference-line')).join('');
    for(const v of [vTop,vBottom])svg+=breakLine([SX(e.u0)-6,SY(v)],[SX(e.u1)+6,SY(v)]);
    svg+=line([SX(e.center),SY(vTop)-26],[SX(e.center),below+12],'grid-line');
    const grid=e.line==='A'?uA:uB,face=grid+e.sign*m.column.d/2,near=e.sign<0?e.u1:e.u0,clear=Math.abs(near-face)*1000,yc=SY(vBottom+(vTop-vBottom)*.34);
    const [x1,x2]=[SX(Math.min(near,face)),SX(Math.max(near,face))];
+   // A crane column tied to this building column: the girder tie and the column tie, no clearance (craneColumnSheet).
+   if(tied){svg+=craneColumnSectionTies(s,grid,e.sign,seat,SX,SY)+'</g>';continue;}
    // Clearance to the surveyed existing steel: survey data, printed as surveyed.
    svg+=refDim(dimH(x1,x2,yc-4,yc,`${drawingLength(clear,p.units)} CLR.`,e.sign<0?'left':'right'));
    // The separation required and the column's label in the clear space, where it has room.
@@ -175,7 +179,10 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   svg+=capped?multiLeader([[SX(capped.cap.plate.width/2000),SY(seat-capped.cap.plate.thickness/2000)]],[lx,SY(seat)+16],[`COLUMN CAP, SEE ${detailRef(columnCapTitles.section)}`]):multiLeader([[SX(0),SY(seat-Math.min(.05,m.bracketDepth/3))]],[lx,SY(seat)+16],d?[`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`]:['BRACKET BY BUILDING DESIGNER (REF.)']);
   // The column callout a line below the bracket's or cap's where a shallow band brings them together.
   const columnY=Math.max(SY(vBottom+.2)+3,SY(seat)+16+lettering.leading+2);
-  svg+=multiLeader([[SX(uA+m.column.d/2),SY(vBottom+.2)]],[lx,columnY],o.newColumns?[`NEW ${o.columnName} COLUMN, SEE ${detailRef(detailTitles.newColumn)}`]:['EXISTING BUILDING COLUMN (REF.), FIELD VERIFY']);
+  // Crane columns: the ties to the (dashed) building column beside each crane column on the column's callout.
+  const be=tied?existing.find(v=>v.line==='A'):undefined;
+  svg+=be?multiLeader([[SX(uA+m.column.d/2),SY(vBottom+.2)],[SX(be.center),SY(vBottom+.1)]],[lx,columnY],[`NEW ${o.columnName} CRANE COLUMN, SEE ${detailRef(detailTitles.newColumn)};`,`TIED TO THE (E) ${be.input.shape?`${be.input.shape} `:''}BUILDING`,`COLUMN (DASHED), SEE ${detailRef(craneColumnTitles.elevation)}`])
+   :multiLeader([[SX(uA+m.column.d/2),SY(vBottom+.2)]],[lx,columnY],o.newColumns?[`NEW ${o.columnName} COLUMN, SEE ${detailRef(detailTitles.newColumn)}`]:['EXISTING BUILDING COLUMN (REF.), FIELD VERIFY']);
   svg+=text(SX(uRB)-70,columnY,'RUNWAY AT GRID B OPPOSITE HAND',8.5,'end');
   svg+=viewTitle(box.x+box.w/2,below+92,typicalSectionTitle,scale.label,ga)+'</g>';
   return svg;
@@ -218,7 +225,8 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
 
   // The surveyed existing building beside new columns: its column lines outboard of the runway grids, with the new
   // and existing footings, in plan; the enlarged plan of the least clearance stands left of the runway plan.
-  const eb=newColumns?existingLayout(p):undefined,shown=eb?.steel?eb:undefined,fb=p.columnBase?.footing;
+  // A crane column tied to the building column beside it: no clearance to keep, so no enlarged clearance plan (existingClearanceShown).
+  const eb=newColumns?existingLayout(p):undefined,shown=eb?.steel&&!tiedToBuilding(p)?eb:undefined,fb=p.columnBase?.footing;
   const reach=(line:'A'|'B')=>Math.max(m.column.d/2,fb&&eb?fb.L/2000:0,...(eb?.lines.find(v=>v.line===line)?.columns.flatMap(c=>[c.column.u1,c.footing?.u1??0]).map(v=>v/1000)??[]));
   const zTop=eb?rows[1]-reach('B'):rows[1],zBottom=eb?rows[0]+reach('A'):rows[0];
   const along=eb?[...eb.lines.flatMap(l=>l.columns.flatMap(c=>[c.column,...(c.footing?[c.footing]:[])])),...eb.footings,...eb.columns].map(b=>[b.x0/1000-m.length/2,b.x1/1000-m.length/2]).flat():[-m.length/2-m.column.bf/2,m.length/2+m.column.bf/2];
@@ -546,7 +554,7 @@ function girderSchedule(s:CalculationSnapshot,box:{x:number;y:number;width:numbe
     return [mark,String(all.length*2),specGrade(`${p.section.name}; ${p.section.kind==='cap'&&p.capDesign?`W ${astmSpec('w-shape',p.section.Fy,p.section.Fu)}, CAP ${astmSpec('channel',p.capDesign.Fy,p.capDesign.Fu,p.capDesign.materialSource)}`:astmSpec(p.section.kind==='welded'?'plate':'w-shape',p.section.Fy,p.section.Fu)}`.toUpperCase())+`${p.section.kind==='cap'&&p.capDesign&&d?` (CAP: SEE ${detailRef(detailTitles.capSection)})`:''}`,len(g.length),all.map(v=>`${from(v)}-${to(v)}`).join(', '),camber>0?len(camber):'NONE; NATURAL UP',pieced?`${ends}; FIELD SPLICE PER ${detailRef(spliceTitles.elevation)}`:ends];});
   const notes=[
     analysisOnly(p)?'ANALYSIS ONLY - NOT FOR CONSTRUCTION. THIS SHEET RECORDS THE GIRDERS AS ANALYZED. SEE S-00 FOR THE ANALYSIS BASIS, THE SUPPORT REACTIONS AND THE LATERAL RESTRAINT AND RAIL ASSUMED, WHICH THE CONNECTIONS, SUPPORTS AND RAIL BY OTHERS SHALL PROVIDE.':'SEE S-00 FOR GENERAL NOTES, DESIGN CRITERIA, MATERIALS, SPECIAL INSPECTIONS AND SUPPORT REACTIONS.',
-    newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${separationLength(separation.required,u)} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS ARE SHOWN AS CENTERLINES (DASH-DOT); COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
+    newColumns&&tiedToBuilding(p)?craneColumnPlanNote(s):newColumns?`NEW ${columnName} RUNWAY COLUMNS ON SPREAD FOOTINGS AT EVERY GRID OF BOTH RUNWAYS, SEE ${detailRef(detailTitles.newColumn)}. ${surveyed?`THE EXISTING BUILDING COLUMNS AND FOOTINGS BESIDE THE RUNWAY ARE SHOWN DASHED FROM THE SURVEY (${short((surveyed.source||'SOURCE NOT ENTERED').toUpperCase(),110)}) AND CARRY NO CRANE LOAD${surveyed.steel?`; LEAST CLEARANCES ON ${detailRef(existingClearanceTitle)}`:''}. KEEP ALL RUNWAY STEEL ${separation?`${separationLength(separation.required,u)} MIN. `:''}CLEAR OF THE EXISTING BUILDING${separation?' (ASCE 7 §12.12.3)':''} AND THE NEW FOOTINGS ${len(surveyed.footingClear)} MIN. CLEAR OF EXISTING FOOTINGS. FIELD VERIFY THE SURVEY, GRID DIMENSIONS AND CLEARANCE TO OTHER EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.`:'THE EXISTING BUILDING FRAMING IS NOT SHOWN AND CARRIES NO CRANE LOAD; FIELD VERIFY GRID DIMENSIONS AND CLEARANCE TO EXISTING FRAMING, SLABS AND UTILITIES BEFORE LAYOUT.'}`:'GRIDS ARE SHOWN AS CENTERLINES (DASH-DOT); COLUMNS AND BUILDING FRAMING ARE EXISTING OR BY OTHERS AND ARE SHOWN DASHED FOR REFERENCE. FIELD VERIFY GRID DIMENSIONS AND COLUMN LOCATIONS BEFORE FABRICATION.',
     'GRID B RUNWAY IS IDENTICAL AND OPPOSITE HAND TO GRID A U.N.O. QUANTITIES IN THE SCHEDULE ARE FOR BOTH RUNWAYS.',
     ...(analysisOnly(p)?[]:[`ERECT GIRDERS WITH ANY NATURAL MILL CAMBER UP${camber>0?`; INDUCED CAMBER AS SCHEDULED`:''}.`]),
     // With the detailed set the rail setting is the S-00 crane runway installation note; an analysis gives the rail on S-00.
@@ -611,6 +619,8 @@ export function detailTopics(s:CalculationSnapshot,f:FramingSettings=defaultFram
     ...(d&&activeEndStop(p)?[endStopTopic(s)]:[]),
     ...(d&&!spliceLayout(p).errors.length&&spliceLayout(p).stations.length?[spliceTopic(s)]:[]),
     ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[...(activeColumnCap(p)?[columnCapTopic(s)]:[]),newColumnTopic(s)]:[]),
+    // A crane column tied to the existing building column: the elevation, the ties' plan and the column tie.
+    ...(()=>{const t=craneColumnTopic(s);return t?[t]:[];})(),
     ...(s.bracingSystem?[bracingTopic(s)]:[])];
   // HOLD lines of each topic's views: the open items with a failing check at the details that draw them (detailHolds).
   return topics.map(t=>({...t,views:t.views.map(clearView),holds:[...new Set(t.views.flatMap(v=>viewHolds(s,v.title)))].map(h=>`${h.text}: ${t.views.filter(v=>h.views!.test(v.title)).map(v=>v.title).join('; ')}`)}));

@@ -191,6 +191,31 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   if(close(thermal+rot+sp.settingTolerance,dem))return [`\\alpha L\\Delta T+d\\theta+t_{set}=${p.units==='US'?'6.67\\times10^{-6}\\,\\text{/°F}':'12\\times10^{-6}\\,\\text{/°C}'}\\times${tx(L,'length')}\\times${tx(dT,'temperatureChange')}+${tx(p.section.d,'length')}\\times${th.toFixed(5)}+${tx(sp.settingTolerance,'length')}`,
    `\\quad=${tx(thermal,'length')}+${tx(rot,'length')}+${tx(sp.settingTolerance,'length')}=${tx(dem,'length')}${rel.le}u=${tx(cap,'length')}\\quad ${rel.dc}`];
  }
+ // A crane column tied to the building column (craneColumn.ts): the Appendix 6 nodal brace at the crane-column top, the
+ // column tie bolts and the vertical slot travel, each rebuilt from the calculation's own result.
+ const cr=s.craneColumn;
+ if(cr&&c.id==='crane-column-brace-stiffness'){
+  const b=cr.brace,st=b.stiffness,req=(lrfd?1/.75:2)*10*b.Pr/b.L,el=1/(1/st.building+1/st.tie),prov=st.play>0&&b.strength.required>0?1/(1/el+st.play/b.strength.required):el;
+  if(close(req,dem)&&close(prov,cap))return [
+   `\\beta_{br}=${lrfd?'\\frac{1}{\\phi}':'\\Omega'}\\frac{10P_r}{L_{br}}=${lrfd?'\\frac{1}{0.75}':'2.00'}\\times\\frac{10\\times${tx(b.Pr,'force')}}{${tx(b.L,'length')}}=${tx(req,'stiffness')}\\quad(\\text{AISC 360-16 App. 6 \\S6.2.2, nodal brace})`,
+   `k_b=${tx(st.building,'stiffness')}\\ (\\text{building column at the tie, unit force});\\quad k_t=${tx(st.tie,'stiffness')}\\ (\\text{column tie})`,
+   `\\beta_{prov}=\\left(\\frac{1}{k_b}+\\frac{1}{k_t}+\\frac{g}{P_{br}}\\right)^{-1},\\ g=${tx(st.play,'length')},\\ P_{br}=0.01P_r=${tx(b.strength.required,'force')}`,
+   `\\quad=${tx(prov,'stiffness')}${rel.ge}\\beta_{br}=${tx(dem,'stiffness')}\\quad ${rel.dc}`];
+ }
+ if(cr&&c.id==='crane-column-brace-strength'){
+  const t=cr.ties;
+  if(close(t.columnTie,dem))return [`P_{br}=0.01P_r=0.01\\times${tx(cr.brace.Pr,'force')}=${tx(t.braceForce,'force')}\\quad(\\text{App. 6 \\S6.2.2})`,
+   `F_{tie}=H_b+\\frac{P_re}{H}+P_{br}=${tx(t.bottom,'force')}+${tx(t.eccentric,'force')}+${tx(t.braceForce,'force')}=${tx(dem,'force')}${rel.le}\\min(${lrfd?'\\phi':''}R_n)_{tie}=${tx(cap,'force')}\\quad ${rel.dc}`];
+ }
+ if(cr&&c.id==='crane-column-tie-bolts'&&p.craneColumn){
+  const n0=p.craneColumn.columnTie.bolts.count;
+  if(close(cr.ties.columnTie/n0,dem))return [`r_u=\\frac{F_{tie}}{n}=\\frac{${tx(cr.ties.columnTie,'force')}}{${n0}}=${tx(dem,'force')}${rel.le}${lrfd?'\\phi ':''}r_n=${lrfd?'\\phi ':''}F_{nv}A_b=${tx(cap,'force')}\\quad ${rel.dc}\\quad(\\text{J3.6, single shear on the sleeves})`];
+ }
+ if(cr&&c.id==='crane-column-tie-slot-travel'){
+  const v=cr.slot;
+  if(close(v.demand,dem)&&close(v.capacity,cap))return [`\\delta_c=\\frac{PL}{EA}=${tx(v.crane,'length')}\\ (\\text{crane column});\\quad \\delta_b=${tx(v.building,'length')}\\ (\\text{building column, existing L and roof live, snow or rain})`,
+   `\\max(\\delta_c,\\delta_b)+\\delta_t=${tx(Math.max(v.crane,v.building),'length')}+${tx(v.tolerance,'length')}=${tx(dem,'length')}${rel.le}\\frac{l_s-D_s}{2}=${tx(cap,'length')}\\quad ${rel.dc}`];
+ }
  // End stop plies: AISC Manual Part 9 thickness for no prying under the front bolt tension.
  if((c.id==='end-stop-flange-prying'||c.id==='end-stop-base-prying')&&d){
   const e=activeEndStop(p);

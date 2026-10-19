@@ -311,7 +311,7 @@ export function checksCsv(s:CalculationSnapshot,tax:Taxonomy,o:{internal?:boolea
  */
 export function fatigueSnPlot(tax:Taxonomy,units:Units){
  const F=tax.fatigue,N=F.cycles,toU=(v:number)=>units==='US'?v/ksi:v,unit=units==='US'?'ksi':'MPa';
- const rows=F.evaluated.map((r,i)=>({r,i,n:i+1})).filter(({r})=>r.range!==undefined&&r.capacity!==undefined&&r.capacity>0).map(({r,i,n})=>{
+ const rows=F.evaluated.map((r,i)=>({r,i,n:i+1})).filter(({r})=>r.range!==undefined&&r.range>0&&r.capacity!==undefined&&r.capacity>0).map(({r,i,n})=>{
   const m=/^F$/.test(r.category)?6:3,FSR=toU(r.capacity!),TH=r.threshold===undefined?0:toU(r.threshold);
   const bins=(r.bins?.length?r.bins:[{cycles:N,range:r.range!}]).filter(b=>b.cycles>0&&b.range>0).map(b=>({n:b.cycles,f:toU(b.range)}));
   return {n,i,m,FSR,TH,range:toU(r.range!),eq:r.bins?.length&&r.equivalent!==undefined?toU(r.equivalent):undefined,bins,label:categoryLabel(r.category,r.title),title:r.title};
@@ -321,7 +321,9 @@ export function fatigueSnPlot(tax:Taxonomy,units:Units){
  const x0=4,x1=8,W=600,L=50,R=118,T=14,ph=240,pw=W-L-R;
  // F_SR(n): through F_SR at N with slope 1/m, not below F_TH.
  const curve=(r:typeof rows[number],n:number)=>Math.max(r.FSR*(N/n)**(1/r.m),r.TH);
- const vals=rows.length?rows.flatMap(r=>[r.range,curve(r,10**x0),curve(r,10**x1),...r.bins.map(b=>b.f),...(r.eq?[r.eq]:[])]):scr.map(s=>s.range);
+ // A zero range (a detail without stress range, e.g. on a support that takes no runway load) has no point on a log axis.
+ const vals=(rows.length?rows.flatMap(r=>[r.range,curve(r,10**x0),curve(r,10**x1),...r.bins.map(b=>b.f),...(r.eq?[r.eq]:[])]):scr.map(s=>s.range)).filter(v=>v>0&&Number.isFinite(v));
+ if(!vals.length)return '';
  // The axis spans the evaluated details; screened ranges below it are counted in the key, not drawn.
  const y0=Math.floor(Math.log10(Math.min(...vals)*.8)),y1=Math.ceil(Math.log10(Math.max(...vals)*1.2));
  const X=(n:number)=>L+(Math.log10(n)-x0)/(x1-x0)*pw,Y=(v:number)=>T+ph-(Math.log10(v)-y0)/(y1-y0)*ph,clipY=(v:number)=>Math.min(Math.max(v,10**y0),10**y1);
