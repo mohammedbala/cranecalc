@@ -21,9 +21,11 @@ describe('crane column drawings',()=>{
   expect(views).toContain(detailTitles.tie);
   const tie=topics.find(t=>t.key==='connection')!.views.find(v=>v.title===detailTitles.tie)!.render().svg;
   expect(tie).toContain('BUILDING COLUMN (REF.)');expect(tie).toContain('FIELD WELD');
-  // The footing plan shows the building column's existing footing and the coordination note.
+  // The footing plan shows the building column, its existing footing to be removed and the combined footing note
+  // (the isolated footings would overlap it): no hold, the reinforcement drawn.
   const footing=topics.find(t=>t.key==='new-column')!.views.find(v=>v.title==='FOOTING / PLAN')!.render().svg;
-  expect(footing).toContain('data-existing-footing="building"');expect(footing).toMatch(/OPEN ITEM: THE FOOTINGS OVERLAP/);
+  expect(footing).toContain('data-existing-footing="building"');expect(footing).toMatch(/COMBINED FOOTING WITH THE \(E\) COLUMN/);
+  expect(footing).not.toMatch(/HOLD/);expect(footing).toMatch(/E\.W\. BOTTOM/);
   // The column tie section: slots, sleeves, the tab designed and field welded to the building column, the shop fillets.
   const section=topics.find(t=>t.key==='crane-column')!.views.find(v=>v.title===craneColumnTitles.tie)!.render().svg;
   for(const t of ['VERT. SLOTS','SLEEVE','TAB PL','HOLES TO MATCH THE SLOTS','FACES, FULL DEPTH (FIELD)','PRETENSIONED AGAINST THE SLEEVES'])expect(section).toContain(t);

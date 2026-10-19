@@ -143,6 +143,8 @@ export interface ColumnCapGridResult {
  boltSets:{T:number;Vz:number;Vx:number;id:string;combination:string}[];
  /** Unfactored fatigue ranges per duty bin: cap weld peak range per length, the largest bearing reaction range and the net lateral force range at the bottom-flange interface |H_top + H_bot| (the bottom flange alone on a tied crane column). */
  fatigue:{weld:number;reaction:number;lateral:number;
+  /** Tension range of the most loaded bearing bolt: its share of the uplift range plus the fork couple range on its side (no joint pre-compression credit). */
+  bolt:number;
   /** The base-metal stress range at a CJP joint of the cap (capWeldGroup.peakStress). */
   cjp:number}[];
 }
@@ -186,7 +188,7 @@ export function createColumnCapCollector(p:ProjectInput){
    if(!s.boltSets.some(o=>o.T>=T&&o.Vz>=Vz&&o.Vx>=Vx)){s.boltSets=s.boltSets.filter(o=>!(T>=o.T&&Vz>=o.Vz&&Vx>=o.Vx));s.boltSets.push({T,Vz,Vx,id:f.id,combination:f.combination});}
    const peak=weld.peak(a);if(peak>s.weld.value)s.weld={value:peak,id:f.id,combination:f.combination,grid:j,actions:a};
   }else if(bin>=0&&bin<bins){
-   const r=s.fatigue[bin],values:Record<string,number>={N:Math.max(0,-R.reduce((u,v)=>u+v,0)),Vx:a.Vx,Vz:a.Vz,Mx:a.Mx,My:a.My,...Object.fromEntries(R.map((v,i)=>[`R${i}`,v]))};
+   const r=s.fatigue[bin],values:Record<string,number>={N:Math.max(0,-R.reduce((u,v)=>u+v,0)),Vx:a.Vx,Vz:a.Vz,Mx:a.Mx,My:a.My,F:f.top*(g.arms.top-p.details!.bearing.thickness)+f.bottom*p.section.tf/2,...Object.fromEntries(R.map((v,i)=>[`R${i}`,v]))};
    for(const [k,v] of Object.entries(values)){r.lo[k]=Math.min(r.lo[k]??v,v);r.hi[k]=Math.max(r.hi[k]??v,v);}
   }
  }
@@ -196,7 +198,9 @@ export function createColumnCapCollector(p:ProjectInput){
     const range=(k:string)=>(r.hi[k]??0)-(r.lo[k]??0),Mz=range('Vz')*Math.max(0,...g.grids[j].bearings.map(b=>Math.abs(b.center)));
     // Ranges of every component taken together; compression bears on the milled column end, uplift is welded.
     const ranges={N:range('N'),Vx:range('Vx'),Vz:range('Vz'),Mx:range('Mx'),My:range('My'),Mz};
-    return {weld:weld.peak(ranges),cjp:weld.peakStress(ranges),reaction:Math.max(0,...g.grids[j].bearings.map((_,i)=>range(`R${i}`))),lateral:range('Vz')};
+    // The fork couple F/(2 lever) is tension in the bolts on one side and relieves the other: each side's tension range.
+    const hiF=r.hi.F??0,loF=r.lo.F??0,side=(a:number,b:number)=>Math.max(0,a)-Math.max(0,b),bolt=Math.max(side(hiF,loF),side(-loF,-hiF))/(2*g.lever)+range('N')/4;
+    return {bolt,weld:weld.peak(ranges),cjp:weld.peakStress(ranges),reaction:Math.max(0,...g.grids[j].bearings.map((_,i)=>range(`R${i}`))),lateral:range('Vz')};
    })}))};
  }
  return {observe,finish};
@@ -366,6 +370,13 @@ export function columnCapChecks(p:ProjectInput,r:ColumnCapResults,ctx:{imperfect
   if(capCjp(cap)){const cr=Math.max(...r.grids.flatMap(v=>v.fatigue.map(x=>x.cjp))),Fc=Math.max(fatigueThreshold('C'),finiteLife(4.4,total));
    add('weld-fatigue','Cap CJP welds · toe fatigue in the column',cr,Fc,'stress','\\Delta f=\\max\\frac{2\\Delta q}{t_f,\\ t_w}\\le F_{SR}\\ \\text{(Category C)}',`CJP groove welds with reinforcing fillets: no unfused root, so the crack starts at the weld toe in the column flange or web, Category C (C_f = 44 × 10⁸; the toe-crack category of the transverse T-joints of AISC Table A-3.1 Section 5; item number not cited). Base-metal range 2Δq/t of the peak line-force range from every component of the duty-bin sets taken together, applied to all ${total.toLocaleString('en-US')} cycles; no fractional-duty reduction. A CJP joint is used because the all-around fillets fail their throat fatigue (Category F) at the largest fillet the sizing takes. Compression bears on the milled column end.`,['column-cap','aisc-fatigue']);
   }else add('weld-fatigue','Cap fillets · weld throat fatigue',range/throat,Fsr,'stress','F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',`Category F, AISC Table A-3.1 item 8.2. Range of the peak line force from every component of the duty-bin sets taken together (uplift, lateral, longitudinal and both moments), applied to all cycles; no fractional-duty reduction. Compression bears on the milled column end.${cap.weld>5/8*inch+1e-6?` The ${f(cap.weld,'length')} fillet is a multi-pass fillet past the 5/8 in sizing limit, taken because a 5/8 in fillet fails this check (the throat range falls as 1/w): at most 1 in and t − 1/16 in of the thinner part joined (AISC 360-16 J2.2b), prequalified per AWS D1.1 with low-hydrogen electrodes.`:''}`,['column-cap','aisc-fatigue']);
+  // The bearing bolts in cyclic tension from the fork couple (v2:86): AISC 360-16 Table A-3.1 item 8.5 (bolts and threaded
+  // parts in tension, pretensioned or snug-tightened; Category G, C_f = 3.9 × 10^8, F_TH = 7 ksi, as anchor-fatigue) on the
+  // tensile stress area. No credit for joint pre-compression: the sliding end's sleeved bolts do not clamp the slotted
+  // flange, and the locating end is taken the same way (conservative).
+  {const db=eb.bolts.diameter/inch,tpi:Record<string,number>={'0.5':13,'0.625':11,'0.75':10,'0.875':9,'1':8,'1.125':7,'1.25':7,'1.375':6,'1.5':6},At=Math.PI/4*(db-.9743/(tpi[String(Math.round(db*1000)/1000)]??8))**2*inch**2;
+   const dT=Math.max(0,...r.grids.flatMap(v=>v.fatigue.map(x=>x.bolt??0))),ksi=6.894757293168361,Fsr=Math.max(finiteLife(.39,total),7*ksi);
+   if(dT>0)add('bolt-fatigue','Bearing bolts · tension fatigue with the fork couple (A-3.1 item 8.5)',dT/At,Fsr,'stress','f_{sr}=\\frac{\\Delta T}{A_t}=\\frac{\\Delta R_{up}/4+\\Delta M_{fork}/(2l)}{A_t}\\le F_{SR}=\\left(\\frac{C_f}{n_{SR}}\\right)^{0.333}\\ge F_{TH}',`AISC 360-16 Table A-3.1 item 8.5 (Category G: C_f = 3.9 × 10^8, F_TH = 7 ksi; item number as for the anchor rods, to be verified against the printed table) on the tensile stress area A_t = ${f(At,'area')} of a ${f(eb.bolts.diameter,'length')} bolt. The tension range of the most loaded bolt in any duty bin: its share of the uplift range plus the fork couple range on its side of the girder, F/(2l) with l = ${f(g.lever,'length')}; the couple reverses with the side thrust, loading each side's bolts in turn. No credit for joint pre-compression (the sliding end's sleeved bolts do not clamp the slotted flange), no prying increment; the largest bin range applied to all ${total.toLocaleString('en-US')} cycles.`,['column-cap','aisc-fatigue']);}
   if(g.stiffened){const R=Math.max(...r.grids.flatMap(v=>v.fatigue.map(x=>x.reaction)));
    add('stiffener-weld-fatigue','Cap stiffener fillets · weld throat fatigue',R/(4*g.stiffener.weld*cap.stiffener.weld/Math.SQRT2),Fsr,'stress','f_{sr}=\\frac{\\Delta R}{4L_w(0.707w)}\\le F_{SR}\\ \\ \\text{(Cat. F)}','Largest girder end reaction range of any duty bin through the four fillet lines of one cap stiffener, every cycle.',['column-cap','aisc-fatigue']);}
  }

@@ -5,8 +5,9 @@ import {rolledUnderSeat} from './rolledBracketSheet';
 import {haunchUnderSeat} from './taperedHaunchSheet';
 import {format} from '../engine/units';
 import {existingColumnSection} from '../engine/existingColumn';
-import {anchorHardware,columnBaseElevation} from '../engine/columnBaseInputs';
-import {barDiameter,plateWasherWeld} from '../engine/columnBase';
+import {anchorHardware,columnBaseElevation,footingKeyWidth} from '../engine/columnBaseInputs';
+import {barDiameter,combinedFooting,plateWasherWeld} from '../engine/columnBase';
+import {designsBracing} from '../engine/newColumnBracing';
 import {runwayElevations} from '../engine/drawingData';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {activeColumnCap} from '../engine/columnCapInputs';
@@ -81,6 +82,10 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  const tie=flangeTieGeometry(p);
  // A crane column tied to the building column: its footing beside the building column's existing footing.
  const tied=tiedToBuilding(p);
+ // A combined footing with the building column (combinedFooting) is centered fc from the column; footings that overlap
+ // the existing one without it cannot be built: drawn as outlines on hold, without reinforcement.
+ const combo=combinedFooting(p),combined=!!combo,fc=combo?.uc??0,cf=s.craneColumn?.footing,hold=!!cf&&!cf.combined&&cf.clear<cf.required;
+ const braced=b.braced&&designsBracing(p)?b.braced.footing:undefined,keyText=(f:typeof ft)=>f.key?` + KEY ${size(footingKeyWidth)} X ${dim(f.key)}`:'';
  const views:DetailView[]=[];
 
  // 1: Elevation across the runway at a support, looking along the runway. A long column is broken between
@@ -89,7 +94,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   let svg='';
   const top=Math.max(H,tos+cap+railDepth),bottom=ftgBot-4*inch,upperFrom=seat-(bseat?bseat.thickness+bseat.depth:capG&&s.bracingSystem?capG.drop+capG.strutDepth/2:capG?capG.cap.plate.thickness+capG.hang:0)-9*inch,lowerTo=Math.max(14*inch,ft.soil+8*inch);
   const broken=upperFrom-lowerTo>18*inch,gap=broken?22:0,shown=broken?(top-upperFrom)+(lowerTo-bottom):top-bottom;
-  const zMin=-ft.L/2-ext*.55,zMax=Math.max(ft.L/2+ext*.55,girderZ+Math.max(g.bf,g.kind==='cap'?g.capWidth:0)/2);
+  const zMin=Math.min(fc-ft.L/2-ext*.55,-c.d),zMax=Math.max(fc+ft.L/2+ext*.55,girderZ+Math.max(g.bf,g.kind==='cap'?g.capWidth:0)/2);
   const k=drawingScale(Math.min((600-gap)/shown,280/(zMax-zMin)),u),kk=k.pointsPerMm,cx=124+(-zMin)*kk,X=(z:number)=>cx+z*kk;
   // Centered between the top of its two-row cell and the view title.
   const base=640-Math.max(0,(670-gap-shown*kk)/2);
@@ -139,7 +144,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   for(const t of ties)svg+=rect(X(t.z1),Y(t.yc+t.w/2),(t.z2-t.z1)*kk,t.w*kk,'runway-line');
   // Base plate, grout, anchor rods, footing and the floor.
   svg+=rect(X(-b.plate.N/2),Y(0),b.plate.N*kk,tb*kk,'runway-line')+rect(X(-b.plate.N/2-inch),Y(-tb),(b.plate.N+2*inch)*kk,gr*kk,'annotation');
-  svg+=rect(X(-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk,'runway-line')+concrete(X(-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk,.8);
+  svg+=rect(X(fc-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk,'runway-line')+concrete(X(fc-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk,.8);
   for(const z of [-row,row]){
    const head=ftgTop-a.embedment,nut=1.5*a.diameter;
    svg+=line([X(z),Y(hw.washerThickness+a.diameter*1.6)],[X(z),Y(head)],'runway-line');
@@ -148,10 +153,10 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   // Existing slab saw cut to the footing outline, isolation joint each side.
   const slabTop=floor,slabBot=floor-ft.slab;
   for(const sign of [-1,1]){
-   const zi=sign*(ft.soil>0?b.plate.N/2+12*inch:ft.L/2),zo=sign*(ft.L/2+ext*.55),x1=X(Math.min(zi,zo)),w=Math.abs(zo-zi)*kk;
+   const zi=ft.soil>0?sign*(b.plate.N/2+12*inch):fc+sign*ft.L/2,zo=fc+sign*(ft.L/2+ext*.55),x1=X(Math.min(zi,zo)),w=Math.abs(zo-zi)*kk;
    if(ft.slab>0)svg+=rect(x1,Y(slabTop),w,ft.slab*kk,'reference-line')+concrete(x1,Y(slabTop),w,ft.slab*kk,.8)+breakLine([X(zo),Y(slabTop)-4],[X(zo),Y(slabBot)+4])+line([X(zi)+sign*1.2,Y(slabTop)],[X(zi)+sign*1.2,Y(slabBot)],'annotation');
   }
-  svg+=earth(X(-ft.L/2),X(ft.L/2),Y(ftgBot));
+  svg+=earth(X(fc-ft.L/2),X(fc+ft.L/2),Y(ftgBot));
   // Elevations: runway beside the girder, base and footing on the left.
   const girderRight=X(girderZ+(g.kind==='cap'?g.capWidth:g.bf)/2),right=Math.max(girderRight,X(c.d/2+(br?.seatProjection??0)))+8,left=X(zMin)-6;
   // Runway elevations beside the column on the left, clear of the component leaders on the right.
@@ -160,11 +165,11 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   ],X(-c.d/2)-48,'left',yy=>yy===Y(rb+railDepth)?X(railZ-rl.headWidth/2)-2:X(-c.d/2)-2);
   svg+=elevationMarks([
    {y:Y(0),label:`T/BASE PL ${elev(0)}`},{y:Y(ftgTop),label:`T/FTG ${ft.soil>0?'':'= T/SLAB '}${elev(ftgTop)}`},{y:Y(ftgBot),label:`B/FTG ${elev(ftgBot)}`}
-  ],left,'left',yy=>yy===Y(0)?X(-b.plate.N/2)-2:X(-ft.L/2)-2);
+  ],left,'left',yy=>yy===Y(0)?X(-b.plate.N/2)-2:X(fc-ft.L/2)-2);
   // Column and seat heights from the base (across the break), footing width.
   // On a column cap the column top is the bearing seat: one dimension.
   svg+=dimV(Y(H),Y(0),X(-c.d/2),X(-c.d/2)-18,dim(H))+(Math.abs(H-seat)>.5?dimV(Y(seat),Y(0),X(-c.d/2),X(-c.d/2)-36,dim(seat)):'');
-  svg+=dimH(X(-ft.L/2),X(ft.L/2),Y(ftgBot),Y(ftgBot)+20,dim(ft.L));
+  svg+=dimH(X(fc-ft.L/2),X(fc+ft.L/2),Y(ftgBot),Y(ftgBot)+20,dim(ft.L));
   if(br)svg+=dimH(X(c.d/2),X(girderZ),Y(top),Y(top)-8,dim(br.reach));
   void brk;
   const lx=Math.max(right,X(zMax)+4)+14;
@@ -178,9 +183,9 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(c.d/2),Y(broken?upperFrom+(seat-upperFrom)*.25:H*.5)],labels:[`NEW ${name}`,'COLUMN, ASTM A992']},
    {at:[X(row+hw.washer/2),Y(hw.washerThickness/2)],labels:[`PL ${size(tb)} BASE PL`,`SEE ${detailRef(detailTitles.basePlate)}`]},
    {at:[X(b.plate.N/2+inch),Y(-tb-gr/2)],labels:[`${size(gr)} NON-SHRINK GROUT`]},
-   ...(ft.slab>0?[{at:[X(ft.L/2+ext*.4),Y(slabTop-ft.slab/2)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,'ISOLATION JOINT']}]:[]),
+   ...(ft.slab>0?[{at:[X(fc+ft.L/2+ext*.4),Y(slabTop-ft.slab/2)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,'ISOLATION JOINT']}]:[]),
    {at:[X(row),Y(ftgTop-a.embedment*.6)],labels:[anchorLabel.replace(' ASTM',''),`HEADED, HEF ${dim(a.embedment)}`]},
-   {at:[X(ft.L/2),Y(ftgTop-hf*.75)],labels:[`FTG ${dim(ft.L)} X ${dim(ft.B)} X ${dim(hf)}`,`SEE ${detailRef(detailTitles.footing)}`]}
+   {at:[X(fc+ft.L/2),Y(ftgTop-hf*.75)],labels:[`FTG ${dim(ft.L)} X ${dim(ft.B)} X ${dim(hf)}`,`SEE ${detailRef(detailTitles.footing)}`]}
   ];
   svg+=labelColumn(items,lx,Y(top)+6,Y(bottom)-6);
   return {svg:svg+'</g>',scale:k.label};
@@ -210,21 +215,21 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  // 3: Footing plan with the bottom bars each way.
  views.push({title:'FOOTING / PLAN',render:()=>{
   let svg='';
-  const k=drawingScale(Math.min(240/ft.L,240/ft.B),u),kk=k.pointsPerMm,cx=1010,cy=226,X=(z:number)=>cx+z*kk,Y=(x:number)=>cy+x*kk;
+  const k=drawingScale(Math.min(240/ft.L,240/ft.B),u),kk=k.pointsPerMm,cx=1010-fc*kk,cy=226,X=(z:number)=>cx+z*kk,Y=(x:number)=>cy+x*kk;
   svg+='<g data-view="footing-plan">';
-  svg+=rect(X(-ft.L/2),Y(-ft.B/2),ft.L*kk,ft.B*kk,'runway-line');
+  svg+=rect(X(fc-ft.L/2),Y(-ft.B/2),ft.L*kk,ft.B*kk,'runway-line');
   const along=r?.footing.strength.along.bars??Math.floor((ft.B-2*ft.cover)/ft.spacing)+1,across=r?.footing.strength.across.bars??Math.floor((ft.L-2*ft.cover)/ft.spacing)+1;
   const spread=(count:number,span:number)=>Array.from({length:count},(_,i)=>-span/2+ft.cover+(count>1?i*(span-2*ft.cover)/(count-1):(span-2*ft.cover)/2));
-  for(const x of spread(along,ft.B))svg+=line([X(-ft.L/2+ft.cover),Y(x)],[X(ft.L/2-ft.cover),Y(x)],'hidden-line');
-  for(const z of spread(across,ft.L))svg+=line([X(z),Y(-ft.B/2+ft.cover)],[X(z),Y(ft.B/2-ft.cover)],'hidden-line');
+  if(!hold)for(const x of spread(along,ft.B))svg+=line([X(fc-ft.L/2+ft.cover),Y(x)],[X(fc+ft.L/2-ft.cover),Y(x)],'hidden-line');
+  if(!hold)for(const z of spread(across,ft.L))svg+=line([X(fc+z),Y(-ft.B/2+ft.cover)],[X(fc+z),Y(ft.B/2-ft.cover)],'hidden-line');
   svg+=rect(X(-b.plate.N/2),Y(-b.plate.B/2),b.plate.N*kk,b.plate.B*kk,'runway-line')+wPlan(cx,cy,c.d,c.bf,c.tf,c.tw,kk);
-  svg+=line([X(-ft.L/2)-14,cy],[X(ft.L/2)+6,cy],'grid-line')+line([cx,Y(-ft.B/2)-14],[cx,Y(ft.B/2)+6],'grid-line');
-  svg+=dimH(X(-ft.L/2),X(ft.L/2),Y(ft.B/2),Y(ft.B/2)+20,dim(ft.L))+dimV(Y(-ft.B/2),Y(ft.B/2),X(ft.L/2),X(ft.L/2)+22,dim(ft.B));
+  svg+=line([X(fc-ft.L/2)-14,cy],[X(fc+ft.L/2)+6,cy],'grid-line')+line([cx,Y(-ft.B/2)-14],[cx,Y(ft.B/2)+6],'grid-line');
+  svg+=dimH(X(fc-ft.L/2),X(fc+ft.L/2),Y(ft.B/2),Y(ft.B/2)+20,dim(ft.L))+dimV(Y(-ft.B/2),Y(ft.B/2),X(fc+ft.L/2),X(fc+ft.L/2)+22,dim(ft.B));
   const barText=Math.abs(ft.L-ft.B)<1&&along===across?[`${2*along} ${barName} X ${dim(ft.L-2*ft.cover)} (${along} EACH WAY)`]:[`${along} ${barName} X ${dim(ft.L-2*ft.cover)} ALONG L`,`${across} ${barName} X ${dim(ft.B-2*ft.cover)} ACROSS`];
-  const bars=[barText[0],...barText.slice(1),barLabel,`${size(ft.cover)} CLEAR, STRAIGHT`],bx=X(ft.L/2)+44;
-  svg+=multiLeader([[X(ft.L/2-ft.cover-ft.spacing*.5),Y(spread(along,ft.B)[0])]],[bx,Y(-ft.B/2)+14],bars,7.5);
-  svg+=multiLeader([[X(-c.d/2),cy-2]],[Math.min(866,X(-ft.L/2)-24),Math.min(90,Y(-ft.B/2)-16)],['COLUMN C/L ON GRID,','FOOTING CONCENTRIC'],7.5);
-  svg+=sectionCut([X(-ft.L/2)-4,cy],[X(ft.L/2)+4,cy],[0,1],detailTitles.footing,['a'],'tip');
+  const bars=hold?['REINFORCEMENT NOT SHOWN:','FOOTING ON HOLD, SEE NOTE BELOW']:[barText[0],...barText.slice(1),barLabel,`${size(ft.cover)} CLEAR, STRAIGHT`],bx=X(fc+ft.L/2)+44;
+  svg+=multiLeader([[X(fc+ft.L/2-ft.cover-ft.spacing*.5),Y(spread(along,ft.B)[0])]],[bx,Y(-ft.B/2)+14],bars,7.5);
+  svg+=multiLeader([[X(-c.d/2),cy-2]],[Math.min(866,X(fc-ft.L/2)-24),Math.min(90,Y(-ft.B/2)-16)],['COLUMN C/L ON GRID,',combined?'COMBINED FOOTING, SEE NOTE':'FOOTING CONCENTRIC'],7.5);
+  svg+=sectionCut([X(fc-ft.L/2)-4,cy],[X(fc+ft.L/2)+4,cy],[0,1],detailTitles.footing,['a'],'tip');
   if(tied)svg+=buildingFootingPlan(s,X,Y,kk,Y(ft.B/2)+44);
   return {svg:svg+'</g>',scale:k.label};
  }});
@@ -233,14 +238,14 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   let svg='';
   // Dimensions at the left and the callouts at the right of the section, which is drawn up to 380 wide.
   const stub=10*inch,top=Math.max(stub,floor+2*inch),bottom=ftgBot-3*inch,span=ft.L+2*ext*.5;
-  const k=drawingScale(Math.min(380/span,190/(top-bottom)),u),kk=k.pointsPerMm,x0=470,cx=x0+(ext*.5+ft.L/2)*kk,X=(z:number)=>cx+z*kk,Y=(y:number)=>600-(y-bottom)*kk;
+  const k=drawingScale(Math.min(380/span,190/(top-bottom)),u),kk=k.pointsPerMm,x0=470,cx=x0+(ext*.5+ft.L/2-fc)*kk,X=(z:number)=>cx+z*kk,Y=(y:number)=>600-(y-bottom)*kk;
   svg+='<g data-view="footing-section">';
-  svg+=rect(X(-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk,'runway-line')+concrete(X(-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk);
+  svg+=rect(X(fc-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk,'runway-line')+concrete(X(fc-ft.L/2),Y(ftgTop),ft.L*kk,hf*kk);
   // Lower layer across the section (bars cut), upper layer along it.
   const upper=ftgBot+ft.cover+1.5*db,lower=ftgBot+ft.cover+db/2;
-  svg+=line([X(-ft.L/2+ft.cover),Y(upper)],[X(ft.L/2-ft.cover),Y(upper)],'runway-line');
+  if(!hold)svg+=line([X(fc-ft.L/2+ft.cover),Y(upper)],[X(fc+ft.L/2-ft.cover),Y(upper)],'runway-line');
   const cut=Math.floor((ft.L-2*ft.cover)/ft.spacing)+1;
-  for(let i=0;i<cut;i++){const z=-ft.L/2+ft.cover+(cut>1?i*(ft.L-2*ft.cover)/(cut-1):0);svg+=circle(X(z),Y(lower),Math.max(1,db/2*kk),'dot');}
+  if(!hold)for(let i=0;i<cut;i++){const z=fc-ft.L/2+ft.cover+(cut>1?i*(ft.L-2*ft.cover)/(cut-1):0);svg+=circle(X(z),Y(lower),Math.max(1,db/2*kk),'dot');}
   // Column stub, plate, grout and rods to their heads.
   svg+=rect(X(-c.d/2),Y(stub),c.d*kk,stub*kk,'runway-line')+line([X(-c.d/2+c.tf),Y(stub)],[X(-c.d/2+c.tf),Y(0)],'runway-line')+line([X(c.d/2-c.tf),Y(stub)],[X(c.d/2-c.tf),Y(0)],'runway-line');
   svg+=breakLine([X(-c.d/2)-6,Y(stub)],[X(c.d/2)+6,Y(stub)]);
@@ -252,19 +257,20 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   }
   const slabTop=floor,slabBot=floor-ft.slab;
   for(const sign of [-1,1]){
-   const zi=sign*(ft.soil>0?b.plate.N/2+12*inch:ft.L/2),zo=sign*(ft.L/2+ext*.5),x1=X(Math.min(zi,zo)),w=Math.abs(zo-zi)*kk;
+   const zi=ft.soil>0?sign*(b.plate.N/2+12*inch):fc+sign*ft.L/2,zo=fc+sign*(ft.L/2+ext*.5),x1=X(Math.min(zi,zo)),w=Math.abs(zo-zi)*kk;
    if(ft.slab>0)svg+=rect(x1,Y(slabTop),w,ft.slab*kk,'reference-line')+concrete(x1,Y(slabTop),w,ft.slab*kk)+breakLine([X(zo),Y(slabTop)-4],[X(zo),Y(slabBot)+4])+line([X(zi)+sign*1.5,Y(slabTop)],[X(zi)+sign*1.5,Y(slabBot)],'annotation');
   }
-  svg+=earth(X(-ft.L/2-ext*.5),X(ft.L/2+ext*.5),Y(ftgBot))+line([X(-ft.L/2-ext*.5),Y(ftgBot)],[X(-ft.L/2),Y(ftgBot)],'annotation')+line([X(ft.L/2),Y(ftgBot)],[X(ft.L/2+ext*.5),Y(ftgBot)],'annotation');
+  if(ft.key)svg+=rect(X(fc-footingKeyWidth/2),Y(ftgBot),footingKeyWidth*kk,ft.key*kk,'runway-line')+concrete(X(fc-footingKeyWidth/2),Y(ftgBot),footingKeyWidth*kk,ft.key*kk);
+  svg+=earth(X(fc-ft.L/2-ext*.5),X(fc+ft.L/2+ext*.5),Y(ftgBot))+line([X(fc-ft.L/2-ext*.5),Y(ftgBot)],[X(fc-ft.L/2),Y(ftgBot)],'annotation')+line([X(fc+ft.L/2),Y(ftgBot)],[X(fc+ft.L/2+ext*.5),Y(ftgBot)],'annotation');
   // Dimensions: footing thickness and rod embedment left of the section; rod spacing above; cover in the bar callout.
   // An embedment too short for its text carries the text above the footing, clear of the thickness string below; a
   // rod spacing too short for its text carries it to the left, above the slab and clear of the callout leaders.
-  const lx=X(-ft.L/2),dx=x0-10,emb=dim(a.embedment),ew=textWidth(emb,9),ey1=Y(ftgTop),ey2=Y(head);
+  const lx=X(fc-ft.L/2),dx=x0-10,emb=dim(a.embedment),ew=textWidth(emb,9),ey1=Y(ftgTop),ey2=Y(head);
   svg+=ew+6<=ey2-ey1?dimV(ey1,ey2,X(-row-nut/2),dx,emb):line([X(-row-nut/2),ey1],[dx-4,ey1])+line([X(-row-nut/2),ey2],[dx-4,ey2])+line([dx,ey1-ew-6],[dx,ey2])+[ey1,ey2].map(y=>line([dx-3,y+2.5],[dx+3,y-2.5])).join('')+dimText(dx-6,ey1-4-ew/2,emb,9,'middle',400,-90);
   svg+=dimV(Y(ftgTop),Y(ftgBot),lx,dx-20,dim(hf));
   const spacing=dim(2*row),short=textWidth(spacing,9)+6>2*row*kk,sy=short&&ft.slab>0?Math.min(Y(stub)-6,Y(slabTop)-8):Y(stub)-6;
   svg+=dimH(X(-row),X(row),Y(hw.washerThickness+a.diameter*1.6),sy,spacing,short?'left':'right');
-  const rx=X(ft.L/2+ext*.5)+28,slabZ=(ft.soil>0?b.plate.N/2+12*inch+ft.L/2+ext*.5:ft.L+ext*.5)/2;
+  const rx=X(fc+ft.L/2+ext*.5)+28,slabZ=(ft.soil>0?b.plate.N/2+12*inch+fc+ft.L/2+ext*.5:2*fc+ft.L+ext*.5)/2;
   const items:{at:XY;labels:string[];weld?:string;field?:boolean;arrowSide?:boolean;allAround?:boolean}[]=[
    {at:[X(c.d/2),Y(stub*.8)],labels:[`${name} COLUMN`]},
    {at:[X(row+nut/2),Y(hw.washerThickness+a.diameter/2)],labels:['HVY HEX NUT AND','PL WASHER']},
@@ -272,8 +278,8 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(b.plate.N/2+inch),Y(-tb-gr/2)],labels:[`${size(gr)} NON-SHRINK GROUT`]},
    ...(ft.slab>0?[{at:[X(slabZ),Y(slabTop-ft.slab/2)] as XY,labels:[`(E) ${size(ft.slab)} SLAB, SAW CUT,`,`${size(inch/2)} ISOLATION JT.`]}]:[]),
    {at:[X(row+nut/2),Y(head+a.diameter/2)],labels:['EMBEDDED HVY HEX NUT,','TACK WELDED TO ROD']},
-   {at:[X(ft.L/2-ft.cover-ft.spacing*.5),Y(upper)],labels:[barLabel,`${size(ft.cover)} CLEAR`]},
-   {at:[X(ft.L/2+ext*.3),Y(ftgBot)+2],labels:['UNDISTURBED SOIL','OR APPROVED FILL']}
+   ...(hold?[]:[{at:[X(fc+ft.L/2-ft.cover-ft.spacing*.5),Y(upper)] as XY,labels:[barLabel,`${size(ft.cover)} CLEAR`]}]),
+   {at:[X(fc+ft.L/2+ext*.3),Y(ftgBot)+2],labels:['UNDISTURBED SOIL','OR APPROVED FILL']}
   ];
   const height=items.reduce((a,v)=>a+v.labels.length*11+9,0),ltop=Math.min(Y(top),Y(bottom)-height+12);
   svg+=labelColumn(items,rx,ltop,Y(bottom)+6);
@@ -287,7 +293,8 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ['COLUMN',`${name}, ${dim(H)} BASE TO TOP, SEAT ${dim(seat)}`],
    ['BASE PLATE',`PL ${size(tb)} X ${dim(b.plate.B)} X ${dim(b.plate.N)}, FY ${force(b.plate.Fy,'stress')}`],
    ['ANCHOR RODS',`${anchorLabel}, HEF ${dim(a.embedment)}`],
-   ['FOOTING',`${dim(ft.L)} X ${dim(ft.B)} X ${dim(hf)}, ${barLabel}`],
+   [braced?'FOOTING F1 (UNBRACED COLUMNS)':'FOOTING',`${combined?'COMBINED, ':''}${dim(ft.L)} X ${dim(ft.B)} X ${dim(hf)}${keyText(ft)}, ${hold?'HOLD':barLabel}`],
+   ...(braced?[['FOOTING F2 (BRACED COLUMNS)',`${combined?'COMBINED, ':''}${dim(braced.L)} X ${dim(braced.B)} X ${dim(braced.thickness)}${keyText(braced)}, ${hold?'HOLD':`${u==='SI'?`#${metricBar[braced.bar]??braced.bar.slice(1)}`:braced.bar} @ ${dim(braced.spacing)} E.W. BOTTOM`}`]]:[]),
    [`GOVERNING BASE ACTION (${p.method})`,act?`${act.id}: P ${force(act.P)}, M ${force(act.Mx,'moment')}, V ${force(act.Vx)}`:'-'],
    [`ANCHOR GROUP (${p.method}): TENSION ON THE ${a.perRow}-ROD ROW / SHEAR ON ALL ${2*a.perRow} RODS`,r&&anchorAct?`${force(r.anchors.T)} (${force(r.anchors.T/a.perRow)} PER ROD) / ${force(r.anchors.V)} (${force(r.anchors.V/(2*a.perRow))} PER ROD), ${anchorAct.id}`:'-'],
    ['SOIL: ALLOWABLE / MAX. SERVICE',r?`${force(b.soil.allowable,'pressure')} / ${force(r.footing.qMax,'pressure')}`:'-'],
@@ -306,6 +313,9 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    `SET THE PLATE ON SHIM STACKS OR LEVELING NUTS AND FILL ${size(gr)} OF NON-SHRINK, NON-METALLIC GROUT (ASTM C1107, ${u==='US'?'5,000 PSI':'35 MPa'} MINIMUM) TO FULL BEARING BEFORE THE GIRDER IS SET.`,
    `FOOTING CONCRETE f'c = ${force(b.concrete.fc,'stress')} AT 28 DAYS, NORMALWEIGHT; REINFORCEMENT ${rebarGrade(b.footing.fy,u)}, ${size(ft.cover)} CLEAR COVER CAST AGAINST EARTH, STRAIGHT BARS EACH WAY.`,
    `${ft.soil>0?`TOP OF FOOTING ${dim(ft.soil)} BELOW THE FLOOR; BACKFILL AND REPLACE THE SLAB OVER IT AFTER THE COLUMN IS ERECTED.`:`SAW CUT AND REMOVE THE EXISTING SLAB TO THE FOOTING OUTLINE, EXCAVATE TO BEARING AND POUR THE FOOTING TO THE TOP OF SLAB WITH A ${size(inch/2)} PREFORMED ISOLATION JOINT AT THE PERIMETER.`} LOCATE UNDERGROUND UTILITIES BEFORE CUTTING OR EXCAVATING.`,
+   ...(braced?[`FOOTING F2 AT THE COLUMNS AT THE ENDS OF THE BRACED SPANS (THE RODS' UPLIFT AND SHEAR ALONG THE RUNWAY), F1 ELSEWHERE; F1 SHOWN, F2 SIMILAR.`]:[]),
+   ...(ft.key||braced?.key?[`SHEAR KEYS: ${size(footingKeyWidth)} WIDE, THE FULL FOOTING WIDTH ACROSS THE RUNWAY, CENTERED, CAST MONOLITHIC WITH THE FOOTING AGAINST UNDISTURBED SOIL; THE BRACE SHEAR IS RESISTED BY BASE FRICTION AND THE SOIL'S LATERAL BEARING ${force(b.soil.passive??0,'unitWeight')} PER UNIT DEPTH (IBC §1806.3.1). DO NOT OVER-EXCAVATE THE KEY TRENCH.`]:[]),
+   ...(combined?[`COMBINED FOOTINGS: EACH CRANE COLUMN AND ITS (E) BUILDING COLUMN ON ONE FOOTING CENTERED ${dim(Math.abs(fc))} FROM THE CRANE COLUMN TOWARD THE BUILDING COLUMN. SHORE THE (E) COLUMN (SHORING DESIGNED BY THE CONTRACTOR'S ENGINEER FOR ITS EXISTING LOADS), REMOVE THE (E) FOOTING, CAST THE COMBINED FOOTING AND RE-SET THE (E) COLUMN ON NEW ANCHOR RODS DESIGNED BY THE ENGINEER OF RECORD FOR ITS BASE REACTIONS.`]:[]),
    `BEAR FOOTINGS ON UNDISTURBED SOIL OR COMPACTED FILL APPROVED BY THE GEOTECHNICAL ENGINEER: ${force(b.soil.allowable,'pressure')} ALLOWABLE. BOTTOM OF FOOTING ${dim(ft.soil+hf)} BELOW THE FLOOR${b.soil.frost>0?`, BELOW THE ${dim(b.soil.frost)} FROST DEPTH`:', INTERIOR FOOTING PROTECTED FROM FROST'}.`,
    ...(s.existingColumn?.seismic?(()=>{const z=s.existingColumn!.seismic!.basis,aisc341=!z.integrityOnly;
     // ASCE 7 §14.1.2.2.1: a cantilever column system in SDC B to F is detailed to AISC 341 (§E5 / §E6).
@@ -320,7 +330,8 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  * A crane column's footing plan beside the existing building column (craneColumn.ts): the building column and its
  * surveyed footing dashed at the column offset (away from the crane span, at the left), and the clearance or overlap with
  * the coordination note: concentric isolated footings this close overlap, a coordination open item for a combined
- * footing by the foundation engineer (check crane-column-footing-clearance).
+ * footing by the foundation engineer (check crane-column-footing-clearance); or, with a combined footing that replaces
+ * the existing one (columnBase.combined), the removal and re-setting note.
  */
 function buildingFootingPlan(s:CalculationSnapshot,X:(z:number)=>number,Y:(x:number)=>number,kk:number,noteY:number){
  const p=s.input,u=p.units,k=p.craneColumn!,bc=k.building,line=p.existingColumn!.adjacent?.A??p.existingColumn!.adjacent?.B,dim=(v:number)=>dimensionLength(v,u),z=-k.offset;
@@ -332,7 +343,7 @@ function buildingFootingPlan(s:CalculationSnapshot,X:(z:number)=>number,Y:(x:num
  const x0=Math.min(X(z-Math.max(f?.L??0,d)/2),X(-p.columnBase!.footing.L/2)),w=Math.max(260,X(p.columnBase!.footing.L/2)+40-x0);
  const target:[number,number]=f&&f.L>0?[X(z-f.L/2),Y(f.B/2)]:[X(z-d/2),Y(0)];
  svg+=multiLeader([target],[x0,noteY],[`(E) ${bc.shape||'BUILDING'} COLUMN ${dim(k.offset)} FROM THE CRANE COLUMN C/L${f&&f.L>0?` ON (E) ${dim(f.L)} X ${dim(f.B)}`:''}`,`${f&&f.L>0?'FOOTING ':''}(REF., DASHED)`]);
- const lines=[
+ const lines=r?.combined?[`COMBINED FOOTING WITH THE (E) COLUMN: SHORE THE (E) COLUMN, REMOVE THE (E) FOOTING (DASHED) AND RE-SET THE COLUMN ON NEW ANCHOR RODS BY THE ENGINEER OF RECORD; SEE NOTE.`]:[
   r?r.clear<r.required?`OPEN ITEM: THE FOOTINGS ${r.clear<0?`OVERLAP ${dim(-r.clear)}`:`ARE ${dim(r.clear)} APART, ${dim(r.required)} MIN.`}. COMBINED OR ENLARGED`:`FOOTING CLEAR ${dim(r.clear)}, ${dim(r.required)} MIN.`:'(E) FOOTING SIZE NOT ENTERED: LOCATE IT BY TEST PIT BEFORE EXCAVATION.',
   ...(r&&r.clear<r.required?['FOOTING BY THE FOUNDATION ENGINEER FOR THE REACTIONS ON S-00, BEFORE EXCAVATION;','DO NOT UNDERMINE OR CUT THE (E) FOOTING. HOLD - NOT FOR CONSTRUCTION.']:[])];
  // Under the plan, wrapped to the footing's width.

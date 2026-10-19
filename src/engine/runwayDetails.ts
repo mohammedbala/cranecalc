@@ -102,6 +102,8 @@ export interface FatigueDetailResult {
  /** AISC 360-16 Table A-3.1 threshold stress range F_TH of the category, MPa. */
  threshold:number;
  bins:{name:string;cycles:number;minimum:number;maximum:number;range:number;allowable:number;damage:number}[];
+ /** Continuous girders: stress cycles per crane pass at this detail (passCycles.ts), already in the bin cycles; absent = 1. */
+ cyclesPerPass?:number;
  damage:number;range:number;peak:number;
 }
 /**
@@ -140,10 +142,14 @@ export interface RunwayDetailResults {
    * F2 / F4 / F5 curve at L_e); cb = Mcr / Mocr (1 when the eigenvalue does not reduce the strength), printed only; Mocr the
    * uniform-moment F2-4 / F4-5 / F5-4 moment at Lb. */
   cb:number;mocr:number;sign?:number;
+  /** M_cr not solved (the case is stable where it would lower the strength): the lower bound of M_cr that shows. */ criticalAtLeast?:number;
   /** Height of the rail head above the shear center (load height in the eigen model). */
   height:number;
   /** Commentary F1: Cb (F1-1) of the case over the unbraced segment, times 1.4^(2y/h); its available strength. */
   commentary?:{segment:[number,number];mmax:number;quarter:[number,number,number];gradient:number;y:number;h:number;factor:number;cb:number;capacity:number}};
+ /** The load-height record of each sign of moment: positive (top flange / cap in compression), negative (W bottom flange in
+  * compression), each at its own peak and against its own Chapter F curve; loadHeight is the one with the larger ratio. */
+ loadHeightBySign?:{positive:NonNullable<RunwayDetailResults['loadHeight']>;negative:NonNullable<RunwayDetailResults['loadHeight']>};
  /** Combined normal stress at each flange's extreme fibres (top: cap tips; bottom: W bottom flange tips). */
  flangeNormal?:{top:number;bottom:number};
  /** Normalized warping function W_no at the tips of each flange. */
@@ -151,7 +157,7 @@ export interface RunwayDetailResults {
  /** The terms of each flange's governing combined normal stress (FlangeStressParts). */
  flangeParts?:{top:FlangeStressParts;bottom:FlangeStressParts};
  /** H1 at each flange with the governing major-axis strength M_cx (load height included): governing concurrent actions. */
- interaction?:{mcx:number;top:number;bottom:number;topCase?:import('./types').DesignCaseSummary;bottomCase?:import('./types').DesignCaseSummary;
+ interaction?:{mcx:number;/** M_cx for negative moment (W bottom flange in compression). */ mcxNegative?:number;top:number;bottom:number;topCase?:import('./types').DesignCaseSummary;bottomCase?:import('./types').DesignCaseSummary;
   /** H1 of each combination with this M_cx (the larger flange). */ combinations?:{id:string;interaction:number}[]};
  /**
   * St Venant torque G_k·J·θ′ the girder delivers to each support through each girder end, at the analysis stiffness
