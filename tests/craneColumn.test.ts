@@ -45,12 +45,12 @@ describe('crane column tied to the building column: mechanics',()=>{
   expect(columnTieStiffness(p)).toBeCloseTo(1/(1/kPlate+1/kBolts),3);
   expect(g.gap).toBeCloseTo(8*inch,6);
  });
- it('checks the Appendix 6 nodal brace of the crane-column top by hand: 0.01Pr and (1/φ)(10Pr/L) against the building column, the tie and the sleeve play',()=>{
+ it('checks the Appendix 6 nodal brace of the crane-column top by hand: 0.01Pr and (1/φ)(8Pr/L) (A-6-4) against the building column, the tie and the sleeve play',()=>{
   const p=craneProject(offset),s=snapshotOf(p);craneColumnCalculation(s);
   const r=s.craneColumn!,g=craneColumnLayout(p)!,Pr=s.existingColumn!.governing.P.P,L=g.columnTie.elevation;
   expect(r.brace.Pr).toBeCloseTo(Pr,6);expect(r.brace.L).toBeCloseTo(L,6);
   expect(r.brace.strength.required).toBeCloseTo(.01*Pr,6);
-  expect(r.brace.stiffness.required).toBeCloseTo(10*Pr/L/.75,6);
+  expect(r.brace.stiffness.required).toBeCloseTo(8*Pr/L/.75,6);
   // Sleeve: standard hole (7/8 in bolt: 15/16 in) plus two 1/4 in walls; play across the 1 1/2 in slot.
   const od=bolt('A325',.875*inch).hole+2*.25*inch,play=1.5*inch-od,kb=buildingColumnStiffness(p,L),kt=columnTieStiffness(p);
   expect(od).toBeCloseTo(1.4375*inch,6);expect(r.brace.stiffness.play).toBeCloseTo(play,6);

@@ -314,7 +314,10 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    for(const b of eb.footings)for(const z of rows)later+=rect(X(b.x0/1000-m.length/2),Y(z-(b.u1-b.u0)/2000),(b.x1-b.x0)/1000*k,(b.u1-b.u0)/1000*k,'hidden-line');
    for(const l of eb.lines){
     const zl=(u:number)=>l.line==='A'?rows[0]+u/1000:rows[1]-u/1000,yl=Y(zl(l.input.offset));
-    later+=`<g data-existing-line="${l.line}">`+line([gridLeft-18,yl],[gridRight+12,yl],'grid-line')+text(gridLeft-22,yl+3,'(E) COL. LINE',7.5,'end');
+    // The tag beside the runway row bubbles (gridLeft - 30, radius 11; annotationClashes counts no circles) would print
+    // through them where the column line runs close to a runway line: then it stands left of the bubble, or at the right end.
+    const tag='(E) COL. LINE',nearBubble=rows.some(z=>Math.abs(Y(z)-yl)<16),left=gridLeft-44-textWidth(tag,7.5)>panel.x0;
+    later+=`<g data-existing-line="${l.line}">`+line([gridLeft-18,yl],[gridRight+12,yl],'grid-line')+(!nearBubble?text(gridLeft-22,yl+3,tag,7.5,'end'):left?text(gridLeft-44,yl+3,tag,7.5,'end'):text(gridRight+16,yl+3,tag,7.5,'start'));
     for(const c of l.columns)for(const b of [c.column,c.footing])if(b)later+=rect(X(b.x0/1000-m.length/2),Math.min(Y(zl(b.u0)),Y(zl(b.u1))),(b.x1-b.x0)/1000*k,Math.abs(b.u1-b.u0)/1000*k,'reference-line');
     later+='</g>';
    }
@@ -643,8 +646,11 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
   // Each sheet is drawn once: the cover reads the others' text (abbreviations) before the set draws them.
   const once=<T,>(draw:()=>T)=>{let v:T|undefined;return ()=>v??=draw();};
   // A supplied-load analysis details nothing: no connection or detail sheets (S-00 gives the interface requirements).
+  // A topic continued on the next sheet keeps its subject with '(CONTINUED)', so no two sheets share a title.
+  const titles=new Set<string>();
   const details=(analysisOnly(p)?[]:packDetailSheets(detailTopics(s,f),p.units)).map((layout,i)=>{
-    const number=`S-${String(i+2).padStart(2,'0')}`,title=detailSheetTitle(layout);
+    const base=detailSheetTitle(layout),title=titles.has(base)?`${base} (CONTINUED)`:base;titles.add(base);
+    const number=`S-${String(i+2).padStart(2,'0')}`;
     return {number,name:`runway-${layout.topics.map(t=>t.key).join('-')}-sheet-arch-d`,title,details:layout.placed.flatMap(v=>[v.view.title,...(v.view.subdetails??[])]),render:once(()=>detailSheetSvg(s,number,title,layout))};
   });
   const sheets=[{number:'S-01',name:'runway-plan-sheet-arch-d',title:'GENERAL ARRANGEMENT',details:[...arrangementDetails,...(existingClearanceShown(s)?[existingClearanceTitle]:[])],render:once(()=>planSheetSvg(s,f))},...details];
@@ -654,12 +660,12 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
     ...Array.from({length:pages-1},(_,i)=>({...coverContinuation(i+1),name:`general-notes-continued-${i+1}-sheet-arch-d`,render:()=>covers()[i+1]})),...sheets];
 }
 /**
- * Sheet numbers ("S-xx") of the groups of details in the set by key (see detailTopics), for references
+ * Sheet numbers ("S-xx", or "S-05, S-06" for a group continued on the next sheet) of the groups of details in the set by key (see detailTopics), for references
  * outside the set such as the calculation report; a group not in the set reads "the drawings".
  */
 export function detailSheetNumbers(s:CalculationSnapshot,f:FramingSettings=defaultFraming){
   const sheets=new Map<string,string>();
-  if(!connectionOptionChecks(s.input).length&&!analysisOnly(s.input))packDetailSheets(detailTopics(s,f),s.input.units).forEach((l,i)=>{for(const t of l.topics)sheets.set(t.key,`S-${String(i+2).padStart(2,'0')}`);});
+  if(!connectionOptionChecks(s.input).length&&!analysisOnly(s.input))packDetailSheets(detailTopics(s,f),s.input.units).forEach((l,i)=>{const no=`S-${String(i+2).padStart(2,'0')}`;for(const t of l.topics){const was=sheets.get(t.key);if(!was?.split(', ').includes(no))sheets.set(t.key,was?`${was}, ${no}`:no);}});
   return (topic:string)=>sheets.get(topic)??'the drawings';
 }
 /**

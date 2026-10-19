@@ -140,7 +140,7 @@ function bracketFigure(p:ProjectInput,g:SupportGeometry){
  const xb=-h.gap/2-g.bearing.length/2,y=g.reach,top=steelTop(g);
  S.arrow([xb,y,top+G.d*.9],[xb,y,top+12],'R');
  const L=g.seat.projection,xe=g.seat.length/2+60;
- if(!enabled){S.label('SEAT BY OTHERS',[g.seat.length/2,L,-ts],8,12,'start');return finish(S,[['load/R',-24,-6,[xb,y,top]],['bearing/plate',-30,14,[xb,y+g.bearing.width/2,G.z0/2]],['bracket/seat',-26,-2,[-g.seat.length/2,L*.6,-ts]]],{az:50});}
+ if(!enabled){S.label(p?.existingColumn?.enabled&&p.existingColumn.step?'(E) STEP CAP':'SEAT BY OTHERS',[g.seat.length/2,L,-ts],8,12,'start');return finish(S,[['load/R',-24,-6,[xb,y,top]],['bearing/plate',-30,14,[xb,y+g.bearing.width/2,G.z0/2]],['bracket/seat',-26,-2,[-g.seat.length/2,L*.6,-ts]]],{az:50});}
  S.dim([xe,0,0],[xe,y,0],'e',6,0);
  // Tapered I haunch: 1 reaction, 2 top flange and stiffeners, 3 web and flanges, 4 welds at the column face, 5 column.
  if(g.support==='tapered-haunch'){

@@ -1,4 +1,5 @@
 import type {CalculationSnapshot,ProjectInput} from './types';
+import {tiedToBuilding} from './craneColumnInputs';
 import {girderSegments} from './simpleSupports';
 import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
@@ -99,4 +100,14 @@ export function supportColumn(p:ProjectInput){
  const c=p.existingColumn,isNew=!!(c?.enabled&&c.isNew),detailed=isNew&&!!p.columnBase?.enabled&&!!p.details;
  const name=isNew?`NEW ${c!.shape||'BUILT-UP'} COLUMN`:'EXISTING COLUMN';
  return {isNew,detailed,name,reference:isNew?name:'EXISTING COLUMN (REF.)',weld:isNew?'SHOP WELD':'FIELD WELD',field:!isNew};
+}
+/**
+ * The column the girder top-flange tie lands on, as the tie details name it: on a crane column tied to the building
+ * (tiedToBuilding) the existing building column beside it (field welded or field drilled, drawn dashed, the S-00 existing
+ * building notes), not the new crane column the girder bears on; otherwise the supporting column (supportColumn).
+ */
+export function tieReceiverColumn(p:ProjectInput){
+ if(!tiedToBuilding(p))return {...supportColumn(p),building:false};
+ const name=`(E) ${p.craneColumn!.building.shape||'BUILT-UP'} BUILDING COLUMN`;
+ return {isNew:false,detailed:false,name,reference:`${name} (REF.)`,weld:'FIELD WELD',field:true,building:true};
 }

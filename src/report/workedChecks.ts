@@ -217,9 +217,9 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  // column tie bolts and the vertical slot travel, each rebuilt from the calculation's own result.
  const cr=s.craneColumn;
  if(cr&&c.id==='crane-column-brace-stiffness'){
-  const b=cr.brace,st=b.stiffness,req=(lrfd?1/.75:2)*10*b.Pr/b.L,el=1/(1/st.building+1/st.tie),prov=st.play>0&&b.strength.required>0?1/(1/el+st.play/b.strength.required):el;
+  const b=cr.brace,st=b.stiffness,req=(lrfd?1/.75:2)*8*b.Pr/b.L,el=1/(1/st.building+1/st.tie),prov=st.play>0&&b.strength.required>0?1/(1/el+st.play/b.strength.required):el;
   if(close(req,dem)&&close(prov,cap))return [
-   `\\beta_{br}=${lrfd?'\\frac{1}{\\phi}':'\\Omega'}\\frac{10P_r}{L_{br}}=${lrfd?'\\frac{1}{0.75}':'2.00'}\\times\\frac{10\\times${tx(b.Pr,'force')}}{${tx(b.L,'length')}}=${tx(req,'stiffness')}\\quad(\\text{AISC 360-16 App. 6 \\S6.2.2, nodal brace})`,
+   `\\beta_{br}=${lrfd?'\\frac{1}{\\phi}':'\\Omega'}\\frac{8P_r}{L_{br}}=${lrfd?'\\frac{1}{0.75}':'2.00'}\\times\\frac{8\\times${tx(b.Pr,'force')}}{${tx(b.L,'length')}}=${tx(req,'stiffness')}\\quad(\\text{AISC 360-16 App. 6 \\S6.2.2, Eq. A-6-4, column nodal brace})`,
    `k_b=${tx(st.building,'stiffness')}\\ (\\text{building column at the tie, unit force});\\quad k_t=${tx(st.tie,'stiffness')}\\ (\\text{column tie})`,
    `\\beta_{prov}=\\left(\\frac{1}{k_b}+\\frac{1}{k_t}+\\frac{g}{P_{br}}\\right)^{-1},\\ g=${tx(st.play,'length')},\\ P_{br}=0.01P_r=${tx(b.strength.required,'force')}`,
    `\\quad=${tx(prov,'stiffness')}${rel.ge}\\beta_{br}=${tx(dem,'stiffness')}\\quad ${rel.dc}`];

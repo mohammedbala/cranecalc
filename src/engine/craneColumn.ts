@@ -3,13 +3,13 @@ import {tiedToBuilding,type CraneColumnInput} from './craneColumnInputs';
 import type {ExistingColumnInput} from './existingColumnInputs';
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
 import {existingColumnAnalysis,existingColumnChecks,existingColumnSection,validateExistingColumn,type ExistingColumnCombination,type ExistingColumnResult} from './existingColumn';
-import type {SupportReactionSet} from './supportReactions';
+import {supportReactions,type SupportReactionSet} from './supportReactions';
 import {columnResponse} from './columnAnalysis';
 import {sectionProperties} from './section';
 import {boltCapacity,boltProperties,compressionResistance,minimumFillet,transverseFilletFatigue} from './connectionStrength';
 import {available} from './aiscStrength';
 import {minimumEdge,capAngleGeometry} from './capAngle';
-import {flangeTieGeometry,stiffenerTieGeometry} from './tieGeometry';
+import {flangeTieGeometry,stiffenerTieGeometry,tieLine} from './tieGeometry';
 import {braceImperfection} from './forcesDelivered';
 import {secantStiffness} from './restraintClearance';
 import {finiteLife,fatigueThreshold} from './fatigueConstants';
@@ -31,8 +31,8 @@ import {columnBaseActions,combinedFooting,footingsOf} from './columnBase';
  * - The building column (`craneColumn.building`, existing) takes lateral load only from the runway: the side thrust at the
  *   rail head (its resultant through the two ties), the Appendix 6 brace forces the ties deliver and the runway's seismic
  *   force across the runway, with its own existing effects (buildingColumnProject: checks building-column-*).
- * - The column tie at the cap: one plate shop welded to the crane-column flange, lapping a tab on the building column (by
- *   others) with pretensioned bolts on steel sleeves through vertical long slots in the plate, so the two columns
+ * - The column tie at the cap: one plate shop welded to the crane-column flange, lapping a tab field welded to the
+ *   building column (designed here, columnTieGeometry.tab) with pretensioned bolts on steel sleeves through vertical long slots in the plate, so the two columns
  *   shorten independently (the established released-tie detail of this package, boltingBasis.ts).
  */
 const inch=25.4;
@@ -63,7 +63,7 @@ export interface CraneColumnLayout {
  gap:number;
  /** Girder web centerline (the girder bears centered on the crane-column cap). */
  girderWeb:number;
- /** Girder top-flange tie: the girder web to the building-column inner face, and its elevation (the girder top flange). */
+ /** Girder top-flange tie: the girder web to the building-column inner face, and its elevation (its line of action, tieLine). */
  girderTie:{face:number;elevation:number};
  /** Column tie at cap level: elevation, clear length between the flanges, plate, vertical slot and bolts at the building column. */
  columnTie:{elevation:number;length:number;plate:CraneColumnInput['columnTie']['plate'];slot:CraneColumnInput['columnTie']['slot'];bolts:CraneColumnInput['columnTie']['bolts']};
@@ -71,9 +71,11 @@ export interface CraneColumnLayout {
 export function craneColumnLayout(p:ProjectInput):CraneColumnLayout|undefined{
  const k=p.craneColumn,c=p.existingColumn;if(!k?.enabled||!c?.enabled)return undefined;
  const cc=columnPlates(c),bc=columnPlates(k.building),bearing=p.details?.bearing.thickness??0;
- const top=c.height,girderTop=c.seatElevation+bearing+p.section.d+(p.section.kind==='cap'?p.section.capTw:0);
+ // The girder tie's line of action (tieLine: the bar or plate centroid, the cap tieback's tie plate, else the flange at
+ // mid-thickness) above the girder bottom on the bearing: one work line for the building-column model, S-00 and S-05.
+ const top=c.height,girderTie=c.seatElevation+bearing+(p.details?tieLine(p):p.section.d-p.section.tf/2);
  return {craneColumn:{...cc,x:0,base:0,top},buildingColumn:{...bc,x:k.offset,base:0,top:k.building.height},
-  gap:k.offset-bc.d/2-cc.d/2,girderWeb:0,girderTie:{face:k.offset-bc.d/2,elevation:girderTop-p.section.tf/2},
+  gap:k.offset-bc.d/2-cc.d/2,girderWeb:0,girderTie:{face:k.offset-bc.d/2,elevation:girderTie},
   columnTie:{elevation:k.columnTie.elevation??top,length:k.offset-bc.d/2-cc.d/2,plate:k.columnTie.plate,slot:k.columnTie.slot,bolts:k.columnTie.bolts}};
 }
 
@@ -87,8 +89,16 @@ export function craneColumnLayout(p:ProjectInput):CraneColumnLayout|undefined{
 export function columnTieGeometry(p:ProjectInput){
  const k=p.craneColumn!,t=k.columnTie,b=boltProperties(t.bolts.grade,t.bolts.diameter),od=b.hole+2*columnTieSleeveWall,cc=columnPlates(p.existingColumn!);
  const lap=(t.bolts.count-1)*t.bolts.pitch+2*t.bolts.edge;
+ const bc=columnPlates(k.building);
  return {hole:b.hole,od,play:Math.max(0,t.slot.width-od),travel:(t.slot.length-od)/2,lap,minimumGap:Math.max(craneColumnGap,lap+2*columnTieEndClearance),
   weld:Math.max(inch/4,minimumFillet(Math.min(t.plate.thickness,cc.tf))),
+  /**
+   * The tab on the existing building column (designed here; the crane column's Appendix 6 nodal brace runs through it):
+   * a plate of the tie plate's thickness, depth and material at the building column's web line, from the column flange
+   * face past the tie plate end by the lap, with standard holes matching the slots; field fillets both faces over its
+   * depth to the existing flange (the AISC J2.4 minimum for the thinner part, at least 1/4 in).
+   */
+  tab:{thickness:t.plate.thickness,depth:t.plate.width,length:columnTieEndClearance+lap,weld:Math.max(inch/4,minimumFillet(Math.min(t.plate.thickness,bc.tf)))},
   /** Net width of the plate on a vertical section through a slot (the slot length plus 1/16 in, AISC B4.3b). */
   netWidth:t.plate.width-(t.slot.length+inch/16)};
 }
@@ -190,8 +200,8 @@ export interface CraneColumnResult {
   */
  ties:{girderTie:number;columnTie:number;case:string;bottom:number;eccentric:number;braceForce:number;range:number};
  /**
-  * AISC 360-16 Appendix 6 §6.2.2 nodal brace at the crane-column top: required strength 0.01Pr and stiffness
-  * (1/φ)(10Pr/L_br) (Ω = 2 ASD; the coefficient as the reference entry states it, conservative), against the building
+  * AISC 360-16 Appendix 6 §6.2.2 point (nodal) column brace at the crane-column top: required strength 0.01Pr (A-6-3)
+  * and stiffness (1/φ)(8Pr/L_br) (A-6-4; φ = 0.75, Ω = 2.00 ASD), against the building
   * column at the tie in series with the column tie, at its secant stiffness with the sleeve play taken up at P_br.
   */
  brace:{Pr:number;L:number;strength:{required:number;provided:number};stiffness:{required:number;building:number;tie:number;provided:number;play:number};case:ExistingColumnCombination['id']};
@@ -222,7 +232,17 @@ export function columnTieCapacities(p:ProjectInput){
  const bearing=available(perBolt(lcEnd)+(t.bolts.count-1)*perBolt(lcIn),m,.75,2);
  const Fexx=p.details?.material.Fexx??482.6,weldLine=2*plate.width,weldCapacity=available(.6*Fexx,m,.75,2),weldForce=weldCapacity*weldLine*tg.weld/Math.SQRT2;
  const need=minimumEdge(db),vertical=(plate.width-t.slot.length)/2+t.slot.width/2,needV=need+.75*db;
- return {Ag,An,tension,comp,bolt,bolts,lcEnd,lcIn,bearing,weldLine,weldCapacity,weldForce,strength:Math.min(tension,comp.capacity,bolts,bearing,weldForce),
+ // The tab on the building column: standard holes (J3.10(a), deformation at the holes a design consideration), the net
+ // section through one hole (the bolts in one row along the tie), its field fillets to the existing flange, and the
+ // building column web under the tab force (J10.2, the tab on the web line, l_b its depth; k_des of the shape, else t_f).
+ const tab=tg.tab,bc=columnPlates(p.craneColumn!.building),bw=bc.shape?aiscShapeByName(bc.shape):undefined,kb=bw?bw.kdes*inch:bc.tf,Fyw=p.craneColumn!.building.Fy;
+ const tabLcEnd=t.bolts.edge-tg.hole/2,tabLcIn=t.bolts.pitch-tg.hole,tabPerBolt=(lc:number)=>Math.max(0,Math.min(2.4*db*tab.thickness*plate.Fu,1.2*lc*tab.thickness*plate.Fu));
+ const tabBearing=available(tabPerBolt(tabLcEnd)+(t.bolts.count-1)*tabPerBolt(tabLcIn),m,.75,2),tabAn=Math.max(0,(tab.depth-(tg.hole+inch/16))*tab.thickness);
+ const tabTension=Math.min(available(plate.Fy*tab.depth*tab.thickness,m,.9,1.67),available(plate.Fu*tabAn,m,.75,2));
+ const tabWeldLine=2*tab.depth,tabWeldForce=weldCapacity*tabWeldLine*tab.weld/Math.SQRT2,webYield=available(Fyw*bc.tw*(5*kb+tab.depth),m,1,1.5);
+ const tabEdge={end:t.bolts.edge,vertical:tab.depth/2,ratio:Math.max(need/t.bolts.edge,need/(tab.depth/2))};
+ return {Ag,An,tension,comp,bolt,bolts,lcEnd,lcIn,bearing,weldLine,weldCapacity,weldForce,strength:Math.min(tension,comp.capacity,bolts,bearing,weldForce,tabBearing,tabTension,tabWeldForce,webYield),
+  tab:{bearing:tabBearing,lcEnd:tabLcEnd,lcIn:tabLcIn,An:tabAn,tension:tabTension,weldLine:tabWeldLine,weldForce:tabWeldForce,webYield,k:kb,tw:bc.tw,Fyw,edge:tabEdge},
   edge:{need,end:t.bolts.edge,vertical,needV,ratio:Math.max(need/t.bolts.edge,needV/Math.max(vertical,1e-9))},spacing:Math.max(8/3*db,t.slot.width+Math.max(db,inch/2))};
 }
 /**
@@ -230,13 +250,32 @@ export function columnTieCapacities(p:ProjectInput){
  * runway dead load, the crane with impact at the most loaded support and its own weight; the building column under its
  * existing L and the largest of Lr, S and R; and the erection tolerance.
  */
-export function columnShortening(p:ProjectInput,reactions:SupportReactionSet){
- const k=p.craneColumn!,g=craneColumnLayout(p)!,E=p.section.E,z=g.columnTie.elevation,cp=sectionProperties(existingColumnSection(p).section);
+export function columnShortening(p:ProjectInput,reactions:SupportReactionSet,z=craneColumnLayout(p)!.columnTie.elevation){
+ const k=p.craneColumn!,E=p.section.E,cp=sectionProperties(existingColumnSection(p).section),zc=Math.min(z,p.existingColumn!.height);
  const s=reactions.supports.reduce((a,v)=>v.D+v.Cd+v.Cv+v.Ci>a.D+a.Cd+a.Cv+a.Ci?v:a);
  const bp=sectionProperties(existingColumnSection(buildingColumnProject(p)).section),ex=k.building.existing;
  const P=Math.abs(ex.L.P)+Math.max(Math.abs(ex.Lr.P),Math.abs(ex.S.P),Math.abs(ex.R.P));
- return {crane:(s.D+s.Cd+s.Cv+s.Ci+cp.weight*z)*z/(E*cp.A),building:P*Math.min(z,k.building.height)/(E*bp.A),tolerance:k.tolerance??defaultSlotTolerance};
+ return {crane:(s.D+s.Cd+s.Cv+s.Ci+cp.weight*zc)*zc/(E*cp.A),building:P*Math.min(z,k.building.height)/(E*bp.A),tolerance:k.tolerance??defaultSlotTolerance,
+  /** The crane column's shortening under the crane with impact alone (the part that cycles with each pass). */
+  cyclic:(s.Cd+s.Cv+s.Ci)*zc/(E*cp.A)};
 }
+/**
+ * Vertical movement each way that a tie between the crane column and the building column must release at elevation z
+ * (the column tie's slot check, crane-column-tie-slot-travel, applied to every tie between the two columns, the girder
+ * tie included): the larger shortening of the two columns between their bases and the tie (the crane column to its top
+ * at most) plus the erection tolerance; `cyclic` the crane column's shortening under the crane alone. Undefined unless
+ * the runway is on crane columns tied to the building.
+ */
+export function tieShortening(p:ProjectInput,z:number,reactions?:SupportReactionSet){
+ if(!tiedToBuilding(p)||!craneColumnLayout(p))return undefined;
+ // The tie sizing asks for the same project many times (each a clone): its reactions are computed once per input.
+ const key=reactions?undefined:JSON.stringify([z,p.craneColumn,p.existingColumn,p.section,p.spans,p.system,p.cranes,p.details?.rail?.name,p.details?.bearing,p.columnCap]);
+ const hit=key===undefined?undefined:shorteningMemo.get(key);if(hit)return hit;
+ const v=columnShortening(p,reactions??supportReactions(p,sectionProperties(p.section)),z),out={...v,z,demand:Math.max(v.crane,v.building)+v.tolerance};
+ if(key!==undefined){if(shorteningMemo.size>200)shorteningMemo.clear();shorteningMemo.set(key,out);}
+ return out;
+}
+const shorteningMemo=new Map<string,ReturnType<typeof columnShortening>&{z:number;demand:number}>();
 
 /** Fatigue cycles of the project: the duty spectrum where one is entered, else the project count. */
 const cyclesOf=(p:ProjectInput)=>{const s=p.details?.spectrum??[];return s.length?s.reduce((a,v)=>a+v.cycles,0):p.fatigue.cycles;};
@@ -281,7 +320,7 @@ export function craneColumnCalculation(snapshot:CalculationSnapshot):void{
  const buildingChecks=existingColumnChecks(projection,building,{prefix:'building-',label:'Building column'}).map(v=>v.id.startsWith('building-column-')?{...v,group:'Building column',title:v.title.replace(/^Existing column/,'Building column')}:v);
  // Appendix 6 nodal brace at the crane-column top.
  const kb=buildingColumnStiffness(p,g.columnTie.elevation),kt=columnTieStiffness(p),elastic=series(kb,kt),provided=secantStiffness(elastic,tg.play,braceForce);
- const required=(lrfd?1/.75:2)*10*Pr/Lbr;
+ const required=(lrfd?1/.75:2)*8*Pr/Lbr;
  // The column tie: its strengths (one plate, the bolt row in single shear on sleeves through long slots perpendicular to the force).
  const cap=columnTieCapacities(p),{Ag,An,tension,comp,bolt,bolts,lcEnd,lcIn,bearing,weldCapacity}=cap,plate=t.plate,db=t.bolts.diameter,tieStrength=cap.strength;
  const weldStress=columnTieForce/(cap.weldLine*tg.weld/Math.SQRT2);
@@ -299,10 +338,10 @@ export function craneColumnCalculation(snapshot:CalculationSnapshot):void{
 
  const L=(v:number)=>f(v,'length'),forces=`column-tie force ${f(columnTieForce)} = girder bottom-flange restraint ${f(bottom)}${bottomSet.id?` (${bottomSet.id})`:''} through the cap + the crane column's eccentric top reaction ${f(eccentric)} (P_r·e/H, e = ${L(crane.eccentricity)}) + the Appendix 6 brace force 0.01P_r = ${f(braceForce)}, taken together in either direction`;
  checks.push({id:'crane-column-basis',group,title:'Crane column tied to the building column · arrangement and load path',status:'pass',equation:'',referenceIds:[...refs,'tr13-bracket'],
-  note:`New ${g.craneColumn.shape} crane column ${L(g.gap)} clear of the existing ${g.buildingColumn.shape} building column (centerlines ${L(k.offset)} apart), ${k.base} base, braced at the top across the runway by the column tie and along it by the crane-level bracing. Vertical: the girder on the column cap, the crane column and its footing (the building column takes no runway vertical load). Lateral: the girder top-flange tie to the building column face at ${L(g.girderTie.elevation)} above the base, and the bottom flange through the end-bearing bolts, cap and column top to the column tie at ${L(g.columnTie.elevation)}: the side thrust, the Appendix 6 brace forces and the runway's seismic force across the runway go to the building column (checked under Building column) and the building's lateral system. Column tie: ${L(plate.thickness)} × ${L(plate.width)} plate shop welded to the crane-column flange (${L(tg.weld)} fillets both faces), lapping a tab on the building column with ${t.bolts.count} ${t.bolts.grade} ${L(db)} bolts pretensioned against steel sleeves (${L(tg.od)} outside) through ${L(t.slot.width)} × ${L(t.slot.length)} vertical long slots, so the columns shorten independently. The tab and its connection to the existing building column are by others for the column-tie force reported here. Crane-column reactions, side thrust excluded: the column alone is checked above.`});
+  note:`New ${g.craneColumn.shape} crane column ${L(g.gap)} clear of the existing ${g.buildingColumn.shape} building column (centerlines ${L(k.offset)} apart), ${k.base} base, braced at the top across the runway by the column tie and along it by the crane-level bracing. Vertical: the girder on the column cap, the crane column and its footing (the building column takes no runway vertical load). Lateral: the girder top-flange tie to the building column face at ${L(g.girderTie.elevation)} above the base, and the bottom flange through the end-bearing bolts, cap and column top to the column tie at ${L(g.columnTie.elevation)}: the side thrust, the Appendix 6 brace forces and the runway's seismic force across the runway go to the building column (checked under Building column) and the building's lateral system. Column tie: ${L(plate.thickness)} × ${L(plate.width)} plate shop welded to the crane-column flange (${L(tg.weld)} fillets both faces), lapping a ${L(tg.tab.thickness)} × ${L(tg.tab.depth)} × ${L(tg.tab.length)} tab field welded to the existing building column flange on its web line (${L(tg.tab.weld)} fillets both faces; designed here, the existing-steel welding checks under Building column), with ${t.bolts.count} ${t.bolts.grade} ${L(db)} bolts pretensioned against steel sleeves (${L(tg.od)} outside) through ${L(t.slot.width)} × ${L(t.slot.length)} vertical long slots in the plate and standard holes in the tab, so the columns shorten independently. Crane-column reactions, side thrust excluded: the column alone is checked above.`});
  add('gap','Crane column · clear gap to the building column',tg.minimumGap,g.gap,'length','c\\ge\\max\\left(2\\,\\mathrm{in},\\;(n-1)s+2l_e+2c_e\\right)',`Clear distance between the facing flanges ${L(g.gap)}: at least 2 in for erection, and the column-tie lap (${t.bolts.count} bolts at ${L(t.bolts.pitch)}, edges ${L(t.bolts.edge)}: ${L(tg.lap)}) with ${L(columnTieEndClearance)} clear at the plate and tab ends: ${L(tg.minimumGap)}.`,['dg7-columns']);
- add('brace-stiffness','Crane column top · nodal brace stiffness (Appendix 6)',required,provided,'stiffness','\\beta_{br}=\\frac{1}{\\phi}\\frac{10P_r}{L_{br}}\\le\\left(\\frac{1}{k_b}+\\frac{1}{k_t}+\\frac{g}{P_{br}}\\right)^{-1}',`AISC 360-16 Appendix 6 §6.2.2 nodal brace at the crane-column top, the coefficient 10 as the reference entry states it (conservative; to be verified): P_r = ${f(Pr)} (${crane.governing.P.id}), L_br = ${L(Lbr)} from the ${k.base} base to the column tie, ${lrfd?'φ = 0.75':'Ω = 2.00'}. Provided: the building column at the column tie, k_b = ${f(kb,'stiffness')} (unit force, ${k.building.strong.base} base, ${k.building.strong.top} top, column alone), in series with the column tie k_t = ${f(kt,'stiffness')} (plate over the gap and the bolt shear deformation), at its secant stiffness with the sleeve play g = ${L(tg.play)} across the slot taken up at P_br: ${f(provided,'stiffness')}. The building's own sway at the tie (frame and roof diaphragm) is excluded: the braced top of the building column is an existing-building survey item (Building column · frame type).`,refs,crane.governing.P.id);
- add('brace-strength','Crane column top · nodal brace strength (Appendix 6)',columnTieForce,tieStrength,'force','P_{br}=0.01P_r;\\quad P_{br}+H_b+H_e\\le\\min(\\phi R_n)_{tie}',`Required brace strength 0.01P_r = ${f(braceForce)}, with the concurrent ${forces}, against the governing strength of the column tie (plate, bolts, bearing at the slots and the shop weld below). The building column takes the same forces (Building column).`,refs,crane.governing.P.id);
+ add('brace-stiffness','Crane column top · nodal brace stiffness (Appendix 6)',required,provided,'stiffness','\\beta_{br}=\\frac{1}{\\phi}\\frac{8P_r}{L_{br}}\\le\\left(\\frac{1}{k_b}+\\frac{1}{k_t}+\\frac{g}{P_{br}}\\right)^{-1}',`AISC 360-16 Appendix 6 §6.2.2 point (nodal) column brace at the crane-column top, Eq. A-6-4 β_br = (1/φ)(8P_r/L_br) (LRFD) or Ω(8P_r/L_br) (ASD), with the brace strength P_br = 0.01P_r of Eq. A-6-3 (the same in AISC 360-22 §6.2.2): P_r = ${f(Pr)} (${crane.governing.P.id}), L_br = ${L(Lbr)} from the ${k.base} base to the column tie, ${lrfd?'φ = 0.75':'Ω = 2.00'}. Provided: the building column at the column tie, k_b = ${f(kb,'stiffness')} (unit force, ${k.building.strong.base} base, ${k.building.strong.top} top, column alone), in series with the column tie k_t = ${f(kt,'stiffness')} (plate over the gap and the bolt shear deformation), at its secant stiffness with the sleeve play g = ${L(tg.play)} across the slot taken up at P_br: ${f(provided,'stiffness')}. The building's own sway at the tie (frame and roof diaphragm) is excluded: the braced top of the building column is an existing-building survey item (Building column · frame type).`,refs,crane.governing.P.id);
+ add('brace-strength','Crane column top · nodal brace strength (Appendix 6)',columnTieForce,tieStrength,'force','P_{br}=0.01P_r;\\quad P_{br}+H_b+H_e\\le\\min(\\phi R_n)_{tie}',`Required brace strength 0.01P_r = ${f(braceForce)}, with the concurrent ${forces}, against the governing strength of the column tie (plate, bolts, bearing at the slots, the shop weld, the tab on the building column with its field fillets, and the building column web under it: checks below). The building column takes the same forces (Building column).`,refs,crane.governing.P.id);
  add('tie-plate-yield','Column tie · plate tension (yield, net section)',columnTieForce,tension,'force','\\min(\\phi F_yA_g,\\;\\phi F_uA_n),\\;A_n=(h-l_s-1/16)t',`${L(plate.thickness)} × ${L(plate.width)} plate: gross yielding (D2-1) and rupture of the net section through a vertical slot, A_n = ${f(An,'area')} (U = 1). ${forces}.`,['aisc-connections']);
  add('tie-compression','Column tie · plate compression',columnTieForce,comp.capacity,'force','P_n=F_{cr}A_g\\ \\ (E3),\\;KL/r=1.2L/(t/\\sqrt{12})',`Out-of-plane flexural buckling over the clear gap L = ${L(g.gap)}, K = 1.2 (welded end and the bolted lap rotation-fixed, the lap free to translate along the runway: AISC Commentary Table C-A-7.1 (c)); KL/r = ${comp.slenderness.toFixed(1)}.`,['aisc-e']);
  add('tie-bolts','Column tie · bolt shear',columnTieForce/t.bolts.count,bolt.shear,'force','r_n=F_{nv}A_b\\ \\ (J3.6),\\ \\text{single plane, threads included}',`${t.bolts.count} ${t.bolts.grade} ${L(db)} bolts in single shear on their sleeves; the force shared equally.`,['aisc-connections','tr13-bolting']);
@@ -315,7 +354,17 @@ export function craneColumnCalculation(snapshot:CalculationSnapshot):void{
  {const n=cyclesOf(p),allow=transverseFilletFatigue(plate.thickness,tg.weld,n).capacity,stress=range/Ag;
   add('tie-weld-fatigue','Column tie · fillet toe fatigue at the crane column',stress,allow,'stress','\\Delta f=\\frac{\\Delta F}{ht}\\le F_{SR}\\ \\ (A-3-5,\\ A-3-6)',`Unfactored range of the column-tie force ${f(range)}: the bottom-flange lateral force range through the cap in any duty bin plus the static crane's eccentric top reaction, at all ${n.toLocaleString('en-US')} cycles (all-cycle bound). Transverse fillets on the tension-loaded plate, Category C with the root reduction R_FIL.`,['aisc-fatigue'],undefined);
   const Fsr=Math.max(fatigueThreshold('E'),finiteLife(1.1,n)),net=range/Math.max(An,1e-9);
-  add('tie-plate-fatigue','Column tie · plate net section fatigue at the slots',net,Fsr,'stress','\\Delta f=\\frac{\\Delta F}{A_n}\\le F_{SR}\\ \\ \\text{(Category E)}',`Net section through a slot, the plate bearing on the sleeve without clamping: taken as a pin plate (AISC Table A-3.1 item 2.4, Category E, C_f = 11 × 10⁸), all ${n.toLocaleString('en-US')} cycles.`,['aisc-fatigue']);}
+  add('tie-plate-fatigue','Column tie · plate net section fatigue at the slots',net,Fsr,'stress','\\Delta f=\\frac{\\Delta F}{A_n}\\le F_{SR}\\ \\ \\text{(Category E)}',`Net section through a slot, the plate bearing on the sleeve without clamping: taken as a pin plate (AISC Table A-3.1 item 2.4, Category E, C_f = 11 × 10⁸), all ${n.toLocaleString('en-US')} cycles.`,['aisc-fatigue']);
+  // The tab on the existing building column (the crane column's nodal brace runs through it): field fillets, fatigue.
+  const tb=tg.tab,tabAllow=transverseFilletFatigue(tb.thickness,tb.weld,n).capacity;
+  add('tab-weld-fatigue','Column tie tab · field fillet fatigue at the building column',range/(tb.thickness*tb.depth),tabAllow,'stress','\\Delta f=\\frac{\\Delta F}{ht}\\le F_{SR}\\ \\ (A-3-5,\\ A-3-6)',`The same unfactored range of the column-tie force ${f(range)} on the tab, at all ${n.toLocaleString('en-US')} cycles: transverse field fillets ${L(tb.weld)} both faces on the ${L(tb.thickness)} tab, Category C at the toe in the existing flange with the root reduction R_FIL.`,['aisc-fatigue']);}
+ {const tb=tg.tab,x=cap.tab;
+  add('tab-bearing','Column tie tab · bolt bearing and tearout (standard holes)',columnTieForce,x.bearing,'force','R_n=\\sum\\min(1.2l_ctF_u,\\;2.4dtF_u)\\ \\ (J3.10a)',`Tab ${L(tb.thickness)} × ${L(tb.depth)} × ${L(tb.length)} (the tie plate's material), standard holes ${L(tg.hole)} matching the slots; the tie in tension pulls the bolts toward the tab end: clear distance l_c = ${L(x.lcEnd)} at the end, ${L(x.lcIn)} between holes. ${forces}.`,['aisc-connections']);
+  add('tab-tension','Column tie tab · tension (yield, net section)',columnTieForce,x.tension,'force','\\min(\\phi F_yA_g,\\;\\phi F_uA_n),\\;A_n=(h-d_h-1/16)t',`Gross section h·t and the net section through one standard hole (the bolts in one row along the tie), A_n = ${f(x.An,'area')} (U = 1).`,['aisc-connections']);
+  add('tab-weld','Column tie tab · field fillets to the existing building column',columnTieForce/(x.weldLine*tb.weld/Math.SQRT2),weldCapacity,'stress','f=\\frac{F}{2h(0.707w)}\\le\\phi0.60F_{EXX}',`${L(tb.weld)} field fillets both faces of the tab over its depth ${L(tb.depth)} (the AISC J2.4 minimum for the thinner of the tab and the existing flange, at least 1/4 in), the force normal to the weld, no directional increase. Welding to the existing column: base metal, carbon equivalent, preheat and the load while welding are checked under Building column (building-column-weld-*); AWS D1.1 Clause 11.`,['aisc-connections']);
+  add('tab-web-yielding','Building column web · local yielding under the tab force',columnTieForce,x.webYield,'force','R_n=F_{yw}t_w(5k+l_b)\\ \\ (J10\\text{-}2),\\ \\phi=1.00',`The tab is on the building column's web line, so its force crosses the flange into the web: F_yw = ${f(x.Fyw,'stress')}, t_w = ${L(x.tw)}, k = ${L(x.k)} (k_des of the shape, else t_f), l_b = the tab depth ${L(tb.depth)} (the fillet legs not counted).`,['aisc-connections']);
+  const {need}=cap.edge;
+  add('tab-edge','Column tie tab · edge distances at the standard holes',x.edge.ratio,1,'ratio','l_e\\ge l_{e,min}\\ \\ (J3.4)',`To the tab end ${L(x.edge.end)} and to its top and bottom edges ${L(x.edge.vertical)}, each against ${L(need)} (AISC Table J3.4).`,['aisc-connections']);}
  add('tie-slot-travel','Column tie · vertical slot travel (differential shortening)',slotDemand,slotCapacity,'length','\\max(\\delta_c,\\delta_b)+\\delta_t\\le\\frac{l_s-D_s}{2}',`Each way from the centered sleeve: crane column shortening δc = PL/EA = ${L(craneShort)} (runway dead load, crane with impact at the most loaded support and the column's own weight, base to the tie), building column shortening δb = ${L(buildingShort)} (its existing L and the largest of Lr, S and R axial effects, unfactored), the larger plus the erection tolerance ${L(tolerance)}; travel (${L(t.slot.length)} − ${L(tg.od)})/2 = ${L(slotCapacity)}. The sleeves are set centered at erection, after the runway dead load is on the crane column.`,['dg7-columns','aisc-connections']);
  if(footing&&combined){const s=footing;s.combined=true;
   checks.push({id:'crane-column-footing-clearance',group,title:'Crane column · combined footing with the building column',status:'pass',equation:'',referenceIds:['criteria','aci-318'],

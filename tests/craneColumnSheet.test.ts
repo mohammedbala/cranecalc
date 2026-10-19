@@ -26,9 +26,10 @@ describe('crane column drawings',()=>{
   const footing=topics.find(t=>t.key==='new-column')!.views.find(v=>v.title==='FOOTING / PLAN')!.render().svg;
   expect(footing).toContain('data-existing-footing="building"');expect(footing).toMatch(/COMBINED FOOTING WITH THE \(E\) COLUMN/);
   expect(footing).not.toMatch(/HOLD/);expect(footing).toMatch(/E\.W\. BOTTOM/);
-  // The column tie section: slots, sleeves, the tab by others and the shop fillets (AWS weld symbol).
+  // The column tie section: slots, sleeves, the tab designed and field welded to the building column, the shop fillets.
   const section=topics.find(t=>t.key==='crane-column')!.views.find(v=>v.title===craneColumnTitles.tie)!.render().svg;
-  for(const t of ['VERT. SLOTS','SLEEVE','TAB BY OTHERS','PRETENSIONED AGAINST THE SLEEVES'])expect(section).toContain(t);
+  for(const t of ['VERT. SLOTS','SLEEVE','TAB PL','HOLES TO MATCH THE SLOTS','FACES, FULL DEPTH (FIELD)','PRETENSIONED AGAINST THE SLEEVES'])expect(section).toContain(t);
+  expect(section).not.toContain('BY OTHERS');expect(section).toContain('data-weld-location="field"');
   expect(section).toContain('data-multileader="weld"');
   // S-01: the ties on the typical section, no clearance plan to keep beside the building column; S-00: H only.
   const sheets=drawingSheetSet(s),ga=sheets.find(v=>v.number==='S-01')!.svg,cover=sheets.find(v=>v.number==='S-00')!.svg;

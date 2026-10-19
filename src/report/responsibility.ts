@@ -82,7 +82,7 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
  // The crane-level strut the existing-column check relies on: its location, stiffness and forces.
  const cls=byId.get('crane-level-strut');
  if(cls)take('crane-level-strut',{item:cls.title,needed:`${sentences(cls.note.replace(/^Not checked here:\s*/,'')).slice(0,1).join(' ').replace(/^./,c=>c.toUpperCase()).replace(/\.$/,'')}; the existing column check relies on it.`,
-  criterion:'AISC 360-16 strength for the line force; on the girder line, an axial stiffness at each seat at least 10 times the column\'s own (the column check keeps 1/11 of the force).',
+  criterion:`AISC 360-16 strength for the line force; on the girder line, an axial stiffness at each seat at least ${z?.strut?.ratio??10} times the column's own (the column check keeps 1/${(z?.strut?.ratio??10)+1} of the force).`,
   forces:[longitudinal&&longitudinal.charAt(0).toUpperCase()+longitudinal.slice(1)+'.',...sentences(cls.note).filter(x=>/\d\s*(kip|kN)/.test(x))].filter(Boolean).join(' ')||'See section @@ref:interfaces@@.',party:EOR});
  const strut=byId.get('brace-by-others')??byId.get('column-longitudinal');
  if(strut){const force=sentences(strut.note).find(x=>/\d\s*(kip|kN)\b/.test(x));
@@ -107,8 +107,8 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
  // and the footing coordination are needed from others.
  const cc=tiedToBuilding(p)?s.craneColumn:undefined;
  if(cc&&p.craneColumn){const k=p.craneColumn,g=cc.layout,dc=dl?.craneColumn,datum=(z:number)=>el((p.drawing?.datumElevation??0)+(p.columnBase?.enabled?p.columnBase.plate.thickness+p.columnBase.grout-p.columnBase.footing.soil:0)+z);
-  rows.push({item:'Building column · tie connections (girder tie gusset, column tie tab)',needed:`Design the connections of both ties to each existing ${g.buildingColumn.shape} building column: the girder tie's column gusset and its welds or bolts, and the column tie's tab with standard holes matching the slotted plate; check the column flange and web for the local forces at both.`,
-   criterion:'AISC 360-16 Chapter J (J2, J3, J4, J10) for the tie design forces in either direction; the tab clear of the crane column by 1/2 in.',
+  rows.push({item:'Building column · flange and web at the girder tie',needed:`Check each existing ${g.buildingColumn.shape} building column flange and web for the local girder tie force at its column gusset or end plate (the gusset or end plate with its welds or bolts, and the column tie's tab with its field welds and the column web under it, are designed in this calculation).`,
+   criterion:'AISC 360-16 J10 (or a yield-line flange model) for the girder tie design force in either direction.',
    forces:`Horizontal only, either direction: girder tie ${f(dl?.tie.design)} at${datum(g.girderTie.elevation)}, column tie ${f(dc?.columnTie)} at${datum(g.columnTie.elevation)} (per grid: S-00 and section @@ref:interfaces@@).`,party:EOR});
   rows.push({item:'Building column survey',needed:`Field-verify every building column beside the crane columns before fabrication: ${g.buildingColumn.shape}, plumb, its face ${len(g.girderTie.face)} from the girder web and ${len(g.gap)} clear of the crane column, the column top and base, and its footing (${k.building.source||'source not entered'}).`,
    criterion:'Surveyed dimensions within the ASTM A6 and AISC Code of Standard Practice tolerances of the values used; the tie lengths are cut to the surveyed faces.',forces:'—',party:'Contractor (survey), reviewed by the engineer of record'});

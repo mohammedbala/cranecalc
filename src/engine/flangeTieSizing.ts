@@ -46,7 +46,7 @@ import {createBracketCollector} from './bracketDesign';
 import {createRolledBracketCollector} from './rolledBracket';
 import {tiedToBuilding} from './craneColumnInputs';
 import {activeColumnCap} from './columnCapInputs';
-import {craneColumnRestraint} from './craneColumn';
+import {craneColumnRestraint,craneColumnLayout,tieShortening} from './craneColumn';
 
 const inch=25.4,sixteenth=inch/16,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step;
 
@@ -338,7 +338,10 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  const faceDemand=(face:number)=>{
   let v=faceDemands.get(face);if(v)return v;
   const support=demand.support===undefined||limit===undefined?demand.support:Math.max(limit,bracketServiceDeflection(applyTieProportions(structuredClone(p),{...base,face}))??0);
-  const travel=release?Math.max(inch/8,up((support??sixteenth)*cranes*(1+impact)+demand.rotation*base.setback+sixteenth+inch/32,sixteenth)):base.travel;
+  // A tie to the building column beside a crane column: the larger column shortening plus the erection tolerance
+  // (tieShortening) in place of a support deflection (the tie-release-travel check).
+  const layout=craneColumnLayout(p),diff=layout?tieShortening(p,layout.girderTie.elevation):undefined;
+  const travel=release?Math.max(inch/8,up((diff?diff.demand:(support??sixteenth)*cranes*(1+impact))+demand.rotation*base.setback+sixteenth+inch/32,sixteenth)):base.travel;
   v={demand:{...demand,support},travel};faceDemands.set(face,v);return v;
  };
  const faces:number[]=[];for(let f=base.face;f<=Math.max(base.face,opts.reach??base.face)+1e-6;f+=inch)faces.push(f);
