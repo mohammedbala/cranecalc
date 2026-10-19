@@ -48,8 +48,9 @@ describe('DEMO-FOCUS-005 girder after the G3 review fixes',()=>{
   // The detailed search stops at 80 travel steps once the governing D/Cs change by less than 1% (the per-quantity gate
   // went on to 1280 steps for fatigue ranges at D/C 0.005): 0.3321 / 0.3452 there, 0.3316 / 0.3447 at 1280 steps.
   // Round 3 engine: the load-height M_cr enters F4 at its equivalent length (no Cb < 1 on the inelastic strength), so
-  // M_cx rises and H1 falls to 0.1991 at both flanges.
-  expect(check('major').utilization!).toBeLessThan(.16);expect(check('combined').utilization!).toBeCloseTo(.1991,3);expect(check('combined-bottom').utilization!).toBeCloseTo(.1991,3);
+  // M_cx rises and H1 falls to 0.1991 at both flanges. Round 5: H1 takes each flange's sign; the bottom flange is in tension
+  // under the positive moment, so it takes F4.4 tension-flange yielding (R_pt M_yt) instead of the LTB strength: 0.1751.
+  expect(check('major').utilization!).toBeLessThan(.16);expect(check('combined').utilization!).toBeCloseTo(.1991,3);expect(check('combined-bottom').utilization!).toBeCloseTo(.1751,3);
   expect(check('shear').utilization!).toBeCloseTo(.0966,3);// Vertical deflection against L/1000: G1 (A3) puts the fixture in AIST Class B (L/600 gave 0.1355).
   expect(check('vertical').utilization!).toBeCloseTo(.1355*1000/600,3);
  });
