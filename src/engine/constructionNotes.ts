@@ -13,6 +13,7 @@ import {activeEndBearing} from './endBearingInputs';
 import {bearingSeat,bearingShim,bearingSurface} from './endBearing';
 import {flangeTieFamily,stiffenerTieGeometry,stiffenerTieJoint} from './tieGeometry';
 import {activeColumnCap} from './columnCapInputs';
+import {activeStep} from './steppedColumnInputs';
 import {activeEndStop} from './endStopInputs';
 import {boltSpec} from './materialSpecs';
 
@@ -63,7 +64,7 @@ export function cjpWelds(p:ProjectInput):string[]{
  */
 function seatSurvey(p:ProjectInput){
  const shim=bearingShim(p),max=shim.max>0?shim.max:inch/2,seat=bearingSeat(p);
- return `Bearing seats (${seat==='by-others'?'by others':seat==='existing'?'existing brackets':'field welded'}): survey the seats; shim to the theoretical elevation (steel shims, full bearing, ${shim.plies||3} plies and ${inches(max,p.units)} max., drilled to the bolt pattern); field drill or ream the seat holes after the girder is lined and leveled.`;
+ return `Bearing seats (${activeStep(p)?'existing step caps of the stepped columns':seat==='by-others'?'by others':seat==='existing'?'existing brackets':'field welded'}): survey the seats; shim to the theoretical elevation (steel shims, full bearing, ${shim.plies||3} plies and ${inches(max,p.units)} max., drilled to the bolt pattern); field drill or ream the seat holes after the girder is lined and leveled.`;
 }
 /**
  * Every high-strength bolt grade the model uses, with the joints that use it: the end bearing (or girder end) bolts,

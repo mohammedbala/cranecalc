@@ -6,6 +6,8 @@ import {activeEndBearing,endBearingGeometry,bearingShim} from '../engine/endBear
 import {slidingBolts} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {capSeat} from '../engine/columnCap';
+import {activeStep} from '../engine/steppedColumnInputs';
+import {steppedColumnTitles} from './steppedColumnSheet';
 import {columnCapTitles} from './columnCapSheet';
 import {format} from '../engine/units';
 import {plateInches} from './drawingFormat';
@@ -24,7 +26,7 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
  const p=s.input,e=activeEndBearing(p),d=p.details;if(!e||!d)return undefined;
  const g=endBearingGeometry(p,e);if(!g.sleeve)return undefined;
  return {title:detailTitles.slidingBolt,render:()=>{
-  const b=p.section,bs=d.bearing,sl=slidingBolts(e),db=e.bolts.diameter,wb=d.bracket?.enabled?d.bracket:undefined,cs=capSeat(p),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:bs.thickness),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
+  const b=p.section,bs=d.bearing,sl=slidingBolts(e),db=e.bolts.diameter,wb=d.bracket?.enabled?d.bracket:undefined,cs=capSeat(p),step=activeStep(p),seatT=cs?.thickness??(wb?bracketSeat(wb).thickness:step?step.cap.thickness:bs.thickness),ws=cs?undefined:rolledUnderSeat(p)??haunchUnderSeat(p);
   const size=(v:number)=>plateInches(v,p.units),hx=heavyHex(db),washer=hx.washer,sleeve=g.sleeve!;
   // Grip: plate washer, sleeve, bearing plate and seat, from under the head to under the F436 washer.
   // The grip includes the shim stack under the bearing plate (its largest thickness), where the seat takes shims.
@@ -72,7 +74,7 @@ export function slidingBoltView(s:CalculationSnapshot):DetailView|undefined{
    {at:at(X(od/2),(ySleeveTop+yBear)/2-4),labels:[`STEEL SLEEVE ${size(od)} OD X ${size(g.hole)} BORE`,`X ${size(sleeve.length)} (FLANGE + ${size(sl.clearance)} MIN.), FY ${Fy}`]},
    {at:at(X(half*.7),yFlangeTop+2),labels:[`GIRDER BOTTOM FLANGE, ${size(b.tf)}`,`SLOTTED; SEE ${detailRef(bearingBoltsTitle(p))}`]},
    {at:at(X(half*.75),yBear+bs.thickness*k/2),labels:[`BEARING PL ${size(bs.thickness)}, ${size(g.hole)} STD HOLE`]},
-   {at:at(X(half*.75),yBearBot+seatT*k/2),labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,ws?.hasSeat?`HOLES OVER THE ${ws.name} FLANGE: ALSO`:`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`,...(ws?.hasSeat?[`THE ${size(ws.tf)} FLANGE, LENGTH ${size(boltLength(db,plies+seatT+ws.tf,p.units))}, GRIP ${size(plies+seatT+ws.tf)}`]:[])]:['BRACKET SEAT BY OTHERS'])},
+   {at:at(X(half*.75),yBearBot+seatT*k/2),labels:cs?[`COLUMN CAP PL ${size(seatT)}`,`SEE ${detailRef(columnCapTitles.section)}`]:ws?.label??(wb?[`BRACKET SEAT PL ${size(seatT)}`,ws?.hasSeat?`HOLES OVER THE ${ws.name} FLANGE: ALSO`:`SEE ${detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket)}`,...(ws?.hasSeat?[`THE ${size(ws.tf)} FLANGE, LENGTH ${size(boltLength(db,plies+seatT+ws.tf,p.units))}, GRIP ${size(plies+seatT+ws.tf)}`]:[])]:step?[`(E) STEP CAP PL ${size(seatT)}`,`FIELD DRILLED; SEE ${detailRef(steppedColumnTitles.section)}`]:['BRACKET SEAT BY OTHERS'])},
    {at:at(X(hx.corners/2),yNut+hx.nut*k/2),labels:['HEAVY HEX NUT, A563 DH, AND F436','WASHER BELOW SEAT: TURN THE NUT']}
   ],labelBottom=yHead+labels.reduce((a,v)=>a+v.labels.length*11+8,-8);
   svg+=labelColumn(labels,lx,yHead,Math.max(yEnd+tail*k,labelBottom));

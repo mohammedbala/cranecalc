@@ -14,6 +14,9 @@ import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {bracketForceBlocks,bracketForceTopic,bracketForcesAt} from './bracketForceTable';
+import {activeStep} from '../engine/steppedColumnInputs';
+import {girderBearingTitle} from './columnCapSheet';
+import {steppedColumnTitles} from './steppedColumnSheet';
 import {isCapAngleTie} from '../engine/capAngle';
 import {topFlangeRestraint} from './tieNames';
 
@@ -31,20 +34,22 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  // The detail is typical: interior grids for adjacent ends, both grids of a single span.
  const gridLabel=joint?'2':'1',gridNote=joint?(p.spans.length>3?`TYP. GRIDS 2 THRU ${p.spans.length}`:p.spans.length>2?'TYP. GRIDS 2 AND 3':'GRID 2'):'TYP. GRIDS 1 AND 2';
  const bracketRef=detailRef(usesExistingBracket(p)?detailTitles.existingBracket:detailTitles.weldedBracket),views:DetailView[]=[];
+ // A stepped column: the girder ends bear on the existing step cap (stepped column details), not on a bracket.
+ const step=activeStep(p),stepRef=detailRef(steppedColumnTitles.section);
  views.push({title:detailTitles.supportEnd(joint),render:()=>{
  let svg='';
  const scale=drawingScale(Math.min(.28,142/b.d,350/(4*bs.length+c.endGap)),p.units),k=scale.pointsPerMm;
  const cx=250,top=125,bottom=top+b.d*k,g=joint?c.endGap*k/2:0,l=bs.length*k,st=bs.stiffenerThickness*k,extent=2*l+g;
  // Rows below the lowest steel and a label column right of the girders follow the drawn size, so the
  // detail stays clear at any scale.
- const seat=wb?bracketSeat(wb):undefined,lowest=bottom+bs.thickness*k+(seat?seat.thickness*k:25.4*k+27),dimY=lowest+31,nameY=dimY+18,lx=cx+extent+85;
+ const seat=wb?bracketSeat(wb):undefined,lowest=bottom+bs.thickness*k+(seat?seat.thickness*k:step?step.cap.thickness*k:25.4*k+27),dimY=lowest+31,nameY=dimY+18,lx=cx+extent+85;
  const stiffY=top+Math.max(59,(bottom-top)*.3),bearingY=Math.max(stiffY+(joint?99:46),bottom+7),noteY=Math.max(nameY+16,bearingY+27);
  svg+='<g data-view="independent-end-elevation">';
  // The column beyond runs between the end gap dimension above and the bearing length dimensions below.
  svg+=rect(cx-m.column.bf*1000*k/2,top-11,m.column.bf*1000*k,lowest+14-(top-11),'reference-line');
  svg+=line([cx,90],[cx,nameY-4],'grid-line')+bubble(cx,86,gridLabel)+text(cx-12,89,gridNote,7.2,'end');
  const spread=(2*bs.length+c.endGap+2*c.guideTravel)*k;
- if(seat){svg+=rect(cx-seat.length*k/2,bottom+bs.thickness*k,seat.length*k,seat.thickness*k,'runway-line');}else{
+ if(seat){svg+=rect(cx-seat.length*k/2,bottom+bs.thickness*k,seat.length*k,seat.thickness*k,'runway-line');}else if(step)svg+=rect(cx-step.cap.length*k/2,bottom+bs.thickness*k,step.cap.length*k,step.cap.thickness*k,'reference-line');else{
  svg+=rect(cx-spread/2,bottom+bs.thickness*k,spread,25.4*k,'reference-line');
  svg+=rect(cx-spread/2,bottom+(bs.thickness+25.4)*k,spread,25,'reference-line');
  svg+=line([cx-spread/2,bottom+(bs.thickness+25.4)*k+20],[cx+spread/2,bottom+(bs.thickness+25.4)*k+27],'reference-line');
@@ -61,12 +66,12 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  }
  if(joint)svg+=dimH(cx-g,cx+g,top,111,dim(c.endGap));
  svg+=line([cx+extent,top],[lx-5,top])+text(lx,top+3,'T.O.S. EL., SEE S-01',8);
- svg+=multiLeader([[cx+g+l/2,top+b.d*k*.46]],[lx,stiffY],['PAIRED FITTED STIFFENERS',`PL ${size(bs.stiffenerThickness)} X ${size(bs.stiffenerWidth)}`,`EACH GIRDER END / SEE ${detailRef(detailTitles.bearing)}`]);
+ svg+=multiLeader([[cx+g+l/2,top+b.d*k*.46]],[lx,stiffY],['PAIRED FITTED STIFFENERS',`PL ${size(bs.stiffenerThickness)} X ${size(bs.stiffenerWidth)}`,`EACH GIRDER END / SEE ${detailRef(girderBearingTitle(p))}`]);
  svg+=multiLeader([[cx+g+l,bottom+bs.thickness*k/2]],[lx,bearingY],[`SEPARATE BEARING PL ${size(bs.thickness)}`,`${dim(bs.width)} W X ${dim(bs.length)} L`]);
  // Both girder ends are alike, so the stiffener welds are called out on the right one with the others.
- if(joint)svg+=filletLeader([[cx+g+l/2+st/2,top+b.d*k*.66]],[lx,stiffY+53],size(bs.weldSize),['STIFFENER WEB FILLETS, TYP. BOTH ENDS',`FLANGE ATTACHMENT: ${detailRef(detailTitles.bearing)}`],true);
+ if(joint)svg+=filletLeader([[cx+g+l/2+st/2,top+b.d*k*.66]],[lx,stiffY+53],size(bs.weldSize),['STIFFENER WEB FILLETS, TYP. BOTH ENDS',`FLANGE ATTACHMENT: ${detailRef(girderBearingTitle(p))}`],true);
  const ends=p.section.kind==='cap'?'GIRDER AND CAP ENDS':'GIRDER ENDS',bridge=p.section.kind==='cap'?'GIRDER OR CAP ENDS':'THE GIRDER ENDS';
- svg+=text(Math.min(44,cx-extent),noteY,usesExistingBracket(p)?`EXISTING BRACKET / NEW BOLTED SEAT: ${bracketRef}. KEEP ${ends} SEPARATE.`:wb?`WELDED COLUMN BRACKET BELOW / ${bracketRef}. DO NOT BRIDGE ${bridge}.${joint?' END GRIDS: ONE GIRDER END, SIMILAR.':''}`:`SHARED COLUMN BRACKET / SPREADER BELOW (REF.). DO NOT BRIDGE ${bridge}.`,7.8);
+ svg+=text(Math.min(44,cx-extent),noteY,usesExistingBracket(p)?`EXISTING BRACKET / NEW BOLTED SEAT: ${bracketRef}. KEEP ${ends} SEPARATE.`:wb?`WELDED COLUMN BRACKET BELOW / ${bracketRef}. DO NOT BRIDGE ${bridge}.${joint?' END GRIDS: ONE GIRDER END, SIMILAR.':''}`:step?`GIRDER ENDS ON THE (E) STEP CAP / ${stepRef}. DO NOT BRIDGE ${bridge}.`:`SHARED COLUMN BRACKET / SPREADER BELOW (REF.). DO NOT BRIDGE ${bridge}.`,7.8);
  return {svg:svg+'</g>',scale:scale.label};
  }});
 
@@ -92,7 +97,7 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  if(joint)svg+=dimH(px-pg,px+pg,py-b.bf*pk/2,111,dim(c.endGap));
  if(joint)svg+=multiLeader([[px-pg-pl/2+(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[643,247],['LEFT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieRef}`],8.5,[[[629,py+d.brace.length*pk*.55]]]);
  svg+=multiLeader([[px+pg+pl/2-(tieLayout?.attachment.longitudinalSetback??0)*pk,py+(tieStart+d.brace.length*.55)*pk]],[1025,247],['RIGHT GIRDER: SEPARATE TIE',`${flanges} / SEE ${tieRef}`]);
- svg+=text(918,colY+48,sc.isNew?columnReference(p):'BUILDING COLUMN (REF.)',8,'middle');
+ svg+=text(918,colY+48,sc.isNew?columnReference(p):step?'(E) UPPER SHAFT OF THE STEPPED COLUMN (REF.)':'BUILDING COLUMN (REF.)',8,'middle');
  svg+=text(635,Math.max(335,colY+62),tieRelease(p)?.slide?'COLUMN GUSSETS: SLEEVED BOLTS IN VERTICAL SLOTS; GUSSETS SLIDE ALONG THE RUNWAY. BARS FLEX WITH END ROTATION.':tieRelease(p)?'COLUMN GUSSETS: SLEEVED BOLTS IN VERTICAL SLOTS. BARS FLEX WITH END ROTATION AND THERMAL TRAVEL.':'COLUMN-SIDE ATTACHMENTS: BARS FLEX WITH END ROTATION, THERMAL TRAVEL AND SUPPORT DEFLECTION.',7.6);
  return {svg:svg+'</g>',scale:ps.label};
  }});
@@ -121,14 +126,14 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  const forces=bracketForcesAt(s,'support','ABOVE');
  const bearingRef=activeEndBearing(p)?detailRef(detailTitles.endBearing):'';
  const notes=bearingRef?[
-  `${usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}`:'BRACKET BY OTHERS'}. BOLTED END BEARINGS TRANSFER LONGITUDINAL FORCE AND UPLIFT (${bearingRef}); ${topFlangeRestraint(p).replace(/^THE /,'')} TRANSFER LATERAL FORCE. FACTORED FORCES: ${forces}.`,
+  `${usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}`:step?`GIRDER ENDS ON THE EXISTING STEP CAP OF THE STEPPED COLUMN (${stepRef})`:'BRACKET BY OTHERS'}. BOLTED END BEARINGS TRANSFER LONGITUDINAL FORCE AND UPLIFT (${bearingRef}); ${topFlangeRestraint(p).replace(/^THE /,'')} TRANSFER LATERAL FORCE. FACTORED FORCES: ${forces}.`,
   `THE END OF EACH BAY AT ITS LOWER-NUMBERED GRID LOCATES LONGITUDINALLY. FULL CRANE TRACTION IS ASSIGNED TO EACH OCCUPIED BAY${railBearsOnStops(p)?' AND, VIA THE RAIL STRING, TO EACH END BAY AT ITS STOP,':''} IN SEPARATE BOUNDING CASES; DO NOT ADD THESE CASES.`,
   `GIRDER ANALYSIS SPANS ARE GRID-TO-GRID; BEARINGS ARE INSET AS SHOWN. LOCATING ENDS: STANDARD HOLES, PRETENSIONED. SLIDING ENDS: SLOTS, ${slidingPhrase(activeEndBearing(p)!)} (${bearingRef}).`,
   `REFERENCE AIST TECHNICAL REPORT 13 §5.8.1. ${p.section.kind==='cap'?'GIRDER AND CAP':'GIRDER'} ENDS REMAIN SEPARATE.${railHasJoints(p)?' RAIL JOINTS ARE DETAILED INDEPENDENTLY.':''}`
  ]:[
-  usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}. SEPARATE TIES AND LOCATING ATTACHMENTS TRANSFER HORIZONTAL FORCES. FACTORED FORCES: ${forces}.`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}. SEPARATE HORIZONTAL CONNECTIONS TRANSFER LATERAL AND LONGITUDINAL FORCES. FACTORED FORCES: ${forces}.`:`DESIGN EACH BRACKET AND ITS COLUMN ATTACHMENT FOR THE ${forces} WITH THE ECCENTRICITY TO THE COLUMN.`,
+  usesExistingBracket(p)?`EXISTING BRACKET AND NEW BOLTED SEAT: ${bracketRef}. SEPARATE TIES AND LOCATING ATTACHMENTS TRANSFER HORIZONTAL FORCES. FACTORED FORCES: ${forces}.`:wb?`WELDED GRAVITY BRACKET: ${bracketRef}. SEPARATE HORIZONTAL CONNECTIONS TRANSFER LATERAL AND LONGITUDINAL FORCES. FACTORED FORCES: ${forces}.`:step?`GIRDER ENDS ON THE EXISTING STEP CAP OF THE STEPPED COLUMN (${stepRef}); SEPARATE TIES TRANSFER HORIZONTAL FORCES. FACTORED FORCES: ${forces}.`:`DESIGN EACH BRACKET AND ITS COLUMN ATTACHMENT FOR THE ${forces} WITH THE ECCENTRICITY TO THE COLUMN.`,
   `THE END OF EACH BAY AT ITS LOWER-NUMBERED GRID LOCATES LONGITUDINALLY. FULL CRANE TRACTION IS ASSIGNED TO EACH OCCUPIED BAY${railBearsOnStops(p)?' AND, VIA THE RAIL STRING, TO EACH END BAY AT ITS STOP,':''} IN SEPARATE BOUNDING CASES; DO NOT ADD THESE CASES.`,
-  usesExistingBracket(p)?'GIRDER SPANS ARE GRID-TO-GRID. BEARINGS ARE INSET; EXISTING SUPPORT ASSESSMENT AND MOVEMENT COMPATIBILITY ARE REQUIRED.':wb?`GIRDER ANALYSIS SPANS ARE GRID-TO-GRID; BEARINGS ARE INSET AS SHOWN. WELDED BRACKET ${bracketRef}; COLUMN-SIDE MOVEMENT ATTACHMENTS REQUIRE PROJECT DESIGN.`:'GIRDER SPANS IN ANALYSIS ARE GRID-TO-GRID. BEARINGS ARE INSET AS SHOWN; BRACKET SPREADER AND COLUMN-SIDE CONNECTIONS REQUIRE PROJECT DESIGN.',
+  usesExistingBracket(p)?'GIRDER SPANS ARE GRID-TO-GRID. BEARINGS ARE INSET; EXISTING SUPPORT ASSESSMENT AND MOVEMENT COMPATIBILITY ARE REQUIRED.':wb?`GIRDER ANALYSIS SPANS ARE GRID-TO-GRID; BEARINGS ARE INSET AS SHOWN. WELDED BRACKET ${bracketRef}; COLUMN-SIDE MOVEMENT ATTACHMENTS REQUIRE PROJECT DESIGN.`:step?'GIRDER SPANS IN ANALYSIS ARE GRID-TO-GRID. BEARINGS ARE INSET AS SHOWN ON THE STEP CAP; THE STEP IS CHECKED WITH THE STEPPED COLUMN.':'GIRDER SPANS IN ANALYSIS ARE GRID-TO-GRID. BEARINGS ARE INSET AS SHOWN; BRACKET SPREADER AND COLUMN-SIDE CONNECTIONS REQUIRE PROJECT DESIGN.',
   `REFERENCE AIST TECHNICAL REPORT 13 §5.8.1. ${p.section.kind==='cap'?'GIRDER AND CAP':'GIRDER'} ENDS REMAIN SEPARATE.${railHasJoints(p)?' RAIL JOINTS ARE DETAILED INDEPENDENTLY.':''}`
  ];
  return {key:'support',name:'SUPPORTS',views,notes:(t:Style)=>[
