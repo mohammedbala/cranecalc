@@ -185,7 +185,7 @@ function seatTwist(p:ProjectInput){
 function sizingSnapshot(p:ProjectInput,demand:TieSizingDemands):CalculationSnapshot{
  // The column twist enters tieMovements through the column result (twistMovement reads only its torsion).
  // The movement θe grows as e² (the torque F e, the twist T/K) where the sizing moves the bracket reach.
- const k=demand.twist?.offset?(girderOffset(p)/demand.twist.offset)**2:1,twist=demand.twist?{existingColumn:{torsion:{slip:k*demand.twist.factored,service:{slip:k*demand.twist.service}}}}:{};
+ const k=demand.twist?.offset?(girderOffset(p)/demand.twist.offset)**2:1,twist=demand.twist?{existingColumn:{torsion:{slip:k*demand.twist.factored,offset:girderOffset(p),service:{slip:k*demand.twist.service}}}}:{};
  return {input:p,...twist,designAnalysis:{endRotation:demand.rotation,serviceRotation:demand.serviceRotation},
   detailResults:{demands:{brace:demand.force,braceFatigue:demand.range,railLateral:demand.railLateral,braceSustained:demand.sustained},...(demand.support!==undefined?{bracket:{service:{deflection:{value:demand.support}}}}:{})}} as unknown as CalculationSnapshot;
 }
@@ -514,7 +514,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  const over=(r:Trial)=>Object.entries(r.ratios).some(([k,v])=>movementChecks.has(k)&&v>sizingLimit(r.ratios,k,target)+1e-9);
  if(kept&&kept.worst>1&&over(kept)&&release&&!plate){
   const mv=tieMovements(sizingSnapshot(applyTieProportions(structuredClone(p),{...base,slide:0}),demand));
-  const slide=Math.max(inch/8,up(mv.longitudinal+sixteenth+inch/32,sixteenth));
+  const slide=Math.max(inch/8,up(mv.travel+sixteenth+inch/32,sixteenth));
   if(slide<=.75*inch+1e-9){
    // The flexible length helps the bars here too: the farthest face reached first, then nearer while a set passes, so
    // the reach is the shortest at which the slide passes.

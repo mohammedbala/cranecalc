@@ -44,11 +44,23 @@ import { fatigueCycleFamilies } from './railChecks';
 import { tiedToBuilding } from './craneColumnInputs';
 import { fabricationToleranceNote } from './fitTolerances';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
+/**
+ * The configurator's members beyond its catalog (configurator.beyondCatalog: a plate girder, a built-up crane column, a
+ * top-flange tie its sizing could not resolve), while the project still has the member it could not size: one open item
+ * each, status 'incomplete' (the member is not designed), so the package is a review draft, never an issued design. The
+ * closest catalog member is built and checked; its own failing checks are reported as they are.
+ */
+export function configuratorOpenItems(p:ProjectInput):CheckResult[]{
+ const titles={girder:'Plate girder required (outside the rolled/capped catalog)','crane-column':'Built-up crane column required (outside the rolled catalog)',tie:'Top-flange tie not resolved by the configurator'};
+ return (p.configurator?.beyondCatalog??[]).filter(v=>v.member==='girder'?p.section.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)
+  .map(v=>({id:`configurator-${v.member}`,group:'Detailing',title:titles[v.member],status:'incomplete',equation:'',referenceIds:['criteria'],
+   note:`${v.reason} The closest ${v.member==='tie'?'tie':'catalog member'} (${v.shape}) is built and checked here so the package can be reviewed; its failing checks are listed as they are. Open item: the package is a review draft until the member is designed.`}));
+}
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
  const p=parsed.data,s=p.section,errors:string[]=[];const L=p.spans.reduce((a,b)=>a+b,0);
- // The configurator's stop: a member beyond the catalog, while the project still has the member it could not size.
- for(const v of p.configurator?.beyondCatalog??[])if(v.member==='girder'?s.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)errors.push(`configurator: ${v.reason}`);
+ // A member beyond the configurator's catalog is not a validation stop: the closest member is built and calculated, and
+ // configuratorOpenItems reports it as an open item (the package is a review draft) beside its failing checks.
  if(s.d<=2*s.tf)errors.push('section.d: depth must exceed twice the flange thickness.');
  if(s.tw>=s.bf)errors.push('section.tw: web must be thinner than the flange width.');
  if(p.capDesign&&p.capDesign.Fu<p.capDesign.Fy)errors.push('capDesign.Fu: ultimate strength cannot be less than channel yield strength.');
@@ -200,7 +212,7 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  snapshot.warnings.push(...connectionCoordination(p));
  snapshot.warnings.push(snapshot.detailResults?'The detailed rail-head check includes lateral bending, Saint-Venant/warping torsion and girder-side tie flexibility. Supplied-load diagram envelopes remain a separate first-order display.':'Supplied-load diagram lateral results represent weak-axis section bending under supplied forces. Rail displacement from twist and top-flange force distribution is not established.');
  snapshot.warnings.push(snapshot.detailResults?'Vertical bending uses Euler-Bernoulli theory. Detailed lateral/torsion response includes geometric stiffness and girder-side connection flexibility; material nonlinearity, section distortion, shear deformation and building-interface flexibility are excluded.':'Euler-Bernoulli small-deflection analysis; shear deformation, nonlinear behavior and support flexibility are excluded.');
- snapshot.checks.push(...packageContentChecks(p));
+ snapshot.checks.push(...packageContentChecks(p),...configuratorOpenItems(p));
  // Clashes and layout conflicts: open items (status 'fail') until the arrangement is revised.
  snapshot.checks.push(...coordinationChecks(p),...constructionNoteChecks(snapshot));
  const optionChecks=connectionOptionChecks(p);

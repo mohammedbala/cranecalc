@@ -566,6 +566,8 @@ export function buildTaxonomy(s:CalculationSnapshot,elementDefs:ElementDef[]=def
 export function openKind(t:Pick<TaxonEntry,'check'|'type'>):OpenItem['kind']{
  const c=t.check;
  if(c.group==='Coordination'||c.geometry||(t.type==='detailing'&&fitRule(c)))return 'clash';
+ // A member beyond the configurator's catalog (configuratorOpenItems): the member is to be designed.
+ if(/^configurator-(girder|tie|crane-column)$/.test(c.id))return 'redesign';
  if(c.status==='unverified'||c.status==='incomplete')return 'input';
  if(c.status==='unsupported')return 'redesign';
  // The bumper peak force against the end stop design strength restates the end-stop checks (it stays a bumper-selection

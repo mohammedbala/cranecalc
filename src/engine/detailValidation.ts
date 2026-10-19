@@ -1,4 +1,5 @@
 import {activeEndBearing} from './endBearingInputs';
+import {girderEndFork} from './craneColumnInputs';
 import {stopStiffenerClear,stopStiffenerArrangement} from './endStopInputs';
 import {wrenchClearance} from './endStop';
 import {aiscShapeByName} from '../data/aiscSections';
@@ -77,7 +78,8 @@ export function validateRunwayDetails(p:ProjectInput){
  }
  // Paired bars on the bearing stiffener run just under the tied flange. On a capped girder the top bars and their girder
  // gusset must clear the cap channel's turned-down flange (its web on the W flange, its flanges reaching down past it).
- {const st=stiffenerTieGeometry(p),s=p.section;
+ // A girder end fork on a column cap (girderEndFork) has no flange tie: no tie bars or gussets to fit.
+ {const st=girderEndFork(p)?undefined:stiffenerTieGeometry(p),s=p.section;
   // No part of the tie may come out with no length: the bars between their bolt groups, the girder gusset from the
   // bearing stiffener through the girder-end bolt group, and the column gusset.
   if(st){const f=(v:number)=>(v/25.4).toFixed(3),free=b.length-2*st.connection-columnGussetExtension(p);
