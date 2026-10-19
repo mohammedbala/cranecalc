@@ -127,7 +127,7 @@ export interface Classification{type:CheckType;effect?:Effect;owner:boolean;rule
 /** The type of one check (and, for DESIGN, the force effect it governs). */
 export function classifyCheck(c:CheckResult):Classification{
  if(c.group==='Coordination')return {type:'detailing',owner:false,rule:'group'};
- if(c.status==='excluded')return {type:'by-others',owner:false,rule:'status'};
+ if(c.status==='excluded'||c.byOthers)return {type:'by-others',owner:false,rule:'status'};
  const r=idRules.find(v=>v.re.test(c.id));
  if(r)return {type:r.type,effect:r.type==='design'?r.effect??'other':undefined,owner:!!r.owner,rule:'id'};
  const g=groupRules.find(([re])=>re.test(c.group));

@@ -92,7 +92,7 @@ const classCycles={A:'more than 500,000',B:'100,000–500,000',C:'20,000–100,0
 
 /** Templates and the quick configurator: the shortest way from a few choices to a complete runway package. */
 /** The configuration choices of a built project's configurator record, without its selection log (an output). */
-const choicesOf=(c:RunwayConfig):RunwayConfig=>{const {selections:_log,...choices}=c;return {...defaultRunwayConfig,...choices};};
+const choicesOf=(c:RunwayConfig):RunwayConfig=>{const {selections:_log,beyondCatalog:_stop,...choices}=c;return {...defaultRunwayConfig,...choices};};
 
 export default function StartPanel({project,onBuild}:{project:ProjectInput;onBuild:(p:ProjectInput,label:string)=>void}){
  const [config,setConfig]=useState<RunwayConfig>(()=>project.configurator?choicesOf(project.configurator):{...runwayTemplates[0].config});

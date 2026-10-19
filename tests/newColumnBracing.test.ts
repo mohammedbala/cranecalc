@@ -19,10 +19,11 @@ const column=existingColumnSection(p).section;
 
 describe('rod X-bracing between new freestanding columns',()=>{
  it('designs the rods, connections, strut, collector and seismic along the runway with every check passing',()=>{
-  // Open only for the engineer of record's acceptance of the column twist (column-twist-basis, no limit applied).
+  // The bracing itself passes; the column twist at the bracket offset is a designed limit that this demonstration
+  // fails (columnTwistLimit.ts) without a torsion brace, its movement taken into the sliding bearings, end gaps and the tie.
   expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);
-  expect(s.checks.filter(c=>c.status==='unverified'||c.status==='incomplete'||c.status==='unsupported').map(c=>`${c.id} ${c.status}`)).toEqual(['column-twist-basis unverified']);
-  expect(s.checks.filter(c=>c.status==='fail'&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
+  expect(s.checks.filter(c=>c.status==='unverified'||c.status==='incomplete'||c.status==='unsupported').map(c=>`${c.id} ${c.status}`)).toEqual(['end-bearing-slot-travel unverified']);
+  expect(s.checks.filter(c=>c.status==='fail'&&!reviewOpenItem(c)).map(c=>c.id).sort()).toEqual(['column-twist','column-twist-rotation','simple-guide-travel','simple-joint-gap','tie-move-fatigue','tie-move-gusset','tie-move-root-fatigue','tie-move-strength','tie-move-weld']);
   for(const id of ['brace-tension','brace-pin','brace-pin-bearing','brace-gusset-rupture','brace-gusset-tearout','brace-gusset-yield','brace-gusset-weld','brace-column-web',
    'brace-strut','brace-strut-slenderness','brace-strut-tension','brace-strut-slip','brace-strut-bolts','brace-strut-bearing','brace-strut-block','brace-strut-tab','brace-seat-weld','brace-collector-bearing',
    'brace-seismic-basis','brace-seismic-drift','brace-separation','column-torsion','base-uplift','brace-rod-crossing','brace-offset-gusset','brace-rod-torsion','existing-steel-clear','existing-footing-clear'])expect(check(id)?.status,id).toBe('pass');

@@ -80,7 +80,9 @@ const byOthers=(id:string,title:string,note:string):CheckResult=>({id,group:'End
  */
 export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:DesignAnalysis;lateral:number;
  /** On a column cap: the per-bolt tension and shear of the cap's bolt checks (capBoltSets), the same bolts and force sets. */
- cap?:{tension:number;shear:number}}):CheckResult[]{
+ cap?:{tension:number;shear:number};
+ /** The locating column's service twist movement along the runway (columnTwistLimit.twistSlip), added to the slot travel demand. */
+ slip?:number}):CheckResult[]{
  const d=p.details!,b=p.section,bs=d.bearing,m=d.material,method=p.method,u=p.units,f=(v:number)=>format(v,'length',u,3);
  const supports=continuousBearings(p),locates=supports.find(v=>v.role==='LOCATING'),LE=locates?`Locating support (grid ${locates.grid})`:'Locating end',SE=locates?'Sliding supports':'Sliding end';
  const g=endBearingGeometry(p,e),db=e.bolts.diameter,C=wrenchClearance(db),gauge=e.bolts.gauge,n=4;
@@ -131,12 +133,12 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   compared('end-bearing-washer-stiffener','Plate washers clear the bearing stiffener',g.washer.length/2+g.travel+slidingClearance,stiffClear,'length','b/2+u+c_f\\le|x_b-x_{st}|-t_{st}/2-w',`The washer covers the slot as installed (AISC J3.2), 1/4 in past each slot end. It moves with the bolt, which is fixed in the seat, while the girder and its stiffener slide by up to u = ${f(g.travel)}: the washer clears the stiffener weld toe at either extreme of travel, so it cannot jam the sliding end, with a margin c_f = ${f(slidingClearance)} for the fabrication tolerance of the stiffener and hole locations (AISC Code of Standard Practice §6.4) on this moving part.`)
  ];
  // Movement beyond about 1 in each way: sliding bearings with that much travel need large slots, sleeves and washers.
- {const c=simpleSupportInput(p),far=locates?Math.max(...supports.map(v=>v.distance)):Math.max(...p.spans),need=12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance;
+ {const c=simpleSupportInput(p),far=locates?Math.max(...supports.map(v=>v.distance)):Math.max(...p.spans),need=12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance+(ctx.slip??0);
   if(need>inch+1e-6)checks.push({id:'end-bearing-slot-travel',group:'End bearings',title:`${SE} · movement beyond 1 in each way`,status:'unverified',demand:need,capacity:inch,quantity:'length',utilization:need/inch,equation:'\\alpha L\\Delta T+d\\theta+t_{set}\\le1\\,\\mathrm{in}',note:`The sliding bearings must move ${f(need)} each way (${locates?`the farthest sliding support ${f(far)} from the locating support`:`a ${f(far)} span`}). Beyond about 1 in of travel the slotted bearing, its sleeves and plate washers grow out of proportion: provide expansion units (a runway expansion joint with independent girders at it) or simple spans, or obtain the engineer of record's acceptance of the long-slot bearing.`,referenceIds:['tr13-girder','dg7']});}
  // A continuous girder slides at every support but the locating one, by the thermal strain over its distance from it.
  if(locates){
   const c=simpleSupportInput(p),far=Math.max(...supports.map(v=>v.distance));
-  checks.push(compared('end-bearing-travel',`${SE} · movement allowance each direction`,12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance,g.travel,'length','\\alpha L\\Delta T+d\\theta+t_{set}\\le u',`Farthest sliding support ${f(far)} from the locating support at grid ${locates.grid}; the flange slots give ${f(g.travel)} each way. Thermal coefficient ${u==='US'?'6.6667 × 10⁻⁶ /°F':'12 × 10⁻⁶ /°C'} is a stated steel modeling assumption; temperature changes are measured from erection. Reference AIST Technical Report 13 §5.8.1; AISC DG7 §11.2.`,['tr13-girder','dg7','criteria']));
+  checks.push(compared('end-bearing-travel',`${SE} · movement allowance each direction`,12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance+(ctx.slip??0),g.travel,'length',ctx.slip?'\\alpha L\\Delta T+d\\theta+t_{set}+\\Delta_s\\le u':'\\alpha L\\Delta T+d\\theta+t_{set}\\le u',`${ctx.slip?`Includes the locating column's twist movement Δ_s = ${f(ctx.slip)} (column-twist). `:''}Farthest sliding support ${f(far)} from the locating support at grid ${locates.grid}; the flange slots give ${f(g.travel)} each way. Thermal coefficient ${u==='US'?'6.6667 × 10⁻⁶ /°F':'12 × 10⁻⁶ /°C'} is a stated steel modeling assumption; temperature changes are measured from erection. Reference AIST Technical Report 13 §5.8.1; AISC DG7 §11.2.`,['tr13-girder','dg7','criteria']));
  }
  const wb=d.bracket?.enabled&&weldedRibBracket(d.bracket)?d.bracket:undefined;
  if(wb){
@@ -230,12 +232,14 @@ export function bearingPlateChecks(p:ProjectInput,reaction:number):CheckResult[]
  * - the width max(b_f + 1/2 in, g + 3d) on the 1/4 in grid;
  * - the thickness from the plate flexure beyond the flange tips (bearingPlateChecks) at 0.9, at least 3/4 in, in 1/8 in steps.
  */
-export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickness:number;stiffenerWeld:number;saddle?:{setback:number;length:number;weld:number};endBearing?:EndBearingInput;simple?:{temperatureRise:number;temperatureFall:number;settingTolerance:number};Fy?:number;minEdge?:number;lateral?:number;surface?:'A'|'B';plies?:number;minLength?:number}){
+export function bearingLayout(p:ProjectInput,x:{rotation:number;
+ /** The locating column's service twist movement along the runway (columnTwistLimit.twistSlip), added to the travel. */
+ slip?:number;stiffenerThickness:number;stiffenerWeld:number;saddle?:{setback:number;length:number;weld:number};endBearing?:EndBearingInput;simple?:{temperatureRise:number;temperatureFall:number;settingTolerance:number};Fy?:number;minEdge?:number;lateral?:number;surface?:'A'|'B';plies?:number;minLength?:number}){
  const b=p.section,lrfd=p.method==='LRFD',up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step,q=inch/4;
  const e0=x.endBearing??defaultEndBearing,sl=slidingBolts(e0),sleeved=sl.mode==='sleeved',ss=x.simple??{temperatureRise:30,temperatureFall:30,settingTolerance:inch/8};
  // Travel each way from the farthest support's thermal strain, the end rotation over the depth and the setting tolerance.
  let g=0;const grids=[0,...p.spans.map(v=>g+=v)],far=p.system==='continuous'?Math.max(...grids.map(v=>Math.abs(v-grids[locatingSupport(p)]))):Math.max(...p.spans);
- const need=12e-6*far*Math.max(ss.temperatureRise,ss.temperatureFall)+b.d*x.rotation+ss.settingTolerance,travel=Math.max(inch/2,up(need,inch/16));
+ const need=12e-6*far*Math.max(ss.temperatureRise,ss.temperatureFall)+b.d*x.rotation+ss.settingTolerance+(x.slip??0),travel=Math.max(inch/2,up(need,inch/16));
  const shape=aiscShapeByName(b.catalogueId??''),k1=b.tw/2+(shape?shape.kdes*inch-b.tf:0);
  // Factored longitudinal force at a locating end: the traction (at least the design minimum) or the bumper force on the
  // girder, with the tie force estimate as the bottom-flange force, over four bolts. Without a stated seat, Class A with
@@ -278,12 +282,12 @@ export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickne
  * saddle remains, the slot travel, bolts, plate and the AIST effective bearing length. `rotation`: the factored girder
  * end rotation, rad; `lateral`: the factored bottom-flange (tie) force estimate, N.
  */
-export function applyBearingLayout(p:ProjectInput,rotation:number,lateral=0){
+export function applyBearingLayout(p:ProjectInput,rotation:number,lateral=0,slip=0){
  const d=p.details;if(!d)return p;
  const a=d.brace.flangeAttachment,saddle=p.system==='simple'&&a?.enabled&&d.brace.arrangement!=='cap-angle'?{setback:a.longitudinalSetback,length:a.saddleLength,weld:a.weldSize}:undefined;
  // An edge distance set for the support (a W-stub seat) is kept; a plate already thick enough keeps its thickness, so the
  // seat elevations set from it hold.
- const layout=(minLength?:number)=>bearingLayout(p,{minLength,rotation,stiffenerThickness:d.bearing.stiffenerThickness,stiffenerWeld:d.bearing.weldSize,saddle,endBearing:d.endBearing,simple:d.simpleSupport,Fy:d.material.Fy,minEdge:d.endBearing?.bolts.edge,lateral,surface:bearingSurface(p),plies:bearingShim(p).plies});
+ const layout=(minLength?:number)=>bearingLayout(p,{minLength,rotation,slip,stiffenerThickness:d.bearing.stiffenerThickness,stiffenerWeld:d.bearing.weldSize,saddle,endBearing:d.endBearing,simple:d.simpleSupport,Fy:d.material.Fy,minEdge:d.endBearing?.bolts.edge,lateral,surface:bearingSurface(p),plies:bearingShim(p).plies});
  // A cap tieback angle: the least length from the layout's at which its cap bolt hardware clears the stiffener.
  let v=layout();const cap=capTieBearingLength(p,v.length);if(cap!==undefined&&cap>v.length+1e-6)v=layout(cap);
  Object.assign(d.bearing,{length:v.length,width:v.width,thickness:Math.max(d.bearing.thickness,v.thickness)});

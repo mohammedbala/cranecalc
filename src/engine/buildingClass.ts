@@ -73,12 +73,12 @@ export function statedCycleCounts(text:string){
  return out;
 }
 /** One fatigue cycle count throughout: the fatigue input, the duty bins and every stated count in the duty sources. */
-export function fatigueCycleCheck(p:ProjectInput):CheckResult{
+export function fatigueCycleCheck(p:ProjectInput,families:{label:string;cycles:number;groups:number}[]=[]):CheckResult{
  const N=fatigueCycles(p),n=(v:number)=>v.toLocaleString('en-US');
  const sources:[string,string|undefined][]=[['fatigue cycle basis (aist.cycleSource)',p.aist?.cycleSource],['cap duty source (capDesign.dutySource)',p.section.kind==='cap'?p.capDesign?.dutySource:undefined],['fatigue detail (fatigue.detail)',p.fatigue.detail]];
  const stated=sources.flatMap(([label,text])=>text?statedCycleCounts(text).map(v=>({label,v})):[]);
  const conflicts=[...stated.filter(s=>s.v!==N),...(p.fatigue.cycles!==N?[{label:'fatigue.cycles',v:p.fatigue.cycles}]:[])];
  return {id:'fatigue-cycles',group:'Criteria',title:'One fatigue cycle count throughout',status:conflicts.length?'fail':'pass',equation:'n_{SR}=\\sum n_i',referenceIds:['tr13-class','criteria'],
   note:conflicts.length?`The fatigue checks use N = ${n(N)} cycles${p.details?.spectrum.length?` (sum of the ${p.details.spectrum.length} duty bins)`:''}, but ${conflicts.map(c=>`the ${c.label} states ${n(c.v)}`).join('; ')}. Correct the source text or the duty spectrum so one count is used throughout.`
-   :`Fatigue checks, duty bins${stated.length?' and the stated duty sources':''} all use N = ${n(N)} cycles.`};
+   :`Fatigue checks, duty bins${stated.length?' and the stated duty sources':''} all use N = ${n(N)} crane passages${families.length?`: one stress cycle per passage at the girder, its connections and supports; at the wheel-local details each wheel group passing is a cycle (AISC DG7 and AIST TR-13 cycle counting), n = N × wheel groups: ${families.map(f=>`${f.label} ${n(f.cycles)} (${f.groups} group${f.groups>1?'s':''})`).join(', ')}`:''}.`};
 }

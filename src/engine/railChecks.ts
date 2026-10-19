@@ -5,12 +5,13 @@ import { boltCapacity,boltProperties,plateBearing,blockShear,minimumFillet } fro
 import { minimumEdge } from './capAngle';
 import { fatigueSpectrumBin } from './detailAnalysis';
 import { latexNumber,withinLimit } from './math';
-import { railClipResponse,railAnchorForce,wheelGroups } from './railClip';
+import { railClipResponse,railAnchorForce,wheelLocalCycles,clipWindow } from './railClip';
 import { railSeat,clipSeatThickness } from './railSeat';
 import { railMovements,railJointMovement,railJointType,railJointGap,tightJointGap,railJointBars,railJointKind,railHasJoints } from './railLayout';
 import { activeEndStop,stopEnds,stopRailClear } from './endStopInputs';
 import { stopBumperForce,endStopResistance } from './endStop';
 import { format } from './units';
+import { twistSlip } from './columnTwistLimit';
 /**
  * Rail joint bolt bearing ply by ply (AISC 360-16 J3.10): the two joint bars together (2t_j and the plate F_u; the holes
  * on the bars' mid-height, so the clear distance to the bar edge in the direction of the vertical wheel force is h_j/2
@@ -24,10 +25,23 @@ export function railJointBearing(p:ProjectInput){
  const web=available(2.4*r.jointBoltDiameter*r.webThickness*r.Fu,method,.75,2)*slotted;
  return {bars,web,capacity:Math.min(bars,web),governs:bars<=web?'bars' as const:'web' as const};
 }
+/**
+ * The cycle count of each fatigue detail family, for the one-count check (fatigue-cycles) and the notes: one cycle per
+ * crane passage at the girder and its connections; the passages times the wheel groups at the wheel-local details (rail
+ * clip base welds, the cap welds under the wheel, rail joint bars and bolts: wheelLocalCycles).
+ */
+export function fatigueCycleFamilies(p:ProjectInput){
+ const d=p.details;if(!d)return [];
+ const out:{label:string;cycles:number;groups:number}[]=[];
+ const clip=wheelLocalCycles(p,p.aist?.clipSpacing??0);
+ if(d.rail.clip?.type!=='bolted')out.push({label:'rail clip base welds',cycles:clip.cycles,groups:clip.groups});
+ if(p.section.kind==='cap'){const v=wheelLocalCycles(p,clipWindow(p));out.push({label:'cap welds under the wheels',cycles:v.cycles,groups:v.groups});}
+ if(railHasJoints(p)&&railJointKind(p)!=='welded'){const v=railJointCycles(p);out.push({label:'rail joint bars and bolts',cycles:v.cycles,groups:v.groups});}
+ return out;
+}
 /** Each wheel group crossing a rail joint is one cycle of its bars and bolts: crane passages × wheel groups per rail. */
 export function railJointCycles(p:ProjectInput){
- const passes=p.details!.spectrum.reduce((n,b)=>n+b.cycles,0),groups=wheelGroups(p,railJointBars(p).length);
- return {passes,groups,cycles:passes*groups};
+ return wheelLocalCycles(p,railJointBars(p).length);
 }
 /**
  * The demands the rail supplier's joint bars and bolts are designed for (a deferred submittal, jointKind
@@ -36,7 +50,7 @@ export function railJointCycles(p:ProjectInput){
  */
 export function supplierRailJointDemands(s:CalculationSnapshot){
  const p=s.input;if(!p.details||railJointKind(p)!=='supplier-bars'||!railHasJoints(p))return undefined;
- const c=(id:string)=>s.checks.find(v=>v.id===id&&v.status==='excluded')?.demand;
+ const c=(id:string)=>s.checks.find(v=>v.id===id&&(v.status==='excluded'||v.byOthers))?.demand;
  const shear=c('rail-joint-net'),moment=c('rail-joint-plate'),range=s.detailResults?.demands.railFatigueVertical;
  return shear===undefined?undefined:{shear,moment,range,cycles:railJointCycles(p).cycles};
 }
@@ -48,7 +62,9 @@ export function supplierRailJointDemands(s:CalculationSnapshot){
 export function supplierRailJointText(s:CalculationSnapshot){
  const d=supplierRailJointDemands(s);if(!d)return undefined;
  const u=s.input.units,f=(v:number)=>format(v,'force',u,1);
- return `factored wheel force across the joint ${f(d.shear)} (bar moment = this force × the distance from the joint to the first bolt line)${d.range!==undefined?`; service wheel force range ${f(d.range)} at ${Math.round(d.cycles).toLocaleString('en-US')} cycles`:''}`;
+ // The joint checks whose reference estimate (idealized bars of the entered size) exceeds its limit (reopenedByOthers).
+ const over=s.checks.filter(v=>v.byOthers&&v.id.startsWith('rail-joint-')&&(v.utilization??0)>1);
+ return `factored wheel force across the joint ${f(d.shear)} (bar moment = this force × the distance from the joint to the first bolt line)${d.range!==undefined?`; service wheel force range ${f(d.range)} at ${Math.round(d.cycles).toLocaleString('en-US')} cycles`:''}${over.length?`; the app's estimate for standard bars of the entered size exceeds the limit (${over.map(v=>`${v.id} D/C ${(v.utilization??0).toFixed(2)}`).join(', ')}): the supplier shall demonstrate the joint for these demands with heavier bars, a welded joint or a reduced-range detail`:''}`;
 }
 export function railChecks(s:CalculationSnapshot):CheckResult[]{
  const p=s.input,d=p.details!,r=d.rail,m=d.material,a=s.detailResults!,depth=p.aist!.railDepth,spacing=p.aist!.clipSpacing;
@@ -88,7 +104,7 @@ export function railChecks(s:CalculationSnapshot):CheckResult[]{
  }else{
   const clip=railClipResponse(p,H,k),phi=available(.6*m.Fexx,method,.75,2);
   clipCheck('rail-clip-weld',`Rail clip base welds to the ${p.section.kind==='cap'?'cap channel web':'girder top flange'}`,clip.weldStress,phi,'stress','f_w=\\frac{1}{2t_el_w}\\sqrt{V^2+\\left(T+\\frac{6M}{l_w}\\right)^2}\\le\\phi(0.6F_{EXX})',`AISC 360-16 J2.4, elastic method, no directional strength increase. Two fillets ${len(k.weld)} × ${len(k.weldLength)}, one across each end of the clip base, ${len(k.baseLength)} apart, on ${where}. Factored side thrust H = ${force(H)} on one clip in either role: bearing clip V = H at mid-height of the rail base (M = ${force(H)} × ${len(k.lateralHeight)}), or hold-down clip T = Hh_r/b_r at the nose (M = T × ${len(clip.upliftArm)} from the weld centroid). The weld size and length are the manufacturer's minimum.${k.weldLength<4*k.weld-1e-6?' The fillets are shorter than 4w and taken at the J2.2b effective size L/4.':''} Base metal of the ${plate} (0.6F_yt per unit length) does not govern.`);
-  const passes=d.spectrum.reduce((n,b)=>n+b.cycles,0),clipGroups=wheelGroups(p,spacing),cycles=passes*clipGroups,F=categoryF(cycles);
+  const {passes,groups:clipGroups,cycles}=wheelLocalCycles(p,spacing),F=categoryF(cycles);
   clipCheck('rail-clip-weld-fatigue','Rail clip base weld throat fatigue',Math.max(...a.railFatigueBins.map(b=>b.weldStress)),F,'stress','f_{sr}=\\max_i f_w\\left(C_d+\\frac{Q_i}{Q}C_{vs}+0.5C_{ss}\\right)\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',`AISC 360-16 Table A-3.1 item 8.2 (shear on the throat of fillet welds), Category F; AIST TR-13 §3.10.2.3 unfactored duty-bin wheel groups, no impact. The clip force is one-signed (the rail pushes a clip outward or lifts its nose), so each passage ranges from zero to the largest bin value; it is assigned to every cycle, with no endurance or load-sharing credit. Cycles n = ${count(passes)} crane passages × ${clipGroups} wheel group${clipGroups>1?'s':''} per rail (wheels farther apart than the ${len(spacing)} clip spacing each load a clip separately) = ${count(cycles)} (AISC DG7 and AIST TR-13 cycle counting: each wheel or wheel group passing a local detail is one cycle). The cap at each clip is a short-attachment fatigue detail (A-3.1 item 7.1, Appendix A).`,'Fatigue');
   clipCheck('rail-clip-weld-minimum','Rail clip base weld minimum size',minimumFillet(Math.min(k.baseThickness,receivingThickness)),k.weld,'length','w\\ge w_{min}',`AISC Table J2.4 by the thinner part joined (the ${plate} or the clip base), low-hydrogen electrodes.`,'Detailing');
  }
@@ -133,7 +149,10 @@ export function railChecks(s:CalculationSnapshot):CheckResult[]{
  // Tight (or welded) joints: a string floating between two designed stops can use both clearance gaps, each less the
  // setting tolerance; a string continuing onto an existing rail at its other end has the one gap at its stop.
  const both=tight&&(['A','B'] as const).some(side=>stopped.filter(v=>v.side===side).length===2),gaps=both?2:1,tol=d.criteria.alignmentTolerance;
- if(stop&&stopped.length)check('rail-end-gap','Rail end clear of the end stop',Math.max(...stopped.map(v=>v.movement))+gaps*tol,gaps*stopRailClear(stop),'length',both?'\\alpha\\Delta TL+2t_{set}\\le2g':'\\alpha\\Delta TL+t_{set}\\le g',`${tight?(both?'Tight joints: the rail string floats in its clips between the two end stops; its growth over the temperature swing closes the two clearance gaps together, each less the setting tolerance (AIST TR-13 §5.16.1).':'Tight joints: the rail string floats in its clips and continues onto the existing rail at its other end, so its growth over the temperature swing must fit in the one clearance gap at its stop (AIST TR-13 §5.16.1).'):'The anchored end piece grows toward the stop by its length beyond its anchor.'} The gap g is measured from the rail end to the nearest steel of the stop, the front edge of its base plate (in front of the face plate), so the rail end stays clear of all stop steel and the bumper force reaches the stop, not the rail.`,'Detailing');
+ // A new column's twist at its bracket seat moves the end girder, and its stop, θ_s·e along the runway at every crane start
+ // and stop against the rail string held in the clips of the other girders (columnTwistLimit.ts).
+ const twist=twistSlip(s.existingColumn);
+ if(stop&&stopped.length)check('rail-end-gap','Rail end clear of the end stop',Math.max(...stopped.map(v=>v.movement))+gaps*tol+twist,gaps*stopRailClear(stop),'length',(both?'\\alpha\\Delta TL+2t_{set}':'\\alpha\\Delta TL+t_{set}')+(twist?'+\\theta_se':'')+(both?'\\le2g':'\\le g'),`${tight?(both?'Tight joints: the rail string floats in its clips between the two end stops; its growth over the temperature swing closes the two clearance gaps together, each less the setting tolerance (AIST TR-13 §5.16.1).':'Tight joints: the rail string floats in its clips and continues onto the existing rail at its other end, so its growth over the temperature swing must fit in the one clearance gap at its stop (AIST TR-13 §5.16.1).'):'The anchored end piece grows toward the stop by its length beyond its anchor.'} The gap g is measured from the rail end to the nearest steel of the stop, the front edge of its base plate (in front of the face plate), so the rail end stays clear of all stop steel and the bumper force reaches the stop, not the rail.${twist?` The column twist at the end girder's bracket seat moves the girder and its stop θ_s·e = ${format(twist,'length',p.units,3)} along the runway at every crane start and stop (column-twist), added to the demand.`:''}`,'Detailing');
  check('rail-joint-fit','Joint bar fit between head and base',r.jointPlateHeight,webDepth,'length','h_j\\le h_r-t_h-t_b','Both joint bars fit within the clear rail web depth.','Detailing');
  // Holes on the bars' mid-height: the J3.4 edge distance to the top and bottom bar edges, and to the bar ends.
  check('rail-joint-edge','Rail joint bars · bolt edge distance',minimumEdge(r.jointBoltDiameter),Math.min(r.jointPlateHeight/2,r.jointEdge),'length','l_e\\ge l_{e,min}\\ \\ \\text{(Table J3.4)}','Bolt holes on the mid-height of the joint bars: the edge distance is half the bar height (and the end distance at the bar ends); the AISC 360-16 Table J3.4 minimum for the joint bolt diameter.','Detailing');

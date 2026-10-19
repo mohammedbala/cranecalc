@@ -83,6 +83,9 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  const weldLabel=size(d.weld),views:DetailView[]=[];
  // Web stiffener pair at each upper gusset and strut tab (webStiffeners), where the bracing sizing added it.
  const stiff=d.stiffeners,stiffName=stiff?`PL ${size(stiff.thickness)} WEB STIFF. PAIR`:'';
+ // Torsion brace (design.torsionBrace): plates on both strut flanges at every column hold the column against the twist.
+ const tb=r.torsionBrace,tg=tb?.geometry,tbName=tg?`PL ${size(tg.t)} TORSION PLATES`:'';
+ const torqueNote=tb&&tg?`THE TORQUE FROM ITS ${dim(girderOffset(p))} OFFSET IS HELD BY THE STRUT: ${torsionBraceCallout(p,s)} (${detailRef(detailTitles.strutPlan)}).`:`THE COLUMN TAKES THE TORQUE FROM ITS ${dim(girderOffset(p))} OFFSET (CALCULATION REPORT, NEW COLUMN).`;
  // A column cap: the girder bears on the cap over the column; the strut work point is below the cap.
  const capG=activeColumnCap(p)?columnCapGeometry(p):undefined,capT=capG?.cap.plate.thickness??0;
  const turnAt=.25;
@@ -268,6 +271,13 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
     const plate=side>0?[rod-gt/2,rod+gt/2]:[-gt/2,gt/2],lo=Math.min(plate[0],web),hi=Math.max(plate[1],web+sg.tw);
     for(const x of sg.bolts)out+=line([X(side*x),Y(lo)+.3*inch*q],[X(side*x),Y(hi)-.3*inch*q],'runway-line');
    }
+   // Torsion plates below the cut, under the strut's bottom flange on each side: between the column flanges, split by a
+   // rod gusset, out past the cope to the bolt pairs through the strut flange (the top plates match them above the cut).
+   if(tg)for(const side of [1,-1]){
+    const x0=side*g.x0,x1=side*tg.end,hw=tg.width/2,splits=side>0?[rod-gt/2,rod+gt/2]:undefined;
+    for(const [y0,y1] of splits?[[-hw,splits[0]],[splits[1],hw]]:[[-hw,hw]])out+=box(x0,x1,y0,y1,'runway-line');
+    for(const x of tg.rows)for(const yb of [web+sg.tw/2-tg.gauge/2,web+sg.tw/2+tg.gauge/2])out+=circle(X(side*x),Y(yb),Math.max(1.2,sg.bolt.hole/2*q),'runway-line');
+   }
    // Clevis and rod below the cut, in the gusset's plane.
    out+=box(g.top.pin[0]-.9*g.dp,g.top.pin[0]+1.1*g.dp,rod-gt/2-.4*g.dp,rod+gt/2+.4*g.dp,'hidden-line');
    for(const side of [-1,1])out+=line([X(g.top.pin[0]+2.6*g.dp),Y(rod+side*b.rod.diameter/2)],[X(R.x1-inch),Y(rod+side*b.rod.diameter/2)],'hidden-line');
@@ -288,7 +298,8 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
    const items:{at:XY;labels:string[];weld?:string}[]=[
     ...(br?[{at:[X(xMax)-2,Y(e)] as XY,labels:['GIRDER WEB C/L']},ws?{at:[X(ws.bf/4),Y(c.d/2+y0+(proj-y0)*.3)] as XY,labels:[`${ws.name} BRACKET (COLLECTOR):`,`WELDS PER ${detailRef(detailTitles.weldedBracket)}`]}:{at:[X(c.bf/4),Y(c.d/2)] as XY,labels:[`SEAT PL TO COL. FLANGE, TOP,`,`${dim(seatColumnWeld(p,s.detailResults?.bracket).length)} LONG, SHOP (COLLECTOR)`],weld:size(d.seatWeld)}]:[]),
     {at:[X(sg.bolts[1]),Y(web+sg.tw)],labels:[`${sg.shape} STRUT, WEB ON THE`,'GIRDER FACE, EACH SIDE']},
-    {at:[X(gx-inch),Y(-gt/2)],labels:[`${gussetName} (ROD ${gridA}-${gridB})`,`ON COLUMN C/L, SEE ${detailRef(detailTitles.braceTop)}`]}
+    {at:[X(gx-inch),Y(-gt/2)],labels:[`${gussetName} (ROD ${gridA}-${gridB})`,`ON COLUMN C/L, SEE ${detailRef(detailTitles.braceTop)}`]},
+    ...(tg?[{at:[X(tg.end-inch/4),Y(-tg.width/2+inch/2)] as XY,labels:[`${tbName}, TOP AND BOTTOM`,`EACH SIDE, EVERY COLUMN (TORSION BRACE)`]}]:[])
    ];
    svg+=labelColumn(items,X(xMax)+30,Y(yMax),Y(yMin));
    const tab=[`PL ${size(gt)} STRUT TAB, AT OTHER`,'SIDE AND OTHER COLUMNS'],tw2=Math.max(...tab.map(v=>textWidth(v,8.5)));
@@ -351,6 +362,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   ['GUSSET WELDS',`${weldLabel} FILLETS BOTH FACES: ${dim(r.outlines.welds.upper.to-r.outlines.welds.upper.from)} TO WEB AT W.P.; ${dim(r.outlines.welds.lower.web)} TO WEB AND ${dim(r.outlines.welds.lower.plate-g.x0)} TO BASE PL`],
   ...(stiff?[['WEB STIFFENERS',`PL ${size(stiff.thickness)} PAIR AT EACH UPPER GUSSET AND STRUT TAB, ${size(stiff.weld)} FILLETS BOTH FACES TO GUSSET, WEB AND FLANGES`]]:[]),
   ['STRUT',`${sg.shape}, ${force(r.strutForce.H)} (${r.strutForce.id}); ${boltName} EACH END`],
+  ...(tb&&tg?[['TORSION BRACE',`${tbName} TOP AND BOTTOM OF STRUT, EACH SIDE OF EVERY COLUMN, ${tg.rows.length * 2} - ${size(d.strut.boltDiameter)} ${d.strut.grade} BOLTS EACH; STRUT END MOMENT IN PLAN ${force(tb.M,'moment')} (${tb.caseId}); COLUMN KEEPS ${tb.stiffness.keep.toFixed(3)} OF THE TORQUE`]]:[]),
   ['ROD CROSSING',`ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}; RODS ${drawingLength(cr.clear,u)} CLEAR AT MID-BAY`],
   ['COLLECTOR AT EACH COLUMN',capG?`GIRDER LOCATING BOLTS TO THE COLUMN CAP, CAP FILLETS ALL AROUND THE COLUMN: ${force(r.seatForce.F)}`:rolled?`GIRDER LOCATING BOLTS TO ${rolled.seat?'SEAT':'BRACKET FLANGE'}, ${rolled.name} BRACKET WELDS TO FLANGE: ${force(r.seatForce.F)}`:`GIRDER LOCATING BOLTS TO SEAT, ${size(d.seatWeld)} SEAT FILLET TO FLANGE: ${force(r.seatForce.F)}`],
   ...(z?[['SEISMIC ALONG RUNWAY',`R ${z.basis.R}, CS ${z.basis.Cs.toFixed(3)}, QE ${force(z.QE)}; DRIFT ${dim(z.drift)}`]]:[]),
@@ -364,13 +376,24 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   `TENSION RODS AFTER THE STRUT IS BOLTED AND THE COLUMNS ARE PLUMB: TAKE OUT THE SAG BY HAND, THEN LOCK THE TURNBUCKLES WITH JAM NUTS. DO NOT USE THE RODS TO PLUMB THE COLUMNS. ROD ${gridB}-${gridA} LIES IN A PLANE ${offsetLabel} SO THE RODS PASS AT MID-BAY ${dim(cr.clear)} CLEAR, NOT CONNECTED (${detailRef(rodCrossingTitle)}); DO NOT BEND A ROD TO CLEAR THE OTHER.`,
   `GUSSETS AND STRUT TABS: ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN WEB WITH ${weldLabel} FILLETS BOTH FACES; THE LOWER GUSSET ALSO TO THE BASE PLATE. ROD ${gridA}-${gridB} GUSSETS ON THE COLUMN C/L; ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}${cr.filler?`, WITH A ${size(cr.filler)} FILLER UNDER THE STRUT WEB AT GRID ${gridB}`:''}. SNIPE GUSSET CORNERS ${size(.75*inch)} TO CLEAR THE COLUMN-TO-PLATE WELDS. PIN HOLES ${holeInches(g.dh,u)} DIA., DRILLED.${stiff?` AT EACH UPPER GUSSET AND STRUT TAB: A PAIR OF PL ${size(stiff.thickness)} A572 GR. 50 HORIZONTAL STIFFENERS BETWEEN THE COLUMN FLANGES ON THE GUSSET SIDE, AT THE TOP AND BOTTOM OF THE GUSSET WELD TO THE WEB (TOP AND BOTTOM OF THE TAB), EACH IN TWO PIECES EITHER SIDE OF THE GUSSET, ${size(stiff.weld)} FILLETS BOTH FACES TO THE GUSSET, WEB AND BOTH FLANGES; CLIP CORNERS AT THE COLUMN FILLETS. THEY CARRY THE ROD AND STRUT FORCE NORMAL TO THE WEB TO THE FLANGES.`:''}`,
   `CRANE-LEVEL STRUT: ASTM A992 ${sg.shape} ON THE COLUMN CENTERLINE AT THE W.P., EVERY SPAN OF BOTH RUNWAYS, FLANGES COPED ${dim(sg.cope)} EACH END, ${boltName} ${bolting} (AIST TR-13 §5.14, RCSC §4.3: REVERSING CRANE FORCES), TO THE GUSSET OR TAB AT EACH COLUMN. IT COLLECTS THE GIRDERS' LONGITUDINAL FORCE AT EVERY COLUMN AND BRACES THE COLUMNS ALONG THE RUNWAY.`,
-  capG?`AT EVERY COLUMN THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO THE COLUMN CAP, WELDED ALL AROUND THE COLUMN TOP (${detailRef(columnCapTitles.section)}); THE COLUMN CARRIES IT ${dim(capG.drop)} DOWN TO THE STRUT, CENTERED UNDER THE GIRDER, WITHOUT TORQUE.`:rolled?`AT EVERY COLUMN THE ${rolled.name} BRACKET, SHOP WELDED TO THE COLUMN FLANGE (${detailRef(detailTitles.weldedBracket)}), IS THE COLLECTOR: THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO ${rolled.seat?'ITS SEAT':'ITS TOP FLANGE'}; THE COLUMN TAKES THE TORQUE FROM ITS ${dim(girderOffset(p))} OFFSET (CALCULATION REPORT, NEW COLUMN).`:`AT EVERY COLUMN: SHOP WELD THE BRACKET SEAT PLATE TO THE COLUMN FLANGE WITH A ${size(d.seatWeld)} TOP FILLET ACROSS THE FLANGE. THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO THE SEAT; THE COLUMN TAKES THE TORQUE FROM ITS ${dim(girderOffset(p))} OFFSET (CALCULATION REPORT, NEW COLUMN).`,
+  capG?`AT EVERY COLUMN THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO THE COLUMN CAP, WELDED ALL AROUND THE COLUMN TOP (${detailRef(columnCapTitles.section)}); THE COLUMN CARRIES IT ${dim(capG.drop)} DOWN TO THE STRUT, CENTERED UNDER THE GIRDER, WITHOUT TORQUE.`:rolled?`AT EVERY COLUMN THE ${rolled.name} BRACKET, SHOP WELDED TO THE COLUMN FLANGE (${detailRef(detailTitles.weldedBracket)}), IS THE COLLECTOR: THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO ${rolled.seat?'ITS SEAT':'ITS TOP FLANGE'}; ${torqueNote}`:`AT EVERY COLUMN: SHOP WELD THE BRACKET SEAT PLATE TO THE COLUMN FLANGE WITH A ${size(d.seatWeld)} TOP FILLET ACROSS THE FLANGE. THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO THE SEAT; ${torqueNote}`,
+  ...(tg?[`TORSION BRACE: AT EVERY COLUMN A ${tbName.replace('PLATES','PLATE')} (ASTM A572 GR. 50) ON THE TOP AND ONE UNDER THE BOTTOM FLANGE OF THE STRUT, EACH SIDE OF THE WEB, BETWEEN THE COLUMN FLANGES: ${size(tg.weld)} FILLETS BOTH FACES TO BOTH FLANGES AND THE WEB, SPLIT AT A ROD GUSSET AND WELDED TO IT; ${tg.rows.length} ROWS OF ${size(d.strut.boltDiameter)} ${d.strut.grade} BOLT PAIRS AT ${dim(tg.gauge)} GAUGE THROUGH THE STRUT FLANGE BEYOND THE COPE, ${bolting}. THE STRUT IS MOMENT-CONNECTED IN PLAN SO IT HOLDS THE COLUMN AGAINST THE TWIST FROM THE GIRDER OFFSET.`]:[]),
   `ERECT THE STRUT AND RODS WITH THE COLUMNS, BEFORE THE GIRDERS ARE SET. THE BRACED COLUMNS AND FOOTINGS ARE DESIGNED FOR THE ROD FORCES, INCLUDING UPLIFT AND SHEAR ALONG THE RUNWAY AT THE BASE.`,
   ...(sep?[`KEEP THE NEW COLUMNS, STRUT, RODS, GIRDERS AND RAILS AT LEAST ${separationLength(sep.required,u)} CLEAR OF THE EXISTING BUILDING IN EVERY DIRECTION (ASCE 7 §12.12.3); FIELD VERIFY BEFORE SETTING THE FOOTINGS.`]:[])
  ];
  return {key:'bracing',name:'LONGITUDINAL BRACING',views,notes:(t:Style)=>[heading(t,'BRACING DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.25,1.75]),heading(t,'BRACING NOTES'),...numbered(t,notes)]};
 }
 /** Required seismic separation as specified on the drawings, rounded up to 1/8 in or 5 mm. */
+/** The bracket sheets' note on the girder's longitudinal path where a torsion brace holds the column (none otherwise). */
+export function torsionBraceNotes(s:CalculationSnapshot):string[]{
+ const p=s.input,tb=s.bracingSystem?.torsionBrace;if(!tb)return [];
+ return [`LONGITUDINAL FORCE: THE GIRDER'S LOCATING BEARING BOLTS DELIVER IT TO THE BRACKET, ${dimensionLength(girderOffset(p),p.units)} OFF THE COLUMN C/L; THE BRACKET-TO-COLUMN WELDS TAKE IT WITH ITS TORQUE (CALCULATION: BRACE-SEAT-WELD), AND THE ${torsionBraceCallout(p,s)} HOLDS THE COLUMN AGAINST THE TWIST (${detailRef(detailTitles.strutPlan)}).`];
+}
+/** The torsion brace in one line, for the bracket sheets' collector notes. */
+export function torsionBraceCallout(p:CalculationSnapshot['input'],s:CalculationSnapshot){
+ const tg=s.bracingSystem?.torsionBrace?.geometry;if(!tg)return '';
+ return `${bracingDesign(p).strut.shape} CRANE-LEVEL STRUT MOMENT-CONNECTED IN PLAN AT EVERY COLUMN BY ${plateInches(tg.t,p.units)} TORSION PLATES ON ITS FLANGES (TORSION BRACE)`;
+}
 export const specifiedSeparation=(required:number,units:'US'|'SI')=>{const q=units==='US'?inch/8:5;return Math.ceil(required/q-1e-9)*q;};
 /** The seismic separation as every sheet prints it: the specified minimum, never rounded down (drawingFormat.limitLength). */
 export const separationLength=(required:number,units:'US'|'SI')=>limitLength(specifiedSeparation(required,units),units,'min');

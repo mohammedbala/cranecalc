@@ -1,4 +1,5 @@
 import {supportColumn} from '../engine/drawingData';
+import {stiffenerTopCjp} from '../engine/constructionNotes';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
 import {haunchUnderSeat} from './taperedHaunchSheet';
@@ -118,7 +119,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   svg+=refDim(dimV(top,bottom,cx-m().bf*k/2,87,drawingLength(b.d,p.units)));
   svg+=multiLeader([[inner+C(110),110]],[lx,100],[colRef]);
   // Capped girders: stiffeners CJP to the W top flange (its own groove callout), fitted at the bottom only.
-  const cjp=b.kind==='cap',stiffY=cjp?170:165;
+  const cjp=stiffenerTopCjp(p),stiffY=cjp?170:165;
   if(cjp)svg+=grooveLeader([cx+(b.tw/2+d.bearing.stiffenerWidth*.6)/1000*k,top+b.tf/1000*k+1],[lx,128],['CJP TO W TOP FLANGE','BOTH STIFFENERS'],[[215,150]]);
   svg+=multiLeader(stiffPts,[lx,stiffY],[`2 PL ${size(d.bearing.stiffenerThickness)} X ${size(d.bearing.stiffenerWidth)}`,`FULL-DEPTH FITTED BEARING STIFFENERS`,`${size(d.bearing.cope)} WEB-SIDE CORNER COPES`],8,stiffPts.map(()=>[[215,stiffY-5]]));
   svg+=filletLeader([weldPts[1]],[lx,218],size(d.bearing.weldSize),['TYP. BOTH STIFFENERS',cjp?'CONT. WEB FILLETS':'CONT. WEB & FLANGE FILLETS',cjp?'FIT BOTTOM END':'FIT / MILL STIFFENER ENDS'],true);

@@ -485,7 +485,7 @@ function aiscChannelKdes(name:string){const c=channelData(name);return c?c.kdes*
 
 
 /** Fit ratios of the sizing, held at one. */
-const capAngleFits=new Set(['cap-angle-cap-edge','cap-angle-rail-clear']);
+const capAngleFits=new Set(['cap-angle-cap-edge','cap-angle-rail-clear','cap-angle-column-wrench']);
 /** Sizing ratios of the plate's displacement-controlled checks (held nearer one where the movement part governs). */
 const capAngleMovementRatio=new Set(['cap-angle-plate-fatigue','cap-angle-weld-toe-fatigue','cap-angle-weld-root-fatigue']);
 /**
@@ -502,7 +502,9 @@ export function capAngleSizingRatios(q:ProjectInput,g:CapAngleGeometry,F:number,
   'cap-angle-endplate-weld':x.weld.demand/x.weld.capacity,'cap-angle-heel':x.heel,
   // Fits held at one (capAngleFits): the cap bolts within the channel flange depth, the hardware below the top of the rail.
   'cap-angle-cap-edge':minimumEdge(g.cap.diameter)/Math.max(q.section.capDepth-g.cap.gauge,1e-6),
-  'cap-angle-rail-clear':Math.max(g.endPlate.z1,g.plate.z1+boltHardware(g.lap.diameter).head+boltHardware(g.lap.diameter).washer.t)/Math.max(railTopAboveSteel(q),1e-6)};
+  'cap-angle-rail-clear':Math.max(g.endPlate.z1,g.plate.z1+boltHardware(g.lap.diameter).head+boltHardware(g.lap.diameter).washer.t)/Math.max(railTopAboveSteel(q),1e-6),
+  // The column bolt nuts inside the column flange clear of the web fillet (check cap-angle-column-wrench).
+  ...(g.column.receiver?{'cap-angle-column-wrench':wrenchClearance(g.column.diameter)/Math.max(x.ezMin-g.column.receiver.k1,1e-6)}:{})};
  const controlled=new Set<string>();Object.defineProperty(r,'movementControlled',{value:controlled,enumerable:false});
  if(movement){
   r['cap-angle-lap-tension']=x.lapTension/x.lapBolt.tension;

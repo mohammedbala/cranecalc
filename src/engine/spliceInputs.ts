@@ -6,6 +6,7 @@ import {clipGeometry,railClipInput,railPad} from './railSeat';
 import {minimumEdge} from './capAngle';
 import type {RunwayDetails} from './runwayDetails';
 import {activeEndStop,stopEnds} from './endStopInputs';
+import {runwayEnds} from './continuation';
 
 const inch=25.4,foot=304.8;
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
@@ -100,8 +101,10 @@ export type SpliceGeometry=ReturnType<typeof spliceGeometry>;
 export function girderSegmentsOf(p:ProjectInput){
  const L=p.spans.reduce((a,v)=>a+v,0);
  if(p.system==='continuous')return [{bay:1,start:0,end:L}];
- const gap=p.details?.simpleSupport?.endGap??25.4;let x=0;
- return p.spans.map((s,i)=>{const a=x;x+=s;return {bay:i+1,start:a+(i?gap/2:0),end:x-(i<p.spans.length-1?gap/2:0)};});
+ // At a runway-end grid with the bearing centered on the grid the girder runs half the bearing length past it (as
+ // simpleSupports endGridOverhang): the piece, its schedule length and the 3D model end there.
+ const gap=p.details?.simpleSupport?.endGap??25.4,ends=runwayEnds(p),past=(end:'left'|'right')=>p.details?.simpleSupport?.endGridBearing==='centered'&&ends.includes(end)?(p.details.bearing.length??254)/2:0;let x=0;
+ return p.spans.map((s,i)=>{const a=x;x+=s;return {bay:i+1,start:a+(i?gap/2:-past('left')),end:x-(i<p.spans.length-1?gap/2:-past('right'))};});
 }
 const gridsOf=(p:ProjectInput)=>p.spans.reduce((a,v)=>[...a,a.at(-1)!+v],[0]);
 

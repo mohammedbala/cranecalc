@@ -1,4 +1,5 @@
 import {checkDcText,elementSummary,failingNote,sheetDc} from './sheetRatios';
+import {stiffenerTopCjp} from '../engine/constructionNotes';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {activeStep} from '../engine/steppedColumnInputs';
@@ -160,7 +161,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const right=[
    {at:stiffAt[1],labels:[`2 PL ${size(bs.stiffenerThickness)} X ${size(bs.stiffenerWidth)} FULL-DEPTH FITTED`,`BEARING STIFFENERS, ${size(bs.cope)} COPES`]},
    {at:[X(gw-b.bf/2),Y(yCut-6*inch)] as XY,labels:[`${b.name} RUNWAY GIRDER (BROKEN)`]},
-   {at:[X(gw+b.tw/2),Y(hs+bt+b.tf+(shown-b.tf)*.8)] as XY,labels:['TYP. BOTH STIFFENERS','CONT. WEB & FLANGE FILLETS',b.kind==='cap'?'FIT BOTTOM END':'FIT / MILL STIFFENER ENDS'],weld:size(bs.weldSize)},
+   {at:[X(gw+b.tw/2),Y(hs+bt+b.tf+(shown-b.tf)*.8)] as XY,labels:['TYP. BOTH STIFFENERS',stiffenerTopCjp(p)?'CONT. WEB FILLETS, CJP TO TOP FL.':'CONT. WEB & FLANGE FILLETS',b.kind==='cap'?'FIT BOTTOM END':'FIT / MILL STIFFENER ENDS'],weld:size(bs.weldSize)},
    {at:[X(gw+bs.width/2),Y(hs+bt/2)] as XY,labels:[`BEARING PL ${size(bt)} X ${size(bs.width)} X ${size(bs.length)}`,`OVER THE CRANE-SIDE FLANGE; SHIM`,eb?`BOLTS: SEE ${detailRef(bearingBoltsTitle(p))}`:'TO FULL BEARING']},
    ...(sf?[{at:[X(g.innerFlange+sf.thickness/2),Y(g.cap.bottom-sh*.55)] as XY,labels:['STEP STIFFENER TO (E) WEB,','BOTH FACES, EACH PLATE',`SEE ${detailRef(steppedColumnTitles.stiffener)}`],weld:size(sf.weld),field:true}]:[])
   ];

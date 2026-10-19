@@ -39,11 +39,15 @@ import { validateSplices } from './spliceInputs';
 import { craneColumnCalculation,validateCraneColumn } from './craneColumn';
 import { steppedColumnCalculation,validateSteppedColumn } from './steppedColumn';
 import { activeStep } from './steppedColumnInputs';
+import { fatigueCycleCheck } from './buildingClass';
+import { fatigueCycleFamilies } from './railChecks';
 import { tiedToBuilding } from './craneColumnInputs';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
  const p=parsed.data,s=p.section,errors:string[]=[];const L=p.spans.reduce((a,b)=>a+b,0);
+ // The configurator's stop: a member beyond the catalog, while the project still has the member it could not size.
+ for(const v of p.configurator?.beyondCatalog??[])if(v.member==='girder'?s.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)errors.push(`configurator: ${v.reason}`);
  if(s.d<=2*s.tf)errors.push('section.d: depth must exceed twice the flange thickness.');
  if(s.tw>=s.bf)errors.push('section.tw: web must be thinner than the flange width.');
  if(p.capDesign&&p.capDesign.Fu<p.capDesign.Fy)errors.push('capDesign.Fu: ultimate strength cannot be less than channel yield strength.');
@@ -154,7 +158,7 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
    const column=p.existingColumn?.enabled?existingColumnSection(p).section:undefined;
    if(p.longitudinalBracing?.enabled)snapshot.longitudinalBracing=longitudinalBracingAnalysis(p,snapshot.supportReactions,column);
    // A stepped column is analyzed by its own model (steppedColumnCalculation below), not as a prismatic column.
-   if(p.existingColumn?.enabled&&!activeStep(p)){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn,tiedToBuilding(p)?{label:'Crane column'}:{}));}
+   if(p.existingColumn?.enabled&&!activeStep(p)){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn,{...(tiedToBuilding(p)?{label:'Crane column'}:{}),braceMove:snapshot.longitudinalBracing?.deflection.value??0}));}
    if(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled){snapshot.columnBase=columnBaseAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...columnBaseChecks(p,snapshot.columnBase,snapshot.existingColumn));}
    // Stepped column (WP-2): sets snapshot.existingColumn (compatible summary) and snapshot.steppedColumn, and its checks.
    steppedColumnCalculation(snapshot);
@@ -204,6 +208,12 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  // Project option: a check left unverified only for missing data is omitted from this package (listed as not checked,
  // by others) instead of blocking it. Incomplete or unsupported results still block.
  if(p.omitUnverified)snapshot.checks=snapshot.checks.map(c=>c.status==='unverified'?{...c,status:'excluded',note:`Not checked here: ${c.note.trim()} Omitted from this package until these data are provided (by others).`}:c);
+ // A by-others or deferred-submittal check whose reference estimate exceeds its limit is never left excluded: it is an open
+ // item (unverified, adequacy not established) until the responsible party demonstrates it, so the package cannot read as
+ // passing while this calculation's own estimate says the item does not (reopenedByOthers).
+ snapshot.checks=snapshot.checks.map(reopenedByOthers);
+ // The one-count check names the cycles of every wheel-local detail family, derived from the one count (fatigueCycleFamilies).
+ if(p.details)snapshot.checks=snapshot.checks.map(c=>c.id==='fatigue-cycles'?fatigueCycleCheck(p,fatigueCycleFamilies(p)):c);
  integrityAndGates(snapshot);
  const blocking=snapshot.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status));
  // Failed engineering criteria can export; failed numerical verification cannot.
@@ -218,4 +228,19 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
   snapshot.detailResults.caseIndex=index;
  }
  return snapshot;
+}
+
+/**
+ * An excluded (by others, deferred submittal) check whose reference D/C exceeds 1.00, reopened as 'unverified' with the
+ * flag byOthers: listed with the open items and on the drawings, never read as passing. Its demand and capacity stay for
+ * the reader; the note says what the responsible party must demonstrate.
+ */
+export function reopenedByOthers(c:CheckResult):CheckResult{
+ // A reference D/C: a demand against a capacity of the same check (not a stated requirement such as a stiffness ratio
+ // a by-others member must meet).
+ const u=c.utilization,ratio=c.demand!==undefined&&c.capacity!==undefined&&c.capacity>0&&c.quantity!=='stiffness'&&Math.abs(c.demand/c.capacity-(u??NaN))<=1e-6*Math.max(1,u??0);
+ // The crane-level strut record states what the column alone would carry without the strut (its dependency), not an
+ // estimate of the strut.
+ if(c.status!=='excluded'||u===undefined||!Number.isFinite(u)||u<=1+1e-9||!ratio||c.id==='crane-level-strut')return c;
+ return {...c,status:'unverified',byOthers:true,note:`APP ESTIMATE EXCEEDS THE LIMIT (D/C ${u.toFixed(2)}): this item is by others, and this calculation's reference estimate for it does not pass. The responsible party (supplier or engineer of record) shall demonstrate it before fabrication, or the detail shall be changed (heavier parts, another joint type or a reduced stress range); until then it is an open item. ${c.note}`};
 }

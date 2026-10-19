@@ -52,7 +52,7 @@ export function preheatBasis(p:ProjectInput){
 export function cjpWelds(p:ProjectInput):string[]{
  const d=p.details;if(!d)return [];
  const out:string[]=[];
- if(p.section.kind==='cap'&&p.capDesign?.topStiffenerCjp)out.push('girder bearing stiffeners to the W top flange');
+ if(stiffenerTopCjp(p))out.push('girder bearing stiffeners to the W top flange');
  // A girder on a column cap has no tie (its end fork restrains the top flange): no tie gusset.
  if(stiffenerTieJoint(p)==='cjp'&&!capFork(p))out.push('tie gussets to the girder bearing stiffeners');
  if(d.bracket?.enabled&&usesTaperedHaunch(p)&&haunchInput(d.bracket).flangeJoint==='cjp')out.push(`haunch flanges to the ${p.existingColumn?.isNew?'new':'existing'} column flange (field)`);
@@ -213,3 +213,10 @@ export function constructionNoteChecks(s:CalculationSnapshot):CheckResult[]{
   note:bad.length?`OPEN ITEM: ${bad.length} entered fabrication note${bad.length>1?'s contradict':' contradicts'} the requirements and ${bad.length>1?'are':'is'} superseded on the drawings and in the report: ${bad.map(v=>`${v.field}: "${v.sentence}" (${v.reason})`).join('; ')}. Correct the project fabrication notes.`
    :'The project fabrication notes agree with the bolting, rail-joint, tolerance and inspection requirements of this calculation.'}];
 }
+
+/**
+ * The girder bearing stiffeners' joint to the top flange, one source for the notes, the details, the 3D model and the
+ * inspections: CJP for a capped girder whose cap design calls it (capDesign.topStiffenerCjp, check cap-stiffener-cjp),
+ * else fillets to the web and flange.
+ */
+export const stiffenerTopCjp=(p:ProjectInput)=>p.section.kind==='cap'&&!!p.capDesign?.topStiffenerCjp;

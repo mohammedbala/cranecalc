@@ -1,4 +1,5 @@
 import {braceImperfection} from './forcesDelivered';
+import {twistSlip} from './columnTwistLimit';
 import {categoryF,damageSum,damageText,minerEquation,minerEquivalent} from './fatigueConstants';
 import {format} from './units';
 import {flangeTieChecks,stiffenerTieChecks} from './flangeTieDesign';
@@ -293,7 +294,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  const boltLateral=cap&&capR?Math.max(...capR.grids.map(v=>v.lateral.value))+imperfection:r.demands.brace+imperfection;
  // On a column cap the bearing bolts are the cap's bolts: their end-bearing rows take its concurrent per-bolt actions.
  const capBolts=cap&&capR?capBoltSets(p,capR,imperfection):undefined;
- if(bearingBolts)checks.push(...restraint(endBearingChecks(p,bearingBolts,{analysis:a,lateral:boltLateral,...(capBolts?{cap:{tension:Math.max(...capBolts.map(v=>v.T)),shear:Math.max(...capBolts.map(v=>v.V))}}:{})})));
+ if(bearingBolts)checks.push(...restraint(endBearingChecks(p,bearingBolts,{analysis:a,lateral:boltLateral,slip:twistSlip(s.existingColumn),...(capBolts?{cap:{tension:Math.max(...capBolts.map(v=>v.T)),shear:Math.max(...capBolts.map(v=>v.V))}}:{})})));
  else checks.push(...lapChecks(p,d.end,'end','Girder end / longitudinal connection',a.axial,Math.max(a.reaction,a.uplift),p.section.tw,p.section.Fy,p.section.Fu));
  const bs=d.bearing,m=d.material,stiffener=bearingStiffener({width:bs.stiffenerWidth,thickness:bs.stiffenerThickness,cope:bs.cope,webThickness:p.section.tw,webDepth:strength.h,flangeThickness:p.section.tf,loadedWidth:p.section.bf,E:p.section.E,Fy:Math.min(m.Fy,p.section.Fy),method:p.method});
  add('stiffener-column','Local forces','Paired full-depth bearing stiffeners',a.reaction,stiffener.compression.capacity,'force','L_c=0.75h;\\quad A=2b_st_s+12t_w^2;\\quad P_n=F_{cr}A','Uses the smaller end effective web strip at every support. Fitted stiffeners, full-depth web welds; no reliance on the bare web strength.',['aisc-connections','aisc-e']);
@@ -379,7 +380,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  if(plate)checks.push(...restraint(plateTieChecks(s,{force:(r.demands.brace+imperfection)/brace.cos,cos:brace.cos,member:brace.member})));
  }
  checks.push(...spliceChecks(s));
- checks.push(...railChecks(s),...capAttachmentChecks(s),...simpleSupportChecks(p,a.endRotation),...endStopChecks(p,{analysis:h1,strength:h1Strength,props,holdDown:checks.find(c=>c.id==='hold-down-model')?.capacity??0}));
+ checks.push(...railChecks(s),...capAttachmentChecks(s),...simpleSupportChecks(p,a.endRotation,twistSlip(s.existingColumn)),...endStopChecks(p,{analysis:h1,strength:h1Strength,props,holdDown:checks.find(c=>c.id==='hold-down-model')?.capacity??0}));
 
  // A restraint component past its strength (flange-tie-*, D/C > 1) yields before the analysis' elastic restraint
  // stiffness is reached: the stresses, twist, multiplier and rail movement rely on that stiffness.

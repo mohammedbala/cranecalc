@@ -44,7 +44,14 @@ const simulated:Record<string,RunwayConfig>={
 describe('configurator project validity',()=>{
  // t13 to t16: the crane columns tied to the building columns and the stepped columns (girder on the step).
  for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
- for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project`,()=>{expect(validateProject(buildProject(c))).toEqual([]);},300000);
+ // Beyond the catalog the build stops with the configurator's reasons only (beyondCatalog): V059 and V061 need a plate
+ // girder (they took the W14X873 column shape before).
+ const stops=new Set(['V059','V061']);
+ for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} ${stops.has(id)?'stops with the configurator reason':'builds a valid project'}`,()=>{
+  const e=validateProject(buildProject(c));
+  if(stops.has(id)){expect(e.some(v=>/^configurator: Plate girder required/.test(v))).toBe(true);expect(e.every(v=>v.startsWith('configurator: '))).toBe(true);}
+  else expect(e).toEqual([]);
+ },300000);
  it('new freestanding columns take the top of rail to at most 35 ft (ASCE 7 cantilever column height limit), with the reason',()=>{
   const n=normalizeConfig(simulated['V082']);
   expect(n.config.railElevation).toBe(35);
@@ -52,14 +59,17 @@ describe('configurator project validity',()=>{
   expect(normalizeConfig({...simulated['V082'],structure:'existing'}).config.railElevation).toBe(36);
  });
  it('rail clips that cannot cross the girder joints within the pad spacing: the rail without its pad, clips at most 30 in, logged',()=>{
-  const p=buildProject(simulated['V059']);
+  // The W14X873 the sizing chose before column shapes left the girder catalog, now named (V059 itself stops: a plate
+  // girder is required).
+  const p=buildProject({...simulated['V059'],girderShape:'W14X873'});
   expect(p.aist!.railPad).toBe(false);
   expect(p.aist!.clipSpacing).toBeCloseTo(30*25.4,6);
   expect(p.configurator!.selections!.find(s=>s.item==='Rail pad')?.reason).toMatch(/AIST TR-13/);
  },300000);
  it('a cap tieback angle that fits no column flange falls back to paired bars, with the reason in the selections log',()=>{
   const p=buildProject({...simulated['017'],columnShape:'W14X61'});
-  expect(validateProject(p)).toEqual([]);
+  // The paired bars it falls back to do not pass their own sizing on this column either: the build stops with the reason.
+  expect(validateProject(p)).toEqual([expect.stringMatching(/^configurator: Top-flange tie not resolved: the Paired flat bars on a flange saddle/)]);
   expect(p.details!.brace.arrangement).toBe('paired-bars');
   const tie=p.configurator!.selections!.find(s=>s.item==='Top-flange tie')!;
   expect(tie.entered).toBe('Cap tieback angle');

@@ -110,10 +110,11 @@ describe('New freestanding column package',()=>{
   expect(s.errors).toEqual([]);
   const base=s.checks.filter(c=>c.group==='New column base');
   expect(base.map(c=>c.id)).toEqual(expect.arrayContaining(['base-bearing','base-plate','base-weld','base-anchor-tension','base-anchor-shear','base-anchor-interaction','base-soil','base-overturning','base-sliding','base-frost','base-one-way','base-two-way','base-flexure','base-min-steel','base-development','base-bar-spacing']));
-  expect(s.checks.filter(c=>c.status==='fail'&&!reviewOpenItem(c)).map(c=>c.id)).toEqual([]);
-  // Eligible once the engineer of record accepts the column twist (column-twist-basis).
-  expect(s.eligible).toBe(false);expect(s.checks.find(c=>c.id==='column-twist-basis')?.status).toBe('unverified');
-  p.existingColumn!.twistAcceptance='Fictitious EOR acceptance of the seat twist';expect(calculate(p).eligible).toBe(true);
+  // The open W14 column twists under the traction at the bracket offset: a designed limit now (columnTwistLimit.ts),
+  // failing, with its movement in the sliding travel, end gap and tie movement demands (no torsion brace in this
+  // demonstration; the configurator adds one, torsionBrace.test.ts).
+  expect(s.checks.filter(c=>c.status==='fail'&&!reviewOpenItem(c)).map(c=>c.id).sort()).toEqual(['column-twist','column-twist-rotation','simple-guide-travel','simple-joint-gap','tie-move-fatigue','tie-move-gusset','tie-move-root-fatigue','tie-move-strength','tie-move-weld']);
+  expect(s.eligible).toBe(false);expect(s.checks.find(c=>c.id==='column-twist-basis')).toBeUndefined();
   // The footing rotating on the soil adds to the fixed-base column drift at the rail.
   const drift=s.checks.find(c=>c.id==='base-drift')!,column=s.checks.find(c=>c.id==='column-drift')!;
   const d=baseDrift(p,s.existingColumn!);

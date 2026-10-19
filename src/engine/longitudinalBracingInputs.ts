@@ -41,7 +41,15 @@ export const longitudinalBracingSchema=z.object({
    * flanges on the gusset's side of the web, each split by the gusset and welded to it, the web and both flanges, with
    * fillets of `weld` both faces. They carry the force normal to the web to the flanges (webStiffeners).
    */
-  stiffeners:z.object({thickness:pos,weld:pos,Fy:pos,Fu:pos}).optional()
+  stiffeners:z.object({thickness:pos,weld:pos,Fy:pos,Fu:pos}).optional(),
+  /**
+   * Torsion brace at each locating column of a bracket seat (none when not given): a horizontal plate on the top and one
+   * under the bottom flange of the crane-level strut at each strut end there, between the column flanges (welded to both
+   * flanges and the web with fillets of `weld` both faces) and bolted to the strut flange beyond the cope with `rows`
+   * pairs of the strut's bolts. The strut, moment-connected in plan, holds the column against the twist from the girder
+   * offset (newColumnBracing.torsionBraceStiffness).
+   */
+  torsionBrace:z.object({thickness:pos,weld:pos,Fy:pos,Fu:pos,rows:z.number().int().min(2).max(5)}).optional()
  }).optional()
 });
 export type LongitudinalBracingInput=z.infer<typeof longitudinalBracingSchema>;
