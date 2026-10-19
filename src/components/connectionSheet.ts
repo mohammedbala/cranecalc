@@ -29,6 +29,7 @@ import { slidingBoltView } from './slidingBoltSection';
 import {isCapAngleTie} from '../engine/capAngle';
 import {tiedToBuilding} from '../engine/craneColumnInputs';
 import {columnPlates} from '../engine/craneColumn';
+import {activeStep} from '../engine/steppedColumnInputs';
 
 /** Girder bearing, end connection, flange tie and rail clip details on their own sheet. */
 export function connectionSheetSvg(s:CalculationSnapshot,f:FramingSettings=defaultFraming,number='S-02'){
@@ -46,7 +47,9 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  const dim=(v:number)=>dimensionLength(v,p.units),size=(v:number)=>plateInches(v,p.units);
  // A surveyed existing column is named and drawn as surveyed; only an unsurveyed one takes the reference framing style.
  const sc=supportColumn(p),surveyed=!sc.isNew&&!!p.existingColumn?.enabled,tapered=drawnFrameStyle(p,f)==='tapered';
- const colName=sc.isNew?sc.name:surveyed?`EXISTING ${p.existingColumn!.shape||'BUILT-UP'} COLUMN`:tapered?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN',colRef=sc.isNew?columnReference(p):`${colName} (REF.)`;
+ // A stepped column receives the tie on its upper shaft.
+ const upper=activeStep(p)?.upper;
+ const colName=sc.isNew?sc.name:upper?`EXISTING ${upper.shape||'BUILT-UP'} UPPER SHAFT`:surveyed?`EXISTING ${p.existingColumn!.shape||'BUILT-UP'} COLUMN`:tapered?'EXISTING TAPERED COLUMN':'EXISTING BUILDING COLUMN',colRef=sc.isNew?columnReference(p):`${colName} (REF.)`;
  const bracket=referenceCrossheads.find(v=>v.name===f.crosshead)!;
  const colAt=(y:number)=>tapered?m().columnDepthAt(y):m().column.d,colLine=sc.isNew?'runway-line':'reference-line';
  // A crane column tied to the building column (craneColumn.ts): the girder tie lands on the existing building column.
@@ -72,8 +75,9 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  // 1: Actual girder transverse section, fitted stiffeners and bearing plate.
  // Receiving bracket and building-column profile remain dashed reference geometry.
  // A column cap carries the girder on the column (column cap details); there is no bracket or flange tie.
+ // On a stepped column the girder bears on the step (stepped column details, STEP / SECTION): no bracket.
  const capped=!!activeColumnCap(p);
- if(!capped)views.push({title:detailTitles.bearing,render:()=>{
+ if(!capped&&!activeStep(p))views.push({title:detailTitles.bearing,render:()=>{
   let svg='<g data-view="bracket-connection">';
   // Depth drawn below the bearing: the bracket designed here, or the reference bracket. The section is
   // drawn up to 240 deep, its callouts placed against the girder and bracket.
@@ -234,7 +238,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
    {at:[X(tg/2)+offk+tbk,Z(cut?z1:(g.gussetEnd+g.face-g.connection)/2)-4],labels:[`2 FB ${size(tb)} X ${size(t.width)} (VERTICAL) X ${dim(t.length)}`,'ONE EACH SIDE OF THE GUSSETS']},
    ...(rel?[{at:[X(tg/2)+offk+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,...(rel.slide?[`${size(rel.slot)} VERT. SLOTS; GUSSET SLIDES ${size(rel.slide)}`,`EACH WAY ALONG THE RUNWAY; ${size(rel.barOffset)} FILLER`,'EACH FACE AT GIRDER GUSSET']:[`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`]),
     // The slots take the support's deflection limit handed to its designer (S-00): the same words as there.
-    ...(()=>{const lim=s.checks.find(v=>v.id==='tie-move-support')?.capacity;return lim!==undefined&&lim>0?['SLOTS TAKE THE BRACKET\'S VERTICAL','DEFLECTION AT THE BEARING UNDER CRANE',`LOADS ${limitLength(lim,p.units,'max')} MAX.`]:[];})()]}]:[]),
+    ...(()=>{const lim=s.checks.find(v=>v.id==='tie-move-support')?.capacity;return lim!==undefined&&lim>0?[activeStep(p)?'SLOTS TAKE THE STEP\'S VERTICAL':'SLOTS TAKE THE BRACKET\'S VERTICAL','DEFLECTION AT THE BEARING UNDER CRANE',`LOADS ${limitLength(lim,p.units,'max')} MAX.`]:[];})()]}]:[]),
    {at:[X(tg/2),colZ],labels:[`COLUMN GUSSET PL ${size(tg)} X ${size(hg)} X ${size(g.columnGussetLength)}`,`2 ROOT FILLETS X ${dim(c.weldLength)}, ${tieWeld}`],weld:'fillet'},
    {at:[cx+colW*k*.3,colZ+colT*k],labels:[tieColRef]}
   ];

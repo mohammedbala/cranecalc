@@ -1,6 +1,7 @@
 import {railBearsOnStops} from '../engine/railLayout';
 import type {CalculationSnapshot,ProjectInput} from '../engine/types';
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {activeStep} from '../engine/steppedColumnInputs';
 import {deliveredForces,type DeliveredForces,type DeliveredSet} from '../engine/forcesDelivered';
 import {drawingElevation} from '../components/drawingFormat';
 import {caseLabel,sig3,tidyNumbers} from './reportParts';
@@ -48,6 +49,7 @@ export function deliveredRows(s:CalculationSnapshot,d:DeliveredForces|undefined=
 export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=deliveredForces(s),separator=' '){
  if(!d)return '';
  const u=s.input.units,f=(v:number|undefined)=>sig3(v,'force',u),len=(v:number|undefined)=>sig3(v,'length',u),el=(v?:number)=>v===undefined?'':`, El. ${drawingElevation(v,u)}`;
+ const step=!!activeStep(s.input);
  const grids=(v:number[])=>v.length>1?`grids ${v.slice(0,-1).join(', ')} and ${v.at(-1)}`:`grid ${v[0]}`;
  const support=s.detailResults?.taperedHaunch?'haunch':s.input.details?.bracket?.enabled?'bracket':'support';
  // Where V acts: from the column centerline, or from the column face where the seat and the column are by others.
@@ -57,7 +59,7 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
  const far=beyond>1e-3?Math.abs(beyond-half)<1e-3?` (the far edge of the bearing plate, a conservative reaction position; the girder web is at ${len(d.web)})`:` (the girder web line at ${len(d.web)} plus ${len(beyond)}, the larger of the rail eccentricity and the bearing plate's kern b/6, for a full-contact bearing under the web's bearing stiffeners)`:'';
  const at=d.e===undefined?'; e, from the column centerline to the reaction, is not established here (the column is by others): Mx = V·e with the surveyed seat position (column strong axis).'
   :d.eFrom==='face'?`, at e = ${len(d.e)} from the column face${far}. Mx = V·e is the moment at the column face; for the column centerline add V times half the column depth (column by others).`
-  :`, at e = ${len(d.e)} from the column centerline${far}. Mx = V·e (column strong axis).`;
+  :`, at e = ${len(d.e)} from the ${step?'lower shaft ':''}column centerline${far}. Mx = V·e (column strong axis).`;
  const bars=d.elevation?.tieBars,k=d.craneColumn,b=s.input.columnBase;
  // Elevations from the crane-column base (craneColumnLayout) on the drawing datum, as runwayElevations.
  const elAt=(z:number)=>(s.input.drawing?.datumElevation??0)+(b?.enabled?columnBaseElevation(b):0)+z;
@@ -66,10 +68,10 @@ export function deliveredNote(s:CalculationSnapshot,d:DeliveredForces|undefined=
   `H column tie: bottom-flange restraint force through the bearing bolts and the cap, plus the crane column's eccentric top reaction (${f(k.eccentric)}) and its Appendix 6 nodal brace force 0.01P_r (${f(k.braceForce)}), at the column tie, El. ${drawingElevation(elAt(k.elevation.columnTie),u)}; design value ${f(k.columnTie)}.`,
   `The two ties act together in each set; their connections to the building column (tie gusset, tab) are by others for these forces.`].join(separator);
  return [`Factored ${s.input.method}. Each row is one concurrent set; do not combine rows.`,
-  `V: girder reactions on the seat${d.elevation?el(d.elevation.seat):''}${at}`,
+  `V: girder reactions on the ${step?'step cap of the stepped column':'seat'}${d.elevation?el(d.elevation.seat):''}${at}`,
   `My,seat: moment of the unbalanced end reactions about the grid (column weak axis).`,
   activeColumnCap(s.input)?`H top: top-flange restraint force of the end fork plus the Appendix 6 brace force (${f(d.brace.force)}), at the girder top flange${d.elevation?el(d.elevation.tie):''}, carried by the bearing stiffeners to the bolted bottom flange and the cap (no top-flange tie); design value ${f(d.tie.design)}.`
-   :`H tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the tie line${d.elevation?el(d.elevation.tie):''}${bars!==undefined&&d.elevation?`, delivered to the column by the tie at its centerline${el(bars)}`:''}; design value ${f(d.tie.design)}.`,
+   :`H tie: top-flange restraint force plus the Appendix 6 brace force (${f(d.brace.force)}), at the tie line${d.elevation?el(d.elevation.tie):''}${bars!==undefined&&d.elevation?`, delivered to the ${step?'upper shaft inner flange':'column'} by the tie at its centerline${el(bars)}`:step?', delivered to the upper shaft inner flange':''}; design value ${f(d.tie.design)}.`,
   `H seat: bottom-flange restraint force at the bearing bolts, ∓ opposite in sign to H ${activeColumnCap(s.input)?'top':'tie'}.`,
   `F: longitudinal force at the locating bearing, + toward the next grid.${d.stopGrids.length?` Stop force ${f(d.stop)} at ${grids(d.stopGrids)} only.`:''}${railBearsOnStops(s.input)?' Traction reaches the bay under the crane, or through the floating rail string an end bay at its stop.':''}`,
   ...(d.strut?[`Strut: the crane-level strut by others ${d.strut.location==='girder-line'?`on the girder line, ${len(d.strut.offset)} from the column centerline,`:'at the column centerline'} at the seat level of grids ${d.strut.grids.join(', ')}${d.strut.stiffness!==undefined?`, axial stiffness k ≥ ${sig3(d.strut.stiffness,'stiffness',u)} at each seat`:''}: design force F = ${f(d.strut.force)} (traction ${f(d.strut.traction)}${d.strut.stop?`, stop ${f(d.strut.stop)}`:''}), carried to the braced bay; the existing column check relies on it.`]:[]),

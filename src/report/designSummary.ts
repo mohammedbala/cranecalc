@@ -3,6 +3,7 @@ import {type Component} from '../components/figureDetails';
 import {stepBadge} from '../components/checkFigures';
 import {dcText} from '../engine/checkPresentation';
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {activeStep} from '../engine/steppedColumnInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {equationCell,governing,shortReference,statusLabel,subscripts} from './reportParts';
 import {loadPathSteps,supportAssemblyFigure} from './hairline/figures';
@@ -18,6 +19,7 @@ interface Element{key:string;step?:number;order:number;label:string;component?:C
 
 function supportLabel(p:ProjectInput){
  if(activeColumnCap(p))return 'Column cap';
+ if(activeStep(p))return 'Step of the existing stepped column';
  const b=p.details?.bracket;if(!b?.enabled)return 'Girder seat (by others)';
  return {'twin-rib':'Twin-rib bracket','haunched-seat':'Haunched seat bracket','rolled-corbel':'W-stub bracket','tapered-haunch':'Tapered haunch','existing-corbel':'Existing bracket, new seat','existing-w-corbel':'Existing bracket, new seat'}[b.arrangement??'twin-rib'];
 }
