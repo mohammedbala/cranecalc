@@ -13,6 +13,7 @@ import {usesTaperedHaunch,projectHaunch} from '../engine/taperedHaunch';
 import {taperedHaunchParts} from '../engine/taperedHaunchParts';
 import {grooveLeader} from './rolledBracketSheet';
 import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
+import {torsionBraceNotes} from './bracingSheet';
 import {endGridBearingNote} from '../engine/simpleSupports';
 import {topFlangeRestraint} from './tieNames';
 
@@ -245,7 +246,7 @@ export function taperedHaunchTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `THE HAUNCH IS DESIGNED FOR EVERY CONCURRENT CASE OF THE BRACKET DESIGN FORCES BELOW, WITH ITS SELF-WEIGHT: FLEXURE AND SHEAR ON THE SECTIONS OF THE TAPER, TORSION FROM THE OFFSET BEARINGS, THE STIFFENERS, THE WELD GROUP ON THE COLUMN FACE, FATIGUE AND DEFLECTION${collector?'; WITH THE BRACING, ALSO THE COLLECTOR FORCE THROUGH ITS WELDS':''}. THE ${sc.isNew?'':'EXISTING '}COLUMN FLANGE AND WEB LOCAL CHECKS (J10) ARE IN THE CALCULATION${cs?', WITH THE COLUMN STIFFENERS AT BOTH HAUNCH FLANGE LEVELS':', WITHOUT COLUMN STIFFENERS'}.`
  ];
  const stiffView=columnStiffenerView(s);if(stiffView)views.push(stiffView);
- return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,sc.isNew?'HAUNCH FABRICATION NOTES':'HAUNCH FABRICATION & EXISTING-STEEL WELDING NOTES'),...numbered(t,[...notes,...stiffenerNotes(p)]),...bracketForceBlocks(s,t)]};
+ return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,sc.isNew?'HAUNCH FABRICATION NOTES':'HAUNCH FABRICATION & EXISTING-STEEL WELDING NOTES'),...numbered(t,[...notes,...stiffenerNotes(p),...torsionBraceNotes(s)]),...bracketForceBlocks(s,t)]};
 }
 
 /**

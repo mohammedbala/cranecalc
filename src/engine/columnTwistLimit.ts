@@ -16,7 +16,7 @@
  * - On a column designed here, the service movement θ_s e is a slip of the locating girder against its sliding supports,
  *   the adjacent girder and the top-flange tie at every crane start and stop: it is added to the slot travel, end gap,
  *   rail end gap and tie movement demands (twistSlip; simpleSupportChecks, endBearingChecks, railChecks, tieMovements),
- *   and the factored movement θ_u e to the tie's static movement (twistMovement).
+ *   and the factored traction's movement (1.6 or 1.0 θ_s e) to the tie's static movement (twistMovement).
  */
 import type {CheckResult,ProjectInput} from './types';
 import type {ExistingColumnResult} from './existingColumn';
@@ -33,8 +33,13 @@ type Torsion=NonNullable<ExistingColumnResult['torsion']>;
  * reviewed existing and stepped columns keep their own torsion checks and paths).
  */
 export const twistSlip=(r:ExistingColumnResult|undefined)=>r?.torsion&&!r.support?Math.abs(r.torsion.service.slip):0;
-/** The girder's movement along the runway at the seat from the column twist: service (each crane start and stop) and factored, as twistSlip. */
-export const twistMovement=(r:ExistingColumnResult|undefined)=>r?.torsion&&!r.support?{service:Math.abs(r.torsion.service.slip),factored:Math.abs(r.torsion.slip)}:{service:0,factored:0};
+/**
+ * The girder's movement along the runway at the seat from the column twist, as twistSlip: service (the single-crane
+ * traction, each crane start and stop) and factored with the tie force it acts with. The tie's governing combinations
+ * carry the crane traction with the side thrust as live load (ASCE 7 with L: 1.6 LRFD, 1.0 ASD, on the linear twist);
+ * the TR-13 crane stop, which gives the largest torque, acts without side thrust, so it is not added to them.
+ */
+export const twistMovement=(r:ExistingColumnResult|undefined,method:ProjectInput['method']='LRFD')=>r?.torsion&&!r.support?{service:Math.abs(r.torsion.service.slip),factored:(method==='LRFD'?1.6:1)*Math.abs(r.torsion.service.slip)}:{service:0,factored:0};
 /** The rail's shift across the runway from the service twist, e(1 − cos θ_s), added to the column's lateral displacement. */
 export const twistShift=(t:Torsion|undefined)=>t?Math.abs(t.service.lateral):0;
 
@@ -78,5 +83,5 @@ export function columnTwistChecks(p:ProjectInput,t:TwistResult,o:TwistCheckOptio
    note:`${o.model}${path} Factored twist θ_u = ${rotation.toFixed(4)} rad under the largest torque ${M(t.T)}${t.case?` (${t.case.id})`:''} at the offset e = ${L(t.offset)}: the girder bearing moves ${L(Math.abs(t.slip))} along the runway. Basis (mechanics): the column analysis is first order (small rotations); the girder reaction R, shifted e·θ along the runway by the twist, adds a weak-axis moment R·e·θ it leaves out, which θ ≤ ${twistRotationLimit} rad keeps within ${Math.round(twistRotationLimit*100)}% of the eccentric moment R·e the strong-axis H1 carries. A larger twist is not admissible. ${remedy}`},
   {id:ids.movement,group:o.label,title:`${o.label} twist · girder movement along the runway at the ${at} (service)`,status:status(move,o.limit),demand:move,capacity:o.limit,utilization:move/o.limit,quantity:'length',
    equation:'\\Delta=\\theta_se+\\Delta_{brace}\\le\\min(H/400,\\;2\\,\\mathrm{in})',substitution:sub(move,o.limit),referenceIds:['tr13-service','tr13-column-path',...refs],
-   note:`${o.model}${path} Unfactored single-crane traction at the girder line, torque ${M(s.T)} (every crane start and stop): θ_s = ${Math.abs(s.twist).toFixed(4)} rad, the locating girder bearing moving θ_s·e = ${L(Math.abs(s.slip))} along the runway${brace>0?`, in series with the bracing's crane-level displacement ${L(brace)} (brace-drift)`:''}: ${L(move)} against the runway-level limit ${L(o.limit)} (AIST TR-13 §5.5, H/400 or 2 in). The rail shifts e(1 − cos θ_s) = ${L(Math.abs(s.lateral))} across the runway, added to the column drift (column-drift).${o.movementUsed===false?'':' The movement θ_s·e is added to the sliding bearing travel, the girder end gaps, the rail end gap at the stops and the tie movement (θ_u·e to the tie\'s static movement).'}${o.accepted?` Engineer of record's note: ${o.accepted}.`:''} ${remedy}`}];
+   note:`${o.model}${path} Unfactored single-crane traction at the girder line, torque ${M(s.T)} (every crane start and stop): θ_s = ${Math.abs(s.twist).toFixed(4)} rad, the locating girder bearing moving θ_s·e = ${L(Math.abs(s.slip))} along the runway${brace>0?`, in series with the bracing's crane-level displacement ${L(brace)} (brace-drift)`:''}: ${L(move)} against the runway-level limit ${L(o.limit)} (AIST TR-13 §5.5, H/400 or 2 in). The rail shifts e(1 − cos θ_s) = ${L(Math.abs(s.lateral))} across the runway, added to the column drift (column-drift).${o.movementUsed===false?'':' The movement θ_s·e is added to the sliding bearing travel, the girder end gaps, the rail end gap at the stops and the tie movement (the factored traction\'s to the tie\'s static movement).'}${o.accepted?` Engineer of record's note: ${o.accepted}.`:''} ${remedy}`}];
 }

@@ -178,7 +178,7 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
 /** The new column's twist movement at the bracket seat the tie takes (tieMovements), as the calculation finds it. */
 function seatTwist(p:ProjectInput){
  const c=p.existingColumn,none={service:0,factored:0,offset:0};if(!c?.enabled||!c.isNew||activeStep(p)||!p.details?.bracket?.enabled||activeColumnCap(p)||tiedToBuilding(p))return none;
- try{return {...twistMovement(existingColumnAnalysis(p,supportReactions(p,sectionProperties(p.section)))),offset:girderOffset(p)};}catch{return none;}
+ try{return {...twistMovement(existingColumnAnalysis(p,supportReactions(p,sectionProperties(p.section))),p.method),offset:girderOffset(p)};}catch{return none;}
 }
 
 /** A calculation snapshot carrying only the sizing demands, for the tie check functions. */

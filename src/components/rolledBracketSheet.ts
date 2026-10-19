@@ -13,6 +13,7 @@ import {endBearingGeometry} from '../engine/endBearing';
 import {simpleSupportInput,endGridBearingNote} from '../engine/simpleSupports';
 import {projectStub,stubBoltLayout,stubWeldGroup,usesRolledBracket} from '../engine/rolledBracket';
 import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
+import {torsionBraceNotes} from './bracingSheet';
 import {topFlangeRestraint} from './tieNames';
 
 /** Elevation of the bracket seen from the runway; also keyed on the plan (same title as the plate brackets). */
@@ -173,7 +174,7 @@ export function rolledBracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `THE BRACKET IS DESIGNED FOR EVERY CONCURRENT CASE OF THE BRACKET DESIGN FORCES BELOW, WITH ITS SELF-WEIGHT: STUB FLEXURE, SHEAR AND TORSION FROM THE OFFSET BEARINGS, WEB YIELDING AND CRIPPLING UNDER THE BEARING${sf?' AND THE STIFFENERS':''}, THE STUB-TO-COLUMN WELDS WITH THE LONGITUDINAL FORCE AND H BOTTOM, THE COLUMN FLANGE AND WEB LOCAL EFFECTS, DEFLECTION AND FATIGUE${collector?'; WITH THE BRACING, ALSO THE COLLECTOR FORCE THROUGH THE STUB WELDS':''}.`
  ];
  const stiffView=columnStiffenerView(s);if(stiffView)views.push(stiffView);
- return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,[...notes,...stiffenerNotes(p)]),...bracketForceBlocks(s,t)]};
+ return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,[...notes,...stiffenerNotes(p),...torsionBraceNotes(s)]),...bracketForceBlocks(s,t)]};
 }
 /**
  * The rolled stub under a bearing section along the runway: its top flange under the seat (or the flange as the

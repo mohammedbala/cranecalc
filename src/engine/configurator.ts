@@ -25,7 +25,7 @@ import {fatigueSpectrumBin,railClipCategory} from './detailAnalysis';
 import {selectBracketArrangement,selectTieArrangement,tieArrangement,tieOptions} from './connectionOptions';
 import {sizeTaperedHaunch} from './taperedHaunchSizing';
 import {baseSizingRatios,columnDriftShare,sizeColumnBase} from './columnBaseSizing';
-import {bracingRatios,columnTorsionRatio,sizeBracing,sizeTorsionStrut,twistMovementTarget} from './bracingSizing';
+import {bracingRatios,columnTorsionRatio,sizeBracing,sizeTorsionStrut,twistMovementTarget,withTwistMovementTarget} from './bracingSizing';
 import {bracingDesign,defaultTorsionBrace,designsBracing,girderOffset,torsionBraceActive} from './newColumnBracing';
 import {longitudinalBracingAnalysis,longitudinalBracingChecks} from './longitudinalBracing';
 import {supportReactions} from './supportReactions';
@@ -494,7 +494,17 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  // The twist layout rule (withTwistLimit) applies to the outermost build only: the sizing steps rebuild the project with
  // a named column, which must not change the layout under them.
  buildDepth++;
- try{const q=buildLayout(input,trace);return buildDepth===1?withTwistLimit(q,configOf(input).config,trace):q;}finally{buildDepth--;}
+ try{
+  let q=buildLayout(input,trace),target=twistMovementTarget();
+  if(buildDepth!==1)return q;
+  // A tie that cannot take the twist movement of a torsion-braced column (beyondCatalog 'tie'): the strut held to a
+  // tighter twist movement (1/16 in, then 1/32 in), the layout built again.
+  for(const next of [inch/16,inch/32]){
+   if(!torsionBraceActive(q)||!q.configurator?.beyondCatalog?.some(v=>v.member==='tie'))break;
+   const inner:SelectionTrace={};q=withTwistMovementTarget(next,()=>buildLayout(input,inner));Object.assign(trace,inner);target=next;
+  }
+  return withTwistLimit(q,configOf(input).config,trace,target);
+ }finally{buildDepth--;}
 }
 let buildDepth=0;
 function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
@@ -653,16 +663,16 @@ function withTorsionBrace(p:ProjectInput){
  * set and sized here if the final reach first needs it), stated in the selection log with the unbraced twist for
  * comparison; where the twist still exceeds a limit the log says so and the failing check stays in the calculation.
  */
-function withTwistLimit(q:ProjectInput,cfg:RunwayConfig,_trace:SelectionTrace):ProjectInput{
+function withTwistLimit(q:ProjectInput,cfg:RunwayConfig,_trace:SelectionTrace,target=twistMovementTarget()):ProjectInput{
  if(cfg.scope!=='design'||cfg.structure!=='new'||cfg.support==='column-cap'||!q.existingColumn?.enabled||!q.details?.bracket?.enabled||!designsBracing(q))return q;
  const unbraced=(()=>{const r=structuredClone(q);delete r.longitudinalBracing!.design!.torsionBrace;return seatTwist(r);})();
  if(!unbraced||unbraced.ok&&!torsionBraceActive(q))return q;
  let r=q;
- if(!torsionBraceActive(r)){r=structuredClone(q);r.longitudinalBracing!.design={...bracingDesign(r),torsionBrace:{...defaultTorsionBrace}};r=sizeBracing(r);}
+ if(!torsionBraceActive(r)){r=structuredClone(q);r.longitudinalBracing!.design={...bracingDesign(r),torsionBrace:{...defaultTorsionBrace}};r=withTwistMovementTarget(target,()=>sizeBracing(r));}
  const braced=seatTwist(r)!,len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`,d=bracingDesign(r),tb=d.torsionBrace!;
  const state=(v:NonNullable<ReturnType<typeof seatTwist>>)=>`${Math.abs(v.t.twist).toFixed(4)} rad factored (limit ${twistRotationLimit}) and ${len(v.slip)} of bearing movement at every crane start and stop (limit ${len(v.limit)})`;
  const plate=cfg.units==='SI'?`${Math.round(tb.thickness)} mm`:`${+(tb.thickness/inch).toFixed(3)} in`;
- const why=`On the new ${r.existingColumn!.shape} columns the ${supportLabels[cfg.support].toLowerCase()} seats the girder ${len(braced.t.offset)} off the column axis, where the crane-level strut holds the column: with the strut on the column centerline alone the traction twists the column ${state(unbraced)}. The bracket stays: the ${d.strut.shape} strut is moment-connected in plan at each locating column by ${plate} plates on its flanges (torsion brace, ${tb.rows} rows of bolt pairs), so the strut holds the column against the twist; the strut is sized so the girder's factored movement from the twist stays within ${len(twistMovementTarget)} (a configurator target, the TR-13 alignment tolerance class, so the tie, slots and gaps are not sized by it): ${state(braced)}, ${len(Math.abs(braced.t.slip))} factored${braced.ok?'.':`: still beyond a limit (column-twist, column-twist-rotation fail and stay in the calculation): a stiffer strut, a torsionally stiffer column or a column cap is needed.`}`;
+ const why=`On the new ${r.existingColumn!.shape} columns the ${supportLabels[cfg.support].toLowerCase()} seats the girder ${len(braced.t.offset)} off the column axis, where the crane-level strut holds the column: with the strut on the column centerline alone the traction twists the column ${state(unbraced)}. The bracket stays: the ${d.strut.shape} strut is moment-connected in plan at each locating column by ${plate} plates on its flanges (torsion brace, ${tb.rows} rows of bolt pairs), so the strut holds the column against the twist; the strut is sized so the girder's movement from the twist under the factored traction stays within ${len(target)} (a configurator target${target<inch/8?', tightened from 1/8 in where the tie could not take the movement':', the TR-13 alignment tolerance class'}, so the tie, slots and gaps are not sized by it): ${state(braced)}${braced.ok?'.':`: still beyond a limit (column-twist, column-twist-rotation fail and stay in the calculation): a stiffer strut, a torsionally stiffer column or a column cap is needed.`}`;
  r.notes+=` ${why}`;
  const sel=r.configurator?.selections??[];
  if(r.configurator)r.configurator.selections=[...sel.filter(v=>v.item!=='Longitudinal path'),{item:'Longitudinal path',entered:'Crane-level strut on the column centerline',designed:`${d.strut.shape} strut with a torsion brace at the locating columns`,reason:why.slice(0,800)}].slice(0,24);

@@ -35,7 +35,7 @@ import {supportReactions,type SupportReactionSet} from './supportReactions';
 import {existingColumnAnalysis,existingColumnSection,twistMovementLimit} from './existingColumn';
 import {longitudinalBracingAnalysis,longitudinalBracingChecks} from './longitudinalBracing';
 import {bracingDesign,bracingGeometry,bracingSystemAnalysis,bracingSystemChecks,connectionCapacities,designsBracing,torsionBraceActive,webStiffeners,webYieldLine} from './newColumnBracing';
-import {twistRotationLimit} from './columnTwistLimit';
+import {twistMovement,twistRotationLimit} from './columnTwistLimit';
 import {filletMinimum} from './connectionStrength';
 
 const inch=25.4,eighth=inch/8,sixteenth=inch/16,next=(v:number,step:number)=>(Math.floor(v/step+1e-6)+1)*step;
@@ -52,17 +52,22 @@ export function bracingChecks(p:ProjectInput,reactions:SupportReactionSet=suppor
 /**
  * With a torsion brace, the column's twist limits it holds (columnTwistLimit.ts), as sizing ratios: the factored twist
  * against the small-rotation limit and the service movement (without the bracing displacement in series, which the
- * calculation adds) against the runway-level limit; and a configurator target, not a code limit: the girder's factored
- * movement from the twist θ_u·e within 1/8 in, the AIST TR-13 alignment tolerance class, so the tie, the bearing slots
+ * calculation adds) against the runway-level limit; and a configurator target, not a code limit: the girder's movement
+ * from the twist under the factored traction (twistMovement, what the tie takes) within 1/8 in, the AIST TR-13 alignment tolerance class, so the tie, the bearing slots
  * and the stop gaps that take it (tieMovements, simpleSupportChecks, railChecks) are not sized by it.
  */
 function twistRatios(p:ProjectInput,c:ReturnType<typeof existingColumnAnalysis>):CheckResult[]{
  const t=c.torsion;if(!torsionBraceActive(p)||!t)return [];
  const row=(id:string,v:number):CheckResult=>({id,group:'Torsion brace',title:id,status:v<=1?'pass':'fail',equation:'',note:'',referenceIds:[],utilization:v});
- return [row('column-twist-rotation',Math.abs(t.twist)/twistRotationLimit),row('column-twist',Math.abs(t.service.slip)/twistMovementLimit(p,c)),row('torsion-brace-movement',Math.abs(t.slip)/twistMovementTarget)];
+ return [row('column-twist-rotation',Math.abs(t.twist)/twistRotationLimit),row('column-twist',Math.abs(t.service.slip)/twistMovementLimit(p,c)),row('torsion-brace-movement',twistMovement(c,p.method).factored/movementTarget)];
 }
-/** Configurator target on the factored twist movement of the girder at the seat with a torsion brace (twistRatios). */
-export const twistMovementTarget=inch/8;
+/**
+ * Configurator target on the girder's twist movement at the seat under the factored traction with a torsion brace
+ * (twistRatios): 1/8 in, tightened by the configurator (withTwistMovementTarget) where the tie cannot take the movement.
+ */
+let movementTarget=inch/8;
+export const twistMovementTarget=()=>movementTarget;
+export function withTwistMovementTarget<T>(v:number,f:()=>T):T{const was=movementTarget;movementTarget=v;try{return f();}finally{movementTarget=was;}}
 /**
  * The strut of a torsion brace (design.torsionBrace) for the twist ratios (twistRatios), before the tie and the bearings
  * are laid out for the twist movement: the lightest strut from the entered one up whose I_y holds them within `target`,

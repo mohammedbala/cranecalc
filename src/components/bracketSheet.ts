@@ -20,6 +20,7 @@ import {simpleSupportInput,endGridBearingNote} from '../engine/simpleSupports';
 import {ribGeometry} from '../engine/bracketRib';
 import {haunchedRibView,haunchedFaceRibs,haunchedRibCallout,haunchedRibNotes} from './haunchedBracketDrawing';
 import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
+import {torsionBraceNotes} from './bracingSheet';
 import {topFlangeRestraint} from './tieNames';
 /** Column bracket details on their own sheet. */
 export function bracketSheetSvg(s:CalculationSnapshot,number='S-05'){
@@ -149,6 +150,6 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
    `THE BRACKET IS DESIGNED FOR EVERY CONCURRENT CASE OF THE BRACKET DESIGN FORCES BELOW, WITH ITS SELF-WEIGHT; RIB FORCE MAY REVERSE UNDER AN OFFSET BEARING. FOR THE LONGITUDINAL FORCE AND H BOTTOM THE CALCULATION CHECKS ${eb?'THE BEARING BOLTS IN BEARING ON THE SEAT AND THE SEAT FOR PRYING; ':''}THE SEAT FILLET AND RIB ROOT FILLETS AS ONE WELD GROUP WITH THE CONCURRENT VERTICAL LOAD, AND THE SEAT FILLET FOR FATIGUE; AND THE COLUMN FLANGE (LOCAL BENDING) AND WEB (LOCAL YIELDING) UNDER THE SEAT${collector?'; WITH THE BRACING, ALSO THE COLLECTOR FORCE THROUGH THE SEAT FILLET':''}.`
   ];
   const stiffView=columnStiffenerView(s);if(stiffView)views.push(stiffView);
-  return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,[...notes,...stiffenerNotes(p)]),...bracketForceBlocks(s,t)]};
+  return {key:'bracket',name:'BRACKETS',views,notes:(t:Style)=>[heading(t,'BRACKET FABRICATION & DESIGN NOTES'),...numbered(t,[...notes,...stiffenerNotes(p),...torsionBraceNotes(s)]),...bracketForceBlocks(s,t)]};
  }
 }
