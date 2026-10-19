@@ -67,6 +67,18 @@ The **Templates** tab (opened first when no project is saved on the device) is t
 - **Template data.** Supplier, survey and site data are fictitious examples, marked as such. A template builds a demonstration-purpose project. Switching the report purpose to a project blocks issue until every example item is replaced.
 - **Rebuilding.** The choices are stored with the project (`configurator`), so **Edit its choices** on the Templates tab rebuilds it after a change. Detailed edits made under Inputs & checks are not kept by a rebuild.
 
+## Sample cases
+
+The **Sample cases** tab (next to Templates) lists simulated runway configurations generated to test the app: existing and new structures, every support and tie type, rolled and capped girders on simple or continuous spans, one or two cranes from 1 to 40 tons. Each card shows a short title, the girder as built, the outcome of the simulation run (eligible, with failures, review draft, blocked, not run), the governing D/C and the open items. Search, the outcome chips and the filters (structure, girder support, tie, girder system, crane capacity, outcome) narrow the list; sort by case number, capacity or governing D/C. **Open** loads the case's prebuilt inputs and recalculates them on **Inputs & checks**; **Drawings** opens it on the drawing sheets. Opening a case replaces the current project, as building a template does. The cases are fictitious demonstration configurations with fictitious crane, supplier, survey and site data.
+
+The projects ship prebuilt, so nothing is sized in the browser: `public/cases/NNN.json` is each case's project (compact JSON, about 15 KB) fetched when opened, and `public/cases/index.json` is the list the tab reads. Both are written by:
+
+```sh
+npx tsx scripts/exportSampleCases.ts <casesDir> [resultsDir] [--out public/cases]
+```
+
+`<casesDir>` holds the generated `NNN.json` case files (`{id,title,descriptor,config,project}`); `[resultsDir]` holds the simulation run's `NNN/summary.json` (outcome, check counts, open items, calculation time) and `NNN/checks.csv` (the governing D/C: the highest evaluated design-check ratio, or a failing check's when higher). Every project is checked with `validateProject`; invalid ones are skipped and reported, and cases without results are listed as not run. The command replaces the numbered files and the index in the output folder, so re-run it whenever the case set or its results are regenerated. `tests/sampleCases.test.ts` covers the export and the gallery.
+
 ## Current calculation capability
 
 The app now includes an **AIST runway girder design worksheet** referenced to **AIST Technical Report 13** using the user's supplied source dated February 24, 2020, DG7 third edition (2019, appended 2023 corrections), and directly verified AISC 360-16 provisions. Exact source provenance is retained in the source audit; the reference building requires its own design.
