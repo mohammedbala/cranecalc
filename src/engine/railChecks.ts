@@ -5,7 +5,7 @@ import { boltCapacity,boltProperties,plateBearing,blockShear,minimumFillet } fro
 import { minimumEdge } from './capAngle';
 import { fatigueSpectrumBin } from './detailAnalysis';
 import { latexNumber,withinLimit } from './math';
-import { railClipResponse,railAnchorForce,wheelGroups } from './railClip';
+import { railClipResponse,railAnchorForce,wheelLocalCycles,clipWindow } from './railClip';
 import { railSeat,clipSeatThickness } from './railSeat';
 import { railMovements,railJointMovement,railJointType,railJointGap,tightJointGap,railJointBars,railJointKind,railHasJoints } from './railLayout';
 import { activeEndStop,stopEnds,stopRailClear } from './endStopInputs';
@@ -24,10 +24,23 @@ export function railJointBearing(p:ProjectInput){
  const web=available(2.4*r.jointBoltDiameter*r.webThickness*r.Fu,method,.75,2)*slotted;
  return {bars,web,capacity:Math.min(bars,web),governs:bars<=web?'bars' as const:'web' as const};
 }
+/**
+ * The cycle count of each fatigue detail family, for the one-count check (fatigue-cycles) and the notes: one cycle per
+ * crane passage at the girder and its connections; the passages times the wheel groups at the wheel-local details (rail
+ * clip base welds, the cap welds under the wheel, rail joint bars and bolts: wheelLocalCycles).
+ */
+export function fatigueCycleFamilies(p:ProjectInput){
+ const d=p.details;if(!d)return [];
+ const out:{label:string;cycles:number;groups:number}[]=[];
+ const clip=wheelLocalCycles(p,p.aist?.clipSpacing??0);
+ if(d.rail.clip?.type!=='bolted')out.push({label:'rail clip base welds',cycles:clip.cycles,groups:clip.groups});
+ if(p.section.kind==='cap'){const v=wheelLocalCycles(p,clipWindow(p));out.push({label:'cap welds under the wheels',cycles:v.cycles,groups:v.groups});}
+ if(railHasJoints(p)&&railJointKind(p)!=='welded'){const v=railJointCycles(p);out.push({label:'rail joint bars and bolts',cycles:v.cycles,groups:v.groups});}
+ return out;
+}
 /** Each wheel group crossing a rail joint is one cycle of its bars and bolts: crane passages × wheel groups per rail. */
 export function railJointCycles(p:ProjectInput){
- const passes=p.details!.spectrum.reduce((n,b)=>n+b.cycles,0),groups=wheelGroups(p,railJointBars(p).length);
- return {passes,groups,cycles:passes*groups};
+ return wheelLocalCycles(p,railJointBars(p).length);
 }
 /**
  * The demands the rail supplier's joint bars and bolts are designed for (a deferred submittal, jointKind
@@ -36,7 +49,7 @@ export function railJointCycles(p:ProjectInput){
  */
 export function supplierRailJointDemands(s:CalculationSnapshot){
  const p=s.input;if(!p.details||railJointKind(p)!=='supplier-bars'||!railHasJoints(p))return undefined;
- const c=(id:string)=>s.checks.find(v=>v.id===id&&v.status==='excluded')?.demand;
+ const c=(id:string)=>s.checks.find(v=>v.id===id&&(v.status==='excluded'||v.byOthers))?.demand;
  const shear=c('rail-joint-net'),moment=c('rail-joint-plate'),range=s.detailResults?.demands.railFatigueVertical;
  return shear===undefined?undefined:{shear,moment,range,cycles:railJointCycles(p).cycles};
 }
@@ -48,7 +61,9 @@ export function supplierRailJointDemands(s:CalculationSnapshot){
 export function supplierRailJointText(s:CalculationSnapshot){
  const d=supplierRailJointDemands(s);if(!d)return undefined;
  const u=s.input.units,f=(v:number)=>format(v,'force',u,1);
- return `factored wheel force across the joint ${f(d.shear)} (bar moment = this force × the distance from the joint to the first bolt line)${d.range!==undefined?`; service wheel force range ${f(d.range)} at ${Math.round(d.cycles).toLocaleString('en-US')} cycles`:''}`;
+ // The joint checks whose reference estimate (idealized bars of the entered size) exceeds its limit (reopenedByOthers).
+ const over=s.checks.filter(v=>v.byOthers&&v.id.startsWith('rail-joint-')&&(v.utilization??0)>1);
+ return `factored wheel force across the joint ${f(d.shear)} (bar moment = this force × the distance from the joint to the first bolt line)${d.range!==undefined?`; service wheel force range ${f(d.range)} at ${Math.round(d.cycles).toLocaleString('en-US')} cycles`:''}${over.length?`; the app's estimate for standard bars of the entered size exceeds the limit (${over.map(v=>`${v.id} D/C ${(v.utilization??0).toFixed(2)}`).join(', ')}): the supplier shall demonstrate the joint for these demands with heavier bars, a welded joint or a reduced-range detail`:''}`;
 }
 export function railChecks(s:CalculationSnapshot):CheckResult[]{
  const p=s.input,d=p.details!,r=d.rail,m=d.material,a=s.detailResults!,depth=p.aist!.railDepth,spacing=p.aist!.clipSpacing;
@@ -88,7 +103,7 @@ export function railChecks(s:CalculationSnapshot):CheckResult[]{
  }else{
   const clip=railClipResponse(p,H,k),phi=available(.6*m.Fexx,method,.75,2);
   clipCheck('rail-clip-weld',`Rail clip base welds to the ${p.section.kind==='cap'?'cap channel web':'girder top flange'}`,clip.weldStress,phi,'stress','f_w=\\frac{1}{2t_el_w}\\sqrt{V^2+\\left(T+\\frac{6M}{l_w}\\right)^2}\\le\\phi(0.6F_{EXX})',`AISC 360-16 J2.4, elastic method, no directional strength increase. Two fillets ${len(k.weld)} × ${len(k.weldLength)}, one across each end of the clip base, ${len(k.baseLength)} apart, on ${where}. Factored side thrust H = ${force(H)} on one clip in either role: bearing clip V = H at mid-height of the rail base (M = ${force(H)} × ${len(k.lateralHeight)}), or hold-down clip T = Hh_r/b_r at the nose (M = T × ${len(clip.upliftArm)} from the weld centroid). The weld size and length are the manufacturer's minimum.${k.weldLength<4*k.weld-1e-6?' The fillets are shorter than 4w and taken at the J2.2b effective size L/4.':''} Base metal of the ${plate} (0.6F_yt per unit length) does not govern.`);
-  const passes=d.spectrum.reduce((n,b)=>n+b.cycles,0),clipGroups=wheelGroups(p,spacing),cycles=passes*clipGroups,F=categoryF(cycles);
+  const {passes,groups:clipGroups,cycles}=wheelLocalCycles(p,spacing),F=categoryF(cycles);
   clipCheck('rail-clip-weld-fatigue','Rail clip base weld throat fatigue',Math.max(...a.railFatigueBins.map(b=>b.weldStress)),F,'stress','f_{sr}=\\max_i f_w\\left(C_d+\\frac{Q_i}{Q}C_{vs}+0.5C_{ss}\\right)\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',`AISC 360-16 Table A-3.1 item 8.2 (shear on the throat of fillet welds), Category F; AIST TR-13 §3.10.2.3 unfactored duty-bin wheel groups, no impact. The clip force is one-signed (the rail pushes a clip outward or lifts its nose), so each passage ranges from zero to the largest bin value; it is assigned to every cycle, with no endurance or load-sharing credit. Cycles n = ${count(passes)} crane passages × ${clipGroups} wheel group${clipGroups>1?'s':''} per rail (wheels farther apart than the ${len(spacing)} clip spacing each load a clip separately) = ${count(cycles)} (AISC DG7 and AIST TR-13 cycle counting: each wheel or wheel group passing a local detail is one cycle). The cap at each clip is a short-attachment fatigue detail (A-3.1 item 7.1, Appendix A).`,'Fatigue');
   clipCheck('rail-clip-weld-minimum','Rail clip base weld minimum size',minimumFillet(Math.min(k.baseThickness,receivingThickness)),k.weld,'length','w\\ge w_{min}',`AISC Table J2.4 by the thinner part joined (the ${plate} or the clip base), low-hydrogen electrodes.`,'Detailing');
  }

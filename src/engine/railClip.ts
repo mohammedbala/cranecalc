@@ -51,3 +51,15 @@ export function railAnchorForce(p:ProjectInput){
 export function wheelGroups(p:ProjectInput,window:number){
  return Math.max(1,...p.cranes.map(c=>{const x=c.wheels.map(w=>w.offset).sort((a,b)=>a-b);return x.reduce((n,v,i)=>i&&v-x[i-1]>window+1e-6?n+1:n,x.length?1:0);}));
 }
+/**
+ * Cycles of a wheel-local detail (rail clips and their base welds, rail joint bars and bolts, the cap welds under the
+ * wheel): the crane passages of the duty (the duty bins, else the fatigue count; one stress cycle per passage at every
+ * girder detail) times the wheel groups that pass it separately within its window (wheelGroups). One rule for the
+ * sizing, the checks, the notes and the deferred submittals (AISC DG7 and AIST TR-13 cycle counting).
+ */
+export function wheelLocalCycles(p:ProjectInput,window:number){
+ const passes=p.details?.spectrum.length?p.details.spectrum.reduce((n,b)=>n+b.cycles,0):p.fatigue.cycles,groups=wheelGroups(p,window);
+ return {passes,groups,cycles:passes*groups};
+}
+/** The window of the wheel group at a rail clip station (detailAnalysis groups the clip and cap forces in it): the clip spacing, at least 2(h_r + t_f). */
+export const clipWindow=(p:ProjectInput)=>Math.max(p.aist?.clipSpacing??0,2*((p.aist?.railDepth??p.railHeight)+p.section.tf));

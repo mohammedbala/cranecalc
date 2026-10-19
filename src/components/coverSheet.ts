@@ -16,7 +16,7 @@ import {buildingClassBasis} from '../engine/buildingClass';
 import {runwayElevations,issueStatus,revisionIdentity,supportColumn,delegatedChecks,unevaluatedStructure} from '../engine/drawingData';
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {railJointType} from '../engine/railLayout';
-import {supplierRailJointText} from '../engine/railChecks';
+import {supplierRailJointText,fatigueCycleFamilies} from '../engine/railChecks';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
@@ -338,7 +338,9 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew),tied=tiedToBui
   ...(d?[['RAIL TWIST / HEAD MOVEMENT',`${d.criteria.twistLimit?`ROTATION ${d.criteria.twistLimit} RAD (OWNER / CRANE SUPPLIER)`:'NO ROTATION LIMIT ENTERED (OWNER / CRANE SUPPLIER), ROTATION NOT CHECKED'}; RAIL-HEAD LATERAL MOVEMENT L/${Math.max(400,p.lateralLimit,d.criteria.railLateralLimit)} OF THE SHORTEST BAY, TWIST INCLUDED (OWNER / CRANE SUPPLIER CRITERIA, ONE STATIC CRANE)`]]:[]),
   ['FATIGUE SPECTRUM',d?(()=>{const rated=d.spectrum.filter(b=>b.liftFraction>=1).reduce((sum,b)=>sum+b.cycles,0),perPass=a&&a.buildingCycles>0?rated/a.buildingCycles:0;
    // The rated-lift bin relates to the owner's full-load repetitions by the stress cycles per crane pass.
-   return `${d.spectrum.reduce((sum,b)=>sum+b.cycles,0).toLocaleString()} STRESS CYCLES AT EACH DETAIL IN ${d.spectrum.length} DUTY BINS (${rated.toLocaleString()} AT RATED LIFT${perPass>0?`: ${Number(perPass.toFixed(2))} STRESS CYCLE${perPass===1?'':'S'} PER FULL-LOAD REPETITION`:''})`;})():`${p.fatigue.cycles.toLocaleString()} CYCLES, CATEGORY ${p.fatigue.category}`],
+   // Wheel-local details count each wheel group passing (fatigueCycleFamilies), as the checks and submittals do.
+   const local=fatigueCycleFamilies(p);
+   return `${d.spectrum.reduce((sum,b)=>sum+b.cycles,0).toLocaleString()} STRESS CYCLES AT EACH GIRDER DETAIL (ONE PER CRANE PASSAGE) IN ${d.spectrum.length} DUTY BINS (${rated.toLocaleString()} AT RATED LIFT${perPass>0?`: ${Number(perPass.toFixed(2))} STRESS CYCLE${perPass===1?'':'S'} PER FULL-LOAD REPETITION`:''})${local.length?`; WHEEL-LOCAL DETAILS, ONE CYCLE PER WHEEL GROUP: ${local.map(f=>`${f.label.toUpperCase()} ${f.cycles.toLocaleString()}`).join(', ')}`:''}`;})():`${p.fatigue.cycles.toLocaleString()} CYCLES, CATEGORY ${p.fatigue.category}`],
   // IBC 1603.1.5: the seismic data for the new structure, and the design base shear each way.
   ...(()=>{const z=seismicBasis(p),e=p.existingColumn?.seismic;if(!z||!e)return [];
    const v=(x:number|undefined)=>x===undefined?'NOT ENTERED':String(x),across=s.existingColumn?.seismic?.QE,along=s.bracingSystem?.seismic?.QE;

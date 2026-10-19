@@ -43,7 +43,9 @@ export interface CheckResult { id:string; group:string; title:string; status:Sta
  /** Set by checkIntegrity.ts: the part has no capacity for the action (capacity ≤ 0, or a ratio that is not finite or above 1000). It fails with utilization Infinity and ranks above every finite D/C; JSON writes Infinity as null, so this flag is the source of truth. */
  noCapacity?:boolean;
  /** Set by checkIntegrity.ts: 'min' where the demand is the requirement and the capacity the provided value (a minimum factor of safety, a ratio to be met or exceeded); 'max' (the default) where the demand may not exceed the capacity. */
- sense?:'max'|'min'; }
+ sense?:'max'|'min';
+ /** Set by calculate(): a by-others or deferred-submittal check (status 'excluded') whose reference estimate exceeds its limit. It is reopened as 'unverified' (an open item: the party responsible must demonstrate it) and stays classified by others, out of this design's governing D/C. */
+ byOthers?:boolean; }
 export interface Properties { A:number; Ix:number; Iy:number; Sx:number; Sy:number; Zx:number; Zy:number; J:number; Cw:number; cy:number; h0:number; weight:number; }
 export interface PointLoad { x:number; vertical:number; lateral:number; crane:string; }
 export interface LoadCase { id:string; positions:number[]; points:PointLoad[]; lateralSign:number; }

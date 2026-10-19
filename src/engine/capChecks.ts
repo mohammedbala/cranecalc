@@ -6,6 +6,7 @@ import {aiscChannelByName} from '../data/aiscChannels';
 import {available} from './aiscStrength';
 import {filletMinimum} from './connectionStrength';
 import {railTopAboveSteel} from './railSeat';
+import {wheelLocalCycles,clipWindow} from './railClip';
 import {format} from './units';
 import {astmSpec} from './materialSpecs';
 
@@ -85,9 +86,10 @@ export function capAttachmentChecks(s:CalculationSnapshot):CheckResult[]{
  else out.push({id:'cap-development-full-force',group:'Cap channel',title:'Cap end · full channel force development',status:'not-applicable',equation:'cF_yA_c\\le2\\beta a^{\\prime}r_w',referenceIds:['dg7-cap','aisc-f5','aisc-connections'],note:`Not applicable: the cap runs the full length of each girder and terminates at the supports, where the moment is zero; the full-force rule applies only to partial-length caps or a non-negligible moment at the termination. Values: c·F_y·A_c = ${frc(full)}; 2βa′r_w = ${frc(fullR)}. The cumulative weld force development check is the design check.`});
  add('cap-development-length','Cap end · available development length',2*d.developmentLength,Math.min(...girderSegments(p).map(m=>m.end-m.start)),'2a^{\\prime}\\le L','Both terminal development regions fit within the shortest physical girder segment, after joint-gap deductions.','length');
  add('cap-rail-footprint','Rail footprint on supported cap web',p.details!.rail.baseWidth+2*Math.abs(p.railEccentricity),p.section.bf,'b_r+2e\\le b_f','Rail base must remain over the W top flange; outstand wheel bearing is outside the supported template.','length');
- const n=p.fatigue.cycles,F=categoryF(n);
+ // The local wheel stress on the cap welds cycles once per wheel group passing (wheelLocalCycles), with the girder's shear flow.
+ const {passes,groups,cycles:n}=wheelLocalCycles(p,clipWindow(p)),F=categoryF(n);
  const tractionRange=2*Math.max(...p.cranes.map(c=>c.longitudinal))*Ac/cap.elastic.A/(2*beta*d.developmentLength*a);
  const fatigueRange=tractionRange+2*Math.max(...r.fatigueFlows.map((q,i)=>q+local(s.detailResults!.railFatigueBins[i].vertical,s.detailResults!.railFatigueBins[i].lateral)))/a;
- add('cap-weld-fatigue','Cap weld throat · Category F fatigue',fatigueRange,F,'f_{sr}=\\frac{2\\Delta q}{0.707w}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}','Full reversal of every absolute stress component, largest bin assigned to all cycles; full traction reversal transferred into the channel share over each reduced effective end-development length a′ is added. Δq is the range of the shear flow per weld. Unfactored Cds + lift fraction × Cvs + 0.5Css, without impact. Fatigue limit equation uses MPa; displayed stresses follow project units. AISC Table A-3.1 item 8.2; DG7 §13.3.','stress','Fatigue');
+ add('cap-weld-fatigue','Cap weld throat · Category F fatigue',fatigueRange,F,'f_{sr}=\\frac{2\\Delta q}{0.707w}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',`Full reversal of every absolute stress component, largest bin assigned to all cycles; full traction reversal transferred into the channel share over each reduced effective end-development length a′ is added. Δq is the range of the shear flow per weld. Unfactored Cds + lift fraction × Cvs + 0.5Css, without impact. Fatigue limit equation uses MPa; displayed stresses follow project units. AISC Table A-3.1 item 8.2; DG7 §13.3. Cycles n_SR = ${passes.toLocaleString('en-US')} crane passages × ${groups} wheel group${groups>1?'s':''} per rail = ${n.toLocaleString('en-US')}: the local wheel stress on the welds cycles once per wheel group passing (AISC DG7 and AIST TR-13 cycle counting), and the whole range is assigned to every one.`,'stress','Fatigue');
  return out;
 }
