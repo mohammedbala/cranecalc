@@ -128,7 +128,7 @@ and accessible panels (labels, focus order, keyboard reachable).
 
 | Increment | Status |
 | --- | --- |
-| 1 Drafting core | in progress |
+| 1 Drafting core | done: model, draw and modify commands; tests in `tests/cadDrafting.test.ts`, browser check in `tests/e2e/cad.spec.ts` |
 | 2 Precision and selection | planned |
 | 3 Hatching | planned |
 | 4 Annotation | planned |

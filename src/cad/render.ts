@@ -1,4 +1,5 @@
-import {DEG,bbox,dimGeometry,textBox,textWidthPerHeight,type Box,type CadDoc,type Ent,type Grip,type NewEnt,type Pt,type SnapKind} from './model';
+import {bulgeArc} from './curves';
+import {DEG,bbox,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,pieces,textBox,textWidthPerHeight,type Box,type CadDoc,type Ent,type Grip,type NewEnt,type Pt,type SnapKind} from './model';
 import {dashPattern} from './convert';
 
 /** Screen view: world point (cx, cy) at the canvas center, scale pixels per drawing unit, canvas w × h CSS pixels. */
@@ -32,9 +33,20 @@ function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<Ca
  const S=(p:Pt)=>toScreen(v,p);
  switch(e.type){
   case 'line':{const a=S(e.a),b=S(e.b);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);break;}
-  case 'poly':{const p=e.points.map(S);ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);if(e.closed)ctx.closePath();break;}
+  case 'poly':{
+   const p=e.points.map(S);ctx.moveTo(p[0][0],p[0][1]);const n=e.points.length,segs=e.closed&&n>2?n:n-1;
+   for(let i=0;i<segs;i++){const j=(i+1)%n,g=e.bulges?.[i]?bulgeArc(e.points[i],e.points[j],e.bulges[i]):undefined;
+    if(g){const c=S(g.c);ctx.arc(c[0],c[1],g.r*v.scale,-g.a0*DEG,-(g.a0+g.sweep)*DEG,g.sweep>0);}else ctx.lineTo(p[j][0],p[j][1]);}
+   if(e.closed)ctx.closePath();break;
+  }
   case 'circle':{const c=S(e.center),r=e.radius*v.scale;ctx.moveTo(c[0]+r,c[1]);ctx.arc(c[0],c[1],r,0,2*Math.PI);break;}
   case 'arc':{const c=S(e.center),r=e.radius*v.scale,s=S([e.center[0]+e.radius*Math.cos(e.start*DEG),e.center[1]+e.radius*Math.sin(e.start*DEG)]);ctx.moveTo(s[0],s[1]);ctx.arc(c[0],c[1],r,-e.start*DEG,-e.end*DEG,true);break;}
+  case 'ellipse':{
+   const c=S(e.center),rx=Math.hypot(e.major[0],e.major[1])*v.scale,rot=-Math.atan2(e.major[1],e.major[0]),full=ellipseSweep(e)>=360,s=S(curveSamples(e)[0].p);
+   ctx.moveTo(s[0],s[1]);ctx.ellipse(c[0],c[1],rx,rx*e.ratio,rot,-e.start*DEG,full?-e.start*DEG-2*Math.PI:-(e.start+ellipseSweep(e))*DEG,true);break;
+  }
+  case 'spline':{const p=curveSamples(e).map(q=>S(q.p));ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);break;}
+  case 'xline':case 'ray':{const pc=pieces(e as Ent)[0],vb=viewBox(v),m=(vb[2]-vb[0])*.05;if(pc.k!=='seg')break;const k=clipSegment(pc.a,pc.b,[vb[0]-m,vb[1]-m,vb[2]+m,vb[3]+m]);if(k){const a=S(k[0]),b=S(k[1]);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}break;}
   case 'dim':for(const [a,b] of dimGeometry(e as Ent&{type:'dim'},doc).lines){const p=S(a),q=S(b);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}break;
  }
 }
@@ -83,15 +95,20 @@ export function drawScene(ctx:CanvasRenderingContext2D,o:SceneOptions){
  const byLayer=new Map<string,Ent[]>();
  for(const e of doc.entities){if(!overlaps(cachedBox(e,doc),vb))continue;let list=byLayer.get(e.layer);if(!list)byLayer.set(e.layer,list=[]);list.push(e);}
  for(const layer of doc.layers){
-  const list=byLayer.get(layer.name);if(!layer.visible||!list?.length)continue;
-  const color=layerColor(layer.color,theme);
-  ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=o.lwt?Math.max(1,layer.weight/24):1;ctx.lineCap='round';ctx.lineJoin='round';
-  const dash=dashPattern(layer.ltype,doc.unit).map(d=>d*v.scale);
-  ctx.setLineDash(dash.length&&Math.min(...dash)>=1.5?dash:[]);
-  ctx.beginPath();for(const e of list)if(e.type!=='text'&&e.type!=='solid')strokePath(ctx,v,e,doc);ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.beginPath();for(const e of list)if(e.type==='solid'||e.type==='dim')fillShapes(ctx,v,e,doc);ctx.fill();
-  for(const e of list){const t=textOf(e,doc);if(t)drawText(ctx,v,t.at,t.height,t.value,t.angle,t.align,t.bold);}
+  const all=byLayer.get(layer.name);if(!layer.visible||!all?.length)continue;
+  // Objects with their own color, linetype or lineweight draw in their own batch.
+  const batches=new Map<string,Ent[]>();
+  for(const e of all){const k=e.color===undefined&&e.ltype===undefined&&e.weight===undefined&&e.ltscale===undefined?'':`${e.color}|${e.ltype}|${e.weight}|${e.ltscale}`;let b=batches.get(k);if(!b)batches.set(k,b=[]);b.push(e);}
+  for(const list of batches.values()){
+   const f=effective(list[0],layer),color=layerColor(f.color,theme);
+   ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=o.lwt?Math.max(1,f.weight/24):1;ctx.lineCap='round';ctx.lineJoin='round';
+   const dash=dashPattern(f.ltype,doc.unit,f.ltscale).map(d=>d*v.scale),longest=Math.max(0,...dash);
+   ctx.setLineDash(dash.length&&longest>=1.5?dash.map(d=>Math.max(d,.01)):[]);
+   ctx.beginPath();for(const e of list)if(e.type!=='text'&&e.type!=='solid')strokePath(ctx,v,e,doc);ctx.stroke();
+   ctx.setLineDash([]);
+   ctx.beginPath();for(const e of list)if(e.type==='solid'||e.type==='dim')fillShapes(ctx,v,e,doc);ctx.fill();
+   for(const e of list){const t=textOf(e,doc);if(t)drawText(ctx,v,t.at,t.height,t.value,t.angle,t.align,t.bold);}
+  }
  }
  ctx.setLineDash([]);
 }
@@ -102,7 +119,7 @@ export interface OverlayOptions{
  window?:{a:Pt;b:Pt};grips?:Grip[];hot?:Pt;snap?:{kind:SnapKind;p:Pt};
  cursor?:[number,number];crosshair:boolean;tip?:string;pickbox:number;
 }
-const snapNames:Record<SnapKind,string>={end:'Endpoint',mid:'Midpoint',cen:'Center',qua:'Quadrant',int:'Intersection',per:'Perpendicular',nea:'Nearest',ins:'Insertion',grid:'Grid'};
+export const snapNames:Record<SnapKind,string>={end:'Endpoint',mid:'Midpoint',cen:'Center',qua:'Quadrant',int:'Intersection',per:'Perpendicular',nea:'Nearest',ins:'Insertion',grid:'Grid',nod:'Node',tan:'Tangent',ext:'Extension',par:'Parallel',app:'Apparent intersection',trk:'Tracking'};
 /** Everything that follows the cursor: selection highlight, hover, preview, window, grips, snap marker, crosshair. */
 export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
  const {doc,view:v,theme}=o,c=themeColors(theme),vb=viewBox(v);
@@ -145,7 +162,12 @@ export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
    case 'per':ctx.moveTo(x-r,y-r);ctx.lineTo(x-r,y+r);ctx.lineTo(x+r,y+r);ctx.moveTo(x-r,y);ctx.lineTo(x,y);ctx.lineTo(x,y+r);break;
    case 'nea':ctx.moveTo(x-r,y-r);ctx.lineTo(x+r,y-r);ctx.lineTo(x-r,y+r);ctx.lineTo(x+r,y+r);ctx.closePath();break;
    case 'ins':ctx.rect(x-r,y-r,2*r,2*r);ctx.moveTo(x-r,y);ctx.lineTo(x+r,y);break;
-   case 'grid':ctx.moveTo(x-r,y);ctx.lineTo(x+r,y);ctx.moveTo(x,y-r);ctx.lineTo(x,y+r);break;
+   case 'grid':case 'trk':ctx.moveTo(x-r,y);ctx.lineTo(x+r,y);ctx.moveTo(x,y-r);ctx.lineTo(x,y+r);break;
+   case 'nod':ctx.arc(x,y,r,0,2*Math.PI);ctx.moveTo(x-r*.7,y-r*.7);ctx.lineTo(x+r*.7,y+r*.7);ctx.moveTo(x+r*.7,y-r*.7);ctx.lineTo(x-r*.7,y+r*.7);break;
+   case 'tan':ctx.arc(x,y,r*.8,0,2*Math.PI);ctx.moveTo(x-r,y-r);ctx.lineTo(x+r,y-r);break;
+   case 'ext':ctx.moveTo(x-r,y);ctx.lineTo(x-r*.5,y);ctx.moveTo(x-r*.15,y);ctx.lineTo(x+r*.15,y);ctx.moveTo(x+r*.5,y);ctx.lineTo(x+r,y);break;
+   case 'par':ctx.moveTo(x-r,y+r*.4);ctx.lineTo(x+r*.2,y-r);ctx.moveTo(x-r*.2,y+r);ctx.lineTo(x+r,y-r*.4);break;
+   case 'app':ctx.rect(x-r,y-r,2*r,2*r);ctx.moveTo(x-r*.7,y-r*.7);ctx.lineTo(x+r*.7,y+r*.7);ctx.moveTo(x+r*.7,y-r*.7);ctx.lineTo(x-r*.7,y+r*.7);break;
   }
   ctx.stroke();
   if(o.cursor)tip(ctx,o.cursor[0]+14,o.cursor[1]+22,snapNames[o.snap.kind],c);

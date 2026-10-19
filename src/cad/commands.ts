@@ -1,53 +1,11 @@
 import {
- add,angleOf,dist,explodeEnt,extendEnt,mirroring,offsetEnt,parseLength,polar,rotation,scaling,sub,sweep,transformEnt,translation,trimEnt,
- type Affine,type CadDoc,type Ent,type NewEnt,type Pt,
+ add,angleOf,dist,explodeEnt,extendEnt,mirroring,offsetEnt,polar,rotation,scaling,sub,sweep,transformEnt,translation,trimEnt,
+ type CadDoc,type Ent,type NewEnt,type Pt,
 } from './model';
-import type {CadStore} from './store';
-
-/** What a command can ask of the editor. */
-export interface Env{
- store:CadStore;
- layer():string;
- textHeight():number;setTextHeight(h:number):void;
- dimHeight():number;
- offsetDistance():number|undefined;setOffsetDistance(d:number):void;
- log(message:string):void;
- /** Entities on visible layers whose extents touch e's (trim and extend boundaries). */
- neighbors(e:Ent):Ent[];
- zoomExtents():void;zoomWindow(a:Pt,b:Pt):void;
- openPanel(panel:'layers'|'properties'):void;
- /** A drawing length as it reads at the drawing scale. */
- length(d:number):string;
-}
-export interface Preview{ents?:NewEnt[];rubber?:[Pt,Pt];tip?:string}
-export interface Command{
- name:string;
- prompt():string;
- /** Gather a selection (or use the current one) before begin(). */
- selectFirst?:boolean;
- begin?():void;
- point?(p:Pt):void;
- /** The step wants an object picked rather than a point. */
- wantsPick?():boolean;
- pick?(e:Ent|undefined,p:Pt):void;
- /** A typed keyword or value; false if not understood (the editor then reads it as a point). */
- text?(s:string):boolean;
- enter?():void;
- preview?(cursor:Pt):Preview|undefined;
- /** The last point: relative input, ortho, perpendicular snap and the rubber band start here. */
- base?():Pt|undefined;
- /** The command line takes free text (text content). */
- freeText?():boolean;
- done:boolean;
-}
-
-const strip=(e:Ent):NewEnt=>{const {id:_,...rest}=e;return rest as NewEnt;};
-const key=(s:string)=>s.trim().toUpperCase();
-const num=(s:string)=>parseLength(s);
-const fmtAngle=(a:number)=>`${Number(((a%360+360)%360).toFixed(2))}°`;
-/** Selected entities on unlocked layers. */
-const editable=(env:Env)=>env.store.selected().filter(e=>!env.store.layer(e.layer)?.locked);
-const ghosts=(list:Ent[],m:Affine)=>list.length>1500?undefined:list.map(e=>strip(transformEnt(e,m)));
+import {editable,fmtAngle,ghosts,key,num,strip,type Command,type Env} from './cmdkit';
+import {drawCommands,drawNames} from './drawCommands';
+import {modifyCommands,modifyNames} from './modifyCommands';
+export type {Command,Env,Preview} from './cmdkit';
 
 // ---- draw --------------------------------------------------------------------------------------------------------
 function lineCmd(env:Env):Command{
@@ -94,24 +52,7 @@ function circleCmd(env:Env):Command{
   preview:cur=>center?{ents:[{type:'circle',layer:env.layer(),center,radius:Math.max(1e-9,dist(center,cur)/(diameter?2:1))}],rubber:[center,cur],tip:`${diameter?'Ø':'R'} ${env.length(dist(center,cur))}`}:undefined};
  return c;
 }
-/** The circle through three points as an arc from p1 through p2 to p3. */
-export function arcThrough(p1:Pt,p2:Pt,p3:Pt):{center:Pt;radius:number;start:number;end:number}|undefined{
- const d=2*(p1[0]*(p2[1]-p3[1])+p2[0]*(p3[1]-p1[1])+p3[0]*(p1[1]-p2[1]));if(Math.abs(d)<1e-12)return undefined;
- const s1=p1[0]**2+p1[1]**2,s2=p2[0]**2+p2[1]**2,s3=p3[0]**2+p3[1]**2;
- const center:Pt=[(s1*(p2[1]-p3[1])+s2*(p3[1]-p1[1])+s3*(p1[1]-p2[1]))/d,(s1*(p3[0]-p2[0])+s2*(p1[0]-p3[0])+s3*(p2[0]-p1[0]))/d];
- const a1=angleOf(center,p1),a2=angleOf(center,p2),a3=angleOf(center,p3);
- // Counterclockwise from p1 to p3 if p2 lies on that sweep, otherwise from p3 to p1.
- const ccw=sweep(a1,a2)<=sweep(a1,a3);
- return {center,radius:dist(center,p1),start:ccw?a1:a3,end:ccw?a3:a1};
-}
-function arcCmd(env:Env):Command{
- const pts:Pt[]=[];
- const c:Command={name:'ARC',done:false,
-  prompt:()=>['ARC Specify start point:','ARC Specify second point:','ARC Specify end point:'][pts.length],base:()=>pts[pts.length-1],
-  point(p){pts.push(p);if(pts.length===3){const a=arcThrough(pts[0],pts[1],pts[2]);if(a)env.store.commit('Arc',{add:[{type:'arc',layer:env.layer(),...a}]});else env.log('The three points are in line: no arc.');c.done=true;}},
-  preview:cur=>{if(pts.length===2){const a=arcThrough(pts[0],pts[1],cur);return a?{ents:[{type:'arc',layer:env.layer(),...a}]}:undefined;}return pts.length?{rubber:[pts[0],cur]}:undefined;}};
- return c;
-}
+export {arcThrough} from './drawCommands';
 function textCmd(env:Env):Command{
  let at:Pt|undefined,step:'at'|'height'|'angle'|'text'='at',height=env.textHeight(),angle=0;
  const c:Command={name:'TEXT',done:false,
@@ -211,7 +152,7 @@ function explodeCmd(env:Env):Command{
    const del:number[]=[],add:NewEnt[]=[];
    for(const e of editable(env)){const parts=explodeEnt(e,env.store.doc);if(parts){del.push(e.id);add.push(...parts);}}
    if(del.length)env.store.commit('Explode',{del,add});
-   env.log(del.length?`${del.length} exploded.`:'Only polylines and dimensions explode.');c.done=true;}};
+   env.log(del.length?`${del.length} exploded.`:'Only polylines, dimensions and blocks explode.');c.done=true;}};
  return c;
 }
 function offsetCmd(env:Env):Command{
@@ -219,7 +160,7 @@ function offsetCmd(env:Env):Command{
  const c:Command={name:'OFFSET',done:false,
   prompt:()=>d===undefined?'OFFSET Specify offset distance:':!target?`OFFSET Select object to offset or <exit> (distance ${env.length(d)}):`:'OFFSET Specify point on side to offset:',
   wantsPick:()=>d!==undefined&&!target,
-  pick(e){if(!e)return;if(env.store.layer(e.layer)?.locked){env.log('That object is on a locked layer.');return;}if(!['line','poly','circle','arc'].includes(e.type)){env.log('Offset lines, polylines, circles and arcs.');return;}target=e;},
+  pick(e){if(!e)return;if(env.store.layer(e.layer)?.locked){env.log('That object is on a locked layer.');return;}if(!['line','poly','circle','arc','ellipse','spline','xline','ray'].includes(e.type)){env.log('Offset lines, polylines, circles, arcs, ellipses, splines and construction lines.');return;}target=e;},
   point(p){if(d===undefined){return;}if(target){const o=offsetEnt(target,d,p);if(o)env.store.commit('Offset',{add:[o]});else env.log('Cannot offset that far.');target=undefined;}},
   text(s){if(d!==undefined&&!target)return false;const v=num(s);if(d===undefined&&v!==undefined&&v>0){d=v;env.setOffsetDistance(v);return true;}return false;},
   enter(){if(d===undefined)return;c.done=true;},
@@ -235,7 +176,7 @@ function trimCmd(env:Env,extend:boolean):Command{
    if(!e)return;if(env.store.layer(e.layer)?.locked){env.log('That object is on a locked layer.');return;}
    if(extend){const r=extendEnt(e,p,env.neighbors(e),env.store.doc);if(r)env.store.commit('Extend',{put:[r]});else env.log('No boundary ahead of that end.');return;}
    const pieces=trimEnt(e,p,env.neighbors(e),env.store.doc);
-   if(!pieces){env.log('Trim lines, polylines, circles and arcs.');return;}
+   if(!pieces){env.log('Trim lines, polylines, circles, arcs, ellipses, splines and construction lines.');return;}
    env.store.commit('Trim',{del:[e.id],add:pieces});
   },
   enter(){c.done=true;}};
@@ -272,17 +213,18 @@ export const commandNames:Record<string,string>={
  M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',MI:'MIRROR',MIRROR:'MIRROR',
  E:'ERASE',ERASE:'ERASE',X:'EXPLODE',EXPLODE:'EXPLODE',O:'OFFSET',OFFSET:'OFFSET',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',
  DI:'DIST',DIST:'DIST',Z:'ZOOM',ZOOM:'ZOOM',U:'UNDO',UNDO:'UNDO',REDO:'REDO',LA:'LAYER',LAYER:'LAYER',PR:'PROPERTIES',CH:'PROPERTIES',PROPERTIES:'PROPERTIES',
+ ...drawNames,...modifyNames,
 };
 /** A command by its full name, or undefined for UNDO, REDO, LAYER and PROPERTIES, which the editor runs directly. */
 export function makeCommand(name:string,env:Env):Command|undefined{
  switch(name){
   case 'LINE':return lineCmd(env);case 'PLINE':return plineCmd(env);case 'RECTANG':return rectCmd(env);case 'CIRCLE':return circleCmd(env);
-  case 'ARC':return arcCmd(env);case 'TEXT':return textCmd(env);case 'DIMLINEAR':return dimCmd(env,false);case 'DIMALIGNED':return dimCmd(env,true);
+  case 'TEXT':return textCmd(env);case 'DIMLINEAR':return dimCmd(env,false);case 'DIMALIGNED':return dimCmd(env,true);
   case 'MOVE':return moveCopyCmd(env,false);case 'COPY':return moveCopyCmd(env,true);case 'ROTATE':return rotateCmd(env);case 'SCALE':return scaleCmd(env);
   case 'MIRROR':return mirrorCmd(env);case 'ERASE':return eraseCmd(env);case 'EXPLODE':return explodeCmd(env);case 'OFFSET':return offsetCmd(env);
   case 'TRIM':return trimCmd(env,false);case 'EXTEND':return trimCmd(env,true);case 'DIST':return distCmd(env);case 'ZOOM':return zoomCmd(env);
  }
- return undefined;
+ return drawCommands[name]?.(env)??modifyCommands[name]?.(env);
 }
 /** Default text and dimension heights: 1/8 in or 2.5 mm on a sheet; sketches by their own text. */
 export function defaultHeights(doc:CadDoc){

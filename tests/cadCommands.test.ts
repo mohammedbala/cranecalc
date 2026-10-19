@@ -14,7 +14,8 @@ function setup(doc=blank()){
  const store=new CadStore(doc),log:string[]=[];let offset:number|undefined;
  const env:Env={store,layer:()=>'0',textHeight:()=>.125,setTextHeight:()=>{},dimHeight:()=>.1,offsetDistance:()=>offset,setOffsetDistance:d=>{offset=d;},
   log:m=>{log.push(m);},neighbors:e=>store.doc.entities.filter(o=>o.id!==e.id),zoomExtents:()=>{},zoomWindow:()=>{},openPanel:()=>{},
-  length:d=>formatLength(d*store.doc.realPerUnit,store.doc.display)};
+  length:d=>formatLength(d*store.doc.realPerUnit,store.doc.display),vars:{},lastWindow:()=>win};
+ let win:{box:[number,number,number,number];crossing:boolean}|undefined;
  /** Run a command with clicks (points), picks ({pick}), typed values (strings) and Enter (null). */
  const run=(name:string,...steps:(Pt|string|null|{pick:Pt})[]):Command=>{
   const c=makeCommand(name,env)!;if(c.selectFirst)c.begin?.();
@@ -26,7 +27,7 @@ function setup(doc=blank()){
   }
   return c;
  };
- return {store,env,run,log};
+ return {store,env,run,log,setWindow:(box:[number,number,number,number])=>{win={box,crossing:true};}};
 }
 const lines=(s:CadStore)=>s.doc.entities.filter((e):e is Extract<Ent,{type:'line'}>=>e.type==='line');
 

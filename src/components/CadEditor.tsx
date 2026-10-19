@@ -2,11 +2,12 @@ import {useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore,type 
 import {
  ArrowRightToLine,Circle,Copy,CopyPlus,Download,Eraser,Eye,EyeOff,FlipHorizontal2,Hand,Layers,Lock,LockOpen,Maximize2,Move,
  MoveHorizontal,MousePointer2,Plus,Redo2,RectangleHorizontal,RotateCw,Ruler,Scaling,Scissors,SlidersHorizontal,Spline,TriangleAlert,Type,
- Undo2,Ungroup,Waypoints,X,Slash,
+ Undo2,Ungroup,Waypoints,X,Slash,Egg,Activity,Hexagon,MoveDiagonal,CornerDownRight,Diamond,StretchHorizontal,Grid3x3,RotateCcw,Unlink,Link,MoveRight,
+ AlignHorizontalJustifyStart,PenLine,Paintbrush,
 } from 'lucide-react';
 import {
- DEG,add,angleOf,bbox,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,intersections,lerp,nearest,nearestOnSegment,parseLength,
- parsePoint,segments,snapPoints,stretchGrip,sub,sweep,type Box,type CadDoc,type CadLayer,type Ent,type NewEnt,type Pt,type SnapKind,
+ DEG,add,angleOf,bbox,curveLength,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,intersections,lerp,lineTypes,nearest,nearestOnSegment,parseLength,
+ parsePoint,segments,snapPoints,stretchGrip,sub,sweep,type Box,type CadDoc,type CadLayer,type Ent,type NewEnt,type Pt,type SnapKind,type LineType,
 } from '../cad/model';
 import {CadStore} from '../cad/store';
 import {commandNames,defaultHeights,makeCommand,placeCmd,type Command,type Env,type Preview} from '../cad/commands';
@@ -19,13 +20,13 @@ export interface CadSource{project:string;base:string;generated:CadDoc;record?:C
 type Toggles={grid:boolean;snap:boolean;ortho:boolean;osnap:boolean;lwt:boolean};
 
 const APERTURE=9,PICKBOX=5;
-const snapRank:Record<SnapKind,number>={end:0,int:0,mid:1,cen:2,qua:2,ins:2,per:3,nea:4,grid:5};
+const snapRank:Record<SnapKind,number>={end:0,int:0,mid:1,cen:2,qua:2,ins:2,nod:2,app:2,per:3,tan:3,ext:4,par:4,trk:4,nea:5,grid:6};
 const download=(blob:Blob,name:string)=>{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const scales=(unit:CadDoc['unit']):[string,number][]=>unit==='in'
  ?[['1:1 (paper)',25.4],['3" = 1\'-0"',4*25.4],['1 1/2" = 1\'-0"',8*25.4],['1" = 1\'-0"',12*25.4],['3/4" = 1\'-0"',16*25.4],['1/2" = 1\'-0"',24*25.4],['3/8" = 1\'-0"',32*25.4],['1/4" = 1\'-0"',48*25.4],['3/16" = 1\'-0"',64*25.4],['1/8" = 1\'-0"',96*25.4]]
  :unit==='mm'?[['1:1 (paper)',1],['1:5',5],['1:10',10],['1:20',20],['1:25',25],['1:50',50],['1:100',100],['1:200',200]]:[];
 const fmtNum=(v:number)=>String(Number(v.toFixed(4)));
-const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension'};
+const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray'};
 
 export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=>void}){
  const store=useMemo(()=>new CadStore(structuredClone(source.record?.doc??source.generated)),[]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -57,6 +58,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const [panMode,setPanMode]=useState(false);
  const textHeight=useRef(heights.text),offsetDistance=useRef<number|undefined>(undefined);
  const clipboard=useRef<{ents:NewEnt[];base:Pt}|null>(null);
+ const vars=useRef<Record<string,number|string|boolean>>({}),lastWindow=useRef<{box:Box;crossing:boolean}|undefined>(undefined);
  const togglesRef=useRef(toggles);togglesRef.current=toggles;
  const dirty=useRef({scene:true,overlay:true}),frame=useRef(0);
  const say=useCallback((m:string)=>setLog(l=>[...l.slice(-60),m]),[]);
@@ -164,6 +166,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   log:say,neighbors:e=>{const b=cachedBox(e,store.doc);return store.doc.entities.filter(o=>o.id!==e.id&&visible(o)&&(()=>{const c=cachedBox(o,store.doc);return c[0]<=b[2]&&c[2]>=b[0]&&c[1]<=b[3]&&c[3]>=b[1];})());},
   zoomExtents,zoomWindow:(a,b)=>zoomTo([Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])],1.02),
   openPanel:p=>setPanel(v=>({...v,[p==='layers'?'layers':'props']:true})),length:lengthText,
+  vars:vars.current,lastWindow:()=>lastWindow.current,
  };
  const prompt=()=>grip.current?'** STRETCH ** Specify stretch point:':active.current?(selecting.current?`${active.current.name} Select objects (Enter when done):`:active.current.prompt()):'Command:';
  function endCommand(clear=true){if(active.current&&clear&&active.current.selectFirst)store.clearSelection();active.current=null;selecting.current=false;grip.current=null;snap.current=undefined;setInput('');refresh();schedule();}
@@ -177,7 +180,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(name==='LAYER'){setPanel(v=>({...v,layers:true}));return;}
   if(name==='PROPERTIES'){setPanel(v=>({...v,props:true}));return;}
   const cmd=makeCommand(name,env);if(!cmd){say(`Unknown command "${raw.trim()}". Press F1 for the command list.`);return;}
-  lastCommand.current=name;active.current=cmd;
+  lastCommand.current=name;active.current=cmd;lastWindow.current=undefined;
   if(cmd.selectFirst){if(store.selection.size)cmd.begin?.();else selecting.current=true;}
   step();
   setTimeout(()=>cmdRef.current?.focus(),0);
@@ -205,6 +208,8 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(selecting.current){say('Pick objects or press Enter.');return;}
   if(cmd.text?.(v)){step();return;}
   if(cmd.point&&!cmd.wantsPick?.()){const p=parsePoint(v,cmd.base?.(),cursor.current.world);if(p){cmd.point(p);step();return;}}
+  // A typed point answers an object prompt with the object there.
+  if(cmd.wantsPick?.()){const p=parsePoint(v,cmd.base?.(),cursor.current.world);if(p){cmd.pick?.(entityAt(p),p);step();return;}}
   say('Point or option keyword required.');
  }
  function commitGrip(p:Pt){
@@ -218,6 +223,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   const w=windowSel.current!;windowSel.current=null;
   const box:Box=[Math.min(w.a[0],b[0]),Math.min(w.a[1],b[1]),Math.max(w.a[0],b[0]),Math.max(w.a[1],b[1])],crossing=b[0]<w.a[0];
   const ids=store.doc.entities.filter(e=>pickable(e)&&inWindow(e,box,crossing,store.doc)).map(e=>e.id);
+  lastWindow.current={box,crossing};
   store.select(ids,shift?'remove':'add');
   if(selecting.current)say(`${ids.length} found, ${store.selection.size} total`);
   schedule();
@@ -310,6 +316,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  function putEnt(e:Ent,label='Properties'){store.commit(label,{put:[e]});schedule(true);}
  function setLayers(layers:CadLayer[],label:string){store.commit(label,{layers});schedule(true);}
  function changeLayerOfSelection(name:string){store.commit('Change layer',{put:selected.map(e=>({...e,layer:name}))});schedule(true);}
+ function changeSelection(label:string,fn:(e:Ent)=>Ent){store.commit(label,{put:selected.filter(pickable).map(fn)});schedule(true);}
  function resolveStale(keep:boolean){
   if(keep){void saveCadRecord(source.project,source.base,store.doc).then(()=>setSaveState('saved'));say('Kept the edited drawing for the current design.');}
   else{void deleteCadRecord(source.project,doc.key);store.reset(structuredClone(source.generated));startVersion.current=store.docVersion;setSaveState('generated');say('Started over from the generated drawing.');}
@@ -322,13 +329,20 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
 
  const tools:[string,string,ReactNode][]=[
   ['LINE','Line (L)',<Slash key="l" size={16}/>],['PLINE','Polyline (PL)',<Waypoints key="pl" size={16}/>],['RECTANG','Rectangle (REC)',<RectangleHorizontal key="r" size={16}/>],
-  ['CIRCLE','Circle (C)',<Circle key="c" size={16}/>],['ARC','Arc, 3 points (A)',<Spline key="a" size={16}/>],['TEXT','Text (T)',<Type key="t" size={16}/>],
+  ['CIRCLE','Circle (C)',<Circle key="c" size={16}/>],['ARC','Arc (A): 3 points, or start, center, end and the other AutoCAD variants',<Spline key="a" size={16}/>],
+  ['ELLIPSE','Ellipse (EL)',<Egg key="el" size={16}/>],['SPLINE','Spline (SPL)',<Activity key="spl" size={16}/>],['POLYGON','Polygon (POL)',<Hexagon key="pol" size={16}/>],
+  ['XLINE','Construction line (XL)',<MoveDiagonal key="xl" size={16}/>],['TEXT','Text (T)',<Type key="t" size={16}/>],
   ['DIMLINEAR','Linear dimension (DLI)',<Ruler key="d" size={16}/>],['DIMALIGNED','Aligned dimension (DAL)',<Ruler key="da" size={16} style={{transform:'rotate(-35deg)'}}/>],
  ];
  const modify:[string,string,ReactNode][]=[
   ['MOVE','Move (M)',<Move key="m" size={16}/>],['COPY','Copy (CO)',<Copy key="co" size={16}/>],['ROTATE','Rotate (RO)',<RotateCw key="ro" size={16}/>],
   ['SCALE','Scale (SC)',<Scaling key="sc" size={16}/>],['MIRROR','Mirror (MI)',<FlipHorizontal2 key="mi" size={16}/>],['OFFSET','Offset (O)',<CopyPlus key="o" size={16}/>],
-  ['TRIM','Trim (TR)',<Scissors key="tr" size={16}/>],['EXTEND','Extend (EX)',<ArrowRightToLine key="ex" size={16}/>],['EXPLODE','Explode (X)',<Ungroup key="x" size={16}/>],
+  ['TRIM','Trim (TR)',<Scissors key="tr" size={16}/>],['EXTEND','Extend (EX)',<ArrowRightToLine key="ex" size={16}/>],
+  ['FILLET','Fillet (F)',<CornerDownRight key="f" size={16}/>],['CHAMFER','Chamfer (CHA)',<Diamond key="cha" size={16}/>],['STRETCH','Stretch (S): select with a crossing window',<StretchHorizontal key="s" size={16}/>],
+  ['ARRAYRECT','Rectangular array (AR)',<Grid3x3 key="ar" size={16}/>],['ARRAYPOLAR','Polar array',<RotateCcw key="arp" size={16}/>],
+  ['BREAK','Break (BR)',<Unlink key="br" size={16}/>],['JOIN','Join (J)',<Link key="j" size={16}/>],['LENGTHEN','Lengthen (LEN)',<MoveRight key="len" size={16}/>],
+  ['ALIGN','Align (AL)',<AlignHorizontalJustifyStart key="al" size={16}/>],['PEDIT','Edit polyline (PE)',<PenLine key="pe" size={16}/>],['MATCHPROP','Match properties (MA)',<Paintbrush key="ma" size={16}/>],
+  ['EXPLODE','Explode (X)',<Ungroup key="x" size={16}/>],
   ['ERASE','Erase (E, Delete)',<Eraser key="e" size={16}/>],['DIST','Measure distance (DI)',<MoveHorizontal key="di" size={16}/>],
  ];
  const counts=useMemo(()=>{const m=new Map<string,number>();for(const e of doc.entities)m.set(e.layer,(m.get(e.layer)??0)+1);return m;},[doc.entities]);
@@ -374,7 +388,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
    </div>
    {(panel.props||panel.layers)&&<aside className="cad-side">
     {panel.props&&<section className="cad-panel" aria-label="Properties"><h3><SlidersHorizontal size={13}/>Properties<button aria-label="Hide properties" onClick={()=>setPanel(v=>({...v,props:false}))}><X size={12}/></button></h3>
-     <Properties doc={doc} selected={selected} layers={doc.layers} onPut={putEnt} onLayer={changeLayerOfSelection} lengthText={lengthText}/></section>}
+     <Properties doc={doc} selected={selected} layers={doc.layers} onPut={putEnt} onLayer={changeLayerOfSelection} onAll={changeSelection} lengthText={lengthText}/></section>}
     {panel.layers&&<section className="cad-panel" aria-label="Layers"><h3><Layers size={13}/>Layers<button aria-label="New layer" title="New layer" onClick={()=>setNewLayer('')}><Plus size={12}/></button><button aria-label="Hide layers" onClick={()=>setPanel(v=>({...v,layers:false}))}><X size={12}/></button></h3>
      {newLayer!==null&&<div className="cad-new-layer"><input autoFocus placeholder="Layer name" value={newLayer} onChange={e=>setNewLayer(e.target.value.toUpperCase().replace(/[^A-Z0-9_ -]/g,''))}
       onKeyDown={e=>{if(e.key==='Enter'&&newLayer.trim()&&!layerOf(newLayer.trim())){setLayers([...doc.layers,{name:newLayer.trim(),color:7,ltype:'Continuous',weight:25,visible:true,locked:false}],'New layer');setCurrentLayer(newLayer.trim());setNewLayer(null);}if(e.key==='Escape')setNewLayer(null);}}/></div>}
@@ -406,11 +420,19 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
 
 const helpRows:[string,string][]=[
  ['L · LINE','Lines from point to point; U undoes a segment, C closes'],['PL · PLINE','A polyline; C closes, Enter ends'],['REC · RECTANG','Two corners'],
- ['C · CIRCLE','Center, then radius (or D for diameter)'],['A · ARC','Three points: start, through, end'],['T · TEXT','Start point, height, rotation, then the text; Enter on an empty line ends'],
+ ['C · CIRCLE','Center, then radius (or D for diameter)'],['A · ARC','3 points; C center, E end, then A angle, L chord, R radius, D direction; Enter continues tangent'],
+ ['EL · ELLIPSE','Axis endpoints and the other half-axis; C from the center; A for an elliptical arc'],['SPL · SPLINE','Fit points (M for control vertices); C closes'],
+ ['XL · XLINE / RAY','Construction lines: through points, H, V, A angle, B bisect, O offset'],['POL · POLYGON','Sides, center, inscribed or circumscribed, radius; E on an edge'],['DO · DONUT','Inside and outside diameters, then centers'],
+ ['T · TEXT','Start point, height, rotation, then the text; Enter on an empty line ends'],
  ['DLI · DIMLINEAR','Two points, then the dimension line (H or V to force)'],['DAL · DIMALIGNED','A dimension parallel to the two points'],
  ['M · MOVE / CO · COPY','Select, base point, second point (COPY repeats)'],['RO · ROTATE','Select, base point, angle'],['SC · SCALE','Select, base point, factor'],
  ['MI · MIRROR','Select, two points on the mirror line, keep or erase the source'],['O · OFFSET','Distance, then an object and the side'],
- ['TR · TRIM / EX · EXTEND','Pick the part to trim, or the end to extend; every object is a boundary'],['X · EXPLODE','Polylines to lines, dimensions to lines and text'],
+ ['TR · TRIM / EX · EXTEND','Pick the part to trim, or the end to extend; every object is a boundary'],['F · FILLET / CHA · CHAMFER','R radius (D, A for chamfer), T trim, P whole polyline, M multiple; pick two objects'],
+ ['S · STRETCH','Select with a crossing window, base point, second point'],['AR · ARRAYRECT / ARRAYPOLAR / ARRAYPATH','Columns and rows with spacing; center, count and angle; a path and a count'],
+ ['BR · BREAK','Pick at the first point, then the second (@ breaks at the point; F picks the first point again)'],['J · JOIN','Lines, arcs and open polylines that meet, into one'],
+ ['LEN · LENGTHEN','DE delta, P percent, T total, DY dynamic; then pick near the end to change'],['AL · ALIGN','Source and destination points (one or two pairs), optional scale'],
+ ['PE · PEDIT','C/O close or open, J join, F fit, S spline, D decurve, R reverse'],['MA · MATCHPROP','Pick the source, then the objects to change'],
+ ['X · EXPLODE','Polylines to lines and arcs, dimensions to lines and text'],
  ['E · ERASE (Delete)','Erase the selection'],['DI · DIST','Distance and angle between two points'],['Z · ZOOM','E extents, W window'],['U / REDO','Undo, redo (Ctrl+Z, Ctrl+Y)'],
  ['Points','Click (object snaps), or type x,y · @dx,dy · @d<angle · a distance along the cursor; lengths take 1\'6", 1-1/2, 3/4'],
  ['Mouse','Wheel zooms at the cursor; middle drag pans (or the hand); middle double-click zooms to the sheet; right click is Enter'],
@@ -422,23 +444,44 @@ function HelpCard({onClose}:{onClose:()=>void}){
   <dl>{helpRows.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>;
 }
 
+const weights=[0,5,9,13,15,18,20,25,30,35,40,50,53,60,70,80,90,100,106,120,140,158,200,211];
+type PropKey='color'|'ltype'|'weight'|'ltscale';
+/** Color, linetype, lineweight and linetype scale of the selection: ByLayer or the object's own. */
+function ObjectProps({selected,onAll}:{selected:Ent[];onAll:(label:string,fn:(e:Ent)=>Ent)=>void}){
+ const same=<K extends PropKey>(k:K)=>selected.every(e=>e[k]===selected[0][k])?selected[0][k]:'*';
+ const set=<K extends PropKey>(k:K,label:string,v:Ent[K]|undefined)=>onAll(label,e=>{const n={...e} as Ent;if(v===undefined)delete n[k];else (n as unknown as Record<string,unknown>)[k]=v;return n;});
+ const c=same('color'),lt=same('ltype'),w=same('weight'),ls=same('ltscale');
+ return <>
+  <dt>Color</dt><dd><select aria-label="Color" value={c===undefined?'bylayer':String(c)} style={c!==undefined&&c!=='*'?{borderColor:aci(c)}:undefined} onChange={e=>set('color','Color',e.target.value==='bylayer'?undefined:+e.target.value)}>
+   {c==='*'&&<option value="*">*varies*</option>}<option value="bylayer">ByLayer</option>{[...new Set([...aciPalette,...(typeof c==='number'?[c]:[])])].map(v=><option key={v} value={v}>{v}</option>)}</select></dd>
+  <dt>Linetype</dt><dd><select aria-label="Linetype" value={lt===undefined?'bylayer':lt} onChange={e=>set('ltype','Linetype',e.target.value==='bylayer'?undefined:e.target.value as LineType)}>
+   {lt==='*'&&<option value="*">*varies*</option>}<option value="bylayer">ByLayer</option>{lineTypes.map(v=><option key={v} value={v}>{v}</option>)}</select></dd>
+  <dt>Lineweight</dt><dd><select aria-label="Lineweight" value={w===undefined?'bylayer':String(w)} onChange={e=>set('weight','Lineweight',e.target.value==='bylayer'?undefined:+e.target.value)}>
+   {w==='*'&&<option value="*">*varies*</option>}<option value="bylayer">ByLayer</option>{weights.map(v=><option key={v} value={v}>{(v/100).toFixed(2)} mm</option>)}</select></dd>
+  <dt>Lt scale</dt><dd><NumField value={typeof ls==='number'?ls:1} onCommit={v=>v>0&&set('ltscale','Linetype scale',Math.abs(v-1)<1e-12?undefined:v)}/></dd>
+ </>;
+}
 /** Properties of the selection: geometry, text and layer, edited in place. */
-function Properties({doc,selected,layers,onPut,onLayer,lengthText}:{doc:CadDoc;selected:Ent[];layers:CadLayer[];onPut:(e:Ent)=>void;onLayer:(name:string)=>void;lengthText:(d:number)=>string}){
+function Properties({doc,selected,layers,onPut,onLayer,onAll,lengthText}:{doc:CadDoc;selected:Ent[];layers:CadLayer[];onPut:(e:Ent)=>void;onLayer:(name:string)=>void;onAll:(label:string,fn:(e:Ent)=>Ent)=>void;lengthText:(d:number)=>string}){
  if(!selected.length)return <dl className="cad-props"><dt>Drawing</dt><dd>{doc.key}</dd><dt>Units</dt><dd>{doc.unit==='in'?'Paper inches':doc.unit==='mm'?'Paper millimeters':'Sketch units'}</dd>
   <dt>Objects</dt><dd>{doc.entities.length.toLocaleString()}</dd><dt>Size</dt><dd>{fmtNum(doc.width)} × {fmtNum(doc.height)}</dd><dd className="cad-hint">Click objects, or drag a window (left to right: inside; right to left: crossing). Shift-click removes.</dd></dl>;
  const layerSel=<select aria-label="Layer of the selection" value={selected.every(e=>e.layer===selected[0].layer)?selected[0].layer:''} onChange={e=>onLayer(e.target.value)}>
   {!selected.every(e=>e.layer===selected[0].layer)&&<option value="">*varies*</option>}{layers.map(l=><option key={l.name} value={l.name}>{l.name}</option>)}</select>;
  if(selected.length>1){const by=new Map<string,number>();for(const e of selected)by.set(typeName[e.type],(by.get(typeName[e.type])??0)+1);
-  return <dl className="cad-props"><dt>Selected</dt><dd>{selected.length.toLocaleString()} ({[...by].map(([k,v])=>`${v} ${k.toLowerCase()}${v>1?'s':''}`).join(', ')})</dd><dt>Layer</dt><dd>{layerSel}</dd></dl>;}
+  return <dl className="cad-props"><dt>Selected</dt><dd>{selected.length.toLocaleString()} ({[...by].map(([k,v])=>`${v} ${k.toLowerCase()}${v>1?'s':''}`).join(', ')})</dd><dt>Layer</dt><dd>{layerSel}</dd><ObjectProps selected={selected} onAll={onAll}/></dl>;}
  const e=selected[0];
  const num=(label:string,value:number,set:(v:number)=>Ent|undefined)=><><dt>{label}</dt><dd><NumField value={value} onCommit={v=>{const n=set(v);if(n)onPut(n);}}/></dd></>;
  const pt=(label:string,p:Pt,set:(p:Pt)=>Ent)=><>{num(`${label} X`,p[0],v=>set([v,p[1]]))}{num(`${label} Y`,p[1],v=>set([p[0],v]))}</>;
- return <dl className="cad-props"><dt>Object</dt><dd>{typeName[e.type]}</dd><dt>Layer</dt><dd>{layerSel}</dd>
+ return <dl className="cad-props"><dt>Object</dt><dd>{typeName[e.type]}</dd><dt>Layer</dt><dd>{layerSel}</dd><ObjectProps selected={selected} onAll={onAll}/>
   {e.type==='line'&&<>{pt('Start',e.a,a=>({...e,a}))}{pt('End',e.b,b=>({...e,b}))}<dt>Length</dt><dd>{fmtNum(dist(e.a,e.b))} · {lengthText(dist(e.a,e.b))}</dd><dt>Angle</dt><dd>{fmtNum((angleOf(e.a,e.b)+360)%360)}°</dd></>}
   {e.type==='poly'&&<><dt>Vertices</dt><dd>{e.points.length}</dd><dt>Closed</dt><dd><input type="checkbox" checked={e.closed} onChange={ev=>onPut({...e,closed:ev.target.checked})}/></dd>
-   <dt>Length</dt><dd>{lengthText(segments(e).reduce((s,[a,b])=>s+dist(a,b),0))}</dd></>}
+   <dt>Arc segments</dt><dd>{e.bulges?.filter(b=>b).length??0}</dd><dt>Length</dt><dd>{lengthText(curveLength(e))}</dd></>}
   {e.type==='circle'&&<>{pt('Center',e.center,center=>({...e,center}))}{num('Radius',e.radius,radius=>radius>0?{...e,radius}:undefined)}<dt>Diameter</dt><dd>{lengthText(2*e.radius)}</dd></>}
   {e.type==='arc'&&<>{pt('Center',e.center,center=>({...e,center}))}{num('Radius',e.radius,radius=>radius>0?{...e,radius}:undefined)}{num('Start angle',e.start,start=>({...e,start}))}{num('End angle',e.end,end=>({...e,end}))}<dt>Arc length</dt><dd>{lengthText(e.radius*sweep(e.start,e.end)*DEG)}</dd></>}
+  {e.type==='ellipse'&&<>{pt('Center',e.center,center=>({...e,center}))}{num('Major radius',Math.hypot(...e.major),r=>r>0?{...e,major:[e.major[0]/Math.hypot(...e.major)*r,e.major[1]/Math.hypot(...e.major)*r]}:undefined)}
+   {num('Radius ratio',e.ratio,ratio=>ratio>0&&ratio<=1?{...e,ratio}:undefined)}{num('Start parameter',e.start,start=>({...e,start}))}{num('End parameter',e.end,end=>({...e,end}))}<dt>Length</dt><dd>{lengthText(curveLength(e))}</dd></>}
+  {e.type==='spline'&&<><dt>Degree</dt><dd>{e.degree}</dd><dt>{e.fit?'Fit points':'Control points'}</dt><dd>{e.fit?.length??e.ctrl.length}</dd><dt>Closed</dt><dd>{e.closed?'Yes':'No'}</dd><dt>Length</dt><dd>{lengthText(curveLength(e))}</dd></>}
+  {(e.type==='xline'||e.type==='ray')&&<>{pt('Base',e.base,base=>({...e,base}))}{num('Angle',angleOf([0,0],e.dir),a=>({...e,dir:[Math.cos(a*DEG),Math.sin(a*DEG)]}))}</>}
   {e.type==='text'&&<><dt>Contents</dt><dd><TextField value={e.value} onCommit={value=>value.trim()&&onPut({...e,value})}/></dd>{num('Height',e.height,height=>height>0?{...e,height}:undefined)}{num('Rotation',e.angle,angle=>({...e,angle}))}
    <dt>Justify</dt><dd><select value={e.align} onChange={ev=>onPut({...e,align:+ev.target.value as 0|1|2})}><option value={0}>Left</option><option value={1}>Center</option><option value={2}>Right</option></select></dd>
    <dt>Bold</dt><dd><input type="checkbox" checked={e.bold} onChange={ev=>onPut({...e,bold:ev.target.checked})}/></dd>{pt('Position',e.at,at=>({...e,at}))}</>}
