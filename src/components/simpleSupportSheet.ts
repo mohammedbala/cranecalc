@@ -80,8 +80,9 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
  if(!(d.brace.flangeAttachment?.enabled&&flangeTieGeometry(p))&&!isCapAngleTie(p))views.push({title:detailTitles.supportTies,render:()=>{
  let svg='<g data-view="independent-tie-plan">';
  const tieLayout=flangeTieGeometry(p),tieRef=detailRef(tieLayout?detailTitles.flangeTie:detailTitles.tie),tieStart=tieLayout?.start??0,tieReach=tieLayout?.face??d.brace.length,flanges=tieSides(p).length>1?'TOP & BOTTOM':'TOP FLANGE';
- // The column outline and its label stay above the view note at y = 335.
- const ps=drawingScale(Math.min(.24,175/(b.bf/2+d.brace.length+150),335/(4*bs.length+c.endGap),118/tieReach),p.units),pk=ps.pointsPerMm,px=895,py=155,pg=joint?c.endGap*pk/2:0,pl=bs.length*pk,span=2*pl+pg;
+ // The column outline and its label stay above the view note at y = 335. The girders' plan stands below the end gap's
+ // dimension at y = 111, lower for a wide flange.
+ const ps=drawingScale(Math.min(.24,175/(b.bf/2+d.brace.length+150),335/(4*bs.length+c.endGap),118/tieReach),p.units),pk=ps.pointsPerMm,px=895,py=Math.max(155,117+b.bf*pk/2),pg=joint?c.endGap*pk/2:0,pl=bs.length*pk,span=2*pl+pg;
  const colY=py+tieReach*pk,bar=d.brace.thickness*pk,gus=d.brace.gussetThickness*pk;
  const sc=supportColumn(p),colLine=sc.isNew?'runway-line':'reference-line';
  svg+=rect(px-m.column.bf*1000*pk/2,colY,m.column.bf*1000*pk,37,colLine);

@@ -59,7 +59,9 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   const xs=d.bearing.length/2;svg+=rect(X(xs-d.bearing.stiffenerThickness/2),wFl,d.bearing.stiffenerThickness*kk,cut-wFl,'runway-line');
   // Top tie saddle under the flange on the column side, between the girder end and the stop bolts.
   const tie=flangeTieGeometry(p),endTie=tie?.sides.includes(1)?tie.stations.find(v=>v.bay===1&&v.end==='left'):undefined;
-  if(tie&&endTie)svg+=rect(X(endTie.tieX-tie.attachment.saddleLength/2),wFl,tie.attachment.saddleLength*kk,tie.attachment.saddleThickness*kk,'hidden-line');
+  // Its station from the girder end (the stations run from grid 1; the girder may start past the grid).
+  const tieAt=endTie?endTie.tieX-endTie.start:0;
+  if(tie&&endTie)svg+=rect(X(tieAt-tie.attachment.saddleLength/2),wFl,tie.attachment.saddleLength*kk,tie.attachment.saddleThickness*kk,'hidden-line');
   // Stop: base plate, face plate and stiffener profile.
   const yb=Y(tb);
   svg+=rect(X(g.back),yb,e.base.length*kk,tb*kk,'runway-line')+rect(X(g.faceBack),Y(tb+H),tp*kk,H*kk,'runway-line');
@@ -104,7 +106,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(g.front),yb+tb*kk/2],labels:[`PL ${size(tb)} X ${size(Wb)} X ${dim(e.base.length)} BASE`]},
    {at:[X(g.frontRow)+hx.corners/2*kk,wFl+hx.nut/2*kk],labels:[boltLabel,`${size(hole)} STD HOLES THRU ${capped?'CAP AND ':''}FLANGE`,'HEADS UP, NUTS BELOW TOP FLANGE']},
    {at:[X(xs+d.bearing.stiffenerThickness/2),cut-8],labels:[`END BEARING STIFFENERS, SEE ${detailRef(girderBearingTitle(p))}`]},
-   ...(tie&&endTie?[{at:[X(endTie.tieX),wFl+tie.attachment.saddleThickness*kk] as XY,labels:['TOP TIE SADDLE, FAR SIDE (HIDDEN)',`SEE ${detailRef(detailTitles.flangeTie)}`]}]:[])
+   ...(tie&&endTie?[{at:[X(tieAt),wFl+tie.attachment.saddleThickness*kk] as XY,labels:['TOP TIE SADDLE, FAR SIDE (HIDDEN)',`SEE ${detailRef(detailTitles.flangeTie)}`]}]:[])
   ],lx,Y(tb+H)-54,cut+30);
   // The girder end, led to its end line below the flange.
   {const label='GIRDER END',w=textWidth(label,7.5,true),ty=(wFl+cut)/2,at:XY=[X(0)-22-w,ty+3];svg+=multiLeader([[X(0),ty]],at,[],7.5,[],w)+text(at[0],at[1],label,7.5,'start',700);}

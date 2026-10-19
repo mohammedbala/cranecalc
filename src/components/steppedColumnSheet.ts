@@ -129,7 +129,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
  views.push({title:steppedColumnTitles.section,render:()=>{
   // The girder is broken above its lower part: the bearing, not the girder, is the subject.
   const shown=Math.min(b.d-b.tf,Math.max(10*inch,b.d*.3)),yCut=hs+bt+shown;
-  const below=(sf?sh:Math.max(sh*.6,8*inch))+4*inch,yLow=g.cap.bottom-below,yHigh=yCut+3*inch,xMin=lowerOut,xMax=Math.max(gw+girderHalf,g.cap.width/2,gw+bs.width/2);
+  const below=(sf?sh:Math.max(sh*.6,8*inch))+4*inch,yLow=g.cap.bottom-below,yHigh=yCut+3*inch,edge=Math.min(lowerOut,-g.cap.width/2),xMin=edge,xMax=Math.max(gw+girderHalf,g.cap.width/2,gw+bs.width/2);
   const k=drawingScale(Math.min(330/(yHigh-yLow),300/(xMax-xMin)),u),kk=k.pointsPerMm,cx=40+(-xMin+3*inch)*kk,X=(x:number)=>cx+x*kk,y0=50+(yHigh-hs)*kk,Y=(y:number)=>y0-(y-hs)*kk;
   let svg='<g data-view="step-section">';
   svg+=shaft(X,Y,g.lower,yLow,g.cap.bottom)+shaft(X,Y,g.upper,hs,yHigh);
@@ -165,12 +165,13 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[X(gw+bs.width/2),Y(hs+bt/2)] as XY,labels:[`BEARING PL ${size(bt)} X ${size(bs.width)} X ${size(bs.length)}`,`OVER THE CRANE-SIDE FLANGE; SHIM`,eb?`BOLTS: SEE ${detailRef(bearingBoltsTitle(p))}`:'TO FULL BEARING']},
    ...(sf?[{at:[X(g.innerFlange+sf.thickness/2),Y(g.cap.bottom-sh*.55)] as XY,labels:['STEP STIFFENER TO (E) WEB,','BOTH FACES, EACH PLATE',`SEE ${detailRef(steppedColumnTitles.stiffener)}`],weld:size(sf.weld),field:true}]:[])
   ];
-  svg+=labelColumn(left,X(lowerOut)-50-lw,Y(yHigh),Y(yLow)+4)+labelColumn(right,X(xMax)+34,Y(yHigh),Y(yLow)+4);
+  // The left callouts and the cap thickness stand clear of the lower shaft and of a step cap reaching past it.
+  svg+=labelColumn(left,X(edge)-50-lw,Y(yHigh),Y(yLow)+4)+labelColumn(right,X(xMax)+34,Y(yHigh),Y(yLow)+4);
   const yb=Y(yLow)+18,space=new AnnotationSpace(svg);
   svg+=dimHClear(space,X(g.innerFlange),X(0),Y(yLow)-6,yb,dim(Math.abs(g.innerFlange)))+dimHClear(space,X(0),X(gw),Y(yLow)-6,yb,dim(gw))+dimHClear(space,X(lowerOut),X(lowerIn),Y(yLow),yb+18,dim(g.lower.d));
   svg+=dimHClear(space,X(gw-bs.width/2),X(gw+bs.width/2),Y(hs+bt),Y(yHigh)-10,dim(bs.width));
-  svg+=dimVClear(space,Y(hs),Y(g.cap.bottom),X(lowerOut),X(lowerOut)-14,size(g.cap.thickness));
-  if(sf)svg+=dimVClear(space,Y(g.cap.bottom),Y(g.cap.bottom-sh),X(lowerOut),X(lowerOut)-32,dim(sh));
+  svg+=dimVClear(space,Y(hs),Y(g.cap.bottom),X(edge),X(edge)-14,size(g.cap.thickness));
+  if(sf)svg+=dimVClear(space,Y(g.cap.bottom),Y(g.cap.bottom-sh),X(lowerOut),X(edge)-32,dim(sh));
   return {svg:svg+'</g>',scale:k.label};
  }});
 
