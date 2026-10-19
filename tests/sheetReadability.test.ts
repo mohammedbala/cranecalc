@@ -55,7 +55,7 @@ describe('readable drawing sheets',()=>{
   for(let i=1;i<=16;i++)expect(names,`template t${String(i).padStart(2,'0')}`).toContain(`t${String(i).padStart(2,'0')}`);
   expect(names.filter(v=>v.startsWith('s')).length).toBeGreaterThanOrEqual(8);
   // The sample cases whose sheets had clashing annotation or text on grid bubbles (scripts/refreshSheetFixtures.ts, configFixtures).
-  for(const c of ['047','057','059','062','066','078','083','084','086','087','088'])expect(names,`sample case ${c}`).toContain(`c${c}`);
+  for(const c of ['015','047','049','057','059','062','066','078','083','084','086','087','088','094'])expect(names,`sample case ${c}`).toContain(`c${c}`);
   expect(readdirSync(new URL('./fixtures/sheets/',import.meta.url)).filter(f=>f.endsWith('.json.gz')).length).toBe(names.length);
  });
  // Each project in feet and inches and in SI (the configurator's units option): SI values and scales differ.

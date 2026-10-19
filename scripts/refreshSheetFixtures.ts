@@ -19,6 +19,12 @@ import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
  * overlapping annotation in the final run, each built from its configuration as the simulation builds it (buildProject).
  */
 const configFixtures:Record<string,RunwayConfig>={
+ // Sample case 015 (general arrangement plan in SI: section cut tag in a short single bay, between the overall dimension's extension lines).
+ c015:{"title":"10 t pendant · existing building · twin-rib · paired-bars · 1×15 ft simple · ASD","number":"SIM-015","units":"US","method":"ASD","scope":"design","capacity":10,"craneSpan":57,"control":"pendant","cmaa":"D","cranes":1,"buildingClass":"A","system":"simple","bays":1,"span":15,"railElevation":21,"girder":"capped","structure":"existing","support":"twin-rib","tie":"paired-bars"} as RunwayConfig,
+ // Sample case 049 (end stop section in SI: the gauge value under the girder's leader).
+ c049:{"title":"25 t cab · existing building · crane-column · paired-bars · 6×20 ft simple","number":"SIM-049","units":"US","method":"LRFD","scope":"design","capacity":25,"craneSpan":78,"control":"cab","cmaa":"D","cranes":1,"buildingClass":"A","system":"simple","bays":6,"span":20,"railElevation":32,"girder":"rolled","structure":"existing","support":"crane-column","tie":"paired-bars","craneColumnBase":"pinned"} as RunwayConfig,
+ // Sample case 094 (general arrangement plan in SI: grid dimension A-B too short for its value, beside the column line offsets and notes).
+ c094:{"title":"12.5 t pendant · new columns · column-cap · paired-bars · 6×35 ft simple · ASD","number":"SIM-094","units":"US","method":"ASD","scope":"design","capacity":12.5,"craneSpan":51,"control":"pendant","cmaa":"C","cranes":1,"buildingClass":"C","system":"simple","bays":6,"span":35,"railElevation":31,"girder":"rolled","structure":"new","support":"column-cap","tie":"paired-bars"} as RunwayConfig,
  // Sample case 047 (general arrangement plan: bracing callout and section cut tag on the grid bubbles).
  c047:{"title":"40 t cab · existing building · crane-column · flexible-plate · 5×45 ft simple","number":"SIM-047","units":"US","method":"LRFD","scope":"design","capacity":40,"craneSpan":71,"control":"cab","cmaa":"D","cranes":1,"buildingClass":"B","system":"simple","bays":5,"span":45,"railElevation":27,"girder":"capped","structure":"existing","support":"crane-column","tie":"flexible-plate","reach":30,"craneColumnBase":"fixed"} as RunwayConfig,
  // Sample case 087 (general arrangement plan: section cut tag on a grid bubble).
