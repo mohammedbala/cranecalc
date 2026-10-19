@@ -7,6 +7,7 @@ import {stepStiffenerClip,stepStiffenerHeight} from '../engine/stepSeat';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {isCapAngleTie} from '../engine/capAngle';
 import {runwayElevations} from '../engine/drawingData';
+import {railPadThickness} from '../engine/railSeat';
 import {drawingElevation,plateInches,dimensionLength} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,text,line,rect,dimH,dimV,detailRef,detailTitles,bearingBoltsTitle,capAngleTitles,labelColumn,breakLine,capChannelSection,textWidth,n,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
@@ -49,7 +50,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const dim=(v:number)=>dimensionLength(v,u),size=(v:number)=>plateInches(v,u),weld=(v:number)=>plateInches(v,u).replaceAll('"','');
  const el=runwayElevations(p),datum=p.drawing?.datumElevation??0,elev=(y:number)=>`EL. ${drawingElevation(datum+y,u)}`;
  const lowName=shaftName(g.lower,size),upName=shaftName(g.upper,size),capLabel=`PL ${size(g.cap.thickness)} X ${dim(g.cap.width)} X ${dim(g.cap.length)}`;
- const cap=b.kind==='cap'?b.capTw:0,bt=bs.thickness,hs=g.cap.top,tos=hs+bt+b.d,railDepth=p.aist?.railDepth??p.railHeight,rb=tos+cap,tor=rb+railDepth;
+ const cap=b.kind==='cap'?b.capTw:0,bt=bs.thickness,hs=g.cap.top,tos=hs+bt+b.d,railDepth=p.aist?.railDepth??p.railHeight,rb=tos+cap+railPadThickness(p),tor=rb+railDepth;
  const sf=g.stiffener,sh=stepStiffenerHeight(g),tieRef=detailRef(steppedTieTitle(p)),gw=g.girderWeb,lowerOut=-g.lower.d/2,lowerIn=g.lower.d/2;
  const girderHalf=Math.max(b.bf,b.kind==='cap'?b.capWidth:0)/2;
  // Girder I-section with its cap channel and the rail on the web centerline, bottom flange at `y0` (mm), in view coordinates.
