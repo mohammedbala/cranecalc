@@ -31,8 +31,8 @@ describe('crane column drawings',()=>{
   for(const t of ['VERT. SLOTS','SLEEVE','TAB PL','HOLES TO MATCH THE SLOTS','FACES, FULL DEPTH (FIELD)','PRETENSIONED AGAINST THE SLEEVES'])expect(section).toContain(t);
   expect(section).not.toContain('BY OTHERS');expect(section).toContain('data-weld-location="field"');
   expect(section).toContain('data-multileader="weld"');
-  // S-01: the ties on the typical section, no clearance plan to keep beside the building column; S-00: H only.
-  const sheets=drawingSheetSet(s),ga=sheets.find(v=>v.number==='S-01')!.svg,cover=sheets.find(v=>v.number==='S-00')!.svg;
+  // S-01: the ties on the typical section, no clearance plan to keep beside the building column; S-00/S-00A (the cover continues when the selections log fills S-00): H only.
+  const sheets=drawingSheetSet(s),ga=sheets.find(v=>v.number==='S-01')!.svg,cover=sheets.filter(v=>/^S-00/.test(v.number)).map(v=>v.svg).join('');
   expect(ga).toContain('data-crane-column-ties="section"');expect(ga).not.toContain('data-view="existing-clearance-plan"');
   expect(cover).toContain('FORCES DELIVERED TO THE BUILDING COLUMNS (H ONLY');expect(cover).toContain('CRANE COLUMN REACTIONS TO ITS FOOTING');
   // The delivered table: girder tie and column tie design forces only, the column tie force with the crane column's parts.
