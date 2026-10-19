@@ -64,7 +64,10 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const bolts=Array.from({length:t.bolts.count},(_,i)=>plateEnd-t.bolts.edge-i*t.bolts.pitch),tabEnd=plateEnd-tg.lap;
  const ccName=`NEW ${cc.shape} CRANE COLUMN`,bcName=`(E) ${bc.shape} BUILDING COLUMN`,plateLabel=`PL ${size(t.plate.thickness)} X ${size(t.plate.width)} X ${dim(plateEnd-ccFace)}`;
  const tieRef=girderTieRef(p),el=runwayElevations(p),zt=g.columnTie.elevation,gt=girderTieLine(s),db=t.bolts.diameter,hx=heavyHex(db);
- const washer={t:5/16*inch,h:t.slot.length+.5*inch,w:Math.max(2.5*db,t.slot.width+inch)},sleeve=t.plate.thickness+inch/16;
+ // Plate washers (AISC J3.2) covering each slot 1/4 in past its ends at either extreme of the sleeve travel (the washer
+ // stays with the bolt), and 1/4 in past its sides; 1/8 in apart along the tie, else one continuous bar over the row.
+ const wAlong=Math.max(t.slot.width+.5*inch,Math.min(2.5*db,t.bolts.pitch-inch/8)),bar=t.bolts.count>1&&wAlong>t.bolts.pitch-inch/8;
+ const washer={t:5/16*inch,h:t.slot.length+2*tg.travel+.5*inch,w:bar?(t.bolts.count-1)*t.bolts.pitch+wAlong:wAlong,bar,each:wAlong},sleeve=t.plate.thickness+inch/16;
  const views:DetailView[]=[];
 
  // 1: Elevation across the runway at a typical grid, looking along the runway, crane span at the left: the crane column on
@@ -216,9 +219,10 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   for(const [y,sgn] of [[0,-1],[tp,1]] as const)svg+=`<path class="runway-line" d="M${n(X(ccFace))},${n(Y(y))}l${n(tg.weld*kk)},0L${n(X(ccFace))},${n(Y(y)+sgn*tg.weld*kk)}Z"/>`;
   for(const x of bolts){
    // Sleeve through the slot, standing on the tab; plate washer on the sleeve; head on the washer, nut and F436 washer beyond the tab.
-   const r0=tg.hole/2,r1=tg.od/2,ws=washer.w/2,top0=-(sleeve-tp);
+   const r0=tg.hole/2,r1=tg.od/2,ws=washer.each/2,top0=-(sleeve-tp);
    svg+=rect(X(x-r1),Y(top0),(r1-r0)*kk,sleeve*kk,'runway-line')+rect(X(x+r0),Y(top0),(r1-r0)*kk,sleeve*kk,'runway-line');
-   svg+=rect(X(x-ws),Y(top0-washer.t),2*ws*kk,washer.t*kk,'runway-line')+rect(X(x-hx.corners/2),Y(top0-washer.t-hx.head),hx.corners*kk,hx.head*kk,'runway-line');
+   if(!washer.bar||x===bolts[0])svg+=rect(X(washer.bar?bolts.at(-1)!-washer.each/2:x-ws),Y(top0-washer.t),(washer.bar?washer.w:2*ws)*kk,washer.t*kk,'runway-line');
+   svg+=rect(X(x-hx.corners/2),Y(top0-washer.t-hx.head),hx.corners*kk,hx.head*kk,'runway-line');
    svg+=rect(X(x-hx.washer.od/2),Y(tp+tt),hx.washer.od*kk,hx.washer.t*kk,'runway-line')+rect(X(x-hx.corners/2),Y(tp+tt+hx.washer.t),hx.corners*kk,hx.nut*kk,'runway-line');
    svg+=line([X(x),Y(top0-washer.t-hx.head)-4],[X(x),Y(tp+tt+hx.washer.t+hx.nut)+4],'grid-line');
   }
@@ -242,7 +246,7 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=labelColumn(items,lx,Z(zTop)+2,Z(zBot));
   // The section's callouts beside the section, so their leaders stay clear of the elevation's dimensions.
   const parts:{at:XY;labels:string[]}[]=[
-   {at:[X(bolts[0]+washer.w/2),Y(-(sleeve-tp)-washer.t/2)],labels:[`PL WASHER ${size(washer.t)} X ${size(washer.w)}`,`X ${size(washer.h)}, EACH BOLT (J3.2)`]},
+   {at:[X(bolts[0]+washer.each/2),Y(-(sleeve-tp)-washer.t/2)],labels:[`${washer.bar?'BAR':'PL'} WASHER ${size(washer.t)} X ${size(washer.w)}`,`X ${size(washer.h)}${washer.bar?', CONT. OVER THE BOLTS':', EACH BOLT'} (J3.2)`]},
    {at:[X(bolts[0]+tg.od/2),Y(tp/2)],labels:[`SLEEVE ${size(tg.od)} OD X ${size(tg.hole)} BORE`,`X ${size(sleeve)} (PLATE + 1/16")`]},
    {at:[X(bolts[0]+hx.corners/2),Y(tp+tt+hx.washer.t+hx.nut/2)],labels:[`${t.bolts.count} - ${size(db)} DIA. ${t.bolts.grade},`,'PRETENSIONED AGAINST THE SLEEVES']}
   ];
