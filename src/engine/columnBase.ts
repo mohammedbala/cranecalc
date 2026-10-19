@@ -1,7 +1,7 @@
 import {asceCombinations} from './asceCombinations';
 import {columnResponse} from './columnAnalysis';
 import {existingColumnEccentricity,existingColumnRailElevation,existingColumnSection,railForce,seismicHeight} from './existingColumn';
-import {anchorGrades,anchorHardware,barSizes,columnBaseElevation,type ColumnBaseInput} from './columnBaseInputs';
+import {anchorGrades,anchorHardware,barSizes,columnBaseElevation,footingKeyWidth,type ColumnBaseInput} from './columnBaseInputs';
 import {minimumFillet} from './connectionStrength';
 import {wrenchClearance} from './endStop';
 import {filletRootReduction,finiteLife,fatigueThresholdKsi,KSI} from './fatigueConstants';
@@ -64,6 +64,8 @@ export {columnBaseElevation};
  * eccentricity, and Mh and Vh those from the side thrust, as magnitudes. Mx and Vx add every part.
  */
 export interface BaseAction {id:string;equation:string;P:number;Mx:number;My:number;Vx:number;Vy:number;Pd:number;Md:number;Vd:number;Mh:number;Vh:number;
+ /** A crane column tied to the building column: the girder's side thrust at this support, factored (a combined footing's shear, footingAction). */
+ css?:number;
  /** Overturning and sliding safety factor required with this combination (1.5 unless noted). */
  fs?:number;
  /** A seismic combination with overstrength: ACI 318 §17.10 applies to the anchors. */
@@ -110,10 +112,10 @@ export function columnBaseActions(p:ProjectInput,runway:SupportReactionSet,metho
  return reactions.supports.map((sp,j)=>{
   const seat=(f:{D:number;L:number;Cd:number;Cv:number})=>ends&&seatTop&&ends[j]?.length?seatMoment(ends[j],f):0;
   const ex=capTop?capAlongEccentricity(p,j):0,capMy=(runway:number,ms=0)=>(capTop?Math.abs(runway*ex*capTop.reactions.baseMoment):0)+(ms&&seatTop?Math.abs(ms*seatTop.reactions.baseMoment):0),capVy=(runway:number,ms=0)=>(capTop?Math.abs(runway*ex*capTop.reactions.base):0)+(ms&&seatTop?Math.abs(ms*seatTop.reactions.base):0);
-  const dead=sp.D+column,live=sp.Cd+sp.Cv+sp.Ci+sp.L+sp.Clv,lift=Math.min(0,sp.craneMinimum);
+  const dead=sp.D+column,live=sp.Cd+sp.Cv+sp.Ci+sp.L+sp.Clv,lift=Math.min(0,sp.craneMinimum),cssR=reactions===runway?0:runway.supports[j]?.Css??0;
   const act=(k:{id:string;equation:string;factors:{D:number;L:number}},vertical:number,tag:string,thrust=1):BaseAction=>{
    const runway=k.factors.D*sp.D+k.factors.L*vertical,Mh=Math.abs(thrust*k.factors.L*sp.Css*side.reactions.baseMoment),Vh=Math.abs(thrust*k.factors.L*sp.Css*side.reactions.base),ms=seat({D:k.factors.D,L:k.factors.L,Cd:k.factors.L,Cv:k.factors.L});
-   return {id:`${method} ${k.id}${tag}`,equation:k.equation,P:k.factors.D*dead+k.factors.L*vertical,
+   return {id:`${method} ${k.id}${tag}`,equation:k.equation,css:Math.abs(thrust*k.factors.L*cssR),P:k.factors.D*dead+k.factors.L*vertical,
     Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,
     My:(along?Math.abs(k.factors.L*longitudinal*along.reactions.baseMoment):0)+capMy(runway,ms),Vy:(along?Math.abs(k.factors.L*longitudinal*along.reactions.base):0)+capVy(runway,ms),
     Pd:k.factors.D*dead,Md:Math.abs(k.factors.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.factors.D*sp.D*e*eccentric.reactions.base),Mh,Vh};
@@ -135,7 +137,7 @@ export function columnBaseActions(p:ProjectInput,runway:SupportReactionSet,metho
     // the base, each with its bimoment there (magnitudes added).
     const at=(crane:number,tag:string,brace:number,Vy:number,rod=0,top=0,thrust=k.side):BaseAction=>{
      const runway=k.D*sp.D+crane,Mh=Math.abs(thrust*sp.Css*side.reactions.baseMoment),Vh=Math.abs(thrust*sp.Css*side.reactions.base),ms=seat({D:k.D,L:k.live,Cd:k.Cd,Cv:k.Cv});
-     return {id:`${k.id}${tag}`,equation:k.equation,P:k.D*dead+crane+brace,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway,ms),Vy:Vy+capVy(runway,ms),
+     return {id:`${k.id}${tag}`,equation:k.equation,css:Math.abs(thrust*cssR),P:k.D*dead+crane+brace,Mx:Math.abs(runway*e*eccentric.reactions.baseMoment)+Mh,Vx:Math.abs(runway*e*eccentric.reactions.base)+Vh,My:capMy(runway,ms),Vy:Vy+capVy(runway,ms),
       Pd:k.D*dead,Md:Math.abs(k.D*sp.D*e*eccentric.reactions.baseMoment),Vd:Math.abs(k.D*sp.D*e*eccentric.reactions.base),Mh,Vh,fs:k.fs,seismic:k.seismic||undefined,uplift:Math.max(0,-brace),torque:torque+rod+top,
       ...(restrained?{bimoment:warping(torque,hs)+warping(top,layout.height)}:{})};
     };
@@ -254,7 +256,10 @@ export function soilPressure(b:ColumnBaseInput,P:number,M:number,My=0){
 
 /** ACI 318-19 footing shear and flexure for one strength-level action, in each plan direction. */
 export function footingStrength(p:ProjectInput,b:ColumnBaseInput,a:BaseAction){
- const f=b.footing,{section:c}=existingColumnSection(p),h=f.thickness,sq=sqrtPsi(b.concrete.fc);
+ const f=b.footing,{section:col}=existingColumnSection(p),h=f.thickness,sq=sqrtPsi(b.concrete.fc);
+ // A combined footing (combinedFooting): the two columns' group footprint is the column and base plate, centered (a
+ // combined footing's action is footingAction's).
+ const group=combinedFooting(p)?.footprint,c={d:group?.d??col.d,bf:group?.bf??col.bf},plateN=group?.N??b.plate.N,plateB=group?.B??b.plate.B;
  // Both layers are taken at the upper layer's depth.
  const db=barDiameter[f.bar],d=h-f.cover-1.5*db,Pu=a.P,lambdaS=Math.min(1,Math.sqrt(2/(1+ins(d)/10)));
  // Span `L` with the moment, width `B`; column dimension `col` and plate dimension `plate` along the span.
@@ -273,9 +278,9 @@ export function footingStrength(p:ProjectInput,b:ColumnBaseInput,a:BaseAction){
   const cb=Math.min(f.cover+db/2,f.spacing/2),ld=Math.max(12*inch,3/40*f.fy/(sq*psi)*(db<=.75*inch+1e-6?.8:1)/Math.min(2.5,cb/db)*db);
   return {Mu,phiMn,Vu:V,phiVc,As,bars,AsMin:.0018*B*h,ld,available:arm-f.cover};
  };
- const arm=h+b.grout,along=way(f.L,f.B,a.Mx+a.Vx*arm,c.d,b.plate.N),across=way(f.B,f.L,a.My+a.Vy*arm,c.bf,b.plate.B);
+ const arm=h+b.grout,along=way(f.L,f.B,a.Mx+a.Vx*arm,c.d,plateN),across=way(f.B,f.L,a.My+a.Vy*arm,c.bf,plateB);
  // Two-way shear at d/2 outside the critical section, with the unbalanced moments transferred by eccentric shear.
- const cx=(c.d+b.plate.N)/4,cy=(c.bf+b.plate.B)/4,b1=2*cx+d,b2=2*cy+d,b0=2*(b1+b2),Vu=Math.max(0,Pu*(1-b1*b2/(f.L*f.B)));
+ const cx=(c.d+plateN)/4,cy=(c.bf+plateB)/4,b1=2*cx+d,b2=2*cy+d,b0=2*(b1+b2),Vu=Math.max(0,Pu*(1-b1*b2/(f.L*f.B)));
  const transfer=(c1:number,c2:number,M:number)=>{const gammaV=1-1/(1+2/3*Math.sqrt(c1/c2)),Jc=d*c1**3/6+c1*d**3/6+d*c2*c1*c1/2;return gammaV*M*(c1/2)/Jc;};
  const vu=Vu/(b0*d)+transfer(b1,b2,a.Mx+a.Vx*b.grout)+transfer(b2,b1,a.My+a.Vy*b.grout),beta=Math.max(c.d,c.bf)/Math.min(c.d,c.bf);
  const phivc=.75*Math.min(4,2+4/beta,2+40*d/b0)*lambdaS*sq*psi;
@@ -285,6 +290,10 @@ const ways=(r:ReturnType<typeof footingStrength>)=>[{direction:'L' as const,...r
 
 export interface ColumnBaseResult {
  station:number;
+ /** The base this support was designed with (its own footing: the braced one at braced columns), and whether it is that one. */
+ input?:ColumnBaseInput;braced?:boolean;
+ /** Lateral bearing (passive) resistance of the footing and its key (passiveResistance), service level. */
+ passive?:number;
  /** Results at each support, for checks that govern elsewhere than the support reported here. */
  supports?:ColumnBaseResult[];
  plate:{action:BaseAction;bearingAction:BaseAction;Y:number;T:number;couple?:number;fp:number;fpMax:number;bearing:number;l:number;tRequired:number;weld:{demand:number;capacity:number;action?:BaseAction;Mfl?:number;Ff?:number}};
@@ -301,6 +310,54 @@ export interface ColumnBaseResult {
   /** Bottom bar development length over the bar length from the flexure critical section, worse direction. */
   development:number};
 }
+/**
+ * Combined footing of a crane column and its building column (columnBase.combined): plan positions u across the runway
+ * from the crane column centerline, the building column at u = -s (s = craneColumn.offset, away from the crane span).
+ * The footing is centered on the two base plates (the building column's taken as d + 9 1/2 in by b_f + 3 1/2 in, as the
+ * configurator proportions the crane column's), at u_c; the group footprint is what the footing strength takes as the
+ * "column" (both plates within it).
+ */
+export function combinedFooting(p:ProjectInput){
+ const b=p.columnBase,k=p.craneColumn;if(!b?.combined||!k?.enabled)return undefined;
+ const bc=k.building,s=k.offset,Nb=bc.d+9.5*inch,Bb=bc.bf+3.5*inch,{section:c}=existingColumnSection(p);
+ const lo=-s-Nb/2,hi=b.plate.N/2,uc=(lo+hi)/2;
+ return {s,uc,Nb,Bb,building:bc,footprint:{d:s+bc.d/2+c.d/2,bf:Math.max(bc.bf,c.bf),N:hi-lo,B:Math.max(Bb,b.plate.B)},
+  /** The removed existing footing's extent across the runway, relative to the footing center (the new one covers it). */
+  existing:p.existingColumn?.adjacent?.A?.footing??p.existingColumn?.adjacent?.B?.footing};
+}
+/**
+ * The action on a combined footing: the crane column's base action plus the building column's existing axial load at u = -s,
+ * as moments about the footing center (magnitudes added to the crane column's base moment, a bound), and the girder's side
+ * thrust as a base shear across the runway (the building column's share of it, bounded by the whole). The building
+ * column's dead load takes the action's dead-load factor; its live, roof live, snow and rain loads at their full value
+ * (1.6 at strength level) count only where they increase the demand: in P and the moment, never in the resisting dead load.
+ * The building's own wind and seismic at its column base are the EOR's (excluded).
+ */
+export function footingAction(p:ProjectInput,a:BaseAction,dead:number,method:ProjectInput['method']):BaseAction{
+ const g=combinedFooting(p);if(!g)return a;
+ const e=g.building.existing,kD=dead>0?a.Pd/dead:1,live=(method==='LRFD'?1.6:1)*(e.L.P+Math.max(e.Lr.P,e.S.P,e.R.P));
+ const Db=kD*e.D.P,Pb=Db+Math.max(0,live),armB=-g.s-g.uc,armC=-g.uc;
+ return {...a,P:a.P+Pb,Pd:a.Pd+Db,Mx:a.Mx+Math.abs(Pb*armB+a.P*armC),Md:a.Md+Math.abs(Db*armB+a.Pd*armC),Vx:a.Vx+(a.css??0),Vh:a.Vh+(a.css??0)};
+}
+/** The base for the anchors and plate bearing of a crane column on a combined footing: its footing symmetric about the column. */
+export function anchorBase(p:ProjectInput,b:ColumnBaseInput):ColumnBaseInput{const g=combinedFooting(p);return g?{...b,footing:{...b.footing,L:b.footing.L-2*Math.abs(g.uc)}}:b;}
+/** Columns at the ends of a braced span (the rods' uplift and shear along the runway reach their bases). */
+export function bracedSupport(p:ProjectInput,j:number){return designsBracing(p)&&(bracingLayout(p).braced[j]??0)>0;}
+/** The base at support j: the braced columns' footing (columnBase.braced) there, else the typical one. */
+export function baseAt(p:ProjectInput,j:number):ColumnBaseInput{const b=p.columnBase!;return b.braced&&bracedSupport(p,j)?{...b,footing:b.braced.footing}:b;}
+/** The footings in use: the typical one, and the braced columns' where it differs. */
+export function footingsOf(p:ProjectInput){const b=p.columnBase!;return b.braced&&designsBracing(p)?[b.footing,b.braced.footing]:[b.footing];}
+/**
+ * Allowable lateral bearing (passive) resistance of a footing (soil.passive per unit depth, IBC §1806.2) on its
+ * leading face, the smaller plan width, from the bottom of the slab (the slab and the soil above it not credited) to the
+ * bottom of the footing or of its shear key: P_p = p (z_2² - z_1²)/2 with depths below the slab bottom.
+ */
+export function passiveResistance(b:ColumnBaseInput){
+ const f=b.footing,k=b.soil.passive??0,s=f.slab,z1=Math.max(f.soil,s)-s,z2=f.soil+f.thickness+(f.key??0)-s;
+ return k>0&&z2>z1?k*Math.min(f.L,f.B)*(z2**2-z1**2)/2:0;
+}
+/** Sliding safety factor: (μN + P_p)/V (IBC §1806.3.1, friction and lateral bearing combined). */
+export function slidingFs(b:ColumnBaseInput,N:number,V:number,passive=passiveResistance(b)){const R=b.soil.friction*Math.max(0,N)+passive;return V>0?R/V:Infinity;}
 type Worst<T>={value:number;action:BaseAction;result:T};
 const worst=<T,>(actions:BaseAction[],evaluate:(a:BaseAction)=>T,score:(r:T)=>number):Worst<T>=>actions.map(a=>{const result=evaluate(a);return {value:score(result),action:a,result};}).reduce((x,y)=>(Number.isNaN(y.value)?Infinity:y.value)>(Number.isNaN(x.value)?Infinity:x.value)?y:x);
 
@@ -332,12 +389,16 @@ export function columnBaseAnalysis(p:ProjectInput,reactions:SupportReactionSet):
  const b=p.columnBase!,{section:c}=existingColumnSection(p),A=sectionProperties(c).A,f=b.footing,arm=f.thickness+b.grout;
  const design=columnBaseActions(p,reactions,p.method),strength=columnBaseActions(p,reactions,'LRFD'),service=columnBaseActions(p,reactions,'ASD'),cyclic=columnBaseFatigueActions(p,reactions);
  const results=design.map((sp,j):ColumnBaseResult=>{
-  const thick=worst(sp.actions,a=>basePlate(p,b,a),r=>r.tRequired),bearing=worst(sp.actions,a=>basePlate(p,b,a),r=>r.bearing);
+  // Each support on its own footing: the braced columns' (columnBase.braced), else the typical one.
+  const b=baseAt(p,j),f=b.footing,arm=f.thickness+b.grout,passive=passiveResistance(b),bA=anchorBase(p,b);
+  // A combined footing carries the building column too (footingAction); the plate and rods see the crane column alone.
+  const fa=(a:BaseAction,method:ProjectInput['method'])=>footingAction(p,a,design[j].dead,method),sa=(a:BaseAction)=>fa(a,'ASD'),ua=(a:BaseAction)=>fa(a,'LRFD');
+  const thick=worst(sp.actions,a=>basePlate(p,bA,a),r=>r.tRequired),bearing=worst(sp.actions,a=>basePlate(p,bA,a),r=>r.bearing);
   const weld=flangeWeldCapacity(p,b),flange=worst(sp.actions,a=>flangeWeldDemand(p,b,a,A),v=>v.demand);
-  const seismicAnchors=(seismicBasis(p)?.sdc??'A')>='C',rods=(a:BaseAction)=>anchorsFor(p,b,a,seismicAnchors);
+  const seismicAnchors=(seismicBasis(p)?.sdc??'A')>='C',rods=(a:BaseAction)=>anchorsFor(p,bA,a,seismicAnchors);
   const anchors=worst(strength[j].actions,rods,r=>r.interaction),anchorTension=worst(strength[j].actions,rods,r=>r.phiNn>0?r.T/r.phiNn:Infinity),anchorShear=worst(strength[j].actions,rods,r=>r.phiVn>0?r.V/r.phiVn:Infinity);
   const W=footingWeight(b);
-  const soil=worst(service[j].actions,a=>soilPressure(b,a.P+W,a.Mx+a.Vx*arm,a.My+a.Vy*arm),q=>q);
+  const soil=worst(service[j].actions.map(sa),a=>soilPressure(b,a.P+W,a.Mx+a.Vx*arm,a.My+a.Vy*arm),q=>q);
   // Overturning about the footing edge, with only dead load resisting: across the runway about the edge on the
   // bracket side, where the dead reaction's eccentricity reduces the restoring moment; along the runway about
   // either edge. Crane vertical load acts inside the footing, so it adds more restoring moment than its
@@ -346,13 +407,15 @@ export function columnBaseAnalysis(p:ProjectInput,reactions:SupportReactionSet):
   // A brace's upward force acts at the column centerline and reduces the restoring weight.
   const overturning=(a:BaseAction)=>{const Wr=a.Pd+W-(a.uplift??0);return Math.min(fs(Wr*f.L/2-a.Md-a.Vd*arm,a.Mh+a.Vh*arm),fs(Wr*f.B/2,a.My+a.Vy*arm));};
   // Each combination's required safety factor: 1.5, or 1.0 with the reduced dead load of the seismic combinations.
-  const tipping=worst(service[j].actions,a=>({fs:overturning(a),required:a.fs??1.5}),v=>v.fs>0?v.required/v.fs:Infinity);
-  const sliding=worst(service[j].actions,a=>{const N=a.Pd+W-(a.uplift??0),v=N>0?Math.hypot(a.Vx,a.Vy)/N:Infinity;return {fs:v>0?b.soil.friction/v:Infinity,required:a.fs??1.5};},v=>v.fs>0?v.required/v.fs:Infinity);
-  const lifted=service[j].actions.filter(a=>(a.uplift??0)>0),lift=lifted.length?worst(lifted,a=>({uplift:a.uplift!,resist:a.Pd+W,required:a.fs??1.5}),v=>v.required*v.uplift/v.resist):undefined;
-  const shear=worst(strength[j].actions,a=>footingStrength(p,b,a),r=>Math.max(...ways(r).map(w=>w.Vu/w.phiVc)));
-  const punching=worst(strength[j].actions,a=>footingStrength(p,b,a),r=>r.vu/r.phivc),bending=worst(strength[j].actions,a=>footingStrength(p,b,a),r=>Math.max(...ways(r).map(w=>w.Mu/w.phiMn)));
+  const tipping=worst(service[j].actions.map(sa),a=>({fs:overturning(a),required:a.fs??1.5}),v=>v.fs>0?v.required/v.fs:Infinity);
+  // Base friction on the dead load combined with the lateral bearing (passive) resistance (IBC §1806.3.1).
+  const sliding=worst(service[j].actions.map(sa),a=>({fs:slidingFs(b,a.Pd+W-(a.uplift??0),Math.hypot(a.Vx,a.Vy),passive),required:a.fs??1.5}),v=>v.fs>0?v.required/v.fs:Infinity);
+  const lifted=service[j].actions.map(sa).filter(a=>(a.uplift??0)>0),lift=lifted.length?worst(lifted,a=>({uplift:a.uplift!,resist:a.Pd+W,required:a.fs??1.5}),v=>v.required*v.uplift/v.resist):undefined;
+  const factored=strength[j].actions.map(ua);
+  const shear=worst(factored,a=>footingStrength(p,b,a),r=>Math.max(...ways(r).map(w=>w.Vu/w.phiVc)));
+  const punching=worst(factored,a=>footingStrength(p,b,a),r=>r.vu/r.phivc),bending=worst(factored,a=>footingStrength(p,b,a),r=>Math.max(...ways(r).map(w=>w.Mu/w.phiMn)));
   const oneWay=ways(shear.result).reduce((x,y)=>y.Vu/y.phiVc>x.Vu/x.phiVc?y:x),flexure=ways(bending.result).reduce((x,y)=>y.Mu/y.phiMn>x.Mu/x.phiMn?y:x);
-  return {station:sp.x,fatigue:columnBaseFatigue(p,b,cyclic[j]),
+  return {station:sp.x,input:b,braced:b!==p.columnBase,passive,fatigue:columnBaseFatigue(p,b,cyclic[j]),
    ...(lift?{uplift:{action:lift.action,...lift.result}}:{}),
    plate:{action:thick.action,bearingAction:bearing.action,Y:thick.result.Y,T:thick.result.T,couple:thick.result.couple,fp:bearing.result.fp,fpMax:bearing.result.fpMax,bearing:bearing.value,l:thick.result.l,tRequired:thick.result.tRequired,
     weld:{demand:Math.max(0,flange.value),capacity:weld,action:flange.action,Mfl:flange.result.Mfl,Ff:flange.result.Ff}},
@@ -487,10 +550,10 @@ export function rodClearance(p:ProjectInput,b:ColumnBaseInput){
  const washer=hw.washer/2+washerWeld+flange,wrench=wrenchClearance(b.anchors.diameter)+flange;
  return {available:b.plate.N/2-b.anchors.edge-c.d/2,required:Math.max(washer,wrench),washer,wrench,washerWeld,flange,washerWidth:hw.washer,socket:wrenchClearance(b.anchors.diameter)};
 }
-function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
- const b=p.columnBase!,u=p.units,f=(v:number,q:Parameters<typeof format>[1]='force')=>format(v,q,u,3),checks:CheckResult[]=[];
+export function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
+ const b=r.input??p.columnBase!,u=p.units,f=(v:number,q:Parameters<typeof format>[1]='force')=>format(v,q,u,3),checks:CheckResult[]=[];
  const add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,refs:string[],caseId?:string)=>checks.push({id:'base-'+id,group:'New column base',title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:Number.isFinite(demand)&&Number.isFinite(capacity)&&capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds:refs,caseId});
- const at=`Support x=${f(r.station,'length')}`,pl=r.plate,a=r.anchors,ft=r.footing,s=ft.strength,way=(d:'L'|'B')=>d==='L'?'along L (strong axis)':'across B (weak axis)';
+ const at=`Support x=${f(r.station,'length')}${p.columnBase!.braced&&designsBracing(p)?`, ${r.braced?'braced-column footing':'typical footing'} ${f(b.footing.L,'length')} × ${f(b.footing.B,'length')}`:''}`,pl=r.plate,a=r.anchors,ft=r.footing,s=ft.strength,way=(d:'L'|'B')=>d==='L'?'along L (strong axis)':'across B (weak axis)';
  checks.push({id:'base-basis',group:'New column base',title:'Soil, concrete and anchor data',status:b.confirmed&&b.source.trim()?'pass':'unverified',equation:'',referenceIds:['aci-318','dg1'],
   note:b.confirmed&&b.source.trim()?`Allowable bearing ${f(b.soil.allowable,'pressure')}, base friction ${b.soil.friction}, soil ${f(b.soil.unitWeight,'unitWeight')}, frost depth ${f(b.soil.frost,'length')}; f'c = ${f(b.concrete.fc,'stress')}; bars fy = ${f(b.footing.fy,'stress')}. Source: ${b.source}.`:'Enter and confirm the geotechnical report values and the concrete, reinforcement and anchor rod specifications.'});
  add('bearing','Base plate · concrete bearing',pl.bearing,1,'ratio','f_p\\le f_{p,max}=\\phi_c\\,0.85f^\\prime_c\\sqrt{A_2/A_1}\\le\\phi_c\\,1.7f^\\prime_c;\\quad\\left(f+\\tfrac N2\\right)^2\\ge\\frac{2(M+Pf)}{q_{max}}',`${at}, ${pl.bearingAction.id}. f_p,max = ${f(pl.fpMax,'stress')}. Small moment: f_p/f_p,max; large moment: the bearing block at f_p,max needs 2(M + Pf)/q_max of the available (f + N/2)². A2 is the largest footing area similar to and concentric with the plate, at most 4A1.`,['dg1'],pl.bearingAction.id);
@@ -516,7 +579,7 @@ function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
  add('soil','Footing · soil bearing',ft.qMax,b.soil.allowable,'pressure','q_{max}=\\frac{P}{BL}\\left(1+\\frac{6e}{L}\\right)\;\\text{or}\;\\frac{2P}{3B(L/2-e)}',`${at}, ${ft.soilAction.id} (service): column load plus footing and soil ${f(ft.weight)}; base moment plus base shear times the footing and grout depth.`,['aci-318'],ft.soilAction.id);
  add('overturning','Footing · overturning',ft.overturningRequired,ft.overturning,'ratio',`FS=\\frac{W_D\\,L/2-M_{D,e}}{M_{ot}}\\ge${ft.overturningRequired}`,`${at}, ${ft.stabilityAction.id}${ft.overturningRequired<1.5?' (seismic, reduced dead load, FS 1.0)':''}: dead load of the runway, column, footing and soil about the footing edge against the side thrust (or longitudinal force) moment at the footing base. Across the runway the edge on the bracket side governs, with the runway dead reaction's eccentric moment deducted from the restoring moment; the crane vertical load is not credited.`,['aci-318'],ft.stabilityAction.id);
  if(r.uplift)add('uplift','Footing · uplift from the bracing',r.uplift.required*r.uplift.uplift,r.uplift.resist,'force','FS\\cdot U\\le W_D',`${at}, ${r.uplift.action.id} (service): the rod whose lower end is at this base lifts it by ${f(r.uplift.uplift)}; dead load of the runway, column, footing and soil ${f(r.uplift.resist)} resists it with FS ${r.uplift.required}. The rods' shear along the runway is in the anchor, sliding and overturning checks.`,['aci-318'],r.uplift.action.id);
- add('sliding','Footing · sliding',ft.slidingRequired,ft.sliding,'ratio',`FS=\\frac{\\mu\\,W_D}{V}\\ge${ft.slidingRequired}`,`${at}, ${ft.slidingAction.id}${ft.slidingRequired<1.5?' (seismic, reduced dead load, FS 1.0)':''}: base friction μ = ${b.soil.friction} on the dead load; crane vertical load and passive pressure not credited.`,['aci-318'],ft.slidingAction.id);
+ add('sliding','Footing · sliding',ft.slidingRequired,ft.sliding,'ratio',`FS=\\frac{\\mu\\,W_D+P_p}{V}\\ge${ft.slidingRequired}`,`${at}, ${ft.slidingAction.id}${ft.slidingRequired<1.5?' (seismic, reduced dead load, FS 1.0)':''}: base friction μ = ${b.soil.friction} on the dead load${r.passive?` plus the lateral bearing (passive) resistance P_p = ${f(r.passive)} of the leading face${b.footing.key?` and a ${f(b.footing.key,'length')} deep shear key below the footing (${f(footingKeyWidth,'length')} wide, its full width)`:''}: lateral bearing ${f(b.soil.passive!,'unitWeight')} (pressure per unit depth) below the slab bottom (the slab and the soil above it not credited), IBC 2018 §1806.2 and §1806.3.1 (friction and lateral bearing combined), the owner safety factor on top of the allowable values; crane vertical load not credited.`:'; crane vertical load and passive pressure not credited.'}`,['aci-318',...(r.passive?['ibc-1806']:[])],ft.slidingAction.id);
  add('frost','Footing · depth below frost',b.soil.frost,ft.bottom,'length','\\text{bottom of footing}\\ge\\text{frost depth}',`Bottom of footing ${f(ft.bottom,'length')} below the finished floor (top of footing ${f(b.footing.soil,'length')} below the floor plus ${f(b.footing.thickness,'length')} thick). IBC 1809.4/1809.5; enter zero only for a footing protected from frost inside a heated building.`,['aci-318']);
  add('one-way','Footing · one-way shear',ft.oneWay,1,'ratio','\\phi V_c=0.75\\cdot8\\lambda_s\\rho_w^{1/3}\\sqrt{f^\\prime_c}\\,b\\,d',`${at}, ${ft.shearAction.id}: ACI 318-19 Table 22.5.5.1(c) with λs; d = ${f(s.d,'length')}; governing ${way(ft.oneWayDirection)}; critical section d beyond halfway between the column face and the plate edge.`,['aci-318'],ft.shearAction.id);
  add('two-way','Footing · two-way shear with moment transfer',ft.twoWay,1,'ratio','v_u=\\frac{V_u}{b_od}+\\frac{\\gamma_{vx}M_{ux}c}{J_{cx}}+\\frac{\\gamma_{vy}M_{uy}c}{J_{cy}}\\le\\phi v_c',`${at}, ${ft.punchingAction.id}: ACI 318-19 §8.4.4.2 and Table 22.6.5.2 with λs; perimeter d/2 outside halfway between the column face and the plate edge.`,['aci-318'],ft.punchingAction.id);

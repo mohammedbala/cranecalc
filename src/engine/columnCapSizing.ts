@@ -14,8 +14,8 @@
  * and stiffness of the fork come from the girder's moving-load moment (braceImperfection).
  *
  * Growth on the governing ratio: the cap plate one plate step; the all-around cap fillets 1/16 in (to 5/8 in and
- * t - 1/16 in of the thinner part; past 5/8 in, to 1 in, only once the cap weld ratio exceeds 1: heavyCapFillet; then CJP
- * groove welds with reinforcing fillets where no such fillet passes); the bearing bolts one diameter up (3/4 in to 1 1/4 in) or A490, or a wider gauge,
+ * t - 1/16 in of the thinner part; then, once the cap weld ratio exceeds 1 at that size, CJP groove welds with
+ * reinforcing fillets); the bearing bolts one diameter up (3/4 in to 1 1/4 in) or A490, or a wider gauge,
  * whichever lowers the bolt tension or slip ratio most per pound; the bolt edge distance 1/8 in for the nut clearance at
  * the column web; the cap stiffeners thicker, deeper or with larger fillets. After each step the cap plate covers the
  * column, the bearings and the bolt edges, the fillets meet their J2.4 minimum, the end bearing edge distances follow
@@ -171,13 +171,12 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
  const step=(from:{cap:ColumnCapInput;e:EndBearingInput},move:Move)=>{const v=structuredClone(from);if(!move(v))return undefined;return settle(v)&&JSON.stringify(v)!==JSON.stringify(from)?v:undefined;};
  const plate:Move=v=>{const t=nextPlate(v.cap.plate.thickness);if(!t)return false;v.cap.plate.thickness=t;return true;};
  const weld:Move=v=>{const w=v.cap.weld+sixteenth;if(v.cap.joint==='cjp'||w>maxFillet(v.cap.plate.thickness,col.tf)+1e-6)return false;v.cap.weld=w;return true;};
- // Past 5/8 in only once the governing cap weld ratio exceeds 1 at the 5/8 in limit (it would fail there), then in 1/16 in
- // steps to the sizing target.
+ // Where the 5/8 in fillet (a practical multi-pass limit) and a thicker plate still leave the cap weld ratio above 1:
+ // CJP groove welds of the column flanges and web with the reinforcing fillet, t/4 of the flange and at most 3/8 in,
+ // never under the J2.4 minimum. Fillets past 5/8 in (heavyCapFillet) are no longer taken: a 1 in multi-pass fillet on
+ // the column flange is neither practical nor developed by the base metal.
  let governing=0,heavy=false;
- const heavyWeld:Move=v=>{heavy||=governing>1+1e-9;const w=v.cap.weld+sixteenth;if(!heavy||v.cap.joint==='cjp'||w>heavyCapFillet(v.cap.plate.thickness,col.tf)+1e-6)return false;v.cap.weld=w;return true;};
- // Where no fillet the sizing takes passes (the nut clearance at the web or the 1 in limit stops it): CJP groove welds of
- // the column flanges and web with the reinforcing fillet, t/4 of the flange and at most 3/8 in, never under the J2.4 minimum.
- const cjp:Move=v=>{if(!heavy||v.cap.joint==='cjp')return false;v.cap.joint='cjp';v.cap.weld=up(Math.max(filletMinimum([v.cap.plate.thickness,col.tf]),Math.min(col.tf/4,3/8*inch)),sixteenth);return true;};
+ const cjp:Move=v=>{heavy||=governing>1+1e-9;if(!heavy||v.cap.joint==='cjp')return false;v.cap.joint='cjp';v.cap.weld=up(Math.max(filletMinimum([v.cap.plate.thickness,col.tf]),Math.min(col.tf/4,3/8*inch)),sixteenth);return true;};
  const bolt:Move=v=>{const i=boltSizes.findIndex(x=>x>v.e.bolts.diameter+1e-6);if(i<0)return false;v.e.bolts.diameter=boltSizes[i];return true;};
  const grade:Move=v=>{if(v.e.bolts.grade==='A490')return false;v.e.bolts.grade='A490';return true;};
  const gauge:Move=v=>{v.e.bolts.gauge+=inch/2;return true;};
@@ -188,7 +187,7 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
  const bolts:Move[]=[bolt,grade,gauge];
  const moves:Record<string,(Move|Move[])[]>={
   'plate':[plate],'plate-shear':[plate],'web-yield':[plate],'web-cripple':[plate],'prying':[plate],'fork-stiffness':[[plate,bolt]],'bolt-bearing':[plate,bolt],
-  'weld':[weld,plate,heavyWeld,cjp],'weld-fatigue':[weld,plate,heavyWeld,cjp],
+  'weld':[weld,plate,cjp],'weld-fatigue':[weld,plate,cjp],
   'bolt-tension':[bolts],'bolt-slip':[bolts],'bolt-fatigue':[[bolt,gauge]],
   'wrench-web':[edge],'wrench-flange':[],'wrench-stiffener':[edge],
   'stiffener-bearing':[stiffThicker],'stiffener-slenderness':[stiffThicker],'stiffener-shear':[[stiffThicker,stiffDeeper]],'stiffener-flange':[stiffDeeper],

@@ -18,9 +18,10 @@ import type {ProjectInput} from './types';
 import {sectionProperties} from './section';
 import {supportReactions,type SupportReactionSet} from './supportReactions';
 import {existingColumnAnalysis,existingColumnSection} from './existingColumn';
-import {anchorsFor,anchorStrength,barArea,barDiameter,baseDrift,basePlate,columnBaseActions,columnBaseAnalysis,columnBaseFatigue,columnBaseFatigueActions,rodClearance,columnBaseChecks,flangeWeldCapacity,flangeWeldDemand,footingStrength,footingWeight,plateWasherWeld,soilPressure} from './columnBase';
+import {anchorBase,anchorsFor,anchorStrength,barArea,footingAction,combinedFooting,barDiameter,baseAt,baseDrift,basePlate,bracedSupport,columnBaseActions,columnBaseAnalysis,columnBaseFatigue,columnBaseFatigueActions,rodClearance,flangeWeldCapacity,flangeWeldDemand,footingsOf,footingStrength,footingWeight,passiveResistance,plateWasherWeld,slidingFs,soilPressure,supportChecks} from './columnBase';
 import {anchorHardware,barSizes} from './columnBaseInputs';
 import {seismicBasis} from './runwaySeismic';
+import {supportStations} from './supportReactions';
 
 const inch=25.4,foot=304.8,psi=0.006894757293168,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
 /** The next multiple of `step` above `v`, and the last one below it: sizes stay on their standard increments. */
@@ -71,10 +72,12 @@ function anchorStates(r:AnchorResult){
  * support for each check), each component function evaluated once per action.
  */
 export function baseSizingRatios(p:ProjectInput,set:BaseSizingSet=baseSizingSet(p)):BaseSizingRatios{
- const b=p.columnBase!,{section:c}=existingColumnSection(p),A=sectionProperties(c).A,f=b.footing,an=b.anchors,arm=f.thickness+b.grout,W=footingWeight(b);
+ const b=p.columnBase!,{section:c}=existingColumnSection(p),A=sectionProperties(c).A,f=b.footing,an=b.anchors;
  const ratios:Record<string,number>={},put=(k:string,v:number)=>{ratios[k]=Math.max(ratios[k]??0,finite(v));};
  let tRequired=0;
- for(const sp of set.design)for(const a of sp.actions){const r=basePlate(p,b,a);tRequired=Math.max(tRequired,finite(r.tRequired));put('bearing',r.bearing);}
+ // Each support on its own footing (baseAt): the footing ratios of the braced columns' footing under 'braced:' keys.
+ const at=(j:number)=>baseAt(p,j),key=(j:number,k:string)=>at(j)!==b?`braced:${k}`:k;
+ for(const [j,sp] of set.design.entries())for(const a of sp.actions){const r=basePlate(p,anchorBase(p,at(j)),a);tRequired=Math.max(tRequired,finite(r.tRequired));put('bearing',r.bearing);}
  put('plate',tRequired/b.plate.thickness);
  // The flange fillets with the base bimoment's flange lateral moments (flangeWeldDemand).
  const flange=Math.max(0,...set.design.flatMap(sp=>sp.actions.map(a=>flangeWeldDemand(p,b,a,A).demand)));
@@ -82,30 +85,33 @@ export function baseSizingRatios(p:ProjectInput,set:BaseSizingSet=baseSizingSet(
  // The rods (anchorsFor): torque shear added as vectors per rod, the bimoment's rod force; tension and shear each at their own worst action.
  const seismicAnchors=(seismicBasis(p)?.sdc??'A')>='C',washer=plateWasherWeld(b).phiRn;
  let governing:{r:AnchorResult;v:number}|undefined;
- for(const sp of set.strength){
+ for(const [j,sp] of set.strength.entries()){
   let worst:{r:AnchorResult;v:number}|undefined;
-  for(const a of sp.actions){const r=anchorsFor(p,b,a,seismicAnchors),v=finite(r.interaction);put('anchor-tension',r.T/r.phiNn);put('anchor-shear',r.V/r.phiVn);put('washer-weld',r.V/(2*an.perRow)/washer);if(!worst||v>worst.v)worst={r,v};}
+  for(const a of sp.actions){const r=anchorsFor(p,anchorBase(p,at(j)),a,seismicAnchors),v=finite(r.interaction);put('anchor-tension',r.T/r.phiNn);put('anchor-shear',r.V/r.phiVn);put('washer-weld',r.V/(2*an.perRow)/washer);if(!worst||v>worst.v)worst={r,v};}
   if(!worst)continue;
   put('anchor-interaction',worst.r.interaction);
   if(!governing||worst.v>governing.v)governing=worst;
  }
  const fs=(resist:number,ot:number)=>resist<=0?0:ot>0?resist/ot:Infinity;
- for(const sp of set.service)for(const a of sp.actions){
-  const required=a.fs??1.5,dead=a.Pd+W-(a.uplift??0);
-  put('soil',soilPressure(b,a.P+W,a.Mx+a.Vx*arm,a.My+a.Vy*arm)/b.soil.allowable);
-  const tipping=Math.min(fs(dead*f.L/2-a.Md-a.Vd*arm,a.Mh+a.Vh*arm),fs(dead*f.B/2,a.My+a.Vy*arm));put('overturning',tipping>0?required/tipping:Infinity);
-  const v=dead>0?Math.hypot(a.Vx,a.Vy)/dead:Infinity,sliding=v>0?b.soil.friction/v:Infinity;put('sliding',sliding>0?required/sliding:Infinity);
-  if((a.uplift??0)>0)put('uplift',required*a.uplift!/(a.Pd+W));
- }
- for(const sp of set.strength)for(const a of sp.actions){
-  const r=footingStrength(p,b,a);put('two-way',r.vu/r.phivc);
-  for(const w of [r.along,r.across]){put('one-way',w.Vu/w.phiVc);put('flexure',w.Mu/w.phiMn);put('min-steel',w.AsMin/w.As);put('development',w.available>0?w.ld/w.available:Infinity);}
+ for(const [j,sp] of set.service.entries()){const bj=at(j),fj=bj.footing,arm=fj.thickness+bj.grout,W=footingWeight(bj),passive=passiveResistance(bj),k=(v:string)=>key(j,v);
+  for(const a of sp.actions.map(v=>footingAction(p,v,sp.dead,'ASD'))){
+   const required=a.fs??1.5,dead=a.Pd+W-(a.uplift??0);
+   put(k('soil'),soilPressure(bj,a.P+W,a.Mx+a.Vx*arm,a.My+a.Vy*arm)/bj.soil.allowable);
+   const tipping=Math.min(fs(dead*fj.L/2-a.Md-a.Vd*arm,a.Mh+a.Vh*arm),fs(dead*fj.B/2,a.My+a.Vy*arm));put(k('overturning'),tipping>0?required/tipping:Infinity);
+   const sliding=slidingFs(bj,dead,Math.hypot(a.Vx,a.Vy),passive);put(k('sliding'),sliding>0?required/sliding:Infinity);
+   if((a.uplift??0)>0)put(k('uplift'),required*a.uplift!/(a.Pd+W));
+  }}
+ for(const [j,sp] of set.strength.entries())for(const a of sp.actions.map(v=>footingAction(p,v,sp.dead,'LRFD'))){
+  const r=footingStrength(p,at(j),a),k=(v:string)=>key(j,v);put(k('two-way'),r.vu/r.phivc);
+  for(const w of [r.along,r.across]){put(k('one-way'),w.Vu/w.phiVc);put(k('flexure'),w.Mu/w.phiMn);put(k('min-steel'),w.AsMin/w.As);put(k('development'),w.available>0?w.ld/w.available:Infinity);}
  }
  // Fatigue of the rods, the flange joint and the plate under the duty bins (columnBaseFatigue); the rods' clearance to the flange.
  for(const a of set.fatigue){const z=columnBaseFatigue(p,b,a);put('anchor-fatigue',z.rod.range/z.rod.capacity);put('weld-fatigue-toe',z.toe.range/z.toe.capacity);if(z.root)put('weld-fatigue-root',z.root.range/z.root.capacity);put('plate-fatigue',z.plate.range/z.plate.capacity);}
  {const g=rodClearance(p,b);put('rod-clear',g.required/g.available);}
- put('frost',b.soil.frost/(f.soil+f.thickness));
- put('bar-spacing',f.spacing/Math.min(3*f.thickness,18*inch));
+ for(const [mark,fj] of [['',f],...(b.braced&&footingsOf(p).length>1?[['braced:',b.braced.footing]]:[])] as [string,typeof f][]){
+  put(mark+'frost',b.soil.frost/(fj.soil+fj.thickness));
+  put(mark+'bar-spacing',fj.spacing/Math.min(3*fj.thickness,18*inch));
+ }
  const d=baseDrift(p,set.column);put('drift',d.total/d.limit);
  return {ratios,...(governing?anchorStates(governing.r):{tension:'steel' as const,shear:'steel' as const,dominant:'tension' as const}),edgeReduced:!!governing&&governing.r.hef<an.embedment-1e-6,tRequired,column:d.column/d.limit};
 }
@@ -113,7 +119,10 @@ export function baseSizingRatios(p:ProjectInput,set:BaseSizingSet=baseSizingSet(
 /** The same ratios from the full analysis (columnBaseAnalysis, columnBaseChecks): what the calculation reports. */
 export function exactBaseSizingRatios(p:ProjectInput,set:BaseSizingSet=baseSizingSet(p)):BaseSizingRatios{
  const r=columnBaseAnalysis(p,set.reactions),ratios:Record<string,number>={};
- for(const c of columnBaseChecks(p,r,set.column))if(c.id.startsWith('base-')&&c.utilization!==undefined)ratios[c.id.slice(5)]=finite(c.utilization);
+ // Per support, the braced columns' footing ratios under 'braced:' keys (as baseSizingRatios); the drift as reported.
+ const put=(k:string,v:number)=>{ratios[k]=Math.max(ratios[k]??0,finite(v));},footingKeys=/^(soil|overturning|sliding|uplift|two-way|one-way|flexure|min-steel|development|frost|bar-spacing)$/;
+ for(const v of r.supports??[r])for(const c of supportChecks(p,v))if(c.id.startsWith('base-')&&c.utilization!==undefined){const k=c.id.slice(5);put(v.braced&&footingKeys.test(k)?`braced:${k}`:k,c.utilization);}
+ {const d=baseDrift(p,set.column);put('drift',d.total/d.limit);}
  const supports=r.supports??[r],governing=supports.reduce((x,y)=>finite(y.anchors.interaction)>finite(x.anchors.interaction)?y:x).anchors,d=baseDrift(p,set.column);
  return {ratios,...anchorStates(governing),edgeReduced:governing.hef<p.columnBase!.anchors.embedment-1e-6,tRequired:Math.max(...supports.map(v=>finite(v.plate.tRequired))),column:d.column/d.limit};
 }
@@ -160,13 +169,23 @@ function lowerColumn(p:ProjectInput,delta:number){
 export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
  const q=structuredClone(p),col=q.existingColumn,b=q.columnBase;
  if(!col?.enabled||!col.isNew||!b?.enabled)return q;
- const {section}=existingColumnSection(q),reactions=supportReactions(q,sectionProperties(q.section)),pl=b.plate,a=b.anchors,ft=b.footing;
+ const {section}=existingColumnSection(q),reactions=supportReactions(q,sectionProperties(q.section)),pl=b.plate,a=b.anchors;
+ // Braced runways with unbraced columns too: the braced columns' footing is sized apart from the others' (columnBase.braced),
+ // starting from the same footing; the step acting on a 'braced:' ratio grows that one.
+ const stations=supportStations(q).map((_,j)=>bracedSupport(q,j));
+ if(!b.braced&&stations.some(v=>v)&&stations.some(v=>!v))b.braced={footing:structuredClone(b.footing)};
+ if(b.braced&&!stations.some(v=>v))delete b.braced;
+ const footings=()=>b.braced?[b.footing,b.braced.footing]:[b.footing];
+ let ft=b.footing;
  // Footing: square, never smaller than the plate; deep enough for the rod heads above both bar layers.
- const fitFooting=()=>{
+ // A combined footing (combinedFooting) covers both base plates by 6 in and the removed existing footing's plan.
+ const combined=()=>{const g=combinedFooting(q);if(!g)return {L:0,B:0};const e=g.existing,eL=e?.L??0,eB=e?.B??0;
+  return {L:Math.max(g.footprint.N+12*inch,2*Math.abs(-g.s-eL/2-g.uc),2*Math.abs(-g.s+eL/2-g.uc)),B:Math.max(g.footprint.B+12*inch,eB)};};
+ const fitFooting=()=>{const need=combined();for(const ft of footings()){
   ft.L=ft.B=Math.max(ft.L,ft.B);
-  while(ft.L<pl.N||ft.B<pl.B)ft.L=ft.B=next(ft.L,6*inch);
+  while(ft.L<pl.N||ft.B<pl.B||ft.L<need.L-1e-6||ft.B<need.B-1e-6)ft.L=ft.B=next(ft.L,6*inch);
   while(a.embedment+ft.cover+2*barDiameter[ft.bar]>ft.thickness+1e-6)ft.thickness=next(ft.thickness,2*inch);
- };
+ }};
  // Rods: the plate washer on the plate and clear of the flange welds, rods four diameters and a washer apart,
  // inside the plate width (validateColumnBase).
  const fit=()=>{
@@ -179,6 +198,10 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
   fitFooting();
  };
  const wider=()=>{const L=next(ft.L,6*inch);if(L>caps.footing+1e-6)return false;ft.L=ft.B=L;return true;};
+ // The rods' edge distances: every footing at least as wide as the one grown.
+ const widerAll=()=>{const L=next(Math.min(...footings().map(v=>v.L)),6*inch);if(L>caps.footing+1e-6)return false;for(const v of footings())if(v.L<L)v.L=v.B=L;return true;};
+ // A shear key below the footing (6 in steps to 3 ft) where the soil's lateral bearing is given (passiveResistance).
+ const keyed=()=>{if(!(b.soil.passive??0))return false;const k=next(ft.key??0,6*inch);if(k>36*inch+1e-6)return false;ft.key=k;return true;};
  const deeper=()=>{const t=next(ft.thickness,2*inch);if(t>caps.depth+1e-6)return false;ft.thickness=t;return true;};
  // Dead load: a footing about twice as wide as deep past the plate.
  const heavier=()=>ft.thickness<(ft.L-pl.N)/4?deeper()||wider():wider()||deeper();
@@ -189,7 +212,7 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
  const largerNut=()=>{const d=nextRod();if(!d)return false;a.diameter=d;return true;};
  const moreRods=()=>{if(a.perRow>=4)return false;a.perRow++;return true;};
  const embed=(edgeReduced:boolean)=>{
-  if(edgeReduced)return wider();
+  if(edgeReduced)return widerAll();
   const hef=next(a.embedment,inch);if(hef>caps.embedment+1e-6||hef+ft.cover+2*barDiameter[ft.bar]>caps.depth+1e-6)return false;
   a.embedment=hef;return true;
  };
@@ -202,7 +225,8 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
   while(k>6&&area(bar,k*inch)<As)k--;
   ft.bar=bar;ft.spacing=k*inch;return true;
  };
- const grow=(key:string,s:BaseSizingRatios):boolean=>{
+ const grow=(tagged:string,s:BaseSizingRatios):boolean=>{
+  const braced=tagged.startsWith('braced:'),key=braced?tagged.slice(7):tagged;ft=braced&&b.braced?b.braced.footing:b.footing;
   switch(key){
    case 'plate':{const t=Math.max(next(pl.thickness,inch/8),up(s.tRequired/target,inch/8));if(!Number.isFinite(t))return longer();if(t>caps.thickness+1e-6)return false;pl.thickness=t;return true;}
    case 'bearing':return larger();
@@ -218,11 +242,13 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
    case 'anchor-tension':case 'anchor-shear':case 'anchor-interaction':case 'washer-weld':{
     if(key==='washer-weld')return largerRod()||moreRods();
     const shear=key==='anchor-shear'||(key==='anchor-interaction'&&s.dominant==='shear');
-    if(shear)return s.shear==='steel'?largerRod()||moreRods():s.shear==='pryout'?embed(s.edgeReduced)||moreRods():wider();
-    return (s.tension==='steel'?largerRod():s.tension==='pullout'?largerNut():s.tension==='blowout'?wider():embed(s.edgeReduced))||moreRods()||longer();
+    if(shear)return s.shear==='steel'?largerRod()||moreRods():s.shear==='pryout'?embed(s.edgeReduced)||moreRods():widerAll();
+    return (s.tension==='steel'?largerRod():s.tension==='pullout'?largerNut():s.tension==='blowout'?widerAll():embed(s.edgeReduced))||moreRods()||longer();
    }
    case 'soil':case 'overturning':case 'development':case 'drift':return key==='drift'&&s.column>columnDriftShare*target?false:wider();
-   case 'sliding':case 'uplift':return heavier();
+   // Sliding: a shear key engages the soil's lateral bearing deeper (where it is given), then a heavier footing.
+   case 'sliding':return keyed()||heavier();
+   case 'uplift':return heavier();
    case 'frost':case 'one-way':case 'two-way':return deeper();
    case 'flexure':case 'min-steel':return moreSteel()||deeper();
    case 'bar-spacing':{const max=Math.floor(Math.min(3*ft.thickness,18*inch)/inch+1e-6)*inch;if(ft.spacing<=max)return false;ft.spacing=max;return true;}

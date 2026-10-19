@@ -6,7 +6,7 @@ import {haunchUnderSeat} from './taperedHaunchSheet';
 import {format} from '../engine/units';
 import {existingColumnSection} from '../engine/existingColumn';
 import {anchorHardware,columnBaseElevation} from '../engine/columnBaseInputs';
-import {bracingDesign,girderOffset,strutBolting} from '../engine/newColumnBracing';
+import {bracingDesign,girderOffset,stiffenerLevels,strutBolting} from '../engine/newColumnBracing';
 import {seatColumnWeld} from '../engine/bracketDesign';
 import {capWorkPointDrop,columnCapGeometry} from '../engine/columnCap';
 import {activeColumnCap} from '../engine/columnCapInputs';
@@ -81,6 +81,8 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  const offsetLabel=`${dim(cr.offset)} OFF COLUMN C/L TOWARD GIRDER`;
  const el=runwayElevations(p),datum=p.drawing?.datumElevation??0,elev=(z:number)=>`EL. ${dim(datum+columnBaseElevation(base)+z)}`;
  const weldLabel=size(d.weld),views:DetailView[]=[];
+ // Web stiffener pair at each upper gusset and strut tab (webStiffeners), where the bracing sizing added it.
+ const stiff=d.stiffeners,stiffName=stiff?`PL ${size(stiff.thickness)} WEB STIFF. PAIR`:'';
  // A column cap: the girder bears on the cap over the column; the strut work point is below the cap.
  const capG=activeColumnCap(p)?columnCapGeometry(p):undefined,capT=capG?.cap.plate.thickness??0;
  const turnAt=.25;
@@ -176,6 +178,8 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   // The web edges, hidden behind the flange.
   for(const x of [-c.tw/2,c.tw/2])svg+=line([X(x),Y(c0)],[X(x),Y(c1)],'hidden-line');
   svg+=behind(outline.map(([x,z]):XY=>[X(x),Y(z)]),[X(-c.bf/2),X(c.bf/2)]);
+  // The web stiffener pair at the upper gusset, between the flanges behind the near flange.
+  if(!lower&&stiff)for(const z of stiffenerLevels(r,stiff.thickness).gusset)svg+=rect(X(g.x0),Y(z+stiff.thickness/2),(c.bf/2-g.x0)*kk,stiff.thickness*kk,'hidden-line');
   if(lower){
    // Base plate on grout on the footing; the near row of anchor rods.
    const pl=base.plate,a=base.anchors,hw=anchorHardware(a.diameter);
@@ -215,7 +219,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   const leftLabels=[`NEW ${colName} COLUMN`,...(lower?['BASE PL, SEE',detailRef(detailTitles.basePlate)]:[])];
   svg+=multiLeader([[X(-c.bf/2),Y((c0+c1)/2+(lower?2*inch:0))]],[lx-Math.max(...leftLabels.map(v=>textWidth(v,8.5))),Y(zTop)-6],leftLabels);
   const items:{at:XY;labels:string[];weld?:string}[]=[
-   {at:[X(c.bf/2+inch),Y(lower?weld!.web*.6:upper.to-.4*(upper.to-upper.from))],labels:[`SHOP, ${welds}`,`${gussetName}, A572 GR. 50`],weld:weldLabel},
+   {at:[X(c.bf/2+inch),Y(lower?weld!.web*.6:upper.to-.4*(upper.to-upper.from))],labels:[`SHOP, ${welds}`,`${gussetName}, A572 GR. 50`,...(!lower&&stiff?[`+ ${stiffName}, SEE NOTE`]:[])],weld:weldLabel},
    {at:[P[0]+dir[0]*1.8*g.dp*kk,P[1]+dir[1]*1.8*g.dp*kk+.6*g.dp*kk],labels:[`FORGED CLEVIS, ${pinName}`,`${dim(lower?g.bottom.s:g.top.s)} FROM W.P. ALONG ROD;`,`RATED TO DEVELOP THE ROD`]},
    {at:[end[0]-dir[0]*14,end[1]-dir[1]*14],labels:[rodName,`ASTM F1554 GR. 36`]},
    ...(lower?[]:[{at:[X(sg.bolts[1]),Y(0)] as XY,labels:[boltName,'PRETENSIONED, SLIP-CRITICAL','CLASS B, STD HOLES']},{at:[X(sg.tabEnd+6*inch),Y(sg.d/2)] as XY,labels:[`${sg.shape} STRUT, COPE`,`FLANGES ${dim(sg.cope)}`]}])
@@ -345,6 +349,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   [`LINE FORCE / ROD FORCE (${p.method})`,`${force(lb.governing.H)} / ${force(lb.governing.force)} (${lb.governing.id})`],
   ['ROD STRENGTH = CONNECTION FORCE',`${force(r.develop)}: CLEVIS, ${pinName}, ${gussetName} AND WELDS DEVELOP THE ROD`],
   ['GUSSET WELDS',`${weldLabel} FILLETS BOTH FACES: ${dim(r.outlines.welds.upper.to-r.outlines.welds.upper.from)} TO WEB AT W.P.; ${dim(r.outlines.welds.lower.web)} TO WEB AND ${dim(r.outlines.welds.lower.plate-g.x0)} TO BASE PL`],
+  ...(stiff?[['WEB STIFFENERS',`PL ${size(stiff.thickness)} PAIR AT EACH UPPER GUSSET AND STRUT TAB, ${size(stiff.weld)} FILLETS BOTH FACES TO GUSSET, WEB AND FLANGES`]]:[]),
   ['STRUT',`${sg.shape}, ${force(r.strutForce.H)} (${r.strutForce.id}); ${boltName} EACH END`],
   ['ROD CROSSING',`ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}; RODS ${drawingLength(cr.clear,u)} CLEAR AT MID-BAY`],
   ['COLLECTOR AT EACH COLUMN',capG?`GIRDER LOCATING BOLTS TO THE COLUMN CAP, CAP FILLETS ALL AROUND THE COLUMN: ${force(r.seatForce.F)}`:rolled?`GIRDER LOCATING BOLTS TO ${rolled.seat?'SEAT':'BRACKET FLANGE'}, ${rolled.name} BRACKET WELDS TO FLANGE: ${force(r.seatForce.F)}`:`GIRDER LOCATING BOLTS TO SEAT, ${size(d.seatWeld)} SEAT FILLET TO FLANGE: ${force(r.seatForce.F)}`],
@@ -357,7 +362,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  const notes=[
   `RODS: ASTM F1554 GR. 36 (OR A36) ${rodName}, THREADED FOR A FORGED CLEVIS AT EACH END AND A TURNBUCKLE ${Math.round(turnAt*100)}% OF THE LENGTH FROM THE LOWER END (RIGHT- AND LEFT-HAND THREADS). CLEVIS, PIN AND TURNBUCKLE RATED BY THE MANUFACTURER TO DEVELOP THE ROD, ${force(r.develop)}; CLEVIS GRIP TO SUIT THE ${size(g.t)} GUSSET. SUBMIT CATALOG DATA.`,
   `TENSION RODS AFTER THE STRUT IS BOLTED AND THE COLUMNS ARE PLUMB: TAKE OUT THE SAG BY HAND, THEN LOCK THE TURNBUCKLES WITH JAM NUTS. DO NOT USE THE RODS TO PLUMB THE COLUMNS. ROD ${gridB}-${gridA} LIES IN A PLANE ${offsetLabel} SO THE RODS PASS AT MID-BAY ${dim(cr.clear)} CLEAR, NOT CONNECTED (${detailRef(rodCrossingTitle)}); DO NOT BEND A ROD TO CLEAR THE OTHER.`,
-  `GUSSETS AND STRUT TABS: ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN WEB WITH ${weldLabel} FILLETS BOTH FACES; THE LOWER GUSSET ALSO TO THE BASE PLATE. ROD ${gridA}-${gridB} GUSSETS ON THE COLUMN C/L; ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}${cr.filler?`, WITH A ${size(cr.filler)} FILLER UNDER THE STRUT WEB AT GRID ${gridB}`:''}. SNIPE GUSSET CORNERS ${size(.75*inch)} TO CLEAR THE COLUMN-TO-PLATE WELDS. PIN HOLES ${holeInches(g.dh,u)} DIA., DRILLED.`,
+  `GUSSETS AND STRUT TABS: ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN WEB WITH ${weldLabel} FILLETS BOTH FACES; THE LOWER GUSSET ALSO TO THE BASE PLATE. ROD ${gridA}-${gridB} GUSSETS ON THE COLUMN C/L; ROD ${gridB}-${gridA} GUSSETS ${offsetLabel}${cr.filler?`, WITH A ${size(cr.filler)} FILLER UNDER THE STRUT WEB AT GRID ${gridB}`:''}. SNIPE GUSSET CORNERS ${size(.75*inch)} TO CLEAR THE COLUMN-TO-PLATE WELDS. PIN HOLES ${holeInches(g.dh,u)} DIA., DRILLED.${stiff?` AT EACH UPPER GUSSET AND STRUT TAB: A PAIR OF PL ${size(stiff.thickness)} A572 GR. 50 HORIZONTAL STIFFENERS BETWEEN THE COLUMN FLANGES ON THE GUSSET SIDE, AT THE TOP AND BOTTOM OF THE GUSSET WELD TO THE WEB (TOP AND BOTTOM OF THE TAB), EACH IN TWO PIECES EITHER SIDE OF THE GUSSET, ${size(stiff.weld)} FILLETS BOTH FACES TO THE GUSSET, WEB AND BOTH FLANGES; CLIP CORNERS AT THE COLUMN FILLETS. THEY CARRY THE ROD AND STRUT FORCE NORMAL TO THE WEB TO THE FLANGES.`:''}`,
   `CRANE-LEVEL STRUT: ASTM A992 ${sg.shape} ON THE COLUMN CENTERLINE AT THE W.P., EVERY SPAN OF BOTH RUNWAYS, FLANGES COPED ${dim(sg.cope)} EACH END, ${boltName} ${bolting} (AIST TR-13 §5.14, RCSC §4.3: REVERSING CRANE FORCES), TO THE GUSSET OR TAB AT EACH COLUMN. IT COLLECTS THE GIRDERS' LONGITUDINAL FORCE AT EVERY COLUMN AND BRACES THE COLUMNS ALONG THE RUNWAY.`,
   capG?`AT EVERY COLUMN THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO THE COLUMN CAP, WELDED ALL AROUND THE COLUMN TOP (${detailRef(columnCapTitles.section)}); THE COLUMN CARRIES IT ${dim(capG.drop)} DOWN TO THE STRUT, CENTERED UNDER THE GIRDER, WITHOUT TORQUE.`:rolled?`AT EVERY COLUMN THE ${rolled.name} BRACKET, SHOP WELDED TO THE COLUMN FLANGE (${detailRef(detailTitles.weldedBracket)}), IS THE COLLECTOR: THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO ${rolled.seat?'ITS SEAT':'ITS TOP FLANGE'}; THE COLUMN TAKES THE TORQUE FROM ITS ${dim(girderOffset(p))} OFFSET (CALCULATION REPORT, NEW COLUMN).`:`AT EVERY COLUMN: SHOP WELD THE BRACKET SEAT PLATE TO THE COLUMN FLANGE WITH A ${size(d.seatWeld)} TOP FILLET ACROSS THE FLANGE. THE GIRDER'S LOCATING BEARING BOLTS DELIVER ITS LONGITUDINAL FORCE TO THE SEAT; THE COLUMN TAKES THE TORQUE FROM ITS ${dim(girderOffset(p))} OFFSET (CALCULATION REPORT, NEW COLUMN).`,
   `ERECT THE STRUT AND RODS WITH THE COLUMNS, BEFORE THE GIRDERS ARE SET. THE BRACED COLUMNS AND FOOTINGS ARE DESIGNED FOR THE ROD FORCES, INCLUDING UPLIFT AND SHEAR ALONG THE RUNWAY AT THE BASE.`,

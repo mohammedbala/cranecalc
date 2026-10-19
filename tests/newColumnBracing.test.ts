@@ -109,9 +109,10 @@ describe('rod X-bracing between new freestanding columns',()=>{
  });
  it('passes the two rods of the X in parallel planes, one offset by the strut web and a filler',()=>{
   const g=bracingGeometry(p,column),b=p.longitudinalBracing!,d=b.design!,cr=g.cross,r=s.bracingSystem!;
-  // Rod B's plane: the gusset thickness, the strut web and the filler from rod A's, at least 1/4 in clear of it.
-  expect(cr.offset).toBeCloseTo(d.gusset.thickness+g.strut.tw+cr.filler,9);expect(cr.clear).toBeGreaterThanOrEqual(inch/4-1e-9);
-  expect(cr.filler/(inch/16)).toBeCloseTo(Math.round(cr.filler/(inch/16)),9);expect(cr.offset-inch/16-b.rod.diameter).toBeLessThan(inch/4);
+  // Rod B's plane: the gusset thickness, the strut web and the filler from rod A's, at least 1/2 in clear of it
+  // (rodCrossingClear: a 1/4 in gap plus the gusset location tolerance and sag).
+  expect(cr.offset).toBeCloseTo(d.gusset.thickness+g.strut.tw+cr.filler,9);expect(cr.clear).toBeGreaterThanOrEqual(inch/2-1e-9);
+  expect(cr.filler/(inch/16)).toBeCloseTo(Math.round(cr.filler/(inch/16)),9);expect(cr.offset-inch/16-b.rod.diameter).toBeLessThan(inch/2);
   expect(check('brace-rod-crossing')!.capacity).toBeCloseTo(cr.offset,9);
   // J5.2(b): a filler over 1/4 in reduces the strut bolt shear.
   expect(check('brace-strut-bolts')!.note).toContain('filler lies under the strut web');
