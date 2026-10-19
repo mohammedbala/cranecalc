@@ -64,9 +64,12 @@ const idRules:Rule[]=[
  // Inputs and input consistency (crane statics, cycle count, class), survey and material records
  T(/^crane-\d+-(statics|data|bumper-selection)/,'input'),T(/^(building-class|fatigue-cycles)$/,'input'),
  T(/^cap-(catalogue|compression-components|material|duty|fitup|unperforated|stiffener-cjp)$/,'input'),
- T(/^column-(basis|weld-base-metal|weld-ce|weld-preheat|weld-load|frame|longitudinal-path)$/,'input'),
+ // Column checks: a second column of the crane-column arrangement takes the 'building-' prefix (existingColumnChecks opts).
+ // The effective-length basis of a stepped column feeds its strength checks: a classification, ahead of the -basis records.
+ T(/^(building-)?column-buckling-basis$/,'classification'),
+ T(/^(building-)?column-(basis|weld-base-metal|weld-ce|weld-preheat|weld-load|frame|longitudinal-path)$/,'input'),
  // The bracket and tie load-path statement is a scope record; it is by others only when excluded (status rule above).
- T(/^(brace-basis|bracket-receiver|bracket-load-path|haunch-stiffener-required|building-seismic-runway)$/,'input'),
+ T(/^(brace-basis|bracket-receiver|bracket-load-path|haunch-stiffener-required|step-stiffener-required|building-seismic-runway)$/,'input'),
  T(/-(basis|receiver|survey)$/,'input'),
  // By others
  T(/^(supporting-structure|brace-by-others)$/,'by-others'),T(/-by-others$/,'by-others'),
@@ -86,6 +89,8 @@ const idRules:Rule[]=[
  T(/(-edge|-spacing|-pitch|-ligament|-slot-end|-slot-toe|-weld-min|-weld-minimum|-weld-max|-weld-maximum|-weld-size|-weld-length)$/,'detailing'),
  T(/(-wrench|-wrench-[a-z-]+|-nut-[a-z]+|-washer|-washer-(fit|bottom|stiffener)|-fit|-clear|-shim-max|-sleeve-length|-contact|-width|-proportions|-colstiff-length|-lap-nut-clear)$/,'detailing'),
  T(/^(cap-development-length|cap-rail-footprint|haunch-colstiff-weld-minimum)$/,'detailing'),
+ // Crane column: clear gap to the building column and footing clearance; step stiffener proportions (J10.8); AISC 341 §E6 detailing.
+ T(/^(crane-column-(gap|clearance|footing-clearance)|step-stiffener-(thickness|proportions)|(building-)?column-seismic-e6)$/,'detailing'),
  T(/^cap-angle-plate-slenderness$/,'detailing'),
  // Design: strength and serviceability, by effect
  // Thickness from strength (t_req ≤ t): the base plate in bending (AISC DG1).
@@ -93,12 +98,16 @@ const idRules:Rule[]=[
  D(/^(cap-weld-(strength|metal|rupture)|rail-joint-plate|end-stop-bearing-(base|flange)|cap-development(-full-force)?)$/,'connection'),
  // Rail clips: the manufacturer's lateral and uplift ratings; the rail anchorage (end stops or anchor clip pair).
  D(/^(rail-clip-(lateral|uplift)|rail-anchorage)$/,'connection'),
+ // Step of a stepped column: J10.2/J10.3 on the lower web under the upper inner flange, J10.6 panel shear (local, as haunch-column-panel).
+ D(/^step-(panel-shear|web-yielding|web-crippling|web-sidesway|flange-bending)$/,'local'),
+ D(/^((building-)?column-((upper|lower)-)?axial|(building-)?column-seismic-axial|crane-column-brace-strength|crane-column-tie-(compression|buckling))$/,'axial'),
  D(/^(axial|column-axial|brace-tension|brace-rod)$|-(plate-yield|plate-rupture|plate-compression|leg-tension|tension)$/,'axial'),
  D(/^(shear|torsion-shear|column-shear|haunch-shear|haunch-flange-shear)$|-(shear|shear-rupture|web-shear)$/,'shear'),
  D(/^(wheel-yield|wheel-cripple|wheel-web-tr13|sidesway|rail-web|rail-flange-local|haunch-seat-strip|stiffener-lateral-flexure)$/,'local'),
  D(/-(web-yielding|web-crippling|column-yield-top|column-yield-bottom|column-crippling|column-sidesway|column-flange|column-panel|channel-flange|leg-prying|endplate-prying|web|base-prying|flange-prying|seat-prying)$/,'local'),
  D(/^(stiffener-column|stiffener-bearing)$|-stiffener-(column|bearing|bracket)$|-colstiff-(upper|lower)$/,'local'),
- D(/^(brace-member|brace-stiffness|torsion-stability|flexure-load-height|end-stop-girder|end-stop-uplift)$/,'stability'),
+ D(/^(brace-member|brace-stiffness|torsion-stability|flexure-load-height|end-stop-girder|end-stop-uplift|crane-column-brace-stiffness|(building-)?column-seismic-stability)$/,'stability'),
+ D(/^(building-)?column-((upper|lower)-)?(flexure|flexure-y|interaction|torsion)$/,'flexure'),
  D(/^(major|minor|combined|combined-bottom|torsion-normal|torsion-normal-bottom|column-flexure|column-flexure-y|column-interaction|column-torsion|rail-flexure|bearing-plate|cap-angle-heel|building-seismic-alteration)$/,'flexure'),
  D(/-(flexure|interaction|combined|bottom-flange|top-flange|top-flange-net|face|face-outstand|bending|heel)$/,'flexure'),
  D(/(weld|cjp|-web-base|slip|bolts?|bolt-shear|bolt-tension|bearing|block|-net|sleeve|anchor-bearing|hold-down-model|-uplift|locating-[a-z]+|sliding|cap-development|col-bolt|cap-bolt|shim-bearing)$/,'connection'),

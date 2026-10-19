@@ -9,7 +9,8 @@ import type {SupportReactionSet} from './supportReactions';
 import type {CheckResult,ProjectInput,Properties,Section} from './types';
 import {format} from './units';
 import {latexNumber} from './math';
-import {cantileverHeightLimit,cantileverSystems,sdcFromSD1,sdcFromSDS,seismicBasis,seismicCombinations,seismicImportance,type SeismicBasis} from './runwaySeismic';
+import {acrossRunwaySeismic,cantileverHeightLimit,cantileverSystems,sdcFromSD1,sdcFromSDS,seismicCombinations,seismicImportance,type SeismicBasis} from './runwaySeismic';
+import {tiedToBuilding} from './craneColumnInputs';
 import {alongSeismic,braceCases,braceShare,columnTorsion,designsBracing,girderOffset,torsionBase} from './newColumnBracing';
 import {railTopAboveSteel} from './railSeat';
 import {activeColumnCap} from './columnCapInputs';
@@ -184,7 +185,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const capacity={Pc:s.compression,Pt:available(section.Fy*props.A,p.method,.9,1.67),Mcx:McxF13,Mcy:s.minor,Vc:s.shear,flexure:`${s.flexureBranch}${s.flangeRatio>s.flangeLimit?' with F3 flange local buckling':''}${McxF13<Mcx?'; F13-1 tension flange rupture at the tie bolt holes':''}; Cb = 1.0`,webCompact};
  const alpha=p.method==='LRFD'?1:1.6,Pex=Math.PI**2*E*props.Ix/c.Lcx**2,Pey=Math.PI**2*E*props.Iy/c.Lcy**2;
  // Seismic force across the runway at the girder's mid-depth (new freestanding columns only).
- const basis=seismicBasis(p),hg=seismicHeight(p),sideE=basis?columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,hg)],[hs]):undefined,columnWeight=props.weight*c.height,ownWeight=c.isNew?columnWeight:0;
+ const basis=acrossRunwaySeismic(p),hg=seismicHeight(p),sideE=basis?columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,hg)],[hs]):undefined,columnWeight=props.weight*c.height,ownWeight=c.isNew?columnWeight:0;
  // The eccentric reaction sampled at the same stations as the seismic force.
  const eccentricE=basis?columnResponse(c.height,E*props.Ix,c.strong,[{x:hs,moment:1}],[Math.min(hg,c.height)]):undefined;
  // Braced new columns: brace overturning compresses the columns of a braced span, and a girder's longitudinal force
@@ -220,7 +221,7 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const share=designed?braceShare(p,j):undefined,brace=(id:string)=>designed?.cases.find(v=>v.id===id);
  // A column cap: the girder end reactions act along the runway off the column centerline (weak axis, top moment).
  const ex=capAlongEccentricity(p,j),amplifyY=(P:number)=>P<=0?1:alpha*P>=Pey?Infinity:1/(1-alpha*P/Pey);
- const dead=support.D,live=support.Cd+support.Cv+support.Ci+support.L+support.Clv,liveStatic=support.Cd+support.Cv,lateral=support.Css,liveAll=live,lateralAll=lateral,concurrent=p.aist?.concurrency==='full';
+ const dead=support.D,live=support.Cd+support.Cv+support.Ci+support.L+support.Clv,liveStatic=support.Cd+support.Cv,lateral=tiedToBuilding(p)?0:support.Css,liveAll=live,lateralAll=lateral,concurrent=p.aist?.concurrency==='full';
  const seat=ends?.[j]??[],seatCase=(fD:number,fL:number,fCd:number,fCv:number)=>seat.length?seatMoment(seat,{D:fD,L:fL,Cd:fCd,Cv:fCv}):0;
  // Weak-axis moment from the seat moment and the longitudinal force F at the seat (the eave-strut path only), and the torque F·offset.
  const reviewMy=(Mseat:number,F:number)=>alongM&&alongF?combinedPeak(alongM.samples,alongF.samples,'moment',Mseat,exit==='eave-strut'?F:exit==='girder-strut'?keep*F:0):0;
@@ -366,8 +367,13 @@ export function twistNote(t:NonNullable<ExistingColumnResult['torsion']>,u:Proje
  const L=(v:number)=>format(v,'length',u,3),s=t.service;
  return `Column twist at the seat: ${s.twist.toFixed(4)} rad under the unfactored single-crane traction (torque ${format(s.T,'moment',u,3)}, every crane start and stop), moving the girder bearing ${L(s.slip)} along the runway and the rail ${L(s.lateral)} across it, offset·(1 − cos θ); ${t.twist.toFixed(4)} rad under the largest factored torque, ${L(t.slip)} along and ${L(t.lateral)} across. No twist limit is applied here, and the tie movement, end stop and rail alignment checks take the column as not twisting: REQUIRES ENGINEER-OF-RECORD ACCEPTANCE.`;
 }
-export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):CheckResult[]{
- const c=p.existingColumn!,refs=['asce','aisc-e','aisc-f2','aisc-h','existing-column'],u=p.units,checks:CheckResult[]=[],label=c.isNew?'New column':'Existing column';
+/**
+ * `opts` names the column when the project has two (crane-column arrangement, WP-1): `label` replaces 'New column' /
+ * 'Existing column' in the groups and titles (e.g. 'Crane column', 'Building column'), and `prefix` goes before every
+ * `column-*` id ('building-' gives building-column-axial, building-column-interaction, ...). Other ids are kept.
+ */
+export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult,opts:{prefix?:string;label?:string}={}):CheckResult[]{
+ const c=p.existingColumn!,refs=['asce','aisc-e','aisc-f2','aisc-h','existing-column'],u=p.units,checks:CheckResult[]=[],label=opts.label??(c.isNew?'New column':'Existing column');
  const add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,caseId?:string)=>checks.push({id:'column-'+id,group:label,title,demand,capacity,quantity,utilization:demand/capacity,status:Number.isFinite(demand)&&demand<=capacity*(1+1e-9)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(demand/capacity).toFixed(4)}`,note,caseId,referenceIds:refs});
  const mk=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,caseId?:string):CheckResult=>({id:'column-'+id,group:label,title,demand,capacity,quantity,utilization:demand/capacity,status:Number.isFinite(demand)&&demand<=capacity*(1+1e-9)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(demand/capacity).toFixed(4)}`,note,caseId,referenceIds:refs});
  const g=r.governing,crane=`Support x=${format(r.station,'length',u,3)}: runway dead ${format(r.crane.dead,'force',u,3)}, crane and runway live ${format(r.crane.live,'force',u,3)} (Cd+Cv+Ci+L), side thrust ${format(r.crane.lateral,'force',u,3)}${r.crane.longitudinal?`, longitudinal ${format(r.crane.longitudinal,'force',u,3)}`:''}; eccentricity ${format(r.eccentricity,'length',u,3)}${p.details?.bracket?.enabled&&!activeColumnCap(p)?(p.existingColumn?.isNew?` (the girder web line plus ${format(columnReactionOffset(p),'length',u,3)}, the larger of the rail eccentricity and the bearing plate's kern b/6: a full-contact bearing under the web's bearing stiffeners)`:' (to the far edge of the bearing plate)'):''}; rail head ${format(r.railElevation,'length',u,3)} above base. Crane loads are live load L (ASCE 7 §4.9).`;
@@ -419,7 +425,8 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):Chec
  for(const v of checks)if(v.id.startsWith('column-seismic-'))v.referenceIds=v.id==='column-seismic-basis'||!r.seismic||r.seismic.basis.integrityOnly?['asce-12','aisc-e']:['asce-12','aisc-341','aisc-e'];
  if(!c.isNew)checks.push(...existingWeldingChecks(p,existingColumnSection(p).section.tf));
  if(c.longitudinal==='bracing'&&!p.longitudinalBracing?.enabled)checks.push({id:'column-longitudinal',group:label,title:'Crane longitudinal force · bracing path',status:'excluded',equation:'',note:'The runway longitudinal force is assigned to building bracing, not to this column. Design the crane-level strut, bracing bay and its foundation for the reported longitudinal force.',referenceIds:refs});
- return checks;
+ const prefix=opts.prefix;
+ return prefix?checks.map(v=>v.id.startsWith('column-')?{...v,id:prefix+v.id}:v):checks;
 }
 
 /**
@@ -427,7 +434,7 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult):Chec
  * column, the frame type, TR-13 §5.3 drift under the 10-year wind and the rail gauge under gravity, the seismic
  * mass the runway adds to the building and the evaluation of its existing lateral system.
  */
-function columnSupportChecks(p:ProjectInput,r:ExistingColumnResult,label:string,refs:string[]):CheckResult[]{
+export function columnSupportChecks(p:ProjectInput,r:ExistingColumnResult,label:string,refs:string[]):CheckResult[]{
  const c=p.existingColumn!,z=r.support!,u=p.units,out:CheckResult[]=[],len=(v:number)=>format(v,'length',u,3),force=(v:number)=>format(v,'force',u,3),moment=(v:number)=>format(v,'moment',u,3);
  const lrfd=p.method==='LRFD',seat=z.seat.filter(v=>v.moment>0),seatMax=seat.reduce((a,v)=>v.moment>a.moment?v:a,{grid:0,moment:0,case:''});
  const exitText={'girder-strut':`a crane-level strut on the girder line, at least ${z.strut?.ratio??10} times the column's own stiffness there${z.strut?` (k_s ≥ ${format(z.strut.required,'stiffness',u,3)})`:''}: the column keeps at most 1/${z.strut?Math.round(1/z.strut.share):11} of the force, checked as weak-axis bending and torsion`,'column-strut':'a crane-level strut at the column centerline: no weak-axis bending from it, torsion from the girder offset','eave-strut':'the eave strut at the column top: weak-axis bending from the seat to the top, and torsion from the girder offset'}[z.exit];
@@ -459,7 +466,7 @@ const locatingLabel=(p:ProjectInput)=>(p.system==='continuous'?p.spans.map((_,i)
  * site seismic data is given, and the mass added to the building with the evaluation of its existing lateral system
  * under the building code's alteration provisions (IEBC 10% demand-capacity ratio test).
  */
-function buildingSeismicChecks(p:ProjectInput):CheckResult[]{
+export function buildingSeismicChecks(p:ProjectInput):CheckResult[]{
  const c=p.existingColumn!,u=p.units,G='Building seismic',site=runwaySiteSeismic(p),force=(v:number)=>format(v,'force',u,3),out:CheckResult[]=[];
  const m=site?.mass??runwayMass(p,!!c.siteSeismic?.liftedLoadSecured);
  out.push(site?{id:'building-seismic-runway',group:G,title:'Runway seismic · TR-13 combinations 5a and 7a',status:site.input.source.trim()?'pass':'unverified',equation:'C_s=\\frac{S_{DS}I_e}{R}\\ge0.044S_{DS}I_e\\ge0.01',referenceIds:['tr13-supporting','asce-12'],
