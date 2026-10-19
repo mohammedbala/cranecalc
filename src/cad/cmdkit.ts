@@ -39,6 +39,8 @@ export interface Command{
  base?():Pt|undefined;
  /** The command line takes free text (text content). */
  freeText?():boolean;
+ /** The selection stays when the command ends (selection commands). */
+ keepSelection?:boolean;
  done:boolean;
 }
 

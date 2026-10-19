@@ -118,6 +118,8 @@ export interface OverlayOptions{
  selected:Ent[];hover?:Ent;preview?:NewEnt[];rubber?:[Pt,Pt];
  window?:{a:Pt;b:Pt};grips?:Grip[];hot?:Pt;snap?:{kind:SnapKind;p:Pt};
  cursor?:[number,number];crosshair:boolean;tip?:string;pickbox:number;
+ /** Tracking paths (dotted), acquired tracking points (small crosses) and a fence being drawn. */
+ tracks?:[Pt,Pt][];acquired?:Pt[];fence?:Pt[];
 }
 export const snapNames:Record<SnapKind,string>={end:'Endpoint',mid:'Midpoint',cen:'Center',qua:'Quadrant',int:'Intersection',per:'Perpendicular',nea:'Nearest',ins:'Insertion',grid:'Grid',nod:'Node',tan:'Tangent',ext:'Extension',par:'Parallel',app:'Apparent intersection',trk:'Tracking'};
 /** Everything that follows the cursor: selection highlight, hover, preview, window, grips, snap marker, crosshair. */
@@ -147,6 +149,14 @@ export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
   ctx.fillStyle=crossing?'rgba(70,200,110,.16)':'rgba(70,130,255,.16)';ctx.strokeStyle=crossing?'#46c86e':'#4682ff';ctx.lineWidth=1;ctx.setLineDash(crossing?[5,4]:[]);
   ctx.fillRect(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.abs(b[0]-a[0]),Math.abs(b[1]-a[1]));ctx.strokeRect(Math.min(a[0],b[0])+.5,Math.min(a[1],b[1])+.5,Math.abs(b[0]-a[0]),Math.abs(b[1]-a[1]));ctx.setLineDash([]);
  }
+ if(o.tracks?.length||o.acquired?.length){
+  ctx.strokeStyle=c.snap;ctx.lineWidth=1;ctx.setLineDash([3,4]);ctx.beginPath();
+  for(const [a,b] of o.tracks??[]){const k=clipSegment(a,b,vb);if(!k)continue;const p=toScreen(v,k[0]),q=toScreen(v,k[1]);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}
+  ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1.5;ctx.beginPath();
+  for(const a of o.acquired??[]){const [x,y]=toScreen(v,a);ctx.moveTo(x-4,y);ctx.lineTo(x+4,y);ctx.moveTo(x,y-4);ctx.lineTo(x,y+4);}
+  ctx.stroke();
+ }
+ if(o.fence&&o.fence.length>1){const p=o.fence.map(q=>toScreen(v,q));ctx.strokeStyle=c.preview;ctx.lineWidth=1;ctx.setLineDash([6,3]);ctx.beginPath();ctx.moveTo(p[0][0],p[0][1]);for(const q of p.slice(1))ctx.lineTo(q[0],q[1]);ctx.stroke();ctx.setLineDash([]);}
  if(o.grips?.length){
   for(const g of o.grips){const [x,y]=toScreen(v,g.p);if(x<-8||y<-8||x>v.w+8||y>v.h+8)continue;const hot=o.hot&&Math.abs(o.hot[0]-g.p[0])<1e-12&&Math.abs(o.hot[1]-g.p[1])<1e-12;
    ctx.fillStyle=hot?'#ff3b30':'#2b7bff';ctx.fillRect(x-4,y-4,8,8);ctx.strokeStyle=theme==='dark'?'#dbe9ff':'#ffffff';ctx.lineWidth=1;ctx.strokeRect(x-4.5,y-4.5,9,9);}

@@ -5,6 +5,7 @@ import {
 import {editable,fmtAngle,ghosts,key,num,strip,type Command,type Env} from './cmdkit';
 import {drawCommands,drawNames} from './drawCommands';
 import {modifyCommands,modifyNames} from './modifyCommands';
+import {selectCommands,selectNames} from './selectCommands';
 export type {Command,Env,Preview} from './cmdkit';
 
 // ---- draw --------------------------------------------------------------------------------------------------------
@@ -213,9 +214,10 @@ export const commandNames:Record<string,string>={
  M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',MI:'MIRROR',MIRROR:'MIRROR',
  E:'ERASE',ERASE:'ERASE',X:'EXPLODE',EXPLODE:'EXPLODE',O:'OFFSET',OFFSET:'OFFSET',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',
  DI:'DIST',DIST:'DIST',Z:'ZOOM',ZOOM:'ZOOM',U:'UNDO',UNDO:'UNDO',REDO:'REDO',LA:'LAYER',LAYER:'LAYER',PR:'PROPERTIES',CH:'PROPERTIES',PROPERTIES:'PROPERTIES',
- ...drawNames,...modifyNames,
+ OS:'OSNAP',OSNAP:'OSNAP',DS:'OSNAP',DSETTINGS:'OSNAP',QSELECT:'QSELECT',FILTER:'QSELECT',FI:'QSELECT',
+ ...drawNames,...modifyNames,...selectNames,
 };
-/** A command by its full name, or undefined for UNDO, REDO, LAYER and PROPERTIES, which the editor runs directly. */
+/** A command by its full name, or undefined for UNDO, REDO, LAYER, PROPERTIES, OSNAP and QSELECT, which the editor runs directly. */
 export function makeCommand(name:string,env:Env):Command|undefined{
  switch(name){
   case 'LINE':return lineCmd(env);case 'PLINE':return plineCmd(env);case 'RECTANG':return rectCmd(env);case 'CIRCLE':return circleCmd(env);
@@ -224,7 +226,7 @@ export function makeCommand(name:string,env:Env):Command|undefined{
   case 'MIRROR':return mirrorCmd(env);case 'ERASE':return eraseCmd(env);case 'EXPLODE':return explodeCmd(env);case 'OFFSET':return offsetCmd(env);
   case 'TRIM':return trimCmd(env,false);case 'EXTEND':return trimCmd(env,true);case 'DIST':return distCmd(env);case 'ZOOM':return zoomCmd(env);
  }
- return drawCommands[name]?.(env)??modifyCommands[name]?.(env);
+ return drawCommands[name]?.(env)??modifyCommands[name]?.(env)??selectCommands[name]?.(env);
 }
 /** Default text and dimension heights: 1/8 in or 2.5 mm on a sheet; sketches by their own text. */
 export function defaultHeights(doc:CadDoc){

@@ -129,7 +129,7 @@ and accessible panels (labels, focus order, keyboard reachable).
 | Increment | Status |
 | --- | --- |
 | 1 Drafting core | done: model, draw and modify commands; tests in `tests/cadDrafting.test.ts`, browser check in `tests/e2e/cad.spec.ts` |
-| 2 Precision and selection | planned |
+| 2 Precision and selection | done: `src/cad/snap.ts`, `src/cad/select.ts`; tests in `tests/cadPrecision.test.ts` and `tests/e2e/cad.spec.ts` |
 | 3 Hatching | planned |
 | 4 Annotation | planned |
 | 5 Blocks | planned |

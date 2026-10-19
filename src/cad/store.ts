@@ -1,8 +1,8 @@
-import type {CadDoc,CadLayer,Ent,NewEnt} from './model';
+import type {CadDoc,CadGroup,CadLayer,Ent,NewEnt} from './model';
 
-/** One undoable edit: entities put (added or replaced by id) and deleted, and optionally the layer table. */
-export interface Change{put?:Ent[];add?:NewEnt[];del?:number[];layers?:CadLayer[]}
-interface State{ents:Map<number,Ent|null>;layers?:CadLayer[]}
+/** One undoable edit: entities put (added or replaced by id) and deleted, and optionally the layer table and groups. */
+export interface Change{put?:Ent[];add?:NewEnt[];del?:number[];layers?:CadLayer[];groups?:CadGroup[]}
+interface State{ents:Map<number,Ent|null>;layers?:CadLayer[];groups?:CadGroup[]}
 interface Step{label:string;before:State;after:State}
 
 /** The open drawing with its selection and unlimited undo and redo. */
@@ -38,7 +38,8 @@ export class CadStore{
   for(const e of put){before.ents.set(e.id,this.byId.get(e.id)??null);after.ents.set(e.id,e);}
   for(const id of change.del??[])if(this.byId.has(id)){before.ents.set(id,this.byId.get(id)!);after.ents.set(id,null);}
   if(change.layers){before.layers=this.doc.layers;after.layers=change.layers;}
-  if(!after.ents.size&&!after.layers)return added;
+  if(change.groups){before.groups=this.doc.groups??[];after.groups=change.groups;}
+  if(!after.ents.size&&!after.layers&&!after.groups)return added;
   this.apply(after);this.undoStack.push({label,before,after});this.redoStack=[];
   if(this.undoStack.length>500)this.undoStack.shift();
   this.emit(true);return added;
@@ -55,7 +56,7 @@ export class CadStore{
    // Draw order follows id: an entity restored by undo goes back to its place.
    if(added.some(e=>e.id<top))list.sort((a,b)=>a.id-b.id);
   }
-  this.doc={...this.doc,entities:list,layers:state.layers??this.doc.layers};
+  this.doc={...this.doc,entities:list,layers:state.layers??this.doc.layers,...(state.groups?{groups:state.groups}:{})};
   this.index();
   for(const id of [...this.selection])if(!this.byId.has(id))this.selection.delete(id);
  }

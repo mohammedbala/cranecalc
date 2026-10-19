@@ -6,21 +6,25 @@ import {
  AlignHorizontalJustifyStart,PenLine,Paintbrush,
 } from 'lucide-react';
 import {
- DEG,add,angleOf,bbox,curveLength,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,intersections,lerp,lineTypes,nearest,nearestOnSegment,parseLength,
- parsePoint,segments,snapPoints,stretchGrip,sub,sweep,type Box,type CadDoc,type CadLayer,type Ent,type NewEnt,type Pt,type SnapKind,type LineType,
+ DEG,add,angleOf,bbox,curveLength,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,lineTypes,nearest,parseLength,
+ parsePoint,stretchGrip,sub,sweep,type Box,type CadDoc,type CadLayer,type Ent,type NewEnt,type Pt,type SnapKind,type LineType,
 } from '../cad/model';
 import {CadStore} from '../cad/store';
 import {commandNames,defaultHeights,makeCommand,placeCmd,type Command,type Env,type Preview} from '../cad/commands';
-import {aci,aciPalette,cachedBox,drawOverlay,drawScene,toWorld,type Theme,type View} from '../cad/render';
+import {aci,aciPalette,cachedBox,drawOverlay,drawScene,snapNames,toWorld,type Theme,type View} from '../cad/render';
+import {acquirable,allSnapModes,defaultSnapModes,resolveSnap,type Acquired} from '../cad/snap';
+import {expandGroups,fenceSelect,propValue,quickSelect,type QuickProp,type QuickSpec} from '../cad/select';
 import {docToDxf,docToSvg} from '../cad/convert';
 import {cadPersistent,deleteCadRecord,saveCadRecord,type CadRecord} from '../cad/storage';
 import '../cad/cad.css';
 
 export interface CadSource{project:string;base:string;generated:CadDoc;record?:CadRecord;units:'US'|'SI'}
-type Toggles={grid:boolean;snap:boolean;ortho:boolean;osnap:boolean;lwt:boolean};
+type Toggles={grid:boolean;snap:boolean;ortho:boolean;osnap:boolean;lwt:boolean;polar:boolean;otrack:boolean;dyn:boolean};
 
 const APERTURE=9,PICKBOX=5;
-const snapRank:Record<SnapKind,number>={end:0,int:0,mid:1,cen:2,qua:2,ins:2,nod:2,app:2,per:3,tan:3,ext:4,par:4,trk:4,nea:5,grid:6};
+/** Per-viewer editor preferences (snap modes, polar angle) in local storage, when it is available. */
+function loadPref<T>(key:string,fallback:T):T{try{const v=localStorage.getItem(key);return v?JSON.parse(v) as T:fallback;}catch{return fallback;}}
+function savePref(key:string,value:unknown){try{localStorage.setItem(key,JSON.stringify(value));}catch{/* not kept */}}
 const download=(blob:Blob,name:string)=>{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const scales=(unit:CadDoc['unit']):[string,number][]=>unit==='in'
  ?[['1:1 (paper)',25.4],['3" = 1\'-0"',4*25.4],['1 1/2" = 1\'-0"',8*25.4],['1" = 1\'-0"',12*25.4],['3/4" = 1\'-0"',16*25.4],['1/2" = 1\'-0"',24*25.4],['3/8" = 1\'-0"',32*25.4],['1/4" = 1\'-0"',48*25.4],['3/16" = 1\'-0"',64*25.4],['1/8" = 1\'-0"',96*25.4]]
@@ -32,7 +36,12 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const store=useMemo(()=>new CadStore(structuredClone(source.record?.doc??source.generated)),[]);// eslint-disable-line react-hooks/exhaustive-deps
  useSyncExternalStore(store.subscribe,store.getVersion);
  const doc=store.doc,heights=useMemo(()=>defaultHeights(source.generated),[source.generated]);
- const [toggles,setToggles]=useState<Toggles>({grid:false,snap:false,ortho:false,osnap:true,lwt:true});
+ const [toggles,setToggles]=useState<Toggles>({grid:false,snap:false,ortho:false,osnap:true,lwt:true,polar:true,otrack:true,dyn:true});
+ const [snapModes,setSnapModes]=useState<Set<SnapKind>>(()=>new Set(loadPref<SnapKind[]>('cad-osnap',defaultSnapModes)));
+ const [polarAngle,setPolarAngle]=useState<number>(()=>loadPref('cad-polar',90));
+ const [settings,setSettings]=useState<'osnap'|'polar'|null>(null);
+ const [qselect,setQselect]=useState(false);
+ const [pickGroups,setPickGroups]=useState(true);
  const [theme,setTheme]=useState<Theme>('dark');
  const [panel,setPanel]=useState<{props:boolean;layers:boolean}>({props:true,layers:true});
  const [currentLayer,setCurrentLayer]=useState(()=>doc.layers.some(l=>l.name==='S-ANNO')?'S-ANNO':doc.layers.some(l=>l.name==='OUTLINE')?'OUTLINE':'0');
@@ -60,6 +69,10 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const clipboard=useRef<{ents:NewEnt[];base:Pt}|null>(null);
  const vars=useRef<Record<string,number|string|boolean>>({}),lastWindow=useRef<{box:Box;crossing:boolean}|undefined>(undefined);
  const togglesRef=useRef(toggles);togglesRef.current=toggles;
+ const snapRef=useRef({modes:snapModes,polarAngle});snapRef.current={modes:snapModes,polarAngle};
+ const acquired=useRef<Acquired[]>([]),dwell=useRef<{key:string;t:number;a:Acquired;timer?:number}|null>(null),track=useRef<{tracks?:[Pt,Pt][];tip?:string}>({});
+ const dynLock=useRef<number|null>(null),prevSelection=useRef<number[]>([]);
+ const selMode=useRef<{kind:'W'|'C'|'F'|'G';pts:Pt[]}|null>(null),removing=useRef(false);
  const dirty=useRef({scene:true,overlay:true}),frame=useRef(0);
  const say=useCallback((m:string)=>setLog(l=>[...l.slice(-60),m]),[]);
 
@@ -76,7 +89,8 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
    const selected=store.selected(),showGrips=!cmd&&selected.length<=300;
    drawOverlay(over,{doc:store.doc,view:v,theme,selected,hover:hover.current,preview:pv?.ents,rubber:pv?.rubber??(base&&!pv?.ents?[base,c.world]:undefined),
     window:windowSel.current?{a:windowSel.current.a,b:c.raw}:undefined,grips:showGrips?selected.flatMap(gripsOf):undefined,hot:grip.current?.from,
-    snap:snap.current,cursor:c.screen,crosshair:!panMode&&!pan.current,tip:pv?.tip,pickbox:cmd&&!cmd.wantsPick?.()&&!selecting.current?0:PICKBOX});
+    snap:snap.current,cursor:c.screen,crosshair:!panMode&&!pan.current,tip:[track.current.tip,pv?.tip].filter(Boolean).join('  ·  ')||undefined,pickbox:cmd&&!cmd.wantsPick?.()&&!selecting.current?0:PICKBOX,
+    tracks:track.current.tracks,acquired:acquired.current.map(a=>a.p),fence:selMode.current&&selMode.current.pts.length?[...selMode.current.pts,c.raw]:undefined});
   }
  },[store,theme,underlay,source.generated,panMode]);// eslint-disable-line react-hooks/exhaustive-deps
  const schedule=useCallback((scene=false)=>{if(scene)dirty.current.scene=true;dirty.current.overlay=true;if(!frame.current)frame.current=requestAnimationFrame(paint);},[paint]);
@@ -126,34 +140,27 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   for(const e of candidates(p,r,pickable)){const d=nearest(e,p,store.doc).d;if(d<=r&&d<=bd){bd=d;best=e;}}
   return best;
  }
- function findSnap(p:Pt,base?:Pt){
-  const r=APERTURE/view.current.scale,near=candidates(p,r,visible).slice(-400);
-  let best:{kind:SnapKind;p:Pt}|undefined,score=Infinity;
-  const offer=(kind:SnapKind,q:Pt)=>{const d=dist(p,q);if(d>r)return;const s=snapRank[kind]*1e6+d;if(s<score){score=s;best={kind,p:q};}};
-  for(const e of near)for(const s of snapPoints(e,store.doc))offer(s.kind,s.p);
-  // Intersections and perpendiculars: only the segments and curves passing under the cursor.
-  const pieces:Ent[]=[];
-  for(const e of near){
-   if(pieces.length>=80)break;
-   if(e.type==='text')continue;
-   if(e.type==='circle'||e.type==='arc'){if(nearest(e,p).d<=r)pieces.push(e);continue;}
-   for(const [a,b] of segments(e,store.doc))if(dist(p,nearestOnSegment(p,a,b).point)<=r)pieces.push({id:-1,type:'line',layer:e.layer,a,b});
-  }
-  for(let i=0;i<pieces.length;i++)for(let j=i+1;j<pieces.length;j++)for(const q of intersections(pieces[i],pieces[j]))offer('int',q);
-  if(base)for(const e of pieces){
-   if(e.type==='line'){const v=sub(e.b,e.a),l2=v[0]*v[0]+v[1]*v[1];if(l2<1e-24)continue;const t=((base[0]-e.a[0])*v[0]+(base[1]-e.a[1])*v[1])/l2;if(t>=0&&t<=1)offer('per',lerp(e.a,e.b,t));}
-   else if(e.type==='circle'||e.type==='arc'){const d=dist(base,e.center);if(d>1e-12){const q=add(e.center,[(base[0]-e.center[0])/d*e.radius,(base[1]-e.center[1])/d*e.radius]);if(e.type==='circle'||nearest(e,q).d<1e-9)offer('per',q);}}
-  }
-  return best;
+ const aperture=()=>APERTURE/view.current.scale;
+ /** The point a click gives: object snap, tracking (polar and object snap tracking), grid snap, ortho; a locked dynamic-input length. */
+ function resolvePoint(raw:Pt,base?:Pt):{p:Pt;snap?:{kind:SnapKind;p:Pt};tracks?:[Pt,Pt][];tip?:string}{
+  const t=togglesRef.current,r=aperture();
+  if(dynLock.current!==null&&base){const d=sub(raw,base),l=Math.hypot(d[0],d[1])||1;return {p:add(base,[d[0]/l*dynLock.current,d[1]/l*dynLock.current]),tip:`Length ${lengthText(dynLock.current)} (locked) < ${fmtNum((angleOf(base,raw)+360)%360)}°`};}
+  const near=candidates(raw,r*12,visible).slice(-400);
+  return resolveSnap(raw,near,store.doc,r,{osnap:t.osnap,modes:snapRef.current.modes,ortho:t.ortho,polar:t.polar&&!t.ortho,polarAngle:snapRef.current.polarAngle,otrack:t.otrack&&t.osnap,grid:t.snap?gridSpacing(store.doc):null},base,acquired.current);
  }
- /** The point a click gives: object snap first, then grid snap and ortho from the base point. */
- function resolvePoint(raw:Pt,base?:Pt):{p:Pt;snap?:{kind:SnapKind;p:Pt}}{
-  const t=togglesRef.current;
-  if(t.osnap){const s=findSnap(raw,base);if(s)return {p:s.p,snap:s};}
-  let p=raw;
-  if(t.snap){const g=gridSpacing(store.doc);p=[Math.round(p[0]/g)*g,Math.round(p[1]/g)*g];}
-  if(t.ortho&&base){p=Math.abs(p[0]-base[0])>=Math.abs(p[1]-base[1])?[p[0],base[1]]:[base[0],p[1]];}
-  return {p};
+ /** Object snap tracking: a snap point hovered a moment is acquired (or released). */
+ function dwellOn(raw:Pt){
+  const t=togglesRef.current;if(!t.osnap||!(t.otrack||snapRef.current.modes.has('ext')||snapRef.current.modes.has('par'))){dwell.current=null;return;}
+  const a=acquirable(raw,candidates(raw,aperture(),visible).slice(-400),store.doc,aperture());
+  if(!a){if(dwell.current?.timer)clearTimeout(dwell.current.timer);dwell.current=null;return;}
+  const key=`${a.p[0]},${a.p[1]}`;if(dwell.current?.key===key)return;
+  if(dwell.current?.timer)clearTimeout(dwell.current.timer);
+  const timer=window.setTimeout(()=>{
+   if(dwell.current?.key!==key)return;
+   const list=acquired.current,i=list.findIndex(x=>x.p[0]===a.p[0]&&x.p[1]===a.p[1]);
+   acquired.current=i>=0?list.filter((_,j)=>j!==i):[...list.slice(-6),a];schedule();
+  },380);
+  dwell.current={key,t:performance.now(),a,timer};
  }
  const wantsPoint=()=>!!grip.current||(!!active.current&&!selecting.current&&!active.current.wantsPick?.());
  const currentBase=()=>grip.current?.from??(active.current&&!selecting.current?active.current.base?.():undefined);
@@ -168,8 +175,21 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   openPanel:p=>setPanel(v=>({...v,[p==='layers'?'layers':'props']:true})),length:lengthText,
   vars:vars.current,lastWindow:()=>lastWindow.current,
  };
- const prompt=()=>grip.current?'** STRETCH ** Specify stretch point:':active.current?(selecting.current?`${active.current.name} Select objects (Enter when done):`:active.current.prompt()):'Command:';
- function endCommand(clear=true){if(active.current&&clear&&active.current.selectFirst)store.clearSelection();active.current=null;selecting.current=false;grip.current=null;snap.current=undefined;setInput('');refresh();schedule();}
+ const selPrompt=()=>{const m=selMode.current,n=active.current!.name;
+  if(m?.kind==='W'||m?.kind==='C')return `${n} Specify ${m.pts.length?'opposite':'first'} corner (${m.kind==='W'?'window':'crossing'}):`;
+  if(m?.kind==='F')return `${n} Specify ${m.pts.length?'next fence point or <done>':'first fence point'}:`;
+  if(m?.kind==='G')return `${n} Enter group name:`;
+  return `${n} Select objects${removing.current?' to remove':''} or [ALL/Last/Previous/Window/Crossing/Fence/Group/Add/Remove] (Enter when done):`;};
+ const prompt=()=>grip.current?'** STRETCH ** Specify stretch point:':active.current?(selecting.current?selPrompt():active.current.prompt()):'Command:';
+ function endCommand(clear=true){
+  const cmd=active.current;if(cmd&&clear&&cmd.selectFirst&&!cmd.keepSelection)store.clearSelection();
+  active.current=null;selecting.current=false;grip.current=null;snap.current=undefined;selMode.current=null;removing.current=false;dynLock.current=null;acquired.current=[];track.current={};setInput('');refresh();schedule();
+ }
+ /** A selection-first command starts on the selection, which becomes the previous selection. */
+ function beginOn(cmd:Command){prevSelection.current=[...store.selection];cmd.begin?.();}
+ /** Ids picked or windowed, with whole groups when group selection is on. */
+ const withGroups=(ids:number[])=>pickGroups?expandGroups(store.doc,ids).filter(id=>{const e=store.get(id);return !!e&&pickable(e);}):ids;
+ function addToSelection(ids:number[],remove:boolean){store.select(withGroups(ids),remove||removing.current?'remove':'add');}
  function step(){if(active.current?.done)endCommand();else{refresh();schedule();}}
  function run(raw:string){
   const name=commandNames[raw.trim().toUpperCase()]??raw.trim().toUpperCase();if(!name)return;
@@ -179,9 +199,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(name==='REDO'){const l=store.redo();say(l?`Redo ${l}`:'Nothing to redo.');schedule(true);return;}
   if(name==='LAYER'){setPanel(v=>({...v,layers:true}));return;}
   if(name==='PROPERTIES'){setPanel(v=>({...v,props:true}));return;}
+  if(name==='OSNAP'){setSettings('osnap');return;}
+  if(name==='QSELECT'){setQselect(true);return;}
   const cmd=makeCommand(name,env);if(!cmd){say(`Unknown command "${raw.trim()}". Press F1 for the command list.`);return;}
   lastCommand.current=name;active.current=cmd;lastWindow.current=undefined;
-  if(cmd.selectFirst){if(store.selection.size)cmd.begin?.();else selecting.current=true;}
+  if(cmd.selectFirst){if(store.selection.size)beginOn(cmd);else selecting.current=true;}
   step();
   setTimeout(()=>cmdRef.current?.focus(),0);
  }
@@ -195,7 +217,12 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(grip.current){grip.current=null;refresh();schedule();return;}
   const cmd=active.current;
   if(!cmd){if(lastCommand.current)run(lastCommand.current);return;}
-  if(selecting.current){selecting.current=false;if(store.selection.size)cmd.begin?.();else cmd.done=true;step();return;}
+  if(selecting.current){
+   const m=selMode.current;
+   if(m?.kind==='F'){if(m.pts.length>1){const ids=fenceSelect(store.doc.entities.filter(pickable),m.pts,store.doc);addToSelection(ids,false);say(`${ids.length} found, ${store.selection.size} total`);}selMode.current=null;refresh();schedule();return;}
+   if(m){selMode.current=null;refresh();return;}
+   selecting.current=false;if(store.selection.size)beginOn(cmd);else cmd.done=true;step();return;
+  }
   cmd.enter?.();if(!cmd.enter)cmd.done=true;step();
  }
  function submit(value:string){
@@ -203,14 +230,40 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(!active.current&&!grip.current){if(!v.trim())enter();else run(v);return;}
   if(grip.current){const p=parsePoint(v,grip.current.from,cursor.current.world);if(p)commitGrip(p);else say('Point or option keyword required.');return;}
   const cmd=active.current!;
-  if(cmd.freeText?.()){cmd.text?.(v);step();return;}
+  if(!selecting.current&&cmd.freeText?.()){cmd.text?.(v);step();return;}
   if(!v.trim()){enter();return;}
-  if(selecting.current){say('Pick objects or press Enter.');return;}
+  if(selecting.current){selectKeyword(v);return;}
+  if(dynLock.current!==null&&cmd.base?.()&&cmd.point){const a=Number(v.trim().replace(/[°d]$/i,''));if(Number.isFinite(a)){const b=cmd.base()!;const len=dynLock.current;dynLock.current=null;cmd.point([b[0]+len*Math.cos(a*DEG),b[1]+len*Math.sin(a*DEG)]);step();return;}}
   if(cmd.text?.(v)){step();return;}
   if(cmd.point&&!cmd.wantsPick?.()){const p=parsePoint(v,cmd.base?.(),cursor.current.world);if(p){cmd.point(p);step();return;}}
   // A typed point answers an object prompt with the object there.
   if(cmd.wantsPick?.()){const p=parsePoint(v,cmd.base?.(),cursor.current.world);if(p){cmd.pick?.(entityAt(p),p);step();return;}}
   say('Point or option keyword required.');
+ }
+ /** The selection keywords of AutoCAD's Select objects prompt. */
+ function selectKeyword(raw:string){
+  const v=raw.trim(),k=v.toUpperCase(),m=selMode.current,all=()=>store.doc.entities.filter(pickable);
+  if(m?.kind==='G'){const g=store.doc.groups?.find(x=>x.name.toUpperCase()===k);if(g){store.select(g.ids.filter(id=>{const e=store.get(id);return !!e&&pickable(e);}),removing.current?'remove':'add');say(`${g.ids.length} found, ${store.selection.size} total`);}else say(`No group named ${v}.`);selMode.current=null;refresh();schedule();return;}
+  if(m&&(m.kind==='W'||m.kind==='C'||m.kind==='F')){const p=parsePoint(v,m.pts[m.pts.length-1],cursor.current.world);if(p){selectPoint(p);return;}}
+  if(k==='ALL'){addToSelection(all().map(e=>e.id),false);say(`${store.selection.size} found`);}
+  else if(k==='L'||k==='LAST'){const last=all().at(-1);if(last)addToSelection([last.id],false);say(last?`1 found, ${store.selection.size} total`:'Nothing found.');}
+  else if(k==='P'||k==='PREVIOUS'){const ids=prevSelection.current.filter(id=>{const e=store.get(id);return !!e&&pickable(e);});addToSelection(ids,false);say(`${ids.length} found, ${store.selection.size} total`);}
+  else if(k==='W'||k==='WINDOW'||k==='C'||k==='CROSSING'){selMode.current={kind:k[0] as 'W'|'C',pts:[]};}
+  else if(k==='F'||k==='FENCE'){selMode.current={kind:'F',pts:[]};}
+  else if(k==='G'||k==='GROUP'){selMode.current={kind:'G',pts:[]};}
+  else if(k==='R'||k==='REMOVE'){removing.current=true;}
+  else if(k==='A'||k==='ADD'){removing.current=false;}
+  else say('Pick objects, use a selection option, or press Enter.');
+  refresh();schedule();
+ }
+ /** A point given while a selection option collects points (window, crossing, fence). */
+ function selectPoint(p:Pt){
+  const m=selMode.current!;m.pts.push(p);
+  if((m.kind==='W'||m.kind==='C')&&m.pts.length===2){
+   const [a,b]=m.pts,box:Box=[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])],ids=store.doc.entities.filter(e=>pickable(e)&&inWindow(e,box,m.kind==='C',store.doc)).map(e=>e.id);
+   lastWindow.current={box,crossing:m.kind==='C'};addToSelection(ids,false);say(`${ids.length} found, ${store.selection.size} total`);selMode.current=null;
+  }
+  refresh();schedule();
  }
  function commitGrip(p:Pt){
   const g=grip.current!,e=store.get(g.id);grip.current=null;
@@ -224,7 +277,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   const box:Box=[Math.min(w.a[0],b[0]),Math.min(w.a[1],b[1]),Math.max(w.a[0],b[0]),Math.max(w.a[1],b[1])],crossing=b[0]<w.a[0];
   const ids=store.doc.entities.filter(e=>pickable(e)&&inWindow(e,box,crossing,store.doc)).map(e=>e.id);
   lastWindow.current={box,crossing};
-  store.select(ids,shift?'remove':'add');
+  addToSelection(ids,shift);
   if(selecting.current)say(`${ids.length} found, ${store.selection.size} total`);
   schedule();
  }
@@ -240,10 +293,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   cmdRef.current?.focus();
   if(windowSel.current&&!windowSel.current.dragged&&windowSel.current.hit===undefined){finishWindow(raw,e.shiftKey);return;}
   const cmd=active.current;
+  if(cmd&&selecting.current&&selMode.current&&selMode.current.kind!=='G'){selectPoint(raw);return;}
   if(grip.current){commitGrip(resolvePoint(raw,grip.current.from).p);return;}
   if(cmd&&!selecting.current){
    if(cmd.wantsPick?.()){cmd.pick?.(entityAt(raw),raw);step();return;}
-   const {p}=resolvePoint(raw,cmd.base?.());cmd.point?.(p);step();return;
+   const {p}=resolvePoint(raw,cmd.base?.());dynLock.current=null;cmd.point?.(p);step();return;
   }
   // Idle or gathering a selection: a grip, an object, or the corner of a window.
   if(!cmd){
@@ -258,8 +312,8 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(pan.current){view.current={...v,cx:pan.current.cx-(x-pan.current.x)/v.scale,cy:pan.current.cy+(y-pan.current.y)/v.scale};schedule(true);return;}
   const raw=toWorld(v,x,y);
   if(windowSel.current&&!windowSel.current.dragged&&Math.hypot(x-windowSel.current.start[0],y-windowSel.current.start[1])>5&&(e.buttons&1))windowSel.current.dragged=true;
-  let world=raw;snap.current=undefined;
-  if(wantsPoint()){const r=resolvePoint(raw,currentBase());world=r.p;snap.current=r.snap;}
+  let world=raw;snap.current=undefined;track.current={};
+  if(wantsPoint()){const r=resolvePoint(raw,currentBase());world=r.p;snap.current=r.snap;track.current={tracks:r.tracks,tip:r.tip};dwellOn(raw);}
   hover.current=!wantsPoint()&&!windowSel.current&&!panMode?entityAt(raw):undefined;
   cursor.current={screen:[x,y],world,raw};setCoords(world);schedule();
  }
@@ -267,7 +321,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(pan.current){pan.current=null;schedule();return;}
   const w=windowSel.current;
   if(w?.dragged)finishWindow(toWorld(view.current,...local(e)),e.shiftKey);
-  else if(w&&w.hit!==undefined){windowSel.current=null;store.select([w.hit],w.shift?'remove':'add');if(selecting.current)say(`1 found, ${store.selection.size} total`);schedule();}
+  else if(w&&w.hit!==undefined){windowSel.current=null;addToSelection([w.hit],!!w.shift);if(selecting.current)say(`${withGroups([w.hit]).length} found, ${store.selection.size} total`);schedule();}
  }
  function onWheel(e:WheelEvent){
   e.preventDefault();const [x,y]=local(e),v=view.current;
@@ -290,7 +344,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
    const target=e.target as HTMLElement,inField=target&&target!==cmdRef.current&&['INPUT','SELECT','TEXTAREA'].includes(target.tagName);
    const mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
    if(e.key==='F1'){e.preventDefault();setHelp(v=>!v);return;}
-   if(e.key==='F3'||e.key==='F7'||e.key==='F8'||e.key==='F9'){e.preventDefault();const name=({F3:'osnap',F7:'grid',F8:'ortho',F9:'snap'} as const)[e.key as 'F3'];setToggles(t=>({...t,[name]:!t[name]}));say(`<${name.toUpperCase()} ${togglesRef.current[name]?'off':'on'}>`);return;}
+   const fkeys={F3:'osnap',F7:'grid',F8:'ortho',F9:'snap',F10:'polar',F11:'otrack',F12:'dyn'} as const;
+   if(e.key in fkeys){e.preventDefault();const name=fkeys[e.key as keyof typeof fkeys],on=!togglesRef.current[name];
+    // Ortho and polar tracking exclude each other, as in AutoCAD.
+    setToggles(t=>({...t,[name]:on,...(on&&name==='ortho'?{polar:false}:on&&name==='polar'?{ortho:false}:{})}));say(`<${({osnap:'Osnap',grid:'Grid',ortho:'Ortho',snap:'Snap',polar:'Polar',otrack:'Object Snap Tracking',dyn:'Dynamic Input'} as const)[name]} ${on?'on':'off'}>`);return;}
+   if(mod&&e.shiftKey&&k==='a'){e.preventDefault();setPickGroups(v=>{say(`<Groups ${v?'off':'on'}>`);return !v;});return;}
    if(inField)return;
    if(mod&&k==='z'&&!e.shiftKey){e.preventDefault();run('UNDO');return;}
    if(mod&&(k==='y'||(k==='z'&&e.shiftKey))){e.preventDefault();run('REDO');return;}
@@ -300,13 +358,15 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
    if(e.key==='Delete'&&!active.current&&store.selection.size&&!input){e.preventDefault();run('ERASE');return;}
    if(e.key==='Escape'){e.preventDefault();cancel();return;}
    // Enter and Space answer the command line wherever the focus is (AutoCAD).
-   if(target!==cmdRef.current&&!mod&&(e.key==='Enter'||(e.key===' '&&!active.current?.freeText?.()))){e.preventDefault();cmdRef.current?.focus();submit(input);return;}
+   if(target!==cmdRef.current&&!mod&&(e.key==='Enter'||(e.key===' '&&(selecting.current||!active.current?.freeText?.())))){e.preventDefault();cmdRef.current?.focus();submit(input);return;}
    if(target!==cmdRef.current&&!mod&&e.key.length===1&&/[\w@.,<'"/ -]/.test(e.key)){cmdRef.current?.focus();}
   };
   window.addEventListener('keydown',onKey);return ()=>window.removeEventListener('keydown',onKey);
  });
  function onCmdKey(e:React.KeyboardEvent<HTMLInputElement>){
-  const free=!!active.current?.freeText?.();
+  const free=!selecting.current&&!!active.current?.freeText?.();
+  // Dynamic input: Tab locks a typed length; the angle follows the cursor or is typed next.
+  if(e.key==='Tab'&&togglesRef.current.dyn&&wantsPoint()&&currentBase()){const v=parseLength(input);if(v!==undefined&&v>0){e.preventDefault();dynLock.current=v;setInput('');say(`Length ${lengthText(v)}: type the angle, or click.`);schedule();return;}}
   if(e.key==='Enter'||(e.key===' '&&!free)){e.preventDefault();submit(input);return;}
   if(e.key==='Escape'){e.preventDefault();cancel();}
  }
@@ -385,6 +445,14 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
       onKeyDown={e=>{if(e.key==='Enter'){const ent=store.get(textEdit.id);if(ent?.type==='text'&&textEdit.value.trim())putEnt({...ent,value:textEdit.value},'Edit text');if(ent?.type==='dim')putEnt({...ent,text:textEdit.value.trim()||undefined},'Edit dimension text');setTextEdit(null);cmdRef.current?.focus();}if(e.key==='Escape'){setTextEdit(null);cmdRef.current?.focus();}}}/>
      <small>Enter to apply · Esc to cancel{store.get(textEdit.id)?.type==='dim'?' · empty measures the distance':''}</small></div>}
     {help&&<HelpCard onClose={()=>setHelp(false)}/>}
+    {settings==='osnap'&&<div className="cad-pop" role="dialog" aria-label="Object snap settings"><h3>Object snaps<button aria-label="Close" onClick={()=>setSettings(null)}><X size={12}/></button></h3>
+     {allSnapModes.map(m=><label key={m}><input type="checkbox" checked={snapModes.has(m)} onChange={ev=>{const n=new Set(snapModes);if(ev.target.checked)n.add(m);else n.delete(m);setSnapModes(n);savePref('cad-osnap',[...n]);}}/>{snapNames[m]}</label>)}
+     <div className="cad-pop-row"><button onClick={()=>{const n=new Set(allSnapModes);setSnapModes(n);savePref('cad-osnap',[...n]);}}>All</button><button onClick={()=>{setSnapModes(new Set());savePref('cad-osnap',[]);}}>None</button><button onClick={()=>{setSnapModes(new Set(defaultSnapModes));savePref('cad-osnap',defaultSnapModes);}}>Default</button></div></div>}
+    {settings==='polar'&&<div className="cad-pop" role="dialog" aria-label="Polar tracking angle"><h3>Polar angle<button aria-label="Close" onClick={()=>setSettings(null)}><X size={12}/></button></h3>
+     {[90,45,30,22.5,18,15,10,5].map(a=><label key={a}><input type="radio" name="polar" checked={polarAngle===a} onChange={()=>{setPolarAngle(a);savePref('cad-polar',a);setToggles(v=>({...v,polar:true,ortho:false}));}}/>{a}°</label>)}</div>}
+    {qselect&&<QuickSelect doc={doc} selected={selected} onClose={()=>setQselect(false)} onApply={(ids,append)=>{store.select(withGroups(ids),append?'add':'replace');say(`${ids.length} objects selected.`);setQselect(false);schedule();}} pickable={pickable}/>}
+    {toggles.dyn&&cursor.current.screen&&(active.current||input)&&!textEdit&&<div className="cad-dyn" aria-hidden="true" style={{left:Math.min(cursor.current.screen[0]+20,view.current.w-260),top:Math.min(cursor.current.screen[1]+24,view.current.h-48)}}>
+     <span>{prompt().replace(/^\S+ /,'').replace(/^\*\* STRETCH \*\* /,'')}</span><b>{input||'\u00a0'}</b>{dynLock.current!==null&&<em>length {lengthText(dynLock.current)} locked</em>}</div>}
    </div>
    {(panel.props||panel.layers)&&<aside className="cad-side">
     {panel.props&&<section className="cad-panel" aria-label="Properties"><h3><SlidersHorizontal size={13}/>Properties<button aria-label="Hide properties" onClick={()=>setPanel(v=>({...v,props:false}))}><X size={12}/></button></h3>
@@ -406,7 +474,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
    <label className="cad-cmd"><span>{prompt()}</span><input ref={cmdRef} aria-label="Command line" autoFocus spellCheck={false} autoComplete="off" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={onCmdKey}/></label>
    <div className="cad-status">
     <span className="cad-coords">{fmtNum(coords[0])}, {fmtNum(coords[1])} {doc.unit==='unit'?'':doc.unit}</span>
-    {(['grid','snap','ortho','osnap','lwt'] as const).map(t=><button key={t} className={toggles[t]?'on':''} aria-pressed={toggles[t]} title={({grid:'Grid (F7)',snap:'Snap to grid (F9)',ortho:'Ortho (F8)',osnap:'Object snap (F3)',lwt:'Lineweights'})[t]} onClick={()=>setToggles(v=>({...v,[t]:!v[t]}))}>{t.toUpperCase()}</button>)}
+    {(['grid','snap','ortho','polar','osnap','otrack','dyn','lwt'] as const).map(t=><span key={t} className="cad-toggle"><button className={toggles[t]?'on':''} aria-pressed={toggles[t]}
+     title={({grid:'Grid (F7)',snap:'Snap to grid (F9)',ortho:'Ortho (F8)',polar:`Polar tracking, every ${polarAngle}° (F10)`,osnap:'Object snap (F3)',otrack:'Object snap tracking: hover a snap point to acquire it (F11)',dyn:'Dynamic input at the cursor; Tab locks a typed length (F12)',lwt:'Lineweights'})[t]}
+     onClick={()=>setToggles(v=>({...v,[t]:!v[t],...(!v[t]&&t==='ortho'?{polar:false}:!v[t]&&t==='polar'?{ortho:false}:{})}))}>{t==='otrack'?'OTRACK':t.toUpperCase()}</button>
+     {(t==='osnap'||t==='polar')&&<button className="cad-more" aria-label={t==='osnap'?'Object snap settings':'Polar tracking angle'} aria-expanded={settings===t} onClick={()=>setSettings(v=>v===t?null:t)}>▾</button>}</span>)}
+    <button className={pickGroups?'on':''} aria-pressed={pickGroups} title="Picking a group member selects the whole group (Ctrl+Shift+A)" onClick={()=>setPickGroups(v=>!v)}>GROUPS</button>
     {scales(doc.unit).length>0&&<label className="cad-scale">Scale<select aria-label="Drawing scale for dimensions and distances" value={doc.realPerUnit} onChange={e=>{store.setMeta({realPerUnit:+e.target.value});schedule(true);}}>{scales(doc.unit).map(([n,v])=><option key={n} value={v}>{n}</option>)}</select></label>}
     <label className="cad-scale">Layer<select aria-label="Current layer" value={currentLayer} onChange={e=>setCurrentLayer(e.target.value)}>{doc.layers.map(l=><option key={l.name} value={l.name}>{l.name}</option>)}</select></label>
     <button title="Model (dark) or paper (light) view" onClick={()=>setTheme(t=>t==='dark'?'paper':'dark')}>{theme==='dark'?'MODEL':'PAPER'}</button>
@@ -437,7 +509,10 @@ const helpRows:[string,string][]=[
  ['Points','Click (object snaps), or type x,y · @dx,dy · @d<angle · a distance along the cursor; lengths take 1\'6", 1-1/2, 3/4'],
  ['Mouse','Wheel zooms at the cursor; middle drag pans (or the hand); middle double-click zooms to the sheet; right click is Enter'],
  ['Selecting','Click objects; drag left to right for a window, right to left for crossing; Shift removes; Ctrl+A all; grips stretch'],
- ['Keys','Enter or Space repeats or ends; Esc cancels; F3 snaps, F7 grid, F8 ortho, F9 grid snap; Ctrl+C / Ctrl+X / Ctrl+V; double-click text to edit'],
+ ['Select objects','ALL, L last, P previous, W window, C crossing, F fence, G group, R remove, A add'],
+ ['QSELECT · SELECTSIMILAR','Select by type and property; select objects like the selection'],['G · GROUP / UNGROUP','Name a group of the selection; picking a member selects the group (Ctrl+Shift+A)'],
+ ['OS · OSNAP','Choose the running object snaps'],
+ ['Keys','Enter or Space repeats or ends; Esc cancels; F3 snaps, F7 grid, F8 ortho, F9 grid snap, F10 polar, F11 snap tracking, F12 dynamic input (Tab locks a length); Ctrl+C / Ctrl+X / Ctrl+V; double-click text to edit'],
 ];
 function HelpCard({onClose}:{onClose:()=>void}){
  return <div className="cad-help" role="dialog" aria-label="CAD commands"><h3>Commands and shortcuts<button aria-label="Close help" onClick={onClose}><X size={12}/></button></h3>
@@ -489,6 +564,24 @@ function Properties({doc,selected,layers,onPut,onLayer,onAll,lengthText}:{doc:Ca
    <dt>Measurement</dt><dd>{dimGeometry({...e,text:undefined},doc).text.value}</dd><dt>Text override</dt><dd><TextField value={e.text??''} onCommit={t=>onPut({...e,text:t.trim()||undefined})}/></dd>{num('Text height',e.height,height=>height>0?{...e,height}:undefined)}</>}
   {e.type==='solid'&&<><dt>Vertices</dt><dd>{e.points.length}</dd></>}
  </dl>;
+}
+/** QSELECT: objects by type and property (layer, color, linetype, lineweight). */
+function QuickSelect({doc,selected,onClose,onApply,pickable}:{doc:CadDoc;selected:Ent[];onClose:()=>void;onApply:(ids:number[],append:boolean)=>void;pickable:(e:Ent)=>boolean}){
+ const [scope,setScope]=useState<'all'|'selection'>(selected.length?'selection':'all');
+ const pool=(scope==='selection'?selected:doc.entities).filter(pickable);
+ const types=[...new Set(pool.map(e=>e.type))];
+ const [type,setType]=useState<QuickSpec['type']>('*'),[prop,setProp]=useState<QuickProp>('layer'),[op,setOp]=useState<QuickSpec['op']>('='),[exclude,setExclude]=useState(false),[append,setAppend]=useState(false);
+ const values=[...new Set(pool.filter(e=>type==='*'||e.type===type).map(e=>propValue(e,prop)))].sort();
+ const [value,setValue]=useState<string>('');const v=values.includes(value)?value:values[0]??'';
+ return <div className="cad-pop cad-qselect" role="dialog" aria-label="Quick select"><h3>Quick select<button aria-label="Close quick select" onClick={onClose}><X size={12}/></button></h3>
+  <label>Apply to<select value={scope} onChange={e=>setScope(e.target.value as 'all'|'selection')}><option value="all">Entire drawing</option>{selected.length>0&&<option value="selection">Current selection</option>}</select></label>
+  <label>Object type<select value={type} onChange={e=>setType(e.target.value as QuickSpec['type'])}><option value="*">Multiple</option>{types.map(t=><option key={t} value={t}>{typeName[t]}</option>)}</select></label>
+  <label>Property<select value={prop} onChange={e=>setProp(e.target.value as QuickProp)}><option value="layer">Layer</option><option value="color">Color</option><option value="ltype">Linetype</option><option value="weight">Lineweight</option></select></label>
+  <label>Operator<select value={op} onChange={e=>setOp(e.target.value as QuickSpec['op'])}><option value="=">= Equals</option><option value="<>">&lt;&gt; Not equal</option><option value="*">* Select all</option></select></label>
+  {op!=='*'&&<label>Value<select value={v} onChange={e=>setValue(e.target.value)}>{values.map(x=><option key={x} value={x}>{x}</option>)}</select></label>}
+  <label className="cad-check"><input type="checkbox" checked={exclude} onChange={e=>setExclude(e.target.checked)}/>Exclude from the new selection</label>
+  <label className="cad-check"><input type="checkbox" checked={append} onChange={e=>setAppend(e.target.checked)}/>Append to the current selection</label>
+  <div className="cad-pop-row"><button className="on" onClick={()=>onApply(quickSelect(pool,{type,prop,op,value:v,exclude}),append)}>Select</button><button onClick={onClose}>Cancel</button></div></div>;
 }
 function NumField({value,onCommit}:{value:number;onCommit:(v:number)=>void}){
  const [text,setText]=useState(fmtNum(value));
