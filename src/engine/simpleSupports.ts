@@ -89,12 +89,14 @@ export function tractionBays(p:ProjectInput,e:RunwayCaseEvent){
  const points=p.cranes[crane.index].wheels.map(w=>crane.origin+w.offset);
  return girderSegments(p).filter(m=>points.some(x=>x>=m.leftGrid-1e-6&&x<=m.rightGrid+1e-6)).map(m=>m.bay);
 }
-export function simpleSupportChecks(p:ProjectInput,rotation:number):CheckResult[]{
+/** `slip`: the locating support's own service movement along the runway (column twist, columnTwistLimit.twistSlip), taken by the sliding ends and the end gaps. */
+export function simpleSupportChecks(p:ProjectInput,rotation:number,slip=0):CheckResult[]{
  if(p.system!=='simple'||!p.details)return [];
  const c=simpleSupportInput(p),L=Math.max(...p.spans),alpha=12e-6;
  const check=(id:string,title:string,demand:number,capacity:number,equation:string,note:string):CheckResult=>({id,group:'Detailing',title,demand,capacity,utilization:demand/capacity,quantity:'length',equation,status:demand<=capacity*(1+1e-9)?'pass':'fail',referenceIds:['tr13-girder','dg7','criteria'],note});
+ const twistText=slip>0?` The locating column twists under the crane traction, moving its seat Δ_s = ${(slip/(p.units==='US'?25.4:1)).toFixed(3)} ${p.units==='US'?'in':'mm'} along the runway at every crane start and stop (column-twist): added to the demand.`:'';
  const common=`Reference AIST Technical Report 13 §5.8.1; AISC DG7 §11.2 (end rotation and thermal movement released at the supports). Independent simple bays; left end locates longitudinally, right end slides. Thermal coefficient ${p.units==='US'?'6.6667 × 10⁻⁶ /°F':'12 × 10⁻⁶ /°C'} is a stated steel modeling assumption; temperature changes are measured from erection. This is a clearance check, not verification of attachment flexibility or bracket capacity.`;
- const checks=[check('simple-guide-travel','Sliding end · movement allowance each direction',alpha*L*Math.max(c.temperatureRise,c.temperatureFall)+p.section.d*rotation+c.settingTolerance,c.guideTravel,'\\alpha L\\Delta T+d\\theta+t_{set}\\le u',common)];
- if(p.spans.length>1)checks.push(check('simple-joint-gap','Adjacent girder ends · minimum clear gap',alpha*L*c.temperatureRise+2*p.section.d*rotation+2*c.settingTolerance,c.endGap,'\\alpha L\\Delta T+2d\\theta+2t_{set}\\le g',`${common} Both adjacent end rotations are bounded independently; cap channels terminate with their girders.`));
+ const checks=[check('simple-guide-travel','Sliding end · movement allowance each direction',alpha*L*Math.max(c.temperatureRise,c.temperatureFall)+p.section.d*rotation+c.settingTolerance+slip,c.guideTravel,slip?'\\alpha L\\Delta T+d\\theta+t_{set}+\\Delta_s\\le u':'\\alpha L\\Delta T+d\\theta+t_{set}\\le u',`${common}${twistText}`)];
+ if(p.spans.length>1)checks.push(check('simple-joint-gap','Adjacent girder ends · minimum clear gap',alpha*L*c.temperatureRise+2*p.section.d*rotation+2*c.settingTolerance+slip,c.endGap,slip?'\\alpha L\\Delta T+2d\\theta+2t_{set}+\\Delta_s\\le g':'\\alpha L\\Delta T+2d\\theta+2t_{set}\\le g',`${twistText.trim()?`${twistText.trim()} `:''}${common} Both adjacent end rotations are bounded independently; cap channels terminate with their girders.`));
  return checks;
 }

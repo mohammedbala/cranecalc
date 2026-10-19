@@ -80,7 +80,9 @@ const byOthers=(id:string,title:string,note:string):CheckResult=>({id,group:'End
  */
 export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:DesignAnalysis;lateral:number;
  /** On a column cap: the per-bolt tension and shear of the cap's bolt checks (capBoltSets), the same bolts and force sets. */
- cap?:{tension:number;shear:number}}):CheckResult[]{
+ cap?:{tension:number;shear:number};
+ /** The locating column's service twist movement along the runway (columnTwistLimit.twistSlip), added to the slot travel demand. */
+ slip?:number}):CheckResult[]{
  const d=p.details!,b=p.section,bs=d.bearing,m=d.material,method=p.method,u=p.units,f=(v:number)=>format(v,'length',u,3);
  const supports=continuousBearings(p),locates=supports.find(v=>v.role==='LOCATING'),LE=locates?`Locating support (grid ${locates.grid})`:'Locating end',SE=locates?'Sliding supports':'Sliding end';
  const g=endBearingGeometry(p,e),db=e.bolts.diameter,C=wrenchClearance(db),gauge=e.bolts.gauge,n=4;
@@ -131,12 +133,12 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   compared('end-bearing-washer-stiffener','Plate washers clear the bearing stiffener',g.washer.length/2+g.travel+slidingClearance,stiffClear,'length','b/2+u+c_f\\le|x_b-x_{st}|-t_{st}/2-w',`The washer covers the slot as installed (AISC J3.2), 1/4 in past each slot end. It moves with the bolt, which is fixed in the seat, while the girder and its stiffener slide by up to u = ${f(g.travel)}: the washer clears the stiffener weld toe at either extreme of travel, so it cannot jam the sliding end, with a margin c_f = ${f(slidingClearance)} for the fabrication tolerance of the stiffener and hole locations (AISC Code of Standard Practice §6.4) on this moving part.`)
  ];
  // Movement beyond about 1 in each way: sliding bearings with that much travel need large slots, sleeves and washers.
- {const c=simpleSupportInput(p),far=locates?Math.max(...supports.map(v=>v.distance)):Math.max(...p.spans),need=12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance;
+ {const c=simpleSupportInput(p),far=locates?Math.max(...supports.map(v=>v.distance)):Math.max(...p.spans),need=12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance+(ctx.slip??0);
   if(need>inch+1e-6)checks.push({id:'end-bearing-slot-travel',group:'End bearings',title:`${SE} · movement beyond 1 in each way`,status:'unverified',demand:need,capacity:inch,quantity:'length',utilization:need/inch,equation:'\\alpha L\\Delta T+d\\theta+t_{set}\\le1\\,\\mathrm{in}',note:`The sliding bearings must move ${f(need)} each way (${locates?`the farthest sliding support ${f(far)} from the locating support`:`a ${f(far)} span`}). Beyond about 1 in of travel the slotted bearing, its sleeves and plate washers grow out of proportion: provide expansion units (a runway expansion joint with independent girders at it) or simple spans, or obtain the engineer of record's acceptance of the long-slot bearing.`,referenceIds:['tr13-girder','dg7']});}
  // A continuous girder slides at every support but the locating one, by the thermal strain over its distance from it.
  if(locates){
   const c=simpleSupportInput(p),far=Math.max(...supports.map(v=>v.distance));
-  checks.push(compared('end-bearing-travel',`${SE} · movement allowance each direction`,12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance,g.travel,'length','\\alpha L\\Delta T+d\\theta+t_{set}\\le u',`Farthest sliding support ${f(far)} from the locating support at grid ${locates.grid}; the flange slots give ${f(g.travel)} each way. Thermal coefficient ${u==='US'?'6.6667 × 10⁻⁶ /°F':'12 × 10⁻⁶ /°C'} is a stated steel modeling assumption; temperature changes are measured from erection. Reference AIST Technical Report 13 §5.8.1; AISC DG7 §11.2.`,['tr13-girder','dg7','criteria']));
+  checks.push(compared('end-bearing-travel',`${SE} · movement allowance each direction`,12e-6*far*Math.max(c.temperatureRise,c.temperatureFall)+b.d*ctx.analysis.endRotation+c.settingTolerance+(ctx.slip??0),g.travel,'length',ctx.slip?'\\alpha L\\Delta T+d\\theta+t_{set}+\\Delta_s\\le u':'\\alpha L\\Delta T+d\\theta+t_{set}\\le u',`${ctx.slip?`Includes the locating column's twist movement Δ_s = ${f(ctx.slip)} (column-twist). `:''}Farthest sliding support ${f(far)} from the locating support at grid ${locates.grid}; the flange slots give ${f(g.travel)} each way. Thermal coefficient ${u==='US'?'6.6667 × 10⁻⁶ /°F':'12 × 10⁻⁶ /°C'} is a stated steel modeling assumption; temperature changes are measured from erection. Reference AIST Technical Report 13 §5.8.1; AISC DG7 §11.2.`,['tr13-girder','dg7','criteria']));
  }
  const wb=d.bracket?.enabled&&weldedRibBracket(d.bracket)?d.bracket:undefined;
  if(wb){
