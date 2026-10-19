@@ -100,11 +100,8 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
   // An open item that is not the governing check keeps its own status in the note: it never labels a passing check.
   const status=items.some(i=>i.governing.status==='fail')?'fail':(items.find(i=>i.members.includes(g.c))??(checked?undefined:items[0]))?.governing.status??g.c.status;
   const others=items.filter(i=>!i.members.includes(g.c));
-  // The result cell is the governing check's own status beside its own D/C; another failing open item of the element is
-  // listed below the check as NG (and the row keeps the element's NG shading).
-  const own=g.c.status;
-  const note=others.length?`<small class="open">Open${others.some(i=>i.governing.status==='fail')?' (NG)':''}: ${others.slice(0,2).map(i=>`${esc(title(i.title))} (${esc(groupDc(i))})`).join('; ')}${others.length>2?`; ${others.length-2} more`:''} (open items, page 1)</small>`:'';
-  return `<tr class="${status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b></td><td>${esc(title(g.c.title))}<small class="ref">${esc(shortReference(g.c))}</small>${note}</td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—')}</td><td class="res"><b class="${own}">${esc(statusLabel(own))}</b></td></tr>`;
+  const note=others.length?`<small class="open">Open: ${others.slice(0,2).map(i=>`${esc(title(i.title))} (${esc(groupDc(i))})`).join('; ')}${others.length>2?`; ${others.length-2} more`:''} (open items, page 1)</small>`:'';
+  return `<tr class="${status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b></td><td>${esc(title(g.c.title))}<small class="ref">${esc(shortReference(g.c))}</small>${note}</td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—')}</td><td class="res"><b class="${status}">${esc(statusLabel(status))}</b></td></tr>`;
  }).join('')}</tbody></table>`;
 }
 /**
