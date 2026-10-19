@@ -333,8 +333,8 @@ function buildingFootingPlan(s:CalculationSnapshot,X:(z:number)=>number,Y:(x:num
  const target:[number,number]=f&&f.L>0?[X(z-f.L/2),Y(f.B/2)]:[X(z-d/2),Y(0)];
  svg+=multiLeader([target],[x0,noteY],[`(E) ${bc.shape||'BUILDING'} COLUMN ${dim(k.offset)} FROM THE CRANE COLUMN C/L${f&&f.L>0?` ON (E) ${dim(f.L)} X ${dim(f.B)}`:''}`,`${f&&f.L>0?'FOOTING ':''}(REF., DASHED)`]);
  const lines=[
-  r?r.clear<r.required?`OPEN ITEM: THE FOOTINGS ${r.clear<0?`OVERLAP ${dim(-r.clear)}`:`ARE ${dim(r.clear)} APART, ${dim(r.required)} MIN.`}. COORDINATE A COMBINED OR`:`FOOTING CLEAR ${dim(r.clear)}, ${dim(r.required)} MIN.`:'(E) FOOTING SIZE NOT ENTERED: LOCATE IT BY TEST PIT BEFORE EXCAVATION.',
-  ...(r&&r.clear<r.required?['MODIFIED FOOTING WITH THE FOUNDATION ENGINEER OF RECORD BEFORE EXCAVATION;','DO NOT UNDERMINE OR CUT THE (E) FOOTING. HOLD - NOT FOR CONSTRUCTION.']:[])];
+  r?r.clear<r.required?`OPEN ITEM: THE FOOTINGS ${r.clear<0?`OVERLAP ${dim(-r.clear)}`:`ARE ${dim(r.clear)} APART, ${dim(r.required)} MIN.`}. COMBINED OR ENLARGED`:`FOOTING CLEAR ${dim(r.clear)}, ${dim(r.required)} MIN.`:'(E) FOOTING SIZE NOT ENTERED: LOCATE IT BY TEST PIT BEFORE EXCAVATION.',
+  ...(r&&r.clear<r.required?['FOOTING BY THE FOUNDATION ENGINEER FOR THE REACTIONS ON S-00, BEFORE EXCAVATION;','DO NOT UNDERMINE OR CUT THE (E) FOOTING. HOLD - NOT FOR CONSTRUCTION.']:[])];
  // Under the plan, wrapped to the footing's width.
  wrapToWidth(lines.join(' '),w,lettering.text).forEach((v,i)=>{svg+=text(x0,noteY+2*lettering.leading+6+i*lettering.noteLeading,v,lettering.text,'start');});
  return svg+'</g>';

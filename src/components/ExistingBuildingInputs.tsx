@@ -13,6 +13,8 @@ import {ColumnCapInputs} from './ColumnCapInputs';
 import {existingWeldingDemand,weldingBasisLabel,weldsToExistingColumn} from '../engine/existingWelding';
 import {existingColumnSection} from '../engine/existingColumn';
 import type {CalculationSnapshot,ProjectInput} from '../engine/types';
+import type {CraneColumnInput} from '../engine/craneColumnInputs';
+import type {StepInput} from '../engine/steppedColumnInputs';
 import {format,type Quantity} from '../engine/units';
 
 type NumericField=(label:string,value:number,onChange:(n:number)=>void,q?:Quantity,help?:string,min?:number)=>ReactNode;
@@ -43,6 +45,8 @@ export function ExistingBuildingInputs({project,update,numeric}:{project:Project
    {support('strong','Strong axis (across runway)')}{support('weak','Weak axis (along runway)')}
    <div className="field-grid">{numeric('Strong-axis effective length Lcx',c.Lcx,v=>set({Lcx:v}),'length','Use K for the actual end conditions; at least 1.0H pinned-braced, 0.8H fixed-braced, 2.1H fixed-free.')}{numeric('Weak-axis effective length Lcy',c.Lcy,v=>set({Lcy:v}))}{numeric('Torsional effective length Lcz',c.Lcz,v=>set({Lcz:v}))}{!bracket&&numeric('Flange unbraced length Lb',c.Lb,v=>set({Lb:v}))}</div>
    <div className="field-grid"><label className="field"><span>Crane longitudinal force</span><select value={c.longitudinal} onChange={e=>set({longitudinal:e.target.value as ExistingColumnInput['longitudinal']})}><option value="bracing">Bracing</option><option value="column">This column</option></select></label>{numeric('Runway drift limit h / n',c.driftLimit,v=>set({driftLimit:v}),'ratio')}</div>
+   {c.isNew&&project.craneColumn?.enabled&&<CraneColumnInputs project={project} update={update} numeric={numeric}/>}
+   {!c.isNew&&c.step&&<StepInputs column={c} set={set} numeric={numeric}/>}
    {c.isNew&&<SeismicInputs column={c} set={set} numeric={numeric}/>}
    {c.isNew&&<AdjacentBuildingInputs column={c} set={set} numeric={numeric}/>}
    {c.isNew?<ColumnBaseInputs project={project} update={update} numeric={numeric}/>:<>
@@ -257,5 +261,78 @@ function ColumnReviewInputs({column:c,set,numeric}:{column:ExistingColumnInput;s
    <label className="field"><span>Source of the site seismic data</span><input value={z.source} onChange={e=>set({siteSeismic:{...z,source:e.target.value}})}/></label>
    <div className="field-grid">{numeric('Largest D/C increase of existing lateral elements (IEBC)',z.alteration?.dcrIncrease??0,v=>set({siteSeismic:{...z,alteration:{source:z.alteration?.source??'',dcrIncrease:v}}}),'ratio')}</div>
    <label className="field"><span>Source of the alteration evaluation</span><input value={z.alteration?.source??''} onChange={e=>set({siteSeismic:{...z,alteration:{dcrIncrease:z.alteration?.dcrIncrease??0,source:e.target.value}}})}/></label></>}
+ </>;
+}
+
+/**
+ * A crane column tied to an existing building column: the building column the ties brace to (survey, existing effects,
+ * frame and service data), the column tie at the cap, the column spacing and the crane-column base.
+ */
+function CraneColumnInputs({project,update,numeric}:{project:ProjectInput;update:(fn:(p:ProjectInput)=>void)=>void;numeric:NumericField}){
+ const k=project.craneColumn!,b=k.building,t=k.columnTie;
+ const put=(patch:Partial<CraneColumnInput>)=>update(p=>{p.craneColumn={...p.craneColumn!,...patch};
+  // The crane-column base follows (the validator requires both axes on it).
+  const col=p.existingColumn;if(patch.base&&col)p.existingColumn={...col,strong:{...col.strong,base:patch.base},weak:{...col.weak,base:patch.base}};});
+ const building=(patch:Partial<ExistingColumnInput>)=>put({building:{...b,...patch}}),tie=(patch:Partial<CraneColumnInput['columnTie']>)=>put({columnTie:{...t,...patch}});
+ return <>
+  <div className="form-section-title"><span>01b</span>Building column and column tie</div>
+  <p className="form-note">The girder top-flange tie and the column tie at the cap carry the side thrust, the Appendix 6 brace forces and the runway's seismic force across the runway to this existing building column; it takes no runway vertical load. The column tie bolts through vertical long slots so the columns shorten independently.</p>
+  <div className="field-grid">
+   <label className="field"><span>Building column section</span><select value={aiscShapeByName(b.shape)?b.shape:''} onChange={e=>{const w=aiscShapeByName(e.target.value);building(w?{shape:w.name,d:w.d*25.4,bf:w.bf*25.4,tf:w.tf*25.4,tw:w.tw*25.4}:{shape:''});}}><option value="">Custom plates (no fillet credit)</option>{aiscWShapes.map(w=><option key={w.name} value={w.name}>{w.name}</option>)}</select></label>
+   {!aiscShapeByName(b.shape)&&<>{numeric('Depth d',b.d,v=>building({d:v}))}{numeric('Flange width bf',b.bf,v=>building({bf:v}))}{numeric('Flange thickness tf',b.tf,v=>building({tf:v}))}{numeric('Web thickness tw',b.tw,v=>building({tw:v}))}</>}
+   {numeric('Yield strength Fy',b.Fy,v=>building({Fy:v}),'stress')}
+   {numeric('Base to top lateral support',b.height,v=>building({height:v}))}
+   {numeric('Strong-axis effective length Lcx',b.Lcx,v=>building({Lcx:v}))}{numeric('Weak-axis effective length Lcy',b.Lcy,v=>building({Lcy:v}))}
+   <label className="field"><span>Building column · base</span><select value={b.strong.base} onChange={e=>building({strong:{...b.strong,base:e.target.value as 'pinned'|'fixed'}})}><option value="pinned">Pinned</option><option value="fixed">Fixed</option></select></label>
+   <label className="field"><span>Building column · top</span><select value={b.strong.top} onChange={e=>building({strong:{...b.strong,top:e.target.value as 'braced'|'free'}})}><option value="braced">Braced</option><option value="free">Sways</option></select></label>
+   {numeric('Crane column to building column (centerlines)',k.offset,v=>put({offset:v}),'length','Across the runway, positive away from the crane span; at least 2 in clear between the facing flanges and the column-tie lap.')}
+   <label className="field"><span>Crane column base</span><select value={k.base} onChange={e=>put({base:e.target.value as 'pinned'|'fixed'})}><option value="pinned">Pinned (four anchor rods)</option><option value="fixed">Fixed</option></select></label>
+  </div>
+  <div className="form-section-title"><span>01c</span>Building column · existing load effects</div>
+  <p className="form-note">Unfactored effects at the governing section from the building's own analysis, per load type; compression positive, moments added without sign credit.</p>
+  {existingLoadKeys.map(key=><div className="field-grid" key={key}>{(['P','Mx','My','V'] as const).map(q=>numeric(`${loadNames[key]} · ${{P:'axial P',Mx:'strong Mx',My:'weak My',V:'shear V'}[q]}`,b.existing[key][q],v=>building({existing:{...b.existing,[key]:{...b.existing[key],[q]:v}}}),q==='Mx'||q==='My'?'moment':'force',undefined,-1e15))}</div>)}
+  <label className="field"><span>Source of the building column survey and loads</span><input value={b.source} onChange={e=>building({source:e.target.value})}/></label>
+  <label className="checkbox-field"><input type="checkbox" checked={b.confirmed} onChange={e=>building({confirmed:e.target.checked})}/>Building column dimensions, material and existing load effects are confirmed from the stated source</label>
+  <ColumnReviewInputs column={b} set={building} numeric={numeric}/>
+  <div className="form-section-title"><span>01d</span>Column tie at the cap</div>
+  <div className="field-grid">
+   {numeric('Tie plate thickness',t.plate.thickness,v=>tie({plate:{...t.plate,thickness:v}}))}{numeric('Tie plate depth',t.plate.width,v=>tie({plate:{...t.plate,width:v}}))}
+   {numeric('Bolts in the slotted row',t.bolts.count,v=>tie({bolts:{...t.bolts,count:Math.max(2,Math.min(8,Math.round(v)))}}),'ratio')}
+   {numeric('Bolt diameter',t.bolts.diameter,v=>tie({bolts:{...t.bolts,diameter:v}}))}
+   <label className="field"><span>Bolt grade</span><select value={t.bolts.grade} onChange={e=>tie({bolts:{...t.bolts,grade:e.target.value as 'A325'|'A490'}})}><option value="A325">A325</option><option value="A490">A490</option></select></label>
+   {numeric('Bolt pitch',t.bolts.pitch,v=>tie({bolts:{...t.bolts,pitch:v}}))}{numeric('Bolt edge distance',t.bolts.edge,v=>tie({bolts:{...t.bolts,edge:v}}))}
+   {numeric('Vertical slot length',t.slot.length,v=>tie({slot:{...t.slot,length:v}}),'length','Travel each way: (slot length − sleeve outside diameter)/2, at least the larger column shortening plus the tolerance.')}{numeric('Slot width',t.slot.width,v=>tie({slot:{...t.slot,width:v}}))}
+   {numeric('Slot travel tolerance',k.tolerance??6.35,v=>put({tolerance:v}),'length',undefined,0)}
+  </div>
+  <label className="field"><span>Source of the crane-column arrangement</span><input value={k.source} onChange={e=>put({source:e.target.value})}/></label>
+ </>;
+}
+
+/**
+ * The step of an existing stepped column (the girder bears on it): the upper shaft, the geometry across the runway, the
+ * surveyed step cap and stiffener, and the signed existing effects in the upper shaft just above the step.
+ */
+function StepInputs({column:c,set,numeric}:{column:ExistingColumnInput;set:(patch:Partial<ExistingColumnInput>)=>void;numeric:NumericField}){
+ const st=c.step!,put=(patch:Partial<StepInput>)=>set({step:{...st,...patch}}),u=st.upper;
+ return <>
+  <div className="form-section-title"><span>01b</span>Stepped column · upper shaft and step</div>
+  <p className="form-note">The column above is the lower shaft and its seat the top of the step cap. The girder bears over the lower shaft's crane-side flange; the top-flange tie runs to the upper shaft's inner flange. Offsets across the runway from the lower-shaft centroid.</p>
+  <div className="field-grid">
+   <label className="field"><span>Upper shaft section</span><select value={aiscShapeByName(u.shape)?u.shape:''} onChange={e=>{const w=aiscShapeByName(e.target.value);put(w?{upper:{...u,shape:w.name,d:w.d*25.4,bf:w.bf*25.4,tf:w.tf*25.4,tw:w.tw*25.4},offset:(c.d-w.d*25.4)/2}:{upper:{...u,shape:''}});}}><option value="">Custom plates</option>{aiscWShapes.map(w=><option key={w.name} value={w.name}>{w.name}</option>)}</select></label>
+   {!aiscShapeByName(u.shape)&&<>{numeric('Upper depth d',u.d,v=>put({upper:{...u,d:v}}))}{numeric('Upper flange width bf',u.bf,v=>put({upper:{...u,bf:v}}))}{numeric('Upper flange thickness tf',u.tf,v=>put({upper:{...u,tf:v}}))}{numeric('Upper web thickness tw',u.tw,v=>put({upper:{...u,tw:v}}))}</>}
+   {numeric('Upper shaft Fy',u.Fy,v=>put({upper:{...u,Fy:v}}),'stress')}{numeric('Upper shaft Fu',u.Fu,v=>put({upper:{...u,Fu:v}}),'stress')}
+   {numeric('Upper shaft centroid outboard of the lower',st.offset,v=>put({offset:v}),'length','(d_l − d_u)/2 with the outer flanges flush.',-1e6)}
+   {numeric('Girder web from the lower-shaft centroid',st.girderOffset,v=>put({girderOffset:v}),'length','d_l/2 − t_fl/2: over the crane-side flange.',-1e6)}
+   {numeric('Upper shaft weak-axis length Lcy',st.upperLcy??c.Lcy,v=>put({upperLcy:v}))}
+   <label className="field"><span>Shaft construction</span><select value={st.construction??'rolled'} onChange={e=>put({construction:e.target.value as NonNullable<StepInput['construction']>})}><option value="rolled">Rolled W shapes</option><option value="built-up">Built-up (not modeled)</option><option value="laced">Laced or battened (not modeled)</option></select></label>
+   {numeric('Step cap thickness',st.cap.thickness,v=>put({cap:{...st.cap,thickness:v}}))}{numeric('Step cap width across',st.cap.width,v=>put({cap:{...st.cap,width:v}}))}{numeric('Step cap length along',st.cap.length,v=>put({cap:{...st.cap,length:v}}))}
+  </div>
+  <label className="checkbox-field"><input type="checkbox" checked={!!st.stiffener} onChange={e=>put({stiffener:e.target.checked?{thickness:12.7,width:Math.max(25.4,Math.floor((c.bf/2-c.tw/2-6.35)/6.35)*6.35),weld:7.9375}:undefined})}/>Step stiffener pair in the lower shaft under the upper shaft's inner flange</label>
+  {st.stiffener&&<div className="field-grid">{numeric('Stiffener thickness',st.stiffener.thickness,v=>put({stiffener:{...st.stiffener!,thickness:v}}))}{numeric('Stiffener width',st.stiffener.width,v=>put({stiffener:{...st.stiffener!,width:v}}))}{numeric('Stiffener fillet',st.stiffener.weld,v=>put({stiffener:{...st.stiffener!,weld:v}}))}</div>}
+  <div className="form-section-title"><span>01c</span>Upper shaft · existing effects at the step (signed)</div>
+  <p className="form-note">Positive Mx bends the upper shaft just above the step the same way as the crane reaction moment; a roof moment that relieves it is entered negative. Gravity effects keep their sign; W and E are applied in both directions.</p>
+  {existingLoadKeys.map(key=><div className="field-grid" key={key}>{(['P','Mx','My','V'] as const).map(q=>numeric(`${loadNames[key]} · ${{P:'axial P',Mx:'strong Mx',My:'weak My',V:'shear V'}[q]}`,st.existingUpper[key][q],v=>put({existingUpper:{...st.existingUpper,[key]:{...st.existingUpper[key],[q]:v}}}),q==='Mx'||q==='My'?'moment':'force',undefined,-1e15))}</div>)}
+  <label className="field"><span>Source of the step survey and upper-shaft effects</span><input value={st.source} onChange={e=>put({source:e.target.value})}/></label>
+  <label className="checkbox-field"><input type="checkbox" checked={st.confirmed} onChange={e=>put({confirmed:e.target.checked})}/>Step geometry, cap and upper-shaft effects are confirmed from the stated source</label>
  </>;
 }

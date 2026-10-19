@@ -26,7 +26,8 @@ export function conflictView(id:string):ViewRender{
 }
 
 /**
- * HOLD tags: each open item with a failing check, at the views that draw its part, so a detail is never read as final
+ * HOLD tags: each open item with a failing check (and the crane-column footing coordination item, unverified: the
+ * isolated footing drawn is not built until the combined or enlarged footing is designed), at the views that draw its part, so a detail is never read as final
  * while the calculation fails it. An item maps to views by the report's element of its governing check (openItemGroups),
  * and register points and fit rules by their ids; one that maps to no view is listed on S-00 (OPEN ITEMS).
  */
@@ -57,7 +58,9 @@ const byElement:Record<string,RegExp>={
 const cache=new WeakMap<CheckResult[],Hold[]>();
 export function holdsFor(s:CalculationSnapshot):Hold[]{
  let v=cache.get(s.checks);if(v)return v;
- v=sheetOpenGroups(s).filter(g=>g.members.some(c=>c.status==='fail')).map(g=>{
+ const coordination=(c:CheckResult)=>c.id==='crane-column-footing-clearance'&&c.status==='unverified';
+ v=sheetOpenGroups(s).filter(g=>g.members.some(c=>c.status==='fail'||coordination(c))).map(g=>{
+  if(coordination(g.governing))return {group:g,check:g.governing,views:/^FOOTING \/ PLAN$/,text:'OPEN ITEM: FOOTING COORDINATION'};
   const c=g.members.find(m=>m.status==='fail')===g.governing?g.governing:g.members.find(m=>m.status==='fail')!;
   const views=byId.find(([re])=>re.test(c.id))?.[1]??byElement[g.element];
   const dc=c.geometry?undefined:g.kind==='clash'||g.kind==='detailing'?checkDc(c):g.dc;

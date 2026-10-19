@@ -16,7 +16,7 @@ import {compactReport} from '../src/report/compactReport';
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&')).join(' ');
 
 describe('stepped column drawings',()=>{
- for(const [name,stiffened] of [['c-stepped-20t',true],['c-stepped-10t',false]] as const)it(`${name}: the stepped column details, S-01 and S-00 show the step, and no bracket that does not exist`,()=>{
+ for(const [name,stiffened] of [['t15',true],['t16',false]] as const)it(`${name}: the stepped column details, S-01 and S-00 show the step, and no bracket that does not exist`,()=>{
   const s=sheetFixture(name),topics=detailTopics(s),topic=topics.find(t=>t.key==='stepped-column');
   expect(topic?.views.map(v=>v.title)).toEqual([steppedColumnTitles.elevation,steppedColumnTitles.section,...(stiffened?[steppedColumnTitles.stiffener]:[])]);
   expect(topics.flatMap(t=>t.views.map(v=>v.title))).not.toContain(detailTitles.bearing);

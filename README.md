@@ -38,10 +38,12 @@ Open http://127.0.0.1:5173. The report service binds to 127.0.0.1:4174. For the 
 
 The **Templates** tab (opened first when no project is saved on the device) is the shortest way to a complete runway package.
 
-- **Twelve templates** cover the common arrangements:
+- **Sixteen templates** cover the common arrangements:
   - welded twin-rib seats, haunched seats, rolled W-stub brackets and built-up tapered haunches on existing columns;
   - brackets by others;
   - new freestanding columns with welded brackets or column caps;
+  - separate crane columns beside the existing building columns, the girders on their column caps and tied to the building columns (t13, 15 t; t14, 25 t CMAA D, Class B);
+  - existing stepped columns with the girders on the step (t15, rolled girders and paired bars; t16, capped girders and cap tieback angles, which also covers a column extension);
   - a continuous girder, two cranes, heavy CMAA D duty and a light 2-ton runway;
   - a girder-only analysis.
 
@@ -50,7 +52,7 @@ The **Templates** tab (opened first when no project is saved on the device) is t
   - the crane's capacity, span, operation, CMAA class and number of cranes;
   - the runway's bays, bay length, girder system, top of rail and AIST building class;
   - the girder type, with the section optional;
-  - the supports: existing building or new columns, support, tieback, column and reach.
+  - the supports: existing building or new columns, support, tieback, column and reach; for a crane column, the building column beside it and the crane-column base (the reach is then the girder web to the building column face); for a stepped column, the lower and upper shafts (the reach follows from the step).
 
   It generates every dependent input:
   - crane wheel loads with consistent statics (both runways sum to the crane weight; TR-13 §1.5.6.1 data), bridge speed and a bumper selected for the 16 ft/s² limit;
@@ -59,9 +61,11 @@ The **Templates** tab (opened first when no project is saved on the device) is t
   - the girder, sized for the moving loads with the top flange's lateral bending, warping, load height and second-order twist;
   - bearings, ties (sized for the imposed end movement as well as the tie force, with a released column end or another tie type when one cannot pass), end stops and the bracket or column cap, sized by the engine's own sizing routines;
   - bolted slip-critical field splices for continuous girders longer than a 60 ft piece;
-  - the existing or new columns, their bases (with anchor rod, base weld and brace rod fatigue) and the longitudinal bracing.
+  - the existing or new columns, their bases (with anchor rod, base weld and brace rod fatigue) and the longitudinal bracing;
+  - for a crane column, the crane column on its cap, the column tie with its vertical slots and the building column's checks under the tie forces; for a stepped column, the lower shaft deep enough for the tie to the upper shaft, the step cap and a step stiffener where the web needs one;
+  - weld-on rail clips, switched to bolted clamp plates where the clip base welds fail their fatigue or strength estimate.
 
-  Choices that cannot go together are adjusted at once, with the reason shown. A support reaction above the AIST TR-13 §5.9.2 recommendation for column brackets (about 50 kip) moves new structures to column caps and warns on existing ones. The summary shows the crane data, duty, rail and sized girder before you build.
+  Choices that cannot go together are adjusted at once, with the reason shown. A support reaction above the AIST TR-13 §5.9.2 recommendation for column brackets (about 50 kip) moves new structures to column caps and warns on existing ones, naming crane columns tied to the building columns as the remedy (an existing configuration is not switched). Crane columns and column steps are direct column bearing and take no bracket warning. Where a crane-column footing overlaps the existing building-column footing, the clearance check stays an open coordination item (unverified): a combined or enlarged footing by the foundation engineer for the crane-column base reactions listed on S-00 and in the open items. The summary shows the crane data, duty, rail and sized girder before you build.
 - **Configurator selections.** Every member or part the configurator chose or changed (girder, support, tie, column, reach, splices) is listed with the configuration as entered, the design and the governing reason: under the project on the Templates tab, near the top of the report and on S-00.
 - **Analysis only.** The girder-only template produces an analysis record (S-00 and S-01, ANALYSIS ONLY - NOT FOR CONSTRUCTION) with the support reactions and the restraint the analysis assumed as requirements for the connections by others.
 - **Template data.** Supplier, survey and site data are fictitious examples, marked as such. A template builds a demonstration-purpose project. Switching the report purpose to a project blocks issue until every example item is replaced.

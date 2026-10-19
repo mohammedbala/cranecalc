@@ -22,11 +22,19 @@ const simulated:Record<string,RunwayConfig>={
  '034':cfg('034',{capacity:35,craneSpan:85,control:'cab',cmaa:'D',buildingClass:'C',bays:3,span:35,railElevation:24,support:'haunched-seat',tie:'cap-angle'}),
  '061':cfg('061',{capacity:35,craneSpan:91,control:'cab',cmaa:'D',buildingClass:'B',bays:5,span:35,railElevation:29,support:'tapered-haunch',tie:'paired-bars'}),
  '070':cfg('070',{capacity:1,craneSpan:59,control:'pendant',cmaa:'C',buildingClass:'C',bays:3,span:40,railElevation:29,structure:'new',support:'twin-rib',tie:'paired-bars'}),
+ // Crane columns and stepped columns beyond the templates: continuous girders, a capped girder with cap angles, a fixed
+ // crane-column base with a configured reach, and configured shafts.
+ 'CC1':cfg('CC1',{capacity:15,craneSpan:60,control:'cab',cmaa:'C',buildingClass:'C',bays:4,span:25,railElevation:24,girder:'rolled',system:'continuous',support:'crane-column',tie:'paired-bars'}),
+ 'CC2':cfg('CC2',{capacity:10,craneSpan:60,control:'cab',cmaa:'C',buildingClass:'C',bays:3,span:25,railElevation:22,support:'crane-column',tie:'cap-angle'}),
+ 'CC3':cfg('CC3',{capacity:20,craneSpan:70,control:'cab',cmaa:'C',buildingClass:'C',bays:3,span:30,railElevation:28,girder:'rolled',support:'crane-column',tie:'paired-bars',craneColumnBase:'fixed',reach:28}),
+ 'ST1':cfg('ST1',{capacity:15,craneSpan:60,control:'cab',cmaa:'C',buildingClass:'C',bays:4,span:25,railElevation:26,girder:'rolled',system:'continuous',support:'stepped-column',tie:'paired-bars'}),
+ 'ST2':cfg('ST2',{capacity:20,craneSpan:70,control:'cab',cmaa:'D',buildingClass:'B',bays:3,span:30,railElevation:30,girder:'rolled',support:'stepped-column',tie:'paired-bars',columnShape:'W40X199',buildingColumnShape:'W14X145'}),
 };
 
 describe('configurator project validity',()=>{
- for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);});
- for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project`,()=>{expect(validateProject(buildProject(c))).toEqual([]);});
+ // t13 to t16: the crane columns tied to the building columns and the stepped columns (girder on the step).
+ for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
+ for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project`,()=>{expect(validateProject(buildProject(c))).toEqual([]);},300000);
  it('a cap tieback angle that fits no column flange falls back to paired bars, with the reason in the selections log',()=>{
   const p=buildProject({...simulated['017'],columnShape:'W14X61'});
   expect(validateProject(p)).toEqual([]);

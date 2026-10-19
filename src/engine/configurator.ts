@@ -12,12 +12,13 @@ import {runwayConfigSchema,supportLabels,tieLabels,type ConfigSelection,type Run
 import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationProject} from './demonstration';
 import {neutralDetails} from './detailTemplate';
 import {sizeEndStop} from './endStopSizing';
-import {emptyCraneDesign,craneDesignMinimum} from './aistLoads';
+import {emptyCraneDesign,craneDesignMinimum,craneCombinations} from './aistLoads';
+import {railClipResponse} from './railClip';
 import {emptyCapDesign} from './capDesignInputs';
 import {aiscWShapes,aiscShapeByName,loadAiscSection} from '../data/aiscSections';
 import {aiscChannelByName,loadCappedSection} from '../data/aiscChannels';
 import {sectionProperties} from './section';
-import {girderStrength} from './aiscStrength';
+import {available,girderStrength} from './aiscStrength';
 import {movingAnalysis} from './analysis';
 import {fatigueSpectrumBin,railClipCategory} from './detailAnalysis';
 import {selectBracketArrangement,selectTieArrangement,tieArrangement,tieOptions} from './connectionOptions';
@@ -86,6 +87,12 @@ export function normalizeConfig(input:RunwayConfig):{config:RunwayConfig;changes
  fix(c.support==='by-others'&&c.system==='continuous',{support:'twin-rib'},'A continuous girder needs a seat designed here for the stiffener ties: the support is the welded twin-rib seat.');
  // The girder web over the lower shaft's crane-side flange sets a stepped column's reach (the step geometry).
  if(c.support==='stepped-column'&&c.reach!==undefined){delete c.reach;changes.push('On a column step the girder bears over the lower shaft\'s crane-side flange: the reach comes from the column geometry, not the entered reach.');}
+ // The lower shaft of a stepped column holds the upper shaft within its flanges (validateSteppedColumn) with the tie room
+ // past the girder flange that withSteppedColumn gives its own choice: at least as wide, and d_l − d_u − t_fl/2 at least
+ // the girder half flange (the named girder or cap, else the least 8 1/2 in flange) plus 6 in.
+ if(c.support==='stepped-column'&&c.columnShape){const lo=aiscShapeByName(c.columnShape),hi=aiscShapeByName(c.buildingColumnShape??existingColumnFor(c.capacity));
+  const girder=c.girder==='capped'?aiscChannelByName(c.capChannel??'')?.d:aiscShapeByName(c.girderShape??'')?.bf,half=(girder??8.5)/2;
+  if(lo&&hi&&(lo.bf<hi.bf-1e-9||lo.d-hi.d-lo.tf/2-half<6-1e-9)){changes.push(`The lower shaft of a stepped column holds the upper shaft within its flanges, at least as wide and deep enough for the top-flange tie past the girder flange (6 in of tie room): the ${c.columnShape} lower shaft does not hold the ${hi.name} upper shaft so, and the lower shaft is chosen for the crane.`);delete c.columnShape;}}
  return {config:c,changes,rules};
 }
 /** One configuration choice a rule changed (normalizeConfig, or the AIST column-bracket screen): the field, as it was, as it became and why. */
@@ -184,6 +191,26 @@ export function railClipFatigue(p:ProjectInput){
  const vertical=(a.demand.moment-a.deadMoment)/(1+impact)*(s.d+(s.kind==='cap'?s.capTw:0)-pr.cy)/pr.Ix,lateral=a.demand.lateralMoment*half/Iyt,range=vertical+lateral;
  const category=railClipCategory(clip),allowable=fatigueSpectrumBin(category,range,cycles).allowable,ratio=range/allowable,ksiOf=(v:number)=>p.units==='SI'?`${v.toFixed(1)} MPa`:`${(v/6.894757).toFixed(2)} ksi`;
  return {ratio,why:`Weld-on clip bases on the ${s.kind==='cap'?'cap channel web':'top flange'} are an AISC Table A-3.1 item 7.1 attachment, Category ${category==='E1'?'E′':category}: the estimated top-plate range ${ksiOf(range)} (rated-lift crane moment without impact plus the top-flange lateral bending under the side thrust) at all ${cycles.toLocaleString('en-US')} cycles exceeds F_SR = ${ksiOf(allowable)} (ratio ${ratio.toFixed(2)}, the project's all-cycle method). Bolted clamp plates leave holes for pretensioned bolts (item 2.2, Category B), as AISC DG7 and AIST TR-13 allow.`};
+}
+/**
+ * The weld-on clip base welds' strength before the analysis (rail-clip-weld, railChecks.ts): the factored side thrust of
+ * the wheel group at a clip station, every wheel within the clip window (the clip spacing, at least 2(h_r + t_f), as
+ * detailAnalysis groups them; two cranes at their minimum separation counted as wheels of one group where they fall in
+ * it), the largest side-thrust factor of the strength combinations, on ONE clip in both of its roles (railClipResponse,
+ * no sharing with the neighboring clips), against φ(0.6F_EXX) (AISC 360-16 J2.4). ratio > 1: the clips are bolted clamp
+ * plates instead (no base welds), as AISC DG7 and AIST TR-13 allow.
+ */
+export function railClipWeldStrength(p:ProjectInput){
+ const clip=p.details?.rail.clip;
+ if(!clip||clip.type==='bolted'||!p.aist)return {ratio:0,why:''};
+ const window=Math.max(p.aist.clipSpacing,2*(p.aist.railDepth+p.section.tf)),factor=Math.max(0,...craneCombinations(p.method,p.aist.concurrency==='full').map(c=>c.h));
+ // Wheels along the rail: the cranes in order, each next crane at the minimum separation past the last wheel.
+ const wheels:{x:number;h:number}[]=[];let start=0;
+ for(const c of p.cranes){for(const w of c.wheels)wheels.push({x:start+w.offset,h:w.lateral});start+=Math.max(0,...c.wheels.map(w=>w.offset))+c.minSeparation;}
+ const H=factor*Math.max(0,...wheels.map(w=>sum(wheels.filter(v=>v.x>=w.x-1e-6&&v.x<=w.x+window+1e-6).map(v=>v.h))));
+ const stress=railClipResponse(p,H).weldStress,Fexx=p.details!.material.Fexx,capacity=available(.6*Fexx,p.method,.75,2),ratio=stress/capacity;
+ const kipOf=(v:number)=>p.units==='SI'?`${(v/1000).toFixed(1)} kN`:`${(v/kip).toFixed(1)} kip`,ksiOf=(v:number)=>p.units==='SI'?`${v.toFixed(0)} MPa`:`${(v/ksi).toFixed(1)} ksi`;
+ return {ratio,why:`The weld-on clip base welds: the factored side thrust ${kipOf(H)} of the wheel group at a clip station on one clip gives a weld stress ${ksiOf(stress)} against φ(0.6F_EXX) = ${ksiOf(capacity)} (ratio ${ratio.toFixed(2)}, AISC 360-16 J2.4). Bolted clamp plates have no base welds (holes for pretensioned bolts through the top plate, AISC Table A-3.1 item 2.2, Category B), as AISC DG7 and AIST TR-13 allow.`};
 }
 /** Least flange width (W, or the cap web inside the channel flanges) that seats the rail and its clips. */
 export function seatWidthNeeded(depth:number,clipWidth:number,tolerance=.125*inch){return 2*(tolerance+up(depth,1.5875)/2+clipWidth);}
@@ -383,17 +410,23 @@ function screened(input:RunwayConfig){
   const why=`The support reaction, ${about}, exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets: the girders bear on column caps over the new crane columns (direct column bearing).`;
   changes.push(why,...n.changes);rules.push({field:'support',from:cfg.support,to:'column-cap',why},...n.rules);
   cfg=n.config;sk=skeleton(cfg);
- }else changes.push(`Support reaction ${about} exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets; consider new crane columns with column caps, or obtain the engineer of record's acceptance.`);
+ }else changes.push(`Support reaction ${about} exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets; consider new crane columns tied to the building columns, the girders on their column caps (support: ${supportLabels['crane-column']}), or obtain the engineer of record's acceptance.`);
  return {config:cfg,changes,sk,reaction:R,rules,entered};
 }
 
 /** What a configuration will produce, for the configurator's summary: crane data, duty, rail and girder. */
 export function previewConfig(input:RunwayConfig){
  const {config:cfg,changes,sk,reaction}=screened(input),{p,depth,trial,spectrum}=sk;
- const crane=estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control),structure=cfg.scope==='analysis'?undefined:cfg.support==='crane-column'?(cfg.columnShape??craneColumnFor(cfg.capacity)):cfg.structure==='new'?(cfg.columnShape??newColumnFor(cfg.capacity)):cfg.support==='by-others'?undefined:(cfg.columnShape??existingColumnFor(cfg.capacity));
+ const crane=estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control),design=cfg.scope!=='analysis';
+ // The supporting column (a crane column, or a stepped column's lower shaft: the build may deepen it for the tie) and the
+ // building column beside it, or the stepped column's upper shaft.
+ const structure=!design?undefined:cfg.support==='crane-column'?(cfg.columnShape??craneColumnFor(cfg.capacity)):cfg.support==='stepped-column'?(cfg.columnShape??steppedLowerFor(cfg.capacity)):cfg.structure==='new'?(cfg.columnShape??newColumnFor(cfg.capacity)):cfg.support==='by-others'?undefined:(cfg.columnShape??existingColumnFor(cfg.capacity));
+ const building=design&&(cfg.support==='crane-column'||cfg.support==='stepped-column')?(cfg.buildingColumnShape??existingColumnFor(cfg.capacity)):undefined;
  // The assumed end-truck geometry is stated with the changes (the crane supplier confirms it).
  if(cfg.scope==='design')changes.push(overhangNote(crane));
- return {config:cfg,changes,crane,spectrum,railDepth:depth,girder:p.section.name,trial:trial&&{utilization:trial.utilization,deflection:trial.deflection,lateral:trial.lateral,weight:trial.weight},column:structure,verticalLimit:p.verticalLimit,
+ return {config:cfg,changes,crane,spectrum,railDepth:depth,girder:p.section.name,trial:trial&&{utilization:trial.utilization,deflection:trial.deflection,lateral:trial.lateral,weight:trial.weight},column:structure,
+  /** The existing building column beside a crane column, or the upper shaft of a stepped column. */
+  buildingColumn:building,verticalLimit:p.verticalLimit,
   /** Largest unfactored support reaction (all cranes, impact, dead load), for the AIST column-bracket recommendation. */
   reaction,
   /** AIST TR-13 crane type and the side-thrust rule it takes. */
@@ -427,8 +460,9 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  d.spectrum=spectrum.bins;p.fatigue.cycles=N;
  // The clip base as a fatigue detail on the top plate, by the project's method: bolted clamp plates where the weld-on
  // base does not pass (railClipFatigue); the top-flange comparison point FT1 takes the clip's category.
- const clipFatigue=railClipFatigue(p);
- if(clipFatigue.ratio>1){r.clip=exampleClip(r.baseWidth,depth,r.clip.weld,'bolted');trace.clip=clipFatigue.why;}
+ const clipFatigue=railClipFatigue(p),clipStrength=railClipWeldStrength(p);
+ // The base welds' strength as well (railClipWeldStrength): the clips are bolted where either fails.
+ if(clipFatigue.ratio>1||clipStrength.ratio>1){r.clip=exampleClip(r.baseWidth,depth,r.clip.weld,'bolted');trace.clip=[clipFatigue.ratio>1?clipFatigue.why:'',clipStrength.ratio>1?clipStrength.why:''].filter(Boolean).join(' ');}
  const ft=d.fatigueDetails.find(v=>v.id==='FT1'),category=railClipCategory(r.clip);
  if(ft)Object.assign(ft,{category,name:`Top flange at longest-bay midspan, category ${category==='E1'?'E′':category}`,reference:`AISC 360 Table A-3.1 · top-flange comparison point at the rail clip ${r.clip.type==='bolted'?'bolt holes (item 2.2)':'base welds (item 7.1)'}; rail clip stations are checked automatically`});
  p.railWeight=railArea(r)*7850*g/1e9;

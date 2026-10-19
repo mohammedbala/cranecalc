@@ -55,7 +55,7 @@ function tie(p:ProjectInput){
 }
 function support(p:ProjectInput){
  const cap=activeColumnCap(p);
- if(cap)return `Column cap ${plate(p,cap.plate.thickness,cap.plate.width,cap.plate.length)}, ${plateInches(cap.weld,p.units)} fillet all around; cap stiffeners PL ${plateInches(cap.stiffener.thickness,p.units)}`;
+ if(cap)return `Column cap ${plate(p,cap.plate.thickness,cap.plate.width,cap.plate.length)}, ${cap.joint==='cjp'?`CJP to the column with ${plateInches(cap.weld,p.units)} reinforcing fillets`:`${plateInches(cap.weld,p.units)} fillet all around`}; cap stiffeners PL ${plateInches(cap.stiffener.thickness,p.units)}`;
  const st=stepGeometry(p);if(st)return `Girder on the existing step cap ${plate(p,st.cap.thickness,st.cap.width,st.cap.length)} over the lower shaft's crane-side flange, web ${len(p,st.girderWeb)} from the lower centroid${st.stiffener?`; step stiffeners 2-PL ${plateInches(st.stiffener.thickness,p.units)} × ${plateInches(st.stiffener.width,p.units)}`:''}`;
  const b=p.details?.bracket;if(!b?.enabled)return 'Girder seat by others (support reactions are reported for its design)';
  const kind=b.arrangement??'twin-rib';

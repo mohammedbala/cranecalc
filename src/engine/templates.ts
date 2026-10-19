@@ -1,5 +1,5 @@
 /**
- * Configuration templates: a dozen common crane runway arrangements, each a set of configurator choices
+ * Configuration templates: sixteen common crane runway arrangements, each a set of configurator choices
  * (RunwayConfig). Loading a template builds the complete example project with buildProject; every choice stays
  * editable in the configurator, which rebuilds the project from the edited choices.
  */
@@ -57,6 +57,18 @@ export const runwayTemplates:RunwayTemplate[]=[
  t('t12','Girder analysis only · supplied loads','Quick check: 10-ton crane on three 25-ft bays, girder only',
   'The girder alone under the supplied crane loads: moving-load envelopes, strength, deflection and fatigue of the girder without connections, supports or drawings. Use it to size a girder before starting the detailed design.',
   ['Analysis only','Rolled girder','Quick check'],{capacity:10,craneSpan:60,control:'cab',bays:3,span:25,scope:'analysis'}),
+ t('t13','Existing building · separate crane columns','15-ton cab crane on new crane columns beside the existing building columns, tied to them',
+  'Where the reactions are past what brackets on the building columns should take (AIST TR-13 §5.9.2): four 25-ft rolled girders on column caps over new W14 crane columns, each on a pinned base plate, anchor rods and a spread footing beside an existing building column. Paired flat-bar ties at the bearing stiffeners and a column tie with vertical slots carry the side thrust to the building column, so the two columns shorten independently; crane-level rod X-bracing between the crane columns takes the longitudinal forces. The building columns take no runway vertical load and are checked for the tie forces with their existing load effects; the footing beside the existing footing is coordinated with the foundation engineer. (A flexible plate on a welded flange saddle does not suit this arrangement: tied to the more flexible building column the girder twists more at the supports, and the saddle fails fatigue.)',
+  ['Existing building','Crane column','Column cap','Paired bars'],{capacity:15,craneSpan:60,control:'cab',bays:4,span:25,support:'crane-column',tie:'paired-bars',railElevation:24}),
+ t('t14','Heavy duty · crane columns beside an existing frame','25-ton cab crane, CMAA D, Class B, on crane columns tied to the existing frame',
+  'A heavy-service runway (CMAA Class D crane, AIST Class B building, L/1000 vertical deflection) carried on its own crane columns instead of brackets on the building frame: rolled girders on column caps over new W14 crane columns, paired-bar top-flange ties and slotted column ties to the existing frame columns, base plates, footings and crane-level rod bracing. Fatigue governs the cap welds, ties and rail clips. Compare with t10, the same duty on built-up haunches welded to the building columns.',
+  ['Existing building','Heavy duty','Crane column','Fatigue'],{capacity:25,craneSpan:70,control:'cab',cmaa:'D',buildingClass:'B',bays:4,span:30,support:'crane-column',tie:'paired-bars',railElevation:30}),
+ t('t15','Existing stepped columns · girder on the step','20-ton cab crane on the steps of existing stepped mill-building columns',
+  'A runway replacement in a mill building: four 30-ft rolled girders bearing on the steps of the existing stepped columns, over the lower shafts\' crane-side flanges, with paired-bar top-flange ties to the upper shafts. The stepped columns are checked as two-shaft columns with their existing load effects, the effective lengths from a buckling analysis, and the step is checked locally (bearing, cap plate, web yielding and crippling, panel shear, with a step stiffener where it needs one).',
+  ['Existing building','Stepped column','Rolled girder','Paired bars'],{capacity:20,craneSpan:70,control:'cab',bays:4,span:30,support:'stepped-column',tie:'paired-bars',railElevation:32}),
+ t('t16','Stepped columns · capped girder, cap tieback angles','10-ton cab crane, capped girders on column steps with cap tieback angles',
+  'Capped girders on the steps of existing stepped columns, with cap tieback angles bolted to the channel caps and the upper shafts, end bearings and stops. The same arrangement covers a column extension (an upper shaft added on an existing column, a step with small offsets): enter the extension as the upper shaft.',
+  ['Existing building','Stepped column','Capped girder','Cap angle'],{capacity:10,craneSpan:60,control:'cab',bays:3,span:25,girder:'capped',support:'stepped-column',tie:'cap-angle',railElevation:26}),
 ];
 
 export const templateById=(id:string)=>runwayTemplates.find(v=>v.id===id);

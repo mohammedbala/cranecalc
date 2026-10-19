@@ -3,7 +3,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {activeEndBearing,endBearingGeometry} from '../engine/endBearing';
 import {columnCapGeometry,type CapBearing} from '../engine/columnCap';
-import {activeColumnCap} from '../engine/columnCapInputs';
+import {activeColumnCap,capCjp} from '../engine/columnCapInputs';
 import {activeStep} from '../engine/steppedColumnInputs';
 import {steppedColumnTitles} from './steppedColumnSheet';
 import {boltProperties} from '../engine/connectionStrength';
@@ -95,7 +95,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   const right:Item[]=[
    {at:[X(b.tw/2),Y(yb+b.tf+web*.7)],labels:['TYP. BOTH STIFFENERS',cjp?'CONT. WEB FILLETS, CJP TO TOP FL.':'CONT. WEB & FLANGE FILLETS',cjp?'FIT BOTTOM END':'FIT / MILL STIFFENER ENDS'],weld:size(bs.weldSize)},
    {at:[X(cap.plate.width/2),Y(-tc/2)],labels:[`${capLabel},`,'ASTM A572 GR. 50']},
-   {at:[X(col.d/2),Y(-tc)],labels:['CAP TO COLUMN: FLANGES BOTH','FACES, WEB BOTH SIDES'],weld:size(cap.weld),allAround:true},
+   {at:[X(col.d/2),Y(-tc)],labels:capCjp(cap)?['CAP TO COLUMN: CJP FLANGES','& WEB, REINF. FILLETS']:['CAP TO COLUMN: FLANGES BOTH','FACES, WEB BOTH SIDES'],weld:size(cap.weld),allAround:true},
    ...(stiff?[{at:[X(col.d/2-col.tf),Y(-tc-hs*.6)] as XY,labels:['CAP STIFFENER TO EACH FLANGE,',`WHERE SHOWN ON ${groups.filter(o=>g.grids[o.grid].stiffeners.length).map(o=>o.mark).join(', ')}`],weld:size(cap.stiffener.weld)}]:[]),
    {at:[X(col.d/2),Y(cb+below*.3)],labels:[`${colName}, ASTM A992,`,'TOP MILLED TO BEAR ON THE CAP']}
   ];
@@ -169,7 +169,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(pieces[0][0]+(pieces[0][1]-pieces[0][0])*.7),Y(yb+b.tf)],labels:[`${b.name} GIRDER`,p.system==='continuous'?(bearings[0].end?'GIRDER END':'CONTINUOUS OVER COLUMN'):'GIRDER ENDS, GAP PER S-01']},
    {at:[X(bearings[0].x1),Y(bt/2)],labels:[`BEARING PL ${size(bt)} X ${dim(bs.width)} X ${dim(bs.length)}`,`${locating?'LOCATING':'SLIDING'}${bearings.length>1?' / SLIDING':''}; SEE ${detailRef(bearingBoltsTitle(p))}`]},
    {at:[X(cap.plate.length/2),Y(-tc/2)],labels:[`${grp.mark}: ${capLabel}`]},
-   {at:[X(col.bf/2),Y(-tc)],labels:['CAP TO COLUMN, ALL AROUND'],weld:size(cap.weld),allAround:true},
+   {at:[X(col.bf/2),Y(-tc)],labels:[capCjp(cap)?'CAP TO COLUMN, CJP + REINF.':'CAP TO COLUMN, ALL AROUND'],weld:size(cap.weld),allAround:true},
    ...(stiff?[{at:[X(grid.stiffeners.at(-1)!+ts/2),Y(-tc-hs*.7)] as XY,labels:[`CAP STIFFENER PL ${size(ts)} X ${size(hs)}`,`X ${dim(g.clear)}, ${size(g.clip)} CLIPS, FIT TO BEAR`,'UNDER GIRDER BRG. STIFFENER']}]:[]),
    {at:[X(col.bf/2),Y(cb+below*.3)],labels:[colName,'MILLED TOP']}
   ];
@@ -193,7 +193,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
  const r=s.detailResults?.columnCap,peak=r?Math.max(...r.grids.flatMap(v=>v.bearings.map(x=>x.R.value))):0;
  const rows=[
   ['CAP PLATE',`${groups.map(v=>v.mark).join(', ')}: ${capLabel}, ASTM A572 GR. 50`],
-  ['CAP WELD',`${weld(cap.weld)} FILLET ALL AROUND THE COLUMN: FLANGES BOTH FACES, WEB BOTH SIDES`],
+  ['CAP WELD',capCjp(cap)?`CJP GROOVE WELDS, COLUMN FLANGES AND WEB TO THE CAP, ${weld(cap.weld)} REINFORCING FILLETS BOTH FACES; UT`:`${weld(cap.weld)} FILLET ALL AROUND THE COLUMN: FLANGES BOTH FACES, WEB BOTH SIDES`],
   ...(g.stiffened?[['CAP STIFFENERS',`PL ${size(ts)} X ${size(hs)} X ${dim(g.clear)} BETWEEN THE FLANGES, ${weld(cap.stiffener.weld)} FILLETS BOTH FACES TO EACH FLANGE`]]:[]),
   ['BEARING BOLTS',`4 - ${size(db)} DIA. ${eb.bolts.grade} AT EACH GIRDER ${p.system==='continuous'?'BEARING':'END'}, THRU FLANGE, BEARING PL AND CAP`],
   [`LARGEST GIRDER END REACTION (${p.method})`,r?force(peak):'-'],
@@ -205,7 +205,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
  ];
  const notes=[
   `THE RUNWAY GIRDERS BEAR DIRECTLY ON THE NEW COLUMNS, CENTERED ON THEM (AIST TR-13 §5.9.2): NO BRACKETS. MILL THE COLUMN TOP SQUARE AND FIT THE CAP PLATE TO FULL BEARING BEFORE WELDING (AISC 360 J1.4).`,
-  `CAP PLATE ASTM A572 GR. 50, SHOP WELDED ALL AROUND THE COLUMN WITH ${weld(cap.weld)} FILLETS, E70XX LOW HYDROGEN. DRILL OR SUB-PUNCH AND REAM THE ${size(hole)} BEARING BOLT HOLES TO A TEMPLATE MATCHING THE GIRDER FLANGE AND BEARING PLATE; ERECTION ADJUSTMENT AT THE COLUMN BASE (S-00, CRANE RUNWAY INSTALLATION); NO OVERSIZED OR SLOTTED HOLES OR SHIMS AT THE CAP.`,
+  `CAP PLATE ASTM A572 GR. 50, SHOP WELDED ALL AROUND THE COLUMN WITH ${capCjp(cap)?`CJP GROOVE WELDS (COLUMN FLANGES AND WEB BEVELED, BACKGOUGED OR ON BACKING REMOVED) AND ${weld(cap.weld)} REINFORCING FILLETS`:`${weld(cap.weld)} FILLETS`}, E70XX LOW HYDROGEN. DRILL OR SUB-PUNCH AND REAM THE ${size(hole)} BEARING BOLT HOLES TO A TEMPLATE MATCHING THE GIRDER FLANGE AND BEARING PLATE; ERECTION ADJUSTMENT AT THE COLUMN BASE (S-00, CRANE RUNWAY INSTALLATION); NO OVERSIZED OR SLOTTED HOLES OR SHIMS AT THE CAP.`,
   ...(g.stiffened?[`CAP STIFFENERS UNDER EACH GIRDER BEARING STIFFENER NOT OVER THE COLUMN WEB: FIT TO BEAR AGAINST THE CAP, CLIP THE TOP CORNERS ${size(g.clip)} TO CLEAR THE CAP FILLETS, WELD TO BOTH FLANGES BEFORE THE CAP IS WELDED.`]:[]),
   `THE GIRDER ENDS ARE HELD AGAINST TWIST BY THEIR BEARING STIFFENERS AND THE BOLTED BOTTOM FLANGE; ${tiedToBuilding(p)?`THE TOP FLANGE BY THE GIRDER TIE TO THE BUILDING COLUMN AND THE COLUMN TOP BY THE COLUMN TIE (${detailRef(craneColumnTitles.elevation)})`:'NO TOP FLANGE TIE'}. INSTALL ALL BEARING BOLTS, PRETENSIONED${slidingNote(p)}, BEFORE THE CRANE IS OPERATED.`,
   `KEEP THE AREA UNDER THE CAP AROUND EACH BOLT CLEAR FOR THE WRENCH; INSTALL NUTS FROM BELOW.`,

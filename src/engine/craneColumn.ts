@@ -15,6 +15,7 @@ import {secantStiffness} from './restraintClearance';
 import {finiteLife,fatigueThreshold} from './fatigueConstants';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
+import {columnBaseActions} from './columnBase';
 
 /**
  * Separate crane column tied to an existing building column (configurator support 'crane-column'; AISC Design Guide 7,
@@ -197,7 +198,9 @@ export interface CraneColumnResult {
  /** Vertical slot travel at the column tie, each way from the centered sleeve: crane-column and building-column shortening (PL/EA) and the tolerance, the larger shortening plus the tolerance against the travel. */
  slot:{crane:number;building:number;tolerance:number;demand:number;capacity:number};
  /** Clear distance across the runway between the crane-column footing and the building column footing (undefined where its size is not entered). */
- footing?:{clear:number;required:number;crane:{L:number;B:number};building:{L:number;B:number}};
+ footing?:{clear:number;required:number;crane:{L:number;B:number};building:{L:number;B:number};
+  /** Where the footings overlap (an open coordination item): the crane-column base reactions for the combined or enlarged footing. */
+  reactions?:FootingReactions};
 }
 
 /**
@@ -236,6 +239,18 @@ export function columnShortening(p:ProjectInput,reactions:SupportReactionSet){
 /** Fatigue cycles of the project: the duty spectrum where one is entered, else the project count. */
 const cyclesOf=(p:ProjectInput)=>{const s=p.details?.spectrum??[];return s.length?s.reduce((a,v)=>a+v.cycles,0):p.fatigue.cycles;};
 
+/** The crane-column base reactions a combined or enlarged footing is designed for: service (ASD) and factored (LRFD) extremes, both axes. */
+export interface FootingReactions {service:{Pmax:number;Pmin:number;V:number;M:number};factored:{Pmax:number;Pmin:number;V:number;M:number}}
+export function footingReactions(p:ProjectInput,reactions:SupportReactionSet):FootingReactions{
+ const of=(method:ProjectInput['method'])=>{const a=columnBaseActions(p,reactions,method).flatMap(v=>v.actions);
+  return {Pmax:Math.max(0,...a.map(v=>v.P)),Pmin:Math.min(...a.map(v=>v.P-(v.uplift??0))),V:Math.max(0,...a.map(v=>Math.hypot(v.Vx,v.Vy))),M:Math.max(0,...a.map(v=>Math.hypot(v.Mx,v.My)))};};
+ return {service:of('ASD'),factored:of('LRFD')};
+}
+/** "P 63.0 kip max, -16.1 kip min (uplift); V 13.9 kip; M 0.0 kip-ft (service, ...); ... (factored, LRFD)". */
+export function footingReactionText(r:FootingReactions,u:ProjectInput['units']){
+ const f=(v:number)=>format(v,'force',u,1),m=(v:number)=>format(v,'moment',u,1),one=(x:FootingReactions['service'])=>`P ${f(x.Pmax)} max, ${f(x.Pmin)} min${x.Pmin<0?' (uplift)':''}; V ${f(x.V)}; M ${m(x.M)}`;
+ return `crane-column base, per column, ${one(r.service)} (service, ASD combinations); ${one(r.factored)} (factored, LRFD)`;
+}
 /**
  * Pipeline hook (calculate.ts, after the crane column, its base and the runway details): the building column under the
  * tie forces, the Appendix 6 brace of the crane-column top, the column tie, its slot travel, the gap and the footings.
@@ -272,7 +287,7 @@ export function craneColumnCalculation(snapshot:CalculationSnapshot):void{
  const {crane:craneShort,building:buildingShort,tolerance}=columnShortening(p,reactions),slotDemand=Math.max(craneShort,buildingShort)+tolerance,slotCapacity=tg.travel;
  // Footing clearance across the runway (both footings concentric with their columns at each grid).
  const ft=p.columnBase?.enabled?p.columnBase.footing:undefined,adj=c.adjacent?.enabled?c.adjacent:undefined,line=adj?.A??adj?.B;
- const footing=ft&&line&&line.footing.L>0&&line.footing.B>0?{clear:k.offset-ft.L/2-line.footing.L/2,required:adj!.footingClear,crane:{L:ft.L,B:ft.B},building:{L:line.footing.L,B:line.footing.B}}:undefined;
+ const footing:CraneColumnResult['footing']=ft&&line&&line.footing.L>0&&line.footing.B>0?{clear:k.offset-ft.L/2-line.footing.L/2,required:adj!.footingClear,crane:{L:ft.L,B:ft.B},building:{L:line.footing.L,B:line.footing.B}}:undefined;
 
  snapshot.buildingColumn=building;
  snapshot.craneColumn={layout:g,ties:{girderTie,columnTie:columnTieForce,case:bottomSet.id,bottom,eccentric,braceForce,range},
@@ -299,8 +314,15 @@ export function craneColumnCalculation(snapshot:CalculationSnapshot):void{
   const Fsr=Math.max(fatigueThreshold('E'),finiteLife(1.1,n)),net=range/Math.max(An,1e-9);
   add('tie-plate-fatigue','Column tie · plate net section fatigue at the slots',net,Fsr,'stress','\\Delta f=\\frac{\\Delta F}{A_n}\\le F_{SR}\\ \\ \\text{(Category E)}',`Net section through a slot, the plate bearing on the sleeve without clamping: taken as a pin plate (AISC Table A-3.1 item 2.4, Category E, C_f = 11 × 10⁸), all ${n.toLocaleString('en-US')} cycles.`,['aisc-fatigue']);}
  add('tie-slot-travel','Column tie · vertical slot travel (differential shortening)',slotDemand,slotCapacity,'length','\\max(\\delta_c,\\delta_b)+\\delta_t\\le\\frac{l_s-D_s}{2}',`Each way from the centered sleeve: crane column shortening δc = PL/EA = ${L(craneShort)} (runway dead load, crane with impact at the most loaded support and the column's own weight, base to the tie), building column shortening δb = ${L(buildingShort)} (its existing L and the largest of Lr, S and R axial effects, unfactored), the larger plus the erection tolerance ${L(tolerance)}; travel (${L(t.slot.length)} − ${L(tg.od)})/2 = ${L(slotCapacity)}. The sleeves are set centered at erection, after the runway dead load is on the crane column.`,['dg7-columns','aisc-connections']);
- if(footing){const s=footing;
-  add('footing-clearance','Crane column · footing clearance to the building column footing',s.required,s.clear,'length','c_{ftg}=e-\\frac{L_c}{2}-\\frac{L_b}{2}\\ge c_{min}',`Across the runway: the crane-column footing ${L(s.crane.L)} × ${L(s.crane.B)} and the existing building-column footing ${L(s.building.L)} × ${L(s.building.B)}, both concentric with their columns ${L(k.offset)} apart: clear ${L(s.clear)} against ${L(s.required)}. ${s.clear<s.required?'OPEN ITEM (coordination): the footings overlap or are too close. A combined footing, or the crane-column footing bearing on the existing footing with its capacity established, is outside this calculation: by the foundation engineer.':'Excavation shall not undermine the existing footing.'}${adj?.source?` Survey: ${adj.source}.`:''}`,['criteria']);
+ if(footing){const s=footing,title='Crane column · footing clearance to the building column footing',eq='c_{ftg}=e-\\frac{L_c}{2}-\\frac{L_b}{2}\\ge c_{min}';
+  const geometry=`Across the runway: the crane-column footing ${L(s.crane.L)} × ${L(s.crane.B)} and the existing building-column footing ${L(s.building.L)} × ${L(s.building.B)}, both concentric with their columns ${L(k.offset)} apart: clear ${L(s.clear)} against ${L(s.required)}.`;
+  if(s.clear>=s.required)add('footing-clearance',title,s.required,s.clear,'length',eq,`${geometry} Excavation shall not undermine the existing footing.${adj?.source?` Survey: ${adj.source}.`:''}`,['criteria']);
+  // Footings that overlap (or come too close) are a foundation coordination item, not a failed design of the runway:
+  // a combined or enlarged footing for the reactions given here is the foundation engineer's (by others), so the check
+  // stays open ('unverified') until that design is referenced, with the crane-column base reactions it needs.
+  else{const r=footingReactions(p,reactions);s.reactions=r;
+   checks.push({id:'crane-column-footing-clearance',group,title,status:'unverified',demand:s.required,capacity:s.clear,quantity:'length',equation:eq,referenceIds:['criteria'],
+    note:`Combined or enlarged footing by the foundation engineer for the reactions given: ${footingReactionText(r,u)}. ${geometry} The isolated crane-column footing sized here overlaps (or comes too close to) the existing footing, so it cannot be built as drawn: a foundation coordination item (the crane-column footing checks above apply to the isolated footing only). The building-column footing also takes the base shear and moment of the tie forces (Building column). Excavation shall not undermine the existing footing.${adj?.source?` Survey: ${adj.source}.`:''}`});}
  }else checks.push({id:'crane-column-footing-clearance',group,title:'Crane column · footing clearance to the building column footing',status:'incomplete',equation:'',referenceIds:['criteria'],note:'Enter the surveyed building column footing (existingColumn.adjacent, its footing size) to check the crane-column footing against it.'});
  // The building column's footing clearance is reported here, not twice.
  snapshot.checks=snapshot.checks.filter(v=>v.id!=='existing-footing-clear');

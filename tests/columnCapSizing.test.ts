@@ -42,8 +42,11 @@ describe('column cap sizing',()=>{
   const before=boltCapacity({grade:'A325',diameter:.75*inch,planes:1,surface:'B',shear:1,tension:1.2*1.13*28*4448.2216152605,method:'LRFD'});expect(before.slip).toBe(0);
   expect(e.bolts.diameter).toBeGreaterThan(.75*inch);
   for(const k of ['bolt-slip','bolt-tension','weld','wrench-web','plate','prying'])expect(r[k],k).toBeLessThanOrEqual(.9);
-  // Left to the checks: the all-around cap fillets in fatigue (Category F under the alternating girder-end reactions
-  // along the runway, beyond what 5/8 in fillets carry).
-  expect(r['weld-fatigue']).toBeGreaterThan(1);expect(p.columnCap!.weld).toBeCloseTo(5/8*inch,9);
+  // The all-around cap fillets in fatigue (Category F on the throat under the alternating girder-end reactions along the
+  // runway) fail at 5/8 in and still at 7/8 in, where the nuts below the cap stop the fillet on the web growing: the cap
+  // takes CJP groove welds with reinforcing fillets (Category C at the toe in the column flanges and web).
+  expect(p.columnCap!.joint).toBe('cjp');expect(p.columnCap!.weld).toBeLessThanOrEqual(3/8*inch+1e-9);
+  for(const k of ['weld','weld-fatigue'])expect(r[k],k).toBeLessThanOrEqual(.9);
+  for(const w of [5/8,7/8]){const fillet=structuredClone(p);Object.assign(fillet.columnCap!,{joint:'fillet',weld:w*inch});expect(columnCapSizingRatios(fillet)['weld-fatigue']).toBeGreaterThan(1);}
  },120000);
 });

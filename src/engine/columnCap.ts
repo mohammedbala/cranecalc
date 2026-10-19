@@ -1,8 +1,8 @@
-import {categoryF} from './fatigueConstants';
+import {categoryF,fatigueThreshold,finiteLife} from './fatigueConstants';
 import {available} from './aiscStrength';
 import {aiscShapeByName} from '../data/aiscSections';
 import {boltCapacity,boltProperties,plateBearing,filletMinimum} from './connectionStrength';
-import {activeColumnCap,type ColumnCapInput} from './columnCapInputs';
+import {activeColumnCap,capCjp,type ColumnCapInput} from './columnCapInputs';
 import {activeEndBearing,continuousBearings,type EndBearingInput} from './endBearingInputs';
 import {independentBearings} from './simpleSupports';
 import {existingColumnSection} from './existingColumn';
@@ -93,8 +93,14 @@ export function capWeldGroup(p:ProjectInput){
  }
  const points=segments.flat();
  /** Peak resultant per unit length: every component by magnitude at each line end. */
- const peak=(a:{N:number;Vx:number;Vz:number;Mx:number;My:number;Mz:number})=>Math.max(...points.map(([x,z])=>Math.hypot(Math.max(0,a.N)/A+Math.abs(a.Mx)*Math.abs(z)/Ix+Math.abs(a.My)*Math.abs(x)/Iy,Math.abs(a.Vx)/A+Math.abs(a.Mz)*Math.abs(z)/(Ix+Iy),Math.abs(a.Vz)/A+Math.abs(a.Mz)*Math.abs(x)/(Ix+Iy))));
- return {segments,A,Ix,Iy,peak};
+ const at=(a:{N:number;Vx:number;Vz:number;Mx:number;My:number;Mz:number},[x,z]:[number,number])=>Math.hypot(Math.max(0,a.N)/A+Math.abs(a.Mx)*Math.abs(z)/Ix+Math.abs(a.My)*Math.abs(x)/Iy,Math.abs(a.Vx)/A+Math.abs(a.Mz)*Math.abs(z)/(Ix+Iy),Math.abs(a.Vz)/A+Math.abs(a.Mz)*Math.abs(x)/(Ix+Iy));
+ const peak=(a:{N:number;Vx:number;Vz:number;Mx:number;My:number;Mz:number})=>Math.max(...points.map(v=>at(a,v)));
+ /**
+  * CJP groove welds instead of the fillets: the same line force per line, two lines (both faces) per element, carried
+  * by the joined flange or web over its thickness: the peak base-metal stress 2q/t at the line ends of each element.
+  */
+ const peakStress=(a:{N:number;Vx:number;Vz:number;Mx:number;My:number;Mz:number})=>Math.max(...segments.flatMap(([p1,p2])=>{const t=Math.abs(p2[1]-p1[1])<1e-9?col.tf:col.tw;return [p1,p2].map(v=>2*at(a,v)/t);}));
+ return {segments,A,Ix,Iy,peak,peakStress};
 }
 
 /**
@@ -136,7 +142,9 @@ export interface ColumnCapGridResult {
   */
  boltSets:{T:number;Vz:number;Vx:number;id:string;combination:string}[];
  /** Unfactored fatigue ranges per duty bin: cap weld peak range per length, the largest bearing reaction range and the net lateral force range at the bottom-flange interface |H_top + H_bot| (the bottom flange alone on a tied crane column). */
- fatigue:{weld:number;reaction:number;lateral:number}[];
+ fatigue:{weld:number;reaction:number;lateral:number;
+  /** The base-metal stress range at a CJP joint of the cap (capWeldGroup.peakStress). */
+  cjp:number}[];
 }
 export interface ColumnCapResults {grids:ColumnCapGridResult[];fork:ReturnType<typeof capForkStiffness>;}
 /**
@@ -187,7 +195,8 @@ export function createColumnCapCollector(p:ProjectInput){
    fatigue:s.fatigue.map(r=>{
     const range=(k:string)=>(r.hi[k]??0)-(r.lo[k]??0),Mz=range('Vz')*Math.max(0,...g.grids[j].bearings.map(b=>Math.abs(b.center)));
     // Ranges of every component taken together; compression bears on the milled column end, uplift is welded.
-    return {weld:weld.peak({N:range('N'),Vx:range('Vx'),Vz:range('Vz'),Mx:range('Mx'),My:range('My'),Mz}),reaction:Math.max(0,...g.grids[j].bearings.map((_,i)=>range(`R${i}`))),lateral:range('Vz')};
+    const ranges={N:range('N'),Vx:range('Vx'),Vz:range('Vz'),Mx:range('Mx'),My:range('My'),Mz};
+    return {weld:weld.peak(ranges),cjp:weld.peakStress(ranges),reaction:Math.max(0,...g.grids[j].bearings.map((_,i)=>range(`R${i}`))),lateral:range('Vz')};
    })}))};
  }
  return {observe,finish};
@@ -303,9 +312,15 @@ export function columnCapChecks(p:ProjectInput,r:ColumnCapResults,ctx:{imperfect
  }else for(const [id,title] of [['stiffener-bearing','Cap stiffener · fitted bearing'],['stiffener-weld','Cap stiffener · fillets to the column flanges']] as const)na(id,title,'Every girder bearing stiffener line lies over the column web; no cap stiffeners.');
  // All-around cap weld.
  {const v=r.grids.reduce((a,c)=>c.weld.value>a.weld.value?c:a).weld,throat=cap.weld/Math.SQRT2,wg=capWeldGroup(p),a=v.actions;
-  add('weld','Cap plate to column · all-around fillets',v.value/throat,available(.6*Fexx,method,.75,2),'stress','f=\\frac{1}{0.707w}\\sqrt{\\left(\\frac{N}{A}+\\frac{M_xz}{I_x}+\\frac{M_yx}{I_y}\\right)^2+\\left(\\frac{V_x}{A}+\\frac{M_zz}{J}\\right)^2+\\left(\\frac{V_z}{A}+\\frac{M_zx}{J}\\right)^2}',`${f(cap.weld,'length')} fillets on both flange faces and both web faces clear of the root fillets, ${f(wg.A,'length')} of line; elastic method, every component by magnitude at each line end, no directional increase. Governing ${where(v)}: uplift ${f(a.N)}, longitudinal ${f(a.Vx)}, lateral ${f(a.Vz)}, overturning across the runway ${f(a.Mx,'moment')} (fork forces at their heights), along it ${f(a.My,'moment')} (each girder end reaction at 0.8 of its bearing from the girder end), torsion ${f(a.Mz,'moment')}. Compression is carried by bearing on the milled column end and not credited.`,refs,v.id);
+  // CJP groove welds (capCjp): the joined flange or web carries the line force over its thickness (base metal governs a
+  // CJP joint, AISC 360-16 Table J2.5): the peak 2q/t against shear yielding φ0.6F_y, a bound below the tensile yield
+  // that governs the normal component.
+  if(capCjp(cap)){const sv=r.grids.map(c=>({c:c.weld,f:wg.peakStress(c.weld.actions)})).reduce((x,y)=>y.f>x.f?y:x);
+   add('weld','Cap plate to column · CJP groove welds (base metal)',sv.f,available(.6*col.Fy,method,1,1.5),'stress','f=\\max\\frac{2q}{t_f,\\ t_w}\\le\\phi0.6F_y\\ \\text{(J2.5, J4.2)}',`CJP groove welds of the column flanges and web to the cap plate, with ${f(cap.weld,'length')} reinforcing fillets: the line force of the all-around weld group (both faces of each element; elastic, every component by magnitude at each line end) carried by the ${f(col.tf,'length')} flanges and the ${f(col.tw,'length')} web, governing ${where(sv.c)}. A CJP joint develops the base metal (Table J2.5); shear yielding φ0.6F_y bounds the combined stress. Compression is carried by bearing on the milled column end and not credited.`,refs,sv.c.id);
+  }else add('weld','Cap plate to column · all-around fillets',v.value/throat,available(.6*Fexx,method,.75,2),'stress','f=\\frac{1}{0.707w}\\sqrt{\\left(\\frac{N}{A}+\\frac{M_xz}{I_x}+\\frac{M_yx}{I_y}\\right)^2+\\left(\\frac{V_x}{A}+\\frac{M_zz}{J}\\right)^2+\\left(\\frac{V_z}{A}+\\frac{M_zx}{J}\\right)^2}',`${f(cap.weld,'length')} fillets on both flange faces and both web faces clear of the root fillets, ${f(wg.A,'length')} of line; elastic method, every component by magnitude at each line end, no directional increase. Governing ${where(v)}: uplift ${f(a.N)}, longitudinal ${f(a.Vx)}, lateral ${f(a.Vz)}, overturning across the runway ${f(a.Mx,'moment')} (fork forces at their heights), along it ${f(a.My,'moment')} (each girder end reaction at 0.8 of its bearing from the girder end), torsion ${f(a.Mz,'moment')}. Compression is carried by bearing on the milled column end and not credited.`,refs,v.id);
   add('weld-base','Column web · base metal at the cap fillets',2*v.value/col.tw,available(.6*col.Fu,method,.75,2),'stress','f_v=\\frac{2q}{t_w}\\le\\phi0.6F_u\\\ \\text{(J4.2)}','Fillets both sides of the web at the peak line force.',refs,v.id);
-  add('weld-minimum','Cap fillet · minimum size',filletMinimum([t,col.tf]),cap.weld,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined.',refs);
+  if(capCjp(cap))add('weld-minimum','Cap CJP · reinforcing fillet size',Math.max(filletMinimum([t,col.tf]),Math.min(col.tf/4,3/8*inch)),cap.weld,'length','w\\ge\\max\\left(w_{min},\\ \\min(t/4,\\ 3/8\\,\\mathrm{in})\\right)','AISC 360-16 Table J2.4 by the thinner part joined, and the reinforcing fillet of a CJP T-joint in cyclically loaded steel, t/4 of the joined part but not over 3/8 in (AWS D1.1; clause to be verified).',refs);
+  else add('weld-minimum','Cap fillet · minimum size',filletMinimum([t,col.tf]),cap.weld,'length','w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined.',refs);
  }
  // Bearing bolts through the cap: tension from uplift and the fork couple with the concurrent shear (J3.7).
  {const db=eb.bolts.diameter,bolt=boltProperties(eb.bolts.grade,db),sets=capBoltSets(p,r,ctx.imperfection);
@@ -344,7 +359,10 @@ export function columnCapChecks(p:ProjectInput,r:ColumnCapResults,ctx:{imperfect
  }
  // Fatigue: the cap fillets and the cap stiffener fillets, Category F on the throat, full range for every cycle in the bin.
  {const bins=d.spectrum,total=bins.reduce((a,v)=>a+v.cycles,0),range=Math.max(...r.grids.flatMap(v=>v.fatigue.map(x=>x.weld))),Fsr=categoryF(total),throat=cap.weld/Math.SQRT2;
-  add('weld-fatigue','Cap fillets · weld throat fatigue',range/throat,Fsr,'stress','F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}','Category F, AISC Table A-3.1 item 8.2. Range of the peak line force from every component of the duty-bin sets taken together (uplift, lateral, longitudinal and both moments), applied to all cycles; no fractional-duty reduction. Compression bears on the milled column end.',['column-cap','aisc-fatigue']);
+  // CJP joint: no unfused root; the crack starts at the toe of the reinforcing fillet in the column flange or web.
+  if(capCjp(cap)){const cr=Math.max(...r.grids.flatMap(v=>v.fatigue.map(x=>x.cjp))),Fc=Math.max(fatigueThreshold('C'),finiteLife(4.4,total));
+   add('weld-fatigue','Cap CJP welds · toe fatigue in the column',cr,Fc,'stress','\\Delta f=\\max\\frac{2\\Delta q}{t_f,\\ t_w}\\le F_{SR}\\ \\text{(Category C)}',`CJP groove welds with reinforcing fillets: no unfused root, so the crack starts at the weld toe in the column flange or web, Category C (C_f = 44 × 10⁸; the toe-crack category of the transverse T-joints of AISC Table A-3.1 Section 5; item number to be verified). Base-metal range 2Δq/t of the peak line-force range from every component of the duty-bin sets taken together, applied to all ${total.toLocaleString('en-US')} cycles; no fractional-duty reduction. A CJP joint is used because the all-around fillets fail their throat fatigue (Category F) at the largest fillet the sizing takes. Compression bears on the milled column end.`,['column-cap','aisc-fatigue']);
+  }else add('weld-fatigue','Cap fillets · weld throat fatigue',range/throat,Fsr,'stress','F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',`Category F, AISC Table A-3.1 item 8.2. Range of the peak line force from every component of the duty-bin sets taken together (uplift, lateral, longitudinal and both moments), applied to all cycles; no fractional-duty reduction. Compression bears on the milled column end.${cap.weld>5/8*inch+1e-6?` The ${f(cap.weld,'length')} fillet is a multi-pass fillet past the 5/8 in sizing limit, taken because a 5/8 in fillet fails this check (the throat range falls as 1/w): at most 1 in and t − 1/16 in of the thinner part joined (AISC 360-16 J2.2b), prequalified per AWS D1.1 with low-hydrogen electrodes.`:''}`,['column-cap','aisc-fatigue']);
   if(g.stiffened){const R=Math.max(...r.grids.flatMap(v=>v.fatigue.map(x=>x.reaction)));
    add('stiffener-weld-fatigue','Cap stiffener fillets · weld throat fatigue',R/(4*g.stiffener.weld*cap.stiffener.weld/Math.SQRT2),Fsr,'stress','f_{sr}=\\frac{\\Delta R}{4L_w(0.707w)}\\le F_{SR}\\ \\ \\text{(Cat. F)}','Largest girder end reaction range of any duty bin through the four fillet lines of one cap stiffener, every cycle.',['column-cap','aisc-fatigue']);}
  }

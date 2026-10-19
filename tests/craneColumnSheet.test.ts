@@ -8,10 +8,10 @@ import {detailTitles} from '../src/components/sheetGraphics';
 
 /**
  * The drawings of a crane column tied to the existing building column (craneColumnSheet.ts), from the stored configured
- * fixtures (scripts/refreshSheetFixtures.ts configFixtures c-crane-15t, c-crane-25t). Readability is sheetReadability's.
+ * fixtures (scripts/refreshSheetFixtures.ts templates t13, t14). Readability is sheetReadability's.
  */
 describe('crane column drawings',()=>{
- for(const name of ['c-crane-15t','c-crane-25t'])it(`${name}: the crane column topic, the ties to the building column and the H-only forces`,()=>{
+ for(const name of ['t13','t14'])it(`${name}: the crane column topic, the ties to the building column and the H-only forces`,()=>{
   const s=sheetFixture(name),topics=detailTopics(s),keys=topics.map(t=>t.key);
   // The crane column is a new column: its cap, column, base and footing, and bracing, with the crane column details.
   for(const k of ['column-cap','new-column','crane-column','bracing'])expect(keys).toContain(k);

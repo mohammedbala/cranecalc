@@ -33,18 +33,24 @@ export function SupportSketch({config}:{config:RunwayConfig}){
  const s=config.support,newColumn=config.structure==='new',capped=config.girder==='capped',analysis=config.scope==='analysis';
  const girder=<g>{/* girder section */}<path d="M66 15H90M66 17H90M78 17V40M66 40H90M66 42H90" strokeWidth="1.6"/>{capped&&<path d="M63 12V15H93V12" strokeWidth="1.4"/>}<rect x="75" y={capped?6:8} width="6" height={capped?6:7} fill="currentColor" stroke="none" opacity=".75"/></g>;
  if(analysis)return <svg viewBox="0 0 120 80" className="support-sketch" aria-hidden="true" fill="none" stroke="currentColor"><path d="M8 46H112" strokeWidth="3"/><path d="M14 50l-5 8h10zM60 50l-5 8h10zM106 50l-5 8h10z" strokeWidth="1.2"/>{[30,42,78,90].map(x=><path key={x} d={`M${x} 20V40M${x-3} 35l3 5 3-5`} strokeWidth="1.3"/>)}<path d="M8 68H112" strokeWidth=".6" strokeDasharray="2 2"/></svg>;
- const column=s==='column-cap'
-  ?<g><rect x="70" y="44" width="16" height="30" strokeWidth="1.4"/><path d="M62 43H94" strokeWidth="2.4"/>{[72,84].map(x=><path key={x} d={`M${x} 44V52`} strokeWidth="1"/>)}</g>
+ // Existing columns hatched; a crane column (new, on the cap) beside the existing building column; a stepped column's
+ // narrow upper shaft over its deep lower shaft, the girder on the step over the crane-side flange (drawn 16 units left).
+ const hatch=(x:number,y0:number,y1:number,w:number)=><path d={Array.from({length:Math.floor((y1-y0-14)/16)+1},(_,i)=>`M${x} ${y0+6+16*i}l${w} ${Math.min(8,w*.7)}`).join('')} strokeWidth=".5"/>;
+ const cap=<g><rect x="70" y="44" width="16" height="30" strokeWidth="1.4"/><path d="M62 43H94" strokeWidth="2.4"/>{[72,84].map(x=><path key={x} d={`M${x} 44V52`} strokeWidth="1"/>)}</g>;
+ const stepped=s==='stepped-column',crane=s==='crane-column',shift=stepped?-16:0;
+ const column=s==='column-cap'?cap
+  :crane?<g>{cap}<rect x="12" y="4" width="12" height="70" strokeWidth="1.4"/>{hatch(12,4,74,12)}{/* column tie with its vertical slot */}<path d="M24 47H70" strokeWidth="1.8"/><rect x="26" y="45.5" width="2.4" height="5" rx="1.2" strokeWidth=".6"/></g>
+  :stepped?<g><rect x="14" y="4" width="18" height="40" strokeWidth="1.4"/>{hatch(14,4,44,18)}<rect x="14" y="44" width="52" height="30" strokeWidth="1.4"/><path d="M17 44V74M63 44V74" strokeWidth=".6"/>{hatch(18,44,74,44)}<path d="M14 43.6H66" strokeWidth="2.2"/></g>
   :<g><rect x="12" y="4" width="12" height="70" strokeWidth="1.4" strokeDasharray={newColumn?undefined:'0'}/>{!newColumn&&<path d="M12 10l12 8M12 26l12 8M12 42l12 8M12 58l12 8" strokeWidth=".5"/>}</g>;
- const base=newColumn?<g><path d={s==='column-cap'?'M66 74H90':'M8 74H28'} strokeWidth="2"/><rect x={s==='column-cap'?60:4} y="74" width="36" height="5" strokeWidth=".8" strokeDasharray="2 1.5"/></g>:<path d="M2 74H118" strokeWidth=".6"/>;
+ const base=newColumn||crane?<g><path d={s==='column-cap'||crane?'M66 74H90':'M8 74H28'} strokeWidth="2"/><rect x={s==='column-cap'||crane?60:4} y="74" width="36" height="5" strokeWidth=".8" strokeDasharray="2 1.5"/>{crane&&<path d="M2 74H56" strokeWidth=".6"/>}</g>:<path d="M2 74H118" strokeWidth=".6"/>;
  const seat='M24 42H92';
  const bracket=s==='twin-rib'?<g><path d={seat} strokeWidth="2.2"/><rect x="24" y="43" width="56" height="18" strokeWidth="1.3"/></g>
   :s==='haunched-seat'?<g><path d={seat} strokeWidth="2.2"/><path d="M24 43H84V49L24 66Z" strokeWidth="1.3"/></g>
   :s==='rolled-corbel'?<g><path d={seat} strokeWidth="2.2"/><path d="M24 45H86M24 59H86M86 45V59M24 52H86" strokeWidth="1.3"/></g>
   :s==='tapered-haunch'?<g><path d={seat} strokeWidth="2.2"/><path d="M24 70L88 49M24 52 88 46" strokeWidth="1.3"/><path d="M88 43V49" strokeWidth="1.3"/></g>
   :s==='by-others'?<g><path d={seat} strokeWidth="1.6" strokeDasharray="3 2"/><path d="M24 43H80V60H24" strokeWidth="1" strokeDasharray="3 2"/></g>:null;
- const tie=s==='column-cap'?null:config.tie==='cap-angle'?<path d="M24 12H62V9" strokeWidth="1.6"/>:<path d="M24 16H66" strokeWidth={config.tie==='flexible-plate'?1:2}/>;
- return <svg viewBox="0 0 120 80" className="support-sketch" aria-hidden="true" fill="none" stroke="currentColor">{column}{bracket}{girder}{tie}{base}</svg>;
+ const from=stepped?32:24,tie=s==='column-cap'?null:config.tie==='cap-angle'?<path d={`M${from} 12H${62+shift}V9`} strokeWidth="1.6"/>:<path d={`M${from} 16H${66+shift}`} strokeWidth={config.tie==='flexible-plate'?1:2}/>;
+ return <svg viewBox="0 0 120 80" className="support-sketch" aria-hidden="true" fill="none" stroke="currentColor">{column}{bracket}{shift?<g transform={`translate(${shift} 0)`}>{girder}</g>:girder}{tie}{base}</svg>;
 }
 
 function TemplateCard({t,onCustomize,onBuild,busy}:{t:RunwayTemplate;onCustomize:()=>void;onBuild:()=>void;busy:boolean}){
@@ -78,6 +84,9 @@ function Select<T extends string|number>({label,value,options,onChange}:{label:s
 
 const compactW=aiscWShapes.filter(s=>s.d>=12&&s.d<=40&&s.bf/(2*s.tf)<=.38*Math.sqrt(29000/50)&&(s.d-2*s.kdes)/s.tw<=3.76*Math.sqrt(29000/50)).sort((a,b)=>a.d-b.d||a.weight-b.weight).map(s=>s.name);
 const columnShapes=aiscWShapes.filter(s=>s.name.startsWith('W14X')&&s.weight>=61&&s.weight<=398).sort((a,b)=>a.weight-b.weight).map(s=>s.name);
+/** Crane columns: W12 and W14. The lower shaft of a stepped column: W24 to W44 (the upper shaft is a W14 within its flanges). */
+const craneColumnShapes=aiscWShapes.filter(s=>(s.name.startsWith('W12X')&&s.weight>=50||s.name.startsWith('W14X')&&s.weight>=61)&&s.weight<=398).sort((a,b)=>a.d-b.d||a.weight-b.weight).map(s=>s.name);
+const lowerShaftShapes=aiscWShapes.filter(s=>/^W(24|27|30|33|36|40|44)X/.test(s.name)&&s.bf>=12).sort((a,b)=>a.d-b.d||a.weight-b.weight).map(s=>s.name);
 const channels=['C10X15.3','C12X20.7','C12X25','C15X33.9','C15X40','C15X50','MC18X42.7'];
 const classCycles={A:'more than 500,000',B:'100,000–500,000',C:'20,000–100,000',D:'up to 20,000'} as const;
 
@@ -100,7 +109,7 @@ export default function StartPanel({project,onBuild}:{project:ProjectInput;onBui
  };
  const customize=(t:RunwayTemplate)=>{setConfig({...t.config});setNotes([]);formRef.current?.scrollIntoView({behavior:'smooth',block:'start'});};
  const c=config,design=c.scope==='design',supports:{value:SupportKind;label:string;disabled?:string}[]=(Object.keys(supportLabels) as SupportKind[]).map(v=>({value:v,label:supportLabels[v],
-  disabled:v==='crane-column'||v==='stepped-column'?'not yet built by the configurator':v==='by-others'&&c.structure==='new'?'new columns carry a bracket designed here':v==='column-cap'&&c.structure!=='new'?'column caps sit on new columns':v==='by-others'&&c.system==='continuous'?'continuous girders need a seat designed here':undefined}));
+  disabled:(v==='crane-column'||v==='stepped-column')&&c.structure==='new'?(v==='crane-column'?'a crane column is tied to an existing building column':'a column step is on an existing stepped column'):v==='by-others'&&c.structure==='new'?'new columns carry a bracket designed here':v==='column-cap'&&c.structure!=='new'?'column caps sit on new columns':v==='by-others'&&c.system==='continuous'?'continuous girders need a seat designed here':undefined}));
  const ties:{value:TieKind;label:string;disabled?:string}[]=(Object.keys(tieLabels) as TieKind[]).map(v=>({value:v,label:tieLabels[v],
   disabled:c.support==='column-cap'&&v!=='paired-bars'?'a column cap holds the girder without a flange tie':v==='cap-angle'&&c.girder!=='capped'?'bolts to a channel cap':v!=='paired-bars'&&c.system==='continuous'?'simple spans only':undefined}));
  const p=preview,crane=p?.crane;
@@ -144,11 +153,15 @@ export default function StartPanel({project,onBuild}:{project:ProjectInput;onBui
       {c.girder==='capped'&&<Select label="Cap channel" value={c.capChannel??''} options={[{value:'',label:'Size automatically'},...channels.map(v=>({value:v,label:v}))]} onChange={v=>set({capChannel:v||undefined})}/>}
      </div></fieldset>
      {design&&<fieldset><legend>Supports and tieback</legend><div className="field-grid">
-      <Select label="Structure" value={c.structure} options={[{value:'existing',label:'Existing building columns'},{value:'new',label:'New freestanding columns'}]} onChange={v=>set({structure:v,columnShape:undefined,support:defaultSupportFor(v,c.support)})}/>
-      <Select label="Girder support" value={c.support} options={supports} onChange={v=>set({support:v})}/>
+      <Select label="Structure" value={c.structure} options={[{value:'existing',label:'Existing building columns'},{value:'new',label:'New freestanding columns'}]} onChange={v=>set({structure:v,columnShape:undefined,buildingColumnShape:undefined,support:defaultSupportFor(v,c.support)})}/>
+      {/* The column lists differ for a stepped column's lower shaft: a change to or from it clears the shapes. */}
+      <Select label="Girder support" value={c.support} options={supports} onChange={v=>set({support:v,...((v==='stepped-column')!==(c.support==='stepped-column')?{columnShape:undefined,buildingColumnShape:undefined}:{})})}/>
       <Select label="Top-flange tieback" value={c.tie} options={ties} onChange={v=>set({tie:v})}/>
-      {c.support!=='by-others'&&<Select label={c.structure==='new'?'New column':'Existing column'} value={c.columnShape??''} options={[{value:'',label:'Chosen for the crane'},...columnShapes.map(v=>({value:v,label:v}))]} onChange={v=>set({columnShape:v||undefined})}/>}
-      {c.support!=='column-cap'&&<NumberField label="Column face to girder web" unit="in" value={c.reach} placeholder="auto" min={12} max={48} step={.5} onChange={v=>set({reach:v})}/>}
+      {c.support!=='by-others'&&<Select label={c.support==='crane-column'?'Crane column (new)':c.support==='stepped-column'?'Lower shaft (existing)':c.structure==='new'?'New column':'Existing column'} value={c.columnShape??''}
+       options={[{value:'',label:'Chosen for the crane'},...(c.support==='crane-column'?craneColumnShapes:c.support==='stepped-column'?lowerShaftShapes:columnShapes).map(v=>({value:v,label:v}))]} onChange={v=>set({columnShape:v||undefined})}/>}
+      {(c.support==='crane-column'||c.support==='stepped-column')&&<Select label={c.support==='crane-column'?'Building column (existing)':'Upper shaft (existing)'} value={c.buildingColumnShape??''} options={[{value:'',label:'Chosen for the crane'},...columnShapes.map(v=>({value:v,label:v}))]} onChange={v=>set({buildingColumnShape:v||undefined})}/>}
+      {c.support==='crane-column'&&<Select label="Crane column base" value={c.craneColumnBase??'pinned'} options={[{value:'pinned',label:'Pinned (four anchor rods)'},{value:'fixed',label:'Fixed'}]} onChange={v=>set({craneColumnBase:v})}/>}
+      {c.support!=='column-cap'&&c.support!=='stepped-column'&&<NumberField label={c.support==='crane-column'?'Building column face to girder web':'Column face to girder web'} unit="in" value={c.reach} placeholder="auto" min={12} max={48} step={.5} onChange={v=>set({reach:v})}/>}
      </div></fieldset>}
      {notes.length>0&&<div className="inline-note config-notes"><TriangleAlert size={14}/><div>{notes.map(v=><p key={v}>{v}</p>)}</div></div>}
     </div>
@@ -163,7 +176,9 @@ export default function StartPanel({project,onBuild}:{project:ProjectInput;onBui
       <div><dt>Duty</dt><dd>Class {c.buildingClass}: {n(p.spectrum.total)} cycles ({p.spectrum.bins.map(b=>`${n(b.cycles)} at ${b.liftFraction*100}%`).join(', ')}); vertical L/{p.verticalLimit}</dd></div>
       <div><dt>Rail</dt><dd>{(p.railDepth/inch).toFixed(2)} in rail, weld-on clips (example data)</dd></div>
       <div><dt>Girder</dt><dd><strong>{p.girder}</strong>{p.trial?` · sized: DG7 top-flange ratio ${p.trial.utilization.toFixed(2)}, deflection ${p.trial.deflection.toFixed(2)} of L/${p.verticalLimit}`:' · as selected'}</dd></div>
-      {design&&<div><dt>Supports</dt><dd>{pc.structure==='new'?'New':'Existing'} {p.column??''} columns · {supportLabels[pc.support]}{pc.support==='column-cap'?'':` · ${tieLabels[pc.tie]}`}{pc.structure==='new'?' · base plates, footings, rod bracing':''}</dd></div>}
+      {design&&<div><dt>Supports</dt><dd>{pc.support==='crane-column'?`New ${p.column??''} crane columns on column caps beside the existing ${p.buildingColumn??''} building columns, tied to them · ${tieLabels[pc.tie]} · ${pc.craneColumnBase??'pinned'} bases, footings, rod bracing`
+       :pc.support==='stepped-column'?`Existing stepped columns, ${p.column??''} lower / ${p.buildingColumn??''} upper shaft · girder on the step · ${tieLabels[pc.tie]} to the upper shaft`
+       :<>{pc.structure==='new'?'New':'Existing'} {p.column??''} columns · {supportLabels[pc.support]}{pc.support==='column-cap'?'':` · ${tieLabels[pc.tie]}`}{pc.structure==='new'?' · base plates, footings, rod bracing':''}</>}</dd></div>}
       {design&&p.reaction!==undefined&&<div><dt>Support reaction</dt><dd>{k(p.reaction,0)} unfactored, all cranes with impact (AIST TR-13 §5.9.2: column brackets up to 50 kip)</dd></div>}
      </dl>}
      {screen.length>0&&<div className="inline-note config-notes"><TriangleAlert size={14}/><div>{screen.map(v=><p key={v}>{v}</p>)}</div></div>}

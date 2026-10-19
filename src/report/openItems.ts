@@ -7,6 +7,7 @@ import {columnFlangeWidth,flangeEffectiveWidth} from '../engine/flangeTieDesign'
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {capAngleFatigue,capAngleResult} from '../engine/capAngleTie';
 import {maximumRule,sig3,statusLabel,value} from './reportParts';
+import {footingReactionText} from '../engine/craneColumn';
 
 /**
  * The open items of a calculation as a reviewer acts on them: one item per detail type and element, never one per
@@ -201,6 +202,9 @@ export function remedyFor(g:OpenGroup,s:CalculationSnapshot,tax:Taxonomy){
  const step=units==='US'?25.4/16:1;
  const x:RemedyContext={c,g,s,p,u,units,len:v=>sig3(v,'length',units),pct:r=>`${Math.ceil(r*100)}%`,
   size:(mm,r)=>Number.isFinite(r)?noteLength(Math.ceil(mm*r/step-1e-9)*step,units):'a larger size'};
+ // Crane-column footings over the existing footings: a foundation coordination item with the reactions to design for.
+ if(c.id==='crane-column-footing-clearance'&&c.status==='unverified'){const r=s.craneColumn?.footing?.reactions;
+  return `Combined or enlarged footing by the foundation engineer for the reactions given (${r?footingReactionText(r,units):'the crane-column base reactions'}); reference it in the calculation once designed.`;}
  // Missing or unconfirmed data: what to supply, from the check's own note.
  if(g.kind==='input'&&c.status!=='fail')return `Supply or confirm: ${firstSentence(c.note)}`;
  // A model outside the supported scope: a separate model, or an arrangement inside the scope.
