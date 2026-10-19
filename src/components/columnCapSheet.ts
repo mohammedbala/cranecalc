@@ -86,7 +86,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   svg+=dimH(X(-col.d/2),X(col.d/2),Y(cb),dy,dim(col.d))+dimH(X(-cap.plate.width/2),X(cap.plate.width/2),Y(-tc),dy+18,dim(cap.plate.width));
   // Callouts in two columns: the girder, its stiffeners, bearing plate and bolts at the left; welds, cap and column at the right.
   const cjp=stiffenerTopCjp(p),half=Math.max(cap.plate.width,b.kind==='cap'?b.capWidth:b.bf)/2;
-  type Item={at:XY;labels:string[];weld?:string;allAround?:boolean;arrowSide?:boolean};
+  type Item={at:XY;labels:string[];weld?:string;allAround?:boolean;arrowSide?:boolean;cjp?:boolean};
   const left:Item[]=[
    {at:[X(-b.bf/2)+4,Y(yt)],labels:[`${b.name} RUNWAY GIRDER,`,'CENTERED ON THE COLUMN']},
    {at:stiffPts[0],labels:[`2 PL ${size(bs.stiffenerThickness)} X ${size(bs.stiffenerWidth)} FULL-DEPTH`,`FITTED BEARING STIFFENERS,`,`${size(bs.cope)} WEB-SIDE CORNER COPES`]},
@@ -96,7 +96,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   const right:Item[]=[
    {at:[X(b.tw/2),Y(yb+b.tf+web*.7)],labels:['TYP. BOTH STIFFENERS',cjp?'CONT. WEB FILLETS, CJP TO TOP FL.':'CONT. WEB & FLANGE FILLETS',cjp?'FIT BOTTOM END':'FIT / MILL STIFFENER ENDS'],weld:size(bs.weldSize)},
    {at:[X(cap.plate.width/2),Y(-tc/2)],labels:[`${capLabel},`,'ASTM A572 GR. 50']},
-   {at:[X(col.d/2),Y(-tc)],labels:capCjp(cap)?['CAP TO COLUMN: CJP FLANGES','& WEB, REINF. FILLETS']:['CAP TO COLUMN: FLANGES BOTH','FACES, WEB BOTH SIDES'],weld:size(cap.weld),allAround:true},
+   {at:[X(col.d/2),Y(-tc)],labels:capCjp(cap)?['CAP TO COLUMN: COLUMN FLANGES','& WEB BEVELED, REINF. FILLET']:['CAP TO COLUMN: FLANGES BOTH','FACES, WEB BOTH SIDES'],weld:size(cap.weld),allAround:true,cjp:capCjp(cap)},
    ...(stiff?[{at:[X(col.d/2-col.tf),Y(-tc-hs*.6)] as XY,labels:['CAP STIFFENER TO EACH FLANGE,',`WHERE SHOWN ON ${groups.filter(o=>g.grids[o.grid].stiffeners.length).map(o=>o.mark).join(', ')}`],weld:size(cap.stiffener.weld)}]:[]),
    {at:[X(col.d/2),Y(cb+below*.3)],labels:[`${colName}, ASTM A992,`,'TOP MILLED TO BEAR ON THE CAP']}
   ];
@@ -166,11 +166,11 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   svg+=dimV(Zp(-cap.plate.width/2),Zp(cap.plate.width/2),xp,gw+6<=gy2-gy1?xp-38:gx-gw-16,dim(cap.plate.width));
   // Labels at the right of the elevation, then of the plan.
   const lx=xr+(braced?60:56),locating=bearings.some(v=>v.role==='LOCATING');
-  const items:{at:XY;labels:string[];weld?:string;allAround?:boolean;arrowSide?:boolean}[]=[
+  const items:{at:XY;labels:string[];weld?:string;allAround?:boolean;arrowSide?:boolean;cjp?:boolean}[]=[
    {at:[X(pieces[0][0]+(pieces[0][1]-pieces[0][0])*.7),Y(yb+b.tf)],labels:[`${b.name} GIRDER`,p.system==='continuous'?(bearings[0].end?'GIRDER END':'CONTINUOUS OVER COLUMN'):'GIRDER ENDS, GAP PER S-01']},
    {at:[X(bearings[0].x1),Y(bt/2)],labels:[`BEARING PL ${size(bt)} X ${dim(bs.width)} X ${dim(bs.length)}`,`${locating?'LOCATING':'SLIDING'}${bearings.length>1?' / SLIDING':''}; SEE ${detailRef(bearingBoltsTitle(p))}`]},
    {at:[X(cap.plate.length/2),Y(-tc/2)],labels:[`${grp.mark}: ${capLabel}`]},
-   {at:[X(col.bf/2),Y(-tc)],labels:[capCjp(cap)?'CAP TO COLUMN, CJP + REINF.':'CAP TO COLUMN, ALL AROUND'],weld:size(cap.weld),allAround:true},
+   {at:[X(col.bf/2),Y(-tc)],labels:[capCjp(cap)?'CAP TO COLUMN, CJP + REINF.':'CAP TO COLUMN, ALL AROUND'],weld:size(cap.weld),allAround:true,cjp:capCjp(cap)},
    ...(stiff?[{at:[X(grid.stiffeners.at(-1)!+ts/2),Y(-tc-hs*.7)] as XY,labels:[`CAP STIFFENER PL ${size(ts)} X ${size(hs)}`,`X ${dim(g.clear)}, ${size(g.clip)} CLIPS, FIT TO BEAR`,'UNDER GIRDER BRG. STIFFENER']}]:[]),
    {at:[X(col.bf/2),Y(cb+below*.3)],labels:[colName,'MILLED TOP']}
   ];

@@ -109,7 +109,9 @@ describe('Concurrent design, fatigue and export safety',()=>{
  });
  it('shows shared-support bracket reactions and limits serviceability to one crane on a continuous two-bay runway',()=>{
   const p=designProject();p.system='continuous';p.spans=[7620,7620];p.cranes[0].travelEnd=15240;p.cranes.push({...structuredClone(p.cranes[0]),id:'second',name:'Second crane'});const s=calculate(p);
-  expect(s.errors).toEqual([]);expect(s.designAnalysis!.singleVertical).toBeLessThan(s.analysis!.demand.deflection);expect(s.designAnalysis!.serviceReaction).toBeGreaterThan(50*4448.221615);expect(s.checks.find(c=>c.id==='column-brackets')?.status).toBe('fail');
+  expect(s.errors).toEqual([]);expect(s.designAnalysis!.singleVertical).toBeLessThan(s.analysis!.demand.deflection);expect(s.designAnalysis!.serviceReaction).toBeGreaterThan(50*4448.221615);
+  // Above the TR-13 bracket guideline: a failure while a bracket check fails, else an advisory recommendation.
+  const cb=s.checks.find(c=>c.id==='column-brackets')!;expect(cb.utilization).toBeGreaterThan(1);expect(cb.status==='fail'||cb.note.startsWith('AIST TR-13 §5.9.2 (clause to be verified)')).toBe(true);
   expect(s.designAnalysis!.combinations.some(c=>c.moment>0&&c.positions.length===2)).toBe(true);
  },300000);
  it('renders every worksheet equation without KaTeX errors and resolves every provision identifier',()=>{

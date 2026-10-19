@@ -105,7 +105,7 @@ export default function App(){
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),5000);return ()=>clearTimeout(t);},[toast]);
  // Keep expanded equations mounted during recalculation. The previous values
  // are dimmed and marked busy; export still requires the exact current revision.
- const current=snapshot?.revision===revision&&!busy,checks=snapshot?.checks??[],blockers=checks.filter(c=>['unverified','unsupported','incomplete'].includes(c.status)),passed=checks.filter(c=>c.status==='pass').length,failed=checks.filter(c=>c.status==='fail').length;
+ const current=snapshot?.revision===revision&&!busy,checks=snapshot?.checks??[],blockers=checks.filter(c=>['unverified','unsupported','incomplete'].includes(c.status)),passed=checks.filter(c=>c.status==='pass'&&!c.record).length,failed=checks.filter(c=>c.status==='fail').length;
  const ready=current&&snapshot.eligible,errors=current?snapshot.errors:[];
  const np=(label:string,value:number,onChange:(n:number)=>void,q:Quantity='length',help?:string,min=0)=><Numeric label={label} value={value} onChange={onChange} q={q} units={project.units} help={help} min={min}/>;
  const sf=(label:string,key:keyof ProjectInput['section'],q:Quantity='length')=>np(label,project.section[key] as number,n=>update(p=>{(p.section[key] as number)=n;}),q);

@@ -10,6 +10,7 @@ import {tieMovementChecks} from '../src/engine/tieMovement';
 import {braceSystem} from '../src/engine/detailAnalysis';
 import {checksCsv,valueCells} from '../src/report/taxonomyReport';
 import {summaryElements} from '../src/report/designSummary';
+import {recorded} from '../src/engine/calculate';
 import type {CalculationSnapshot,CheckResult} from '../src/engine/types';
 
 /**
@@ -187,5 +188,21 @@ describe('tie B1: one end-condition model, no clamped amplifier',()=>{
   expect(c.status).toBe('fail');expect(c.noCapacity).toBe(true);expect(c.utilization).toBe(Infinity);
   expect(c.note).toMatch(/elastic instability, αP_r\/P_e1 = 1\.10 ≥ 1 \(P_e1 = [\d.]+ kip over L_c = [\d.]+ in\), no capacity/);
   expect(c.note).not.toMatch(/^No capacity:/);
+ });
+});
+
+describe('input and load-basis records',()=>{
+ it('carry no D/C and are flagged records, never a governing 1.00; real input comparisons keep their ratio',()=>{
+  const r=(v:Partial<CheckResult>&{id:string})=>recorded(chk(v));
+  for(const c of [r({id:'design-scope',group:'Loading',demand:1,capacity:1,utilization:1,quantity:'ratio'}),r({id:'building-class',group:'Criteria',demand:1e5,capacity:1e5,utilization:1}),
+   r({id:'crane-1-impact',group:'Loading',demand:.1,capacity:.1,utilization:1}),r({id:'crane-1-statics-runway',group:'Crane input',demand:200*kip,capacity:200*kip,utilization:1,quantity:'force'})]){
+   expect(c.record,c.id).toBe(true);expect(c.utilization,c.id).toBeUndefined();expect(c.status).toBe('pass');
+  }
+  const energy=r({id:'crane-1-bumper-energy',group:'Bumper selection',demand:31.3,capacity:35.6,utilization:.88});
+  expect(energy.record).toBeUndefined();expect(energy.utilization).toBeCloseTo(.88,6);
+  // A design check at its limit is not a record.
+  expect(r({id:'shear',group:'Strength',demand:1,capacity:1,utilization:1,quantity:'force'}).record).toBeUndefined();
+  const s=sim002Snapshot();s.checks=[recorded(chk({id:'load-basis',group:'Loading',demand:1,capacity:1,utilization:1,quantity:'ratio'}))];
+  expect(checksCsv(s,buildTaxonomy(s)).split('\n')[1]).toMatch(/,pass,1,1,,ratio,.*,record$/);
  });
 });

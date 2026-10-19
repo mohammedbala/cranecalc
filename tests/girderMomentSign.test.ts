@@ -1,5 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {majorBySign} from '../src/engine/aistChecks';
+import {girderSizingRatios} from '../src/engine/configurator';
 import {flangeStrengths} from '../src/engine/designAnalysis';
 import {girderStrength,interaction} from '../src/engine/aiscStrength';
 import {sectionProperties} from '../src/engine/section';
@@ -42,5 +43,16 @@ describe('girder flexure by the sign of the moment (v2:21)',()=>{
   const gross={...p,aist:{...p.aist!,netFlangeArea:undefined}},g=girderStrength(gross,props);
   expect(g.netLimitApplies).toBe(false);expect(g.tensionMajor).toBeCloseTo(Mp,3);
   expect(w.tensionMajor!).toBeGreaterThanOrEqual(w.major*(1-1e-12));
+ });
+});
+
+describe('configurator girder screening by moment sign',()=>{
+ it('screens the negative moment of a continuous capped girder against M_c- (bottom flange in compression)',()=>{
+  const p={...cappedDemonstrationProject(),system:'continuous' as const},str=girderStrength(p,sectionProperties(p.section)),McR=flangeStrengths(str).bottom.majorReverse!;
+  const base={Mu:1,Mcrane:0,Hu:0,V:0};
+  const none=girderSizingRatios(p,p.section,base,str),neg=girderSizingRatios(p,p.section,{...base,Mneg:.8*McR},str);
+  expect(none.h1).toBeLessThan(.01);expect(neg.h1).toBeCloseTo(.8,6);
+  // The capped section is weaker in negative moment than in positive: the same moment screened positive gives less.
+  expect(girderSizingRatios(p,p.section,{...base,Mu:.8*McR},str).h1).toBeLessThan(neg.h1);
  });
 });

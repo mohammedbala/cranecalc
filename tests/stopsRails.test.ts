@@ -7,8 +7,9 @@ import {sizeEndStop,stopWeldAccess} from '../src/engine/endStopSizing';
 import {endStopGeometry} from '../src/engine/endStop';
 import {boltCapacity} from '../src/engine/connectionStrength';
 import {craneDesignMinimum} from '../src/engine/aistLoads';
-import {railLayout,railHasJoints,railJointKind} from '../src/engine/railLayout';
-import {railJointBearing} from '../src/engine/railChecks';
+import {railLayout,railHasJoints,railJointKind,railJointCategory} from '../src/engine/railLayout';
+import {railJointBearing,railChecks} from '../src/engine/railChecks';
+import {sheetFixture} from './fixtures/sheets/sheetFixtures';
 import {wheelGroups} from '../src/engine/railClip';
 import {stopContacts,stopFace} from '../src/engine/craneTravel';
 import {validateRunwayDetails} from '../src/engine/detailValidation';
@@ -91,8 +92,19 @@ describe('crane type, rail layout, joints and wheel passages',()=>{
  });
  it('welds the rail joints for heavy duty and uses supplier joint bars otherwise',()=>{
   expect(railJointKind(config({capacity:20,cmaa:'D'}))).toBe('welded');
-  expect(railJointKind(config({capacity:5,cmaa:'C',buildingClass:'C'}))).toBe('supplier-bars');
+  const light=config({capacity:5,cmaa:'C',buildingClass:'C'});
+  expect(railJointKind(light)).toBe('supplier-bars');
+  // The supplier's bars installed to the slip-critical requirements: AISC 360-16 Table A-3.1 item 2.2, Category B.
+  expect(light.details!.rail.jointSlipCriticalInstall).toBe(true);expect(railJointCategory(light)).toEqual({category:'B',basis:'installed'});
  },120000);
+ it('estimates the supplier joint bars at Category B when installed slip-critical, at Category D as a bearing-type joint',()=>{
+  const s=sheetFixture('t01'),est=(install:boolean)=>{const t=structuredClone(s);t.input.details!.rail.jointSlipCriticalInstall=install;return railChecks(t).find(c=>c.id==='rail-joint-fatigue')!;};
+  const d=est(false),b=est(true);
+  expect(b.demand).toBeCloseTo(d.demand!,6);
+  // F_SR = (C_f/n)^(1/3): Category B C_f = 120e8, D 22e8 (ksi³), so the allowables stand as (120/22)^(1/3).
+  expect(b.capacity!/d.capacity!).toBeCloseTo(Math.cbrt(120/22),3);
+  expect(b.note).toMatch(/Category B \(AISC 360-16 Table A-3\.1 item 2\.2\)/);expect(b.utilization!).toBeLessThan(1);
+ });
  it('puts the crane wheel at the stop face from the assumed bumper overhang',()=>{
   const p=config({capacity:10}),c=stopContacts(p,0);
   expect(p.cranes[0].design!.bumperOverhang).toBeGreaterThan(0);expect(c.every(v=>v.basis==='geometry')).toBe(true);

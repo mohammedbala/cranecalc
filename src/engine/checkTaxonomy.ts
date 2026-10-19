@@ -315,6 +315,10 @@ function ruleGate(s:CalculationSnapshot,c:CheckResult,k:Classification):GateResu
   return {gate:'not-applicable',reason:'Full channel-force development applies at the ends of partial-length caps; this cap runs the full girder length and ends at the supports, where the moment is negligible.'};
  // AISC 360-16 E2 and D1 user notes: slenderness limits the Specification recommends; the strength checks govern.
  const note=userNote(c);
+ // AIST TR-13 §5.9.2 bracket reaction guideline (clause to be verified): a recommendation, not a code limit, while the
+ // bracket's own checks pass; where one of them fails it stays an open item beside them (redesign of the support).
+ if(/^(column-brackets|(bracket|haunch|wbracket)-tr13-load)$/.test(c.id)&&!s.checks.some(v=>/^(bracket|haunch|wbracket)-/.test(v.id)&&!/-tr13-load$/.test(v.id)&&v.status==='fail'))
+  return {gate:'advisory',recommendation:true,reason:'AIST TR-13 §5.9.2 (clause to be verified): reaction above the TR-13 guideline for brackets, consider a crane column or stepped column; an advisory, not a code requirement: the bracket and column checks govern.'};
  if(note)return {gate:'advisory',recommendation:true,reason:note==='E2'?'AISC 360-16 E2 user note: L_c/r preferably should not exceed 200; a recommendation, not a requirement (the compression strength is checked by AISC E3 and H1).':'AISC 360-16 D1 user note: L/r preferably should not exceed 300; a recommendation, not a requirement.'};
  if(k.effect==='fatigue'&&!isPeak(c.id)){
   const n=fatigueCycles(s);

@@ -294,7 +294,7 @@ export function checksCsv(s:CalculationSnapshot,tax:Taxonomy,o:{internal?:boolea
  const head=['id','type','effect','element','title','group','location','repeat_group','typical_of','governs_group','body_line','gate','gate_reason','status','demand','capacity','utilization','quantity','units','reference','case','case_name','classification_rule','dc_state'];
  // A check without a usable D/C says why: no capacity (the flag, as JSON writes Infinity as null), invalid geometry, or a
  // result not valid because its edge or fit prerequisite fails; its utilization cell is then empty.
- const state=(c:CheckResult)=>c.geometry?'invalid geometry':c.noCapacity||noCapacity(c.utilization)?'no capacity':c.note.startsWith('Not valid:')?'not valid':'';
+ const state=(c:CheckResult)=>c.record?'record':c.geometry?'invalid geometry':c.noCapacity||noCapacity(c.utilization)?'no capacity':c.note.startsWith('Not valid:')?'not valid':'';
  const rows=[...tax.entries.values()].map(t=>{const c=t.check,line=t.line&&tax.shown.some(l=>l.key===t.line)?t.line:'',qq=(c.quantity??'ratio') as Quantity;
   const st=state(c),[demand,capacity,util,u]=o.internal?[c.demand??'',c.capacity??'',st?'':c.utilization??'','SI internal (N, mm, MPa)']:[csvNumber(c.demand,qq,units),csvNumber(c.capacity,qq,units),!st&&c.utilization!==undefined&&Number.isFinite(c.utilization)?Number(c.utilization.toFixed(c.utilization<.1&&c.utilization>0?4:2)):'',unit(qq,units)];
   return [c.id,t.type,t.effect??'',t.elementLabel,c.title,c.group,t.location??'',t.repeat??'',t.typicalOf,t.governsRepeat?'yes':'',line,t.gate,t.reason??'',c.status,demand,capacity,util,c.quantity??'',u,shortReference(c),c.caseId??'',c.caseId?tax.caseName(c.caseId):'',t.rule,st];});

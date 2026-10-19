@@ -66,16 +66,20 @@ describe('open items of SIM-002',()=>{
   expect(c.status).toBe('not-applicable');expect(c.utilization).toBeCloseTo(1.055,3);
   expect(gateCheck(s,c)).toMatchObject({gate:'advisory',recommendation:true});
   expect(tax.openItems.some(o=>o.check.id==='tie-slenderness')).toBe(false);expect(group('tie-slenderness')).toBeUndefined();
-  expect(tax.recommendations.map(r=>r.check.id)).toEqual(['tie-slenderness']);
-  expect(text(openItemsBlock(tax,s))).toMatch(/Recommendation \(not code requirements, not counted as open items\): Flexible plate, slenderness 211 against 200 \(AISC 360-16 E2 user note: L ?c ?\/r preferably should not exceed 200\)\./);
+  expect(tax.recommendations.map(r=>r.check.id)).toContain('tie-slenderness');
+  expect(text(openItemsBlock(tax,s))).toMatch(/Recommendations? \(not code requirements, not counted as open items\):.*Flexible plate, slenderness 211 against 200 \(AISC 360-16 E2 user note: L ?c ?\/r preferably should not exceed 200\)[.;]/);
   // The strength deficiency stays in the H1 check of the tie.
   expect(group('tie-move-strength')!.kind).toBe('redesign');
  });
- it('reads the two TR-13 §5.9.2 statements as one redesign item with the remedy',()=>{
-  const g=group('column-brackets')!;
-  expect(g.kind).toBe('redesign');expect(g.members.map(c=>c.id).sort()).toEqual(['bracket-tr13-load','column-brackets']);
-  expect(g.title).toBe('Column bracket applicability (AIST TR-13 §5.9.2 total reaction)');
-  expect(g.remedy).toMatch(/crane columns or a stepped column, or record the engineer of record’s acceptance of brackets for this load with the surveyed capacity of the building column/);
+ it('lists the TR-13 §5.9.2 bracket guideline (clause to be verified) as an advisory while the bracket checks pass',()=>{
+  expect(group('column-brackets')).toBeUndefined();expect(group('bracket-tr13-load')).toBeUndefined();
+  const c=s.checks.find(v=>v.id==='bracket-tr13-load')!;
+  expect(gateCheck(s,c)).toMatchObject({gate:'advisory',recommendation:true});
+  expect(tax.recommendations.map(r=>r.check.id)).toContain('bracket-tr13-load');
+  expect(text(openItemsBlock(tax,s))).toMatch(/reaction above the TR-13 guideline for brackets, consider a crane column or stepped column/);
+  // A failing check of the bracket itself keeps the guideline an open item beside it.
+  const failing={...s,checks:[...s.checks,chk({id:'bracket-root-weld',group:'Bracket',status:'fail',demand:2,capacity:1,utilization:2,quantity:'force'})]};
+  expect(gateCheck(failing,{...c,status:'fail'}).gate).toBe('evaluated');
  });
  it('reads the column gusset root fillets as one weld, the tie in compression as one member',()=>{
   const welds=tax.lines.find(l=>l.key.startsWith('tie-column-welds@'))!;

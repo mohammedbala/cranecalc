@@ -154,29 +154,27 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
    [{capacity:25,craneSpan:70,cmaa:'D',buildingClass:'B',bays:4,span:30,support:'tapered-haunch',railElevation:28},91.5]];
   for(const [cfg,R] of cases)expect(Math.abs(previewConfig({...defaultRunwayConfig,...cfg}).reaction!/kip/R-1)).toBeLessThan(.02);
  });
- it('puts a new structure above it on column caps over the new crane columns, and says why',()=>{
+ it('keeps the brackets of a new structure above it (the guideline is advisory), naming the column caps',()=>{
   const cfg:RunwayConfig={...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30,structure:'new',support:'twin-rib',tie:'flexible-plate'};
   const v=previewConfig(cfg);
-  expect(v.reaction!).toBeGreaterThan(50*kip);expect(v.config).toMatchObject({structure:'new',support:'column-cap',tie:'paired-bars'});
-  expect(v.changes[0]).toMatch(/^The support reaction, about \d+ kip, exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets: the girders bear on column caps over the new crane columns/);
-  const p=buildProject(cfg);
-  expect(p.configurator?.support).toBe('column-cap');expect(p.columnCap?.enabled).toBe(true);expect(p.details!.bracket?.enabled).toBeFalsy();
-  expect(validateProject(p)).toEqual([]);
-  // The selection log names the support and the tie that were replaced, each with its governing rule.
-  const log=p.configurator!.selections!,row=(item:string)=>log.find(v=>v.item===item);
-  expect(row('Girder support')).toMatchObject({entered:'Welded twin-rib seat',designed:'Column cap (new columns)',reason:expect.stringMatching(/exceeds the AIST TR-13 §5\.9\.2 recommendation/)});
-  expect(row('Top-flange tie')).toMatchObject({entered:'Flexible plate',designed:expect.stringMatching(/^None: end fork on the column cap/),reason:expect.stringMatching(/fork/)});
-  expect(row('New column')?.designed).toBe(p.existingColumn!.shape);
- },120000);
- it('puts an existing structure above it on crane columns tied to the building columns; within it nothing is said',()=>{
-  const v=previewConfig({...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30});
-  expect(v.config.support).toBe('crane-column');
-  expect(v.changes).toContainEqual(expect.stringMatching(/^The support reaction, about \d+ kip, exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets \(clause to be verified\): new crane columns beside the building columns/));
+  expect(v.reaction!).toBeGreaterThan(50*kip);expect(v.config).toMatchObject({structure:'new',support:'twin-rib'});
+  expect(v.changes[0]).toMatch(/^The support reaction, about \d+ kip, is above the AIST TR-13 §5\.9\.2 guideline of 50 kip for column brackets, a clause to be verified: consider column caps over the new columns; an advisory, not a code limit, so the support entered \(Welded twin-rib seat\) is kept and checked here\.$/);
+ });
+ it('keeps the brackets of an existing structure above it, with an advisory naming the crane and stepped columns; within it nothing is said',()=>{
+  const cfg:RunwayConfig={...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30},v=previewConfig(cfg);
+  // The TR-13 guideline (clause to be verified) never replaces the support entered.
+  expect(v.config.support).toBe('twin-rib');
+  expect(v.changes).toContainEqual(expect.stringMatching(/^The support reaction, about \d+ kip, is above the AIST TR-13 §5\.9\.2 guideline of 50 kip for column brackets, a clause to be verified: consider a crane column tied to the building column or a stepped column; an advisory, not a code limit, so the support entered \(Welded twin-rib seat\) is kept and checked here\.$/));
+  expect(previewConfig({...cfg,support:'by-others'}).config.support).toBe('by-others');
+  // The selection log keeps the support and says why (report and S-00: 'Girder support, advisory').
+  const p=buildProject(cfg),row=p.configurator!.selections!.find(v=>v.item==='Girder support, advisory')!;
+  expect(p.details!.bracket?.enabled).toBe(true);expect(p.craneColumn).toBeUndefined();
+  expect(row).toMatchObject({entered:'Welded twin-rib seat',designed:'Welded twin-rib seat, kept',reason:expect.stringMatching(/a clause to be verified: consider a crane column/)});
   // The structure stays existing (t05, t08 and t10 are within the recommendation and keep their brackets).
   expect(v.config.structure).toBe('existing');
   // The one statement within the limit is the assumed bumper overhang (end-truck geometry for the stop contacts).
   const light=previewConfig({...defaultRunwayConfig,capacity:5});expect(light.changes.filter(v=>!/^Bumper overhang assumed/.test(v))).toEqual([]);expect(light.changes.at(-1)).toMatch(/^Bumper overhang assumed \d+ in/);expect(light.reaction!).toBeLessThan(50*kip);
- });
+ },120000);
 });
 
 describe('configurator selection log',()=>{
@@ -240,4 +238,17 @@ describe('configurator selection log',()=>{
   expect(cover).not.toContain('NEXT LIGHTER');
   expect(annotationClashes(cover)).toBe(0);expect(cover).not.toMatch(/data-overflow/);
  });
+});
+
+describe('configurator: the fork on a column cap and the title as designed',()=>{
+ it('sizes the bearing stiffener pair of the fork for plate fatigue (case 086 on column caps)',()=>{
+  const cfg:RunwayConfig={...defaultRunwayConfig,title:'15 t cab · new columns · column-cap · paired-bars · 3×35 ft simple · ASD',units:'US',method:'ASD',scope:'design',
+   capacity:15,craneSpan:56,control:'cab',cmaa:'B',cranes:1,buildingClass:'B',system:'simple',bays:3,span:35,railElevation:18,girder:'rolled',structure:'new',support:'column-cap',tie:'paired-bars'};
+  const p=buildProject(cfg);
+  expect(p.columnCap?.enabled).toBe(true);
+  // The pair laid out at 5/8 in by the template is thickened for the fork's fatigue range.
+  expect(p.details!.bearing.stiffenerThickness).toBeGreaterThanOrEqual(.75*inch-1e-9);
+  // The title names the end fork, not the paired bars entered (there is no flange tie).
+  expect(p.title).toBe('15 t cab · new columns · column-cap · end-fork · 3×35 ft simple · ASD');
+ },300000);
 });

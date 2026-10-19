@@ -46,10 +46,14 @@ describe('configurator project validity',()=>{
  for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
  // Beyond the catalog the build stops with the configurator's reasons only (beyondCatalog): V059 and V061 need a plate
  // girder (they took the W14X873 column shape before).
- const stops=new Set(['V059','V061']);
+ // 034, 061 and CC2 ask for a cap tieback angle that no set of its sizing steps carries (lap slip several times over,
+ // or the imposed movement in the plate): the build stops (capAngleUnresolved; the calculation of CC2 gave plate
+ // movement 1.96 and end plate weld 1.44 against estimates of 2.56 and 1.87).
+ const stops=new Map<string,RegExp>([['V059',/^configurator: Plate girder required/],['V061',/^configurator: Plate girder required/],
+  ['034',/^configurator: Top-flange tie not resolved: the cap tieback angle/],['061',/^configurator: Top-flange tie not resolved: the cap tieback angle/],['CC2',/^configurator: Top-flange tie not resolved: the cap tieback angle/]]);
  for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} ${stops.has(id)?'stops with the configurator reason':'builds a valid project'}`,()=>{
   const e=validateProject(buildProject(c));
-  if(stops.has(id)){expect(e.some(v=>/^configurator: Plate girder required/.test(v))).toBe(true);expect(e.every(v=>v.startsWith('configurator: '))).toBe(true);}
+  if(stops.has(id)){expect(e.some(v=>stops.get(id)!.test(v))).toBe(true);expect(e.every(v=>v.startsWith('configurator: '))).toBe(true);}
   else expect(e).toEqual([]);
  },300000);
  it('new freestanding columns take the top of rail to at most 35 ft (ASCE 7 cantilever column height limit), with the reason',()=>{

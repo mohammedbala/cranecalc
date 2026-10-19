@@ -90,7 +90,8 @@ describe('girder-mounted runway end stops',()=>{
   const checks=endStopChecks(p),bearing=checks.find(c=>c.id==='end-stop-wrench-bearing')!;
   expect(bearing.status).toBe('fail');e.setback=7*inch;
   e.bolts.frontClear=.75*inch;expect(endStopChecks(p).find(c=>c.id==='end-stop-wrench-face')!.status).toBe('fail');
-  expect(wrenchClearance(.75*inch)).toBeCloseTo(1.25*inch,9);expect(wrenchClearance(1*inch)).toBeCloseTo(1.6*inch,9);
+  // AISC Manual Table 7-15 C1 plus the 1/16 in fabrication tolerance (fitTolerances.ts).
+  expect(wrenchClearance(.75*inch)).toBeCloseTo((1.25+1/16)*inch,9);expect(wrenchClearance(1*inch)).toBeCloseTo((1.6+1/16)*inch,9);
   // A stop over a runway-end tie saddle puts its back nuts on the saddle (the demonstration with its tie on the saddle).
   const q=saddleDemonstration(),f=q.details!.endStop!;f.bolts.frontClear=1.75*inch;f.setback=.5*inch;expect(endStopChecks(q).find(c=>c.id==='end-stop-wrench-saddle')!.status).toBe('fail');e.bolts.frontClear=1.75*inch;e.setback=.5*inch;
   expect(endStopChecks(p).some(c=>c.id==='end-stop-zone')).toBe(false);
@@ -177,7 +178,7 @@ describe('girder-mounted runway end stops',()=>{
   const si={...demo,input:{...demo.input,units:'SI' as const}},t=endStopTopic(si);
   const all=[...t.views.map(v=>texts(v.render().svg).join(' | ')),texts(endStopSheetSvg(si)).join(' | ')].join(' | ');
   expect(all).not.toMatch(/KIP|KSI|\d[ -]IN\b|"|\d+\.\d{2,} kN/);
-  expect(all).toContain('89 kN');expect(texts(endStopSheetSvg(demo)).join(' ')).toContain('1 7/16" / 1 5/16", 1 1/4" MIN.');
+  expect(all).toContain('89 kN');expect(texts(endStopSheetSvg(demo)).join(' ')).toContain('1 7/16" / 1 5/16", 1 5/16" MIN.');
  });
  it('requires a stop design whenever a stop force reaches the girder',()=>{
   const p=demonstrationProject();p.details!.endStop!.enabled=false;

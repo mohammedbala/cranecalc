@@ -17,7 +17,7 @@
  *   configurator then sizes a welded bracket at that reach;
  * - paired bars that still cannot follow the movement: the column-end slide (the column gusset floating along the
  *   runway on longer sleeves, fillers at the girder gusset; tieRelease, tieMovementChecks).
- * Strength and fatigue ratios are held to 0.9, the imposed-movement checks to 0.97 and the fit and detailing limits to
+ * Strength and fatigue ratios are held to 0.9, the imposed-movement checks to 0.93 and the fit and detailing limits to
  * one (sizingLimit). Canonical units N, mm, MPa.
  */
 import type {CalculationSnapshot,CheckResult,ProjectInput} from './types';
@@ -312,11 +312,12 @@ export const tieSizingTarget=.9;
  * Checks of the imposed girder end movement: the bars or plate fixed at both bolt groups, and the gussets and welds
  * that hold them. Their movement is the analysis's own (the same beam end rotations, thermal travel and geometry) and
  * only the axial share of the H1 sum is estimated (the tie force estimate, within 3% of the analysis on t01, t05 and
- * t08), so they are sized nearer their limit: the target plus 0.07, 0.97 at the default target.
+ * t08), so they are sized nearer their limit: the target plus 0.03, 0.93 at the default target, which keeps that 3%
+ * and a margin (0.97 left case 034 at 1.001 calculated).
  */
 const imposedMovement=new Set(['tie-move-strength','tie-move-gusset','tie-move-weld','tie-move-root-fatigue','tie-move-fatigue']);
 /** The limit the sizing holds a ratio to: one for fit and detailing limits, the movement target for the imposed movement, else the target. */
-export const sizingLimit=(ratios:Record<string,number>,k:string,target=tieSizingTarget)=>sizingLimits(ratios).has(k)?1:imposedMovement.has(k)?Math.min(1,target+.07):target;
+export const sizingLimit=(ratios:Record<string,number>,k:string,target=tieSizingTarget)=>sizingLimits(ratios).has(k)?1:imposedMovement.has(k)?Math.min(1,target+.03):target;
 /**
  * The project with its tie sized for the estimated demands (tieSizingDemands), every ratio at most `target` where the
  * search finds such a set. `reach`: the largest column face distance from the girder web centerline (bracket reach, or

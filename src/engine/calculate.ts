@@ -20,7 +20,7 @@ import { aistChecks } from './aistChecks';
 import { latexNumber,withinLimit } from './math';
 import { validateRunwayDetails } from './detailValidation';
 import { completeRunwayChecks } from './detailChecks';
-import { gateCheck } from './checkTaxonomy';
+import { gateCheck,classifyCheck } from './checkTaxonomy';
 import { normalizeChecks } from './checkIntegrity';
 import { compressionFlangeGap } from './detailAnalysis';
 import { travelLimits } from './continuation';
@@ -42,6 +42,7 @@ import { activeStep } from './steppedColumnInputs';
 import { fatigueCycleCheck } from './buildingClass';
 import { fatigueCycleFamilies } from './railChecks';
 import { tiedToBuilding } from './craneColumnInputs';
+import { fabricationToleranceNote } from './fitTolerances';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
@@ -215,6 +216,7 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  // The one-count check names the cycles of every wheel-local detail family, derived from the one count (fatigueCycleFamilies).
  if(p.details)snapshot.checks=snapshot.checks.map(c=>c.id==='fatigue-cycles'?fatigueCycleCheck(p,fatigueCycleFamilies(p)):c);
  integrityAndGates(snapshot);
+ snapshot.checks=snapshot.checks.map(recorded).map(toleranceStated);
  const blocking=snapshot.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status));
  // Failed engineering criteria can export; failed numerical verification cannot.
  snapshot.eligible=!blocking&&!snapshot.errors.length&&snapshot.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass');
@@ -230,6 +232,28 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  return snapshot;
 }
 
+/**
+ * A tool-clearance check (the socket clearance C₁ of AISC Manual Table 7-15, wrenchClearance) states the fabrication
+ * tolerance its required clearance includes (fitTolerances.ts).
+ */
+export function toleranceStated(c:CheckResult):CheckResult{
+ if(c.quantity!=='length'||c.note.includes(fabricationToleranceNote))return c;
+ return /wrench|^base-rod-clear$/.test(c.id)||/Table 7-15/.test(c.note)?{...c,note:`${c.note.trim()} ${fabricationToleranceNote}`}:c;
+}
+/**
+ * An input or load-basis record (classifyCheck type 'input' or 'load-basis') that passes by restating a value (demand
+ * equal to capacity, e.g. the building class cycles, the impact factor or the crane statics as entered) or with no
+ * ratio: flagged record, its utilization removed, so it never ranks as a governing D/C of 1.00 and is not counted as a
+ * passing check. Input checks that compare two different values (the bumper energy against its rating) keep their D/C.
+ */
+export function recorded(c:CheckResult):CheckResult{
+ if(c.status!=='pass')return c;
+ const type=classifyCheck(c).type;if(type!=='input'&&type!=='load-basis')return c;
+ const same=c.demand!==undefined&&c.capacity!==undefined&&Math.abs(c.demand-c.capacity)<=1e-9*Math.max(1,Math.abs(c.capacity));
+ const none=c.demand===undefined&&c.capacity===undefined;
+ if(!same&&!none)return c;
+ const {utilization:_u,...rest}=c;return {...rest,record:true};
+}
 /**
  * An excluded (by others, deferred submittal) check whose reference D/C exceeds 1.00, reopened as 'unverified' with the
  * flag byOthers: listed with the open items and on the drawings, never read as passing. Its demand and capacity stay for

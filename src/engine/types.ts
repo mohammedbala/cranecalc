@@ -40,6 +40,8 @@ export interface ReferenceRecord { id:string; title:string; edition:string; clau
 export interface CheckResult { id:string; group:string; title:string; status:Status; demand?:number; capacity?:number; utilization?:number; quantity?:'length'|'force'|'moment'|'stress'|'ratio'|'stiffness'|'pressure'|'temperature'|'acceleration'|'lineForce'; equation:string; substitution?:string; referenceIds:string[]; note:string; caseId?:string;
  /** Set by checkIntegrity.ts: a dimensional check whose demand or capacity is negative (an impossible part or an overlap). It fails, carries no D/C (utilization undefined) and is listed in CalculationSnapshot.geometryConflicts. */
  geometry?:boolean;
+ /** Set by calculate(): a recorded input or load-basis value (an input, load or criterion restated, its demand equal to its own value, or no ratio at all). It carries no D/C (utilization undefined), is never ranked as governing and is not counted as a passing check. */
+ record?:boolean;
  /** Set by checkIntegrity.ts: the part has no capacity for the action (capacity ≤ 0, or a ratio that is not finite or above 1000). It fails with utilization Infinity and ranks above every finite D/C; JSON writes Infinity as null, so this flag is the source of truth. */
  noCapacity?:boolean;
  /** Set by checkIntegrity.ts: 'min' where the demand is the requirement and the capacity the provided value (a minimum factor of safety, a ratio to be met or exceeded); 'max' (the default) where the demand may not exceed the capacity. */

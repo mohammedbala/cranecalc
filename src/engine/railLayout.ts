@@ -86,6 +86,18 @@ export const railJointType=(p:ProjectInput):'tight'|'open'=>railJointKind(p)==='
 /** How the rail pieces are joined (runwayDetails rail.jointKind): welded, supplier joint bars, or joint bars detailed here. */
 export const railJointKind=(p:ProjectInput)=>p.details?.rail.jointKind??'bolted-bars';
 /**
+ * The AISC 360-16 Table A-3.1 category of the joint bars' net section: B for a slip-critical joint (item 2.1) or a
+ * bearing-type joint installed to all the slip-critical requirements (item 2.2: pretensioned bolts and Class A faying
+ * surfaces, rail.jointSlipCriticalInstall), else D (item 2.3, other mechanically fastened joints).
+ */
+export function railJointCategory(p:ProjectInput):{category:'B'|'D';basis:'slip-critical'|'installed'|'bearing'}{
+ const k=railJointKind(p);
+ if(k==='slip-critical-bars')return {category:'B',basis:'slip-critical'};
+ return k!=='welded'&&p.details?.rail.jointSlipCriticalInstall?{category:'B',basis:'installed'}:{category:'D',basis:'bearing'};
+}
+/** The installation requirement of joint bars installed as slip-critical (Table A-3.1 item 2.2), as the notes print it. */
+export const slipCriticalInstallText='installed as a slip-critical joint (bolts pretensioned per RCSC, Class A faying surfaces of clean mill scale free of paint, oil and lubricant), AISC 360-16 Table A-3.1 item 2.2';
+/**
  * Joint kind for the crane duty: welded rail joints (thermite or flash-butt) for CMAA Class D to F cranes or an AIST
  * Class A or B building, where bolted joints loosen and their bars and holes fatigue under the wheel passages (AIST
  * TR-13 §5.16); otherwise the rail supplier's joint bars fitted to the rail fishing surfaces.

@@ -77,7 +77,7 @@ export function CheckGroup({name,checks,units,issuesOnly,project}:{name:string;c
  const rows=checks.filter(c=>c.group===name),issues=rows.filter(c=>!['pass','not-applicable'].includes(c.status)),visible=issuesOnly?issues:rows;
  if(!rows.length)return null;
  const utilizations=rows.map(utilization).filter((v):v is number=>v!==undefined);
- const max=utilizations.length?Math.max(...utilizations):undefined,pass=rows.filter(c=>c.status==='pass').length,fail=rows.filter(c=>c.status==='fail').length,na=rows.filter(c=>c.status==='not-applicable').length,others=rows.filter(c=>c.status==='excluded').length;
+ const max=utilizations.length?Math.max(...utilizations):undefined,pass=rows.filter(c=>c.status==='pass'&&!c.record).length,fail=rows.filter(c=>c.status==='fail').length,na=rows.filter(c=>c.status==='not-applicable').length,others=rows.filter(c=>c.status==='excluded').length;
  return <details className={`worksheet-checks ${issues.length?'has-issues':''}`} open={issues.length>0||rows.length<=6}>
   <summary><ChevronRight size={13}/><strong>{name}</strong><span>{pass} pass{fail?` · ${fail} fail`:''}{issues.length-fail-others?` · ${issues.length-fail-others} pending`:''}{others?` · ${others} by others`:''}{na?` · ${na} N/A`:''}</span><b className={max!==undefined&&max>1?'danger':''}>{max===undefined?'—':max.toFixed(3)}<small>MAX D/C</small></b></summary>
   <CheckFigure topic={name} project={project}/>
