@@ -10,6 +10,7 @@ import {capTieLine} from './capAngle';
 import {activeColumnCap} from './columnCapInputs';
 import {tiedToBuilding} from './craneColumnInputs';
 import {columnPlates} from './craneColumn';
+import {stepTieColumn} from './steppedColumnInputs';
 
 /**
  * Ties of the direct flange-tie family: two flat bars, one each side of the girder and column gussets, or one
@@ -32,6 +33,8 @@ export function tieReceiver(p:ProjectInput){
  const b=p.details?.bracket;
  if(tiedToBuilding(p)){const k=p.craneColumn!.building,c=columnPlates(k);return {width:c.bf,flangeThickness:c.tf,Fy:k.Fy,source:'building column'};}
  if(b?.enabled)return {width:b.receiver.width,flangeThickness:b.receiver.flangeThickness,Fy:b.receiver.Fy,source:'bracket receiving column'};
+ // A stepped column: the tie lands on the upper shaft's inner flange.
+ const up=stepTieColumn(p);if(up)return {width:up.bf,flangeThickness:up.tf,Fy:up.Fy,source:up.source};
  if(p.existingColumn?.enabled){const s=existingColumnSection(p).section;return {width:s.bf,flangeThickness:s.tf,Fy:s.Fy,source:'existing column'};}
  return undefined;
 }

@@ -1,4 +1,5 @@
 import {seatSettingTolerance,slidingClearance} from './fitTolerances';
+import {activeStep} from './steppedColumnInputs';
 import type {CheckResult,DesignAnalysis,ProjectInput} from './types';
 import {available} from './aiscStrength';
 import {boltCapacity,boltProperties,plateBearing} from './connectionStrength';
@@ -150,6 +151,7 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   );
  }else if(usesRolledBracket(p))checks.push(...rolledSeatChecks(p,e,g,V,T,C,tMin,compared));
  else if(usesTaperedHaunch(p))checks.push(...haunchSeatChecks(p,e,g,V,T,C,tMin,compared));
+ else if(activeStep(p))checks.push(byOthers('end-bearing-seat','Step cap holes and nut clearance',`The seat is the existing step cap of the stepped column (its bearing, flexure and the lower shaft under it: Stepped column checks): survey the cap, shim the bearing plates to the theoretical elevation (steel shims, full bearing, at most ${shim.plies||3} plies, ${f(shim.max||12.7)} max.), field drill the cap to the bearing pattern after the girder is lined and leveled, clear of the cap-to-shaft welds, and confirm nut clearance below the cap.`));
  else if(!activeColumnCap(p))checks.push(byOthers('end-bearing-seat','Bracket seat holes and nut clearance',`The seat is by others: survey the seats, shim the bearing plates to the theoretical elevation (steel shims, full bearing, at most ${shim.plies||3} plies, ${f(shim.max||12.7)} max.), and field drill or ream the seat holes to the bearing pattern after the girder is lined and leveled; provide nut clearance below the seat and a seat that carries the bolt forces reported here.`));
  return checks;
 }

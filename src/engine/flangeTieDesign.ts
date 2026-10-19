@@ -1,4 +1,5 @@
 import {categoryF,finiteLife} from './fatigueConstants';
+import {stepTieColumn} from './steppedColumnInputs';
 import type {ProjectInput,CheckResult,CalculationSnapshot} from './types';
 import {flangeTieGeometry,stiffenerTieGeometry,stiffenerTieJoint,gussetRotation} from './tieGeometry';
 import {format} from './units';
@@ -40,7 +41,7 @@ export function flangeEffectiveWidth(p:ProjectInput,g=flangeTieGeometry(p)!){
  * stops at half the clear gap between them.
  */
 export function columnFlangeWidth(p:ProjectInput,g=flangeTieGeometry(p)!){
- const d=p.details!,b=d.bracket,col=tieColumn(p),hg=g.columnGusset,s=p.section;
+ const d=p.details!,b=d.bracket,tc=tieColumn(p),col=tc?.enabled?{...tc,...stepTieColumn(p)}:tc,hg=g.columnGusset,s=p.section;
  const flange=g.receiver?.flangeThickness??0,web=b?.enabled?b.receiver.webThickness:col?.enabled?col.tw:0,shape=aiscShapeByName(col?.shape??'');
  // Fillet toe from the catalogue shape when it is the receiving section, else the web face.
  const k1=web/2+(shape&&Math.abs(shape.tf*25.4-flange)<=1.5875?Math.max(0,shape.kdes-shape.tf)*25.4:0);

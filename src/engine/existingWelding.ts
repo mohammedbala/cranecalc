@@ -1,4 +1,5 @@
 import type {CheckResult,ProjectInput} from './types';
+import {activeStep} from './steppedColumnInputs';
 import type {ExistingWeldingInput} from './existingColumnInputs';
 import {format} from './units';
 import {rolledStub} from './rolledBracketInputs';
@@ -30,6 +31,8 @@ export function weldedAttachments(p:ProjectInput):{name:string;t:number}[]{
  const capStiffener=d.brace.arrangement==='cap-angle'&&d.brace.capAngle?.stiffener?.enabled?d.brace.capAngle.stiffener:undefined;
  if(capStiffener)out.push({name:'column stiffener at the cap angle tie',t:capStiffener.thickness});
  if(d.brace.arrangement!=='cap-angle')out.push({name:'tie gusset',t:d.brace.gussetThickness});
+ // A stepped column's step stiffener pair is fillet welded to the existing lower web.
+ const st=activeStep(p)?.stiffener;if(st)out.push({name:'step stiffener',t:st.thickness});
  return out;
 }
 /** True where this calculation specifies welds to an existing (not new) column. */
