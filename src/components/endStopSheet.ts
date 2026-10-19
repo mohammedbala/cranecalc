@@ -14,6 +14,7 @@ import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {activeEndBearing,continuousBearings} from '../engine/endBearingInputs';
 import {heavyHex,hexSide,hexPlan} from './heavyHex';
+import {AnnotationSpace,dimHClear} from './annotationSpace';
 
 const inch=25.4;
 /**
@@ -178,7 +179,7 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
   // C/L height left of the plates; the bumper C/L runs across the face plate to its dimension. Extension lines run
   // past their dimension lines.
   const xH=X(-Wb/2)-52,xC=X(-Wb/2)-30,rb=e.bumperDiameter/2*kk;
-  svg+=dimH(X(-Wb/2),X(Wb/2),Y(tb+H)-2,Y(tb+H)-14,dim(Wb))+dimH(X(-gauge/2),X(gauge/2),wFl+hx.nut*kk+2,cut+26,dim(gauge));
+  svg+=dimH(X(-Wb/2),X(Wb/2),Y(tb+H)-2,Y(tb+H)-14,dim(Wb));
   svg+=dimV(Y(tb+H),yb,X(-Wb/2)-2,xH,dim(H));
   // The bumper height shares the base plate extension line of the face plate height.
   svg+=line([bc[0]+rb+6,bc[1]],[xC-over,bc[1]],'grid-line')+refDim(dimLineV(bc[1],yb,xC,drawingLength(g.contact,u)));
@@ -189,6 +190,8 @@ export function endStopTopic(s:CalculationSnapshot):DetailTopic{
    {at:[X(gauge/2)+hx.corners/2*kk,wFl+hx.nut/2*kk],labels:[boltLabel,'NUTS BELOW TOP FLANGE','CLEAR OF WEB FILLET']},
    {at:[X(b.tw/2),cut-6],labels:[`${b.name} RUNWAY GIRDER`]}
   ],lx,410,620);
+  // The gauge below the nuts, its value between the bolt lines where the girder's leader leaves it clear, else beyond them.
+  svg+=dimHClear(new AnnotationSpace(svg),X(-gauge/2),X(gauge/2),wFl+hx.nut*kk+2,cut+26,dim(gauge));
   return {svg:svg+'</g>',scale:k.label};
  }});
  // 4: Design data and notes.

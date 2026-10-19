@@ -19,7 +19,7 @@ import {capTopic} from './capSheet';
 import {steppedColumnTopic,steppedColumnTitles} from './steppedColumnSheet';
 import {activeStep} from '../engine/steppedColumnInputs';
 import {packDetailSheets,detailSheetSvg,detailSheetTitle,clearView,annotationClashes,type DetailTopic} from './detailSheet';
-import {AnnotationSpace,dimHAt,dimVAt,type DimPlace} from './annotationSpace';
+import {AnnotationSpace,dimHAt,dimVAt,dimVClear,type DimPlace} from './annotationSpace';
 import {craneLevelStrut} from '../engine/existingColumn';
 import {format} from '../engine/units';
 import type { CalculationSnapshot } from '../engine/types';
@@ -301,9 +301,14 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   // The panel's edges bound the annotation placed on the plan: the dividers at the left and below, the drawing area's
   // edges above and at the right.
   const panel={x0:g.x+6,y0:6,x1:sheetArea.width-20,y1:g.y-6};
-  {const cutSpace=new AnnotationSpace(svg.slice(planFrom));cutSpace.bounds=panel;const xc=X(m.section.at),label=detailRef(typicalSectionTitle),tw=textWidth(label,lettering.text,true);
+  // The overall dimension below the plan, drawn later, is fixed: the tags read clear of its extension lines too. In a bay
+  // too short for a tag beside the stem, it is centered past the arrow, between the extension lines.
+  const planDim=gBottom+52,overall=dimH(left,right,gBottom+19,planDim,`${dim(m.length)} OVERALL`);
+  {const cutSpace=new AnnotationSpace(svg.slice(planFrom)+overall);cutSpace.bounds=panel;const xc=X(m.section.at),label=detailRef(typicalSectionTitle),tw=textWidth(label,lettering.text,true);
    for(const [y0,ends] of [[gTop-8,[gTop-24,gTop-54]],[gBottom+8,[gBottom+24]]] as const){
-    svg+=cutSpace.pick(ends.flatMap(y1=>[xc+4,xc-20-tw].map(tx=>`<g data-section-cut="${typicalSectionTitle}">${line([xc,y0],[xc,y1],'divider')}${line([xc,y1],[xc-14,y1],'divider')}<path class="leader-arrow" d="M${n(xc-16)},${n(y1)}l5,-2.2v4.4z"/>${text(tx,y1+(y1<y0?-3:9),label,lettering.text,'start',700)}</g>`)));
+    const cut=(y1:number,tag:string)=>`<g data-section-cut="${typicalSectionTitle}">${line([xc,y0],[xc,y1],'divider')}${line([xc,y1],[xc-14,y1],'divider')}<path class="leader-arrow" d="M${n(xc-16)},${n(y1)}l5,-2.2v4.4z"/>${tag}</g>`;
+    svg+=cutSpace.pick([...ends.flatMap(y1=>[xc+4,xc-20-tw].map(tx=>cut(y1,text(tx,y1+(y1<y0?-3:9),label,lettering.text,'start',700)))),
+     ...ends.map(y1=>cut(y1,text(xc-7,y1<y0?y1-8:y1+15,label,lettering.text,'middle',700)))]);
    }}
   // The existing building and the plan's dimensions and notes, laid out ahead of the callouts so the callouts read clear
   // of them, and drawn after them.
@@ -337,20 +342,23 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    }
    later+='</g>';
   }
-  const planDim=gBottom+52;
-  later+=dimH(left,right,gBottom+19,planDim,`${dim(m.length)} OVERALL`);
+  later+=overall;
+  // The notes under the plan, then the dimensions across the runways: the grid dimension's value between its ends where
+  // it fits, else carried past an end or level beside its line where it reads clear of the offsets and the notes.
+  const sep=newColumns?s.bracingSystem?.separation:undefined;
+  const notes=text(X(0),planDim+20,`RAIL C/L SPACING (CRANE SPAN): ${dim(m.width+2*m.railZ)}${p.details?'':' (REF.)'}`,9,'middle')
+   +(sep?text(X(0),planDim+33,`SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL ${separationLength(sep.required,p.units)} MIN. CLEAR OF THE EXISTING BUILDING (ASCE 7 §12.12.3)`,8,'middle'):'');
+  const across=new AnnotationSpace(svg.slice(planFrom)+later+notes);across.bounds=panel;
   if(eb){
    // Grid lines A-B with each existing column line outboard of them, beyond the footings at the last grid.
    const from=Math.max(right+13,X(xHi)+6),at=from+35,lines=Object.fromEntries(eb.lines.map(l=>[l.line,l.input.offset/1000]));
    // A column line offset too short for its value carries it outward, away from the grid dimension's.
-   const offset=(y1:number,y2:number,label:string,out:DimPlace)=>dimVAt(y1,y2,from,at,label,textWidth(label,lettering.text)+6<=Math.abs(y2-y1)?'inside':out);
+   const offset=(y1:number,y2:number,label:string,out:DimPlace)=>across.add(dimVAt(y1,y2,from,at,label,textWidth(label,lettering.text)+6<=Math.abs(y2-y1)?'inside':out));
    if(lines.B!==undefined)later+=offset(Y(rows[1]-lines.B),Y(rows[1]),dim(Math.abs(lines.B)),'near');
-   later+=dimV(Y(rows[1]),Y(rows[0]),from,at,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
    if(lines.A!==undefined)later+=offset(Y(rows[0]),Y(rows[0]+lines.A),dim(Math.abs(lines.A)),'far');
-  }else later+=dimV(Y(rows[1]),Y(rows[0]),right+13,right+48,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
-  later+=text(X(0),planDim+20,`RAIL C/L SPACING (CRANE SPAN): ${dim(m.width+2*m.railZ)}${p.details?'':' (REF.)'}`,9,'middle');
-  const sep=newColumns?s.bracingSystem?.separation:undefined;
-  if(sep)later+=text(X(0),planDim+33,`SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL ${separationLength(sep.required,p.units)} MIN. CLEAR OF THE EXISTING BUILDING (ASCE 7 §12.12.3)`,8,'middle');
+   later+=dimVClear(across,Y(rows[1]),Y(rows[0]),from,at,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
+  }else later+=dimVClear(across,Y(rows[1]),Y(rows[0]),right+13,right+48,`${dim(rows[0]-rows[1])} GRIDS A-B (REF.)`);
+  later+=notes;
   // Callouts between the runways, each where it reads clear of the plan drawn so far: its preferred place first, then
   // others along the runway and up or down between the runways.
   const clearancePlan=shown?existingClearancePlan(s,shown,gaLayout.clearance,ga):'';
