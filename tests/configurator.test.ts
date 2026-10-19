@@ -174,11 +174,15 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
   expect(v.config.support).toBe('twin-rib');
   expect(v.changes).toContainEqual(expect.stringMatching(/^The support reaction, about \d+ kip, is above the AIST TR-13 §5\.9\.2 guideline of 50 kip for column brackets, a clause to be verified: consider a crane column tied to the building column or a stepped column .*an advisory, not a code limit, so the support entered \(Welded twin-rib seat\) is kept and checked here\.$/));
   expect(previewConfig({...cfg,support:'by-others'}).config.support).toBe('by-others');
+  // The selection log keeps the support and says why (report and S-00: 'Girder support, advisory').
+  const p=buildProject(cfg),row=p.configurator!.selections!.find(v=>v.item==='Girder support, advisory')!;
+  expect(p.details!.bracket?.enabled).toBe(true);expect(p.craneColumn).toBeUndefined();
+  expect(row).toMatchObject({entered:'Welded twin-rib seat',designed:'Welded twin-rib seat, kept',reason:expect.stringMatching(/a clause to be verified: consider a crane column/)});
   // The structure stays existing (t05, t08 and t10 are within the recommendation and keep their brackets).
   expect(v.config.structure).toBe('existing');
   // The one statement within the limit is the assumed bumper overhang (end-truck geometry for the stop contacts).
   const light=previewConfig({...defaultRunwayConfig,capacity:5});expect(light.changes.filter(v=>!/^Bumper overhang assumed/.test(v))).toEqual([]);expect(light.changes.at(-1)).toMatch(/^Bumper overhang assumed \d+ in/);expect(light.reaction!).toBeLessThan(50*kip);
- });
+ },120000);
 });
 
 describe('configurator selection log',()=>{
