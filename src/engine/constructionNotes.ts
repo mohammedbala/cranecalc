@@ -56,6 +56,7 @@ export function cjpWelds(p:ProjectInput):string[]{
  if(stiffenerTieJoint(p)==='cjp'&&!capFork(p))out.push('tie gussets to the girder bearing stiffeners');
  if(d.bracket?.enabled&&usesTaperedHaunch(p)&&haunchInput(d.bracket).flangeJoint==='cjp')out.push(`haunch flanges to the ${p.existingColumn?.isNew?'new':'existing'} column flange (field)`);
  if(d.bracket?.enabled&&usesRolledBracket(p)&&d.bracket.rolled?.flangeJoint==='cjp'&&rolledStub(d.bracket))out.push('bracket flanges to the column flange');
+ if(activeColumnCap(p)?.joint==='cjp')out.push('column flanges and web to the column cap plate');
  return out;
 }
 
