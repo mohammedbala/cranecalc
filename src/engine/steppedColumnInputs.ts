@@ -38,6 +38,8 @@ export const stepSchema=z.object({
  stiffener:z.object({thickness:pos,width:pos,weld:pos}).optional(),
  /** Weak-axis effective length of the upper shaft (girts or the step strut); blank: existingColumn.Lcy, which is the lower shaft's. */
  upperLcy:pos.optional(),
+ /** Surveyed leg of the existing step welds (the cap to the lower shaft, the upper shaft to the cap); blank: not surveyed, the step fatigue check reports the required leg as an open item. */
+ capWeld:pos.optional(),
  /** Built-up or laced shafts are not modeled (an unsupported check). */
  construction:z.enum(['rolled','built-up','laced']).optional(),
  source:z.string().max(300),confirmed:z.boolean()

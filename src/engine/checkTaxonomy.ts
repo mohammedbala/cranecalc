@@ -72,7 +72,9 @@ const idRules:Rule[]=[
  T(/^(brace-basis|bracket-receiver|bracket-load-path|haunch-stiffener-required|step-stiffener-required|building-seismic-runway)$/,'input'),
  T(/-(basis|receiver|survey)$/,'input'),
  // By others
- T(/^(supporting-structure|brace-by-others)$/,'by-others'),T(/-by-others$/,'by-others'),
+ T(/^(supporting-structure|brace-by-others)$/,'by-others'),
+ // A crane-level strut the stepped column depends on (open while the column alone fails): new steel by the engineer of record.
+ T(/^crane-level-strut$/,'by-others'),T(/-by-others$/,'by-others'),
  // Classification: section/element slenderness, applicability tests feeding a strength check, F13.1 capacity modifier
  T(/^(compact-flange|compact-web|cap-proportion|flange-net|column-brackets|hook-bolts)$/,'classification'),
  T(/^cap-angle-plate-slenderness$/,'detailing'),T(/(-slenderness|-slope)$/,'classification'),T(/^cap-angle-column-holes$/,'classification'),T(/^end-stop-stiffener$/,'classification'),
@@ -82,6 +84,8 @@ const idRules:Rule[]=[
  // Movement capacity (design)
  D(/^(rotation-clearance|simple-guide-travel|rail-expansion-gap|rail-joint-slot|end-bearing-travel)$/,'movement'),
  D(/(slot-travel|-deflection|-rotation|-drift(-wind)?|rail-gauge)$/,'movement'),
+ // Twist of a stepped column's lower shaft at the step: the factored small-rotation limit and the service movement.
+ D(/^column-lower-twist(-movement)?$/,'movement'),
  D(/^rail-twist$/,'movement',true),D(/^(vertical|lateral|rail-head)$/,'movement'),
  D(/-plate-movement$/,'axial'),
  // Detailing: dimensions, sizes, fit and clearances
@@ -100,6 +104,8 @@ const idRules:Rule[]=[
  D(/^(rail-clip-(lateral|uplift)|rail-anchorage)$/,'connection'),
  // Step of a stepped column: J10.2/J10.3 on the lower web under the upper inner flange, J10.6 panel shear (local, as haunch-column-panel).
  D(/^step-(panel-shear|web-yielding|web-crippling|web-sidesway|flange-bending|flange-yielding)$/,'local'),
+ // The existing upper shaft of a stepped column under the off-web column gussets of a stiffener tie (tieMovement.ts).
+ D(/^column-upper-tie-flange$/,'local'),
  D(/^((building-)?column-((upper|lower)-)?axial|(building-)?column-seismic-axial|crane-column-brace-strength|crane-column-tie-(compression|buckling))$/,'axial'),
  D(/^(axial|column-axial|brace-tension|brace-rod)$|-(plate-yield|plate-rupture|plate-compression|leg-tension|tension)$/,'axial'),
  D(/^(shear|torsion-shear|column-shear|haunch-shear|haunch-flange-shear)$|-(shear|shear-rupture|web-shear)$/,'shear'),
@@ -234,6 +240,8 @@ export function fatigueData(s:CalculationSnapshot,c:CheckResult):FatigueData|und
  // whatever category the note names first (a toe crack, a bound), and a root crack has no threshold: never screened.
  // A Category F throat check that only refers to a root check elsewhere is not one.
  const ownRoot=/R_\{FIL\}/.test(c.equation)||/\bR_?FIL\s*=|\bwith R_FIL\b/.test(note),categoryF=/1\.5\/n_\{SR\}|\(1\.5\/n/.test(c.equation)||/\bCategory F\b/.test(note);
+ // A Category F weld-throat check by its own equation or title is Category F, whatever other category its note names.
+ if(/1\.5\/n_\{SR\}|\(1\.5\/n/.test(c.equation)||/\b(Category|Cat\.) F\b/.test(c.title))cat='F';
  if(ownRoot&&!categoryF&&c.capacity<allCycleRange('C',n)*(1-.005))return {range:c.demand,threshold:undefined,category:"C''",allCycle:c.utilization,capacity:c.capacity,source:'check'};
  // All-cycle checks: the demand is the largest range. Root cracks (C″, R_FIL < 1): no threshold.
  if(cat==="C''"||(!cat&&rfil)){const R=rootR();return {range:c.demand,threshold:R<1-1e-9?undefined:thresholdOf('C'),category:R<1-1e-9?"C''":'C',allCycle:c.utilization,capacity:c.capacity,source:'check'};}

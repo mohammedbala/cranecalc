@@ -15,7 +15,8 @@
  */
 import {available} from './aiscStrength';
 import {filletMinimum} from './connectionStrength';
-import {categoryF} from './fatigueConstants';
+import {categoryF,fatigueThresholdKsi,finiteLife,KSI} from './fatigueConstants';
+import {capAngleGeometry} from './capAngle';
 import {stiffenerPairStrength,type ColumnStiffenerGeometry} from './columnStiffeners';
 import {independentBearings} from './simpleSupports';
 import {latexNumber} from './math';
@@ -33,6 +34,10 @@ export interface StepActions {
  flange:StepPeak&{P:number;M:number;Pl:number};
  /** Range of the inner-flange force per crane passage (unfactored crane, no impact), for the stiffener weld fatigue. */
  range:number;
+ /** Range of the girder reaction on the step per crane passage (unfactored crane, no impact), for the step fatigue checks. */
+ reactionRange?:number;
+ /** Largest factored girder reaction at each support (grid), for the cap flexure over the bearings at that grid. */
+ bySupport?:{station:number;value:number;caseId:string}[];
 }
 /** Corner clip of a step stiffener at the cap, clear of the existing cap-to-web fillet (3/4 in, the fillet taken as at most 5/8 in). */
 export const stepStiffenerClip=.75*inch;
@@ -90,9 +95,16 @@ export function stepSeatChecks(p:ProjectInput,g:StepGeometry,x:StepActions):{che
  add('step-flange-yielding','Lower crane-side flange · local yielding and crippling under the girder reaction',R.value,fcap,'force','R_n=F_yt_{fl}(l_b+5t_c)\\ \\text{(J10.2)};\\quad R_n=0.80t_{fl}^2\\sqrt{EF_yt_c/t_{fl}}\\ \\text{(J10.3)}',
   `The girder web stands over the lower shaft's crane-side flange (girder web ${L(g.girderWeb)} from the lower centroid): the reaction enters the flange end through the cap, the flange as the loaded plate and the cap as its flange (k = t_c = ${L(k)}). Effective length along the flange ${L(lbe)} (the bearing ${L(N)}, centered ${L(along)} from the column centerline, plus 2.5t_c each side, within the flange width ${L(g.lower.bf)}): yielding φR_n = ${F(fy)}, crippling (interior form, l_b/d term neglected) φR_n = ${F(fc)}. The whole grid reaction on one bearing (${R.caseId}). Mechanics analogy of J10.2/J10.3 (DG7 step detail, clause mapping not verified).`,R.caseId);
  // Cap plate flexure: the reaction spread over the girder flange width, cantilevering from the lower flange faces.
- const bg=p.section.bf,a=Math.max(0,(Math.min(bg,w)-g.lower.tf)/2),Mreq=R.value/Math.min(bg,w)*a*a/2,Zc=overY*k**2/4,Mcap=available(Fyc*Zc,p.method,.9,1.67);
+ // Each grid's reaction over the length of cap its bearings cover: both plates and the joint gap at a shared simple-span
+ // grid (the grid total), one plate at a runway end or under a continuous girder.
+ const bg=p.section.bf,a=Math.max(0,(Math.min(bg,w)-g.lower.tf)/2),bearings=independentBearings(p);
+ const grids=(x.bySupport?.length?x.bySupport:[{station:NaN,value:R.value,caseId:R.caseId}]).map(v=>{
+  const at=bearings.filter(b=>Math.abs(b.station-v.station)<1),extent=at.length?Math.max(...at.map(b=>b.finish))-Math.min(...at.map(b=>b.start)):N;
+  const l=Math.min(extent,cap.length),Mreq=v.value/Math.min(bg,w)*a*a/2,Mcap=available(Fyc*l*k**2/4,p.method,.9,1.67);
+  return {...v,l,plates:Math.max(1,at.length),Mreq,Mcap};}).reduce((x0,v)=>v.Mreq/v.Mcap>x0.Mreq/x0.Mcap?v:x0);
+ const {Mreq,Mcap}=grids;
  add('step-cap-flexure','Step cap · flexure across the runway past the lower flange',Mreq,Mcap,'moment','M_u=\\frac{R_u}{b}\\frac{a^2}{2}\\le\\phi F_y\\frac{l\\,t_c^2}{4};\\quad a=\\frac{b-t_{fl}}{2}',
-  `The girder reaction spread uniformly over the bearing width b = min(girder flange, bearing plate) = ${L(Math.min(bg,w))} across the runway, the cap cantilevering a = ${L(a)} each side of the lower flange (${L(g.lower.tf)}) over the bearing length l = ${L(overY)}: M_u = ${Mf(Mreq)} against the cap's plastic strength φF_y l t_c²/4 = ${Mf(Mcap)} (cap alone; the bearing plate above it is not credited). Whole grid reaction on one bearing (${R.caseId}).`,R.caseId);
+  `The girder reaction spread uniformly over the bearing width b = min(girder flange, bearing plate) = ${L(Math.min(bg,w))} across the runway, the cap cantilevering a = ${L(a)} each side of the lower flange (${L(g.lower.tf)}) over the length l of cap its bearings cover at the governing grid, ${grids.plates>1?`both bearing plates and the joint gap with the grid's total reaction`:'one bearing plate with that girder end\'s reaction'}: R_u = ${F(grids.value)} (${grids.caseId}), l = ${L(grids.l)}, M_u = ${Mf(Mreq)} against the cap's plastic strength φF_y l t_c²/4 = ${Mf(Mcap)} (cap alone; the bearing plate above it is not credited, conservative).`,grids.caseId);
  // J10.2 / J10.3 on the lower web under the inner flange.
  const web=stepWebStrength(p,g),stiff=g.stiffener,required=Fin.value>Math.min(web.yielding,web.crippling)*(1+1e-9);
  const flangeText=`Inner flange of the upper shaft at ${L(g.innerFlange)} from the lower centroid, over the lower web (t_w = ${L(g.lower.tw)}): F = P_u/2 + |M_u|/(d_u − t_fu) = ${F(Fin.P)}/2 + ${Mf(Math.abs(Fin.M))}/${L(upperFlangeArm(g))} = ${F(Fin.value)} (${Fin.caseId}; M_u the amplified upper-shaft moment at the step with the existing upper effects signed).`;
@@ -108,6 +120,7 @@ export function stepSeatChecks(p:ProjectInput,g:StepGeometry,x:StepActions):{che
  const Vn=.6*c.Fy*panel.height*g.lower.tw*(ratioP<=.4?1:Math.max(0,1.4-ratioP)),Vc=available(Vn,p.method,.9,1.67);
  add('step-panel-shear','Lower web panel at the step · shear (J10.6)',panel.shear,Vc,'force','V=F\\frac{\\max(a,b)}{s};\\quad R_v=0.60F_yd_ct_w\\left(1.4-\\frac{\\alpha P_r}{P_y}\\right)\\le0.60F_yd_ct_w',
   `The lower web spans between the lower flange centerlines (s = ${L(panel.span)}) as the step's deep beam and carries the inner-flange force ${F(Fin.value)} at a = ${L(panel.a)}, b = ${L(panel.b)} to the flanges: V = ${F(panel.shear)}. Panel ${L(panel.height)} deep (a square panel, the force spreading at 45°), αP_r/P_y = ${ratioP.toFixed(3)} with the lower shaft's axial force ${F(Fin.Pl)} (J10-9 / J10-10). Deep-beam model of the DG7 step detail (clause mapping not verified).${stiff?' The stiffener pair bounds the panel but adds no shear strength.':''}`,Fin.caseId);
+ checks.push(...stepFatigueChecks(p,g,x,lbe,web));
  if(!stiff){
   checks.push({id:'step-stiffener-required',group:'Stepped column',title:'Step stiffener · J10.8',status:required?'fail':'pass',equation:'R_u>\\phi R_n\\ \\text{(J10.2, J10.3)}\\Rightarrow\\text{stiffeners}',caseId:Fin.caseId,referenceIds:refs,
    note:required?`The inner-flange force ${F(Fin.value)} exceeds the unstiffened lower web (J10.2 ${F(web.yielding)}, J10.3 ${F(web.crippling)}): add a step stiffener pair under the inner flange (J10.8), or a heavier step.`:`Not required: the unstiffened lower web carries the inner-flange force ${F(Fin.value)} (J10.2 ${F(web.yielding)}, J10.3 ${F(web.crippling)}).`});
@@ -138,4 +151,55 @@ export function stepSeatChecks(p:ProjectInput,g:StepGeometry,x:StepActions):{che
  const info2=checks.map(v=>{if(v.status!=='not-applicable'||v.capacity===undefined)return v;const {demand,capacity,utilization:_u,caseId:_k,substitution:_s,...rest}=v;
   return {...rest,note:`${rest.note} D/C ${((demand??0)/capacity).toFixed(2)}${(demand??0)>capacity?' (exceeded: the stiffener pair carries it)':''}.`};});
  return {checks:info2,stiffenerRequired:required,panelShear:panel.shear};
+}
+
+/**
+ * Fatigue at the step of the existing column (AISC 360-16 Appendix 3, Table A-3.1; AIST TR-13 fatigue of the supporting
+ * structure), at the project's all-cycle count n_SR (p.fatigue.cycles, the count the other all-cycle checks use), with the
+ * unfactored crane (no impact) once per passage:
+ *  - the existing fillet welds that carry the step actions, taken to carry them in full (no credit for bearing of an
+ *    unfinished cap): the cap to the lower crane-side flange (the girder reaction range over the dispersion length, both
+ *    faces), the upper shaft's inner flange to the cap (the inner-flange force range, both faces along b_fu) and, with no
+ *    step stiffener, the cap to the lower web under it (both faces over the J10.2 end length); weld throat in shear,
+ *    Category F (Eq. A-3-2). The existing leg is the surveyed existingColumn.step.capWeld; without it the required leg is
+ *    reported as an open existing-structure item;
+ *  - the base metal at the toes of those welds, the lower crane-side flange and (no stiffener) the lower web, the stress
+ *    normal to the weld axis: Category C (transverse fillet weld toe in a loaded plate; the root is covered by the throat
+ *    check above at Category F);
+ *  - tie bolt holes field drilled in the upper shaft's inner flange (cap tieback angle): the upper-shaft flange stress range
+ *    at the step on the net section, Category D, the lowest of the bolted-joint items of Table A-3.1 Section 2.
+ * Item numbers beyond these categories are not verified against the printed table (reference 'aisc-fatigue').
+ */
+function stepFatigueChecks(p:ProjectInput,g:StepGeometry,x:StepActions,lbe:number,web:{lb:number;k:number}):CheckResult[]{
+ const s=p.existingColumn!.step!,u=p.units,cycles=p.fatigue.cycles,out:CheckResult[]=[],refs=['aisc-fatigue','dg7-columns','existing-column'];
+ const L=(v:number)=>format(v,'length',u,3),F=(v:number)=>format(v,'force',u,3),S=(v:number)=>format(v,'stress',u,3),n=cycles.toLocaleString('en-US');
+ const dR=x.reactionRange??0,dF=x.range,FSRf=categoryF(cycles),FSRc=Math.max(fatigueThresholdKsi.C*KSI,finiteLife(4.4,cycles)),FSRd=Math.max(fatigueThresholdKsi.D*KSI,finiteLife(2.2,cycles));
+ const stiff=!!g.stiffener,webLength=2.5*web.k+web.lb;
+ // Welds: force range, total weld length (both faces), and the leg each needs at the Category F range.
+ const welds=[{name:'step cap to the lower crane-side flange',force:dR,length:2*lbe},{name:'upper inner flange to the step cap',force:dF,length:2*g.upper.bf},
+  ...(stiff?[]:[{name:'step cap to the lower web under the inner flange',force:dF,length:2*webLength}])].map(w=>({...w,need:w.force/(.7071*w.length*FSRf)}));
+ const worst=welds.reduce((a,b)=>b.need>a.need?b:a),leg=s.capWeld,list=welds.map(w=>`${w.name}: ΔF = ${F(w.force)} on ${L(w.length)} of fillet, required leg ${L(w.need)}${leg?`, f_sr = ${S(w.force/(.7071*leg*w.length))}`:''}`).join('; ');
+ const head=`Range per crane passage (unfactored crane at the step, no impact) at the all-cycle count n_SR = ${n}: girder reaction ΔR = ${F(dR)}, upper inner-flange force ΔF = ${F(dF)}. Existing fillet welds taken to carry the step actions in full (no bearing credit for an unfinished cap): ${list}. Category F (weld throat in shear, Eq. A-3-2): F_SR = ${S(FSRf)}.`;
+ const weldCheck:CheckResult=leg?{id:'step-weld-fatigue',group:'Stepped column',title:'Step welds (existing) · throat fatigue (Category F)',status:worst.need<=leg*(1+1e-9)?'pass':'fail',demand:worst.need,capacity:leg,quantity:'length',utilization:worst.need/leg,
+  equation:'f_{sr}=\\frac{\\Delta F}{0.707wL_w}\\le F_{SR}\\ \\text{(Cat. F)}\\iff w\\ge w_{req}',substitution:`\\frac{${latexNumber(worst.need)}}{${latexNumber(leg)}}=${(worst.need/leg).toFixed(4)}`,
+  note:`${head} Surveyed leg ${L(leg)} (${s.source}) against the largest required leg ${L(worst.need)} (${worst.name}).${worst.need>leg?' Not adequate: reinforce the existing welds (field welding to existing steel) or have the engineer of record evaluate the existing step.':''}`,referenceIds:refs}
+  :{id:'step-weld-fatigue',group:'Stepped column',title:'Step welds (existing) · throat fatigue (Category F): survey the weld legs',status:'unverified',demand:worst.need,quantity:'length',equation:'w\\ge w_{req}=\\frac{\\Delta F}{0.707L_wF_{SR}}',
+  note:`${head} Existing-structure evaluation item: survey the step welds (existingColumn.step.capWeld) and confirm a leg of at least ${L(worst.need)}, or reinforce them.`,referenceIds:refs};
+ out.push(weldCheck);
+ // Base metal at the weld toes, Category C.
+ const base=[{name:'lower crane-side flange at the cap weld toe',range:dR/(g.lower.tf*Math.max(lbe,1e-9))},...(stiff?[]:[{name:'lower web at the cap weld toe under the inner flange',range:dF/(g.lower.tw*webLength)}])];
+ const b0=base.reduce((a,b)=>b.range>a.range?b:a);
+ out.push({id:'step-base-fatigue',group:'Stepped column',title:'Lower shaft at the step · base metal fatigue at the cap weld toes (Category C)',status:b0.range<=FSRc*(1+1e-9)?'pass':'fail',demand:b0.range,capacity:FSRc,quantity:'stress',utilization:b0.range/FSRc,
+  equation:'f_{sr}=\\frac{\\Delta R}{t_{fl}l_b}\\le F_{SR}\\ \\text{(Cat. C)}',substitution:`\\frac{${latexNumber(b0.range)}}{${latexNumber(FSRc)}}=${(b0.range/FSRc).toFixed(4)}`,
+  note:`${base.map(v=>`${v.name}: f_sr = ${S(v.range)}`).join('; ')} (the reaction range over the flange's dispersion length ${L(lbe)}${stiff?'':`, the inner-flange force range over the web's J10.2 end length ${L(webLength)}`}). Base metal at the toe of a transverse fillet weld, the stress normal to the weld axis: Category C (Table A-3.1 Section 5; item number to be verified against the printed table), F_SR = ${S(FSRc)} at n_SR = ${n} (Eq. A-3-1, C_f = 4.4, F_TH = ${S(fatigueThresholdKsi.C*KSI)}); the weld root is covered by step-weld-fatigue at Category F, which bounds the root category.${stiff?' The step stiffener fillets: step-stiffener-fatigue.':''}`,referenceIds:refs});
+ // Tie bolt holes field drilled in the upper shaft's inner flange (cap tieback angle).
+ let q;try{q=capAngleGeometry(p);}catch{q=undefined;}
+ const col=q?.column.receiver;
+ if(q&&col){
+  const hole=q.column.hole+inch/16,Afg=col.width*col.tf,Afn=(col.width-hole)*col.tf,M=dF*upperFlangeArm(g),fsr=M/upperFlangeArm(g)/Afn;
+  out.push({id:'step-tie-holes-fatigue',group:'Stepped column',title:'Upper shaft flange · fatigue at the field-drilled tie bolt holes (Category D)',status:fsr<=FSRd*(1+1e-9)?'pass':'fail',demand:fsr,capacity:FSRd,quantity:'stress',utilization:fsr/FSRd,
+   equation:'f_{sr}=\\frac{\\Delta M}{(d_u-t_{fu})A_{fn}}\\le F_{SR}\\ \\text{(Cat. D)}',substitution:`\\frac{${latexNumber(fsr)}}{${latexNumber(FSRd)}}=${(fsr/FSRd).toFixed(4)}`,
+   note:`The upper shaft's moment range just above the step per crane passage, ΔM = ΔF(d_u − t_fu) = ${format(M,'moment',u,3)}, as the flange force range on the net flange (${L(col.width)} × ${L(col.tf)} less one ${L(hole)} hole: A_fn = ${format(Afn,'area',u,3)} of A_fg = ${format(Afg,'area',u,3)}): f_sr = ${S(fsr)}. Category D, the lowest of the bolted-joint items (Table A-3.1 Section 2, bolts not relied on for pretension): F_SR = ${S(FSRd)} at n_SR = ${n} (C_f = 2.2, F_TH = 7 ksi). Drill or ream the holes; no flame-cut holes in the existing flange.`,referenceIds:refs});
+ }
+ return out;
 }
