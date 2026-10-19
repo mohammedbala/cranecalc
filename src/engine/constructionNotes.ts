@@ -16,6 +16,7 @@ import {activeColumnCap} from './columnCapInputs';
 import {tiedToBuilding} from './craneColumnInputs';
 /** The girder ends are forks on the column caps, with no flange tie (a crane column tied to the building keeps its ties). */
 const capFork=(p:Parameters<typeof activeColumnCap>[0])=>!!activeColumnCap(p)&&!tiedToBuilding(p);
+import {activeStep} from './steppedColumnInputs';
 import {activeEndStop} from './endStopInputs';
 import {boltSpec} from './materialSpecs';
 
@@ -66,7 +67,7 @@ export function cjpWelds(p:ProjectInput):string[]{
  */
 function seatSurvey(p:ProjectInput){
  const shim=bearingShim(p),max=shim.max>0?shim.max:inch/2,seat=bearingSeat(p);
- return `Bearing seats (${seat==='by-others'?'by others':seat==='existing'?'existing brackets':'field welded'}): survey the seats; shim to the theoretical elevation (steel shims, full bearing, ${shim.plies||3} plies and ${inches(max,p.units)} max., drilled to the bolt pattern); field drill or ream the seat holes after the girder is lined and leveled.`;
+ return `Bearing seats (${activeStep(p)?'existing step caps of the stepped columns':seat==='by-others'?'by others':seat==='existing'?'existing brackets':'field welded'}): survey the seats; shim to the theoretical elevation (steel shims, full bearing, ${shim.plies||3} plies and ${inches(max,p.units)} max., drilled to the bolt pattern); field drill or ream the seat holes after the girder is lined and leveled.`;
 }
 /**
  * Every high-strength bolt grade the model uses, with the joints that use it: the end bearing (or girder end) bolts,

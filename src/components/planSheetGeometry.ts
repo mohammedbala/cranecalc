@@ -7,7 +7,7 @@ import {independentBearingSettings,buildIndependentSupports} from './independent
 import type { ProjectInput } from '../engine/types';
 import { validateProject } from '../engine/calculate';
 import { referenceColumns, referenceCrossheads, shapeMeters } from '../data/aiscReferenceShapes';
-import { buildReferenceFraming,newColumnFraming } from './referenceFraming';
+import { buildReferenceFraming,newColumnFraming,steppedFraming } from './referenceFraming';
 import { buildReferenceStructure, cloneOppositeRunway } from './referenceStructure';
 import { defaultFraming, drawnFrameStyle, framingSchema, type FramingSettings } from './framingSettings';
 import {flangeTieGeometry} from '../engine/tieGeometry';
@@ -73,8 +73,8 @@ export function planSheetGeometry(input: ProjectInput, settings: FramingSettings
   // The rail is set on the girder web C/L; the rail eccentricity is a design allowance for setting and
   // wear, not a setting offset, so girders are at the crane span.
   const railZ = 0, width = input.details ? input.details.criteria.railGauge / 1000 : input.configurator?.craneSpan ? input.configurator.craneSpan * .3048 : f.width / 1000;
-  const newColumn = newColumnFraming(input);
-  const reference = buildReferenceFraming({newColumn,columnFace:input.details?.bracket?.enabled?undefined:tieFaceMeters(input), bracket:input.details?.bracket,continuousBearing:input.system==='continuous'&&input.details?.bracket?.enabled?{width:input.details.bearing.width/1000,length:input.details.bearing.length/1000,thickness:input.details.bearing.thickness/1000}:undefined,independentBearing:independentBearingSettings(input), supports, girderDepth: d, girderWidth: bf, girderFlangeT: tf, columnHeight: f.height / 1000,
+  const newColumn = newColumnFraming(input), stepped = steppedFraming(input);
+  const reference = buildReferenceFraming({newColumn,stepped,columnFace:input.details?.bracket?.enabled?undefined:tieFaceMeters(input), bracket:input.details?.bracket,continuousBearing:input.system==='continuous'&&input.details?.bracket?.enabled?{width:input.details.bearing.width/1000,length:input.details.bearing.length/1000,thickness:input.details.bearing.thickness/1000}:undefined,independentBearing:independentBearingSettings(input), supports, girderDepth: d, girderWidth: bf, girderFlangeT: tf, columnHeight: f.height / 1000,
     roofBottom: railBase + railH + .0125 + f.roofClearance / 1000, column, crosshead, materials, frameStyle: f.frameStyle });
   const frame = buildReferenceStructure({ supports, bayWidth: width, columnBottom: reference.columnBottom, floor: reference.floor,
     railTop: railBase + railH + .0125, roofClearance: f.roofClearance / 1000, columnOffset: reference.columnOffset, column,
@@ -125,5 +125,5 @@ export function planSheetGeometry(input: ProjectInput, settings: FramingSettings
   // The grid to girder C/L distance on the 1/4 in grid, as it is dimensioned, so the grid-to-rail, crane span and
   // grid-to-grid dimensions of the section add up (the framing's column depth need not be on the grid).
   return { referenceLines, runwayLines, length, supports, width, d, bf, tf, railZ, railBase, columnOffset: snapQuarter(reference.columnOffset*1000)/1000,
-    column: newColumn?.cap?shapeMeters(newColumn.cap.column):input.details?.bracket?.enabled?{d:input.details.bracket.receiver.depth/1000,bf:input.details.bracket.receiver.width/1000,tf:input.details.bracket.receiver.flangeThickness/1000,tw:input.details.bracket.receiver.webThickness/1000}:shapeMeters(column), columnDepthAt: (y:number) => reference.columnOuter(y)-reference.columnFace, bracketDepth: newColumn?.cap?newColumn.cap.thickness+Math.max(newColumn.cap.stiffener.height,.1):input.details?.bracket?.enabled?bracketModelDepth(input.details.bracket)/1000:shapeMeters(crosshead).d, floor: reference.floor, membersPerRunway: members.length, members, section };
+    column: stepped?shapeMeters(stepped.upper):newColumn?.cap?shapeMeters(newColumn.cap.column):input.details?.bracket?.enabled?{d:input.details.bracket.receiver.depth/1000,bf:input.details.bracket.receiver.width/1000,tf:input.details.bracket.receiver.flangeThickness/1000,tw:input.details.bracket.receiver.webThickness/1000}:shapeMeters(column), columnDepthAt: (y:number) => reference.columnOuter(y)-reference.columnFace, stepped, bracketDepth: stepped?stepped.cap.thickness+.25:newColumn?.cap?newColumn.cap.thickness+Math.max(newColumn.cap.stiffener.height,.1):input.details?.bracket?.enabled?bracketModelDepth(input.details.bracket)/1000:shapeMeters(crosshead).d, floor: reference.floor, membersPerRunway: members.length, members, section };
 }

@@ -4,6 +4,8 @@ import {format} from '../engine/units';
 import {activeEndBearing,endBearingGeometry} from '../engine/endBearing';
 import {columnCapGeometry,type CapBearing} from '../engine/columnCap';
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {activeStep} from '../engine/steppedColumnInputs';
+import {steppedColumnTitles} from './steppedColumnSheet';
 import {boltProperties} from '../engine/connectionStrength';
 import {runwayElevations} from '../engine/drawingData';
 import {drawingLength,drawingElevation,plateInches,dimensionLength} from './drawingFormat';
@@ -18,7 +20,7 @@ const inch=25.4;
 /** Detail titles of the column cap, referenced from the general arrangement and the new column details. */
 export const columnCapTitles={section:'GIRDER BEARING / COLUMN CAP',arrangement:(grids:string)=>`COLUMN CAP AT ${grids} / ELEVATION AND PLAN`};
 /** The girder bearing section: on the column cap, or on the bracket. */
-export const girderBearingTitle=(p:CalculationSnapshot['input'])=>activeColumnCap(p)?columnCapTitles.section:detailTitles.bearing;
+export const girderBearingTitle=(p:CalculationSnapshot['input'])=>activeColumnCap(p)?columnCapTitles.section:activeStep(p)?steppedColumnTitles.section:detailTitles.bearing;
 
 /**
  * Grids sharing one cap arrangement (bearings, bolts and cap stiffeners), a runway-end grid with the opposite

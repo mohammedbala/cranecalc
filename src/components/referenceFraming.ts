@@ -13,6 +13,19 @@ import {aiscShapeByName} from '../data/aiscSections';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapGeometry} from '../engine/columnCap';
 import type {ProjectInput} from '../engine/types';
+import {stepGeometry} from '../engine/steppedColumn';
+
+/**
+ * An existing stepped building column under the girder (stepped-column support), in m across the runway from the girder
+ * web, positive toward the building: the lower shaft to the step cap, the upper shaft above it (outer flanges flush), no
+ * bracket. Existing steel, drawn as reference framing.
+ */
+export interface SteppedFraming {lower:ReferenceShape;upper:ReferenceShape;lowerZ:number;upperZ:number;cap:{thickness:number;width:number;length:number}}
+export function steppedFraming(p:ProjectInput):SteppedFraming|undefined{
+ const g=stepGeometry(p);if(!g)return undefined;
+ const shape=(v:typeof g.lower,name:string):ReferenceShape=>({name:v.shape||name,row:0,d:v.d/25.4,bf:v.bf/25.4,tf:v.tf/25.4,tw:v.tw/25.4});
+ return {lower:shape(g.lower,'Lower shaft'),upper:shape(g.upper,'Upper shaft'),lowerZ:g.girderWeb/1000,upperZ:(g.girderWeb-g.upper.x)/1000,cap:{thickness:g.cap.thickness/1000,width:g.cap.width/1000,length:g.cap.length/1000}};
+}
 
 /** New freestanding runway columns, in m from the girder mid-depth: column top and base, base plate, anchor rods and footing. */
 export interface NewColumnFraming {top:number;bottom:number;floor:number;plate:{N:number;B:number;t:number};grout:number;anchors:{x:number;z:number;d:number}[];footing:{L:number;B:number;h:number};
@@ -49,28 +62,33 @@ interface FramingOptions {
   columnFace?:number;
   /** New runway columns designed here replace the building columns at the supports. */
   newColumn?:NewColumnFraming;
+  /** The girder bears on the step of an existing stepped column: no bracket. */
+  stepped?:SteppedFraming;
 }
 
 // One continuous building column per station, with an inward-facing runway
 // bracket. The opposite row is mirrored, so both brackets face into the bay.
 // These are illustrative connections, not a stiffness or connection design.
-export function buildReferenceFraming({ supports, girderDepth, girderWidth, girderFlangeT = .01905, columnHeight, roofBottom = girderDepth / 2 + 2.5, column, crosshead, materials, hardware, frameStyle='rolled',independentBearing,bracket,continuousBearing,columnConnectionHoles=[],columnFace:tieFace,newColumn }: FramingOptions) {
+export function buildReferenceFraming({ supports, girderDepth, girderWidth, girderFlangeT = .01905, columnHeight, roofBottom = girderDepth / 2 + 2.5, column, crosshead, materials, hardware, frameStyle='rolled',independentBearing,bracket,continuousBearing,columnConnectionHoles=[],columnFace:tieFace,newColumn,stepped }: FramingOptions) {
   bracket=bracket?.enabled?bracket:undefined;
   if(bracket){const r=bracket.receiver;column={name:'Entered receiver I-section',row:0,d:r.depth/25.4,bf:r.width/25.4,tf:r.flangeThickness/25.4,tw:r.webThickness/25.4};}
   // A column cap: the new column stands under the girder, its cap plate at the bearing seat; no bracket.
   const capped=newColumn?.cap;if(capped)column=capped.column;
+  // A stepped column: the upper shaft is the column the ties reach; the lower shaft stands under the step cap.
+  if(stepped){column=stepped.upper;frameStyle='rolled';}
   const group = new THREE.Group(); group.name = 'reference-support-framing';
   const c = shapeMeters(column), b = shapeMeters(crosshead), plateT = .0254, padH = .2;
-  const seatTop = -girderDepth / 2-(independentBearing?.thickness??continuousBearing?.thickness??0), beamTop = seatTop - (bracket?bracketSeat(bracket).thickness/1000:plateT), beamBottom = beamTop - (bracket?bracketSeat(bracket).depth/1000:b.d);
+  const seatTop = -girderDepth / 2-(independentBearing?.thickness??continuousBearing?.thickness??0), beamTop = seatTop - (bracket?bracketSeat(bracket).thickness/1000:stepped?stepped.cap.thickness:plateT), beamBottom = beamTop - (bracket?bracketSeat(bracket).depth/1000:stepped?0:b.d);
   if(newColumn)frameStyle='rolled';
   const columnBottom = newColumn?newColumn.bottom:beamBottom - plateT - columnHeight, columnTop = newColumn?newColumn.top:frameStyle==='tapered'?roofBottom+portalDimensions.kneeDepth:roofBottom-plateT, floor = newColumn?newColumn.floor:columnBottom - plateT - padH;
   // A rolled (or new, or surveyed) column is prismatic: its outer flange stays at the constant depth c.d.
   const columnMid=(columnBottom+columnTop)/2,half=(columnTop-columnBottom)/2,profile=frameStyle==='tapered'?columnProfile(columnTop-columnBottom,beamTop-columnMid,c.d):[{s:-half,lower:-c.d/2,upper:c.d/2},{s:half,lower:-c.d/2,upper:c.d/2}];
   if(bracket&&frameStyle==='tapered'){const a=beamBottom-columnMid-.05,z=beamTop-columnMid+.05+(isExistingBracketType(bracket.arrangement)?existingBracketProfile(bracket).continuityAbove/1000:0);profile.splice(1,1,{s:a,lower:-c.d/2,upper:c.d/2},{s:z,lower:-c.d/2,upper:c.d/2});}
-  const columnOffset = capped?0:(bracket?bracket.reach/1000+c.d/2:tieFace!==undefined?tieFace+c.d/2:Math.max(.9, girderWidth / 2 + c.d / 2 + .35)), columnFace = columnOffset - c.d / 2;
+  const columnOffset = capped?0:stepped?stepped.upperZ:(bracket?bracket.reach/1000+c.d/2:tieFace!==undefined?tieFace+c.d/2:Math.max(.9, girderWidth / 2 + c.d / 2 + .35)), columnFace = columnOffset - c.d / 2;
   const seatWidth = Math.max(girderWidth + .24, .42), bracketStart = bracket?columnFace-bracket.seatProjection/1000:-seatWidth / 2 - .07, bracketEnd = columnFace - (bracket?0:plateT);
   const capLength = bracketEnd - bracketStart, bracketMid = (bracketStart + bracketEnd) / 2;
-  const baseX = c.bf + .24, baseZ = c.d + .24, endPlateWidth = Math.max(b.bf + .12, .24);
+  const lower=stepped?shapeMeters(stepped.lower):c,baseOffset=stepped?stepped.lowerZ:0;
+  const baseX = lower.bf + .24, baseZ = lower.d + .24, endPlateWidth = Math.max(b.bf + .12, .24);
   const endPlateTop = beamTop + .11, endPlateBottom = beamBottom - .5, endPlateMid = (endPlateTop + endPlateBottom) / 2;
   const girderBoltHoles: Hole[] = [];
   const outlined = (mesh: THREE.Mesh, name: string, family?: string, support?: { x:number; z:number }) => {
@@ -101,13 +119,13 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
     for(const hole of columnConnectionHoles.filter(h=>Math.abs(h.station-x)<1e-6))columnHoles.push({x:hole.y-columnMid,z:hole.x-x,diameter:hole.diameter});
     const diameter=referenceBoltDiameter, holeD=diameter+.003, code=`S${i+1}`;
     if(hardware){
-      if(!bracket&&!capped)for(const sx of [-1,1])for(const sz of [-1,1]){
+      if(!bracket&&!capped&&!stepped)for(const sx of [-1,1])for(const sz of [-1,1]){
         const dx=sx*(b.bf/2-.04),z=sz*(girderWidth/2+.06),number=(sx<0?1:3)+(sz<0?0:1);
         seatHoles.push({x:dx,z,diameter:holeD});topHoles.push({x:z-bracketMid,z:-dx,diameter:holeD});
         hardware.bolt(group,{id:`${code}-SC-${number}`,family:'Seat mounting bolt',description:'Bearing seat to column bracket top flange',diameter,grip:plateT+b.tf},new THREE.Vector3(x+dx,beamTop-b.tf,z));
       }
       const adjacent=i===0?supports[1]-x:x-supports[i-1];
-      if(!bracket&&!capped&&!independentBearing&&girderWidth>.15&&(girderWidth-c.tw)>.12&&adjacent>.6){
+      if(!bracket&&!capped&&!stepped&&!independentBearing&&girderWidth>.15&&(girderWidth-c.tw)>.12&&adjacent>.6){
         const rows=i===0?[.18,.27]:i===supports.length-1?[-.27,-.18]:[-.18,.18];
         let number=0;for(const dx of rows)for(const sz of [-1,1]){
           const z=sz*(girderWidth/2-.04);seatHoles.push({x:dx,z,diameter:holeD});girderBoltHoles.push({x:x+dx,z,diameter:holeD});
@@ -115,7 +133,7 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
         }
       }
       // Column flange and bracket end-plate holes share a horizontal bolt axis.
-      if(!bracket&&!capped)for(const sx of [-1,1])for(const level of [0,1]){
+      if(!bracket&&!capped&&!stepped)for(const sx of [-1,1])for(const level of [0,1]){
         const dx=sx*Math.min(endPlateWidth/2-.055,c.bf/2-.045),y=level===0?beamTop+.05:beamBottom-.4,number=(sx<0?1:3)+level;
         endHoles.push({x:dx,z:-(y-endPlateMid),diameter:holeD});
         columnHoles.push({x:y-(columnTop+columnBottom)/2,z:dx,diameter:holeD});
@@ -125,9 +143,9 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
         for(const sx of [-1,1])for(const drop of [.12,.30,.50,.68])columnHoles.push({x:columnTop-drop-columnMid,z:sx*.09,diameter:holeD});
       }
       if(!newColumn)for(const sx of [-1,1])for(const sz of [-1,1]){
-        const ax=sx*(c.bf/2+.06),az=sz*(c.d/2+.06),number=(sx<0?1:3)+(sz<0?0:1),anchorD=.0254;
+        const ax=sx*(lower.bf/2+.06),az=sz*(lower.d/2+.06),number=(sx<0?1:3)+(sz<0?0:1),anchorD=.0254;
         baseHoles.push({x:ax,z:az,diameter:anchorD+.006});
-        hardware.bolt(group,{id:`${code}-AR-${number}`,family:'Base anchor rod',description:'Building-column base plate to illustrative foundation pad',diameter:anchorD,grip:plateT,support:{x,z:columnOffset}},new THREE.Vector3(x+ax,columnBottom-plateT,columnOffset+az),new THREE.Vector3(0,1,0),true);
+        hardware.bolt(group,{id:`${code}-AR-${number}`,family:'Base anchor rod',description:'Building-column base plate to illustrative foundation pad',diameter:anchorD,grip:plateT,support:{x,z:columnOffset}},new THREE.Vector3(x+ax,columnBottom-plateT,(stepped?baseOffset:columnOffset)+az),new THREE.Vector3(0,1,0),true);
       }
     }
     const upperHoles:Hole[]=[];
@@ -145,8 +163,14 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
       const at=capped.grids[i];
       for(const sx of at?.stiffeners??[])box(group,`cap-stiffener-${code}-${sx>0?'r':'l'}`,capped.stiffener.thickness,capped.stiffener.height,capped.stiffener.width,x+sx,shaftTop-capped.stiffener.height/2,0,materials.plate);
       for(const [k,bp] of (at?.bearings??[]).entries())box(group,`cap-bearing-${code}-${k}`,bp.x1-bp.x0,capped.bearing.thickness,capped.bearing.width,x+(bp.x0+bp.x1)/2,seatTop+capped.bearing.thickness/2,0,materials.plate);
+    }else if(stepped){
+      // Lower shaft from the base to the underside of the step cap, the cap, and the upper shaft from the step to the top.
+      const capBottom=seatTop-stepped.cap.thickness,upperLength=columnTop-seatTop;
+      wMember(`column-lower-${code}`,stepped.lower,capBottom-columnBottom,new THREE.Vector3(x,(columnBottom+capBottom)/2,stepped.lowerZ),true,materials.column);
+      box(group,`step-cap-${code}`,stepped.cap.length,stepped.cap.thickness,stepped.cap.width,x,seatTop-stepped.cap.thickness/2,stepped.lowerZ,materials.column).userData.part={id:`step-cap-${code}`,family:'Existing step cap',description:'Existing step cap plate of the stepped column (survey); the girder bears on it.',support:{x,z:stepped.lowerZ}} satisfies PartInfo;
+      if(upperLength>0)wMember(`column-${code}`,column,upperLength,new THREE.Vector3(x,seatTop+upperLength/2,columnOffset),true,materials.column,upperHoles,columnHoles);
     }else wMember(`column-${code}`,column,columnTop-columnBottom,new THREE.Vector3(x,columnMid,columnOffset),true,newColumn?materials.plate:materials.column,upperHoles,columnHoles);
-    if(!bracket&&!capped){
+    if(!bracket&&!capped&&!stepped){
     wMember(`bracket-${code}`,crosshead,capLength,new THREE.Vector3(x,(beamTop+beamBottom)/2,bracketMid),false,materials.beam,topHoles);
     plate(`bearing-seat-${code}`,Math.max(b.bf+.12,.7,independentBearing?.seatLength??0),plateT,seatWidth,x,seatTop-plateT/2,0,seatHoles,independentBearing?'Shared bracket spreader (reference)':'Bearing seat plate');
     const end=plate(`bracket-end-plate-${code}`,endPlateWidth,plateT,endPlateTop-endPlateBottom,x,endPlateMid,columnFace-plateT/2,endHoles,'Bracket end plate');end.rotation.x=Math.PI/2;
@@ -166,8 +190,8 @@ export function buildReferenceFraming({ supports, girderDepth, girderWidth, gird
       if(hardware)n.anchors.forEach((a,j)=>hardware.bolt(group,{id:`${code}-AR-${j+1}`,family:'Headed anchor rod',description:'New column base plate to footing; see the new column details',diameter:a.d,grip:pt+n.grout,support:{x,z:columnOffset}},new THREE.Vector3(x+a.x,columnBottom-pt,columnOffset+a.z)));
       box(group,`footing-${code}`,n.footing.B,n.footing.h,n.footing.L,x,top-n.footing.h/2,columnOffset,materials.foundation);
     }else{
-    plate(`base-plate-${code}`,baseX,plateT,baseZ,x,columnBottom-plateT/2,columnOffset,baseHoles,'Column base plate');
-    box(group,`foundation-pad-${code}`,baseX+.2,padH,baseZ+.2,x,floor+padH/2,columnOffset,materials.foundation);
+    plate(`base-plate-${code}`,baseX,plateT,baseZ,x,columnBottom-plateT/2,stepped?baseOffset:columnOffset,baseHoles,'Column base plate');
+    box(group,`foundation-pad-${code}`,baseX+.2,padH,baseZ+.2,x,floor+padH/2,stepped?baseOffset:columnOffset,materials.foundation);
     }
   });
   // Crane-level strut on the column line in every span, its flanges stopping at the coped ends, and the rods pin

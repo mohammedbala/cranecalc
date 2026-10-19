@@ -2,6 +2,8 @@ import type {CalculationSnapshot,CheckResult,ProjectInput} from '../engine/types
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeEndStop} from '../engine/endStopInputs';
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {activeStep} from '../engine/steppedColumnInputs';
+import {stepGeometry} from '../engine/steppedColumn';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesTaperedHaunch} from '../engine/taperedHaunch';
 import {usesRolledBracket} from '../engine/rolledBracket';
@@ -35,6 +37,7 @@ export function runwayParts(p:ProjectInput){
  if(activeColumnCap(p))out.push('column caps');
  else if(b?.enabled)out.push(usesExistingBracket(p)?'new seats on the existing brackets':usesTaperedHaunch(p)?'haunches':usesRolledBracket(p)?'W-stub brackets':'brackets');
  if(columnStiffenerGeometry(p))out.push('column stiffeners');
+ if(stepGeometry(p)?.stiffener)out.push('step stiffeners');
  if(!activeColumnCap(p))out.push(capAngleGeometry(p)?'cap tiebacks':'ties');
  if(activeEndStop(p))out.push('end stops');
  return `${out.slice(0,-1).join(', ')} and ${out.at(-1)}`;
@@ -55,7 +58,7 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
  const take=(id:string,row:Omit<ResponsibilityRow,'check'>)=>{const c=byId.get(id);if(!c)return;byId.delete(id);rows.push({...row,check:c});};
  const sup=byId.get('supporting-structure');
  // The column member is checked here only where the project models it; otherwise it is part of what is needed.
- const columnText=col?.enabled?`the ${col.isNew?'new':'existing'} column member is checked in section @@ref:column@@${col.isNew?'':' (braced frame assumed)'}`:'the columns themselves are not checked in this package: check them for the forces delivered, with the reaction eccentricity and its moment';
+ const columnText=col?.enabled?activeStep(p)?'the existing stepped column, both shafts and the step, is checked in sections @@ref:column@@ to @@ref:step@@ (braced frame assumed)':`the ${col.isNew?'new':'existing'} column member is checked in section @@ref:column@@${col.isNew?'':' (braced frame assumed)'}`:'the columns themselves are not checked in this package: check them for the forces delivered, with the reaction eccentricity and its moment';
  if(sup)take('supporting-structure',{item:sup.title,needed:`Check the building frame, roof and wall framing, the column-to-foundation connections, anchors and foundations for the crane forces combined with the building loads; ${columnText}.`,
   criterion:'AISC 360-16 and ACI 318 strength under the ASCE 7-16 §2.3 combinations, crane loads as L (§4.9); IEBC alteration provisions.',forces:`Factored ${where}. Unfactored reactions by load type: section @@ref:reactions@@.`,party:EOR});
  take('column-frame',{item:'Existing column · frame type and second-order effects',needed:`Confirm that the column line is braced (non-sway) across the runway, or give the frame's B2 from its analysis. The existing column check (section @@ref:column@@) is conditional on a braced frame: ${col?`${col.strong.base} base, ${col.strong.top} top, B1 only`:'B1 only'}.`,

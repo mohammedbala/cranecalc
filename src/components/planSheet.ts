@@ -14,6 +14,8 @@ import {bracketTopic} from './bracketSheet';
 import {usesExistingBracket,existingBracket} from '../engine/existingBracket';
 import {simpleSupportTopic} from './simpleSupportSheet';
 import {capTopic} from './capSheet';
+import {steppedColumnTopic,steppedColumnTitles} from './steppedColumnSheet';
+import {activeStep} from '../engine/steppedColumnInputs';
 import {packDetailSheets,detailSheetSvg,detailSheetTitle,clearView,type DetailTopic} from './detailSheet';
 import {AnnotationSpace,dimHAt,dimVAt,type DimPlace} from './annotationSpace';
 import {craneLevelStrut} from '../engine/existingColumn';
@@ -21,6 +23,7 @@ import {format} from '../engine/units';
 import type { CalculationSnapshot } from '../engine/types';
 import { defaultFraming, framingSchema, type FramingSettings } from './framingSettings';
 import { planSheetGeometry, type Point, type Segment } from './planSheetGeometry';
+import { shapeMeters } from '../data/aiscReferenceShapes';
 import { drawingLength, drawingElevation,dimensionLength,plateInches,specGrade} from './drawingFormat';
 import {refDim,dimText, sheetDrawingScale as drawingScale, sheetArea, n, text, rect, line, bubble, dimH, dimV, short, titleBlock, sheetStart, viewTitle, multiLeader, detailRef, detailTitles, sheetRef, breakLine, textWidth, wrapToWidth, lettering, type XY } from './sheetGraphics';
 import { heading, table, numbered, noteStack, type Style } from './noteBlocks';
@@ -86,7 +89,9 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   // The scale is the height's unless the panel's width (existing columns outboard, a long kept runway) needs a smaller one:
   // the runways are then kept longer for that scale, until the scale and the kept length agree.
   const gap=.9;let kh=drawingScale((box.bottom-top-150)/(vTop-vBottom)/1000,p.units,ga).pointsPerMm*1000;
-  const wl=Math.max(textWidth('EXISTING BUILDING COLUMN (REF.), FIELD VERIFY',8.5),textWidth(`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`,8.5)),wr=textWidth('RUNWAY AT GRID B OPPOSITE HAND',8.5);
+  // A stepped column: the girder on the existing step, the column's two shafts named (steppedColumnSheet).
+  const st=m.stepped,stepLabels=st?{seat:[`GIRDER ON THE (E) STEP CAP, SEE ${detailRef(steppedColumnTitles.section)}`],column:[`(E) STEPPED COLUMN (REF.): UPPER ${st.upper.name}, LOWER ${st.lower.name}`,`FIELD VERIFY; SEE ${detailRef(steppedColumnTitles.elevation)}`]}:undefined;
+  const wl=Math.max(textWidth('EXISTING BUILDING COLUMN (REF.), FIELD VERIFY',8.5),textWidth(`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`,8.5),...(stepLabels?[...stepLabels.seat,...stepLabels.column].map(v=>textWidth(v,8.5)):[])),wr=textWidth('RUNWAY AT GRID B OPPOSITE HAND',8.5);
   let span:{from:number;to:number}|undefined,shift=0;
   const keepFor=(kq:number)=>{const keep=Math.max(2.8,(76+wl)/kq-gap/2,((160+wl+wr)/kq-gap)/2);span=uRB-uRA-2*keep>1.5?{from:uRA+keep,to:uRB-keep}:undefined;shift=span?span.to-span.from-gap:0;};
   keepFor(kh);
@@ -172,10 +177,10 @@ function typicalSection(s:CalculationSnapshot,m:ReturnType<typeof planSheetGeome
   svg+=multiLeader([[SX(uRA+headW/2),SY(railTop-.01)]],[lx,SY(railTop)-2],[`CRANE RAIL${d?`, SEE ${detailRef(detailTitles.railKeeper)}`:analysisOnly(p)?' BY OTHERS, SEE S-00':''}`]);
   svg+=multiLeader([[SX(m.bf/2),SY(m.d/4)]],[lx,SY(m.d/4)+3],[`${p.section.name} RUNWAY GIRDER`,'SEE RUNWAY GIRDER SCHEDULE']);
   const capped=activeColumnCap(p)?columnCapGeometry(p):undefined;
-  svg+=capped?multiLeader([[SX(capped.cap.plate.width/2000),SY(seat-capped.cap.plate.thickness/2000)]],[lx,SY(seat)+16],[`COLUMN CAP, SEE ${detailRef(columnCapTitles.section)}`]):multiLeader([[SX(0),SY(seat-Math.min(.05,m.bracketDepth/3))]],[lx,SY(seat)+16],d?[`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`]:['BRACKET BY BUILDING DESIGNER (REF.)']);
+  svg+=st&&stepLabels?multiLeader([[SX(-st.lowerZ+st.cap.width/2),SY(seat-st.cap.thickness/2)]],[lx,SY(seat)+16],stepLabels.seat):capped?multiLeader([[SX(capped.cap.plate.width/2000),SY(seat-capped.cap.plate.thickness/2000)]],[lx,SY(seat)+16],[`COLUMN CAP, SEE ${detailRef(columnCapTitles.section)}`]):multiLeader([[SX(0),SY(seat-Math.min(.05,m.bracketDepth/3))]],[lx,SY(seat)+16],d?[`BEARING AND BRACKET, SEE ${detailRef(detailTitles.bearing)}`]:['BRACKET BY BUILDING DESIGNER (REF.)']);
   // The column callout a line below the bracket's or cap's where a shallow band brings them together.
   const columnY=Math.max(SY(vBottom+.2)+3,SY(seat)+16+lettering.leading+2);
-  svg+=multiLeader([[SX(uA+m.column.d/2),SY(vBottom+.2)]],[lx,columnY],o.newColumns?[`NEW ${o.columnName} COLUMN, SEE ${detailRef(detailTitles.newColumn)}`]:['EXISTING BUILDING COLUMN (REF.), FIELD VERIFY']);
+  svg+=st&&stepLabels?multiLeader([[SX(-st.lowerZ+st.lower.d*.0254/2),SY(vBottom+.12)]],[lx,columnY],stepLabels.column):multiLeader([[SX(uA+m.column.d/2),SY(vBottom+.2)]],[lx,columnY],o.newColumns?[`NEW ${o.columnName} COLUMN, SEE ${detailRef(detailTitles.newColumn)}`]:['EXISTING BUILDING COLUMN (REF.), FIELD VERIFY']);
   svg+=text(SX(uRB)-70,columnY,'RUNWAY AT GRID B OPPOSITE HAND',8.5,'end');
   svg+=viewTitle(box.x+box.w/2,below+92,typicalSectionTitle,scale.label,ga)+'</g>';
   return svg;
@@ -236,7 +241,9 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     for(const [side,z] of rows.entries()){
       svg+=rect(X(x-m.column.bf/2),Y(z-m.column.d/2),m.column.bf*k,m.column.d*k,newColumns?'runway-line':'reference-line');
       const rail=side?-m.width:0,wb=p.details?.bracket;
-      if(capGeo)svg+=`<g data-column-cap="plan">${rect(X(x-capGeo.cap.plate.length/2000),Y(z-capGeo.cap.plate.width/2000),capGeo.cap.plate.length/1000*k,capGeo.cap.plate.width/1000*k,'runway-line')}</g>`;
+      // A stepped column: its lower shaft and step cap toward the runway, under the upper shaft (all existing).
+      if(m.stepped){const q=m.stepped,zl=rail+(side?-1:1)*q.lowerZ,lo=shapeMeters(q.lower);svg+=`<g data-stepped-column="plan">${rect(X(x-lo.bf/2),Y(zl-lo.d/2),lo.bf*k,lo.d*k,'reference-line')}${rect(X(x-q.cap.length/2),Y(zl-q.cap.width/2),q.cap.length*k,q.cap.width*k,'reference-line')}</g>`;}
+      else if(capGeo)svg+=`<g data-column-cap="plan">${rect(X(x-capGeo.cap.plate.length/2000),Y(z-capGeo.cap.plate.width/2000),capGeo.cap.plate.length/1000*k,capGeo.cap.plate.width/1000*k,'runway-line')}</g>`;
       else if(wb?.enabled){const face=rail+(side?-1:1)*wb.reach/1000,tip=face+(side?1:-1)*wb.seatProjection/1000,len=bracketSeat(wb).length;svg+=rect(X(x-len/2000),Y(Math.min(face,tip)),len/1000*k,wb.seatProjection/1000*k,'runway-line');}else svg+=rect(X(x-.15),Y(Math.min(z,rail)),.3*k,Math.abs(z-rail)*k,'reference-line');
     }
   });
@@ -448,10 +455,12 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
     // The column is beyond the girder. A new column ends at its top, at or below the top of the girder. An existing
     // building column is drawn only below the seat, a stub broken once at its foot: above the girder it continues to
     // the roof (shown on the typical section), and a short piece broken at both ends would only add break lines.
-    const c0=EX(x-m.column.bf/2),c1=EX(x+m.column.bf/2),front=EY(m.railBase),stubEnd=bottom+stubLength;
+    const colBf=m.stepped?shapeMeters(m.stepped.lower).bf:m.column.bf,c0=EX(x-colBf/2),c1=EX(x+colBf/2),front=EY(m.railBase),stubEnd=bottom+stubLength;
     // Past a runway end the column is in view.
     const behind=(x:number)=>x>el+.5&&x<er-.5,edges=[c0,...[el,er].filter(v=>v>c0&&v<c1),c1];
-    const capBottom=capGeo?bottom+(p.details!.bearing.thickness+capGeo.cap.plate.thickness)/1000*ek:bottom;
+    const capBottom=capGeo?bottom+(p.details!.bearing.thickness+capGeo.cap.plate.thickness)/1000*ek:m.stepped?bottom+(p.details?.bearing.thickness??0)/1000*ek+m.stepped.cap.thickness*ek:bottom;
+    // The existing step cap under the girder bearing; the lower shaft below it.
+    if(m.stepped){const q=m.stepped,bt=(p.details?.bearing.thickness??0)/1000*ek;svg+=`<g data-stepped-column="elevation">${rect(EX(x-q.cap.length/2),bottom+bt,q.cap.length*ek,q.cap.thickness*ek,'reference-line')}</g>`;}
     if(newColumns&&capGeo){
      // Column cap: the bearing plates on the cap plate under the girder, the column below the cap.
      svg+=`<g data-column-cap="elevation">${rect(EX(x-capGeo.cap.plate.length/2000),bottom+p.details!.bearing.thickness/1000*ek,capGeo.cap.plate.length/1000*ek,capGeo.cap.plate.thickness/1000*ek,'runway-line')}${capGeo.grids[i].bearings.map(b=>rect(EX(x+b.x0/1000),bottom,(b.x1-b.x0)/1000*ek,p.details!.bearing.thickness/1000*ek,'runway-line')).join('')}</g>`;
@@ -469,7 +478,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
      const h=haunchUnderSeat(p)!.g,sy=bottom+(p.details!.bearing.thickness/1000)*ek;
      svg+=rect(EX(x-h.bt/2000),sy,h.bt/1000*ek,h.tt/1000*ek,'runway-line')+rect(EX(x-h.bb/2000),sy+h.tt/1000*ek,h.bb/1000*ek,(h.hr-h.tt)/1000*ek,'runway-line');
     }
-    else if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1]){svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');const rg=ribGeometry(wb);if(rg.tapered)svg+=line([EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],[EX(x+(side*wb.ribSpacing+wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],'runway-line');}}else if(!capGeo)svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
+    else if(wb?.enabled){const sy=bottom+(p.details!.bearing.thickness/1000)*ek;svg+=rect(EX(x-wb.seatLength/2000),sy,wb.seatLength/1000*ek,wb.seatThickness/1000*ek,'runway-line');if(usesExistingBracket(p)){const e=existingBracket(p),y=sy+wb.seatThickness/1000*ek;for(const off of [0,e.depth-e.flangeThickness])svg+=rect(EX(x-e.width/2000),y+off/1000*ek,e.width/1000*ek,e.flangeThickness/1000*ek,'reference-line');svg+=rect(EX(x-e.webThickness/2000),y+e.flangeThickness/1000*ek,e.webThickness/1000*ek,(e.depth-2*e.flangeThickness)/1000*ek,'reference-line');}else for(const side of [-1,1]){svg+=rect(EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+wb.seatThickness/1000*ek,wb.ribThickness/1000*ek,wb.ribDepth/1000*ek,'runway-line');const rg=ribGeometry(wb);if(rg.tapered)svg+=line([EX(x+(side*wb.ribSpacing-wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],[EX(x+(side*wb.ribSpacing+wb.ribThickness)/2000),sy+(wb.seatThickness+rg.tip)/1000*ek],'runway-line');}}else if(!capGeo&&!m.stepped)svg+=rect(EX(x-.35),bottom,.7*ek,Math.max(4,m.bracketDepth*ek),'reference-line');
     svg+=line([EX(x),bubbleY+12],[EX(x),below+33],'grid-line')+gridBubble(EX(x),bubbleY,String(i+1));
     if(i)svg+=dimH(EX(m.supports[i-1]),EX(x),below+34,below+54,dim(p.spans[i-1]/1000));
   });
@@ -603,11 +612,11 @@ const unescape=(v:string)=>v.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(
  * column brackets, direct flange ties, end stops and new columns. Details are drawn on demand.
  */
 export function detailTopics(s:CalculationSnapshot,f:FramingSettings=defaultFraming):DetailTopic[]{
-  const p=s.input,d=p.details,ties=d?.brace.flangeAttachment?.enabled?flangeTieTopic(s):undefined,bracket=d?.bracket?.enabled?bracketTopic(s):undefined,supports=simpleSupportTopic(s,f),capAngle=capAngleTopic(s);
+  const p=s.input,d=p.details,ties=d?.brace.flangeAttachment?.enabled?flangeTieTopic(s):undefined,bracket=d?.bracket?.enabled?bracketTopic(s):undefined,supports=simpleSupportTopic(s,f),capAngle=capAngleTopic(s),stepped=steppedColumnTopic(s);
   // Each detail drawn where its annotation reads clear (clearView).
   const topics:DetailTopic[]=[connectionTopic(s,f,!ties),
     ...(p.section.kind==='cap'&&p.capDesign&&d?[capTopic(s)]:[]),
-    ...(supports?[supports]:[]),...(bracket?[bracket]:[]),...(ties?[ties]:[]),...(capAngle?[capAngle]:[]),
+    ...(supports?[supports]:[]),...(stepped?[stepped]:[]),...(bracket?[bracket]:[]),...(ties?[ties]:[]),...(capAngle?[capAngle]:[]),
     ...(d&&activeEndStop(p)?[endStopTopic(s)]:[]),
     ...(d&&!spliceLayout(p).errors.length&&spliceLayout(p).stations.length?[spliceTopic(s)]:[]),
     ...(d&&p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled?[...(activeColumnCap(p)?[columnCapTopic(s)]:[]),newColumnTopic(s)]:[]),

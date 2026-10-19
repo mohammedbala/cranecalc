@@ -7,6 +7,7 @@ import {ribGeometry} from '../engine/bracketRib';
 import {rolledStub} from '../engine/rolledBracketInputs';
 import {haunchGeometry} from '../engine/taperedHaunchInputs';
 import {existingBracketLabel} from '../engine/bracketProfiles';
+import {stepGeometry} from '../engine/steppedColumn';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {capAngleGeometry} from '../engine/capAngle';
@@ -55,6 +56,7 @@ function tie(p:ProjectInput){
 function support(p:ProjectInput){
  const cap=activeColumnCap(p);
  if(cap)return `Column cap ${plate(p,cap.plate.thickness,cap.plate.width,cap.plate.length)}, ${plateInches(cap.weld,p.units)} fillet all around; cap stiffeners PL ${plateInches(cap.stiffener.thickness,p.units)}`;
+ const st=stepGeometry(p);if(st)return `Girder on the existing step cap ${plate(p,st.cap.thickness,st.cap.width,st.cap.length)} over the lower shaft's crane-side flange, web ${len(p,st.girderWeb)} from the lower centroid${st.stiffener?`; step stiffeners 2-PL ${plateInches(st.stiffener.thickness,p.units)} × ${plateInches(st.stiffener.width,p.units)}`:''}`;
  const b=p.details?.bracket;if(!b?.enabled)return 'Girder seat by others (support reactions are reported for its design)';
  const kind=b.arrangement??'twin-rib';
  if(kind==='existing-corbel'||kind==='existing-w-corbel')return `Existing ${existingBracketLabel(b).toLowerCase()} with new seat ${plate(p,b.seatThickness,b.seatProjection,b.seatLength)}`;
@@ -65,6 +67,7 @@ function support(p:ProjectInput){
 }
 function column(p:ProjectInput){
  const c=p.existingColumn;if(!c?.enabled)return 'Supporting column by others';
+ const st=stepGeometry(p);if(st)return `Existing stepped column: lower ${st.lower.shape||'shaft'} base to step ${len(p,c.seatElevation)}, upper ${st.upper.shape||'shaft'} to the top ${len(p,c.height)}, Fy ${format(c.Fy,'stress',p.units,0)}`;
  return `${c.isNew?'New':'Existing'} ${c.shape||'column'}, Fy ${format(c.Fy,'stress',p.units,0)}, ${len(p,c.height)} base to top support`;
 }
 function base(p:ProjectInput){

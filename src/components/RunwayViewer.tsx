@@ -17,7 +17,7 @@ import type { CalculationSnapshot, ProjectInput } from '../engine/types';
 import { format } from '../engine/units';
 import { validateProject } from '../engine/calculate';
 import { aiscShapeSource, referenceColumns, referenceCrossheads } from '../data/aiscReferenceShapes';
-import { buildReferenceFraming,newColumnFraming } from './referenceFraming';
+import { buildReferenceFraming,newColumnFraming,steppedFraming } from './referenceFraming';
 import { buildRunwayDetails, createHardwareBuilder, holeRimGeometry, type Hole, type PartInfo } from './connectionDetails';
 import { buildReferenceStructure, cloneOppositeRunway } from './referenceStructure';
 import {railClipStations} from '../engine/simpleSupports';
@@ -90,7 +90,7 @@ export default function RunwayViewer({input,snapshot,expanded=false,framing,setF
   let position=-length/2;
   const supports=[position];for(const span of input.spans){position+=span/1000;supports.push(position);}
   const railBase=d/2+(s.kind==='cap'?s.capTw/1000:0),railH=Math.max(.025,input.railHeight/1000),railZ=input.railEccentricity/1000;
-  const newColumn=newColumnFraming(input),reference=framing.shown?buildReferenceFraming({newColumn,columnFace:input.details?.bracket?.enabled?undefined:tieFaceMeters(input),columnConnectionHoles:topFlangeAngleColumnHoles(input),bracket:input.details?.bracket,continuousBearing:input.system==='continuous'&&input.details?.bracket?.enabled?{width:input.details.bearing.width/1000,length:input.details.bearing.length/1000,thickness:input.details.bearing.thickness/1000}:undefined,independentBearing:independentBearingSettings(input),supports,girderDepth:d,girderWidth:bf,girderFlangeT:tf,columnHeight:framing.height/1000,roofBottom:railBase+railH+.0125+(framing.roofClearance??defaultFraming.roofClearance)/1000,column:referenceColumns.find(s=>s.name===framing.column)!,crosshead:referenceCrossheads.find(s=>s.name===framing.crosshead)!,materials:{column:columnMaterial,beam:beamMaterial,plate:plateMaterial,foundation:foundationMaterial,weld:weldMaterial,edge:framingEdges},hardware,frameStyle:framing.frameStyle}):null;
+  const newColumn=newColumnFraming(input),reference=framing.shown?buildReferenceFraming({newColumn,stepped:steppedFraming(input),columnFace:input.details?.bracket?.enabled?undefined:tieFaceMeters(input),columnConnectionHoles:topFlangeAngleColumnHoles(input),bracket:input.details?.bracket,continuousBearing:input.system==='continuous'&&input.details?.bracket?.enabled?{width:input.details.bearing.width/1000,length:input.details.bearing.length/1000,thickness:input.details.bearing.thickness/1000}:undefined,independentBearing:independentBearingSettings(input),supports,girderDepth:d,girderWidth:bf,girderFlangeT:tf,columnHeight:framing.height/1000,roofBottom:railBase+railH+.0125+(framing.roofClearance??defaultFraming.roofClearance)/1000,column:referenceColumns.find(s=>s.name===framing.column)!,crosshead:referenceCrossheads.find(s=>s.name===framing.crosshead)!,materials:{column:columnMaterial,beam:beamMaterial,plate:plateMaterial,foundation:foundationMaterial,weld:weldMaterial,edge:framingEdges},hardware,frameStyle:framing.frameStyle}):null;
   if(reference){group.add(reference.group);floor=reference.floor;}
   else for(const x of supports){box(.22,supportHeight,Math.max(.24,bf*.9),x,floor+supportHeight/2,0,support);box(.35,.035,Math.max(.38,bf*1.3),x,floor+.0175,0,support);}
   const cr=input.details?.rail;

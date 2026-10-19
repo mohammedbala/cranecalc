@@ -24,6 +24,7 @@ import {clipGeometry,railPadThickness} from '../engine/railSeat';
 import {flangeTieResponse} from '../engine/flangeTieDesign';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {braceSystem} from '../engine/detailAnalysis';
+import {stepWebStrength} from '../engine/stepSeat';
 import {diaphragmArrangement,diaphragmDemand,diaphragmWeldEquivalent,stiffenerPairSection,stiffenerWeldGroup} from '../engine/detailChecks';
 
 
@@ -92,6 +93,27 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
    return [`P_r/P_c=${tx(k.P,'force')}/${tx(C.Pc,'force')}=${n(r,3)}${r>=.2?'\\ge':'<'}0.2\\quad\\text{(${caseLabel(k.id).replace(/[\\{}#%&_$^~]/g,'').replace(/−/g,'-')})}`,
     r>=.2?`U=\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)=${n(r,3)}+\\frac89\\left(${terms}\\right)=${n(U,3)}${rel.le}1\\quad ${rel.dc}`
      :`U=\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}=${n(r/2,3)}+${terms}=${n(U,3)}${rel.le}1\\quad ${rel.dc}`];
+  }
+ }
+ // Stepped column: H1 of each shaft with its governing row (steppedColumn.ts), and the step's local checks (stepSeat.ts).
+ const sc=s.steppedColumn,sk=/^column-(upper|lower)-interaction$/.exec(c.id)?.[1] as 'upper'|'lower'|undefined;
+ if(sc&&sk){
+  const x=sc[sk],k=x.governing.U,C=x.capacity,r=k.P/C.Pc,flex=Math.abs(k.Mx)/C.Mcx+Math.abs(k.My)/C.Mcy,U=r>=.2?r+8/9*flex:r/2+flex;
+  if(k.P>=0&&close(U,c.demand)){
+   const terms=`\\frac{${tx(Math.abs(k.Mx),'moment')}}{${tx(C.Mcx,'moment')}}+\\frac{${tx(Math.abs(k.My),'moment')}}{${tx(C.Mcy,'moment')}}`;
+   return [`P_r/P_c=${tx(k.P,'force')}/${tx(C.Pc,'force')}=${n(r,3)}${r>=.2?'\\ge':'<'}0.2\\quad(L_{cx}=${tx(x.Lcx,'length')},\\ B_{1x}=${n(k.B1x,3)};\\ \\text{${caseLabel(k.id).replace(/[\\{}#%&_$^~]/g,'').replace(/−/g,'-')}})`,
+    r>=.2?`U=\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)=${n(r,3)}+\\frac89\\left(${terms}\\right)=${n(U,3)}${rel.le}1\\quad ${rel.dc}`
+     :`U=\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}=${n(r/2,3)}+${terms}=${n(U,3)}${rel.le}1\\quad ${rel.dc}`];
+  }
+ }
+ if(sc&&p.existingColumn&&(c.id==='step-web-yielding'||c.id==='step-web-crippling'||c.id==='step-cap-flexure')){
+  const g=sc.geometry,Fy=p.existingColumn.Fy,E=p.section.E,w=stepWebStrength(p,g);
+  if(c.id==='step-web-yielding'&&close(w.yielding,cap))return [`${lhs}R_n=${fl(1,1.5)}\\times F_yt_w(2.5k+l_b)=${fl(1,1.5)}\\times${tx(Fy,'stress')}\\times${tx(g.lower.tw,'length')}\\times(2.5\\times${tx(w.k,'length')}+${tx(w.lb,'length')})=${tx(w.yielding,'force')}${check(w.yielding,'R_u')}\\quad(k=t_{cap},\\ l_b=t_{fu})`];
+  if(c.id==='step-web-crippling'&&close(w.crippling,cap))return [`${lhs}R_n=${fl(.75,2)}\\times0.40t_w^2\\sqrt{\\frac{EF_yt_{cap}}{t_w}}=${fl(.75,2)}\\times0.40\\times(${tx(g.lower.tw,'length')})^2\\sqrt{\\frac{${tx(E,'stress')}\\times${tx(Fy,'stress')}\\times${tx(w.k,'length')}}{${tx(g.lower.tw,'length')}}}=${tx(w.crippling,'force')}${check(w.crippling,'R_u')}`];
+  if(c.id==='step-cap-flexure'&&d){
+   const N=d.bearing.length,bw=Math.min(p.section.bf,d.bearing.width),a=Math.max(0,(bw-g.lower.tf)/2),l=Math.min(N,g.cap.length/2),t=g.cap.thickness,M=factor(.9,1.67)*Fy*l*t**2/4;
+   if(close(M,cap))return [`a=\\frac{b-t_{fl}}{2}=\\frac{${tx(bw,'length')}-${tx(g.lower.tf,'length')}}{2}=${tx(a,'length')};\\quad M_u=\\frac{R_u}{b}\\frac{a^2}{2}`,
+    `${lhs}M_n=${fl(.9,1.67)}\\times F_y\\frac{l\\,t_{cap}^2}{4}=${fl(.9,1.67)}\\times${tx(Fy,'stress')}\\times\\frac{${tx(l,'length')}\\times(${tx(t,'length')})^2}{4}=${tx(M,'moment')}${check(M,'M_u')}`];
   }
  }
  // Welded rib bracket: F11 plastic moment of the rectangular rib.
