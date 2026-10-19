@@ -1205,7 +1205,7 @@ function craneColumnSupport(p:ProjectInput,cfg:RunwayConfig,seatLevel:(base:numb
   adjacent:{enabled:true,A:{...line,footing:{...footing}},B:{...line,footing:{...footing}},footingClear:6*inch,source:`Fictitious example survey: existing ${bshape} building columns at every grid beside the crane columns, ${+(footing.L/foot).toFixed(1)} ft square footings by test pits`}};
  p.drawing!.existingEvaluation='Fictitious existing structure evaluation: column line B frame, bracing, connections and foundations for the tie forces and the runway seismic mass';
  const middle=Math.ceil(cfg.bays/2);
- p.longitudinalBracing={...demo.longitudinalBracing!,bayWidth:cfg.span*foot,height:seat,rod:{...demo.longitudinalBracing!.rod,diameter:Math.max(inch,bracingRod(p,cfg.span*foot,seat))},bays:1,
+ p.longitudinalBracing={...demo.longitudinalBracing!,bayWidth:cfg.span*foot,height:seat,rod:{...demo.longitudinalBracing!.rod,diameter:inch},bays:1,
   source:`Fictitious example: new crane-level rod X-bracing between the new crane columns at grid lines ${middle}-${middle+1}; the building's own bracing takes no crane longitudinal force`,confirmed:true,
   design:{...structuredClone(demo.longitudinalBracing!.design!),spans:[middle]}};
  const bd=p.longitudinalBracing.design!;bd.pin={...bd.pin,diameter:Math.max(bd.pin.diameter,p.longitudinalBracing.rod.diameter)};
@@ -1284,11 +1284,15 @@ function withCraneColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):P
  const worst=(r:ProjectInput)=>{
   const a=existingColumnAnalysis(r,supportReactions(r,sectionProperties(r.section))),member=Math.max(0,...existingColumnChecks(r,a).filter(v=>/^column-(axial|flexure|flexure-y|shear|interaction)$/.test(v.id)).map(v=>v.utilization??0));
   const misfit=validateColumnCap(r).length>0,cap=misfit?Infinity:Math.max(0,...Object.values(columnCapSizingRatios(r)));
-  // The bracing gussets and strut tabs load the crane-column web out of its plane (bracingSystemChecks).
+  // The bracing gussets and strut tabs load the crane-column web out of its plane (bracingSystemChecks): the bracing
+  // sizing stiffens the web there first (sizeBracing), so the web ratio is left only where its stiffeners cannot carry it.
   const b=bracingRatios(r),web=Math.max(0,b['brace-column-web']??0,b['brace-strut-tab']??0);
-  return {value:Math.max(member,cap,web),member:Math.max(member,web),cap,misfit};};
- let last=worst(q);if(last.value<=1)return q;
- const why=`the ${q.existingColumn!.shape} crane column ${last.misfit?'does not fit its column cap (validateColumnCap)':`gives a ${last.member>last.cap?'member (H1 or bracing web)':'column cap'} ratio ${last.value.toFixed(2)} > 1.00`}: the lightest heavier W14 that passes`;
+  return {value:Math.max(member,cap,web),member:Math.max(member,web),column:member,web,cap,misfit};};
+ let last=worst(q);
+ // The reason names the member ratio (H1 and its parts) and the connection ratios (the bracing web, the cap) apart.
+ const ratios=(v:typeof last)=>`member (H1) ratio ${v.column.toFixed(2)}, bracing connection (column web at the gussets and strut tabs, stiffened) ratio ${v.web.toFixed(2)}, column cap ratio ${Number.isFinite(v.cap)?v.cap.toFixed(2):'-'}`;
+ if(last.value<=1){trace.column=[trace.column,`The ${q.existingColumn!.shape} crane column gives ${ratios(last)}`].filter(Boolean).join('; ');return q;}
+ const why=`the ${q.existingColumn!.shape} crane column ${last.misfit?'does not fit its column cap (validateColumnCap)':`gives ${ratios(last)}: the ${last.column>1?'member':last.web>1?'bracing connection':'column cap'} exceeds 1.00 and no local fix brings it there`}; the lightest heavier W14 that passes`;
  // The lightest heavier W14 that passes; else the lightest whose member and bracing web pass, its cap ratios reported
  // (the cap's fatigue and fillets barely change with the column once the member passes).
  let best:{r:ProjectInput;inner:SelectionTrace;shape:string}|undefined;

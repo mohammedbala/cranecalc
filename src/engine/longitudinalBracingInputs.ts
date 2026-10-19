@@ -35,7 +35,13 @@ export const longitudinalBracingSchema=z.object({
   strut:z.object({shape:z.string().max(30),Fy:pos,Fu:pos,boltDiameter:pos,grade:z.enum(['A325','A490']),
    /** Bolts in line at each strut end, pretensioned slip-critical (2 when not given). */
    bolts:z.number().int().min(2).max(5).optional()}),
-  seatWeld:pos
+  seatWeld:pos,
+  /**
+   * Horizontal stiffener pair at each upper gusset and strut tab (none when not given): two plates between the column
+   * flanges on the gusset's side of the web, each split by the gusset and welded to it, the web and both flanges, with
+   * fillets of `weld` both faces. They carry the force normal to the web to the flanges (webStiffeners).
+   */
+  stiffeners:z.object({thickness:pos,weld:pos,Fy:pos,Fu:pos}).optional()
  }).optional()
 });
 export type LongitudinalBracingInput=z.infer<typeof longitudinalBracingSchema>;

@@ -234,7 +234,8 @@ export function bracingSystemAnalysis(p:ProjectInput,reactions:SupportReactionSe
  const d=bracingDesign(p),eLap=g.cross.offset-g.strut.lap,Mlap=strutCase.H*eLap;
  let top=6*inch;
  for(;top<36*inch;top+=inch/2){const o=gussetOutlines(g,top,6*inch),w=o.welds.upper,Lw=w.to-w.from,group=weldGroup([[[g.x0,w.from],[g.x0,w.to]]],Rtop,[0,0]);
-  if(group.peak/2+Mlap/(g.t*Lw)<=capacity.weld&&Mlap<=available(d.gusset.Fy*Lw*g.t**2/4,p.method,.9,1.67)&&Math.abs(Rtop[0])<=webYieldLine(column,Lw,p.method))break;}
+  // A stiffened web (design.stiffeners) does not rely on the web's yield line: the weld length is the welds' and the gusset's.
+  if(group.peak/2+Mlap/(g.t*Lw)<=capacity.weld&&Mlap<=available(d.gusset.Fy*Lw*g.t**2/4,p.method,.9,1.67)&&(d.stiffeners||Math.abs(Rtop[0])<=webYieldLine(column,Lw,p.method)))break;}
  let bottom=6*inch;
  for(;bottom<36*inch;bottom+=inch/2){const o=gussetOutlines(g,top,bottom),w=o.welds.lower,group=weldGroup([[[g.x0,0],[g.x0,w.web]],[[g.x0,0],[w.plate,0]]],[develop*g.cos,develop*g.sin],[0,0]);if(group.peak/2<=capacity.weld)break;}
  const outlines=gussetOutlines(g,top,bottom);
@@ -258,10 +259,11 @@ export function bracingSystemAnalysis(p:ProjectInput,reactions:SupportReactionSe
  return {geometry:g,outlines,layout,develop,strutForce:{H:strutCase.H,id:strutCase.id},seatForce:{F:seatCase.Hbay,id:seatCase.id},collector:Math.max(0,...cases.filter(c=>c.seismic).map(c=>c.Hbay)),welds:{top,base:bottom},seismic,separation,rodTorsion};
 }
 /** Weld (both faces of the gusset) per unit length of the line, limited by the gusset and column web base metal (J2.4, J4.2). */
-function connectionCapacities(p:ProjectInput,g:ReturnType<typeof bracingGeometry>,column:Section){
+export function connectionCapacities(p:ProjectInput,g:{t:number},column:Section){
  const d=bracingDesign(p),m=p.details!.material,w=d.weld;
  const weld=available(.6*m.Fexx*w/Math.SQRT2,p.method,.75,2),gusset=available(.6*d.gusset.Fu*g.t,p.method,.75,2)/2,web=available(.6*column.Fu*column.tw,p.method,.75,2)/2;
- return {weld:Math.min(weld,gusset,web),metal:weld};
+ // The part that limits the line: a larger fillet helps only while the weld metal governs (bracingSizing).
+ return {weld:Math.min(weld,gusset,web),metal:weld,gusset,web,governs:(weld<=Math.min(gusset,web)?'weld':gusset<=web?'gusset':'web') as 'weld'|'gusset'|'web'};
 }
 /**
  * Column web loaded out of its plane by the gusset over the weld length c: the strip of web between the flanges
@@ -269,6 +271,46 @@ function connectionCapacities(p:ProjectInput,g:ReturnType<typeof bracingGeometry
  * not credited.
  */
 export function webYieldLine(column:Section,c:number,method:ProjectInput['method']){return available(8*column.Fy*column.tw**2/4*c/(column.d-2*column.tf),method,.9,1.67);}
+
+/**
+ * Horizontal stiffener pair at an upper gusset or strut tab of thickness tg (design.stiffeners), for a force F normal
+ * to the column web. Two plates between the flanges on the gusset's side of the web, at the top and bottom of its web
+ * weld, each split by the gusset into two halves welded to the gusset, the web and both flanges. Lower-bound load path
+ * (the web's own out-of-plane strength is not relied on): each half takes Q = F/4 from the gusset through its two
+ * fillets along the gusset (longitudinal shear) and carries it to its flange as a cantilever of arm a = (d - 2tf - tg)/2:
+ * - fillets to the gusset, f = Q/(2L_g), and the gusset base metal for both halves on its faces, 2Q ≤ φ0.6F_u t_g L_g (J4.2);
+ * - fillets to the flange, shear Q and in-plane moment Qa on two lines of length L_f (elastic, no directional
+ *   increase): f = √((Q/2L_f)² + (3Qa/L_f²)²); the flange base metal at that line force (J4.2, J2.4);
+ * - the half plate at the flange: flexure Qa ≤ φF_y t L_f²/4 and shear Q ≤ φ0.6F_y t L_f (J4.1, J4.2);
+ * - its width-thickness ratio w/t ≤ 0.56√(E/F_y) (J10.8), the force reversing.
+ * L_f = L_g = (b_f - t_w)/2 less the corner clip at the web-flange fillet (k_des - t_f + 1/2 in).
+ * Ratios are linear in F (the width-thickness ratio is not); `capacity` is the force at a ratio of 1.
+ */
+/**
+ * Centerline elevations (from the work point) of the stiffener pair: at the upper gusset, inside the top of its web weld
+ * and inside the bottom of the strut tab (or of the web weld where that ends higher), where the gusset reaches past the
+ * flange tips; at a strut tab, inside its top and bottom edges.
+ */
+export function stiffenerLevels(r:Pick<BracingSystemResult,'outlines'|'geometry'>,t=0){
+ const w=r.outlines.welds.upper,half=r.geometry.strut.half;
+ return {gusset:[w.to-t/2,Math.max(w.from,-half)+t/2] as [number,number],tab:[half-t/2,-half+t/2] as [number,number]};
+}
+export function webStiffeners(p:ProjectInput,column:Section,tg:number,F:number){
+ const s=bracingDesign(p).stiffeners;if(!s)return undefined;
+ const method=p.method,Fexx=p.details!.material.Fexx,shape=aiscShapeByName(column.catalogueId??p.existingColumn?.shape??'');
+ const clip=Math.max(0,(shape?shape.kdes*inch:column.tf)-column.tf)+inch/2,w=(column.bf-column.tw)/2,L=Math.max(w-clip,inch),a=Math.max(0,(column.d-2*column.tf-tg)/2);
+ const t=s.thickness,Q=Math.abs(F)/4,rw=available(.6*Fexx*s.weld/Math.SQRT2,method,.75,2),metal=(Fu:number,th:number)=>available(.6*Fu*th,method,.75,2);
+ const gussetWeld=Q/(2*L),flangeWeld=Math.hypot(Q/(2*L),3*Q*a/L**2);
+ const parts={
+  gussetWeld:gussetWeld/Math.min(rw,metal(s.Fu,t)/2),gussetMetal:2*Q/(metal(column.Fu,tg)*L),
+  flangeWeld:flangeWeld/rw,flangeMetal:2*flangeWeld/Math.min(metal(column.Fu,column.tf),metal(s.Fu,t)),
+  flexure:Q*a/available(s.Fy*t*L**2/4,method,.9,1.67),shear:Q/available(.6*s.Fy*t*L,method,1,1.5),
+  slenderness:w/t/(.56*Math.sqrt(column.E/s.Fy))};
+ const load=Math.max(parts.gussetWeld,parts.gussetMetal,parts.flangeWeld,parts.flangeMetal,parts.flexure,parts.shear);
+ // The governing part: a load part (all linear in F), unless the plate is too slender.
+ const governing=parts.slenderness>1?'slenderness' as const:(Object.entries(parts) as [keyof typeof parts,number][]).filter(([k])=>k!=='slenderness').reduce((x,y)=>y[1]>x[1]?y:x)[0];
+ return {s,clip,w,L,a,Q,parts,governing,ratio:Math.max(load,parts.slenderness),capacity:parts.slenderness>1||load<=0?(parts.slenderness>1?0:Infinity):Math.abs(F)/load};
+}
 
 /**
  * ASCE 7-16 §12.12.3: separation from the existing building by δMT = √(δM1² + δM2²). δM1 is the larger maximum
@@ -303,7 +345,12 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
  const wt=weldGroup([[[g.x0,top.from],[g.x0,top.to]]],Rtop,[0,0]),wb=weldGroup([[[g.x0,0],[g.x0,low.web]],[[g.x0,0],[low.plate,0]]],Rbase,[0,0]);
  const governs=wt.peak/2>=wb.peak/2,weldDemand=Math.max(wt.peak,wb.peak)/2;
  add('brace-gusset-weld',C,'Gusset to column · fillet welds',weldDemand,cap.weld,'lineForce','f=\\sqrt{\\left(\\frac{R_x}{L}-\\frac{M z}{I_p}\\right)^2+\\left(\\frac{R_z}{L}+\\frac{M x}{I_p}\\right)^2}',`${f(d.weld,'length')} fillets both faces, E70XX, per inch of line (elastic method, no directional increase), limited by the gusset and column web base metal. Upper gusset: ${f(top.to-top.from,'length')} to the web for the developed rod and the strut force ${f(r.strutForce.H)} (${r.strutForce.id}). Lower gusset: ${f(low.web,'length')} to the web and ${f(low.plate-g.x0,'length')} to the base plate. Governs at the ${governs?'upper':'lower'} gusset. Peak ${f(weldDemand,'lineForce')} against ${f(cap.weld,'lineForce')}.`,['aisc-connections']);
- add('brace-column-web',C,'Column web · out-of-plane yield line at the gusset',Math.abs(Rtop[0]),webYieldLine(column,top.to-top.from,method),'force','R_n=\\frac{8m_pc}{b},\\;m_p=\\frac{F_yt_w^2}{4}',`The gusset pulls the web out of its plane with the developed rod's horizontal component and the strut force. Strip of web between the flanges, b = d - 2tf = ${f(column.d-2*column.tf,'length')}, fixed edges, line load over c = ${f(top.to-top.from,'length')}; end fans not credited. Column Fy ${f(column.Fy,'stress')}, tw ${f(column.tw,'length')}.`,['aisc-connections']);
+ // The force normal to the web at the upper gusset: the developed rod's horizontal component plus the strut force.
+ const webDemand=`H = T cos θ + H_strut = ${f(T)} × ${g.cos.toFixed(3)} + ${f(r.strutForce.H)} (${r.strutForce.id}) = ${f(Math.abs(Rtop[0]))}, normal to the web (the column web lies across the runway)`;
+ const stiff=webStiffeners(p,column,t,Rtop[0]);
+ if(stiff){const st=stiff.s,lv=stiffenerLevels(r,st.thickness);
+  add('brace-column-web',C,'Column web stiffeners · out-of-plane force at the gusset',Math.abs(Rtop[0]),stiff.capacity,'force','\\max\\left(\\frac{Q}{2L\\phi R_w},\\;\\frac{\\sqrt{(Q/2L)^2+(3Qa/L^2)^2}}{\\phi R_w},\\;\\frac{Qa}{\\phi F_ytL^2/4},\\;\\frac{Q}{\\phi0.6F_ytL}\\right)\\le1,\\;Q=\\frac H4',`${webDemand}. Carried by a stiffener pair, PL ${f(st.thickness,'length')} (Fy ${f(st.Fy,'stress')}), between the flanges on the gusset side at ${f(lv.gusset[0],'length')} and ${f(lv.gusset[1],'length')} from the work point, each split by the gusset and welded to it, the web and both flanges with ${f(st.weld,'length')} fillets both faces (lower bound: the web's out-of-plane strength is not relied on). Each half takes Q = H/4 = ${f(stiff.Q)} from the gusset over L = ${f(stiff.L,'length')} (clip ${f(stiff.clip,'length')} at the web-flange fillet) and cantilevers a = ${f(stiff.a,'length')} to its flange: fillets to the gusset ${stiff.parts.gussetWeld.toFixed(3)}, gusset base metal ${stiff.parts.gussetMetal.toFixed(3)}, fillets to the flange (shear and in-plane moment) ${stiff.parts.flangeWeld.toFixed(3)}, flange and stiffener base metal ${stiff.parts.flangeMetal.toFixed(3)}, plate flexure ${stiff.parts.flexure.toFixed(3)} and shear ${stiff.parts.shear.toFixed(3)} (AISC 360-16 J2.4, J4.1, J4.2); width-thickness ${(stiff.w/st.thickness).toFixed(1)} ≤ 0.56√(E/Fy) (J10.8): ${stiff.parts.slenderness.toFixed(3)}. Without them the web's yield line would give ${f(webYieldLine(column,top.to-top.from,method))} (b = ${f(column.d-2*column.tf,'length')}, tw ${f(column.tw,'length')}).`,['aisc-connections']);
+ }else add('brace-column-web',C,'Column web · out-of-plane yield line at the gusset',Math.abs(Rtop[0]),webYieldLine(column,top.to-top.from,method),'force','R_n=\\frac{8m_pc}{b},\\;m_p=\\frac{F_yt_w^2}{4}',`The gusset pulls the web out of its plane: ${webDemand}. Strip of web between the flanges, b = d - 2tf = ${f(column.d-2*column.tf,'length')}, fixed edges, line load over c = ${f(top.to-top.from,'length')}; end fans not credited. Column Fy ${f(column.Fy,'stress')}, tw ${f(column.tw,'length')}.`,['aisc-connections']);
  // Strut: E3/E4 compression with H1 for its own weight over the full span, tension, bolts, bearing and block shear.
  const S=strutSection(p),sp=sectionProperties(S),span=Math.max(...p.spans),sg=g.strut,H=r.strutForce.H;
  const member:ProjectInput={...p,section:S,unbracedLength:span,spans:[span],aist:{...(p.aist??emptyAistInputs),netFlangeArea:0,axialLength:span,bottomBraceSpacing:span,torsionalLength:span}},str=girderStrength(member,sp);
@@ -325,8 +372,9 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
  add('brace-strut-bearing','Crane-level strut','Strut bolts · bearing and tearout',H,nb*bear,'force','R_n=\\min(1.2l_ctF_u,\\;2.4dtF_u)\\ \\text{(J3.10)}',`Strut web ${f(sg.tw,'length')} and gusset ${f(t,'length')}, the thinner governing at each bolt, the smaller of the edge and pitch clear distances at every bolt; the force reverses.`,['aisc-connections']);
  const run=sg.edge+(nb-1)*sg.pitch,blk=(th:number,Fyp:number,Fup:number)=>blockShear(run*th,(run-(nb-.5)*hole)*th,(sg.half-hole/2)*th,Fyp,Fup,method);
  add('brace-strut-block','Crane-level strut','Strut web and gusset · block shear',H,Math.min(blk(sg.tw,S.Fy,S.Fu),blk(t,Fy,Fu)),'force','R_n=0.6F_uA_{nv}+U_{bs}F_uA_{nt}\\le0.6F_yA_{gv}+U_{bs}F_uA_{nt}',`Shear along the bolt line from the end and tension to the cope edge or gusset edge ${f(sg.half,'length')} from the bolt line; Ubs = 0.5.`,['aisc-connections']);
- const tab=weldGroup([[[g.x0,-sg.half],[g.x0,sg.half]]],[H,0],[0,0]);
- add('brace-strut-tab','Crane-level strut','Strut tab at other columns · welds and column web',Math.max(tab.peak/2/cap.weld,H/webYieldLine(column,2*sg.half,method)),1,'ratio','\\max\\left(\\frac{f}{\\phi R_w},\\;\\frac{H}{\\phi R_{web}}\\right)\\le1',`At columns without a rod, the strut tab ${f(2*sg.half,'length')} tall carries H with ${f(d.weld,'length')} fillets both faces to the web; the web takes it out of its plane (yield line as at the gusset).`,['aisc-connections']);
+ const tab=weldGroup([[[g.x0,-sg.half],[g.x0,sg.half]]],[H,0],[0,0]),tabStiff=webStiffeners(p,column,t,H);
+ const tabWeld=tab.peak/2/cap.weld,tabWeb=tabStiff?(tabStiff.capacity>0?H/tabStiff.capacity:1e12):H/webYieldLine(column,2*sg.half,method);
+ add('brace-strut-tab','Crane-level strut','Strut tab at other columns · welds and column web',Math.max(tabWeld,tabWeb),1,'ratio','\\max\\left(\\frac{f}{\\phi R_w},\\;\\frac{H}{\\phi R_{web}}\\right)\\le1',`At columns without a rod, the strut tab ${f(2*sg.half,'length')} tall carries H = ${f(H)} with ${f(d.weld,'length')} fillets both faces to the web: ${tabWeld.toFixed(3)} (limited by the ${cap.governs==='weld'?'weld metal':cap.governs==='gusset'?'tab base metal':'column web base metal'}). ${tabStiff?`The force normal to the web goes to a stiffener pair PL ${f(tabStiff.s.thickness,'length')} at the top and bottom of the tab, as at the gusset (Column web stiffeners): ${tabWeb.toFixed(3)}, governed by ${tabStiff.governing}.`:`The web takes it out of its plane (yield line as at the gusset): ${tabWeb.toFixed(3)}.`}`,['aisc-connections']);
  // Rod crossing: rod B's plane offset from rod A's by the strut web and filler; the strut at rod B's upper gusset
  // laps it that far off its plane, which bends the gusset about its weak axis and its web fillets as a couple.
  const cr=g.cross,crossing=`Rod B (upper end at the higher-numbered column of the braced span) in a plane ${f(cr.offset,'length')} from rod A's on the column centerline, toward the girder: the strut web (${f(sg.tw,'length')})${cr.filler?` and a ${f(cr.filler,'length')} filler`:''} between the ${f(t,'length')} upper gussets.`;
