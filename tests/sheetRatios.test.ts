@@ -90,7 +90,9 @@ describe('every template sheet set',()=>{
   const stamp=sheetStamp(s);
   if(groups.length)expect(all).toContain(`${groups.length} OPEN ITEM${groups.length>1?'S':''}`);else expect(stamp).toBeUndefined();
   expect(all).not.toContain('FAILED CHECK');
-  if(!s.checks.some(c=>c.status==='fail'))expect(holdsFor(s)).toEqual([]);
+  // Holds mark failing checks, and the one coordination item that stops fabrication of a part (the crane-column
+  // footing over the existing footing, unverified until the foundation engineer confirms it).
+  if(!s.checks.some(c=>c.status==='fail'))expect(holdsFor(s).filter(h=>h.check.id!=='crane-column-footing-clearance')).toEqual([]);
  },300000);
 });
 
