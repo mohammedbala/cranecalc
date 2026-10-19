@@ -1,3 +1,4 @@
+import {fabricationTolerance} from './fitTolerances';
 import {railPadThickness} from './railSeat';
 import {girderDeadLoad} from './newSteel';
 import {snapQuarter} from './quarterInch';
@@ -46,7 +47,12 @@ export function endStopGeometry(p:ProjectInput,e:EndStopInput){
  * 3/4 in bolts, about 1.6d for larger ones. Measured to the toe of any fillet on the obstruction, so the heavy
  * hex head or nut corners and the socket wall clear the weld.
  */
-export const wrenchClearance=(db:number)=>Math.max(1.25*inch,1.6*db);
+/**
+ * Socket (tightening) clearance C₁ from a bolt center to an obstruction: AISC Manual Table 7-15, max(1 1/4 in, 1.6d),
+ * plus the 1/16 in fabrication tolerance on the location of holes and welded parts (fitTolerances.ts), so a clearance
+ * at its limit still admits the socket with the shop variation.
+ */
+export const wrenchClearance=(db:number)=>Math.max(1.25*inch,1.6*db)+fabricationTolerance;
 
 const u2=(p:ProjectInput)=>p.units;
 const compared=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,referenceIds=['aisc-connections','tr13-load']):CheckResult=>({id,group:'End stops',title,demand,capacity,quantity,utilization:capacity>0?demand/capacity:1e12,status:capacity>0&&withinLimit(demand,capacity)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(capacity>0?demand/capacity:1e12).toFixed(4)}`,note,referenceIds});
@@ -208,7 +214,7 @@ function endStopCaseChecks(p:ProjectInput,ctx?:EndStopContext):CaseCheck[]{
   compared('end-stop-stiffener','Stiffener · width-thickness',Math.max(e.face.height,Ls)/ts,1.49*Math.sqrt(b.E/m.Fy),'ratio','b/t\\le1.49\\sqrt{E/F_y}','Stiffener welded on two edges, to the face plate and the base plate.',['aisc-b']),
   compared('end-stop-contact','Face · bumper contact height',g.contact+e.bumperDiameter/2,e.face.height,'length','e+D/2\\le H','The whole bumper (contact diameter D, center e above the base plate) bears on the face plate of height H.'),
   compared('end-stop-width','Face · bumper contact width',e.bumperDiameter,Wb,'length','D\\le W','Face plate is as wide as the base plate, W.'),
-  compared('end-stop-fit','Base plate fits the girder top',Wb,g.surfaceWidth,'length','W\\le b_f',b.kind==='cap'?'On the cap channel web.':'On the W top flange.'),
+  compared('end-stop-fit','Base plate fits the girder top',Wb+2*fabricationTolerance,g.surfaceWidth,'length','W+2t_{fab}\\le b_f',`${b.kind==='cap'?'On the cap channel web.':'On the W top flange.'} t_fab = 1/16 in each side: the fabrication tolerance on the plate width and its location (AISC Code of Standard Practice §6.4, clause to be verified), so the plate stays on the flange.`),
   compared('end-stop-stiffener-fit','Stiffeners fit on the base plate',Ls,e.base.length-g.lip-tp,'length','L_s\\le N-a-t_p','Lip a in front of the face plate leaves room for its front fillet; N is the base plate length.'),
   // Across the runway the stiffeners (and their fillets) must not meet: two stiffeners need their inside fillets
   // plus 1/4 in between them; within the base plate, an edge stiffener sits on the plate.

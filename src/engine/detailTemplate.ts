@@ -6,7 +6,7 @@ import {defaultEndBearing} from './endBearingInputs';
 import {bearingLayout,applyBearingLayout} from './endBearing';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {sizeEndStop} from './endStopSizing';
-import {railJointKindForDuty,railHasJoints,slipCriticalInstallText} from './railLayout';
+import {railJointKindForDuty,railHasJoints} from './railLayout';
 import {defaultRailClip} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
@@ -61,7 +61,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // largest that keeps the AISC J3.4 edge distance to both bar edges (holes on the bars' mid-height).
  const jointHeight=Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35;
  const jointBolt=[.875,.75,.625,.5].map(v=>v*inch).find(db=>2*minimumEdge(db)<=jointHeight+1e-6)??.5*inch;
- const jointKind=railJointKindForDuty(p),jointText=jointKind==='welded'?' Rail joints thermite or flash-butt welded by the rail supplier\'s qualified procedure (preheat, grinding, inspection); no joint bars or bolts.':jointKind==='supplier-bars'?` Rail joints tight (gap 1/16 in max.) with the rail supplier's joint bars and bolts (deferred submittal), bolts pretensioned and re-tightened after 30 and 90 days of operation; the bars and bolts ${slipCriticalInstallText} (fatigue Category B at the bars' net section).`:' Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.';
+ const jointKind=railJointKindForDuty(p),jointText=jointKind==='welded'?' Rail joints thermite or flash-butt welded by the rail supplier\'s qualified procedure (preheat, grinding, inspection); no joint bars or bolts.':jointKind==='supplier-bars'?' Rail joints tight (gap 1/16 in max.), supplier\'s joint bars (deferred submittal) installed slip-critical: Class A surfaces, bolts pretensioned, re-tightened at 30 and 90 days.':' Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.';
  // Bearing stiffener fillets: the J2.4 minimum by the thinner part; else 5/16 in, within the edge limit t - 1/16 in of the
  // thinner of the web and the stiffener, and no larger than the smallest fillet that develops the web in shear rupture
  // with fillets on both faces, D = t_w F_u/(1.414 F_EXX) to the next 1/16 in (t_w = 6.19D/F_u for E70, AISC J4.2): a larger

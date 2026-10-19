@@ -42,6 +42,7 @@ import { activeStep } from './steppedColumnInputs';
 import { fatigueCycleCheck } from './buildingClass';
 import { fatigueCycleFamilies } from './railChecks';
 import { tiedToBuilding } from './craneColumnInputs';
+import { fabricationToleranceNote } from './fitTolerances';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
@@ -215,7 +216,7 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  // The one-count check names the cycles of every wheel-local detail family, derived from the one count (fatigueCycleFamilies).
  if(p.details)snapshot.checks=snapshot.checks.map(c=>c.id==='fatigue-cycles'?fatigueCycleCheck(p,fatigueCycleFamilies(p)):c);
  integrityAndGates(snapshot);
- snapshot.checks=snapshot.checks.map(recorded);
+ snapshot.checks=snapshot.checks.map(recorded).map(toleranceStated);
  const blocking=snapshot.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status));
  // Failed engineering criteria can export; failed numerical verification cannot.
  snapshot.eligible=!blocking&&!snapshot.errors.length&&snapshot.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass');
@@ -231,6 +232,14 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  return snapshot;
 }
 
+/**
+ * A tool-clearance check (the socket clearance C₁ of AISC Manual Table 7-15, wrenchClearance) states the fabrication
+ * tolerance its required clearance includes (fitTolerances.ts).
+ */
+export function toleranceStated(c:CheckResult):CheckResult{
+ if(c.quantity!=='length'||c.note.includes(fabricationToleranceNote))return c;
+ return /wrench|^base-rod-clear$/.test(c.id)||/Table 7-15/.test(c.note)?{...c,note:`${c.note.trim()} ${fabricationToleranceNote}`}:c;
+}
 /**
  * An input or load-basis record (classifyCheck type 'input' or 'load-basis') that passes by restating a value (demand
  * equal to capacity, e.g. the building class cycles, the impact factor or the crane statics as entered) or with no

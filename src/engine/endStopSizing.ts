@@ -1,3 +1,4 @@
+import {fabricationTolerance} from './fitTolerances';
 import type {ProjectInput} from './types';
 import {defaultEndStop,stopLip,type EndStopInput} from './endStopInputs';
 import {endStopChecks,endStopGeometry,endStopLoadCases,stopBoltForces,stopNutClearances,stopObstacles,wrenchClearance} from './endStop';
@@ -38,7 +39,7 @@ export interface StopSizing {stop:EndStopInput;fits:boolean;reason?:string;tried
 export function sizeEndStop(p:ProjectInput):StopSizing{
  const base=p.details?.endStop??{...structuredClone(defaultEndStop),enabled:true};
  const b=p.section,shape=aiscShapeByName(b.catalogueId??''),k1=b.tw/2+(shape?shape.kdes*inch-b.tf:0);
- const surface=b.kind==='cap'?b.capWidth:b.bf,Wmax=down(Math.min(surface,16*inch),.25*inch),D=base.bumperDiameter;
+ const surface=b.kind==='cap'?b.capWidth:b.bf,Wmax=down(Math.min(surface-2*fabricationTolerance,16*inch),.25*inch),D=base.bumperDiameter;
  const railDepth=p.aist?.railDepth??p.railHeight,pad=railPadThickness(p),obstacles=stopObstacles(p);
  const withStop=(e:EndStopInput):ProjectInput=>({...p,details:{...p.details!,endStop:e}});
  let best:{stop:EndStopInput;score:number}|undefined,tried=0;
