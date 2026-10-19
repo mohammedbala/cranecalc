@@ -232,12 +232,14 @@ export function bearingPlateChecks(p:ProjectInput,reaction:number):CheckResult[]
  * - the width max(b_f + 1/2 in, g + 3d) on the 1/4 in grid;
  * - the thickness from the plate flexure beyond the flange tips (bearingPlateChecks) at 0.9, at least 3/4 in, in 1/8 in steps.
  */
-export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickness:number;stiffenerWeld:number;saddle?:{setback:number;length:number;weld:number};endBearing?:EndBearingInput;simple?:{temperatureRise:number;temperatureFall:number;settingTolerance:number};Fy?:number;minEdge?:number;lateral?:number;surface?:'A'|'B';plies?:number;minLength?:number}){
+export function bearingLayout(p:ProjectInput,x:{rotation:number;
+ /** The locating column's service twist movement along the runway (columnTwistLimit.twistSlip), added to the travel. */
+ slip?:number;stiffenerThickness:number;stiffenerWeld:number;saddle?:{setback:number;length:number;weld:number};endBearing?:EndBearingInput;simple?:{temperatureRise:number;temperatureFall:number;settingTolerance:number};Fy?:number;minEdge?:number;lateral?:number;surface?:'A'|'B';plies?:number;minLength?:number}){
  const b=p.section,lrfd=p.method==='LRFD',up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step,q=inch/4;
  const e0=x.endBearing??defaultEndBearing,sl=slidingBolts(e0),sleeved=sl.mode==='sleeved',ss=x.simple??{temperatureRise:30,temperatureFall:30,settingTolerance:inch/8};
  // Travel each way from the farthest support's thermal strain, the end rotation over the depth and the setting tolerance.
  let g=0;const grids=[0,...p.spans.map(v=>g+=v)],far=p.system==='continuous'?Math.max(...grids.map(v=>Math.abs(v-grids[locatingSupport(p)]))):Math.max(...p.spans);
- const need=12e-6*far*Math.max(ss.temperatureRise,ss.temperatureFall)+b.d*x.rotation+ss.settingTolerance,travel=Math.max(inch/2,up(need,inch/16));
+ const need=12e-6*far*Math.max(ss.temperatureRise,ss.temperatureFall)+b.d*x.rotation+ss.settingTolerance+(x.slip??0),travel=Math.max(inch/2,up(need,inch/16));
  const shape=aiscShapeByName(b.catalogueId??''),k1=b.tw/2+(shape?shape.kdes*inch-b.tf:0);
  // Factored longitudinal force at a locating end: the traction (at least the design minimum) or the bumper force on the
  // girder, with the tie force estimate as the bottom-flange force, over four bolts. Without a stated seat, Class A with
@@ -280,12 +282,12 @@ export function bearingLayout(p:ProjectInput,x:{rotation:number;stiffenerThickne
  * saddle remains, the slot travel, bolts, plate and the AIST effective bearing length. `rotation`: the factored girder
  * end rotation, rad; `lateral`: the factored bottom-flange (tie) force estimate, N.
  */
-export function applyBearingLayout(p:ProjectInput,rotation:number,lateral=0){
+export function applyBearingLayout(p:ProjectInput,rotation:number,lateral=0,slip=0){
  const d=p.details;if(!d)return p;
  const a=d.brace.flangeAttachment,saddle=p.system==='simple'&&a?.enabled&&d.brace.arrangement!=='cap-angle'?{setback:a.longitudinalSetback,length:a.saddleLength,weld:a.weldSize}:undefined;
  // An edge distance set for the support (a W-stub seat) is kept; a plate already thick enough keeps its thickness, so the
  // seat elevations set from it hold.
- const layout=(minLength?:number)=>bearingLayout(p,{minLength,rotation,stiffenerThickness:d.bearing.stiffenerThickness,stiffenerWeld:d.bearing.weldSize,saddle,endBearing:d.endBearing,simple:d.simpleSupport,Fy:d.material.Fy,minEdge:d.endBearing?.bolts.edge,lateral,surface:bearingSurface(p),plies:bearingShim(p).plies});
+ const layout=(minLength?:number)=>bearingLayout(p,{minLength,rotation,slip,stiffenerThickness:d.bearing.stiffenerThickness,stiffenerWeld:d.bearing.weldSize,saddle,endBearing:d.endBearing,simple:d.simpleSupport,Fy:d.material.Fy,minEdge:d.endBearing?.bolts.edge,lateral,surface:bearingSurface(p),plies:bearingShim(p).plies});
  // A cap tieback angle: the least length from the layout's at which its cap bolt hardware clears the stiffener.
  let v=layout();const cap=capTieBearingLength(p,v.length);if(cap!==undefined&&cap>v.length+1e-6)v=layout(cap);
  Object.assign(d.bearing,{length:v.length,width:v.width,thickness:Math.max(d.bearing.thickness,v.thickness)});

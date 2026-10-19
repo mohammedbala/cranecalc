@@ -44,9 +44,9 @@ const simulated:Record<string,RunwayConfig>={
 describe('configurator project validity',()=>{
  // t13 to t16: the crane columns tied to the building columns and the stepped columns (girder on the step).
  for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
- // Beyond the catalog the build stops with the configurator's reasons only (beyondCatalog): 061, V059 and V061 need a
- // plate girder (V059 and V061 took the W14X873 column shape before, 061 a W36X529 past its tip-stress estimate).
- const stops=new Set(['061','V059','V061']);
+ // Beyond the catalog the build stops with the configurator's reasons only (beyondCatalog): V059 and V061 need a plate
+ // girder (they took the W14X873 column shape before).
+ const stops=new Set(['V059','V061']);
  for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} ${stops.has(id)?'stops with the configurator reason':'builds a valid project'}`,()=>{
   const e=validateProject(buildProject(c));
   if(stops.has(id)){expect(e.some(v=>/^configurator: Plate girder required/.test(v))).toBe(true);expect(e.every(v=>v.startsWith('configurator: '))).toBe(true);}

@@ -61,7 +61,7 @@ import {columnReactionOffset} from './existingColumn';
 import {stepGeometry,steppedColumnAnalysis,steppedColumnChecks} from './steppedColumn';
 import {activeStep} from './steppedColumnInputs';
 import {independentBearings} from './simpleSupports';
-import {smallRotationLimit,twistMovementLimit,twistSlip} from './columnTwistLimit';
+import {twistRotationLimit,twistSlip} from './columnTwistLimit';
 
 const inch=25.4,foot=304.8,kip=4448.2216152605,ksi=6.894757293168,fpm=5.08,g=9.80665;
 const up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,round=(v:number,step:number)=>Math.round(v/step)*step;
@@ -626,11 +626,13 @@ function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
  */
 function withTwistLimit(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):ProjectInput{
  if(cfg.scope!=='design'||cfg.structure!=='new'||cfg.support==='column-cap'||!q.existingColumn?.enabled||!q.details?.bracket?.enabled)return q;
- const t=existingColumnAnalysis(q,supportReactions(q,sectionProperties(q.section))).torsion;if(!t)return q;
- const slip=twistSlip(t),limit=twistMovementLimit(q);
- if(slip<=limit+1e-9&&Math.abs(t.twist)<=smallRotationLimit)return q;
+ const a=existingColumnAnalysis(q,supportReactions(q,sectionProperties(q.section))),t=a.torsion;if(!t)return q;
+ // The column-twist checks: the service movement within the runway-level displacement limit, the factored twist within
+ // the small-rotation limit (columnTwistLimit.ts; the bracing displacement in series is left to the calculation).
+ const slip=twistSlip(t),limit=a.drift.limit;
+ if(slip<=limit+1e-9&&Math.abs(t.twist)<=twistRotationLimit)return q;
  const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
- const why=`On the new ${q.existingColumn.shape} columns the ${supportLabels[cfg.support].toLowerCase()} seats the girder ${len(t.offset)} off the column axis, where the crane-level strut holds the column: the traction twists it ${t.service.twist.toFixed(4)} rad at every crane start and stop, moving the bearing ${len(slip)} along the runway (allowance ${len(limit)}; factored twist ${Math.abs(t.twist).toFixed(3)} rad, model limit ${smallRotationLimit} rad; column-twist). The girders bear on column caps over the columns instead, on the column axis (no offset, no torque).`;
+ const why=`On the new ${q.existingColumn.shape} columns the ${supportLabels[cfg.support].toLowerCase()} seats the girder ${len(t.offset)} off the column axis, where the crane-level strut holds the column: the traction twists it ${t.service.twist.toFixed(4)} rad at every crane start and stop, moving the bearing ${len(slip)} along the runway (runway-level limit ${len(limit)}; factored twist ${Math.abs(t.twist).toFixed(3)} rad, small-rotation limit ${twistRotationLimit} rad; column-twist). The girders bear on column caps over the columns instead, on the column axis (no offset, no torque).`;
  const inner:SelectionTrace={},r=buildProject({...cfg,support:'column-cap'},inner);
  Object.assign(trace,inner);r.notes+=` ${why}`;
  const sel=r.configurator?.selections??[];
@@ -1005,15 +1007,20 @@ function setBearings(p:ProjectInput){
  const d=p.details;if(!d)return;
  d.bearing.shim=defaultBearingShim(bearingSeat(p));
  const before=d.bearing.length;
- const rotation=girderEndEstimate(p).factored,force=tieSizingDemands(p).force;
- applyBearingLayout(p,rotation,force);
+ const rotation=girderEndEstimate(p).factored,force=tieSizingDemands(p).force,slip=seatTwistSlip(p);
+ applyBearingLayout(p,rotation,force,slip);
  // A cap tieback angle at a runway-end grid: with the bearing centered on the grid its column end plate would land on the
  // column web; the girder end then stays on the grid.
  if(p.system==='simple'&&d.brace.arrangement==='cap-angle'&&d.simpleSupport?.endGridBearing==='centered'&&validateRunwayDetails(p).some(e=>e.includes('details.brace.capAngle'))){
-  d.simpleSupport.endGridBearing='on-grid';applyBearingLayout(p,rotation,force);}
+  d.simpleSupport.endGridBearing='on-grid';applyBearingLayout(p,rotation,force,slip);}
  // A tapered haunch takes its top flange from the bearings it holds: proportioned again for the new bearing length.
  const b=p.details!.bracket;
  if(b?.enabled&&b.arrangement==='tapered-haunch'&&Math.abs(p.details!.bearing.length-before)>1e-6){delete b.haunch;p.details=selectBracketArrangement(p.details!,'tapered-haunch',p.system);}
+}
+/** The locating column's service twist movement at the seat (columnTwistLimit.twistSlip): the bearing slots take it. */
+function seatTwistSlip(p:ProjectInput){
+ if(!p.existingColumn?.enabled||activeStep(p))return 0;
+ try{return twistSlip(existingColumnAnalysis(p,supportReactions(p,sectionProperties(p.section))).torsion);}catch{return 0;}
 }
 /** Top-flange service where a welded saddle attachment (AISC Table A-3.1 Category D or E) on the tied flange is avoided: CMAA Class D to F cranes, AIST Class A and B buildings. */
 const highCycle=(cfg:RunwayConfig)=>['D','E','F'].includes(cfg.cmaa)||cfg.buildingClass==='A'||cfg.buildingClass==='B';

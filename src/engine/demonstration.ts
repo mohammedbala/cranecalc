@@ -84,7 +84,9 @@ export function demonstrationProject():ProjectInput {
   Object.assign(t.connection,{pitch:2*inch,edge:inch,thickness:.3125*inch});t.release={...t.release!,travel:.1875*inch};}
  // Bolted end bearings: standard holes at each bay's locating left end, long slots at its sliding right end.
  // A 1/2-in sliding allowance keeps the 3/4-in bolt slots within the AISC J3.2 long-slot limit.
- p.details.endBearing={...structuredClone(defaultEndBearing),enabled:true};p.details.simpleSupport={...p.details.simpleSupport!,guideTravel:.5*inch};
+ p.details.endBearing={...structuredClone(defaultEndBearing),enabled:true};p.details.endBearing.bolts.edge=2.125*inch;
+ // 5/8 in travel each way: thermal, end rotation and setting tolerance plus the column twist at the seat (column-twist).
+ p.details.simpleSupport={...p.details.simpleSupport!,guideTravel:.625*inch};
  // Girder-mounted end stops inboard of the runway-end tie saddle: both bolt rows clear the saddle and the bearing
  // stiffeners, and the bolt heads clear the stop weld toes by the socket clearance.
  p.details.endStop={...structuredClone(defaultEndStop),enabled:true,bumperHeight:6*inch,bumperDiameter:6*inch,setback:7*inch,railGap:1*inch,base:{length:12*inch,width:10*inch,thickness:1*inch},face:{thickness:1*inch,height:15*inch},stiffener:{thickness:.75*inch,length:9*inch,spacing:3*inch},bolts:{diameter:.75*inch,grade:'A325',gauge:7*inch,frontClear:1.75*inch,edge:1.5*inch},weldSize:.3125*inch,source:'Fictitious supplier data DEMO-CS-01: bumper force, bumper centerline height and contact diameter'};

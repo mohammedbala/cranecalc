@@ -158,7 +158,7 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
    const column=p.existingColumn?.enabled?existingColumnSection(p).section:undefined;
    if(p.longitudinalBracing?.enabled)snapshot.longitudinalBracing=longitudinalBracingAnalysis(p,snapshot.supportReactions,column);
    // A stepped column is analyzed by its own model (steppedColumnCalculation below), not as a prismatic column.
-   if(p.existingColumn?.enabled&&!activeStep(p)){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn,tiedToBuilding(p)?{label:'Crane column'}:{}));}
+   if(p.existingColumn?.enabled&&!activeStep(p)){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn,{...(tiedToBuilding(p)?{label:'Crane column'}:{}),braceMove:snapshot.longitudinalBracing?.deflection.value??0}));}
    if(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled){snapshot.columnBase=columnBaseAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...columnBaseChecks(p,snapshot.columnBase,snapshot.existingColumn));}
    // Stepped column (WP-2): sets snapshot.existingColumn (compatible summary) and snapshot.steppedColumn, and its checks.
    steppedColumnCalculation(snapshot);
