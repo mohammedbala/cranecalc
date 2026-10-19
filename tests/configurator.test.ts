@@ -247,3 +247,16 @@ describe('configurator selection log',()=>{
   expect(annotationClashes(cover)).toBe(0);expect(cover).not.toMatch(/data-overflow/);
  });
 });
+
+describe('configurator: the fork on a column cap and the title as designed (case 086)',()=>{
+ it('sizes the bearing stiffener pair of the fork for plate fatigue and names the designed support and tie in the title',()=>{
+  const cfg:RunwayConfig={...defaultRunwayConfig,title:'15 t cab · new columns · rolled-corbel · paired-bars · 3×35 ft simple · ASD',units:'US',method:'ASD',scope:'design',
+   capacity:15,craneSpan:56,control:'cab',cmaa:'B',cranes:1,buildingClass:'B',system:'simple',bays:3,span:35,railElevation:18,girder:'rolled',structure:'new',support:'rolled-corbel',tie:'paired-bars'};
+  const p=buildProject(cfg);
+  expect(p.columnCap?.enabled).toBe(true);
+  // The pair laid out at 5/8 in by the template is thickened for the fork's fatigue range.
+  expect(p.details!.bearing.stiffenerThickness).toBeGreaterThanOrEqual(.75*inch-1e-9);
+  expect(p.title).toBe('15 t cab · new columns · column-cap · end-fork · 3×35 ft simple · ASD');
+  expect(p.configurator!.selections!.find(v=>v.item==='Girder support')?.entered).toBe('Rolled W-stub bracket');
+ },300000);
+});
