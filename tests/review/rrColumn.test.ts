@@ -143,7 +143,7 @@ describe('M6 · the tie design force and the restraint at the tie line',()=>{
   expect(w).toHaveLength(3);expect(w[0]).toContain('P_{br}=\\frac{0.02M_rC_d}{h_o}+0.01P_r');expect(w[1]).toContain(`F=H+P_{br}=force:${r.demands.brace}+force:${A6.force}`);
   const tie=section('Cap tieback');
   expect(tie).toMatch(/tie design force F = H \+ P ?br = 4\.\d\d kip \+ 2\.50 kip = 6\.\d\d kip ?, pull or push/);
-  expect(tie).toMatch(/H: largest top-flange restraint force at a grid \(LRFD A2b, grid 5\)/);expect(tie).toMatch(/Required brace stiffness 5\.68 kip\/in vs 34\.8 kip\/in provided \(the secant stiffness with the tie's play; 272 kip\/in after contact\)/);expect(tie).toMatch(/Fatigue range ΔF = 2\.\d\d kip/);
+  expect(tie).toMatch(/H: largest top-flange restraint force at a grid \(LRFD A2b, grid 5\)/);expect(tie).toMatch(/Required brace stiffness 5\.68 kip\/in vs 34\.7 kip\/in provided \(the secant stiffness with the tie's play; 262 kip\/in after contact\)/);expect(tie).toMatch(/Fatigue range ΔF = 2\.\d\d kip/);
  });
 });
 

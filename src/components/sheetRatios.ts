@@ -144,7 +144,8 @@ export function sheetStamp(s:CalculationSnapshot,short=false):{text:string;detai
   const ids=verificationFailures(s);
   return {blocked:true,text:short?'ANALYSIS NOT VERIFIED - SEE DIAGNOSTIC':'ANALYSIS NOT VERIFIED - NO CALCULATION ISSUED - SEE DIAGNOSTIC REPORT',detail:ids.length?`FAILED VERIFICATION: ${ids.slice(0,4).join(', ').toUpperCase()}${ids.length>4?` (+${ids.length-4})`:''}`:undefined};
  }
- const groups=sheetOpenGroups(s),failed=s.checks.filter(c=>c.status==='fail').length;
+ // An advisory recommendation not met (e.g. the TR-13 bracket guideline) is listed apart, not counted as a failed check.
+ const {tax}=sheetTaxonomy(s),groups=sheetOpenGroups(s),failed=s.checks.filter(c=>c.status==='fail'&&tax.entries.get(c.id)?.gate!=='advisory').length;
  if(!groups.length&&!failed)return undefined;
  const g=groups.length;
  return {blocked:false,text:`${g} OPEN ITEM${g===1?'':'S'}${failed?` (${failed} CHECK${failed===1?'':'S'})`:''} - SEE CALC${short?'':'ULATION'}`};

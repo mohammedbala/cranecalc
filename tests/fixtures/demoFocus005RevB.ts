@@ -47,8 +47,10 @@ export function demoFocus005RevB():ProjectInput{
  // E35 · end-bay bearings centered on the haunch web at the runway-end grids (girder runs 6 in past the grid).
  p.details!.simpleSupport!.endGridBearing='centered';
  note('End-bay bearings centered on the haunch web at grids 1 and 6 (seat moment there 27.9 → 10.5 kip-ft).');
- p.details!.brace!.capAngle!.endPlate.height=5.5*inch;
- note('Haunch top flange 25 in → 25-1/2 in; cap-angle end plate 5-1/4 in → 5-1/2 in high.');
+ // Socket clearance with the 1/16 in fabrication tolerance (AISC Manual Table 7-15 C1 + tolerance): the column bolts move
+ // 1 3/4 → 2 in from the tie plate and the end plate grows to keep the J3.4 edge distance.
+ p.details!.brace!.capAngle!.endPlate.height=6*inch;p.details!.brace!.capAngle!.columnBolts.gauge=2*inch;
+ note('Haunch top flange 25 in → 25-1/2 in; cap-angle end plate 5-1/4 in → 6 in high, column bolts 2 in from the tie plate for the socket clearance with fabrication tolerance.');
  // Drawings dimension to whole 1/4 in: joint bars 3 7/8 → 3 3/4 in high, cap-angle lap bolt gauge 2 7/8 → 3 in.
  p.details!.rail.jointPlateHeight=3.75*inch;
  p.details!.brace.capAngle!.lapBolts.gauge=3*inch;
