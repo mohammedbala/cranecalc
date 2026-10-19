@@ -17,6 +17,7 @@ import {runwayElevations,issueStatus,revisionIdentity,supportColumn,delegatedChe
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {railJointType} from '../engine/railLayout';
 import {supplierRailJointText,fatigueCycleFamilies} from '../engine/railChecks';
+import {selectionFinal} from '../report/designSummary';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
@@ -354,7 +355,8 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew),tied=tiedToBui
  // in its first clause without the parentheses (the full reasons are in the calculation's design summary).
  const picks=p.configurator?.selections??[];
  if(picks.length)blocks.push(H('CONFIGURATOR SELECTIONS'),T(['ITEM','AS ENTERED → AS DESIGNED','GOVERNING REASON'],
-  picks.map(v=>[v.item,`${v.entered} → ${v.designed}`,v.reason.split('; ')[0].replace(/\.$/,'')].map(x=>x.replace(/\s*\([^()]*\)/g,'').toUpperCase())),[.8,1.3,1.9]));
+  // A reason quoting screening estimates carries the final calculated ratios beside them (selectionFinal).
+  picks.map(v=>{const f=selectionFinal(s,v.item),strip=(x:string)=>x.replace(/\s*\([^()]*\)/g,'');return [strip(v.item),strip(`${v.entered} → ${v.designed}`),`${strip(v.reason.split('; ')[0].replace(/\.$/,''))}${f?`: SCREENING ESTIMATE. ${f.replace(/\.$/,'')}`:''}`].map(x=>x.toUpperCase());}),[.8,1.3,1.9]));
  const r=s.supportReactions;
  // The runway seismic combinations are evaluated by the engineer of record: their item in the existing structure evaluation.
  const runwaySeismic=unevaluatedStructure(s).findIndex(c=>c.id==='building-seismic-runway')+1;

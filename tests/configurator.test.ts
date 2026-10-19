@@ -43,7 +43,9 @@ describe('configuration templates',()=>{
   expect(p.section.kind).toBe(c.girder==='capped'?'cap':'rolled');
   if(c.scope==='analysis'){expect(p.details).toBeUndefined();return;}
   const d=p.details!;
-  if(c.support==='column-cap'){expect(p.columnCap?.enabled).toBe(true);expect(d.bracket?.enabled).toBeFalsy();}
+  // New columns with bracket seats whose column twist exceeds its limit bear on column caps instead (withTwistLimit).
+  const twisted=c.structure==='new'&&c.support!=='column-cap'&&!!p.configurator?.selections?.some(v=>v.item==='Girder support'&&/twists/.test(v.reason));
+  if(c.support==='column-cap'||twisted){expect(p.columnCap?.enabled).toBe(true);expect(d.bracket?.enabled).toBeFalsy();expect(p.configurator?.support).toBe('column-cap');}
   // A crane column: the girder on its cap, tied to the building column; a stepped column: the girder on the step.
   else if(c.support==='crane-column'){expect(p.columnCap?.enabled).toBe(true);expect(p.craneColumn?.enabled).toBe(true);expect(d.bracket?.enabled).toBeFalsy();expect(p.aist!.supportType).toBe('column');}
   else if(c.support==='stepped-column'){expect(p.existingColumn?.step).toBeDefined();expect(p.craneColumn).toBeUndefined();expect(d.bracket?.enabled).toBeFalsy();expect(p.aist!.supportType).toBe('column');}
@@ -53,7 +55,7 @@ describe('configuration templates',()=>{
   // bearing stiffener (attachTie): the flexible plate then becomes paired bars.
   // A capped saddle that does not suit the girder takes the cap tieback angle, with the reason in the notes.
   const onStiffener=c.system==='simple'&&c.girder==='rolled'&&d.brace.flangeAttachment?.enabled===false,capAngle=c.girder==='capped'&&p.notes.includes('do not suit this capped girder');
-  if(c.support!=='column-cap')expect(d.brace.arrangement??'paired-bars').toBe(onStiffener?'paired-bars':capAngle?'cap-angle':c.tie);
+  if(c.support!=='column-cap'&&!twisted)expect(d.brace.arrangement??'paired-bars').toBe(onStiffener?'paired-bars':capAngle?'cap-angle':c.tie);
   expect(!!p.existingColumn?.enabled).toBe(c.support!=='by-others');
   // A crane column is a new column on its own base beside the existing building column.
   expect(!!p.existingColumn?.isNew).toBe(c.structure==='new'||c.support==='crane-column');
@@ -165,11 +167,11 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
   expect(row('Top-flange tie')).toMatchObject({entered:'Flexible plate',designed:expect.stringMatching(/^None: end fork on the column cap/),reason:expect.stringMatching(/fork/)});
   expect(row('New column')?.designed).toBe(p.existingColumn!.shape);
  },120000);
- it('keeps the brackets of an existing structure above it, with the warning; within it nothing is said',()=>{
+ it('puts an existing structure above it on crane columns tied to the building columns; within it nothing is said',()=>{
   const v=previewConfig({...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30});
-  expect(v.config.support).toBe('twin-rib');
-  expect(v.changes).toContainEqual(expect.stringMatching(/^Support reaction about \d+ kip exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets; consider new crane columns tied to the building columns, the girders on their column caps \(support: Crane column tied to the building column \(existing\)\), or obtain the engineer of record's acceptance\.$/));
-  // The warning does not switch an existing structure (t05, t08 and t10 keep their brackets).
+  expect(v.config.support).toBe('crane-column');
+  expect(v.changes).toContainEqual(expect.stringMatching(/^The support reaction, about \d+ kip, exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets: new crane columns beside the building columns/));
+  // The structure stays existing (t05, t08 and t10 are within the recommendation and keep their brackets).
   expect(v.config.structure).toBe('existing');
   // The one statement within the limit is the assumed bumper overhang (end-truck geometry for the stop contacts).
   const light=previewConfig({...defaultRunwayConfig,capacity:5});expect(light.changes.filter(v=>!/^Bumper overhang assumed/.test(v))).toEqual([]);expect(light.changes.at(-1)).toMatch(/^Bumper overhang assumed \d+ in/);expect(light.reaction!).toBeLessThan(50*kip);

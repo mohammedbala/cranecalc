@@ -100,8 +100,24 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
  * The configurator selection log (configurator.selections) as the short 'Configurator selections' table of the design
  * summary: what was built in place of the configuration as entered, or chosen where it was blank, and why.
  */
-export function selectionsTable(p:ProjectInput){
+export function selectionsTable(p:ProjectInput,s?:CalculationSnapshot){
  const rows=p.configurator?.selections??[];if(!rows.length)return '';
- return `<h3>Configurator selections</h3><table class="selections"><thead><tr><th>Item</th><th>As entered</th><th>As designed</th><th>Governing reason</th></tr></thead><tbody>${rows.map(v=>`<tr><td>${esc(v.item)}</td><td>${esc(v.entered)}</td><td>${esc(v.designed)}</td><td>${esc(v.reason)}</td></tr>`).join('')}</tbody></table>`;
+ return `<h3>Configurator selections</h3><table class="selections"><thead><tr><th>Item</th><th>As entered</th><th>As designed</th><th>Governing reason</th></tr></thead><tbody>${rows.map(v=>{const f=s&&selectionFinal(s,v.item);return `<tr><td>${esc(v.item)}</td><td>${esc(v.entered)}</td><td>${esc(v.designed)}</td><td>${esc(v.reason)}${f?` <b>${esc(f)}</b>`:''}</td></tr>`;}).join('')}</tbody></table>`;
+}
+/** The summary element whose final ratios a configurator selection is judged by. */
+const selectionElements:Record<string,string[]>={Girder:['girder','service'],'Girder type':['girder','service'],'Crane column':['column'],'New column':['column'],'Existing column':['column'],'Lower shaft (stepped column)':['column'],'Top-flange tie':['tie'],'Column tie':['tie']};
+/**
+ * The final calculated ratios beside a configurator selection whose reason quotes screening estimates (the sized girder,
+ * the columns, the tie): the governing design D/C of its element after calculate(), and for the girder the vertical and
+ * lateral deflection ratios. Undefined for other items or without a ratio.
+ */
+export function selectionFinal(s:CalculationSnapshot,item:string){
+ const keys=selectionElements[item];if(!keys)return undefined;
+ const all=elementChecks(s),of=(k:string)=>all.find(v=>v.element.key===k)?.checks??[];
+ const checks=keys.flatMap(of).filter(c=>c.group!=='Serviceability'),g=checks.length?governingForSummary(checks):undefined;
+ const dc=(id:string)=>{const u=s.checks.find(c=>c.id===id)?.utilization;return u!==undefined&&Number.isFinite(u)?u.toFixed(2):undefined;};
+ const v=item.startsWith('Girder')?dc('vertical'):undefined,h=item.startsWith('Girder')?dc('lateral'):undefined;
+ if(!g||g.utilization===undefined||!Number.isFinite(g.utilization))return undefined;
+ return `Final calculation: governing D/C ${g.utilization.toFixed(2)} (${g.title})${v&&h?`, vertical deflection ${v} and lateral ${h} of the limits`:''}.`;
 }
 export const summaryCss=`table.selections{font-size:8.5px}table.selections td{vertical-align:top;padding:2px 4px}table.selections td:nth-child(1){width:13%}table.selections td:nth-child(2),table.selections td:nth-child(3){width:16%}.summary-head{display:grid;grid-template-columns:330px 1fr;gap:12px;align-items:start;margin:6px 0}.summary-head svg{width:330px;height:auto;border:1px solid #000}.summary-head .key td,.summary-head .key th{padding:2px 5px;font-size:8.5px}.summary-head .key th:first-child{width:24%}.banner{border:2px solid #000;padding:6px 10px;margin:8px 0;font-size:11px}.banner b{font-size:12px}.banner.fail{background:#e6e6e6}table.summary-checks{font-size:9px}table.summary-checks col.s-el{width:20%}table.summary-checks col.s-check{width:32%}table.summary-checks col.s-eq{width:34%}table.summary-checks col.s-dc{width:6%}table.summary-checks col.s-res{width:8%}table.summary-checks td{vertical-align:middle;padding:3px 4px}table.summary-checks td small{display:block;font-size:7.5px;color:#222}table.summary-checks td small.path{font-style:italic}table.summary-checks td.num{text-align:right}table.summary-checks td.res{text-align:center}table.summary-checks td.eq .katex{font-size:1em;white-space:normal}table.summary-checks tr.fail td{background:#e6e6e6;font-weight:700}`;
