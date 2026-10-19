@@ -370,7 +370,10 @@ function skeleton(cfg:RunwayConfig){
  const clipWidth=(up(depth,1.5875)<=4.5*inch+1e-6?2:2.5)*inch,minSeat=seatWidthNeeded(depth,clipWidth);
  // Flanges that take the 5 1/2 in gauge of the 3/4 in end bearing bolts with the sleeved slots at the J3.4 edge
  // distance (8 3/8 in), and caps wide enough for the tie gussets beside the W flange (a saddle tie or flexible plate).
- const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'};
+ // The flexible plate's estimate factor (less end restraint against twist) only where the plate stays: on a crane column
+ // attachTie always replaces it (paired bars on the bearing stiffener, or the cap angle on a capped girder), and the
+ // girder sized for the softer plate came out about 1.25 times heavier than the final calculation needed (046, 052).
+ const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'&&cfg.support!=='crane-column'};
  // Girder: the named section, else sized for the moving loads.
  let trial:GirderTrial|undefined;
  if(cfg.girder==='capped'){
@@ -716,7 +719,7 @@ const bracketTarget=.9;
  * rest), or that meets it on the footing already sized; the configuration keeps its blank column choice.
  */
 function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
- const q=combinedWhereOverlapping(p,sizeColumnBase(p,baseTarget),trace);clearExistingFootings(q);
+ const q=combinedWhereOverlapping(p,sizeColumnBase(p,baseTarget),cfg,trace);clearExistingFootings(q);
  // The column twists where the girder's longitudinal force reaches it off its centerline (a bracket) or an offset
  // rod ends: the column torsion ratios (column-torsion, brace-rod-torsion) judge the shape as the drift does.
  const torsionOk=(r:ProjectInput)=>columnTorsionRatio(r)<=1;
@@ -741,14 +744,14 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  * distance, each crane column and its building column stand on one combined footing that replaces the existing one
  * (columnBase.combined, combinedFooting), sized again from the configured start; the reason is logged.
  */
-function combinedWhereOverlapping(p:ProjectInput,q:ProjectInput,trace:SelectionTrace):ProjectInput{
+function combinedWhereOverlapping(p:ProjectInput,q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):ProjectInput{
  const k=q.craneColumn,adj=q.existingColumn?.adjacent,line=adj?.A??adj?.B;
  if(!k?.enabled||!q.columnBase?.enabled||q.columnBase.combined||!adj?.enabled||!line||!(line.footing.L>0))return q;
  const L=Math.max(...footingsOf(q).map(v=>v.L)),clear=k.offset-L/2-line.footing.L/2;
  if(clear>=adj.footingClear)return q;
  const start=structuredClone(p);start.columnBase!.combined=true;
- const r=sizeColumnBase(start,baseTarget),ft=(v:number)=>`${+(v/foot).toFixed(2)} ft`,F=r.columnBase!;
- trace.footing=`Isolated ${ft(L)} square crane-column footings ${+(k.offset/inch).toFixed(2)} in from the building column would be ${clear<0?`${+(-clear/inch).toFixed(2)} in into`:`${+(clear/inch).toFixed(2)} in from`} its ${ft(line.footing.L)} footing (${+(adj.footingClear/inch).toFixed(2)} in clear required): each crane column and its building column stand on one combined footing replacing the existing one, ${ft(F.footing.L)} square${F.braced?` (${ft(F.braced.footing.L)} at the braced columns)`:''}, the building column shored and re-set on new anchor rods`;
+ const r=sizeColumnBase(start,baseTarget),si=cfg.units==='SI',ft=(v:number)=>si?`${Math.round(v)} mm`:`${+(v/foot).toFixed(2)} ft`,ins=(v:number)=>si?`${Math.round(v)} mm`:`${+(v/inch).toFixed(2)} in`,F=r.columnBase!;
+ trace.footing=`Isolated ${ft(L)} square crane-column footings ${ins(k.offset)} from the building column would be ${clear<0?`${ins(-clear)} into`:`${ins(clear)} from`} its ${ft(line.footing.L)} footing (${ins(adj.footingClear)} clear required): each crane column and its building column stand on one combined footing replacing the existing one, ${ft(F.footing.L)} square${F.braced?` (${ft(F.braced.footing.L)} at the braced columns)`:''}, the building column shored and re-set on new anchor rods`;
  return r;
 }
 /**
@@ -1338,7 +1341,7 @@ function craneColumnLog(entered:RunwayConfig,cfg:RunwayConfig,p:ProjectInput,tra
  const col=p.existingColumn,k=p.craneColumn,auto='configurator default';if(!col?.enabled||!k?.enabled)return;
  if(!entered.columnShape)add('Crane column',auto,col.shape,[`New crane column for a ${+cfg.capacity.toFixed(2)}-ton crane (${craneColumnRule}), ${k.base} base, braced at the cap across the runway by the column tie and along it by the crane-level bracing`,trace.column].filter(Boolean).join('. ')+'.');
  if(!entered.buildingColumnShape)add('Building column',auto,k.building.shape,`Fictitious example existing building column for a ${+cfg.capacity.toFixed(2)}-ton crane (W14X90 to 7.5 t, W14X120 to 15 t, W14X159 to 30 t, else W14X211), checked for the tie forces with its existing load effects; replace with the surveyed shape.`);
- {const b=p.columnBase,ft=(v:number)=>`${+(v/foot).toFixed(2)} ft`;if(b?.enabled)add('Crane-column footing',auto,`${b.combined?'combined with the building column, ':''}${ft(b.footing.L)} square${b.braced?`; ${ft(b.braced.footing.L)} at the braced columns`:''}`,
+ {const b=p.columnBase,ft=len;if(b?.enabled)add('Crane-column footing',auto,`${b.combined?'combined with the building column, ':''}${ft(b.footing.L)} square${b.braced?`; ${ft(b.braced.footing.L)} at the braced columns`:''}`,
   [trace.footing??`Isolated footings clear of the building-column footing`,`sized for the base reactions; the braced columns' footing apart from the others' (the rods' uplift and shear along the runway), sliding resisted by the base friction and the soil's lateral bearing on the footing and its shear key (IBC §1806.3.1)`].join('; ')+'.');}
  if(trace.columnTie)add('Column tie',auto,`${len(k.columnTie.plate.thickness)} × ${len(k.columnTie.plate.width)} plate, ${k.columnTie.bolts.count} bolts ${len(k.columnTie.bolts.diameter)}`,trace.columnTie);
  const g=craneColumnLayout(p);
