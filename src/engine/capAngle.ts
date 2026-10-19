@@ -1,4 +1,5 @@
 import type {ProjectInput} from './types';
+import {stepTieColumn} from './steppedColumnInputs';
 import {snapQuarter,sleeveLength} from './quarterInch';
 import type {RunwayDetails} from './runwayDetails';
 import {aiscAngleByName} from '../data/aiscAngles';
@@ -9,6 +10,7 @@ import {independentBearings} from './simpleSupports';
 import {defaultCapAngle,type CapAngleInput} from './capAngleInputs';
 import {initialColumnStiffeners,clipMargin} from './columnStiffenerInputs';
 import {capChannelProfile} from './channelProfile';
+import {tieColumn} from './craneColumnInputs';
 export {capAngleSchema,defaultCapAngle,type CapAngleInput} from './capAngleInputs';
 
 const inch=25.4;
@@ -75,7 +77,7 @@ export function tensileArea(db:number){
  * The web fillet k1 comes from the catalog shape with these plates, else no fillet is credited.
  */
 export function capAngleColumn(p:ProjectInput){
- const b=p.details?.bracket,c=p.existingColumn?.enabled?p.existingColumn:undefined;
+ const b=p.details?.bracket,t=tieColumn(p),c=t?.enabled?(stepTieColumn(p)??t):undefined;
  let plates:{depth:number;width:number;tf:number;tw:number;Fy:number;Fu:number;source:string}|undefined;
  if(b?.enabled){const r=b.receiver;plates={depth:r.depth,width:r.width,tf:r.flangeThickness,tw:r.webThickness,Fy:r.Fy,Fu:r.Fu,source:'bracket receiving column'};}
  else if(c){const w=aiscShapeByName(c.shape??'');plates=w?{depth:w.d*inch,width:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch,Fy:c.Fy,Fu:c.Fu,source:`existing ${c.shape}`}:{depth:c.d,width:c.bf,tf:c.tf,tw:c.tw,Fy:c.Fy,Fu:c.Fu,source:'existing column'};}

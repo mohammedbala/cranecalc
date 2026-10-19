@@ -8,6 +8,9 @@ import {existingColumnSection} from './existingColumn';
 import {activeEndBearing,continuousBearings} from './endBearingInputs';
 import {capTieLine} from './capAngle';
 import {activeColumnCap} from './columnCapInputs';
+import {tiedToBuilding} from './craneColumnInputs';
+import {columnPlates} from './craneColumn';
+import {stepTieColumn} from './steppedColumnInputs';
 
 /**
  * Ties of the direct flange-tie family: two flat bars, one each side of the girder and column gussets, or one
@@ -22,10 +25,16 @@ export const tieEccentricity=(p:ProjectInput)=>tiePlies(p)===1?(p.details!.brace
 /** Flanges with paired-bar ties: the top flange only where bolted end bearings restrain the bottom flange at the seat. */
 export const tieSides=(p:ProjectInput):(1|-1)[]=>activeEndBearing(p)?[1]:[-1,1];
 
-/** Receiving column flange at the tie roots: the designed bracket's receiver, else the surveyed existing column. */
+/**
+ * Receiving column flange at the tie roots: the designed bracket's receiver, else the building column of a crane column
+ * tied to the building, else the surveyed existing column.
+ */
 export function tieReceiver(p:ProjectInput){
  const b=p.details?.bracket;
+ if(tiedToBuilding(p)){const k=p.craneColumn!.building,c=columnPlates(k);return {width:c.bf,flangeThickness:c.tf,Fy:k.Fy,source:'building column'};}
  if(b?.enabled)return {width:b.receiver.width,flangeThickness:b.receiver.flangeThickness,Fy:b.receiver.Fy,source:'bracket receiving column'};
+ // A stepped column: the tie lands on the upper shaft's inner flange.
+ const up=stepTieColumn(p);if(up)return {width:up.bf,flangeThickness:up.tf,Fy:up.Fy,source:up.source};
  if(p.existingColumn?.enabled){const s=existingColumnSection(p).section;return {width:s.bf,flangeThickness:s.tf,Fy:s.Fy,source:'existing column'};}
  return undefined;
 }
@@ -178,11 +187,12 @@ export function stiffenerTieJoint(p:ProjectInput):'integral'|'cjp'|undefined{
  * of a direct flange saddle tie (flangeTieGeometry) or of the bars on the bearing-stiffener gusset (stiffenerTieGeometry),
  * below the tied flange by the saddle or gusset and its clearance. A column cap fork and a tie without a laid-out
  * attachment act at the flange at mid-thickness; the bottom flange at mid-thickness where the end bearing bolts
- * restrain it. The girder analysis, the rail-head take-up, the interface torque and the S-00 tie elevation use it.
+ * restrain it. A crane column tied to the building keeps its top-flange tie on the cap. The girder analysis, the
+ * rail-head take-up, the interface torque and the S-00 tie elevation use it.
  */
 export function tieLine(p:ProjectInput,side:'top'|'bottom'='top'){
  const s=p.section,flange=side==='top'?s.d-s.tf/2:s.tf/2;
- if(activeColumnCap(p))return flange;
+ if(activeColumnCap(p)&&!tiedToBuilding(p))return flange;
  if(side==='top'){const cap=capTieLine(p);if(cap!==undefined)return cap;}
  const tie=flangeTieGeometry(p)??stiffenerTieGeometry(p);
  return tie&&tie.sides.includes(side==='top'?1:-1)?s.d/2+(side==='top'?tie.topCenter:tie.bottomCenter):flange;

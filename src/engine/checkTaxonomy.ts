@@ -99,7 +99,7 @@ const idRules:Rule[]=[
  // Rail clips: the manufacturer's lateral and uplift ratings; the rail anchorage (end stops or anchor clip pair).
  D(/^(rail-clip-(lateral|uplift)|rail-anchorage)$/,'connection'),
  // Step of a stepped column: J10.2/J10.3 on the lower web under the upper inner flange, J10.6 panel shear (local, as haunch-column-panel).
- D(/^step-(panel-shear|web-yielding|web-crippling|web-sidesway|flange-bending)$/,'local'),
+ D(/^step-(panel-shear|web-yielding|web-crippling|web-sidesway|flange-bending|flange-yielding)$/,'local'),
  D(/^((building-)?column-((upper|lower)-)?axial|(building-)?column-seismic-axial|crane-column-brace-strength|crane-column-tie-(compression|buckling))$/,'axial'),
  D(/^(axial|column-axial|brace-tension|brace-rod)$|-(plate-yield|plate-rupture|plate-compression|leg-tension|tension)$/,'axial'),
  D(/^(shear|torsion-shear|column-shear|haunch-shear|haunch-flange-shear)$|-(shear|shear-rupture|web-shear)$/,'shear'),

@@ -13,6 +13,9 @@ import {activeEndBearing} from './endBearingInputs';
 import {bearingSeat,bearingShim,bearingSurface} from './endBearing';
 import {flangeTieFamily,stiffenerTieGeometry,stiffenerTieJoint} from './tieGeometry';
 import {activeColumnCap} from './columnCapInputs';
+import {tiedToBuilding} from './craneColumnInputs';
+/** The girder ends are forks on the column caps, with no flange tie (a crane column tied to the building keeps its ties). */
+const capFork=(p:Parameters<typeof activeColumnCap>[0])=>!!activeColumnCap(p)&&!tiedToBuilding(p);
 import {activeEndStop} from './endStopInputs';
 import {boltSpec} from './materialSpecs';
 
@@ -50,7 +53,7 @@ export function cjpWelds(p:ProjectInput):string[]{
  const out:string[]=[];
  if(p.section.kind==='cap'&&p.capDesign?.topStiffenerCjp)out.push('girder bearing stiffeners to the W top flange');
  // A girder on a column cap has no tie (its end fork restrains the top flange): no tie gusset.
- if(stiffenerTieJoint(p)==='cjp'&&!activeColumnCap(p))out.push('tie gussets to the girder bearing stiffeners');
+ if(stiffenerTieJoint(p)==='cjp'&&!capFork(p))out.push('tie gussets to the girder bearing stiffeners');
  if(d.bracket?.enabled&&usesTaperedHaunch(p)&&haunchInput(d.bracket).flangeJoint==='cjp')out.push(`haunch flanges to the ${p.existingColumn?.isNew?'new':'existing'} column flange (field)`);
  if(d.bracket?.enabled&&usesRolledBracket(p)&&d.bracket.rolled?.flangeJoint==='cjp'&&rolledStub(d.bracket))out.push('bracket flanges to the column flange');
  return out;
@@ -74,7 +77,7 @@ export function boltGrades(p:ProjectInput):{grade:'A325'|'A490';where:string[]}[
  const d=p.details;if(!d)return [];
  const used:[string,'A325'|'A490'][]=[],eb=activeEndBearing(p),cap=capAngleGeometry(p)?d.brace.capAngle:undefined;
  if(eb)used.push([activeColumnCap(p)?'girder bearings on the column caps':'girder end bearings',eb.bolts.grade]);else used.push(['girder end connections',d.end.grade]);
- if(flangeTieFamily(d)&&!activeColumnCap(p))used.push(['tie connections',d.brace.connection.grade]);
+ if(flangeTieFamily(d)&&!capFork(p))used.push(['tie connections',d.brace.connection.grade]);
  if(cap)used.push(['cap tiebacks',cap.capBolts.grade],['cap tiebacks',cap.lapBolts.grade],['cap tiebacks',cap.columnBolts.grade]);
  const stop=activeEndStop(p);if(stop)used.push(['end stops',stop.bolts.grade]);
  const lb=p.longitudinalBracing;if(lb?.enabled&&lb.design)used.push(['bracing strut connections',lb.design.strut.grade]);
@@ -129,12 +132,12 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
  const erection=[
   ...(joint==='none'?[`Rail: each rail is one piece, no rail joint. ${tight?floating:'An anchor clip pair at mid-length holds it (rail layout); it moves thermally from there toward the stops.'}`]:[]),
   // On a column cap the end fork (bearing stiffeners and the pretensioned bottom-flange bolts) is the top-flange restraint.
-  activeColumnCap(p)?'Provide temporary lateral and torsional restraint of each girder until all its bearing bolts are installed and pretensioned: the bearing stiffeners and the bolted bottom flange form the end fork that restrains the top flange (no top-flange tie). Set bearings level and fit bearing stiffeners before welding.'
+  capFork(p)?'Provide temporary lateral and torsional restraint of each girder until all its bearing bolts are installed and pretensioned: the bearing stiffeners and the bolted bottom flange form the end fork that restrains the top flange (no top-flange tie). Set bearings level and fit bearing stiffeners before welding.'
    :'Provide temporary lateral and torsional restraint of each girder until its ties are complete. Set bearings level and fit bearing stiffeners before welding.',
   ...(activeEndBearing(p)&&bearingSeat(p)!=='shop'?[seatSurvey(p)]:[]),
   // A column cap is shop welded and drilled with the girder to one template: its erection adjustment is the column base.
   ...(activeColumnCap(p)?['Column caps, erection adjustment: set each column to line, elevation and plumb at its base (shim stacks or leveling nuts, the anchor rods in the oversized base plate holes under plate washers) so that each cap is within the seat tolerance before its girders are set; the cap, bearing plate and girder flange holes are standard holes drilled to one template. No oversized or slotted holes and no shims at the cap: the locating bolt slip check uses standard holes (AISC 360-16 J3.8, φ = 1.00), and oversized or slotted holes would lower it to φ = 0.85.']:[]),
-  ...(flangeTieFamily(d)&&!activeColumnCap(p)&&d.brace.release?.enabled&&(d.bracket?.enabled||p.existingColumn?.enabled||d.brace.flangeAttachment?.columnFace!==undefined)?[tieSequence]:[]),
+  ...(flangeTieFamily(d)&&!capFork(p)&&d.brace.release?.enabled&&(d.bracket?.enabled||p.existingColumn?.enabled||d.brace.flangeAttachment?.columnFace!==undefined)?[tieSequence]:[]),
   // One clearance note: in an existing building the test also covers the existing framing and services.
   `Runway clearance test before the load test (AIST TR-13 §1.5.6.2): crane unloaded, hook fully up, run the crane the full length of the runway three times, with the trolley at each end of the bridge and at center; check the Fig. 1.1 clearances, including the clearance to the roof trusses deflected under snow${p.existingColumn?.enabled&&!p.existingColumn.isNew?', and to the existing roof framing, bracing, lights, piping and other obstructions; report any shortfall to the engineer of record before commissioning':''}.`];
  // (Re-tightening of the rail joint bolts after 30 and 90 days is stated once, with the rail joints under bolting.)
@@ -189,7 +192,7 @@ export function enteredFabricationNote(p:ProjectInput,field:keyof NonNullable<Pr
  const bad=supersededFabricationNotes(p).filter(v=>v.field===field);
  if(bad.some(v=>v.sentence===d.fabrication[field]))return '';
  // A girder on a column cap has no tie: entered sentences about ties describe no part of this project.
- const noTie=!!activeColumnCap(p),tieSentence=(v:string)=>noTie&&/\bties?\b/i.test(v);
+ const noTie=!!capFork(p),tieSentence=(v:string)=>noTie&&/\bties?\b/i.test(v);
  // With more than one bolt grade in the model, an entered sentence naming one grade for all bolts gives way to the
  // generated grade list (constructionRequirements bolting).
  const grades=boltGrades(p).length>1,oneGrade=(v:string)=>grades&&field==='bolting'&&/\bA(325|490)\b/.test(v)&&!(/\bA325\b/.test(v)&&/\bA490\b/.test(v));

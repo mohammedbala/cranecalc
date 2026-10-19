@@ -13,6 +13,7 @@ import {format} from './units';
 import {latexNumber,withinLimit} from './math';
 import type {SupportForceSet} from './bracketForces';
 import type {CheckResult,ProjectInput} from './types';
+import {tiedToBuilding} from './craneColumnInputs';
 export {activeColumnCap,columnCapSchema,defaultColumnCap,type ColumnCapInput} from './columnCapInputs';
 
 const inch=25.4,up=(v:number,step=inch/8)=>Math.ceil(v/step-1e-9)*step;
@@ -134,8 +135,8 @@ export interface ColumnCapGridResult {
   * |V_x| of the same set that the bolt group takes in shear.
   */
  boltSets:{T:number;Vz:number;Vx:number;id:string;combination:string}[];
- /** Unfactored fatigue ranges per duty bin: cap weld peak range per length, and the largest bearing reaction range. */
- fatigue:{weld:number;reaction:number}[];
+ /** Unfactored fatigue ranges per duty bin: cap weld peak range per length, the largest bearing reaction range and the net lateral force range at the bottom-flange interface |H_top + H_bot| (the bottom flange alone on a tied crane column). */
+ fatigue:{weld:number;reaction:number;lateral:number}[];
 }
 export interface ColumnCapResults {grids:ColumnCapGridResult[];fork:ReturnType<typeof capForkStiffness>;}
 /**
@@ -145,6 +146,9 @@ export interface ColumnCapResults {grids:ColumnCapGridResult[];fork:ReturnType<t
 export function createColumnCapCollector(p:ProjectInput){
  if(!activeColumnCap(p))return undefined;
  const g=columnCapGeometry(p),weld=capWeldGroup(p),t=g.cap.plate.thickness,bins=p.details!.spectrum.length;
+ // A crane column tied to the building: the top-flange force goes through the girder tie to the building column; the cap
+ // takes the bottom flange force only (the column tie carries it on to the building column).
+ const viaCap=(f:SupportForceSet)=>tiedToBuilding(p)?{...f,top:0}:f;
  const grids=g.grids.map(v=>({bearings:v.bearings.map(b=>({bearing:b,R:none(v.grid)})),uplift:none(v.grid),lateral:none(v.grid),longitudinal:none(v.grid),fork:none(v.grid),boltTension:none(v.grid),boltSets:[] as ColumnCapGridResult['boltSets'],
   weld:{...none(v.grid),actions:{N:0,Vx:0,Vz:0,Mx:0,My:0,Mz:0}},
   fatigue:Array.from({length:bins},()=>({lo:{} as Record<string,number>,hi:{} as Record<string,number>}))}));
@@ -160,6 +164,7 @@ export function createColumnCapCollector(p:ProjectInput){
  };
  function observe(kind:'strength'|'service'|'fatigue',x:number,f:SupportForceSet,bin=-1){
   const j=g.grids.findIndex(v=>Math.abs(v.x-x)<1e-6);if(j<0||kind==='service')return;
+  f=viaCap(f);
   const R=reactions(j,f),a=actions(j,f,R),s=grids[j];
   if(kind==='strength'){
    s.bearings=s.bearings.map((b,i)=>({...b,R:keep(b.R,R[i],f)}));
@@ -182,7 +187,7 @@ export function createColumnCapCollector(p:ProjectInput){
    fatigue:s.fatigue.map(r=>{
     const range=(k:string)=>(r.hi[k]??0)-(r.lo[k]??0),Mz=range('Vz')*Math.max(0,...g.grids[j].bearings.map(b=>Math.abs(b.center)));
     // Ranges of every component taken together; compression bears on the milled column end, uplift is welded.
-    return {weld:weld.peak({N:range('N'),Vx:range('Vx'),Vz:range('Vz'),Mx:range('Mx'),My:range('My'),Mz}),reaction:Math.max(0,...g.grids[j].bearings.map((_,i)=>range(`R${i}`)))};
+    return {weld:weld.peak({N:range('N'),Vx:range('Vx'),Vz:range('Vz'),Mx:range('Mx'),My:range('My'),Mz}),reaction:Math.max(0,...g.grids[j].bearings.map((_,i)=>range(`R${i}`))),lateral:range('Vz')};
    })}))};
  }
  return {observe,finish};
@@ -199,8 +204,11 @@ export function validateColumnCap(p:ProjectInput):string[]{
  add(!!d.bracket?.enabled,'enabled: choose either the welded bracket or the column cap; a column cap replaces the bracket.');
  add(p.aist?.supportType!=='column','enabled: with a column cap the girder bears directly on the column; set the AIST support load path to direct column bearing.');
  add(!activeEndBearing(p),'enabled: the girder bolts to the cap through its end bearings; enable the bolted end bearings.');
- add(!!d.brace.flangeAttachment?.enabled,'enabled: a column cap has no column face at the top flange for a tie: disable the direct flange ties; the bearing stiffeners and the bolted bottom flange restrain the girder end.');
- add(col.strong.top!=='free'||col.weak.top!=='braced','enabled: a column-cap runway column is a cantilever across the runway (free top) braced along it by the crane-level bracing.');
+ // A crane column tied to the building (craneColumn.ts): the girder top-flange tie reaches the building column face and
+ // the column tie braces the column top across the runway (validateCraneColumn).
+ const tied=tiedToBuilding(p);
+ add(!tied&&!!d.brace.flangeAttachment?.enabled,'enabled: a column cap has no column face at the top flange for a tie: disable the direct flange ties; the bearing stiffeners and the bolted bottom flange restrain the girder end.');
+ add(!tied&&col.strong.top!=='free'||col.weak.top!=='braced','enabled: a column-cap runway column is a cantilever across the runway (free top) braced along it by the crane-level bracing.');
  add(Math.abs(col.height-col.seatElevation)>.5,'enabled: the column stops at the cap: set the column top equal to the bearing seat (top of the cap plate).');
  add(!!p.continuation&&adjacentBays(p).length>0,'enabled: adjacent existing girders on the end columns are not detailed with a column cap.');
  add(p.lateralBraceSpacing<Math.min(...p.spans)-1e-6||(!!p.aist?.bottomBraceSpacing&&p.aist.bottomBraceSpacing<Math.min(...p.spans)-1e-6),'enabled: a column cap restrains the girder at the columns only; intermediate flange braces need their own bracing system. Set the brace spacings to the span.');
@@ -251,7 +259,7 @@ export function columnCapChecks(p:ProjectInput,r:ColumnCapResults,ctx:{imperfect
  const t=cap.plate.thickness,Fy=Math.min(m.Fy,col.Fy),Fexx=m.Fexx,where=(k:Peak)=>`${gridName(k.grid)}, ${k.combination}`;
  const lines=g.grids.flatMap(v=>r.grids[v.grid].bearings.map(x=>({...x,grid:v.grid,stiffeners:v.stiffeners})));
  checks.push({id:'column-cap-basis',group,title:'Column cap · arrangement and load path',status:'pass',equation:'',referenceIds:['column-cap','tr13-bracket','aisc-connections'],
-  note:`The girder sits centered over each new ${col.name} column on a ${f(t,'length')} cap plate ${f(cap.plate.width,'length')} across by ${f(cap.plate.length,'length')} along the runway, welded all around the milled column top with ${f(cap.weld,'length')} fillets; the end bearing bolts pass through the cap. Vertical: girder bearing stiffeners, bearing plate and cap to the column web directly below a stiffener line, or to a ${f(cap.stiffener.thickness,'length')} cap stiffener between the column flanges, ${f(cap.stiffener.height,'length')} deep, welded to both flanges (AISC J1.4: compression by bearing, the welds hold the parts and carry uplift, shear and moments). Lateral and torsion: a fork at each girder end, the bearing stiffener pair a cantilever from the bolted bottom flange; the bolts take the flange force and the overturning couple into the cap; no top-flange tie. Longitudinal: locating bearing bolts, cap and cap welds to the column top, down the column to the crane-level strut ${f(g.drop,'length')} below the cap top. Column eccentricity across the runway: the rail eccentricity ${f(Math.abs(p.railEccentricity),'length')} only. AIST TR-13 §5.9.2: direct column bearing, as recommended where bracket reactions exceed 50 kip.`});
+  note:`The girder sits centered over each new ${col.name} column on a ${f(t,'length')} cap plate ${f(cap.plate.width,'length')} across by ${f(cap.plate.length,'length')} along the runway, welded all around the milled column top with ${f(cap.weld,'length')} fillets; the end bearing bolts pass through the cap. Vertical: girder bearing stiffeners, bearing plate and cap to the column web directly below a stiffener line, or to a ${f(cap.stiffener.thickness,'length')} cap stiffener between the column flanges, ${f(cap.stiffener.height,'length')} deep, welded to both flanges (AISC J1.4: compression by bearing, the welds hold the parts and carry uplift, shear and moments). ${tiedToBuilding(p)?'Lateral and torsion: the top-flange tie to the building column at each girder end, and the bolted bottom flange; the bolts take the bottom flange force into the cap, and the column tie carries it with the crane-column brace force to the building column.':'Lateral and torsion: a fork at each girder end, the bearing stiffener pair a cantilever from the bolted bottom flange; the bolts take the flange force and the overturning couple into the cap; no top-flange tie.'} Longitudinal: locating bearing bolts, cap and cap welds to the column top, down the column to the crane-level strut ${f(g.drop,'length')} below the cap top. Column eccentricity across the runway: the rail eccentricity ${f(Math.abs(p.railEccentricity),'length')} only. AIST TR-13 §5.9.2: direct column bearing, as recommended where bracket reactions exceed 50 kip.`});
  // Cap plate: one-way strips along the runway between the column web and the cap stiffeners, cantilevering
  // beyond the outermost line to the bearing plate end, under uniform bearing pressure.
  {let worst={M:0,V:0,kind:'',R:none(0)};
@@ -324,7 +332,8 @@ export function columnCapChecks(p:ProjectInput,r:ColumnCapResults,ctx:{imperfect
   if(g.stiffened)add('wrench-stiffener','Nuts below the cap · cap stiffeners',C,stiffClear,'length','|x_b-x_s|-t_s/2-w_s\\ge C_1','Each bolt row clears the cap stiffeners and their fillets.',refs);
  }
  // Fork restraint stiffness against the Appendix 6 point-brace requirement used for the flange ties.
- {const k=r.fork,parts=k.parts;
+ if(tiedToBuilding(p))na('fork-stiffness','Girder end fork restraint · stiffness','A crane column tied to the building column: the girder top-flange tie to the building column is the top restraint of the lateral-torsional model (its stiffness in series with the building column is checked under Bracing); the fork is not relied on, and the cap takes the bottom flange force only.');
+ else {const k=r.fork,parts=k.parts;
   add('fork-stiffness','Girder end fork restraint · stiffness',ctx.required,k.k,'stiffness','\\beta=\\left[\\frac{L^3}{3EI_s}+\\frac{L}{GA_v}+\\frac{h_{top}L}{e^2}\\left(\\frac{1}{k_b}+\\frac{1}{k_f}+\\frac{1}{k_c}\\right)\\right]^{-1}',`Top-flange lateral spring of each girder end on the cap, used as its top restraint in the lateral-torsional, twist and rail-head models: stiffener pair cantilever L = ${f(k.Lc,'length')} (coped section) plus the overturning couple through the tension bolts (no pretension credit), the bottom flange to the bolt line and the cap plate ${f(k.ac,'length')} from its nearest support. Compliance: stiffener ${(parts.bending*1e3).toExponential(2)} + ${(parts.shear*1e3).toExponential(2)}, rotation ${(parts.rotation*1e3).toExponential(2)} mm/kN. Requirement as for a point brace (AISC Appendix 6.3.1b). The column top is fixed in this model; the column drift is checked under New column.`,['column-cap','aisc-brace'],undefined);
  }
  // Column between the cap and the crane-level strut: the longitudinal force in weak-axis bending and shear.

@@ -32,6 +32,8 @@ import {craneCombinations} from './aistLoads';
 import {runwayEnds} from './continuation';
 import {activeColumnCap} from './columnCapInputs';
 import {capForkStiffness,createColumnCapCollector} from './columnCap';
+import {tiedToBuilding} from './craneColumnInputs';
+import {craneColumnRestraint} from './craneColumn';
 import {createSpliceCollector} from './girderSplice';
 import {capAngleBraceSystem,capAngleFatigueDetails} from './capAngleTie';
 
@@ -210,9 +212,12 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const eb=activeEndBearing(p),ebBolt=eb?boltProperties(eb.bolts.grade,eb.bolts.diameter):undefined;
  const columnCap=activeColumnCap(p);
  const ebK=eb&&ebBolt?4*G*ebBolt.area/(p.section.tf+details.bearing.thickness+(details.bracket?.enabled?bracketSeat(details.bracket).thickness:columnCap?columnCap.plate.thickness:details.bearing.thickness)):0;
- const bottomK=(x:number)=>ebK&&supports.some(v=>Math.abs(v-x)<=1e-6)?ebK:brace.stiffness;
+ // A crane column tied to the building (craneColumn.ts): the top-flange tie in series with the building column at the tie,
+ // and the bolted bottom flange in series with the crane-column top and the column tie to the building column.
+ const crane=columnCap&&tiedToBuilding(p)?craneColumnRestraint(p,brace.stiffness,ebK):undefined,atGrid=(x:number)=>supports.some(v=>Math.abs(v-x)<=1e-6);
+ const bottomK=(x:number)=>ebK&&atGrid(x)?crane?crane.bottom:ebK:brace.stiffness;
  // On a column cap no tie reaches the top flange: the bearing stiffeners and the bolted bottom flange form a fork.
- const forkK=columnCap&&eb?capForkStiffness(p).k:0,topK=(x:number)=>forkK&&supports.some(v=>Math.abs(v-x)<=1e-6)?forkK:brace.stiffness;
+ const forkK=columnCap&&eb&&!crane?capForkStiffness(p).k:0,topK=(x:number)=>forkK&&atGrid(x)?forkK:crane&&atGrid(x)?crane.top:brace.stiffness;
  // Girder-end hardware on the seats (bearing plate and stiffeners at each girder end, end stops at the runway ends).
  const steel=newSteelTakeoff(p),endHardware=(bay:number,end:'left'|'right')=>steel.perEnd+(bay===0&&end==='left'&&steel.stops.includes('left')||bay===p.spans.length-1&&end==='right'&&steel.stops.includes('right')?steel.stopEach:0);
  const gridHardware=(x:number)=>steel.grid[supports.findIndex(v=>Math.abs(v-x)<1e-6)]??0;
@@ -222,7 +227,7 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
  const detailInputs=automaticFatigueDetails(p);
  const fatigue:FatigueDetailResult[]=detailInputs.map(f=>({id:f.id,name:f.name,x:f.x,category:f.category,threshold:fatigueThreshold(f.category),reference:f.reference,bins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,minimum:0,maximum:0,range:0,allowable:0,damage:0})),damage:0,range:0,peak:0}));
- const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
+ const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:crane?crane.top:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
  const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0,cb:1,mocr:curves.positive.mocr,height:z};
  // AISC 360-16 Commentary F1 load-height comparison: Cb (F1-1) of the case's moment diagram over the unbraced segment times
