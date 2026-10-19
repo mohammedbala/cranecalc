@@ -312,7 +312,8 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
     ...(fill>1e-6?[{at:[X(sg.tabEnd-inch/2),Y(cr.offset-gt/2-fill/2)] as XY,labels:[`${size(cr.filler)} FILLER UNDER`,'STRUT WEB']}]:[]),
     {at:[X(sg.bolts[1]),Y(web)],labels:[`${boltName}`,'THROUGH WEB, FILLER, GUSSET']}];
    const lw=Math.max(...left.flatMap(v=>v.labels.map(l=>textWidth(l,8.5))));
-   svg+=labelColumn(left,X(RB.x1)-30-lw,Y(RB.y1),Y(RB.y0));
+   // Left of the plan's edge and of the gusset tip where the gusset reaches past it, so the leaders land at the right.
+   svg+=labelColumn(left,Math.min(X(RB.x1),...left.map(v=>v.at[0]))-30-lw,Y(RB.y1),Y(RB.y0));
    const tab=[`PL ${size(gt)} STRUT TAB`,'ON COLUMN C/L'];
    svg+=multiLeader([[X(-sg.tabEnd+inch),Y(-gt/2)]],[X(RB.x0)+16,Y(RB.y0)+4],tab);
    svg+=text(100,Y(RB.y0)+30,`PLAN AT GRID ${gridB}: ${kBlabel.replace('SCALE: ','SCALE ')}`,7.5);

@@ -213,7 +213,10 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=dims.add(dimH(X(ccFace),X(plateEnd),Z(w/2)-3,ya,dim(plateEnd-ccFace),'left')+dimH(X(plateEnd),X(face),Z(w/2)-3,ya,size(clear),'right',X(face+bc.tf)+4));
   svg+=dims.add(dimH(X(ccFace),X(face),Z(zTop)-3,ya-18,`${dim(g.gap)} CLR.`,'right'));
   const stations=[tabEnd,...[...bolts].reverse(),plateEnd],yb=Z(-w/2)+16;
-  for(let i=1;i<stations.length;i++){const a=X(stations[i-1]),c2=X(stations[i]);svg+=dims.add(dimH(a,c2,Z(-w/2)-3,yb,size(stations[i]-stations[i-1]),i===1?'left':'right'));}
+  // A value too long for its space is carried outward; past the plate end it is kept beyond the building column flange
+  // where it would cross the flange, else carried the other way.
+  for(let i=1;i<stations.length;i++){const a=X(stations[i-1]),c2=X(stations[i]),v=size(stations[i]-stations[i-1]),side=i===1?'left':'right';
+   svg+=dims.pick([dimH(a,c2,Z(-w/2)-3,yb,v,side),...(side==='right'?[dimH(a,c2,Z(-w/2)-3,yb,v,'right',X(face+bc.tf)+4)]:[]),dimH(a,c2,Z(-w/2)-3,yb,v,side==='left'?'right':'left')]);}
   // At the right: the plate depth and the slot length.
   const xr=X(x1)+8;
   svg+=dimV(Z(w/2),Z(-w/2),X(plateEnd)+2,xr+30,size(w))+dimV(Z(t.slot.length/2),Z(-t.slot.length/2),X(bolts[0])+t.slot.width/2*kk+2,xr+10,size(t.slot.length));
@@ -255,7 +258,8 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[X((tabEnd+plateEnd)/2),Z(-w/2)],labels:[`${tabLabel}, STD.`,`${size(tg.hole)} HOLES TO MATCH THE SLOTS`]},
    {at:[X(face+bc.tf),Z(-w/2-inch)],labels:[`${bcName} FLANGE (REF.)`]}
   ];
-  svg+=labelColumn(items,lx,Z(zTop)+2,Z(zBot));
+  // The plate's leader lands on its top edge, else on its face where it would cross the dimensions above the plate.
+  svg+=new AnnotationSpace(svg).pick([items,[{...items[0],at:[X((ccFace+tabEnd)/2),Z(w/4)] as XY},...items.slice(1)]].map(v=>labelColumn(v,lx,Z(zTop)+2,Z(zBot))));
   // The section's callouts beside the section, so their leaders stay clear of the elevation's dimensions.
   const parts:{at:XY;labels:string[];weld?:string;field?:boolean}[]=[
    {at:[X(face)-tab.weld*kk*.4,Y(tp+tt)+tab.weld*kk*.4],labels:['TAB TO (E) COL. FLANGE, BOTH','FACES, FULL DEPTH (FIELD)'],weld:size(tab.weld),field:true},

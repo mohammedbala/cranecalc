@@ -49,6 +49,8 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
  // Grid at the shared support, or at each runway end of a single span (sliding end at grid 2, locating end at grid 1).
  for(const [i,c] of centers.entries())svg+=line([X(c),yTop-14],[X(c),ySeat+20],'grid-line')+bubble(X(c),yTop-22,separate?(i?'1':'2'):'2');
  const ends=[{side:-1,role:'SLIDING'},{side:1,role:'LOCATING'}] as const;
+ // Lowest point of the elevation: the bolt lines past the nuts, which hang below the seat under a rolled or haunched bracket.
+ let nutLow=-Infinity;
  for(const {side} of ends){
   const near=side*h,far=side*extent,lo=Math.min(X(near),X(far)),hi=Math.max(X(near),X(far));
   // Girder bottom flange and web stub, broken above and away from the support.
@@ -66,6 +68,7 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
    const top=Y(b.tf)-(side<0?e.washerThickness*kk+lift:0);
    const nut=ySeat+(ws?.drop(near+side*r-(separate?side*(h+o):0))??0)*kk;
    svg+=hexSide(x,top,hx.corners*kk,hx.head*kk,-1)+hexSide(x,nut,hx.corners*kk,hx.nut*kk,1)+line([x,top-hx.head*kk-3],[x,nut+hx.nut*kk+3],'grid-line');
+   nutLow=Math.max(nutLow,nut+hx.nut*kk+3);
   }
  }
  // Bracket seat and ribs under the bearings: one seat at the shared support, one at each grid of a single span.
@@ -79,7 +82,8 @@ export function endBearingView(s:CalculationSnapshot):ViewRender{
   svg+=breakY(ySeat+1.5*inch*kk,Xc(lo),Xc(hi));
  }
  // Plan on the bottom flange: standard holes at the locating end, slots under plate washers at the sliding end.
- const Z0=ySeat+1.5*inch*kk+16+Math.max(b.bf,bs.width)/2*kk,Z=(z:number)=>Z0+z*kk;
+ // Below the elevation, the bolt lines included (the gap value reads over the plan's top edge).
+ const Z0=Math.max(ySeat+1.5*inch*kk,nutLow)+16+Math.max(b.bf,bs.width)/2*kk,Z=(z:number)=>Z0+z*kk;
  svg+='<g data-view="end-bearing-plan">';
  for(const {side} of ends){
   const near=side*h,far=side*extent,lo=Math.min(X(near),X(far)),hi=Math.max(X(near),X(far));

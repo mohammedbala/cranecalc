@@ -16,6 +16,7 @@ import {columnCapTitles} from './columnCapSheet';
 import {drawingLength,drawingElevation,plateInches,dimensionLength,limitLength} from './drawingFormat';
 import {dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,capChannelSection,wrapToWidth,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
+import {AnnotationSpace,dimVAt,dimVClear} from './annotationSpace';
 import {ribGeometry,ribDepthAt} from '../engine/bracketRib';
 import {haunchedRibOutline} from './haunchedBracketDrawing';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
@@ -168,7 +169,12 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   ],left,'left',yy=>yy===Y(0)?X(-b.plate.N/2)-2:X(fc-ft.L/2)-2);
   // Column and seat heights from the base (across the break), footing width.
   // On a column cap the column top is the bearing seat: one dimension.
-  svg+=dimV(Y(H),Y(0),X(-c.d/2),X(-c.d/2)-18,dim(H))+(Math.abs(H-seat)>.5?dimV(Y(seat),Y(0),X(-c.d/2),X(-c.d/2)-36,dim(seat)):'');
+  // The column height's value reads at its middle, else at the middle of the part below or above the seat level where
+  // the seat's lines cross it there (a column broken short), else beyond its ends.
+  {const seatDim=Math.abs(H-seat)>.5?dimV(Y(seat),Y(0),X(-c.d/2),X(-c.d/2)-36,dim(seat)):'',space=new AnnotationSpace(svg+seatDim),x=X(-c.d/2)-18,label=dim(H);
+   const along=(y:number)=>dimVAt(Y(H),Y(0),X(-c.d/2),x,'','inside')+dimText(x-6,y,label,lettering.text,'middle',400,-90),room=textWidth(label,lettering.text)+6;
+   const parts=seatDim?[[Y(seat),Y(0)],[Y(H),Y(seat)]].filter(([a,b])=>Math.abs(b-a)>=room).map(([a,b])=>along((a+b)/2)):[];
+   svg+=seatDim+(space.cost(dimVAt(Y(H),Y(0),X(-c.d/2),x,label,'inside'))&&parts.some(v=>!space.cost(v))?space.pick(parts):dimVClear(space,Y(H),Y(0),X(-c.d/2),x,label));}
   svg+=dimH(X(fc-ft.L/2),X(fc+ft.L/2),Y(ftgBot),Y(ftgBot)+20,dim(ft.L));
   if(br)svg+=dimH(X(c.d/2),X(girderZ),Y(top),Y(top)-8,dim(br.reach));
   void brk;
