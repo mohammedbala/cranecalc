@@ -460,7 +460,7 @@ function screened(input:RunwayConfig){
   // An existing building: new crane columns beside the building columns, tied to them, the girders on their caps (the
   // direct column bearing TR-13 points to), in place of brackets past the recommendation.
   const n=normalizeConfig({...cfg,support:'crane-column'});
-  const why=`The support reaction, ${about}, exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets: new crane columns beside the building columns carry the girders on their column caps (direct column bearing), tied to the building columns.`;
+  const why=`The support reaction, ${about}, exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets (clause to be verified): new crane columns beside the building columns carry the girders on their column caps (direct column bearing), tied to the building columns.`;
   changes.push(why,...n.changes);rules.push({field:'support',from:cfg.support,to:'crane-column',why},...n.rules);
   cfg=n.config;sk=skeleton(cfg);
  }

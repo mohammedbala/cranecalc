@@ -171,7 +171,7 @@ describe('AIST TR-13 §5.9.2 column-bracket recommendation',()=>{
  it('puts an existing structure above it on crane columns tied to the building columns; within it nothing is said',()=>{
   const v=previewConfig({...defaultRunwayConfig,capacity:20,craneSpan:70,bays:4,span:30});
   expect(v.config.support).toBe('crane-column');
-  expect(v.changes).toContainEqual(expect.stringMatching(/^The support reaction, about \d+ kip, exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets: new crane columns beside the building columns/));
+  expect(v.changes).toContainEqual(expect.stringMatching(/^The support reaction, about \d+ kip, exceeds the AIST TR-13 §5\.9\.2 recommendation of 50 kip for column brackets \(clause to be verified\): new crane columns beside the building columns/));
   // The structure stays existing (t05, t08 and t10 are within the recommendation and keep their brackets).
   expect(v.config.structure).toBe('existing');
   // The one statement within the limit is the assumed bumper overhang (end-truck geometry for the stop contacts).
