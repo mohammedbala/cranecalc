@@ -13,20 +13,23 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapGeometry} from '../engine/columnCap';
 import {columnCapTitles} from './columnCapSheet';
 import {drawingLength,drawingElevation,plateInches,dimensionLength,limitLength} from './drawingFormat';
-import {dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,capChannelSection,type XY} from './sheetGraphics';
+import {dimText,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,filletLeader,detailRef,detailTitles,labelColumn,n,breakLine,textWidth,sectionCut,capChannelSection,wrapToWidth,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {ribGeometry,ribDepthAt} from '../engine/bracketRib';
 import {haunchedRibOutline} from './haunchedBracketDrawing';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
 import {columnStiffenerTitle} from './columnStiffenerDrawing';
 import {topicSheetSvg,type DetailTopic,type DetailView} from './detailSheet';
+import {tiedToBuilding} from '../engine/craneColumnInputs';
+import {aiscShapeByName} from '../data/aiscSections';
+import {craneColumnTitles} from './craneColumnSheet';
 
 const inch=25.4;
 /** ASTM A615 bar grade in the drawing's units: the inch-pound grade, or the A615M grade in MPa. */
 const rebarGrade=(fy:number,u:'US'|'SI')=>{const ksi=Math.round(fy/6.894757293168),si:Record<number,number>={40:280,60:420,75:520,80:550};return u==='US'?`ASTM A615 GR. ${ksi}`:`ASTM A615M GR. ${si[ksi]??Math.round(fy)}`;};
 
 /** Concrete in section: a fixed stipple of dots and small aggregate triangles inside the outline. */
-function concrete(x:number,y:number,w:number,h:number,density=1){
+export function concrete(x:number,y:number,w:number,h:number,density=1){
  let svg='',seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
  const count=Math.round(w*h/110*density);
  for(let i=0;i<count;i++){
@@ -37,12 +40,12 @@ function concrete(x:number,y:number,w:number,h:number,density=1){
  return `<g data-hatch="concrete">${svg}</g>`;
 }
 /** Undisturbed earth below a line: groups of three short diagonals. */
-function earth(x1:number,x2:number,y:number){
+export function earth(x1:number,x2:number,y:number){
  let svg='';for(let x=x1+3;x<x2-6;x+=11)for(let j=0;j<3;j++)svg+=line([x+j*2,y+.6],[x+j*2-3.2,y+4],'hatch');
  return `<g data-hatch="earth">${svg}</g>`;
 }
 /** Elevation datum: triangle on the extension line and the label beside it, spread to clear its neighbors. */
-function elevationMarks(marks:{y:number;label:string}[],x:number,side:'left'|'right',from:(y:number)=>number){
+export function elevationMarks(marks:{y:number;label:string}[],x:number,side:'left'|'right',from:(y:number)=>number){
  const sorted=[...marks].sort((a,b)=>a.y-b.y),placed:number[]=[];
  for(const [i,m] of sorted.entries())placed.push(Math.max(m.y,i?placed[i-1]+10:-Infinity));
  return sorted.map((m,i)=>{
@@ -51,7 +54,7 @@ function elevationMarks(marks:{y:number;label:string}[],x:number,side:'left'|'ri
  }).join('');
 }
 /** W shape in plan: flanges parallel to the runway, depth across it. */
-function wPlan(cx:number,cy:number,d:number,bf:number,tf:number,tw:number,k:number,cls='runway-line'){
+export function wPlan(cx:number,cy:number,d:number,bf:number,tf:number,tw:number,k:number,cls='runway-line'){
  const x=(z:number)=>cx+z*k,y=(v:number)=>cy+v*k;
  return `<path class="${cls}" d="M${n(x(-d/2))},${n(y(-bf/2))}H${n(x(-d/2+tf))}V${n(y(-tw/2))}H${n(x(d/2-tf))}V${n(y(-bf/2))}H${n(x(d/2))}V${n(y(bf/2))}H${n(x(d/2-tf))}V${n(y(tw/2))}H${n(x(-d/2+tf))}V${n(y(bf/2))}H${n(x(-d/2))}Z"/>`;
 }
@@ -76,6 +79,8 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
  const metricBar:Record<string,number>={'#3':10,'#4':13,'#5':16,'#6':19,'#7':22,'#8':25,'#9':29,'#10':32,'#11':36},barName=u==='SI'?`#${metricBar[ft.bar]??ft.bar.slice(1)}`:ft.bar;
  const barLabel=`${barName} @ ${dim(ft.spacing)} E.W. BOTTOM`;
  const tie=flangeTieGeometry(p);
+ // A crane column tied to the building column: its footing beside the building column's existing footing.
+ const tied=tiedToBuilding(p);
  const views:DetailView[]=[];
 
  // 1: Elevation across the runway at a support, looking along the runway. A long column is broken between
@@ -220,6 +225,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   svg+=multiLeader([[X(ft.L/2-ft.cover-ft.spacing*.5),Y(spread(along,ft.B)[0])]],[bx,Y(-ft.B/2)+14],bars,7.5);
   svg+=multiLeader([[X(-c.d/2),cy-2]],[Math.min(866,X(-ft.L/2)-24),Math.min(90,Y(-ft.B/2)-16)],['COLUMN C/L ON GRID,','FOOTING CONCENTRIC'],7.5);
   svg+=sectionCut([X(-ft.L/2)-4,cy],[X(ft.L/2)+4,cy],[0,1],detailTitles.footing,['a'],'tip');
+  if(tied)svg+=buildingFootingPlan(s,X,Y,kk,Y(ft.B/2)+44);
   return {svg:svg+'</g>',scale:k.label};
  }});
  // 4: Footing section through the column along L.
@@ -294,7 +300,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ['DATA SOURCE',!b.source?'NOT ENTERED':u==='US'?b.source:`${b.source.split(':')[0]} (VALUES CONVERTED ABOVE AND IN THE NOTES)`]
   ];
   const notes=[
-   `NEW COLUMNS: ASTM A992 ${name}, ONE AT EACH SUPPORT OF BOTH RUNWAYS. FIXED BASE, FREE TOP ACROSS THE RUNWAY; ALONG THE RUNWAY BY THE CRANE-LEVEL BRACING. ${capG?`COLUMN TOP MILLED TO BEAR UNDER THE COLUMN CAP, THE GIRDER CENTERED ON THE COLUMN (${detailRef(columnCapTitles.section)}).`:'COLUMN TOP AT OR BELOW THE TOP OF THE GIRDER, CLEAR OF THE CRANE END TRUCKS; VERIFY CLEARANCE WITH THE CRANE SUPPLIER.'}`,
+   `NEW ${tied?'CRANE ':''}COLUMNS: ASTM A992 ${name}, ONE AT EACH SUPPORT OF BOTH RUNWAYS. ${tied?`${p.craneColumn!.base.toUpperCase()} BASE; BRACED AT THE TOP ACROSS THE RUNWAY BY THE COLUMN TIE TO THE EXISTING BUILDING COLUMN (${detailRef(craneColumnTitles.elevation)})`:'FIXED BASE, FREE TOP ACROSS THE RUNWAY'}; ALONG THE RUNWAY BY THE CRANE-LEVEL BRACING. ${capG?`COLUMN TOP MILLED TO BEAR UNDER THE COLUMN CAP, THE GIRDER CENTERED ON THE COLUMN (${detailRef(columnCapTitles.section)}).`:'COLUMN TOP AT OR BELOW THE TOP OF THE GIRDER, CLEAR OF THE CRANE END TRUCKS; VERIFY CLEARANCE WITH THE CRANE SUPPLIER.'}`,
    `BASE PLATE ASTM A572 GR. 50, SHOP WELDED TO THE COLUMN, ${b.plate.flangeJoint==='cjp'?`CJP GROOVE WELDS AT BOTH FLANGES (AWS D1.1 PREQUALIFIED, BACKING REMOVED), ${size(b.plate.weld)} FILLETS BOTH SIDES OF THE WEB`:`${size(b.plate.weld)} FILLETS BOTH SIDES OF FLANGES AND WEB`}. HOLES ${size(hw.hole)} DIA. (AISC DG1 TABLE 2.3) WITH ${size(hw.washer)} X ${size(hw.washer)} X ${size(hw.washerThickness)} PLATE WASHERS; WELD WASHERS TO THE PLATE, ${size(plateWasherWeld(b).size)} FILLET ALL AROUND, AFTER THE NUTS ARE SNUG SO ALL RODS SHARE THE SHEAR.`,
    `ANCHOR RODS ASTM F1554 GR. ${a.grade.split('-')[1]} WITH ASTM A563 HEAVY HEX NUTS; EMBEDDED HEAVY HEX NUT TACK WELDED TO THE ROD. SET WITH A TEMPLATE TO AISC CODE OF STANDARD PRACTICE §7.5 TOLERANCES. DO NOT FIELD BEND OR HEAT RODS.`,
    `SET THE PLATE ON SHIM STACKS OR LEVELING NUTS AND FILL ${size(gr)} OF NON-SHRINK, NON-METALLIC GROUT (ASTM C1107, ${u==='US'?'5,000 PSI':'35 MPa'} MINIMUM) TO FULL BEARING BEFORE THE GIRDER IS SET.`,
@@ -308,4 +314,28 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
   ];
   return {key:'new-column',name:'NEW COLUMNS & FOOTINGS',views,notes:(t:Style)=>[heading(t,'NEW COLUMN DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.25,1.75]),heading(t,'NEW COLUMN AND FOUNDATION NOTES'),...numbered(t,notes)]};
  }
+}
+
+/**
+ * A crane column's footing plan beside the existing building column (craneColumn.ts): the building column and its
+ * surveyed footing dashed at the column offset (away from the crane span, at the left), and the clearance or overlap with
+ * the coordination note: concentric isolated footings this close overlap, a coordination open item for a combined
+ * footing by the foundation engineer (check crane-column-footing-clearance).
+ */
+function buildingFootingPlan(s:CalculationSnapshot,X:(z:number)=>number,Y:(x:number)=>number,kk:number,noteY:number){
+ const p=s.input,u=p.units,k=p.craneColumn!,bc=k.building,line=p.existingColumn!.adjacent?.A??p.existingColumn!.adjacent?.B,dim=(v:number)=>dimensionLength(v,u),z=-k.offset;
+ const sh=bc.shape?aiscShapeByName(bc.shape):undefined,tf=sh?sh.tf*inch:bc.tf,tw=sh?sh.tw*inch:bc.tw,d=sh?sh.d*inch:bc.d,bf=sh?sh.bf*inch:bc.bf;
+ let svg='<g data-existing-footing="building">'+wPlan(X(z),Y(0),d,bf,tf,tw,kk,'reference-line');
+ const f=line?.footing,r=s.craneColumn?.footing;
+ if(f&&f.L>0&&f.B>0)svg+=rect(X(z-f.L/2),Y(-f.B/2),f.L*kk,f.B*kk,'reference-line');
+ // The building column and its footing called out with a leader to the footing's outer corner; the coordination note below.
+ const x0=Math.min(X(z-Math.max(f?.L??0,d)/2),X(-p.columnBase!.footing.L/2)),w=Math.max(260,X(p.columnBase!.footing.L/2)+40-x0);
+ const target:[number,number]=f&&f.L>0?[X(z-f.L/2),Y(f.B/2)]:[X(z-d/2),Y(0)];
+ svg+=multiLeader([target],[x0,noteY],[`(E) ${bc.shape||'BUILDING'} COLUMN ${dim(k.offset)} FROM THE CRANE COLUMN C/L${f&&f.L>0?` ON (E) ${dim(f.L)} X ${dim(f.B)}`:''}`,`${f&&f.L>0?'FOOTING ':''}(REF., DASHED)`]);
+ const lines=[
+  r?r.clear<r.required?`OPEN ITEM: THE FOOTINGS ${r.clear<0?`OVERLAP ${dim(-r.clear)}`:`ARE ${dim(r.clear)} APART, ${dim(r.required)} MIN.`}. COORDINATE A COMBINED OR`:`FOOTING CLEAR ${dim(r.clear)}, ${dim(r.required)} MIN.`:'(E) FOOTING SIZE NOT ENTERED: LOCATE IT BY TEST PIT BEFORE EXCAVATION.',
+  ...(r&&r.clear<r.required?['MODIFIED FOOTING WITH THE FOUNDATION ENGINEER OF RECORD BEFORE EXCAVATION;','DO NOT UNDERMINE OR CUT THE (E) FOOTING. HOLD - NOT FOR CONSTRUCTION.']:[])];
+ // Under the plan, wrapped to the footing's width.
+ wrapToWidth(lines.join(' '),w,lettering.text).forEach((v,i)=>{svg+=text(x0,noteY+2*lettering.leading+6+i*lettering.noteLeading,v,lettering.text,'start');});
+ return svg+'</g>';
 }

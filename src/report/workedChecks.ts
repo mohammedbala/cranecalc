@@ -24,6 +24,7 @@ import {clipGeometry,railPadThickness} from '../engine/railSeat';
 import {flangeTieResponse} from '../engine/flangeTieDesign';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {braceSystem} from '../engine/detailAnalysis';
+import {stepWebStrength} from '../engine/stepSeat';
 import {diaphragmArrangement,diaphragmDemand,diaphragmWeldEquivalent,stiffenerPairSection,stiffenerWeldGroup} from '../engine/detailChecks';
 
 
@@ -92,6 +93,27 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
    return [`P_r/P_c=${tx(k.P,'force')}/${tx(C.Pc,'force')}=${n(r,3)}${r>=.2?'\\ge':'<'}0.2\\quad\\text{(${caseLabel(k.id).replace(/[\\{}#%&_$^~]/g,'').replace(/−/g,'-')})}`,
     r>=.2?`U=\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)=${n(r,3)}+\\frac89\\left(${terms}\\right)=${n(U,3)}${rel.le}1\\quad ${rel.dc}`
      :`U=\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}=${n(r/2,3)}+${terms}=${n(U,3)}${rel.le}1\\quad ${rel.dc}`];
+  }
+ }
+ // Stepped column: H1 of each shaft with its governing row (steppedColumn.ts), and the step's local checks (stepSeat.ts).
+ const sc=s.steppedColumn,sk=/^column-(upper|lower)-interaction$/.exec(c.id)?.[1] as 'upper'|'lower'|undefined;
+ if(sc&&sk){
+  const x=sc[sk],k=x.governing.U,C=x.capacity,r=k.P/C.Pc,flex=Math.abs(k.Mx)/C.Mcx+Math.abs(k.My)/C.Mcy,U=r>=.2?r+8/9*flex:r/2+flex;
+  if(k.P>=0&&close(U,c.demand)){
+   const terms=`\\frac{${tx(Math.abs(k.Mx),'moment')}}{${tx(C.Mcx,'moment')}}+\\frac{${tx(Math.abs(k.My),'moment')}}{${tx(C.Mcy,'moment')}}`;
+   return [`P_r/P_c=${tx(k.P,'force')}/${tx(C.Pc,'force')}=${n(r,3)}${r>=.2?'\\ge':'<'}0.2\\quad(L_{cx}=${tx(x.Lcx,'length')},\\ B_{1x}=${n(k.B1x,3)};\\ \\text{${caseLabel(k.id).replace(/[\\{}#%&_$^~]/g,'').replace(/−/g,'-')}})`,
+    r>=.2?`U=\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)=${n(r,3)}+\\frac89\\left(${terms}\\right)=${n(U,3)}${rel.le}1\\quad ${rel.dc}`
+     :`U=\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}=${n(r/2,3)}+${terms}=${n(U,3)}${rel.le}1\\quad ${rel.dc}`];
+  }
+ }
+ if(sc&&p.existingColumn&&(c.id==='step-web-yielding'||c.id==='step-web-crippling'||c.id==='step-cap-flexure')){
+  const g=sc.geometry,Fy=p.existingColumn.Fy,E=p.section.E,w=stepWebStrength(p,g);
+  if(c.id==='step-web-yielding'&&close(w.yielding,cap))return [`${lhs}R_n=${fl(1,1.5)}\\times F_yt_w(2.5k+l_b)=${fl(1,1.5)}\\times${tx(Fy,'stress')}\\times${tx(g.lower.tw,'length')}\\times(2.5\\times${tx(w.k,'length')}+${tx(w.lb,'length')})=${tx(w.yielding,'force')}${check(w.yielding,'R_u')}\\quad(k=t_{cap},\\ l_b=t_{fu})`];
+  if(c.id==='step-web-crippling'&&close(w.crippling,cap))return [`${lhs}R_n=${fl(.75,2)}\\times0.40t_w^2\\sqrt{\\frac{EF_yt_{cap}}{t_w}}=${fl(.75,2)}\\times0.40\\times(${tx(g.lower.tw,'length')})^2\\sqrt{\\frac{${tx(E,'stress')}\\times${tx(Fy,'stress')}\\times${tx(w.k,'length')}}{${tx(g.lower.tw,'length')}}}=${tx(w.crippling,'force')}${check(w.crippling,'R_u')}`];
+  if(c.id==='step-cap-flexure'&&d){
+   const N=d.bearing.length,bw=Math.min(p.section.bf,d.bearing.width),a=Math.max(0,(bw-g.lower.tf)/2),l=Math.min(N,g.cap.length/2),t=g.cap.thickness,M=factor(.9,1.67)*Fy*l*t**2/4;
+   if(close(M,cap))return [`a=\\frac{b-t_{fl}}{2}=\\frac{${tx(bw,'length')}-${tx(g.lower.tf,'length')}}{2}=${tx(a,'length')};\\quad M_u=\\frac{R_u}{b}\\frac{a^2}{2}`,
+    `${lhs}M_n=${fl(.9,1.67)}\\times F_y\\frac{l\\,t_{cap}^2}{4}=${fl(.9,1.67)}\\times${tx(Fy,'stress')}\\times\\frac{${tx(l,'length')}\\times(${tx(t,'length')})^2}{4}=${tx(M,'moment')}${check(M,'M_u')}`];
   }
  }
  // Welded rib bracket: F11 plastic moment of the rectangular rib.
@@ -190,6 +212,31 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
   const sp=simpleSupportInput(p),L=Math.max(...p.spans),dT=Math.max(sp.temperatureRise,sp.temperatureFall),th=s.designAnalysis.endRotation,thermal=12e-6*L*dT,rot=p.section.d*th;
   if(close(thermal+rot+sp.settingTolerance,dem))return [`\\alpha L\\Delta T+d\\theta+t_{set}=${p.units==='US'?'6.67\\times10^{-6}\\,\\text{/°F}':'12\\times10^{-6}\\,\\text{/°C}'}\\times${tx(L,'length')}\\times${tx(dT,'temperatureChange')}+${tx(p.section.d,'length')}\\times${th.toFixed(5)}+${tx(sp.settingTolerance,'length')}`,
    `\\quad=${tx(thermal,'length')}+${tx(rot,'length')}+${tx(sp.settingTolerance,'length')}=${tx(dem,'length')}${rel.le}u=${tx(cap,'length')}\\quad ${rel.dc}`];
+ }
+ // A crane column tied to the building column (craneColumn.ts): the Appendix 6 nodal brace at the crane-column top, the
+ // column tie bolts and the vertical slot travel, each rebuilt from the calculation's own result.
+ const cr=s.craneColumn;
+ if(cr&&c.id==='crane-column-brace-stiffness'){
+  const b=cr.brace,st=b.stiffness,req=(lrfd?1/.75:2)*10*b.Pr/b.L,el=1/(1/st.building+1/st.tie),prov=st.play>0&&b.strength.required>0?1/(1/el+st.play/b.strength.required):el;
+  if(close(req,dem)&&close(prov,cap))return [
+   `\\beta_{br}=${lrfd?'\\frac{1}{\\phi}':'\\Omega'}\\frac{10P_r}{L_{br}}=${lrfd?'\\frac{1}{0.75}':'2.00'}\\times\\frac{10\\times${tx(b.Pr,'force')}}{${tx(b.L,'length')}}=${tx(req,'stiffness')}\\quad(\\text{AISC 360-16 App. 6 \\S6.2.2, nodal brace})`,
+   `k_b=${tx(st.building,'stiffness')}\\ (\\text{building column at the tie, unit force});\\quad k_t=${tx(st.tie,'stiffness')}\\ (\\text{column tie})`,
+   `\\beta_{prov}=\\left(\\frac{1}{k_b}+\\frac{1}{k_t}+\\frac{g}{P_{br}}\\right)^{-1},\\ g=${tx(st.play,'length')},\\ P_{br}=0.01P_r=${tx(b.strength.required,'force')}`,
+   `\\quad=${tx(prov,'stiffness')}${rel.ge}\\beta_{br}=${tx(dem,'stiffness')}\\quad ${rel.dc}`];
+ }
+ if(cr&&c.id==='crane-column-brace-strength'){
+  const t=cr.ties;
+  if(close(t.columnTie,dem))return [`P_{br}=0.01P_r=0.01\\times${tx(cr.brace.Pr,'force')}=${tx(t.braceForce,'force')}\\quad(\\text{App. 6 \\S6.2.2})`,
+   `F_{tie}=H_b+\\frac{P_re}{H}+P_{br}=${tx(t.bottom,'force')}+${tx(t.eccentric,'force')}+${tx(t.braceForce,'force')}=${tx(dem,'force')}${rel.le}\\min(${lrfd?'\\phi':''}R_n)_{tie}=${tx(cap,'force')}\\quad ${rel.dc}`];
+ }
+ if(cr&&c.id==='crane-column-tie-bolts'&&p.craneColumn){
+  const n0=p.craneColumn.columnTie.bolts.count;
+  if(close(cr.ties.columnTie/n0,dem))return [`r_u=\\frac{F_{tie}}{n}=\\frac{${tx(cr.ties.columnTie,'force')}}{${n0}}=${tx(dem,'force')}${rel.le}${lrfd?'\\phi ':''}r_n=${lrfd?'\\phi ':''}F_{nv}A_b=${tx(cap,'force')}\\quad ${rel.dc}\\quad(\\text{J3.6, single shear on the sleeves})`];
+ }
+ if(cr&&c.id==='crane-column-tie-slot-travel'){
+  const v=cr.slot;
+  if(close(v.demand,dem)&&close(v.capacity,cap))return [`\\delta_c=\\frac{PL}{EA}=${tx(v.crane,'length')}\\ (\\text{crane column});\\quad \\delta_b=${tx(v.building,'length')}\\ (\\text{building column, existing L and roof live, snow or rain})`,
+   `\\max(\\delta_c,\\delta_b)+\\delta_t=${tx(Math.max(v.crane,v.building),'length')}+${tx(v.tolerance,'length')}=${tx(dem,'length')}${rel.le}\\frac{l_s-D_s}{2}=${tx(cap,'length')}\\quad ${rel.dc}`];
  }
  // End stop plies: AISC Manual Part 9 thickness for no prying under the front bolt tension.
  if((c.id==='end-stop-flange-prying'||c.id==='end-stop-base-prying')&&d){
