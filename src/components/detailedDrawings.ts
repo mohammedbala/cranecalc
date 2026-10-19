@@ -31,7 +31,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  if(connectionOptionChecks(p).length)return [];
  const f=(v:number)=>plateInches(v,p.units),force=(v:number)=>format(v,'force',p.units,2);
  // Drawing sheets that carry the matching details, e.g. "S-02" or "S-02, S-03".
- const sheetOf=detailSheetNumbers(s),sheets=(...keys:string[])=>[...new Set(keys.map(sheetOf))].join(', ');
+ const sheetOf=detailSheetNumbers(s),sheets=(...keys:string[])=>[...new Set(keys.flatMap(k=>sheetOf(k).split(', ')))].join(', ');
  const output:CadDrawing[]=[];
  {
  const k=260/p.section.d,b=p.section,bs=d.bearing,fork=girderEndFork(p),dr=new Draft(s,'bearing-detail','Girder bearing / flange-restraint section','SK-04',500,1/k,fork?'Column cap, new column, base and foundations: designed in this calculation. No top-flange tie: the end fork restrains the top flange.':tiedToBuilding(p)?'Column cap, crane column, base and foundations: designed in this calculation. Top flange: the girder tie to the existing building column (SK-06); the end fork is not relied on.':`${d.bracket?.enabled?'':'Building bracket, '}${d.bracket?.enabled?'Building frame':'frame'}, anchorage and foundations: by others.`);

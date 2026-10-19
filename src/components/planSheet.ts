@@ -660,12 +660,12 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
     ...Array.from({length:pages-1},(_,i)=>({...coverContinuation(i+1),name:`general-notes-continued-${i+1}-sheet-arch-d`,render:()=>covers()[i+1]})),...sheets];
 }
 /**
- * Sheet numbers ("S-xx") of the groups of details in the set by key (see detailTopics), for references
+ * Sheet numbers ("S-xx", or "S-05, S-06" for a group continued on the next sheet) of the groups of details in the set by key (see detailTopics), for references
  * outside the set such as the calculation report; a group not in the set reads "the drawings".
  */
 export function detailSheetNumbers(s:CalculationSnapshot,f:FramingSettings=defaultFraming){
   const sheets=new Map<string,string>();
-  if(!connectionOptionChecks(s.input).length&&!analysisOnly(s.input))packDetailSheets(detailTopics(s,f),s.input.units).forEach((l,i)=>{for(const t of l.topics)sheets.set(t.key,`S-${String(i+2).padStart(2,'0')}`);});
+  if(!connectionOptionChecks(s.input).length&&!analysisOnly(s.input))packDetailSheets(detailTopics(s,f),s.input.units).forEach((l,i)=>{const no=`S-${String(i+2).padStart(2,'0')}`;for(const t of l.topics){const was=sheets.get(t.key);if(!was?.split(', ').includes(no))sheets.set(t.key,was?`${was}, ${no}`:no);}});
   return (topic:string)=>sheets.get(topic)??'the drawings';
 }
 /**
