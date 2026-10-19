@@ -4,9 +4,14 @@ import type { ProjectInput, Properties } from './types';
 
 /** Capped-section flexure for one bending direction (AISC F4 or F5 by the Table B4.1b case 16 web class). Rpg is Rpc under F4. */
 export interface CapDirection {clause:'F4'|'F5';web:'compact'|'noncompact'|'slender';lambda:number;lambdaP:number;lambdaR:number;hc:number;hp:number;Mp:number;My:number;j:number;rt:number;Lp:number;Lr:number;Rpg:number;Rpt:number;Sc:number;Mn:number;
+ /** Nominal strength of the flange in tension: F4.4 R_pt M_yt (<= M_p), F5-10 F_y S_xt. */ tension:number;
  /** Nominal lateral-torsional buckling moment with Cb = 1 (F4-2/F4-3 or Rpg Fcr Sxc of F5), not capped by the yield limit states; undefined when Lb <= Lp. */ ltb?:number}
 export interface GirderStrength { /** Singly symmetric members: resistance to negative (hogging) moment, bottom flange in compression. */ majorReverse?:number; topMinor?:number; bottomMinor?:number; capDirections?:CapDirection[]; /** Capped: the Table B4.1b case 16 web classification that sets webRatio / webLimit. */ webCase?:CapDirection; k:number; h:number; flangeRatio:number; webRatio:number; flangeLimit:number; webLimit:number; compact:boolean; Lp:number; Lr:number; rts:number; major:number; netMoment:number; netLimitApplies:boolean; Yt:number; minor:number; flangeMinor:number; shear:number; compression:number; elasticAxial:number; axialArea:number; flexureBranch:string; Cv:number; shearPhi:number; shearOmega:number;
- /** Nominal lateral-torsional buckling moment with Cb = 1 (positive / negative moment), before the yield and net-section caps; undefined when Lb <= Lp. AISC applies Cb to it (F2-2, F4-2, F5-3). */ ltb?:number; ltbReverse?:number; }
+ /** Nominal lateral-torsional buckling moment with Cb = 1 (positive / negative moment), before the yield and net-section caps; undefined when Lb <= Lp. AISC applies Cb to it (F2-2, F4-2, F5-3). */ ltb?:number; ltbReverse?:number;
+ /** Available major-axis strength for the flange in TENSION (no lateral-torsional buckling, a compression-flange limit state):
+  * positive moment (W bottom flange in tension) and negative moment (top flange in tension). F2.1 yielding M_p of a W, F4.4
+  * tension-flange yielding R_pt M_yt of a capped section, each with the F13.1 net-section cap. Used by the H1 check of that flange. */
+ tensionMajor?:number; tensionMajorReverse?:number; }
 export const available=(nominal:number,method:ProjectInput['method'],phi:number,omega:number)=>method==='LRFD'?phi*nominal:nominal/omega;
 // AISC 360-16 B4, E3/E4/E7, F2/F6 and G2. Canonical units N, mm, MPa.
 // Cb=1.0; no tension field action, no rail composite action or stiffener credit.
@@ -43,7 +48,8 @@ export function girderStrength(p:ProjectInput,s:Properties):GirderStrength {
  const effective=(width:number,lambda:number,limit:number,c1:number,c2:number)=>lambda<=limit*Math.sqrt(Fy/Fcr)?width:width*(1-c1*Math.sqrt((c2*limit/lambda)**2*Fy/Fcr))*Math.sqrt((c2*limit/lambda)**2*Fy/Fcr);
  const be=Math.min(bf/2,Math.max(0,effective(bf/2,flangeRatio,flangeAxialLimit,.22,1.49))),he=Math.min(h,Math.max(0,effective(h,webRatio,webAxialLimit,.18,1.31)));
  const Ae=s.A-4*(bf/2-be)*tf-(h-he)*tw;
- const result:GirderStrength={ltb:Lb<=Lp?undefined:Mn,k,h,flangeRatio,webRatio,flangeLimit,webLimit,compact,Lp,Lr,rts,major:available(Math.min(grossMoment,netMn),p.method,.9,1.67),netMoment:available(netMn,p.method,.9,1.67),netLimitApplies,Yt,minor:available(Mny,p.method,.9,1.67),flangeMinor:available(flangeMn,p.method,.9,1.67),shear:available(.6*Fy*d*tw*Cv,p.method,shearPhi,shearOmega),compression:available(Fcr*Ae,p.method,.9,1.67),elasticAxial:Math.min(Fex,Fey)*s.A,axialArea:Ae,flexureBranch:branch,Cv,shearPhi,shearOmega};
+ const tensionMajor=available(Math.min(Mp,netMn),p.method,.9,1.67);
+ const result:GirderStrength={tensionMajor,tensionMajorReverse:tensionMajor,ltb:Lb<=Lp?undefined:Mn,k,h,flangeRatio,webRatio,flangeLimit,webLimit,compact,Lp,Lr,rts,major:available(Math.min(grossMoment,netMn),p.method,.9,1.67),netMoment:available(netMn,p.method,.9,1.67),netLimitApplies,Yt,minor:available(Mny,p.method,.9,1.67),flangeMinor:available(flangeMn,p.method,.9,1.67),shear:available(.6*Fy*d*tw*Cv,p.method,shearPhi,shearOmega),compression:available(Fcr*Ae,p.method,.9,1.67),elasticAxial:Math.min(Fex,Fey)*s.A,axialArea:Ae,flexureBranch:branch,Cv,shearPhi,shearOmega};
  return p.section.kind==='cap'?cappedStrength(p,s,result):result;
 }
 

@@ -35,12 +35,12 @@ export function cappedStrength(p:ProjectInput,s:Properties,base:GirderStrength):
    const ltbNominal=Lb<=Lp?undefined:Lb<=Lr?cfy-(cfy-FL*f.Sc)*(Lb-Lp)/(Lr-Lp):Math.PI**2*E/(Lb/rt)**2*Math.sqrt(1+.078*j*(Lb/rt)**2)*f.Sc;
    const ltb=Math.min(cfy,ltbNominal??Infinity);
    const tfy=f.St>=f.Sc?Infinity:Rpt*Myt;
-   return {clause:'F4' as const,web,lambda,lambdaP,lambdaR,hc:f.hc,hp:f.hp,Mp,My,j,rt,Lp,Lr,Rpg:Rpc,Rpt,Sc:f.Sc,Mn:Math.min(cfy,ltb,tfy),ltb:ltbNominal};
+   return {clause:'F4' as const,web,lambda,lambdaP,lambdaR,hc:f.hc,hp:f.hp,Mp,My,j,rt,Lp,Lr,Rpg:Rpc,Rpt,Sc:f.Sc,Mn:Math.min(cfy,ltb,tfy),ltb:ltbNominal,tension:Math.min(Mp,Rpt*Myt)};
   }
   const Lp=1.1*rt*root,Lr=Math.PI*rt*Math.sqrt(E/(.7*Fy));
   const aw=Math.min(10,f.hc*tw/f.A),Rpg=Math.min(1,1-aw/(1200+300*aw)*(f.hc/tw-5.7*root));
   const Fcr=Lb<=Lp?Fy:Lb<=Lr?Fy*(1-.3*(Lb-Lp)/(Lr-Lp)):Math.PI**2*E/(Lb/rt)**2;
-  return {clause:'F5' as const,web,lambda,lambdaP,lambdaR,hc:f.hc,hp:f.hp,Mp,My,j:0,rt,Lp,Lr,Rpg,Rpt:1,Sc:f.Sc,Mn:Math.min(Rpg*Math.min(Fy,Fcr)*f.Sc,Fy*f.St),ltb:Lb<=Lp?undefined:Rpg*Fcr*f.Sc};
+  return {clause:'F5' as const,web,lambda,lambdaP,lambdaR,hc:f.hc,hp:f.hp,Mp,My,j:0,rt,Lp,Lr,Rpg,Rpt:1,Sc:f.Sc,Mn:Math.min(Rpg*Math.min(Fy,Fcr)*f.Sc,Fy*f.St),ltb:Lb<=Lp?undefined:Rpg*Fcr*f.Sc,tension:Fy*f.St};
  });
  // Positive (sagging) moment puts the cap and W top flange in compression; negative moment the
  // W bottom flange. Simple spans see only positive moment; continuous runways envelope both signs,
@@ -73,7 +73,9 @@ export function cappedStrength(p:ProjectInput,s:Properties,base:GirderStrength):
  const netMn=netLimitApplies?Fu*net/gross*Math.min(cap.Stop,cap.Sbottom):governing.Mn,netCap=netLimitApplies?netMn:Infinity;
  const topMinor=resistance(Fy*cap.topS),bottomMinor=resistance(Fy*(tf*bf**2/6));
  return {...base,compact,flangeRatio,flangeLimit:.38*root,webRatio,webLimit,webCase,
-  major:resistance(Math.min(positive.Mn,netCap)),majorReverse:resistance(Math.min(negative.Mn,netCap)),ltb:positive.ltb,ltbReverse:negative.ltb,netMoment:resistance(netMn),netLimitApplies,Yt,
+  major:resistance(Math.min(positive.Mn,netCap)),majorReverse:resistance(Math.min(negative.Mn,netCap)),
+  // The flange in tension: F4.4 tension-flange yielding R_pt M_yt (F5-10 F_y S_xt of a slender web), with the F13.1 cap.
+  tensionMajor:resistance(Math.min(positive.tension,netCap)),tensionMajorReverse:resistance(Math.min(negative.tension,netCap)),ltb:positive.ltb,ltbReverse:negative.ltb,netMoment:resistance(netMn),netLimitApplies,Yt,
   Lp:governing.Lp,Lr:governing.Lr,rts:governing.rt,flangeMinor:Math.min(topMinor,bottomMinor),topMinor,bottomMinor,
   minor:resistance(Fy*s.Sy),compression:resistance(Fcr*s.A*areaFactor),axialArea:s.A*areaFactor,elasticAxial:Fe*s.A,
   flexureBranch:`${p.system==='continuous'?`positive moment ${positive.clause} (web ${positive.web}), negative moment ${negative.clause} (web ${negative.web}), by the sign of the moment at each station`:`${positive.clause} (web ${positive.web}, Table B4.1b case 16): positive moment, cap and W top flange in compression (simple spans)`}; ${occurring.some(v=>v.clause==='F4')?'F4.1 compression flange yielding (Rpc), F4.2 LTB, F4.4 tension flange yielding (Rpt)':''}${occurring.some(v=>v.clause==='F5')?'F5 with Rpg (slender web)':''}; Cb=1; E4-3/E7 axial`,
