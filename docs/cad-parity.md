@@ -135,6 +135,6 @@ and accessible panels (labels, focus order, keyboard reachable).
 | 4 Annotation | done: `src/cad/annotation.ts`, `src/cad/annotateCommands.ts`, `src/cad/StylesDialog.tsx`; tests in `tests/cadAnnotation.test.ts`; the ribbon replaced the vertical tool bar |
 | 5 Blocks | done: `src/cad/blocks.ts`, `src/cad/blockLibrary.ts`, `src/cad/blockCommands.ts`; tests in `tests/cadBlocks.test.ts`. References scale uniformly (with a mirror flag), as most drafting blocks do; WBLOCK arrives with DXF interchange |
 | 6 Layouts | done: `src/cad/layout.ts`, `src/cad/layoutCommands.ts`, `src/cad/pdf.ts`; tests in `tests/cadLayout.test.ts`. One layout per sheet (the sheet itself); several layouts per drawing are not needed by the sheet set |
-| 7 Interchange | planned |
+| 7 Interchange | done: `src/cad/dxf.ts` (writer), `src/cad/dxfImport.ts` (reader), `src/cad/interchangeCommands.ts` (IMPORT, WBLOCK); tests in `tests/cadDxf.test.ts` with `tests/fixtures/cad/ezdxf-sample.dxf`. DWG not bundled (GPL), as planned |
 | 8 Associativity | planned |
 | 9 Performance and UX | planned |

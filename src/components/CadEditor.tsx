@@ -4,7 +4,7 @@ import {
  MoveHorizontal,MousePointer2,Plus,Redo2,RectangleHorizontal,RotateCw,Ruler,Scaling,Scissors,SlidersHorizontal,Spline,TriangleAlert,Type,
  Undo2,Ungroup,Waypoints,X,Slash,Egg,Activity,Hexagon,MoveDiagonal,CornerDownRight,Diamond,StretchHorizontal,Grid3x3,RotateCcw,Unlink,Link,MoveRight,
  AlignHorizontalJustifyStart,PenLine,Paintbrush,PaintBucket,Scan,Combine,Blocks,AlignLeft,CaseSensitive,Triangle,Radius,Diameter,Milestone,Rows3,Columns3,Settings2,
- MessageSquareText,MessageSquare,Table,Cloud,Palette,Waves,Box as BoxIcon,Tag,Tags,PencilRuler,Library,FileInput,Box as Box3,FileText,Frame,Ratio,Printer,
+ Upload,MessageSquareText,MessageSquare,Table,Cloud,Palette,Waves,Box as BoxIcon,Tag,Tags,PencilRuler,Library,FileInput,Box as Box3,FileText,Frame,Ratio,Printer,
 } from 'lucide-react';
 import {
  DEG,add,angleOf,bbox,curveLength,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,lineTypes,nearest,parseLength,
@@ -21,10 +21,13 @@ import {insertCmd} from '../cad/blockCommands';
 import {attdefsOf,setXrefResolver} from '../cad/blocks';
 import {modelDoc,modelExtents,scaleLabel,scalesFor,withModel} from '../cad/layout';
 import {docToPdf,pdfBytes,type PlotOptions} from '../cad/pdf';
+import {writeDxf} from '../cad/dxf';
+import {readDxf} from '../cad/dxfImport';
+import {importCmd} from '../cad/interchangeCommands';
 import {dimValue,standardDimStyle} from '../cad/annotation';
 import {StylesDialog} from '../cad/StylesDialog';
 import {expandGroups,fenceSelect,propValue,quickSelect,type QuickProp,type QuickSpec} from '../cad/select';
-import {docToDxf,docToSvg} from '../cad/convert';
+import {docToSvg} from '../cad/convert';
 import {cadPersistent,deleteCadRecord,saveCadRecord,type CadRecord} from '../cad/storage';
 import '../cad/cad.css';
 
@@ -237,7 +240,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   zoomExtents,zoomWindow:(a,b)=>zoomTo([Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])],1.02),
   openPanel:p=>setPanel(v=>({...v,[p==='layers'?'layers':'props']:true})),length:lengthText,
   vars:vars.current,lastWindow:()=>lastWindow.current,
-  editBlock,closeBlock,blockEditing:()=>blockEdit.current?.name,editAttributes:id=>{store.select([id]);setPanel(v=>({...v,props:true}));say('Edit the attribute values in Properties.');},
+  editBlock,closeBlock,blockEditing:()=>blockEdit.current?.name,download:(name,content,type)=>download(new Blob([content],{type}),name),editAttributes:id=>{store.select([id]);setPanel(v=>({...v,props:true}));say('Edit the attribute values in Properties.');},
  };
  const selPrompt=()=>{const m=selMode.current,n=active.current!.name;
   if(m?.kind==='W'||m?.kind==='C')return `${n} Specify ${m.pts.length?'opposite':'first'} corner (${m.kind==='W'?'window':'crossing'}):`;
@@ -270,6 +273,8 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(name==='MSPACE'){toModel();return;}
   if(name==='PSPACE'){toLayout();return;}
   if(name==='PLOT'){setPlot(true);return;}
+  if(name==='IMPORT'){fileRef.current?.click();return;}
+  if(name==='DXFOUT'){dxfOut();return;}
   const cmd=makeCommand(name,env);if(!cmd){say(`Unknown command "${raw.trim()}". Press F1 for the command list.`);return;}
   lastCommand.current=name;active.current=cmd;lastWindow.current=undefined;
   if(cmd.selectFirst){if(store.selection.size)beginOn(cmd);else selecting.current=true;}
@@ -449,6 +454,13 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  // ---- property edits ----
  const selected=store.selected();
  function putEnt(e:Ent,label='Properties'){store.commit(label,{put:[e]});schedule(true);}
+ /** The drawing (the layout with its model space) as a full DXF. */
+ function dxfOut(){const d=space.current?withModel(space.current.saved.doc,store.doc):store.doc;download(new Blob([writeDxf(d,{k:d.unit==='unit'?d.realPerUnit/(d.display==='US'?25.4:1):1})],{type:'application/dxf'}),`${d.key}${edited?'-edited':''}.dxf`);}
+ const fileRef=useRef<HTMLInputElement>(null);
+ async function importFile(f:File){
+  try{const r=readDxf(await f.text());if(active.current||grip.current)endCommand(false);active.current=importCmd(env,r,f.name);lastCommand.current=null;say(`Command: IMPORT ${f.name}`);refresh();schedule();setTimeout(()=>cmdRef.current?.focus(),0);}
+  catch(err){say(`${f.name} could not be read as DXF (${err instanceof Error?err.message:'error'}).`);}
+ }
  function applyTextEdit(){
   const t=textEdit!,ent=store.get(t.id);
   if(ent?.type==='text'&&t.value.trim())putEnt({...ent,value:t.value},'Edit text');
@@ -497,6 +509,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   {tab:'Insert',panels:[
    {name:'Block',tools:[['INSERT','Insert a block (I)',I(Blocks)],['BLOCK','Create a block from the selection (B)',I(BoxIcon)],['ATTDEF','Define an attribute (ATT)',I(Tag)],['BEDIT','Edit a block (BE)',I(PencilRuler)],['ATTEDIT','Edit attributes',I(Tags)],['BLOCKSPALETTE','Blocks palette: drawing and library blocks',I(Library)]]},
    {name:'Reference',tools:[['XATTACH','Attach another drawing of the project as a reference (XA)',I(FileInput)],['XBIND','Bind references into the drawing',I(Link)]]},
+   {name:'Interchange',tools:[['IMPORT','Import a DXF as a block or objects',I(Upload)],['WBLOCK','Write the selection to a DXF (W)',I(Download)]]},
   ]},
   {tab:'Layout',panels:[
    {name:'Spaces',tools:[['MSPACE','Model space (MS)',I(Box3)],['PSPACE','Layout (PS)',I(FileText)]]},
@@ -523,7 +536,8 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
     <button title="Zoom extents (Z E, double-click the wheel)" onClick={zoomExtents}><Maximize2 size={15}/></button>
     <button title="Pan (or drag with the middle button)" aria-pressed={panMode} className={panMode?'on':''} onClick={()=>setPanMode(v=>!v)}><Hand size={15}/></button>
     <span className="cad-sep"/>
-    <button onClick={()=>download(new Blob([docToDxf(store.doc)],{type:'application/dxf'}),`${doc.key}${edited?'-edited':''}.dxf`)}><Download size={14}/>DXF</button>
+    <button title="The drawing as a DXF (AutoCAD 2000) with its layers, styles, blocks and layout" onClick={dxfOut}><Download size={14}/>DXF</button>
+    <button title="Import a DXF into this drawing (IMPORT)" onClick={()=>run('IMPORT')}><Upload size={14}/>Import</button>
     <button onClick={()=>download(new Blob([docToSvg(store.doc)],{type:'image/svg+xml'}),`${doc.key}${edited?'-edited':''}.svg`)}><Download size={14}/>SVG</button>
     <button disabled={!edited&&!store.canUndo} onClick={revert}>Revert to generated</button>
     <span className="cad-sep"/>
@@ -544,6 +558,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   <div className="cad-body">
    <div className="cad-canvas" ref={wrapRef}>
     <canvas ref={sceneRef} aria-hidden="true"/>
+    <input ref={fileRef} type="file" accept=".dxf,application/dxf,image/vnd.dxf" hidden aria-label="DXF file to import" onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void importFile(f);}}/>
     <canvas ref={overlayRef} className={panMode||pan.current?'panning':''} data-testid="cad-canvas" onPointerDown={onPointerDown} onMouseDown={e=>e.preventDefault()} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
      onPointerLeave={()=>{cursor.current={...cursor.current,screen:undefined};hover.current=undefined;schedule();}} onDoubleClick={onDoubleClick} onAuxClick={onAuxClick} onContextMenu={e=>e.preventDefault()}/>
     {textEdit&&<div className="cad-text-edit" style={{left:Math.min(textEdit.x,view.current.w-300),top:Math.max(4,textEdit.y-(textEdit.multi?96:44))}}>

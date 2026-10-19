@@ -10,6 +10,7 @@ import {annotateCommands,annotateNames,currentDimStyle,styleHeight} from './anno
 import {textStyleOf} from './annotation';
 import {blockCommands,blockNames} from './blockCommands';
 import {layoutCommands,layoutNames} from './layoutCommands';
+import {interchangeCommands,interchangeNames} from './interchangeCommands';
 export type {Command,Env,Preview} from './cmdkit';
 
 // ---- draw --------------------------------------------------------------------------------------------------------
@@ -221,9 +222,9 @@ export const commandNames:Record<string,string>={
  E:'ERASE',ERASE:'ERASE',X:'EXPLODE',EXPLODE:'EXPLODE',O:'OFFSET',OFFSET:'OFFSET',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',
  DI:'DIST',DIST:'DIST',Z:'ZOOM',ZOOM:'ZOOM',U:'UNDO',UNDO:'UNDO',REDO:'REDO',LA:'LAYER',LAYER:'LAYER',PR:'PROPERTIES',CH:'PROPERTIES',PROPERTIES:'PROPERTIES',
  OS:'OSNAP',OSNAP:'OSNAP',BLOCKSPALETTE:'BLOCKSPALETTE',DS:'OSNAP',DSETTINGS:'OSNAP',QSELECT:'QSELECT',FILTER:'QSELECT',FI:'QSELECT',
- ...drawNames,...modifyNames,...selectNames,...annotateNames,...blockNames,...layoutNames,
+ ...drawNames,...modifyNames,...selectNames,...annotateNames,...blockNames,...layoutNames,...interchangeNames,
 };
-/** A command by its full name, or undefined for UNDO, REDO, LAYER, PROPERTIES, OSNAP, QSELECT, STYLE, DIMSTYLE, BEDIT, BCLOSE, ATTEDIT, MSPACE, PSPACE and PLOT, which the editor runs directly. */
+/** A command by its full name, or undefined for UNDO, REDO, LAYER, PROPERTIES, OSNAP, QSELECT, STYLE, DIMSTYLE, BEDIT, BCLOSE, ATTEDIT, MSPACE, PSPACE, PLOT, IMPORT and DXFOUT, which the editor runs directly. */
 export function makeCommand(name:string,env:Env):Command|undefined{
  switch(name){
   case 'LINE':return lineCmd(env);case 'PLINE':return plineCmd(env);case 'RECTANG':return rectCmd(env);case 'CIRCLE':return circleCmd(env);
@@ -232,7 +233,7 @@ export function makeCommand(name:string,env:Env):Command|undefined{
   case 'MIRROR':return mirrorCmd(env);case 'ERASE':return eraseCmd(env);case 'EXPLODE':return explodeCmd(env);case 'OFFSET':return offsetCmd(env);
   case 'TRIM':return trimCmd(env,false);case 'EXTEND':return trimCmd(env,true);case 'DIST':return distCmd(env);case 'ZOOM':return zoomCmd(env);
  }
- return drawCommands[name]?.(env)??modifyCommands[name]?.(env)??selectCommands[name]?.(env)??annotateCommands[name]?.(env)??blockCommands[name]?.(env)??layoutCommands[name]?.(env);
+ return drawCommands[name]?.(env)??modifyCommands[name]?.(env)??selectCommands[name]?.(env)??annotateCommands[name]?.(env)??blockCommands[name]?.(env)??layoutCommands[name]?.(env)??interchangeCommands[name]?.(env);
 }
 /** Default text and dimension heights: 1/8 in or 2.5 mm on a sheet; sketches by their own text. */
 export function defaultHeights(doc:CadDoc){

@@ -168,3 +168,18 @@ test('layouts: model space, a viewport at scale, and plotting to PDF',async({pag
  expect(pdf.startsWith('%PDF-1.4')).toBe(true);expect(pdf).toContain('(BAY A) Tj');expect(pdf).toContain('/MediaBox [0 0 2592 1728]');
  expect(errors).toEqual([]);
 });
+
+test('interchange: import a DXF as a block, export the drawing as DXF',async({page})=>{
+ const errors=watch(page);
+ const {type,objects}=await openEditor(page);
+ const start=await objects();
+ await page.getByLabel('DXF file to import').setInputFiles('tests/fixtures/cad/ezdxf-sample.dxf');
+ await expect(page.locator('.cad-cmd span')).toContainText('IMPORT ezdxf-sample.dxf');
+ await type('B','10,10');
+ await expect(page.locator('.cad-log')).toContainText('imported as block EZDXF-SAMPLE');
+ expect(await objects()).toBe(start+1);
+ const dxf=page.waitForEvent('download');await page.getByRole('button',{name:'DXF',exact:true}).click();
+ const text=await fs.readFile((await (await dxf).path())!,'utf8');
+ expect(text).toContain('AC1015');expect(text).toContain('EZDXF-SAMPLE');expect(text).toContain('\nINSERT\n');
+ expect(errors).toEqual([]);
+});
