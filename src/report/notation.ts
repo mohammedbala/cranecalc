@@ -22,7 +22,7 @@ export const notationGroups:[string,Entry[]][]=[
   ['f_{un}','Total normal stress, factored loads, including warping'],['f_{uv}','Total shear stress, factored loads, including torsion'],
   ['\\Delta_r','Lateral movement of the rail head'],['\\Delta_o','Lateral deflection at the shear center']]],
  ['Serviceability and fit',[
-  ['\\Delta_v','Vertical deflection, one crane, static wheel loads'],['\\Delta_h','Lateral deflection of the top flange, one crane'],['t_{set}','Setting tolerance (TR-13 §5.18)']]],
+  ['\\Delta_v','Vertical deflection, one crane, static wheel loads'],['\\Delta_h','Lateral deflection of the top flange, one crane'],['t_{set}','Setting tolerance (TR-13 §5.18)'],['t_{fab}','Fabrication tolerance on hole and part location (AISC Code of Standard Practice §6.4)']]],
  ['Fatigue (unfactored duty-bin loads)',[
   ['f_{max}','Largest stress under the unfactored fatigue loads'],['f_{min}','Smallest stress under the unfactored fatigue loads'],
   ['f_{sr,i}','Stress range of duty bin i; F<sub>SR,i</sub> is the allowable range at its n<sub>i</sub> cycles'],
