@@ -18,7 +18,7 @@ import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
 
 const kip=4448.221615,inch=25.4,foot=304.8;
 const existingProject=()=>{const p=designProject();p.existingColumn={...structuredClone(defaultExistingColumn),enabled:true,confirmed:true,source:'Unit test'};p.existingColumn.existing.D={P:50*kip,Mx:0,My:0,V:0};return p;};
-const building=():CraneColumnInput['building']=>({...structuredClone(defaultExistingColumn),enabled:true,height:30*foot,seatElevation:20*foot,source:'Unit test survey',confirmed:true});
+const building=():CraneColumnInput['building']=>({...structuredClone(defaultExistingColumn),enabled:true,height:30*foot,seatElevation:20*foot,Lcx:30*foot,source:'Unit test survey',confirmed:true});
 const tie:CraneColumnInput['columnTie']={plate:{thickness:.75*inch,width:8*inch,Fy:345,Fu:448},bolts:{count:4,diameter:.875*inch,grade:'A325',pitch:3*inch,edge:1.5*inch},slot:{length:2.5*inch,width:15/16*inch}};
 const plates=(shape:string)=>{const w=aiscShapeByName(shape)!;return {shape,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch};};
 /** A new W14X120 crane column on its cap, tied to an existing W14X90 at `offset`. */
@@ -27,6 +27,8 @@ function craneProject(offset:number){
  p.details!.bracket!.enabled=false;p.columnCap={enabled:true,plate:{length:26*inch,width:16*inch,thickness:1.5*inch},weld:5/16*inch,stiffener:{thickness:.75*inch,height:8*inch,weld:5/16*inch}};
  c.strong={base:'pinned',top:'braced'};
  p.craneColumn={enabled:true,offset,building:building(),columnTie:tie,base:'pinned',source:'Unit test'};
+ // The girder tie ends at the building column face (validateCraneColumn, WP-1).
+ const f=p.details!.brace.flangeAttachment;if(f)f.columnFace=offset-plates('W14X90').d/2;
  return p;
 }
 const snapshotOf=(input:ProjectInput)=>({input,checks:[],errors:[],warnings:[]} as unknown as CalculationSnapshot);
@@ -66,7 +68,7 @@ describe('crane column tied to the building: contracts (WP-0)',()=>{
   const q=craneProject(offset);q.craneColumn!.base='fixed';q.details!.bracket!.enabled=true;q.craneColumn!.building.isNew=true;
   const e=validateCraneColumn(q).join(' ');
   expect(e).toMatch(/craneColumn\.base: /);expect(e).toMatch(/not on a bracket/);expect(e).toMatch(/building\.isNew/);
-  // The stub keeps any crane-column project from being issued until WP-1 implements it.
+  // Without the crane column's own analysis the arrangement is not analysed (WP-1 replaces the stub otherwise).
   const s=snapshotOf(p);craneColumnCalculation(s);
   expect(s.checks).toMatchObject([{id:'crane-column-basis',status:'unsupported'}]);expect(classifyCheck(s.checks[0]).rule).toBe('id');
   const t=snapshotOf(existingProject());craneColumnCalculation(t);expect(t.checks).toEqual([]);
@@ -133,7 +135,7 @@ describe('configurator rules for the new supports (WP-0)',()=>{
   expect(s.config.reach).toBeUndefined();expect(s.config.support).toBe('stepped-column');expect(s.changes[0]).toMatch(/reach comes from the column geometry/);
   expect(normalizeConfig({...defaultRunwayConfig,structure:'existing',support:'crane-column',reach:24}).changes).toEqual([]);
  });
- it('does not build them yet: a clear error, not another arrangement',()=>{
-  for(const support of ['crane-column','stepped-column'] as const)expect(()=>buildProject({...defaultRunwayConfig,structure:'existing',support})).toThrow(/does not build the .* support yet/);
+ it('does not build the stepped column yet: a clear error, not another arrangement',()=>{
+  for(const support of ['stepped-column'] as const)expect(()=>buildProject({...defaultRunwayConfig,structure:'existing',support})).toThrow(/does not build the .* support yet/);
  });
 });

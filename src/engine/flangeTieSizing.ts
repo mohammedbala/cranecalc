@@ -44,6 +44,9 @@ import {validateRunwayDetails} from './detailValidation';
 import {bracketSizingSet} from './bracketSizing';
 import {createBracketCollector} from './bracketDesign';
 import {createRolledBracketCollector} from './rolledBracket';
+import {tiedToBuilding} from './craneColumnInputs';
+import {activeColumnCap} from './columnCapInputs';
+import {craneColumnRestraint} from './craneColumn';
 
 const inch=25.4,sixteenth=inch/16,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step;
 
@@ -191,7 +194,9 @@ export function tieSizingRatios(p:ProjectInput,demand=tieSizingDemands(p)):Recor
   // The single plate's single-shear laps, or the paired bars' double-cover connection.
   ...(plate?plateTieChecks(s,{force,cos:brace.cos,member:brace.member}):lapChecks(p,d.brace.connection,'tie','Flange tie connection',force,0,d.brace.gussetThickness,d.material.Fy,d.material.Fu))])put(c);
  ratios['brace-member']=demand.force/brace.capacity;
- ratios['brace-stiffness']=demand.braceStiffness/secantStiffness(brace.stiffness,restraintClearances(p).top.gap,demand.braceForce);
+ // A crane column tied to the building: the tie in series with the building column at the tie (craneColumnRestraint).
+ const restraint=tiedToBuilding(p)&&activeColumnCap(p)?craneColumnRestraint(p,brace.stiffness,0).top:brace.stiffness;
+ ratios['brace-stiffness']=demand.braceStiffness/secantStiffness(restraint,restraintClearances(p).top.gap,demand.braceForce);
  const g=flangeTieGeometry(p);
  if(g){
   const a=g.attachment,cycles=p.details!.spectrum.reduce((n,v)=>n+v.cycles,0),category=a.saddleLength<2*inch?'C':a.saddleLength<=Math.min(12*a.saddleThickness,4*inch)?'D':a.saddleThickness<=.8*inch?'E':'E1';
@@ -518,13 +523,15 @@ const saddleRatio=(k:string)=>k.startsWith('flange-tie-')||k==='plate-tie-keeper
  * validate and their sized ratios exceed their limits by no more in total than the saddle's (a column face held by a
  * configured reach can leave the shorter bars too stiff for the end movement); else undefined.
  */
-export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCycle?:string;bracket?:NonNullable<ProjectInput['details']>['bracket'];face?:number}={}){
+export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCycle?:string;bracket?:NonNullable<ProjectInput['details']>['bracket'];face?:number;
+ /** A further reason to prefer the stiffener tie (e.g. a crane column: the tie on the flexible building column), stated as given. */
+ prefer?:string}={}){
  if(p.section.kind==='cap'||p.system!=='simple'||!flangeTieGeometry(p))return undefined;
  const ratios=tieSizingRatios(p),over=Object.entries(ratios).filter(([k,v])=>saddleRatio(k)&&v>sizingLimit(ratios,k)+1e-9).sort((a,b)=>b[1]-a[1]);
  // Any other check the sized saddle tie still fails (the imposed movement on a held reach, a plate's H1 sum): the
  // stiffener tie is tried too, and kept only where it exceeds its limits by less.
  const failing=Object.entries(ratios).filter(([k,v])=>!saddleRatio(k)&&v>1+1e-9).sort((a,b)=>b[1]-a[1]);
- if(!over.length&&!opts.highCycle&&!failing.length)return undefined;
+ if(!over.length&&!opts.highCycle&&!opts.prefer&&!failing.length)return undefined;
  const q=structuredClone(p),qd=q.details!,t=qd.brace;
  if(opts.bracket)qd.bracket=structuredClone(opts.bracket);
  if(t.arrangement==='flexible-plate'){t.arrangement='paired-bars';delete t.referenceDetail;}
@@ -536,6 +543,6 @@ export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCyc
  if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||excess(tieSizingRatios(q))>excess(ratios)+1e-9)return undefined;
  const why=[...(over.length?[`the sized saddle leaves ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
   ...(!over.length&&failing.length?[`the sized saddle tie leaves ${failing.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
-  ...(opts.highCycle?[`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (${opts.highCycle})`]:[])].join('; ');
+  ...(opts.highCycle?[`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (${opts.highCycle})`]:[]),...(opts.prefer?[opts.prefer]:[])].join('; ');
  return {details:q.details!,why};
 }

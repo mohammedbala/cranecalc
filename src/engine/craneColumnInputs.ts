@@ -55,3 +55,9 @@ export type CraneColumnInput=z.infer<typeof craneColumnSchema>;
 export const tiedToBuilding=(p:ProjectInput)=>!!(p.craneColumn?.enabled&&p.existingColumn?.enabled);
 /** The reactions the crane column itself carries: the side thrust removed where the runway is tied to the building. */
 export const craneColumnReactions=(p:ProjectInput,r:SupportReactionSet):SupportReactionSet=>tiedToBuilding(p)?{...r,supports:r.supports.map(s=>({...s,Css:0}))}:r;
+/**
+ * The column the girder top-flange tie lands on (its receiving flange, web and height for the tie's column-end checks):
+ * the building column where the runway is tied to the building, its girder seat taken at the crane column's (one datum,
+ * the crane-column base), else the supporting column itself.
+ */
+export const tieColumn=(p:ProjectInput)=>tiedToBuilding(p)?{...p.craneColumn!.building,enabled:true,isNew:false,seatElevation:p.existingColumn!.seatElevation}:p.existingColumn;

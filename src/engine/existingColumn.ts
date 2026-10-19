@@ -75,8 +75,9 @@ export function validateExistingColumn(p:ProjectInput):string[]{
  add(!!c.isNew&&existingLoadKeys.some(k=>Object.values(c.existing[k]).some(v=>v!==0)),'existing: a new freestanding runway column carries no existing building loads; check a column that does as an existing column.');
  add(c.Fu<c.Fy,'Fu: ultimate strength cannot be less than yield strength.');
  add(!!c.shape&&!p.details?.bracket?.enabled&&!aiscShapeByName(c.shape),'shape: select an AISC W shape or clear it to use entered plates.');
- // A freestanding column (free top) may carry the girder on its cap, with the rail above the column top.
- const freestanding=c.strong.top==='free';
+ // A freestanding column (free top) may carry the girder on its cap, with the rail above the column top; so may a crane
+ // column tied to the building, whose column tie braces it at the cap (craneColumn.ts).
+ const freestanding=c.strong.top==='free'||tiedToBuilding(p);
  add(c.seatElevation>c.height+1e-6||(!freestanding&&c.seatElevation>=c.height),'seatElevation: the bracket seat must be below the column top support.');
  add(!freestanding&&existingColumnRailElevation(p)>=c.height,'height: the rail head must be below the column top support.');
  // The drawings take an existing column's rail elevation from its surveyed seat, so an entered top of rail must agree.
@@ -160,7 +161,15 @@ export interface ColumnSupportResult {
  gauge:{crane:number;frame?:number;total:number;snowFactor?:number};
  combinations:{asce:number;tr13:number;bumper:number};
 }
-export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionSet):ExistingColumnResult{
+/**
+ * Options of a second column analysed with this model (the building column of a crane-column arrangement, craneColumn.ts):
+ * `seismicReactions`, the reactions whose runway and crane masses give the runway's seismic force across the runway at
+ * the column (default `reactions`: a column that carries the girder vertically); `lateral`, further factored horizontal
+ * forces across the runway at their elevations (the Appendix 6 brace forces delivered by the ties), each applied with its
+ * full value in every combination with crane load and added to the peak moment and shear by magnitude.
+ */
+export interface ExistingColumnOptions {seismicReactions?:SupportReactionSet;lateral?:{x:number;force:number}[];}
+export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionSet,opts:ExistingColumnOptions={}):ExistingColumnResult{
  const c=p.existingColumn!,{section,source}=existingColumnSection(p),props:Properties=sectionProperties(section),E=section.E;
  const longitudinal=c.longitudinal==='column'?reactions.Cls:0;
  const e=existingColumnEccentricity(p),hs=c.seatElevation,ht=existingColumnRailElevation(p);
@@ -185,6 +194,9 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  const capacity={Pc:s.compression,Pt:available(section.Fy*props.A,p.method,.9,1.67),Mcx:McxF13,Mcy:s.minor,Vc:s.shear,flexure:`${s.flexureBranch}${s.flangeRatio>s.flangeLimit?' with F3 flange local buckling':''}${McxF13<Mcx?'; F13-1 tension flange rupture at the tie bolt holes':''}; Cb = 1.0`,webCompact};
  const alpha=p.method==='LRFD'?1:1.6,Pex=Math.PI**2*E*props.Ix/c.Lcx**2,Pey=Math.PI**2*E*props.Iy/c.Lcy**2;
  // Seismic force across the runway at the girder's mid-depth (new freestanding columns only).
+ // Further lateral forces at their elevations: the peak moment and shear of each unit force (a braced top or a sway frame).
+ const extra=(opts.lateral??[]).filter(v=>v.force).map(v=>{const r=columnResponse(c.height,E*props.Ix,c.strong,[{x:Math.min(v.x,c.height),force:1}]);return {force:Math.abs(v.force),moment:Math.max(...r.samples.map(s=>Math.abs(s.moment))),shear:Math.max(...r.samples.map(s=>Math.abs(s.shear)))};});
+ const extraPeak=(key:'moment'|'shear',fL:number)=>fL?extra.reduce((a,v)=>a+v.force*v[key],0):0;
  const basis=acrossRunwaySeismic(p),hg=seismicHeight(p),sideE=basis?columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,hg)],[hs]):undefined,columnWeight=props.weight*c.height,ownWeight=c.isNew?columnWeight:0;
  // The eccentric reaction sampled at the same stations as the seismic force.
  const eccentricE=basis?columnResponse(c.height,E*props.Ix,c.strong,[{x:hs,moment:1}],[Math.min(hg,c.height)]):undefined;
@@ -237,17 +249,17 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
   // TR-13 supporting-structure forms take the crane dead load with the dead-load factor (cd), the rest of the crane with L.
   const runway=f.D*dead+(cd===undefined?f.L*live:cd*support.Cd+f.L*(live-support.Cd)),bc=brace(`${p.method} ${k.id}`);
   // Runway seismic force across the runway at the column with E (site seismic data): the runway and crane masses here.
-  const Eside=site&&f.E?Math.abs(f.E)*site.across*(dead+support.Cd+(site.input.liftedLoadSecured?support.Cv:0)):0;
+  const mass=opts.seismicReactions?.supports[j]??support,Eside=site&&f.E?Math.abs(f.E)*site.across*(mass.D+mass.Cd+(site.input.liftedLoadSecured?mass.Cv:0)):0;
   // Existing moments are added to the crane peak at its governing section: conservative superposition of maxima.
   // A new column carries its own weight to the base (an existing column's is in its entered dead load).
   const P=existing('P',false)+runway+f.D*ownWeight+(bc&&share?bc.H*share.vertical:0);
-  const Mx=combinedPeak(eccentric.samples,side.samples,'moment',runway*e,f.L*lateral+Eside)+existing('Mx',true);
-  const V=combinedPeak(eccentric.samples,side.samples,'shear',runway*e,f.L*lateral+Eside)+existing('V',true);
+  const Mx=combinedPeak(eccentric.samples,side.samples,'moment',runway*e,f.L*lateral+Eside)+existing('Mx',true)+extraPeak('moment',f.L);
+  const V=combinedPeak(eccentric.samples,side.samples,'shear',runway*e,f.L*lateral+Eside)+existing('V',true)+extraPeak('shear',f.L);
   const F=locating.has(j)?Math.abs(f.L)*Cls:0;
   const My=f.L*longitudinal*alongMoment+existing('My',true)+Math.abs(runway)*ex+reviewMy(seatCase(f.D,f.L,cd??f.L,f.L),F);
   const amplify=(Pe:number)=>P<=0?1:alpha*P>=Pe?Infinity:1/(1-alpha*P/Pe),B1x=amplify(Pex),B1y=amplify(Pey);
   // Sway frame with the entered B2 (AISC Appendix 8): B1 on the gravity part, B2 on the lateral part (side thrust, W, E).
-  const Mxr=sway===undefined?B1x*Mx:B1x*(combinedPeak(eccentric.samples,side.samples,'moment',runway*e,0)+existing('Mx',true,nonSway))+sway*(combinedPeak(eccentric.samples,side.samples,'moment',0,f.L*lateral+Eside)+existing('Mx',true,['W','E']));
+  const Mxr=sway===undefined?B1x*Mx:B1x*(combinedPeak(eccentric.samples,side.samples,'moment',runway*e,0)+existing('Mx',true,nonSway))+sway*(combinedPeak(eccentric.samples,side.samples,'moment',0,f.L*lateral+Eside)+existing('Mx',true,['W','E'])+extraPeak('moment',f.L));
   const ratio=P>=0?P/capacity.Pc:-P/capacity.Pt,flex=Mxr/capacity.Mcx+B1y*My/capacity.Mcy;
   const U=Number.isFinite(flex)?(ratio>=.2?ratio+8/9*flex:ratio/2+flex):1e12;
   const row={id:`${p.method} ${k.id}${split?` (${split==='Css'?'side thrust, no impact':'impact, no side thrust'})`:''}`,equation:k.equation,P,Mx:Mxr,My:B1y*My,V,B1x,B1y,U};
@@ -377,7 +389,7 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult,opts:
  const add=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,caseId?:string)=>checks.push({id:'column-'+id,group:label,title,demand,capacity,quantity,utilization:demand/capacity,status:Number.isFinite(demand)&&demand<=capacity*(1+1e-9)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(demand/capacity).toFixed(4)}`,note,caseId,referenceIds:refs});
  const mk=(id:string,title:string,demand:number,capacity:number,quantity:CheckResult['quantity'],equation:string,note:string,caseId?:string):CheckResult=>({id:'column-'+id,group:label,title,demand,capacity,quantity,utilization:demand/capacity,status:Number.isFinite(demand)&&demand<=capacity*(1+1e-9)?'pass':'fail',equation,substitution:`\\frac{${latexNumber(demand)}}{${latexNumber(capacity)}}=${(demand/capacity).toFixed(4)}`,note,caseId,referenceIds:refs});
  const g=r.governing,crane=`Support x=${format(r.station,'length',u,3)}: runway dead ${format(r.crane.dead,'force',u,3)}, crane and runway live ${format(r.crane.live,'force',u,3)} (Cd+Cv+Ci+L), side thrust ${format(r.crane.lateral,'force',u,3)}${r.crane.longitudinal?`, longitudinal ${format(r.crane.longitudinal,'force',u,3)}`:''}; eccentricity ${format(r.eccentricity,'length',u,3)}${p.details?.bracket?.enabled&&!activeColumnCap(p)?(p.existingColumn?.isNew?` (the girder web line plus ${format(columnReactionOffset(p),'length',u,3)}, the larger of the rail eccentricity and the bearing plate's kern b/6: a full-contact bearing under the web's bearing stiffeners)`:' (to the far edge of the bearing plate)'):''}; rail head ${format(r.railElevation,'length',u,3)} above base. Crane loads are live load L (ASCE 7 §4.9).`;
- if(c.isNew)checks.push({id:'column-basis',group:label,title:'New column · section and loads',status:'pass',equation:'',note:`New ${r.source} column designed here for the crane and runway reactions only; it carries no existing building loads. Base plate, anchor rods and footing: see New column base.`,referenceIds:['existing-column']});
+ if(c.isNew)checks.push({id:'column-basis',group:label,title:`${label} · section and loads`,status:'pass',equation:'',note:`New ${r.source} column designed here for the crane and runway reactions only; it carries no existing building loads. Base plate, anchor rods and footing: see New column base.`,referenceIds:['existing-column']});
  else checks.push({id:'column-basis',group:label,title:`${label} · survey and existing load effects`,status:c.confirmed&&c.source.trim()?'pass':'unverified',equation:'',note:c.confirmed&&c.source.trim()?`Section: ${r.source}. Existing load effects: ${c.source}. Existing effects act at the column's governing section and are added to the crane peaks regardless of sign or location.`:'Enter the surveyed column and the existing load effects (D, L, Lr, S, R, W, E) with their source, then confirm.',referenceIds:refs});
  if(!r.capacity.webCompact)checks.push({id:'column-web',group:label,title:`${label} · web slenderness for flexure`,status:'unsupported',equation:'h/t_w\\le\\lambda_{pw}=3.76\\sqrt{E/F_y}',note:'A noncompact or slender column web needs AISC F4/F5, which this check does not implement.',referenceIds:refs});
  add('axial',`${label} · axial compression`,Math.max(0,g.P.P),r.capacity.Pc,'force','P_n=F_{cr}A_e\\\ \\text{(E3, E4, E7)}',`${crane} Lcx=${format(c.Lcx,'length',u,3)} (strong axis, base to the braced top). Weak-axis and torsional buckling use max(Lcy, Lb) = ${format(Math.max(c.Lcy,existingColumnUnbracedLength(p)),'length',u,3)} and max(Lcz, Lb) = ${format(Math.max(c.Lcz,existingColumnUnbracedLength(p)),'length',u,3)}: the specified Lcy = ${format(c.Lcy,'length',u,3)}, Lcz = ${format(c.Lcz,'length',u,3)} are not credited below the flange unbraced length Lb = ${format(existingColumnUnbracedLength(p),'length',u,3)} of the lateral-torsional buckling check (girts brace the outer flange only).`,g.P.id);
