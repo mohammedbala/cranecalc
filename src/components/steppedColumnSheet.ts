@@ -118,7 +118,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   // distance to the girder web, the girder reaction's eccentricity from the lower centroid and the lower shaft overall.
   const yd=Y(tor)-22,from=Y(tor)-4,space=new AnnotationSpace(svg);
   svg+=dimHClear(space,X(lowerOut),X(g.tieFace),from,yd,dim(g.tieFace-lowerOut))+dimHClear(space,X(g.tieFace),X(gw),from,yd,dim(g.tieDistance));
-  svg+=dimHClear(space,X(0),X(gw),from,yd-18,`${dim(gw)} = e`)+dimHClear(space,X(lowerOut),X(lowerIn),from,yd-36,dim(g.lower.d));
+  svg+=dimHClear(space,X(0),X(gw),from,yd-18,`${dim(gw)} WEB`)+dimHClear(space,X(lowerOut),X(lowerIn),from,yd-36,dim(g.lower.d));
   return {svg:svg+'</g>',scale:k.label};
  }});
 
@@ -126,7 +126,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
  // upper shaft's flanges on the cap and the step stiffener under its inner flange.
  views.push({title:steppedColumnTitles.section,render:()=>{
   // The girder is broken above its lower part: the bearing, not the girder, is the subject.
-  const shown=Math.min(b.d-b.tf,Math.max(14*inch,b.d*.45)),yCut=hs+bt+shown;
+  const shown=Math.min(b.d-b.tf,Math.max(10*inch,b.d*.3)),yCut=hs+bt+shown;
   const below=(sf?sh:Math.max(sh*.6,8*inch))+4*inch,yLow=g.cap.bottom-below,yHigh=yCut+3*inch,xMin=lowerOut,xMax=Math.max(gw+girderHalf,g.cap.width/2,gw+bs.width/2);
   const k=drawingScale(Math.min(330/(yHigh-yLow),300/(xMax-xMin)),u),kk=k.pointsPerMm,cx=40+(-xMin+3*inch)*kk,X=(x:number)=>cx+x*kk,y0=50+(yHigh-hs)*kk,Y=(y:number)=>y0-(y-hs)*kk;
   let svg='<g data-view="step-section">';
@@ -218,8 +218,9 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   ['LOWER SHAFT (E)',`${lowName}, Fy = ${Fy(c.Fy)}; BASE TO STEP ${dim(c.seatElevation)}`],
   ['UPPER SHAFT (E)',`${upName}, Fy = ${Fy(st.upper.Fy)}; STEP TO TOP ${dim(c.height-c.seatElevation)}; OUTER FLANGES FLUSH`],
   ['STEP CAP (E)',`${capLabel}, TOP AT ${elev(hs)}`],
-  ['GIRDER WEB FROM LOWER C/L (e)',`${dim(gw)}; TO UPPER INNER FACE ${dim(g.tieDistance)}`],
-  ...(r?[['EFFECTIVE LENGTHS L_c (BUCKLING)',`UPPER ${len(r.upper.Lcx)}, LOWER ${len(r.lower.Lcx)} (λ = ${r.buckling.factor.toFixed(1)}, AISC 360 APP. 7)`],
+  ['GIRDER WEB FROM LOWER C/L',`${dim(gw)}; TO UPPER INNER FACE ${dim(g.tieDistance)}`],
+  ...(s.existingColumn?[['REACTION ECCENTRICITY e (DESIGN)',`${dim(s.existingColumn.eccentricity)} FROM LOWER C/L (FAR BEARING EDGE); Mx = V·e`]]:[]),
+  ...(r?[['EFFECTIVE LENGTHS L_c (BUCKLING)',`UPPER ${len(r.buckling.Lcx.upper)}, LOWER ${len(r.buckling.Lcx.lower)} (λ = ${r.buckling.factor.toFixed(1)}, GOVERNING COMBINATION, AISC 360 APP. 7)`],
    [`STEP REACTION / INNER FLANGE FORCE (${p.method})`,`${force(r.step.reaction)} / ${force(r.step.flangeForce)}`]]:[]),
   ['H1 RATIOS: UPPER / LOWER SHAFT',`${ratio('column-upper-interaction')} / ${ratio('column-lower-interaction')}`],
   ['RATIOS: BEARING / FLANGE / CAP / PANEL',`${ratio('step-bearing')} / ${ratio('step-flange-yielding')} / ${ratio('step-cap-flexure')} / ${ratio('step-panel-shear')}`],

@@ -238,6 +238,8 @@ export function fatigueData(s:CalculationSnapshot,c:CheckResult):FatigueData|und
  // whatever category the note names first (a toe crack, a bound), and a root crack has no threshold: never screened.
  // A Category F throat check that only refers to a root check elsewhere is not one.
  const ownRoot=/R_\{FIL\}/.test(c.equation)||/\bR_?FIL\s*=|\bwith R_FIL\b/.test(note),categoryF=/1\.5\/n_\{SR\}|\(1\.5\/n/.test(c.equation)||/\bCategory F\b/.test(note);
+ // A Category F weld-throat check by its own equation or title is Category F, whatever other category its note names.
+ if(/1\.5\/n_\{SR\}|\(1\.5\/n/.test(c.equation)||/\b(Category|Cat\.) F\b/.test(c.title))cat='F';
  if(ownRoot&&!categoryF&&c.capacity<allCycleRange('C',n)*(1-.005))return {range:c.demand,threshold:undefined,category:"C''",allCycle:c.utilization,capacity:c.capacity,source:'check'};
  // All-cycle checks: the demand is the largest range. Root cracks (C″, R_FIL < 1): no threshold.
  if(cat==="C''"||(!cat&&rfil)){const R=rootR();return {range:c.demand,threshold:R<1-1e-9?undefined:thresholdOf('C'),category:R<1-1e-9?"C''":'C',allCycle:c.utilization,capacity:c.capacity,source:'check'};}

@@ -33,7 +33,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
  const sheetOf=detailSheetNumbers(s),sheets=(...keys:string[])=>[...new Set(keys.map(sheetOf))].join(', ');
  const output:CadDrawing[]=[];
  {
- const k=260/p.section.d,b=p.section,bs=d.bearing,fork=!!activeColumnCap(p),dr=new Draft(s,'bearing-detail','Girder bearing / flange-restraint section','SK-04',500,1/k,fork?'Column cap, new column, base and foundations: designed in this calculation. No top-flange tie: the end fork restrains the top flange.':`${d.bracket?.enabled?'':'Building bracket, '}${d.bracket?.enabled?'Building frame':'frame'}, anchorage and foundations: by others.`);
+ const k=260/p.section.d,b=p.section,bs=d.bearing,fork=!!activeColumnCap(p),dr=new Draft(s,'bearing-detail','Girder bearing / flange-restraint section','SK-04',500,1/k,fork?'Column cap, new column, base and foundations: designed in this calculation. No top-flange tie: the end fork restrains the top flange.':p.existingColumn?.enabled&&p.existingColumn.step?'The girder bears on the existing step cap of the stepped column (checked in this calculation); building frame, anchorage and foundations: by others.':`${d.bracket?.enabled?'':'Building bracket, '}${d.bracket?.enabled?'Building frame':'frame'}, anchorage and foundations: by others.`);
  const cx=265,y=80,left=cx-b.bf*k/2,right=cx+b.bf*k/2;
  dr.rect(left,y,b.bf*k,b.tf*k);dr.rect(cx-b.tw*k/2,y+b.tf*k,b.tw*k,(b.d-2*b.tf)*k);dr.rect(left,y+(b.d-b.tf)*k,b.bf*k,b.tf*k);
  for(const sign of [-1,1])dr.poly(bearingStiffenerProfile(bs.stiffenerWidth,b.d-2*b.tf,bs.cope).map(([z,v])=>[cx+sign*(b.tw/2+z)*k,y+(b.tf+v)*k]),true);

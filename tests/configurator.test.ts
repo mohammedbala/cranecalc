@@ -121,7 +121,8 @@ describe('dependent choices',()=>{
   expect(crane).toMatchObject({column:'W14X90',buildingColumn:'W14X120'});
   expect(previewConfig({...defaultRunwayConfig,capacity:15,support:'crane-column',girderShape:'W30X191',columnShape:'W14X159',buildingColumnShape:'W14X145'})).toMatchObject({column:'W14X159',buildingColumn:'W14X145'});
   const step=previewConfig({...defaultRunwayConfig,capacity:20,support:'stepped-column',girderShape:'W30X191'});
-  expect(step).toMatchObject({column:'W30X173',buildingColumn:'W14X159'});
+  // The assumed lower shaft for the class holds the upper shaft: the preview shows the shaft the build keeps.
+  expect(step).toMatchObject({column:'W33X201',buildingColumn:'W14X159'});
   // Both are direct column bearing: no column-bracket warning whatever the reaction.
   expect([...crane.changes,...step.changes].filter(v=>/^Support reaction/.test(v))).toEqual([]);
   expect(previewConfig({...defaultRunwayConfig,girderShape:'W24X104'}).buildingColumn).toBeUndefined();
