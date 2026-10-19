@@ -2,6 +2,7 @@ import {finiteLife,fatigueCoefficient,fatigueThreshold,KSI} from './fatigueConst
 import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
+import {cyclesPerPass} from './passCycles';
 import {flangeTieGeometry,tieLine,tiePlies,tieRelease} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
@@ -227,18 +228,26 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
  const vertical=beamSystem(p.spans,E*props.Ix,p.system,undefined,subdivisions);
  const detailInputs=automaticFatigueDetails(p);
  const fatigue:FatigueDetailResult[]=detailInputs.map(f=>({id:f.id,name:f.name,x:f.x,category:f.category,threshold:fatigueThreshold(f.category),reference:f.reference,bins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,minimum:0,maximum:0,range:0,allowable:0,damage:0})),damage:0,range:0,peak:0}));
- const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:crane?crane.top:brace.stiffness,braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
+ const result:RunwayDetailResults={normalStress:0,shearStress:0,railDisplacement:0,twist:0,criticalMultiplier:128,residual:0,meshChange:0,travelChange:0,cases:0,braceStiffness:forkK||(crane?crane.top:brace.stiffness),braceForce:0,fatigue,interfaces:[],railFatigueBins:details.spectrum.map(b=>({name:b.name,cycles:b.cycles,vertical:0,lateral:0,weldStress:0})),demands:{brace:0,braceFatigue:0,verticalFatigue:0,endLongitudinal:0,railLateral:0,railVertical:0,railFatigueVertical:0,railFatigueLateral:0},governing:{}};
  if(cap)result.cap={longitudinalFlow:0,fatigueFlows:details.spectrum.map(()=>0)};
- const curves=flexureCurves(p,props),loadHeight=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0,cb:1,mocr:curves.positive.mocr,height:z};
+ const curves=flexureCurves(p,props),loadHeight:NonNullable<RunwayDetailResults['loadHeight']>=result.loadHeight={utilization:0,demand:0,capacity:0,length:p.unbracedLength,critical:Infinity,id:'',combination:'',x:0,cb:1,mocr:curves.positive.mocr,height:z};
+ const loadHeightBySign:NonNullable<RunwayDetailResults['loadHeightBySign']>=result.loadHeightBySign={positive:{...loadHeight,sign:1},negative:{...loadHeight,mocr:curves.negative.mocr,sign:-1}};
  // AISC 360-16 Commentary F1 load-height comparison: Cb (F1-1) of the case's moment diagram over the unbraced segment times
  // 1.4^(2y/h), y the load point from mid-depth (negative above it), h the section depth; extrapolated above the top flange.
  const depth=p.section.d+(cap?p.section.capTw:0),yLoad=-(railTopAboveSteel(p)+depth/2),f1Factor=1.4**(2*yLoad/depth);
- const commentary=(moment:(x:number)=>number,xm:number,start:number,end:number,wheelXs:number[],c:typeof curves.positive)=>{
-  const tops=[start,end,...flanges.top.filter(x=>x>start+1e-6&&x<end-1e-6)],a=Math.max(...tops.filter(x=>x<=xm+1e-6)),b=Math.min(...tops.filter(x=>x>=xm-1e-6)),Lseg=b-a;
-  const at=(t:number)=>Math.abs(moment(a+t*Lseg)),points=[...Array.from({length:201},(_,i)=>i/200),...wheelXs.filter(x=>x>=a&&x<=b).map(x=>(x-a)/Lseg)];
-  const mmax=Math.max(...points.map(at)),quarter:[number,number,number]=[at(.25),at(.5),at(.75)],gradient=12.5*mmax/(2.5*mmax+3*quarter[0]+4*quarter[1]+3*quarter[2]);
-  const cb=gradient*f1Factor;
-  return {segment:[a,b] as [number,number],mmax,quarter,gradient,y:yLoad,h:depth,factor:f1Factor,cb,capacity:c.capacity(cb*c.mocr)};
+ // The unbraced segment is bounded by the restraints of the compression flange (top for positive moment, bottom for
+ // negative); a peak at a restraint (an interior support) lies at the end of the two segments beside it, and the one with
+ // the lower C_b is reported.
+ const commentary=(moment:(x:number)=>number,xm:number,start:number,end:number,wheelXs:number[],c:typeof curves.positive,sign:number=1)=>{
+  const braced=[start,end,...(sign<0?flanges.bottom:flanges.top).filter(x=>x>start+1e-6&&x<end-1e-6)].sort((u,v)=>u-v);
+  const below=braced.filter(x=>x<=xm+1e-6),above=braced.filter(x=>x>=xm-1e-6),a0=Math.max(...below),b0=Math.min(...above);
+  const segments:[number,number][]=b0-a0>1e-6?[[a0,b0]]:[[Math.max(start,...braced.filter(x=>x<a0-1e-6)),a0],[b0,Math.min(end,...braced.filter(x=>x>b0+1e-6))]].filter(([u,v])=>v-u>1e-6) as [number,number][];
+  const one=([a,b]:[number,number])=>{const Lseg=b-a,at=(t:number)=>Math.abs(moment(a+t*Lseg)),points=[...Array.from({length:201},(_,i)=>i/200),...wheelXs.filter(x=>x>=a&&x<=b).map(x=>(x-a)/Lseg)];
+   const mmax=Math.max(...points.map(at)),quarter:[number,number,number]=[at(.25),at(.5),at(.75)],gradient=12.5*mmax/(2.5*mmax+3*quarter[0]+4*quarter[1]+3*quarter[2]);
+   return {segment:[a,b] as [number,number],mmax,quarter,gradient};};
+  const g=(segments.length?segments:[[a0,b0] as [number,number]]).map(one).reduce((u,v)=>v.gradient<u.gradient?v:u);
+  const cb=g.gradient*f1Factor;
+  return {...g,y:yLoad,h:depth,factor:f1Factor,cb,capacity:c.capacity(cb*c.mocr)};
  };
  // Each restraint acts where its tie acts on the girder (tieLine): the cap tieback's tie plate line above the cap (M6),
  // the bar or plate centroid of a direct flange saddle tie or of the bars on the bearing-stiffener gusset (a bar force F
@@ -374,20 +383,26 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
     // the governing utilization so far. A case that buckles below the applied load (no second-order state) enters with
     // its own multiplier like any other, so it never lowers the D/C. The moment is sampled at the mesh nodes and element
     // midpoints, the stations of a solution.
-    let Mx=0,xm=start;for(const x of stability.nodes.flatMap((v,i,a)=>i?[(a[i-1]+v)/2,v]:[v])){const m=moment(x+start);if(Math.abs(m)>Math.abs(Mx)){Mx=m;xm=x+start;}}
-    const c=Mx>=0?curves.positive:curves.negative,M=Math.abs(Mx);
-    if(M>0){
-     const record=(u:number,capacity:number,critical:number)=>{if(u>loadHeight.utilization)Object.assign(loadHeight,{utilization:u,demand:M,capacity,length:Number.isFinite(critical)?c.equivalentLength(critical):p.unbracedLength,critical,cb:Number.isFinite(critical)?c.cb(critical):1,mocr:c.mocr,sign:Mx>=0?1:-1,id:e.id,combination:e.combination,x:xm,commentary:commentary(moment,xm,start,end,wheels.map(w=>w.x),c)});};
-     record(M/c.base,c.base,Infinity);
-     // This case's multiplier is at least the least one found so far, which bounds its strength from below.
-     const bound=M/c.capacity(result.criticalMultiplier*M/.8);
-     const threshold=.8*c.criticalFor(M/loadHeight.utilization)/M;
-     if(bound>loadHeight.utilization&&threshold>0&&!stability.isStable(threshold)){
-      let lambda=ownMultiplier;
-      if(lambda===undefined){let lo=Math.min(result.criticalMultiplier,threshold),hi=threshold;if(!stability.isStable(lo))lo=0;for(let i=0;i<30;i++){const mid=(lo+hi)/2;if(stability.isStable(mid))lo=mid;else hi=mid;}lambda=lo;}
-      const critical=lambda*M/.8,capacity=c.capacity(critical);
-      record(M/capacity,capacity,critical);
-     }
+    // Each sign of moment against the strength of the flange it compresses (positive: top flange / cap, negative: W bottom
+    // flange), at that sign's peak in this case. The eigenvalue lambda is the load multiplier of the whole moment diagram,
+    // so the elastic critical moment at either peak is lambda M / 0.8.
+    let Mp=0,xp=start,Mn=0,xn=start;for(const x of stability.nodes.flatMap((v,i,a)=>i?[(a[i-1]+v)/2,v]:[v])){const m=moment(x+start);if(m>Mp){Mp=m;xp=x+start;}if(-m>Mn){Mn=-m;xn=x+start;}}
+    // A sign whose peak is under a tenth of the case's larger one (round-off at a simple support, a small hogging moment
+    // under a distant crane) does not define that sign's strength: the case's buckling is recorded with its dominant sign.
+    const signs=([[1,Mp,xp],[-1,Mn,xn]] as const).filter(([,M])=>M>0&&M>=.1*Math.max(Mp,Mn)).map(([sign,M,xm])=>({sign,M,xm,c:sign>0?curves.positive:curves.negative,rec:loadHeightBySign[sign>0?'positive':'negative']}));
+    const record=(v:typeof signs[number],u:number,capacity:number,critical:number)=>{if(u<=v.rec.utilization)return;
+     Object.assign(v.rec,{criticalAtLeast:undefined,utilization:u,demand:v.M,capacity,length:Number.isFinite(critical)?v.c.equivalentLength(critical):p.unbracedLength,critical,cb:Number.isFinite(critical)?v.c.cb(critical):1,mocr:v.c.mocr,sign:v.sign,id:e.id,combination:e.combination,x:v.xm,commentary:commentary(moment,v.xm,start,end,wheels.map(w=>w.x),v.c,v.sign)});
+     if(u>loadHeight.utilization)Object.assign(loadHeight,v.rec);};
+    for(const v of signs)record(v,v.M/v.c.base,v.c.base,Infinity);
+    // This case's multiplier is at least the least one found so far, which bounds its strength from below.
+    const open=signs.map(v=>({v,bound:v.M/v.c.capacity(result.criticalMultiplier*v.M/.8),threshold:.8*v.c.criticalFor(v.M/v.rec.utilization)/v.M})).filter(o=>o.bound>o.v.rec.utilization&&o.threshold>0);
+    const threshold=Math.max(0,...open.map(o=>o.threshold)),stableAt=open.length&&stability.isStable(threshold)?threshold:0;
+    // A record this case holds at the C_b = 1 strength: its multiplier is known only from below (printed as M_cr >= ...).
+    for(const v of signs)if(v.rec.id===e.id&&!Number.isFinite(v.rec.critical)){v.rec.criticalAtLeast=Math.max(result.criticalMultiplier,stableAt)*v.M/.8;if(loadHeight.id===e.id&&loadHeight.sign===v.sign)loadHeight.criticalAtLeast=v.rec.criticalAtLeast;}
+    if(open.length&&!stableAt){
+     let lambda=ownMultiplier;
+     if(lambda===undefined){let lo=Math.min(result.criticalMultiplier,threshold),hi=threshold;if(!stability.isStable(lo))lo=0;for(let i=0;i<30;i++){const mid=(lo+hi)/2;if(stability.isStable(mid))lo=mid;else hi=mid;}lambda=lo;}
+     for(const {v} of open){const critical=lambda*v.M/.8,capacity=v.c.capacity(critical);record(v,v.M/capacity,capacity,critical);}
     }
    }
    }
@@ -611,6 +626,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const st=saddles.stations[+m[1]],v=endForceBins.get(`${st.bay}:${st.end}`)?.[f.id.endsWith('top-right')?'top':'bottom'];
   f.bins.forEach((b,k)=>{const local=unit*(v?v[k].max-v[k].min:0);b.minimum=-local/2;b.maximum=local/2;});}}
 
+  // Continuous girders: the cycles per crane pass at each detail (rainflow of the moment under the crane's wheel group,
+  // about two at an interior support, cyclesPerPass) multiply the duty-bin cycles of the girder details; the saddle tie
+  // local details (SL) keep their tie-force ranges per pass.
+  if(p.system==='continuous'){const girder=fatigue.filter(f=>!f.id.startsWith('SL')),n=cyclesPerPass(p,girder.map(f=>f.x));
+   girder.forEach((f,k)=>{if(n[k]>1+1e-6){f.cyclesPerPass=n[k];for(const b of f.bins)b.cycles=Math.round(b.cycles*n[k]);}});}
   for(const [i,f] of fatigue.entries()){for(const b of f.bins){b.range=b.maximum-b.minimum;Object.assign(b,fatigueSpectrumBin(f.category as keyof typeof constants,b.range,b.cycles));}f.range=Math.max(...f.bins.map(b=>b.range));f.damage=f.bins.reduce((a,b)=>a+b.damage,0);f.peak=deadBounds[i]+Math.max(...f.bins.flatMap(b=>[Math.abs(b.minimum),Math.abs(b.maximum)]));}
   const grouped=new Map<string,InterfaceAction>();
   for(const v of interfaceExtremes.values()){const key=`${v.x}:${v.id}:${v.longitudinal}`;const old=grouped.get(key);if(old)old.controls.push(...v.controls);else grouped.set(key,{...v,controls:[...v.controls]});}

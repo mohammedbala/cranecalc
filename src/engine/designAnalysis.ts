@@ -10,6 +10,7 @@ import {spliceCriticalStations} from './spliceInputs';
 import {adjacentReactions} from './continuation';
 import {railTopAboveSteel} from './railSeat';
 import {craneAtStop} from './craneTravel';
+import {locatingSupport} from './endBearingInputs';
 import {runwaySiteSeismic,seismicCraneCombinations} from './columnSupport';
 
 const abs=(xs:number[])=>Math.max(0,...xs.map(Math.abs));
@@ -72,6 +73,14 @@ let scope:{caches:Map<string,ResponseCache>;envelopeKey?:string;progress?:(p:Des
  * reporting their progress to onProgress at most four times a second. */
 export function withDesignCache<T>(f:()=>T,onProgress?:(p:DesignProgress)=>void):T{const outer=scope;scope={caches:new Map(),progress:onProgress};try{return f();}finally{scope=outer;}}
 
+/** The major-axis strengths of the H1 check at each flange by moment sign: positive moment puts the top flange in compression
+ * (major) and the bottom flange in tension; negative moment the reverse (majorReverse). The tension flange takes its yielding
+ * strength (tensionMajor / tensionMajorReverse: F2.1 M_p, F4.4 R_pt M_yt, with the F13.1 net-section cap). */
+export function flangeStrengths(strength:GirderStrength){
+ const negative=strength.majorReverse??strength.major;
+ return {top:{...strength,flangeMinor:strength.topMinor??strength.flangeMinor,majorReverse:strength.tensionMajorReverse??negative},
+  bottom:{...strength,flangeMinor:strength.bottomMinor??strength.flangeMinor,major:strength.tensionMajor??strength.major,majorReverse:negative}};
+}
 export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:GirderStrength,steps:number,mesh:number,observe?:RunwayCaseObserver,options:DesignAnalysisOptions={}):DesignAnalysis {
  const envelope=options.envelope!==false;
  const di=p.aist??emptyAistInputs,L=p.spans.reduce((a,b)=>a+b,0),q=girderDeadLoad(p,props.weight),endSteel=newSteelTakeoff(p).grid;
@@ -154,13 +163,32 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
  const site=runwaySiteSeismic(p),secured=site?.input.liftedLoadSecured?1:0,lineMass=site?site.mass.line*Math.max(...p.spans):0;
  const combinations:(ReturnType<typeof craneCombinations>[number]&{seismic?:number})[]=[...craneCombinations(p.method,di.concurrency==='full'),...seismicCraneCombinations(p)],records=new Map<string,DesignCaseSummary>();
  for(const c of combinations)records.set(c.id,{id:`${p.method} ${c.id}`,equation:c.equation,moment:0,lateralMoment:0,shear:0,reaction:0,axial:0,interaction:0,positions:[],location:0});
- const result:DesignAnalysis={combinations:[],cases:0,convergence:0,meshConvergence:0,equilibriumError:0,singleVertical:0,serviceRotation:0,deadRotation:abs(supportNodes.map(i=>dead.rotation[i])),singleLateral:0,endRotation:0,serviceReaction:0,fatigueMin:0,fatigueMax:0,wheelLoad:0,wheelNearEndLoad:0,torsion:0,moment:0,shear:0,reaction:0,uplift:0,axial:0,lateralMoment:0,interactionTop:0,interactionBottom:0,topLateralMoment:0,bottomLateralMoment:0,interaction:0,governing:{}};
+ const result:DesignAnalysis={combinations:[],cases:0,convergence:0,meshConvergence:0,equilibriumError:0,singleVertical:0,serviceRotation:0,deadRotation:abs(supportNodes.map(i=>dead.rotation[i])),singleLateral:0,endRotation:0,serviceReaction:0,fatigueMin:0,fatigueMax:0,wheelLoad:0,wheelNearEndLoad:0,torsion:0,moment:0,momentPositive:0,momentNegative:0,shear:0,reaction:0,uplift:0,axial:0,lateralMoment:0,interactionTop:0,interactionBottom:0,topLateralMoment:0,bottomLateralMoment:0,interaction:0,governing:{}};
  const railTM=samples.map(x=>momentAt(x,railT.reactions,[],p.railWeight*verticalLever)),railBM=samples.map(x=>momentAt(x,railB.reactions,[],-p.railWeight*verticalLever));
  const deadAdjacent=adjacentReactions(p,[],q),liveAdjacent=adjacentReactions(p,[],di.liveLoad);
  const deadM=samples.map(x=>momentAt(x,dead.reactions,[],q)),liveM=samples.map(x=>momentAt(x,live.reactions,[],di.liveLoad));
  // Per crane: the design traction (the larger of the supplier's and the minimum) and the bumper force on the girder.
  const tractionForce=p.cranes.map(c=>Math.max(c.longitudinal,craneDesignMinimum(c).traction)),bumperForce=p.cranes.map(c=>c.design?.bumperBypassesGirder?0:c.design?.bumperForce??0);
- const topStrength={...strength,flangeMinor:strength.topMinor??strength.flangeMinor},bottomStrength={...strength,flangeMinor:strength.bottomMinor??strength.flangeMinor};
+ // H1 at each flange by the sign of the station's moment (interaction() takes majorReverse for a negative moment): the flange
+ // in compression with its Chapter F strength (lateral-torsional buckling included), the flange in tension with its yielding
+ // strength (F2.1 M_p, F4.4 R_pt M_yt): lateral-torsional buckling is a compression-flange limit state.
+ const topStrength=flangeStrengths(strength).top,bottomStrength=flangeStrengths(strength).bottom;
+ // End stops (AIST stop combinations, crane at the stop): the bumper force acts y above the girder centroid at the stop end
+ // and is resisted at the locating bearing, e_b (the centroid height) below it. Each eccentricity is a point couple on the
+ // girder line, applied in the vertical beam model as a force pair (statically exact beyond it), so its moment decays along
+ // the continuous girder (to about -1/4 of the end value at the interior support of two equal spans) and adds at each
+ // station to the concurrent crane moment of the stop case. Continuous girders locate at locatingSupport(); a simple bay
+ // either at the stop end or at its far end, whichever is worse.
+ const centroid=cap?cap.cy:p.section.d/2,stopY=bumperLever-centroid,delta=Math.min(1,1e-4*L),unitCouples=new Map<number,(x:number)=>number>();
+ const unitCouple=(xc:number)=>{let u=unitCouples.get(xc);if(u)return u;
+  // A counterclockwise unit couple at xc, inside the bay beside it: a downward force 1/delta and an upward one delta further on.
+  const x1=stations[bayOf(Math.min(L-1e-6,Math.max(1e-6,xc)))+1],a=xc>=x1-1e-6?xc-2*delta:xc+delta,loads=[{x:a,p:1/delta},{x:a+delta,p:-1/delta}],res=vertical.evaluate(loads);
+  u=(x:number)=>momentAt(Math.min(L-3*delta,Math.max(3*delta,x)),res.reactions,loads,0);unitCouples.set(xc,u);return u;};
+ const stopVariants=(end:'left'|'right')=>{const xs=end==='left'?0:L,sgn=end==='left'?1:-1;
+  if(p.system==='continuous'){const xl=stations[locatingSupport(p)];return [[{x:xs,m:sgn*stopY},{x:xl,m:sgn*centroid}]];}
+  const far=end==='left'?stations[1]:stations[stations.length-2];
+  return [[{x:xs,m:sgn*(stopY+centroid)}],[{x:xs,m:sgn*stopY},{x:far,m:sgn*centroid}]];};
+ const stopCouples={left:stopVariants('left'),right:stopVariants('right')};
  const nearEnd=(x:number)=>p.system==='simple'?stations.some(s=>Math.abs(x-s)<=p.section.d):Math.min(x,L-x)<=p.section.d,torsionArm=railHead+flangeY;
  for(const [craneIndex,group] of responses.entries())for(const s of group){
   if(old(craneIndex,s.position))continue;
@@ -177,7 +205,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
   }
  }
  const chosen:{index:number;response:typeof responses[number][number]}[]=[];
- type Governed='moment'|'shear'|'reaction'|'uplift'|'axial'|'lateralMoment'|'topLateralMoment'|'bottomLateralMoment'|'interaction'|'interactionTop'|'interactionBottom';
+ type Governed='stopInteraction'|'moment'|'momentPositive'|'momentNegative'|'shear'|'reaction'|'uplift'|'axial'|'lateralMoment'|'topLateralMoment'|'bottomLateralMoment'|'interaction'|'interactionTop'|'interactionBottom';
  function govern(key:Governed,value:number,c:DesignCaseSummary){if(value>(result[key]??0)){result[key]=value;result.governing[key]={...c,positions:[...c.positions]};}}
  // govern() with the case at a station: the summary is copied only when it governs (same fields and order as {...c, ...}).
  function governAt(key:Governed,value:number,c:DesignCaseSummary,location:number,moment:number,lateralMoment:number){if(value>(result[key]??0)){result[key]=value;result.governing[key]={...c,location,moment,lateralMoment,positions:[...c.positions]};}}
@@ -258,7 +286,10 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
       if(u>c.interaction){c.interaction=u;c.location=x;}
       // This interaction is evaluated at each actual concurrent station.
       governAt('interaction',u,c,x,M,My);
-      governAt('moment',Math.abs(M),c,x,M,My);governAt('lateralMoment',My,c,x,M,My);
+      // Stop cases: the bumper couple's moment at this station with the crane moment, each flange by the sign of the sum.
+      if(stop&&bumper>0)for(const variant of stopCouples[stop]){const Ms=M+bumper*variant.reduce((sum,v)=>sum+v.m*unitCouple(v.x)(x),0);
+       governAt('stopInteraction',Math.max(interaction(axial,Ms,Mt,topStrength,p.method).utilization,interaction(axial,Ms,Mb,bottomStrength,p.method).utilization),c,x,Ms,My);}
+      governAt('moment',Math.abs(M),c,x,M,My);governAt('momentPositive',Math.max(0,M),c,x,M,My);governAt('momentNegative',Math.max(0,-M),c,x,M,My);governAt('lateralMoment',My,c,x,M,My);
       governAtX('topLateralMoment',Math.abs(Mt),c,x);governAtX('bottomLateralMoment',Math.abs(Mb),c,x);
       // A wheel on a support also gives each adjacent span's end shear with the wheel just inside it (the limit as the
       // wheel approaches the support: the shear beside the wheel plus its load on the span side).
@@ -295,7 +326,7 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
 
 /** The envelope of a refined search from its new states (result) and the previous search: maxima and minima merged. */
 function mergePrevious(result:DesignAnalysis,previous:DesignAnalysis){
- for(const k of ['singleVertical','serviceRotation','singleLateral','endRotation','serviceReaction','fatigueMax','wheelLoad','wheelNearEndLoad','torsion','moment','shear','reaction','uplift','axial','lateralMoment','topLateralMoment','bottomLateralMoment','interaction','interactionTop','interactionBottom'] as const){
+ for(const k of ['singleVertical','serviceRotation','singleLateral','endRotation','serviceReaction','fatigueMax','wheelLoad','wheelNearEndLoad','torsion','moment','momentPositive','momentNegative','shear','reaction','uplift','axial','lateralMoment','topLateralMoment','bottomLateralMoment','interaction','interactionTop','interactionBottom','stopInteraction'] as const){
   const b=previous[k]??0;if(b>=(result[k]??0)){result[k]=b;if(previous.governing[k])result.governing[k]=previous.governing[k];}
  }
  result.fatigueMin=Math.min(result.fatigueMin,previous.fatigueMin);result.cases+=previous.cases;
