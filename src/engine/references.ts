@@ -91,6 +91,7 @@ export const references:ReferenceRecord[] = [
  steel('aisc-f4','F1 (Cb, F1-1); F4.1–F4.4 (F4-1, F4-2, F4-3, F4-5, F4-6, F4-9a, F4-15); Commentary F1 (load height, Cb·1.4^(2y/h))','Singly symmetric I-shaped members with a compact or noncompact web: compression flange yielding, lateral-torsional buckling with Cb, tension flange yielding. A rational elastic critical moment from a buckling analysis enters as Cb = Mcr/Mocr; the Commentary F1 load-height modification of Cb is the comparison.'),
  steel('aisc-f2','F1/F2 · F2-1–F2-8','Compact doubly symmetric I-section yielding/LTB; phi=0.90, Omega=1.67, Cb=1.0. Cap/noncompact girders remain outside implemented branch.'),
  steel('aisc-f6','F6 · F6-1–F6-4','Minor-axis strength; DG7 flange-only rail force-couple resistance.'),
+ steel('aisc-f11','F11 · F11-1–F11-4','Rectangular bars bent about their major axis (plates in in-plane flexure): yielding and lateral-torsional buckling with L_bd/t².'),
  steel('aisc-f13','F13.1 · F13-1; B4.3','Tension flange net-section rupture; actual minimum net flange area across both flanges, not illustrative viewer holes.'),
  steel('aisc-g','G2.1 · G2-1–G2-5','Unstiffened-web shear, no tension field action; stocky rolled-web factors.'),
  steel('aisc-j','J2.4, J3.3, J10.2–J10.8','Weld direct shear, bolt pitch and web yielding/crippling/sidesway/compression buckling. Complete connections still require actual engineering models.'),
