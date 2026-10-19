@@ -816,14 +816,16 @@ type CheckResultLike={id:string;status:string};
  */
 function withSteppedTie(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):ProjectInput{
  const s=activeStep(q);if(!s||cfg.columnShape||!q.details||!flangeTieFamily(q.details))return q;
- const worst=(r:ProjectInput)=>Object.entries(tieSizingRatios(r)).reduce((a,v)=>v[1]>a[1]?v:a,['',0] as [string,number]);
+ // A tie that does not fit between its bolt groups (a validation error) counts as failing.
+ const worst=(r:ProjectInput)=>{const misfit=validateRunwayDetails(r).find(e=>/^details\.brace|tie/.test(e));
+  return misfit?['tie fit',Infinity] as [string,number]:Object.entries(tieSizingRatios(r)).reduce((a,v)=>v[1]>a[1]?v:a,['',0] as [string,number]);};
  const first=worst(q);if(first[1]<=1+1e-9)return q;
  const wu=aiscShapeByName(s.upper.shape)!,current=q.existingColumn!.d/inch;
  const deeper=['W36','W40','W44'].map(n=>aiscWShapes.filter(w=>w.name.startsWith(n+'X')&&w.bf>=wu.bf-1e-9&&w.d>current+.5).sort((a,b)=>a.weight-b.weight)[0]).filter(Boolean).map(w=>w!.name);
  for(const shape of deeper){
   const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner),now=worst(r);
   if(now[1]<=1+1e-9){
-   Object.assign(trace,inner,{lower:`${trace.lower??''} At the step the tie runs only to the upper shaft's inner face (${+((q.details.brace.flangeAttachment?.columnFace??q.details.brace.reach)/inch).toFixed(2)} in from the girder web on the ${q.existingColumn!.shape}), too short for the girder end movement (tie sizing ratio ${first[0]} ${first[1].toFixed(2)} > 1.00): the lightest deeper lower shaft whose longer tie passes, ${shape}.`.trim()});
+   Object.assign(trace,inner,{lower:`${trace.lower??''} At the step the tie runs only to the upper shaft's inner face (${+((q.details.brace.flangeAttachment?.columnFace??q.details.brace.reach)/inch).toFixed(2)} in from the girder web on the ${q.existingColumn!.shape}), too short for the girder end movement (${Number.isFinite(first[1])?`tie sizing ratio ${first[0]} ${first[1].toFixed(2)} > 1.00`:'the bars do not fit between their bolt groups'}): the lightest deeper lower shaft whose longer tie passes, ${shape}.`.trim()});
    r.notes+=` The tie to the upper shaft at the step of a ${q.existingColumn!.shape} lower shaft is too short for the girder end movement: the example lower shafts are ${shape}.`;
    return {...r,configurator:{...cfg}};
   }
