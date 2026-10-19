@@ -12,7 +12,8 @@ import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
 
 const inch=25.4;
 const braced=(p:ProjectInput)=>{const q=structuredClone(p);q.longitudinalBracing!.design={...q.longitudinalBracing!.design!,torsionBrace:{...defaultTorsionBrace}};return q;};
-const p0=newColumnDemonstrationProject(),p1=braced(p0),column=existingColumnSection(p0).section;
+// The demonstration carries the torsion brace; p0 is it without (the strut on the column centerline alone).
+const p0=(()=>{const q=newColumnDemonstrationProject();delete q.longitudinalBracing!.design!.torsionBrace;return q;})(),p1=braced(p0),column=existingColumnSection(p0).section;
 const reactions=supportReactions(p0,sectionProperties(p0.section));
 const a0=existingColumnAnalysis(p0,reactions),a1=existingColumnAnalysis(p1,reactions);
 

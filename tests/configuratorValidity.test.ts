@@ -2,7 +2,7 @@ import {describe,expect,it} from 'vitest';
 import {runwayTemplates} from '../src/engine/templates';
 import {buildProject,normalizeConfig} from '../src/engine/configurator';
 import {defaultRunwayConfig,type RunwayConfig} from '../src/engine/configInputs';
-import {validateProject} from '../src/engine/calculate';
+import {configuratorOpenItems,validateProject} from '../src/engine/calculate';
 
 /**
  * The configurator never produces an invalid project: every template and the cap tieback angle configurations of the
@@ -44,17 +44,21 @@ const simulated:Record<string,RunwayConfig>={
 describe('configurator project validity',()=>{
  // t13 to t16: the crane columns tied to the building columns and the stepped columns (girder on the step).
  for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
- // Beyond the catalog the build stops with the configurator's reasons only (beyondCatalog): V059 and V061 need a plate
- // girder (they took the W14X873 column shape before).
+ // Beyond the catalog the closest member is built (an open item, configuratorOpenItems, the package a review draft),
+ // never a validation stop: V059 and V061 need a plate girder (they took the W14X873 column shape before).
  // 034, 061 and CC2 ask for a cap tieback angle that no set of its sizing steps carries (lap slip several times over,
- // or the imposed movement in the plate): the build stops (capAngleUnresolved; the calculation of CC2 gave plate
- // movement 1.96 and end plate weld 1.44 against estimates of 2.56 and 1.87).
- const stops=new Map<string,RegExp>([['V059',/^configurator: Plate girder required/],['V061',/^configurator: Plate girder required/],
-  ['034',/^configurator: Top-flange tie not resolved: the cap tieback angle/],['061',/^configurator: Top-flange tie not resolved: the cap tieback angle/],['CC2',/^configurator: Top-flange tie not resolved: the cap tieback angle/]]);
- for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} ${stops.has(id)?'stops with the configurator reason':'builds a valid project'}`,()=>{
-  const e=validateProject(buildProject(c));
-  if(stops.has(id)){expect(e.some(v=>stops.get(id)!.test(v))).toBe(true);expect(e.every(v=>v.startsWith('configurator: '))).toBe(true);}
-  else expect(e).toEqual([]);
+ // or the imposed movement in the plate): the closest angle is built with the open item (capAngleUnresolved; the
+ // calculation of CC2 gave plate movement 1.96 and end plate weld 1.44 against estimates of 2.56 and 1.87).
+ const open=new Map<string,RegExp>([['V059',/^Plate girder required/],['V061',/^Plate girder required/],
+  ['034',/^Top-flange tie not resolved: the cap tieback angle/],['061',/^Top-flange tie not resolved: the cap tieback angle/],['CC2',/^Top-flange tie not resolved: the cap tieback angle/]]);
+ for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project${open.has(id)?', with the configurator open item':''}`,()=>{
+  const p=buildProject(c);
+  expect(validateProject(p)).toEqual([]);
+  if(open.has(id)){
+   expect(p.configurator!.beyondCatalog!.some(v=>open.get(id)!.test(v.reason))).toBe(true);
+   expect(configuratorOpenItems(p).map(v=>v.status)).toContain('incomplete');
+   expect(p.configurator!.selections!.some(v=>v.item==='Open item'&&open.get(id)!.test(v.reason))).toBe(true);
+  }
  },300000);
  it('new freestanding columns take the top of rail to at most 35 ft (ASCE 7 cantilever column height limit), with the reason',()=>{
   const n=normalizeConfig(simulated['V082']);
@@ -63,8 +67,8 @@ describe('configurator project validity',()=>{
   expect(normalizeConfig({...simulated['V082'],structure:'existing'}).config.railElevation).toBe(36);
  });
  it('rail clips that cannot cross the girder joints within the pad spacing: the rail without its pad, clips at most 30 in, logged',()=>{
-  // The W14X873 the sizing chose before column shapes left the girder catalog, now named (V059 itself stops: a plate
-  // girder is required).
+  // The W14X873 the sizing chose before column shapes left the girder catalog, now named (V059 itself needs a plate
+  // girder: an open item).
   const p=buildProject({...simulated['V059'],girderShape:'W14X873'});
   expect(p.aist!.railPad).toBe(false);
   expect(p.aist!.clipSpacing).toBeCloseTo(30*25.4,6);
@@ -72,8 +76,10 @@ describe('configurator project validity',()=>{
  },300000);
  it('a cap tieback angle that fits no column flange falls back to paired bars, with the reason in the selections log',()=>{
   const p=buildProject({...simulated['017'],columnShape:'W14X61'});
-  // The paired bars it falls back to do not pass their own sizing on this column either: the build stops with the reason.
-  expect(validateProject(p)).toEqual([expect.stringMatching(/^configurator: Top-flange tie not resolved: the Paired flat bars on a flange saddle/)]);
+  // The paired bars it falls back to do not pass their own sizing on this column either: built, with the open item.
+  expect(validateProject(p)).toEqual([]);
+  expect(configuratorOpenItems(p).map(v=>[v.id,v.status])).toEqual([['configurator-tie','incomplete']]);
+  expect(p.configurator!.beyondCatalog!.map(v=>v.reason)).toEqual([expect.stringMatching(/^Top-flange tie not resolved: the Paired flat bars on a flange saddle/)]);
   expect(p.details!.brace.arrangement).toBe('paired-bars');
   const tie=p.configurator!.selections!.find(s=>s.item==='Top-flange tie')!;
   expect(tie.entered).toBe('Cap tieback angle');

@@ -76,8 +76,9 @@ describe('Seismic design of new freestanding runway columns',()=>{
   expect(t).toContain('RISK CATEGORY II, IE 1; SS 0.19, S1 0.05; SITE CLASS D; SDS 0.2, SD1 0.08;');
   expect(t).toContain('SEISMIC DESIGN CATEGORY B');
   expect(t).toContain('EQUIVALENT LATERAL FORCE PROCEDURE');
-  // The welded rib brackets' own weight is in the seismic weight (newSteel takeoff): 1.5 -> 1.66 kip, 1.86 -> 2.14 kip.
-  expect(t).toMatch(/V = 1\.66 KIP PER\s+COLUMN/);expect(t).toMatch(/V = 2\.14 KIP PER\s+RUNWAY LINE/);
+  // The welded rib brackets' own weight is in the seismic weight (newSteel takeoff): 1.5 -> 1.66 kip, 1.86 -> 2.14 kip;
+  // the W8X31 strut of the torsion brace (in place of a W8X24) along the runway: 2.17 kip.
+  expect(t).toMatch(/V = 1\.66 KIP PER\s+COLUMN/);expect(t).toMatch(/V = 2\.17 KIP PER\s+RUNWAY LINE/);
   expect(t).toContain('WIND (NEW COLUMNS)');expect(t).toContain('REDUNDANCY 1;');
   // The Greek rho is not upper-cased into a P-like capital.
   expect(t).not.toContain('Ρ');

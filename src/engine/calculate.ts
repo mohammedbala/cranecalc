@@ -44,11 +44,33 @@ import { fatigueCycleFamilies } from './railChecks';
 import { tiedToBuilding } from './craneColumnInputs';
 import { fabricationToleranceNote } from './fitTolerances';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
+/**
+ * The configurator's members beyond its catalog (configurator.beyondCatalog: a plate girder, a built-up crane column, a
+ * top-flange tie its sizing could not resolve), while the project still has the member it could not size: one open item
+ * each, status 'incomplete' (the member is not designed), so the package is a review draft, never an issued design. The
+ * closest catalog member is built and checked; its own failing checks are reported as they are. The configurator judged
+ * it on its screening estimates: given the calculation's checks (`checks`), an item whose member's own checks all pass
+ * is closed (status 'pass', the calculation's checks decide; e.g. case 014, a cap tieback angle at estimated lap slip
+ * 1.64 that the calculation passes), and stays open while any of them fails.
+ */
+const memberChecks:Record<'girder'|'tie'|'crane-column',RegExp>={
+ girder:/^(vertical|lateral|major|minor|combined|combined-bottom|torsion-normal|torsion-normal-bottom|torsion-shear|torsion-stability|flexure-load-height|shear|sidesway)$/,
+ tie:/^(tie-|flange-tie-|plate-tie-|cap-angle-|brace-member$|brace-stiffness$|coord-tie-|coord-cap-tie-)/,
+ 'crane-column':/^column-/};
+export function configuratorOpenItems(p:ProjectInput,checks?:CheckResult[]):CheckResult[]{
+ const titles={girder:'Plate girder required (outside the rolled/capped catalog)','crane-column':'Built-up crane column required (outside the rolled catalog)',tie:'Top-flange tie not resolved by the configurator'};
+ return (p.configurator?.beyondCatalog??[]).filter(v=>v.member==='girder'?p.section.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)
+  .map(v=>{
+   const own=checks?.filter(c=>memberChecks[v.member].test(c.id)),failing=own?.filter(c=>c.status==='fail'),closed=!!own?.length&&!failing!.length;
+   return {id:`configurator-${v.member}`,group:'Detailing',title:titles[v.member],status:closed?'pass':'incomplete',equation:'',referenceIds:['criteria'],
+    note:closed?`${v.reason} The configurator's screening estimates did not confirm the ${v.member==='tie'?'tie':'member'} (${v.shape}); the calculation checks it, and its ${own!.length} checks of this ${v.member==='tie'?'tie':'member'} pass: closed by the calculation.`
+     :`${v.reason} The closest ${v.member==='tie'?'tie':'catalog member'} (${v.shape}) is built and checked here so the package can be reviewed; its failing checks are listed as they are${failing?.length?` (${failing.slice(0,4).map(c=>c.id).join(', ')}${failing.length>4?', …':''})`:''}. Open item: the package is a review draft until the member is designed.`} as CheckResult;});
+}
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
  const p=parsed.data,s=p.section,errors:string[]=[];const L=p.spans.reduce((a,b)=>a+b,0);
- // The configurator's stop: a member beyond the catalog, while the project still has the member it could not size.
- for(const v of p.configurator?.beyondCatalog??[])if(v.member==='girder'?s.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)errors.push(`configurator: ${v.reason}`);
+ // A member beyond the configurator's catalog is not a validation stop: the closest member is built and calculated, and
+ // configuratorOpenItems reports it as an open item (the package is a review draft) beside its failing checks.
  if(s.d<=2*s.tf)errors.push('section.d: depth must exceed twice the flange thickness.');
  if(s.tw>=s.bf)errors.push('section.tw: web must be thinner than the flange width.');
  if(p.capDesign&&p.capDesign.Fu<p.capDesign.Fy)errors.push('capDesign.Fu: ultimate strength cannot be less than channel yield strength.');
@@ -215,6 +237,8 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  snapshot.checks=snapshot.checks.map(reopenedByOthers);
  // The one-count check names the cycles of every wheel-local detail family, derived from the one count (fatigueCycleFamilies).
  if(p.details)snapshot.checks=snapshot.checks.map(c=>c.id==='fatigue-cycles'?fatigueCycleCheck(p,fatigueCycleFamilies(p)):c);
+ // Members beyond the configurator's catalog, judged by the calculation's own checks of the member (configuratorOpenItems).
+ snapshot.checks.push(...configuratorOpenItems(p,snapshot.checks));
  integrityAndGates(snapshot);
  snapshot.checks=snapshot.checks.map(recorded).map(toleranceStated);
  const blocking=snapshot.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status));

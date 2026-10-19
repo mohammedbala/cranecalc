@@ -4,6 +4,7 @@ import {buildProject} from '../src/engine/configurator';
 import {templateProject} from '../src/engine/templates';
 import {defaultRunwayConfig,type RunwayConfig} from '../src/engine/configInputs';
 import {validateProject} from '../src/engine/calculate';
+import {coordinationChecks} from '../src/engine/connectionCoordination';
 import {flangeTieGeometry,stiffenerTieGeometry} from '../src/engine/tieGeometry';
 import {tieSizingRatios} from '../src/engine/flangeTieSizing';
 import {bearingLayout,bearingPlateChecks,bearingSeat,bearingShim,bearingSurface,endBearingChecks,endBearingGeometry,fillerShearFactor,continuousBearings} from '../src/engine/endBearing';
@@ -54,7 +55,9 @@ describe('girder end zone: the tie on the bearing stiffener for rolled simple sp
   // On a designed bracket the receiving flange is known: a 6 in flange is too narrow for the gussets at the shared grid.
   p.details!.bracket={...structuredClone(buildProject(config({...sim5,support:'twin-rib'})).details!.bracket!),enabled:true};
   p.details!.bracket.receiver.width=6*inch;
-  expect(validateRunwayDetails(p).join(' ')).toMatch(/column tie gussets at the bearing stiffeners must fit on the receiving column flange/);
+  // A coordination clash of the calculation (an open item), not a validation stop.
+  expect(validateRunwayDetails(p).join(' ')).not.toMatch(/column tie gussets/);
+  expect(coordinationChecks(p).find(c=>c.id==='coord-tie-gusset-flange')).toMatchObject({status:'fail',group:'Coordination'});
   // Stop bolts moved over the tie at the runway end clash with the gusset and bars.
   const q=structuredClone(p5()),stop=q.details!.endStop!;
   stop.setback=q.details!.bearing.length/2-stop.bolts.edge;stop.bolts.gauge=q.section.bf;

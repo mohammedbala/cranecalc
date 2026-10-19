@@ -1,4 +1,5 @@
-import {flangeTieGeometry,flangeTieFamily} from './tieGeometry';
+import {flangeTieGeometry,flangeTieFamily,stiffenerTieGeometry} from './tieGeometry';
+import {girderEndFork} from './craneColumnInputs';
 import {connectionOptionChecks} from './connectionOptions';
 import {capAngleGeometry,capBoltNutEnvelope,type CapAngleBox} from './capAngle';
 import {railLayout,railLayoutCriteria} from './railLayout';
@@ -112,7 +113,25 @@ function railJointCoordination(p:ProjectInput):CheckResult[]{
 /** Model coordination checks: clashes and layout conflicts, status 'fail' (an open item) while unresolved. */
 export function coordinationChecks(p:ProjectInput):CheckResult[]{
  if(connectionOptionChecks(p).length||!p.details)return [];
- return [...capAngleCoordination(p),...flangeTieCoordination(p),...railJointCoordination(p)];
+ return [...capAngleCoordination(p),...flangeTieCoordination(p),...stiffenerGussetCoordination(p),...railJointCoordination(p)];
+}
+/**
+ * Paired bars on the bearing stiffeners of simple spans: each girder end's tie has its column gusset on the receiving
+ * column flange at the bearing center's offset from the grid, so the gusset with its root fillets must lie on the flange,
+ * |x| + t_g/2 + w ≤ b_f/2. Where it does not (long bearings, a narrow column flange), the worst station; else undefined.
+ */
+export function stiffenerGussetMisfit(p:ProjectInput){
+ const st=girderEndFork(p)?undefined:stiffenerTieGeometry(p),b=p.details?.brace;
+ if(!st||!b||p.system!=='simple'||!st.receiver)return undefined;
+ const offset=Math.max(...st.stations.map(v=>Math.abs(v.offset))),required=offset+b.gussetThickness/2+b.connection.weldSize,clear=st.receiver.width/2;
+ return required>clear+1e-6?{offset,required,clear,width:st.receiver.width}:undefined;
+}
+/** The column tie gussets at the bearing stiffeners off the receiving column flange: an open clash item (listed only when it fails). */
+function stiffenerGussetCoordination(p:ProjectInput):CheckResult[]{
+ const m=stiffenerGussetMisfit(p);if(!m)return [];
+ const len=(v:number)=>format(v,'length',p.units,3);
+ return [check(p,'coord-tie-gusset-flange','Column tie gussets · on the receiving column flange',m.required,m.clear,'|x|+t_g/2+w\le b_f/2',
+  `Each girder end's tie bolts to its bearing stiffener, its column gusset welded to the receiving column flange at the bearing center, ${len(m.offset)} from the grid: with half the gusset and its root fillet it reaches ${len(m.required)} from the column centerline, past the ${len(m.width)} flange's half width. Shorten the bearings or the girder end gap, widen the column flange, or tie the girder ends another way.`,['mechanics'])];
 }
 
 /**

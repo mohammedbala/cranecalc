@@ -88,8 +88,8 @@ export const runwayConfigSchema=z.object({
  selections:z.array(configSelectionSchema).max(24).optional(),
  /**
   * Set by the configurator on the built project, never read as a choice: members the catalog cannot supply within the
-  * sizing targets (a plate girder or a built-up crane column required). validateProject reports each while the project
-  * still has that member, so the build stops with the reason instead of reading as a design.
+  * sizing targets (a plate girder or a built-up crane column required). calculate reports each as an open item while the
+  * project still has that member (configuratorOpenItems): the closest member is built and checked, a review draft.
   */
  beyondCatalog:z.array(z.object({member:z.enum(['girder','crane-column','tie']),shape:z.string().max(80),reason:z.string().max(800)})).max(4).optional(),
 });

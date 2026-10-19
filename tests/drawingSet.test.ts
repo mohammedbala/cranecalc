@@ -269,7 +269,7 @@ describe('welded bracket, new-column and bracing details',()=>{
    expect(boxes.length).toBeGreaterThanOrEqual(5);expect(area/(right*1512)).toBeCloseTo(1,3);
   }
   const elevation=texts(at(newColumnSet,'new-column-elevation')).join(' ');
-  expect(elevation).toContain('W8X24 STRUT AT W.P.,');expect(elevation).toContain('ROD GUSSETS, BRACED COLUMNS;');
+  expect(elevation).toContain('W8X31 STRUT AT W.P.,');expect(elevation).toContain('ROD GUSSETS, BRACED COLUMNS;');
   expect(at(newColumnSet,'footing-plan')).toContain('data-section-cut="FOOTING / SECTION"');
   expect(at(newColumnSet,'braced-bay-elevation')).toContain('data-section-cut="ROD CROSSING / SECTION AT MID-BAY"');
   const crossing=texts(at(newColumnSet,'rod-crossing')).join(' '),g=newColumn.bracingSystem!.geometry;

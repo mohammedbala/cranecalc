@@ -16,6 +16,8 @@ import {defaultColumnBase} from './columnBaseInputs';
 import {columnBaseElevation} from './columnBase';
 import {aiscShapeByName} from '../data/aiscSections';
 import {railTopAboveSteel} from './railSeat';
+import {defaultTorsionBrace} from './newColumnBracing';
+import {applyTieProportions} from './flangeTieSizing';
 const inch=25.4,foot=304.8,kip=4448.221615,ksi=6.894757293;
 const lap=():LapConnection=>({rows:2,gauge:3*inch,pitch:3*inch,edge:1.5*inch,thickness:.5*inch,diameter:.75*inch,grade:'A325',surface:'B',projection:2*inch,weldSize:.25*inch,weldLength:6*inch});
 /**
@@ -208,8 +210,14 @@ export function newColumnDemonstrationProject():ProjectInput {
    source:'Fictitious survey SV-02: existing column faces located at every grid, footings by test pits at grids 1 and 3'}};
  p.columnBase=base;
  p.longitudinalBracing={...p.longitudinalBracing!,height:seat,existing:{W:0,E:0},source:'Fictitious new crane-level rod X-bracing between the new columns at grid lines 2-3; no building wind or seismic on this line',confirmed:true,
-  // Clevis rods in the middle span, a W8X24 strut on the column line and the bracket seats welded to the columns.
+  // Clevis rods in the middle span, a W8X31 strut on the column line (torsion brace below) and the bracket seats welded to the columns.
   design:{...structuredClone(defaultBracingDesign),spans:[2]}};
- p.notes='Software capability demonstration using realistic fictitious geometry, supplier forces, duty and criteria. Not a site-specific design. Scope: three simply supported 25-ft bays of a 2-ton capped runway on new freestanding W14X120 columns with welded brackets, top-flange ties, base plates, anchor rods and spread footings poured flush with the saw cut slab, and crane-level rod X-bracing with a W8X24 strut on the column line. The existing building carries no crane load. Seismic: ordinary steel cantilever column system across the runway and rod bracing not specifically detailed for seismic resistance along it, Seismic Design Category B.';
+ // The girder seats 20 in off the column axis: the traction twists the columns, so the strut is moment-connected in plan
+ // at the locating columns (torsion brace) and is a W8X31, as sizeTorsionStrut sizes it, and the flange tie is the
+ // paired flat bars sizeFlangeTie gives for the braced columns' movement (1/2 in bolts, 1/4 in bars, 3/4 in gussets,
+ // 3/16 in column-end slots, 1 5/8 in saddle; the bracket reach kept).
+ p.longitudinalBracing.design!.torsionBrace={...defaultTorsionBrace};p.longitudinalBracing.design!.strut.shape='W8X31';
+ applyTieProportions(p,{diameter:.5*inch,thickness:.25*inch,gusset:.75*inch,travel:3/16*inch,face:20*inch,widen:0,saddleThickness:1.625*inch,saddleWeld:5/16*inch,setback:3.5*inch,slide:0,wall:.25*inch});
+ p.notes='Software capability demonstration using realistic fictitious geometry, supplier forces, duty and criteria. Not a site-specific design. Scope: three simply supported 25-ft bays of a 2-ton capped runway on new freestanding W14X120 columns with welded brackets, top-flange ties, base plates, anchor rods and spread footings poured flush with the saw cut slab, and crane-level rod X-bracing with a W8X31 strut on the column line, moment-connected in plan at the locating columns (torsion brace). The existing building carries no crane load. Seismic: ordinary steel cantilever column system across the runway and rod bracing not specifically detailed for seismic resistance along it, Seismic Design Category B.';
  return p;
 }

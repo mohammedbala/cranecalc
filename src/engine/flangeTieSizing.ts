@@ -40,6 +40,7 @@ import {minimumFillet} from './connectionStrength';
 import {wrenchClearance} from './endStop';
 import {restraintClearances,secantStiffness} from './restraintClearance';
 import {snapQuarter} from './quarterInch';
+import {stiffenerGussetMisfit} from './connectionCoordination';
 import {validateRunwayDetails} from './detailValidation';
 import {bracketSizingSet} from './bracketSizing';
 import {createBracketCollector} from './bracketDesign';
@@ -185,7 +186,7 @@ function seatTwist(p:ProjectInput){
 function sizingSnapshot(p:ProjectInput,demand:TieSizingDemands):CalculationSnapshot{
  // The column twist enters tieMovements through the column result (twistMovement reads only its torsion).
  // The movement θe grows as e² (the torque F e, the twist T/K) where the sizing moves the bracket reach.
- const k=demand.twist?.offset?(girderOffset(p)/demand.twist.offset)**2:1,twist=demand.twist?{existingColumn:{torsion:{slip:k*demand.twist.factored,service:{slip:k*demand.twist.service}}}}:{};
+ const k=demand.twist?.offset?(girderOffset(p)/demand.twist.offset)**2:1,twist=demand.twist?{existingColumn:{torsion:{slip:k*demand.twist.factored,offset:girderOffset(p),service:{slip:k*demand.twist.service}}}}:{};
  return {input:p,...twist,designAnalysis:{endRotation:demand.rotation,serviceRotation:demand.serviceRotation},
   detailResults:{demands:{brace:demand.force,braceFatigue:demand.range,railLateral:demand.railLateral,braceSustained:demand.sustained},...(demand.support!==undefined?{bracket:{service:{deflection:{value:demand.support}}}}:{})}} as unknown as CalculationSnapshot;
 }
@@ -514,7 +515,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  const over=(r:Trial)=>Object.entries(r.ratios).some(([k,v])=>movementChecks.has(k)&&v>sizingLimit(r.ratios,k,target)+1e-9);
  if(kept&&kept.worst>1&&over(kept)&&release&&!plate){
   const mv=tieMovements(sizingSnapshot(applyTieProportions(structuredClone(p),{...base,slide:0}),demand));
-  const slide=Math.max(inch/8,up(mv.longitudinal+sixteenth+inch/32,sixteenth));
+  const slide=Math.max(inch/8,up(mv.travel+sixteenth+inch/32,sixteenth));
   if(slide<=.75*inch+1e-9){
    // The flexible length helps the bars here too: the farthest face reached first, then nearer while a set passes, so
    // the reach is the shortest at which the slide passes.
@@ -570,7 +571,7 @@ export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCyc
  t.length=t.reach=reach-up(q.section.tw/2+qd.bearing.stiffenerWidth+inch/4,inch/4);
  q.details=sizeFlangeTie(q,{reach:opts.reach}).details;
  const excess=(r:Record<string,number>)=>Object.entries(r).reduce((n,[k,v])=>n+Math.max(0,v-sizingLimit(r,k)),0);
- if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||(!opts.misfit&&excess(tieSizingRatios(q))>excess(ratios)+1e-9))return undefined;
+ if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||stiffenerGussetMisfit(q)||(!opts.misfit&&excess(tieSizingRatios(q))>excess(ratios)+1e-9))return undefined;
  const why=[...(over.length?[`the sized saddle leaves ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
   ...(!over.length&&failing.length?[`the sized saddle tie leaves ${failing.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
   ...(opts.highCycle?[`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (${opts.highCycle})`]:[]),...(opts.prefer?[opts.prefer]:[]),...(opts.misfit?[opts.misfit]:[])].join('; ');
