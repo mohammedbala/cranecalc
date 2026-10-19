@@ -17,7 +17,10 @@ const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m
 
 describe('stepped column drawings',()=>{
  for(const [name,stiffened] of [['t15',true],['t16',false]] as const)it(`${name}: the stepped column details, S-01 and S-00 show the step, and no bracket that does not exist`,()=>{
-  const s=sheetFixture(name),topics=detailTopics(s),topic=topics.find(t=>t.key==='stepped-column');
+  const s=sheetFixture(name);
+  // t15's W40X199 lower web carries the inner flange unstiffened; the stiffener drawings are shown with a pair added.
+  if(stiffened&&!s.input.existingColumn!.step!.stiffener)s.input.existingColumn!.step!.stiffener={thickness:.625*25.4,width:7.25*25.4,weld:.3125*25.4};
+  const topics=detailTopics(s),topic=topics.find(t=>t.key==='stepped-column');
   expect(topic?.views.map(v=>v.title)).toEqual([steppedColumnTitles.elevation,steppedColumnTitles.section,...(stiffened?[steppedColumnTitles.stiffener]:[])]);
   expect(topics.flatMap(t=>t.views.map(v=>v.title))).not.toContain(detailTitles.bearing);
   const sheets=drawingSheetSet(s),all=sheets.map(v=>v.svg).join(''),words=texts(all);
