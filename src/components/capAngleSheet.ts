@@ -4,7 +4,7 @@ import type {CalculationSnapshot} from '../engine/types';
 import {capAngleGeometry,boltHardware,capAngleStiffenerGeometry,type CapAngleGeometry} from '../engine/capAngle';
 import {capAngleResult} from '../engine/capAngleTie';
 import {clipGeometry,clipOutline,railPadThickness} from '../engine/railSeat';
-import {supportColumn} from '../engine/drawingData';
+import {tieReceiverColumn} from '../engine/drawingData';
 import {capChannelProfile} from '../engine/channelProfile';
 import {sheetDrawingScale as drawingScale,line,rect,text,dimH,dimV,multiLeader,breakLine,textWidth,labelCaps,bubble,n,detailRef,capChannelSection,capAngleTitles,type XY} from './sheetGraphics';
 import {tieSize,tieDim,weldLength,weldLeader,type Weld} from './flangeTieSheet';
@@ -29,8 +29,8 @@ export const beveledCapWasher=(b:Parameters<typeof capChannelProfile>[0])=>capCh
 // The engine's capBoltSeat (src/engine/capAngle.ts) uses the same 1:20 rule for the washer in the checks and hardware envelopes.
 /** The column the end plates bolt to, as drawn and named. */
 function tieColumn(s:CalculationSnapshot,g:CapAngleGeometry){
- const col=g.column.receiver,sc=supportColumn(s.input);
- return {col,isNew:sc.isNew,cls:sc.isNew?'runway-line':'reference-line',label:sc.isNew?sc.name:col?`EXISTING ${col.shape??'COLUMN'}${col.shape?' COLUMN':''}`:'COLUMN BY OTHERS',tf:col?.tf??19.05};
+ const col=g.column.receiver,sc=tieReceiverColumn(s.input);
+ return {col,isNew:sc.isNew,cls:sc.isNew?'runway-line':'reference-line',label:sc.isNew||sc.building?sc.name:col?`EXISTING ${col.shape??'COLUMN'}${col.shape?' COLUMN':''}`:'COLUMN BY OTHERS',tf:col?.tf??19.05};
 }
 
 /** Section at a support looking along the runway: the girder with cap, rail and rail clip, the cap angle, tie plate, end plate, shims and column flange. */

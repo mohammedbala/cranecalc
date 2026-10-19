@@ -8,6 +8,7 @@ import {sectionProperties} from './section';
 import {simpleSupportInput} from './simpleSupports';
 import {activeEndBearing,continuousBearings} from './endBearingInputs';
 import {format} from './units';
+import {tieShortening,craneColumnLayout} from './craneColumn';
 import {latexNumber,withinLimit} from './math';
 
 const inch=25.4,alpha=12e-6,install=1/16*inch;
@@ -45,12 +46,16 @@ export function tieMovements(s:CalculationSnapshot){
  const support=r.bracket?.service.deflection?.value??r.rolledBracket?.service.deflection?.value??r.taperedHaunch?.service.deflection?.value??r.existingBracket?.service.seatDeflection?.value;
  const supportSource=r.bracket||r.rolledBracket||r.taperedHaunch?'designed bracket':r.existingBracket?'new seat on the existing bracket (existing support deformation excluded)':undefined;
  const cranes=p.cranes.length,impact=Math.max(...p.cranes.map(c=>c.impact));
- return {setback,cyclicLongitudinal:cyclicRotation*depth,longitudinal:rotation*depth+thermal,thermal,cyclicRotation,rotation,
+ // A crane column tied to the building: the girder (on the crane column) and the building column the tie lands on shorten
+ // differently; the tie's column-end slots take the larger shortening plus the erection tolerance (tieShortening, the
+ // column tie's own slot rule), the crane column's crane-only part cycling with each pass.
+ const layout=craneColumnLayout(p),differential=layout?tieShortening(p,layout.girderTie.elevation):undefined;
+ return {setback,differential,cyclicLongitudinal:cyclicRotation*depth,longitudinal:rotation*depth+thermal,thermal,cyclicRotation,rotation,
   support,supportSource,cranes,impact,
   // Column-end slide: the tie force left between crane passes, which holds the slide against thermal travel by friction.
   sustained:release?.slide?(r.demands as {braceSustained?:number}).braceSustained??sustainedTieForce(p):0,
   // Static vertical movement at the tie: every crane at once with impact, plus end rotation over the setback.
-  vertical:(support??0)*cranes*(1+impact)+rotation*setback,cyclicVertical:(support??0)+cyclicRotation*setback,release,
+  vertical:(support??0)*cranes*(1+impact)+rotation*setback+(differential?.demand??0),cyclicVertical:(support??0)+cyclicRotation*setback+(differential?.cyclic??0),release,
   // Clear bar length between the gussets: both bolt groups and the column gusset's longer slotted end edge.
   freeLength:t.length-2*((t.connection.rows-1)*t.connection.pitch+2*t.connection.edge)-columnGussetExtension(p)};
 }
@@ -147,11 +152,11 @@ export function tieMovementChecks(s:CalculationSnapshot,ctx:{force:number;member
  const fatigueRoot=roots.reduce((a,x)=>{const range=r.demands.braceFatigue/(x.b*tg)+6*(act(x,cyclic,fatigueFriction).m+lap(r.demands.braceFatigue))/(x.b*tg**2),cap=Math.min(fatigueSpectrumBin('C',1,totalCycles).allowable,transverseFilletFatigue(tg,x.weld,totalCycles).capacity);return range/cap>a.range/a.cap?{x,range,cap}:a;},{x:roots[0],range:0,cap:1});
  checks.push(compared('tie-move-root-fatigue','Tie gusset roots · fatigue with imposed movement',fatigueRoot.range,fatigueRoot.cap,'stress',single?'f_{sr}=\\frac{\\Delta F}{bt_g}+\\frac{6(M_s+V_sa+\\Delta Fe)}{bt_g^2}\\le F_{SR}':'f_{sr}=\\frac{\\Delta F}{bt_g}+\\frac{6(M_s+V_sa)}{bt_g^2}\\le F_{SR}',`Governing ${fatigueRoot.x.name}. Tie force range plus the single-crane rotation movement${single?' and the lap couple range ΔF·e':''}, every cycle; transverse fillet root (AISC A-3.1 item 8.2 with R_FIL) bounded by Category C.${slide?` Column-end slide: the root range is bounded by the sleeve friction range 2μ_u(F_s + ΔF) as the end shear, and at the column gusset by its couple over the sleeve rows.`:''}`,['aisc-fatigue']));
  // Vertical movement at the column gusset.
- const byOthers=!mv.supportSource;
+ const byOthers=!mv.supportSource&&!mv.differential,diff=mv.differential;
  if(rel){
   const hole=rel.hole,db=c.diameter,bolt=boltCapacity({grade:c.grade,diameter:db,planes:2,surface:c.surface,shear:0,tension:0,method});
   const required=mv.vertical+install;
-  checks.push(compared('tie-release-travel','Column gusset slots · vertical travel',required,rel.travel,'length','\\Delta_sn(1+I)+\\theta e+1/16\\,\\mathrm{in}\\le u',byOthers?`The bracket is by others: its deflection is not included here and is limited by the criterion below. End rotation ${mv.rotation.toExponential(3)} rad over the ${fmt(mv.setback)} tie setback, plus a 1/16 in positioning allowance for the field-welded gusset.`:`Support deflection ${fmt(mv.support!)} (${mv.supportSource}, single crane) × ${mv.cranes} crane(s) × (1 + ${mv.impact}) impact, end rotation over the ${fmt(mv.setback)} setback, and a 1/16 in positioning allowance.`));
+  checks.push(compared('tie-release-travel','Column gusset slots · vertical travel',required,rel.travel,'length',diff?'\\max(\\delta_c,\\delta_b)+\\delta_t+\\theta e+1/16\\,\\mathrm{in}\\le u':'\\Delta_sn(1+I)+\\theta e+1/16\\,\\mathrm{in}\\le u',diff?`The girder tie lands on the building column beside the crane column: the column-tie slot rule (crane-column-tie-slot-travel) at the girder tie, ${fmt(diff.z)} above the crane-column base: crane column shortening δc = PL/EA = ${fmt(diff.crane)} (runway dead load, crane with impact at the most loaded support, own weight; to its top), building column shortening δb = ${fmt(diff.building)} (its existing L and the largest of Lr, S and R, unfactored), the larger plus the erection tolerance ${fmt(diff.tolerance)}; plus the end rotation ${mv.rotation.toExponential(3)} rad over the ${fmt(mv.setback)} tie setback and a 1/16 in positioning allowance for the field-welded gusset. Once a sleeve bears on a slot end the tie would carry runway vertical load into the building column.`:byOthers?`The bracket is by others: its deflection is not included here and is limited by the criterion below. End rotation ${mv.rotation.toExponential(3)} rad over the ${fmt(mv.setback)} tie setback, plus a 1/16 in positioning allowance for the field-welded gusset.`:`Support deflection ${fmt(mv.support!)} (${mv.supportSource}, single crane) × ${mv.cranes} crane(s) × (1 + ${mv.impact}) impact, end rotation over the ${fmt(mv.setback)} setback, and a 1/16 in positioning allowance.`));
   checks.push(compared('tie-release-sleeve','Spacer sleeves · bolt installation load',1.5*bolt.pretension,m.Fy*rel.sleeveArea,'force','1.5T_b\\le\\phi F_yA_g;\\ \\phi=1.0\\ \\text{(sleeve)}',`Sleeve ${fmt(rel.od)} OD × ${fmt(hole)} bore × ${fmt(rel.sleeveLength)} long, F_y as the plate material. 1.5 × the minimum pretension bounds turn-of-nut overshoot (RCSC commentary); ${single?'the plate and an F436 washer bear':'the bars bear'} on the sleeve ends, not on the gusset.`));
   checks.push(compared('tie-release-clearance','Sleeve length · gusset free to slide',inch/32,rel.sleeveLength-tg,'length','L-t_g\\ge1/32\\,\\mathrm{in}\\ \\ \\text{(sleeve)}',`The sleeve projects beyond the gusset so ${single?'the pretensioned plate and washer do':'the pretensioned bars do'} not clamp it; total clearance over both faces.`));
   // The sleeves bear toward the gusset end, at the gusset's own end edge.

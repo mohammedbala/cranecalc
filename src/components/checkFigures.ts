@@ -1,4 +1,5 @@
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {girderEndFork} from '../engine/craneColumnInputs';
 import type {ProjectInput} from '../engine/types';
 import {componentDetail,type Component} from './figureDetails';
 import {activeEndBearing} from '../engine/endBearingInputs';
@@ -154,7 +155,7 @@ function bracket(p?:ProjectInput):Drawing{
 export interface CheckFigure{title:string;note:string;svg:string;path:string[];detail:string;view:'isometric'|'schematic'}
 export function checkFigure(topic:string,p?:ProjectInput):CheckFigure{
  // A girder on a column cap has no tie: its connection and restraint figures are the column cap's end fork.
- if(p&&activeColumnCap(p)&&['Connections','Flange attachment','Cap tieback','Cap tieback movement'].includes(topic))topic='Column cap';
+ if(p&&girderEndFork(p)&&['Connections','Flange attachment','Cap tieback','Cap tieback movement'].includes(topic))topic='Column cap';
  let title=topic,note=checkGroupPurpose[topic]??'Review the stated inputs, calculation basis and acceptance limits.',drawing='',steps:string[]=[],detail:Component[]=[];
  switch(topic){
   case 'Geometry':title='Spans, supports and member';note=`${p?.spans.length??3} ${p?.system==='continuous'?'continuous':'independent'} bay(s). Section properties and restraint lengths establish the member model.`;drawing=geometry(p);steps=['Wheel loads P on the girder','Girder spans grid to grid','Reactions R at the supports'];detail=['girder'];break;
