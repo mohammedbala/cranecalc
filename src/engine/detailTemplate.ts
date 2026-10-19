@@ -6,7 +6,7 @@ import {defaultEndBearing} from './endBearingInputs';
 import {bearingLayout,applyBearingLayout} from './endBearing';
 import {defaultEndStop,needsGirderStops} from './endStopInputs';
 import {sizeEndStop} from './endStopSizing';
-import {railJointKindForDuty,railHasJoints} from './railLayout';
+import {railJointKindForDuty,railHasJoints,slipCriticalInstallText} from './railLayout';
 import {defaultRailClip} from './railSeat';
 import {columnGussetHeight,tieBarGap,tieRelease} from './tieGeometry';
 import {aiscShapeByName} from '../data/aiscSections';
@@ -61,7 +61,7 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // largest that keeps the AISC J3.4 edge distance to both bar edges (holes on the bars' mid-height).
  const jointHeight=Math.floor(.95*(h-up(.3*h,1.5875)-up(.17*h,1.5875))/6.35)*6.35;
  const jointBolt=[.875,.75,.625,.5].map(v=>v*inch).find(db=>2*minimumEdge(db)<=jointHeight+1e-6)??.5*inch;
- const jointKind=railJointKindForDuty(p),jointText=jointKind==='welded'?' Rail joints thermite or flash-butt welded by the rail supplier\'s qualified procedure (preheat, grinding, inspection); no joint bars or bolts.':jointKind==='supplier-bars'?' Rail joints tight (gap 1/16 in max.) with the rail supplier\'s joint bars and bolts (deferred submittal), bolts pretensioned and re-tightened after 30 and 90 days of operation.':' Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.';
+ const jointKind=railJointKindForDuty(p),jointText=jointKind==='welded'?' Rail joints thermite or flash-butt welded by the rail supplier\'s qualified procedure (preheat, grinding, inspection); no joint bars or bolts.':jointKind==='supplier-bars'?` Rail joints tight (gap 1/16 in max.) with the rail supplier's joint bars and bolts (deferred submittal), bolts pretensioned and re-tightened after 30 and 90 days of operation; the bars and bolts ${slipCriticalInstallText} (fatigue Category B at the bars' net section).`:' Rail joints tight (gap 1/16 in max.), joint bolts pretensioned and re-tightened after 30 and 90 days of operation.';
  // Bearing stiffener fillets: the J2.4 minimum by the thinner part; else 5/16 in, within the edge limit t - 1/16 in of the
  // thinner of the web and the stiffener, and no larger than the smallest fillet that develops the web in shear rupture
  // with fillets on both faces, D = t_w F_u/(1.414 F_EXX) to the next 1/16 in (t_w = 6.19D/F_u for E70, AISC J4.2): a larger
@@ -90,8 +90,12 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
    // base, 5/16 in base welds) lays out the stations and every clip check is unverified.
    clip:{...structuredClone(defaultRailClip),product:`${toBeEntered} rail clip manufacturer and series (or equal), rated lateral and uplift capacity per clip`},
    jointGap:inch/16,jointPlateThickness:1*inch,jointPlateHeight:jointHeight,jointBoltDiameter:jointBolt,jointPitch:3*inch,jointEdge:1.5*inch,temperatureRange:30,
-   // Joint kind by duty: welded for CMAA D to F or an AIST Class A or B building, else the rail supplier's joint bars.
-   jointKind},
+   // Joint kind by duty: welded for CMAA D to F or an AIST Class A or B building, else the rail supplier's joint bars,
+   // installed to the slip-critical requirements (AISC 360-16 Table A-3.1 item 2.2, Category B): AIST TR-13 §5.16.1
+   // already pretensions and re-tightens the bolts, and Class A faying surfaces are the bars' and rail's clean mill
+   // scale. A bearing-type joint (Category D) of the idealized bars exceeds the fatigue range for every rail size at the
+   // class cycle counts, while clamped bars keep the range off the hole edges.
+   jointKind,...(jointKind==='supplier-bars'?{jointSlipCriticalInstall:true}:{})},
   criteria:{...(p.details?.criteria.twistLimit?{twistLimit:p.details.criteria.twistLimit}:{}),railLateralLimit:400,railGauge:p.details?.criteria.railGauge??12192,alignmentTolerance:.125*inch,levelTolerance:.125*inch,rotationClearance:.5*inch,temperatureMaximum:50,corrosionProtected:true},
   fatigueDetails:register,
   spectrum:[{name:'All cycles at rated lift',liftFraction:1,cycles:p.fatigue.cycles}],

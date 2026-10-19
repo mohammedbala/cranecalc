@@ -80,7 +80,11 @@ export const runwayDetailsSchema=z.object({
   // fishing surfaces, a deferred submittal for the demands printed here), 'bolted-bars' (default: the joint bars
   // detailed here, a bearing-type joint with pretensioned bolts, Category D) or 'slip-critical-bars' (the bars detailed
   // here as a slip-critical Class A joint, slip checked under the cyclic shear, Category B).
-  jointKind:z.enum(['welded','supplier-bars','bolted-bars','slip-critical-bars']).optional()}),
+  jointKind:z.enum(['welded','supplier-bars','bolted-bars','slip-critical-bars']).optional(),
+  // Bolted joint bars (supplier's or detailed here) designed for bearing but installed to every requirement of a
+  // slip-critical joint (RCSC pretension, Class A faying surfaces: clean mill scale, no paint, oil or lubricant): AISC
+  // 360-16 Table A-3.1 item 2.2, Category B at the net section, with no slip check (railJointCategory).
+  jointSlipCriticalInstall:z.boolean().optional()}),
  criteria:z.object({twistLimit:pos.optional(),railLateralLimit:pos,railGauge:pos,alignmentTolerance:pos,levelTolerance:pos,rotationClearance:pos,temperatureMaximum:z.number().finite(),corrosionProtected:z.boolean()}),
  fatigueDetails:z.array(z.object({id:z.string().min(1).max(40),name:z.string().min(1).max(120),x:nn,point:z.enum(['top-left','top-right','bottom-left','bottom-right']),category:z.enum(['A','B','B1','C','D','E','E1']),reference:z.string().min(1).max(300)})).min(1).max(16),
  spectrum:z.array(z.object({name:z.string().min(1).max(80),liftFraction:nn.max(1),cycles:pos})).min(1).max(8),
