@@ -316,7 +316,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
   svg+=dimVClear(drawn,Z(zc0),Z(zc0+hg),X(g.face+colT),xr,size(hg))+dimVClear(drawn,Z(zs[0]),Z(zs[1]),X(columnRows.at(-1)!)+6,xr+22,size(c.gauge));
   const yL=Math.max(ly,Z(colBot))+6,lw=lx+Math.max(...items.flatMap(v=>v.labels.map(l=>textWidth(l,8.5))))-X(-b.bf/2);
   // Where the tie sits along the runway: on the tie-side stiffener at the bearing center, the column gusset with it.
-  const note=wrapToWidth(labelCaps(`Column gusset on the column flange in line with the tie-side bearing stiffener, at the bearing center: ${ends.length?Math.max(...ends)<1?'on the grid line at the runway-end grids':`${dim(Math.max(...ends))} inboard of the grid at the runway-end grids`:''}${ends.length&&inner.length?', ':''}${inner.length?`${dim(Math.max(...inner))} each side of the shared grids`:''}. The tie centerline is ${dim(drop)} below the top of steel.`),Math.max(260,lw),lettering.text);
+  const note=wrapToWidth(labelCaps(`Column gusset on the column flange in line with the tie-side bearing stiffener, at the bearing center: ${ends.length?Math.max(...ends)<1?'on the grid line at the runway-end grids':`${dim(Math.max(...ends))} inboard of the grid at the runway-end grids`:''}${ends.length&&inner.length?', ':''}${inner.length?`${dim(Math.max(...inner))} each side of the shared grids`:''}. The tie centerline is ${size(drop)} below the top of steel.`),Math.max(260,lw),lettering.text);
   note.forEach((v,i)=>{svg+=text(X(-b.bf/2),yL+14+i*lettering.noteLeading,v,lettering.text);});
   return {svg:svg+'</g>',scale:scale.label};
  }

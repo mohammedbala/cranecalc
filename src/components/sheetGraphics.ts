@@ -342,13 +342,35 @@ export function filletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],
  if(allAround)svg+=circle(weldJunction(at,right)[0],y,3);
  return `<g data-multileader="weld"${field?' data-weld-location="field"':''}${allAround?' data-weld-all-around="true"':''}>${svg}${field?fieldWeldFlag(weldJunction(at,right),right?'right':'left'):''}</g>`;
 }
+/**
+ * Combined weld symbol (AWS A2.4) for a CJP groove weld with a reinforcing fillet: the single-bevel groove symbol and
+ * the fillet triangle on the arrow side of one reference line, the fillet size left of the triangle, CJP in the tail,
+ * the weld-all-around circle where the arrow meets the line. Laid out like filletLeader (same reference line).
+ */
+export function cjpFilletLeader(points:XY[],at:XY,filletSize:string,labels:string[],allAround=false){
+ let svg=multiLeader(points,at,[],lettering.text,[],89);
+ const y=at[1]-3,x=at[0]+30,bx=at[0]+56,right=points.length>0&&points.every(p=>p[0]>at[0]+89);
+ svg+=line([at[0]-3,y],[at[0]+92,y]);
+ svg+=`<path class="annotation" d="M${x},${y}l0,7l8,-7Z"/>`;
+ svg+=line([bx,y],[bx,y+8])+line([bx,y],[bx+8,y+8]);
+ svg+=text(x-6,y+7,labelCaps(filletSize.replaceAll('"','')),lettering.text,'end');
+ // The tail at the end away from the arrow, CJP above it.
+ const tail=right?at[0]-3:at[0]+92,dir=right?-1:1;
+ svg+=line([tail,y],[tail+dir*6,y-5])+line([tail,y],[tail+dir*6,y+5]);
+ svg+=text(right?at[0]+4:at[0]+70,y-3,'CJP',lettering.text,'start');
+ svg+=labels.map((v,i)=>text(at[0],at[1]+17+i*lettering.leading,labelCaps(v),lettering.text)).join('');
+ if(allAround)svg+=circle(weldJunction(at,right)[0],y,3);
+ return `<g data-multileader="weld" data-weld="cjp"${allAround?' data-weld-all-around="true"':''}>${svg}</g>`;
+}
 export function fieldFilletLeader(points:XY[],at:XY,sizeLabel:string,labels:string[],bothSides=false,via:XY[][]=[]){return filletLeader(points,at,sizeLabel,labels,bothSides,via,true);}
 
 /**
  * Leaders to a column of labels, ordered by target height so no two leaders
  * cross; labels are spaced by their line count within [top, bottom].
  */
-export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boolean;arrowSide?:boolean;allAround?:boolean}[],x:number,top:number,bottom:number){
+export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boolean;arrowSide?:boolean;allAround?:boolean;
+ /** A CJP groove weld with a reinforcing fillet of size `weld` (cjpFilletLeader). */
+ cjp?:boolean}[],x:number,top:number,bottom:number){
  const sorted=[...items].sort((a,b)=>a.at[1]-b.at[1]),height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*lettering.leading;
  const total=sorted.reduce((a,v)=>a+height(v),0),gap=Math.max(8,(bottom-top-total)/Math.max(1,sorted.length-1));
  const slots=()=>{let y=top;return sorted.map(v=>{const at=y;y+=height(v)+gap;return at;});};
@@ -362,7 +384,7 @@ export function labelColumn(items:{at:XY;labels:string[];weld?:string;field?:boo
   if(!swapped)break;
  }
  let svg='';const ys=slots();
- sorted.forEach((v,i)=>{const y=ys[i];svg+=v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,!v.arrowSide,[],!!v.field,!!v.allAround):multiLeader([v.at],[x,y],v.labels);});
+ sorted.forEach((v,i)=>{const y=ys[i];svg+=v.weld&&v.cjp?cjpFilletLeader([v.at],[x,y+3],v.weld,v.labels,!!v.allAround):v.weld?filletLeader([v.at],[x,y+3],v.weld,v.labels,!v.arrowSide,[],!!v.field,!!v.allAround):multiLeader([v.at],[x,y],v.labels);});
  return svg;
 }
 

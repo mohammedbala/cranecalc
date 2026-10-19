@@ -12,7 +12,7 @@ import {capWorkPointDrop,columnCapGeometry} from '../engine/columnCap';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapTitles} from './columnCapSheet';
 import {runwayElevations} from '../engine/drawingData';
-import {drawingLength,holeInches,plateInches,dimensionLength,limitLength} from './drawingFormat';
+import {drawingLength,holeInches,plateInches,dimensionLength,limitLength,drawingElevation} from './drawingFormat';
 import {refDim,sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,multiLeader,detailRef,detailTitles,labelColumn,n,breakLine,bubble,textWidth,sectionCut,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import type {DetailTopic,DetailView} from './detailSheet';
@@ -79,7 +79,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  const cr=g.cross,rodName=`${size(b.rod.diameter)} DIA. ROD`,pinName=`${size(g.dp)} DIA. PIN`,gussetName=`PL ${size(g.t)} GUSSET`,boltName=`${sg.bolts.length} - ${size(d.strut.boltDiameter)} ${d.strut.grade} BOLTS`,bolting=strutBolting(p).callout;
  const grids=(i:number)=>[i,i+1].map(String),spanGrids=L.spans.map(i=>grids(i).join('-')).join(', '),[gridA,gridB]=grids(L.spans[0]);
  const offsetLabel=`${dim(cr.offset)} OFF COLUMN C/L TOWARD GIRDER`;
- const el=runwayElevations(p),datum=p.drawing?.datumElevation??0,elev=(z:number)=>`EL. ${dim(datum+columnBaseElevation(base)+z)}`;
+ const el=runwayElevations(p),datum=p.drawing?.datumElevation??0,elev=(z:number)=>`EL. ${drawingElevation(datum+columnBaseElevation(base)+z,u)}`;
  const weldLabel=size(d.weld),views:DetailView[]=[];
  // Web stiffener pair at each upper gusset and strut tab (webStiffeners), where the bracing sizing added it.
  const stiff=d.stiffeners,stiffName=stiff?`PL ${size(stiff.thickness)} WEB STIFF. PAIR`:'';
@@ -345,7 +345,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
  const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(...ids:string[])=>ids.map(id=>checkDcText(s,check(id))).join(' / ');
  const z=r.seismic,sep=r.separation,lb=s.longitudinalBracing!;
  const rows=[
-  ['BRACING',`${rodName} X, TENSION ONLY, GRIDS ${spanGrids}, BOTH RUNWAYS; W.P. ${dim(L.height)} ABOVE T/BASE PL${el?` (${capG?`${dim(capG.drop)} BELOW THE CAP TOP, EL. ${dim(datum+columnBaseElevation(base)+L.height)}`:`BRG. SEAT ${elev(L.height)}`})`:''}`],
+  ['BRACING',`${rodName} X, TENSION ONLY, GRIDS ${spanGrids}, BOTH RUNWAYS; W.P. ${dim(L.height)} ABOVE T/BASE PL${el?` (${capG?`${dim(capG.drop)} BELOW THE CAP TOP, ${elev(L.height)}`:`BRG. SEAT ${elev(L.height)}`})`:''}`],
   [`LINE FORCE / ROD FORCE (${p.method})`,`${force(lb.governing.H)} / ${force(lb.governing.force)} (${lb.governing.id})`],
   ['ROD STRENGTH = CONNECTION FORCE',`${force(r.develop)}: CLEVIS, ${pinName}, ${gussetName} AND WELDS DEVELOP THE ROD`],
   ['GUSSET WELDS',`${weldLabel} FILLETS BOTH FACES: ${dim(r.outlines.welds.upper.to-r.outlines.welds.upper.from)} TO WEB AT W.P.; ${dim(r.outlines.welds.lower.web)} TO WEB AND ${dim(r.outlines.welds.lower.plate-g.x0)} TO BASE PL`],
