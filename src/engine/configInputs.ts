@@ -79,6 +79,11 @@ export const runwayConfigSchema=z.object({
  buildingColumnShape:z.string().max(30).optional(),
  /** Crane-column base: pinned (four anchor rods, default) or fixed. */
  craneColumnBase:z.enum(['pinned','fixed']).optional(),
+ /**
+  * Rail pad: blank, an elastomeric pad under rails 5 in deep and deeper, the clips at most 24 in apart; false, the rail
+  * bears directly on the girder and the clips stand at most 30 in apart (AIST TR-13 opposing clip spacing without a pad).
+  */
+ railPad:z.boolean().optional(),
  /** Set by the configurator on the built project (buildProject), never read as a choice: its selection log. */
  selections:z.array(configSelectionSchema).max(24).optional(),
 });
