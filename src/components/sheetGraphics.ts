@@ -285,7 +285,8 @@ const resolvedLength=(v:string)=>v.replace(/\{\{REF:[^}]*\}\}/g,'00/S-00').repla
  * Printed sizes: 3/16 in title, 1/8 in scale, 0.42 in bubble at any content scale.
  */
 export function viewTitle(cx:number,y:number,title:string,scale:string,contentScale:number=sheetFormat.contentScale){
- const k=1/contentScale,size=13.5*k,w=textWidth(title,size,true),r=15*k,bx=cx-w/2-r-7*k;
+ // The bubble left of the title, and of a scale line longer than the title.
+ const k=1/contentScale,size=13.5*k,w=textWidth(title,size,true),r=15*k,bx=cx-Math.max(w/2+7*k,textWidth(scale,lettering.text*k)/2+4*k)-r;
  return `<g data-view-title="below" data-detail-title="${esc(title)}">${circle(bx,y,r,'divider')}${line([bx-r,y],[bx+r,y],'annotation')}${text(bx,y-3.6*k,detailNumberToken,11.5*k,'middle',700)}${text(bx,y+9.4*k,sheetNumberToken,lettering.text*k,'middle')}${text(cx,y-4*k,title,size,'middle',700)}${line([bx+r,y],[cx+w/2+5*k,y],'divider')}${text(cx,y+12*k,scale,lettering.text*k,'middle')}</g>`;
 }
 /**

@@ -127,12 +127,12 @@ function drawing(view:DetailView,level:number):Drawing|undefined{
  }
  return list[level];
 }
-/** Width a detail title takes: the bubble left of the centered title and the cell's side clearances. */
-const titleWidth=(title:string)=>textWidth(title,lettering.title,true)+74+2*detailLayout.cell.side;
+/** Width a detail title takes: the bubble left of the centered title (or of a longer scale line, viewTitle) and the cell's side clearances. */
+const titleWidth=(title:string,scale='')=>Math.max(textWidth(title,lettering.title,true)+14,textWidth(scale,lettering.text)+8)+60+2*detailLayout.cell.side;
 /** Cell a detail drawing needs. */
 function need(view:DetailView,d:Drawing){
  const {cell}=detailLayout,b=d.bounds;
- return {w:Math.max(b.x1-b.x0+2*cell.side,titleWidth(view.title)),h:b.y1-b.y0+cell.top+cell.bottom};
+ return {w:Math.max(b.x1-b.x0+2*cell.side,titleWidth(view.title,d.render.scale)),h:b.y1-b.y0+cell.top+cell.bottom};
 }
 /** Least total height of the details in rows of the field width at their standard scales (Infinity when one is too wide). */
 function leastHeight(items:Placed[],fieldW:number){
