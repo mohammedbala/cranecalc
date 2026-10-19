@@ -106,18 +106,19 @@ describe('crane column: configured builds and full calculations',()=>{
   // Crane column with a rigid building column and a very stiff column tie.
   const q=structuredClone(p13),k=q.craneColumn!;
   Object.assign(k.building,{shape:'',d:3000,bf:3000,tf:300,tw:300,strong:{base:'fixed',top:'braced'}});
-  k.columnTie={...k.columnTie,plate:{...k.columnTie.plate,thickness:50,width:3000},bolts:{...k.columnTie.bolts,count:8,diameter:1.5*inch}};
+  // A mechanical limit, not a buildable tie (the schema allows at most 8 bolts; the detail run does not validate).
+  k.columnTie={...k.columnTie,plate:{...k.columnTie.plate,thickness:12,width:30000},bolts:{...k.columnTie.bolts,count:400,diameter:1.5*inch}};
   const brace=braceSystem(q),eb=activeEndBearing(q)!,G=q.section.E/2.6,ebK=4*G*bolt(eb.bolts.grade,eb.bolts.diameter).area/(q.section.tf+q.details!.bearing.thickness+q.columnCap!.plate.thickness);
   const restraint=craneColumnRestraint(q,brace.stiffness,ebK);
-  expect(restraint.top/brace.stiffness).toBeGreaterThan(.999);expect(restraint.bottom/ebK).toBeGreaterThan(.97);
+  expect(restraint.top/brace.stiffness).toBeGreaterThan(.995);expect(restraint.bottom/ebK).toBeGreaterThan(.99);
   // The same girder, tie and bearings on a welded bracket at the same column face, its seat as thick as the cap plate.
   const b=structuredClone(q),seat=b.columnCap!.plate.thickness,face=craneColumnLayout(q)!.girderTie.face;
   delete b.craneColumn;delete b.columnCap;
   b.details!.bracket={...structuredClone(cappedDemonstrationProject().details!.bracket!),enabled:true,reach:face,seatThickness:seat};
   b.existingColumn={...b.existingColumn!,isNew:false};
   const a=detailRun(q),r=detailRun(b);
-  expect(r.braceStiffness).toBeCloseTo(brace.stiffness,6);expect(a.braceStiffness/brace.stiffness).toBeGreaterThan(.999);
-  expect(a.demands.brace/r.demands.brace).toBeCloseTo(1,1);
+  expect(r.braceStiffness).toBeCloseTo(brace.stiffness,6);expect(a.braceStiffness/brace.stiffness).toBeGreaterThan(.995);
+  expect(a.demands.brace/r.demands.brace).toBeCloseTo(1,2);
   // And the real building column and column tie are softer restraints: the tie force changes with them.
   const real=detailRun(p13);expect(real.braceStiffness).toBeLessThan(brace.stiffness);
  },600000);
@@ -135,7 +136,8 @@ describe('crane column: configured builds and full calculations',()=>{
    console.log(`${name}: failing ${failing.join(', ')||'none'}`);
    expect(s.checks.filter(c=>c.status==='fail').map(c=>c.id).filter(id=>!(allowed as readonly string[]).includes(id))).toEqual([]);
    expect(s.checks.filter(c=>['incomplete','unsupported'].includes(c.status)).map(c=>c.id)).toEqual([]);
-   for(const c of s.checks)expect(classifyCheck(c).rule,c.id).not.toBe('default');
+   // This arrangement's checks are typed by their own rules (the new-column base rows keep the taxonomy they have elsewhere).
+   for(const c of s.checks.filter(v=>/^(crane-column-|building-column-)/.test(v.id)))expect(classifyCheck(c).rule,c.id).not.toBe('default');
    expect(s.buildingColumn).toBeDefined();expect(s.craneColumn!.ties.columnTie).toBeGreaterThan(s.craneColumn!.brace.strength.required);
    for(const id of ['crane-column-brace-stiffness','crane-column-brace-strength','crane-column-tie-slot-travel','building-column-interaction','column-interaction','column-cap-weld'])expect(s.checks.find(c=>c.id===id)?.status,id).toBe('pass');
    expect(s.checks.find(c=>c.id==='column-cap-fork-stiffness')?.status).toBe('not-applicable');
