@@ -3,7 +3,7 @@ import type {CadDoc,CadGroup,CadLayer,Ent,NewEnt} from './model';
 /** One undoable edit: entities put (added or replaced by id) and deleted, and optionally the layer table and groups. */
 export interface Change{put?:Ent[];add?:NewEnt[];del?:number[];layers?:CadLayer[];groups?:CadGroup[];meta?:Meta}
 /** Drawing settings changed undoably: styles, linetype scale, plot style. */
-export type Meta=Partial<Pick<CadDoc,'textStyles'|'dimStyles'|'ltscale'|'plotStyle'>>;
+export type Meta=Partial<Pick<CadDoc,'textStyles'|'dimStyles'|'ltscale'|'plotStyle'|'blocks'>>;
 interface State{ents:Map<number,Ent|null>;layers?:CadLayer[];groups?:CadGroup[];meta?:Meta}
 interface Step{label:string;before:State;after:State}
 
@@ -30,6 +30,9 @@ export class CadStore{
  get redoLabel(){return this.redoStack[this.redoStack.length-1]?.label;}
  /** Change drawing settings that are not geometry (the drawing scale): not undoable. */
  setMeta(patch:Partial<Pick<CadDoc,'realPerUnit'>>){this.doc={...this.doc,...patch};this.emit(true);}
+ /** Set the drawing aside with its history (BEDIT opens a block in its place); restore() brings it back. */
+ swap(doc:CadDoc){const saved={doc:this.doc,undo:this.undoStack,redo:this.redoStack};this.doc=doc;this.index();this.selection.clear();this.undoStack=[];this.redoStack=[];this.emit(true);return saved;}
+ restore(saved:{doc:CadDoc;undo:Step[];redo:Step[]}){this.doc=saved.doc;this.index();this.selection.clear();this.undoStack=saved.undo;this.redoStack=saved.redo;this.emit(true);}
  /** Replace the whole drawing (open, revert); clears the history. */
  reset(doc:CadDoc){this.doc=doc;this.index();this.selection.clear();this.undoStack=[];this.redoStack=[];this.emit(true);}
  /** Record and apply an edit; returns the ids of the entities it added. */

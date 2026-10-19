@@ -37,7 +37,11 @@ export default function DraftingViewer({ snapshot, framing=defaultFraming }: { s
   const openCad = () => {
     const sheetEntry = sheets.find(v => v.number === name);
     const generated = sheet && sheetEntry ? docFromSheet({ number: name, title: sheetEntry.title, svg: sheetSvg }, snapshot.input.units) : drawing ? docFromSketch(drawing, snapshot.input.units) : undefined;
-    if (generated) setCad({ project, base, generated, record: edit?.record, units: snapshot.input.units });
+    // The project's other drawings, for external references in the editor (edited where current, else generated).
+    const others = [...drawings.map(d => ({ key: d.number, title: d.title, make: () => docFromSketch(d, snapshot.input.units) })),
+      ...sheets.map(v => ({ key: v.number, title: v.title, make: () => docFromSheet({ number: v.number, title: v.title, svg: drawingSheetSet(snapshot, framing).find(x => x.number === v.number)?.svg ?? '' }, snapshot.input.units) }))]
+      .filter(o => o.key !== key).map(o => ({ key: o.key, title: o.title, doc: () => { const e = cadEditFor(project, o.key, base); return e?.current ? e.record.doc : o.make(); } }));
+    if (generated) setCad({ project, base, generated, record: edit?.record, units: snapshot.input.units, others });
   };
   const reset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
   useEffect(reset, [name, snapshot.revision]);

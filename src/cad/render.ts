@@ -1,6 +1,7 @@
 import {bulgeArc} from './curves';
 import {DEG,bbox,clipSegment,compositeBoxes,curveSamples,effective,ellipseSweep,hatchLines,isComposite,pieces,textBox,textWidthPerHeight,type Box,type CadDoc,type Ctx,type Ent,type Grip,type NewEnt,type Pt,type SnapKind} from './model';
 import {fonts,primitives,textStyleOf,type TextStyle} from './annotation';
+import {children} from './blocks';
 import {dashPattern} from './convert';
 
 /** Screen view: world point (cx, cy) at the canvas center, scale pixels per drawing unit, canvas w × h CSS pixels. */
@@ -55,6 +56,7 @@ function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Ctx){
   case 'spline':{const p=curveSamples(e).map(q=>S(q.p));ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);break;}
   case 'hatch':{if(e.pattern==='SOLID')break;const vb=viewBox(v);for(const [a,b] of hatchLines(e,doc.unit??'in')){if(Math.max(a[0],b[0])<vb[0]||Math.min(a[0],b[0])>vb[2]||Math.max(a[1],b[1])<vb[1]||Math.min(a[1],b[1])>vb[3])continue;const p=S(a),q=S(b);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}break;}
   case 'xline':case 'ray':{const pc=pieces(e as Ent)[0],vb=viewBox(v),m=(vb[2]-vb[0])*.05;if(pc.k!=='seg')break;const k=clipSegment(pc.a,pc.b,[vb[0]-m,vb[1]-m,vb[2]+m,vb[3]+m]);if(k){const a=S(k[0]),b=S(k[1]);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}break;}
+  case 'insert':case 'xref':for(const c of children(e,doc))strokePath(ctx,v,c,doc);break;
   case 'dim':case 'leader':case 'table':case 'mtext':
    for(const p of primitives(e,doc)??[]){
     if(p.k==='line'){const a=S(p.a),b=S(p.b);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}
@@ -64,6 +66,7 @@ function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Ctx){
  }
 }
 function fillShapes(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Ctx){
+ if(e.type==='insert'||e.type==='xref'){for(const c of children(e,doc))fillShapes(ctx,v,c,doc);return;}
  const polys=e.type==='solid'?[e.points]:isComposite(e)?(primitives(e,doc)??[]).flatMap(p=>p.k==='fill'?[p.pts]:[]):e.type==='hatch'&&e.pattern==='SOLID'?e.loops:[];
  for(const pts of polys){const p=pts.map(q=>toScreen(v,q));ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);ctx.closePath();}
 }
@@ -84,6 +87,8 @@ function drawText(ctx:CanvasRenderingContext2D,v:View,t:TextDraw){
 function textsOf(e:Ent|NewEnt,doc:Ctx):TextDraw[]{
  if(e.type==='text')return [{at:e.at,height:e.height,value:e.value,angle:e.angle,align:e.align,bold:e.bold,style:textStyleOf(e.style,doc)}];
  if(isComposite(e))return (primitives(e,doc)??[]).flatMap(p=>p.k==='text'?[{at:p.at,height:p.height,value:p.value,angle:p.angle,align:p.align,bold:p.bold,style:textStyleOf(p.style,doc)}]:[]);
+ if(e.type==='attdef')return [{at:e.at,height:e.height,value:e.tag,angle:e.angle,align:e.align,bold:false,style:textStyleOf(e.style,doc)}];
+ if(e.type==='insert'||e.type==='xref')return children(e,doc).flatMap(c=>textsOf(c,doc));
  return [];
 }
 
@@ -109,7 +114,13 @@ export function drawScene(ctx:CanvasRenderingContext2D,o:SceneOptions){
   ctx.stroke();
  }
  const byLayer=new Map<string,Ent[]>();
- for(const e of doc.entities){if(!overlaps(cachedBox(e,doc),vb))continue;let list=byLayer.get(e.layer);if(!list)byLayer.set(e.layer,list=[]);list.push(e);}
+ const names=new Set(doc.layers.map(l=>l.name)),put=(e:Ent,layer:string)=>{let list=byLayer.get(layer);if(!list)byLayer.set(layer,list=[]);list.push(e);};
+ for(const e of doc.entities){
+  if(!overlaps(cachedBox(e,doc),vb))continue;
+  // A reference draws its children on their own layers (layers this drawing lacks fall back to the reference's).
+  if(e.type==='insert'||e.type==='xref'){for(const c of children(e,doc))if(overlaps(cachedBox(c,doc),vb))put(c,names.has(c.layer)?c.layer:e.layer);continue;}
+  put(e,e.layer);
+ }
  for(const layer of doc.layers){
   const all=byLayer.get(layer.name);if(!layer.visible||!all?.length)continue;
   // Objects with their own color, linetype or lineweight draw in their own batch.
@@ -138,6 +149,8 @@ export interface OverlayOptions{
  cursor?:[number,number];crosshair:boolean;tip?:string;pickbox:number;
  /** Tracking paths (dotted), acquired tracking points (small crosses) and a fence being drawn. */
  tracks?:[Pt,Pt][];acquired?:Pt[];fence?:Pt[];
+ /** The base point of a block being edited. */
+ basePoint?:Pt;
 }
 export const snapNames:Record<SnapKind,string>={end:'Endpoint',mid:'Midpoint',cen:'Center',qua:'Quadrant',int:'Intersection',per:'Perpendicular',nea:'Nearest',ins:'Insertion',grid:'Grid',nod:'Node',tan:'Tangent',ext:'Extension',par:'Parallel',app:'Apparent intersection',trk:'Tracking'};
 /** Everything that follows the cursor: selection highlight, hover, preview, window, grips, snap marker, crosshair. */
@@ -177,6 +190,7 @@ export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
   for(const a of o.acquired??[]){const [x,y]=toScreen(v,a);ctx.moveTo(x-4,y);ctx.lineTo(x+4,y);ctx.moveTo(x,y-4);ctx.lineTo(x,y+4);}
   ctx.stroke();
  }
+ if(o.basePoint){const [x,y]=toScreen(v,o.basePoint);ctx.strokeStyle=c.select;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x-12,y);ctx.lineTo(x+12,y);ctx.moveTo(x,y-12);ctx.lineTo(x,y+12);ctx.moveTo(x+5,y);ctx.arc(x,y,5,0,2*Math.PI);ctx.stroke();}
  if(o.fence&&o.fence.length>1){const p=o.fence.map(q=>toScreen(v,q));ctx.strokeStyle=c.preview;ctx.lineWidth=1;ctx.setLineDash([6,3]);ctx.beginPath();ctx.moveTo(p[0][0],p[0][1]);for(const q of p.slice(1))ctx.lineTo(q[0],q[1]);ctx.stroke();ctx.setLineDash([]);}
  if(o.grips?.length){
   for(const g of o.grips){const [x,y]=toScreen(v,g.p);if(x<-8||y<-8||x>v.w+8||y>v.h+8)continue;const hot=o.hot&&Math.abs(o.hot[0]-g.p[0])<1e-12&&Math.abs(o.hot[1]-g.p[1])<1e-12;

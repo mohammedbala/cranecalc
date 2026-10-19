@@ -111,3 +111,33 @@ test('annotation: ribbon, multiline text, dimensions, leaders, tables, clouds an
  expect(text).toContain('Times New Roman');
  expect(errors).toEqual([]);
 });
+
+test('blocks: library, attributes, block editor and external references',async({page})=>{
+ const errors=watch(page);
+ const {type,objects}=await openEditor(page);
+ const start=await objects();
+ await page.getByRole('tab',{name:'Insert'}).click();
+ await page.getByRole('button',{name:'Blocks palette: drawing and library blocks'}).click();
+ const palette=page.getByRole('region',{name:'Blocks'});
+ await palette.getByRole('button',{name:'Insert GRID-BUBBLE'}).click();
+ await type('S','20','500,300','C7');
+ await type('INSERT','WELD-FILLET-FIELD','600,250','SMAW','5/16','6"');
+ expect(await objects()).toBe(start+2);
+ await expect(palette.getByRole('button',{name:'Edit GRID-BUBBLE'})).toBeVisible();
+ // Edit the bubble's block: a circle added there shows in every reference.
+ await palette.getByRole('button',{name:'Edit GRID-BUBBLE'}).click();
+ await expect(page.locator('.cad-bedit')).toContainText('Block editor: GRID-BUBBLE');
+ await type('C','0,0','0.4');
+ await page.getByRole('button',{name:'Save block'}).click();
+ await expect(page.locator('.cad-log')).toContainText('Block GRID-BUBBLE saved');
+ expect(await objects()).toBe(start+2);
+ // Another drawing of the project as an external reference, then bound into this one.
+ await type('XATTACH','SK-03','0,0','');
+ expect(await objects()).toBe(start+3);
+ await type('XBIND','L','');
+ await expect(page.locator('.cad-log')).toContainText('1 reference bound as blocks');
+ const svg=page.waitForEvent('download');await page.getByRole('button',{name:'SVG'}).click();
+ const text=await fs.readFile((await (await svg).path())!,'utf8');
+ for(const s of ['C7','SMAW','5/16'])expect(text).toContain(s);
+ expect(errors).toEqual([]);
+});

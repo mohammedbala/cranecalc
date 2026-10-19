@@ -16,12 +16,14 @@ export function setup(doc=blank()){
  const pickAt=(p:Pt)=>{let best:Ent|undefined,bd=Infinity;for(const e of store.doc.entities){const d=nearest(e,p,store.doc).d;if(d<bd-1e-12){bd=d;best=e;}}return bd<.05?best:undefined;};
  const run=(name:string,...steps:Step[]):Command=>{
   const c=makeCommand(name,env);if(!c)throw Error(`No command ${name}`);if(c.selectFirst)c.begin?.();
-  for(const s of steps){if(c.done)break;
+  // The prompt is asked after every step, as the editor does.
+  for(const s of steps){c.prompt();if(c.done)break;
    if(s===null)c.enter?.();
    else if(typeof s==='string'){if(!c.text?.(s))throw Error(`${name} rejected "${s}" at "${c.prompt()}"`);}
    else if('pick' in s)c.pick?.(pickAt(s.pick),s.pick);
    else c.point?.(s);
   }
+  if(!c.done)c.prompt();
   return c;
  };
  const add=(...ents:NewEnt[])=>store.commit('test',{add:ents});

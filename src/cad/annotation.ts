@@ -16,7 +16,7 @@ export interface DimStyle{
  textPos:'above'|'centered';units:'arch'|'decimal';precision:number;scale:number;baseline:number;textStyle?:string;prefix?:string;suffix?:string;
 }
 /** What drawing a composite entity needs from its drawing. */
-export type Ctx=Pick<CadDoc,'display'|'realPerUnit'>&Partial<Pick<CadDoc,'unit'|'textStyles'|'dimStyles'>>;
+export type Ctx=Pick<CadDoc,'display'|'realPerUnit'>&Partial<Pick<CadDoc,'unit'|'textStyles'|'dimStyles'|'blocks'>>;
 export type Prim={k:'line';a:Pt;b:Pt}|{k:'arc';c:Pt;r:number;s:number;e:number}|{k:'fill';pts:Pt[]}|{k:'text';at:Pt;height:number;value:string;angle:number;align:Align;bold:boolean;style?:string};
 
 export const fonts:Record<string,string>={

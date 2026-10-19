@@ -3,6 +3,7 @@
  * sheets, sketch units for the engineering sketches), y up, origin at the lower-left corner of the sheet.
  */
 import {hatchSegments,insideLoops} from './hatch';
+import {children,type BlockDef} from './blocks';
 import {fonts,mtextLayout,primEnts,primTextBox,primitives,textStyleOf,type Ctx,type DimStyle,type TextStyle} from './annotation';
 import {bulgeArc,bulgePoint,bulgeThrough,ellipseParam,ellipsePoint,splineParam,splineParams,splinePoint,splineRange,splineThrough,subBulge,subSpline,type BulgeArc,type SplineGeom} from './curves';
 
@@ -46,7 +47,13 @@ export interface MTextEnt extends Base{type:'mtext';at:Pt;width:number;height:nu
 export interface LeaderEnt extends Base{type:'leader';points:Pt[];value:string;height:number;arrow?:'closed'|'open'|'tick'|'dot'|'none';landing?:boolean;style?:string}
 /** A table: top-left corner, column widths, row heights (going down), cell text; header rows are bold. */
 export interface TableEnt extends Base{type:'table';at:Pt;cols:number[];rows:number[];cells:string[][];height:number;header?:number;align?:('left'|'center'|'right')[];title?:string;source?:string}
-export type Ent=LineEnt|PolyEnt|SolidEnt|CircleEnt|ArcEnt|TextEnt|DimEnt|EllipseEnt|SplineEnt|XlineEnt|HatchEnt|MTextEnt|LeaderEnt|TableEnt;
+/** An attribute definition: a tagged value a block's references fill in (shown as its tag outside a block). */
+export interface AttDefEnt extends Base{type:'attdef';tag:string;prompt:string;value:string;at:Pt;height:number;angle:number;align:Align;invisible?:boolean;style?:string}
+/** A block reference: the named block placed at at, scaled, rotated (degrees) and mirrored, with attribute values by tag. */
+export interface InsertEnt extends Base{type:'insert';name:string;at:Pt;scale:number;rotation:number;mirror?:boolean;attribs?:Record<string,string>}
+/** An external reference: another drawing of the project (by its number) placed at at, scaled and rotated. */
+export interface XrefEnt extends Base{type:'xref';name:string;at:Pt;scale:number;rotation:number}
+export type Ent=LineEnt|PolyEnt|SolidEnt|CircleEnt|ArcEnt|TextEnt|DimEnt|EllipseEnt|SplineEnt|XlineEnt|HatchEnt|MTextEnt|LeaderEnt|TableEnt|AttDefEnt|InsertEnt|XrefEnt;
 /** An entity before it has an id. */
 export type NewEnt=Ent extends infer E?E extends Ent?Omit<E,'id'>:never:never;
 
@@ -66,7 +73,10 @@ export interface CadDoc{
  groups?:CadGroup[];
  /** Text and dimension styles (Standard when absent), the global linetype scale and the plot style. */
  textStyles?:TextStyle[];dimStyles?:DimStyle[];ltscale?:number;plotStyle?:'monochrome'|'grayscale'|'color';
+ /** Block definitions, by name. */
+ blocks?:BlockDef[];
 }
+export type {BlockDef};
 export type {Ctx,DimStyle,TextStyle};
 export interface CadGroup{name:string;ids:number[]}
 /** Color, linetype and lineweight as drawn: the object's own, else its layer's. */
@@ -137,6 +147,8 @@ export function dimGeometry(e:DimEnt,doc:Ctx):DimGeometry{
  return {lines:prims.flatMap(p=>p.k==='line'?[[p.a,p.b] as [Pt,Pt]]:[]),arcs:prims.flatMap(p=>p.k==='arc'?[{c:p.c,r:p.r,s:p.s,e:p.e}]:[]),arrows:prims.flatMap(p=>p.k==='fill'?[p.pts]:[]),
   text:t?{at:t.at,angle:t.angle,value:t.value,height:t.height}:{at:e.at,angle:0,value:'',height:e.height}};
 }
+/** An attribute definition read as the text of its tag. */
+export const attdefAsText=(a:Omit<AttDefEnt,'id'>):Omit<TextEnt,'id'>=>({type:'text',layer:a.layer,at:a.at,height:a.height,value:a.tag,angle:a.angle,align:a.align,bold:false,...(a.style?{style:a.style}:{})});
 /** Whether an entity is drawn from primitives (dimensions, multiline text, leaders, tables). */
 export const isComposite=(e:{type:string}):e is DimEnt|MTextEnt|LeaderEnt|TableEnt=>e.type==='dim'||e.type==='mtext'||e.type==='leader'||e.type==='table';
 /** Text boxes of a composite entity's text. */
@@ -180,7 +192,8 @@ export function pieces(e:Ent,doc?:Ctx):Piece[]{
   case 'xline':return [{k:'seg',a:add(e.base,mul(e.dir,-XLINE_REACH)),b:add(e.base,mul(e.dir,XLINE_REACH))}];
   case 'ray':return [{k:'seg',a:e.base,b:add(e.base,mul(e.dir,XLINE_REACH))}];
   case 'dim':case 'leader':case 'table':return (primitives(e,doc??{display:'US',realPerUnit:1})??[]).flatMap((p):Piece[]=>p.k==='line'?[{k:'seg',a:p.a,b:p.b}]:p.k==='arc'?[{k:'arc',c:p.c,r:p.r,s:p.s,e:p.e}]:[]);
-  case 'mtext':return [];
+  case 'mtext':case 'attdef':return [];
+  case 'insert':case 'xref':return children(e,doc??{}).flatMap(c=>pieces(c,doc));
   case 'hatch':return e.loops.flatMap(l=>l.map((a,i)=>({k:'seg' as const,a,b:l[(i+1)%l.length]})));
   case 'text':return [];
  }
@@ -219,12 +232,14 @@ export function bbox(e:Ent,doc?:Ctx):Box{
   case 'ellipse':case 'spline':case 'xline':case 'ray':return boxOf(piecePoints(pieces(e)));
   case 'hatch':return boxOf(e.loops.flat());
   case 'text':return boxOf(textBox(e,doc));
+  case 'attdef':return boxOf(textBox(attdefAsText(e),doc));
+  case 'insert':case 'xref':{const cs=children(e,doc??{});if(!cs.length)return [e.at[0],e.at[1],e.at[0],e.at[1]];const bs=cs.map(c=>bbox(c,doc));return [Math.min(...bs.map(b=>b[0])),Math.min(...bs.map(b=>b[1])),Math.max(...bs.map(b=>b[2])),Math.max(...bs.map(b=>b[3]))];}
   case 'dim':case 'leader':case 'table':case 'mtext':{const c=doc??{display:'US',realPerUnit:1};return boxOf([...piecePoints(pieces(e,c)),...(primitives(e,c)??[]).flatMap(p=>p.k==='fill'?p.pts:[]),...compositeBoxes(e,c).flat()]);}
  }
 }
 /** Straight segments of an entity: curves other than circles and arcs as chords; circles and arcs have none. */
 export function segments(e:Ent,doc?:Ctx):[Pt,Pt][]{
- if(e.type==='circle'||e.type==='arc'||e.type==='text'||e.type==='mtext')return [];
+ if(e.type==='circle'||e.type==='arc'||e.type==='text'||e.type==='mtext'||e.type==='attdef')return [];
  const out:[Pt,Pt][]=[];
  for(const p of pieces(e,doc)){if(p.k==='seg')out.push([p.a,p.b]);else{const c=arcChords(p);for(let i=1;i<c.length;i++)out.push([c[i-1],c[i]]);}}
  return out;
@@ -236,6 +251,8 @@ export function nearestOnSegment(p:Pt,a:Pt,b:Pt):{point:Pt;t:number}{
 function inPolygon(p:Pt,poly:Pt[]){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const [xi,yi]=poly[i],[xj,yj]=poly[j];if((yi>p[1])!==(yj>p[1])&&p[0]<(xj-xi)*(p[1]-yi)/(yj-yi)+xi)inside=!inside;}return inside;}
 /** The point of the entity nearest p, and its distance (0 inside text and solids). */
 export function nearest(e:Ent,p:Pt,doc?:Ctx):{point:Pt;d:number}{
+ if(e.type==='attdef')return nearest({...attdefAsText(e),id:e.id} as TextEnt,p,doc);
+ if(e.type==='insert'||e.type==='xref'){let best={point:e.at,d:dist(p,e.at)};for(const c of children(e,doc??{})){const n=nearest(c,p,doc);if(n.d<best.d)best=n;}return best;}
  if(e.type==='text'){const box=textBox(e,doc);if(inPolygon(p,box))return {point:e.at,d:0};}
  if(isComposite(e)){const c=doc??{display:'US',realPerUnit:1};for(const box of compositeBoxes(e,c))if(inPolygon(p,box))return {point:p,d:0};if(e.type==='table'&&p[0]>=e.at[0]&&p[1]<=e.at[1]&&p[0]<=e.at[0]+e.cols.reduce((a,v)=>a+v,0)&&p[1]>=e.at[1]-e.rows.reduce((a,v)=>a+v,0))return {point:p,d:0};}
  if(e.type==='solid'&&inPolygon(p,e.points))return {point:p,d:0};
@@ -263,11 +280,12 @@ export function clipSegment(a:Pt,b:Pt,r:Box):[Pt,Pt]|undefined{
  return [lerp(a,b,t0),lerp(a,b,t1)];
 }
 /** Window (entity wholly inside r) or crossing (entity touches r) selection test. */
-export function inWindow(e:Ent,r:Box,crossing:boolean,doc?:Ctx){
+export function inWindow(e:Ent,r:Box,crossing:boolean,doc?:Ctx):boolean{
  const b=bbox(e,doc);
  if(b[0]>=r[0]&&b[1]>=r[1]&&b[2]<=r[2]&&b[3]<=r[3])return true;
  if(!crossing||b[2]<r[0]||b[0]>r[2]||b[3]<r[1]||b[1]>r[3])return false;
- if(e.type==='text'||e.type==='solid'||isComposite(e))return true;
+ if(e.type==='text'||e.type==='solid'||e.type==='attdef'||isComposite(e))return true;
+ if(e.type==='insert'||e.type==='xref')return children(e,doc??{}).some(c=>inWindow(c,r,true,doc));
  if(e.type==='hatch'&&insideLoops([(r[0]+r[2])/2,(r[1]+r[3])/2],e.loops))return true;
  return pieces(e,doc).some(p=>{if(p.k==='seg')return segBox(p.a,p.b,r);const c=arcChords(p,7.5);for(let i=1;i<c.length;i++)if(segBox(c[i-1],c[i],r))return true;return false;});
 }
@@ -296,7 +314,8 @@ export function snapPoints(e:Ent,doc?:Ctx):{kind:SnapKind;p:Pt}[]{
    else{out.push({kind:'end',p:e.a},{kind:'end',p:e.at});if(e.kind==='angular')out.push({kind:'end',p:e.b});if(e.c)out.push({kind:e.kind==='ordinate'?'end':'cen',p:e.c});}
    break;
   }
-  case 'mtext':out.push({kind:'ins',p:e.at});break;
+  case 'mtext':case 'attdef':out.push({kind:'ins',p:e.at});break;
+  case 'insert':case 'xref':out.push({kind:'ins',p:e.at});for(const c of children(e,doc??{}))out.push(...snapPoints(c,doc).filter(s=>s.kind!=='ins'));break;
   case 'leader':for(const p of e.points)out.push({kind:'end',p});break;
   case 'table':{const W=e.cols.reduce((a,v)=>a+v,0),H=e.rows.reduce((a,v)=>a+v,0);out.push({kind:'ins',p:e.at},{kind:'end',p:[e.at[0]+W,e.at[1]]},{kind:'end',p:[e.at[0],e.at[1]-H]},{kind:'end',p:[e.at[0]+W,e.at[1]-H]});break;}
  }
@@ -504,6 +523,10 @@ export function transformEnt<E extends Ent>(e:E,m:Affine):E{
    return {...e,at:P(e.at),height:e.height*k,width:e.width*k,angle:clean(angle),attach:row*3+(2-col)+1};
   }
   case 'leader':return {...e,points:e.points.map(P),height:e.height*k};
+  case 'attdef':{const t=transformEnt({...attdefAsText(e),id:e.id} as TextEnt,m);return {...e,at:t.at,height:t.height,angle:t.angle,align:t.align};}
+  // A mirrored reference flips its mirror flag; its rotation becomes the mirror line's angle less the old rotation.
+  case 'insert':return mirror?{...e,at:P(e.at),scale:e.scale*k,rotation:clean(norm360(rot-e.rotation)),mirror:!e.mirror}:{...e,at:P(e.at),scale:e.scale*k,rotation:clean(norm360(e.rotation+rot))};
+  case 'xref':return {...e,at:P(e.at),scale:e.scale*k,rotation:clean(norm360(e.rotation+rot))};
   case 'table':{
    // Tables stay square to the sheet: the box moves (and scales) to where its corners go.
    const W=e.cols.reduce((a,v)=>a+v,0),H=e.rows.reduce((a,v)=>a+v,0),cs=[e.at,[e.at[0]+W,e.at[1]],[e.at[0],e.at[1]-H],[e.at[0]+W,e.at[1]-H]].map(q=>P(q as Pt));
@@ -528,7 +551,7 @@ export function grips(e:Ent):Grip[]{
   case 'hatch':{const b=boxOf(e.loops.flat());return [{p:[(b[0]+b[2])/2,(b[1]+b[3])/2],role:'center'},...e.loops.flatMap((l,i)=>l.map((p,j)=>({p,role:`l${i}v${j}`})))];}
   case 'text':return [{p:e.at,role:'at'}];
   case 'dim':return [{p:e.a,role:'a'},...(e.kind==='angular'||e.kind==='horizontal'||e.kind==='vertical'||e.kind==='aligned'?[{p:e.b,role:'b'}]:[]),{p:e.at,role:'at'},...(e.c?[{p:e.c,role:'c'}]:[])];
-  case 'mtext':return [{p:e.at,role:'at'}];
+  case 'mtext':case 'attdef':case 'insert':case 'xref':return [{p:e.at,role:'at'}];
   case 'leader':return e.points.map((p,i)=>({p,role:`v${i}`}));
   case 'table':return [{p:e.at,role:'at'}];
  }
@@ -567,7 +590,7 @@ export function stretchGrip(e:Ent,role:string,from:Pt,p:Pt):Ent{
   case 'hatch':{if(role==='center')return transformEnt(e,translation(d));const [i,j]=role.slice(1).split('v').map(Number);return {...e,loops:e.loops.map((l,a)=>a===i?l.map((q,b)=>b===j?p:q):l)};}
   case 'text':return {...e,at:p};
   case 'dim':return role==='a'?{...e,a:p}:role==='b'?{...e,b:p}:role==='c'?{...e,c:p}:{...e,at:p};
-  case 'mtext':case 'table':return {...e,at:p};
+  case 'mtext':case 'table':case 'attdef':case 'insert':case 'xref':return {...e,at:p};
   case 'leader':{const pts=e.points.map(q=>[...q] as Pt);pts[+role.slice(1)]=p;return {...e,points:pts};}
  }
 }
@@ -676,6 +699,7 @@ export function explodeEnt(e:Ent,doc:Ctx):NewEnt[]|undefined{
  if(e.type==='hatch')return e.pattern==='SOLID'?undefined:hatchLines(e,doc.unit??'in').map(([a,b])=>({...pr,type:'line',a,b}) as NewEnt);
  if(e.type==='poly')return pieces(e).map(p=>p.k==='seg'?{...pr,type:'line',a:p.a,b:p.b} as NewEnt:{...pr,type:'arc',center:p.c,radius:p.r,start:norm360(p.s),end:norm360(p.e)} as NewEnt);
  if(isComposite(e))return primEnts(primitives(e,doc)!,pr);
+ if(e.type==='insert'){const cs=children(e,doc);return cs.length?cs.map(({id:_,...c})=>c as NewEnt):undefined;}
  return undefined;
 }
 

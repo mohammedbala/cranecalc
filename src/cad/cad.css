@@ -104,3 +104,8 @@
 .cad-style-list{display:flex;flex-direction:column;max-height:130px;overflow:auto;border:1px solid var(--cad-line);border-radius:4px;padding:2px}
 .cad-style-list button{justify-content:flex-start}
 .cad-text-edit textarea{width:300px;font:inherit;color:inherit;background:color-mix(in srgb,var(--cad-bg) 70%,var(--cad-panel));border:1px solid var(--cad-line);border-radius:3px;padding:3px}
+.cad-blocks{overflow-y:auto;min-height:0;max-height:30vh;padding:0 6px 8px}
+.cad-block{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:2px}
+.cad-block span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cad-block small{color:var(--cad-muted);font-size:9.5px;margin-left:5px}
+.cad-block button{padding:1px 6px;border-color:var(--cad-line)}
+.cad-bedit{background:#163a5a;color:#d7ecff}.theme-paper .cad-bedit{background:#dbeeff;color:#163a5a}

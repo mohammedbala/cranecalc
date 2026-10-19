@@ -6,6 +6,7 @@ import {bulgeArc} from './curves';
 import {fillTrapezoids} from './hatch';
 import {fonts,primEnts,primitives,textStyleOf} from './annotation';
 import {plotColor} from './render';
+import {attdefText,flatten} from './blocks';
 import {DEG,arcPoint,hatchLines,isComposite,polyOutline,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,pieces,sweep,type Box,type CadDoc,type CadLayer,type Ent,type LineType,type Pt} from './model';
 
 const layer=(name:string,color:number,ltype:LineType,weight:number):CadLayer=>({name,color,ltype,weight,visible:true,locked:false});
@@ -90,7 +91,7 @@ export function docToSvg(doc:CadDoc){
   const f=effective(e,l),ink=sketch&&e.color===undefined?sketchInk(l.name,l.color):plotInk(f.color,ps),dash=dashPattern(f.ltype,doc.unit,f.ltscale*lts).map(v=>r(v/k)).join(' ');
   return ` stroke="${ink}" stroke-width="${r(plotWidth({...l,weight:f.weight},doc.unit)/k)}" stroke-dasharray="${dash||'none'}" style="color:${ink}"`;
  };
- for(const e of doc.entities){
+ for(const e of flatten(doc.entities,doc)){
   const l=byName.get(e.layer);if(!l||!l.visible)continue;
   if(open!==e.layer){if(open)out+='</g>';out+=`<g data-layer="${esc(e.layer)}" ${style(l)}>`;open=e.layer;}
   const o=own(e,l),line=(a:Pt,b:Pt)=>`<line x1="${X(a).split(',')[0]}" y1="${X(a).split(',')[1]}" x2="${X(b).split(',')[0]}" y2="${X(b).split(',')[1]}"${o}/>`;
@@ -119,6 +120,7 @@ export function docToSvg(doc:CadDoc){
    }
    case 'xline':case 'ray':{const pc=pieces(e)[0];if(pc.k==='seg'){const c=clipSegment(pc.a,pc.b,sheetBox);if(c)out+=line(c[0],c[1]);}break;}
    case 'text':out+=wrap(text(e.at,e.height,e.value,e.angle,e.align,e.bold,e.style));break;
+   case 'attdef':out+=wrap(text(e.at,e.height,e.tag,e.angle,e.align,false,e.style));break;
    case 'dim':case 'mtext':case 'leader':case 'table':out+=wrap((primitives(e,doc)??[]).map(p=>p.k==='line'?line(p.a,p.b):p.k==='arc'?arc(p.c,p.r,p.s,p.e):p.k==='fill'?`<path d="M${p.pts.map(X).join('L')}Z" fill="currentColor" stroke="none"/>`:text(p.at,p.height,p.value,p.angle,p.align,p.bold,p.style)).join(''));break;
   }
  }
@@ -137,9 +139,10 @@ export const docDxfLayers=(doc:CadDoc):Record<string,DxfLayer>=>Object.fromEntri
  */
 export function docDxfEntities(doc:CadDoc,k=1):DxfEntity[]{
  const P=(p:Pt):Pt=>[p[0]*k,p[1]*k],out:DxfEntity[]=[];
- for(const e of doc.entities){
+ for(const e of flatten(doc.entities,doc)){
   switch(e.type){
    case 'line':out.push({type:'line',layer:e.layer,a:P(e.a),b:P(e.b)});break;
+   case 'attdef':{const t=attdefText(e);out.push({type:'text',layer:e.layer,at:P(t.at),height:t.height*k,value:t.value,angle:t.angle,align:t.align,bold:false});break;}
    case 'poly':{
     if(!e.bulges?.some(v=>v)){out.push({type:'poly',layer:e.layer,points:e.points.map(P),closed:e.closed});break;}
     const pts=polyOutline(e);

@@ -1,10 +1,10 @@
-import {useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore,type ReactNode} from 'react';
+import {Fragment,useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore,type ReactNode} from 'react';
 import {
  ArrowRightToLine,Circle,Copy,CopyPlus,Download,Eraser,Eye,EyeOff,FlipHorizontal2,Hand,Layers,Lock,LockOpen,Maximize2,Move,
  MoveHorizontal,MousePointer2,Plus,Redo2,RectangleHorizontal,RotateCw,Ruler,Scaling,Scissors,SlidersHorizontal,Spline,TriangleAlert,Type,
  Undo2,Ungroup,Waypoints,X,Slash,Egg,Activity,Hexagon,MoveDiagonal,CornerDownRight,Diamond,StretchHorizontal,Grid3x3,RotateCcw,Unlink,Link,MoveRight,
  AlignHorizontalJustifyStart,PenLine,Paintbrush,PaintBucket,Scan,Combine,Blocks,AlignLeft,CaseSensitive,Triangle,Radius,Diameter,Milestone,Rows3,Columns3,Settings2,
- MessageSquareText,MessageSquare,Table,Cloud,Palette,Waves,
+ MessageSquareText,MessageSquare,Table,Cloud,Palette,Waves,Box as BoxIcon,Tag,Tags,PencilRuler,Library,FileInput,
 } from 'lucide-react';
 import {
  DEG,add,angleOf,bbox,curveLength,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,lineTypes,nearest,parseLength,
@@ -16,6 +16,9 @@ import {aci,aciPalette,cachedBox,drawOverlay,drawScene,snapNames,toWorld,type Th
 import {acquirable,allSnapModes,defaultSnapModes,resolveSnap,type Acquired} from '../cad/snap';
 import {hatchArea,patternNames} from '../cad/hatch';
 import {cellAt,setCell} from '../cad/annotateCommands';
+import {blockLibrary,libraryBlock} from '../cad/blockLibrary';
+import {insertCmd} from '../cad/blockCommands';
+import {attdefsOf,setXrefResolver} from '../cad/blocks';
 import {dimValue,standardDimStyle} from '../cad/annotation';
 import {StylesDialog} from '../cad/StylesDialog';
 import {expandGroups,fenceSelect,propValue,quickSelect,type QuickProp,type QuickSpec} from '../cad/select';
@@ -23,7 +26,8 @@ import {docToDxf,docToSvg} from '../cad/convert';
 import {cadPersistent,deleteCadRecord,saveCadRecord,type CadRecord} from '../cad/storage';
 import '../cad/cad.css';
 
-export interface CadSource{project:string;base:string;generated:CadDoc;record?:CadRecord;units:'US'|'SI'}
+/** The drawing to edit; others are the project's other drawings, for external references. */
+export interface CadSource{project:string;base:string;generated:CadDoc;record?:CadRecord;units:'US'|'SI';others?:{key:string;title:string;doc:()=>CadDoc}[]}
 type Toggles={grid:boolean;snap:boolean;ortho:boolean;osnap:boolean;lwt:boolean;polar:boolean;otrack:boolean;dyn:boolean};
 
 const APERTURE=9,PICKBOX=5;
@@ -35,7 +39,7 @@ const scales=(unit:CadDoc['unit']):[string,number][]=>unit==='in'
  ?[['1:1 (paper)',25.4],['3" = 1\'-0"',4*25.4],['1 1/2" = 1\'-0"',8*25.4],['1" = 1\'-0"',12*25.4],['3/4" = 1\'-0"',16*25.4],['1/2" = 1\'-0"',24*25.4],['3/8" = 1\'-0"',32*25.4],['1/4" = 1\'-0"',48*25.4],['3/16" = 1\'-0"',64*25.4],['1/8" = 1\'-0"',96*25.4]]
  :unit==='mm'?[['1:1 (paper)',1],['1:5',5],['1:10',10],['1:20',20],['1:25',25],['1:50',50],['1:100',100],['1:200',200]]:[];
 const fmtNum=(v:number)=>String(Number(v.toFixed(4)));
-const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray',hatch:'Hatch',mtext:'Multiline text',leader:'Leader',table:'Table'};
+const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray',hatch:'Hatch',mtext:'Multiline text',leader:'Leader',table:'Table',attdef:'Attribute definition',insert:'Block reference',xref:'External reference'};
 
 export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=>void}){
  const store=useMemo(()=>new CadStore(structuredClone(source.record?.doc??source.generated)),[]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -49,7 +53,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const [pickGroups,setPickGroups]=useState(true);
  const [styles,setStyles]=useState<'text'|'dim'|null>(null);
  const [theme,setTheme]=useState<Theme>('dark');
- const [panel,setPanel]=useState<{props:boolean;layers:boolean}>({props:true,layers:true});
+ const [panel,setPanel]=useState<{props:boolean;layers:boolean;blocks?:boolean}>({props:true,layers:true});
  const [currentLayer,setCurrentLayer]=useState(()=>doc.layers.some(l=>l.name==='S-ANNO')?'S-ANNO':doc.layers.some(l=>l.name==='OUTLINE')?'OUTLINE':'0');
  const [input,setInput]=useState('');
  const [log,setLog]=useState<string[]>(['CAD editor ready. Type a command (L, PL, C, T, DLI, M, CO, RO, TR, O …) or pick a tool. Esc cancels; Enter or Space repeats.']);
@@ -96,7 +100,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
    drawOverlay(over,{doc:store.doc,view:v,theme,selected,hover:hover.current,preview:pv?.ents,rubber:pv?.rubber??(base&&!pv?.ents?[base,c.world]:undefined),
     window:windowSel.current?{a:windowSel.current.a,b:c.raw}:undefined,grips:showGrips?selected.flatMap(gripsOf):undefined,hot:grip.current?.from,
     snap:snap.current,cursor:c.screen,crosshair:!panMode&&!pan.current,tip:[track.current.tip,pv?.tip].filter(Boolean).join('  ·  ')||undefined,pickbox:cmd&&!cmd.wantsPick?.()&&!selecting.current?0:PICKBOX,
-    tracks:track.current.tracks,acquired:acquired.current.map(a=>a.p),fence:selMode.current&&selMode.current.pts.length?[...selMode.current.pts,c.raw]:undefined});
+    tracks:track.current.tracks,acquired:acquired.current.map(a=>a.p),basePoint:blockEdit.current?.base,fence:selMode.current&&selMode.current.pts.length?[...selMode.current.pts,c.raw]:undefined});
   }
  },[store,theme,underlay,source.generated,panMode]);// eslint-disable-line react-hooks/exhaustive-deps
  const schedule=useCallback((scene=false)=>{if(scene)dirty.current.scene=true;dirty.current.overlay=true;if(!frame.current)frame.current=requestAnimationFrame(paint);},[paint]);
@@ -121,10 +125,35 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   return ()=>ro.disconnect();
  },[zoomExtents,schedule]);
 
+ // ---- external references: the project's other drawings ----
+ useEffect(()=>{
+  const list=source.others??[],memo=new Map<string,CadDoc|undefined>();
+  setXrefResolver(name=>{if(!memo.has(name))memo.set(name,list.find(o=>o.key===name)?.doc());return memo.get(name);});
+  return ()=>setXrefResolver(undefined);
+ },[source.others]);
+ // ---- block editor: the block's entities open in place of the drawing; BCLOSE writes them back ----
+ const blockEdit=useRef<{name:string;base:Pt;saved:ReturnType<CadStore['swap']>;view:View}|null>(null);
+ function editBlock(name:string){
+  if(blockEdit.current){say('Close the block editor first (BCLOSE).');return;}
+  let def=store.doc.blocks?.find(b=>b.name===name);
+  if(!def){const lib=libraryBlock(name);if(!lib)return;store.commit(`Copy ${name} from the library`,{meta:{blocks:[...(store.doc.blocks??[]),lib]}});def=lib;}
+  const parent=store.doc,ents=def.entities,nextId=Math.max(0,...ents.map(e=>e.id))+1;
+  const layers=[...parent.layers];for(const e of ents)if(!layers.some(l=>l.name===e.layer))layers.push({name:e.layer,color:7,ltype:'Continuous',weight:25,visible:true,locked:false});
+  blockEdit.current={name,base:def.base,view:{...view.current},saved:store.swap({...parent,key:parent.key,title:`Block ${name}`,layers,entities:ents,nextId})};
+  say(`Editing block ${name}: draw and modify as usual; BCLOSE (or Save block) writes it back to every reference.`);refresh();schedule(true);zoomTo(blockBox(ents));
+ }
+ function closeBlock(save:boolean){
+  const b=blockEdit.current;if(!b)return;
+  const ents=store.doc.entities;blockEdit.current=null;store.restore(b.saved);view.current={...b.view,w:view.current.w,h:view.current.h};
+  if(save){const blocks=(store.doc.blocks??[]).map(d=>d.name===b.name?{...d,entities:ents}:d);store.commit(`Edit block ${b.name}`,{meta:{blocks}});say(`Block ${b.name} saved; its references follow.`);}
+  else say(`Block ${b.name} left unchanged.`);
+  refresh();schedule(true);
+ }
+ function blockBox(ents:Ent[]):Box{if(!ents.length)return [-1,-1,1,1];const bs=ents.map(e=>bbox(e,store.doc));return [Math.min(...bs.map(v=>v[0])),Math.min(...bs.map(v=>v[1])),Math.max(...bs.map(v=>v[2])),Math.max(...bs.map(v=>v[3]))];}
  // ---- persistence: save a moment after each change ----
  const startVersion=useRef(store.docVersion);
  useEffect(()=>{
-  if(store.docVersion===startVersion.current)return;
+  if(store.docVersion===startVersion.current||blockEdit.current)return;
   setSaveState('saving');
   const t=setTimeout(()=>{void saveCadRecord(source.project,stale&&source.record?source.record.base:source.base,store.doc).then(()=>setSaveState('saved'));},500);
   return ()=>clearTimeout(t);
@@ -181,6 +210,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   zoomExtents,zoomWindow:(a,b)=>zoomTo([Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])],1.02),
   openPanel:p=>setPanel(v=>({...v,[p==='layers'?'layers':'props']:true})),length:lengthText,
   vars:vars.current,lastWindow:()=>lastWindow.current,
+  editBlock,closeBlock,blockEditing:()=>blockEdit.current?.name,editAttributes:id=>{store.select([id]);setPanel(v=>({...v,props:true}));say('Edit the attribute values in Properties.');},
  };
  const selPrompt=()=>{const m=selMode.current,n=active.current!.name;
   if(m?.kind==='W'||m?.kind==='C')return `${n} Specify ${m.pts.length?'opposite':'first'} corner (${m.kind==='W'?'window':'crossing'}):`;
@@ -209,6 +239,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(name==='OSNAP'){setSettings('osnap');return;}
   if(name==='QSELECT'){setQselect(true);return;}
   if(name==='STYLE'||name==='DIMSTYLE'){setStyles(name==='STYLE'?'text':'dim');return;}
+  if(name==='BLOCKSPALETTE'){setPanel(v=>({...v,blocks:true}));return;}
   const cmd=makeCommand(name,env);if(!cmd){say(`Unknown command "${raw.trim()}". Press F1 for the command list.`);return;}
   lastCommand.current=name;active.current=cmd;lastWindow.current=undefined;
   if(cmd.selectFirst){if(store.selection.size)beginOn(cmd);else selecting.current=true;}
@@ -346,6 +377,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   grip.current=null;store.select([hit.id]);
   if(hit.type==='text'||hit.type==='dim')setTextEdit({id:hit.id,value:hit.type==='text'?hit.value:hit.text??'',x,y});
   else if(hit.type==='mtext'||hit.type==='leader')setTextEdit({id:hit.id,value:hit.value,x,y,multi:true});
+  else if(hit.type==='insert'){setPanel(v=>({...v,props:true}));}
   else if(hit.type==='table'){const c=cellAt(hit,toWorld(view.current,x,y));if(c)setTextEdit({id:hit.id,value:hit.cells[c.i]?.[c.j]??'',x,y,multi:true,cell:c});}
  }
  function onAuxClick(e:React.MouseEvent){if(e.button===1&&e.detail===2)zoomExtents();}
@@ -431,6 +463,10 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
    {name:'Tables',tools:[['TABLE','Table (TB)',I(Table)]]},
    {name:'Markup',tools:[['REVCLOUD','Revision cloud',I(Cloud)]]},
   ]},
+  {tab:'Insert',panels:[
+   {name:'Block',tools:[['INSERT','Insert a block (I)',I(Blocks)],['BLOCK','Create a block from the selection (B)',I(BoxIcon)],['ATTDEF','Define an attribute (ATT)',I(Tag)],['BEDIT','Edit a block (BE)',I(PencilRuler)],['ATTEDIT','Edit attributes',I(Tags)],['BLOCKSPALETTE','Blocks palette: drawing and library blocks',I(Library)]]},
+   {name:'Reference',tools:[['XATTACH','Attach another drawing of the project as a reference (XA)',I(FileInput)],['XBIND','Bind references into the drawing',I(Link)]]},
+  ]},
   {tab:'View',panels:[
    {name:'Navigate',tools:[['ZOOM','Zoom (Z): E extents, W window',I(Maximize2)]]},
    {name:'Plot',tools:[['PLOTSTYLE','Plot style: monochrome, grayscale or color',I(Palette)],['LTSCALE','Linetype scale (LTS)',I(Waves)],['UCS','Origin for ordinate dimensions (UCS)',I(Milestone)]]},
@@ -458,6 +494,8 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
     <button className="cad-close" onClick={onClose} aria-label="Close the CAD editor"><X size={16}/>Close</button>
    </div>
   </header>
+  {blockEdit.current&&<div className="cad-stale cad-bedit"><Blocks size={15}/><p><strong>Block editor: {blockEdit.current.name}</strong> · the base point is marked with a cross; every reference follows when you save.</p>
+   <button onClick={()=>{endCommand(false);closeBlock(true);}}>Save block</button><button onClick={()=>{endCommand(false);closeBlock(false);}}>Discard changes</button></div>}
   {stale&&<div className="cad-stale"><TriangleAlert size={15}/><p><strong>The design changed after this drawing was edited</strong> ({new Date(source.record!.savedAt).toLocaleString()}). Your edited drawing is open; the generated drawing for the current design differs.</p>
    <button onClick={()=>setUnderlay(v=>!v)}>{underlay?'Hide':'Show'} current design underneath</button><button onClick={()=>resolveStale(true)}>Keep my edits</button><button onClick={()=>{if(window.confirm('Discard your edits and start from the drawing generated for the current design?'))resolveStale(false);}}>Start from the current design</button></div>}
   <div className="cad-ribbon">
@@ -490,9 +528,14 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
     {toggles.dyn&&cursor.current.screen&&(active.current||input)&&!textEdit&&<div className="cad-dyn" aria-hidden="true" style={{left:Math.min(cursor.current.screen[0]+20,view.current.w-260),top:Math.min(cursor.current.screen[1]+24,view.current.h-48)}}>
      <span>{prompt().replace(/^\S+ /,'').replace(/^\*\* STRETCH \*\* /,'')}</span><b>{input||'\u00a0'}</b>{dynLock.current!==null&&<em>length {lengthText(dynLock.current)} locked</em>}</div>}
    </div>
-   {(panel.props||panel.layers)&&<aside className="cad-side">
+   {(panel.props||panel.layers||panel.blocks)&&<aside className="cad-side">
     {panel.props&&<section className="cad-panel" aria-label="Properties"><h3><SlidersHorizontal size={13}/>Properties<button aria-label="Hide properties" onClick={()=>setPanel(v=>({...v,props:false}))}><X size={12}/></button></h3>
      <Properties doc={doc} selected={selected} layers={doc.layers} onPut={putEnt} onLayer={changeLayerOfSelection} onAll={changeSelection} lengthText={lengthText}/></section>}
+    {panel.blocks&&<section className="cad-panel" aria-label="Blocks"><h3><Blocks size={13}/>Blocks<button aria-label="Hide blocks" onClick={()=>setPanel(v=>({...v,blocks:false}))}><X size={12}/></button></h3>
+     <div className="cad-blocks">{[...(doc.blocks??[]).map(b=>({b,lib:false})),...blockLibrary.filter(b=>!doc.blocks?.some(d=>d.name===b.name)).map(b=>({b,lib:true}))].map(({b,lib})=>
+      <div key={b.name} className="cad-block" title={b.description??b.name}><span>{b.name}{lib&&<small>library</small>}</span>
+       <button aria-label={`Insert ${b.name}`} onClick={()=>{if(active.current||grip.current)endCommand(false);active.current=insertCmd(env,b.name);lastCommand.current='INSERT';say(`Command: INSERT ${b.name}`);refresh();schedule();setTimeout(()=>cmdRef.current?.focus(),0);}}>Insert</button>
+       {!lib&&<button aria-label={`Edit ${b.name}`} onClick={()=>{endCommand(false);editBlock(b.name);}}>Edit</button>}</div>)}</div></section>}
     {panel.layers&&<section className="cad-panel" aria-label="Layers"><h3><Layers size={13}/>Layers<button aria-label="New layer" title="New layer" onClick={()=>setNewLayer('')}><Plus size={12}/></button><button aria-label="Hide layers" onClick={()=>setPanel(v=>({...v,layers:false}))}><X size={12}/></button></h3>
      {newLayer!==null&&<div className="cad-new-layer"><input autoFocus placeholder="Layer name" value={newLayer} onChange={e=>setNewLayer(e.target.value.toUpperCase().replace(/[^A-Z0-9_ -]/g,''))}
       onKeyDown={e=>{if(e.key==='Enter'&&newLayer.trim()&&!layerOf(newLayer.trim())){setLayers([...doc.layers,{name:newLayer.trim(),color:7,ltype:'Continuous',weight:25,visible:true,locked:false}],'New layer');setCurrentLayer(newLayer.trim());setNewLayer(null);}if(e.key==='Escape')setNewLayer(null);}}/></div>}
@@ -521,6 +564,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
     <button title="Commands and shortcuts (F1)" aria-pressed={help} className={help?'on':''} onClick={()=>setHelp(v=>!v)}>HELP</button>
     {!panel.props&&<button onClick={()=>setPanel(v=>({...v,props:true}))}>PROPS</button>}
     {!panel.layers&&<button onClick={()=>setPanel(v=>({...v,layers:true}))}>LAYERS</button>}
+    <button aria-pressed={!!panel.blocks} className={panel.blocks?'on':''} onClick={()=>setPanel(v=>({...v,blocks:!v.blocks}))}>BLOCKS</button>
    </div>
   </footer>
  </div>;
@@ -539,6 +583,8 @@ const helpRows:[string,string][]=[
  ['DOR · DIMORDINATE','Feature point, then the leader end (X or Y datum); UCS sets the origin'],['DBA · DIMBASELINE / DCO · DIMCONTINUE','Next points after the last linear dimension'],
  ['MLD · MLEADER / LE · LEADER','Arrowhead, landing (or points), then the note'],['TB · TABLE','Columns, rows, sizes, corner; double-click a cell to type'],['REVCLOUD','R rectangular, P polygonal, O object, A arc length'],
  ['ST · STYLE / D · DIMSTYLE','Text and dimension styles; LTSCALE, PLOTSTYLE'],
+ ['B · BLOCK / I · INSERT','Name, base point (selection first); a block, insertion point (S scale, R rotate), attribute values'],['ATT · ATTDEF','Tag (I invisible), prompt, default, point'],
+ ['BE · BEDIT / BCLOSE','Edit a block in place; save to update every reference'],['XA · XATTACH / XBIND','Reference another drawing of the project; bind references as blocks'],
  ['M · MOVE / CO · COPY','Select, base point, second point (COPY repeats)'],['RO · ROTATE','Select, base point, angle'],['SC · SCALE','Select, base point, factor'],
  ['MI · MIRROR','Select, two points on the mirror line, keep or erase the source'],['O · OFFSET','Distance, then an object and the side'],
  ['TR · TRIM / EX · EXTEND','Pick the part to trim, or the end to extend; every object is a boundary'],['F · FILLET / CHA · CHAMFER','R radius (D, A for chamfer), T trim, P whole polyline, M multiple; pick two objects'],
@@ -620,6 +666,13 @@ function Properties({doc,selected,layers,onPut,onLayer,onAll,lengthText}:{doc:Ca
   {e.type==='dim'&&<><dt>Type</dt><dd>{e.kind==='horizontal'||e.kind==='vertical'||e.kind==='aligned'?<select value={e.kind} onChange={ev=>onPut({...e,kind:ev.target.value as typeof e.kind})}><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option><option value="aligned">Aligned</option></select>:{angular:'Angular',radius:'Radius',diameter:'Diameter',ordinate:'Ordinate'}[e.kind]}</dd>
    <dt>Measurement</dt><dd>{dimValue({...e,text:undefined},doc)}</dd><dt>Style</dt><dd><select value={e.style??''} onChange={ev=>onPut({...e,style:ev.target.value||undefined})}><option value="">(none)</option>{dimStyleNames.map(n=><option key={n} value={n}>{n}</option>)}</select></dd><dt>Text override</dt><dd><TextField value={e.text??''} onCommit={t=>onPut({...e,text:t.trim()||undefined})}/></dd>{num('Text height',e.height,height=>height>0?{...e,height}:undefined)}</>}
   {e.type==='solid'&&<><dt>Vertices</dt><dd>{e.points.length}</dd></>}
+  {e.type==='insert'&&<><dt>Block</dt><dd>{e.name}</dd>{pt('Position',e.at,at=>({...e,at}))}{num('Scale',e.scale,scale=>scale?{...e,scale}:undefined)}{num('Rotation',e.rotation,rotation=>({...e,rotation}))}
+   <dt>Mirrored</dt><dd><input type="checkbox" checked={!!e.mirror} onChange={ev=>onPut({...e,mirror:ev.target.checked||undefined})}/></dd>
+   {attdefsOf(doc.blocks?.find(b=>b.name===e.name)).map(a=><Fragment key={a.tag}><dt title={a.prompt}>{a.tag}</dt><dd><TextField value={e.attribs?.[a.tag]??a.value} onCommit={v=>onPut({...e,attribs:{...(e.attribs??{}),[a.tag]:v}})}/></dd></Fragment>)}</>}
+  {e.type==='attdef'&&<><dt>Tag</dt><dd><TextField value={e.tag} onCommit={v=>v.trim()&&!/\s/.test(v.trim())&&onPut({...e,tag:v.trim().toUpperCase()})}/></dd><dt>Prompt</dt><dd><TextField value={e.prompt} onCommit={prompt=>onPut({...e,prompt})}/></dd>
+   <dt>Default</dt><dd><TextField value={e.value} onCommit={value=>onPut({...e,value})}/></dd>{num('Height',e.height,height=>height>0?{...e,height}:undefined)}
+   <dt>Invisible</dt><dd><input type="checkbox" checked={!!e.invisible} onChange={ev=>onPut({...e,invisible:ev.target.checked||undefined})}/></dd>{pt('Position',e.at,at=>({...e,at}))}</>}
+  {e.type==='xref'&&<><dt>Drawing</dt><dd>{e.name}</dd>{pt('Position',e.at,at=>({...e,at}))}{num('Scale',e.scale,scale=>scale>0?{...e,scale}:undefined)}{num('Rotation',e.rotation,rotation=>({...e,rotation}))}<dd className="cad-hint">XBIND makes the reference part of this drawing, so it plots and exports everywhere.</dd></>}
   {e.type==='hatch'&&<><dt>Pattern</dt><dd><select aria-label="Hatch pattern" value={e.pattern} onChange={ev=>onPut({...e,pattern:ev.target.value})}>{patternNames.map(n=><option key={n} value={n}>{n}</option>)}</select></dd>
    {e.pattern!=='SOLID'&&<>{num('Scale',e.scale,scale=>scale>0?{...e,scale}:undefined)}{num('Angle',e.angle,angle=>({...e,angle}))}</>}
    <dt>Loops</dt><dd>{e.loops.length}</dd><dt>Area</dt><dd>{fmtNum(hatchArea(e.loops))} {doc.unit==='unit'?'sq units':`sq ${doc.unit}`}</dd></>}

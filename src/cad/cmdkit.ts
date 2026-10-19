@@ -17,6 +17,8 @@ export interface Env{
  length(d:number):string;
  /** Command settings that persist between commands (AutoCAD system variables: FILLETRAD, POLYSIDES ...). */
  vars:Record<string,number|string|boolean>;
+ /** Block editing (BEDIT, BCLOSE) and attribute editing: the editor's to do. */
+ editBlock?(name:string):void;closeBlock?(save:boolean):void;editAttributes?(id:number):void;blockEditing?():string|undefined;
  /** The window of the last selection made by a window or crossing, if any (STRETCH). */
  lastWindow():{box:[number,number,number,number];crossing:boolean}|undefined;
 }
