@@ -15,16 +15,10 @@ import {drawingSheetSet,detailTopics} from '../src/components/planSheet';
 import type {CalculationSnapshot,ProjectInput} from '../src/engine/types';
 
 /**
- * Configurator choices of fixtures that are not (yet) templates: the stepped-column arrangements of the plan's t15/t16
- * (20 t cab, 4 × 30 ft rolled, paired bars, rail 32 ft; 10 t cab, 3 × 25 ft capped, cap tieback angles, rail 26 ft).
+ * Configurator choices of fixtures that are not templates (none at present: the crane-column and stepped-column
+ * arrangements are the templates t13 to t16).
  */
 const configFixtures:Record<string,RunwayConfig>={
- 'c-stepped-20t':{...defaultRunwayConfig,title:'Stepped columns, girder on the step',capacity:20,control:'cab',cmaa:'C',bays:4,span:30,girder:'rolled',structure:'existing',support:'stepped-column',tie:'paired-bars',railElevation:32,craneSpan:70},
- 'c-stepped-10t':{...defaultRunwayConfig,title:'Stepped columns, capped girder, cap tieback angles',capacity:10,control:'cab',cmaa:'C',bays:3,span:25,girder:'capped',structure:'existing',support:'stepped-column',tie:'cap-angle',railElevation:26,craneSpan:60},
- // The crane-column arrangements of the plan's t13/t14: 15 t cab, 4 × 25 ft rolled, flexible plate, rail 24 ft; 25 t cab
- // CMAA D Class B, 4 × 30 ft rolled, paired bars, rail 30 ft (the configurator may change the tie, configurator selections).
- 'c-crane-15t':{...defaultRunwayConfig,title:'Crane columns, flexible plates',capacity:15,control:'cab',cmaa:'C',buildingClass:'C',bays:4,span:25,girder:'rolled',structure:'existing',support:'crane-column',tie:'flexible-plate',railElevation:24,craneSpan:60},
- 'c-crane-25t':{...defaultRunwayConfig,title:'Heavy crane columns, paired bars',capacity:25,control:'cab',cmaa:'D',buildingClass:'B',bays:4,span:30,girder:'rolled',structure:'existing',support:'crane-column',tie:'paired-bars',railElevation:30,craneSpan:60}
 };
 const dir=new URL('../tests/fixtures/sheets/',import.meta.url);
 const file=(name:string)=>new URL(`${name}.json.gz`,dir);

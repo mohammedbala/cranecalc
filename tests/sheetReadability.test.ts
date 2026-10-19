@@ -52,7 +52,7 @@ describe('readable drawing sheets',()=>{
   const names=sheetFixtureNames();
   // Every template, t09 (two cranes, five bays) included: its two-crane calculate() now fits in memory (about 20 min with
   // 3 GB of heap; scripts/refreshSheetFixtures.ts t09), and the stored snapshot is drawn like the others.
-  for(let i=1;i<=12;i++)expect(names,`template t${String(i).padStart(2,'0')}`).toContain(`t${String(i).padStart(2,'0')}`);
+  for(let i=1;i<=16;i++)expect(names,`template t${String(i).padStart(2,'0')}`).toContain(`t${String(i).padStart(2,'0')}`);
   expect(names.filter(v=>v.startsWith('s')).length).toBeGreaterThanOrEqual(8);
   expect(readdirSync(new URL('./fixtures/sheets/',import.meta.url)).filter(f=>f.endsWith('.json.gz')).length).toBe(names.length);
  });
