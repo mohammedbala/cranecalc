@@ -15,14 +15,17 @@ import type {ProjectInput} from '../src/engine/types';
 const inch=25.4,foot=304.8,ksi=6.894757293168;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&')).join(' ');
 const p=newColumnDemonstrationProject(),s=calculate(p),check=(id:string)=>s.checks.find(c=>c.id===id);
+// The demonstration without its torsion brace (the W8X24 strut on the column centerline alone): the column takes the
+// whole seat torque, for the tests of the column torsion and the rod torque.
+const pu=(()=>{const q=newColumnDemonstrationProject();delete q.longitudinalBracing!.design!.torsionBrace;q.longitudinalBracing!.design!.strut.shape='W8X24';return q;})(),su=calculate(pu);
 const column=existingColumnSection(p).section;
 
 describe('rod X-bracing between new freestanding columns',()=>{
  it('designs the rods, connections, strut, collector and seismic along the runway with every check passing',()=>{
   // The column twist at the bracket offset is a designed limit (columnTwistLimit.ts): the demonstration's strut is
   // moment-connected in plan at the locating columns (torsion brace), and the tie is sized for the braced movement.
-  expect(s.errors).toEqual([]);expect(s.eligible).toBe(false);
-  expect(s.checks.filter(c=>c.status==='unverified'||c.status==='incomplete'||c.status==='unsupported').map(c=>`${c.id} ${c.status}`)).toEqual(['end-bearing-slot-travel unverified']);
+  expect(s.errors).toEqual([]);expect(s.eligible).toBe(true);
+  expect(s.checks.filter(c=>c.status==='unverified'||c.status==='incomplete'||c.status==='unsupported').map(c=>`${c.id} ${c.status}`)).toEqual([]);
   expect(s.checks.filter(c=>c.status==='fail'&&!reviewOpenItem(c)).map(c=>c.id).sort()).toEqual([]);
   for(const id of ['brace-tension','brace-pin','brace-pin-bearing','brace-gusset-rupture','brace-gusset-tearout','brace-gusset-yield','brace-gusset-weld','brace-column-web',
    'brace-strut','brace-strut-slenderness','brace-strut-tension','brace-strut-slip','brace-strut-bolts','brace-strut-bearing','brace-strut-block','brace-strut-tab','brace-seat-weld','brace-collector-bearing',
@@ -59,6 +62,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
   expect(r.geometry).toMatchObject({bays:1,tiers:1,spans:[2]});expect(r.length).toBeCloseTo(Math.hypot(L.width,L.height),6);
  });
  it('loads the braced columns and bases with the rod forces and the locating columns with the girder torque',()=>{
+  const p=pu,s=su,check=(id:string)=>su.checks.find(c=>c.id===id);
   const reactions=s.supportReactions!,L=bracingLayout(p),e=girderOffset(p),Cbs=p.cranes[0].design!.bumperForce;
   const [base1,base2,,base4]=columnBaseActions(p,reactions,'LRFD'),V=Cbs*L.height/L.width,sp=reactions.supports[1];
   const comp=base2.actions.find(a=>a.id==='LRFD AIST bumper · brace')!,lift=base2.actions.find(a=>a.id==='LRFD AIST bumper · brace uplift')!;
@@ -109,6 +113,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
   expect(sep.along).toBeCloseTo(s.bracingSystem!.seismic!.drift,9);
  });
  it('passes the two rods of the X in parallel planes, one offset by the strut web and a filler',()=>{
+  const p=pu,s=su,check=(id:string)=>su.checks.find(c=>c.id===id),column=existingColumnSection(pu).section;
   const g=bracingGeometry(p,column),b=p.longitudinalBracing!,d=b.design!,cr=g.cross,r=s.bracingSystem!;
   // Rod B's plane: the gusset thickness, the strut web and the filler from rod A's, at least 1/2 in clear of it
   // (rodCrossingClear: a 1/4 in gap plus the gusset location tolerance and sag).
@@ -150,7 +155,7 @@ describe('rod X-bracing between new freestanding columns',()=>{
   expect(s01).toContain('data-elevation-bracing="true"');expect(s01).toContain('data-bracing="plan"');
   // The rods are not cut off at the column stubs (they read as knee braces): a reference to the braced bay.
   expect(texts(s01)).toContain('3/4" DIA. ROD X-BRACING BELOW, GRIDS 2-3, BOTH RUNWAYS');
-  expect(texts(s01)).toContain('W8X24 STRUT ON COLUMN LINE, ALL SPANS');
+  expect(texts(s01)).toContain('W8X31 STRUT ON COLUMN LINE, ALL SPANS');
   // The separation reads alike on S-01 and S-04 (bracingSheet.separationLength): the specified minimum in inches.
   expect(texts(s01)).toMatch(/SEISMIC SEPARATION: KEEP ALL RUNWAY STEEL 1 3\/4" MIN\. CLEAR/);
   const sheet=set.find(v=>v.svg.includes('data-view="braced-bay-elevation"'))!;
