@@ -109,3 +109,6 @@
 .cad-block span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cad-block small{color:var(--cad-muted);font-size:9.5px;margin-left:5px}
 .cad-block button{padding:1px 6px;border-color:var(--cad-line)}
 .cad-bedit{background:#163a5a;color:#d7ecff}.theme-paper .cad-bedit{background:#dbeeff;color:#163a5a}
+.cad-spaces{display:inline-flex;margin-right:8px}.cad-spaces button{border-radius:0;border-color:var(--cad-line)}.cad-spaces button:first-child{border-radius:4px 0 0 4px}.cad-spaces button:last-child{border-radius:0 4px 4px 0;margin-left:-1px}
+.cad-plot{width:300px}.cad-plot label{justify-content:space-between}.cad-plot label span{color:var(--cad-muted)}.cad-plot select{width:150px}
+.cad-frozen{display:flex;flex-direction:column;max-height:120px;overflow:auto}.cad-frozen label{display:flex;gap:5px;align-items:center;font-size:11px}

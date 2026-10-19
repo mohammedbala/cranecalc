@@ -135,20 +135,27 @@ export function findBoundary(p:Pt,segs:[Pt,Pt][],tol=1e-7):Pt[]|undefined{
  // Prune dangling edges (degree 1) repeatedly: they bound no face.
  for(let changed=true;changed;){changed=false;for(const [n,set] of adj)if(set.size<2){for(const m of set)adj.get(m)?.delete(n);adj.delete(n);changed=true;}}
  if(!adj.size)return undefined;
- // The nearest edge to the right of p along +x.
- let best:{a:number;b:number;x:number}|undefined;
- for(const [a,set] of adj)for(const b of set){if(a>b)continue;const A=nodes[a],B=nodes[b];if((A[1]>p[1])===(B[1]>p[1]))continue;const x=A[0]+(B[0]-A[0])*(p[1]-A[1])/(B[1]-A[1]);if(x>p[0]&&(!best||x<best.x))best={a,b,x};}
- if(!best)return undefined;
- let [from,to]=cross(sub(nodes[best.b],nodes[best.a]),sub(p,nodes[best.a]))>0?[best.a,best.b]:[best.b,best.a];
- const start=`${from}>${to}`,loop:Pt[]=[];
+ // Edges crossed by a ray from p along +x, nearest first. The face is walked from the nearest; if that walk is
+ // the outside of a closed shape p is not in (an island), the next crossing is tried.
+ const crossingsX:{a:number;b:number;x:number}[]=[];
+ for(const [a,set] of adj)for(const b of set){if(a>b)continue;const A=nodes[a],B=nodes[b];if((A[1]>p[1])===(B[1]>p[1]))continue;const x=A[0]+(B[0]-A[0])*(p[1]-A[1])/(B[1]-A[1]);if(x>p[0])crossingsX.push({a,b,x});}
+ crossingsX.sort((u,v)=>u.x-v.x);
  const ang=(i:number,j:number)=>Math.atan2(nodes[j][1]-nodes[i][1],nodes[j][0]-nodes[i][0]);
- for(let guard=0;guard<200000;guard++){
-  loop.push(nodes[from]);
-  const back=ang(to,from);let next=-1,bd=Infinity;
-  for(const w of adj.get(to)!){let d=back-ang(to,w);d=((d%(2*Math.PI))+2*Math.PI)%(2*Math.PI);if(w===from)d=2*Math.PI;if(d<1e-12)d=2*Math.PI;if(d<bd){bd=d;next=w;}}
-  from=to;to=next;
-  if(`${from}>${to}`===start)break;
+ const walk=(from:number,to:number):Pt[]=>{
+  const start=`${from}>${to}`,loop:Pt[]=[];
+  for(let guard=0;guard<200000;guard++){
+   loop.push(nodes[from]);
+   const back=ang(to,from);let next=-1,bd=Infinity;
+   for(const w of adj.get(to)!){let d=back-ang(to,w);d=((d%(2*Math.PI))+2*Math.PI)%(2*Math.PI);if(w===from)d=2*Math.PI;if(d<1e-12)d=2*Math.PI;if(d<bd){bd=d;next=w;}}
+   from=to;to=next;
+   if(`${from}>${to}`===start)break;
+  }
+  return loop;
+ };
+ for(const c of crossingsX.slice(0,64)){
+  const [from,to]=cross(sub(nodes[c.b],nodes[c.a]),sub(p,nodes[c.a]))>0?[c.a,c.b]:[c.b,c.a];
+  const loop=walk(from,to);
+  if(loop.length>=3&&loopArea(loop)>0&&insideLoops(p,[loop]))return loop;
  }
- if(loop.length<3||loopArea(loop)<=0||!insideLoops(p,[loop]))return undefined;
- return loop;
+ return undefined;
 }

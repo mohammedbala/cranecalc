@@ -4,11 +4,11 @@ import {
  MoveHorizontal,MousePointer2,Plus,Redo2,RectangleHorizontal,RotateCw,Ruler,Scaling,Scissors,SlidersHorizontal,Spline,TriangleAlert,Type,
  Undo2,Ungroup,Waypoints,X,Slash,Egg,Activity,Hexagon,MoveDiagonal,CornerDownRight,Diamond,StretchHorizontal,Grid3x3,RotateCcw,Unlink,Link,MoveRight,
  AlignHorizontalJustifyStart,PenLine,Paintbrush,PaintBucket,Scan,Combine,Blocks,AlignLeft,CaseSensitive,Triangle,Radius,Diameter,Milestone,Rows3,Columns3,Settings2,
- MessageSquareText,MessageSquare,Table,Cloud,Palette,Waves,Box as BoxIcon,Tag,Tags,PencilRuler,Library,FileInput,
+ MessageSquareText,MessageSquare,Table,Cloud,Palette,Waves,Box as BoxIcon,Tag,Tags,PencilRuler,Library,FileInput,Box as Box3,FileText,Frame,Ratio,Printer,
 } from 'lucide-react';
 import {
  DEG,add,angleOf,bbox,curveLength,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,lineTypes,nearest,parseLength,
- parsePoint,stretchGrip,sub,sweep,type Box,type CadDoc,type CadLayer,type Ent,type NewEnt,type Pt,type SnapKind,type LineType,
+ parsePoint,stretchGrip,sub,sweep,type Box,type CadDoc,type CadLayer,type Ent,type NewEnt,type Pt,type SnapKind,type LineType,type ViewportEnt,
 } from '../cad/model';
 import {CadStore} from '../cad/store';
 import {commandNames,defaultHeights,makeCommand,placeCmd,type Command,type Env,type Preview} from '../cad/commands';
@@ -19,6 +19,8 @@ import {cellAt,setCell} from '../cad/annotateCommands';
 import {blockLibrary,libraryBlock} from '../cad/blockLibrary';
 import {insertCmd} from '../cad/blockCommands';
 import {attdefsOf,setXrefResolver} from '../cad/blocks';
+import {modelDoc,modelExtents,scaleLabel,scalesFor,withModel} from '../cad/layout';
+import {docToPdf,pdfBytes,type PlotOptions} from '../cad/pdf';
 import {dimValue,standardDimStyle} from '../cad/annotation';
 import {StylesDialog} from '../cad/StylesDialog';
 import {expandGroups,fenceSelect,propValue,quickSelect,type QuickProp,type QuickSpec} from '../cad/select';
@@ -39,7 +41,7 @@ const scales=(unit:CadDoc['unit']):[string,number][]=>unit==='in'
  ?[['1:1 (paper)',25.4],['3" = 1\'-0"',4*25.4],['1 1/2" = 1\'-0"',8*25.4],['1" = 1\'-0"',12*25.4],['3/4" = 1\'-0"',16*25.4],['1/2" = 1\'-0"',24*25.4],['3/8" = 1\'-0"',32*25.4],['1/4" = 1\'-0"',48*25.4],['3/16" = 1\'-0"',64*25.4],['1/8" = 1\'-0"',96*25.4]]
  :unit==='mm'?[['1:1 (paper)',1],['1:5',5],['1:10',10],['1:20',20],['1:25',25],['1:50',50],['1:100',100],['1:200',200]]:[];
 const fmtNum=(v:number)=>String(Number(v.toFixed(4)));
-const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray',hatch:'Hatch',mtext:'Multiline text',leader:'Leader',table:'Table',attdef:'Attribute definition',insert:'Block reference',xref:'External reference'};
+const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray',hatch:'Hatch',mtext:'Multiline text',leader:'Leader',table:'Table',attdef:'Attribute definition',insert:'Block reference',xref:'External reference',viewport:'Viewport'};
 
 export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=>void}){
  const store=useMemo(()=>new CadStore(structuredClone(source.record?.doc??source.generated)),[]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -52,6 +54,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const [qselect,setQselect]=useState(false);
  const [pickGroups,setPickGroups]=useState(true);
  const [styles,setStyles]=useState<'text'|'dim'|null>(null);
+ const [plot,setPlot]=useState(false);
  const [theme,setTheme]=useState<Theme>('dark');
  const [panel,setPanel]=useState<{props:boolean;layers:boolean;blocks?:boolean}>({props:true,layers:true});
  const [currentLayer,setCurrentLayer]=useState(()=>doc.layers.some(l=>l.name==='S-ANNO')?'S-ANNO':doc.layers.some(l=>l.name==='OUTLINE')?'OUTLINE':'0');
@@ -110,7 +113,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   const v=view.current,w=Math.max(1e-9,b[2]-b[0]),h=Math.max(1e-9,b[3]-b[1]);
   view.current={...v,cx:(b[0]+b[2])/2,cy:(b[1]+b[3])/2,scale:Math.min(v.w/(w*margin),v.h/(h*margin))};schedule(true);
  },[schedule]);
- const zoomExtents=useCallback(()=>zoomTo([0,0,store.doc.width,store.doc.height]),[zoomTo,store]);
+ const zoomExtents=useCallback(()=>{
+  // Model space has no sheet: its extents are its objects'.
+  if(store.doc.space==='model'){const ext=modelExtents(store.doc.entities,store.doc);zoomTo(ext?[ext[0],ext[1],Math.max(ext[2],ext[0]+1),Math.max(ext[3],ext[1]+1)]:[0,0,store.doc.width,store.doc.height]);return;}
+  zoomTo([0,0,store.doc.width,store.doc.height]);
+ },[zoomTo,store]);
 
  // Canvas size follows the editor; the first layout fits the sheet.
  useEffect(()=>{
@@ -131,10 +138,30 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   setXrefResolver(name=>{if(!memo.has(name))memo.set(name,list.find(o=>o.key===name)?.doc());return memo.get(name);});
   return ()=>setXrefResolver(undefined);
  },[source.others]);
+ // ---- model space: opened on the Model tab in place of the layout; the layout tab writes it back ----
+ const space=useRef<{saved:ReturnType<CadStore['swap']>;view:View}|null>(null);
+ function toModel(vp?:ViewportEnt){
+  if(blockEdit.current){say('Close the block editor first (BCLOSE).');return;}
+  if(space.current){if(vp)zoomTo(modelWindow(vp));return;}
+  if(active.current||grip.current)endCommand(false);
+  const sheet=store.doc;space.current={view:{...view.current},saved:store.swap(modelDoc(sheet))};
+  say(`Model space (real size, annotation at ${scaleLabel(sheet,store.doc.annoScale??1)}): text, dimensions and leaders drawn here are annotative.`);
+  if(vp)zoomTo(modelWindow(vp));else zoomExtents();refresh();
+ }
+ function toLayout(){
+  const s=space.current;if(!s)return;if(active.current||grip.current)endCommand(false);
+  const m=store.doc;space.current=null;store.restore(s.saved);view.current={...s.view,w:view.current.w,h:view.current.h};
+  const before=store.doc.model,next=withModel(store.doc,m);
+  if(before?.entities!==next.model!.entities||before?.annoScale!==next.model!.annoScale||store.doc.layers!==next.layers||store.doc.blocks!==next.blocks||store.doc.textStyles!==next.textStyles||store.doc.dimStyles!==next.dimStyles)
+   store.commit('Model space',{meta:{model:next.model,textStyles:next.textStyles,dimStyles:next.dimStyles,blocks:next.blocks},layers:next.layers});
+  say('Layout.');refresh();schedule(true);
+ }
+ const modelWindow=(vp:ViewportEnt):Box=>[vp.view[0]-vp.width/2/vp.scale,vp.view[1]-vp.height/2/vp.scale,vp.view[0]+vp.width/2/vp.scale,vp.view[1]+vp.height/2/vp.scale];
  // ---- block editor: the block's entities open in place of the drawing; BCLOSE writes them back ----
  const blockEdit=useRef<{name:string;base:Pt;saved:ReturnType<CadStore['swap']>;view:View}|null>(null);
  function editBlock(name:string){
   if(blockEdit.current){say('Close the block editor first (BCLOSE).');return;}
+  if(space.current){say('Edit blocks from the layout tab.');return;}
   let def=store.doc.blocks?.find(b=>b.name===name);
   if(!def){const lib=libraryBlock(name);if(!lib)return;store.commit(`Copy ${name} from the library`,{meta:{blocks:[...(store.doc.blocks??[]),lib]}});def=lib;}
   const parent=store.doc,ents=def.entities,nextId=Math.max(0,...ents.map(e=>e.id))+1;
@@ -155,7 +182,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  useEffect(()=>{
   if(store.docVersion===startVersion.current||blockEdit.current)return;
   setSaveState('saving');
-  const t=setTimeout(()=>{void saveCadRecord(source.project,stale&&source.record?source.record.base:source.base,store.doc).then(()=>setSaveState('saved'));},500);
+  const t=setTimeout(()=>{void saveCadRecord(source.project,stale&&source.record?source.record.base:source.base,space.current?withModel(space.current.saved.doc,store.doc):store.doc).then(()=>setSaveState('saved'));},500);
   return ()=>clearTimeout(t);
  },[store.docVersion,store,source.project,source.base,source.record,stale]);
 
@@ -240,6 +267,9 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(name==='QSELECT'){setQselect(true);return;}
   if(name==='STYLE'||name==='DIMSTYLE'){setStyles(name==='STYLE'?'text':'dim');return;}
   if(name==='BLOCKSPALETTE'){setPanel(v=>({...v,blocks:true}));return;}
+  if(name==='MSPACE'){toModel();return;}
+  if(name==='PSPACE'){toLayout();return;}
+  if(name==='PLOT'){setPlot(true);return;}
   const cmd=makeCommand(name,env);if(!cmd){say(`Unknown command "${raw.trim()}". Press F1 for the command list.`);return;}
   lastCommand.current=name;active.current=cmd;lastWindow.current=undefined;
   if(cmd.selectFirst){if(store.selection.size)beginOn(cmd);else selecting.current=true;}
@@ -378,6 +408,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(hit.type==='text'||hit.type==='dim')setTextEdit({id:hit.id,value:hit.type==='text'?hit.value:hit.text??'',x,y});
   else if(hit.type==='mtext'||hit.type==='leader')setTextEdit({id:hit.id,value:hit.value,x,y,multi:true});
   else if(hit.type==='insert'){setPanel(v=>({...v,props:true}));}
+  else if(hit.type==='viewport'){toModel(hit);}
   else if(hit.type==='table'){const c=cellAt(hit,toWorld(view.current,x,y));if(c)setTextEdit({id:hit.id,value:hit.cells[c.i]?.[c.j]??'',x,y,multi:true,cell:c});}
  }
  function onAuxClick(e:React.MouseEvent){if(e.button===1&&e.detail===2)zoomExtents();}
@@ -467,6 +498,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
    {name:'Block',tools:[['INSERT','Insert a block (I)',I(Blocks)],['BLOCK','Create a block from the selection (B)',I(BoxIcon)],['ATTDEF','Define an attribute (ATT)',I(Tag)],['BEDIT','Edit a block (BE)',I(PencilRuler)],['ATTEDIT','Edit attributes',I(Tags)],['BLOCKSPALETTE','Blocks palette: drawing and library blocks',I(Library)]]},
    {name:'Reference',tools:[['XATTACH','Attach another drawing of the project as a reference (XA)',I(FileInput)],['XBIND','Bind references into the drawing',I(Link)]]},
   ]},
+  {tab:'Layout',panels:[
+   {name:'Spaces',tools:[['MSPACE','Model space (MS)',I(Box3)],['PSPACE','Layout (PS)',I(FileText)]]},
+   {name:'Viewports',tools:[['MVIEW','Viewport on the layout (MV)',I(Frame)],['ANNOSCALE','Annotation scale of model space',I(Ratio)]]},
+   {name:'Plot',tools:[['PLOT','Plot to PDF or SVG at 1:1',I(Printer)]]},
+  ]},
   {tab:'View',panels:[
    {name:'Navigate',tools:[['ZOOM','Zoom (Z): E extents, W window',I(Maximize2)]]},
    {name:'Plot',tools:[['PLOTSTYLE','Plot style: monochrome, grayscale or color',I(Palette)],['LTSCALE','Linetype scale (LTS)',I(Waves)],['UCS','Origin for ordinate dimensions (UCS)',I(Milestone)]]},
@@ -524,6 +560,10 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
      {[90,45,30,22.5,18,15,10,5].map(a=><label key={a}><input type="radio" name="polar" checked={polarAngle===a} onChange={()=>{setPolarAngle(a);savePref('cad-polar',a);setToggles(v=>({...v,polar:true,ortho:false}));}}/>{a}°</label>)}</div>}
     {styles&&<StylesDialog kind={styles} doc={doc} vars={vars.current} onClose={()=>setStyles(null)} onChange={(meta,label)=>{store.commit(label,{meta});schedule(true);}} onCurrent={(k,name)=>{vars.current[k==='text'?'TEXTSTYLE':'DIMSTYLE']=name;say(`Current ${k==='text'?'text':'dimension'} style: ${name}.`);refresh();}}
      onApplyDims={name=>{const st=(store.doc.dimStyles??[]).find(d=>d.name===name)??standardDimStyle(store.doc.unit);const dims=store.doc.entities.filter(e=>e.type==='dim'&&(e.style??'Standard')===name);if(dims.length){store.commit('Update dimensions',{put:dims.map(e=>({...e,height:st.textHeight*st.scale}) as Ent)});say(`${dims.length} dimensions updated to ${name}.`);schedule(true);}}}/>}
+    {plot&&<PlotDialog doc={space.current?space.current.saved.doc:doc} inModel={!!space.current} onClose={()=>setPlot(false)} onSetup={lw=>{if(!space.current){store.commit('Page setup',{meta:{pageSetup:{...(store.doc.pageSetup??{}),lineweights:lw}}});}}}
+     onPlot={(fmt,o)=>{const d=space.current?withModel(space.current.saved.doc,store.doc):store.doc,name=`${d.key}${edited?'-edited':''}`;
+      if(fmt==='pdf')download(new Blob([pdfBytes(docToPdf(d,o))],{type:'application/pdf'}),`${name}.pdf`);else download(new Blob([docToSvg({...d,plotStyle:o.plotStyle??d.plotStyle},{trueSize:true,lineweights:o.lineweights})],{type:'image/svg+xml'}),`${name}.svg`);
+      say(`Plotted ${name}.${fmt} at 1:1 (${fmtNum(d.width)} × ${fmtNum(d.height)} ${d.unit==='unit'?'units':d.unit}).`);setPlot(false);}}/>}
     {qselect&&<QuickSelect doc={doc} selected={selected} onClose={()=>setQselect(false)} onApply={(ids,append)=>{store.select(withGroups(ids),append?'add':'replace');say(`${ids.length} objects selected.`);setQselect(false);schedule();}} pickable={pickable}/>}
     {toggles.dyn&&cursor.current.screen&&(active.current||input)&&!textEdit&&<div className="cad-dyn" aria-hidden="true" style={{left:Math.min(cursor.current.screen[0]+20,view.current.w-260),top:Math.min(cursor.current.screen[1]+24,view.current.h-48)}}>
      <span>{prompt().replace(/^\S+ /,'').replace(/^\*\* STRETCH \*\* /,'')}</span><b>{input||'\u00a0'}</b>{dynLock.current!==null&&<em>length {lengthText(dynLock.current)} locked</em>}</div>}
@@ -558,7 +598,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
      onClick={()=>setToggles(v=>({...v,[t]:!v[t],...(!v[t]&&t==='ortho'?{polar:false}:!v[t]&&t==='polar'?{ortho:false}:{})}))}>{t==='otrack'?'OTRACK':t.toUpperCase()}</button>
      {(t==='osnap'||t==='polar')&&<button className="cad-more" aria-label={t==='osnap'?'Object snap settings':'Polar tracking angle'} aria-expanded={settings===t} onClick={()=>setSettings(v=>v===t?null:t)}>▾</button>}</span>)}
     <button className={pickGroups?'on':''} aria-pressed={pickGroups} title="Picking a group member selects the whole group (Ctrl+Shift+A)" onClick={()=>setPickGroups(v=>!v)}>GROUPS</button>
-    {scales(doc.unit).length>0&&<label className="cad-scale">Scale<select aria-label="Drawing scale for dimensions and distances" value={doc.realPerUnit} onChange={e=>{store.setMeta({realPerUnit:+e.target.value});schedule(true);}}>{scales(doc.unit).map(([n,v])=><option key={n} value={v}>{n}</option>)}</select></label>}
+    <span className="cad-spaces" role="tablist" aria-label="Model and layout">
+     <button role="tab" aria-selected={doc.space==='model'} className={doc.space==='model'?'on':''} onClick={()=>toModel()} disabled={!!blockEdit.current}>Model</button>
+     <button role="tab" aria-selected={doc.space!=='model'} className={doc.space!=='model'?'on':''} onClick={toLayout}>{space.current?space.current.saved.doc.key:doc.key}</button></span>
+    {doc.space==='model'&&<label className="cad-scale">Annotation<select aria-label="Annotation scale" value={doc.annoScale} onChange={e=>{const cmd=makeCommand('ANNOSCALE',env);if(cmd){cmd.text?.(String(1/+e.target.value));schedule(true);refresh();}}}>{scalesFor(doc).map(([n,v])=><option key={n} value={v}>{n}</option>)}</select></label>}
+    {doc.space!=='model'&&scales(doc.unit).length>0&&<label className="cad-scale">Scale<select aria-label="Drawing scale for dimensions and distances" value={doc.realPerUnit} onChange={e=>{store.setMeta({realPerUnit:+e.target.value});schedule(true);}}>{scales(doc.unit).map(([n,v])=><option key={n} value={v}>{n}</option>)}</select></label>}
     <label className="cad-scale">Layer<select aria-label="Current layer" value={currentLayer} onChange={e=>setCurrentLayer(e.target.value)}>{doc.layers.map(l=><option key={l.name} value={l.name}>{l.name}</option>)}</select></label>
     <button title="Model (dark) or paper (light) view" onClick={()=>setTheme(t=>t==='dark'?'paper':'dark')}>{theme==='dark'?'MODEL':'PAPER'}</button>
     <button title="Commands and shortcuts (F1)" aria-pressed={help} className={help?'on':''} onClick={()=>setHelp(v=>!v)}>HELP</button>
@@ -672,11 +716,29 @@ function Properties({doc,selected,layers,onPut,onLayer,onAll,lengthText}:{doc:Ca
   {e.type==='attdef'&&<><dt>Tag</dt><dd><TextField value={e.tag} onCommit={v=>v.trim()&&!/\s/.test(v.trim())&&onPut({...e,tag:v.trim().toUpperCase()})}/></dd><dt>Prompt</dt><dd><TextField value={e.prompt} onCommit={prompt=>onPut({...e,prompt})}/></dd>
    <dt>Default</dt><dd><TextField value={e.value} onCommit={value=>onPut({...e,value})}/></dd>{num('Height',e.height,height=>height>0?{...e,height}:undefined)}
    <dt>Invisible</dt><dd><input type="checkbox" checked={!!e.invisible} onChange={ev=>onPut({...e,invisible:ev.target.checked||undefined})}/></dd>{pt('Position',e.at,at=>({...e,at}))}</>}
+  {e.type==='viewport'&&<><dt>Scale</dt><dd><select aria-label="Viewport scale" value={scalesFor(doc).some(([,v])=>Math.abs(v-e.scale)<1e-9)?e.scale:''} onChange={ev=>{const sc=+ev.target.value;if(sc>0)onPut({...e,scale:sc});}}>
+    {!scalesFor(doc).some(([,v])=>Math.abs(v-e.scale)<1e-9)&&<option value="">{scaleLabel(doc,e.scale)}</option>}{scalesFor(doc).map(([n,v])=><option key={n} value={v}>{n}</option>)}</select></dd>
+   {num('View X',e.view[0],x=>({...e,view:[x,e.view[1]]}))}{num('View Y',e.view[1],y=>({...e,view:[e.view[0],y]}))}{num('Width',e.width,width=>width>0?{...e,width}:undefined)}{num('Height',e.height,height=>height>0?{...e,height}:undefined)}
+   <dt>Locked</dt><dd><input type="checkbox" checked={!!e.locked} onChange={ev=>onPut({...e,locked:ev.target.checked||undefined})}/></dd>
+   <dt>Frozen layers</dt><dd className="cad-frozen">{layers.map(l=><label key={l.name}><input type="checkbox" checked={!!e.frozen?.includes(l.name)} onChange={ev=>{const f=new Set(e.frozen??[]);if(ev.target.checked)f.add(l.name);else f.delete(l.name);onPut({...e,frozen:f.size?[...f]:undefined});}}/>{l.name}</label>)}</dd>
+   <dd className="cad-hint">Double-click the viewport to work in model space through it.</dd></>}
   {e.type==='xref'&&<><dt>Drawing</dt><dd>{e.name}</dd>{pt('Position',e.at,at=>({...e,at}))}{num('Scale',e.scale,scale=>scale>0?{...e,scale}:undefined)}{num('Rotation',e.rotation,rotation=>({...e,rotation}))}<dd className="cad-hint">XBIND makes the reference part of this drawing, so it plots and exports everywhere.</dd></>}
   {e.type==='hatch'&&<><dt>Pattern</dt><dd><select aria-label="Hatch pattern" value={e.pattern} onChange={ev=>onPut({...e,pattern:ev.target.value})}>{patternNames.map(n=><option key={n} value={n}>{n}</option>)}</select></dd>
    {e.pattern!=='SOLID'&&<>{num('Scale',e.scale,scale=>scale>0?{...e,scale}:undefined)}{num('Angle',e.angle,angle=>({...e,angle}))}</>}
    <dt>Loops</dt><dd>{e.loops.length}</dd><dt>Area</dt><dd>{fmtNum(hatchArea(e.loops))} {doc.unit==='unit'?'sq units':`sq ${doc.unit}`}</dd></>}
  </dl>;
+}
+/** PLOT: the layout to PDF or SVG at 1:1, with the plot style and lineweights (the page setup). */
+function PlotDialog({doc,inModel,onClose,onPlot,onSetup}:{doc:CadDoc;inModel:boolean;onClose:()=>void;onPlot:(fmt:'pdf'|'svg',o:PlotOptions)=>void;onSetup:(lineweights:boolean)=>void}){
+ const [fmt,setFmt]=useState<'pdf'|'svg'>('pdf'),[style,setStyle]=useState<CadDoc['plotStyle']>(doc.plotStyle??'monochrome'),[lw,setLw]=useState(doc.pageSetup?.lineweights!==false);
+ const paper=doc.unit==='in'?`${fmtNum(doc.width)} × ${fmtNum(doc.height)} in${Math.abs(doc.width-36)<1e-6&&Math.abs(doc.height-24)<1e-6?' (ARCH D)':''}`:doc.unit==='mm'?`${fmtNum(doc.width)} × ${fmtNum(doc.height)} mm`:`${fmtNum(doc.width)} × ${fmtNum(doc.height)} units`;
+ return <div className="cad-pop cad-plot" role="dialog" aria-label="Plot"><h3>Plot {doc.key}<button aria-label="Close plot" onClick={onClose}><X size={12}/></button></h3>
+  {inModel&&<p className="cad-hint">Plots the layout {doc.key} (viewports show model space at their scales).</p>}
+  <label>Paper<span>{paper}, landscape</span></label><label>Plot scale<span>1:1 (the layout)</span></label>
+  <label>Format<select aria-label="Plot format" value={fmt} onChange={e=>setFmt(e.target.value as 'pdf'|'svg')}><option value="pdf">PDF</option><option value="svg">SVG</option></select></label>
+  <label>Plot style<select aria-label="Plot style" value={style} onChange={e=>setStyle(e.target.value as CadDoc['plotStyle'])}><option value="monochrome">Monochrome</option><option value="grayscale">Grayscale</option><option value="color">Color</option></select></label>
+  <label className="cad-check"><input type="checkbox" checked={lw} onChange={e=>{setLw(e.target.checked);onSetup(e.target.checked);}}/>Plot lineweights</label>
+  <div className="cad-pop-row"><button className="on" onClick={()=>onPlot(fmt,{lineweights:lw,plotStyle:style})}>Plot</button><button onClick={onClose}>Cancel</button></div></div>;
 }
 /** QSELECT: objects by type and property (layer, color, linetype, lineweight). */
 function QuickSelect({doc,selected,onClose,onApply,pickable}:{doc:CadDoc;selected:Ent[];onClose:()=>void;onApply:(ids:number[],append:boolean)=>void;pickable:(e:Ent)=>boolean}){

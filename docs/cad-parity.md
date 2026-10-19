@@ -132,9 +132,9 @@ and accessible panels (labels, focus order, keyboard reachable).
 | 1 Drafting core | done: model, draw and modify commands; tests in `tests/cadDrafting.test.ts`, browser check in `tests/e2e/cad.spec.ts` |
 | 2 Precision and selection | done: `src/cad/snap.ts`, `src/cad/select.ts`; tests in `tests/cadPrecision.test.ts` and `tests/e2e/cad.spec.ts` |
 | 3 Hatching | done: `src/cad/hatch.ts` (patterns, even-odd clipping, solid fills, boundary detection with islands); tests in `tests/cadHatch.test.ts` |
-| 4 Annotation | done (annotative scaling arrives with layouts, increment 6): `src/cad/annotation.ts`, `src/cad/annotateCommands.ts`, `src/cad/StylesDialog.tsx`; tests in `tests/cadAnnotation.test.ts`; the ribbon replaced the vertical tool bar |
+| 4 Annotation | done: `src/cad/annotation.ts`, `src/cad/annotateCommands.ts`, `src/cad/StylesDialog.tsx`; tests in `tests/cadAnnotation.test.ts`; the ribbon replaced the vertical tool bar |
 | 5 Blocks | done: `src/cad/blocks.ts`, `src/cad/blockLibrary.ts`, `src/cad/blockCommands.ts`; tests in `tests/cadBlocks.test.ts`. References scale uniformly (with a mirror flag), as most drafting blocks do; WBLOCK arrives with DXF interchange |
-| 6 Layouts | planned |
+| 6 Layouts | done: `src/cad/layout.ts`, `src/cad/layoutCommands.ts`, `src/cad/pdf.ts`; tests in `tests/cadLayout.test.ts`. One layout per sheet (the sheet itself); several layouts per drawing are not needed by the sheet set |
 | 7 Interchange | planned |
 | 8 Associativity | planned |
 | 9 Performance and UX | planned |

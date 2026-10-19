@@ -3,7 +3,7 @@ import type {CadDoc,CadGroup,CadLayer,Ent,NewEnt} from './model';
 /** One undoable edit: entities put (added or replaced by id) and deleted, and optionally the layer table and groups. */
 export interface Change{put?:Ent[];add?:NewEnt[];del?:number[];layers?:CadLayer[];groups?:CadGroup[];meta?:Meta}
 /** Drawing settings changed undoably: styles, linetype scale, plot style. */
-export type Meta=Partial<Pick<CadDoc,'textStyles'|'dimStyles'|'ltscale'|'plotStyle'|'blocks'>>;
+export type Meta=Partial<Pick<CadDoc,'textStyles'|'dimStyles'|'ltscale'|'plotStyle'|'blocks'|'annoScale'|'pageSetup'|'model'>>;
 interface State{ents:Map<number,Ent|null>;layers?:CadLayer[];groups?:CadGroup[];meta?:Meta}
 interface Step{label:string;before:State;after:State}
 

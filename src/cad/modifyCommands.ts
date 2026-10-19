@@ -174,7 +174,7 @@ export function stretchEnt(e:Ent,box:Box,d:Pt):Ent{
   }
   case 'dim':return {...e,a:mv(e.a),b:mv(e.b),at:mv(e.at),...(e.c?{c:mv(e.c)}:{})};
   case 'hatch':return {...e,loops:e.loops.map(l=>l.map(mv))};
-  case 'mtext':case 'table':case 'attdef':case 'insert':case 'xref':return inBox(e.at,box)?whole():e;
+  case 'mtext':case 'table':case 'attdef':case 'insert':case 'xref':case 'viewport':return inBox(e.at,box)?whole():e;
   case 'leader':return {...e,points:e.points.map(mv)};
  }
 }

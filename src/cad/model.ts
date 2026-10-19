@@ -14,7 +14,9 @@ export const lineTypes:LineType[]=['Continuous','DASHED','HIDDEN','CENTER','PHAN
 export interface CadLayer{name:string;color:number;ltype:LineType;weight:number;visible:boolean;locked:boolean}
 
 /** Object properties: color (AutoCAD color index), linetype and lineweight (1/100 mm) are ByLayer when unset. */
-export interface EntProps{layer:string;color?:number;ltype?:LineType;weight?:number;ltscale?:number}
+export interface EntProps{layer:string;color?:number;ltype?:LineType;weight?:number;ltscale?:number;
+ /** Annotative (model space text, dimensions, leaders): drawn at one paper size in every viewport. */
+ annotative?:boolean}
 interface Base extends EntProps{id:number}
 export interface LineEnt extends Base{type:'line';a:Pt;b:Pt}
 /** bulges[i] is the bulge of the segment from point i to the next (tan of a quarter of its sweep; 0 straight). */
@@ -53,7 +55,11 @@ export interface AttDefEnt extends Base{type:'attdef';tag:string;prompt:string;v
 export interface InsertEnt extends Base{type:'insert';name:string;at:Pt;scale:number;rotation:number;mirror?:boolean;attribs?:Record<string,string>}
 /** An external reference: another drawing of the project (by its number) placed at at, scaled and rotated. */
 export interface XrefEnt extends Base{type:'xref';name:string;at:Pt;scale:number;rotation:number}
-export type Ent=LineEnt|PolyEnt|SolidEnt|CircleEnt|ArcEnt|TextEnt|DimEnt|EllipseEnt|SplineEnt|XlineEnt|HatchEnt|MTextEnt|LeaderEnt|TableEnt|AttDefEnt|InsertEnt|XrefEnt;
+/** A layout viewport: a window on the sheet (center at, width × height, paper units) onto model space centered at view, at scale (paper units per model unit). */
+export interface ViewportEnt extends Base{type:'viewport';at:Pt;width:number;height:number;view:Pt;scale:number;frozen?:string[];locked?:boolean}
+export type Ent=LineEnt|PolyEnt|SolidEnt|CircleEnt|ArcEnt|TextEnt|DimEnt|EllipseEnt|SplineEnt|XlineEnt|HatchEnt|MTextEnt|LeaderEnt|TableEnt|AttDefEnt|InsertEnt|XrefEnt|ViewportEnt;
+/** Model space of a layout: real-size entities (inches or millimeters) and the annotation scale they are drafted at. */
+export interface ModelSpace{entities:Ent[];nextId:number;annoScale:number}
 /** An entity before it has an id. */
 export type NewEnt=Ent extends infer E?E extends Ent?Omit<E,'id'>:never:never;
 
@@ -75,6 +81,12 @@ export interface CadDoc{
  textStyles?:TextStyle[];dimStyles?:DimStyle[];ltscale?:number;plotStyle?:'monochrome'|'grayscale'|'color';
  /** Block definitions, by name. */
  blocks?:BlockDef[];
+ /** Model space behind the layout's viewports. */
+ model?:ModelSpace;
+ /** Page setup for plotting. */
+ pageSetup?:{lineweights?:boolean};
+ /** Set on model space while it is open on the Model tab (not stored): the annotation scale it is drafted at. */
+ space?:'model';annoScale?:number;
 }
 export type {BlockDef};
 export type {Ctx,DimStyle,TextStyle};
@@ -194,6 +206,7 @@ export function pieces(e:Ent,doc?:Ctx):Piece[]{
   case 'dim':case 'leader':case 'table':return (primitives(e,doc??{display:'US',realPerUnit:1})??[]).flatMap((p):Piece[]=>p.k==='line'?[{k:'seg',a:p.a,b:p.b}]:p.k==='arc'?[{k:'arc',c:p.c,r:p.r,s:p.s,e:p.e}]:[]);
   case 'mtext':case 'attdef':return [];
   case 'insert':case 'xref':return children(e,doc??{}).flatMap(c=>pieces(c,doc));
+  case 'viewport':{const [x0,y0,x1,y1]=[e.at[0]-e.width/2,e.at[1]-e.height/2,e.at[0]+e.width/2,e.at[1]+e.height/2],c:Pt[]=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];return c.map((a,i)=>({k:'seg' as const,a,b:c[(i+1)%4]}));}
   case 'hatch':return e.loops.flatMap(l=>l.map((a,i)=>({k:'seg' as const,a,b:l[(i+1)%l.length]})));
   case 'text':return [];
  }
@@ -233,6 +246,7 @@ export function bbox(e:Ent,doc?:Ctx):Box{
   case 'hatch':return boxOf(e.loops.flat());
   case 'text':return boxOf(textBox(e,doc));
   case 'attdef':return boxOf(textBox(attdefAsText(e),doc));
+  case 'viewport':return [e.at[0]-e.width/2,e.at[1]-e.height/2,e.at[0]+e.width/2,e.at[1]+e.height/2];
   case 'insert':case 'xref':{const cs=children(e,doc??{});if(!cs.length)return [e.at[0],e.at[1],e.at[0],e.at[1]];const bs=cs.map(c=>bbox(c,doc));return [Math.min(...bs.map(b=>b[0])),Math.min(...bs.map(b=>b[1])),Math.max(...bs.map(b=>b[2])),Math.max(...bs.map(b=>b[3]))];}
   case 'dim':case 'leader':case 'table':case 'mtext':{const c=doc??{display:'US',realPerUnit:1};return boxOf([...piecePoints(pieces(e,c)),...(primitives(e,c)??[]).flatMap(p=>p.k==='fill'?p.pts:[]),...compositeBoxes(e,c).flat()]);}
  }
@@ -315,6 +329,7 @@ export function snapPoints(e:Ent,doc?:Ctx):{kind:SnapKind;p:Pt}[]{
    break;
   }
   case 'mtext':case 'attdef':out.push({kind:'ins',p:e.at});break;
+  case 'viewport':for(const pc of pieces(e))if(pc.k==='seg')out.push({kind:'end',p:pc.a});out.push({kind:'cen',p:e.at});break;
   case 'insert':case 'xref':out.push({kind:'ins',p:e.at});for(const c of children(e,doc??{}))out.push(...snapPoints(c,doc).filter(s=>s.kind!=='ins'));break;
   case 'leader':for(const p of e.points)out.push({kind:'end',p});break;
   case 'table':{const W=e.cols.reduce((a,v)=>a+v,0),H=e.rows.reduce((a,v)=>a+v,0);out.push({kind:'ins',p:e.at},{kind:'end',p:[e.at[0]+W,e.at[1]]},{kind:'end',p:[e.at[0],e.at[1]-H]},{kind:'end',p:[e.at[0]+W,e.at[1]-H]});break;}
@@ -527,6 +542,8 @@ export function transformEnt<E extends Ent>(e:E,m:Affine):E{
   // A mirrored reference flips its mirror flag; its rotation becomes the mirror line's angle less the old rotation.
   case 'insert':return mirror?{...e,at:P(e.at),scale:e.scale*k,rotation:clean(norm360(rot-e.rotation)),mirror:!e.mirror}:{...e,at:P(e.at),scale:e.scale*k,rotation:clean(norm360(e.rotation+rot))};
   case 'xref':return {...e,at:P(e.at),scale:e.scale*k,rotation:clean(norm360(e.rotation+rot))};
+  // Viewports stay square to the sheet: moved and scaled (with their scale), the model view unchanged.
+  case 'viewport':return {...e,at:P(e.at),width:e.width*k,height:e.height*k,scale:e.scale*k};
   case 'table':{
    // Tables stay square to the sheet: the box moves (and scales) to where its corners go.
    const W=e.cols.reduce((a,v)=>a+v,0),H=e.rows.reduce((a,v)=>a+v,0),cs=[e.at,[e.at[0]+W,e.at[1]],[e.at[0],e.at[1]-H],[e.at[0]+W,e.at[1]-H]].map(q=>P(q as Pt));
@@ -552,6 +569,7 @@ export function grips(e:Ent):Grip[]{
   case 'text':return [{p:e.at,role:'at'}];
   case 'dim':return [{p:e.a,role:'a'},...(e.kind==='angular'||e.kind==='horizontal'||e.kind==='vertical'||e.kind==='aligned'?[{p:e.b,role:'b'}]:[]),{p:e.at,role:'at'},...(e.c?[{p:e.c,role:'c'}]:[])];
   case 'mtext':case 'attdef':case 'insert':case 'xref':return [{p:e.at,role:'at'}];
+  case 'viewport':return [{p:e.at,role:'at'},...pieces(e).map((pc,i)=>({p:pc.k==='seg'?pc.a:e.at,role:`c${i}`}))];
   case 'leader':return e.points.map((p,i)=>({p,role:`v${i}`}));
   case 'table':return [{p:e.at,role:'at'}];
  }
@@ -591,6 +609,13 @@ export function stretchGrip(e:Ent,role:string,from:Pt,p:Pt):Ent{
   case 'text':return {...e,at:p};
   case 'dim':return role==='a'?{...e,a:p}:role==='b'?{...e,b:p}:role==='c'?{...e,c:p}:{...e,at:p};
   case 'mtext':case 'table':case 'attdef':case 'insert':case 'xref':return {...e,at:p};
+  case 'viewport':{
+   if(role==='at')return {...e,at:p};
+   // A corner grip resizes the viewport about the opposite corner; the model stays put on the paper.
+   const i=+role.slice(1),c=pieces(e).map(pc=>pc.k==='seg'?pc.a:e.at),o=c[(i+2)%4],x0=Math.min(o[0],p[0]),x1=Math.max(o[0],p[0]),y0=Math.min(o[1],p[1]),y1=Math.max(o[1],p[1]);
+   if(x1-x0<1e-6||y1-y0<1e-6)return e;
+   const at:Pt=[(x0+x1)/2,(y0+y1)/2];return {...e,at,width:x1-x0,height:y1-y0,view:[e.view[0]+(at[0]-e.at[0])/e.scale,e.view[1]+(at[1]-e.at[1])/e.scale]};
+  }
   case 'leader':{const pts=e.points.map(q=>[...q] as Pt);pts[+role.slice(1)]=p;return {...e,points:pts};}
  }
 }

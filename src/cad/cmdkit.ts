@@ -60,3 +60,6 @@ export const isKey=(s:string,...words:string[])=>{const k=key(s).replace(/\s+/g,
 /** A locked-layer check for picked objects. */
 export const lockedPick=(env:Env,e:Ent)=>{if(env.store.layer(e.layer)?.locked){env.log('That object is on a locked layer.');return true;}return false;};
 
+/** In model space, annotation is drafted at the annotation scale: paper sizes divided by it, and marked annotative. */
+export const annoFactor=(env:Env)=>env.store.doc.space==='model'?1/(env.store.doc.annoScale??1):1;
+export const annoProps=(env:Env):{annotative?:true}=>env.store.doc.space==='model'?{annotative:true}:{};

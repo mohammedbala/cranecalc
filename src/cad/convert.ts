@@ -7,6 +7,7 @@ import {fillTrapezoids} from './hatch';
 import {fonts,primEnts,primitives,textStyleOf} from './annotation';
 import {plotColor} from './render';
 import {attdefText,flatten} from './blocks';
+import {clippedContents,viewportContents} from './layout';
 import {DEG,arcPoint,hatchLines,isComposite,polyOutline,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,pieces,sweep,type Box,type CadDoc,type CadLayer,type Ent,type LineType,type Pt} from './model';
 
 const layer=(name:string,color:number,ltype:LineType,weight:number):CadLayer=>({name,color,ltype,weight,visible:true,locked:false});
@@ -70,14 +71,14 @@ export const plotWidth=(l:CadLayer,unit:CadDoc['unit'])=>unit==='in'?l.weight/25
 export const plotInk=(color:number,style?:CadDoc['plotStyle'])=>plotColor(color,style);
 const sketchInk=(name:string,color:number)=>name in cadLayers?`var(--cad-${name.toLowerCase()},${cadLayers[name as keyof typeof cadLayers].ink})`:plotInk(color);
 
-/** The drawing as an SVG in the coordinates of the sheet it came from (sketches keep their CAD-view colors). */
-export function docToSvg(doc:CadDoc){
+/** The drawing as an SVG; trueSize gives it its paper width and height (plotting at true scale). */
+export function docToSvg(doc:CadDoc,opts:{trueSize?:boolean;lineweights?:boolean}={}){
  const k=doc.svgScale,W=doc.width/k,H=doc.height/k,X=(p:Pt)=>`${r(p[0]/k)},${r((doc.height-p[1])/k)}`,sketch=doc.unit==='unit';
  const byName=new Map(doc.layers.map(l=>[l.name,l]));
  let out='',open='';
- const lts=doc.ltscale??1,ps=doc.plotStyle;
+ const lts=doc.ltscale??1,ps=doc.plotStyle,pw=(l:CadLayer)=>opts.lineweights===false?plotWidth({...l,weight:18},doc.unit):plotWidth(l,doc.unit);
  const style=(l:CadLayer)=>{const ink=sketch?sketchInk(l.name,l.color):plotInk(l.color,ps),dash=dashPattern(l.ltype,doc.unit,lts).map(v=>r(v/k)).join(' ');
-  return `stroke="${ink}" fill="none" stroke-width="${r(plotWidth(l,doc.unit)/k)}"${dash?` stroke-dasharray="${dash}"`:''} style="color:${ink}"`;};
+  return `stroke="${ink}" fill="none" stroke-width="${r(pw(l)/k)}"${dash?` stroke-dasharray="${dash}"`:''} style="color:${ink}"`;};
  const text=(at:Pt,height:number,value:string,angle:number,align:number,bold:boolean,styleName?:string)=>{
   const [x,y]=X(at).split(','),size=r(height/.716/k),st=textStyleOf(styleName,doc),wf=st.widthFactor||1;
   const tf=[angle?`rotate(${r(-angle)} ${x} ${y})`:'',wf!==1||st.oblique?`translate(${x} ${y})${wf!==1?` scale(${r(wf)} 1)`:''}${st.oblique?` skewX(${r(-st.oblique)})`:''} translate(${-x} ${-y})`:''].filter(Boolean).join(' ');
@@ -89,10 +90,17 @@ export function docToSvg(doc:CadDoc){
  const own=(e:Ent,l:CadLayer)=>{
   if(e.color===undefined&&e.ltype===undefined&&e.weight===undefined&&e.ltscale===undefined)return '';
   const f=effective(e,l),ink=sketch&&e.color===undefined?sketchInk(l.name,l.color):plotInk(f.color,ps),dash=dashPattern(f.ltype,doc.unit,f.ltscale*lts).map(v=>r(v/k)).join(' ');
-  return ` stroke="${ink}" stroke-width="${r(plotWidth({...l,weight:f.weight},doc.unit)/k)}" stroke-dasharray="${dash||'none'}" style="color:${ink}"`;
+  return ` stroke="${ink}" stroke-width="${r(pw({...l,weight:f.weight})/k)}" stroke-dasharray="${dash||'none'}" style="color:${ink}"`;
  };
- for(const e of flatten(doc.entities,doc)){
+ let clips=0;
+ const body=(list:Ent[])=>{for(const e of flatten(list,doc)){
   const l=byName.get(e.layer);if(!l||!l.visible)continue;
+  // A viewport: what it shows, clipped to it, then its border.
+  if(e.type==='viewport'){
+   if(open)out+='</g>';open='';const id=`vp${esc(doc.key)}-${++clips}`,[x,y]=X([e.at[0]-e.width/2,e.at[1]+e.height/2]).split(',');
+   out+=`<clipPath id="${id}"><rect x="${x}" y="${y}" width="${r(e.width/k)}" height="${r(e.height/k)}"/></clipPath><g clip-path="url(#${id})">`;
+   body(viewportContents(e,doc));if(open)out+='</g>';open='';out+='</g>';
+  }
   if(open!==e.layer){if(open)out+='</g>';out+=`<g data-layer="${esc(e.layer)}" ${style(l)}>`;open=e.layer;}
   const o=own(e,l),line=(a:Pt,b:Pt)=>`<line x1="${X(a).split(',')[0]}" y1="${X(a).split(',')[1]}" x2="${X(b).split(',')[0]}" y2="${X(b).split(',')[1]}"${o}/>`;
   const wrap=(svg:string)=>o?`<g${o}>${svg}</g>`:svg;
@@ -121,12 +129,15 @@ export function docToSvg(doc:CadDoc){
    case 'xline':case 'ray':{const pc=pieces(e)[0];if(pc.k==='seg'){const c=clipSegment(pc.a,pc.b,sheetBox);if(c)out+=line(c[0],c[1]);}break;}
    case 'text':out+=wrap(text(e.at,e.height,e.value,e.angle,e.align,e.bold,e.style));break;
    case 'attdef':out+=wrap(text(e.at,e.height,e.tag,e.angle,e.align,false,e.style));break;
+   case 'viewport':{const c=[[e.at[0]-e.width/2,e.at[1]-e.height/2],[e.at[0]+e.width/2,e.at[1]-e.height/2],[e.at[0]+e.width/2,e.at[1]+e.height/2],[e.at[0]-e.width/2,e.at[1]+e.height/2]] as Pt[];out+=`<path d="M${c.map(X).join('L')}Z"${o}/>`;break;}
    case 'dim':case 'mtext':case 'leader':case 'table':out+=wrap((primitives(e,doc)??[]).map(p=>p.k==='line'?line(p.a,p.b):p.k==='arc'?arc(p.c,p.r,p.s,p.e):p.k==='fill'?`<path d="M${p.pts.map(X).join('L')}Z" fill="currentColor" stroke="none"/>`:text(p.at,p.height,p.value,p.angle,p.align,p.bold,p.style)).join(''));break;
   }
- }
+ }};
+ body(doc.entities);
  if(open)out+='</g>';
  const paper=`style="fill:${sketch?'var(--cad-paper,#fff)':'#fff'};stroke:none"`;
- return `<svg xmlns="http://www.w3.org/2000/svg" class="cad-sheet" data-cad-edited="${esc(doc.key)}" viewBox="0 0 ${r(W)} ${r(H)}" role="img" aria-label="${esc(doc.title)}"><title>${esc(doc.title)}</title><rect class="cad-paper" width="${r(W)}" height="${r(H)}" ${paper}/><g font-family="Arial, Helvetica, sans-serif" stroke-linecap="round" stroke-linejoin="round">${out}</g></svg>`;
+ const size=opts.trueSize&&!sketch?` width="${r(doc.width)}${doc.unit}" height="${r(doc.height)}${doc.unit}"`:'';
+ return `<svg xmlns="http://www.w3.org/2000/svg" class="cad-sheet" data-cad-edited="${esc(doc.key)}"${size} viewBox="0 0 ${r(W)} ${r(H)}" role="img" aria-label="${esc(doc.title)}"><title>${esc(doc.title)}</title><rect class="cad-paper" width="${r(W)}" height="${r(H)}" ${paper}/><g font-family="Arial, Helvetica, sans-serif" stroke-linecap="round" stroke-linejoin="round">${out}</g></svg>`;
 }
 
 // ---- DXF ---------------------------------------------------------------------------------------------------------
@@ -139,8 +150,9 @@ export const docDxfLayers=(doc:CadDoc):Record<string,DxfLayer>=>Object.fromEntri
  */
 export function docDxfEntities(doc:CadDoc,k=1):DxfEntity[]{
  const P=(p:Pt):Pt=>[p[0]*k,p[1]*k],out:DxfEntity[]=[];
- for(const e of flatten(doc.entities,doc)){
+ const emit=(list:Ent[])=>{for(const e of flatten(list,doc)){
   switch(e.type){
+   case 'viewport':{emit(clippedContents(e,doc));const c=[[e.at[0]-e.width/2,e.at[1]-e.height/2],[e.at[0]+e.width/2,e.at[1]-e.height/2],[e.at[0]+e.width/2,e.at[1]+e.height/2],[e.at[0]-e.width/2,e.at[1]+e.height/2]] as Pt[];out.push({type:'poly',layer:e.layer,points:c.map(P),closed:true});break;}
    case 'line':out.push({type:'line',layer:e.layer,a:P(e.a),b:P(e.b)});break;
    case 'attdef':{const t=attdefText(e);out.push({type:'text',layer:e.layer,at:P(t.at),height:t.height*k,value:t.value,angle:t.angle,align:t.align,bold:false});break;}
    case 'poly':{
@@ -164,7 +176,8 @@ export function docDxfEntities(doc:CadDoc,k=1):DxfEntity[]{
    case 'arc':out.push({type:'arc',layer:e.layer,center:P(e.center),radius:e.radius*k,start:e.start,end:e.end});break;
    case 'text':out.push({type:'text',layer:e.layer,at:P(e.at),height:e.height*k,value:e.value,angle:e.angle,align:e.align,bold:e.bold});break;
   }
- }
+ }};
+ emit(doc.entities);
  return out;
 }
 /**

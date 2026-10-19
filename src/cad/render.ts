@@ -2,6 +2,7 @@ import {bulgeArc} from './curves';
 import {DEG,bbox,clipSegment,compositeBoxes,curveSamples,effective,ellipseSweep,hatchLines,isComposite,pieces,textBox,textWidthPerHeight,type Box,type CadDoc,type Ctx,type Ent,type Grip,type NewEnt,type Pt,type SnapKind} from './model';
 import {fonts,primitives,textStyleOf,type TextStyle} from './annotation';
 import {children} from './blocks';
+import {viewportContents} from './layout';
 import {dashPattern} from './convert';
 
 /** Screen view: world point (cx, cy) at the canvas center, scale pixels per drawing unit, canvas w × h CSS pixels. */
@@ -57,6 +58,7 @@ function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Ctx){
   case 'hatch':{if(e.pattern==='SOLID')break;const vb=viewBox(v);for(const [a,b] of hatchLines(e,doc.unit??'in')){if(Math.max(a[0],b[0])<vb[0]||Math.min(a[0],b[0])>vb[2]||Math.max(a[1],b[1])<vb[1]||Math.min(a[1],b[1])>vb[3])continue;const p=S(a),q=S(b);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}break;}
   case 'xline':case 'ray':{const pc=pieces(e as Ent)[0],vb=viewBox(v),m=(vb[2]-vb[0])*.05;if(pc.k!=='seg')break;const k=clipSegment(pc.a,pc.b,[vb[0]-m,vb[1]-m,vb[2]+m,vb[3]+m]);if(k){const a=S(k[0]),b=S(k[1]);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}break;}
   case 'insert':case 'xref':for(const c of children(e,doc))strokePath(ctx,v,c,doc);break;
+  case 'viewport':{const a=S([e.at[0]-e.width/2,e.at[1]-e.height/2]),b=S([e.at[0]+e.width/2,e.at[1]+e.height/2]);ctx.rect(a[0],b[1],b[0]-a[0],a[1]-b[1]);break;}
   case 'dim':case 'leader':case 'table':case 'mtext':
    for(const p of primitives(e,doc)??[]){
     if(p.k==='line'){const a=S(p.a),b=S(p.b);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}
@@ -98,14 +100,16 @@ export function drawScene(ctx:CanvasRenderingContext2D,o:SceneOptions){
  const {doc,view:v,theme}=o,c=themeColors(theme),vb=viewBox(v);
  ctx.fillStyle=c.bg;ctx.fillRect(0,0,v.w,v.h);
  const s0=toScreen(v,[0,doc.height]),s1=toScreen(v,[doc.width,0]);
- if(theme==='paper'){ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(s0[0]+4,s0[1]+4,s1[0]-s0[0],s1[1]-s0[1]);ctx.fillStyle=c.sheet;ctx.fillRect(s0[0],s0[1],s1[0]-s0[0],s1[1]-s0[1]);}
+ if(doc.space==='model'){/* model space has no sheet edge */}
+ else if(theme==='paper'){ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(s0[0]+4,s0[1]+4,s1[0]-s0[0],s1[1]-s0[1]);ctx.fillStyle=c.sheet;ctx.fillRect(s0[0],s0[1],s1[0]-s0[0],s1[1]-s0[1]);}
  else{ctx.strokeStyle=c.sheet;ctx.lineWidth=1;ctx.setLineDash([]);ctx.strokeRect(s0[0]+.5,s0[1]+.5,s1[0]-s0[0],s1[1]-s0[1]);}
  if(o.grid){
   let g=o.grid;while(g*v.scale<8)g*=g*v.scale<3?10:2;
   ctx.strokeStyle=c.grid;ctx.lineWidth=1;ctx.beginPath();
-  const x0=Math.max(0,Math.floor(vb[0]/g)*g),x1=Math.min(doc.width,vb[2]),y0=Math.max(0,Math.floor(vb[1]/g)*g),y1=Math.min(doc.height,vb[3]);
-  for(let x=x0;x<=x1;x+=g){const p=toScreen(v,[x,0]);ctx.moveTo(Math.round(p[0])+.5,Math.max(0,s0[1]));ctx.lineTo(Math.round(p[0])+.5,Math.min(v.h,s1[1]));}
-  for(let y=y0;y<=y1;y+=g){const p=toScreen(v,[0,y]);ctx.moveTo(Math.max(0,s0[0]),Math.round(p[1])+.5);ctx.lineTo(Math.min(v.w,s1[0]),Math.round(p[1])+.5);}
+  const lim:Box=doc.space==='model'?vb:[0,0,doc.width,doc.height],x0=Math.max(lim[0],Math.floor(vb[0]/g)*g),x1=Math.min(lim[2],vb[2]),y0=Math.max(lim[1],Math.floor(vb[1]/g)*g),y1=Math.min(lim[3],vb[3]);
+  const t0=toScreen(v,[lim[0],lim[3]]),t1=toScreen(v,[lim[2],lim[1]]);
+  for(let x=x0;x<=x1;x+=g){const p=toScreen(v,[x,0]);ctx.moveTo(Math.round(p[0])+.5,Math.max(0,t0[1]));ctx.lineTo(Math.round(p[0])+.5,Math.min(v.h,t1[1]));}
+  for(let y=y0;y<=y1;y+=g){const p=toScreen(v,[0,y]);ctx.moveTo(Math.max(0,t0[0]),Math.round(p[1])+.5);ctx.lineTo(Math.min(v.w,t1[0]),Math.round(p[1])+.5);}
   ctx.stroke();
  }
  if(o.underlay){
@@ -113,9 +117,22 @@ export function drawScene(ctx:CanvasRenderingContext2D,o:SceneOptions){
   for(const e of o.underlay.entities)if(overlaps(cachedBox(e,doc),vb))strokePath(ctx,v,e,doc);
   ctx.stroke();
  }
+ drawEntities(ctx,doc.entities,o,vb);
+ ctx.setLineDash([]);
+}
+
+/** Entities batched by layer and object properties; viewports draw what they show, clipped, before their border. */
+function drawEntities(ctx:CanvasRenderingContext2D,ents:Ent[],o:SceneOptions,vb:Box){
+ const {doc,view:v,theme}=o;
+ for(const e of ents)if(e.type==='viewport'&&doc.layers.find(l=>l.name===e.layer)?.visible!==false&&overlaps(cachedBox(e,doc),vb)){
+  const a=toScreen(v,[e.at[0]-e.width/2,e.at[1]+e.height/2]),b=toScreen(v,[e.at[0]+e.width/2,e.at[1]-e.height/2]);
+  ctx.save();ctx.beginPath();ctx.rect(a[0],a[1],b[0]-a[0],b[1]-a[1]);ctx.clip();
+  const inner:Box=[Math.max(vb[0],e.at[0]-e.width/2),Math.max(vb[1],e.at[1]-e.height/2),Math.min(vb[2],e.at[0]+e.width/2),Math.min(vb[3],e.at[1]+e.height/2)];
+  drawEntities(ctx,viewportContents(e,doc),o,inner);ctx.restore();
+ }
  const byLayer=new Map<string,Ent[]>();
  const names=new Set(doc.layers.map(l=>l.name)),put=(e:Ent,layer:string)=>{let list=byLayer.get(layer);if(!list)byLayer.set(layer,list=[]);list.push(e);};
- for(const e of doc.entities){
+ for(const e of ents){
   if(!overlaps(cachedBox(e,doc),vb))continue;
   // A reference draws its children on their own layers (layers this drawing lacks fall back to the reference's).
   if(e.type==='insert'||e.type==='xref'){for(const c of children(e,doc))if(overlaps(cachedBox(c,doc),vb))put(c,names.has(c.layer)?c.layer:e.layer);continue;}

@@ -5,7 +5,7 @@ import {
  add,angleOf,arcPoint,dist,dot,len,mul,sub,sweep,
  type CadDoc,type DimEnt,type Ent,type NewEnt,type Pt,
 } from './model';
-import {angleText,fmtAngle,isKey,key,lockedPick,num,type Command,type Env} from './cmdkit';
+import {angleText,annoFactor,annoProps,fmtAngle,isKey,key,lockedPick,num,type Command,type Env} from './cmdkit';
 
 /** The current dimension style (DIMSTYLE), Standard when unset. */
 export function currentDimStyle(env:Env):DimStyle{
@@ -28,7 +28,7 @@ function mtextCmd(env:Env):Command{
   const p=a!,q=b??a!,x0=Math.min(p[0],q[0]),x1=Math.max(p[0],q[0]),y0=Math.min(p[1],q[1]),y1=Math.max(p[1],q[1]),row=Math.floor((attach-1)/3),col=(attach-1)%3;
   const w=width??(x1-x0);return {at:[col===0?x0:col===1?(x0+x1)/2:x1,row===0?y1:row===1?(y0+y1)/2:y0],width:w};
  };
- const ent=(value:string):NewEnt=>({type:'mtext',layer:env.layer(),...place(),height,value,angle,attach,...(style!=='Standard'?{style}:{})});
+ const ent=(value:string):NewEnt=>({type:'mtext',layer:env.layer(),...place(),height:height*annoFactor(env),value,angle,attach,...(style!=='Standard'?{style}:{}),...annoProps(env)});
  const cmd:Command={name:'MTEXT',done:false,
   prompt:()=>({first:`MTEXT Specify first corner (style ${style}, height ${env.length(height)}):`,corner:'MTEXT Specify opposite corner or [Height/Justify/Rotation/Style/Width]:',height:`MTEXT Specify height <${env.length(height)}>:`,
    justify:'MTEXT Enter justification [TL/TC/TR/ML/MC/MR/BL/BC/BR] <TL>:',rotation:`MTEXT Specify rotation angle <${angle}>:`,style:`MTEXT Enter style name <${style}>:`,width:'MTEXT Specify width (0 for no wrapping):',
@@ -55,7 +55,7 @@ function mtextCmd(env:Env):Command{
 }
 
 // ---- dimensions ----------------------------------------------------------------------------------------------------
-const dimBase=(env:Env):Pick<DimEnt,'layer'|'height'|'style'>=>{const st=currentDimStyle(env);return {layer:env.layer(),height:styleHeight(st),style:st.name};};
+const dimBase=(env:Env):Pick<DimEnt,'layer'|'height'|'style'|'annotative'>=>{const st=currentDimStyle(env);return {layer:env.layer(),height:styleHeight(st)*annoFactor(env),style:st.name,...annoProps(env)};};
 const lineHit=(a:Pt,b:Pt,c:Pt,d:Pt):Pt|undefined=>{const r=sub(b,a),s=sub(d,c),den=r[0]*s[1]-r[1]*s[0];if(Math.abs(den)<1e-12)return undefined;const t=((c[0]-a[0])*s[1]-(c[1]-a[1])*s[0])/den;return add(a,mul(r,t));};
 function dimAngularCmd(env:Env):Command{
  type Step='pick'|'second'|'vertex'|'p1'|'p2'|'place';
@@ -137,8 +137,8 @@ function dimChainCmd(env:Env,baseline:boolean):Command{
 // ---- leaders -------------------------------------------------------------------------------------------------------
 function leaderCmd(env:Env,multi:boolean):Command{
  const name=multi?'MLEADER':'LEADER',pts:Pt[]=[],lines:string[]=[];let writing=false;
- const st=currentDimStyle(env),h=styleHeight(st);
- const ent=(extra?:Pt):NewEnt=>({type:'leader',layer:env.layer(),points:extra?[...pts,extra]:[...pts],value:lines.join('\n'),height:h,style:st.name});
+ const st=currentDimStyle(env),h=styleHeight(st)*annoFactor(env);
+ const ent=(extra?:Pt):NewEnt=>({type:'leader',layer:env.layer(),points:extra?[...pts,extra]:[...pts],value:lines.join('\n'),height:h,style:st.name,...annoProps(env)});
  const finish=()=>{if(pts.length>=2)env.store.commit(multi?'Multileader':'Leader',{add:[ent()]});cmd.done=true;};
  const cmd:Command={name,done:false,
   prompt:()=>writing?`${name} Enter annotation text (Enter on an empty line ends):`:!pts.length?`${name} Specify leader arrowhead location:`:multi?`${name} Specify leader landing location:`:`${name} Specify next point or <annotation>:`,

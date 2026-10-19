@@ -64,7 +64,8 @@ interface DimSizes{h:number;arrow:number;gap:number;ext:number;textGap:number;ki
 function sizes(e:DimEnt,ctx?:Ctx):DimSizes{
  const st=dimStyleOf(e.style,ctx),h=e.height;
  if(!st)return {h,arrow:h*1.1,gap:h*.5,ext:h*.6,textGap:h*.45,kind:'closed',centered:false};
- const k=st.scale;return {h,arrow:st.arrowSize*k,gap:st.extOffset*k,ext:st.extBeyond*k,textGap:st.textGap*k,kind:st.arrow,centered:st.textPos==='centered',style:st};
+ // Style sizes go with the dimension's text height, so a dimension drawn at another scale (annotative) keeps its proportions.
+ const k=st.textHeight>0?h/st.textHeight:st.scale;return {h,arrow:st.arrowSize*k,gap:st.extOffset*k,ext:st.extBeyond*k,textGap:st.textGap*k,kind:st.arrow,centered:st.textPos==='centered',style:st};
 }
 const readable=(deg:number)=>{let a=deg;a=((a%360)+360)%360;if(a>90.0001&&a<=270.0001)a-=180;return a>180?a-360:a;};
 const text=(at:Pt,height:number,value:string,angle:number,align:Align=1,style?:string):Prim=>({k:'text',at,height,value,angle,align,bold:false,...(style?{style}:{})});
@@ -173,7 +174,7 @@ export function mtextLayout(e:Omit<MTextEnt,'id'>,ctx?:Ctx):{lines:MTextLine[];b
 
 // ---- leaders -------------------------------------------------------------------------------------------------------
 export function leaderPrims(e:Omit<LeaderEnt,'id'>,ctx?:Ctx):Prim[]{
- const st=dimStyleOf(e.style,ctx),h=e.height,arrow=st?st.arrowSize*st.scale:h*1.1,kind=e.arrow??st?.arrow??'closed',out:Prim[]=[];
+ const st=dimStyleOf(e.style,ctx),h=e.height,arrow=st&&st.textHeight>0?st.arrowSize*h/st.textHeight:h*1.1,kind=e.arrow??st?.arrow??'closed',out:Prim[]=[];
  const pts=e.points;if(pts.length<2)return out;
  for(let i=1;i<pts.length;i++)out.push({k:'line',a:pts[i-1],b:pts[i]});
  out.push(...arrowPrims(pts[0],pts[1],arrow,kind));

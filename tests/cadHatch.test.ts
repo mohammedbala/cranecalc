@@ -40,6 +40,9 @@ describe('CAD hatch boundaries',()=>{
   const loops=boundaryAt([2,2],ents)!;expect(loops).toHaveLength(2);
   expect(insideLoops([5,5],loops)).toBe(false);expect(insideLoops([2,2],loops)).toBe(true);
   expect(boundaryAt([5,5],ents)).toHaveLength(1);
+  // An island between the point and the boundary (on the ray cast from the point) is passed over.
+  const island:Ent[]=[{id:1,type:'poly',layer:'0',points:sq(0,0,480),closed:true},{id:2,type:'circle',layer:'0',center:[240,120],radius:36}];
+  expect(boundaryAt([120,120],island)?.map(l=>l.length)).toEqual([4,120]);
  });
 });
 

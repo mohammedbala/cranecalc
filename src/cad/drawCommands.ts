@@ -3,7 +3,7 @@ import {findBoundary,hatchPatterns,insideLoops,patternNames} from './hatch';
 import {
  DEG,add,angleOf,arcChords,arcPoint,bbox,curveSamples,dist,ellipseSweep,len,mid,mul,norm360,pieces,polar,polyOutline,sub,sweep,type Box,type EllipseEnt,type Ent,type NewEnt,type Pt,
 } from './model';
-import {angleText,fmtAngle,isKey,key,lockedPick,num,type Command,type Env} from './cmdkit';
+import {angleText,annoFactor,fmtAngle,isKey,key,lockedPick,num,type Command,type Env} from './cmdkit';
 
 /** The circle through three points as an arc from p1 through p2 to p3. */
 export function arcThrough(p1:Pt,p2:Pt,p3:Pt):{center:Pt;radius:number;start:number;end:number}|undefined{
@@ -335,7 +335,8 @@ export function boundaryAt(p:Pt,ents:Ent[]):Pt[][]|undefined{
 function hatchCmd(env:Env):Command{
  type Step='pick'|'select'|'pattern'|'scale'|'angle'|'origin';
  const v=env.vars;let step:Step='pick';const loops:Pt[][]=[];
- const pattern=()=>String(v.HPNAME??'ANSI31'),scale=()=>+(v.HPSCALE??1),angle=()=>+(v.HPANG??0),origin=()=>(v.HPORIGINX!==undefined?[+v.HPORIGINX,+(v.HPORIGINY??0)]:undefined) as Pt|undefined;
+ // In model space the pattern is sized for the annotation scale, as an annotative hatch.
+ const pattern=()=>String(v.HPNAME??'ANSI31'),scale=()=>+(v.HPSCALE??1)*annoFactor(env),angle=()=>+(v.HPANG??0),origin=()=>(v.HPORIGINX!==undefined?[+v.HPORIGINX,+(v.HPORIGINY??0)]:undefined) as Pt|undefined;
  const visible=()=>env.store.doc.entities.filter(e=>env.store.layer(e.layer)?.visible);
  const ent=():NewEnt=>({type:'hatch',layer:env.layer(),loops:[...loops],pattern:pattern(),scale:scale(),angle:angle(),...(origin()?{origin:origin()}:{})});
  const cmd:Command={name:'HATCH',done:false,
@@ -361,7 +362,7 @@ function hatchCmd(env:Env):Command{
     if(k in hatchPatterns){v.HPNAME=k;return true;}
    }
    if(step==='pattern'){if(!(k in hatchPatterns))return false;v.HPNAME=k;step='pick';return true;}
-   if(step==='scale'){const x=num(t);if(x===undefined||x<=0)return false;v.HPSCALE=x;step='pick';return true;}
+   if(step==='scale'){const x=num(t);if(x===undefined||x<=0)return false;v.HPSCALE=x/annoFactor(env);step='pick';return true;}
    if(step==='angle'){const x=angleText(t);if(x===undefined)return false;v.HPANG=x;step='pick';return true;}
    return false;
   },

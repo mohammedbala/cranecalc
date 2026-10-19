@@ -141,3 +141,30 @@ test('blocks: library, attributes, block editor and external references',async({
  for(const s of ['C7','SMAW','5/16'])expect(text).toContain(s);
  expect(errors).toEqual([]);
 });
+
+test('layouts: model space, a viewport at scale, and plotting to PDF',async({page})=>{
+ const errors=watch(page);
+ await page.goto('/');
+ await page.getByRole('button',{name:'Inputs & checks'}).click();
+ await page.getByRole('button',{name:'Drawings'}).click();
+ const tabs=page.locator('.drafting-views button');
+ await expect(tabs.filter({hasText:'S-00'})).toHaveCount(1,{timeout:240000});
+ await tabs.filter({hasText:'S-00'}).first().click();
+ await page.getByRole('button',{name:'Edit in CAD'}).click();
+ await expect(page.getByTestId('cad-canvas')).toBeVisible();
+ const line=page.getByLabel('Command line');
+ const type=async(...values:string[])=>{for(const v of values){await line.fill(v);await line.press('Enter');}};
+ // Model space at real size: a 40 ft by 20 ft bay and an annotative note.
+ await page.getByRole('tab',{name:'Model'}).click();
+ await expect(page.locator('.cad-log')).toContainText('Model space');
+ await type('REC','0,0',"40',20'",'T',"2',2'",'0.125','0','BAY A','');
+ await page.getByRole('tab',{name:'S-00'}).click();
+ await type('MV','2,2','14,9');
+ await expect(page.locator('.cad-log')).toContainText('Viewport at');
+ const plot=page.waitForEvent('download');
+ await type('PLOT');
+ await page.getByRole('dialog',{name:'Plot'}).getByRole('button',{name:'Plot',exact:true}).click();
+ const pdf=await fs.readFile((await (await plot).path())!,'latin1');
+ expect(pdf.startsWith('%PDF-1.4')).toBe(true);expect(pdf).toContain('(BAY A) Tj');expect(pdf).toContain('/MediaBox [0 0 2592 1728]');
+ expect(errors).toEqual([]);
+});

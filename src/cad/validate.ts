@@ -27,8 +27,9 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
   if(e.ltype!==undefined&&!lineTypes.includes(e.ltype as CadLayer['ltype']))return undefined;
   if(e.weight!==undefined&&(!n(e.weight)||e.weight<0||e.weight>211))return undefined;
   if(e.ltscale!==undefined&&(!n(e.ltscale)||e.ltscale<=0))return undefined;
+  if(e.annotative!==undefined&&typeof e.annotative!=='boolean')return undefined;
   const base:EntProps&{id:number}={id:e.id,layer:e.layer};
-  if(e.color!==undefined)base.color=e.color as number;if(e.ltype!==undefined)base.ltype=e.ltype as CadLayer['ltype'];if(e.weight!==undefined)base.weight=e.weight as number;if(e.ltscale!==undefined)base.ltscale=e.ltscale as number;
+  if(e.color!==undefined)base.color=e.color as number;if(e.ltype!==undefined)base.ltype=e.ltype as CadLayer['ltype'];if(e.weight!==undefined)base.weight=e.weight as number;if(e.ltscale!==undefined)base.ltscale=e.ltscale as number;if(e.annotative)base.annotative=true;
   switch(e.type){
    case 'line':if(!pt(e.a)||!pt(e.b))return undefined;return ({...base,type:'line',a:e.a,b:e.b});break;
    case 'poly':{if(!pts(e.points,2)||typeof e.closed!=='boolean')return undefined;
@@ -73,6 +74,11 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
     const at=e.attribs;if(at!==undefined&&(typeof at!=='object'||at===null||Array.isArray(at)||Object.keys(at).length>200||!Object.entries(at).every(([k,v])=>str(k,80)&&str(v))))return undefined;
     return ({...base,type:'insert',name:e.name,at:e.at,scale:e.scale,rotation:e.rotation,...(e.mirror?{mirror:true}:{}),...(at?{attribs:{...(at as Record<string,string>)}}:{})});
    }
+   case 'viewport':{
+    if(depth>0||!pt(e.at)||!n(e.width)||e.width<=0||!n(e.height)||e.height<=0||!pt(e.view)||!n(e.scale)||e.scale<=0||(e.locked!==undefined&&typeof e.locked!=='boolean'))return undefined;
+    const fr=e.frozen;if(fr!==undefined&&(!Array.isArray(fr)||fr.length>2000||!fr.every(x=>str(x,80))))return undefined;
+    return {...base,type:'viewport',at:e.at,width:e.width,height:e.height,view:e.view,scale:e.scale,...(fr?{frozen:fr as string[]}:{}),...(e.locked?{locked:true}:{})};
+   }
    case 'xref':if(!str(e.name,40)||!pt(e.at)||!n(e.scale)||e.scale<=0||!n(e.rotation))return undefined;return ({...base,type:'xref',name:e.name,at:e.at,scale:e.scale,rotation:e.rotation});
    default:return undefined;
   }
@@ -88,8 +94,17 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
    blocks.push({name:b.name,base:b.base,entities:list,...(b.description?{description:b.description as string}:{})});
   }
  }
+ // Model space: real-size entities behind the viewports (no viewports of its own).
+ let model:CadDoc['model'];
+ if(o.model!==undefined){
+  const m=o.model as Record<string,unknown>;
+  if(!m||typeof m!=='object'||!Array.isArray(m.entities)||m.entities.length>300000||!n(m.nextId)||!n(m.annoScale)||m.annoScale<=0)return undefined;
+  const list:Ent[]=[];for(const e of m.entities as Record<string,unknown>[]){const v=entity(e,1);if(!v)return undefined;list.push(v);}
+  model={entities:list,nextId:m.nextId,annoScale:m.annoScale};
+ }
+ if(o.pageSetup!==undefined){const ps=o.pageSetup as Record<string,unknown>;if(!ps||typeof ps!=='object'||(ps.lineweights!==undefined&&typeof ps.lineweights!=='boolean'))return undefined;}
  const blockNames=new Set(blocks?.map(b=>b.name));
- if([...entities,...(blocks??[]).flatMap(b=>b.entities)].some(e=>e.type==='insert'&&!blockNames.has(e.name)))return undefined;
+ if([...entities,...(blocks??[]).flatMap(b=>b.entities),...(model?.entities??[])].some(e=>e.type==='insert'&&!blockNames.has(e.name)))return undefined;
  let groups:CadGroup[]|undefined;
  if(o.groups!==undefined){
   if(!Array.isArray(o.groups)||o.groups.length>5000)return undefined;groups=[];
@@ -110,5 +125,5 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
  }
  if(o.ltscale!==undefined){if(!n(o.ltscale)||o.ltscale<=0)return undefined;meta.ltscale=o.ltscale;}
  if(o.plotStyle!==undefined){if(!['monochrome','grayscale','color'].includes(o.plotStyle as string))return undefined;meta.plotStyle=o.plotStyle;}
- return {...meta,...(groups?{groups}:{}),...(blocks?{blocks}:{}),key:o.key,title:o.title,unit:o.unit as CadDoc['unit'],display:o.display as CadDoc['display'],realPerUnit:o.realPerUnit,width:o.width,height:o.height,svgScale:o.svgScale,layers,entities,nextId:o.nextId};
+ return {...meta,...(groups?{groups}:{}),...(blocks?{blocks}:{}),...(model?{model}:{}),...(o.pageSetup?{pageSetup:{...((o.pageSetup as {lineweights?:boolean}).lineweights!==undefined?{lineweights:(o.pageSetup as {lineweights:boolean}).lineweights}:{})}}:{}),key:o.key,title:o.title,unit:o.unit as CadDoc['unit'],display:o.display as CadDoc['display'],realPerUnit:o.realPerUnit,width:o.width,height:o.height,svgScale:o.svgScale,layers,entities,nextId:o.nextId};
 }
