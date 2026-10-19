@@ -16,9 +16,11 @@ const effect=z.object({P:num,Mx:num,My:num,V:num});
  * x = −offset (offset = (d_l − d_u)/2 with the outer flanges flush), so the top-flange tie runs from the girder to
  * the upper shaft's inner flange, a face distance d_l − d_u − t_fl/2 from the girder web when flush.
  *
- * Sign convention of `existingUpper` (signed superposition at the step): Mx is positive when it bends the column the way
- * the crane reaction moment R·girderOffset does (compression on the crane-side face below the step), so a roof moment
- * that relieves the crane moment is entered negative. `existingColumn.existing` stays the LOWER shaft's effects at its
+ * Sign convention of `existingUpper` (signed superposition at the step): Mx is positive when it bends the upper shaft just
+ * above the step in the same sense as the crane reaction moment R·girderOffset does there (steppedColumn.ts takes that
+ * sense from the column model), so a roof moment that relieves the crane moment in the upper shaft is entered negative.
+ * The gravity effects (D, L, Lr, S, R) are superposed with their sign and taken constant over the upper shaft (no
+ * transverse load between the step and the top); W and E reverse and are added as magnitudes. `existingColumn.existing` stays the LOWER shaft's effects at its
  * governing section, added as magnitudes as for any existing column.
  */
 export const stepSchema=z.object({
@@ -43,3 +45,8 @@ export const stepSchema=z.object({
 export type StepInput=z.infer<typeof stepSchema>;
 /** The step when the girder bears on it: an enabled existing (not new) column with `step` entered. */
 export const activeStep=(p:ProjectInput)=>{const c=p.existingColumn;return c?.enabled&&!c.isNew&&c.step?c.step:undefined;};
+/**
+ * The column the top-flange tie lands on: the upper shaft's inner flange on a stepped column (its plates and material),
+ * else undefined (the existing column itself).
+ */
+export const stepTieColumn=(p:ProjectInput)=>{const s=activeStep(p);return s?{...s.upper,isNew:false,source:'upper shaft of the stepped column'}:undefined;};

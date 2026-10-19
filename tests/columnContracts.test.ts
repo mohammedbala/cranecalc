@@ -97,8 +97,8 @@ describe('stepped column: contracts (WP-0)',()=>{
   const n=stepped().p;n.existingColumn!.isNew=true;expect(validateSteppedColumn(n).join(' ')).toMatch(/clear isNew/);expect(stepGeometry(n)).toBeUndefined();
   expect(lo.d).toBeGreaterThan(0);
  });
- it('the stub replaces the prismatic column check with an unsupported open item',()=>{
-  const {p}=stepped(),s=snapshotOf(p);steppedColumnCalculation(s);
+ it('a built-up or laced stepped column is one unsupported open item (WP-2 analyzes rolled shafts: tests/steppedColumn.test.ts)',()=>{
+  const {p}=stepped();p.existingColumn!.step!.construction='laced';const s=snapshotOf(p);steppedColumnCalculation(s);
   expect(s.checks).toMatchObject([{id:'step-basis',status:'unsupported'}]);
   const t=snapshotOf(existingProject());steppedColumnCalculation(t);expect(t.checks).toEqual([]);
  });
@@ -114,7 +114,7 @@ describe('check taxonomy of the crane-column and stepped-column families',()=>{
   'building-column-interaction':['design','flexure'],'building-column-frame':['input'],'building-column-drift-wind':['design','movement'],'building-column-weld-preheat':['input'],
   'step-basis':['input'],'step-web-yielding':['design','local'],'step-web-crippling':['design','local'],'step-panel-shear':['design','local'],'step-bearing':['design','connection'],
   'step-cap-flexure':['design','flexure'],'step-stiffener-bearing':['design','local'],'step-stiffener-weld':['design','connection'],'step-stiffener-width':['detailing'],
-  'step-stiffener-thickness':['detailing'],'step-stiffener-required':['input'],
+  'step-stiffener-thickness':['detailing'],'step-stiffener-required':['input'],'step-flange-yielding':['design','local'],'step-stiffener-column':['design','local'],'step-stiffener-fatigue':['design','fatigue'],'column-lower-torsion':['design','flexure'],
  };
  for(const [id,[type,effect]] of Object.entries(ids))it(id,()=>{
   const c=classifyCheck({id,group:'Crane column',title:'',status:'pass',equation:'',note:'',referenceIds:[],demand:1,capacity:2});
@@ -133,7 +133,7 @@ describe('configurator rules for the new supports (WP-0)',()=>{
   expect(s.config.reach).toBeUndefined();expect(s.config.support).toBe('stepped-column');expect(s.changes[0]).toMatch(/reach comes from the column geometry/);
   expect(normalizeConfig({...defaultRunwayConfig,structure:'existing',support:'crane-column',reach:24}).changes).toEqual([]);
  });
- it('does not build them yet: a clear error, not another arrangement',()=>{
-  for(const support of ['crane-column','stepped-column'] as const)expect(()=>buildProject({...defaultRunwayConfig,structure:'existing',support})).toThrow(/does not build the .* support yet/);
+ it('does not build the crane column yet: a clear error, not another arrangement',()=>{
+  expect(()=>buildProject({...defaultRunwayConfig,structure:'existing',support:'crane-column'})).toThrow(/does not build the .* support yet/);
  });
 });
