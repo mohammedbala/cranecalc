@@ -150,7 +150,7 @@ export function strutBolting(p:ProjectInput){
  *
  * Rod crossing: in each braced span rod A (upper end at the lower-numbered column) is on the column centerline and
  * rod B (upper end at the higher-numbered column) in a parallel plane offset toward the girder, so the rods pass
- * at mid-bay at least 1/4 in clear. The strut web lies between the two upper gussets: on the girder face of rod A's
+ * at mid-bay at least rodCrossingClear (1/2 in) clear. The strut web lies between the two upper gussets: on the girder face of rod A's
  * and the other face of rod B's, with a filler where the web alone does not give the offset.
  */
 export function bracingGeometry(p:ProjectInput,column:Section){
@@ -161,13 +161,15 @@ export function bracingGeometry(p:ProjectInput,column:Section){
  const bolts=Array.from({length:count},(_,i)=>strutEnd+edge+i*pitch),tabEnd=bolts[count-1]+edge,cope=tabEnd-strutEnd+inch/2,half=Math.max(edge,Math.floor((sd/2-sk)/(inch/4))*inch/4);
  const top=up(Math.max((column.bf/2+clevis)/cos,(sd/2+inch/4+clevis)/sin)),bottom=up(Math.max((column.bf/2+clevis)/cos,(clevis+inch/2)/sin));
  const x0=column.tw/2,plateEdge=base.plate.B/2-inch/2;
- const need=b.rod.diameter+inch/4-(t+stw),filler=need>1e-9?up(need,inch/16):0,offset=t+stw+filler;
+ const need=b.rod.diameter+rodCrossingClear-(t+stw),filler=need>1e-9?up(need,inch/16):0,offset=t+stw+filler;
  return {t,dp,dh,beff,width,end,a:end-dh/2,clevis,rod:b.rod.diameter,cos,sin,
   cross:{offset,filler,clear:offset-b.rod.diameter},
   strut:{shape:d.strut.shape,d:sd,bf:sbf,tf:stf,tw:stw,kdes:sk,end:strutEnd,cope,bolts,tabEnd,half,edge,pitch,bolt,lap:(t+stw)/2,bolting:strutBolting(p)},
   top:{s:top,pin:[top*cos,-top*sin] as [number,number]},bottom:{s:bottom,pin:[bottom*cos,bottom*sin] as [number,number]},x0,plateEdge};
 }
 type Pt=[number,number];
+/** Least clear gap between the crossing rods at mid-bay (brace-rod-crossing). */
+export const rodCrossingClear=inch/2;
 function hull(points:Pt[]):Pt[]{
  const s=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]),cross=(o:Pt,a:Pt,b:Pt)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
  const lower:Pt[]=[],upper:Pt[]=[];
@@ -378,7 +380,7 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
  // Rod crossing: rod B's plane offset from rod A's by the strut web and filler; the strut at rod B's upper gusset
  // laps it that far off its plane, which bends the gusset about its weak axis and its web fillets as a couple.
  const cr=g.cross,crossing=`Rod B (upper end at the higher-numbered column of the braced span) in a plane ${f(cr.offset,'length')} from rod A's on the column centerline, toward the girder: the strut web (${f(sg.tw,'length')})${cr.filler?` and a ${f(cr.filler,'length')} filler`:''} between the ${f(t,'length')} upper gussets.`;
- add('brace-rod-crossing','Brace connections','Rods · clear gap where they cross',p.longitudinalBracing!.rod.diameter+inch/4,cr.offset,'length','s\\ge d_{rod}+1/4\\,in',`${crossing} The rods pass at mid-bay ${f(cr.clear,'length')} clear, not connected.`,['aisc-brace-member']);
+ add('brace-rod-crossing','Brace connections','Rods · clear gap where they cross',p.longitudinalBracing!.rod.diameter+rodCrossingClear,cr.offset,'length','s\\ge d_{rod}+1/2\\,in',`${crossing} The rods pass at mid-bay ${f(cr.clear,'length')} clear, not connected: at least 1/2 in (a 1/4 in working gap plus 1/4 in for the gusset location tolerance and the rods' residual sag, a detailing criterion, not a code value), so erection cannot close it.`,['aisc-brace-member']);
  const eLap=cr.offset-sg.lap,Lw=top.to-top.from,Mlap=H*eLap,plateRatio=Mlap/available(Fy*Lw*t**2/4,method,.9,1.67),weldRatio=(wt.peak/2+Mlap/(t*Lw))/cap.weld;
  add('brace-offset-gusset','Brace connections','Offset gusset · strut lap eccentricity',Math.max(plateRatio,weldRatio),1,'ratio','\\max\\left(\\frac{He}{\\phi F_yL_wt^2/4},\\;\\frac{f_w+He/(tL_w)}{\\phi R_w}\\right)\\le1',`${crossing} At that gusset the strut force H = ${f(H)} acts e = ${f(eLap,'length')} off the gusset plane: the gusset bends about its weak axis over the ${f(Lw,'length')} weld to the web, and its two fillets take He as a couple added to their in-plane peak.`,['aisc-connections'],r.strutForce.id);
  if(r.rodTorsion){const rt=r.rodTorsion;add('brace-rod-torsion','Brace connections','Column · torsion with the offset rod',rt.U,1,'ratio','\\max\\left(U_t+\\frac89\\frac{f_w(Hs/n)}{\\phi F_y},\\;\\frac{\\tau+\\tau(Hs/n)}{\\phi0.6F_y}\\right)\\le1',`The column torsion check (${rt.base.toFixed(3)}) with the offset rod's torque added at its top: the line force ${f(H)} over ${r.layout.spans.length} braced span${r.layout.spans.length>1?'s':''} at ${f(cr.offset,'length')} from the centerline, T = ${f(rt.T,'moment')}. ${rt.model==='warping-free'?'Warping free at the base (Saint-Venant torsion, no warping stress): its flange shear adds to the column\'s':'Base restrained against warping: its warping stress adds to H1 and its flange shear to the column\'s'}; H1 ${rt.H1.toFixed(3)}, flange shear ${rt.shear.toFixed(3)}. At the base the same torque is in the anchor shear.`,['aisc-h'],r.strutForce.id);}
