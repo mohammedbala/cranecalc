@@ -20,7 +20,7 @@ import { aistChecks } from './aistChecks';
 import { latexNumber,withinLimit } from './math';
 import { validateRunwayDetails } from './detailValidation';
 import { completeRunwayChecks } from './detailChecks';
-import { gateCheck } from './checkTaxonomy';
+import { gateCheck,classifyCheck } from './checkTaxonomy';
 import { normalizeChecks } from './checkIntegrity';
 import { compressionFlangeGap } from './detailAnalysis';
 import { travelLimits } from './continuation';
@@ -215,6 +215,7 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  // The one-count check names the cycles of every wheel-local detail family, derived from the one count (fatigueCycleFamilies).
  if(p.details)snapshot.checks=snapshot.checks.map(c=>c.id==='fatigue-cycles'?fatigueCycleCheck(p,fatigueCycleFamilies(p)):c);
  integrityAndGates(snapshot);
+ snapshot.checks=snapshot.checks.map(recorded);
  const blocking=snapshot.checks.some(c=>['incomplete','unsupported','unverified'].includes(c.status));
  // Failed engineering criteria can export; failed numerical verification cannot.
  snapshot.eligible=!blocking&&!snapshot.errors.length&&snapshot.checks.filter(c=>c.group==='Analysis').every(c=>c.status==='pass');
@@ -230,6 +231,20 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  return snapshot;
 }
 
+/**
+ * An input or load-basis record (classifyCheck type 'input' or 'load-basis') that passes by restating a value (demand
+ * equal to capacity, e.g. the building class cycles, the impact factor or the crane statics as entered) or with no
+ * ratio: flagged record, its utilization removed, so it never ranks as a governing D/C of 1.00 and is not counted as a
+ * passing check. Input checks that compare two different values (the bumper energy against its rating) keep their D/C.
+ */
+export function recorded(c:CheckResult):CheckResult{
+ if(c.status!=='pass')return c;
+ const type=classifyCheck(c).type;if(type!=='input'&&type!=='load-basis')return c;
+ const same=c.demand!==undefined&&c.capacity!==undefined&&Math.abs(c.demand-c.capacity)<=1e-9*Math.max(1,Math.abs(c.capacity));
+ const none=c.demand===undefined&&c.capacity===undefined;
+ if(!same&&!none)return c;
+ const {utilization:_u,...rest}=c;return {...rest,record:true};
+}
 /**
  * An excluded (by others, deferred submittal) check whose reference D/C exceeds 1.00, reopened as 'unverified' with the
  * flag byOthers: listed with the open items and on the drawings, never read as passing. Its demand and capacity stay for
