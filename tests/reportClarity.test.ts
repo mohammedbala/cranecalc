@@ -36,9 +36,10 @@ const check=(s:CalculationSnapshot,id:string)=>s.checks.find(c=>c.id===id)!;
 describe('open items: one per detail type and element, sorted, with what is needed',()=>{
  const {groups,bounds}=openGroups(tax,base);
  it('groups the register points of one detail, folds the all-cycle bound into the Miner item and counts its locations',()=>{
-  // 32 open checks: the 20 all-cycle bounds beside the failing Miner points are comparison ratios (gate advisory,
-  // "comparison bound; Miner governs"), folded into their items below, not open checks of their own.
-  expect(tax.openItems.length).toBe(32);
+  // 31 open checks: the 20 all-cycle bounds beside the failing Miner points are comparison ratios (gate advisory,
+  // "comparison bound; Miner governs"), folded into their items below, not open checks of their own; the TR-13 bracket
+  // guideline (no bracket check fails) is a recommendation, not an open item.
+  expect(tax.openItems.length).toBe(31);expect(tax.recommendations.map(r=>r.check.id)).toContain('column-brackets');
   expect(groups.length).toBeLessThan(16);
   const saddle=groups.filter(g=>g.key.startsWith('register:SA'));
   expect(saddle).toHaveLength(1);
@@ -82,7 +83,6 @@ describe('open items: one per detail type and element, sorted, with what is need
   expect(by('flange-tie-saddle-weld')).toMatch(/w ≥ 7\/16 in/);
   expect(by('tie-slip')).toMatch(/more or larger bolts/);
   expect(by('detail-fatigue-SA0--1-top-right')).toMatch(/the stress range must drop by at least 55%/);
-  expect(by('column-brackets')).toMatch(/crane columns/);
  });
  it('does not list an all-cycle bound whose Miner ratio is within its limit',()=>{
   const s=clone(),miner=check(s,'detail-fatigue-SA0--1-top-right'),full=check(s,'detail-full-cycle-SA0--1-top-right');

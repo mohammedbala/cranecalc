@@ -426,7 +426,8 @@ export function serviceReactionEstimate(p:ProjectInput){
  * The configuration and its skeleton, screened against the AIST TR-13 §5.9.2 column-bracket recommendation once the
  * girder is known: above it a new structure bears on column caps over the new crane columns (the direct column
  * bearing TR-13 points to; normalizeConfig then drops the flange tie), with the reason; an existing structure keeps its
- * brackets, with a warning and the remedy.
+ * brackets (the guideline, a clause to be verified, never replaces the support entered), with an advisory note naming
+ * the crane column and the stepped column.
  */
 function screened(input:RunwayConfig){
  const {config,changes,rules,entered}=configOf(input);let cfg=config,sk=skeleton(cfg);
@@ -457,12 +458,11 @@ function screened(input:RunwayConfig){
   changes.push(why,...n.changes);rules.push({field:'support',from:cfg.support,to:'column-cap',why},...n.rules);
   cfg=n.config;sk=skeleton(cfg);
  }else{
-  // An existing building: new crane columns beside the building columns, tied to them, the girders on their caps (the
-  // direct column bearing TR-13 points to), in place of brackets past the recommendation.
-  const n=normalizeConfig({...cfg,support:'crane-column'});
-  const why=`The support reaction, ${about}, exceeds the AIST TR-13 §5.9.2 recommendation of ${limit} for column brackets (clause to be verified): new crane columns beside the building columns carry the girders on their column caps (direct column bearing), tied to the building columns.`;
-  changes.push(why,...n.changes);rules.push({field:'support',from:cfg.support,to:'crane-column',why},...n.rules);
-  cfg=n.config;sk=skeleton(cfg);
+  // An existing building keeps the support entered: the TR-13 bracket guideline (clause to be verified) is an advisory,
+  // not a code limit, so it never replaces the user's support; the note and the selection log point to the direct
+  // column bearing alternatives. The bracket's own strength, fatigue and column checks decide its adequacy.
+  const why=`The support reaction, ${about}, is above the AIST TR-13 §5.9.2 guideline of ${limit} for column brackets, a clause to be verified: consider a crane column tied to the building column or a stepped column (configurator supports '${supportLabels['crane-column']}' and '${supportLabels['stepped-column']}'); an advisory, not a code limit, so the support entered (${supportLabels[cfg.support]}) is kept${cfg.support==='by-others'?', by others':' and checked here'}.`;
+  changes.push(why);rules.push({field:'support',from:cfg.support,to:cfg.support,why});
  }
  return {config:cfg,changes,sk,reaction:R,rules,entered};
 }
@@ -1235,6 +1235,8 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  const structureLabel=(v:RunwayConfig['structure'])=>v==='new'?'New freestanding columns':'Existing building columns';
  if(design&&entered.structure!==cfg.structure)add('Structure',structureLabel(entered.structure),structureLabel(cfg.structure),why('structure'));
  if(design&&entered.support!==cfg.support)add('Girder support',supportLabels[entered.support],supportLabels[cfg.support],why('support'));
+ // The TR-13 bracket guideline above its reaction: an advisory row, the support kept as entered.
+ else if(design&&why('support'))add('Girder support, advisory',supportLabels[entered.support],`${supportLabels[cfg.support]}, kept`,why('support'));
  if(design&&entered.system!==cfg.system)add('Girder system',`${entered.bays} × ${entered.span} ft ${entered.system}`,`${cfg.bays} × ${cfg.span} ft ${cfg.system}`,why('system'));
  if(design&&p.details){
   const cap=!!activeColumnCap(p)&&!tiedToBuilding(p),arrangement=tieArrangement(p.details);
