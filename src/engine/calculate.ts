@@ -35,6 +35,9 @@ import { validateColumnCap } from './columnCap';
 import { bumperSelectionChecks,craneInputChecks,craneInputWarnings } from './craneInput';
 import { girderPieceChecks } from './girderPieces';
 import { validateSplices } from './spliceInputs';
+import { craneColumnCalculation,validateCraneColumn } from './craneColumn';
+import { steppedColumnCalculation,validateSteppedColumn } from './steppedColumn';
+import { activeStep } from './steppedColumnInputs';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
@@ -75,7 +78,7 @@ export function validateProject(input:unknown):string[]{
   // At stop contact (bumper overhang less stroke from the stop face) the end wheel must still stand on the rail.
   for(const v of stopContacts(p,i))if(v.railEnd!==undefined&&(v.end==='left'?v.wheel<v.railEnd:v.wheel>v.railEnd))errors.push(`cranes.${i}.design.bumperOverhang: at the ${v.end} stop the bumper overhang less the stroke leaves the end wheel off the rail; check the end-truck geometry and the stop and rail-end layout.`);
   const reach=craneTravel(p,i);if(reach.start>=reach.end)errors.push(`cranes.${i}.design.bumperOverhang: the stop contacts leave the crane no travel between the stops.`);});
- return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateColumnBase(p),...validateLongitudinalBracing(p),...validateAdjacentBuilding(p),...validateColumnCap(p),...validateSplices(p)];
+ return [...errors,...validateRunwayDetails(p),...validateExistingColumn(p),...validateColumnBase(p),...validateLongitudinalBracing(p),...validateAdjacentBuilding(p),...validateColumnCap(p),...validateSplices(p),...validateCraneColumn(p),...validateSteppedColumn(p)];
 }
 /**
  * After every module: each check tells the truth about its own status (checkIntegrity.ts: impossible geometry fails as a
@@ -148,8 +151,12 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
    // Bracing between new columns is analyzed first: its forces load the braced columns and their bases.
    const column=p.existingColumn?.enabled?existingColumnSection(p).section:undefined;
    if(p.longitudinalBracing?.enabled)snapshot.longitudinalBracing=longitudinalBracingAnalysis(p,snapshot.supportReactions,column);
-   if(p.existingColumn?.enabled){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn));}
+   // A stepped column is analyzed by its own model (steppedColumnCalculation below), not as a prismatic column.
+   if(p.existingColumn?.enabled&&!activeStep(p)){snapshot.existingColumn=existingColumnAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...existingColumnChecks(p,snapshot.existingColumn));}
    if(p.existingColumn?.enabled&&p.existingColumn.isNew&&p.columnBase?.enabled){snapshot.columnBase=columnBaseAnalysis(p,snapshot.supportReactions);snapshot.checks.push(...columnBaseChecks(p,snapshot.columnBase,snapshot.existingColumn));}
+   // Crane column tied to the building column (WP-1): the building column, ties, brace and slot, after the crane column and its base.
+   // Stepped column (WP-2): sets snapshot.existingColumn (compatible summary) and snapshot.steppedColumn, and its checks.
+   craneColumnCalculation(snapshot);steppedColumnCalculation(snapshot);
    // Drawings print elevations from project data only.
    // A continuous girder longer than a practical piece: shipping and erection, or field splices (open until confirmed).
    snapshot.checks.push(...girderPieceChecks(p));

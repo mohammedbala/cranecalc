@@ -1,4 +1,5 @@
 import type {ProjectInput} from './types';
+import {tiedToBuilding} from './craneColumnInputs';
 
 /**
  * Seismic design of new freestanding runway columns as an ASCE 7-16 cantilever column system
@@ -48,6 +49,13 @@ export function seismicCombinations(method:ProjectInput['method'],b:Pick<Seismic
  const amplified=basic.map(k=>b.integrityOnly?{...k,id:`${k.id} (§1.4.2)`,overstrength:true}:{...k,id:`${k.id} Ωo`,equation:k.equation.replace('ρQE','ΩoQE'),E:k.E/r*o,overstrength:true});
  return [...basic,...amplified].map(k=>({...k,D:fix(k.D),E:fix(k.E)}));
 }
+/**
+ * The seismic basis across the runway at the column: none on a crane column tied to the building (craneColumnInputs.ts),
+ * whose across-runway seismic force the ties deliver to the building column and the building's lateral system (the
+ * runway mass enters the building column's site seismic data); otherwise seismicBasis. Along the runway the
+ * crane-level bracing keeps seismicBasis.
+ */
+export const acrossRunwaySeismic=(p:ProjectInput)=>tiedToBuilding(p)?undefined:seismicBasis(p);
 export type RiskCategory='I'|'II'|'III'|'IV';
 /** Seismic design category from SDS (Table 11.6-1); Risk Category I-III unless given. The entered SDC governs. */
 export const sdcFromSDS=(SDS:number,rc:RiskCategory='II')=>SDS<.167?'A':SDS<.33?(rc==='IV'?'C':'B'):SDS<.5?(rc==='IV'?'D':'C'):'D';

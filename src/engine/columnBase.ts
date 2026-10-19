@@ -8,7 +8,8 @@ import {filletRootReduction,finiteLife,fatigueThresholdKsi,KSI} from './fatigueC
 import {sectionProperties} from './section';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
-import {seismicBasis,seismicCombinations} from './runwaySeismic';
+import {acrossRunwaySeismic,seismicBasis,seismicCombinations} from './runwaySeismic';
+import {craneColumnReactions} from './craneColumnInputs';
 import {alongSeismic,baseWarping,braceCases,braceShare,bracingGeometry,bracingLayout,designsBracing,girderOffset,offsetRodEnds,torsionBase} from './newColumnBracing';
 import {activeColumnCap} from './columnCapInputs';
 import {capAlongEccentricity} from './columnCap';
@@ -93,12 +94,13 @@ export function baseBimoment(p:ProjectInput,b:ColumnBaseInput,B:number){
  * crane load is also taken with only an upward crane reaction ("least crane vertical"), for anchor tension and
  * overturning, without side thrust: side thrust comes with the wheel loads of the crane producing it.
  */
-export function columnBaseActions(p:ProjectInput,reactions:SupportReactionSet,method:ProjectInput['method']){
- const c=p.existingColumn!,{section}=existingColumnSection(p),props=sectionProperties(section),E=section.E;
+export function columnBaseActions(p:ProjectInput,runway:SupportReactionSet,method:ProjectInput['method']){
+ // A crane column tied to the building carries no side thrust (craneColumnReactions) and no seismic force across the runway.
+ const reactions=craneColumnReactions(p,runway),c=p.existingColumn!,{section}=existingColumnSection(p),props=sectionProperties(section),E=section.E;
  const e=existingColumnEccentricity(p),hs=c.seatElevation,ht=existingColumnRailElevation(p),column=props.weight*c.height;
  const eccentric=columnResponse(c.height,E*props.Ix,c.strong,[{x:hs,moment:1}],[Math.min(ht,c.height)]),side=columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,ht)],[hs]);
  const longitudinal=c.longitudinal==='column'?reactions.Cls:0,along=longitudinal?columnResponse(c.height,E*props.Iy,c.weak,[railForce(c.height,ht)]):undefined;
- const basis=seismicBasis(p),sideE=basis?columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,seismicHeight(p))],[hs]):undefined;
+ const basis=acrossRunwaySeismic(p),sideE=basis?columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,seismicHeight(p))],[hs]):undefined;
  const designed=designsBracing(p)?{cases:braceCases(p,reactions,method,alongSeismic(p,reactions,section)),offset:girderOffset(p)}:undefined;
  // A column cap: the girder end reactions off the column centerline along the runway, a weak-axis moment at the top.
  const capTop=activeColumnCap(p)?columnResponse(c.height,E*props.Iy,c.weak,[{x:c.height,moment:1}]):undefined;
@@ -409,8 +411,8 @@ export function plateWasherWeld(b:ColumnBaseInput){
  * compression positive, the strong-axis moment as a magnitude. The weak-axis seat moment of uneven girder-end
  * reactions is not included (the rod rows and flange welds take the strong axis).
  */
-export function columnBaseFatigueActions(p:ProjectInput,reactions:SupportReactionSet){
- const c=p.existingColumn!,{section}=existingColumnSection(p),props=sectionProperties(section),E=section.E;
+export function columnBaseFatigueActions(p:ProjectInput,runway:SupportReactionSet){
+ const reactions=craneColumnReactions(p,runway),c=p.existingColumn!,{section}=existingColumnSection(p),props=sectionProperties(section),E=section.E;
  const spectrum=p.details?.spectrum?.length?p.details.spectrum:[{name:'All cycles',liftFraction:1,cycles:p.fatigue.cycles}];
  const e=existingColumnEccentricity(p),hs=c.seatElevation,ht=existingColumnRailElevation(p);
  const kE=Math.abs(columnResponse(c.height,E*props.Ix,c.strong,[{x:hs,moment:1}],[Math.min(ht,c.height)]).reactions.baseMoment);
