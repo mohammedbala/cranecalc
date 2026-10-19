@@ -1,4 +1,5 @@
 import {checkDcText,elementSummary,failingNote,sheetDc} from './sheetRatios';
+import {stiffenerTopCjp} from '../engine/constructionNotes';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
 import {activeEndBearing,endBearingGeometry} from '../engine/endBearing';
@@ -84,7 +85,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   const dy=Y(cb)+22;
   svg+=dimH(X(-col.d/2),X(col.d/2),Y(cb),dy,dim(col.d))+dimH(X(-cap.plate.width/2),X(cap.plate.width/2),Y(-tc),dy+18,dim(cap.plate.width));
   // Callouts in two columns: the girder, its stiffeners, bearing plate and bolts at the left; welds, cap and column at the right.
-  const cjp=b.kind==='cap',half=Math.max(cap.plate.width,b.kind==='cap'?b.capWidth:b.bf)/2;
+  const cjp=stiffenerTopCjp(p),half=Math.max(cap.plate.width,b.kind==='cap'?b.capWidth:b.bf)/2;
   type Item={at:XY;labels:string[];weld?:string;allAround?:boolean;arrowSide?:boolean};
   const left:Item[]=[
    {at:[X(-b.bf/2)+4,Y(yt)],labels:[`${b.name} RUNWAY GIRDER,`,'CENTERED ON THE COLUMN']},

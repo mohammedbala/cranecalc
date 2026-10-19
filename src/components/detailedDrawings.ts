@@ -1,4 +1,5 @@
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {stiffenerTopCjp} from '../engine/constructionNotes';
 import {capChannelProfile} from '../engine/channelProfile';
 import {supportColumn} from '../engine/drawingData';
 import {bracketForceTopic} from './bracketForceTable';
@@ -121,7 +122,7 @@ export function detailedDrawings(s:CalculationSnapshot):CadDrawing[]{
   dr.text(485,150,`${b.capCatalogueId} CAP / FULL MEMBER LENGTH`,10);
   dr.text(485,180,`MINIMUM END DEVELOPMENT: ${f(c.developmentLength)} EACH END`,10);
   dr.text(485,210,'FIT / VERIFY FULL CONTACT BEFORE WELDING',10);
-  dr.text(485,300,'BEARING STIFFENERS: CJP TO W TOP FLANGE',10);
+  dr.text(485,300,stiffenerTopCjp(p)?'BEARING STIFFENERS: CJP TO W TOP FLANGE':'BEARING STIFFENERS: FILLETS TO WEB AND FLANGE',10);
   dr.text(485,330,'CMAA A-D ONLY / SEE CALCULATIONS FOR DUTY',10);
   output.push(dr.drawing);
  }
