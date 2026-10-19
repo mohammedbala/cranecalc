@@ -23,8 +23,12 @@ import {format} from './units';
 export const twistRotationLimit=.02;
 type Torsion=NonNullable<ExistingColumnResult['torsion']>;
 
-/** Service bearing movement along the runway from the column twist (each crane start and stop), for the movement checks. */
-export const twistSlip=(t:Torsion|undefined)=>t?Math.abs(t.service.slip):0;
+/**
+ * Service bearing movement along the runway from the column twist (each crane start and stop), for the movement checks:
+ * a column whose twist is limited here (a column designed here, checked without the existing-building review; the
+ * reviewed existing and stepped columns keep their own torsion checks and paths).
+ */
+export const twistSlip=(r:ExistingColumnResult|undefined)=>r?.torsion&&!r.support?Math.abs(r.torsion.service.slip):0;
 /** The rail's shift across the runway from the service twist, e(1 − cos θ_s), added to the column's lateral displacement. */
 export const twistShift=(t:Torsion|undefined)=>t?Math.abs(t.service.lateral):0;
 

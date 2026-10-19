@@ -629,7 +629,7 @@ function withTwistLimit(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):Pr
  const a=existingColumnAnalysis(q,supportReactions(q,sectionProperties(q.section))),t=a.torsion;if(!t)return q;
  // The column-twist checks: the service movement within the runway-level displacement limit, the factored twist within
  // the small-rotation limit (columnTwistLimit.ts; the bracing displacement in series is left to the calculation).
- const slip=twistSlip(t),limit=a.drift.limit;
+ const slip=twistSlip(a),limit=a.drift.limit;
  if(slip<=limit+1e-9&&Math.abs(t.twist)<=twistRotationLimit)return q;
  const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
  const why=`On the new ${q.existingColumn.shape} columns the ${supportLabels[cfg.support].toLowerCase()} seats the girder ${len(t.offset)} off the column axis, where the crane-level strut holds the column: the traction twists it ${t.service.twist.toFixed(4)} rad at every crane start and stop, moving the bearing ${len(slip)} along the runway (runway-level limit ${len(limit)}; factored twist ${Math.abs(t.twist).toFixed(3)} rad, small-rotation limit ${twistRotationLimit} rad; column-twist). The girders bear on column caps over the columns instead, on the column axis (no offset, no torque).`;
@@ -1020,7 +1020,8 @@ function setBearings(p:ProjectInput){
 /** The locating column's service twist movement at the seat (columnTwistLimit.twistSlip): the bearing slots take it. */
 function seatTwistSlip(p:ProjectInput){
  if(!p.existingColumn?.enabled||activeStep(p))return 0;
- try{return twistSlip(existingColumnAnalysis(p,supportReactions(p,sectionProperties(p.section))).torsion);}catch{return 0;}
+ if(!p.existingColumn.isNew||tiedToBuilding(p))return 0;
+ try{return twistSlip(existingColumnAnalysis(p,supportReactions(p,sectionProperties(p.section))));}catch{return 0;}
 }
 /** Top-flange service where a welded saddle attachment (AISC Table A-3.1 Category D or E) on the tied flange is avoided: CMAA Class D to F cranes, AIST Class A and B buildings. */
 const highCycle=(cfg:RunwayConfig)=>['D','E','F'].includes(cfg.cmaa)||cfg.buildingClass==='A'||cfg.buildingClass==='B';
@@ -1172,8 +1173,10 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
  // ratio of its own still past 1.00 (the targets aside): no arrangement the configurator tried passes, so the build
  // stops rather than handing on a tie its own sizing rejects.
  const d=p.details;
- if(d&&(flangeTieGeometry(p)||stiffenerTieGeometry(p))&&cfg.support!=='column-cap'){
-  const over=Object.entries(tieSizingRatios(p)).filter(([,v])=>v>1+1e-6).sort((a,b)=>b[1]-a[1]);
+ // (A tie at a column step is sized with the stepped-column mechanics, withSteppedTie: not judged here.)
+ if(d&&(flangeTieGeometry(p)||stiffenerTieGeometry(p))&&cfg.support!=='column-cap'&&cfg.support!=='stepped-column'){
+  // The tie's own ratios: the supporting column's checks at the tie (column-*) are the column sizing's.
+  const over=Object.entries(tieSizingRatios(p)).filter(([k,v])=>!k.startsWith('column-')&&v>1+1e-6).sort((a,b)=>b[1]-a[1]);
   if(over.length)out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:`Top-flange tie not resolved: the ${tieLabels[tieArrangement(d) as keyof typeof tieLabels]??tieArrangement(d)}${stiffenerTieGeometry(p)?' on the bearing stiffener':' on a flange saddle'}, as sized for the estimated tie demands, still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')}, and no other tie arrangement the configurator tries fits and passes here. Choose another tie or support (a capped girder with the cap tieback angle, column caps, a stiffer support), or design the tie connection by hand.`});
  }
  const col=p.existingColumn,w=col?.shape?aiscShapeByName(col.shape):undefined;
