@@ -139,7 +139,7 @@ const remedies:Remedy[]=[
  [/^stiffener-lateral-flexure$/,x=>{const b=x.p.details?.bearing;return `Thicken the bearing stiffener pair to t_s ≥ ${b?x.size(b.stiffenerThickness,x.u):'u·t_s'} (or widen to b_s ≥ ${b?x.size(b.stiffenerWidth,Math.sqrt(x.u)):'√u·b_s'}); the check is a bound (full-height cantilever, no web participation): refine the model with the web before resizing.`;}],
  [/^bearing-plate$/,x=>{const b=x.p.details?.bearing;return `Thicken the bearing plate to t_p ≥ ${b?x.size(b.thickness,Math.sqrt(x.u)):'√u·t_p'} (plate bending), or move the bearing stiffeners to shorten the cantilever.`;}],
  [/^stiffener-(weld|combined-weld)$/,x=>{const b=x.p.details?.bearing;return `Increase the stiffener-to-web fillets to w ≥ ${b?x.size(b.weldSize,x.u):'u·w'}.`;}],
- [/^stiffener-(fatigue|weld-fatigue)$/,x=>`Bearing stiffener: ${range(x)} (thicker or wider stiffeners, or full-penetration welds to a better category).`],
+ [/^stiffener-(fatigue|weld-fatigue)$/,x=>{const pair=x.c.note.match(/Lightest pair at D\/C ≤ 0\.90 with these ranges: (2-PL [^(]+)\(/)?.[1]?.trim();return `Bearing stiffener: ${range(x)} (${pair?`${pair} stiffeners, then recalculate; or `:'thicker or wider stiffeners, or '}full-penetration welds to a better category).`;}],
  // Ties at the flange
  [/^(flange-tie-flange|plate-tie-keeper-flange)$/,x=>{const g=flangeTieGeometry(x.p),b=g&&flangeEffectiveWidth(x.p,g);
   // The local stress falls with the effective width b_e = B + a + min(a, s_e): a saddle longer by (u - 1) b_e.

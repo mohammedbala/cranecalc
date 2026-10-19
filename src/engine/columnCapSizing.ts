@@ -189,7 +189,7 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
  const moves:Record<string,(Move|Move[])[]>={
   'plate':[plate],'plate-shear':[plate],'web-yield':[plate],'web-cripple':[plate],'prying':[plate],'fork-stiffness':[[plate,bolt]],'bolt-bearing':[plate,bolt],
   'weld':[weld,plate,heavyWeld,cjp],'weld-fatigue':[weld,plate,heavyWeld,cjp],
-  'bolt-tension':[bolts],'bolt-slip':[bolts],
+  'bolt-tension':[bolts],'bolt-slip':[bolts],'bolt-fatigue':[[bolt,gauge]],
   'wrench-web':[edge],'wrench-flange':[],'wrench-stiffener':[edge],
   'stiffener-bearing':[stiffThicker],'stiffener-slenderness':[stiffThicker],'stiffener-shear':[[stiffThicker,stiffDeeper]],'stiffener-flange':[stiffDeeper],
   'stiffener-weld':[stiffWeld,stiffDeeper],'stiffener-weld-fatigue':[stiffWeld,stiffDeeper]};
