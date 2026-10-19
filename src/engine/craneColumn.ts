@@ -15,7 +15,7 @@ import {secantStiffness} from './restraintClearance';
 import {finiteLife,fatigueThreshold} from './fatigueConstants';
 import {format} from './units';
 import {latexNumber,withinLimit} from './math';
-import {columnBaseActions} from './columnBase';
+import {columnBaseActions,combinedFooting,footingsOf} from './columnBase';
 
 /**
  * Separate crane column tied to an existing building column (configurator support 'crane-column'; AISC Design Guide 7,
@@ -200,7 +200,9 @@ export interface CraneColumnResult {
  /** Clear distance across the runway between the crane-column footing and the building column footing (undefined where its size is not entered). */
  footing?:{clear:number;required:number;crane:{L:number;B:number};building:{L:number;B:number};
   /** Where the footings overlap (an open coordination item): the crane-column base reactions for the combined or enlarged footing. */
-  reactions?:FootingReactions};
+  reactions?:FootingReactions;
+  /** The crane column and the building column stand on one combined footing (columnBase.combined), which replaces the existing one. */
+  combined?:boolean};
 }
 
 /**
@@ -286,7 +288,8 @@ export function craneColumnCalculation(snapshot:CalculationSnapshot):void{
  // Slot travel: each column's shortening between its base and the tie, the larger plus the tolerance each way.
  const {crane:craneShort,building:buildingShort,tolerance}=columnShortening(p,reactions),slotDemand=Math.max(craneShort,buildingShort)+tolerance,slotCapacity=tg.travel;
  // Footing clearance across the runway (both footings concentric with their columns at each grid).
- const ft=p.columnBase?.enabled?p.columnBase.footing:undefined,adj=c.adjacent?.enabled?c.adjacent:undefined,line=adj?.A??adj?.B;
+ // The larger footing in use (the braced columns' where it is sized apart) is the one that comes closest.
+ const ft=p.columnBase?.enabled?footingsOf(p).reduce((x,y)=>y.L>x.L?y:x):undefined,adj=c.adjacent?.enabled?c.adjacent:undefined,line=adj?.A??adj?.B,combined=combinedFooting(p);
  const footing:CraneColumnResult['footing']=ft&&line&&line.footing.L>0&&line.footing.B>0?{clear:k.offset-ft.L/2-line.footing.L/2,required:adj!.footingClear,crane:{L:ft.L,B:ft.B},building:{L:line.footing.L,B:line.footing.B}}:undefined;
 
  snapshot.buildingColumn=building;
@@ -314,7 +317,10 @@ export function craneColumnCalculation(snapshot:CalculationSnapshot):void{
   const Fsr=Math.max(fatigueThreshold('E'),finiteLife(1.1,n)),net=range/Math.max(An,1e-9);
   add('tie-plate-fatigue','Column tie · plate net section fatigue at the slots',net,Fsr,'stress','\\Delta f=\\frac{\\Delta F}{A_n}\\le F_{SR}\\ \\ \\text{(Category E)}',`Net section through a slot, the plate bearing on the sleeve without clamping: taken as a pin plate (AISC Table A-3.1 item 2.4, Category E, C_f = 11 × 10⁸), all ${n.toLocaleString('en-US')} cycles.`,['aisc-fatigue']);}
  add('tie-slot-travel','Column tie · vertical slot travel (differential shortening)',slotDemand,slotCapacity,'length','\\max(\\delta_c,\\delta_b)+\\delta_t\\le\\frac{l_s-D_s}{2}',`Each way from the centered sleeve: crane column shortening δc = PL/EA = ${L(craneShort)} (runway dead load, crane with impact at the most loaded support and the column's own weight, base to the tie), building column shortening δb = ${L(buildingShort)} (its existing L and the largest of Lr, S and R axial effects, unfactored), the larger plus the erection tolerance ${L(tolerance)}; travel (${L(t.slot.length)} − ${L(tg.od)})/2 = ${L(slotCapacity)}. The sleeves are set centered at erection, after the runway dead load is on the crane column.`,['dg7-columns','aisc-connections']);
- if(footing){const s=footing,title='Crane column · footing clearance to the building column footing',eq='c_{ftg}=e-\\frac{L_c}{2}-\\frac{L_b}{2}\\ge c_{min}';
+ if(footing&&combined){const s=footing;s.combined=true;
+  checks.push({id:'crane-column-footing-clearance',group,title:'Crane column · combined footing with the building column',status:'pass',equation:'',referenceIds:['criteria','aci-318'],
+   note:`With the columns ${L(k.offset)} apart, an isolated crane-column footing cannot keep ${L(s.required)} clear of the existing ${L(s.building.L)} × ${L(s.building.B)} building-column footing (this one, isolated, would leave ${L(s.clear)}): each crane column and its building column stand on one combined footing (the footing checks above, under New column base), centered ${L(Math.abs(combined.uc))} from the crane column toward the building column, covering both base plates and the plan of the existing footing, which it replaces. Construction sequence: shore the building column (shoring by the contractor's engineer for its existing loads), remove the existing footing, cast the combined footing and re-set the building column on new anchor rods. The building column's existing axial load enters the footing checks from its entered effects (${k.building.source||'survey'}); its own wind and seismic base reactions and the design of its new anchor rods are the engineer of record's, for the base reactions of the building column.${adj?.source?` Survey: ${adj.source}.`:''}`});
+ }else if(footing){const s=footing,title='Crane column · footing clearance to the building column footing',eq='c_{ftg}=e-\\frac{L_c}{2}-\\frac{L_b}{2}\\ge c_{min}';
   const geometry=`Across the runway: the crane-column footing ${L(s.crane.L)} × ${L(s.crane.B)} and the existing building-column footing ${L(s.building.L)} × ${L(s.building.B)}, both concentric with their columns ${L(k.offset)} apart: clear ${L(s.clear)} against ${L(s.required)}.`;
   if(s.clear>=s.required)add('footing-clearance',title,s.required,s.clear,'length',eq,`${geometry} Excavation shall not undermine the existing footing.${adj?.source?` Survey: ${adj.source}.`:''}`,['criteria']);
   // Footings that overlap (or come too close) are a foundation coordination item, not a failed design of the runway:

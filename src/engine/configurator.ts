@@ -29,7 +29,7 @@ import {longitudinalBracingAnalysis,longitudinalBracingChecks} from './longitudi
 import {supportReactions} from './supportReactions';
 import {existingColumnAnalysis,existingColumnChecks,existingColumnSection} from './existingColumn';
 import {existingWeldingDemand} from './existingWelding';
-import {baseDrift} from './columnBase';
+import {baseDrift,footingsOf} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate,validateCapAngle} from './capAngleTie';
 import {simpleSupportInput,railClipStations} from './simpleSupports';
 import {seatSettingTolerance} from './fitTolerances';
@@ -62,6 +62,8 @@ import {activeStep} from './steppedColumnInputs';
 import {independentBearings} from './simpleSupports';
 
 const inch=25.4,foot=304.8,kip=4448.2216152605,ksi=6.894757293168,fpm=5.08,g=9.80665;
+/** Fictitious example allowable lateral bearing (passive) pressure, 150 psf/ft (IBC 2018 Table 1806.2, sandy soils). */
+const examplePassive=150*1.570874638e-7;
 const up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,round=(v:number,step:number)=>Math.round(v/step)*step;
 const sum=(a:number[])=>a.reduce((s,v)=>s+v,0);
 
@@ -516,7 +518,7 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
    plate:{...demo.columnBase!.plate,...basePlatePlan(shape),thickness:up((1.25+.75*heavy)*inch,.125*inch)},
    anchors:{...demo.columnBase!.anchors,diameter:(heavy>.5?1.25:1)*inch,embedment:(15+6*heavy)*inch},
    footing:{...demo.columnBase!.footing,L:round((6.5+5*heavy)*foot,.5*foot),B:round((6.5+5*heavy)*foot,.5*foot),thickness:up((24+12*heavy)*inch,inch),bar:(heavy>.5?'#7':'#6') as '#6'|'#7',spacing:10*inch},
-   source:'Fictitious example geotechnical report: 3,000 psf allowable (net), base friction 0.35, 120 pcf; interior heated building, frost not applicable. Concrete 4,000 psi; ASTM A615 Grade 60 bars; ASTM F1554 Grade 36 rods'};
+   soil:{...demo.columnBase!.soil,passive:examplePassive},source:'Fictitious example geotechnical report: 3,000 psf allowable (net), base friction 0.35, lateral bearing 150 psf/ft (IBC Table 1806.2), 120 pcf; interior heated building, frost not applicable. Concrete 4,000 psi; ASTM A615 Grade 60 bars; ASTM F1554 Grade 36 rods'};
   p.columnBase=baseInput;
   const seat=seatLevel(columnBaseElevation(baseInput)),top=seat+d.bearing.thickness+p.section.d+(p.section.kind==='cap'?p.section.capTw:0);
   const c=demo.existingColumn!;
@@ -714,7 +716,7 @@ const bracketTarget=.9;
  * rest), or that meets it on the footing already sized; the configuration keeps its blank column choice.
  */
 function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
- const q=sizeColumnBase(p,baseTarget);clearExistingFootings(q);
+ const q=combinedWhereOverlapping(p,sizeColumnBase(p,baseTarget),trace);clearExistingFootings(q);
  // The column twists where the girder's longitudinal force reaches it off its centerline (a bracket) or an offset
  // rod ends: the column torsion ratios (column-torsion, brace-rod-torsion) judge the shape as the drift does.
  const torsionOk=(r:ProjectInput)=>columnTorsionRatio(r)<=1;
@@ -732,6 +734,22 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
   if(baseSizingRatios(r).ratios.drift<=baseTarget&&torsionOk(r)){Object.assign(trace,inner,{column:[trace.column,why[0].toUpperCase()+why.slice(1)].filter(Boolean).join('; ')});return {...r,configurator:{...cfg}};}
  }
  return q;
+}
+/**
+ * Crane columns beside the building columns: the footing clearance checked here. Where the sized isolated footings (the
+ * larger, the braced columns', governing) come closer to the surveyed building-column footing than the required clear
+ * distance, each crane column and its building column stand on one combined footing that replaces the existing one
+ * (columnBase.combined, combinedFooting), sized again from the configured start; the reason is logged.
+ */
+function combinedWhereOverlapping(p:ProjectInput,q:ProjectInput,trace:SelectionTrace):ProjectInput{
+ const k=q.craneColumn,adj=q.existingColumn?.adjacent,line=adj?.A??adj?.B;
+ if(!k?.enabled||!q.columnBase?.enabled||q.columnBase.combined||!adj?.enabled||!line||!(line.footing.L>0))return q;
+ const L=Math.max(...footingsOf(q).map(v=>v.L)),clear=k.offset-L/2-line.footing.L/2;
+ if(clear>=adj.footingClear)return q;
+ const start=structuredClone(p);start.columnBase!.combined=true;
+ const r=sizeColumnBase(start,baseTarget),ft=(v:number)=>`${+(v/foot).toFixed(2)} ft`,F=r.columnBase!;
+ trace.footing=`Isolated ${ft(L)} square crane-column footings ${+(k.offset/inch).toFixed(2)} in from the building column would be ${clear<0?`${+(-clear/inch).toFixed(2)} in into`:`${+(clear/inch).toFixed(2)} in from`} its ${ft(line.footing.L)} footing (${+(adj.footingClear/inch).toFixed(2)} in clear required): each crane column and its building column stand on one combined footing replacing the existing one, ${ft(F.footing.L)} square${F.braced?` (${ft(F.braced.footing.L)} at the braced columns)`:''}, the building column shored and re-set on new anchor rods`;
+ return r;
 }
 /**
  * The existing building's column lines stand far enough outboard that the new footings clear theirs by the required
@@ -1056,6 +1074,8 @@ function fitCapAngle(p:ProjectInput):string|undefined{
 }
 /** Reasons the build steps record for the selection log (selectionLog). */
 export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned;clip?:string;
+ /** Crane columns: the footing arrangement chosen by the clearance to the building-column footing (combinedWhereOverlapping). */
+ footing?:string;
  /** Crane columns: the column tie sizing and the column face to the girder web (finishCraneColumn). */
  columnTie?:string;craneFace?:string;
  /** Stepped column: the lower and upper shaft choice and the step stiffener or cap the step checks needed. */
@@ -1183,7 +1203,7 @@ function craneColumnSupport(p:ProjectInput,cfg:RunwayConfig,seatLevel:(base:numb
  const baseInput={...structuredClone(demo.columnBase!),plate:{...demo.columnBase!.plate,...basePlatePlan(shape),thickness:up((1.25+.5*heavy)*inch,.125*inch)},
   anchors:{...demo.columnBase!.anchors,diameter:(heavy>.5?1.25:1)*inch,embedment:(15+6*heavy)*inch},
   footing:{...demo.columnBase!.footing,L:round((5+3*heavy)*foot,.5*foot),B:round((5+3*heavy)*foot,.5*foot),thickness:up((20+8*heavy)*inch,inch),bar:'#6' as const,spacing:10*inch},
-  source:'Fictitious example geotechnical report: 3,000 psf allowable (net), base friction 0.35, 120 pcf; interior heated building, frost not applicable. Concrete 4,000 psi; ASTM A615 Grade 60 bars; ASTM F1554 Grade 36 rods'};
+  soil:{...demo.columnBase!.soil,passive:examplePassive},source:'Fictitious example geotechnical report: 3,000 psf allowable (net), base friction 0.35, lateral bearing 150 psf/ft (IBC Table 1806.2), 120 pcf; interior heated building, frost not applicable. Concrete 4,000 psi; ASTM A615 Grade 60 bars; ASTM F1554 Grade 36 rods'};
  p.columnBase=baseInput;
  const seat=seatLevel(columnBaseElevation(baseInput)),c=demo.existingColumn!;
  // The building column (existing): the example survey and existing effects of the existing-building configurations.
@@ -1318,6 +1338,8 @@ function craneColumnLog(entered:RunwayConfig,cfg:RunwayConfig,p:ProjectInput,tra
  const col=p.existingColumn,k=p.craneColumn,auto='configurator default';if(!col?.enabled||!k?.enabled)return;
  if(!entered.columnShape)add('Crane column',auto,col.shape,[`New crane column for a ${+cfg.capacity.toFixed(2)}-ton crane (${craneColumnRule}), ${k.base} base, braced at the cap across the runway by the column tie and along it by the crane-level bracing`,trace.column].filter(Boolean).join('. ')+'.');
  if(!entered.buildingColumnShape)add('Building column',auto,k.building.shape,`Fictitious example existing building column for a ${+cfg.capacity.toFixed(2)}-ton crane (W14X90 to 7.5 t, W14X120 to 15 t, W14X159 to 30 t, else W14X211), checked for the tie forces with its existing load effects; replace with the surveyed shape.`);
+ {const b=p.columnBase,ft=(v:number)=>`${+(v/foot).toFixed(2)} ft`;if(b?.enabled)add('Crane-column footing',auto,`${b.combined?'combined with the building column, ':''}${ft(b.footing.L)} square${b.braced?`; ${ft(b.braced.footing.L)} at the braced columns`:''}`,
+  [trace.footing??`Isolated footings clear of the building-column footing`,`sized for the base reactions; the braced columns' footing apart from the others' (the rods' uplift and shear along the runway), sliding resisted by the base friction and the soil's lateral bearing on the footing and its shear key (IBC §1806.3.1)`].join('; ')+'.');}
  if(trace.columnTie)add('Column tie',auto,`${len(k.columnTie.plate.thickness)} × ${len(k.columnTie.plate.width)} plate, ${k.columnTie.bolts.count} bolts ${len(k.columnTie.bolts.diameter)}`,trace.columnTie);
  const g=craneColumnLayout(p);
  if(g&&entered.reach===undefined)add('Column face to girder web',auto,len(g.girderTie.face),[`The building column face from the girder web (the crane-column centerline): at least the crane column's half depth plus the column tie's clear gap, moved out by the tie sizing (to at most 30 in) where the tie needs the flexible length; the crane column stands ${len(g.gap)} clear of the building column`,trace.craneFace].filter(Boolean).join('. ')+'.');

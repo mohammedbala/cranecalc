@@ -70,6 +70,7 @@ describe('Configurator new column bases',()=>{
   expect(s.checks.filter(c=>c.id==='existing-footing-clear').map(c=>c.status)).toEqual(['pass']);
   // The sizing saw the calculation's ratios.
   const ratios=exactBaseSizingRatios(p).ratios;
-  for(const c of base)if(c.utilization!==undefined)expect(ratios[c.id.slice(5)],c.id).toBeCloseTo(c.utilization,9);
+  // The braced columns' footing is sized apart (its ratios under 'braced:' keys): the reported check is the worse footing's.
+  for(const c of base)if(c.utilization!==undefined)expect(Math.max(ratios[c.id.slice(5)]??0,ratios[`braced:${c.id.slice(5)}`]??0),c.id).toBeCloseTo(c.utilization,9);
  },600000);
 });

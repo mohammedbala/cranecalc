@@ -122,9 +122,10 @@ describe('crane column: configured builds and full calculations',()=>{
   // And the real building column and column tie are softer restraints: the tie force changes with them.
   const real=detailRun(p13);expect(real.braceStiffness).toBeLessThan(brace.stiffness);
  },600000);
- // No check fails. The footing overlap is a foundation coordination open item ('unverified', not a failed design): a
- // combined or enlarged footing by the foundation engineer for the crane-column base reactions given. At CMAA D Class B
- // the cap fillets grow past 5/8 in for their fatigue and the rail clips are bolted for the base weld strength (WP-4).
+ // No check fails and nothing is left open: the isolated crane-column footings would overlap the building columns'
+ // existing footings, so each crane column and its building column stand on one combined footing that replaces the
+ // existing one (columnBase.combined), checked for both columns' loads. At CMAA D Class B the cap fillets stop at 5/8 in
+ // (CJP beyond) and the rail clips are bolted for the base weld strength (WP-4).
  for(const [name,which,allowed] of [
   ['15 t cab, 4 × 25 ft, rolled girder, flexible plate',()=>p13,[]],
   ['25 t CMAA D, Class B, 4 × 30 ft, paired bars',()=>p14,[]]] as const){
@@ -142,8 +143,11 @@ describe('crane column: configured builds and full calculations',()=>{
    expect(s.checks.find(c=>c.id==='column-cap-fork-stiffness')?.status).toBe('not-applicable');
    expect(s.checks.find(c=>c.id==='brace-stiffness')?.status).toBe('pass');
    const footing=s.checks.find(c=>c.id==='crane-column-footing-clearance')!;
-   expect(footing.status).toBe('unverified');expect(footing.note).toMatch(/^Combined or enlarged footing by the foundation engineer for the reactions given: crane-column base, per column, P [\d.]+ kip max/);
-   expect(s.craneColumn!.footing!.reactions!.factored.Pmax).toBeGreaterThan(s.craneColumn!.footing!.reactions!.service.Pmax);
+   expect(footing.status).toBe('pass');expect(footing.note).toMatch(/^With the columns [\d.]+ in apart, an isolated crane-column footing cannot keep 6 in clear/);
+   expect(s.craneColumn!.footing!.combined).toBe(true);expect(which().columnBase!.combined).toBe(true);
+   // The braced columns' footing is sized apart from the others' (columnBase.braced), and neither nears the old 13 ft.
+   const b=which().columnBase!;expect(b.braced).toBeDefined();expect(b.footing.L).toBeLessThan(b.braced!.footing.L+1e-6);expect(b.braced!.footing.L).toBeLessThan(12.5*304.8);
+   expect(s.checks.filter(c=>c.status==='unverified').map(c=>c.id)).toEqual([]);
   },600000);
  }
 });
