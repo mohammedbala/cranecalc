@@ -14,7 +14,7 @@ import {astmSpec} from '../engine/materialSpecs';
 import {heavyHex} from './heavyHex';
 import {columnCapTitles} from './columnCapSheet';
 import {elevationMarks,concrete,wPlan} from './newColumnSheet';
-import {drawingElevation,plateInches,dimensionLength,specGrade} from './drawingFormat';
+import {drawingElevation,plateInches,dimensionLength,specGrade,limitLength} from './drawingFormat';
 import {sheetDrawingScale as drawingScale,text,line,rect,circle,dimH,dimV,n,breakLine,multiLeader,filletLeader,labelColumn,detailRef,detailTitles,capAngleTitles,bubble,textWidth,lettering,type XY} from './sheetGraphics';
 import {AnnotationSpace} from './annotationSpace';
 import {heading,numbered,table,type Style,type Block} from './noteBlocks';
@@ -41,10 +41,11 @@ function girderTieRef(p:CalculationSnapshot['input']){
  * the runway (from the girder web, to the building column face).
  */
 function girderTieLine(s:CalculationSnapshot){
- const p=s.input,d=p.details!,b=p.section,g=craneColumnLayout(p)!,y0=p.existingColumn!.seatElevation+d.bearing.thickness;
+ const p=s.input,d=p.details!,b=p.section,g=craneColumnLayout(p)!;
  const st=stiffenerTieGeometry(p),ft=flangeTieGeometry(p);
- if(st)return {y:y0+b.d/2+st.topCenter,depth:st.height,from:st.start,to:g.girderTie.face,kind:'PAIRED BARS'};
- if(ft)return {y:y0+b.d/2+ft.topCenter,depth:d.brace.width,from:Math.max(b.bf/2,ft.start),to:g.girderTie.face,kind:ft.plies===1?'FLEXIBLE PLATE':'FLANGE TIE'};
+ // One work line with the calculation (craneColumnLayout: the tie's line of action, tieLine).
+ if(st)return {y:g.girderTie.elevation,depth:st.height,from:st.start,to:g.girderTie.face,kind:'PAIRED BARS'};
+ if(ft)return {y:g.girderTie.elevation,depth:d.brace.width,from:Math.max(b.bf/2,ft.start),to:g.girderTie.face,kind:ft.plies===1?'FLEXIBLE PLATE':'FLANGE TIE'};
  return {y:g.girderTie.elevation,depth:Math.max(3*inch,b.tf),from:b.bf/2,to:g.girderTie.face,kind:'CAP TIEBACK ANGLE'};
 }
 
@@ -58,11 +59,15 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const g=craneColumnLayout(p);if(!g)return undefined;
  const u=p.units,d=p.details,b=p.section,k=p.craneColumn!,c=p.existingColumn!,base=p.columnBase,capG=columnCapGeometry(p),cap=capG.cap.plate,tg=columnTieGeometry(p),t=k.columnTie;
  const dim=(v:number)=>dimensionLength(v,u),size=(v:number)=>plateInches(v,u),weld=(v:number)=>plateInches(v,u).replaceAll('"','');
+ // Travel provided rounds down and travel required rounds up: a drawn value never exceeds the calculated capacity.
+ const travelMax=(v:number)=>u==='SI'?`${Math.floor(2*v+1e-9)/2} mm`:limitLength(v,u,'max'),travelMin=(v:number)=>u==='SI'?`${Math.ceil(2*v-1e-9)/2} mm`:limitLength(v,u,'min');
  const force=(v:number,q:Parameters<typeof format>[1]='force')=>{const x=format(v,q,u,u==='SI'?1:2);return u==='US'?x.toUpperCase():x;};
  const cc=g.craneColumn,bc=g.buildingColumn,face=bc.x-bc.d/2,ccFace=cc.d/2,clear=columnTieEndClearance,plateEnd=face-clear;
  // Bolts along the tie from its end at the building column: the first an edge distance in, the others at the pitch.
  const bolts=Array.from({length:t.bolts.count},(_,i)=>plateEnd-t.bolts.edge-i*t.bolts.pitch),tabEnd=plateEnd-tg.lap;
  const ccName=`NEW ${cc.shape} CRANE COLUMN`,bcName=`(E) ${bc.shape} BUILDING COLUMN`,plateLabel=`PL ${size(t.plate.thickness)} X ${size(t.plate.width)} X ${dim(plateEnd-ccFace)}`;
+ // The tab on the building column (columnTieGeometry.tab): designed here, field welded to the existing flange.
+ const tab=tg.tab,tabLabel=`TAB PL ${size(tab.thickness)} X ${size(tab.depth)} X ${dim(face-tabEnd)}`;
  const tieRef=girderTieRef(p),el=runwayElevations(p),zt=g.columnTie.elevation,gt=girderTieLine(s),db=t.bolts.diameter,hx=heavyHex(db);
  // Plate washers (AISC J3.2) covering each slot 1/4 in past its ends at either extreme of the sleeve travel (the washer
  // stays with the bolt), and 1/4 in past its sides; 1/8 in apart along the tie, else one continuous bar over the row.
@@ -101,7 +106,7 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=`<path class="rail-line" d="M${n(X(rz-rl.baseWidth/2))},${n(Y(rb))}H${n(X(rz+rl.baseWidth/2))}V${n(Y(rb+rl.baseThickness))}H${n(X(rz+rl.webThickness/2))}V${n(Y(railTop-rl.headThickness))}H${n(X(rz+rl.headWidth/2))}V${n(Y(railTop))}H${n(X(rz-rl.headWidth/2))}V${n(Y(railTop-rl.headThickness))}H${n(X(rz-rl.webThickness/2))}V${n(Y(rb+rl.baseThickness))}H${n(X(rz-rl.baseWidth/2))}Z"/>`;
   // Girder tie at its elevation, to the building column face; the column tie plate at its elevation with the tab by others.
   svg+=rect(X(gt.from),Y(gt.y+gt.depth/2),(gt.to-gt.from)*kk,gt.depth*kk,'runway-line');
-  svg+=rect(X(ccFace),Y(zt+t.plate.width/2),(plateEnd-ccFace)*kk,t.plate.width*kk,'runway-line')+rect(X(tabEnd),Y(zt+t.plate.width/2),(face-tabEnd)*kk,t.plate.width*kk,'reference-line');
+  svg+=rect(X(ccFace),Y(zt+t.plate.width/2),(plateEnd-ccFace)*kk,t.plate.width*kk,'runway-line')+rect(X(tabEnd),Y(zt+t.plate.width/2),(face-tabEnd)*kk,t.plate.width*kk,'runway-line');
   for(const x of bolts)svg+=vSlot(X(x),Y(zt),t.slot.length*kk,t.slot.width*kk)+circle(X(x),Y(zt),tg.od/2*kk,'runway-line');
   // Base plate, grout and the top of the footing, broken below.
   svg+=rect(X(-N/2),Y(0),N*kk,tb*kk,'runway-line')+rect(X(-N/2-inch),Y(-tb),(N+2*inch)*kk,gr*kk,'annotation');
@@ -126,7 +131,7 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[X((gt.from+gt.to)/2),Y(gt.y+gt.depth/2)],labels:[`GIRDER TIE (${gt.kind}) TO THE`,`BUILDING COLUMN, SEE ${detailRef(tieRef)}`]},
    {at:[X(cap.width/2),Y(H+cap.thickness/2)],labels:[`COLUMN CAP, SEE ${detailRef(columnCapTitles.section)}`]},
    {at:[X((ccFace+tabEnd)/2),Y(zt+t.plate.width/2)],labels:[`COLUMN TIE ${plateLabel},`,`VERT. SLOTS; SEE ${detailRef(craneColumnTitles.tie)}`]},
-   {at:[X(face-clear/2),Y(zt-t.plate.width/2)],labels:['TAB BY OTHERS ON THE','BUILDING COLUMN FLANGE']},
+   {at:[X(face-clear/2),Y(zt-t.plate.width/2)],labels:[`${tabLabel}, FIELD WELDED TO`,`THE BUILDING COLUMN; ${detailRef(craneColumnTitles.tie)}`]},
    {at:[X(bc.x+bc.d/2),Y((gt.y+zt)/2)],labels:[`${bcName}`,'(REF.), FIELD VERIFY']},
    {at:[X(cc.d/2),Y(broken?upperFrom+(zt-t.plate.width/2-upperFrom)*.3:H*.5)],labels:[`${ccName},`,`${k.base.toUpperCase()} BASE; SEE ${detailRef(detailTitles.newColumn)}`]},
    {at:[X(N/2),Y(tb/2)],labels:[`BASE PL, SEE ${detailRef(detailTitles.basePlate)}`]}
@@ -159,7 +164,7 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const tieW=Math.max(d.brace.gussetThickness+2*d.brace.thickness,b.tw);
   for(const y of centers)svg+=rect(X(gt.from),Y(y+tieW/2),(gt.to-gt.from)*kk,tieW*kk,'runway-line');
   const tp=t.plate.thickness;
-  svg+=rect(X(ccFace),Y(tp/2),(plateEnd-ccFace)*kk,tp*kk,'runway-line')+rect(X(tabEnd),Y(-tp/2),(face-tabEnd)*kk,tp*kk,'reference-line');
+  svg+=rect(X(ccFace),Y(tp/2),(plateEnd-ccFace)*kk,tp*kk,'runway-line')+rect(X(tabEnd),Y(-tp/2),(face-tabEnd)*kk,tp*kk,'runway-line');
   for(const x of bolts)svg+=line([X(x),Y(tp/2)-5],[X(x),Y(-3*tp/2)+5],'annotation');
   // Grid lines: the runway grid along the plan, the crane column line (girder web) and the building column line.
   svg+=line([X(xMin),cy],[X(xMax)+16,cy],'grid-line')+bubble(X(xMax)+27,cy,String(grid.grid+1),11);
@@ -174,7 +179,7 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[X((gt.from+gt.to)/2),Y(centers.at(-1)!+tieW/2)],labels:[`GIRDER TIES AT THE BEARINGS,`,`SEE ${detailRef(tieRef)}`]},
    {at:[X(-b.bf/2),Y(along-3*inch)],labels:[`${b.name} GIRDERS ABOVE, ENDS`,`ON THE CAP (${detailRef(columnCapTitles.section)})`]},
    {at:[X((ccFace+tabEnd)/2),Y(tp/2)],labels:[`COLUMN TIE ${plateLabel}`,`AT THE COLUMN C/L; ${detailRef(craneColumnTitles.tie)}`]},
-   {at:[X((tabEnd+face)/2),Y(-tp/2)],labels:['TAB BY OTHERS']},
+   {at:[X((tabEnd+face)/2),Y(-tp/2)],labels:['TAB, FIELD WELD TO (E) COL.']},
    {at:[X(bc.x+bc.d/2),Y(-bc.bf/4)],labels:[`${bcName}`,'(REF.), FIELD VERIFY']},
    {at:[X(-cc.d/2),Y(-cc.bf/2)],labels:[`${ccName}`,'(CAP AND GIRDERS ABOVE DASHED)']}
   ];
@@ -195,7 +200,7 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   for(const z of [zTop,zBot])svg+=breakLine([X(ccFace-cc.tf)-5,Z(z)],[X(ccFace)+5,Z(z)])+breakLine([X(face)-5,Z(z)],[X(face+bc.tf)+5,Z(z)]);
   void flange;
   // Plate, tab, slots with the sleeves centered and the bolts.
-  svg+=rect(X(ccFace),Z(w/2),(plateEnd-ccFace)*kk,w*kk,'runway-line')+rect(X(tabEnd),Z(w/2),(face-tabEnd)*kk,w*kk,'reference-line');
+  svg+=rect(X(ccFace),Z(w/2),(plateEnd-ccFace)*kk,w*kk,'runway-line')+rect(X(tabEnd),Z(w/2),(face-tabEnd)*kk,w*kk,'runway-line');
   for(const x of bolts)svg+=vSlot(X(x),Z(0),t.slot.length*kk,t.slot.width*kk)+circle(X(x),Z(0),tg.od/2*kk,'runway-line')+circle(X(x),Z(0),db/2*kk,'annotation')+line([X(x),Z(0)-t.slot.length/2*kk-4],[X(x),Z(0)+t.slot.length/2*kk+4],'grid-line');
   svg+=line([X(ccFace)-4,Z(0)],[X(plateEnd)+8,Z(0)],'grid-line');
   // Dimensions above: the plate length and its end clearance, the clear gap; below the slots: edge, pitch and the tab lap.
@@ -214,7 +219,9 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
    svg+=rect(X(x),Y(-above),tf*kk,(above+belowT)*kk,cls);
    for(const y of [-above,belowT])svg+=breakLine([X(x)-5,Y(y)],[X(x+tf)+5,Y(y)]);
   }
-  svg+=rect(X(ccFace),Y(0),(plateEnd-ccFace)*kk,tp*kk,'runway-line')+rect(X(tabEnd),Y(tp),(face-tabEnd)*kk,tt*kk,'reference-line');
+  svg+=rect(X(ccFace),Y(0),(plateEnd-ccFace)*kk,tp*kk,'runway-line')+rect(X(tabEnd),Y(tp),(face-tabEnd)*kk,tt*kk,'runway-line');
+  // Field fillets both faces of the tab at the building column flange.
+  for(const [y,sgn] of [[tp,-1],[tp+tt,1]] as const)svg+=`<path class="runway-line" d="M${n(X(face))},${n(Y(y))}l${n(-tab.weld*kk)},0L${n(X(face))},${n(Y(y)+sgn*tab.weld*kk)}Z"/>`;
   // Shop fillets both faces of the plate at the crane column flange.
   for(const [y,sgn] of [[0,-1],[tp,1]] as const)svg+=`<path class="runway-line" d="M${n(X(ccFace))},${n(Y(y))}l${n(tg.weld*kk)},0L${n(X(ccFace))},${n(Y(y)+sgn*tg.weld*kk)}Z"/>`;
   for(const x of bolts){
@@ -239,13 +246,14 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=labelColumn(left,X(ccFace-cc.tf)-36-Math.max(lw,89),Z(zTop)+10,secBottom);
   const lx=X(x1)+60,items:{at:XY;labels:string[]}[]=[
    {at:[X((ccFace+tabEnd)/2),Z(w/2)],labels:[`${plateLabel},`,specGrade(astmSpec('plate',t.plate.Fy,t.plate.Fu).toUpperCase())]},
-   {at:[X(bolts[0])+t.slot.width/2*kk,Z(t.slot.length/4)],labels:[`${size(t.slot.width)} X ${size(t.slot.length)} VERT. SLOTS;`,`TRAVEL ${size(tg.travel)} EACH WAY`]},
-   {at:[X((tabEnd+plateEnd)/2),Z(-w/2)],labels:['TAB BY OTHERS, STD HOLES','TO MATCH (REF.)']},
+   {at:[X(bolts[0])+t.slot.width/2*kk,Z(t.slot.length/4)],labels:[`${size(t.slot.width)} X ${size(t.slot.length)} VERT. SLOTS;`,`TRAVEL ${travelMax(tg.travel)} EACH WAY`]},
+   {at:[X((tabEnd+plateEnd)/2),Z(-w/2)],labels:[`${tabLabel}, STD.`,`${size(tg.hole)} HOLES TO MATCH THE SLOTS`]},
    {at:[X(face+bc.tf),Z(-w/2-inch)],labels:[`${bcName} FLANGE (REF.)`]}
   ];
   svg+=labelColumn(items,lx,Z(zTop)+2,Z(zBot));
   // The section's callouts beside the section, so their leaders stay clear of the elevation's dimensions.
-  const parts:{at:XY;labels:string[]}[]=[
+  const parts:{at:XY;labels:string[];weld?:string;field?:boolean}[]=[
+   {at:[X(face)-tab.weld*kk*.4,Y(tp+tt)+tab.weld*kk*.4],labels:['TAB TO (E) COL. FLANGE, BOTH','FACES, FULL DEPTH (FIELD)'],weld:size(tab.weld),field:true},
    {at:[X(bolts[0]+washer.each/2),Y(-(sleeve-tp)-washer.t/2)],labels:[`${washer.bar?'BAR':'PL'} WASHER ${size(washer.t)} X ${size(washer.w)}`,`X ${size(washer.h)}${washer.bar?', CONT. OVER THE BOLTS':', EACH BOLT'} (J3.2)`]},
    {at:[X(bolts[0]+tg.od/2),Y(tp/2)],labels:[`SLEEVE ${size(tg.od)} OD X ${size(tg.hole)} BORE`,`X ${size(sleeve)} (PLATE + 1/16")`]},
    {at:[X(bolts[0]+hx.corners/2),Y(tp+tt+hx.washer.t+hx.nut/2)],labels:[`${t.bolts.count} - ${size(db)} DIA. ${t.bolts.grade},`,'PRETENSIONED AGAINST THE SLEEVES']}
@@ -261,10 +269,11 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   ['CRANE COLUMN',`${ccName}, ASTM A992, ${dim(c.height)} BASE TO CAP; ${k.base.toUpperCase()} BASE, BRACED ACROSS THE RUNWAY BY THE COLUMN TIE AT ${dim(zt)} AND ALONG IT BY THE CRANE-LEVEL BRACING`],
   ['BUILDING COLUMN',`${bcName} PER SURVEY, ${dim(bc.x)} C/L TO C/L FROM THE CRANE COLUMN, ${dim(g.gap)} CLEAR BETWEEN FLANGES`],
   [`TIE FORCES TO THE BUILDING COLUMN (${lrfd})`,cr?`GIRDER TIE ${force(cr.ties.girderTie)} AT ${dim(gt.y)}; COLUMN TIE ${force(cr.ties.columnTie)} AT ${dim(zt)} (H ONLY; S-00)`:'-'],
-  ['COLUMN TIE',`${plateLabel}; ${t.bolts.count} - ${size(db)} DIA. ${t.bolts.grade} IN ${size(t.slot.width)} X ${size(t.slot.length)} VERT. SLOTS AT ${size(t.bolts.pitch)}, EDGE ${size(t.bolts.edge)}; ${weld(tg.weld)} FILLETS BOTH FACES`],
+  ['COLUMN TIE',`${plateLabel}; ${t.bolts.count} - ${size(db)} DIA. ${t.bolts.grade} IN ${size(t.slot.width)} X ${size(t.slot.length)} VERT. SLOTS AT ${size(t.bolts.pitch)}, EDGE ${size(t.bolts.edge)}; ${weld(tg.weld)} SHOP FILLETS BOTH FACES`],
+  ['COLUMN TIE TAB (ON THE BUILDING COLUMN)',`${tabLabel}, STD. HOLES; ${weld(tab.weld)} FIELD FILLETS BOTH FACES; RATIOS BEARING / WELD / WEB ${ratio('crane-column-tab-bearing')} / ${ratio('crane-column-tab-weld')} / ${ratio('crane-column-tab-web-yielding')}`],
   ...(cr?[['NODAL BRACE (AISC APP. 6): STRENGTH REQ. / PROVIDED',`${force(cr.brace.strength.required)} (0.01 PR, PR ${force(cr.brace.Pr)}) / ${force(cr.brace.strength.provided)}`],
    ['NODAL BRACE: STIFFNESS REQ. / PROVIDED',`${force(cr.brace.stiffness.required,'stiffness')} / ${force(cr.brace.stiffness.provided,'stiffness')} (BUILDING COLUMN IN SERIES WITH THE TIE, SLEEVE PLAY INCLUDED)`],
-   ['SLOT TRAVEL: DEMAND / PROVIDED, EACH WAY',`${size(cr.slot.demand)} / ${size(cr.slot.capacity)} (LARGER COLUMN SHORTENING PL/EA ${force(Math.max(cr.slot.crane,cr.slot.building),'length')} + TOLERANCE ${size(cr.slot.tolerance)})`]]:[]),
+   ['SLOT TRAVEL: DEMAND / PROVIDED, EACH WAY',`${travelMin(cr.slot.demand)} / ${travelMax(cr.slot.capacity)} (LARGER COLUMN SHORTENING PL/EA ${force(Math.max(cr.slot.crane,cr.slot.building),'length')} + TOLERANCE ${size(cr.slot.tolerance)})`]]:[]),
   ['RATIOS: BRACE STIFFNESS / STRENGTH / BOLTS / WELD / SLOTS',`${ratio('crane-column-brace-stiffness')} / ${ratio('crane-column-brace-strength')} / ${ratio('crane-column-tie-bolts')} / ${ratio('crane-column-tie-weld')} / ${ratio('crane-column-tie-slot-travel')}`],
   ['RATIOS: BUILDING COLUMN H1 / DRIFT',`${ratio('building-column-interaction')} / ${ratio('building-column-drift')}`],
   ...(()=>{const e=elementSummary(s,c2=>c2.group==='Crane column'||c2.group==='Building column'),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b2)=>b2!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, CRANE AND BUILDING COLUMN CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})()
@@ -272,8 +281,8 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const notes=[
   `THE NEW CRANE COLUMNS CARRY THE RUNWAY GIRDER REACTIONS ON THEIR CAPS TO THEIR OWN FOOTINGS (AIST TR-13 §5.9.2; AISC DG7 SEPARATE CRANE COLUMN). THE EXISTING BUILDING COLUMNS TAKE ONLY THE HORIZONTAL FORCES OF THE GIRDER TIE AND THE COLUMN TIE LISTED ON S-00; NO RUNWAY VERTICAL LOAD.`,
   `FIELD VERIFY EACH BUILDING COLUMN (SIZE, PLUMBNESS, FACE LOCATION FROM THE CRANE COLUMN LINE AND ELEVATIONS) BEFORE FABRICATING THE TIES. THE GIRDER TIE AND THE COLUMN TIE PLATE ARE CUT TO THE SURVEYED FACE; REPORT A CLEAR GAP UNDER ${dim(tg.minimumGap)} OR OVER ${dim(g.gap+inch)} TO THE ENGINEER OF RECORD.`,
-  `COLUMN TIE: SHOP WELD THE PLATE TO THE CRANE COLUMN FLANGE WITH ${weld(tg.weld)} FILLETS BOTH FACES, FULL DEPTH, E70XX. THE TAB ON THE BUILDING COLUMN AND ITS CONNECTION ARE BY OTHERS, FOR THE COLUMN TIE FORCE ON S-00, WITH STANDARD HOLES MATCHING THE SLOTS.`,
-  `PRETENSION THE COLUMN TIE BOLTS AGAINST THE STEEL SLEEVES; THE PLATE IS NOT CLAMPED. SET EACH SLEEVE CENTERED IN ITS SLOT WITH THE RUNWAY DEAD LOAD IN PLACE AND THE CRANE OFF THE RUNWAY. DO NOT WELD, SHIM OR TACK THE PLATE TO THE TAB: THE SLOTS LET THE COLUMNS SHORTEN INDEPENDENTLY ${size(tg.travel)} EACH WAY (DIFFERENTIAL SHORTENING PLUS ${size(k.tolerance??defaultSlotTolerance)} ERECTION TOLERANCE).`,
+  `COLUMN TIE: SHOP WELD THE PLATE TO THE CRANE COLUMN FLANGE WITH ${weld(tg.weld)} FILLETS BOTH FACES, FULL DEPTH, E70XX. ${tabLabel} ON THE BUILDING COLUMN AT ITS WEB LINE, ${astmSpec('plate',t.plate.Fy,t.plate.Fu).toUpperCase()}, STANDARD ${size(tg.hole)} HOLES MATCHING THE SLOTS: FIELD WELD TO THE EXISTING COLUMN FLANGE WITH ${weld(tab.weld)} FILLETS BOTH FACES, FULL DEPTH, AT THE SURVEYED LOCATION. WELDING TO THE EXISTING COLUMN: BASE METAL CONFIRMATION, APPROVED WPS, PREHEAT AND LOAD CONDITION PER THE EXISTING BUILDING NOTES ON S-00.`,
+  `PRETENSION THE COLUMN TIE BOLTS AGAINST THE STEEL SLEEVES; THE PLATE IS NOT CLAMPED. SET EACH SLEEVE CENTERED IN ITS SLOT WITH THE RUNWAY DEAD LOAD IN PLACE AND THE CRANE OFF THE RUNWAY. DO NOT WELD, SHIM OR TACK THE PLATE TO THE TAB: THE SLOTS LET THE COLUMNS SHORTEN INDEPENDENTLY ${travelMax(tg.travel)} EACH WAY (DIFFERENTIAL SHORTENING PLUS ${size(k.tolerance??defaultSlotTolerance)} ERECTION TOLERANCE).`,
   `ERECT EACH CRANE COLUMN PLUMB ON ITS BASE AND HOLD IT WITH TEMPORARY BRACING UNTIL THE COLUMN TIE AND THE CRANE-LEVEL BRACING ARE COMPLETE: THE COLUMN TIE IS THE CRANE COLUMN'S BRACE ACROSS THE RUNWAY (AISC 360 APPENDIX 6 NODAL BRACE). SET THE GIRDERS, THEN THE GIRDER TIES.`,
   `INSPECT THE COLUMN TIE SLEEVES, BOLTS AND SLOT TRAVEL WITH THE GIRDER TIES AT THE CRANE INSPECTION INTERVALS; RE-CENTER SLEEVES THAT BEAR ON A SLOT END.`
  ];

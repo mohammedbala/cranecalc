@@ -643,8 +643,11 @@ function sheetPlan(s:CalculationSnapshot,f:FramingSettings){
   // Each sheet is drawn once: the cover reads the others' text (abbreviations) before the set draws them.
   const once=<T,>(draw:()=>T)=>{let v:T|undefined;return ()=>v??=draw();};
   // A supplied-load analysis details nothing: no connection or detail sheets (S-00 gives the interface requirements).
+  // A topic continued on the next sheet keeps its subject with '(CONTINUED)', so no two sheets share a title.
+  const titles=new Set<string>();
   const details=(analysisOnly(p)?[]:packDetailSheets(detailTopics(s,f),p.units)).map((layout,i)=>{
-    const number=`S-${String(i+2).padStart(2,'0')}`,title=detailSheetTitle(layout);
+    const base=detailSheetTitle(layout),title=titles.has(base)?`${base} (CONTINUED)`:base;titles.add(base);
+    const number=`S-${String(i+2).padStart(2,'0')}`;
     return {number,name:`runway-${layout.topics.map(t=>t.key).join('-')}-sheet-arch-d`,title,details:layout.placed.flatMap(v=>[v.view.title,...(v.view.subdetails??[])]),render:once(()=>detailSheetSvg(s,number,title,layout))};
   });
   const sheets=[{number:'S-01',name:'runway-plan-sheet-arch-d',title:'GENERAL ARRANGEMENT',details:[...arrangementDetails,...(existingClearanceShown(s)?[existingClearanceTitle]:[])],render:once(()=>planSheetSvg(s,f))},...details];

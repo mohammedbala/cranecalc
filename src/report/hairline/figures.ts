@@ -2,6 +2,7 @@ import type {ProjectInput} from '../../engine/types';
 import {Scene} from './scene';
 import {bracket,column,girders,rail,steelTop,stiffeners,supportGeometry,ties,wheel} from './parts';
 import {activeColumnCap} from '../../engine/columnCapInputs';
+import {girderEndFork} from '../../engine/craneColumnInputs';
 import {defaultColumnBase} from '../../engine/columnBaseInputs';
 import {activeEndStop} from '../../engine/endStopInputs';
 
@@ -51,13 +52,13 @@ function supportAssemblyScene(p:ProjectInput){
  S.marker(n.rail!,'rail',34,-18,[xw+120,y,g.rail.z+g.rail.height*.6]).marker(n.girder!,'girder',-8,26,[-g.show*.85,y+G.bf/2,G.z0+G.d*.5]).marker(n.bearing!,'bearing/plate',30,16,[xb,y+g.bearing.width/2,G.z0*.5])
   .marker(n.support!,cap?'cap/plate':'bracket',44,8,cap?[cap.plate.length/2,0,-cap.plate.thickness/2]:[0,g.seat.projection*.5,zs-60]).marker(n.column!,'column',30,10,cap?[c.bf/2,c.d/2-c.tf,foot+200]:[c.bf/2,-c.tf,foot+200]);
  // Lateral restraint: the top-flange ties, or the girder end fork on a column cap.
- if(p.details&&!cap)S.marker(n.tie!,p.details.brace.arrangement==='cap-angle'?'cap-angle':'tie',30,-24,[g.gap/2+80,y*.35,G.z0+G.d-G.tf-40]);else if(cap&&n.tie)S.marker(n.tie,'bearing/stiffener',-34,10,[xb,G.bf/2,G.z0+G.d*.5]);
+ if(p.details&&!cap)S.marker(n.tie!,p.details.brace.arrangement==='cap-angle'?'cap-angle':'tie',30,-24,[g.gap/2+80,y*.35,G.z0+G.d-G.tf-40]);else if(cap&&n.tie&&girderEndFork(p))S.marker(n.tie,'bearing/stiffener',-34,10,[xb,G.bf/2,G.z0+G.d*.5]);
  // The longitudinal system (strut and bracing) is outside this view: its marker is on the longitudinal force F it carries.
  S.marker(n.longitudinal!,'load/F',-6,-22,[xw-330,y,zh-20]);
  S.label(c.existing?`EXISTING ${c.name}`:c.name,[0,cap?c.d/2:-c.d,top+(cap?-G.d*.2:12*25.4)],0,-8,'middle');
  S.label(supportName[g.support],cap?[cap.plate.length/2,cap.plate.width/2,-cap.plate.thickness]:[-g.seat.length/2,g.seat.projection,zs],cap?8:-6,14,cap?'start':'end',true);
  if(p.details&&!cap)S.label(p.details.brace?.arrangement==='cap-angle'?'CAP TIEBACK':'TOP TIE',[g.gap/2+80,y*.35,G.z0+G.d-G.tf-40],40,-21,'start',true);
- return {S,options:{az:56,title:'Load path through a support',desc:`Isometric view of a runway support: wheel, rail, girder end with its bearing, the support, ${cap?'the column cap (the end fork restrains the top flange; no tie)':'the top-flange tie'} and the column. Numbered markers follow the load path listed in the summary table: rail, girder, bearing, support, column, base where there is one, lateral restraint and the longitudinal force. P vertical wheel load, H side thrust, F longitudinal force. The near girder is omitted for clarity.`,width:400,height:320}};
+ return {S,options:{az:56,title:'Load path through a support',desc:`Isometric view of a runway support: wheel, rail, girder end with its bearing, the support, ${cap?girderEndFork(p)?'the column cap (the end fork restrains the top flange; no tie)':'the column cap (the top flange is restrained by the girder tie to the building column, beyond the view)':'the top-flange tie'} and the column. Numbered markers follow the load path listed in the summary table: rail, girder, bearing, support, column, base where there is one, lateral restraint and the longitudinal force. P vertical wheel load, H side thrust, F longitudinal force. The near girder is omitted for clarity.`,width:400,height:320}};
 }
 export function supportAssemblyFigure(p:ProjectInput,o:{className?:string}={}){const {S,options}=supportAssemblyScene(p);return S.render({...options,className:o.className});}
 /** Where the summary figure's markers, leaders and labels sit, for checks. */
