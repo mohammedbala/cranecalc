@@ -132,7 +132,7 @@ describe('stepped column: step local checks by hand',()=>{
 });
 
 describe('configured stepped columns (support stepped-column)',()=>{
- const A:RunwayConfig={...defaultRunwayConfig,title:'Stepped A',capacity:20,control:'cab',cmaa:'C',bays:4,span:30,girder:'rolled',structure:'existing',support:'stepped-column',tie:'paired-bars',railElevation:32,craneSpan:70};
+ const A:RunwayConfig={...defaultRunwayConfig,title:'Stepped A',capacity:20,control:'cab',cmaa:'C',bays:4,span:30,girder:'rolled',structure:'existing',support:'stepped-column',tie:'paired-bars',railElevation:32,craneSpan:70,columnShape:'W40X199',buildingColumnShape:'W14X159'};
  const B:RunwayConfig={...defaultRunwayConfig,title:'Stepped B',capacity:10,control:'cab',cmaa:'C',bays:3,span:25,girder:'capped',structure:'existing',support:'stepped-column',tie:'cap-angle',railElevation:26,craneSpan:60};
  for(const [name,cfg,tie] of [['20 t cab, 4 × 30 ft rolled, paired bars',A,'paired-bars'],['10 t cab, 3 × 25 ft capped, cap tieback angles',B,'cap-angle']] as const)it(name,()=>{
   const p=buildProject(cfg),c=p.existingColumn!,s=c.step!,g=stepGeometry(p)!;
@@ -144,7 +144,8 @@ describe('configured stepped columns (support stepped-column)',()=>{
   const face=tie==='cap-angle'?p.details!.brace.capAngle!.columnFace??p.details!.brace.flangeAttachment?.columnFace:p.details!.brace.flangeAttachment?.columnFace;
   expect(face).toBeCloseTo(g.tieDistance,6);
   const items=p.configurator!.selections!.map(v=>v.item);
-  expect(items).toContain('Lower shaft (stepped column)');expect(items).toContain('Upper shaft (stepped column)');
+  if(!cfg.columnShape){expect(items).toContain('Lower shaft (stepped column)');expect(items).toContain('Upper shaft (stepped column)');}
+  else expect(c.shape).toBe(cfg.columnShape);
   const r=calculate(p);
   expect(r.errors).toEqual([]);
   expect(r.steppedColumn).toBeDefined();expect(r.checks.some(v=>v.id==='step-basis')).toBe(false);

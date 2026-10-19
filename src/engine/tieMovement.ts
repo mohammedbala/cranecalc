@@ -42,8 +42,10 @@ export function tieMovements(s:CalculationSnapshot){
  // strain over the span, or on a bolted continuous girder over the distance from its locating support.
  const reach=p.system==='simple'?Math.max(...p.spans):Math.max(0,...continuousBearings(p).map(v=>v.distance));
  const thermal=ss?alpha*reach*Math.max(ss.temperatureRise,ss.temperatureFall):0;
- const support=r.bracket?.service.deflection?.value??r.rolledBracket?.service.deflection?.value??r.taperedHaunch?.service.deflection?.value??r.existingBracket?.service.seatDeflection?.value;
- const supportSource=r.bracket||r.rolledBracket||r.taperedHaunch?'designed bracket':r.existingBracket?'new seat on the existing bracket (existing support deformation excluded)':undefined;
+ // On a column step the app models the support: the step's rotation over the tie distance and the cap flexure (steppedColumn.ts).
+ const step=s.steppedColumn?.stepVertical;
+ const support=r.bracket?.service.deflection?.value??r.rolledBracket?.service.deflection?.value??r.taperedHaunch?.service.deflection?.value??r.existingBracket?.service.seatDeflection?.value??step?.value;
+ const supportSource=r.bracket||r.rolledBracket||r.taperedHaunch?'designed bracket':r.existingBracket?'new seat on the existing bracket (existing support deformation excluded)':step?'existing step: the column\'s rotation at the step over the tie distance plus the cap flexure':undefined;
  const cranes=p.cranes.length,impact=Math.max(...p.cranes.map(c=>c.impact));
  return {setback,cyclicLongitudinal:cyclicRotation*depth,longitudinal:rotation*depth+thermal,thermal,cyclicRotation,rotation,
   support,supportSource,cranes,impact,

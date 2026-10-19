@@ -151,7 +151,18 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   );
  }else if(usesRolledBracket(p))checks.push(...rolledSeatChecks(p,e,g,V,T,C,tMin,compared));
  else if(usesTaperedHaunch(p))checks.push(...haunchSeatChecks(p,e,g,V,T,C,tMin,compared));
- else if(activeStep(p))checks.push(byOthers('end-bearing-seat','Step cap holes and nut clearance',`The seat is the existing step cap of the stepped column (its bearing, flexure and the lower shaft under it: Stepped column checks): survey the cap, shim the bearing plates to the theoretical elevation (steel shims, full bearing, at most ${shim.plies||3} plies, ${f(shim.max||12.7)} max.), field drill the cap to the bearing pattern after the girder is lined and leveled, clear of the cap-to-shaft welds, and confirm nut clearance below the cap.`));
+ else if(activeStep(p)){
+  // The existing step cap is the seat, and the app has its geometry (stepGeometry): the bearings on the cap along and
+  // across the runway, the nuts below the cap clear of the lower crane-side flange and its cap welds, and the bolt
+  // bearing in the cap. Only the survey tolerances are left to the field.
+  const c=p.existingColumn!,st=c.step!,cap=st.cap,gw=st.girderOffset,w=st.capWeld??5/16*inch,Fu=c.Fu;
+  const xo=gw+gauge/2,xi=gw-gauge/2,outer=c.d/2,inner=c.d/2-c.tf,clear=Math.min(xo-outer,inner-xi)-w;
+  checks.push(
+   compared('end-bearing-seat-fit','Bearings and bolts fit on the step cap (along the runway)',(locates?0:simpleSupportInput(p).endGap/2)+bs.length+seatSettingTolerance,cap.length/2,'length','g/2+N+t_{set}\\le L_c/2',`The existing step cap PL ${f(cap.thickness)} × ${f(cap.width)} × ${f(cap.length)} (survey): ${locates?'the bearing, and its bolts, on the cap':'each girder bearing, and its bolts, on its half of the cap at a shared grid'}, with the 1/8 in bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in).`),
+   compared('end-bearing-seat-across-fit','Bearing plate on the step cap (across the runway)',Math.max(gw+bs.width/2,-(gw-bs.width/2)),cap.width/2,'length','e_w+b/2\\le B_c/2',`The bearing plate ${f(bs.width)} wide, centered on the girder web ${f(gw)} from the lower-shaft centroid, within the cap ${f(cap.width)} wide (centered on the lower shaft).`),
+   compared('end-bearing-wrench-step','Nut clearance below the step cap · lower crane-side flange and cap welds',C,clear,'length','\\min(x_o-d_l/2,\\;d_l/2-t_{fl}-x_i)-w\\ge C_1',`Bearing bolts ${f(gauge)} apart across the runway, at ${f(xi)} and ${f(xo)} from the lower-shaft centroid, either side of the crane-side flange (${f(inner)} to ${f(outer)}): the nuts below the cap clear the flange face by ${f(Math.min(xo-outer,inner-xi))}, less the cap weld leg ${f(w)}${st.capWeld?' (surveyed)':' (assumed 5/16 in, not surveyed)'}, against the wrench clearance C₁ = ${f(C)} (AISC Manual Table 7-16). The inner nuts are inside the column, between the flanges.`),
+   compared('end-bearing-seat-bearing','Step cap · bolt bearing / tearout',V,plateBearing(db,g.hole,cap.thickness,Fu,Math.max(e.bolts.edge,cap.length/2-g.rows[1]),g.spacing,method).capacity,'force','R_n=\\min(1.2l_ctF_u,2.4dtF_u)',`Field-drilled standard holes in the existing cap (the lower shaft's F_u = ${format(Fu,'stress',u,3)}).`));
+ }
  else if(!activeColumnCap(p))checks.push(byOthers('end-bearing-seat','Bracket seat holes and nut clearance',`The seat is by others: survey the seats, shim the bearing plates to the theoretical elevation (steel shims, full bearing, at most ${shim.plies||3} plies, ${f(shim.max||12.7)} max.), and field drill or ream the seat holes to the bearing pattern after the girder is lined and leveled; provide nut clearance below the seat and a seat that carries the bolt forces reported here.`));
  return checks;
 }

@@ -72,7 +72,9 @@ const idRules:Rule[]=[
  T(/^(brace-basis|bracket-receiver|bracket-load-path|haunch-stiffener-required|step-stiffener-required|building-seismic-runway)$/,'input'),
  T(/-(basis|receiver|survey)$/,'input'),
  // By others
- T(/^(supporting-structure|brace-by-others)$/,'by-others'),T(/-by-others$/,'by-others'),
+ T(/^(supporting-structure|brace-by-others)$/,'by-others'),
+ // A crane-level strut the stepped column depends on (open while the column alone fails): new steel by the engineer of record.
+ T(/^crane-level-strut$/,'by-others'),T(/-by-others$/,'by-others'),
  // Classification: section/element slenderness, applicability tests feeding a strength check, F13.1 capacity modifier
  T(/^(compact-flange|compact-web|cap-proportion|flange-net|column-brackets|hook-bolts)$/,'classification'),
  T(/^cap-angle-plate-slenderness$/,'detailing'),T(/(-slenderness|-slope)$/,'classification'),T(/^cap-angle-column-holes$/,'classification'),T(/^end-stop-stiffener$/,'classification'),
@@ -82,6 +84,8 @@ const idRules:Rule[]=[
  // Movement capacity (design)
  D(/^(rotation-clearance|simple-guide-travel|rail-expansion-gap|rail-joint-slot|end-bearing-travel)$/,'movement'),
  D(/(slot-travel|-deflection|-rotation|-drift(-wind)?|rail-gauge)$/,'movement'),
+ // Twist of a stepped column's lower shaft at the step: the factored small-rotation limit and the service movement.
+ D(/^column-lower-twist(-movement)?$/,'movement'),
  D(/^rail-twist$/,'movement',true),D(/^(vertical|lateral|rail-head)$/,'movement'),
  D(/-plate-movement$/,'axial'),
  // Detailing: dimensions, sizes, fit and clearances
