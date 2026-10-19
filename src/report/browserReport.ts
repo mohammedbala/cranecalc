@@ -21,7 +21,8 @@ export async function createBrowserReport(input:ProjectInput,revision:string,fra
   const worker=new Worker(new URL('../engine/worker.ts',import.meta.url),{type:'module'});
   const finish=()=>{clearTimeout(timeout);worker.terminate();};
   const timeout=setTimeout(()=>{finish();reject(Error('Report calculation timed out. Reduce the model size and try again.'));},120000);
-  worker.onmessage=event=>{finish();event.data.error?reject(Error(event.data.error)):resolve(event.data.snapshot);};
+  // The worker posts progress messages while it calculates; only the final snapshot or error settles the report.
+  worker.onmessage=event=>{if(!event.data.snapshot&&!event.data.error)return;finish();event.data.error?reject(Error(event.data.error)):resolve(event.data.snapshot);};
   worker.onerror=event=>{finish();reject(Error(event.message||'Report calculation failed.'));};
   worker.postMessage({input,requestId:'report'});
  });

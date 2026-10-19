@@ -55,11 +55,13 @@ test('designs new freestanding columns with base plates and footings',async({pag
  await expect(page.getByRole('button',{name:'Generate output',exact:true})).toBeEnabled({timeout:540000});
  await page.getByRole('button',{name:'Drawings'}).click();
  const tabs=page.locator('.drafting-views button');
- // The new column and bracing details are on the third detail sheet, the last of the set.
- await expect(tabs.filter({hasText:'S-04'})).toHaveCount(1,{timeout:120000});
+ // The new columns and footings are on S-04; the longitudinal bracing (with the torsion brace) on S-05, the last sheet.
+ await expect(tabs.filter({hasText:'S-05'})).toHaveCount(1,{timeout:120000});
  await tabs.filter({hasText:'S-04'}).first().click();
  await expect(page.locator('.drafting-linework svg')).toHaveAttribute('aria-label',/^S-04/);
  await expect(page.locator('.drafting-linework svg')).toContainText('FOOTING / SECTION');
+ await tabs.filter({hasText:'S-05'}).first().click();
+ await expect(page.locator('.drafting-linework svg')).toHaveAttribute('aria-label',/^S-05/);
  await expect(page.locator('.drafting-linework svg')).toContainText('BRACED BAY / ELEVATION');
  expect(errors).toEqual([]);
 });
@@ -118,7 +120,7 @@ test('edits an issued sheet in the CAD editor and carries the edit into the outp
 test('builds a project from a template and from the quick configurator',async({page})=>{
  const errors=watch(page);
  await page.goto('/');
- await expect(page.locator('.template-card')).toHaveCount(12);
+ await expect(page.locator('.template-card')).toHaveCount(16);
  // The configurator summary sizes the girder for the chosen crane.
  await page.locator('.template-card').first().getByRole('button',{name:'Customize'}).click();
  await expect(page.locator('.config-summary')).toContainText(/W\d+X\d+/,{timeout:60000});
