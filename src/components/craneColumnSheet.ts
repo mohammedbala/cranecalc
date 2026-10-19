@@ -164,7 +164,7 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const tieW=Math.max(d.brace.gussetThickness+2*d.brace.thickness,b.tw);
   // The girder ties where the tie geometry puts them along the runway (the checks' stations): the cap tieback angles and
   // flange ties set back from the bearings, the stiffener ties at the bearing centers.
-  const near=(x:number)=>Math.abs(x-grid.x)<1e-6,ca=isCapAngleTie(p)?capAngleGeometry(p):undefined,ftg=flangeTieGeometry(p),stg=stiffenerTieGeometry(p);
+  const near=(x:number)=>Math.abs(x-grid.x)<1e-6,ca=isCapAngleTie(p)?(()=>{try{return capAngleGeometry(p);}catch{return undefined;}})():undefined,ftg=flangeTieGeometry(p),stg=stiffenerTieGeometry(p);
   const ties=ca?ca.stations.filter(v=>near(v.station)).map(v=>v.offset):ftg?ftg.stations.filter(v=>near(v.station)).map(v=>v.tieX-v.station):stg?stg.stations.filter(v=>near(v.station)).map(v=>v.offset):centers;
   const tieAt=[...new Set((ties.length?ties:centers).map(v=>Math.round(v)))].sort((a,c)=>a-c);
   for(const y of tieAt)svg+=rect(X(gt.from),Y(y+tieW/2),(gt.to-gt.from)*kk,tieW*kk,'runway-line');
