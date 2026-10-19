@@ -153,5 +153,7 @@ describe('configured stepped columns (support stepped-column)',()=>{
   // Every check passes where it is evaluated: the sizing makes the arrangement work.
   expect(r.checks.filter(v=>v.status==='fail').map(v=>`${v.id} ${v.utilization?.toFixed(3)}`)).toEqual([]);
   for(const v of r.checks.filter(v=>v.group==='Stepped column'))expect(classifyCheck(v).rule,v.id).not.toBe('default');
+  // Paired bars on the bearing stiffeners land off the upper shaft's web: its flange bending, torsion and fatigue there.
+  if(tie==='paired-bars')for(const id of ['column-upper-tie-flange','column-upper-tie-fatigue']){const v=r.checks.find(k=>k.id===id);expect(v?.status,id).toBe('pass');expect(classifyCheck(v!).rule,id).toBe('id');}
  },600000);
 });

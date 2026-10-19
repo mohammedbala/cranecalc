@@ -8,6 +8,9 @@ import {sectionProperties} from './section';
 import {simpleSupportInput} from './simpleSupports';
 import {activeEndBearing,continuousBearings} from './endBearingInputs';
 import {format} from './units';
+import {activeStep} from './steppedColumnInputs';
+import {upperShaftSection} from './steppedColumn';
+import {fatigueThresholdKsi,finiteLife,KSI} from './fatigueConstants';
 import {latexNumber,withinLimit} from './math';
 
 const inch=25.4,alpha=12e-6,install=1/16*inch;
@@ -148,6 +151,8 @@ export function tieMovementChecks(s:CalculationSnapshot,ctx:{force:number;member
  checks.push(compared('tie-move-weld','Tie gusset root welds · tie force with movement',weld(gw,longitudinal,F),available(.6*m.Fexx,method,.75,2),'stress',single?'f_w=\\left[\\frac{F}{2b}+\\frac{M+Va+Fe}{t_gb}+\\frac{V}{2b}\\right]/(0.707w)':'f_w=\\left[\\frac{F}{2b}+\\frac{M+Va}{t_gb}+\\frac{V}{2b}\\right]/(0.707w)',`Governing ${gw.name}. The moment about the vertical axis${single?', including the lap couple,':''} is taken as a couple on the two fillet lines at the gusset thickness; forces added by magnitude.${slideRoots}`));
  const fatigueRoot=roots.reduce((a,x)=>{const range=r.demands.braceFatigue/(x.b*tg)+6*(act(x,cyclic,fatigueFriction).m+lap(r.demands.braceFatigue))/(x.b*tg**2),cap=Math.min(fatigueSpectrumBin('C',1,totalCycles).allowable,transverseFilletFatigue(tg,x.weld,totalCycles).capacity);return range/cap>a.range/a.cap?{x,range,cap}:a;},{x:roots[0],range:0,cap:1});
  checks.push(compared('tie-move-root-fatigue','Tie gusset roots · fatigue with imposed movement',fatigueRoot.range,fatigueRoot.cap,'stress',single?'f_{sr}=\\frac{\\Delta F}{bt_g}+\\frac{6(M_s+V_sa+\\Delta Fe)}{bt_g^2}\\le F_{SR}':'f_{sr}=\\frac{\\Delta F}{bt_g}+\\frac{6(M_s+V_sa)}{bt_g^2}\\le F_{SR}',`Governing ${fatigueRoot.x.name}. Tie force range plus the single-crane rotation movement${single?' and the lap couple range ΔF·e':''}, every cycle; transverse fillet root (AISC A-3.1 item 8.2 with R_FIL) bounded by Category C.${slide?` Column-end slide: the root range is bounded by the sleeve friction range 2μ_u(F_s + ΔF) as the end shear, and at the column gusset by its couple over the sleeve rows.`:''}`,['aisc-fatigue']));
+ // A stepped column's existing upper shaft under the column gussets of a stiffener tie (off the web, at the bearing stiffeners).
+ checks.push(...upperShaftUnderGusset(s,F,r.demands.braceFatigue,hg,totalCycles));
  // Vertical movement at the column gusset.
  const byOthers=!mv.supportSource;
  if(rel){
@@ -185,4 +190,30 @@ export function tieMovementChecks(s:CalculationSnapshot,ctx:{force:number;member
   checks.push({id:'tie-move-support',group:'Tie movement',title:'Bracket by others · vertical deflection limit for rigid ties',status:'excluded',equation:'\\Delta_s\\le(F_{SR}-f_{sr})L^2/(3Ew)',capacity:allowance,quantity:'length',note:`Criterion for the bracket designer: single-crane vertical deflection at the bearing at most ${fmt(allowance)} for the bars' remaining fatigue range. Release the column gusset with sleeved slots to remove this limit.`,referenceIds:['tieback-practice']});
  }
  return checks;
+}
+
+/**
+ * The existing upper shaft of a stepped column under the column gussets of a paired-bar stiffener tie: each gusset is
+ * welded to the inner flange in line with its girder's tie-side bearing stiffener, a distance a along the runway from the
+ * upper shaft's web (the grid), so the tie force F bends the flange out of plane and, with one girder loaded at a shared
+ * grid, twists the shaft by F·a. Mechanics models (references 'existing-column', 'aisc-fatigue' partial):
+ *  - flange local bending: a plastic strip of length h_g + 2a′ (the force spread at 45° from the gusset to the web face,
+ *    a′ = a − t_w/2) cantilevering a′ from the web face: F a′ ≤ φF_y(h_g + 2a′)t_f²/4 (a yield-line mechanism is stronger);
+ *    the gusset and its weld within the flange;
+ *  - torsion: T = F·a carried in Saint-Venant torsion of the upper shaft alone: τ = T t_f/J ≤ φ0.6F_y;
+ *  - fatigue of the flange at the gusset weld toe: the elastic strip stress range 6ΔF a′/((h_g + 2a′)t_f²) at the
+ *    all-cycle count, Category E (the bound for a fillet-welded attachment; Table A-3.1 item to be verified).
+ */
+function upperShaftUnderGusset(s:CalculationSnapshot,F:number,dF:number,hg:number,cycles:number):CheckResult[]{
+ const p=s.input,st=activeStep(p),g=stiffenerTieGeometry(p);if(!st||!g)return [];
+ const up=upperShaftSection(p).section,J=sectionProperties(up).J,u=p.units,fmt=(v:number)=>format(v,'length',u,3),tw=up.tw,tf=up.tf,bf=up.bf,Fy=up.Fy;
+ const a=Math.max(0,...g.stations.map(v=>Math.abs(v.offset))),arm=Math.max(0,a-tw/2),strip=hg+2*arm,tg=p.details!.brace.gussetThickness,w=p.details!.brace.connection.weldSize;
+ if(arm<=1e-6)return [];
+ const bend=F*arm/available(Fy*strip*tf**2/4,p.method,.9,1.67),fit=(a+tg/2+w)/(bf/2),T=F*a,tor=T*tf/J/available(.6*Fy,p.method,.9,1.67);
+ const ratio=Math.max(bend,fit,tor),range=6*dF*arm/(strip*tf**2),FSR=Math.max(fatigueThresholdKsi.E*KSI,finiteLife(1.1,cycles));
+ const where=`The column gussets are welded to the existing upper shaft's inner flange (${fmt(bf)} × ${fmt(tf)}, ${upperShaftSection(p).source}) in line with the tie-side bearing stiffeners, ${fmt(a)} along the runway from its web (a′ = ${fmt(arm)} from the web face), gusset ${fmt(hg)} high.`;
+ return [compared('column-upper-tie-flange','Upper shaft (existing) · flange bending and torsion under the off-web tie gussets',ratio,1,'ratio','\\frac{Fa^\\prime}{\\phi F_y(h_g+2a^\\prime)t_f^2/4};\\;\\frac{Fa\\,t_f/J}{\\phi0.6F_y};\\;\\frac{a+t_g/2+w}{b_f/2}\\le1',
+   `${where} Tie force F = ${format(F,'force',u,3)} on one gusset: flange bending ${bend.toFixed(2)} (plastic strip ${fmt(strip)} long cantilevering a′; a yield-line mechanism is stronger), torsion of the upper shaft from one girder loaded at a shared grid, T = F·a = ${format(T,'moment',u,3)} in Saint-Venant torsion alone (J = ${format(J,'inertia',u,3)}): ${tor.toFixed(2)}; gusset and weld within the flange half width ${fit.toFixed(2)}.${ratio>1?' Not adequate: move the gusset over the web, add a stiffener behind the flange, or have the engineer of record evaluate the existing shaft.':''}`,['existing-column','aisc-connections']),
+  compared('column-upper-tie-fatigue','Upper shaft (existing) · flange fatigue at the tie gusset weld toe (Category E)',range,FSR,'stress','f_{sr}=\\frac{6\\Delta F a^\\prime}{(h_g+2a^\\prime)t_f^2}\\le F_{SR}',
+   `${where} Tie force range ΔF = ${format(dF,'force',u,3)}: the strip's elastic bending stress range at the weld toe, ${format(range,'stress',u,3)}, against Category E (a fillet-welded attachment, the bound category; Table A-3.1 item to be verified) at the all-cycle count ${cycles.toLocaleString('en-US')}: F_SR = ${format(FSR,'stress',u,3)}.`,['aisc-fatigue','existing-column'])];
 }
