@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {cappedDemonstrationProject} from '../src/engine/demonstration';
 import {girderSegments,independentBearings,railClipStations,simpleSupportChecks} from '../src/engine/simpleSupports';
 import {validateProject,fingerprint} from '../src/engine/calculate';
+import {neutralDetails} from '../src/engine/detailTemplate';
 import {createDetailCollector} from '../src/engine/detailAnalysis';
 import {createSupportForceEnvelope,sideReactions} from '../src/engine/bracketForces';
 import {sectionProperties} from '../src/engine/section';
@@ -110,5 +111,17 @@ describe('independent girder ends',()=>{
   input.details!.brace.flangeAttachment!.enabled=true;input.details!.endBearing!.enabled=true;
   // With the bracket by others the support details carry the bracket design forces.
   input.details!.bracket!.enabled=false;expect(simpleSupportSheetSvg(s)).toContain('PENDING CALCULATION');
+ });
+});
+
+describe('simple-span end gap from the template',()=>{
+ it('sizes the gap for the joint demand, rounded up to 1/8 in, at least 1 in',()=>{
+  const inch=25.4,p=cappedDemonstrationProject();p.system='simple';
+  const d=neutralDetails(p),gap=d.simpleSupport!.endGap;
+  expect(gap).toBeGreaterThanOrEqual(inch-1e-9);expect(Math.abs(gap/(inch/8)-Math.round(gap/(inch/8)))).toBeLessThan(1e-9);
+  // A long span with large end rotations: the gap grows past 1 in in 1/8 in steps.
+  const long=structuredClone(p);long.spans=long.spans.map(()=>45*12*inch);
+  const g2=neutralDetails(long).simpleSupport!.endGap;expect(g2).toBeGreaterThanOrEqual(gap);
+  expect(Math.abs(g2/(inch/8)-Math.round(g2/(inch/8)))).toBeLessThan(1e-9);
  });
 });

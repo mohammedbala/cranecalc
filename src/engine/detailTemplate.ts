@@ -75,7 +75,10 @@ export function neutralDetails(p:ProjectInput):RunwayDetails{
  // The end stop is sized after the details (sizeEndStop).
  const details:RunwayDetails={
   material:{Fy:50*ksi,Fu:65*ksi,Fexx:70*ksi},
-  simpleSupport:{...defaultSimpleSupport,guideTravel:bearing.travel},
+  // The end gap between adjacent simple-span girders: the simple-joint-gap demand (the larger girder's thermal growth,
+  // both end rotations over the depth and both setting tolerances) rounded up to the next 1/8 in, at least 1 in, so a
+  // gap at its limit on paper is not left to rounding.
+  simpleSupport:{...defaultSimpleSupport,guideTravel:bearing.travel,endGap:Math.max(defaultSimpleSupport.endGap,up(12e-6*Math.max(...p.spans)*defaultSimpleSupport.temperatureRise+2*b.d*demands.rotation+2*defaultSimpleSupport.settingTolerance,inch/8))},
   brace:{width:5*inch,thickness:.375*inch,length:tieLength,reach:tieLength,gussetThickness:.75*inch,connectionLength:up(tieStart+tieConnection-rootStart,.25*inch),
    connection:{rows:2,gauge:2.5*inch,pitch:2.25*inch,edge:1.25*inch,thickness:.375*inch,diameter:.625*inch,grade:'A325',surface:'B',projection:1.5*inch,weldSize:weld,weldLength:5*inch},
    ...(simple?{flangeAttachment:{enabled:true,longitudinalSetback:tieSetback,saddleLength:saddle.length,saddleThickness:saddle.thickness,webGap,clearance:.25*inch,weldSize:saddleWeld,columnFace:tieStart+tieLength+tieBarGap(saddleWeld)}}:{}),
