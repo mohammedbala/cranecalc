@@ -20,6 +20,7 @@ import {innerFlangeForce,stepSeatChecks} from './stepSeat';
 import type {SupportReactionSet} from './supportReactions';
 import {latexNumber} from './math';
 import {format} from './units';
+import {columnTwistChecks,twistRotationLimit} from './columnTwistLimit';
 
 /**
  * Girder on the step of an existing stepped building column (configurator support 'stepped-column'; plan §1B, WP-2).
@@ -140,7 +141,7 @@ export function upperShaftSection(p:ProjectInput):{source:string;section:Section
  * girder reaction R, shifted e·θ along the runway by the twist, adds a weak-axis moment R·e·θ that it leaves out; θ ≤ 0.02
  * keeps that within 2% of the eccentric moment R·e the strong-axis H1 carries. A larger twist is not admissible.
  */
-export const steppedTwistLimit=.02;
+export const steppedTwistLimit=twistRotationLimit;
 export const fixedBaseRatio=(b:{base:'pinned'|'fixed';top:'braced'|'free'})=>b.base==='fixed'?(b.top==='braced'?.8/.7:2.1/2):1;
 type ShaftKey='upper'|'lower';
 type Capacity=ExistingColumnResult['capacity'];
@@ -373,12 +374,12 @@ export function steppedColumnChecks(p:ProjectInput,a:SteppedColumnAnalysis):Chec
  if(z.torsion){const t=z.torsion;
   add('column-lower-torsion','Lower shaft · torsion from the longitudinal force offset (TR-13 §5.9.2)',Math.max(t.U,t.shear/t.shearCapacity),1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)\\le1;\\quad\\tau_t=\\frac{Tt_f}{J}\\le\\phi0.6F_y',
    `Each girder's longitudinal force reaches its locating step on the girder line, ${L(t.offset)} from the lower centroid: torque ${M(t.T)} (${t.case.id}, support x=${L(t.station)})${z.support?.exit==='girder-strut'?`, the column keeping 1/${Math.round(1/z.support.strut!.share)} of the force (girder-line strut at least ${z.support.strut!.ratio} k_c = ${format(z.support.strut!.required,'stiffness',u,3)})`:''}. Carried down the lower shaft in Saint-Venant torsion alone (a lower-bound equilibrium solution; no warping stress relied on, the upper shaft not credited): flange shear ${format(t.shear,'stress',u,3)} against ${format(t.shearCapacity,'stress',u,3)}; H1 of the lower shaft with that row ${t.U.toFixed(3)}. The twist is limited by column-lower-twist (factored) and column-lower-twist-movement (service).`,t.case.id,review);
-  const tw=r.twist!,limitNote=`Twist from Saint-Venant torsion of the lower shaft alone over its height ${L(c.seatElevation)} (warping and the upper shaft not credited: an upper bound on the twist), θ = T h/(G J).`;
-  add('column-lower-twist','Lower shaft · twist at the step under the factored torque (small-rotation limit)',t.twist,tw.limit,'ratio','\\theta_u=\\frac{T_uh}{GJ}\\le0.02\\ \\mathrm{rad}',
-   `${limitNote} Largest factored torque ${M(tw.T)} (${tw.case}): θ_u = ${t.twist.toFixed(4)} rad, moving the girder bearing ${L(t.slip)} along the runway.${z.support?.exit==='girder-strut'&&z.support.strut?` The crane-level strut on the girder line is specified at least ${z.support.strut.ratio} k_c, so the column keeps at most 1/${z.support.strut.ratio+1} of the force (${z.support.strut.ratio>10?'stiffer than the 10 k_c minimum to hold this limit and the service movement':'the minimum'}).`:''} Basis (mechanics): the column analysis is first order (small rotations); the girder reaction R, shifted e·θ along the runway by the twist, adds a weak-axis moment R·e·θ that it leaves out, and θ ≤ ${tw.limit} rad keeps that within ${Math.round(tw.limit*100)}% of the eccentric moment R·e that the strong-axis H1 carries. A larger twist is not admissible: ${z.support?.exit==='girder-strut'?'a stiffer crane-level strut on the girder line':'a crane-level strut on the girder line (or a horizontal torsion brace at the step)'} holds the girder line.`,t.case.id,['tr13-column-path']);
-  const move=t.service.slip+tw.braceMove;
-  add('column-lower-twist-movement','Lower shaft twist · girder movement along the runway at the step (service)',move,z.drift.limit,'length','\\Delta=\\theta_se+\\Delta_{brace}\\le\\min(H/400,\\;2\\,\\mathrm{in})',
-   `${limitNote} Unfactored single-crane traction at the girder line, torque ${M(t.service.T)} (every crane start and stop): θ_s = ${t.service.twist.toFixed(4)} rad, the girder line at the locating step moving θ_s·e = ${L(t.service.slip)} along the runway${tw.braceMove>0?`, in series with the bracing's crane-level displacement ${L(tw.braceMove)} (brace-drift)`:''}: ${L(move)} against the runway-level limit ${L(z.drift.limit)} that the bracing displacement takes (AIST TR-13 §5.5, H/400 or 2 in). The rail's shift across the runway, e(1 − cos θ_s) = ${L(tw.shift)}, is added to the column's lateral displacement (column-drift).`,undefined,['tr13-service','tr13-column-path']);
+  // The twist limits on the one basis and wording of every column that twists (columnTwistLimit.ts).
+  const tw=r.twist!,strut=z.support?.exit==='girder-strut'?z.support.strut:undefined;
+  checks.push(...columnTwistChecks(p,{...t,case:{id:tw.case}},{label:'Lower shaft',ids:{rotation:'column-lower-twist',movement:'column-lower-twist-movement'},at:'step',limit:z.drift.limit,braceMove:tw.braceMove,refs,movementUsed:false,
+   model:`Twist from Saint-Venant torsion of the lower shaft alone over its height ${L(c.seatElevation)} (warping and the upper shaft not credited: an upper bound on the twist), K_θ = GJ/h.`,
+   path:strut?`The crane-level strut on the girder line is specified at least ${strut.ratio} k_c, so the column keeps at most 1/${strut.ratio+1} of the force (${strut.ratio>10?'stiffer than the 10 k_c minimum to hold these limits':'the minimum'}).`:undefined,
+   remedy:`Remedy when exceeded: ${strut?'a stiffer crane-level strut on the girder line':'a crane-level strut on the girder line (or a horizontal torsion brace at the step)'} holds the girder line; the slot travel at the step's bearings is checked without the twist movement (the existing step's own review).`}));
  }
  add('column-drift','Stepped column · runway-level lateral displacement',z.drift.value,z.drift.limit,'length','\\Delta\\le\\min(H/400,\;2\\,\\mathrm{in})',`Service side thrust and static eccentric reaction of the crane, stepped column alone (${c.strong.base} base, ${c.strong.top} top), at the rail head ${L(z.railElevation)}${r.twist?.shift?`, plus the rail's shift across the runway from the lower-shaft twist, e(1 − cos θ_s) = ${L(r.twist.shift)}`:''}; AIST TR-13 §5.3 limit ${L(z.drift.limit)} (H = ${L(z.support!.girderTop)} to the top of the girder). Frame and roof diaphragm flexibility excluded.`,undefined,['tr13-service']);
  checks.push(...columnSupportChecks(p,z,label,refs));

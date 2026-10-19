@@ -126,6 +126,40 @@ export function columnTorsion(column:Section,T:number,z:number,base:TorsionBase)
  return {a,B:w.B,stress:w.stress,shear:t*column.tf/s.J*(1-1/Math.cosh(z/a))+1.5*t/(s.h0*column.bf*column.tf),twist:t*(z-a*Math.tanh(z/a))/(G*s.J),Ktheta:G*s.J/(z-a*Math.tanh(z/a))};
 }
 
+/** Torsion brace as the configurator first sets it: PL 1/2 in A572 Gr. 50 top and bottom, 5/16 in fillets, two rows of bolt pairs. */
+export const defaultTorsionBrace={thickness:inch/2,weld:5*inch/16,Fy:50*ksi,Fu:65*ksi,rows:2};
+/** The torsion brace applies at a bracket seat off the column axis (not a column cap) with designed bracing and design.torsionBrace. */
+export function torsionBraceActive(p:ProjectInput){return designsBracing(p)&&!!bracingDesign(p).torsionBrace&&!activeColumnCap(p)&&girderOffset(p)>0;}
+/**
+ * The torsion brace's hold on the column twist: at every column the strut segments that frame in are moment-connected
+ * to it in plan by the torsion plates (design.torsionBrace), so the strut is continuous in plan through the columns.
+ * A locating column twists θ at the seat under the torque T = F e; each strut segment resists the rotation θ of its near
+ * end in weak-axis bending, k = 4EI_y/L − (2EI_y/L)²/(4EI_y/L + K_f), its far end held by the far column's own torsion
+ * K_θ and the strut beyond it (K_f, worked outward from the runway ends, where K_f is the end column's K_θ alone); the
+ * column resists it in torsion with K_θ = T/θ (columnTorsion, its base condition, to the seat height hs). Springs in
+ * parallel: θ = T/(K_θ + Σk), the column keeps K_θ/(K_θ + Σk) of the torque and each segment end takes k/(K_θ + Σk) of
+ * it as a weak-axis moment. One torque at a time is the least stiff case: torques of the same sense at adjacent
+ * columns bend the segments between them in double curvature, stiffer. `keep` is the largest share any locating column
+ * keeps (the one with the least strut stiffness, a runway-end column), `moment` the largest share one strut end takes;
+ * both per unit torque.
+ */
+export function torsionBraceStiffness(p:ProjectInput,column:Section,hs:number,model:TorsionBase){
+ if(!torsionBraceActive(p))return undefined;
+ const s=strutSection(p),Iy=sectionProperties(s).Iy,E=s.E,Ktheta=columnTorsion(column,1,hs,model).Ktheta,l=bracingLayout(p),n=p.spans.length;
+ // Segment i (between columns i and i+1) seen from one end, its far column held by K_θ and the strut beyond.
+ const seg=(L:number,Kf:number)=>{const a=4*E*Iy/L,b=2*E*Iy/L;return a-b*b/(a+Kf);};
+ const right:number[]=Array(n+1).fill(0),left:number[]=Array(n+1).fill(0);
+ for(let j=n-1;j>=0;j--)right[j]=seg(p.spans[j],Ktheta+right[j+1]);
+ for(let j=1;j<=n;j++)left[j]=seg(p.spans[j-1],Ktheta+left[j-1]);
+ const columns=l.stations.map((_,j)=>{const segs=[...(j>0?[{span:j-1,k:left[j]}]:[]),...(j<n?[{span:j,k:right[j]}]:[])];return {grid:j+1,segs,K:segs.reduce((a,v)=>a+v.k,0),locating:l.locating[j]};}).filter(v=>v.locating&&v.segs.length);
+ if(!columns.length)return undefined;
+ const worst=columns.reduce((a,b)=>b.K<a.K?b:a);
+ return {Ktheta,Iy,E,K:worst.K,grid:worst.grid,segments:worst.segs.length,keep:Ktheta/(Ktheta+worst.K),moment:Math.max(...columns.flatMap(v=>v.segs.map(x=>x.k/(Ktheta+v.K)))),
+  /** Locating columns (where the torque enters) and every column (where the plates are). */
+  grids:columns.map(v=>v.grid),all:l.stations.map((_,j)=>j+1)};
+}
+export type TorsionBraceStiffness=NonNullable<ReturnType<typeof torsionBraceStiffness>>;
+
 export const strutSection=(p:ProjectInput):Section=>{const d=bracingDesign(p).strut;return {...loadAiscSection({...p.section,kind:'rolled'},d.shape),Fy:d.Fy,Fu:d.Fu};};
 export const strutProperties=(p:ProjectInput)=>sectionProperties(strutSection(p));
 
@@ -224,6 +258,8 @@ export interface BracingSystemResult {
  separation?:{across:number;along:number;building:number;buildingEntered:boolean;required:number};
  /** Torque from the offset rod at the top of the column where it ends, and the column torsion ratio with it added to the governing case. */
  rodTorsion?:{T:number;U:number;base:number;H1:number;shear:number;model:TorsionBase};
+ /** The torsion brace at the locating columns (design.torsionBrace): its stiffness, geometry and the forces on its parts. */
+ torsionBrace?:TorsionBraceResult;
 }
 /** Connections, strut, seat weld, seismic drift and separation of the designed bracing. */
 export function bracingSystemAnalysis(p:ProjectInput,reactions:SupportReactionSet,brace:LongitudinalBracingResult,column:Section,columnResult?:ExistingColumnResult,base?:ColumnBaseResult):BracingSystemResult{
@@ -258,7 +294,50 @@ export function bracingSystemAnalysis(p:ProjectInput,reactions:SupportReactionSe
   const H1=t.U+(ratio>=.2?8/9:1)*rod.stress/available(column.Fy,p.method,.9,1.67),shear=(t.shear+rod.shear)/t.shearCapacity;
   rodTorsion={T,U:Math.max(H1,shear),base:Math.max(t.U,t.shear/t.shearCapacity),H1,shear,model};
  }
- return {geometry:g,outlines,layout,develop,strutForce:{H:strutCase.H,id:strutCase.id},seatForce:{F:seatCase.Hbay,id:seatCase.id},collector:Math.max(0,...cases.filter(c=>c.seismic).map(c=>c.Hbay)),welds:{top,base:bottom},seismic,separation,rodTorsion};
+ const torsionBrace=torsionBraceAnalysis(p,column,g,{H:strutCase.H,id:strutCase.id},{F:seatCase.Hbay,id:seatCase.id});
+ return {geometry:g,outlines,layout,develop,strutForce:{H:strutCase.H,id:strutCase.id},seatForce:{F:seatCase.Hbay,id:seatCase.id},collector:Math.max(0,...cases.filter(c=>c.seismic).map(c=>c.Hbay)),welds:{top,base:bottom},seismic,separation,rodTorsion,...(torsionBrace?{torsionBrace}:{})};
+}
+
+/**
+ * Torsion plates of the torsion brace at a strut end (design.torsionBrace), in mm: x along the runway from the column
+ * centerline, y across it from the column centerline toward the girder. One plate on the top flange of the strut and one
+ * under its bottom flange, each between the column flanges (width d - 2t_f), welded to both flanges (from the web-flange
+ * fillet clip to the flange tips) and to the web, split by a rod gusset where one passes and welded to it, and running
+ * out past the strut's coped end to `rows` pairs of bolts through the strut flange at `gauge` about the strut web.
+ */
+export function torsionBraceGeometry(p:ProjectInput,column:Section,g:ReturnType<typeof bracingGeometry>){
+ const tb=bracingDesign(p).torsionBrace;if(!tb)return undefined;
+ const s=g.strut,db=bracingDesign(p).strut.boltDiameter,shape=aiscShapeByName(column.catalogueId??p.existingColumn?.shape??'');
+ const clip=Math.max(0,(shape?shape.kdes*inch:column.tf)-column.tf)+inch/2,width=column.d-2*column.tf;
+ // Bolt pairs across the strut flange: the widest 1/4 in gauge that keeps the edge distance, at least 3 diameters.
+ const gauge=Math.max(3*db,Math.floor((s.bf-2*s.edge)/(inch/4)+1e-9)*inch/4),flange=s.end+s.cope;
+ const rows=Array.from({length:tb.rows},(_,i)=>flange+s.edge+i*s.pitch),end=rows.at(-1)!+s.edge;
+ // The strut web laps the tab (or rod A's gusset) on its girder face: the strut's centerline is off the column's.
+ const web=g.t/2+s.tw/2;
+ return {t:tb.thickness,weld:tb.weld,Fy:tb.Fy,Fu:tb.Fu,width,clip,gauge,rows,end,web,flange,
+  /** Plate unbraced between the column flange tips and the strut flange beyond its cope. */
+  free:Math.max(flange-column.bf/2,inch/4),
+  /** Plate centerlines above and below the work point. */
+  levels:[s.d/2+tb.thickness/2,-(s.d/2+tb.thickness/2)] as [number,number],
+  /** Fillet line along each column flange, both faces of the plate. */
+  flangeWeld:Math.max((column.bf-column.tw)/2-clip,inch)};
+}
+export interface TorsionBraceResult {
+ stiffness:TorsionBraceStiffness;geometry:NonNullable<ReturnType<typeof torsionBraceGeometry>>;
+ /** Factored torque at the seat (the whole girder force at the offset), the largest strut end moment in plan, and its case. */
+ T:number;M:number;caseId:string;
+ /** Per plate: axial share of the strut force, in-plane moment and shear; the strut force and its case. */
+ P:number;Mp:number;V:number;H:number;strutCaseId:string;span:number;
+}
+/** The torsion brace's forces (factored): the seat torque F e, the strut end moment it takes, half of each at each plate. */
+export function torsionBraceAnalysis(p:ProjectInput,column:Section,g:ReturnType<typeof bracingGeometry>,strut:{H:number;id:string},seat:{F:number;id:string}):TorsionBraceResult|undefined{
+ const stiffness=torsionBraceStiffness(p,column,p.existingColumn!.seatElevation,torsionBase(p)),geometry=torsionBraceGeometry(p,column,g);
+ if(!stiffness||!geometry)return undefined;
+ // The strut end moment M; its far end carries over at most half of it in the opposite sense, so the plan shear is at
+ // most 1.5M/L over the shortest span.
+ const T=seat.F*girderOffset(p),M=stiffness.moment*T,span=Math.min(...p.spans);
+ // Each plate: half the moment, half the strut force (the web lap is checked for all of it), half the end shear.
+ return {stiffness,geometry,T,M,caseId:seat.id,P:strut.H/2,Mp:M/2,V:1.5*M/span/2,H:strut.H,strutCaseId:strut.id,span};
 }
 /** Weld (both faces of the gusset) per unit length of the line, limited by the gusset and column web base metal (J2.4, J4.2). */
 export function connectionCapacities(p:ProjectInput,g:{t:number},column:Section){
@@ -395,6 +474,36 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
  }else if(br?.enabled){
   const Lw=Math.min(br.seatLength,column.bf)-inch/2,reach=girderOffset(p)-column.d/2,M=F*reach,fw=Math.hypot(F/Lw,6*M/Lw**2);
   add('brace-seat-weld','Crane-level strut','Bracket seat to column flange · collector fillet',fw,available(.6*m.Fexx*d.seatWeld/Math.SQRT2,method,.75,2),'lineForce','f=\\sqrt{\\left(\\frac{F}{L}\\right)^2+\\left(\\frac{6Fe}{L^2}\\right)^2}',`At every column the girder's locating bearing bolts deliver its longitudinal force F = ${f(F)} (${r.seatForce.id}) to the bracket seat, which a ${f(d.seatWeld,'length')} top fillet ${f(Lw,'length')} long welds to the column flange. The seat carries the couple F·e, e = ${f(reach,'length')} from the flange to the girder web, in its plane. Ribs not credited.`,['aisc-connections'],r.seatForce.id);
+ }
+ // Torsion brace at the locating columns: the strut moment-connected in plan by plates on its flanges, holding the
+ // column against the twist from the girder offset (torsionBraceStiffness). Its strut moment, plates, bolts and welds.
+ if(r.torsionBrace){
+  const tb=r.torsionBrace,tg=tb.geometry,ks=tb.stiffness,TB='Torsion brace',db=d.strut.boltDiameter,tp=tg.t;
+  const where=`At each locating column (grids ${ks.grids.join(', ')}) the girder's longitudinal force F reaches the column at the bracket seat, e = ${f(girderOffset(p),'length')} off its centerline: torque T = F·e = ${f(tb.T,'moment')} (${tb.caseId}). The strut ends there are moment-connected in plan by a PL ${f(tp,'length')} on the top flange and one under the bottom flange of the strut, each between the column flanges (${f(tg.width,'length')}), welded to both flanges and the web, and bolted to the strut flange beyond its cope with ${tg.rows.length} pairs of ${f(db,'length')} ${d.strut.grade} bolts at ${f(tg.gauge,'length')} gauge, ${bolting.callout.toLowerCase()}. The strut, moment-connected in plan at every column (grids ${ks.all.join(', ')}) and so continuous through them, resists the column's twist in weak-axis bending, each segment with 4EI_y/L less the give of its far column (its own torsion and the strut beyond); the column (K_θ = ${f(ks.Ktheta,'moment')}/rad) and the struts (ΣK_s = ${f(ks.K,'moment')}/rad at grid ${ks.grid}, the least) share T by stiffness: the column keeps ${ks.keep.toFixed(3)} of it (column-torsion, column-twist), one strut end takes at most ${ks.moment.toFixed(3)} of it, M = ${f(tb.M,'moment')}.`;
+  // Strut: the axial force with its own weight (strong axis) and the end moment in plan (weak axis), H1-1 with B1 on the
+  // weak-axis moment (Cm = 0.6: the far end's carry-over is of the opposite sense, reverse curvature, or none; AISC Appendix 8).
+  const Pe=Math.PI**2*S.E*sp.Iy/tb.span**2,alpha=method==='LRFD'?1:1.6,B1=Math.max(1,.6/Math.max(1e-9,1-alpha*H/Pe)),My=B1*tb.M;
+  const flex=Mw/str.major+My/str.minor,Us=alpha*H>=Pe?1e12:ratio>=.2?ratio+8/9*flex:ratio/2+flex;
+  add('brace-torsion-strut',TB,'Strut · compression with the torsion-brace moment in plan (H1)',Us,1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{B_1M_{ry}}{M_{cy}}\\right)\\le1',`${where} ${sg.shape} strut: P_r = ${f(H)} (${r.strutForce.id}), Pc = ${f(str.compression)}; M_rx = ${kD}wL²/8 = ${f(Mw,'moment')} (Mc = ${f(str.major,'moment')}); M_ry = B1 M = ${B1.toFixed(3)} × ${f(tb.M,'moment')} with Cm = 0.6 and Pe1 = π²EI_y/L² = ${f(Pe)} over the shortest span ${f(tb.span,'length')} (Mcy = ${f(str.minor,'moment')}, AISC F6). The largest axial force and the largest end moment are combined (conservative).`,['aisc-h','aisc-f6','aisc-e','tr13-column-path'],r.strutForce.id);
+  // Plate at the column flange tips, where it leaves the column: half the moment and half the strut force, its section
+  // split by a rod gusset (taken everywhere). In-plane flexure (F11 for a rectangular bar, Lb the free length to the strut
+  // flange, Cb = 1) and compression (E3, K = 1.2 over the free length) or tension yielding, linear sum; shear (G).
+  const w=tg.width,A=tp*(w-g.t),Z=tp*(w*w-g.t*g.t)/4,Sx=tp*(w**3-g.t**3)/(6*w),Fyp=tg.Fy,Ep=S.E,lam=tg.free*w/tp**2;
+  const Mpl=Math.min(Fyp*Z,1.6*Fyp*Sx),Mn=lam<=.08*Ep/Fyp?Mpl:lam<=1.9*Ep/Fyp?Math.min(Mpl,(1.52-.274*lam*Fyp/Ep)*Fyp*Sx):1.9*Ep/lam*Sx;
+  const KL=1.2*tg.free/(tp/Math.sqrt(12)),Fe=Math.PI**2*Ep/KL**2,Fcr=Fyp/Fe<=2.25?Fyp*.658**(Fyp/Fe):.877*Fe;
+  const plateAxial=tb.P/available(Fcr*A,method,.9,1.67),plateFlex=tb.Mp/available(Mn,method,.9,1.67),plateShear=tb.V/available(.6*Fyp*tp*w,method,1,1.5);
+  add('brace-torsion-plate',TB,'Torsion plates · in-plane flexure with axial force and shear',Math.max(plateAxial+plateFlex,plateShear),1,'ratio','\\frac{P}{\\phi P_n}+\\frac{M}{\\phi M_n}\\le1;\;\\frac{V}{\\phi0.6F_yA_g}\\le1',`${where} Each plate (Fy ${f(Fyp,'stress')}) takes half: M = ${f(tb.Mp,'moment')}, P = H/2 = ${f(tb.P)} (the web lap is checked for all of H), V = 1.5M/2L = ${f(tb.V)}. Section at the column flange tips, ${f(w,'length')} less a ${f(g.t,'length')} gusset: Mn = ${f(Mn,'moment')} (F11, Lb = ${f(tg.free,'length')} free to the strut flange, Lb d/t² = ${lam.toFixed(0)}); compression Fcr = ${f(Fcr,'stress')} (E3, KL = 1.2Lb); axial ${plateAxial.toFixed(3)} + flexure ${plateFlex.toFixed(3)}; shear ${plateShear.toFixed(3)}.`,['aisc-f11','aisc-e','aisc-connections']);
+  // Bolts: an elastic bolt group of two lines at the gauge and the rows at the pitch, under P along the runway, V across
+  // and the in-plane moment M (no plastic or ICR credit).
+  const n=tg.rows.length,xc=(tg.rows[0]+tg.rows[n-1])/2,dx=(tg.rows[n-1]-tg.rows[0])/2,Ip=2*tg.rows.reduce((a,x)=>a+(x-xc)**2,0)+2*n*(tg.gauge/2)**2;
+  const Rb=Math.hypot(tb.P/(2*n)+tb.Mp*(tg.gauge/2)/Ip,tb.V/(2*n)+tb.Mp*dx/Ip),bp=boltCapacity({grade:d.strut.grade,diameter:db,planes:1,surface:'B',shear:Rb,tension:0,method});
+  const bearB=Math.min(plateBearing(db,hole,tp,tg.Fu,sg.edge,sg.pitch,method).capacity,plateBearing(db,hole,sg.tf,S.Fu,sg.edge,sg.pitch,method).capacity),Rcap=Math.min(bp.slip,bp.shear,bearB);
+  add('brace-torsion-bolts',TB,'Torsion plate bolts · slip, shear and bearing (elastic group)',Rb,Rcap,'force','R=\\sqrt{\\left(\\frac{P}{n}+\\frac{Mg/2}{I_p}\\right)^2+\\left(\\frac{V}{n}+\\frac{Ms}{I_p}\\right)^2}\\le\\min(\\phi R_{slip},\\phi R_{nv},\\phi R_{bear})',`${where} Each plate: ${2*n} bolts, two lines at ${f(tg.gauge,'length')} and ${n} rows at ${f(sg.pitch,'length')}, I_p = ${f(Ip,'area')}; corner bolt ${f(Rb)} under P = ${f(tb.P)}, V = ${f(tb.V)}, M = ${f(tb.Mp,'moment')}. Per bolt: slip ${f(bp.slip)} (Class B, μ = 0.50, standard holes, J3.8), shear ${f(bp.shear)} (J3.6), bearing and tearout on the ${f(tp,'length')} plate and the ${f(sg.tf,'length')} strut flange ${f(bearB)} (J3.10). Slip-critical: the force reverses with every crane start and stop (AIST TR-13 §5.14, RCSC §4.3).`,['aisc-connections','tr13-bolting','rcsc-joints']);
+  // Welds to the column: the flange lines take the axial force and the moment as a couple across the plate width (the web
+  // line, loaded normal to the web, is not relied on); fillets on both faces of the plate.
+  const Mw2=tb.Mp+tb.P*tg.web,qf=(tb.P/2+Mw2/w)/tg.flangeWeld,qv=tb.V/2/tg.flangeWeld,fw=Math.hypot(qf,qv)/2;
+  const rw=Math.min(available(.6*m.Fexx*tg.weld/Math.SQRT2,method,.75,2),available(.6*tg.Fu*tp,method,.75,2)/2);
+  add('brace-torsion-weld',TB,'Torsion plates to column flanges · fillet welds',fw,rw,'lineForce','f=\\frac{1}{2L}\\sqrt{\\left(\\frac P2+\\frac{M+Pe_y}{b}\\right)^2+\\left(\\frac V2\\right)^2}',`${where} ${f(tg.weld,'length')} fillets both faces of each plate along each column flange, ${f(tg.flangeWeld,'length')} from the web-flange fillet clip (${f(tg.clip,'length')}) to the flange tip, E70XX, elastic, no directional increase: the axial force P = ${f(tb.P)} and the moment M + P e_y = ${f(Mw2,'moment')} (strut web ${f(tg.web,'length')} off the column centerline) as a couple across b = ${f(w,'length')}; the web line is not relied on (normal to the web). Limited by the weld metal and the plate base metal (J2.4, J4.2).`,['aisc-connections']);
  }
  const eb=activeEndBearing(p);
  if(r.seismic&&eb){

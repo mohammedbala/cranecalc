@@ -47,6 +47,10 @@ import {createRolledBracketCollector} from './rolledBracket';
 import {tiedToBuilding} from './craneColumnInputs';
 import {activeColumnCap} from './columnCapInputs';
 import {craneColumnRestraint,craneColumnLayout,tieShortening} from './craneColumn';
+import {existingColumnAnalysis} from './existingColumn';
+import {twistMovement} from './columnTwistLimit';
+import {girderOffset} from './newColumnBracing';
+import {activeStep} from './steppedColumnInputs';
 
 const inch=25.4,sixteenth=inch/16,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step;
 
@@ -134,6 +138,8 @@ export interface TieSizingDemands {
  braceForce:number;braceStiffness:number;
  /** Unfactored tie force between crane passes (dead load and a parked crane at the rail eccentricity), N (sustainedTieForce). */
  sustained:number;
+ /** A new column's twist movement at the bracket seat (columnTwistLimit.twistMovement), N/A elsewhere: the tie takes it. */
+ twist?:{service:number;factored:number;offset:number};
 }
 /**
  * The sizing demands. Force: the factored side thrust reaction at a support (girderEndEstimate), carried to the top
@@ -167,12 +173,20 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
  // t10, simulation cases 5 and 15 after the restraint change): the statics estimate was 0.87 to 0.97 of the analysis
  // tie force, so it is raised by 12%.
  return {force:tieForceCalibration*((lrfd?1.6:1)*r.lateral*torsion+eccentric+braceForce),range:Math.max(1.25*H,tieForceCalibration*(r.lateral*torsion+eccentricRange)),rotation:r.factored,serviceRotation:r.service,support:b?.enabled?Math.max(b.deflectionLimit,bracketServiceDeflection(p)??0):undefined,railLateral:(lrfd?1.6:1)*r.clipLateral,
-  braceForce,braceStiffness:(lrfd?1/.75:2)*(10*r.moment*Cd/props.h0+8*P)/Lbr,sustained};
+  braceForce,braceStiffness:(lrfd?1/.75:2)*(10*r.moment*Cd/props.h0+8*P)/Lbr,sustained,...(()=>{const t=seatTwist(p);return t.service||t.factored?{twist:t}:{};})()};
+}
+/** The new column's twist movement at the bracket seat the tie takes (tieMovements), as the calculation finds it. */
+function seatTwist(p:ProjectInput){
+ const c=p.existingColumn,none={service:0,factored:0,offset:0};if(!c?.enabled||!c.isNew||activeStep(p)||!p.details?.bracket?.enabled||activeColumnCap(p)||tiedToBuilding(p))return none;
+ try{return {...twistMovement(existingColumnAnalysis(p,supportReactions(p,sectionProperties(p.section)))),offset:girderOffset(p)};}catch{return none;}
 }
 
 /** A calculation snapshot carrying only the sizing demands, for the tie check functions. */
 function sizingSnapshot(p:ProjectInput,demand:TieSizingDemands):CalculationSnapshot{
- return {input:p,designAnalysis:{endRotation:demand.rotation,serviceRotation:demand.serviceRotation},
+ // The column twist enters tieMovements through the column result (twistMovement reads only its torsion).
+ // The movement θe grows as e² (the torque F e, the twist T/K) where the sizing moves the bracket reach.
+ const k=demand.twist?.offset?(girderOffset(p)/demand.twist.offset)**2:1,twist=demand.twist?{existingColumn:{torsion:{slip:k*demand.twist.factored,service:{slip:k*demand.twist.service}}}}:{};
+ return {input:p,...twist,designAnalysis:{endRotation:demand.rotation,serviceRotation:demand.serviceRotation},
   detailResults:{demands:{brace:demand.force,braceFatigue:demand.range,railLateral:demand.railLateral,braceSustained:demand.sustained},...(demand.support!==undefined?{bracket:{service:{deflection:{value:demand.support}}}}:{})}} as unknown as CalculationSnapshot;
 }
 
