@@ -31,16 +31,17 @@ import {existingColumnAnalysis,existingColumnChecks,existingColumnSection} from 
 import {existingWeldingDemand} from './existingWelding';
 import {baseDrift} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate,validateCapAngle} from './capAngleTie';
-import {simpleSupportInput} from './simpleSupports';
+import {simpleSupportInput,railClipStations} from './simpleSupports';
 import {seatSettingTolerance} from './fitTolerances';
 import {sizeWeldedBracket,bracketColumnFatigueRatio} from './bracketSizing';
 import {sizeRolledBracket} from './rolledBracketSizing';
 import {sizeColumnCap,columnCapSizingRatios} from './columnCapSizing';
 import {defaultRolledBracket,isRolledBracket} from './rolledBracketInputs';
 import {activeColumnCap,defaultColumnCap} from './columnCapInputs';
-import {capWorkPointDrop} from './columnCap';
+import {capWorkPointDrop,columnCapGeometry} from './columnCap';
 import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
+import {cantileverHeightLimit} from './runwaySeismic';
 import {columnGussetHeight,flangeTieFamily,flangeTieGeometry,stiffenerTieGeometry} from './tieGeometry';
 import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener,bracketServiceDeflection} from './flangeTieSizing';
 import {designSplices,type SplicesDesigned} from './spliceSizing';
@@ -80,6 +81,13 @@ export function normalizeConfig(input:RunwayConfig):{config:RunwayConfig;changes
  fix(c.support==='column-cap'&&c.structure!=='new',{structure:'new'},'A column cap sits on new freestanding columns: the columns are new.');
  // New freestanding columns are crane columns themselves: there is no building column to tie to or column step to bear on.
  fix(c.structure==='new'&&(c.support==='crane-column'||c.support==='stepped-column'),{support:'column-cap'},`New freestanding columns are crane columns themselves, with no existing building column to ${c.support==='crane-column'?'tie a crane column to':'bear on at a column step'}: the girders bear on column caps over the new columns.`);
+ // New freestanding columns are an ASCE 7-16 cantilever column system across the runway (runwaySeismic.ts, Table
+ // 12.2-1 G, §12.2.5.2), which validateExistingColumn limits to 35 ft from the base. The column stops at the top of the
+ // girder (bracket seats) or under it (column cap), below the top of rail, and its base plate sits on the grout above
+ // the floor (columnBaseElevation ≥ 0 with the footings flush with the slab), so a top of rail at most 35 ft above the
+ // floor keeps every new column within the limit, whatever girder the sizing chooses.
+ if(c.structure==='new'&&c.railElevation*foot>cantileverHeightLimit+1e-6){const from=c.railElevation,to=cantileverHeightLimit/foot;c.railElevation=to;
+  changes.push(`New freestanding runway columns are a cantilever column system (ASCE 7 Table 12.2-1, §12.2.5.2), limited to ${to} ft from the column base: the top of rail is lowered from ${from} ft to ${to} ft above the floor (the columns stop below the rail). A higher runway needs columns tied to a building frame: an existing building with crane columns tied to its columns, or its stepped columns.`);}
  fix(c.structure==='new'&&c.support==='by-others',{support:'twin-rib'},'New columns carry a bracket designed here: the support is the welded twin-rib seat.');
  fix(c.tie==='cap-angle'&&c.girder!=='capped',{tie:'paired-bars'},'The cap tieback angle bolts to a channel cap: the tie is paired flat bars on this rolled girder.');
  fix(c.tie!=='paired-bars'&&c.system==='continuous',{tie:'paired-bars'},'Continuous girders are tied at the bearing stiffeners: the tie is paired flat bars.');
@@ -348,7 +356,7 @@ function skeleton(cfg:RunwayConfig){
  p.verticalLimit=severe?1000:cfg.cmaa==='D'?800:600;p.lateralLimit=400;
  p.criteriaSource=`Fictitious example owner criteria: AIST Class ${cfg.buildingClass} building, CMAA Class ${cfg.cmaa} crane; vertical L/${p.verticalLimit}, rail-head lateral L/400.`;
  p.aist={...p.aist!,buildingClass:cfg.buildingClass,classConfirmed:true,buildingCycles:spectrum.repetitions,railDepth:depth,netFlangeArea:0,bottomBraceSpacing:longest,axialLength:longest,torsionalLength:longest,
-  runwayOnly:true,supportType:cfg.support==='column-cap'?'column':'bracket',clipSpacing:24*inch,railPad:depth>=5*inch,fastener:'clips',camber:0,fatiguePoint:'bottom-left',
+  runwayOnly:true,supportType:cfg.support==='column-cap'?'column':'bracket',clipSpacing:(cfg.railPad===false?30:24)*inch,railPad:cfg.railPad??depth>=5*inch,fastener:'clips',camber:0,fatiguePoint:'bottom-left',
   fatigueReference:'AISC 360 Table A-3.1, 1.1 · plain rolled bottom flange; full detail register in the package',
   cycleSource:`Fictitious example duty: ${count(N)} wheel-induced stress fluctuations in three duty bins (rated, half and light lifts), loaded and empty passes included. The bins are an assumed general-service proportion, not crane or owner data, so the fatigue checks govern by the all-cycle bound (the full fatigue load at every one of the ${count(N)} cycles); Miner's sum over the bins is listed for comparison until a sourced duty spectrum is entered.`};
  delete p.aist.classBasis;
@@ -547,6 +555,8 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  attachTie(p,cfg,trace);if(cfg.support!=='column-cap')setBearings(p);
  // Crane columns: the building column where the sized tie ends, the cap for the bearings as laid out, the column tie.
  if(cfg.support==='crane-column')finishCraneColumn(p,trace);
+ // The rail clips across the girder joints within the clip spacing, the bearings laid out again where the tie moved.
+ if(fitClipJoints(p,cfg,trace)){setBearings(p);if(cfg.support==='crane-column')finishCraneColumn(p,trace);}
  // The supports carry the bracket (or cap) and tie before the new column bases are sized for their reactions.
  const tie=sizedTieRatios(p),q=finishCapAngle(finishTie(withHaunch(withWeldedBracket(p),cfg,trace),tie));
  // The end stops sized again for the crane bumper force on the finished girder end (bearing stiffener, tie saddle).
@@ -554,7 +564,26 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  // A continuous girder longer than a practical piece: bolted field splices in the inflection regions (spliceSizing.ts).
  const spliced=designSplices(q);if(spliced){q.details!.splices=spliced.splices;trace.splice=spliced;}
  q.notes+=` ${overhangNote(estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control))}`;
- return logged(withBracketColumn(newColumns(cfg)?withCraneColumn(withCapColumn(withColumnBase(sizeBracing(q,baseTarget),cfg,trace),cfg),cfg,trace):withSteppedTie(withLongitudinalExit(withPreheat(finishSteppedColumn(withExistingRod(q),trace)),cfg,trace),cfg,trace),cfg,trace));
+ return withoutRailPad(logged(withBracketColumn(newColumns(cfg)?withCraneColumn(withCapColumn(withColumnBase(sizeBracing(q,baseTarget),cfg,trace),cfg),cfg,trace):withSteppedTie(withLongitudinalExit(withPreheat(finishSteppedColumn(withExistingRod(q),trace)),cfg,trace),cfg,trace),cfg,trace)),cfg,trace,logged);
+}
+/**
+ * The last resort for the rail clips across the simple-span girder joints, where fitClipJoints found neither a saddle
+ * setback nor a bearing-stiffener tie that keeps them within the 24 in clip spacing a rail pad allows (AIST TR-13, the
+ * aist rail-clips check): a thick top flange widens the clip-free zone at the tie saddle past half the spacing. Where
+ * the joint gap is within the 30 in TR-13 allows without a pad, the project is built with the rail bearing directly on
+ * the girder and the clips at most 30 in apart (the clip, its welds or bolts and the flange checks take the longer
+ * spacing). A high-cycle runway (CMAA D to F, AIST Class A or B) keeps its pad, and a configured pad is kept.
+ */
+function withoutRailPad(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace,logged:(q:ProjectInput)=>ProjectInput):ProjectInput{
+ if(cfg.railPad!==undefined||!p.aist?.railPad||highCycle(cfg)||p.system!=='simple'||!validateRunwayDetails(p).some(e=>e.includes(clipGapRule)))return p;
+ const ks=railClipStations(p),gap=Math.max(...ks.slice(1).map((x,i)=>x-ks[i]));
+ if(gap>30*inch+1e-6)return p;
+ const inner:SelectionTrace={},r=buildProject({...cfg,railPad:false},inner);
+ if(validateRunwayDetails(r).some(e=>e.includes(clipGapRule)))return p;
+ const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(2)} in`;
+ const why=`With a rail pad the clips stand at most ${len(p.aist.clipSpacing)} apart (AIST TR-13); across the girder joints the clips stand clear of the tie saddle (its end fillet and the clip's reach through the ${len(p.section.tf)} flange), ${len(gap)} apart, and neither the saddle at its farthest setback nor the tie on the bearing stiffener closes the gap: the rail bears directly on the girder (no pad: the configurator keeps one on high-cycle runways only, CMAA D to F or AIST Class A and B, and this is CMAA Class ${cfg.cmaa}, AIST Class ${cfg.buildingClass}) and the clips stand at most ${len(30*inch)} apart (TR-13 without a pad), checked for that spacing.`;
+ Object.assign(trace,inner,{pad:why});r.notes+=` ${why}`;
+ return logged(r);
 }
 /**
  * Existing columns: the specified preheat of the field welds to the column is the AWS D1.1 Category B minimum for the
@@ -868,13 +897,22 @@ function withSteppedTie(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):Pr
  const first=worst(q);if(first[1]<=1+1e-9)return q;
  const wu=aiscShapeByName(s.upper.shape)!,current=q.existingColumn!.d/inch;
  const deeper=['W36','W40','W44'].map(n=>aiscWShapes.filter(w=>w.name.startsWith(n+'X')&&w.bf>=wu.bf-1e-9&&w.d>current+.5).sort((a,b)=>a.weight-b.weight)[0]).filter(Boolean).map(w=>w!.name);
+ let closest:{r:ProjectInput;inner:SelectionTrace;shape:string;now:[string,number]}|undefined;
  for(const shape of deeper){
   const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner),now=worst(r);
+  if(now[1]<.9*first[1]&&(!closest||now[1]<closest.now[1]-1e-9))closest={r,inner,shape,now};
   if(now[1]<=1+1e-9){
    Object.assign(trace,inner,{lower:`${trace.lower??''} At the step the tie runs only to the upper shaft's inner face (${+((q.details.brace.flangeAttachment?.columnFace??q.details.brace.reach)/inch).toFixed(2)} in from the girder web on the ${q.existingColumn!.shape}), too short for the girder end movement (${Number.isFinite(first[1])?`tie sizing ratio ${first[0]} ${first[1].toFixed(2)} > 1.00`:'the bars do not fit between their bolt groups'}): the lightest deeper lower shaft whose longer tie passes, ${shape}.`.trim()});
    r.notes+=` The tie to the upper shaft at the step of a ${q.existingColumn!.shape} lower shaft is too short for the girder end movement: the example lower shafts are ${shape}.`;
    return {...r,configurator:{...cfg}};
   }
+ }
+ // None passes: the deeper shaft whose longer tie comes closest, where it lowers the worst ratio by a tenth or more (the checks report
+ // the tie). A tie that fits nowhere deeper stays as it is.
+ if(closest){const {r,inner,shape,now}=closest;
+  Object.assign(trace,inner,{lower:`${trace.lower??''} At the step the tie runs only to the upper shaft's inner face (${+((q.details.brace.flangeAttachment?.columnFace??q.details.brace.reach)/inch).toFixed(2)} in from the girder web on the ${q.existingColumn!.shape}), too short for the girder end movement (${Number.isFinite(first[1])?`tie sizing ratio ${first[0]} ${first[1].toFixed(2)} > 1.00`:'the bars do not fit between their bolt groups'}); no deeper lower shaft of the W36, W40 and W44 steps passes: the one whose longer tie comes closest, ${shape} (${now[0]} ${now[1].toFixed(2)}), the checks reporting the tie.`.trim()});
+  r.notes+=` The tie to the upper shaft at the step of a ${q.existingColumn!.shape} lower shaft is too short for the girder end movement: the example lower shafts are ${shape}, whose longer tie comes closest to its limits.`;
+  return {...r,configurator:{...cfg}};
  }
  return q;
 }
@@ -973,6 +1011,39 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
 }
 
 /**
+ * Rail clips across a simple-span girder joint: no clear gap between clips may exceed the clip spacing
+ * (validateRunwayDetails). With a direct flange saddle the end clips stand clear of the saddle, its end fillet and the
+ * clip's reach through the flange thickness (saddleClipSetback), so a long bearing or a thick flange opens the joint gap
+ * past the spacing. The saddle first moves toward the girder end, 1/16 in at a time up to its end fillet one weld size
+ * from the girder end (validated), to the least setback that closes the gap with no new misfit (the tie at a runway-end
+ * grid moves off the grid as the saddle does), which shortens the clip-free end zone without changing the tie; else the tie moves
+ * onto the bearing stiffener (tieOnBearingStiffener: no saddle, the clips then stand half their base from the girder
+ * ends). Returns true where the tie changed (the bearings are then laid out again).
+ */
+const clipGapRule='girder gap plus rail clip end setbacks exceed the maximum clip spacing';
+function fitClipJoints(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):boolean{
+ const d=p.details,a=d?.brace.flangeAttachment,gapped=(q:ProjectInput)=>validateRunwayDetails(q).some(e=>e.includes(clipGapRule));
+ if(!d||!p.aist||p.system!=='simple'||!a?.enabled||!gapped(p))return false;
+ const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`,ks=railClipStations(p);
+ const gap=Math.max(...ks.slice(1).map((x,i)=>x-ks[i])),errors=validateRunwayDetails(p).length;
+ const why=`with the tie saddle the rail clips stand clear of it at each girder end, so the clips across a girder joint would be ${len(gap)} apart, more than the ${len(p.aist.clipSpacing)} clip spacing`;
+ // The least setback that closes the gap (a saddle farther out moves the tie at a runway-end grid off the grid).
+ const far=Math.floor((d.bearing.length/2-a.saddleLength/2-a.weldSize)/(inch/16)+1e-9)*inch/16;
+ for(let x=Math.ceil(a.longitudinalSetback/(inch/16)-1e-9)*inch/16+inch/16;x<=far+1e-6;x+=inch/16){
+  const q=structuredClone(p);q.details!.brace.flangeAttachment!.longitudinalSetback=x;
+  if(!gapped(q)&&validateRunwayDetails(q).length<errors){
+   p.details=q.details;const note=`Rail clips: ${why}: the saddle sits ${len(x)} from the bearing center toward the girder end (its end fillet at least one weld size on the flange), so the clips come closer to the joint.`;
+   trace.tie=trace.tie?`${trace.tie} ${note}`:note;p.notes+=` ${note}`;return false;
+  }
+ }
+ const moved=tieOnBearingStiffener(p,{reach:cfg.reach===undefined&&cfg.support!=='stepped-column'?30*inch:undefined,bracket:d.bracket,face:a.columnFace,misfit:why});
+ if(!moved)return false;
+ p.details=moved.details;const note=`A direct flange saddle does not suit this rolled girder (${moved.why}): the paired flat bars bolt to the tie-side bearing stiffener, cut as one plate with its gusset extension past the flange tip, and the rail clips stand half their base from the girder ends.`;
+ trace.tie=note;p.notes+=` ${note}`;
+ return true;
+}
+
+/**
  * The cap tieback angle sized on the project (sizeCapAngle, held to the validateCapAngle fit). A girder end at a
  * runway-end grid whose centered bearing puts every angle's column end plate on the column web stays on the grid (as
  * setBearings does), and the angle is sized again. Returns the first fit rule no sized angle meets, else undefined.
@@ -988,7 +1059,9 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
  /** Crane columns: the column tie sizing and the column face to the girder web (finishCraneColumn). */
  columnTie?:string;craneFace?:string;
  /** Stepped column: the lower and upper shaft choice and the step stiffener or cap the step checks needed. */
- lower?:string;upper?:string;step?:string}
+ lower?:string;upper?:string;step?:string;
+ /** The rail without its pad, the clips at the 30 in no-pad spacing (withoutRailPad). */
+ pad?:string}
 const sizingRatioNames:Record<string,string>={tips:'top-flange tip stress (DG7, warping and second-order twist)',h1:'H1 top-flange interaction with the load-height LTB strength',stability:'elastic LTB stability margin',shear:'web shear'};
 /**
  * The configurator selection log kept on the project (configurator.selections): every member or part that differs
@@ -1021,6 +1094,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
    entered.girderShape?'a capped girder is sized as a pair unless both the W and the channel are named':''].filter(Boolean).join('; ');
   add('Girder',entered.girderShape?`${entered.girderShape} + cap channel blank`:`${auto} (sized)`,p.section.name,`${reason}. Configurator sizing ratios; the full calculation checks the section.`);
  }
+ if(design&&trace.pad)add('Rail pad','configurator default (pad under rails 5 in deep and deeper)',`None: rail on the girder, clips at most ${len(30*inch)} apart`,trace.pad);
  const col=p.existingColumn;
  if(design&&cfg.support==='crane-column')craneColumnLog(entered,cfg,p,trace,add,len);
  else if(design&&col?.enabled&&!entered.columnShape){
@@ -1218,7 +1292,13 @@ function withCraneColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):P
  // The lightest heavier W14 that passes; else the lightest whose member and bracing web pass, its cap ratios reported
  // (the cap's fatigue and fillets barely change with the column once the member passes).
  let best:{r:ProjectInput;inner:SelectionTrace;shape:string}|undefined;
- for(const shape of heavierColumns(q.existingColumn!.shape)){
+ // The cap stiffeners under the girder bearing stiffeners (at each bearing center) land on the column flanges with
+ // their fillets (validateColumnCap): where the bearings as laid out need a wider flange than this column's, the
+ // candidates are the W14s at least that wide, the jumbo shapes included (heavierColumns stops at W14X398).
+ const cap=activeColumnCap(q),w0=aiscShapeByName(q.existingColumn!.shape)!;
+ const flange=cap?Math.max(0,...columnCapGeometry(q).grids.flatMap(v=>v.stiffeners.map(x=>2*(Math.abs(x)+cap.stiffener.thickness/2+cap.stiffener.weld)))):0;
+ const shapes=flange>w0.bf*inch+1e-6?aiscWShapes.filter(s=>s.name.startsWith('W14X')&&s.weight>w0.weight&&s.bf*inch>=flange-1e-6).sort((a,b)=>a.weight-b.weight).map(s=>s.name).slice(0,8):heavierColumns(q.existingColumn!.shape);
+ for(const shape of shapes){
   const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner),now=worst(r);
   if(now.value<=1){Object.assign(trace,inner,{column:[trace.column,why[0].toUpperCase()+why.slice(1)].filter(Boolean).join('; ')});return {...r,configurator:{...cfg}};}
   if(now.member<=1&&!now.misfit&&!best)best={r,inner,shape};

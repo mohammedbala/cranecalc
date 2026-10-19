@@ -429,8 +429,10 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // The largest ratio over its limit that a step may still relieve.
  const governing=(r:Trial,stuck:Set<string>)=>Object.entries(r.ratios).map(([k,v])=>[k,v/sizingLimit(r.ratios,k,target)] as const).filter(([k,v])=>v>1&&!stuck.has(k)).sort((u,v)=>v[1]-u[1])[0]?.[0];
  // One bar or plate thickness at one column face, stepped until every ratio is within its limit or no step helps.
+ // The bolt each set starts from: 5/8 in, or 1/2 in where no set fits with the 5/8 in bolt groups (below).
+ let startBolt=.625*inch;
  const sizeAt=(face:number,thickness:number,slide=0)=>{
-  const x:TieProportions={...base,face,thickness,travel:faceDemand(face).travel,diameter:.625*inch,gusset:stiffenerGusset!==undefined?Math.min(stiffenerGusset,.75*inch):Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0,slide};
+  const x:TieProportions={...base,face,thickness,travel:faceDemand(face).travel,diameter:startBolt,gusset:stiffenerGusset!==undefined?Math.min(stiffenerGusset,.75*inch):Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0,slide};
   let r=evaluate(x);
   // A ratio no step relieves is set aside (the checks report it), so the others are still sized.
   const stuck=new Set<string>(),trial={grown:false,movement:false};
@@ -445,6 +447,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   return {r,trial};
  };
  const tried:number[]=[];
+ const searchFaces=():ProjectInput|undefined=>{
  for(const face of faces){
   let atFace:Trial|undefined,previous:number|undefined,faceMovement=false;tried.push(face);
   for(const thickness of thicknesses){
@@ -466,6 +469,13 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   // slotted column gusset).
   if(!atFace||!faceMovement||evaluations>budget)break;
  }
+ return undefined;
+ };
+ let passed=searchFaces();if(passed)return passed;
+ // No set fits at any face with 5/8 in bolts (the bars need clear length between their two bolt groups, e.g. on a short
+ // tie to the upper shaft at a column step): the same search from the 1/2 in bolt, whose groups are shorter (pitch and
+ // edge distances scale with the bolt, J3.3 and J3.4). Only where no set fitted, so a tie that fits keeps its sizing.
+ if(!best){startBolt=.5*inch;tried.length=0;passed=searchFaces();if(passed)return passed;}
  // The imposed movement still binds at 1/4 in at every face the search reached (a configured reach, or 30 in): a 3/16 in
  // bar or plate, more flexible out of plane (the movement stress falls with the thickness), where its axial strength
  // and its bolts still pass; the nearest face first.
@@ -525,13 +535,15 @@ const saddleRatio=(k:string)=>k.startsWith('flange-tie-')||k==='plate-tie-keeper
  */
 export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCycle?:string;bracket?:NonNullable<ProjectInput['details']>['bracket'];face?:number;
  /** A further reason to prefer the stiffener tie (e.g. a crane column: the tie on the flexible building column), stated as given. */
- prefer?:string}={}){
+ prefer?:string;
+ /** Why the saddle tie cannot be detailed (a validation rule it breaks, stated as given): the stiffener tie is then kept wherever it validates, whatever its ratios. */
+ misfit?:string}={}){
  if(p.section.kind==='cap'||p.system!=='simple'||!flangeTieGeometry(p))return undefined;
  const ratios=tieSizingRatios(p),over=Object.entries(ratios).filter(([k,v])=>saddleRatio(k)&&v>sizingLimit(ratios,k)+1e-9).sort((a,b)=>b[1]-a[1]);
  // Any other check the sized saddle tie still fails (the imposed movement on a held reach, a plate's H1 sum): the
  // stiffener tie is tried too, and kept only where it exceeds its limits by less.
  const failing=Object.entries(ratios).filter(([k,v])=>!saddleRatio(k)&&v>1+1e-9).sort((a,b)=>b[1]-a[1]);
- if(!over.length&&!opts.highCycle&&!opts.prefer&&!failing.length)return undefined;
+ if(!over.length&&!opts.highCycle&&!opts.prefer&&!opts.misfit&&!failing.length)return undefined;
  const q=structuredClone(p),qd=q.details!,t=qd.brace;
  if(opts.bracket)qd.bracket=structuredClone(opts.bracket);
  if(t.arrangement==='flexible-plate'){t.arrangement='paired-bars';delete t.referenceDetail;}
@@ -540,9 +552,9 @@ export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCyc
  t.length=t.reach=reach-up(q.section.tw/2+qd.bearing.stiffenerWidth+inch/4,inch/4);
  q.details=sizeFlangeTie(q,{reach:opts.reach}).details;
  const excess=(r:Record<string,number>)=>Object.entries(r).reduce((n,[k,v])=>n+Math.max(0,v-sizingLimit(r,k)),0);
- if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||excess(tieSizingRatios(q))>excess(ratios)+1e-9)return undefined;
+ if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||(!opts.misfit&&excess(tieSizingRatios(q))>excess(ratios)+1e-9))return undefined;
  const why=[...(over.length?[`the sized saddle leaves ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
   ...(!over.length&&failing.length?[`the sized saddle tie leaves ${failing.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
-  ...(opts.highCycle?[`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (${opts.highCycle})`]:[]),...(opts.prefer?[opts.prefer]:[])].join('; ');
+  ...(opts.highCycle?[`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (${opts.highCycle})`]:[]),...(opts.prefer?[opts.prefer]:[]),...(opts.misfit?[opts.misfit]:[])].join('; ');
  return {details:q.details!,why};
 }

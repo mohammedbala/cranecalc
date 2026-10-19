@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {runwayTemplates} from '../src/engine/templates';
-import {buildProject} from '../src/engine/configurator';
+import {buildProject,normalizeConfig} from '../src/engine/configurator';
 import {defaultRunwayConfig,type RunwayConfig} from '../src/engine/configInputs';
 import {validateProject} from '../src/engine/calculate';
 
@@ -29,12 +29,34 @@ const simulated:Record<string,RunwayConfig>={
  'CC3':cfg('CC3',{capacity:20,craneSpan:70,control:'cab',cmaa:'C',buildingClass:'C',bays:3,span:30,railElevation:28,girder:'rolled',support:'crane-column',tie:'paired-bars',craneColumnBase:'fixed',reach:28}),
  'ST1':cfg('ST1',{capacity:15,craneSpan:60,control:'cab',cmaa:'C',buildingClass:'C',bays:4,span:25,railElevation:26,girder:'rolled',system:'continuous',support:'stepped-column',tie:'paired-bars'}),
  'ST2':cfg('ST2',{capacity:20,craneSpan:70,control:'cab',cmaa:'D',buildingClass:'B',bays:3,span:30,railElevation:30,girder:'rolled',support:'stepped-column',tie:'paired-bars',columnShape:'W40X199',buildingColumnShape:'W14X145'}),
+ // Simulation set cases-v2. V059: a 40 t crane on 50 ft bays sizes a W14X873 girder whose 5.5 in flange keeps the rail
+ // clips off the tie saddle past half the 24 in pad spacing at the joints, and whose 15 in bearings put the cap stiffeners
+ // past a W14X145 crane column's flange tips (fitClipJoints, withoutRailPad, the wider crane column). V061: the clip
+ // joint again, with bolted clamp plates (the tie moves onto the bearing stiffener). V067: paired bars at the step of a
+ // continuous girder with no room between 5/8 in bolt groups (sizeFlangeTie from the 1/2 in bolt, the closest deeper
+ // lower shaft). V082: new freestanding columns with the top of rail over 35 ft (normalizeConfig lowers it).
+ 'V059':cfg('V059',{capacity:40,craneSpan:69,control:'cab',cmaa:'C',buildingClass:'C',bays:2,span:50,railElevation:34,girder:'rolled',support:'crane-column',tie:'paired-bars',craneColumnBase:'pinned',buildingColumnShape:'W14X82'}),
+ 'V061':cfg('V061',{capacity:40,craneSpan:68,control:'cab',cmaa:'D',cranes:2,buildingClass:'B',bays:4,span:45,railElevation:28,girder:'rolled',support:'stepped-column',tie:'flexible-plate'}),
+ 'V067':cfg('V067',{capacity:15,craneSpan:45,control:'cab',cmaa:'D',buildingClass:'C',system:'continuous',bays:4,span:22.5,railElevation:27,girder:'rolled',support:'stepped-column',tie:'paired-bars'}),
+ 'V082':cfg('V082',{capacity:2,craneSpan:33,control:'cab',cmaa:'B',buildingClass:'C',bays:4,span:15,railElevation:36,structure:'new',support:'haunched-seat',tie:'cap-angle',reach:18}),
 };
 
 describe('configurator project validity',()=>{
  // t13 to t16: the crane columns tied to the building columns and the stepped columns (girder on the step).
  for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
  for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project`,()=>{expect(validateProject(buildProject(c))).toEqual([]);},300000);
+ it('new freestanding columns take the top of rail to at most 35 ft (ASCE 7 cantilever column height limit), with the reason',()=>{
+  const n=normalizeConfig(simulated['V082']);
+  expect(n.config.railElevation).toBe(35);
+  expect(n.changes.join(' ')).toMatch(/cantilever column system \(ASCE 7 Table 12\.2-1.*lowered from 36 ft to 35 ft/);
+  expect(normalizeConfig({...simulated['V082'],structure:'existing'}).config.railElevation).toBe(36);
+ });
+ it('rail clips that cannot cross the girder joints within the pad spacing: the rail without its pad, clips at most 30 in, logged',()=>{
+  const p=buildProject(simulated['V059']);
+  expect(p.aist!.railPad).toBe(false);
+  expect(p.aist!.clipSpacing).toBeCloseTo(30*25.4,6);
+  expect(p.configurator!.selections!.find(s=>s.item==='Rail pad')?.reason).toMatch(/AIST TR-13/);
+ },300000);
  it('a cap tieback angle that fits no column flange falls back to paired bars, with the reason in the selections log',()=>{
   const p=buildProject({...simulated['017'],columnShape:'W14X61'});
   expect(validateProject(p)).toEqual([]);
