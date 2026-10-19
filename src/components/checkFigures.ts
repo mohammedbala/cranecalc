@@ -1,4 +1,5 @@
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {girderEndFork} from '../engine/craneColumnInputs';
 import type {ProjectInput} from '../engine/types';
 import {componentDetail,type Component} from './figureDetails';
 import {activeEndBearing} from '../engine/endBearingInputs';
@@ -133,7 +134,7 @@ function tie(p?:ProjectInput,attachment=false):Drawing{
 function bracket(p?:ProjectInput):Drawing{
  const enabled=p?.details?.bracket?.enabled!==false,kind=p?.details?.bracket?.arrangement??'twin-rib',existing=kind.startsWith('existing-');
  const girderEnd=rect(66,14,50,5)+rect(88,19,6,22)+rect(66,41,50,5)+rect(70,46,42,4,true);
- if(!enabled)return {linework:section(p,88,15)+rect(92,72,52,5,true)+support(118,77)+arrow(160,4,160,30)+label(166,14,'R','start')+mark(1,176,30)+mark(2,152,74)+mark(3,140,98)+label(120,112,'SEAT BY OTHERS'),title:'Girder bearing and support reaction',note:'Review the bearing reaction and the assumed support. Bracket component design is not enabled.',path:['Girder reaction R','Bearing plate on the support','Support by others, designed for the reported forces'],detail:['bearing','support']};
+ if(!enabled)return {linework:section(p,88,15)+rect(92,72,52,5,true)+support(118,77)+arrow(160,4,160,30)+label(166,14,'R','start')+mark(1,176,30)+mark(2,152,74)+mark(3,140,98)+label(120,112,p?.existingColumn?.enabled&&p.existingColumn.step?'(E) STEP CAP':'SEAT BY OTHERS'),title:'Girder bearing and support reaction',note:'Review the bearing reaction and the assumed support. Bracket component design is not enabled.',path:['Girder reaction R','Bearing plate on the support','Support by others, designed for the reported forces'],detail:['bearing','support']};
  let drawing=column()+girderEnd+rect(57,50,137,6,true);
  if(kind==='haunched-seat')drawing+=poly('M62 56H193V100L62 68Z',true);
  else if(kind==='twin-rib')drawing+=rect(62,56,131,36,true);
@@ -154,7 +155,7 @@ function bracket(p?:ProjectInput):Drawing{
 export interface CheckFigure{title:string;note:string;svg:string;path:string[];detail:string;view:'isometric'|'schematic'}
 export function checkFigure(topic:string,p?:ProjectInput):CheckFigure{
  // A girder on a column cap has no tie: its connection and restraint figures are the column cap's end fork.
- if(p&&activeColumnCap(p)&&['Connections','Flange attachment','Cap tieback','Cap tieback movement'].includes(topic))topic='Column cap';
+ if(p&&girderEndFork(p)&&['Connections','Flange attachment','Cap tieback','Cap tieback movement'].includes(topic))topic='Column cap';
  let title=topic,note=checkGroupPurpose[topic]??'Review the stated inputs, calculation basis and acceptance limits.',drawing='',steps:string[]=[],detail:Component[]=[];
  switch(topic){
   case 'Geometry':title='Spans, supports and member';note=`${p?.spans.length??3} ${p?.system==='continuous'?'continuous':'independent'} bay(s). Section properties and restraint lengths establish the member model.`;drawing=geometry(p);steps=['Wheel loads P on the girder','Girder spans grid to grid','Reactions R at the supports'];detail=['girder'];break;

@@ -11,6 +11,7 @@ import { projectSchema, type CalculationSnapshot, type CheckResult, type Project
 import { matchesAiscSection } from '../data/aiscSections';
 import { matchesCappedSection } from '../data/aiscChannels';
 import { sectionProperties } from './section';
+import { girderStrength } from './aiscStrength';
 import { cappedElasticProperties } from './capChannel';
 import { format } from './units';
 import { movingAnalysis } from './analysis';
@@ -187,7 +188,7 @@ function calculateSnapshot(input:ProjectInput):CalculationSnapshot {
  snapshot.warnings.push('ANALYSIS REPORT ONLY: supplied-load bending and user serviceability criteria. This report does not establish AISC/DG7/TR-13/ASCE compliance or validate strength, fatigue, torsion, bracing or connections.');
  }
  if(d.uplift>1)snapshot.warnings.push('Uplift occurs in a governing position. The linear model assumes supports can resist uplift; hold-down design is required.');
- if(p.section.kind==='cap')snapshot.warnings.push(p.section.capCatalogueId?'Capped design uses catalog transformed bending properties, F5 resistance for both moment signs, E4/E7 compression, integrated open-section warping and J of the two separate components without overlap credit. Full bearing contact and continuous attachment are required; cap distortion from fit-up gaps is outside the model.':'Cap-channel properties use idealized rectangular plates and full composite action. Warping constant and attachment adequacy are not established.');
+ if(p.section.kind==='cap')snapshot.warnings.push(p.section.capCatalogueId?`Capped design uses catalog transformed bending properties, ${(()=>{try{const d=girderStrength(p,props).capDirections??[],cl=[...new Set(d.map(v=>v.clause))];return cl.length===1?`${cl[0]} resistance for both moment signs`:cl.length?`${d.map(v=>v.clause).join(' / ')} resistance for positive / negative moment`:'F4 or F5 resistance by the web class';}catch{return 'F4 or F5 resistance by the web class';}})()}, E4/E7 compression, integrated open-section warping and J of the two separate components without overlap credit. Full bearing contact and continuous attachment are required; cap distortion from fit-up gaps is outside the model.`:'Cap-channel properties use idealized rectangular plates and full composite action. Warping constant and attachment adequacy are not established.');
  if(p.reportPurpose==='demonstration')snapshot.warnings.push('DEMONSTRATION: geometry, supplier data and duty assumptions are fictitious. Calculations are executed normally; this report demonstrates software capabilities and is not a site-specific construction design.');
  else if(p.cranes.some(c=>/illustrative|example|fictitious|fictional|\bdemo\b/i.test(c.loadSource)))snapshot.warnings.push('Illustrative crane data are in use. Replace with the actual manufacturer schedule.');
  if(p.scope==='analysis')snapshot.warnings.push('Envelopes use each crane’s loaded wheel schedule. Unloaded schedules are retained but are not evaluated as separate operating or fatigue cases.');

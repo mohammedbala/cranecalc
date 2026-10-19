@@ -13,6 +13,7 @@ import {railTopAboveSteel} from './railSeat';
 import {aiscAngleByName} from '../data/aiscAngles';
 import {aiscChannelByName as channelData} from '../data/aiscChannels';
 import {format} from './units';
+import {craneColumnLayout,tieShortening} from './craneColumn';
 import {latexNumber,withinLimit} from './math';
 import type {RunwayDetails} from './runwayDetails';
 
@@ -170,10 +171,13 @@ export function capAngleLoads(s:CalculationSnapshot,F:number):CapAngleLoads{
  */
 export function capAngleMovement(p:ProjectInput,g:CapAngleGeometry,m:{support:number;rotation:number;serviceRotation:number}){
  const ss=simpleSupportInput(p),cranes=p.cranes.length,impact=Math.max(...p.cranes.map(c=>c.impact));
+ // To the building column beside a crane column: the larger column shortening plus the erection tolerance (tieShortening),
+ // its crane-only part cycling with each pass.
+ const layout=craneColumnLayout(p),diff=layout?tieShortening(p,layout.girderTie.elevation):undefined;
  // Rotation about the bearing also moves the tie vertically by θ times its distance from the bearing center.
  const arm=Math.max(0,...g.stations.map(v=>Math.abs(v.x-v.bearingCenter)));
  return {rotation:m.rotation,cyclicRotation:m.serviceRotation,thermal:alpha*Math.max(...p.spans)*Math.max(ss.temperatureRise,ss.temperatureFall),
-  vertical:m.support*cranes*(1+impact)+m.rotation*arm,cyclicVertical:m.support+m.serviceRotation*arm};
+  vertical:m.support*cranes*(1+impact)+m.rotation*arm+(diff?.demand??0),cyclicVertical:m.support+m.serviceRotation*arm+(diff?.cyclic??0)};
 }
 /**
  * Fatigue stress ranges of the tie plate (AISC Appendix 3, all cycles at the largest range, no threshold credit), each
@@ -287,7 +291,7 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  if(cl.slot){
   // The released end plate: the bolts, fixed in the column, keep their sleeves and plate washers while the end plate slides.
   const sl=cl.slot,colBolt=boltProperties(cl.grade,cl.diameter),install=inch/16;
-  add('cap-angle-endplate-travel',MG,'End plate vertical slots · travel each way',loads.vertical+install,sl.travel,'length','\\Delta_sn(1+I)+\\theta a+1/16\\,\\mathrm{in}\\le u',`The end plate slides with the girder: the vertical movement at the tie ${len(loads.vertical)} (support deflection times the cranes and 1 + impact, plus the end rotation over the tie's distance from the bearing) plus a 1/16 in positioning allowance, against the travel each way in the ${len(sl.width)} × ${len(sl.length)} vertical slots. The tie plate then takes no bending from it.`);
+  add('cap-angle-endplate-travel',MG,'End plate vertical slots · travel each way',loads.vertical+install,sl.travel,'length','\\Delta_sn(1+I)+\\theta a+1/16\\,\\mathrm{in}\\le u',`The end plate slides with the girder: the vertical movement at the tie ${len(loads.vertical)} (support deflection times the cranes and 1 + impact, plus the end rotation over the tie's distance from the bearing${craneColumnLayout(p)?`, plus the differential shortening of the crane column and the building column with the erection tolerance, ${len(tieShortening(p,craneColumnLayout(p)!.girderTie.elevation)!.demand)} (the column tie's slot rule)`:''}) plus a 1/16 in positioning allowance, against the travel each way in the ${len(sl.width)} × ${len(sl.length)} vertical slots. The tie plate then takes no bending from it.`);
   add('cap-angle-endplate-sleeve',MG,'End plate slots · steel sleeves under the bolt installation load',1.5*colBolt.pretension,m.Fy*sl.sleeve.area,'force','1.5T_b\\le\\phi F_yA_g;\\ \\phi=1.0\\ \\text{(sleeve)}',`Sleeve ${len(sl.sleeve.od)} OD × ${len(sl.sleeve.bore)} bore × ${len(sl.sleeve.length)} long, F_y as the plate material; 1.5 × the minimum pretension bounds turn-of-nut overshoot (RCSC commentary). The sleeve projects past the end plate so the plate is not clamped.`);
   add('cap-angle-endplate-washer',MG,'End plate slots · plate washers clear the tie plate fillets',g.plate.thickness/2+g.weld+sl.washer.length/2+sl.travel,cl.gauge,'length','t_p/2+w+L_w/2+u\\le g',`Plate washer ${len(sl.washer.thickness)} × ${len(sl.washer.width)} × ${len(sl.washer.length)} under each bolt head covers the slot at either extreme of travel (AISC J3.2); it stays with the bolt while the end plate slides by u, clear of the tie plate fillets.`);
  }

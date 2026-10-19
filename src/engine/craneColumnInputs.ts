@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {existingColumnSchema} from './existingColumnInputs';
 import type {ProjectInput} from './types';
+import {activeColumnCap} from './columnCapInputs';
 import type {SupportReactionSet} from './supportReactions';
 
 const pos=z.number().finite().positive(),nonnegative=z.number().finite().nonnegative();
@@ -61,3 +62,10 @@ export const craneColumnReactions=(p:ProjectInput,r:SupportReactionSet):SupportR
  * the crane-column base), else the supporting column itself.
  */
 export const tieColumn=(p:ProjectInput)=>tiedToBuilding(p)?{...p.craneColumn!.building,enabled:true,isNew:false,seatElevation:p.existingColumn!.seatElevation}:p.existingColumn;
+/**
+ * The girder's top-flange restraint at a column cap, one model for the analysis, the checks, the report and the drawings:
+ * a girder end fork (the bearing stiffeners and the bolted bottom flange; no top-flange tie) on a column cap alone, or,
+ * on a crane column tied to the building (tiedToBuilding), the girder top-flange tie in series with the building column
+ * (craneColumnRestraint, with the tie's slot play): the fork is then not relied on. True only for the fork.
+ */
+export const girderEndFork=(p:ProjectInput)=>!!activeColumnCap(p)&&!tiedToBuilding(p);

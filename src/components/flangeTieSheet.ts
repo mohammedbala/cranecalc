@@ -1,6 +1,6 @@
 import {elementSummary,inElements,summaryNote,calculationRef} from './sheetRatios';
 import {viewConflict,conflictView} from './detailHolds';
-import {supportColumn} from '../engine/drawingData';
+import {tieReceiverColumn} from '../engine/drawingData';
 import {sleeveSpec} from '../engine/materialSpecs';
 import type {CalculationSnapshot} from '../engine/types';
 import {flangeTieGeometry,tieRelease} from '../engine/tieGeometry';
@@ -97,9 +97,9 @@ function verticalSlot(cx:number,cy:number,length:number,width:number,cls:string)
 const filletSection=(x:number,y:number,dir:number,leg:number)=>`<path class="runway-line" d="M${n(x)},${n(y)}l${n(dir*leg)},0L${n(x)},${n(y+leg)}Z"/>`;
 /** The column the tie is welded to, as drawn and named on the tie details. */
 function tieColumn(s:CalculationSnapshot){
- const p=s.input,g=flangeTieGeometry(p)!,col=supportColumn(p);
+ const p=s.input,g=flangeTieGeometry(p)!,col=tieReceiverColumn(p);
  return {...col,flange:g.receiver?.flangeThickness??25.4,cls:col.isNew?'runway-line':'reference-line',
-  label:col.isNew?col.name:g.receiver?'EXISTING COLUMN':'COLUMN BY OTHERS'};
+  label:col.isNew||col.building?col.name:g.receiver?'EXISTING COLUMN':'COLUMN BY OTHERS'};
 }
 
 /** Transverse elevation of the top-flange tie, projected along the installed bolt axes. */
@@ -179,7 +179,7 @@ export function flangeTieSection(s:CalculationSnapshot,x:number,y:number,saddleC
   {at:[X(g.rootStart+g.rootLength*.46),Y(a.saddleThickness)],weld:gussetWeld,labels:[`GIRDER GUSSET PL ${sz(t.gussetThickness)} X ${sz(barBottom-a.saddleThickness)} X ${sz(g.gussetEnd-g.rootStart)}`,'TO SADDLE, BOTH FACES']},
   {at:[X(g.columnGussetStart)-14,Y(barTop)],labels:single?[`FLEXIBLE PL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)}, ${sz(g.barGap)} CLR. TO COLUMN;`,`GIRDER END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC, SINGLE SHEAR,`,`${sz(hole)} STD HOLES; HEADS ON PLATE`]:[`2 FB ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)}, ${sz(g.barGap)} CLR. TO COLUMN;`,`GIRDER END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC, ${sz(hole)} STD HOLES${rel?`;`:''}`,...(rel?[`${sz(rel.clearance)} FILLER (HIDDEN)`]:[])]},
   {at:[X(g.barEnd-g.connection*.5),cy0],labels:[...(rel?[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} PRETENSIONED`,`AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.hole)} BORE X ${sz(rel.sleeveLength)};`,`${sz(rel.width)} X ${sz(rel.slot)} VERT. SLOTS IN GUSSET`]:[`COLUMN END: ${2*c.rows} - ${sz(c.diameter)} ${c.grade} SC,`,`${sz(hole)} STD HOLES`]),`COLUMN GUSSET PL ${sz(t.gussetThickness)} X ${sz(hg)} X ${sz(g.columnGussetLength)}`]},
-  {at:[X(g.face),cy0+3],weld:rootWeld,labels:col.isNew?['SHOP WELD COLUMN GUSSET TO',`${col.label} FLANGE; ${detailRef(detailTitles.tiePlan)}`]:[`COLUMN GUSSET TO ${g.receiver?'EXISTING':'COLUMN'}`,`${g.receiver?'COLUMN ':''}FLANGE${g.receiver?'':' BY OTHERS'} (DASHED); ${detailRef(detailTitles.tiePlan)}`]},
+  {at:[X(g.face),cy0+3],weld:rootWeld,labels:col.isNew?['SHOP WELD COLUMN GUSSET TO',`${col.label} FLANGE; ${detailRef(detailTitles.tiePlan)}`]:col.building?['FIELD WELD COLUMN GUSSET TO',`${col.label} FLANGE (DASHED); ${detailRef(detailTitles.tiePlan)}`]:[`COLUMN GUSSET TO ${g.receiver?'EXISTING':'COLUMN'}`,`${g.receiver?'COLUMN ':''}FLANGE${g.receiver?'':' BY OTHERS'} (DASHED); ${detailRef(detailTitles.tiePlan)}`]},
   ...capItem];
  const nx=Math.max(fx1+60,605-215),top=Math.min(columnTop(items),colTop),bottom=Math.max(top+columnHeight(items),overall+12);
  svg+=calloutColumn(items,nx,top);
@@ -247,7 +247,7 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  // beside the column note.
  const tx=cx+((pair.at(-1)?.tieX??grid)-grid)*k;svg+=sectionCut([tx,tier],[tx,noteY-10],[1,0],detailTitles.flangeTie,['b'],'tip');
  svg+=line([cx,116],[cx,noteY-10],'grid-line');
- svg+=text(tx-8,noteY,col.isNew?`${columnReference(p)} / SEPARATE TIES EACH GIRDER`:g.receiver?'EXISTING COLUMN / SEPARATE TIES EACH GIRDER':'COLUMN BY OTHERS (REF.) / SEPARATE TIES EACH GIRDER',8,'end');
+ svg+=text(tx-8,noteY,col.isNew?`${columnReference(p)} / SEPARATE TIES EACH GIRDER`:col.building?`${col.label} / SEPARATE TIES EACH GIRDER`:g.receiver?'EXISTING COLUMN / SEPARATE TIES EACH GIRDER':'COLUMN BY OTHERS (REF.) / SEPARATE TIES EACH GIRDER',8,'end');
  return {svg:svg+'</g>',scale:scale.label};};
  const saddle=():ViewRender=>{
  // Longitudinal section through the middle of the saddle, looking from the column toward the web: the flange
@@ -313,7 +313,7 @@ export function flangeTieTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const drilled=[...(activeEndBearing(p)?['END BEARINGS']:[]),...(activeEndStop(p)?['END STOPS']:[])];
  const notes=[single?`FLEXIBLE PLATE TIES (AISC DG7 §11.2): ONE PL ${sz(t.thickness)} X ${sz(t.width)} X ${dim(t.length)} ${bottom?'AT EACH FLANGE':'AT THE TOP FLANGE'}, ON THE GUSSET FACE TOWARD THE GIRDER END, SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS; PLATE ENDS ${sz(g.barGap)} CLEAR OF THE COLUMN FLANGE.${bottom?'':` THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef(detailTitles.endBearing)}).`}`:`TIES: ${dim(t.length)} LONG, ${bottom?'AT BOTH FLANGES':`AT THE TOP FLANGE. THE BOTTOM FLANGE IS BOLTED TO THE SEAT (${detailRef(detailTitles.endBearing)})`}. SET BACK ${dim(a.longitudinalSetback)} FROM BEARING CENTERS TOWARD GIRDER ENDS. BAR ENDS ${sz(g.barGap)} CLEAR OF THE COLUMN FLANGE.`,
   `GIRDER FORCE TRANSFERS THROUGH THE GUSSET AND SADDLE DIRECTLY TO THE FLANGE. DO NOT WELD THE GUSSET TO THE WEB. WELD THE SADDLE TO THE FLANGE ONLY WITH THE TWO ${sz(a.weldSize).replaceAll('"','')} TRANSVERSE END FILLETS, ONE ACROSS EACH END, ${dim(g.endWeldLength)} LONG, WITHOUT END RETURNS; DO NOT WELD THE SADDLE EDGES ALONG THE RUNWAY.`,
-  col.isNew?`SHOP WELD COLUMN GUSSET TO THE ${col.name}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}.`:`FIELD WELD COLUMN GUSSET TO ${g.receiver?'EXISTING COLUMN':'THE COLUMN'}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}. VERIFY STEEL GRADE, WELDABILITY AND SURFACE CONDITION.`,
+  col.isNew?`SHOP WELD COLUMN GUSSET TO THE ${col.name}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}.`:col.building?`FIELD WELD COLUMN GUSSET TO THE ${col.label} (EXISTING): TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}. WELDING TO THE EXISTING COLUMN: BASE METAL CONFIRMATION, APPROVED WPS, PREHEAT AND LOAD CONDITION PER THE EXISTING BUILDING NOTES ON S-00.`:`FIELD WELD COLUMN GUSSET TO ${g.receiver?'EXISTING COLUMN':'THE COLUMN'}: TWO ${sz(c.weldSize).replaceAll('"','')} CONTINUOUS FILLETS X ${dim(g.columnGusset)}. VERIFY STEEL GRADE, WELDABILITY AND SURFACE CONDITION.`,
   rel?single?`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.hole)} BORE X ${sz(rel.sleeveLength)} LONG (${sleeveSpec.replace(/ to the OD.*$/,'').toUpperCase()}, FY ${stress(Math.max(d.material.Fy,345))} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET, THE PLATE ON ONE SLEEVE END AND AN F436 WASHER ON THE OTHER. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. NO FILLER: THE PLATE FLEXES TO TAKE UP THE SLEEVE PROJECTION.`:`COLUMN END: PRETENSION THE BOLTS AGAINST STEEL SLEEVES ${sz(rel.od)} OD X ${sz(rel.hole)} BORE X ${sz(rel.sleeveLength)} LONG (ASTM A513 TYPE 5 DOM TUBE OR MACHINED ASTM A108 BAR, FY ${stress(Math.max(d.material.Fy,345))} MIN.) PASSING THROUGH ${sz(rel.width)} X ${sz(rel.slot)} VERTICAL SLOTS IN THE COLUMN GUSSET. CENTER THE SLEEVES IN THE SLOTS AT ERECTION. THE GUSSET IS NOT CLAMPED. ${rel.slide?`COLUMN-END SLIDE: THE GUSSET SLIDES ${sz(rel.slide)} EACH WAY ALONG THE RUNWAY ON THE SLEEVES, CENTERED BETWEEN THE BARS AT ERECTION; PROVIDE A ${sz(rel.barOffset)} FILLER (CLASS B SURFACES) ON EACH FACE OF THE GIRDER GUSSET SO THE BARS STAY PARALLEL.`:`PROVIDE A ${sz(rel.clearance)} FILLER (CLASS B SURFACES) AT THE GIRDER GUSSET SO THE BARS STAY PARALLEL.`}`:single?'COLUMN END: STANDARD HOLES; THE PLATE ALSO FLEXES WITH SUPPORT DEFLECTION.':'COLUMN END: STANDARD HOLES; THE BARS ALSO FLEX WITH SUPPORT DEFLECTION.',
   `${single?'THE PLATE FLEXES ABOUT ITS WEAK AXIS':'TIE BARS FLEX OUT OF PLANE'} WITH GIRDER END ROTATION${rel?.slide?'; THERMAL TRAVEL SLIPS OUT AT THE COLUMN-END SLIDE. KEEP THE SLEEVES AND SLOT EDGES FREE OF PAINT AND WELD SPATTER':' AND, AT SLIDING ENDS, THERMAL TRAVEL'}; SEE THE TIE MOVEMENT CHECKS.${single?` KEEP ITS CLEAR LENGTH FREE OF ATTACHMENTS AND WELDS. SET THE COLUMN GUSSET IN LINE WITH THE GIRDER GUSSET WITHIN ${sz(plateAlignment)} ALONG THE RUNWAY; THE PLATE FLEXURE CHECK INCLUDES THAT OFFSET${rel?' AND HALF THE SLEEVE CLEARANCE':''}.`:''}${support?.capacity!==undefined?` BRACKET BY OTHERS: VERTICAL DEFLECTION AT THE BEARING UNDER CRANE LOADS ${limitLength(support.capacity,u,'max')} MAX.`:''}`,
   `GIRDER END: STANDARD HOLES, PRETENSIONED ${c.grade} BOLTS${single?' IN SINGLE SHEAR, HEADS ON THE PLATE':''}, CLASS B FAYING SURFACES. NO HOLES OR CUTS THROUGH THE ${cap?'CAP OR ':''}W FLANGES${drilled.length?` EXCEPT THOSE DETAILED FOR THE ${drilled.join(' AND ')}`:''}.`,
