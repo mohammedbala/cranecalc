@@ -61,6 +61,8 @@ function twistRatios(p:ProjectInput,c:ReturnType<typeof existingColumnAnalysis>)
  const row=(id:string,v:number):CheckResult=>({id,group:'Torsion brace',title:id,status:v<=1?'pass':'fail',equation:'',note:'',referenceIds:[],utilization:v});
  return [row('column-twist-rotation',Math.abs(t.twist)/twistRotationLimit),row('column-twist',Math.abs(t.service.slip)/twistMovementLimit(p,c)),row('torsion-brace-movement',twistMovement(c,p.method).factored/movementTarget)];
 }
+/** A strut whose flange lies on the torsion plates between the column flanges (brace-torsion-fit), its web on the tab's face. */
+function fitsPlate(p:ProjectInput,s:{bf:number;tw:number}){const c=existingColumnSection(p).section,t=bracingDesign(p).gusset.thickness;return t/2+s.tw*inch/2+s.bf*inch/2<=(c.d-2*c.tf)/2+1e-6;}
 /**
  * Configurator target on the girder's twist movement at the seat under the factored traction with a torsion brace
  * (twistRatios): 1/8 in, tightened by the configurator (withTwistMovementTarget) where the tie cannot take the movement.
@@ -79,7 +81,7 @@ export function sizeTorsionStrut(p:ProjectInput,target=.9){
  const worst=()=>Math.max(...twistRatios(p,existingColumnAnalysis(p,reactions)).map(v=>v.utilization!));
  if(worst()<=target)return;
  let best={name:d.strut.shape,Iy:now?.Iy??0};
- for(const s of struts.filter(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9)){
+ for(const s of struts.filter(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(p,v))){
   d.strut.shape=s.name;if(worst()<=target)return;if(s.Iy>best.Iy)best={name:s.name,Iy:s.Iy};
  }
  d.strut.shape=best.name;
@@ -130,7 +132,7 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
  };
  const strut=(slender:boolean)=>{
   const now=struts.find(s=>s.name===d.strut.shape),w=now?.weight??0,r=ry(d.strut.shape);
-  const s=struts.find(v=>v.weight>w+1e-9&&(!slender||Math.sqrt(v.Iy/v.A)>r+1e-6));if(!s)return false;d.strut.shape=s.name;return true;
+  const s=struts.find(v=>v.weight>w+1e-9&&(!slender||Math.sqrt(v.Iy/v.A)>r+1e-6)&&(!torsionBraceActive(q)||fitsPlate(q,v)));if(!s)return false;d.strut.shape=s.name;return true;
  };
  const bolts=()=>{
   if(d.strut.bolts!<4){d.strut.bolts!++;return true;}
@@ -138,7 +140,7 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
   if(d.strut.bolts!<5){d.strut.bolts!++;return true;}return false;
  };
  // The torsion brace: the strut's weak-axis stiffness and strength (I_y), the plates, their bolt rows and fillets.
- const stiffStrut=()=>{const now=aiscWShapes.find(v=>v.name===d.strut.shape),s=struts.find(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9);if(!s)return false;d.strut.shape=s.name;return true;};
+ const stiffStrut=()=>{const now=aiscWShapes.find(v=>v.name===d.strut.shape),s=struts.find(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(q,v));if(!s)return false;d.strut.shape=s.name;return true;};
  const torsionPlate=()=>{const tb=d.torsionBrace;if(!tb)return false;const t=next(tb.thickness,eighth);if(t>1.25*inch+1e-6)return false;tb.thickness=t;tb.weld=Math.max(tb.weld,filletMinimum([t,column().tf]));return true;};
  const torsionRows=()=>{const tb=d.torsionBrace;if(!tb||tb.rows>=5)return false;tb.rows++;return true;};
  const torsionWeld=()=>{const tb=d.torsionBrace;if(!tb)return false;const w=next(tb.weld,sixteenth);if(w>Math.min(5/8*inch,tb.thickness-sixteenth)+1e-6)return torsionPlate();tb.weld=w;return true;};

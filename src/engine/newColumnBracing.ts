@@ -320,7 +320,9 @@ export function torsionBraceGeometry(p:ProjectInput,column:Section,g:ReturnType<
   /** Plate centerlines above and below the work point. */
   levels:[s.d/2+tb.thickness/2,-(s.d/2+tb.thickness/2)] as [number,number],
   /** Fillet line along each column flange, both faces of the plate. */
-  flangeWeld:Math.max((column.bf-column.tw)/2-clip,inch)};
+  flangeWeld:Math.max((column.bf-column.tw)/2-clip,inch),
+  /** The strut flange within the plate between the column flanges: its far edge from the column centerline, and the room. */
+  fit:{need:Math.abs(web)+s.bf/2,room:width/2}};
 }
 export interface TorsionBraceResult {
  stiffness:TorsionBraceStiffness;geometry:NonNullable<ReturnType<typeof torsionBraceGeometry>>;
@@ -484,6 +486,7 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
   // weak-axis moment (Cm = 0.6: the far end's carry-over is of the opposite sense, reverse curvature, or none; AISC Appendix 8).
   const Pe=Math.PI**2*S.E*sp.Iy/tb.span**2,alpha=method==='LRFD'?1:1.6,B1=Math.max(1,.6/Math.max(1e-9,1-alpha*H/Pe)),My=B1*tb.M;
   const flex=Mw/str.major+My/str.minor,Us=alpha*H>=Pe?1e12:ratio>=.2?ratio+8/9*flex:ratio/2+flex;
+  add('brace-torsion-fit',TB,'Torsion plates · strut flange within the plate between the column flanges',tg.fit.need,tg.fit.room,'length','|y_w|+b_{fs}/2\\le(d-2t_f)/2',`The ${sg.shape} flange (${f(sg.bf,'length')} wide), its web ${f(tg.web,'length')} off the column centerline on the tab or gusset, must lie on the plate, which fits between the column flanges (${f(tg.width,'length')}): ${f(tg.fit.need,'length')} against ${f(tg.fit.room,'length')} each side. A detailing condition.`,['aisc-connections']);
   add('brace-torsion-strut',TB,'Strut · compression with the torsion-brace moment in plan (H1)',Us,1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{B_1M_{ry}}{M_{cy}}\\right)\\le1',`${where} ${sg.shape} strut: P_r = ${f(H)} (${r.strutForce.id}), Pc = ${f(str.compression)}; M_rx = ${kD}wL²/8 = ${f(Mw,'moment')} (Mc = ${f(str.major,'moment')}); M_ry = B1 M = ${B1.toFixed(3)} × ${f(tb.M,'moment')} with Cm = 0.6 and Pe1 = π²EI_y/L² = ${f(Pe)} over the shortest span ${f(tb.span,'length')} (Mcy = ${f(str.minor,'moment')}, AISC F6). The largest axial force and the largest end moment are combined (conservative).`,['aisc-h','aisc-f6','aisc-e','tr13-column-path'],r.strutForce.id);
   // Plate at the column flange tips, where it leaves the column: half the moment and half the strut force, its section
   // split by a rod gusset (taken everywhere). In-plane flexure (F11 for a rectangular bar, Lb the free length to the strut

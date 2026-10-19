@@ -139,7 +139,8 @@ export function upperShaftSection(p:ProjectInput):{source:string;section:Section
 /**
  * Factored twist limit of the lower shaft at the step (rad): the torsion analysis is first order (small rotations), so the
  * girder reaction R, shifted e·θ along the runway by the twist, adds a weak-axis moment R·e·θ that it leaves out; θ ≤ 0.02
- * keeps that within 2% of the eccentric moment R·e the strong-axis H1 carries. A larger twist is not admissible.
+ * keeps that within 2% of the eccentric moment R·e the strong-axis H1 carries. A larger twist is not admissible. The one
+ * basis of every column twist check (columnTwistLimit.twistRotationLimit).
  */
 export const steppedTwistLimit=twistRotationLimit;
 export const fixedBaseRatio=(b:{base:'pinned'|'fixed';top:'braced'|'free'})=>b.base==='fixed'?(b.top==='braced'?.8/.7:2.1/2):1;
