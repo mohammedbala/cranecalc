@@ -1,14 +1,18 @@
 import type {CalculationSnapshot} from '../engine/types';
 import {aiscShapeByName} from '../data/aiscSections';
 import {existingColumnSection} from '../engine/existingColumn';
+import {tiedToBuilding} from '../engine/craneColumnInputs';
 import {existingLayout,planClear,type ClearancePair,type ExistingLayout,type PlanBox} from '../engine/existingLayout';
 import {separationLength} from './bracingSheet';
 import {drawingLength} from './drawingFormat';
 import {refDim,dimText,sheetDrawingScale,bubble,dimH,labelColumn,line,n,rect,text,textWidth,viewTitle,detailRef,detailTitles,lettering,type XY} from './sheetGraphics';
 
 export const existingClearanceTitle='EXISTING BUILDING CLEARANCE / PLAN';
-/** The enlarged plan is drawn where an existing column lies within reach of the new runway. */
-export function existingClearanceShown(s:CalculationSnapshot){const r=existingLayout(s.input);return r?.steel?r:undefined;}
+/**
+ * The enlarged plan is drawn where an existing column lies within reach of the new runway; not beside a crane column tied
+ * to the building column (craneColumn.ts), which keeps no clearance to it (its footing plan shows the existing footing).
+ */
+export function existingClearanceShown(s:CalculationSnapshot){const r=existingLayout(s.input);return r?.steel&&!tiedToBuilding(s.input)?r:undefined;}
 /** The new column and the existing column of the least clearance, with their footings: the governing utilization. */
 export function governingPair(s:CalculationSnapshot,r:ExistingLayout):ClearancePair{
  const required=s.bracingSystem?.separation?.required??0,steel=r.steel!,footing=r.footing;

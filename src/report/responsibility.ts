@@ -2,6 +2,8 @@ import type {CalculationSnapshot,CheckResult,ProjectInput} from '../engine/types
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {activeEndStop} from '../engine/endStopInputs';
 import {activeColumnCap} from '../engine/columnCapInputs';
+import {activeStep} from '../engine/steppedColumnInputs';
+import {stepGeometry} from '../engine/steppedColumn';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesTaperedHaunch} from '../engine/taperedHaunch';
 import {usesRolledBracket} from '../engine/rolledBracket';
@@ -14,6 +16,7 @@ import {runwayMass,runwaySeismicBound} from '../engine/columnSupport';
 import {drawingElevation} from '../components/drawingFormat';
 import {caseLabel,sig3,tidyNumbers} from './reportParts';
 import {supplierRailJointText} from '../engine/railChecks';
+import {tiedToBuilding} from '../engine/craneColumnInputs';
 
 /**
  * The responsibility matrix (M10): every item this package needs from others, what is needed, the acceptance
@@ -35,7 +38,10 @@ export function runwayParts(p:ProjectInput){
  if(activeColumnCap(p))out.push('column caps');
  else if(b?.enabled)out.push(usesExistingBracket(p)?'new seats on the existing brackets':usesTaperedHaunch(p)?'haunches':usesRolledBracket(p)?'W-stub brackets':'brackets');
  if(columnStiffenerGeometry(p))out.push('column stiffeners');
- if(!activeColumnCap(p))out.push(capAngleGeometry(p)?'cap tiebacks':'ties');
+ if(stepGeometry(p)?.stiffener)out.push('step stiffeners');
+ if(!activeColumnCap(p)||tiedToBuilding(p))out.push(capAngleGeometry(p)?'cap tiebacks':'ties');
+ // A crane column tied to the building column: its column tie (craneColumn.ts).
+ if(tiedToBuilding(p))out.push('column ties');
  if(activeEndStop(p))out.push('end stops');
  return `${out.slice(0,-1).join(', ')} and ${out.at(-1)}`;
 }
@@ -55,7 +61,7 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
  const take=(id:string,row:Omit<ResponsibilityRow,'check'>)=>{const c=byId.get(id);if(!c)return;byId.delete(id);rows.push({...row,check:c});};
  const sup=byId.get('supporting-structure');
  // The column member is checked here only where the project models it; otherwise it is part of what is needed.
- const columnText=col?.enabled?`the ${col.isNew?'new':'existing'} column member is checked in section @@ref:column@@${col.isNew?'':' (braced frame assumed)'}`:'the columns themselves are not checked in this package: check them for the forces delivered, with the reaction eccentricity and its moment';
+ const columnText=col?.enabled?activeStep(p)?'the existing stepped column, both shafts and the step, is checked in sections @@ref:column@@ to @@ref:step@@ (braced frame assumed)':`the ${col.isNew?'new':'existing'} column member is checked in section @@ref:column@@${col.isNew?'':' (braced frame assumed)'}`:'the columns themselves are not checked in this package: check them for the forces delivered, with the reaction eccentricity and its moment';
  if(sup)take('supporting-structure',{item:sup.title,needed:`Check the building frame, roof and wall framing, the column-to-foundation connections, anchors and foundations for the crane forces combined with the building loads; ${columnText}.`,
   criterion:'AISC 360-16 and ACI 318 strength under the ASCE 7-16 §2.3 combinations, crane loads as L (§4.9); IEBC alteration provisions.',forces:`Factored ${where}. Unfactored reactions by load type: section @@ref:reactions@@.`,party:EOR});
  take('column-frame',{item:'Existing column · frame type and second-order effects',needed:`Confirm that the column line is braced (non-sway) across the runway, or give the frame's B2 from its analysis. The existing column check (section @@ref:column@@) is conditional on a braced frame: ${col?`${col.strong.base} base, ${col.strong.top} top, B1 only`:'B1 only'}.`,
@@ -97,6 +103,18 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
  // Any other check left to others.
  for(const c of byId.values()){const rest=sentences(c.note.replace(/^Not checked here:\s*/,''))[0]??'';const force=sentences(c.note).find(x=>/\d\s*(kip|kN)\b/.test(x));
   rows.push({item:c.title,needed:rest.charAt(0).toUpperCase()+rest.slice(1),criterion:'As stated in the check (Appendix A).',forces:force?.trim()??'See section @@ref:interfaces@@.',party:EOR,check:c});}
+ // A crane column tied to the building column (craneColumn.ts): the tie connections to the building column, its survey
+ // and the footing coordination are needed from others.
+ const cc=tiedToBuilding(p)?s.craneColumn:undefined;
+ if(cc&&p.craneColumn){const k=p.craneColumn,g=cc.layout,dc=dl?.craneColumn,datum=(z:number)=>el((p.drawing?.datumElevation??0)+(p.columnBase?.enabled?p.columnBase.plate.thickness+p.columnBase.grout-p.columnBase.footing.soil:0)+z);
+  rows.push({item:'Building column · tie connections (girder tie gusset, column tie tab)',needed:`Design the connections of both ties to each existing ${g.buildingColumn.shape} building column: the girder tie's column gusset and its welds or bolts, and the column tie's tab with standard holes matching the slotted plate; check the column flange and web for the local forces at both.`,
+   criterion:'AISC 360-16 Chapter J (J2, J3, J4, J10) for the tie design forces in either direction; the tab clear of the crane column by 1/2 in.',
+   forces:`Horizontal only, either direction: girder tie ${f(dl?.tie.design)} at${datum(g.girderTie.elevation)}, column tie ${f(dc?.columnTie)} at${datum(g.columnTie.elevation)} (per grid: S-00 and section @@ref:interfaces@@).`,party:EOR});
+  rows.push({item:'Building column survey',needed:`Field-verify every building column beside the crane columns before fabrication: ${g.buildingColumn.shape}, plumb, its face ${len(g.girderTie.face)} from the girder web and ${len(g.gap)} clear of the crane column, the column top and base, and its footing (${k.building.source||'source not entered'}).`,
+   criterion:'Surveyed dimensions within the ASTM A6 and AISC Code of Standard Practice tolerances of the values used; the tie lengths are cut to the surveyed faces.',forces:'—',party:'Contractor (survey), reviewed by the engineer of record'});
+  if(cc.footing&&cc.footing.clear<cc.footing.required)rows.push({item:'Crane column footing beside the existing building footing',needed:`The concentric footings overlap ${len(-Math.min(0,cc.footing.clear))||'less than the minimum clear distance'}: design a combined or modified footing for the crane column with the existing footing, or relocate it, before excavation.`,
+   criterion:`ACI 318-19 Chapter 13 and the geotechnical bearing pressure; no undermining of the existing footing; ${len(cc.footing.required)} clear between separate footings.`,forces:'Crane column base actions: S-00 and section @@ref:base@@; the building column reactions by the engineer of record.',party:`${EOR} (foundation engineer)`});
+ }
  // Confirmations a runway package rests on.
  for(const c of p.cranes){const d=c.design,max=Math.max(...c.wheels.map(w=>w.loaded)),empty=Math.max(...c.wheels.map(w=>w.unloaded)),spacing=c.wheels.length>1?Math.max(...c.wheels.map(w=>w.offset))-Math.min(...c.wheels.map(w=>w.offset)):0;
   rows.push({item:`Crane data · ${c.name}`,needed:`Signed confirmation of the data used: wheel loads ${f(max)} maximum / ${f(empty)} empty per wheel${d?.minWheelLoad?`, ${f(d.minWheelLoad)} minimum on the far runway`:''}, ${c.wheels.length} wheels${spacing?` at ${len(spacing)}`:''}; side thrust share s = ${d?.sideShare??0.5} to this runway; driven-wheel load ${f(d?.drivenWheelLoad)}; bumper force ${f(d?.bumperForce)} and its height above the rail; bridge speed; the 0.9 trolley factor in the bumper energy.`,

@@ -43,6 +43,11 @@ const byId:[RegExp,RegExp][]=[
  [/^rail-(clip|keeper|pad|seat)/,/RAIL CLIP/],
  [/^rail-/,/RAIL (CLIP|JOINT|LAYOUT)/],
  [/^end-bearing-/,/END BEARINGS|SLIDING BEARING BOLT|GIRDER BEARINGS \/ LOCATING/],
+ // A crane column tied to the building column (craneColumnSheet.ts): the footing coordination at the footing plan, the
+ // column tie at its section, the brace and the building column at the elevation.
+ [/^crane-column-footing-clearance$/,/^FOOTING \/ PLAN$/],
+ [/^crane-column-tie-/,/^COLUMN TIE \/ SECTION$/],
+ [/^(crane-column-|building-column-)/,/^CRANE COLUMN AND BUILDING COLUMN/],
 ];
 const byElement:Record<string,RegExp>={
  rail:/RAIL (CLIP|JOINT|LAYOUT)/,bearing:/BEARING|SLIDING/,tie:/TIE|SADDLE|CAP TIEBACK/,stops:/END STOP/,
