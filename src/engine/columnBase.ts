@@ -1,4 +1,5 @@
 import {asceCombinations} from './asceCombinations';
+import {twistShift} from './columnTwistLimit';
 import {columnResponse} from './columnAnalysis';
 import {existingColumnEccentricity,existingColumnRailElevation,existingColumnSection,railForce,seismicHeight} from './existingColumn';
 import {anchorGrades,anchorHardware,barSizes,columnBaseElevation,footingKeyWidth,type ColumnBaseInput} from './columnBaseInputs';
@@ -451,7 +452,9 @@ export function baseDrift(p:ProjectInput,column:ExistingColumnResult){
  const arm=b.footing.thickness+b.grout+b.plate.thickness;
  const M=Math.abs(column.crane.lateral*(side.reactions.baseMoment+side.reactions.base*arm))+Math.abs(column.crane.liveStatic*e*(eccentric.reactions.baseMoment+eccentric.reactions.base*arm));
  const theta=M/(b.soil.subgrade*b.footing.B*b.footing.L**3/12),lever=ht+arm;
- return {theta,lever,column:column.drift.value,total:column.drift.value+theta*lever,limit:column.drift.limit};
+ // The column's drift as checked (column-drift): with the rail's shift across the runway from the column twist.
+ const own=column.drift.value+twistShift(column.torsion);
+ return {theta,lever,column:own,total:own+theta*lever,limit:column.drift.limit};
 }
 /**
  * Fillet all around each plate washer to the base plate, so every rod takes its share of the base shear through
