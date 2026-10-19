@@ -1133,8 +1133,11 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
  lower?:string;upper?:string;step?:string;
  /** The rail without its pad, the clips at the 30 in no-pad spacing (withoutRailPad). */
  pad?:string}
-/** No catalog girder within the targets, and the closest past a limit itself (a ratio or a deflection above 1.00 by the screening estimate). */
-const beyondGirderCatalog=(t:GirderTrial)=>t.basis?.passed===false&&Math.max(t.utilization,t.deflection,t.lateral)>1;
+/**
+ * No catalog girder within the targets, and the closest past a limit itself: a ratio or a deflection above 1.05 by the
+ * screening estimate (5% for the scatter of the screening model about the full calculation, which checks the section).
+ */
+const beyondGirderCatalog=(t:GirderTrial)=>t.basis?.passed===false&&Math.max(t.utilization,t.deflection,t.lateral)>1.05;
 /**
  * Members the catalog cannot supply within the sizing targets (configurator.beyondCatalog; validateProject stops the
  * build with each reason): a sized girder for which no compact rolled W (and no W + channel cap pair) meets the targets,
@@ -1145,6 +1148,14 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
  if(trial&&beyondGirderCatalog(trial)&&!entered.girderShape){
   const capped=cfg.girder==='capped';
   out.push({member:'girder',shape:p.section.name,reason:`Plate girder required: no ${capped?'W and channel cap pair':'compact rolled W or W and channel cap pair'} of the catalog meets the girder sizing targets for this crane and span (the closest, ${trial.name}: ${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of the limits, screening estimates; targets ratio ${trial.basis?.target} and deflections ${trial.basis?.deflectionTarget}). Design a built-up plate girder with a wide top flange (or a surge plate or lateral truss), or shorten the span; the configurator does not design plate girders.`});
+ }
+ // The flange tie as sized and placed (paired bars, flexible plate, on a saddle or the bearing stiffener) with a sizing
+ // ratio of its own still past 1.00 (the targets aside): no arrangement the configurator tried passes, so the build
+ // stops rather than handing on a tie its own sizing rejects.
+ const d=p.details;
+ if(d&&(flangeTieGeometry(p)||stiffenerTieGeometry(p))&&cfg.support!=='column-cap'){
+  const over=Object.entries(tieSizingRatios(p)).filter(([,v])=>v>1+1e-6).sort((a,b)=>b[1]-a[1]);
+  if(over.length)out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:`Top-flange tie not resolved: the ${tieLabels[tieArrangement(d) as keyof typeof tieLabels]??tieArrangement(d)}${stiffenerTieGeometry(p)?' on the bearing stiffener':' on a flange saddle'}, as sized for the estimated tie demands, still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')}, and no other tie arrangement the configurator tries fits and passes here. Choose another tie or support (a capped girder with the cap tieback angle, column caps, a stiffer support), or design the tie connection by hand.`});
  }
  const col=p.existingColumn,w=col?.shape?aiscShapeByName(col.shape):undefined;
  if(cfg.support==='crane-column'&&!entered.columnShape&&w&&w.weight>398+1e-9)
@@ -1196,7 +1207,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
    b?.lighter?`lighter candidates rejected: ${Object.entries(b.rejected).map(([k,n])=>`${n} by ${k}`).join(', ')}; the next lighter, ${b.lighter.name}: ${b.lighter.why}`:'',
    b?.alternative?`a capped girder, ${b.alternative.name} (${Math.round(b.alternative.weight)} lb/ft against ${Math.round(trial.weight)} lb/ft), meets the same targets: consider it (girder type capped)`:'',
    entered.girderShape?'a capped girder is sized as a pair unless both the W and the channel are named':''].filter(Boolean).join('; ');
-  add('Girder',entered.girderShape?`${entered.girderShape} + cap channel blank`:`${auto} (sized)`,p.section.name,`${reason}. These are the configurator's screening estimates (a simplified model that ranks the catalog), not the final ratios: the calculation checks the section and reports its own ratios.${b?.passed===false?Math.max(trial.utilization,trial.deflection,trial.lateral)>1?' A built-up plate girder is required (the build stops: see the configurator stop).':' The closest section is within the limits but not the sizing margins: the calculation decides.':''}`);
+  add('Girder',entered.girderShape?`${entered.girderShape} + cap channel blank`:`${auto} (sized)`,p.section.name,`${reason}. These are the configurator's screening estimates (a simplified model that ranks the catalog), not the final ratios: the calculation checks the section and reports its own ratios.${b?.passed===false?beyondGirderCatalog(trial)?' A built-up plate girder is required (the build stops: see the configurator stop).':' The closest section is within the limits but not the sizing margins: the calculation decides.':''}`);
  }
  if(design&&trace.pad)add('Rail pad','configurator default (pad under rails 5 in deep and deeper)',`None: rail on the girder, clips at most ${len(30*inch)} apart`,trace.pad);
  const col=p.existingColumn;

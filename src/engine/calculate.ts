@@ -46,7 +46,7 @@ export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
  const p=parsed.data,s=p.section,errors:string[]=[];const L=p.spans.reduce((a,b)=>a+b,0);
  // The configurator's stop: a member beyond the catalog, while the project still has the member it could not size.
- for(const v of p.configurator?.beyondCatalog??[])if(v.member==='girder'?s.name===v.shape:p.existingColumn?.shape===v.shape)errors.push(`configurator: ${v.reason}`);
+ for(const v of p.configurator?.beyondCatalog??[])if(v.member==='girder'?s.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)errors.push(`configurator: ${v.reason}`);
  if(s.d<=2*s.tf)errors.push('section.d: depth must exceed twice the flange thickness.');
  if(s.tw>=s.bf)errors.push('section.tw: web must be thinner than the flange width.');
  if(p.capDesign&&p.capDesign.Fu<p.capDesign.Fy)errors.push('capDesign.Fu: ultimate strength cannot be less than channel yield strength.');

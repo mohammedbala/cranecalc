@@ -91,7 +91,7 @@ export const runwayConfigSchema=z.object({
   * sizing targets (a plate girder or a built-up crane column required). validateProject reports each while the project
   * still has that member, so the build stops with the reason instead of reading as a design.
   */
- beyondCatalog:z.array(z.object({member:z.enum(['girder','crane-column']),shape:z.string().max(80),reason:z.string().max(800)})).max(4).optional(),
+ beyondCatalog:z.array(z.object({member:z.enum(['girder','crane-column','tie']),shape:z.string().max(80),reason:z.string().max(800)})).max(4).optional(),
 });
 export type RunwayConfig=z.infer<typeof runwayConfigSchema>;
 export type SupportKind=RunwayConfig['support'];
