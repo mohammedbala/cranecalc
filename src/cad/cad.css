@@ -112,3 +112,5 @@
 .cad-spaces{display:inline-flex;margin-right:8px}.cad-spaces button{border-radius:0;border-color:var(--cad-line)}.cad-spaces button:first-child{border-radius:4px 0 0 4px}.cad-spaces button:last-child{border-radius:0 4px 4px 0;margin-left:-1px}
 .cad-plot{width:300px}.cad-plot label{justify-content:space-between}.cad-plot label span{color:var(--cad-muted)}.cad-plot select{width:150px}
 .cad-frozen{display:flex;flex-direction:column;max-height:120px;overflow:auto}.cad-frozen label{display:flex;gap:5px;align-items:center;font-size:11px}
+.cad-review ul{margin:3px 0 0;padding-left:16px}.cad-review li{margin:2px 0}.cad-review li button{padding:0 6px;margin-left:4px}
+.cad-stale .cad-primary{background:#ffd27a;color:#3d2600;border-color:#ffd27a!important;font-weight:600}

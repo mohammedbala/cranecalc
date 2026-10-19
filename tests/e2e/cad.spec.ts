@@ -183,3 +183,18 @@ test('interchange: import a DXF as a block, export the drawing as DXF',async({pa
  expect(text).toContain('AC1015');expect(text).toContain('EZDXF-SAMPLE');expect(text).toContain('\nINSERT\n');
  expect(errors).toEqual([]);
 });
+
+test('associativity: a schedule placed from the design model',async({page})=>{
+ const errors=watch(page);
+ const {type,objects}=await openEditor(page);
+ const start=await objects();
+ await type('SCHEDULE');
+ await expect(page.locator('.cad-cmd span')).toContainText('SCHEDULE members');
+ await type('W','50,50');
+ await expect(page.locator('.cad-log')).toContainText('WELD SCHEDULE from the design');
+ expect(await objects()).toBe(start+1);
+ const dxf=page.waitForEvent('download');await page.getByRole('button',{name:'DXF',exact:true}).click();
+ const text=await fs.readFile((await (await dxf).path())!,'utf8');
+ expect(text).toContain('WELD SCHEDULE');expect(text).toContain('ELECTRODE');
+ expect(errors).toEqual([]);
+});

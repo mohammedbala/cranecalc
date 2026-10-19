@@ -25,7 +25,7 @@ function merged(env:Env,src:CadDoc):{layers?:CadLayer[];meta:Meta}{
 export function importCmd(env:Env,src:DxfImport,fileName:string):Command{
  const d=src.doc,ents=d.entities.filter(e=>e.type!=='viewport'),k=importFactor(d,env.store.doc);
  let mode:'block'|'objects'='block',step:'mode'|'point'|'scale'='mode',scale=k;
- const strip=({id:_,...r}:Ent)=>r as NewEnt;
+ const strip=({id:_,src:__,...r}:Ent)=>r as NewEnt;
  const name=uniqueName(fileName.replace(/\.dxf$/i,''),new Set((env.store.doc.blocks??[]).map(b=>b.name)));
  const ghost=(p:Pt)=>ents.length>3000?undefined:ents.map(e=>strip(transformEnt(e,compose(translation(p),scaling([0,0],scale)))));
  const place=(p:Pt)=>{

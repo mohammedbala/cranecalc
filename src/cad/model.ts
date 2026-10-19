@@ -15,6 +15,8 @@ export interface CadLayer{name:string;color:number;ltype:LineType;weight:number;
 
 /** Object properties: color (AutoCAD color index), linetype and lineweight (1/100 mm) are ByLayer when unset. */
 export interface EntProps{layer:string;color?:number;ltype?:LineType;weight?:number;ltscale?:number;
+ /** The signature of the generated object this one came from (tracking.ts); new objects have none. */
+ src?:string;
  /** Annotative (model space text, dimensions, leaders): drawn at one paper size in every viewport. */
  annotative?:boolean}
 interface Base extends EntProps{id:number}
@@ -48,7 +50,8 @@ export interface MTextEnt extends Base{type:'mtext';at:Pt;width:number;height:nu
 /** A leader: arrow at the first point, through the others, with text after a landing at the last. */
 export interface LeaderEnt extends Base{type:'leader';points:Pt[];value:string;height:number;arrow?:'closed'|'open'|'tick'|'dot'|'none';landing?:boolean;style?:string}
 /** A table: top-left corner, column widths, row heights (going down), cell text; header rows are bold. */
-export interface TableEnt extends Base{type:'table';at:Pt;cols:number[];rows:number[];cells:string[][];height:number;header?:number;align?:('left'|'center'|'right')[];title?:string;source?:string}
+/** source names the design schedule a table is generated from; generated keeps the cells as last generated. */
+export interface TableEnt extends Base{type:'table';at:Pt;cols:number[];rows:number[];cells:string[][];height:number;header?:number;align?:('left'|'center'|'right')[];title?:string;source?:string;generated?:string[][]}
 /** An attribute definition: a tagged value a block's references fill in (shown as its tag outside a block). */
 export interface AttDefEnt extends Base{type:'attdef';tag:string;prompt:string;value:string;at:Pt;height:number;angle:number;align:Align;invisible?:boolean;style?:string}
 /** A block reference: the named block placed at at, scaled, rotated (degrees) and mirrored, with attribute values by tag. */
@@ -87,6 +90,8 @@ export interface CadDoc{
  pageSetup?:{lineweights?:boolean};
  /** Set on model space while it is open on the Model tab (not stored): the annotation scale it is drafted at. */
  space?:'model';annoScale?:number;
+ /** Signatures of the objects as generated from the design, for carrying edits onto a regenerated drawing. */
+ generatedSigs?:string[];
 }
 export type {BlockDef};
 export type {Ctx,DimStyle,TextStyle};
@@ -675,7 +680,7 @@ export function extendEnt(e:Ent,p:Pt,others:Ent[],doc?:Ctx):Ent|undefined{
 }
 /** A copy offset by d toward the side of p. */
 export function offsetEnt(e:Ent,d:number,p:Pt):NewEnt|undefined{
- const strip=({id:_,...rest}:Ent)=>rest as NewEnt;
+ const strip=({id:_,src:__,...rest}:Ent)=>rest as NewEnt;
  if(e.type==='line'){const v=sub(e.b,e.a),l=len(v);if(l<1e-12)return undefined;const n:Pt=[-v[1]/l,v[0]/l],s=Math.sign(dot(sub(p,e.a),n))||1;return {...strip(e),a:add(e.a,mul(n,d*s)),b:add(e.b,mul(n,d*s))} as NewEnt;}
  if(e.type==='xline'||e.type==='ray'){const n:Pt=[-e.dir[1],e.dir[0]],s=Math.sign(dot(sub(p,e.base),n))||1;return {...strip(e),base:add(e.base,mul(n,d*s))} as NewEnt;}
  if(e.type==='circle'||e.type==='arc'){const r=e.radius+(dist(p,e.center)>e.radius?d:-d);return r>1e-9?{...strip(e),radius:r} as NewEnt:undefined;}

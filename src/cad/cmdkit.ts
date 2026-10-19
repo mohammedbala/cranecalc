@@ -17,6 +17,8 @@ export interface Env{
  length(d:number):string;
  /** Command settings that persist between commands (AutoCAD system variables: FILLETRAD, POLYSIDES ...). */
  vars:Record<string,number|string|boolean>;
+ /** The design's schedules (members, bolts, welds), when the drawing belongs to a calculated design. */
+ schedules?():import('./schedules').Schedules|undefined;
  /** A file for the user (WBLOCK). */
  download?(name:string,content:string,type:string):void;
  /** Block editing (BEDIT, BCLOSE) and attribute editing: the editor's to do. */
@@ -48,7 +50,8 @@ export interface Command{
  done:boolean;
 }
 
-export const strip=(e:Ent):NewEnt=>{const {id:_,...rest}=e;return rest as NewEnt;};
+/** An entity as a new one: no id, and not a generated object (no src). */
+export const strip=(e:Ent):NewEnt=>{const {id:_,src:__,...rest}=e;return rest as NewEnt;};
 export const key=(s:string)=>s.trim().toUpperCase();
 export const num=(s:string)=>parseLength(s);
 export const fmtAngle=(a:number)=>`${Number(((a%360+360)%360).toFixed(2))}°`;

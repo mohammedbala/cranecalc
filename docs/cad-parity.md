@@ -136,5 +136,5 @@ and accessible panels (labels, focus order, keyboard reachable).
 | 5 Blocks | done: `src/cad/blocks.ts`, `src/cad/blockLibrary.ts`, `src/cad/blockCommands.ts`; tests in `tests/cadBlocks.test.ts`. References scale uniformly (with a mirror flag), as most drafting blocks do; WBLOCK arrives with DXF interchange |
 | 6 Layouts | done: `src/cad/layout.ts`, `src/cad/layoutCommands.ts`, `src/cad/pdf.ts`; tests in `tests/cadLayout.test.ts`. One layout per sheet (the sheet itself); several layouts per drawing are not needed by the sheet set |
 | 7 Interchange | done: `src/cad/dxf.ts` (writer), `src/cad/dxfImport.ts` (reader), `src/cad/interchangeCommands.ts` (IMPORT, WBLOCK); tests in `tests/cadDxf.test.ts` with `tests/fixtures/cad/ezdxf-sample.dxf`. DWG not bundled (GPL), as planned |
-| 8 Associativity | planned |
+| 8 Associativity | done: `src/cad/tracking.ts` (content signatures, change set, replay with a review list), `src/cad/schedules.ts` (member, bolt and weld schedules; SCHEDULE command; refresh keeps overridden cells and counts them); tests in `tests/cadAssociativity.test.ts` and `tests/e2e/cad.spec.ts`. Generated views are regenerated from the design each time and the user's drafting rides on top through the change set |
 | 9 Performance and UX | planned |

@@ -10,7 +10,7 @@ export const findBlock=(env:Env,name:string):{def:BlockDef;fromLibrary:boolean}|
 };
 /** The scale that draws a block defined in inches at its size in this drawing's units. */
 export const unitFactor=(env:Env,def:BlockDef)=>unitScale(env.store.doc.unit)/unitScale(def.units??env.store.doc.unit);
-const strip=(e:Ent):NewEnt=>{const {id:_,...r}=e;return r as NewEnt;};
+const strip=(e:Ent):NewEnt=>{const {id:_,src:__,...r}=e;return r as NewEnt;};
 
 function blockCmd(env:Env):Command{
  let list:Ent[]=[],step:'name'|'redefine'|'base'='name',name='';

@@ -4,7 +4,7 @@ import {
  MoveHorizontal,MousePointer2,Plus,Redo2,RectangleHorizontal,RotateCw,Ruler,Scaling,Scissors,SlidersHorizontal,Spline,TriangleAlert,Type,
  Undo2,Ungroup,Waypoints,X,Slash,Egg,Activity,Hexagon,MoveDiagonal,CornerDownRight,Diamond,StretchHorizontal,Grid3x3,RotateCcw,Unlink,Link,MoveRight,
  AlignHorizontalJustifyStart,PenLine,Paintbrush,PaintBucket,Scan,Combine,Blocks,AlignLeft,CaseSensitive,Triangle,Radius,Diameter,Milestone,Rows3,Columns3,Settings2,
- Upload,MessageSquareText,MessageSquare,Table,Cloud,Palette,Waves,Box as BoxIcon,Tag,Tags,PencilRuler,Library,FileInput,Box as Box3,FileText,Frame,Ratio,Printer,
+ Upload,TableProperties,MessageSquareText,MessageSquare,Table,Cloud,Palette,Waves,Box as BoxIcon,Tag,Tags,PencilRuler,Library,FileInput,Box as Box3,FileText,Frame,Ratio,Printer,
 } from 'lucide-react';
 import {
  DEG,add,angleOf,bbox,curveLength,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,lineTypes,nearest,parseLength,
@@ -21,6 +21,8 @@ import {insertCmd} from '../cad/blockCommands';
 import {attdefsOf,setXrefResolver} from '../cad/blocks';
 import {modelDoc,modelExtents,scaleLabel,scalesFor,withModel} from '../cad/layout';
 import {docToPdf,pdfBytes,type PlotOptions} from '../cad/pdf';
+import {editSet,isModified,replay,stamp,type Conflict} from '../cad/tracking';
+import {refreshCells,scheduleCells,type ScheduleKind,type Schedules} from '../cad/schedules';
 import {writeDxf} from '../cad/dxf';
 import {readDxf} from '../cad/dxfImport';
 import {importCmd} from '../cad/interchangeCommands';
@@ -32,7 +34,7 @@ import {cadPersistent,deleteCadRecord,saveCadRecord,type CadRecord} from '../cad
 import '../cad/cad.css';
 
 /** The drawing to edit; others are the project's other drawings, for external references. */
-export interface CadSource{project:string;base:string;generated:CadDoc;record?:CadRecord;units:'US'|'SI';others?:{key:string;title:string;doc:()=>CadDoc}[]}
+export interface CadSource{project:string;base:string;generated:CadDoc;record?:CadRecord;units:'US'|'SI';others?:{key:string;title:string;doc:()=>CadDoc}[];schedules?:Schedules}
 type Toggles={grid:boolean;snap:boolean;ortho:boolean;osnap:boolean;lwt:boolean;polar:boolean;otrack:boolean;dyn:boolean};
 
 const APERTURE=9,PICKBOX=5;
@@ -47,7 +49,8 @@ const fmtNum=(v:number)=>String(Number(v.toFixed(4)));
 const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray',hatch:'Hatch',mtext:'Multiline text',leader:'Leader',table:'Table',attdef:'Attribute definition',insert:'Block reference',xref:'External reference',viewport:'Viewport'};
 
 export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=>void}){
- const store=useMemo(()=>new CadStore(structuredClone(source.record?.doc??source.generated)),[]);// eslint-disable-line react-hooks/exhaustive-deps
+ // A generated drawing opens with its objects marked, so edits can be carried onto a regenerated one (tracking.ts).
+ const store=useMemo(()=>new CadStore(structuredClone(source.record?.doc??stamp(source.generated))),[]);// eslint-disable-line react-hooks/exhaustive-deps
  useSyncExternalStore(store.subscribe,store.getVersion);
  const doc=store.doc,heights=useMemo(()=>defaultHeights(source.generated),[source.generated]);
  const [toggles,setToggles]=useState<Toggles>({grid:false,snap:false,ortho:false,osnap:true,lwt:true,polar:true,otrack:true,dyn:true});
@@ -141,6 +144,16 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   setXrefResolver(name=>{if(!memo.has(name))memo.set(name,list.find(o=>o.key===name)?.doc());return memo.get(name);});
   return ()=>setXrefResolver(undefined);
  },[source.others]);
+ // ---- schedules: tables generated from the design refresh when the drawing opens ----
+ useEffect(()=>{
+  const sc=source.schedules;if(!sc)return;
+  const put:Ent[]=[];let overridden=0;
+  for(const e of store.doc.entities)if(e.type==='table'&&e.source&&e.source in sc){
+   const r=refreshCells(e.cells,e.generated,scheduleCells(sc[e.source as ScheduleKind]));overridden+=r.overridden;
+   if(JSON.stringify(r.cells)!==JSON.stringify(e.cells)||JSON.stringify(r.generated)!==JSON.stringify(e.generated))put.push({...e,cells:r.cells,generated:r.generated,rows:r.cells.map((_,i)=>e.rows[i]??e.rows[e.rows.length-1])});
+  }
+  if(put.length){store.commit('Refresh schedules',{put});say(`${put.length} schedule${put.length>1?'s':''} refreshed from the design${overridden?`; ${overridden} cell${overridden>1?'s':''} you edited no longer match the design (kept)`:''}.`);}
+ },[]);// eslint-disable-line react-hooks/exhaustive-deps
  // ---- model space: opened on the Model tab in place of the layout; the layout tab writes it back ----
  const space=useRef<{saved:ReturnType<CadStore['swap']>;view:View}|null>(null);
  function toModel(vp?:ViewportEnt){
@@ -190,7 +203,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  },[store.docVersion,store,source.project,source.base,source.record,stale]);
 
  // ---- helpers ----
- function stripId(e:Ent):NewEnt{const {id:_,...rest}=e;return rest as NewEnt;}
+ function stripId(e:Ent):NewEnt{const {id:_,src:__,...rest}=e;return rest as NewEnt;}
  function lengthText(d:number){return formatLength(d*store.doc.realPerUnit,store.doc.display);}
  function gridSpacing(d:CadDoc){return d.unit==='in'?.25:d.unit==='mm'?5:10;}
  const layerOf=(name:string)=>store.doc.layers.find(l=>l.name===name);
@@ -240,7 +253,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   zoomExtents,zoomWindow:(a,b)=>zoomTo([Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])],1.02),
   openPanel:p=>setPanel(v=>({...v,[p==='layers'?'layers':'props']:true})),length:lengthText,
   vars:vars.current,lastWindow:()=>lastWindow.current,
-  editBlock,closeBlock,blockEditing:()=>blockEdit.current?.name,download:(name,content,type)=>download(new Blob([content],{type}),name),editAttributes:id=>{store.select([id]);setPanel(v=>({...v,props:true}));say('Edit the attribute values in Properties.');},
+  schedules:()=>source.schedules,editBlock,closeBlock,blockEditing:()=>blockEdit.current?.name,download:(name,content,type)=>download(new Blob([content],{type}),name),editAttributes:id=>{store.select([id]);setPanel(v=>({...v,props:true}));say('Edit the attribute values in Properties.');},
  };
  const selPrompt=()=>{const m=selMode.current,n=active.current!.name;
   if(m?.kind==='W'||m?.kind==='C')return `${n} Specify ${m.pts.length?'opposite':'first'} corner (${m.kind==='W'?'window':'crossing'}):`;
@@ -474,12 +487,23 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  function changeSelection(label:string,fn:(e:Ent)=>Ent){store.commit(label,{put:selected.filter(pickable).map(fn)});schedule(true);}
  function resolveStale(keep:boolean){
   if(keep){void saveCadRecord(source.project,source.base,store.doc).then(()=>setSaveState('saved'));say('Kept the edited drawing for the current design.');}
-  else{void deleteCadRecord(source.project,doc.key);store.reset(structuredClone(source.generated));startVersion.current=store.docVersion;setSaveState('generated');say('Started over from the generated drawing.');}
+  else{void deleteCadRecord(source.project,doc.key);store.reset(stamp(structuredClone(source.generated)));startVersion.current=store.docVersion;setSaveState('generated');say('Started over from the generated drawing.');}
   setStale(false);setUnderlay(false);
+ }
+ /** The edits replayed on the drawing generated for the current design (Revit-style: the model's views follow the design). */
+ const carried=useMemo(()=>stale&&source.record?replay(source.record.doc,source.generated):undefined,[stale,source.record,source.generated]);
+ const [conflicts,setConflicts]=useState<Conflict[]>([]);
+ function carryEdits(){
+  if(!carried)return;
+  store.reset(structuredClone(carried.doc));startVersion.current=-1;
+  void saveCadRecord(source.project,source.base,store.doc).then(()=>setSaveState('saved'));
+  setStale(false);setUnderlay(false);setConflicts(carried.conflicts);
+  const c=carried.carried;say(`Carried onto the current design: ${c.added} added, ${c.modified} modified and ${c.deleted} deleted objects${carried.dropped?`; ${carried.dropped} deletions no longer apply`:''}${carried.conflicts.length?`; ${carried.conflicts.length} to review`:''}.`);
+  zoomExtents();
  }
  function revert(){
   if(!window.confirm('Discard every edit to this drawing and go back to the generated drawing?'))return;
-  void deleteCadRecord(source.project,doc.key);store.reset(structuredClone(source.generated));startVersion.current=store.docVersion;setSaveState('generated');setStale(false);say('Reverted to the generated drawing.');zoomExtents();
+  void deleteCadRecord(source.project,doc.key);store.reset(stamp(structuredClone(source.generated)));startVersion.current=store.docVersion;setSaveState('generated');setStale(false);setConflicts([]);say('Reverted to the generated drawing.');zoomExtents();
  }
 
  const I=(C:typeof Slash,extra?:React.CSSProperties)=><C size={16} style={extra}/>;
@@ -503,7 +527,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
     ['DIMRADIUS','Radius dimension (DRA)',I(Radius)],['DIMDIAMETER','Diameter dimension (DDI)',I(Diameter)],['DIMORDINATE','Ordinate dimension (DOR)',I(Milestone)],
     ['DIMBASELINE','Baseline dimensions (DBA)',I(Rows3)],['DIMCONTINUE','Continued dimensions (DCO)',I(Columns3)],['DIMSTYLE','Dimension styles (D)',I(Settings2)]]},
    {name:'Leaders',tools:[['MLEADER','Multileader (MLD)',I(MessageSquareText)],['LEADER','Leader (LE)',I(MessageSquare)]]},
-   {name:'Tables',tools:[['TABLE','Table (TB)',I(Table)]]},
+   {name:'Tables',tools:[['TABLE','Table (TB)',I(Table)],['SCHEDULE','Schedule from the design: members, bolts, welds',I(TableProperties)]]},
    {name:'Markup',tools:[['REVCLOUD','Revision cloud',I(Cloud)]]},
   ]},
   {tab:'Insert',panels:[
@@ -546,7 +570,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   </header>
   {blockEdit.current&&<div className="cad-stale cad-bedit"><Blocks size={15}/><p><strong>Block editor: {blockEdit.current.name}</strong> · the base point is marked with a cross; every reference follows when you save.</p>
    <button onClick={()=>{endCommand(false);closeBlock(true);}}>Save block</button><button onClick={()=>{endCommand(false);closeBlock(false);}}>Discard changes</button></div>}
+  {conflicts.length>0&&<div className="cad-stale cad-review" role="region" aria-label="Edits to review"><TriangleAlert size={15}/><div><strong>{conflicts.length} edit{conflicts.length>1?'s':''} to review after the design change</strong>
+   <ul>{conflicts.slice(0,6).map(c=><li key={c.id}>{c.note} <button onClick={()=>{const e=store.get(c.id);if(e){store.select([c.id]);zoomTo(bbox(e,store.doc),3);}}}>Show</button><button onClick={()=>setConflicts(v=>v.filter(x=>x.id!==c.id))}>Keep</button><button onClick={()=>{store.commit('Remove reviewed edit',{del:[c.id]});setConflicts(v=>v.filter(x=>x.id!==c.id));schedule(true);}}>Remove</button></li>)}</ul></div>
+   <button onClick={()=>setConflicts([])}>Done</button></div>}
   {stale&&<div className="cad-stale"><TriangleAlert size={15}/><p><strong>The design changed after this drawing was edited</strong> ({new Date(source.record!.savedAt).toLocaleString()}). Your edited drawing is open; the generated drawing for the current design differs.</p>
+   {carried&&<button className="cad-primary" title={`${carried.carried.added} added, ${carried.carried.modified} modified, ${carried.carried.deleted} deleted objects carry over${carried.conflicts.length?`; ${carried.conflicts.length} need review`:''}`} onClick={carryEdits}>Carry my edits onto the current design{carried.conflicts.length?` (${carried.conflicts.length} to review)`:''}</button>}
    <button onClick={()=>setUnderlay(v=>!v)}>{underlay?'Hide':'Show'} current design underneath</button><button onClick={()=>resolveStale(true)}>Keep my edits</button><button onClick={()=>{if(window.confirm('Discard your edits and start from the drawing generated for the current design?'))resolveStale(false);}}>Start from the current design</button></div>}
   <div className="cad-ribbon">
    <div className="cad-tabs" role="tablist" aria-label="Ribbon">{ribbon.map(r=><button key={r.tab} role="tab" aria-selected={ribbonTab===r.tab} className={ribbonTab===r.tab?'on':''} onClick={()=>setRibbonTab(r.tab)}>{r.tab}</button>)}</div>
@@ -686,7 +714,8 @@ function ObjectProps({selected,onAll}:{selected:Ent[];onAll:(label:string,fn:(e:
 /** Properties of the selection: geometry, text and layer, edited in place. */
 function Properties({doc,selected,layers,onPut,onLayer,onAll,lengthText}:{doc:CadDoc;selected:Ent[];layers:CadLayer[];onPut:(e:Ent)=>void;onLayer:(name:string)=>void;onAll:(label:string,fn:(e:Ent)=>Ent)=>void;lengthText:(d:number)=>string}){
  if(!selected.length)return <dl className="cad-props"><dt>Drawing</dt><dd>{doc.key}</dd><dt>Units</dt><dd>{doc.unit==='in'?'Paper inches':doc.unit==='mm'?'Paper millimeters':'Sketch units'}</dd>
-  <dt>Objects</dt><dd>{doc.entities.length.toLocaleString()}</dd><dt>Size</dt><dd>{fmtNum(doc.width)} × {fmtNum(doc.height)}</dd><dd className="cad-hint">Click objects, or drag a window (left to right: inside; right to left: crossing). Shift-click removes.</dd></dl>;
+  <dt>Objects</dt><dd>{doc.entities.length.toLocaleString()}</dd><dt>Size</dt><dd>{fmtNum(doc.width)} × {fmtNum(doc.height)}</dd>
+  {(()=>{const es=doc.space==='model'?undefined:editSet(doc);return es?<><dt>Your edits</dt><dd>{es.added.length} added, {es.modified.length} modified, {es.deleted.length} deleted</dd></>:null;})()}<dd className="cad-hint">Click objects, or drag a window (left to right: inside; right to left: crossing). Shift-click removes.</dd></dl>;
  const layerSel=<select aria-label="Layer of the selection" value={selected.every(e=>e.layer===selected[0].layer)?selected[0].layer:''} onChange={e=>onLayer(e.target.value)}>
   {!selected.every(e=>e.layer===selected[0].layer)&&<option value="">*varies*</option>}{layers.map(l=><option key={l.name} value={l.name}>{l.name}</option>)}</select>;
  if(selected.length>1){const by=new Map<string,number>();for(const e of selected)by.set(typeName[e.type],(by.get(typeName[e.type])??0)+1);
@@ -696,7 +725,7 @@ function Properties({doc,selected,layers,onPut,onLayer,onAll,lengthText}:{doc:Ca
  const styleSel=(value:string|undefined,set:(v:string|undefined)=>void)=><select aria-label="Text style" value={value??'Standard'} onChange={ev=>set(ev.target.value==='Standard'?undefined:ev.target.value)}>{textStyleNames.map(n=><option key={n} value={n}>{n}</option>)}</select>;
  const num=(label:string,value:number,set:(v:number)=>Ent|undefined)=><><dt>{label}</dt><dd><NumField value={value} onCommit={v=>{const n=set(v);if(n)onPut(n);}}/></dd></>;
  const pt=(label:string,p:Pt,set:(p:Pt)=>Ent)=><>{num(`${label} X`,p[0],v=>set([v,p[1]]))}{num(`${label} Y`,p[1],v=>set([p[0],v]))}</>;
- return <dl className="cad-props"><dt>Object</dt><dd>{typeName[e.type]}</dd><dt>Layer</dt><dd>{layerSel}</dd><ObjectProps selected={selected} onAll={onAll}/>
+ return <dl className="cad-props"><dt>Object</dt><dd>{typeName[e.type]}</dd><dt>Origin</dt><dd>{e.src?(isModified(e)?'Generated, modified by you':'Generated from the design'):'Added by you'}</dd><dt>Layer</dt><dd>{layerSel}</dd><ObjectProps selected={selected} onAll={onAll}/>
   {e.type==='line'&&<>{pt('Start',e.a,a=>({...e,a}))}{pt('End',e.b,b=>({...e,b}))}<dt>Length</dt><dd>{fmtNum(dist(e.a,e.b))} · {lengthText(dist(e.a,e.b))}</dd><dt>Angle</dt><dd>{fmtNum((angleOf(e.a,e.b)+360)%360)}°</dd></>}
   {e.type==='poly'&&<><dt>Vertices</dt><dd>{e.points.length}</dd><dt>Closed</dt><dd><input type="checkbox" checked={e.closed} onChange={ev=>onPut({...e,closed:ev.target.checked})}/></dd>
    <dt>Arc segments</dt><dd>{e.bulges?.filter(b=>b).length??0}</dd><dt>Length</dt><dd>{lengthText(curveLength(e))}</dd></>}

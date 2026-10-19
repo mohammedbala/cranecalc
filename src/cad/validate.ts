@@ -28,8 +28,9 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
   if(e.weight!==undefined&&(!n(e.weight)||e.weight<0||e.weight>211))return undefined;
   if(e.ltscale!==undefined&&(!n(e.ltscale)||e.ltscale<=0))return undefined;
   if(e.annotative!==undefined&&typeof e.annotative!=='boolean')return undefined;
+  if(e.src!==undefined&&!str(e.src,40))return undefined;
   const base:EntProps&{id:number}={id:e.id,layer:e.layer};
-  if(e.color!==undefined)base.color=e.color as number;if(e.ltype!==undefined)base.ltype=e.ltype as CadLayer['ltype'];if(e.weight!==undefined)base.weight=e.weight as number;if(e.ltscale!==undefined)base.ltscale=e.ltscale as number;if(e.annotative)base.annotative=true;
+  if(e.color!==undefined)base.color=e.color as number;if(e.ltype!==undefined)base.ltype=e.ltype as CadLayer['ltype'];if(e.weight!==undefined)base.weight=e.weight as number;if(e.ltscale!==undefined)base.ltscale=e.ltscale as number;if(e.annotative)base.annotative=true;if(e.src)base.src=e.src as string;
   switch(e.type){
    case 'line':if(!pt(e.a)||!pt(e.b))return undefined;return ({...base,type:'line',a:e.a,b:e.b});break;
    case 'poly':{if(!pts(e.points,2)||typeof e.closed!=='boolean')return undefined;
@@ -61,8 +62,8 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
     const cols=e.cols,rows=e.rows,cells=e.cells;
     if(!pt(e.at)||!Array.isArray(cols)||!cols.length||cols.length>200||!cols.every(v=>n(v)&&v>0)||!Array.isArray(rows)||!rows.length||rows.length>5000||!rows.every(v=>n(v)&&v>0)||!n(e.height)||e.height<=0)return undefined;
     if(!Array.isArray(cells)||cells.length>rows.length||!cells.every(r=>Array.isArray(r)&&r.length<=cols.length&&r.every(c=>str(c,2000))))return undefined;
-    if((e.header!==undefined&&(!n(e.header)||e.header<0))||(e.align!==undefined&&(!Array.isArray(e.align)||!e.align.every(a=>['left','center','right'].includes(a))))||(e.title!==undefined&&!str(e.title,400))||(e.source!==undefined&&!str(e.source,80)))return undefined;
-    return ({...base,type:'table',at:e.at,cols:cols as number[],rows:rows as number[],cells:cells as string[][],height:e.height,...(e.header?{header:e.header as number}:{}),...(e.align?{align:e.align as ('left'|'center'|'right')[]}:{}),...(e.title?{title:e.title as string}:{}),...(e.source?{source:e.source as string}:{})});break;
+    if((e.header!==undefined&&(!n(e.header)||e.header<0))||(e.align!==undefined&&(!Array.isArray(e.align)||!e.align.every(a=>['left','center','right'].includes(a))))||(e.title!==undefined&&!str(e.title,400))||(e.source!==undefined&&!str(e.source,80))||(e.generated!==undefined&&(!Array.isArray(e.generated)||e.generated.length>5000||!e.generated.every(r=>Array.isArray(r)&&r.length<=200&&r.every(c=>str(c,2000))))))return undefined;
+    return ({...base,type:'table',at:e.at,cols:cols as number[],rows:rows as number[],cells:cells as string[][],height:e.height,...(e.header?{header:e.header as number}:{}),...(e.align?{align:e.align as ('left'|'center'|'right')[]}:{}),...(e.title?{title:e.title as string}:{}),...(e.source?{source:e.source as string}:{}),...(e.generated?{generated:e.generated as string[][]}:{})});break;
    }
    case 'dim':if(!['aligned','horizontal','vertical','angular','radius','diameter','ordinate'].includes(e.kind as string)||!pt(e.a)||!pt(e.b)||!pt(e.at)||!n(e.height)||e.height<=0||(e.text!==undefined&&!str(e.text,400))||(e.c!==undefined&&!pt(e.c))||(e.style!==undefined&&!str(e.style,80))||(e.axis!==undefined&&e.axis!=='x'&&e.axis!=='y'))return undefined;
     if((e.kind==='angular'||e.kind==='radius'||e.kind==='diameter')&&!pt(e.c))return undefined;
@@ -102,6 +103,8 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
   const list:Ent[]=[];for(const e of m.entities as Record<string,unknown>[]){const v=entity(e,1);if(!v)return undefined;list.push(v);}
   model={entities:list,nextId:m.nextId,annoScale:m.annoScale};
  }
+ let generatedSigs:string[]|undefined;
+ if(o.generatedSigs!==undefined){if(!Array.isArray(o.generatedSigs)||o.generatedSigs.length>300000||!o.generatedSigs.every(x=>str(x,40)))return undefined;generatedSigs=o.generatedSigs as string[];}
  if(o.pageSetup!==undefined){const ps=o.pageSetup as Record<string,unknown>;if(!ps||typeof ps!=='object'||(ps.lineweights!==undefined&&typeof ps.lineweights!=='boolean'))return undefined;}
  const blockNames=new Set(blocks?.map(b=>b.name));
  if([...entities,...(blocks??[]).flatMap(b=>b.entities),...(model?.entities??[])].some(e=>e.type==='insert'&&!blockNames.has(e.name)))return undefined;
@@ -125,5 +128,5 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
  }
  if(o.ltscale!==undefined){if(!n(o.ltscale)||o.ltscale<=0)return undefined;meta.ltscale=o.ltscale;}
  if(o.plotStyle!==undefined){if(!['monochrome','grayscale','color'].includes(o.plotStyle as string))return undefined;meta.plotStyle=o.plotStyle;}
- return {...meta,...(groups?{groups}:{}),...(blocks?{blocks}:{}),...(model?{model}:{}),...(o.pageSetup?{pageSetup:{...((o.pageSetup as {lineweights?:boolean}).lineweights!==undefined?{lineweights:(o.pageSetup as {lineweights:boolean}).lineweights}:{})}}:{}),key:o.key,title:o.title,unit:o.unit as CadDoc['unit'],display:o.display as CadDoc['display'],realPerUnit:o.realPerUnit,width:o.width,height:o.height,svgScale:o.svgScale,layers,entities,nextId:o.nextId};
+ return {...meta,...(generatedSigs?{generatedSigs}:{}),...(groups?{groups}:{}),...(blocks?{blocks}:{}),...(model?{model}:{}),...(o.pageSetup?{pageSetup:{...((o.pageSetup as {lineweights?:boolean}).lineweights!==undefined?{lineweights:(o.pageSetup as {lineweights:boolean}).lineweights}:{})}}:{}),key:o.key,title:o.title,unit:o.unit as CadDoc['unit'],display:o.display as CadDoc['display'],realPerUnit:o.realPerUnit,width:o.width,height:o.height,svgScale:o.svgScale,layers,entities,nextId:o.nextId};
 }

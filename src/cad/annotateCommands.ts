@@ -1,5 +1,6 @@
 import {dimStyleOf,standardDimStyle,tableCell,textStyleOf,type DimStyle} from './annotation';
 import {loopArea} from './hatch';
+import {scheduleCells,scheduleTitles,type Schedule,type ScheduleKind} from './schedules';
 import {closedOutline} from './drawCommands';
 import {
  add,angleOf,arcPoint,dist,dot,len,mul,sub,sweep,
@@ -113,7 +114,7 @@ function lastLinear(doc:CadDoc):DimEnt|undefined{
 export function chainDim(prev:DimEnt,base:DimEnt,p:Pt,baseline:boolean,spacing:number):Omit<DimEnt,'id'>{
  const dir:Pt=prev.kind==='horizontal'?[1,0]:prev.kind==='vertical'?[0,1]:(()=>{const v=sub(prev.b,prev.a),l=len(v)||1;return [v[0]/l,v[1]/l] as Pt;})();
  const n:Pt=[-dir[1],dir[0]],side=Math.sign(dot(sub(prev.at,prev.a),n))||1;
- const {id:_,...rest}=prev;
+ const {id:_,src:__,...rest}=prev;
  if(!baseline)return {...rest,a:prev.b,b:p,text:undefined};
  return {...rest,a:base.a,b:p,at:add(prev.at,mul(n,side*spacing)),text:undefined};
 }
@@ -182,6 +183,25 @@ export function cellAt(e:Extract<Ent,{type:'table'}>,p:Pt):{i:number;j:number}|u
 export function setCell(e:Extract<Ent,{type:'table'}>,i:number,j:number,value:string){
  const cells=e.rows.map((_,r)=>e.cols.map((__,c)=>e.cells[r]?.[c]??''));cells[i][j]=value;
  return {...e,cells};
+}
+
+// ---- SCHEDULE: a live table from the design ------------------------------------------------------------------------
+/** A table entity for a schedule at the corner, sized to its text. */
+export function scheduleTable(kind:ScheduleKind,sc:Schedule,at:Pt,h:number,layer:string):NewEnt{
+ const cells=scheduleCells(sc),n=Math.max(...cells.map(r=>r.length));
+ const cols=Array.from({length:n},(_,j)=>Math.max(h*4,...cells.slice(1).map(r=>(r[j]??'').length*h*.78+h*1.4)));
+ return {type:'table',layer,at,cols,rows:cells.map(()=>h*2.2),cells,height:h,header:2,align:Array.from({length:n},(_,j)=>j===0?'left':'center'),source:kind,generated:cells};
+}
+function scheduleCmd(env:Env):Command{
+ let kind:ScheduleKind='members';const sc=env.schedules?.();
+ const h=env.textHeight(),ent=(p:Pt)=>scheduleTable(kind,sc![kind],p,h,env.layer());
+ const cmd:Command={name:'SCHEDULE',done:false,
+  prompt:()=>`SCHEDULE ${kind} — specify the top-left corner or [Members/Bolts/Welds]:`,
+  text(t){if(isKey(t,'Members'))kind='members';else if(isKey(t,'Bolts'))kind='bolts';else if(isKey(t,'Welds'))kind='welds';else return false;return true;},
+  point(p){env.store.commit(`${scheduleTitles[kind]}`,{add:[ent(p)]});env.log(`${scheduleTitles[kind]} from the design: it refreshes when the design changes; cells you edit are kept and flagged.`);cmd.done=true;},
+  preview:q=>sc?{ents:[ent(q)]}:undefined};
+ if(!sc){env.log('Schedules come from a calculated design: open the drawing from the Drawings tab.');cmd.done=true;}
+ return cmd;
 }
 
 // ---- REVCLOUD ------------------------------------------------------------------------------------------------------
@@ -256,11 +276,11 @@ export const annotateNames:Record<string,string>={
  MT:'MTEXT',MTEXT:'MTEXT',DAN:'DIMANGULAR',DIMANGULAR:'DIMANGULAR',DRA:'DIMRADIUS',DIMRADIUS:'DIMRADIUS',DDI:'DIMDIAMETER',DIMDIAMETER:'DIMDIAMETER',
  DOR:'DIMORDINATE',DIMORDINATE:'DIMORDINATE',DBA:'DIMBASELINE',DIMBASELINE:'DIMBASELINE',DCO:'DIMCONTINUE',DIMCONTINUE:'DIMCONTINUE',
  LE:'LEADER',LEADER:'LEADER',QLEADER:'LEADER',MLD:'MLEADER',MLEADER:'MLEADER',TB:'TABLE',TABLE:'TABLE',REVCLOUD:'REVCLOUD',RC:'REVCLOUD',
- LTS:'LTSCALE',LTSCALE:'LTSCALE',PLOTSTYLE:'PLOTSTYLE',UCS:'UCS',
+ SCHEDULE:'SCHEDULE',SCH:'SCHEDULE',LTS:'LTSCALE',LTSCALE:'LTSCALE',PLOTSTYLE:'PLOTSTYLE',UCS:'UCS',
  ST:'STYLE',STYLE:'STYLE',D:'DIMSTYLE',DST:'DIMSTYLE',DDIM:'DIMSTYLE',DIMSTYLE:'DIMSTYLE',
 };
 export const annotateCommands:Record<string,(env:Env)=>Command>={
  MTEXT:mtextCmd,DIMANGULAR:dimAngularCmd,DIMRADIUS:env=>dimRadialCmd(env,false),DIMDIAMETER:env=>dimRadialCmd(env,true),DIMORDINATE:dimOrdinateCmd,
  DIMBASELINE:env=>dimChainCmd(env,true),DIMCONTINUE:env=>dimChainCmd(env,false),LEADER:env=>leaderCmd(env,false),MLEADER:env=>leaderCmd(env,true),
- TABLE:tableCmd,REVCLOUD:revcloudCmd,LTSCALE:ltscaleCmd,PLOTSTYLE:plotStyleCmd,UCS:ucsCmd,
+ TABLE:tableCmd,SCHEDULE:scheduleCmd,REVCLOUD:revcloudCmd,LTSCALE:ltscaleCmd,PLOTSTYLE:plotStyleCmd,UCS:ucsCmd,
 };

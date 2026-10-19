@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Maximize, Minus, PencilRuler, Plus } from 'lucide-react';
 import { docFromSheet, docFromSketch, docToSvg } from '../cad/convert';
 import { cadBaseKey, cadEditFor, cadProjectKey, useCadRecords } from '../cad/storage';
+import { schedules } from '../cad/schedules';
 import type { CadSource } from './CadEditor';
 import '../cad/cad.css';
 const CadEditor = lazy(() => import('./CadEditor'));
@@ -41,7 +42,8 @@ export default function DraftingViewer({ snapshot, framing=defaultFraming }: { s
     const others = [...drawings.map(d => ({ key: d.number, title: d.title, make: () => docFromSketch(d, snapshot.input.units) })),
       ...sheets.map(v => ({ key: v.number, title: v.title, make: () => docFromSheet({ number: v.number, title: v.title, svg: drawingSheetSet(snapshot, framing).find(x => x.number === v.number)?.svg ?? '' }, snapshot.input.units) }))]
       .filter(o => o.key !== key).map(o => ({ key: o.key, title: o.title, doc: () => { const e = cadEditFor(project, o.key, base); return e?.current ? e.record.doc : o.make(); } }));
-    if (generated) setCad({ project, base, generated, record: edit?.record, units: snapshot.input.units, others });
+    let sched: ReturnType<typeof schedules> | undefined; try { sched = schedules(snapshot); } catch { sched = undefined; }
+    if (generated) setCad({ project, base, generated, record: edit?.record, units: snapshot.input.units, others, schedules: sched });
   };
   const reset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
   useEffect(reset, [name, snapshot.revision]);
