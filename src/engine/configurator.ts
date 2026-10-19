@@ -7,6 +7,7 @@
  * blocks them until they are replaced (packageContentChecks). Canonical units N, mm, MPa.
  */
 import type {Crane,ProjectInput,Section} from './types';
+import {format as formatUnits} from './units';
 import type {RunwayDetails} from './runwayDetails';
 import {runwayConfigSchema,supportLabels,tieLabels,type ConfigSelection,type RunwayConfig} from './configInputs';
 import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationProject} from './demonstration';
@@ -1374,8 +1375,9 @@ function sizeColumnTie(p:ProjectInput):string{
   pick??=tie;if(ok){pick=tie;break search;}
  }
  k.columnTie=pick!;
- const t=k.columnTie,f=(v:number)=>`${+(v/kip).toFixed(1)} kip`,L=(v:number)=>`${+(v/inch).toFixed(3)} in`;
- return `Column tie ${L(t.plate.thickness)} × ${L(t.plate.width)} with ${t.bolts.count} ${L(t.bolts.diameter)} A325 bolts on sleeves in ${L(t.slot.width)} × ${L(t.slot.length)} vertical slots: the lightest within the 0.9 sizing target for the estimated column-tie force ${f(F)} (girder tie force estimate ${f(demand.force)}, eccentric top reaction ${f(eccentric)}, brace force 0.01P_r ${f(.01*Pr)}) and its fatigue range ${f(range)} at all cycles; slot travel ${L(travel)} each way (the larger column shortening plus 1/4 in).`;
+ // In the project's units (an SI package reads SI).
+ const t=k.columnTie,f=(v:number)=>formatUnits(v,'force',p.units,3),L=(v:number)=>formatUnits(v,'length',p.units,3);
+ return `Column tie ${L(t.plate.thickness)} × ${L(t.plate.width)} with ${t.bolts.count} ${L(t.bolts.diameter)} A325 bolts on sleeves in ${L(t.slot.width)} × ${L(t.slot.length)} vertical slots: the lightest within the 0.9 sizing target for the estimated column-tie force ${f(F)} (the girder bottom-flange force through the cap, bounded by the girder tie force estimate ${f(demand.force)}; the crane column's eccentric top reaction ${f(eccentric)}; the brace force 0.01P_r ${f(.01*Pr)}; the calculation takes the bottom-flange force from the girder model) and its fatigue range ${f(range)} at all cycles; slot travel ${L(travel)} each way (the larger column shortening plus the erection tolerance).`;
 }
 /**
  * A crane column whose member (H1) or cap ratios exceed 1, or whose cap does not fit (validateColumnCap), on the chosen
