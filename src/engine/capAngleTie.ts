@@ -523,7 +523,10 @@ export interface CapAngleSizingMovement {
  * imposed movement (flangeTieSizing.sizingLimit). At each angle and bolt size the step's plate is tried first, then
  * thinner plates down to 1/4 in (more flexible out of plane, the stress falls with t_p), then end plate fillets larger
  * in 1/16 in steps up to the plate thickness (R_FIL of the root rises with w/t_p); never a heavier plate for the
- * movement. Returns the first set within its limits, else the one with the least largest ratio.
+ * movement. Every set is also held to the detailing rules of validateCapAngle on the project as it stands (the end
+ * plates on the column flange, the nuts clear of the column web, the angle on its own girder end): returns the first
+ * set that fits and is within its limits, else the fitting one with the least largest ratio; where no set fits, the
+ * one with the least largest ratio (the caller checks the fit with validateCapAngle and chooses another tie).
  */
 export function sizeCapAngle(p:ProjectInput,F:number,target=.9,movement?:CapAngleSizingMovement):CapAngleInput{
  const steps=[
@@ -536,7 +539,7 @@ export function sizeCapAngle(p:ProjectInput,F:number,target=.9,movement?:CapAngl
  ];
  const ss=simpleSupportInput(p),thermal=alpha*Math.max(...p.spans)*Math.max(ss.temperatureRise,ss.temperatureFall);
  const cycles=p.details!.spectrum.reduce((a,v)=>a+v.cycles,0),movementLimit=Math.min(1,target+.07);
- let chosen=capAngleProportions(p,steps[0]),least=Infinity;
+ let chosen=capAngleProportions(p,steps[0]),least=Infinity,chosenFits=false;
  const trial=(size:typeof steps[number]&{released?:boolean},weld?:number)=>{
   // The slot travel along the runway: the factored end rotation (estimated, else 0.002 rad) over the cap bolt height.
   // The slot proportions (pitch, edges, washers) are laid out for that travel.
@@ -549,9 +552,9 @@ export function sizeCapAngle(p:ProjectInput,F:number,target=.9,movement?:CapAngl
   }
   const input={...c,...(weld!==undefined?{weldSize:weld}:{})};
   const q:ProjectInput={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:input}}};
-  const g=capAngleGeometry(q);if(!g)return {input,worst:Infinity};
-  const r=capAngleSizingRatios(q,g,F,movement,cycles);
-  return {input,worst:Math.max(...Object.entries(r as Record<string,number>).map(([k,v])=>v/(capAngleFits.has(k)?1:capAngleMovementRatio.has(k)&&r.movementControlled?.has(k)?movementLimit:target)))};
+  const g=capAngleGeometry(q);if(!g)return {input,worst:Infinity,fits:false};
+  const r=capAngleSizingRatios(q,g,F,movement,cycles),fits=validateCapAngle(q).length===0;
+  return {input,fits,worst:Math.max(...Object.entries(r as Record<string,number>).map(([k,v])=>v/(capAngleFits.has(k)?1:capAngleMovementRatio.has(k)&&r.movementControlled?.has(k)?movementLimit:target)))};
  };
  // Unreleased first; then, with the movement estimated, the end plate released in vertical slots (no movement bending).
  for(const release of movement?[false,true]:[false])for(const size0 of steps){
@@ -563,9 +566,10 @@ export function sizeCapAngle(p:ProjectInput,F:number,target=.9,movement?:CapAngl
   if(movement)for(const plate of plates){const w0=capAngleProportions(p,{...size0,plate}).weldSize;for(let w=w0+inch/16;w<=plate+1e-6;w+=inch/16)sets.push({size:{...size,plate},weld:w});}
   for(const v of sets){
    const r=trial(v.size,v.weld);
-   if(r.worst<=1)return r.input;
-   // Without the movement the heaviest set is kept where none passes (the template sizing as before).
-   if(!movement||r.worst<least){least=r.worst;chosen=r.input;}
+   if(r.worst<=1&&r.fits)return r.input;
+   // Without the movement the heaviest fitting set is kept where none passes (the template sizing as before); a set
+   // that fits always replaces one that does not.
+   if(r.fits&&!chosenFits||r.fits===chosenFits&&(!movement||r.worst<least)){least=r.worst;chosen=r.input;chosenFits=r.fits;}
   }
  }
  return chosen;

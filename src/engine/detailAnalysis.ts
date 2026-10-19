@@ -98,6 +98,15 @@ export function fatigueSpectrumBin(category:keyof typeof constants,range:number,
  // threshold: Table A-3.1 F_TH for the category, so a register point can be screened (range < F_TH).
  return {allowable,damage,threshold:fatigueThreshold(category)};
 }
+/**
+ * Register category of the top plate at a rail clip: a weld-on base is a short attachment, AISC Table A-3.1 item 7.1,
+ * by its length a along the stress and thickness b (C below 2 in; D up to 12b and 4 in; E, or E' for b over 0.8 in);
+ * bolted clamp plates leave holes for pretensioned bolts, item 2.2, Category B.
+ */
+export function railClipCategory(clip:{type:'weld-on'|'bolted';baseLength:number;baseThickness:number}){
+ const inch=25.4,a=clip.baseLength,tb=clip.baseThickness;
+ return clip.type==='bolted'?'B' as const:a<2*inch?'C' as const:a<=Math.min(12*tb,4*inch)?'D' as const:tb<=.8*inch?'E' as const:'E1' as const;
+}
 export function automaticFatigueDetails(p:ProjectInput){
  const d=p.details!,L=p.spans.reduce((s,v)=>s+v,0),list=[...d.fatigueDetails];
  const tie=flangeTieGeometry(p);
@@ -124,7 +133,7 @@ export function automaticFatigueDetails(p:ProjectInput){
  // across the runway: a short attachment, AISC Table A-3.1 item 7.1, by its length a along the stress (the base length)
  // and thickness b (the base thickness). Bolted clamp plates: holes through the top plate, item 2.2.
  const clip=railClipInput(d.rail),bolted=clip.type==='bolted',a=clip.baseLength,tb=clip.baseThickness;
- const category=bolted?'B':a<2*inch?'C':a<=Math.min(12*tb,4*inch)?'D':tb<=.8*inch?'E':'E1';
+ const category=railClipCategory(clip);
  const clipReference=bolted?'AISC Table A-3.1 item 2.2 · holes for pretensioned clamp-plate bolts through the top plate'
   :`AISC Table A-3.1 item 7.1, Category ${category==='E1'?'E′':category}: rail clip base ${(a/inch).toFixed(2)} in long, ${(tb/inch).toFixed(2)} in thick, welded across the runway at both ends`;
  for(const [i,x] of railClipStations(p).map(span).entries()){
