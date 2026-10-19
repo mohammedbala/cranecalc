@@ -128,7 +128,7 @@ test('builds a project from a template and from the quick configurator',async({p
  await expect(page.locator('.config-summary')).toContainText('rated 10.0 kip',{timeout:60000});
  // Dependent choices: a column cap needs new columns.
  await page.getByLabel('Girder support').selectOption('column-cap');
- await expect(page.getByLabel('Structure',{exact:true})).toHaveValue('new');
+ await expect(page.getByRole('combobox',{name:'Structure',exact:true})).toHaveValue('new');
  // Build the girder-analysis template: the project is replaced and calculates.
  await page.locator('.template-card').filter({hasText:'Girder analysis only'}).getByRole('button',{name:'Build'}).click();
  await expect(page.getByRole('button',{name:'Inputs & checks'})).toHaveAttribute('aria-pressed','true',{timeout:60000});
