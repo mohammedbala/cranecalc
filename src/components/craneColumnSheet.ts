@@ -7,7 +7,7 @@ import {existingColumnSection} from '../engine/existingColumn';
 import {activeColumnCap} from '../engine/columnCapInputs';
 import {columnCapGeometry} from '../engine/columnCap';
 import {stiffenerTieGeometry,flangeTieGeometry} from '../engine/tieGeometry';
-import {isCapAngleTie} from '../engine/capAngle';
+import {isCapAngleTie,capAngleGeometry} from '../engine/capAngle';
 import {boltProperties} from '../engine/connectionStrength';
 import {runwayElevations} from '../engine/drawingData';
 import {astmSpec} from '../engine/materialSpecs';
@@ -162,7 +162,12 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=wAlong(bc.x,bc.d,bc.bf,bc.tf,bc.tw,'reference-line');
   // Girder ties at the girder bearings, the column tie plate at the column centerline with the tab by others beside it.
   const tieW=Math.max(d.brace.gussetThickness+2*d.brace.thickness,b.tw);
-  for(const y of centers)svg+=rect(X(gt.from),Y(y+tieW/2),(gt.to-gt.from)*kk,tieW*kk,'runway-line');
+  // The girder ties where the tie geometry puts them along the runway (the checks' stations): the cap tieback angles and
+  // flange ties set back from the bearings, the stiffener ties at the bearing centers.
+  const near=(x:number)=>Math.abs(x-grid.x)<1e-6,ca=isCapAngleTie(p)?capAngleGeometry(p):undefined,ftg=flangeTieGeometry(p),stg=stiffenerTieGeometry(p);
+  const ties=ca?ca.stations.filter(v=>near(v.station)).map(v=>v.offset):ftg?ftg.stations.filter(v=>near(v.station)).map(v=>v.tieX-v.station):stg?stg.stations.filter(v=>near(v.station)).map(v=>v.offset):centers;
+  const tieAt=[...new Set((ties.length?ties:centers).map(v=>Math.round(v)))].sort((a,c)=>a-c);
+  for(const y of tieAt)svg+=rect(X(gt.from),Y(y+tieW/2),(gt.to-gt.from)*kk,tieW*kk,'runway-line');
   const tp=t.plate.thickness;
   svg+=rect(X(ccFace),Y(tp/2),(plateEnd-ccFace)*kk,tp*kk,'runway-line')+rect(X(tabEnd),Y(-tp/2),(face-tabEnd)*kk,tp*kk,'runway-line');
   for(const x of bolts)svg+=line([X(x),Y(tp/2)-5],[X(x),Y(-3*tp/2)+5],'annotation');
@@ -173,10 +178,10 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const yb=Y(-along)+10;
   svg+=dimH(X(0),X(face),Y(-bc.bf/2)+3,yb,dim(face),'right')+dimH(X(0),X(bc.x),Y(-along)+6,yb+18,dim(bc.x),'right');
   const xl=X(xMin)-4;
-  if(centers.length>1)for(let i=0;i<centers.length;i++){const a=i?centers[i-1]:0,cB=centers[i];if(Math.abs(cB-a)>1)svg+=dimV(Y(Math.max(a,cB)),Y(Math.min(a,cB)),X(-b.bf/2)-2,xl-(i%2)*18,size(Math.abs(cB-a)));}
+  if(tieAt.length>1)for(let i=0;i<tieAt.length;i++){const a=i?tieAt[i-1]:0,cB=tieAt[i];if(Math.abs(cB-a)>1)svg+=dimV(Y(Math.max(a,cB)),Y(Math.min(a,cB)),X(-b.bf/2)-2,xl-(i%2)*18,size(Math.abs(cB-a)));}
   // Callouts at the right of the building column.
   const lx=X(xMax)+46,items:{at:XY;labels:string[]}[]=[
-   {at:[X((gt.from+gt.to)/2),Y(centers.at(-1)!+tieW/2)],labels:[`GIRDER TIES AT THE BEARINGS,`,`SEE ${detailRef(tieRef)}`]},
+   {at:[X((gt.from+gt.to)/2),Y(tieAt.at(-1)!+tieW/2)],labels:[`GIRDER TIES, SEPARATE EACH GIRDER,`,`SEE ${detailRef(tieRef)}`]},
    {at:[X(-b.bf/2),Y(along-3*inch)],labels:[`${b.name} GIRDERS ABOVE, ENDS`,`ON THE CAP (${detailRef(columnCapTitles.section)})`]},
    {at:[X((ccFace+tabEnd)/2),Y(tp/2)],labels:[`COLUMN TIE ${plateLabel}`,`AT THE COLUMN C/L; ${detailRef(craneColumnTitles.tie)}`]},
    {at:[X((tabEnd+face)/2),Y(-tp/2)],labels:['TAB, FIELD WELD TO (E) COL.']},
