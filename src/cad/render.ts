@@ -1,5 +1,6 @@
 import {bulgeArc} from './curves';
-import {DEG,bbox,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,hatchLines,pieces,textBox,textWidthPerHeight,type Box,type CadDoc,type Ent,type Grip,type NewEnt,type Pt,type SnapKind} from './model';
+import {DEG,bbox,clipSegment,compositeBoxes,curveSamples,effective,ellipseSweep,hatchLines,isComposite,pieces,textBox,textWidthPerHeight,type Box,type CadDoc,type Ctx,type Ent,type Grip,type NewEnt,type Pt,type SnapKind} from './model';
+import {fonts,primitives,textStyleOf,type TextStyle} from './annotation';
 import {dashPattern} from './convert';
 
 /** Screen view: world point (cx, cy) at the canvas center, scale pixels per drawing unit, canvas w × h CSS pixels. */
@@ -14,9 +15,15 @@ const ACI:Record<number,string>={1:'#ff0000',2:'#ffff00',3:'#00ff00',4:'#00ffff'
 const wheel=['#ff0000','#ff3f00','#ff7f00','#ffbf00','#ffff00','#bfff00','#7fff00','#3fff00','#00ff00','#00ff3f','#00ff7f','#00ffbf','#00ffff','#00bfff','#007fff','#003fff','#0000ff','#3f00ff','#7f00ff','#bf00ff','#ff00ff','#ff00bf','#ff007f','#ff003f'];
 export const aci=(c:number)=>ACI[c]??wheel[Math.round((c-10)/10)%24]??'#ffffff';
 export const aciPalette=[1,2,3,4,5,6,7,8,9,30,40,140,150,210];
-/** On screen: the layer color on the dark model view; black (gray for the gray layers) on paper. */
-export function layerColor(color:number,theme:Theme){
- if(theme==='paper')return color===8?'#5f6670':color===9?'#9aa1a8':'#111';
+/** Plotted ink of a color by plot style: monochrome (black, the gray layers gray), grayscale, or the colors themselves. */
+export function plotColor(color:number,style:CadDoc['plotStyle']='monochrome'){
+ if(style==='color')return color===7?'#111':color===2?'#b89a00':color===4?'#00a3a3':color===3?'#1f9d2a':aci(color);
+ if(style==='grayscale'){const hex=aci(color),r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16),l=color===7?0:Math.round(Math.min(.82,(.3*r+.59*g+.11*b)/255*.85)*255);return `rgb(${l},${l},${l})`;}
+ return color===8?'#5f6670':color===9?'#9aa1a8':'#111';
+}
+/** On screen: the layer color on the dark model view; the plotted ink on paper. */
+export function layerColor(color:number,theme:Theme,style?:CadDoc['plotStyle']){
+ if(theme==='paper')return plotColor(color,style);
  return color===7?'#e8edf2':color===5?'#4d7dff':aci(color);
 }
 export const themeColors=(theme:Theme)=>theme==='dark'
@@ -25,11 +32,11 @@ export const themeColors=(theme:Theme)=>theme==='dark'
 
 const boxCache=new WeakMap<object,Box>();
 /** Cached extents of an entity (entities are immutable: a change makes a new object). */
-export function cachedBox(e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>){let b=boxCache.get(e);if(!b){b=bbox(e as Ent,doc);boxCache.set(e,b);}return b;}
+export function cachedBox(e:Ent|NewEnt,doc:Ctx){let b=boxCache.get(e);if(!b){b=bbox(e as Ent,doc);boxCache.set(e,b);}return b;}
 const overlaps=(a:Box,b:Box)=>a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1];
 
 /** Add an entity's strokes to the current path (solids and text are filled separately). */
-function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'|'unit'>){
+function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Ctx){
  const S=(p:Pt)=>toScreen(v,p);
  switch(e.type){
   case 'line':{const a=S(e.a),b=S(e.b);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);break;}
@@ -46,30 +53,38 @@ function strokePath(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<Ca
    ctx.moveTo(s[0],s[1]);ctx.ellipse(c[0],c[1],rx,rx*e.ratio,rot,-e.start*DEG,full?-e.start*DEG-2*Math.PI:-(e.start+ellipseSweep(e))*DEG,true);break;
   }
   case 'spline':{const p=curveSamples(e).map(q=>S(q.p));ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);break;}
-  case 'hatch':{if(e.pattern==='SOLID')break;const vb=viewBox(v);for(const [a,b] of hatchLines(e,doc.unit)){if(Math.max(a[0],b[0])<vb[0]||Math.min(a[0],b[0])>vb[2]||Math.max(a[1],b[1])<vb[1]||Math.min(a[1],b[1])>vb[3])continue;const p=S(a),q=S(b);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}break;}
+  case 'hatch':{if(e.pattern==='SOLID')break;const vb=viewBox(v);for(const [a,b] of hatchLines(e,doc.unit??'in')){if(Math.max(a[0],b[0])<vb[0]||Math.min(a[0],b[0])>vb[2]||Math.max(a[1],b[1])<vb[1]||Math.min(a[1],b[1])>vb[3])continue;const p=S(a),q=S(b);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}break;}
   case 'xline':case 'ray':{const pc=pieces(e as Ent)[0],vb=viewBox(v),m=(vb[2]-vb[0])*.05;if(pc.k!=='seg')break;const k=clipSegment(pc.a,pc.b,[vb[0]-m,vb[1]-m,vb[2]+m,vb[3]+m]);if(k){const a=S(k[0]),b=S(k[1]);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}break;}
-  case 'dim':for(const [a,b] of dimGeometry(e as Ent&{type:'dim'},doc).lines){const p=S(a),q=S(b);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}break;
+  case 'dim':case 'leader':case 'table':case 'mtext':
+   for(const p of primitives(e,doc)??[]){
+    if(p.k==='line'){const a=S(p.a),b=S(p.b);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);}
+    else if(p.k==='arc'){const c=S(p.c),st=S([p.c[0]+p.r*Math.cos(p.s*DEG),p.c[1]+p.r*Math.sin(p.s*DEG)]);ctx.moveTo(st[0],st[1]);ctx.arc(c[0],c[1],p.r*v.scale,-p.s*DEG,-p.e*DEG,true);}
+   }
+   break;
  }
 }
-function fillShapes(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>){
- const polys=e.type==='solid'?[e.points]:e.type==='dim'?dimGeometry(e as Ent&{type:'dim'},doc).arrows:e.type==='hatch'&&e.pattern==='SOLID'?e.loops:[];
+function fillShapes(ctx:CanvasRenderingContext2D,v:View,e:Ent|NewEnt,doc:Ctx){
+ const polys=e.type==='solid'?[e.points]:isComposite(e)?(primitives(e,doc)??[]).flatMap(p=>p.k==='fill'?[p.pts]:[]):e.type==='hatch'&&e.pattern==='SOLID'?e.loops:[];
  for(const pts of polys){const p=pts.map(q=>toScreen(v,q));ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);ctx.closePath();}
 }
-function drawText(ctx:CanvasRenderingContext2D,v:View,at:Pt,height:number,value:string,angle:number,align:number,bold:boolean){
- const px=height/.716*v.scale,[x,y]=toScreen(v,at);
+interface TextDraw{at:Pt;height:number;value:string;angle:number;align:number;bold:boolean;style:TextStyle}
+function drawText(ctx:CanvasRenderingContext2D,v:View,t:TextDraw){
+ const {at,height,value,angle,align,style}=t,bold=t.bold||!!style.bold,px=height/.716*v.scale,[x,y]=toScreen(v,at),wf=style.widthFactor||1;
  if(px<2.2){
   // Too small to read: a gray bar where the text is (greeked).
-  const w=textWidthPerHeight(value,bold)*height*v.scale,x0=align===1?-w/2:align===2?-w:0;
+  const w=textWidthPerHeight(value,bold,style.font)*height*wf*v.scale,x0=align===1?-w/2:align===2?-w:0;
   ctx.save();ctx.translate(x,y);ctx.rotate(-angle*DEG);ctx.globalAlpha*=.45;ctx.fillRect(x0,-px*.6,w,Math.max(.8,px*.55));ctx.restore();return;
  }
  ctx.save();ctx.translate(x,y);if(angle)ctx.rotate(-angle*DEG);
- ctx.font=`${bold?700:400} ${px}px Arial, "Liberation Sans", Helvetica, sans-serif`;ctx.textAlign=align===1?'center':align===2?'right':'left';ctx.textBaseline='alphabetic';
+ if(wf!==1)ctx.scale(wf,1);if(style.oblique)ctx.transform(1,0,-Math.tan(style.oblique*DEG),1,0,0);
+ ctx.font=`${bold?700:400} ${px}px ${fonts[style.font]??fonts.Arial}`;ctx.textAlign=align===1?'center':align===2?'right':'left';ctx.textBaseline='alphabetic';
  ctx.fillText(value,0,0);ctx.restore();
 }
-function textOf(e:Ent|NewEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>){
- if(e.type==='text')return {at:e.at,height:e.height,value:e.value,angle:e.angle,align:e.align,bold:e.bold};
- if(e.type==='dim'){const t=dimGeometry(e as Ent&{type:'dim'},doc).text;return {...t,align:1,bold:false};}
- return undefined;
+/** The text an entity draws: its own, or its composite pieces' (dimension values, multiline text, leader notes, cells). */
+function textsOf(e:Ent|NewEnt,doc:Ctx):TextDraw[]{
+ if(e.type==='text')return [{at:e.at,height:e.height,value:e.value,angle:e.angle,align:e.align,bold:e.bold,style:textStyleOf(e.style,doc)}];
+ if(isComposite(e))return (primitives(e,doc)??[]).flatMap(p=>p.k==='text'?[{at:p.at,height:p.height,value:p.value,angle:p.angle,align:p.align,bold:p.bold,style:textStyleOf(p.style,doc)}]:[]);
+ return [];
 }
 
 export interface SceneOptions{doc:CadDoc;view:View;theme:Theme;lwt:boolean;grid:number|null;underlay?:CadDoc|null}
@@ -101,16 +116,16 @@ export function drawScene(ctx:CanvasRenderingContext2D,o:SceneOptions){
   const batches=new Map<string,Ent[]>();
   for(const e of all){const k=e.color===undefined&&e.ltype===undefined&&e.weight===undefined&&e.ltscale===undefined?'':`${e.color}|${e.ltype}|${e.weight}|${e.ltscale}`;let b=batches.get(k);if(!b)batches.set(k,b=[]);b.push(e);}
   for(const list of batches.values()){
-   const f=effective(list[0],layer),color=layerColor(f.color,theme);
+   const f=effective(list[0],layer),color=layerColor(f.color,theme,doc.plotStyle);
    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=o.lwt?Math.max(1,f.weight/24):1;ctx.lineCap='round';ctx.lineJoin='round';
-   const dash=dashPattern(f.ltype,doc.unit,f.ltscale).map(d=>d*v.scale),longest=Math.max(0,...dash);
+   const dash=dashPattern(f.ltype,doc.unit,f.ltscale*(doc.ltscale??1)).map(d=>d*v.scale),longest=Math.max(0,...dash);
    ctx.setLineDash(dash.length&&longest>=1.5?dash.map(d=>Math.max(d,.01)):[]);
    ctx.beginPath();for(const e of list)if(e.type!=='text'&&e.type!=='solid')strokePath(ctx,v,e,doc);ctx.stroke();
    ctx.setLineDash([]);
-   ctx.beginPath();for(const e of list)if(e.type==='solid'||e.type==='dim')fillShapes(ctx,v,e,doc);ctx.fill();
+   ctx.beginPath();for(const e of list)if(e.type==='solid'||isComposite(e))fillShapes(ctx,v,e,doc);ctx.fill();
    // Solid hatches fill by the even-odd rule, one at a time so islands stay open.
    for(const e of list)if(e.type==='hatch'&&e.pattern==='SOLID'){ctx.beginPath();fillShapes(ctx,v,e,doc);ctx.fill('evenodd');}
-   for(const e of list){const t=textOf(e,doc);if(t)drawText(ctx,v,t.at,t.height,t.value,t.angle,t.align,t.bold);}
+   for(const e of list)for(const t of textsOf(e,doc))drawText(ctx,v,t);
   }
  }
  ctx.setLineDash([]);
@@ -133,7 +148,7 @@ export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
   ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);ctx.beginPath();
   for(const e of list){
    if(!overlaps(cachedBox(e,doc),vb))continue;
-   if(e.type==='text'){const b=textBox(e as Ent&{type:'text'}).map(p=>toScreen(v,p));ctx.moveTo(b[0][0],b[0][1]);for(let i=1;i<4;i++)ctx.lineTo(b[i][0],b[i][1]);ctx.closePath();}
+   if(e.type==='text'||e.type==='mtext'){for(const box of e.type==='text'?[textBox(e,doc)]:compositeBoxes(e as Ent,doc)){const b=box.map(p=>toScreen(v,p));ctx.moveTo(b[0][0],b[0][1]);for(let i=1;i<4;i++)ctx.lineTo(b[i][0],b[i][1]);ctx.closePath();}}
    else if(e.type==='hatch'){for(const l of e.loops){const b=l.map(p=>toScreen(v,p));ctx.moveTo(b[0][0],b[0][1]);for(const q of b.slice(1))ctx.lineTo(q[0],q[1]);ctx.closePath();}}
    else if(e.type==='solid')fillShapes(ctx,v,e,doc);
    else strokePath(ctx,v,e,doc);
@@ -145,9 +160,9 @@ export function drawOverlay(ctx:CanvasRenderingContext2D,o:OverlayOptions){
  if(o.preview?.length){
   outline(o.preview,c.preview,1.2,[]);
   ctx.strokeStyle=c.preview;ctx.lineWidth=1;ctx.beginPath();for(const e of o.preview)if(e.type==='hatch')strokePath(ctx,v,e,doc);ctx.stroke();
-  ctx.fillStyle=c.preview;ctx.beginPath();for(const e of o.preview)if(e.type==='solid'||e.type==='dim')fillShapes(ctx,v,e,doc);ctx.fill();
+  ctx.fillStyle=c.preview;ctx.beginPath();for(const e of o.preview)if(e.type==='solid'||isComposite(e))fillShapes(ctx,v,e,doc);ctx.fill();
   for(const e of o.preview)if(e.type==='hatch'&&e.pattern==='SOLID'){ctx.globalAlpha=.35;ctx.beginPath();fillShapes(ctx,v,e,doc);ctx.fill('evenodd');ctx.globalAlpha=1;}
-  for(const e of o.preview){const t=textOf(e,doc);if(t)drawText(ctx,v,t.at,t.height,t.value,t.angle,t.align,t.bold);}
+  for(const e of o.preview)for(const t of textsOf(e,doc))drawText(ctx,v,t);
  }
  if(o.rubber){const a=toScreen(v,o.rubber[0]),b=toScreen(v,o.rubber[1]);ctx.strokeStyle=c.preview;ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.setLineDash([]);}
  if(o.window){

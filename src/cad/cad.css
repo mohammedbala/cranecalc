@@ -21,7 +21,17 @@
 .theme-paper .cad-stale{background:#fff1d6;color:#5a3b10}
 .cad-stale p{margin:0;flex:1;min-width:260px}
 .cad-stale button{border-color:currentColor!important}
-.cad-body{flex:1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;min-height:0}
+.cad-body{flex:1;display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:0}
+.cad-ribbon{background:var(--cad-panel);border-bottom:1px solid var(--cad-line)}
+.cad-tabs{display:flex;gap:2px;padding:3px 8px 0}
+.cad-tabs button{border-radius:4px 4px 0 0;padding:3px 12px;font-size:11.5px;color:var(--cad-muted)}
+.cad-tabs button.on{background:color-mix(in srgb,var(--cad-accent) 16%,transparent);border-color:transparent;color:var(--cad-text)}
+.cad-panels{display:flex;align-items:stretch;gap:4px;padding:4px 8px;overflow-x:auto}
+.cad-panels>button{align-self:center;padding:6px}
+.cad-panelgroup{display:flex;flex-direction:column;align-items:center;padding:0 6px;border-left:1px solid var(--cad-line)}
+.cad-panelgroup>div{display:flex;flex-wrap:wrap;gap:1px;max-width:520px}
+.cad-panelgroup>div button{padding:5px}
+.cad-panelgroup>span{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--cad-muted);margin-top:1px}
 .cad-tools{display:flex;flex-direction:column;gap:1px;padding:6px 4px;background:var(--cad-panel);border-right:1px solid var(--cad-line);overflow-y:auto}
 .cad-tools button{justify-content:center;padding:6px}
 .cad-group{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--cad-muted);text-align:center;margin:7px 0 2px}
@@ -64,7 +74,7 @@
 .cad-scale select{max-width:150px}
 @media (max-width:760px){
  .cad-side{position:absolute;right:0;top:0;bottom:0;width:min(268px,80vw);z-index:3;box-shadow:-6px 0 18px rgba(0,0,0,.3)}
- .cad-body{grid-template-columns:auto minmax(0,1fr);position:relative}
+ .cad-body{grid-template-columns:minmax(0,1fr);position:relative}
  .cad-coords{min-width:0}
  .cad-cmd span{max-width:48%}
 }
@@ -89,3 +99,8 @@
 .cad-pop-row{display:flex;gap:6px;margin-top:6px}.cad-pop-row button{border-color:var(--cad-line)}
 .cad-dyn{position:absolute;pointer-events:none;display:flex;flex-direction:column;gap:2px;max-width:250px;padding:4px 7px;background:color-mix(in srgb,var(--cad-panel) 92%,transparent);border:1px solid var(--cad-line);border-radius:4px;font:11px ui-monospace,Menlo,Consolas,monospace;z-index:2}
 .cad-dyn span{color:var(--cad-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cad-dyn b{font-weight:600;color:var(--cad-text);border-bottom:1px solid var(--cad-accent)}.cad-dyn em{font-style:normal;color:var(--cad-accent)}
+.cad-styles{width:300px;top:12px;bottom:auto;left:auto;right:12px}
+.cad-styles label:not(.cad-check){justify-content:space-between}.cad-styles label input,.cad-styles label select{width:140px}
+.cad-style-list{display:flex;flex-direction:column;max-height:130px;overflow:auto;border:1px solid var(--cad-line);border-radius:4px;padding:2px}
+.cad-style-list button{justify-content:flex-start}
+.cad-text-edit textarea{width:300px;font:inherit;color:inherit;background:color-mix(in srgb,var(--cad-bg) 70%,var(--cad-panel));border:1px solid var(--cad-line);border-radius:3px;padding:3px}

@@ -6,6 +6,8 @@ import {editable,fmtAngle,ghosts,key,num,strip,type Command,type Env} from './cm
 import {drawCommands,drawNames} from './drawCommands';
 import {modifyCommands,modifyNames} from './modifyCommands';
 import {selectCommands,selectNames} from './selectCommands';
+import {annotateCommands,annotateNames,currentDimStyle,styleHeight} from './annotateCommands';
+import {textStyleOf} from './annotation';
 export type {Command,Env,Preview} from './cmdkit';
 
 // ---- draw --------------------------------------------------------------------------------------------------------
@@ -55,15 +57,16 @@ function circleCmd(env:Env):Command{
 }
 export {arcThrough} from './drawCommands';
 function textCmd(env:Env):Command{
- let at:Pt|undefined,step:'at'|'height'|'angle'|'text'='at',height=env.textHeight(),angle=0;
+ const style=String(env.vars.TEXTSTYLE??'Standard'),fixed=textStyleOf(style,env.store.doc).height;
+ let at:Pt|undefined,step:'at'|'height'|'angle'|'text'='at',height=fixed>0?fixed:env.textHeight(),angle=0;
  const c:Command={name:'TEXT',done:false,
   prompt:()=>step==='at'?'TEXT Specify start point of text:':step==='height'?`TEXT Specify height <${Number(height.toFixed(4))}>:`:step==='angle'?`TEXT Specify rotation angle of text <${angle}>:`:'TEXT Enter text (Enter on an empty line ends):',
   base:()=>at,freeText:()=>step==='text',
-  point(p){if(step==='at'){at=p;step='height';}else if(step==='height'){height=dist(at!,p);env.setTextHeight(height);step='angle';}else if(step==='angle'){angle=angleOf(at!,p);step='text';}},
+  point(p){if(step==='at'){at=p;step=fixed>0?'angle':'height';}else if(step==='height'){height=dist(at!,p);env.setTextHeight(height);step='angle';}else if(step==='angle'){angle=angleOf(at!,p);step='text';}},
   text(s){
    if(step==='height'){const v=num(s);if(v===undefined||v<=0)return false;height=v;env.setTextHeight(v);step='angle';return true;}
    if(step==='angle'){const v=Number(s);if(!Number.isFinite(v))return false;angle=v;step='text';return true;}
-   if(step==='text'){if(!s.trim()){c.done=true;return true;}env.store.commit('Text',{add:[{type:'text',layer:env.layer(),at:at!,height,value:s,angle,align:0,bold:false}]});at=add(at!,polar([0,0],height*1.65,angle-90));return true;}
+   if(step==='text'){if(!s.trim()){c.done=true;return true;}env.store.commit('Text',{add:[{type:'text',layer:env.layer(),at:at!,height,value:s,angle,align:0,bold:false,...(style!=='Standard'?{style}:{})}]});at=add(at!,polar([0,0],height*1.65,angle-90));return true;}
    return false;},
   enter(){if(step==='height')step='angle';else if(step==='angle')step='text';else c.done=true;},
   preview:cur=>step==='at'?undefined:step==='height'?{rubber:[at!,cur],tip:env.length(dist(at!,cur))}:step==='angle'?{rubber:[at!,cur],tip:fmtAngle(angleOf(at!,cur))}:undefined};
@@ -78,7 +81,8 @@ function dimCmd(env:Env,aligned:boolean):Command{
   const dx=Math.min(Math.abs(cur[0]-x0),Math.abs(cur[0]-x1)),dy=Math.min(Math.abs(cur[1]-y0),Math.abs(cur[1]-y1));
   return dy>=dx?'horizontal':'vertical';
  };
- const dim=(cur:Pt):NewEnt=>({type:'dim',layer:env.layer(),kind:kind(cur),a:pts[0],b:pts[1],at:cur,height:env.dimHeight()});
+ const st=currentDimStyle(env);
+ const dim=(cur:Pt):NewEnt=>({type:'dim',layer:env.layer(),kind:kind(cur),a:pts[0],b:pts[1],at:cur,height:styleHeight(st),style:st.name});
  const name=aligned?'DIMALIGNED':'DIMLINEAR';
  const c:Command={name,done:false,
   prompt:()=>pts.length===0?`${name} Specify first extension line origin:`:pts.length===1?`${name} Specify second extension line origin:`:`${name} Specify dimension line location${aligned?'':' or [Horizontal/Vertical]'}:`,
@@ -215,9 +219,9 @@ export const commandNames:Record<string,string>={
  E:'ERASE',ERASE:'ERASE',X:'EXPLODE',EXPLODE:'EXPLODE',O:'OFFSET',OFFSET:'OFFSET',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',
  DI:'DIST',DIST:'DIST',Z:'ZOOM',ZOOM:'ZOOM',U:'UNDO',UNDO:'UNDO',REDO:'REDO',LA:'LAYER',LAYER:'LAYER',PR:'PROPERTIES',CH:'PROPERTIES',PROPERTIES:'PROPERTIES',
  OS:'OSNAP',OSNAP:'OSNAP',DS:'OSNAP',DSETTINGS:'OSNAP',QSELECT:'QSELECT',FILTER:'QSELECT',FI:'QSELECT',
- ...drawNames,...modifyNames,...selectNames,
+ ...drawNames,...modifyNames,...selectNames,...annotateNames,
 };
-/** A command by its full name, or undefined for UNDO, REDO, LAYER, PROPERTIES, OSNAP and QSELECT, which the editor runs directly. */
+/** A command by its full name, or undefined for UNDO, REDO, LAYER, PROPERTIES, OSNAP, QSELECT, STYLE and DIMSTYLE, which the editor runs directly. */
 export function makeCommand(name:string,env:Env):Command|undefined{
  switch(name){
   case 'LINE':return lineCmd(env);case 'PLINE':return plineCmd(env);case 'RECTANG':return rectCmd(env);case 'CIRCLE':return circleCmd(env);
@@ -226,7 +230,7 @@ export function makeCommand(name:string,env:Env):Command|undefined{
   case 'MIRROR':return mirrorCmd(env);case 'ERASE':return eraseCmd(env);case 'EXPLODE':return explodeCmd(env);case 'OFFSET':return offsetCmd(env);
   case 'TRIM':return trimCmd(env,false);case 'EXTEND':return trimCmd(env,true);case 'DIST':return distCmd(env);case 'ZOOM':return zoomCmd(env);
  }
- return drawCommands[name]?.(env)??modifyCommands[name]?.(env)??selectCommands[name]?.(env);
+ return drawCommands[name]?.(env)??modifyCommands[name]?.(env)??selectCommands[name]?.(env)??annotateCommands[name]?.(env);
 }
 /** Default text and dimension heights: 1/8 in or 2.5 mm on a sheet; sketches by their own text. */
 export function defaultHeights(doc:CadDoc){

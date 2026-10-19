@@ -80,3 +80,34 @@ test('precision and selection: dynamic input, selection options, groups and quic
  await expect(page.getByRole('button',{name:'POLAR',exact:true})).toHaveAttribute('aria-pressed','false');
  expect(errors).toEqual([]);
 });
+
+test('annotation: ribbon, multiline text, dimensions, leaders, tables, clouds and styles',async({page})=>{
+ const errors=watch(page);
+ const {line,type,objects}=await openEditor(page);
+ const start=await objects();
+ await page.getByRole('tab',{name:'Annotate'}).click();
+ await expect(page.getByRole('button',{name:'Multiline text (MT)'})).toBeVisible();
+ await type('MT','100,350','300,320','PLATE 3/4" X 12"','A36 TYP','');
+ await type('L','400,100','500,100','','L','400,100','400,200','','DAN','450,100','400,150','440,140');
+ await type('MLD','420,220','470,260','FIELD WELD','');
+ await type('TB','2','2','','','600,300');
+ await type('REVCLOUD','550,50','650,120');
+ expect(await objects()).toBe(start+7);
+ // Double-click a table cell and type in it.
+ await type('DIMSTYLE');
+ const dlg=page.getByRole('dialog',{name:'Dimension styles'});
+ await dlg.getByRole('button',{name:'New'}).click();
+ await dlg.getByLabel('Arrowheads').selectOption('tick');
+ await dlg.getByRole('button',{name:'Set current'}).click();
+ await expect(page.locator('.cad-log')).toContainText('Current dimension style: Style 1');
+ await dlg.getByRole('button',{name:'Close styles'}).click();
+ await type('STYLE');
+ const ts=page.getByRole('dialog',{name:'Text styles'});
+ await ts.getByLabel('Font').selectOption('Times New Roman');
+ await ts.getByRole('button',{name:'Close styles'}).click();
+ const svg=page.waitForEvent('download');await page.getByRole('button',{name:'SVG'}).click();
+ const text=await fs.readFile((await (await svg).path())!,'utf8');
+ for(const s of ['A36 TYP','FIELD WELD','90°'])expect(text).toContain(s);
+ expect(text).toContain('Times New Roman');
+ expect(errors).toEqual([]);
+});

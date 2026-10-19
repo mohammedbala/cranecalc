@@ -172,8 +172,10 @@ export function stretchEnt(e:Ent,box:Box,d:Pt):Ent{
    if(e.fit){const fit=e.fit.map(mv),g=splineThrough(fit,e.closed);return g?{...e,...g,fit}:e;}
    return {...e,ctrl:e.ctrl.map(mv)};
   }
-  case 'dim':return {...e,a:mv(e.a),b:mv(e.b),at:mv(e.at)};
+  case 'dim':return {...e,a:mv(e.a),b:mv(e.b),at:mv(e.at),...(e.c?{c:mv(e.c)}:{})};
   case 'hatch':return {...e,loops:e.loops.map(l=>l.map(mv))};
+  case 'mtext':case 'table':return inBox(e.at,box)?whole():e;
+  case 'leader':return {...e,points:e.points.map(mv)};
  }
 }
 function stretchCmd(env:Env):Command{

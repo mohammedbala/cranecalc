@@ -50,10 +50,22 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
    case 'solid':if(!pts(e.points,3)||(e.points as Pt[]).length>4)return undefined;entities.push({...base,type:'solid',points:e.points});break;
    case 'circle':if(!pt(e.center)||!n(e.radius)||e.radius<=0)return undefined;entities.push({...base,type:'circle',center:e.center,radius:e.radius});break;
    case 'arc':if(!pt(e.center)||!n(e.radius)||e.radius<=0||!n(e.start)||!n(e.end))return undefined;entities.push({...base,type:'arc',center:e.center,radius:e.radius,start:e.start,end:e.end});break;
-   case 'text':if(!pt(e.at)||!n(e.height)||e.height<=0||!str(e.value)||!n(e.angle)||![0,1,2].includes(e.align as number)||typeof e.bold!=='boolean')return undefined;
-    entities.push({...base,type:'text',at:e.at,height:e.height,value:e.value,angle:e.angle,align:e.align as 0|1|2,bold:e.bold});break;
-   case 'dim':if(!['aligned','horizontal','vertical'].includes(e.kind as string)||!pt(e.a)||!pt(e.b)||!pt(e.at)||!n(e.height)||e.height<=0||(e.text!==undefined&&!str(e.text,400)))return undefined;
-    entities.push({...base,type:'dim',kind:e.kind as 'aligned',a:e.a,b:e.b,at:e.at,height:e.height,text:e.text as string|undefined});break;
+   case 'text':if(!pt(e.at)||!n(e.height)||e.height<=0||!str(e.value)||!n(e.angle)||![0,1,2].includes(e.align as number)||typeof e.bold!=='boolean'||(e.style!==undefined&&!str(e.style,80)))return undefined;
+    entities.push({...base,type:'text',at:e.at,height:e.height,value:e.value,angle:e.angle,align:e.align as 0|1|2,bold:e.bold,...(e.style?{style:e.style as string}:{})});break;
+   case 'mtext':if(!pt(e.at)||!n(e.width)||e.width<0||!n(e.height)||e.height<=0||!str(e.value,20000)||!n(e.angle)||!n(e.attach)||!Number.isInteger(e.attach)||e.attach<1||e.attach>9||(e.style!==undefined&&!str(e.style,80))||(e.spacing!==undefined&&(!n(e.spacing)||e.spacing<=0))||(e.bold!==undefined&&typeof e.bold!=='boolean'))return undefined;
+    entities.push({...base,type:'mtext',at:e.at,width:e.width,height:e.height,value:e.value,angle:e.angle,attach:e.attach,...(e.style?{style:e.style as string}:{}),...(e.spacing?{spacing:e.spacing as number}:{}),...(e.bold?{bold:true}:{})});break;
+   case 'leader':if(!pts(e.points,2)||!str(e.value,20000)||!n(e.height)||e.height<=0||(e.arrow!==undefined&&!['closed','open','tick','dot','none'].includes(e.arrow as string))||(e.landing!==undefined&&typeof e.landing!=='boolean')||(e.style!==undefined&&!str(e.style,80)))return undefined;
+    entities.push({...base,type:'leader',points:e.points,value:e.value,height:e.height,...(e.arrow?{arrow:e.arrow as 'closed'}:{}),...(e.landing!==undefined?{landing:e.landing as boolean}:{}),...(e.style?{style:e.style as string}:{})});break;
+   case 'table':{
+    const cols=e.cols,rows=e.rows,cells=e.cells;
+    if(!pt(e.at)||!Array.isArray(cols)||!cols.length||cols.length>200||!cols.every(v=>n(v)&&v>0)||!Array.isArray(rows)||!rows.length||rows.length>5000||!rows.every(v=>n(v)&&v>0)||!n(e.height)||e.height<=0)return undefined;
+    if(!Array.isArray(cells)||cells.length>rows.length||!cells.every(r=>Array.isArray(r)&&r.length<=cols.length&&r.every(c=>str(c,2000))))return undefined;
+    if((e.header!==undefined&&(!n(e.header)||e.header<0))||(e.align!==undefined&&(!Array.isArray(e.align)||!e.align.every(a=>['left','center','right'].includes(a))))||(e.title!==undefined&&!str(e.title,400))||(e.source!==undefined&&!str(e.source,80)))return undefined;
+    entities.push({...base,type:'table',at:e.at,cols:cols as number[],rows:rows as number[],cells:cells as string[][],height:e.height,...(e.header?{header:e.header as number}:{}),...(e.align?{align:e.align as ('left'|'center'|'right')[]}:{}),...(e.title?{title:e.title as string}:{}),...(e.source?{source:e.source as string}:{})});break;
+   }
+   case 'dim':if(!['aligned','horizontal','vertical','angular','radius','diameter','ordinate'].includes(e.kind as string)||!pt(e.a)||!pt(e.b)||!pt(e.at)||!n(e.height)||e.height<=0||(e.text!==undefined&&!str(e.text,400))||(e.c!==undefined&&!pt(e.c))||(e.style!==undefined&&!str(e.style,80))||(e.axis!==undefined&&e.axis!=='x'&&e.axis!=='y'))return undefined;
+    if((e.kind==='angular'||e.kind==='radius'||e.kind==='diameter')&&!pt(e.c))return undefined;
+    entities.push({...base,type:'dim',kind:e.kind as 'aligned',a:e.a,b:e.b,at:e.at,height:e.height,text:e.text as string|undefined,...(e.c?{c:e.c as Pt}:{}),...(e.style?{style:e.style as string}:{}),...(e.axis?{axis:e.axis as 'x'|'y'}:{})});break;
    default:return undefined;
   }
  }
@@ -62,5 +74,20 @@ export function parseCadDoc(x:unknown):CadDoc|undefined{
   if(!Array.isArray(o.groups)||o.groups.length>5000)return undefined;groups=[];
   for(const g of o.groups as Record<string,unknown>[]){if(!g||!str(g.name,80)||!Array.isArray(g.ids)||g.ids.length>300000||!g.ids.every(n))return undefined;groups.push({name:g.name,ids:g.ids as number[]});}
  }
- return {...(groups?{groups}:{}),key:o.key,title:o.title,unit:o.unit as CadDoc['unit'],display:o.display as CadDoc['display'],realPerUnit:o.realPerUnit,width:o.width,height:o.height,svgScale:o.svgScale,layers,entities,nextId:o.nextId};
+ // Styles and settings: bounded and typed, or the drawing is refused.
+ const meta:Record<string,unknown>={};
+ if(o.textStyles!==undefined){
+  if(!Array.isArray(o.textStyles)||o.textStyles.length>200)return undefined;
+  for(const t of o.textStyles as Record<string,unknown>[])if(!t||!str(t.name,80)||!str(t.font,80)||!n(t.widthFactor)||t.widthFactor<=0||!n(t.oblique)||Math.abs(t.oblique)>85||!n(t.height)||t.height<0||(t.bold!==undefined&&typeof t.bold!=='boolean'))return undefined;
+  meta.textStyles=(o.textStyles as Record<string,unknown>[]).map(t=>({name:t.name,font:t.font,widthFactor:t.widthFactor,oblique:t.oblique,height:t.height,...(t.bold?{bold:true}:{})}));
+ }
+ if(o.dimStyles!==undefined){
+  if(!Array.isArray(o.dimStyles)||o.dimStyles.length>200)return undefined;
+  const keys=['textHeight','arrowSize','extOffset','extBeyond','textGap','precision','scale','baseline'];
+  for(const d of o.dimStyles as Record<string,unknown>[])if(!d||!str(d.name,80)||!keys.every(k=>n(d[k])&&(d[k] as number)>=0)||!['closed','open','tick','dot','none'].includes(d.arrow as string)||!['above','centered'].includes(d.textPos as string)||!['arch','decimal'].includes(d.units as string)||(d.textStyle!==undefined&&!str(d.textStyle,80))||(d.prefix!==undefined&&!str(d.prefix,40))||(d.suffix!==undefined&&!str(d.suffix,40)))return undefined;
+  meta.dimStyles=(o.dimStyles as Record<string,unknown>[]).map(d=>({name:d.name,textHeight:d.textHeight,arrowSize:d.arrowSize,arrow:d.arrow,extOffset:d.extOffset,extBeyond:d.extBeyond,textGap:d.textGap,textPos:d.textPos,units:d.units,precision:d.precision,scale:d.scale,baseline:d.baseline,...(d.textStyle?{textStyle:d.textStyle}:{}),...(d.prefix?{prefix:d.prefix}:{}),...(d.suffix?{suffix:d.suffix}:{})}));
+ }
+ if(o.ltscale!==undefined){if(!n(o.ltscale)||o.ltscale<=0)return undefined;meta.ltscale=o.ltscale;}
+ if(o.plotStyle!==undefined){if(!['monochrome','grayscale','color'].includes(o.plotStyle as string))return undefined;meta.plotStyle=o.plotStyle;}
+ return {...meta,...(groups?{groups}:{}),key:o.key,title:o.title,unit:o.unit as CadDoc['unit'],display:o.display as CadDoc['display'],realPerUnit:o.realPerUnit,width:o.width,height:o.height,svgScale:o.svgScale,layers,entities,nextId:o.nextId};
 }

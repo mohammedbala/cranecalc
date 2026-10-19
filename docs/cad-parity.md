@@ -132,7 +132,7 @@ and accessible panels (labels, focus order, keyboard reachable).
 | 1 Drafting core | done: model, draw and modify commands; tests in `tests/cadDrafting.test.ts`, browser check in `tests/e2e/cad.spec.ts` |
 | 2 Precision and selection | done: `src/cad/snap.ts`, `src/cad/select.ts`; tests in `tests/cadPrecision.test.ts` and `tests/e2e/cad.spec.ts` |
 | 3 Hatching | done: `src/cad/hatch.ts` (patterns, even-odd clipping, solid fills, boundary detection with islands); tests in `tests/cadHatch.test.ts` |
-| 4 Annotation | planned |
+| 4 Annotation | done (annotative scaling arrives with layouts, increment 6): `src/cad/annotation.ts`, `src/cad/annotateCommands.ts`, `src/cad/StylesDialog.tsx`; tests in `tests/cadAnnotation.test.ts`; the ribbon replaced the vertical tool bar |
 | 5 Blocks | planned |
 | 6 Layouts | planned |
 | 7 Interchange | planned |

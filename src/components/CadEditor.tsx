@@ -3,7 +3,8 @@ import {
  ArrowRightToLine,Circle,Copy,CopyPlus,Download,Eraser,Eye,EyeOff,FlipHorizontal2,Hand,Layers,Lock,LockOpen,Maximize2,Move,
  MoveHorizontal,MousePointer2,Plus,Redo2,RectangleHorizontal,RotateCw,Ruler,Scaling,Scissors,SlidersHorizontal,Spline,TriangleAlert,Type,
  Undo2,Ungroup,Waypoints,X,Slash,Egg,Activity,Hexagon,MoveDiagonal,CornerDownRight,Diamond,StretchHorizontal,Grid3x3,RotateCcw,Unlink,Link,MoveRight,
- AlignHorizontalJustifyStart,PenLine,Paintbrush,PaintBucket,
+ AlignHorizontalJustifyStart,PenLine,Paintbrush,PaintBucket,Scan,Combine,Blocks,AlignLeft,CaseSensitive,Triangle,Radius,Diameter,Milestone,Rows3,Columns3,Settings2,
+ MessageSquareText,MessageSquare,Table,Cloud,Palette,Waves,
 } from 'lucide-react';
 import {
  DEG,add,angleOf,bbox,curveLength,dimGeometry,dist,formatLength,grips as gripsOf,inWindow,lineTypes,nearest,parseLength,
@@ -14,6 +15,9 @@ import {commandNames,defaultHeights,makeCommand,placeCmd,type Command,type Env,t
 import {aci,aciPalette,cachedBox,drawOverlay,drawScene,snapNames,toWorld,type Theme,type View} from '../cad/render';
 import {acquirable,allSnapModes,defaultSnapModes,resolveSnap,type Acquired} from '../cad/snap';
 import {hatchArea,patternNames} from '../cad/hatch';
+import {cellAt,setCell} from '../cad/annotateCommands';
+import {dimValue,standardDimStyle} from '../cad/annotation';
+import {StylesDialog} from '../cad/StylesDialog';
 import {expandGroups,fenceSelect,propValue,quickSelect,type QuickProp,type QuickSpec} from '../cad/select';
 import {docToDxf,docToSvg} from '../cad/convert';
 import {cadPersistent,deleteCadRecord,saveCadRecord,type CadRecord} from '../cad/storage';
@@ -31,7 +35,7 @@ const scales=(unit:CadDoc['unit']):[string,number][]=>unit==='in'
  ?[['1:1 (paper)',25.4],['3" = 1\'-0"',4*25.4],['1 1/2" = 1\'-0"',8*25.4],['1" = 1\'-0"',12*25.4],['3/4" = 1\'-0"',16*25.4],['1/2" = 1\'-0"',24*25.4],['3/8" = 1\'-0"',32*25.4],['1/4" = 1\'-0"',48*25.4],['3/16" = 1\'-0"',64*25.4],['1/8" = 1\'-0"',96*25.4]]
  :unit==='mm'?[['1:1 (paper)',1],['1:5',5],['1:10',10],['1:20',20],['1:25',25],['1:50',50],['1:100',100],['1:200',200]]:[];
 const fmtNum=(v:number)=>String(Number(v.toFixed(4)));
-const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray',hatch:'Hatch'};
+const typeName:Record<Ent['type'],string>={line:'Line',poly:'Polyline',solid:'Solid',circle:'Circle',arc:'Arc',text:'Text',dim:'Dimension',ellipse:'Ellipse',spline:'Spline',xline:'Construction line',ray:'Ray',hatch:'Hatch',mtext:'Multiline text',leader:'Leader',table:'Table'};
 
 export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=>void}){
  const store=useMemo(()=>new CadStore(structuredClone(source.record?.doc??source.generated)),[]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -43,6 +47,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const [settings,setSettings]=useState<'osnap'|'polar'|null>(null);
  const [qselect,setQselect]=useState(false);
  const [pickGroups,setPickGroups]=useState(true);
+ const [styles,setStyles]=useState<'text'|'dim'|null>(null);
  const [theme,setTheme]=useState<Theme>('dark');
  const [panel,setPanel]=useState<{props:boolean;layers:boolean}>({props:true,layers:true});
  const [currentLayer,setCurrentLayer]=useState(()=>doc.layers.some(l=>l.name==='S-ANNO')?'S-ANNO':doc.layers.some(l=>l.name==='OUTLINE')?'OUTLINE':'0');
@@ -51,7 +56,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  const [stale,setStale]=useState(!!source.record&&source.record.base!==source.base);
  const [underlay,setUnderlay]=useState(false);
  const [saveState,setSaveState]=useState<'saved'|'saving'|'generated'>(source.record?'saved':'generated');
- const [textEdit,setTextEdit]=useState<{id:number;value:string;x:number;y:number}|null>(null);
+ const [textEdit,setTextEdit]=useState<{id:number;value:string;x:number;y:number;multi?:boolean;cell?:{i:number;j:number}}|null>(null);
  const [newLayer,setNewLayer]=useState<string|null>(null);
  const [coords,setCoords]=useState<Pt>([0,0]);
  const [help,setHelp]=useState(false);
@@ -203,6 +208,7 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   if(name==='PROPERTIES'){setPanel(v=>({...v,props:true}));return;}
   if(name==='OSNAP'){setSettings('osnap');return;}
   if(name==='QSELECT'){setQselect(true);return;}
+  if(name==='STYLE'||name==='DIMSTYLE'){setStyles(name==='STYLE'?'text':'dim');return;}
   const cmd=makeCommand(name,env);if(!cmd){say(`Unknown command "${raw.trim()}". Press F1 for the command list.`);return;}
   lastCommand.current=name;active.current=cmd;lastWindow.current=undefined;
   if(cmd.selectFirst){if(store.selection.size)beginOn(cmd);else selecting.current=true;}
@@ -336,7 +342,11 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  function onDoubleClick(e:React.MouseEvent){
   if(active.current)return;
   const [x,y]=local(e),hit=entityAt(toWorld(view.current,x,y));
-  if(hit&&(hit.type==='text'||hit.type==='dim')){grip.current=null;store.select([hit.id]);setTextEdit({id:hit.id,value:hit.type==='text'?hit.value:hit.text??'',x,y});}
+  if(!hit)return;
+  grip.current=null;store.select([hit.id]);
+  if(hit.type==='text'||hit.type==='dim')setTextEdit({id:hit.id,value:hit.type==='text'?hit.value:hit.text??'',x,y});
+  else if(hit.type==='mtext'||hit.type==='leader')setTextEdit({id:hit.id,value:hit.value,x,y,multi:true});
+  else if(hit.type==='table'){const c=cellAt(hit,toWorld(view.current,x,y));if(c)setTextEdit({id:hit.id,value:hit.cells[c.i]?.[c.j]??'',x,y,multi:true,cell:c});}
  }
  function onAuxClick(e:React.MouseEvent){if(e.button===1&&e.detail===2)zoomExtents();}
 
@@ -376,6 +386,14 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
  // ---- property edits ----
  const selected=store.selected();
  function putEnt(e:Ent,label='Properties'){store.commit(label,{put:[e]});schedule(true);}
+ function applyTextEdit(){
+  const t=textEdit!,ent=store.get(t.id);
+  if(ent?.type==='text'&&t.value.trim())putEnt({...ent,value:t.value},'Edit text');
+  else if(ent?.type==='dim')putEnt({...ent,text:t.value.trim()||undefined},'Edit dimension text');
+  else if((ent?.type==='mtext'||ent?.type==='leader')&&(t.value.trim()||ent.type==='leader'))putEnt({...ent,value:t.value.replace(/\s+$/,'')},'Edit text');
+  else if(ent?.type==='table'&&t.cell)putEnt(setCell(ent,t.cell.i,t.cell.j,t.value.replace(/\s+$/,'')),'Edit cell');
+  setTextEdit(null);cmdRef.current?.focus();
+ }
  function setLayers(layers:CadLayer[],label:string){store.commit(label,{layers});schedule(true);}
  function changeLayerOfSelection(name:string){store.commit('Change layer',{put:selected.map(e=>({...e,layer:name}))});schedule(true);}
  function changeSelection(label:string,fn:(e:Ent)=>Ent){store.commit(label,{put:selected.filter(pickable).map(fn)});schedule(true);}
@@ -389,24 +407,36 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   void deleteCadRecord(source.project,doc.key);store.reset(structuredClone(source.generated));startVersion.current=store.docVersion;setSaveState('generated');setStale(false);say('Reverted to the generated drawing.');zoomExtents();
  }
 
- const tools:[string,string,ReactNode][]=[
-  ['LINE','Line (L)',<Slash key="l" size={16}/>],['PLINE','Polyline (PL)',<Waypoints key="pl" size={16}/>],['RECTANG','Rectangle (REC)',<RectangleHorizontal key="r" size={16}/>],
-  ['CIRCLE','Circle (C)',<Circle key="c" size={16}/>],['ARC','Arc (A): 3 points, or start, center, end and the other AutoCAD variants',<Spline key="a" size={16}/>],
-  ['ELLIPSE','Ellipse (EL)',<Egg key="el" size={16}/>],['SPLINE','Spline (SPL)',<Activity key="spl" size={16}/>],['POLYGON','Polygon (POL)',<Hexagon key="pol" size={16}/>],
-  ['XLINE','Construction line (XL)',<MoveDiagonal key="xl" size={16}/>],['HATCH','Hatch (H): pick inside a closed area',<PaintBucket key="h" size={16}/>],['TEXT','Text (T)',<Type key="t" size={16}/>],
-  ['DIMLINEAR','Linear dimension (DLI)',<Ruler key="d" size={16}/>],['DIMALIGNED','Aligned dimension (DAL)',<Ruler key="da" size={16} style={{transform:'rotate(-35deg)'}}/>],
+ const I=(C:typeof Slash,extra?:React.CSSProperties)=><C size={16} style={extra}/>;
+ type Tool=[string,string,ReactNode];
+ const ribbon:{tab:string;panels:{name:string;tools:Tool[]}[]}[]=[
+  {tab:'Home',panels:[
+   {name:'Draw',tools:[['LINE','Line (L)',I(Slash)],['PLINE','Polyline (PL)',I(Waypoints)],['RECTANG','Rectangle (REC)',I(RectangleHorizontal)],['CIRCLE','Circle (C)',I(Circle)],
+    ['ARC','Arc (A): 3 points, or start, center, end and the other AutoCAD variants',I(Spline)],['ELLIPSE','Ellipse (EL)',I(Egg)],['SPLINE','Spline (SPL)',I(Activity)],['POLYGON','Polygon (POL)',I(Hexagon)],
+    ['XLINE','Construction line (XL)',I(MoveDiagonal)],['HATCH','Hatch (H): pick inside a closed area',I(PaintBucket)]]},
+   {name:'Modify',tools:[['MOVE','Move (M)',I(Move)],['COPY','Copy (CO)',I(Copy)],['ROTATE','Rotate (RO)',I(RotateCw)],['SCALE','Scale (SC)',I(Scaling)],['MIRROR','Mirror (MI)',I(FlipHorizontal2)],
+    ['OFFSET','Offset (O)',I(CopyPlus)],['TRIM','Trim (TR)',I(Scissors)],['EXTEND','Extend (EX)',I(ArrowRightToLine)],['FILLET','Fillet (F)',I(CornerDownRight)],['CHAMFER','Chamfer (CHA)',I(Diamond)],
+    ['STRETCH','Stretch (S): select with a crossing window',I(StretchHorizontal)],['ARRAYRECT','Rectangular array (AR)',I(Grid3x3)],['ARRAYPOLAR','Polar array',I(RotateCcw)],
+    ['BREAK','Break (BR)',I(Unlink)],['JOIN','Join (J)',I(Link)],['LENGTHEN','Lengthen (LEN)',I(MoveRight)],['ALIGN','Align (AL)',I(AlignHorizontalJustifyStart)],
+    ['PEDIT','Edit polyline (PE)',I(PenLine)],['MATCHPROP','Match properties (MA)',I(Paintbrush)],['EXPLODE','Explode (X)',I(Ungroup)],['ERASE','Erase (E, Delete)',I(Eraser)]]},
+   {name:'Select',tools:[['QSELECT','Quick select (QSELECT)',I(Scan)],['SELECTSIMILAR','Select similar',I(Combine)],['GROUP','Group (G)',I(Blocks)],['UNGROUP','Ungroup',I(Ungroup)]]},
+   {name:'Utilities',tools:[['DIST','Measure distance (DI)',I(MoveHorizontal)]]},
+  ]},
+  {tab:'Annotate',panels:[
+   {name:'Text',tools:[['TEXT','Single-line text (T)',I(Type)],['MTEXT','Multiline text (MT)',I(AlignLeft)],['STYLE','Text styles (ST)',I(CaseSensitive)]]},
+   {name:'Dimensions',tools:[['DIMLINEAR','Linear dimension (DLI)',I(Ruler)],['DIMALIGNED','Aligned dimension (DAL)',I(Ruler,{transform:'rotate(-35deg)'})],['DIMANGULAR','Angular dimension (DAN)',I(Triangle)],
+    ['DIMRADIUS','Radius dimension (DRA)',I(Radius)],['DIMDIAMETER','Diameter dimension (DDI)',I(Diameter)],['DIMORDINATE','Ordinate dimension (DOR)',I(Milestone)],
+    ['DIMBASELINE','Baseline dimensions (DBA)',I(Rows3)],['DIMCONTINUE','Continued dimensions (DCO)',I(Columns3)],['DIMSTYLE','Dimension styles (D)',I(Settings2)]]},
+   {name:'Leaders',tools:[['MLEADER','Multileader (MLD)',I(MessageSquareText)],['LEADER','Leader (LE)',I(MessageSquare)]]},
+   {name:'Tables',tools:[['TABLE','Table (TB)',I(Table)]]},
+   {name:'Markup',tools:[['REVCLOUD','Revision cloud',I(Cloud)]]},
+  ]},
+  {tab:'View',panels:[
+   {name:'Navigate',tools:[['ZOOM','Zoom (Z): E extents, W window',I(Maximize2)]]},
+   {name:'Plot',tools:[['PLOTSTYLE','Plot style: monochrome, grayscale or color',I(Palette)],['LTSCALE','Linetype scale (LTS)',I(Waves)],['UCS','Origin for ordinate dimensions (UCS)',I(Milestone)]]},
+  ]},
  ];
- const modify:[string,string,ReactNode][]=[
-  ['MOVE','Move (M)',<Move key="m" size={16}/>],['COPY','Copy (CO)',<Copy key="co" size={16}/>],['ROTATE','Rotate (RO)',<RotateCw key="ro" size={16}/>],
-  ['SCALE','Scale (SC)',<Scaling key="sc" size={16}/>],['MIRROR','Mirror (MI)',<FlipHorizontal2 key="mi" size={16}/>],['OFFSET','Offset (O)',<CopyPlus key="o" size={16}/>],
-  ['TRIM','Trim (TR)',<Scissors key="tr" size={16}/>],['EXTEND','Extend (EX)',<ArrowRightToLine key="ex" size={16}/>],
-  ['FILLET','Fillet (F)',<CornerDownRight key="f" size={16}/>],['CHAMFER','Chamfer (CHA)',<Diamond key="cha" size={16}/>],['STRETCH','Stretch (S): select with a crossing window',<StretchHorizontal key="s" size={16}/>],
-  ['ARRAYRECT','Rectangular array (AR)',<Grid3x3 key="ar" size={16}/>],['ARRAYPOLAR','Polar array',<RotateCcw key="arp" size={16}/>],
-  ['BREAK','Break (BR)',<Unlink key="br" size={16}/>],['JOIN','Join (J)',<Link key="j" size={16}/>],['LENGTHEN','Lengthen (LEN)',<MoveRight key="len" size={16}/>],
-  ['ALIGN','Align (AL)',<AlignHorizontalJustifyStart key="al" size={16}/>],['PEDIT','Edit polyline (PE)',<PenLine key="pe" size={16}/>],['MATCHPROP','Match properties (MA)',<Paintbrush key="ma" size={16}/>],
-  ['EXPLODE','Explode (X)',<Ungroup key="x" size={16}/>],
-  ['ERASE','Erase (E, Delete)',<Eraser key="e" size={16}/>],['DIST','Measure distance (DI)',<MoveHorizontal key="di" size={16}/>],
- ];
+ const [ribbonTab,setRibbonTab]=useState('Home');
  const counts=useMemo(()=>{const m=new Map<string,number>();for(const e of doc.entities)m.set(e.layer,(m.get(e.layer)??0)+1);return m;},[doc.entities]);
  const edited=saveState!=='generated';
 
@@ -430,28 +460,32 @@ export default function CadEditor({source,onClose}:{source:CadSource;onClose:()=
   </header>
   {stale&&<div className="cad-stale"><TriangleAlert size={15}/><p><strong>The design changed after this drawing was edited</strong> ({new Date(source.record!.savedAt).toLocaleString()}). Your edited drawing is open; the generated drawing for the current design differs.</p>
    <button onClick={()=>setUnderlay(v=>!v)}>{underlay?'Hide':'Show'} current design underneath</button><button onClick={()=>resolveStale(true)}>Keep my edits</button><button onClick={()=>{if(window.confirm('Discard your edits and start from the drawing generated for the current design?'))resolveStale(false);}}>Start from the current design</button></div>}
+  <div className="cad-ribbon">
+   <div className="cad-tabs" role="tablist" aria-label="Ribbon">{ribbon.map(r=><button key={r.tab} role="tab" aria-selected={ribbonTab===r.tab} className={ribbonTab===r.tab?'on':''} onClick={()=>setRibbonTab(r.tab)}>{r.tab}</button>)}</div>
+   <div className="cad-panels" role="toolbar" aria-label={`${ribbonTab} tools`}>
+    <button title="Select (Esc)" aria-label="Select (Esc)" className={!active.current&&!panMode?'on':''} onClick={()=>{cancel();setPanMode(false);}}><MousePointer2 size={16}/></button>
+    {ribbon.find(r=>r.tab===ribbonTab)!.panels.map(p=><div key={p.name} className="cad-panelgroup" role="group" aria-label={p.name}><div>{p.tools.map(([name,title,icon])=><button key={name} title={title} aria-label={title} className={active.current?.name===name?'on':''} onClick={()=>run(name)}>{icon}</button>)}</div><span>{p.name}</span></div>)}
+   </div>
+  </div>
   <div className="cad-body">
-   <nav className="cad-tools" aria-label="CAD tools">
-    <button title="Select (Esc)" className={!active.current&&!panMode?'on':''} onClick={()=>{cancel();setPanMode(false);}}><MousePointer2 size={16}/></button>
-    <span className="cad-group">Draw</span>
-    {tools.map(([name,title,icon])=><button key={name} title={title} aria-label={title} className={active.current?.name===name?'on':''} onClick={()=>run(name)}>{icon}</button>)}
-    <span className="cad-group">Modify</span>
-    {modify.map(([name,title,icon])=><button key={name} title={title} aria-label={title} className={active.current?.name===name?'on':''} onClick={()=>run(name)}>{icon}</button>)}
-   </nav>
    <div className="cad-canvas" ref={wrapRef}>
     <canvas ref={sceneRef} aria-hidden="true"/>
     <canvas ref={overlayRef} className={panMode||pan.current?'panning':''} data-testid="cad-canvas" onPointerDown={onPointerDown} onMouseDown={e=>e.preventDefault()} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
      onPointerLeave={()=>{cursor.current={...cursor.current,screen:undefined};hover.current=undefined;schedule();}} onDoubleClick={onDoubleClick} onAuxClick={onAuxClick} onContextMenu={e=>e.preventDefault()}/>
-    {textEdit&&<div className="cad-text-edit" style={{left:Math.min(textEdit.x,view.current.w-300),top:Math.max(4,textEdit.y-44)}}>
-     <input autoFocus aria-label="Text" value={textEdit.value} onChange={e=>setTextEdit({...textEdit,value:e.target.value})}
-      onKeyDown={e=>{if(e.key==='Enter'){const ent=store.get(textEdit.id);if(ent?.type==='text'&&textEdit.value.trim())putEnt({...ent,value:textEdit.value},'Edit text');if(ent?.type==='dim')putEnt({...ent,text:textEdit.value.trim()||undefined},'Edit dimension text');setTextEdit(null);cmdRef.current?.focus();}if(e.key==='Escape'){setTextEdit(null);cmdRef.current?.focus();}}}/>
-     <small>Enter to apply · Esc to cancel{store.get(textEdit.id)?.type==='dim'?' · empty measures the distance':''}</small></div>}
+    {textEdit&&<div className="cad-text-edit" style={{left:Math.min(textEdit.x,view.current.w-300),top:Math.max(4,textEdit.y-(textEdit.multi?96:44))}}>
+     {textEdit.multi?<textarea autoFocus aria-label={textEdit.cell?'Cell text':'Text'} rows={4} value={textEdit.value} onChange={e=>setTextEdit({...textEdit,value:e.target.value})}
+       onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey||textEdit.cell&&!e.shiftKey)){e.preventDefault();applyTextEdit();}if(e.key==='Escape'){setTextEdit(null);cmdRef.current?.focus();}}}/>
+      :<input autoFocus aria-label="Text" value={textEdit.value} onChange={e=>setTextEdit({...textEdit,value:e.target.value})}
+       onKeyDown={e=>{if(e.key==='Enter')applyTextEdit();if(e.key==='Escape'){setTextEdit(null);cmdRef.current?.focus();}}}/>}
+     <small>{textEdit.multi?(textEdit.cell?'Enter applies · Shift+Enter new line':'Ctrl+Enter applies · Enter new line'):'Enter to apply'} · Esc to cancel{store.get(textEdit.id)?.type==='dim'?' · empty measures the distance':''}</small></div>}
     {help&&<HelpCard onClose={()=>setHelp(false)}/>}
     {settings==='osnap'&&<div className="cad-pop" role="dialog" aria-label="Object snap settings"><h3>Object snaps<button aria-label="Close" onClick={()=>setSettings(null)}><X size={12}/></button></h3>
      {allSnapModes.map(m=><label key={m}><input type="checkbox" checked={snapModes.has(m)} onChange={ev=>{const n=new Set(snapModes);if(ev.target.checked)n.add(m);else n.delete(m);setSnapModes(n);savePref('cad-osnap',[...n]);}}/>{snapNames[m]}</label>)}
      <div className="cad-pop-row"><button onClick={()=>{const n=new Set(allSnapModes);setSnapModes(n);savePref('cad-osnap',[...n]);}}>All</button><button onClick={()=>{setSnapModes(new Set());savePref('cad-osnap',[]);}}>None</button><button onClick={()=>{setSnapModes(new Set(defaultSnapModes));savePref('cad-osnap',defaultSnapModes);}}>Default</button></div></div>}
     {settings==='polar'&&<div className="cad-pop" role="dialog" aria-label="Polar tracking angle"><h3>Polar angle<button aria-label="Close" onClick={()=>setSettings(null)}><X size={12}/></button></h3>
      {[90,45,30,22.5,18,15,10,5].map(a=><label key={a}><input type="radio" name="polar" checked={polarAngle===a} onChange={()=>{setPolarAngle(a);savePref('cad-polar',a);setToggles(v=>({...v,polar:true,ortho:false}));}}/>{a}°</label>)}</div>}
+    {styles&&<StylesDialog kind={styles} doc={doc} vars={vars.current} onClose={()=>setStyles(null)} onChange={(meta,label)=>{store.commit(label,{meta});schedule(true);}} onCurrent={(k,name)=>{vars.current[k==='text'?'TEXTSTYLE':'DIMSTYLE']=name;say(`Current ${k==='text'?'text':'dimension'} style: ${name}.`);refresh();}}
+     onApplyDims={name=>{const st=(store.doc.dimStyles??[]).find(d=>d.name===name)??standardDimStyle(store.doc.unit);const dims=store.doc.entities.filter(e=>e.type==='dim'&&(e.style??'Standard')===name);if(dims.length){store.commit('Update dimensions',{put:dims.map(e=>({...e,height:st.textHeight*st.scale}) as Ent)});say(`${dims.length} dimensions updated to ${name}.`);schedule(true);}}}/>}
     {qselect&&<QuickSelect doc={doc} selected={selected} onClose={()=>setQselect(false)} onApply={(ids,append)=>{store.select(withGroups(ids),append?'add':'replace');say(`${ids.length} objects selected.`);setQselect(false);schedule();}} pickable={pickable}/>}
     {toggles.dyn&&cursor.current.screen&&(active.current||input)&&!textEdit&&<div className="cad-dyn" aria-hidden="true" style={{left:Math.min(cursor.current.screen[0]+20,view.current.w-260),top:Math.min(cursor.current.screen[1]+24,view.current.h-48)}}>
      <span>{prompt().replace(/^\S+ /,'').replace(/^\*\* STRETCH \*\* /,'')}</span><b>{input||'\u00a0'}</b>{dynLock.current!==null&&<em>length {lengthText(dynLock.current)} locked</em>}</div>}
@@ -499,7 +533,12 @@ const helpRows:[string,string][]=[
  ['XL · XLINE / RAY','Construction lines: through points, H, V, A angle, B bisect, O offset'],['POL · POLYGON','Sides, center, inscribed or circumscribed, radius; E on an edge'],['DO · DONUT','Inside and outside diameters, then centers'],
  ['H · HATCH','Pick inside closed areas (islands stay open), or S to select closed objects; P pattern, SC scale, A angle; Enter makes the hatch'],
  ['T · TEXT','Start point, height, rotation, then the text; Enter on an empty line ends'],
+ ['MT · MTEXT','Two corners (H height, J justify, R rotation, S style, W width), then lines; an empty line ends'],
  ['DLI · DIMLINEAR','Two points, then the dimension line (H or V to force)'],['DAL · DIMALIGNED','A dimension parallel to the two points'],
+ ['DAN · DIMANGULAR','Two lines, an arc, a circle, or Enter for a vertex and two points; then the arc location'],['DRA · DIMRADIUS / DDI · DIMDIAMETER','An arc or circle, then the text location'],
+ ['DOR · DIMORDINATE','Feature point, then the leader end (X or Y datum); UCS sets the origin'],['DBA · DIMBASELINE / DCO · DIMCONTINUE','Next points after the last linear dimension'],
+ ['MLD · MLEADER / LE · LEADER','Arrowhead, landing (or points), then the note'],['TB · TABLE','Columns, rows, sizes, corner; double-click a cell to type'],['REVCLOUD','R rectangular, P polygonal, O object, A arc length'],
+ ['ST · STYLE / D · DIMSTYLE','Text and dimension styles; LTSCALE, PLOTSTYLE'],
  ['M · MOVE / CO · COPY','Select, base point, second point (COPY repeats)'],['RO · ROTATE','Select, base point, angle'],['SC · SCALE','Select, base point, factor'],
  ['MI · MIRROR','Select, two points on the mirror line, keep or erase the source'],['O · OFFSET','Distance, then an object and the side'],
  ['TR · TRIM / EX · EXTEND','Pick the part to trim, or the end to extend; every object is a boundary'],['F · FILLET / CHA · CHAMFER','R radius (D, A for chamfer), T trim, P whole polyline, M multiple; pick two objects'],
@@ -548,6 +587,8 @@ function Properties({doc,selected,layers,onPut,onLayer,onAll,lengthText}:{doc:Ca
  if(selected.length>1){const by=new Map<string,number>();for(const e of selected)by.set(typeName[e.type],(by.get(typeName[e.type])??0)+1);
   return <dl className="cad-props"><dt>Selected</dt><dd>{selected.length.toLocaleString()} ({[...by].map(([k,v])=>`${v} ${k.toLowerCase()}${v>1?'s':''}`).join(', ')})</dd><dt>Layer</dt><dd>{layerSel}</dd><ObjectProps selected={selected} onAll={onAll}/></dl>;}
  const e=selected[0];
+ const textStyleNames=['Standard',...(doc.textStyles??[]).map(t=>t.name).filter(n=>n!=='Standard')],dimStyleNames=['Standard',...(doc.dimStyles??[]).map(t=>t.name).filter(n=>n!=='Standard')];
+ const styleSel=(value:string|undefined,set:(v:string|undefined)=>void)=><select aria-label="Text style" value={value??'Standard'} onChange={ev=>set(ev.target.value==='Standard'?undefined:ev.target.value)}>{textStyleNames.map(n=><option key={n} value={n}>{n}</option>)}</select>;
  const num=(label:string,value:number,set:(v:number)=>Ent|undefined)=><><dt>{label}</dt><dd><NumField value={value} onCommit={v=>{const n=set(v);if(n)onPut(n);}}/></dd></>;
  const pt=(label:string,p:Pt,set:(p:Pt)=>Ent)=><>{num(`${label} X`,p[0],v=>set([v,p[1]]))}{num(`${label} Y`,p[1],v=>set([p[0],v]))}</>;
  return <dl className="cad-props"><dt>Object</dt><dd>{typeName[e.type]}</dd><dt>Layer</dt><dd>{layerSel}</dd><ObjectProps selected={selected} onAll={onAll}/>
@@ -562,9 +603,22 @@ function Properties({doc,selected,layers,onPut,onLayer,onAll,lengthText}:{doc:Ca
   {(e.type==='xline'||e.type==='ray')&&<>{pt('Base',e.base,base=>({...e,base}))}{num('Angle',angleOf([0,0],e.dir),a=>({...e,dir:[Math.cos(a*DEG),Math.sin(a*DEG)]}))}</>}
   {e.type==='text'&&<><dt>Contents</dt><dd><TextField value={e.value} onCommit={value=>value.trim()&&onPut({...e,value})}/></dd>{num('Height',e.height,height=>height>0?{...e,height}:undefined)}{num('Rotation',e.angle,angle=>({...e,angle}))}
    <dt>Justify</dt><dd><select value={e.align} onChange={ev=>onPut({...e,align:+ev.target.value as 0|1|2})}><option value={0}>Left</option><option value={1}>Center</option><option value={2}>Right</option></select></dd>
-   <dt>Bold</dt><dd><input type="checkbox" checked={e.bold} onChange={ev=>onPut({...e,bold:ev.target.checked})}/></dd>{pt('Position',e.at,at=>({...e,at}))}</>}
-  {e.type==='dim'&&<><dt>Type</dt><dd><select value={e.kind} onChange={ev=>onPut({...e,kind:ev.target.value as typeof e.kind})}><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option><option value="aligned">Aligned</option></select></dd>
-   <dt>Measurement</dt><dd>{dimGeometry({...e,text:undefined},doc).text.value}</dd><dt>Text override</dt><dd><TextField value={e.text??''} onCommit={t=>onPut({...e,text:t.trim()||undefined})}/></dd>{num('Text height',e.height,height=>height>0?{...e,height}:undefined)}</>}
+   <dt>Bold</dt><dd><input type="checkbox" checked={e.bold} onChange={ev=>onPut({...e,bold:ev.target.checked})}/></dd>{pt('Position',e.at,at=>({...e,at}))}
+   <dt>Style</dt><dd>{styleSel(e.style,v=>onPut({...e,style:v}))}</dd></>}
+  {e.type==='mtext'&&<><dt>Contents</dt><dd><textarea className="cad-txt" rows={3} defaultValue={e.value} key={e.id+e.value} onBlur={ev=>{const v=ev.target.value.replace(/\s+$/,'');if(v&&v!==e.value)onPut({...e,value:v});}}/></dd>
+   {num('Height',e.height,height=>height>0?{...e,height}:undefined)}{num('Width',e.width,width=>width>=0?{...e,width}:undefined)}{num('Rotation',e.angle,angle=>({...e,angle}))}{num('Line spacing',e.spacing??1,spacing=>spacing>0?{...e,spacing}:undefined)}
+   <dt>Justify</dt><dd><select value={e.attach} onChange={ev=>onPut({...e,attach:+ev.target.value})}>{['Top left','Top center','Top right','Middle left','Middle center','Middle right','Bottom left','Bottom center','Bottom right'].map((n,i)=><option key={n} value={i+1}>{n}</option>)}</select></dd>
+   <dt>Style</dt><dd>{styleSel(e.style,v=>onPut({...e,style:v}))}</dd><dt>Bold</dt><dd><input type="checkbox" checked={!!e.bold} onChange={ev=>onPut({...e,bold:ev.target.checked||undefined})}/></dd>{pt('Position',e.at,at=>({...e,at}))}</>}
+  {e.type==='leader'&&<><dt>Text</dt><dd><textarea className="cad-txt" rows={2} defaultValue={e.value} key={e.id+e.value} onBlur={ev=>{const v=ev.target.value.replace(/\s+$/,'');if(v!==e.value)onPut({...e,value:v});}}/></dd>
+   {num('Text height',e.height,height=>height>0?{...e,height}:undefined)}<dt>Arrowhead</dt><dd><select value={e.arrow??'closed'} onChange={ev=>onPut({...e,arrow:ev.target.value as 'closed'})}>{['closed','open','tick','dot','none'].map(a=><option key={a} value={a}>{a}</option>)}</select></dd>
+   <dt>Landing</dt><dd><input type="checkbox" checked={e.landing!==false} onChange={ev=>onPut({...e,landing:ev.target.checked?undefined:false})}/></dd><dt>Vertices</dt><dd>{e.points.length}</dd></>}
+  {e.type==='table'&&<><dt>Columns</dt><dd>{e.cols.length} <button title="Add a column" onClick={()=>onPut({...e,cols:[...e.cols,e.cols[e.cols.length-1]]})}>+</button><button title="Remove the last column" disabled={e.cols.length<2} onClick={()=>onPut({...e,cols:e.cols.slice(0,-1),cells:e.cells.map(r=>r.slice(0,e.cols.length-1))})}>−</button></dd>
+   <dt>Rows</dt><dd>{e.rows.length} <button title="Add a row" onClick={()=>onPut({...e,rows:[...e.rows,e.rows[e.rows.length-1]]})}>+</button><button title="Remove the last row" disabled={e.rows.length<2} onClick={()=>onPut({...e,rows:e.rows.slice(0,-1),cells:e.cells.slice(0,e.rows.length-1)})}>−</button></dd>
+   {num('Text height',e.height,height=>height>0?{...e,height}:undefined)}{num('Header rows',e.header??0,header=>header>=0&&header<=e.rows.length?{...e,header:Math.round(header)}:undefined)}
+   {num('Column width',e.cols[0],w=>w>0?{...e,cols:e.cols.map(()=>w)}:undefined)}{num('Row height',e.rows[0],h=>h>0?{...e,rows:e.rows.map(()=>h)}:undefined)}{pt('Corner',e.at,at=>({...e,at}))}
+   {e.source&&<><dt>Schedule</dt><dd>{e.source} (from the design)</dd></>}<dd className="cad-hint">Double-click a cell to type in it.</dd></>}
+  {e.type==='dim'&&<><dt>Type</dt><dd>{e.kind==='horizontal'||e.kind==='vertical'||e.kind==='aligned'?<select value={e.kind} onChange={ev=>onPut({...e,kind:ev.target.value as typeof e.kind})}><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option><option value="aligned">Aligned</option></select>:{angular:'Angular',radius:'Radius',diameter:'Diameter',ordinate:'Ordinate'}[e.kind]}</dd>
+   <dt>Measurement</dt><dd>{dimValue({...e,text:undefined},doc)}</dd><dt>Style</dt><dd><select value={e.style??''} onChange={ev=>onPut({...e,style:ev.target.value||undefined})}><option value="">(none)</option>{dimStyleNames.map(n=><option key={n} value={n}>{n}</option>)}</select></dd><dt>Text override</dt><dd><TextField value={e.text??''} onCommit={t=>onPut({...e,text:t.trim()||undefined})}/></dd>{num('Text height',e.height,height=>height>0?{...e,height}:undefined)}</>}
   {e.type==='solid'&&<><dt>Vertices</dt><dd>{e.points.length}</dd></>}
   {e.type==='hatch'&&<><dt>Pattern</dt><dd><select aria-label="Hatch pattern" value={e.pattern} onChange={ev=>onPut({...e,pattern:ev.target.value})}>{patternNames.map(n=><option key={n} value={n}>{n}</option>)}</select></dd>
    {e.pattern!=='SOLID'&&<>{num('Scale',e.scale,scale=>scale>0?{...e,scale}:undefined)}{num('Angle',e.angle,angle=>({...e,angle}))}</>}

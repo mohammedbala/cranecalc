@@ -1,8 +1,10 @@
 import type {CadDoc,CadGroup,CadLayer,Ent,NewEnt} from './model';
 
 /** One undoable edit: entities put (added or replaced by id) and deleted, and optionally the layer table and groups. */
-export interface Change{put?:Ent[];add?:NewEnt[];del?:number[];layers?:CadLayer[];groups?:CadGroup[]}
-interface State{ents:Map<number,Ent|null>;layers?:CadLayer[];groups?:CadGroup[]}
+export interface Change{put?:Ent[];add?:NewEnt[];del?:number[];layers?:CadLayer[];groups?:CadGroup[];meta?:Meta}
+/** Drawing settings changed undoably: styles, linetype scale, plot style. */
+export type Meta=Partial<Pick<CadDoc,'textStyles'|'dimStyles'|'ltscale'|'plotStyle'>>;
+interface State{ents:Map<number,Ent|null>;layers?:CadLayer[];groups?:CadGroup[];meta?:Meta}
 interface Step{label:string;before:State;after:State}
 
 /** The open drawing with its selection and unlimited undo and redo. */
@@ -39,7 +41,8 @@ export class CadStore{
   for(const id of change.del??[])if(this.byId.has(id)){before.ents.set(id,this.byId.get(id)!);after.ents.set(id,null);}
   if(change.layers){before.layers=this.doc.layers;after.layers=change.layers;}
   if(change.groups){before.groups=this.doc.groups??[];after.groups=change.groups;}
-  if(!after.ents.size&&!after.layers&&!after.groups)return added;
+  if(change.meta){before.meta=Object.fromEntries(Object.keys(change.meta).map(k=>[k,this.doc[k as keyof Meta]]));after.meta=change.meta;}
+  if(!after.ents.size&&!after.layers&&!after.groups&&!after.meta)return added;
   this.apply(after);this.undoStack.push({label,before,after});this.redoStack=[];
   if(this.undoStack.length>500)this.undoStack.shift();
   this.emit(true);return added;
@@ -56,7 +59,7 @@ export class CadStore{
    // Draw order follows id: an entity restored by undo goes back to its place.
    if(added.some(e=>e.id<top))list.sort((a,b)=>a.id-b.id);
   }
-  this.doc={...this.doc,entities:list,layers:state.layers??this.doc.layers,...(state.groups?{groups:state.groups}:{})};
+  this.doc={...this.doc,entities:list,layers:state.layers??this.doc.layers,...(state.groups?{groups:state.groups}:{}),...(state.meta??{})};
   this.index();
   for(const id of [...this.selection])if(!this.byId.has(id))this.selection.delete(id);
  }

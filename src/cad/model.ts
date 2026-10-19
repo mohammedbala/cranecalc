@@ -3,6 +3,7 @@
  * sheets, sketch units for the engineering sketches), y up, origin at the lower-left corner of the sheet.
  */
 import {hatchSegments,insideLoops} from './hatch';
+import {fonts,mtextLayout,primEnts,primTextBox,primitives,textStyleOf,type Ctx,type DimStyle,type TextStyle} from './annotation';
 import {bulgeArc,bulgePoint,bulgeThrough,ellipseParam,ellipsePoint,splineParam,splineParams,splinePoint,splineRange,splineThrough,subBulge,subSpline,type BulgeArc,type SplineGeom} from './curves';
 
 export type Pt=[number,number];
@@ -31,10 +32,21 @@ export interface CircleEnt extends Base{type:'circle';center:Pt;radius:number}
 /** Counterclockwise from start to end, degrees from +x. */
 export interface ArcEnt extends Base{type:'arc';center:Pt;radius:number;start:number;end:number}
 /** height is the cap height; at is the baseline anchor (left, center or right by align). */
-export interface TextEnt extends Base{type:'text';at:Pt;height:number;value:string;angle:number;align:Align;bold:boolean}
+export interface TextEnt extends Base{type:'text';at:Pt;height:number;value:string;angle:number;align:Align;bold:boolean;style?:string}
 /** A dimension measuring a to b; at is a point on the dimension line. */
-export interface DimEnt extends Base{type:'dim';kind:'aligned'|'horizontal'|'vertical';a:Pt;b:Pt;at:Pt;height:number;text?:string}
-export type Ent=LineEnt|PolyEnt|SolidEnt|CircleEnt|ArcEnt|TextEnt|DimEnt|EllipseEnt|SplineEnt|XlineEnt|HatchEnt;
+/**
+ * A dimension: linear (horizontal, vertical, aligned) measures a to b with its line through at; angular measures the
+ * angle at c between a and b with its arc through at; radius and diameter measure the circle at c through a, text at at;
+ * ordinate measures a's x or y from the datum c, leader ending at at. text overrides the value; style names a dimension style.
+ */
+export interface DimEnt extends Base{type:'dim';kind:'aligned'|'horizontal'|'vertical'|'angular'|'radius'|'diameter'|'ordinate';a:Pt;b:Pt;at:Pt;height:number;text?:string;c?:Pt;style?:string;axis?:'x'|'y'}
+/** Multiline text: wrapped to width (0: no wrap), lines split at newlines, placed by attach (1-9: top, middle, bottom rows; left, center, right). */
+export interface MTextEnt extends Base{type:'mtext';at:Pt;width:number;height:number;value:string;angle:number;attach:number;style?:string;spacing?:number;bold?:boolean}
+/** A leader: arrow at the first point, through the others, with text after a landing at the last. */
+export interface LeaderEnt extends Base{type:'leader';points:Pt[];value:string;height:number;arrow?:'closed'|'open'|'tick'|'dot'|'none';landing?:boolean;style?:string}
+/** A table: top-left corner, column widths, row heights (going down), cell text; header rows are bold. */
+export interface TableEnt extends Base{type:'table';at:Pt;cols:number[];rows:number[];cells:string[][];height:number;header?:number;align?:('left'|'center'|'right')[];title?:string;source?:string}
+export type Ent=LineEnt|PolyEnt|SolidEnt|CircleEnt|ArcEnt|TextEnt|DimEnt|EllipseEnt|SplineEnt|XlineEnt|HatchEnt|MTextEnt|LeaderEnt|TableEnt;
 /** An entity before it has an id. */
 export type NewEnt=Ent extends infer E?E extends Ent?Omit<E,'id'>:never:never;
 
@@ -52,7 +64,10 @@ export interface CadDoc{
  layers:CadLayer[];entities:Ent[];nextId:number;
  /** Named groups: picking one member selects the group. */
  groups?:CadGroup[];
+ /** Text and dimension styles (Standard when absent), the global linetype scale and the plot style. */
+ textStyles?:TextStyle[];dimStyles?:DimStyle[];ltscale?:number;plotStyle?:'monochrome'|'grayscale'|'color';
 }
+export type {Ctx,DimStyle,TextStyle};
 export interface CadGroup{name:string;ids:number[]}
 /** Color, linetype and lineweight as drawn: the object's own, else its layer's. */
 export const effective=(e:EntProps,l?:CadLayer)=>({color:e.color??l?.color??7,ltype:e.ltype??l?.ltype??'Continuous' as LineType,weight:e.weight??l?.weight??25,ltscale:e.ltscale??1});
@@ -89,18 +104,18 @@ export const close=(a:Pt,b:Pt,tol=1e-9)=>Math.abs(a[0]-b[0])<=tol&&Math.abs(a[1]
 // ---- text extents ------------------------------------------------------------------------------------------------
 let measureCtx:CanvasRenderingContext2D|null|undefined;
 const widthCache=new Map<string,number>();
-/** Width of the text in units of its cap height (Arial; cap height 0.716 em). */
-export function textWidthPerHeight(value:string,bold:boolean){
- const key=(bold?'b':'r')+value;let w=widthCache.get(key);if(w!==undefined)return w;
+/** Width of the text in units of its cap height (cap height 0.716 em), in Arial unless another font is named. */
+export function textWidthPerHeight(value:string,bold:boolean,font='Arial'){
+ const key=(bold?'b':'r')+(font==='Arial'?'':font+'|')+value;let w=widthCache.get(key);if(w!==undefined)return w;
  if(measureCtx===undefined){try{measureCtx=typeof document!=='undefined'?document.createElement('canvas').getContext('2d'):null;}catch{measureCtx=null;}}
- if(measureCtx){measureCtx.font=`${bold?700:400} 100px Arial, "Liberation Sans", Helvetica, sans-serif`;w=measureCtx.measureText(value).width/71.6;}
+ if(measureCtx){measureCtx.font=`${bold?700:400} 100px ${fonts[font]??fonts.Arial}`;w=measureCtx.measureText(value).width/71.6;}
  else w=value.length*(bold?.62:.56)/.716;
  if(widthCache.size>20000)widthCache.clear();
  widthCache.set(key,w);return w;
 }
 /** The four corners of a text's box: baseline-left, baseline-right, top-right, top-left (descenders included). */
-export function textBox(e:TextEnt):Pt[]{
- const w=textWidthPerHeight(e.value,e.bold)*e.height,x0=e.align===1?-w/2:e.align===2?-w:0,lo=-.28*e.height,hi=1.12*e.height;
+export function textBox(e:Omit<TextEnt,'id'>,ctx?:Partial<Pick<CadDoc,'textStyles'>>):Pt[]{
+ const st=textStyleOf(e.style,ctx),w=textWidthPerHeight(e.value,e.bold||!!st.bold,st.font)*e.height*st.widthFactor,x0=e.align===1?-w/2:e.align===2?-w:0,lo=-.28*e.height,hi=1.12*e.height;
  const c=Math.cos(e.angle*DEG),s=Math.sin(e.angle*DEG),at=(x:number,y:number):Pt=>[e.at[0]+x*c-y*s,e.at[1]+x*s+y*c];
  return [at(x0,lo),at(x0+w,lo),at(x0+w,hi),at(x0,hi)];
 }
@@ -115,24 +130,19 @@ export function formatLength(mm:number,display:'US'|'SI'){
  const frac=f?`${inch||ft?`${inch} `:''}${f}/${d}`:`${inch}`;
  return ft?`${sign}${ft}'-${frac}"`:`${sign}${frac}"`;
 }
-export interface DimGeometry{lines:[Pt,Pt][];arrows:Pt[][];text:{at:Pt;angle:number;value:string;height:number}}
-/** Extension lines, dimension line, arrowheads and text of a dimension. */
-export function dimGeometry(e:DimEnt,doc:Pick<CadDoc,'display'|'realPerUnit'>):DimGeometry{
- const dir:Pt=e.kind==='horizontal'?[1,0]:e.kind==='vertical'?[0,1]:(()=>{const v=sub(e.b,e.a),l=len(v)||1;return [v[0]/l,v[1]/l] as Pt;})();
- const n:Pt=[-dir[1],dir[0]],off=dot(sub(e.at,e.a),n);
- // Dimension line through `at`, along dir; the feet are the measured points projected onto it.
- const foot=(p:Pt):Pt=>add(e.at,mul(dir,dot(sub(p,e.at),dir)));
- const fa=foot(e.a),fb=foot(e.b),measured=Math.abs(dot(sub(e.b,e.a),dir));
- const h=e.height,gap=h*.5,ext=h*.6,arrow=h*1.1,side=(p:Pt,f:Pt)=>{const v=sub(f,p),l=len(v);return l>1e-12?mul(v,1/l):mul(n,Math.sign(off)||1);};
- const lines:[Pt,Pt][]=[];
- for(const [p,f] of [[e.a,fa],[e.b,fb]] as const){const u=side(p,f);if(dist(p,f)>gap)lines.push([add(p,mul(u,gap)),add(f,mul(u,ext))]);}
- lines.push([fa,fb]);
- const along=sub(fb,fa),l=len(along)||1,u=mul(along,1/l),w=arrow*.18;
- const head=(tip:Pt,back:Pt):Pt[]=>{const v=sub(back,tip),vl=len(v)||1,k=mul(v,arrow/vl),p:Pt=[-k[1]/arrow*w,k[0]/arrow*w];return [tip,add(add(tip,k),p),add(add(tip,k),mul(p,-1))];};
- const arrows=l>2.4*arrow?[head(fa,fb),head(fb,fa)]:[head(fa,sub(fa,u)),head(fb,add(fb,u))];
- let angle=Math.atan2(u[1],u[0])/DEG;if(angle>90.0001||angle<=-90)angle+=angle>0?-180:180;
- const up:Pt=[-Math.sin(angle*DEG),Math.cos(angle*DEG)];
- return {lines,arrows,text:{at:add(mid(fa,fb),mul(up,h*.45)),angle,value:e.text??formatLength(measured*doc.realPerUnit,doc.display),height:h}};
+export interface DimGeometry{lines:[Pt,Pt][];arcs:{c:Pt;r:number;s:number;e:number}[];arrows:Pt[][];text:{at:Pt;angle:number;value:string;height:number}}
+/** Extension lines, dimension line or arc, arrowheads and text of a dimension. */
+export function dimGeometry(e:DimEnt,doc:Ctx):DimGeometry{
+ const prims=primitives(e,doc)!,t=prims.find(p=>p.k==='text') as {at:Pt;angle:number;value:string;height:number}|undefined;
+ return {lines:prims.flatMap(p=>p.k==='line'?[[p.a,p.b] as [Pt,Pt]]:[]),arcs:prims.flatMap(p=>p.k==='arc'?[{c:p.c,r:p.r,s:p.s,e:p.e}]:[]),arrows:prims.flatMap(p=>p.k==='fill'?[p.pts]:[]),
+  text:t?{at:t.at,angle:t.angle,value:t.value,height:t.height}:{at:e.at,angle:0,value:'',height:e.height}};
+}
+/** Whether an entity is drawn from primitives (dimensions, multiline text, leaders, tables). */
+export const isComposite=(e:{type:string}):e is DimEnt|MTextEnt|LeaderEnt|TableEnt=>e.type==='dim'||e.type==='mtext'||e.type==='leader'||e.type==='table';
+/** Text boxes of a composite entity's text. */
+export function compositeBoxes(e:Ent,ctx:Ctx):Pt[][]{
+ if(e.type==='mtext')return [mtextLayout(e,ctx).box];
+ return (primitives(e,ctx)??[]).flatMap(p=>p.k==='text'?[primTextBox(p,ctx)]:[]);
 }
 
 // ---- pieces: every entity as straight segments and circular arcs -------------------------------------------------
@@ -158,7 +168,7 @@ export function polyOutline(e:PolyEnt):Pt[]{
  return out;
 }
 const arcPiece=(k:BulgeArc):Piece=>k.sweep>0?{k:'arc',c:k.c,r:k.r,s:k.a0,e:k.a0+k.sweep}:{k:'arc',c:k.c,r:k.r,s:k.a0+k.sweep,e:k.a0};
-export function pieces(e:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):Piece[]{
+export function pieces(e:Ent,doc?:Ctx):Piece[]{
  const segs=(pts:Pt[]):Piece[]=>{const s:Piece[]=[];for(let i=1;i<pts.length;i++)s.push({k:'seg',a:pts[i-1],b:pts[i]});return s;};
  switch(e.type){
   case 'line':return [{k:'seg',a:e.a,b:e.b}];
@@ -169,7 +179,8 @@ export function pieces(e:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):Piece[]{
   case 'ellipse':case 'spline':return segs(curveSamples(e).map(s=>s.p));
   case 'xline':return [{k:'seg',a:add(e.base,mul(e.dir,-XLINE_REACH)),b:add(e.base,mul(e.dir,XLINE_REACH))}];
   case 'ray':return [{k:'seg',a:e.base,b:add(e.base,mul(e.dir,XLINE_REACH))}];
-  case 'dim':return dimGeometry(e,doc??{display:'US',realPerUnit:1}).lines.map(([a,b])=>({k:'seg',a,b}));
+  case 'dim':case 'leader':case 'table':return (primitives(e,doc??{display:'US',realPerUnit:1})??[]).flatMap((p):Piece[]=>p.k==='line'?[{k:'seg',a:p.a,b:p.b}]:p.k==='arc'?[{k:'arc',c:p.c,r:p.r,s:p.s,e:p.e}]:[]);
+  case 'mtext':return [];
   case 'hatch':return e.loops.flatMap(l=>l.map((a,i)=>({k:'seg' as const,a,b:l[(i+1)%l.length]})));
   case 'text':return [];
  }
@@ -198,7 +209,7 @@ export function arcExtremes(e:{center:Pt;radius:number},start:number,end:number)
  return pts;
 }
 const piecePoints=(list:Piece[]):Pt[]=>list.flatMap(p=>p.k==='seg'?[p.a,p.b]:arcExtremes({center:p.c,radius:p.r},p.s,p.e));
-export function bbox(e:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):Box{
+export function bbox(e:Ent,doc?:Ctx):Box{
  switch(e.type){
   case 'line':return boxOf([e.a,e.b]);
   case 'poly':return e.bulges?.some(b=>b)?boxOf(piecePoints(pieces(e))):boxOf(e.points);
@@ -207,13 +218,13 @@ export function bbox(e:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):Box{
   case 'arc':return boxOf(arcExtremes(e,e.start,e.end));
   case 'ellipse':case 'spline':case 'xline':case 'ray':return boxOf(piecePoints(pieces(e)));
   case 'hatch':return boxOf(e.loops.flat());
-  case 'text':return boxOf(textBox(e));
-  case 'dim':{const g=dimGeometry(e,doc??{display:'US',realPerUnit:1});return boxOf([...g.lines.flat(),...textBox({type:'text',id:0,layer:'',at:g.text.at,height:g.text.height,value:g.text.value,angle:g.text.angle,align:1,bold:false})]);}
+  case 'text':return boxOf(textBox(e,doc));
+  case 'dim':case 'leader':case 'table':case 'mtext':{const c=doc??{display:'US',realPerUnit:1};return boxOf([...piecePoints(pieces(e,c)),...(primitives(e,c)??[]).flatMap(p=>p.k==='fill'?p.pts:[]),...compositeBoxes(e,c).flat()]);}
  }
 }
 /** Straight segments of an entity: curves other than circles and arcs as chords; circles and arcs have none. */
-export function segments(e:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):[Pt,Pt][]{
- if(e.type==='circle'||e.type==='arc'||e.type==='text')return [];
+export function segments(e:Ent,doc?:Ctx):[Pt,Pt][]{
+ if(e.type==='circle'||e.type==='arc'||e.type==='text'||e.type==='mtext')return [];
  const out:[Pt,Pt][]=[];
  for(const p of pieces(e,doc)){if(p.k==='seg')out.push([p.a,p.b]);else{const c=arcChords(p);for(let i=1;i<c.length;i++)out.push([c[i-1],c[i]]);}}
  return out;
@@ -224,14 +235,15 @@ export function nearestOnSegment(p:Pt,a:Pt,b:Pt):{point:Pt;t:number}{
 }
 function inPolygon(p:Pt,poly:Pt[]){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const [xi,yi]=poly[i],[xj,yj]=poly[j];if((yi>p[1])!==(yj>p[1])&&p[0]<(xj-xi)*(p[1]-yi)/(yj-yi)+xi)inside=!inside;}return inside;}
 /** The point of the entity nearest p, and its distance (0 inside text and solids). */
-export function nearest(e:Ent,p:Pt,doc?:Pick<CadDoc,'display'|'realPerUnit'>):{point:Pt;d:number}{
- if(e.type==='text'){const box=textBox(e);if(inPolygon(p,box))return {point:e.at,d:0};}
+export function nearest(e:Ent,p:Pt,doc?:Ctx):{point:Pt;d:number}{
+ if(e.type==='text'){const box=textBox(e,doc);if(inPolygon(p,box))return {point:e.at,d:0};}
+ if(isComposite(e)){const c=doc??{display:'US',realPerUnit:1};for(const box of compositeBoxes(e,c))if(inPolygon(p,box))return {point:p,d:0};if(e.type==='table'&&p[0]>=e.at[0]&&p[1]<=e.at[1]&&p[0]<=e.at[0]+e.cols.reduce((a,v)=>a+v,0)&&p[1]>=e.at[1]-e.rows.reduce((a,v)=>a+v,0))return {point:p,d:0};}
  if(e.type==='solid'&&inPolygon(p,e.points))return {point:p,d:0};
  if(e.type==='hatch'&&insideLoops(p,e.loops))return {point:p,d:0};
  let best={point:p,d:Infinity};
  for(const pc of pieces(e,doc)){const q=pieceNearest(pc,p),d=dist(p,q);if(d<best.d)best={point:q,d};}
- if(e.type==='text'){const box=textBox(e);for(let i=0;i<4;i++){const q=nearestOnSegment(p,box[i],box[(i+1)%4]).point,d=dist(p,q);if(d<best.d)best={point:q,d};}}
- if(e.type==='dim'){const g=dimGeometry(e,doc??{display:'US',realPerUnit:1});const box=textBox({type:'text',id:0,layer:'',at:g.text.at,height:g.text.height,value:g.text.value,angle:g.text.angle,align:1,bold:false});if(inPolygon(p,box))return {point:p,d:0};}
+ const boxes=e.type==='text'?[textBox(e,doc)]:e.type==='mtext'?compositeBoxes(e,doc??{display:'US',realPerUnit:1}):[];
+ for(const box of boxes)for(let i=0;i<4;i++){const q=nearestOnSegment(p,box[i],box[(i+1)%4]).point,d=dist(p,q);if(d<best.d)best={point:q,d};}
  return best;
 }
 const segBox=(a:Pt,b:Pt,r:Box)=>{
@@ -251,18 +263,18 @@ export function clipSegment(a:Pt,b:Pt,r:Box):[Pt,Pt]|undefined{
  return [lerp(a,b,t0),lerp(a,b,t1)];
 }
 /** Window (entity wholly inside r) or crossing (entity touches r) selection test. */
-export function inWindow(e:Ent,r:Box,crossing:boolean,doc?:Pick<CadDoc,'display'|'realPerUnit'>){
+export function inWindow(e:Ent,r:Box,crossing:boolean,doc?:Ctx){
  const b=bbox(e,doc);
  if(b[0]>=r[0]&&b[1]>=r[1]&&b[2]<=r[2]&&b[3]<=r[3])return true;
  if(!crossing||b[2]<r[0]||b[0]>r[2]||b[3]<r[1]||b[1]>r[3])return false;
- if(e.type==='text'||e.type==='dim'||e.type==='solid')return true;
+ if(e.type==='text'||e.type==='solid'||isComposite(e))return true;
  if(e.type==='hatch'&&insideLoops([(r[0]+r[2])/2,(r[1]+r[3])/2],e.loops))return true;
  return pieces(e,doc).some(p=>{if(p.k==='seg')return segBox(p.a,p.b,r);const c=arcChords(p,7.5);for(let i=1;i<c.length;i++)if(segBox(c[i-1],c[i],r))return true;return false;});
 }
 
 // ---- snap points -------------------------------------------------------------------------------------------------
 export type SnapKind='end'|'mid'|'cen'|'qua'|'int'|'per'|'nea'|'ins'|'grid'|'nod'|'tan'|'ext'|'par'|'app'|'trk';
-export function snapPoints(e:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):{kind:SnapKind;p:Pt}[]{
+export function snapPoints(e:Ent,doc?:Ctx):{kind:SnapKind;p:Pt}[]{
  const out:{kind:SnapKind;p:Pt}[]=[];
  switch(e.type){
   case 'line':out.push({kind:'end',p:e.a},{kind:'end',p:e.b},{kind:'mid',p:mid(e.a,e.b)});break;
@@ -279,7 +291,14 @@ export function snapPoints(e:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):{kin
   case 'xline':out.push({kind:'mid',p:e.base});break;
   case 'ray':out.push({kind:'end',p:e.base});break;
   case 'text':out.push({kind:'ins',p:e.at});break;
-  case 'dim':{out.push({kind:'end',p:e.a},{kind:'end',p:e.b});const g=dimGeometry(e,doc??{display:'US',realPerUnit:1});out.push({kind:'end',p:g.lines[g.lines.length-1][0]},{kind:'end',p:g.lines[g.lines.length-1][1]});break;}
+  case 'dim':{
+   if(e.kind==='horizontal'||e.kind==='vertical'||e.kind==='aligned'){out.push({kind:'end',p:e.a},{kind:'end',p:e.b});const g=dimGeometry(e,doc??{display:'US',realPerUnit:1}),dl=g.lines[g.lines.length-1];if(dl)out.push({kind:'end',p:dl[0]},{kind:'end',p:dl[1]});}
+   else{out.push({kind:'end',p:e.a},{kind:'end',p:e.at});if(e.kind==='angular')out.push({kind:'end',p:e.b});if(e.c)out.push({kind:e.kind==='ordinate'?'end':'cen',p:e.c});}
+   break;
+  }
+  case 'mtext':out.push({kind:'ins',p:e.at});break;
+  case 'leader':for(const p of e.points)out.push({kind:'end',p});break;
+  case 'table':{const W=e.cols.reduce((a,v)=>a+v,0),H=e.rows.reduce((a,v)=>a+v,0);out.push({kind:'ins',p:e.at},{kind:'end',p:[e.at[0]+W,e.at[1]]},{kind:'end',p:[e.at[0],e.at[1]-H]},{kind:'end',p:[e.at[0]+W,e.at[1]-H]});break;}
  }
  return out;
 }
@@ -305,7 +324,7 @@ export function circleCircle(c1:Pt,r1:number,c2:Pt,r2:number):Pt[]{
  return h<1e-12?[m]:[add(m,o),sub(m,o)];
 }
 /** All intersection points between two entities (text has none). */
-export function intersections(e:Ent,f:Ent,doc?:Pick<CadDoc,'display'|'realPerUnit'>):Pt[]{
+export function intersections(e:Ent,f:Ent,doc?:Ctx):Pt[]{
  if(e.type==='text'||f.type==='text'||e.type==='hatch'||f.type==='hatch')return [];
  const out:Pt[]=[],pe=pieces(e,doc),pf=pieces(f,doc);
  for(const p of pe)for(const q of pf)for(const x of pieceIntersections(p,q))if(!out.some(o=>close(o,x,1e-9)))out.push(x);
@@ -424,7 +443,7 @@ export function subCurve(e:Ent,t0:number,t1:number):NewEnt|undefined{
  return undefined;
 }
 /** Distinct parameters where other entities cut e (inside its range). */
-export function cutParams(e:Ent,others:Ent[],doc?:Pick<CadDoc,'display'|'realPerUnit'>):number[]{
+export function cutParams(e:Ent,others:Ent[],doc?:Ctx):number[]{
  const r=curveRange(e);if(!r)return [];
  const ts=others.filter(o=>o.id!==e.id).flatMap(o=>intersections(e,o,doc)).map(q=>paramAt(e,q));
  const span=r.t1-r.t0,eps=span*1e-9;
@@ -474,7 +493,21 @@ export function transformEnt<E extends Ent>(e:E,m:Affine):E{
    // A horizontal or vertical dimension stays one when the map keeps the axes (a quarter turn swaps them).
    const keep=Math.abs(m[1])<1e-9&&Math.abs(m[2])<1e-9,swap=Math.abs(m[0])<1e-9&&Math.abs(m[3])<1e-9;
    const kind=e.kind==='aligned'?'aligned':keep?e.kind:swap?(e.kind==='horizontal'?'vertical':'horizontal'):'aligned';
-   return {...e,a:P(e.a),b:P(e.b),at:P(e.at),height:e.height*k,kind};
+   const axis=e.axis&&swap?(e.axis==='x'?'y':'x'):e.axis;
+   return {...e,a:P(e.a),b:P(e.b),at:P(e.at),...(e.c?{c:P(e.c)}:{}),...(axis?{axis}:{}),height:e.height*k,kind:e.kind==='horizontal'||e.kind==='vertical'||e.kind==='aligned'?kind:e.kind};
+  }
+  case 'mtext':{
+   if(!mirror)return {...e,at:P(e.at),height:e.height*k,width:e.width*k,angle:clean(norm360(e.angle+rot+180)-180)};
+   // Mirrored multiline text keeps reading left to right: the baseline reversed, the attachment's column swapped.
+   const u=applyLinear(m,[Math.cos(e.angle*DEG),Math.sin(e.angle*DEG)]);let angle=Math.atan2(-u[1],-u[0])/DEG;if(angle>90.0001||angle<=-90)angle+=angle>0?-180:180;
+   const col=(e.attach-1)%3,row=Math.floor((e.attach-1)/3);
+   return {...e,at:P(e.at),height:e.height*k,width:e.width*k,angle:clean(angle),attach:row*3+(2-col)+1};
+  }
+  case 'leader':return {...e,points:e.points.map(P),height:e.height*k};
+  case 'table':{
+   // Tables stay square to the sheet: the box moves (and scales) to where its corners go.
+   const W=e.cols.reduce((a,v)=>a+v,0),H=e.rows.reduce((a,v)=>a+v,0),cs=[e.at,[e.at[0]+W,e.at[1]],[e.at[0],e.at[1]-H],[e.at[0]+W,e.at[1]-H]].map(q=>P(q as Pt));
+   const c=mid(cs[0],cs[3]),w=W*k,h=H*k;return {...e,at:[c[0]-w/2,c[1]+h/2],cols:e.cols.map(v=>v*k),rows:e.rows.map(v=>v*k),height:e.height*k};
   }
  }
  return e;
@@ -494,7 +527,10 @@ export function grips(e:Ent):Grip[]{
   case 'xline':case 'ray':return [{p:e.base,role:'base'}];
   case 'hatch':{const b=boxOf(e.loops.flat());return [{p:[(b[0]+b[2])/2,(b[1]+b[3])/2],role:'center'},...e.loops.flatMap((l,i)=>l.map((p,j)=>({p,role:`l${i}v${j}`})))];}
   case 'text':return [{p:e.at,role:'at'}];
-  case 'dim':return [{p:e.a,role:'a'},{p:e.b,role:'b'},{p:e.at,role:'at'}];
+  case 'dim':return [{p:e.a,role:'a'},...(e.kind==='angular'||e.kind==='horizontal'||e.kind==='vertical'||e.kind==='aligned'?[{p:e.b,role:'b'}]:[]),{p:e.at,role:'at'},...(e.c?[{p:e.c,role:'c'}]:[])];
+  case 'mtext':return [{p:e.at,role:'at'}];
+  case 'leader':return e.points.map((p,i)=>({p,role:`v${i}`}));
+  case 'table':return [{p:e.at,role:'at'}];
  }
 }
 /** The entity with one grip moved to p (from its original position from). */
@@ -530,13 +566,15 @@ export function stretchGrip(e:Ent,role:string,from:Pt,p:Pt):Ent{
   case 'xline':case 'ray':return {...e,base:p};
   case 'hatch':{if(role==='center')return transformEnt(e,translation(d));const [i,j]=role.slice(1).split('v').map(Number);return {...e,loops:e.loops.map((l,a)=>a===i?l.map((q,b)=>b===j?p:q):l)};}
   case 'text':return {...e,at:p};
-  case 'dim':return role==='a'?{...e,a:p}:role==='b'?{...e,b:p}:{...e,at:p};
+  case 'dim':return role==='a'?{...e,a:p}:role==='b'?{...e,b:p}:role==='c'?{...e,c:p}:{...e,at:p};
+  case 'mtext':case 'table':return {...e,at:p};
+  case 'leader':{const pts=e.points.map(q=>[...q] as Pt);pts[+role.slice(1)]=p;return {...e,points:pts};}
  }
 }
 
 // ---- trim, extend, offset, explode -------------------------------------------------------------------------------
 /** Pieces left when the part of e under p between its nearest cutting points is removed; [] erases e. */
-export function trimEnt(e:Ent,p:Pt,others:Ent[],doc?:Pick<CadDoc,'display'|'realPerUnit'>):NewEnt[]|undefined{
+export function trimEnt(e:Ent,p:Pt,others:Ent[],doc?:Ctx):NewEnt[]|undefined{
  const r=curveRange(e);if(!r)return undefined;
  const cuts=cutParams(e,others,doc),t=paramAt(e,p);
  if(r.periodic){
@@ -565,7 +603,7 @@ export function breakEnt(e:Ent,t0:number,t1:number):NewEnt[]|undefined{
  return out;
 }
 /** A line, open polyline or arc with the end nearer p extended to the nearest boundary ahead of it. */
-export function extendEnt(e:Ent,p:Pt,others:Ent[],doc?:Pick<CadDoc,'display'|'realPerUnit'>):Ent|undefined{
+export function extendEnt(e:Ent,p:Pt,others:Ent[],doc?:Ctx):Ent|undefined{
  const bounds=others.filter(o=>o.id!==e.id&&o.type!=='text'&&o.type!=='hatch').flatMap(o=>pieces(o,doc));
  if(e.type==='arc'){
   const atEnd=dist(p,arcPoint(e,e.end))<dist(p,arcPoint(e,e.start)),sw=sweep(e.start,e.end),gap=360-sw;
@@ -633,11 +671,11 @@ function offsetPoly(e:PolyEnt,d:number,p:Pt):NewEnt|undefined{
  return bulges.some(b=>b)?{...rest,points:verts,bulges:closed?bulges:[...bulges,0]}:{...rest,points:verts,bulges:undefined};
 }
 /** Lines and arcs from a polyline; lines, arrowheads and text from a dimension; lines from a patterned hatch. */
-export function explodeEnt(e:Ent,doc:Pick<CadDoc,'display'|'realPerUnit'>&Partial<Pick<CadDoc,'unit'>>):NewEnt[]|undefined{
+export function explodeEnt(e:Ent,doc:Ctx):NewEnt[]|undefined{
  const pr=propsOf(e);
  if(e.type==='hatch')return e.pattern==='SOLID'?undefined:hatchLines(e,doc.unit??'in').map(([a,b])=>({...pr,type:'line',a,b}) as NewEnt);
  if(e.type==='poly')return pieces(e).map(p=>p.k==='seg'?{...pr,type:'line',a:p.a,b:p.b} as NewEnt:{...pr,type:'arc',center:p.c,radius:p.r,start:norm360(p.s),end:norm360(p.e)} as NewEnt);
- if(e.type==='dim'){const g=dimGeometry(e,doc);return [...g.lines.map(([a,b])=>({...pr,type:'line',a,b}) as NewEnt),...g.arrows.map(points=>({...pr,type:'solid',points}) as NewEnt),{...pr,type:'text',at:g.text.at,height:g.text.height,value:g.text.value,angle:g.text.angle,align:1,bold:false}];}
+ if(isComposite(e))return primEnts(primitives(e,doc)!,pr);
  return undefined;
 }
 

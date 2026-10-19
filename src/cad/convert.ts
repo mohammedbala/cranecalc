@@ -4,7 +4,9 @@ import {cadLayers,type CadDrawing} from '../components/drafting';
 import {dxfDocument,type DxfEntity,type DxfLayer} from '../components/sheetDxf';
 import {bulgeArc} from './curves';
 import {fillTrapezoids} from './hatch';
-import {DEG,arcPoint,hatchLines,polyOutline,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,pieces,sweep,type Box,type CadDoc,type CadLayer,type Ent,type LineType,type Pt} from './model';
+import {fonts,primEnts,primitives,textStyleOf} from './annotation';
+import {plotColor} from './render';
+import {DEG,arcPoint,hatchLines,isComposite,polyOutline,clipSegment,curveSamples,dimGeometry,effective,ellipseSweep,pieces,sweep,type Box,type CadDoc,type CadLayer,type Ent,type LineType,type Pt} from './model';
 
 const layer=(name:string,color:number,ltype:LineType,weight:number):CadLayer=>({name,color,ltype,weight,visible:true,locked:false});
 
@@ -63,8 +65,8 @@ export function dashPattern(ltype:LineType,unit:CadDoc['unit'],scale=1):number[]
 export const basicLtype=(l:LineType):'Continuous'|'DASHED'|'CENTER'|'HIDDEN'=>l==='Continuous'||l==='DASHED'||l==='CENTER'||l==='HIDDEN'?l:l==='DOT'||l==='HIDDEN2'?'HIDDEN':l==='DASHED2'?'DASHED':'CENTER';
 /** Plotted line width of a layer in drawing units (lineweight in 1/100 mm). */
 export const plotWidth=(l:CadLayer,unit:CadDoc['unit'])=>unit==='in'?l.weight/2540:unit==='mm'?l.weight/100:l.weight/23;
-/** Plotted ink by layer color: black, with the gray layers in gray. */
-export const plotInk=(color:number)=>color===8?'#5f6670':color===9?'#9aa1a8':'#111';
+/** Plotted ink by color and plot style: black (the gray layers gray) by default. */
+export const plotInk=(color:number,style?:CadDoc['plotStyle'])=>plotColor(color,style);
 const sketchInk=(name:string,color:number)=>name in cadLayers?`var(--cad-${name.toLowerCase()},${cadLayers[name as keyof typeof cadLayers].ink})`:plotInk(color);
 
 /** The drawing as an SVG in the coordinates of the sheet it came from (sketches keep their CAD-view colors). */
@@ -72,18 +74,20 @@ export function docToSvg(doc:CadDoc){
  const k=doc.svgScale,W=doc.width/k,H=doc.height/k,X=(p:Pt)=>`${r(p[0]/k)},${r((doc.height-p[1])/k)}`,sketch=doc.unit==='unit';
  const byName=new Map(doc.layers.map(l=>[l.name,l]));
  let out='',open='';
- const style=(l:CadLayer)=>{const ink=sketch?sketchInk(l.name,l.color):plotInk(l.color),dash=dashPattern(l.ltype,doc.unit).map(v=>r(v/k)).join(' ');
+ const lts=doc.ltscale??1,ps=doc.plotStyle;
+ const style=(l:CadLayer)=>{const ink=sketch?sketchInk(l.name,l.color):plotInk(l.color,ps),dash=dashPattern(l.ltype,doc.unit,lts).map(v=>r(v/k)).join(' ');
   return `stroke="${ink}" fill="none" stroke-width="${r(plotWidth(l,doc.unit)/k)}"${dash?` stroke-dasharray="${dash}"`:''} style="color:${ink}"`;};
- const text=(at:Pt,height:number,value:string,angle:number,align:number,bold:boolean)=>{
-  const [x,y]=X(at).split(','),size=r(height/.716/k);
-  return `<text x="${x}" y="${y}" font-size="${size}"${bold?' font-weight="700"':''}${align?` text-anchor="${align===1?'middle':'end'}"`:''}${angle?` transform="rotate(${r(-angle)} ${x} ${y})"`:''} fill="currentColor" stroke="none">${esc(value)}</text>`;
+ const text=(at:Pt,height:number,value:string,angle:number,align:number,bold:boolean,styleName?:string)=>{
+  const [x,y]=X(at).split(','),size=r(height/.716/k),st=textStyleOf(styleName,doc),wf=st.widthFactor||1;
+  const tf=[angle?`rotate(${r(-angle)} ${x} ${y})`:'',wf!==1||st.oblique?`translate(${x} ${y})${wf!==1?` scale(${r(wf)} 1)`:''}${st.oblique?` skewX(${r(-st.oblique)})`:''} translate(${-x} ${-y})`:''].filter(Boolean).join(' ');
+  return `<text x="${x}" y="${y}" font-size="${size}"${bold||st.bold?' font-weight="700"':''}${st.font!=='Arial'?` font-family='${fonts[st.font]??fonts.Arial}'`:''}${align?` text-anchor="${align===1?'middle':'end'}"`:''}${tf?` transform="${tf}"`:''} fill="currentColor" stroke="none">${esc(value)}</text>`;
  };
  const arc=(c:Pt,rad:number,start:number,end:number)=>{const s=arcPoint({center:c,radius:rad},start),e=arcPoint({center:c,radius:rad},end),sw=sweep(start,end);return `<path d="M${X(s)}A${r(rad/k)},${r(rad/k)} 0 ${sw>180?1:0} 0 ${X(e)}"/>`;};
  const sheetBox:Box=[0,0,doc.width,doc.height];
  // An object's own color, linetype or lineweight overrides its layer's group style.
  const own=(e:Ent,l:CadLayer)=>{
   if(e.color===undefined&&e.ltype===undefined&&e.weight===undefined&&e.ltscale===undefined)return '';
-  const f=effective(e,l),ink=sketch&&e.color===undefined?sketchInk(l.name,l.color):plotInk(f.color),dash=dashPattern(f.ltype,doc.unit,f.ltscale).map(v=>r(v/k)).join(' ');
+  const f=effective(e,l),ink=sketch&&e.color===undefined?sketchInk(l.name,l.color):plotInk(f.color,ps),dash=dashPattern(f.ltype,doc.unit,f.ltscale*lts).map(v=>r(v/k)).join(' ');
   return ` stroke="${ink}" stroke-width="${r(plotWidth({...l,weight:f.weight},doc.unit)/k)}" stroke-dasharray="${dash||'none'}" style="color:${ink}"`;
  };
  for(const e of doc.entities){
@@ -114,8 +118,8 @@ export function docToSvg(doc:CadDoc){
     const segs=hatchLines(e,doc.unit);if(segs.length)out+=`<path d="${segs.map(([a,b])=>`M${X(a)}L${X(b)}`).join('')}"${o}/>`;break;
    }
    case 'xline':case 'ray':{const pc=pieces(e)[0];if(pc.k==='seg'){const c=clipSegment(pc.a,pc.b,sheetBox);if(c)out+=line(c[0],c[1]);}break;}
-   case 'text':out+=wrap(text(e.at,e.height,e.value,e.angle,e.align,e.bold));break;
-   case 'dim':{const g=dimGeometry(e,doc);out+=wrap(g.lines.map(([a,b])=>line(a,b)).join('')+g.arrows.map(p=>`<path d="M${p.map(X).join('L')}Z" fill="currentColor" stroke="none"/>`).join('')+text(g.text.at,g.text.height,g.text.value,g.text.angle,1,false));break;}
+   case 'text':out+=wrap(text(e.at,e.height,e.value,e.angle,e.align,e.bold,e.style));break;
+   case 'dim':case 'mtext':case 'leader':case 'table':out+=wrap((primitives(e,doc)??[]).map(p=>p.k==='line'?line(p.a,p.b):p.k==='arc'?arc(p.c,p.r,p.s,p.e):p.k==='fill'?`<path d="M${p.pts.map(X).join('L')}Z" fill="currentColor" stroke="none"/>`:text(p.at,p.height,p.value,p.angle,p.align,p.bold,p.style)).join(''));break;
   }
  }
  if(open)out+='</g>';
@@ -127,8 +131,9 @@ export function docToSvg(doc:CadDoc){
 /** The drawing's DXF layers, with off and locked layers kept. */
 export const docDxfLayers=(doc:CadDoc):Record<string,DxfLayer>=>Object.fromEntries(doc.layers.map(l=>[l.name,{color:l.color,weight:l.weight,ltype:basicLtype(l.ltype),off:!l.visible,locked:l.locked}]));
 /**
- * DXF entities of the drawing scaled by k, for the shared drawing-set writer: dimensions exploded to lines, arrowheads
- * and text; ellipses, splines and arc segments of polylines as polylines; construction lines clipped to the sheet.
+ * DXF entities of the drawing scaled by k, for the shared drawing-set writer: dimensions, multiline text, leaders and
+ * tables exploded to lines, arcs, fills and text; ellipses, splines and arc segments of polylines as polylines;
+ * construction lines clipped to the sheet; hatches as their pattern lines or solid trapezoids.
  */
 export function docDxfEntities(doc:CadDoc,k=1):DxfEntity[]{
  const P=(p:Pt):Pt=>[p[0]*k,p[1]*k],out:DxfEntity[]=[];
@@ -143,11 +148,18 @@ export function docDxfEntities(doc:CadDoc,k=1):DxfEntity[]{
    case 'ellipse':case 'spline':{const s=curveSamples(e).map(v=>P(v.p)),full=e.type==='ellipse'?ellipseSweep(e)>=360:e.closed;if(full)s.pop();out.push({type:'poly',layer:e.layer,points:s,closed:full});break;}
    case 'xline':case 'ray':{const pc=pieces(e)[0];if(pc.k==='seg'){const c=clipSegment(pc.a,pc.b,[0,0,doc.width,doc.height]);if(c)out.push({type:'line',layer:e.layer,a:P(c[0]),b:P(c[1])});}break;}
    case 'hatch':if(e.pattern==='SOLID')for(const t of fillTrapezoids(e.loops))out.push({type:'solid',layer:e.layer,points:t.map(P)});else for(const [a,b] of hatchLines(e,doc.unit))out.push({type:'line',layer:e.layer,a:P(a),b:P(b)});break;
+   case 'dim':case 'mtext':case 'leader':case 'table':
+    for(const p of primEnts(primitives(e,doc)??[],{layer:e.layer})){
+     if(p.type==='line')out.push({type:'line',layer:e.layer,a:P(p.a),b:P(p.b)});
+     else if(p.type==='arc')out.push({type:'arc',layer:e.layer,center:P(p.center),radius:p.radius*k,start:p.start,end:p.end});
+     else if(p.type==='solid')out.push({type:'solid',layer:e.layer,points:p.points.map(P)});
+     else if(p.type==='text')out.push({type:'text',layer:e.layer,at:P(p.at),height:p.height*k,value:p.value,angle:p.angle,align:p.align,bold:p.bold});
+    }
+    break;
    case 'solid':out.push({type:'solid',layer:e.layer,points:e.points.map(P)});break;
    case 'circle':out.push({type:'circle',layer:e.layer,center:P(e.center),radius:e.radius*k});break;
    case 'arc':out.push({type:'arc',layer:e.layer,center:P(e.center),radius:e.radius*k,start:e.start,end:e.end});break;
    case 'text':out.push({type:'text',layer:e.layer,at:P(e.at),height:e.height*k,value:e.value,angle:e.angle,align:e.align,bold:e.bold});break;
-   case 'dim':{const g=dimGeometry(e,doc);for(const [a,b] of g.lines)out.push({type:'line',layer:e.layer,a:P(a),b:P(b)});for(const p of g.arrows)out.push({type:'solid',layer:e.layer,points:p.map(P)});out.push({type:'text',layer:e.layer,at:P(g.text.at),height:g.text.height*k,value:g.text.value,angle:g.text.angle,align:1,bold:false});break;}
   }
  }
  return out;
