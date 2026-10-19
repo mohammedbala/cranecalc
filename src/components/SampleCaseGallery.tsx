@@ -54,7 +54,7 @@ export function CaseCard({entry:c,busy,disabled,error,onOpen}:{entry:SampleCaseE
 }
 
 function Choice({label,value,options,onChange}:{label:string;value:string;options:{value:string;label:string;count?:number}[];onChange:(v:string)=>void}){
- return <label className="field"><span>{label}</span><select value={value} onChange={e=>onChange(e.target.value)}>
+ return <label className="field"><span>{label}</span><select aria-label={label} value={value} onChange={e=>onChange(e.target.value)}>
   <option value="">All</option>{options.map(o=><option key={o.value} value={o.value}>{o.label}{o.count!==undefined?` (${o.count})`:''}</option>)}</select></label>;
 }
 
@@ -95,14 +95,14 @@ export default function SampleCaseGallery({onOpen,index:given,initialFilters,fet
   {index&&<>
    <div className="case-outcomes" role="group" aria-label="Filter by outcome">{options.outcome.map(o=><button key={o.value} className={`case-outcome ${o.value} ${filters.outcome===o.value?'selected':''}`} aria-pressed={filters.outcome===o.value} title={outcomeNotes[o.value as CaseOutcome]} onClick={()=>set({outcome:filters.outcome===o.value?'':o.value})}><strong>{o.count}</strong> {o.label.toLowerCase()}</button>)}</div>
    <form className="case-filters" role="search" aria-label="Filter sample cases" onSubmit={e=>e.preventDefault()}>
-    <label className="field case-search"><span>Search</span><div className="case-search-wrap"><Search size={13} aria-hidden="true"/><input type="search" value={filters.query} placeholder="Case number, section, crane, support…" onChange={e=>set({query:e.target.value})}/></div></label>
+    <label className="field case-search"><span>Search</span><div className="case-search-wrap"><Search size={13} aria-hidden="true"/><input type="search" aria-label="Search sample cases" value={filters.query} placeholder="Case number, section, crane, support…" onChange={e=>set({query:e.target.value})}/></div></label>
     <Choice label="Structure" value={filters.structure} options={options.structure} onChange={v=>set({structure:v})}/>
     <Choice label="Girder support" value={filters.support} options={options.support} onChange={v=>set({support:v})}/>
     <Choice label="Top-flange tie" value={filters.tie} options={options.tie} onChange={v=>set({tie:v})}/>
     <Choice label="Girder system" value={filters.girderSystem} options={options.girderSystem} onChange={v=>set({girderSystem:v})}/>
     <Choice label="Crane capacity" value={filters.capacity} options={options.capacity} onChange={v=>set({capacity:v})}/>
     <Choice label="Outcome" value={filters.outcome} options={options.outcome} onChange={v=>set({outcome:v})}/>
-    <label className="field"><span>Sort by</span><select value={filters.sort} onChange={e=>set({sort:e.target.value as CaseSort})}><option value="id">Case number</option><option value="capacity">Crane capacity</option><option value="dc">Governing D/C (highest first)</option></select></label>
+    <label className="field"><span>Sort by</span><select aria-label="Sort by" value={filters.sort} onChange={e=>set({sort:e.target.value as CaseSort})}><option value="id">Case number</option><option value="capacity">Crane capacity</option><option value="dc">Governing D/C (highest first)</option></select></label>
    </form>
    <div className="case-count"><p aria-live="polite">{shown.length===cases.length?`${cases.length} cases`:`${shown.length} of ${cases.length} cases`}</p>{filtered&&<button className="text-button" onClick={()=>setFilters(f=>({...emptyFilters,sort:f.sort}))}><RotateCcw size={12}/>Clear filters</button>}</div>
    {shown.length===0?<p className="subtle case-empty">No cases match these filters.</p>
