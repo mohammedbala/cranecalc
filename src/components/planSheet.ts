@@ -314,7 +314,10 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    for(const b of eb.footings)for(const z of rows)later+=rect(X(b.x0/1000-m.length/2),Y(z-(b.u1-b.u0)/2000),(b.x1-b.x0)/1000*k,(b.u1-b.u0)/1000*k,'hidden-line');
    for(const l of eb.lines){
     const zl=(u:number)=>l.line==='A'?rows[0]+u/1000:rows[1]-u/1000,yl=Y(zl(l.input.offset));
-    later+=`<g data-existing-line="${l.line}">`+line([gridLeft-18,yl],[gridRight+12,yl],'grid-line')+text(gridLeft-22,yl+3,'(E) COL. LINE',7.5,'end');
+    // The tag beside the runway row bubbles (gridLeft - 30, radius 11; annotationClashes counts no circles) would print
+    // through them where the column line runs close to a runway line: then it stands left of the bubble, or at the right end.
+    const tag='(E) COL. LINE',nearBubble=rows.some(z=>Math.abs(Y(z)-yl)<16),left=gridLeft-44-textWidth(tag,7.5)>panel.x0;
+    later+=`<g data-existing-line="${l.line}">`+line([gridLeft-18,yl],[gridRight+12,yl],'grid-line')+(!nearBubble?text(gridLeft-22,yl+3,tag,7.5,'end'):left?text(gridLeft-44,yl+3,tag,7.5,'end'):text(gridRight+16,yl+3,tag,7.5,'start'));
     for(const c of l.columns)for(const b of [c.column,c.footing])if(b)later+=rect(X(b.x0/1000-m.length/2),Math.min(Y(zl(b.u0)),Y(zl(b.u1))),(b.x1-b.x0)/1000*k,Math.abs(b.u1-b.u0)/1000*k,'reference-line');
     later+='</g>';
    }
