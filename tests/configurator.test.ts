@@ -96,6 +96,11 @@ describe('dependent choices',()=>{
   expect(r.changes.length).toBeGreaterThanOrEqual(2);
   expect(normalizeConfig({...defaultRunwayConfig,structure:'new',support:'by-others'}).config.support).toBe('twin-rib');
   expect(normalizeConfig({...defaultRunwayConfig,system:'continuous',tie:'flexible-plate'}).config.tie).toBe('paired-bars');
+  // A capped girder over a 60 ft piece has no designed field splice (the cap channel too): simple spans, logged.
+  const capped=normalizeConfig({...defaultRunwayConfig,girder:'capped',system:'continuous',bays:5,span:20,tie:'flexible-plate'});
+  expect(capped.config).toMatchObject({system:'simple',tie:'flexible-plate'});
+  expect(capped.rules).toContainEqual({field:'system',from:'continuous',to:'simple',why:expect.stringMatching(/cap channel.*simple spans/)});
+  expect(normalizeConfig({...defaultRunwayConfig,girder:'capped',system:'continuous',bays:3,span:20}).config.system).toBe('continuous');
   // Each change is kept per choice for the selection log: the field, as entered, as adjusted and the rule.
   expect(r.rules).toContainEqual({field:'structure',from:'existing',to:'new',why:expect.stringMatching(/new freestanding columns/)});
   expect(r.rules).toContainEqual({field:'tie',from:'cap-angle',to:'paired-bars',why:expect.any(String)});

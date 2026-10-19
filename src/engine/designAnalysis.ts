@@ -260,7 +260,9 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
       governAt('interaction',u,c,x,M,My);
       governAt('moment',Math.abs(M),c,x,M,My);governAt('lateralMoment',My,c,x,M,My);
       governAtX('topLateralMoment',Math.abs(Mt),c,x);governAtX('bottomLateralMoment',Math.abs(Mb),c,x);
-      if(wheel)for(const side of [-1e-5,1e-5]){const station=x+side;if(station<0||station>L)continue;const V=shearAtStation(station);if(Math.abs(V)>c.shear){c.shear=Math.abs(V);shearAt=x;}}
+      // A wheel on a support also gives each adjacent span's end shear with the wheel just inside it (the limit as the
+      // wheel approaches the support: the shear beside the wheel plus its load on the span side).
+      if(wheel){const P=stations.some(s=>Math.abs(s-x)<1e-6)?wheels[n-samples.length].p:0;for(const side of [-1e-5,1e-5]){const station=x+side;if(station<0||station>L)continue;const V=shearAtStation(station),Vs=Math.max(Math.abs(V),Math.abs(V+Math.sign(side)*P));if(Vs>c.shear){c.shear=Vs;shearAt=x;}}}
      }
      // Include UDL end shear, also for the no-crane state.
      for(const x of stations)for(const side of [-1e-5,1e-5]){const station=x+side;if(station<0||station>L)continue;const V=shearAtStation(station);if(Math.abs(V)>c.shear){c.shear=Math.abs(V);shearAt=x;}}

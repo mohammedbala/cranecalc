@@ -44,8 +44,10 @@ export function movingAnalysis(p:ProjectInput,props:Properties,subdivisions=20):
      const hd=hi<0?0:selected.reduce((s,c,j)=>s+c.h.displacement[hi]*signs[j],0);row.lateralDeflectionMax=Math.max(row.lateralDeflectionMax,hd);row.lateralDeflectionMin=Math.min(row.lateralDeflectionMin,hd);
      govern('moment',Math.abs(M));govern('lateralMoment',Math.abs(H));govern('shear',Math.abs(V));govern('deflection',Math.abs(d));
     }
-    // Capture shear discontinuities and moments exactly at each wheel position.
-    for(const pt of points){const M=momentAt(pt.x,reactions,points.map(w=>({x:w.x,p:w.vertical})),q),H=momentAt(pt.x,hReactions,points.map(w=>({x:w.x,p:w.lateral})),0);govern('moment',Math.abs(M));govern('lateralMoment',Math.abs(H));for(const side of [-1e-5,1e-5]){const x=pt.x+side;if(x<0||x>length)continue;const V=reactions.reduce((s,r)=>s+(r.x<=x?r.r:0),0)-points.reduce((s,w)=>s+(w.x<=x?w.vertical:0),0)-q*x;govern('shear',Math.abs(V));}}
+    // Capture shear discontinuities and moments exactly at each wheel position. A wheel on a support also gives the
+    // end shear of each adjacent span with the wheel just inside it (the limit as the wheel approaches the support: the
+    // shear beside the wheel plus its load on the span side), the supremum the travel samples approach.
+    for(const pt of points){const M=momentAt(pt.x,reactions,points.map(w=>({x:w.x,p:w.vertical})),q),H=momentAt(pt.x,hReactions,points.map(w=>({x:w.x,p:w.lateral})),0);govern('moment',Math.abs(M));govern('lateralMoment',Math.abs(H));const onSupport=supports.some(s=>Math.abs(s-pt.x)<1e-6);for(const side of [-1e-5,1e-5]){const x=pt.x+side;if(x<0||x>length)continue;const V=reactions.reduce((s,r)=>s+(r.x<=x?r.r:0),0)-points.reduce((s,w)=>s+(w.x<=x?w.vertical:0),0)-q*x;govern('shear',Math.abs(V));if(onSupport)govern('shear',Math.abs(V+Math.sign(side)*pt.vertical));}}
     govern('reaction',absMax(support.map(r=>r.r)));govern('uplift',Math.max(0,...support.map(r=>-r.r)));
     govern('lateralDeflection',absMax(zeroH.x.map((_,i)=>selected.reduce((s,c,j)=>s+c.h.displacement[i]*signs[j],0))));
    }
