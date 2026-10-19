@@ -102,6 +102,8 @@ export interface FatigueDetailResult {
  /** AISC 360-16 Table A-3.1 threshold stress range F_TH of the category, MPa. */
  threshold:number;
  bins:{name:string;cycles:number;minimum:number;maximum:number;range:number;allowable:number;damage:number}[];
+ /** Continuous girders: stress cycles per crane pass at this detail (passCycles.ts), already in the bin cycles; absent = 1. */
+ cyclesPerPass?:number;
  damage:number;range:number;peak:number;
 }
 /**

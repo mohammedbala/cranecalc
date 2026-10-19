@@ -48,7 +48,7 @@ export function girderStrength(p:ProjectInput,s:Properties):GirderStrength {
  const effective=(width:number,lambda:number,limit:number,c1:number,c2:number)=>lambda<=limit*Math.sqrt(Fy/Fcr)?width:width*(1-c1*Math.sqrt((c2*limit/lambda)**2*Fy/Fcr))*Math.sqrt((c2*limit/lambda)**2*Fy/Fcr);
  const be=Math.min(bf/2,Math.max(0,effective(bf/2,flangeRatio,flangeAxialLimit,.22,1.49))),he=Math.min(h,Math.max(0,effective(h,webRatio,webAxialLimit,.18,1.31)));
  const Ae=s.A-4*(bf/2-be)*tf-(h-he)*tw;
- const tensionMajor=available(Math.min(Mp,netMn),p.method,.9,1.67);
+ const tensionMajor=available(netLimitApplies?Math.min(Mp,netMn):Mp,p.method,.9,1.67);
  const result:GirderStrength={tensionMajor,tensionMajorReverse:tensionMajor,ltb:Lb<=Lp?undefined:Mn,k,h,flangeRatio,webRatio,flangeLimit,webLimit,compact,Lp,Lr,rts,major:available(Math.min(grossMoment,netMn),p.method,.9,1.67),netMoment:available(netMn,p.method,.9,1.67),netLimitApplies,Yt,minor:available(Mny,p.method,.9,1.67),flangeMinor:available(flangeMn,p.method,.9,1.67),shear:available(.6*Fy*d*tw*Cv,p.method,shearPhi,shearOmega),compression:available(Fcr*Ae,p.method,.9,1.67),elasticAxial:Math.min(Fex,Fey)*s.A,axialArea:Ae,flexureBranch:branch,Cv,shearPhi,shearOmega};
  return p.section.kind==='cap'?cappedStrength(p,s,result):result;
 }

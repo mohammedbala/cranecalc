@@ -39,6 +39,8 @@ const byId:[RegExp,RegExp][]=[
  [/^detail-(fatigue|full-cycle)-FS/,/BEARING/],
  [/^detail-(fatigue|full-cycle)-/,/$^/],
  [/^(end-stop-|crane-\d+-bumper-stop$)/,/END STOP/],
+ // The bracket's own checks and the TR-13 reaction recommendation (column-brackets, element 'gates') at the bracket views.
+ [/^(column-brackets$|bracket-)/,/BRACKET|HAUNCH/],
  [/^(cap-angle-|cap-clearance$)/,/CAP TIEBACK|FLANGE TIE/],
  [/^rail-joint-/,/RAIL JOINT|RAIL LAYOUT/],
  [/^rail-(clip|keeper|pad|seat)/,/RAIL CLIP/],
@@ -51,6 +53,8 @@ const byId:[RegExp,RegExp][]=[
  [/^(crane-column-|building-column-)/,/^CRANE COLUMN AND BUILDING COLUMN/],
 ];
 const byElement:Record<string,RegExp>={
+ // The girder's strength items at the capped girder section (a rolled girder has no detail of its own: listed on S-00).
+ girder:/^CAPPED GIRDER SECTION$/,
  rail:/RAIL (CLIP|JOINT|LAYOUT)/,bearing:/BEARING|SLIDING/,tie:/TIE|SADDLE|CAP TIEBACK/,stops:/END STOP/,
  support:/BRACKET|HAUNCH|COLUMN CAP|GIRDER BEARING|GIRDER END AT COLUMN|ADJACENT GIRDER ENDS/,column:/NEW RUNWAY COLUMN|BASE PLATE|COLUMN CAP/,base:/NEW RUNWAY COLUMN|BASE PLATE|FOOTING/,
  longitudinal:/BRACED BAY|BRACE AND STRUT|BRACE AT COLUMN|STRUT AND GUSSETS/,

@@ -2,6 +2,7 @@ import {finiteLife,fatigueCoefficient,fatigueThreshold,KSI} from './fatigueConst
 import {girderDeadLoad,newSteelTakeoff} from './newSteel';
 import {adjacentBays} from './continuation';
 import {flexureCurves} from './loadHeightFlexure';
+import {cyclesPerPass} from './passCycles';
 import {flangeTieGeometry,tieLine,tiePlies,tieRelease} from './tieGeometry';
 import {flangeTieResponse} from './flangeTieDesign';
 import {cappedMechanics} from './cappedMechanics';
@@ -625,6 +626,11 @@ export function createDetailCollector(p:ProjectInput,props:Properties,subdivisio
   const st=saddles.stations[+m[1]],v=endForceBins.get(`${st.bay}:${st.end}`)?.[f.id.endsWith('top-right')?'top':'bottom'];
   f.bins.forEach((b,k)=>{const local=unit*(v?v[k].max-v[k].min:0);b.minimum=-local/2;b.maximum=local/2;});}}
 
+  // Continuous girders: the cycles per crane pass at each detail (rainflow of the moment under the crane's wheel group,
+  // about two at an interior support, cyclesPerPass) multiply the duty-bin cycles of the girder details; the saddle tie
+  // local details (SL) keep their tie-force ranges per pass.
+  if(p.system==='continuous'){const girder=fatigue.filter(f=>!f.id.startsWith('SL')),n=cyclesPerPass(p,girder.map(f=>f.x));
+   girder.forEach((f,k)=>{if(n[k]>1+1e-6){f.cyclesPerPass=n[k];for(const b of f.bins)b.cycles=Math.round(b.cycles*n[k]);}});}
   for(const [i,f] of fatigue.entries()){for(const b of f.bins){b.range=b.maximum-b.minimum;Object.assign(b,fatigueSpectrumBin(f.category as keyof typeof constants,b.range,b.cycles));}f.range=Math.max(...f.bins.map(b=>b.range));f.damage=f.bins.reduce((a,b)=>a+b.damage,0);f.peak=deadBounds[i]+Math.max(...f.bins.flatMap(b=>[Math.abs(b.minimum),Math.abs(b.maximum)]));}
   const grouped=new Map<string,InterfaceAction>();
   for(const v of interfaceExtremes.values()){const key=`${v.x}:${v.id}:${v.longitudinal}`;const old=grouped.get(key);if(old)old.controls.push(...v.controls);else grouped.set(key,{...v,controls:[...v.controls]});}

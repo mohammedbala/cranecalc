@@ -114,6 +114,8 @@ const sentenceStart=(v:string)=>v.charAt(0).toUpperCase()+v.slice(1);
  */
 /** The increase a ratio u calls for, in whole percent (u = 2.1: 110%). */
 const more=(u:number)=>Math.ceil((u-1)*100-1e-9);
+const negativeMoment=(x:RemedyContext)=>/^(combined-bottom|major|flexure-load-height)$/.test(x.c.id)&&/negative moment: bottom flange in compression\)|the negative moment governs|negative moment \((W )?bottom flange in compression\)\./.test(x.c.note)
+ ?`Raise the negative-moment strength by at least ${more(x.u)}%: the W bottom flange is in compression over the interior support. A heavier W (wider, thicker bottom flange), or brace the bottom flange near the support (a shorter unbraced length for negative moment than L_b = ${x.len(x.p.unbracedLength)}). Then recalculate.`:undefined;
 const remedies:Remedy[]=[
  // Fatigue register points, by detail family (the register id prefix).
  // Saddle end fillets: the toe on the flange under the girder's longitudinal stress (SA), and the fillet terminations under
@@ -126,8 +128,10 @@ const remedies:Remedy[]=[
  [/^detail-(fatigue|full-cycle)-SH/,x=>`End stop bolt holes in the flange: ${range(x)}. Move the end stop to a lower-stress location (over the support) or reduce the bumper force.`],
  [/^detail-(fatigue|full-cycle)-/,x=>`${sentenceStart(range(x))} at this detail: a better detail category, a larger section or a smaller cyclic force.`],
  // Girder
- [/^(torsion-normal|torsion-normal-bottom|combined|combined-bottom|minor)$/,x=>`Reduce the girder flange stress by at least ${reduction(x.u)}%: a section stiffer in lateral bending and torsion (wider or heavier top flange, or a cap channel), closer or stiffer top-flange restraint, or less play in the ties and bearings, which drives the second-order twist. Then recalculate.`],
- [/^(major|flexure-load-height|torsion-stability)$/,x=>`Raise the major-axis flexural strength by at least ${Math.ceil((x.u-1)*100)}%: a deeper or heavier girder, or brace the compression flange at shorter intervals (L_b = ${x.len(x.p.unbracedLength)}).`],
+ // A bottom flange compressed by the negative moment over an interior support (H1 at its governing station, or major
+ // flexure governed by the negative moment): the W bottom flange and its bracing, not the top flange or a cap.
+ [/^(torsion-normal|torsion-normal-bottom|combined|combined-bottom|minor)$/,x=>negativeMoment(x)??`Reduce the girder flange stress by at least ${reduction(x.u)}%: a section stiffer in lateral bending and torsion (${x.p.section.kind==='cap'?'a heavier W or cap channel':'wider or heavier top flange, or a cap channel'}), closer or stiffer top-flange restraint, or less play in the ties and bearings, which drives the second-order twist. Then recalculate.`],
+ [/^(major|flexure-load-height|torsion-stability)$/,x=>negativeMoment(x)??`Raise the major-axis flexural strength by at least ${Math.ceil((x.u-1)*100)}%: a deeper or heavier girder, or brace the compression flange at shorter intervals (L_b = ${x.len(x.p.unbracedLength)}).`],
  [/^(shear|torsion-shear)$/,()=>'Increase the web area (thicker or deeper web) or reduce the torsion.'],
  [/^(wheel-yield|wheel-cripple|wheel-web-tr13|sidesway)$/,()=>'Thicker girder web, or a deeper rail to spread the wheel load.'],
  [/^(vertical|lateral|rail-head|rail-twist)$/,x=>`Stiffen the girder (${/vertical/.test(x.c.id)?'I_x':'lateral bending and torsion: I_y, J, C_w'}) or reduce the play of the ties and bearings, by at least ${reduction(x.u)}% of the movement; or obtain the owner's or crane supplier's acceptance of the larger value.`],
