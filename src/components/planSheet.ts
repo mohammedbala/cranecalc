@@ -18,7 +18,7 @@ import {simpleSupportTopic} from './simpleSupportSheet';
 import {capTopic} from './capSheet';
 import {steppedColumnTopic,steppedColumnTitles} from './steppedColumnSheet';
 import {activeStep} from '../engine/steppedColumnInputs';
-import {packDetailSheets,detailSheetSvg,detailSheetTitle,clearView,type DetailTopic} from './detailSheet';
+import {packDetailSheets,detailSheetSvg,detailSheetTitle,clearView,annotationClashes,type DetailTopic} from './detailSheet';
 import {AnnotationSpace,dimHAt,dimVAt,type DimPlace} from './annotationSpace';
 import {craneLevelStrut} from '../engine/existingColumn';
 import {format} from '../engine/units';
@@ -314,7 +314,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    for(const b of eb.footings)for(const z of rows)later+=rect(X(b.x0/1000-m.length/2),Y(z-(b.u1-b.u0)/2000),(b.x1-b.x0)/1000*k,(b.u1-b.u0)/1000*k,'hidden-line');
    for(const l of eb.lines){
     const zl=(u:number)=>l.line==='A'?rows[0]+u/1000:rows[1]-u/1000,yl=Y(zl(l.input.offset));
-    // The tag beside the runway row bubbles (gridLeft - 30, radius 11; annotationClashes counts no circles) would print
+    // The tag beside the runway row bubbles (gridLeft - 30, radius 11) would print
     // through them where the column line runs close to a runway line: then it stands left of the bubble, or at the right end.
     const tag='(E) COL. LINE',nearBubble=rows.some(z=>Math.abs(Y(z)-yl)<16),left=gridLeft-44-textWidth(tag,7.5)>panel.x0;
     later+=`<g data-existing-line="${l.line}">`+line([gridLeft-18,yl],[gridRight+12,yl],'grid-line')+(!nearBubble?text(gridLeft-22,yl+3,tag,7.5,'end'):left?text(gridLeft-44,yl+3,tag,7.5,'end'):text(gridRight+16,yl+3,tag,7.5,'start'));
@@ -507,7 +507,12 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    svg+=`<g data-existing-bay="${b.end}">${[top,bottom,EY(m.railBase+railDepth)].map(y=>line([x0,y],[x1,y],'reference-line')).join('')}${breakLine([far,EY(m.railBase+railDepth)-4],[far,bottom+4])}${text(lx,bottom+lettering.text+2,'EXIST.',lettering.text,anchor)}${text(lx,bottom+lettering.text+2+lettering.leading,`${dim(b.length/1000)} BAY`,lettering.text,anchor)}</g>`;
   }
   // On column caps the strut runs just below the girder: the section name goes on the girder.
-  for(const g of marks)svg+=text(EX(mid(g)),top-14-lift,g.mark,lettering.text,'middle',700)+text(EX(mid(g)),capGeo?(top+bottom)/2+3:bottom+17,p.section.name,lettering.text,'middle',700);
+  // Elsewhere it reads under the girder, else on its web or lower where a strut or bracing runs under the girder there.
+  const web=(top+bottom)/2+3,webClear=bottom-top-2*m.tf*ek>lettering.text+4;
+  const sectionNames=(named:AnnotationSpace)=>marks.map(g=>named.pick((capGeo?[web]:[bottom+17,...(webClear?[web]:[]),bottom+17+lettering.leading]).map(y=>text(EX(mid(g)),y,p.section.name,lettering.text,'middle',700)))).join('');
+  {const named=new AnnotationSpace(svg.slice(elevationFrom));
+   for(const g of marks)svg+=named.add(text(EX(mid(g)),top-14-lift,g.mark,lettering.text,'middle',700));
+   svg+=`<g data-section-names="elevation">${sectionNames(named)}</g>`;}
   // Girder field splices: the joint, the splice plates, and the mark with its detail below the girder where it reads clear.
   {const sp=activeSplices(p);if(sp&&splices.length){const sg=spliceGeometry(p,sp),T=sg.top,B=sg.bottom,tf=m.tf*ek,k=ek/1000;
    for(const [i,x] of splices.entries()){
@@ -542,7 +547,15 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   svg+=dimH(el,er,below+62,below+82,`${dim(m.length)} OVERALL`);
   svg+=text(el,below+108,`DATUM EL. ${drawingElevation(datum,p.units)} = ${short(datumLabel.toUpperCase(),60)}. T.O.S. = TOP OF W STEEL${p.section.kind==='cap'?`; CAP ABOVE T.O.S.${capDetailed?` / SEE ${detailRef(detailTitles.capSection)}`:''}`:''}. ELEVATIONS FROM ${elevations?{'new column base':'THE NEW COLUMN BASE','surveyed column seat':'THE SURVEYED COLUMN SEAT','entered top of rail':'THE SPECIFIED TOP OF RAIL'}[elevations.source]:'PROJECT DATA (NOT ENTERED)'}.`,lettering.text);
   // The bracing callout last, clear of everything else on the elevation and inside its panel.
-  if(bracing)svg+=bracingElevationCallout(s,bracingAt,svg.slice(elevationFrom),[30,gaLayout.split.bottomX-10]);
+  // Where it finds no clear place, it is placed first and the section names under the girders after it, clear of it.
+  if(bracing){
+   const bounds:[number,number]=[30,gaLayout.split.bottomX-10],drawn=svg.slice(elevationFrom),callout=bracingElevationCallout(s,bracingAt,drawn,bounds);
+   const names=/<g data-section-names="elevation">.*?<\/g>/.exec(drawn)?.[0]??'',without=drawn.replace(names,'');
+   const other=names&&new AnnotationSpace(drawn).cost(callout)?bracingElevationCallout(s,bracingAt,without,bounds):'';
+   const space=new AnnotationSpace(without+other),renamed=other?`<g data-section-names="elevation">${sectionNames(space)}</g>`:'';
+   if(other&&annotationClashes(without+other+renamed)<annotationClashes(drawn+callout))svg=svg.slice(0,elevationFrom)+without+renamed+other;
+   else svg+=callout;
+  }
   svg+=viewTitle(gaLayout.elevation.x,below+150,'RUNWAY GIRDER ELEVATION - GRID A',elevationScale.label,ga)+'</g>';
   svg+=typicalSection(s,m,below+180,{newColumns,columnName,existing:newColumns?existingLayout(p):undefined});
   // Drawn after the typical section so the existing details keep their numbers.
