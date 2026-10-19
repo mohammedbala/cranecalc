@@ -9,6 +9,15 @@ export const barSizes=['#4','#5','#6','#7','#8','#9','#10','#11'] as const;
  * top of the footing, `soil` below the finished floor (zero for a footing poured flush with the existing
  * slab after saw cutting it). Canonical units mm, N, MPa.
  */
+/**
+ * A spread footing. soil: top of footing below the finished floor; slab: the existing slab, saw cut for the footing;
+ * key: depth of a shear key below the footing bottom (12 in wide, the footing's full width each way), which takes the
+ * soil's lateral bearing (passive) resistance deeper; none when not given.
+ */
+export const footingSchema=z.object({L:pos,B:pos,thickness:pos,cover:pos,soil:nn,slab:nn,bar:z.enum(barSizes),spacing:pos,fy:pos,key:nn.optional()});
+export type FootingInput=z.infer<typeof footingSchema>;
+/** Width of a footing shear key (footing.key). */
+export const footingKeyWidth=12*25.4;
 export const columnBaseSchema=z.object({
  enabled:z.boolean(),
  /**
@@ -20,13 +29,30 @@ export const columnBaseSchema=z.object({
  grout:nn,
  concrete:z.object({fc:pos}),
  /** soil: top of footing below the finished floor, with soil or slab over it; slab: existing slab thickness, saw cut for the footing. */
- footing:z.object({L:pos,B:pos,thickness:pos,cover:pos,soil:nn,slab:nn,bar:z.enum(barSizes),spacing:pos,fy:pos}),
+ footing:footingSchema,
+ /**
+  * The footing at the braced columns (the columns at the ends of the braced spans, which take the rods' uplift and shear
+  * along the runway), sized apart from `footing`, which the other columns keep. Not given: every column has `footing`.
+  */
+ braced:z.object({footing:footingSchema}).optional(),
+ /**
+  * A crane column beside an existing building column (craneColumn): each footing is a combined footing under both columns,
+  * replacing the building column's existing footing, centered on the two base plates; the building column is shored
+  * while its footing is replaced and re-set on new anchor rods. Its existing axial effects load the footing.
+  */
+ combined:z.boolean().optional(),
  /**
   * Allowable (service) soil bearing pressure, base friction coefficient, soil unit weight, frost depth below the
   * floor (zero for an interior footing protected from frost) and modulus of subgrade reaction for the footing's
   * rotation, from the geotechnical report and the building code.
   */
- soil:z.object({allowable:pos,friction:pos,unitWeight:pos,frost:nn,subgrade:pos}),
+ soil:z.object({allowable:pos,friction:pos,unitWeight:pos,frost:nn,subgrade:pos,
+  /**
+   * Allowable lateral bearing (passive) pressure per unit depth below the bottom of the slab, from the geotechnical
+   * report (IBC 2018 §1806.2, Table 1806.2 presumptive values), combined with the base friction in the sliding check
+   * (IBC §1806.3.1). Not given: friction only.
+   */
+  passive:nn.optional()}),
  source:z.string().max(300),confirmed:z.boolean()
 });
 export type ColumnBaseInput=z.infer<typeof columnBaseSchema>;
