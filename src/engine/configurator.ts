@@ -55,6 +55,7 @@ import {tiedToBuilding,type ColumnTieInput} from './craneColumnInputs';
 import {buildingColumnProject,columnPlates,columnShortening,columnTieCapacities,columnTieGeometry,craneColumnLayout,girderTieFace} from './craneColumn';
 import {validateColumnCap} from './columnCap';
 import {minimumEdge,capAngleGeometry} from './capAngle';
+import {flangeStrengths} from './designAnalysis';
 import {transverseFilletFatigue} from './connectionStrength';
 import {finiteLife,fatigueThreshold} from './fatigueConstants';
 import {columnReactionOffset} from './existingColumn';
@@ -265,7 +266,9 @@ export interface GirderTrial {name:string;weight:number;utilization:number;defle
  * eigenvalues; with the monosymmetry term of a capped section (C3 = 0.53); the configurator uses it to rank sections,
  * the full analysis then checks the chosen one.
  */
-export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:number;Mcrane:number;Hu:number;V:number;flexibleTie?:boolean},strength=girderStrength({...p,section,aist:p.aist?{...p.aist,netFlangeArea:section.bf*section.tf}:p.aist},sectionProperties(section))){
+export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:number;Mcrane:number;Hu:number;V:number;flexibleTie?:boolean;
+ /** Factored negative (hogging) moment of a continuous girder, as a magnitude: the bottom flange in compression. */
+ Mneg?:number},strength=girderStrength({...p,section,aist:p.aist?{...p.aist,netFlangeArea:section.bf*section.tf}:p.aist},sectionProperties(section))){
  const pr=sectionProperties(section),E=section.E,G=E/2.6,L=p.unbracedLength,lrfd=p.method==='LRFD',phi=(v:number)=>lrfd?.9*v:v/1.67;
  const cap=section.kind==='cap'?aiscChannelByName(section.capCatalogueId??''):undefined,Iyb=section.tf*section.bf**3/12,Iyt=Iyb+(cap?cap.Ix*inch**4:0);
  const h0=section.d-section.tf,ysc=h0*Iyb/(Iyt+Iyb),hr=p.railHeight+(p.aist?.railPad?.25*inch:0),yg=ysc+section.tf/2+(cap?section.capTw:0)+hr;
@@ -281,7 +284,12 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  const tips=(demand.Mu/Stop+Mf0*amplification/Sf)/phi(section.Fy)*(cap?1.4:1)*(demand.flexibleTie?1.25:1);
  // F2 (F4 for caps, through girderStrength) with the load-height C_b: M_n,LTB scales with C_b below M_p.
  const cb=Math.min(1,Mcr/Mocr),Mn=strength.ltb!==undefined?Math.min(strength.major,cb*strength.major):strength.major;
- const h1=demand.Mu/Mn+Mf0/phi(section.Fy*Sf),stability=(lrfd?1/.9:1.67)/(.8*Mcr/demand.Mu);
+ // H1 by the sign of the moment, as the calculation (flangeStrengths, majorBySign): positive moment against the
+ // strength with the top flange (and cap) in compression, with the top flange's lateral bending; the negative moment of
+ // a continuous girder against M_c- (the W bottom flange in compression, F4/F5 for a cap) and, at the top flange, against
+ // its tension-flange strength with the same lateral bending.
+ const sign=flangeStrengths(strength),Mneg=demand.Mneg??0;
+ const h1=Math.max(demand.Mu/Mn+Mf0/phi(section.Fy*Sf),Mneg>0?Mneg/sign.bottom.majorReverse!:0,Mneg>0?Mneg/sign.top.majorReverse!+Mf0/phi(section.Fy*Sf):0),stability=(lrfd?1/.9:1.67)/(.8*Mcr/demand.Mu);
  const ratios={tips,h1,stability,shear:demand.V/strength.shear};
  const [governs,utilization]=Object.entries(ratios).sort((a,b)=>b[1]-a[1])[0];
  // Rail-head lateral movement as the full analysis takes it: the top flange (with the cap) carries its direct share of
@@ -301,12 +309,16 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
  const target=opts.target??.85,deflectionTarget=opts.deflectionTarget??.9;
  const ref=structuredClone(p);ref.section=loadAiscSection(ref.section,'W24X104');
  const props=sectionProperties(ref.section),a=movingAnalysis(ref,props,8),L=Math.max(...p.spans),lrfd=p.method==='LRFD';
+ const negative=Math.max(0,...a.envelope.map(v=>-v.momentMin));
  const Md=a.deadMoment,M=a.demand.moment,H=a.demand.lateralMoment,V=a.demand.shear,dv=a.demand.deflection*props.Ix,dh=a.demand.lateralDeflection*props.Iy;
  const vLimit=L/p.verticalLimit,hLimit=L/Math.max(p.lateralLimit,400);
  const trials:GirderTrial[]=[],misfits:{name:string;weight:number;why:string;kind:string}[]=[],ins=(v:number)=>p.units==='SI'?`${Math.round(v)} mm`:`${(v/inch).toFixed(2)} in`;
  const consider=(section:Section,name:string,weight:number)=>{
   const pr=sectionProperties(section),dead=Md*(pr.weight+p.railWeight+p.deadLoad)/(props.weight+p.railWeight+p.deadLoad),Mcrane=(lrfd?1.6:1)*(M-Md);
-  const r=girderSizingRatios(p,section,{Mu:(lrfd?1.2:1)*dead+Mcrane,Mcrane,Hu:(lrfd?1.6:1)*H,V:(lrfd?1.6:1)*V,flexibleTie:opts.flexibleTie});
+  // A continuous girder's negative moment: the envelope's least moment less the reference dead moment (the interior
+  // support moment) factored as crane load, plus this section's dead moment factored as dead load.
+  const Mneg=(lrfd?1.6:1)*Math.max(0,negative-Md)+(lrfd?1.2:1)*dead;
+  const r=girderSizingRatios(p,section,{Mu:(lrfd?1.2:1)*dead+Mcrane,Mcrane,Hu:(lrfd?1.6:1)*H,V:(lrfd?1.6:1)*V,flexibleTie:opts.flexibleTie,Mneg:p.system==='continuous'?Mneg:0});
   trials.push({name,weight,utilization:r.utilization,governs:r.governs,deflection:dv/pr.Ix/vLimit,lateral:dh/pr.Iy/hLimit*r.lateralFactor,shear:r.shear,section});
  };
  // Flanges wide enough for the bearing bolts, end-stop bolts and saddles (minFlange), and for the rail and clips.
