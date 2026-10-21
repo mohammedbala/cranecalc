@@ -484,8 +484,23 @@ const wrenchOf=(db:number)=>wrenchClearance(db);
 function aiscChannelKdes(name:string){const c=channelData(name);return c?c.kdes*inch:undefined;}
 
 
+/**
+ * The least setback on the 1/4 in grid, not shorter than the entered one, at which every tie's column bolt nuts clear
+ * the column web fillet by the socket clearance (cap-angle-column-wrench: |offset| − k₁ ≥ C₁). A tie's offset from the
+ * column centerline is ±(setback − a), a the distance from its girder end to the column centerline into the girder
+ * (negative where the girder end stops short of it); where a girder end reaches past the centerline (a centered
+ * bearing at a runway-end grid, a > 0) a longer setback first brings that tie toward the web, so the setback steps past
+ * a + C₁ + k₁ rather than by the shortfall. The entered setback without a receiving column or ties.
+ */
+export function capAngleWrenchSetback(g:CapAngleGeometry){
+ const rc=g.column.receiver,s0=g.input.setback;if(!rc||!g.stations.length)return s0;
+ const need=rc.k1+wrenchClearance(g.column.diameter),a=g.stations.map(v=>s0-(v.end==='left'?1:-1)*v.offset),clear=(s:number)=>a.every(ai=>Math.abs(s-ai)>=need-1e-6);
+ let s=s0;
+ for(let i=0;i<4*a.length+2&&!clear(s);i++)s=roundUp(Math.max(s,...a.filter(ai=>Math.abs(s-ai)<need-1e-6).map(ai=>ai+need)),inch/4);
+ return s;
+}
 /** Fit ratios of the sizing, held at one. */
-const capAngleFits=new Set(['cap-angle-cap-edge','cap-angle-rail-clear','cap-angle-column-wrench']);
+export const capAngleFits=new Set(['cap-angle-cap-edge','cap-angle-rail-clear','cap-angle-column-wrench']);
 /** Sizing ratios of the plate's displacement-controlled checks (held nearer one where the movement part governs). */
 const capAngleMovementRatio=new Set(['cap-angle-plate-fatigue','cap-angle-weld-toe-fatigue','cap-angle-weld-root-fatigue']);
 /**
@@ -562,11 +577,10 @@ export function sizeCapAngle(p:ProjectInput,F:number,target=.9,movement?:CapAngl
   let q:ProjectInput={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:input}}};
   let g=capAngleGeometry(q);if(!g)return {input,worst:Infinity,fits:false};
   // The column bolt nuts inside the column flange clear the web fillet by the socket clearance (cap-angle-column-wrench):
-  // the tie nearest the column centerline (a girder end at a grid) moves farther along its girder, the setback
-  // lengthened in 1/4 in steps (validateCapAngle then holds the end plate on the column flange and the angle on its girder).
-  const rc=g.column.receiver;
-  if(rc){const near=Math.min(...g.stations.map(v=>Math.abs(v.offset))),need=rc.k1+wrenchClearance(input.columnBolts.diameter);
-   if(g.stations.length&&near<need-1e-6){input={...input,setback:input.setback+roundUp(need-near,inch/4)};q={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:input}}};g=capAngleGeometry(q);if(!g)return {input,worst:Infinity,fits:false};}}
+  // the ties move along their girders (capAngleWrenchSetback; validateCapAngle then holds the end plate on the column
+  // flange and the angle on its girder).
+  const s=capAngleWrenchSetback(g);
+  if(s!==input.setback){input={...input,setback:s};q={...p,details:{...p.details!,brace:{...p.details!.brace,arrangement:'cap-angle',capAngle:input}}};g=capAngleGeometry(q);if(!g)return {input,worst:Infinity,fits:false};}
   const r=capAngleSizingRatios(q,g,F,movement,cycles),fits=validateCapAngle(q).length===0&&[...capAngleFits].every(k=>!((r as Record<string,number>)[k]>1+1e-9));
   return {input,fits,worst:Math.max(...Object.entries(r as Record<string,number>).map(([k,v])=>v/(capAngleFits.has(k)?1:capAngleMovementRatio.has(k)&&r.movementControlled?.has(k)?movementLimit:target)))};
  };

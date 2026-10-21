@@ -32,7 +32,7 @@ import {supportReactions} from './supportReactions';
 import {existingColumnAnalysis,existingColumnChecks,existingColumnSection,twistMovementLimit} from './existingColumn';
 import {existingWeldingDemand} from './existingWelding';
 import {baseDrift,footingsOf} from './columnBase';
-import {sizeCapAngle,capAngleForceEstimate,validateCapAngle,capAngleSizingRatios} from './capAngleTie';
+import {sizeCapAngle,capAngleForceEstimate,validateCapAngle,capAngleSizingRatios,capAngleFits,capAngleWrenchSetback} from './capAngleTie';
 import {simpleSupportInput,railClipStations} from './simpleSupports';
 import {seatSettingTolerance} from './fitTolerances';
 import {sizeWeldedBracket,bracketColumnFatigueRatio} from './bracketSizing';
@@ -48,7 +48,7 @@ import {columnGussetHeight,flangeTieFamily,flangeTieGeometry,stiffenerTieGeometr
 import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener,bracketServiceDeflection} from './flangeTieSizing';
 import {designSplices,type SplicesDesigned} from './spliceSizing';
 import {practicalPieceLength} from './girderPieces';
-import {applyBearingLayout,bearingSeat,defaultBearingShim} from './endBearing';
+import {applyBearingLayout,bearingSeat,defaultBearingShim,capTieBearingLength} from './endBearing';
 import {validateRunwayDetails} from './detailValidation';
 import {stiffenerGussetMisfit} from './connectionCoordination';
 import {weldedRibBracket} from './bracketRib';
@@ -589,7 +589,7 @@ function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
  const {config:cfg,sk,rules,entered}=screened(input),{p,depth,clipWidth,spectrum,N,railArea}=sk,spans=p.spans;
  // Both new supports are built: the crane column (craneColumnSupport) and the stepped column (withSteppedColumn).
  p.configurator={...cfg};
- const logged=(q:ProjectInput)=>{alignTieGusset(q,trace);const stop=beyondCatalog(entered,cfg,sk.trial,q);q.configurator={...cfg,selections:[...selectionLog(entered,cfg,rules,sk.trial,q,trace).slice(0,24-stop.length),...stop.map(openItemRow)],...(stop.length?{beyondCatalog:stop}:{})};return q;};
+ const logged=(q:ProjectInput)=>{alignTieGusset(q,trace);refitCapAngleSetback(q,cfg,trace);const stop=beyondCatalog(entered,cfg,sk.trial,q);q.configurator={...cfg,selections:[...selectionLog(entered,cfg,rules,sk.trial,q,trace).slice(0,24-stop.length),...stop.map(openItemRow)],...(stop.length?{beyondCatalog:stop}:{})};return q;};
  const scopeText=`${cfg.bays} ${cfg.system==='simple'?'simply supported':'continuous'} ${cfg.span}-ft bay${cfg.bays>1?'s':''}, ${p.section.name} girder${cfg.bays>1?'s':''}, ${cfg.cranes===2?'two':'one'} ${+cfg.capacity.toFixed(2)}-ton ${cfg.control} crane${cfg.cranes===2?'s':''}`;
  if(cfg.scope==='analysis'){
   delete p.details;p.connections.enabled=false;
@@ -1300,10 +1300,14 @@ function fitClipJoints(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):boo
  * setBearings does), and the angle is sized again. Returns the first fit rule no sized angle meets, else undefined.
  */
 function fitCapAngle(p:ProjectInput):string|undefined{
- const d=p.details!,size=()=>{d.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p));return validateCapAngle(p);};
+ // The validateCapAngle rules, then the fit ratios the sizing holds at one (capAngleFits: the cap bolt edge to the
+ // channel flange tip, the hardware below the top of the rail, the column nuts clear of the web fillet).
+ const fitRatios=()=>{const g=capAngleGeometry(p);if(!g)return ['no cap angle geometry'];const m=capAngleMovementEstimate(p),r=capAngleSizingRatios(p,g,capAngleForceEstimate(p),m,d.spectrum.reduce((a,v)=>a+v.cycles,0)) as Record<string,number>;
+  return [...capAngleFits].filter(k=>r[k]>1+1e-9).map(k=>`${k} ${r[k].toFixed(2)}`);};
+ const d=p.details!,size=()=>{d.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p));const v=validateCapAngle(p);return v.length?v:fitRatios();};
  let misfit=size();
  if(misfit.length&&p.system==='simple'&&d.simpleSupport?.endGridBearing==='centered'){d.simpleSupport.endGridBearing='on-grid';misfit=size();}
- return misfit[0]?.replace(/^details\.brace\.capAngle: /,'').replace(/[:.].*$/,'');
+ return misfit[0]?.replace(/^details\.brace\.capAngle: /,'').replace(/(: |\. |\.$).*$/,'');
 }
 /**
  * The ratios by which the sized cap tieback angle clearly fails under the estimated tie force and movements, beyond
@@ -1449,6 +1453,23 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  return out;
 }
 
+/**
+ * The cap tieback angle on the receiving column as finally chosen (a new column made heavier after the tie was sized,
+ * for its drift or twist, has a larger web fillet): where the column bolt nuts no longer clear the web fillet
+ * (cap-angle-column-wrench), the ties move along their girders (capAngleWrenchSetback). Kept where the angle still
+ * validates and its cap bolt hardware still clears the bearing stiffener at the bearing length as laid out
+ * (capTieBearingLength); else the setback stays and the check reports it.
+ */
+function refitCapAngleSetback(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace){
+ const d=p.details,c=d?.brace.capAngle;if(!d||!c||d.brace.arrangement!=='cap-angle')return;
+ const g=capAngleGeometry(p);if(!g)return;
+ const s=capAngleWrenchSetback(g),before=c.setback;if(s<=before+1e-6)return;
+ c.setback=s;
+ if(validateCapAngle(p).length||validateRunwayDetails(p).length||(capTieBearingLength(p,d.bearing.length)??0)>d.bearing.length+1e-6){c.setback=before;return;}
+ const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
+ const why=`On the ${g.column.receiver?.name??'receiving'} column as chosen, the cap tieback's column bolt nuts clear the web fillet with the ties ${len(s)} from their girder ends (was ${len(before)}).`;
+ trace.tie=trace.tie?`${trace.tie} ${why}`:why;p.notes+=` ${why}`;
+}
 /**
  * The movements the cap tieback angle is sized for (sizeCapAngle): the girder end rotations and the tie force range of
  * the flange tie sizing (tieSizingDemands), and the support's deflection at the bearing under one crane, a designed
