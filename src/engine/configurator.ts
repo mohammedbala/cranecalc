@@ -297,7 +297,9 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  const pe=Math.PI**2*E*pr.Iy/L**2,base=pr.Cw/pr.Iy+L*L*G*pr.J/(Math.PI**2*E*pr.Iy),C1=1.13,C2=.46,C3=.53,arm=C2*yg-C3*betaX/2;
  const Mcr=C1*pe*(Math.sqrt(base+arm**2)-arm),Mocr=pe*(Math.sqrt(base+(betaX/2)**2)+betaX/2);
  const top=Iyt/(Iyt+Iyb),Mf0=demand.Hu*(top+yg/h0)+demand.Mcrane*Math.abs(p.railEccentricity)/h0;
- const amplification=demand.Mu<.8*Mcr?1/(1-demand.Mu/(.8*Mcr)):Infinity;
+ // Second-order amplification as the analysis solves it: at 0.8 of the stiffness and, for ASD, under 1.6 times the ASD
+ // combinations (AISC 360-16 C2.1(4), the results divided by 1.6), so alpha = 1.6 multiplies the ASD moment here.
+ const alpha=lrfd?1:1.6,amplification=alpha*demand.Mu<.8*Mcr?1/(1-alpha*demand.Mu/(.8*Mcr)):Infinity;
  const halfWidth=cap?section.capWidth/2:section.bf/2,Sf=Iyt/halfWidth,Stop=pr.Ix/(section.d+(cap?section.capTw:0)-pr.cy);
  // Calibrated against the full analysis of the simulation set: a capped top flange (the channel tips) and a single
  // flexible plate tie (less end restraint against twist) carry more warping stress than this estimate gives.

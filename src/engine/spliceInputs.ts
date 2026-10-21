@@ -347,9 +347,11 @@ export function defaultSplices(p:ProjectInput,rail?:RunwayDetails['rail'],db=inc
  const rowsFor=(planes:number)=>Math.min(12,Math.max(2,Math.ceil(Pf/(shear*planes*2))));
  // A clip between the girder end and the first top bolt row: its length and end fillets, 1/4 in each side, and the head.
  const clipBase=railClipInput(rail),clip=clipBase.baseLength+2*clipBase.weld+2*spliceRules.clipClear+hex.corners/2;
+ // Bolts at 3 in, at least the J3.3 minimum 2 2/3 d on the 1/4 in grid (3 1/2 in for 1 1/4 in bolts).
+ const webPitch=Math.max(3*inch,up(8/3*db,.25*inch));
  const webHeight=down(b.d-2*b.tf-2*Math.max(kdes-b.tf,inner+hex.washer.t+hex.nut+hex.stickout)-inch,.5*inch);
  return {enabled:true,maxPiece:60*foot,placement:'auto',stations:[],basis:'minimum',grade:'A490',diameter:db,surface:'B',gap:.375*inch,edge:up(e,.125*inch),
-  top:{plates:'inner',outerWidth:down(b.bf,.25*inch),outerThickness:outer,innerWidth,innerThickness:inner,lines:1,gauge:topGauge,lineSpacing:3*inch,rows:Math.min(5,rowsFor(1)),pitch:3*inch,endDistance:up(clip,.25*inch)},
-  bottom:{plates:'inner-outer',outerWidth:down(b.bf,.25*inch),outerThickness:outer,innerWidth,innerThickness:inner,lines:1,gauge:bottomGauge,lineSpacing:3*inch,rows:rowsFor(2),pitch:3*inch,endDistance:up(e,.125*inch)},
-  web:{thickness:up(Math.max(b.tw/2+inch/16,.375*inch),.125*inch),height:Math.max(6*inch,webHeight),rows:Math.max(2,Math.floor((Math.max(6*inch,webHeight)-2*e)/(3*inch))+1),pitch:3*inch,columns:2,spacing:3*inch,endDistance:up(e,.125*inch)}};
+  top:{plates:'inner',outerWidth:down(b.bf,.25*inch),outerThickness:outer,innerWidth,innerThickness:inner,lines:1,gauge:topGauge,lineSpacing:webPitch,rows:Math.min(5,rowsFor(1)),pitch:webPitch,endDistance:up(clip,.25*inch)},
+  bottom:{plates:'inner-outer',outerWidth:down(b.bf,.25*inch),outerThickness:outer,innerWidth,innerThickness:inner,lines:1,gauge:bottomGauge,lineSpacing:webPitch,rows:rowsFor(2),pitch:webPitch,endDistance:up(e,.125*inch)},
+  web:{thickness:up(Math.max(b.tw/2+inch/16,.375*inch),.125*inch),height:Math.max(6*inch,webHeight),rows:Math.max(2,Math.floor((Math.max(6*inch,webHeight)-2*e)/webPitch)+1),pitch:webPitch,columns:2,spacing:webPitch,endDistance:up(e,.125*inch)}};
 }

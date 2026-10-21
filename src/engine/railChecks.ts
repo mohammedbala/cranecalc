@@ -181,6 +181,19 @@ export function railChecks(s:CalculationSnapshot):CheckResult[]{
   const sc=boltCapacity({grade:'A325',diameter:r.jointBoltDiameter,planes:2,surface:'A',shear:P/2,tension:0,method});
   out.pop();out.push({id:'rail-joint-shear-fatigue',group:'Fatigue',title:'Rail joint bolts · cyclic shear',status:'not-applicable',equation:'',referenceIds:jointRefs,note:'Slip-critical joint: the cyclic shear is carried by friction on the faying surfaces, the bolts do not see a shear range (Rail joint bolts · slip).'});
   check('rail-joint-slip','Rail joint bolts · slip under the wheel load (slip-critical, Class A)',P/2,sc.slip,'force','V=P/2\\le\\phi\\mu D_uT_bn_s',`Two bolts each side of the joint, double shear, Class A faying surfaces (μ = 0.30), standard holes; the full wheel load on the bolts of one side. Slip under every passage would let the joint work: slip is a strength limit here (J3.8).`);out.at(-1)!.referenceIds=jointRefs;
+ }else if(jointBasis==='installed'){
+  // Bars installed to the slip-critical requirements (Table A-3.1 item 2.2): pretensioned bolts clamp Class A faying
+  // surfaces. A bolt shank sees a shear range only once the joint slips; while the service wheel force on the bolts of
+  // one side stays within the J3.8 slip resistance the cyclic shear passes by friction (the basis of items 2.1 and 2.2,
+  // which keep the stress range off the holes), so the slip under the service passages replaces the bolt shear-range
+  // bound. Conservative: the full service wheel force (the range) taken as the peak on the two bolts of one side, and
+  // the resistance factor of standard holes (φ = 1.00, Ω = 1.50) kept on a service force. Where the joint would slip,
+  // the Category F bound stays.
+  const Vs=cyclicP/2,sc=boltCapacity({grade:'A325',diameter:r.jointBoltDiameter,planes:2,surface:'A',shear:Vs,tension:0,method});
+  if(cyclicP>0&&withinLimit(Vs,sc.slip)){
+   out.pop();
+   check('rail-joint-shear-fatigue','Rail joint bolts · cyclic shear (no slip under the service passages)',Vs,sc.slip,'force','V_s=\\Delta P/2\\le\\phi\\mu D_uT_bn_s',`Joint bars ${slipCriticalInstallText}. AISC 360-16 Appendix 3 gives no shear category for bolts: a bolt carries a shear range only when the joint slips. Two bolts each side of the joint, double shear, Class A (μ = 0.30, D_u = 1.13), standard holes (J3.8, φ = 1.00 / Ω = 1.50 kept on the service force): the service wheel force range ${force(cyclicP)}, taken whole as the peak on the bolts of one side, stays within the slip resistance, so the faying surfaces carry the cyclic shear by friction and the bolts see no shear range. ${cycleText}`,'Fatigue');
+  }else if(cyclicP>0)out.at(-1)!.note+=` The joint is installed slip-critical, but the service wheel force on the bolts of one side, ${force(Vs)} per bolt, exceeds the slip resistance ${force(sc.slip)} (Class A, J3.8): the joint can slip, so the bolts take the shear range.`;
  }
  // Joint checks follow the layout and the joint kind: none where each rail is one piece, none for welded joints, and
  // excluded (by others, a deferred submittal for the demands printed) for the rail supplier's joint bars.

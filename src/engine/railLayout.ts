@@ -47,31 +47,55 @@ export function railLayout(p:ProjectInput):RailLayout{
  const girderJoints=[...(p.system==='simple'?grids.filter((g,i)=>(i>0&&i<grids.length-1)||adjacentBays(p).some(b=>b.station===g)):[]),...(p.details?spliceStations(p):[])].sort((a,b)=>a-b);
  const steps=new Set<number>([0]);
  for(const c of p.cranes)for(const a of c.wheels)for(const b of c.wheels)if(b.offset>a.offset)steps.add(Math.round(b.offset-a.offset));
- const wheelSteps=[...steps].sort((a,b)=>a-b),conflicts:number[]=[];
- const place=(side:'A'|'B',first:number,avoid:number[]):RailRun=>{
-  const joints:number[]=[];let at=start,length=first;
-  for(let guard=0;guard<200&&end-at>length+1e-6;guard++){
-   // Split a remainder that would leave a short last piece into two equal pieces.
-   // Cut pieces to multiples of railCutStep; full pieces stay uncut.
-   const cut=(v:number)=>at+Math.floor((v-at+1e-6)/step)*step;
-   let target=end-at-length<minPiece?cut(at+(end-at)/2):at+length;
-   for(let i=0;i<40;i++){
-    const hit=avoid.find(c=>Math.abs(target-c)<clear-1e-6);if(hit===undefined)break;
-    const back=cut(hit-clear),ahead=cut(hit+clear+step-1e-6);
-    if(back-at>=minPiece)target=back;else if(ahead-at<=stock&&end-ahead>=minPiece)target=ahead;else{conflicts.push(target);break;}
-   }
-   joints.push(target);at=target;length=stock;
+ const wheelSteps=[...steps].sort((a,b)=>a-b);
+ const place=(side:'A'|'B',first:number,avoid:number[]):RailRun&{conflicts:number[]}=>{
+  const free=(x:number)=>!avoid.some(c=>Math.abs(x-c)<clear-1e-6);
+  // The joint stations after a joint at `at`: the preferred one (a full mill length; a remainder that would leave a short
+  // last piece split into two equal pieces), then, where it is within the clear distance of an avoided station, every
+  // clear cut station: back to the shortest piece first (the longest piece), then ahead (at most a mill length, leaving
+  // at least the shortest piece). Pieces are cut to multiples of railCutStep; full pieces stay uncut.
+  const options=(at:number,length:number)=>{
+   const cut=(v:number)=>at+Math.floor((v-at+1e-6)/step)*step,target=end-at-length<minPiece?cut(at+(end-at)/2):at+length;
+   const list=free(target)?[target]:[];
+   for(let x=cut(target);x-at>=minPiece-1e-6;x-=step)if(x<target-1e-6&&free(x))list.push(x);
+   for(let x=cut(target)+step;x-at<=stock+1e-6&&end-x>=minPiece-1e-6;x+=step)if(free(x))list.push(x);
+   return {target,list};
+  };
+  // Depth-first over those choices, the first choice at every joint first, so a clear layout found joint by joint is
+  // kept; a choice that leads to a joint with no clear station is revisited (stations known to dead-end are remembered).
+  const dead=new Set<number>();let nodes=0;
+  const search=(at:number,length:number):number[]|undefined=>{
+   if(end-at<=length+1e-6)return [];
+   const key=Math.round(at);if(dead.has(key)||++nodes>4000)return undefined;
+   for(const x of options(at,length).list){const rest=search(x,stock);if(rest)return [x,...rest];}
+   dead.add(key);return undefined;
+  };
+  let joints=search(start,first);const conflicts:number[]=[];
+  if(!joints){
+   // No clear layout: joint by joint, the preferred station where no clear one exists (a conflict, an open item).
+   joints=[];let at=start,length=first;
+   for(let guard=0;guard<200&&end-at>length+1e-6;guard++){const o=options(at,length),x=o.list[0]??o.target;if(!o.list.length)conflicts.push(x);joints.push(x);at=x;length=stock;}
   }
   const stations=[start,...joints,end];
-  return {side,start,end,joints,pieces:stations.slice(1).map((v,i)=>v-stations[i])};
+  return {side,start,end,joints,pieces:stations.slice(1).map((v,i)=>v-stations[i]),conflicts};
  };
- const a=place('A',stock,girderJoints);
- const opposite=a.joints.flatMap(j=>wheelSteps.flatMap(s=>s?[j-s,j+s]:[j]));
- // A run within one mill length has no joints on either rail. Otherwise rail B starts with a part piece, half of rail
- // A's first piece (at least the shortest piece, at most half a mill length), so its joints fall between those of A.
- const half=a.joints.length?(a.joints[0]-start)/2:0,first=!a.joints.length?stock:half>=stock/2-1e-6?stock/2:Math.max(minPiece,Math.floor((half+1e-6)/step)*step);
- const b=place('B',first,[...girderJoints,...opposite]);
- return {girderJoints,wheelSteps,rails:[a,b],existing,conflicts};
+ const both=(firstA:number)=>{
+  const a=place('A',firstA,girderJoints);
+  const opposite=a.joints.flatMap(j=>wheelSteps.flatMap(s=>s?[j-s,j+s]:[j]));
+  // A run within one mill length has no joints on either rail. Otherwise rail B starts with a part piece, half of rail
+  // A's first piece (at least the shortest piece, at most half a mill length), so its joints fall between those of A.
+  const half=a.joints.length?(a.joints[0]-start)/2:0,first=!a.joints.length?stock:half>=stock/2-1e-6?stock/2:Math.max(minPiece,Math.floor((half+1e-6)/step)*step);
+  return {a,b:place('B',first,[...girderJoints,...opposite])};
+ };
+ // Rail A starts with a full mill length. Where rail B then has no clear layout (wheel spacings of the cranes close
+ // together leave no clear station within a mill length), rail A's first piece is shortened cut by cut, to the shortest
+ // piece, for the first layout with every joint clear.
+ let best=both(stock);
+ for(let firstA=Math.floor((stock-1e-6)/step)*step;(best.a.conflicts.length||best.b.conflicts.length)&&firstA>=minPiece-1e-6;firstA-=step){
+  const t=both(firstA);if(!t.a.conflicts.length&&!t.b.conflicts.length)best=t;
+ }
+ const strip=({conflicts:_,...r}:RailRun&{conflicts:number[]}):RailRun=>r;
+ return {girderJoints,wheelSteps,rails:[strip(best.a),strip(best.b)],existing,conflicts:[...best.a.conflicts,...best.b.conflicts]};
 }
 
 /**
