@@ -7,6 +7,7 @@ import {available} from './aiscStrength';
 import {filletMinimum,parallelWeldGroup,transverseFilletFatigue} from './connectionStrength';
 import {aiscShapeByName} from '../data/aiscSections';
 import {tieColumn} from './craneColumnInputs';
+import {initialColumnStiffeners,clipMargin,type ColumnStiffenerInput} from './columnStiffenerInputs';
 /**
  * Width of the tied girder flange that carries the saddle couple F·h to the web in elastic plate bending: the saddle
  * length B, a 45° spread toward the bearing stiffener over the distance a from the toe of the web fillet (k₁) to the
@@ -54,6 +55,37 @@ export function columnFlangeWidth(p:ProjectInput,g=flangeTieGeometry(p)!){
  const gap=g.sides.includes(-1)?Math.max(0,g.topCenter-g.bottomCenter-hg):Infinity;
  return {hg,k1,x,top:sTop,gap,width:hg+Math.min(x,sTop,gap)};
 }
+/**
+ * The receiving column at a flange tie's column gussets, for its stiffeners: the designed bracket's receiver, else the
+ * tie column (the building column of a crane column, the stepped column's upper shaft, the existing or new column);
+ * k_des from the AISC shape where it is the receiving section. Undefined for a column by others.
+ */
+export function tieColumnSection(p:ProjectInput){
+ const b=p.details?.bracket,tc=tieColumn(p),col=tc?.enabled?{...tc,...stepTieColumn(p)}:undefined;
+ if(b?.enabled){const r=b.receiver,w=aiscShapeByName(col?.shape??''),same=w&&Math.abs(w.tf*25.4-r.flangeThickness)<=1.5875&&Math.abs(w.bf*25.4-r.width)<=1.5875;
+  return {depth:r.depth,width:r.width,flangeThickness:r.flangeThickness,webThickness:r.webThickness,Fy:r.Fy,k:same?w!.kdes*25.4:undefined,isNew:!!col?.isNew,name:same?w!.name:'receiving column'};}
+ if(!col)return undefined;
+ const w=aiscShapeByName(col.shape??'');
+ return w?{depth:w.d*25.4,width:w.bf*25.4,flangeThickness:w.tf*25.4,webThickness:w.tw*25.4,Fy:col.Fy,k:w.kdes*25.4,isNew:!!col.isNew,name:w.name}
+  :{depth:col.d,width:col.bf,flangeThickness:col.tf,webThickness:col.tw,Fy:col.Fy,k:undefined,isNew:!!col.isNew,name:col.shape||'existing column'};
+}
+/** Starting proportions of the column stiffeners at a flange tie's gussets (initialColumnStiffeners, the gusset delivering the force), else undefined. */
+export function initialTieStiffener(p:ProjectInput):ColumnStiffenerInput|undefined{
+ const c=tieColumnSection(p);if(!c||!p.details)return undefined;
+ return initialColumnStiffeners(c,c.k,p.details.brace.gussetThickness);
+}
+/**
+ * The horizontal column stiffeners of a direct-saddle flange tie (brace.columnStiffener): a plate at the top and one
+ * at the bottom of each column gusset (centered on the gusset's end edges, h_g apart), inside the column on the
+ * gusset's side of the web, half or full depth, fillet welded to the loaded flange and to the web (AISC J10.8). The
+ * flange between them spans h_g from stiffener to stiffener under the gusset root force. Undefined without one.
+ */
+export function flangeTieStiffenerGeometry(p:ProjectInput,g=flangeTieGeometry(p)){
+ const s=p.details?.brace.columnStiffener,c=tieColumnSection(p);if(!g||!s?.enabled||!c||!g.receiver)return undefined;
+ const length=s.length==='full'?c.depth-2*c.flangeThickness:c.depth/2-c.flangeThickness;
+ return {...s,column:c,length,spacing:g.columnGusset,contact:s.width-s.clip,webLength:length-s.clip-(s.length==='full'?s.clip:0),
+  requiredClip:c.k!==undefined?c.k-c.flangeThickness+clipMargin:undefined,sides:[...new Set(g.stations.map(v=>Math.sign(v.tieX-v.station)||1))]};
+}
 /** Elastic local-component bounds. No yield-line redistribution, composite saddle/flange action or global receiver
  * stiffness is credited; the girder flange spreads the saddle couple over its effective width (flangeEffectiveWidth)
  * and the column flange the root force over its own (columnFlangeWidth). */
@@ -81,7 +113,14 @@ export function flangeTieResponse(p:ProjectInput,F:number){
  // strip alone is the screening bound. Other frame loads excluded. A column by others has no local check here; its
  // flexibility is excluded with the building.
  const columnWidth=r?columnFlangeWidth(p,g):undefined,columnStrip=(w:number)=>r?6*(F*e+twist)/(w*r.flangeThickness**2)+1.5*F/(w*r.flangeThickness):0;
- const column=columnStrip(columnWidth?.width??hg),columnScreen=columnStrip(hg);
+ // With column stiffeners at the gusset ends (flangeTieStiffenerGeometry) the flange spans h_g between them: a strip
+ // b_w = t_g + 2w + 2t_c wide (the gusset and its root fillets, spread through the flange thickness at 45°), simply
+ // supported on the two stiffeners under the root force F spread over h_g, M = F h_g/8, with the shear F/2 at each
+ // stiffener; the web edge support and the plate beyond the strip are not credited (a lower-bound load path). The
+ // single plate's lap couple F·e_l bends the flange over the gusset height as before.
+ const sg=r?flangeTieStiffenerGeometry(p,g):undefined,stripWidth=t.gussetThickness+2*t.connection.weldSize+2*(r?.flangeThickness??0);
+ const stiffened=sg&&r?6*F*sg.spacing/8/(stripWidth*r.flangeThickness**2)+1.5*(F/2)/(stripWidth*r.flangeThickness)+6*twist/(hg*r.flangeThickness**2):undefined;
+ const column=stiffened??columnStrip(columnWidth?.width??hg),columnScreen=stiffened??columnStrip(hg);
  // Column flange at the toes of the gusset root fillets (the welded detail): the cantilever moment there, F(t_g/2 + w)
  // with the lap couple, over the gusset height alone, no spread credited. On the plate model of the column flange
  // outstand (W14X61 to W14X257, gussets 5 3/4 and 8 in tall, the column continuing or ending 1 in above the gusset)
@@ -96,7 +135,7 @@ export function flangeTieResponse(p:ProjectInput,F:number){
  // the tie by e times the rotations.
  const k=gussetRotation(p,g.columnGussetLength,L,H),lapCompliance=g.eccentricity**2*(1/k.column+1/k.girder)/E;
  const compliance=h*h*((g.rootStart-p.section.tw/2)+13/35*L)/(E*flangeI)+3*H*H*B**3/(E*a.saddleThickness**3*L**3)+4*H**3/(E*t.gussetThickness*L**3)+e**3/(3*E*columnI)+lapCompliance;
- return {gusset,saddle,flange,flangeScreen,effective,column,columnScreen,columnWidth,columnToe,rootWeld,gussetWeld:weld(t.gussetThickness,M),saddleWeld:weld(B,flangeM,g.endWeldLength),compliance,h,H,L,B,twist};
+ return {gusset,saddle,flange,flangeScreen,effective,column,columnScreen,columnWidth,stiffener:sg&&{...sg,stripWidth},columnToe,rootWeld,gussetWeld:weld(t.gussetThickness,M),saddleWeld:weld(B,flangeM,g.endWeldLength),compliance,h,H,L,B,twist};
 }
 /** Minimum clear distance of the girder gusset to a cap channel flange, mm (1/2 in). */
 export const capClearance=12.7;
@@ -115,7 +154,21 @@ export function flangeTieChecks(s:CalculationSnapshot,force:number):CheckResult[
    `Direct flange saddle, full tie force including bracing imperfection, no composite saddle/flange credit. The couple F·h (h = ${len(r.h)} from the flange to the tie line) and the force F spread through the continuous flange in elastic plate bending to the toe of the web fillet (k₁ = ${len(fe.k1)} from the web centerline): effective width b_e = B + a + min(a, s_e) = ${len(fe.width)}, with the saddle length B = ${len(fe.B)}, a = ${len(fe.a)} from the fillet toe to the centroid of the saddle end fillets across the flange (45° spread toward the bearing stiffener, which holds the flange beside the saddle) and s_e = ${len(fe.end)} of free flange from the end fillet toe to the girder end (the spread toward the girder end stops there). Checked against an elastic plate model of the flange outstand between the free girder end and the bearing stiffener. Screening bound with the saddle-length strip alone (b = B): ${format(r.flangeScreen,'stress',p.units,3)}, D/C ${(r.flangeScreen/phiFy).toFixed(2)}. The same local stress is the local range at the saddle end-fillet toes in the fatigue register.`);}
  // Column flange over its effective width; the gusset-height strip is printed as the screening bound.
  const columnBasis=(w:NonNullable<typeof r.columnWidth>)=>` The root force spreads along the column in elastic plate bending to the toe of the column web fillet (k₁ = ${len(w.k1)} from the web centerline): effective width b_c = h_g + min(x, s_top) = ${len(w.width)}, with the column gusset height h_g = ${len(w.hg)}, x = ${len(w.x)} from the fillet toe to the gusset and s_top = ${len(w.top)} of column above the gusset${Number.isFinite(w.gap)?`, and no more than the clear gap ${len(w.gap)} to the other flange's gusset`:''}. Checked against an elastic plate model of the column flange outstand.`;
- if(g.receiver&&r.columnWidth){const phiFy=available(g.receiver.Fy,p.method,.9,1.67);
+ if(g.receiver&&r.stiffener){const phiFy=available(g.receiver.Fy,p.method,.9,1.67),sg=r.stiffener,tc=g.receiver.flangeThickness,ts=sg.thickness,col=sg.column;
+  const plate=`PL ${len(ts)} × ${len(sg.width)} × ${len(sg.length)}`,field=col.isNew?'Shop':'Field';
+  add('column','Column flange at tie · local elastic stress (stiffened)',r.column,phiFy,'f_c=\\frac{6(Fh_g/8)}{b_wt_c^2}+\\frac{1.5(F/2)}{b_wt_c}'+(single?'+\\frac{6Fe_l}{h_gt_c^2}':'')+';\\quad b_w=t_g+2w+2t_c',
+   `${note} Receiving flange: ${g.receiver.source}. Horizontal column stiffeners ${plate} at the top and bottom of the column gusset, h_g = ${len(sg.spacing)} apart, inside the column on the gusset's side of the web (AISC J10.8): the flange spans between them as a strip b_w = t_g + 2w + 2t_c = ${len(sg.stripWidth)} wide (the gusset and its root fillets, spread through the flange thickness), simply supported, under the root force spread over h_g (M = F h_g/8), with the shear F/2 at each stiffener. The web edge support and the flange beyond the strip are not credited.${single?' The single plate\'s lap couple F·e bends the flange over the gusset height.':''}`);
+  const half=force/2,phiW=available(.6*m.Fexx,p.method,.75,2);
+  add('column-stiffener','Column stiffeners at the tie gusset · force from the flange (J10.8, J4.1)',half,available(g.receiver.Fy*sg.contact*ts,p.method,.9,1.67),'R_{st}=F/2\\le\\phi F_y(b_s-c)t_s',`AISC J10.8 and J4.1: each stiffener takes the reaction F/2 of the flange strip, on its clipped flange contact (clip ${len(sg.clip)}), into the web.`,'force');
+  const prop=Math.max((g.receiver.width/3-col.webThickness/2)/sg.width,Math.max(t.gussetThickness/2,sg.width/16,sg.width/(.56*Math.sqrt(p.section.E/g.receiver.Fy)))/ts);
+  add('column-stiffener-proportions','Column stiffeners · width and thickness (J10.8(1), (2); B4.1a)',prop,1,'b_s\\ge\\frac{b_f}{3}-\\frac{t_w}{2};\\ \\ t_s\\ge\\max\\left(\\frac{t_g}{2},\\,\\frac{b_s}{16},\\,\\frac{b_s}{0.56\\sqrt{E/F_y}}\\right)','AISC J10.8(1) and (2), B4.1a, with the column flange width b_f and the gusset as the plate delivering the force.','ratio');
+  add('column-stiffener-length','Column stiffeners · length (J10.8(3))',col.depth/2,sg.length+col.flangeThickness,'L_s+t_f\\ge d/2',sg.length>col.depth/2?'AISC J10.8(3): full depth between the flanges.':'AISC J10.8(3): from the loaded flange to the column mid-depth.','length');
+  add('column-stiffener-flange-weld','Column stiffeners · fillets to the loaded flange (J10.8, J2.4)',half/(2*sg.flangeWeld/Math.SQRT2*Math.min(sg.contact,sg.stripWidth+2*tc)),phiW,'f_w=\\frac{F/2}{2(0.707w)\\min(b_s-c,\\;b_w+2t_c)}',`Two ${len(sg.flangeWeld)} fillets, one each face, taking the strip reaction over at most b_w + 2t_c = ${len(sg.stripWidth+2*tc)} of their length. ${field} welds to the ${col.isNew?'new':'existing'} column${col.isNew?'':': identify the steel and set the preheat (Existing column welding)'}.`);
+  add('column-stiffener-web-weld','Column stiffeners · fillets to the web (J10.8, J2.4)',half/(2*sg.webWeld/Math.SQRT2*sg.webLength),phiW,'f_w=\\frac{F/2}{2(0.707w)L_w}',`Two ${len(sg.webWeld)} fillets × ${len(sg.webLength)} deliver the stiffener force to the web.`);
+  add('column-stiffener-weld-min','Column stiffeners · minimum fillets (J2.4)',Math.max(filletMinimum([ts,tc])/sg.flangeWeld,filletMinimum([ts,col.webThickness])/sg.webWeld),1,'w\\ge w_{min}','AISC 360-16 Table J2.4, by the thinner part joined.','ratio');
+  if(sg.requiredClip!==undefined)add('column-stiffener-fit','Column stiffeners · clear of the rolled fillet',sg.requiredClip,sg.clip,'c\\ge k-t_f+1/8\\,in',`The corner clip clears the column's web-to-flange fillet; the plate ${len(sg.width)} wide fits inside the flange tip.`,'length');
+  add('column-stiffener-fatigue','Column stiffener fillets to the flange · throat fatigue',s.detailResults.demands.braceFatigue/2/(2*sg.flangeWeld/Math.SQRT2*Math.min(sg.contact,sg.stripWidth+2*tc)),categoryF(cyc),'f_{sr}\\le F_{SR}\\ \\ \\text{(Cat. F)}','AISC Table A-3.1 item 8.2: the fillet throat under the strip reaction range ΔF/2, all cycles, no threshold credit. The column flange base metal at the stiffener fillet toes is checked with the column flange local fatigue.');}
+ else if(g.receiver&&r.columnWidth){const phiFy=available(g.receiver.Fy,p.method,.9,1.67);
   add('column','Column flange at tie · local elastic stress',r.column,phiFy,(single?'f_c=\\frac{6F(e+e_l)}{b_ct_c^2}+\\frac{1.5F}{b_ct_c}':'f_c=\\frac{6Fe}{b_ct_c^2}+\\frac{1.5F}{b_ct_c}')+';\\quad b_c=h_g+\\min(x,s_{top})',note+` Receiving flange: ${g.receiver.source}. Outstand e includes half the gusset thickness; no global axial/lateral interaction approval.${single?' The single plate\'s lap couple F·e bends the same flange.':''}${columnBasis(r.columnWidth)} Screening bound with the gusset-height strip alone (b = h_g): ${format(r.columnScreen,'stress',p.units,3)}, D/C ${(r.columnScreen/phiFy).toFixed(2)}.`);}
  else byOthers('column','Column flange at tie · local elastic stress');
  // The single flexible plate laps one face of each gusset: its couple F·e about the vertical axis.
@@ -130,10 +183,10 @@ export function flangeTieChecks(s:CalculationSnapshot,force:number):CheckResult[
  // root fillets (Category E', the stress there), and the rolled base metal at the toe of the column web fillet, where
  // the flange bending peaks (Category A, the stress over b_c).
  if(g.receiver&&f.columnWidth){
-  const A=finiteLife(250,cyc),toe=f.columnToe/E1,root=f.column/A,stress=(v:number)=>format(v,'stress',p.units,3);
+  const A=f.stiffener?C:finiteLife(250,cyc),toe=f.columnToe/E1,root=f.column/A,stress=(v:number)=>format(v,'stress',p.units,3);
   add('column-fatigue','Column flange at tie · local fatigue',toe>=root?f.columnToe:f.column,toe>=root?E1:A,
-   (single?'f_{sr,toe}=\\frac{6\\Delta F(t_g/2+w+e_l)}{h_gt_c^2}+\\frac{1.5\\Delta F}{h_gt_c}':'f_{sr,toe}=\\frac{6\\Delta F(t_g/2+w)}{h_gt_c^2}+\\frac{1.5\\Delta F}{h_gt_c}')+'\\le F_{SR}\\ \\text{(Cat. E}^{\\prime}\\text{)};\\quad f_{sr,root}=\\frac{6\\Delta Fe}{b_ct_c^2}+\\frac{1.5\\Delta F}{b_ct_c}\\le F_{SR}\\ \\text{(Cat. A)}',
-   `Local tie action only, the full tie range at all cycles, no endurance credit; two details of the column flange. At the toes of the gusset root fillets (Category E-prime, AISC Table A-3.1 item 7.1, an attachment longer than 4 in along the column): the cantilever moment at the toe, the range times t_g/2 + w = ${len(t.gussetThickness/2+c.weldSize)}${single?' with the lap couple':''}, over the gusset height h_g = ${len(g.columnGusset)} alone: ${stress(f.columnToe)}, D/C ${toe.toFixed(2)}; an elastic plate model of the column flange outstand gives at most 0.8 of it across the gusset toes and 0.3 along the column at the gusset ends. At the toe of the column web fillet, where the flange bending peaks, rolled base metal (Category A, item 1.1): the range over the effective width b_c = ${len(f.columnWidth.width)} (Column flange at tie · local elastic stress): ${stress(f.column)}, D/C ${root.toFixed(2)}. Screening bound with that root stress against Category E-prime: D/C ${(f.column/E1).toFixed(2)}. Cyclic building-frame stresses require separate combination.`);
+   (single?'f_{sr,toe}=\\frac{6\\Delta F(t_g/2+w+e_l)}{h_gt_c^2}+\\frac{1.5\\Delta F}{h_gt_c}':'f_{sr,toe}=\\frac{6\\Delta F(t_g/2+w)}{h_gt_c^2}+\\frac{1.5\\Delta F}{h_gt_c}')+'\\le F_{SR}\\ \\text{(Cat. E}^{\\prime}\\text{)};\\quad '+(f.stiffener?'f_{sr,strip}\\le F_{SR}\\ \\text{(Cat. C)}':'f_{sr,root}=\\frac{6\\Delta Fe}{b_ct_c^2}+\\frac{1.5\\Delta F}{b_ct_c}\\le F_{SR}\\ \\text{(Cat. A)}'),
+   `Local tie action only, the full tie range at all cycles, no endurance credit; two details of the column flange. At the toes of the gusset root fillets (Category E-prime, AISC Table A-3.1 item 7.1, an attachment longer than 4 in along the column): the cantilever moment at the toe, the range times t_g/2 + w = ${len(t.gussetThickness/2+c.weldSize)}${single?' with the lap couple':''}, over the gusset height h_g = ${len(g.columnGusset)} alone: ${stress(f.columnToe)}, D/C ${toe.toFixed(2)}; an elastic plate model of the column flange outstand gives at most 0.8 of it across the gusset toes and 0.3 along the column at the gusset ends. ${f.stiffener?`In the flange strip between the column stiffeners (the stiffened Column flange at tie · local elastic stress, its peak bounding the flange at the stiffener fillet toes, Category C, AISC Table A-3.1 item 5.7)`:`At the toe of the column web fillet, where the flange bending peaks, rolled base metal (Category A, item 1.1): the range over the effective width b_c = ${len(f.columnWidth.width)} (Column flange at tie · local elastic stress)`}: ${stress(f.column)}, D/C ${root.toFixed(2)}. Screening bound with that root stress against Category E-prime: D/C ${(f.column/E1).toFixed(2)}. Cyclic building-frame stresses require separate combination.`);
  }
  else byOthers('column-fatigue','Column flange at tie · local fatigue');
  add('weld-fatigue','Flange attachment welds · all-cycle fatigue',Math.max(f.gussetWeld.demand,f.saddleWeld.demand,f.rootWeld),weldF,'f_{sr}\\le F_{SR}\\ \\ \\text{(Cat. F)}','Largest elastic weld throat range (gusset-to-saddle fillets, saddle transverse end fillets, column root fillets) from the full brace-force range, applied to every cycle. The base metal at the toe of the transverse end fillets on the girder flange is a fatigue detail (AISC Table A-3.1 item 7.1, Appendix A).');

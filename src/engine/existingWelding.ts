@@ -31,6 +31,9 @@ export function weldedAttachments(p:ProjectInput):{name:string;t:number}[]{
  const capStiffener=d.brace.arrangement==='cap-angle'&&d.brace.capAngle?.stiffener?.enabled?d.brace.capAngle.stiffener:undefined;
  if(capStiffener)out.push({name:'column stiffener at the cap angle tie',t:capStiffener.thickness});
  if(d.brace.arrangement!=='cap-angle')out.push({name:'tie gusset',t:d.brace.gussetThickness});
+ // The horizontal column stiffeners at a saddle tie's column gussets are fillet welded to the flange and the web.
+ const ts=d.brace.arrangement!=='cap-angle'&&d.brace.flangeAttachment?.enabled&&d.brace.columnStiffener?.enabled?d.brace.columnStiffener:undefined;
+ if(ts)out.push({name:'column stiffener at the tie gusset',t:ts.thickness});
  // A stepped column's step stiffener pair is fillet welded to the existing lower web.
  const st=activeStep(p)?.stiffener;if(st)out.push({name:'step stiffener',t:st.thickness});
  return out;
