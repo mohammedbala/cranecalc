@@ -1046,7 +1046,7 @@ function sizeForkStiffenerFatigue(p:ProjectInput,maxWidth:number,fatigueTarget=.
  * fatigue (bracketColumnFatigueRatio: the range of the whole bracket moment on the column section, AISC Table A-3.1
  * item 7.1, which no bracket part lowers): the project is built on the lightest heavier W14 within it, skipping those
  * whose larger S_x alone cannot bring the ratio there; otherwise it stays and the checks report it. A configured
- * column shape is kept.
+ * column shape is kept, and so is an existing column (a reinforcement / engineer-of-record item, logged).
  */
 function withBracketColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):ProjectInput{
  const b=q.details?.bracket,col=q.existingColumn;
@@ -1055,6 +1055,12 @@ function withBracketColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace)
  for(const shape of heavierColumns(col.shape)){
   if(first*Sx(col.shape)/Sx(shape)>bracketTarget)continue;
   const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner),now=bracketColumnFatigueRatio(r);
+ // An existing column is never resized: it stays as entered (or as the example assumes), and its flange fatigue at the
+ // rib weld toes is a reinforcement item for the engineer of record (the calculation's bracket-fatigue-column check).
+ if(!col.isNew){
+  trace.column=[trace.column,`The existing ${col.shape} column is kept (an existing member is never resized): its flange at the bracket rib weld toes has a fatigue ratio ${first.toFixed(2)} > ${bracketTarget} (screening estimate; AISC Table A-3.1 item 7.1, the bracket moment range on the column section at all cycles). Reinforcement of the existing column at the seat, or a support that does not load its flange through welded ribs (crane column, column cap), is an engineer-of-record item; the calculation reports the check (Column flange at rib weld toes · fatigue)`].filter(Boolean).join('; ');
+  return q;
+ }
   if(now<=bracketTarget){
    Object.assign(trace,inner,{column:[trace.column,`The ${col.shape} column flange at the bracket rib weld toes has a fatigue ratio ${first.toFixed(2)} > ${bracketTarget} (AISC Table A-3.1 item 7.1, the bracket moment range on the column section at all cycles): the lightest heavier W14 within it, ${now.toFixed(2)}`].filter(Boolean).join('; ')});
    return {...r,configurator:{...cfg}};
