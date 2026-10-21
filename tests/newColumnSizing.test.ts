@@ -31,11 +31,19 @@ describe('new freestanding columns for heavy cranes',()=>{
   expect(d.seatWeld).toBeGreaterThan(.625*inch);expect(d.seatWeld).toBeLessThanOrEqual(.75*inch+1e-6);
   expect(bracingRatios(p)['brace-seat-weld']).toBeLessThanOrEqual(1);
  },300000);
- it('073: no rolled W14 keeps a 35 ft cantilever column within its drift: the W14X398 built, an open item naming column caps; the face held at 20 in',()=>{
+ it('073: no rolled W14 keeps a 35 ft cantilever column within its drift: the W14X398 built, an open item beyond the W14 range with its column-cap estimate; the face held at 20 in',()=>{
   const p=buildProject(sim('073',{capacity:40,craneSpan:71,control:'cab',cmaa:'C',buildingClass:'C',bays:3,span:20,railElevation:35,girder:'rolled',support:'twin-rib',tie:'flexible-plate'}));
   expect(p.existingColumn!.shape).toBe('W14X398');
   const v=p.configurator!.beyondCatalog!.find(x=>x.member==='crane-column')!;
-  expect(v).toMatchObject({shape:'W14X398'});expect(v.reason).toMatch(/^Built-up crane column required: no rolled W14 to the W14X398/);expect(v.reason).toMatch(/column caps over the new columns/);
+  expect(v).toMatchObject({shape:'W14X398'});expect(v.reason).toMatch(/^New column beyond the W14 range: the heaviest rolled W14, W14X398, still gives base drift ratio/);
+  // The recommendation from the drift without the eccentric reaction moment (an estimate): caps alone leave the column
+  // past its footing share, so caps need a stiffer footing, else a stiffer column or a held column top.
+  expect(v.reason).toMatch(/Column caps on the W14X398 would leave about 0\.\d\d of the drift limit for the column alone, 1\.\d\d with this footing's rotation/);
+  expect(v.reason).toMatch(/caps alone are not enough on this footing\. Recommended: column caps with a footing stiff enough/);
+  expect(configuratorOpenItems(p).find(c=>c.id==='configurator-crane-column')?.title).toBe('New column beyond the W14 range (drift, torsion or twist)');
+  // The torsion strut sized past the 65 lb/ft struts for the movement target, the log stating the movement achieved.
+  expect(p.longitudinalBracing!.design!.strut.shape).toBe(stiffestTorsionStrut(p));
+  expect(p.configurator!.selections!.find(s=>s.item==='Longitudinal path')!.reason).toMatch(/twist movement under the factored traction is 0\.\d+ in, above the 0\.063 in .*the W10X112 is the stiffest strut that fits/);
   expect(p.configurator!.selections!.some(s=>s.item==='Open item'&&s.entered==='Crane column')).toBe(true);
   expect(configuratorOpenItems(p).find(c=>c.id==='configurator-crane-column')?.status).toBe('incomplete');
   // The tie passes at no face to 30 in: the reach stays at 20 in, the seat twist within its limits.

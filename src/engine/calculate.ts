@@ -43,6 +43,7 @@ import { fatigueCycleCheck } from './buildingClass';
 import { fatigueCycleFamilies } from './railChecks';
 import { tiedToBuilding } from './craneColumnInputs';
 import { fabricationToleranceNote } from './fitTolerances';
+import { newColumnBeyond } from './configInputs';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 /**
  * The configurator's members beyond its catalog (configurator.beyondCatalog: a plate girder, a built-up crane column, a
@@ -63,9 +64,13 @@ export function configuratorOpenItems(p:ProjectInput,checks?:CheckResult[]):Chec
  return (p.configurator?.beyondCatalog??[]).filter(v=>v.member==='girder'?p.section.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)
   .map(v=>{
    const own=checks?.filter(c=>memberChecks[v.member].test(c.id)),failing=own?.filter(c=>c.status==='fail'),closed=!!own?.length&&!failing!.length;
-   return {id:`configurator-${v.member}`,group:'Detailing',title:titles[v.member],status:closed?'pass':'incomplete',equation:'',referenceIds:['criteria'],
+   // A new freestanding column beyond the W14 range (configurator withColumnBase) is not a crane column: titled as such.
+   const title=v.member==='crane-column'&&v.reason.startsWith(newColumnBeyond)?`${newColumnBeyond} (drift, torsion or twist)`:titles[v.member];
+   // The calculation's own ratios lead: the configurator's figures in the reason are screening estimates.
+   const calculated=failing?.length?`The calculation's ratios of this ${v.member==='tie'?'tie':'member'} (${v.shape}) past 1.00: ${failing.slice(0,4).map(c=>`${c.title.replace(/\s*·\s*/g,', ')} ${c.utilization!==undefined&&Number.isFinite(c.utilization)?`D/C ${c.utilization.toFixed(2)}`:c.status}`).join('; ')}${failing.length>4?`; and ${failing.length-4} more`:''}. `:'';
+   return {id:`configurator-${v.member}`,group:'Detailing',title,status:closed?'pass':'incomplete',equation:'',referenceIds:['criteria'],
     note:closed?`${v.reason} The configurator's screening estimates did not confirm the ${v.member==='tie'?'tie':'member'} (${v.shape}); the calculation checks it, and its ${own!.length} checks of this ${v.member==='tie'?'tie':'member'} pass: closed by the calculation.`
-     :`${v.reason} The closest ${v.member==='tie'?'tie':'catalog member'} (${v.shape}) is built and checked here so the package can be reviewed; its failing checks are listed as they are${failing?.length?` (${failing.slice(0,4).map(c=>c.id).join(', ')}${failing.length>4?', …':''})`:''}. Open item: the package is a review draft until the member is designed.`} as CheckResult;});
+     :`${calculated}Configurator (its figures are screening estimates, not the calculated ratios): ${v.reason} The closest ${v.member==='tie'?'tie':'catalog member'} (${v.shape}) is built and checked here so the package can be reviewed; its failing checks are listed as they are. Open item: the package is a review draft until the member is designed.`} as CheckResult;});
 }
 export function validateProject(input:unknown):string[]{
  const parsed=projectSchema.safeParse(input);if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
