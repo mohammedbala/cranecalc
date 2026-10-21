@@ -52,7 +52,9 @@ describe('configurator project validity',()=>{
  // calculation of CC2 gave plate movement 1.96 and end plate weld 1.44 against estimates of 2.56 and 1.87). 061 (paired
  // bars entered, the saddle unsuitable on the cap) takes the paired bars on the bearing stiffener in place of such an
  // angle (capStiffenerTie; calculated: every tie check within its limit, tie-move-strength 0.91).
- const open=new Map<string,RegExp>([['V059',/^Plate girder required/],['V061',/^Plate girder required/],
+ // V061 (two 40 t cranes, 45 ft bays) is within the catalog since the lateral check follows DG7 (the top flange alone
+ // under one crane's side thrust; the W36X529's twist-inclusive rail-head movement calculated 0.79 in round 7).
+ const open=new Map<string,RegExp>([['V059',/^Plate girder required/],
   ['034',/^Top-flange tie not resolved: the cap tieback angle/],['CC2',/^Top-flange tie not resolved: the cap tieback angle/]]);
  for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project${open.has(id)?', with the configurator open item':''}`,()=>{
   const p=buildProject(c);
@@ -66,6 +68,7 @@ describe('configurator project validity',()=>{
    expect(p.section.name).toBe('W36X529');
    expect(p.configurator!.beyondCatalog!.find(v=>v.member==='girder')!.reason).toMatch(/A jumbo rolled W36X\d+ \(.*\) would meet the sizing targets as a heavy alternative.*the configurator does not select it\.$/);
   }
+  if(id==='V061')expect(p.configurator!.beyondCatalog?.some(v=>v.member==='girder')).toBeFalsy();
   if(id==='061'){
    expect(p.configurator!.beyondCatalog?.some(v=>v.member==='tie')).toBeFalsy();
    expect(p.details!.brace.arrangement).toBe('paired-bars');expect(p.details!.brace.flangeAttachment?.enabled).toBe(false);

@@ -38,12 +38,13 @@ describe('configurator fatigue sizing',()=>{
   for(const v of set.strength)c.observe('strength','sizing',v.x,v.loads,-1,v.horizontal);
   expect(c.result.strength.eccentricity!.value).toBeCloseTo(b.reach+seatEccentricity(p,1).half,6);
  });
- it('chooses a heavier column for the bracket column-flange fatigue and sizes the existing rod for its thread fatigue',()=>{
+ it('keeps the existing column past its bracket column-flange fatigue (an EOR reinforcement item) and sizes the existing rod for its thread fatigue',()=>{
   const p=buildProject(c042),col=p.existingColumn!;
   expect(validateProject(p)).toEqual([]);
-  expect(aiscShapeByName(col.shape)!.weight).toBeGreaterThan(aiscShapeByName('W14X159')!.weight);
-  expect(bracketColumnFatigueRatio(p)).toBeLessThanOrEqual(.9);
-  expect(p.configurator!.selections!.find(s=>s.item==='Existing column')!.reason).toMatch(/rib weld toes has a fatigue ratio/);
+  // An existing column is never resized: the assumed W14X159 stays, the log names the ratio as an engineer-of-record item.
+  expect(col.shape).toBe('W14X159');
+  const reason=p.configurator!.selections!.find(s=>s.item==='Existing column')!.reason;
+  if(bracketColumnFatigueRatio(p)>.9)expect(reason).toMatch(/never resized.*rib weld toes has a fatigue ratio .*engineer-of-record item/);
   const checks=longitudinalBracingChecks(p,longitudinalBracingAnalysis(p,supportReactions(p,sectionProperties(p.section))));
   for(const id of ['brace-tension','brace-rod-fatigue'])expect(checks.find(k=>k.id===id)!.utilization!).toBeLessThanOrEqual(1);
  });
