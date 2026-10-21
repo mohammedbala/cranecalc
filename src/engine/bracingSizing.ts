@@ -88,10 +88,14 @@ export function sizeTorsionStrut(p:ProjectInput,target=.9){
  const worst=()=>Math.max(...twistRatios(p,existingColumnAnalysis(p,reactions)).map(v=>v.utilization!));
  if(worst()<=target)return;
  let best={name:d.strut.shape,Iy:now?.Iy??0};
- for(const s of torsionStruts.filter(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(p,v))){
-  d.strut.shape=s.name;if(worst()<=target)return;if(s.Iy>best.Iy)best={name:s.name,Iy:s.Iy};
- }
- d.strut.shape=best.name;
+ // The heavier W10s only where the 65 lb/ft struts leave a twist limit past 1.00 (not the sizing margin, nor the
+ // configurator's movement target).
+ const pass=(pool:typeof struts)=>{for(const s of pool.filter(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(p,v))){
+  d.strut.shape=s.name;if(worst()<=target)return true;if(s.Iy>best.Iy)best={name:s.name,Iy:s.Iy};
+ }d.strut.shape=best.name;return false;};
+ const limits=()=>Math.max(...twistRatios(p,existingColumnAnalysis(p,reactions)).filter(v=>v.id!=='torsion-brace-movement').map(v=>v.utilization!));
+ if(pass(struts)||limits()<=1)return;
+ pass(torsionStruts.filter(v=>v.weight>65));
 }
 /** The stiffest torsion-brace strut (largest I_y) whose flange lies on the torsion plates of this column, or undefined. */
 export function stiffestTorsionStrut(p:ProjectInput):string|undefined{
@@ -141,8 +145,8 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
   if(part==='gussetMetal')return gusset();
   const t=next(s.thickness,eighth);if(t>inch+1e-6)return false;s.thickness=t;minimumWelds();return true;
  };
- const strut=(slender:boolean)=>{
-  const pool=torsionBraceActive(q)?torsionStruts:struts,now=aiscWShapes.find(s=>s.name===d.strut.shape),w=now?.weight??0,r=ry(d.strut.shape);
+ const strut=(slender:boolean,value=0)=>{
+  const pool=torsionBraceActive(q)&&value>1?torsionStruts:struts,now=aiscWShapes.find(s=>s.name===d.strut.shape),w=now?.weight??0,r=ry(d.strut.shape);
   const s=pool.find(v=>v.weight>w+1e-9&&(!slender||Math.sqrt(v.Iy/v.A)>r+1e-6)&&(!torsionBraceActive(q)||fitsPlate(q,v)));if(!s)return false;d.strut.shape=s.name;return true;
  };
  const bolts=()=>{
@@ -151,12 +155,13 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
   if(d.strut.bolts!<5){d.strut.bolts!++;return true;}return false;
  };
  // The torsion brace: the strut's weak-axis stiffness and strength (I_y), the plates, their bolt rows and fillets.
- const stiffStrut=()=>{const now=aiscWShapes.find(v=>v.name===d.strut.shape),s=torsionStruts.find(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(q,v));if(!s)return false;d.strut.shape=s.name;return true;};
+ // The heavier W10s (torsionStruts) only for a ratio past 1.00, a limit: the sizing margin keeps the 65 lb/ft struts.
+ const stiffStrut=(value:number)=>{const now=aiscWShapes.find(v=>v.name===d.strut.shape),s=(value>1?torsionStruts:struts).find(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(q,v));if(!s)return false;d.strut.shape=s.name;return true;};
  const torsionPlate=()=>{const tb=d.torsionBrace;if(!tb)return false;const t=next(tb.thickness,eighth);if(t>1.25*inch+1e-6)return false;tb.thickness=t;tb.weld=Math.max(tb.weld,filletMinimum([t,column().tf]));return true;};
  const torsionRows=()=>{const tb=d.torsionBrace;if(!tb||tb.rows>=5)return false;tb.rows++;return true;};
  const torsionWeld=()=>{const tb=d.torsionBrace;if(!tb)return false;const w=next(tb.weld,sixteenth);if(w>Math.min(5/8*inch,tb.thickness-sixteenth)+1e-6)return torsionPlate();tb.weld=w;return true;};
  const rod=()=>{const v=rods.find(x=>x>b.rod.diameter+1e-6);if(!v)return false;b.rod.diameter=v;d.pin.diameter=Math.max(d.pin.diameter,v);return true;};
- const grow=(key:string):boolean=>{
+ const grow=(key:string,value=0):boolean=>{
   switch(key){
    case 'brace-tension':case 'brace-rod-fatigue':return rod();
    case 'brace-pin':return pin();
@@ -166,18 +171,20 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
    // The tab's welds, or the force normal to the web (its stiffeners).
    case 'brace-strut-tab':return tabWebGoverns()?stiffen():weld();
    case 'brace-column-web':return stiffen();
-   case 'brace-strut':case 'brace-strut-tension':return strut(false);
-   case 'brace-strut-slenderness':return strut(true);
+   case 'brace-strut':case 'brace-strut-tension':return strut(false,value);
+   case 'brace-strut-slenderness':return strut(true,value);
    case 'brace-strut-slip':case 'brace-strut-bolts':return bolts();
    case 'brace-strut-bearing':case 'brace-strut-block':return bolts()||gusset();
-   case 'brace-torsion-strut':case 'column-twist-rotation':case 'column-twist':case 'torsion-brace-movement':return stiffStrut();
+   case 'brace-torsion-strut':case 'column-twist-rotation':case 'column-twist':return stiffStrut(value);
+   // A configurator target (the tie's movement), not a limit: the 65 lb/ft struts only.
+   case 'torsion-brace-movement':return stiffStrut(0);
    case 'brace-torsion-plate':return torsionPlate();
    case 'brace-torsion-bolts':return torsionRows()||torsionPlate();
    case 'brace-torsion-weld':return torsionWeld();
    case 'brace-seat-weld':{const br=q.details?.bracket;if(!br?.enabled||br.arrangement==='rolled-corbel'||br.arrangement==='tapered-haunch')return false;
-    // To 3/4 in: the seat's top fillet is a T-joint on the column flange (no AISC J2.2b edge maximum; at most the seat
+    // To 3/4 in where the 5/8 in fillet is past 1.00 (a limit, not the sizing margin): the seat's top fillet is a T-joint on the column flange (no AISC J2.2b edge maximum; at most the seat
     // thickness, 1 1/2 in or more on a heavy crane's bracket), a multi-pass fillet the heavy cranes' seat couple F·e needs (072, 073).
-    const w=next(d.seatWeld,sixteenth);if(w>Math.min(.75*inch,br.seatThickness)+1e-6)return false;d.seatWeld=w;return true;}
+    const w=next(d.seatWeld,sixteenth);if(w>(value>1?Math.min(.75*inch,br.seatThickness):.625*inch)+1e-6)return false;d.seatWeld=w;return true;}
   }
   return false;
  };
@@ -186,7 +193,7 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
  for(let i=0;i<120;i++){
   const r=bracingRatios(q,reactions),open=Object.entries(r).filter(([k,v])=>!stuck.has(k)&&v>target).sort((x,y)=>y[1]-x[1]);
   if(!open.length)break;
-  if(!grow(open[0][0]))stuck.add(open[0][0]);
+  if(!grow(open[0][0],open[0][1]))stuck.add(open[0][0]);
  }
  return q;
 }

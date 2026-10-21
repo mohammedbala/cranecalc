@@ -45,19 +45,26 @@ describe('configurator project validity',()=>{
  // t13 to t16: the crane columns tied to the building columns and the stepped columns (girder on the step).
  for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
  // Beyond the catalog the closest member is built (an open item, configuratorOpenItems, the package a review draft),
- // never a validation stop: V059 and V061 need a plate girder (they took the W14X873 column shape before).
+ // never a validation stop. V059 and V061, which needed a plate girder past the 40 in catalog (they took the W14X873
+ // column shape before that), take a jumbo rolled W36 past 40 in deep (jumboCandidates) before a plate girder.
  // 034, 061 and CC2 ask for a cap tieback angle that no set of its sizing steps carries (lap slip several times over,
  // or the imposed movement in the plate): the closest angle is built with the open item (capAngleUnresolved; the
  // calculation of CC2 gave plate movement 1.96 and end plate weld 1.44 against estimates of 2.56 and 1.87).
- const open=new Map<string,RegExp>([['V059',/^Plate girder required/],['V061',/^Plate girder required/],
+ const jumbo=new Set(['V059','V061']);
+ const open=new Map<string,RegExp>([
   ['034',/^Top-flange tie not resolved: the cap tieback angle/],['061',/^Top-flange tie not resolved: the cap tieback angle/],['CC2',/^Top-flange tie not resolved: the cap tieback angle/]]);
- for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project${open.has(id)?', with the configurator open item':''}`,()=>{
+ for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project${open.has(id)?', with the configurator open item':jumbo.has(id)?', on a jumbo rolled W36':''}`,()=>{
   const p=buildProject(c);
   expect(validateProject(p)).toEqual([]);
   if(open.has(id)){
    expect(p.configurator!.beyondCatalog!.some(v=>open.get(id)!.test(v.reason))).toBe(true);
    expect(configuratorOpenItems(p).map(v=>v.status)).toContain('incomplete');
    expect(p.configurator!.selections!.some(v=>v.item==='Open item'&&open.get(id)!.test(v.reason))).toBe(true);
+  }
+  if(jumbo.has(id)){
+   expect(p.section.name).toMatch(/^W36X(652|723|802|853|925)$/);
+   expect(p.configurator!.beyondCatalog?.some(v=>v.member==='girder')??false).toBe(false);
+   expect(p.configurator!.selections!.find(v=>v.item==='Girder')?.reason).toMatch(/before a plate girder/);
   }
  },300000);
  it('new freestanding columns take the top of rail to at most 35 ft (ASCE 7 cantilever column height limit), with the reason',()=>{

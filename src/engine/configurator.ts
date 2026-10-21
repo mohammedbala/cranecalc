@@ -237,7 +237,15 @@ export function seatWidthNeeded(depth:number,clipWidth:number,tolerance=.125*inc
  * girder, else a built-up plate girder (sizeGirder reports it).
  */
 export const girderCandidate=(s:{name:string;bf:number})=>!(/^W1[24]X/.test(s.name)&&s.bf>=12-1e-9);
-const wCandidates=()=>aiscWShapes.filter(s=>s.d>=12&&s.d<=40&&girderCandidate(s)&&s.bf/(2*s.tf)<=.38*Math.sqrt(29000/50)&&(s.d-2*s.kdes)/s.tw<=3.76*Math.sqrt(29000/50)).sort((a,b)=>a.weight-b.weight);
+const compactW=(s:{bf:number;tf:number;d:number;kdes:number;tw:number})=>s.bf/(2*s.tf)<=.38*Math.sqrt(29000/50)&&(s.d-2*s.kdes)/s.tw<=3.76*Math.sqrt(29000/50);
+const wCandidates=()=>aiscWShapes.filter(s=>s.d>=12&&s.d<=40&&girderCandidate(s)&&compactW(s)).sort((a,b)=>a.weight-b.weight);
+/**
+ * The jumbo rolled W36 and W40 past the 40 in depth of the girder catalog (actual depth 41 to 44 in: W36X652 to
+ * W36X925, W40X431 to W40X655; I_y to 4,940 in^4 against the 2,490 in^4 of the W36X529), compact as the others: taken
+ * only where no section of the catalog and no W and channel cap pair meets the sizing targets (screened), before a
+ * plate girder. Heavy shapes (flanges over 2 in, as the W36X529 already is): AISC 360 A3.1c, clause to be verified.
+ */
+const jumboCandidates=()=>aiscWShapes.filter(s=>/^W(36|40)X/.test(s.name)&&s.d>40&&s.d<=44&&compactW(s)).sort((a,b)=>a.weight-b.weight);
 const capChannels=['C10X15.3','C12X20.7','C12X25','C15X33.9','C15X40','C15X50','MC18X42.7'];
 /**
  * Least clear pocket each side between the W top flange tip and the inside of the cap channel flange, where the
@@ -308,7 +316,9 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  * girderSizingRatios, the vertical and lateral deflection limits and the web shear. The lightest section within the
  * targets is returned; the full analysis then checks it completely (fatigue, local and connection checks).
  */
-export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:number;minFlange?:number;capRoom?:number;flexibleTie?:boolean;target?:number;deflectionTarget?:number}):GirderTrial|undefined{
+export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:number;minFlange?:number;capRoom?:number;flexibleTie?:boolean;target?:number;deflectionTarget?:number;
+ /** Rolled: the jumbo W36 and W40 past 40 in deep as well (jumboCandidates). */
+ jumbo?:boolean}):GirderTrial|undefined{
  const target=opts.target??.85,deflectionTarget=opts.deflectionTarget??.9;
  const ref=structuredClone(p);ref.section=loadAiscSection(ref.section,'W24X104');
  const props=sectionProperties(ref.section),a=movingAnalysis(ref,props,8),L=Math.max(...p.spans),lrfd=p.method==='LRFD';
@@ -327,7 +337,7 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
  // Flanges wide enough for the bearing bolts, end-stop bolts and saddles (minFlange), and for the rail and clips.
  const minFlange=Math.max(opts.minFlange??0,kind==='rolled'?opts.minSeat:0);
  if(kind==='rolled'){
-  for(const w of wCandidates()){if(w.bf*inch>=minFlange-1e-6)consider(loadAiscSection(p.section,w.name),w.name,w.weight);else misfits.push({name:w.name,weight:w.weight,why:`flange ${ins(w.bf*inch)} narrower than the ${ins(minFlange)} the details need`,kind:'flange width'});}
+  for(const w of [...wCandidates(),...(opts.jumbo?jumboCandidates():[])]){if(w.bf*inch>=minFlange-1e-6)consider(loadAiscSection(p.section,w.name),w.name,w.weight);else misfits.push({name:w.name,weight:w.weight,why:`flange ${ins(w.bf*inch)} narrower than the ${ins(minFlange)} the details need`,kind:'flange width'});}
  }else{
   for(const ch of capChannels){const c=aiscChannelByName(ch)!;
    for(const w of wCandidates()){
@@ -379,7 +389,7 @@ export const configOf=(input:RunwayConfig)=>{
  * The project up to the girder: cranes, runway, criteria, duty, rail depth and the girder (named or sized), without
  * connections or supports. `trial` is the sizing result when the girder was sized here.
  */
-function skeleton(cfg:RunwayConfig){
+function skeleton(cfg:RunwayConfig,jumbo=false){
  const p=demonstrationProject(),spans=Array.from({length:cfg.bays},()=>cfg.span*foot),L=sum(spans),longest=Math.max(...spans);
  const spectrum=exampleSpectrum(cfg.buildingClass),N=spectrum.total,count=(v:number)=>v.toLocaleString('en-US');
  p.reportPurpose='demonstration';p.reportFormat='compact';p.title=cfg.title;p.number=cfg.number;p.engineer='';
@@ -407,7 +417,7 @@ function skeleton(cfg:RunwayConfig){
  // The flexible plate's estimate factor (less end restraint against twist) only where the plate stays: on a crane column
  // attachTie always replaces it (paired bars on the bearing stiffener, or the cap angle on a capped girder), and the
  // girder sized for the softer plate came out about 1.25 times heavier than the final calculation needed (046, 052).
- const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'&&cfg.support!=='crane-column'};
+ const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'&&cfg.support!=='crane-column',jumbo};
  // Girder: the named section, else sized for the moving loads.
  let trial:GirderTrial|undefined;
  if(cfg.girder==='capped'){
@@ -454,6 +464,21 @@ function screened(input:RunwayConfig){
   if(capped.trial?.basis?.passed){
    const why=`No compact rolled W meets the girder sizing targets (closest ${sk.trial.name}: ${sk.trial.governs} ratio ${sk.trial.utilization.toFixed(2)}, vertical deflection ${sk.trial.deflection.toFixed(2)} and lateral ${sk.trial.lateral.toFixed(2)} of the limits, screening estimates): the girder is a W with a channel cap, whose wide top flange carries the side thrust (AISC DG7).`;
    changes.push(why,...n.changes);rules.push({field:'girder',from:'rolled',to:'capped',why},...n.rules);cfg=n.config;sk=capped;
+  }
+ }
+ // Neither a section of the catalog nor a W and channel cap pair within the targets (the girder type entered, and for a
+ // rolled girder the capped pair tried above): the jumbo rolled W36 and W40 past 40 in deep (jumboCandidates), with the
+ // rolled W of the catalog for a capped girder entered, where the girder so far would be a plate girder (past a
+ // deflection limit or the strength scatter, beyondGirderCatalog): taken where one meets the targets, or where the
+ // closest is within those limits, the calculation then deciding (cases 005, 024, 047, 053, 059, 099: lateral 1.13 to 1.53
+ // on the W36X529 or the W24X370 + MC18X42.7, Iy 2,490 in^4 and less; case 005: the W36X529 within the limits).
+ if(cfg.scope==='design'&&!cfg.girderShape&&sk.trial?.basis?.passed===false){
+  const n=normalizeConfig({...cfg,girder:'rolled'}),jumbo=skeleton(n.config,true),t=jumbo.trial,was=sk.trial;
+  if(t&&beyondGirderCatalog(was)&&(t.basis?.passed||!beyondGirderCatalog(t))){
+   const kind=cfg.girder==='capped'?'W and channel cap pair':'compact rolled W of the 40 in catalog or W and channel cap pair';
+   const deep=aiscShapeByName(t.name)!.d>40;
+   const why=`No ${kind} meets the girder sizing targets (closest ${was.name}: ${was.governs} ratio ${was.utilization.toFixed(2)}, vertical deflection ${was.deflection.toFixed(2)} and lateral ${was.lateral.toFixed(2)} of the limits, screening estimates): the girder is the rolled ${t.name}${deep?`, a jumbo W ${+aiscShapeByName(t.name)!.d.toFixed(1)} in deep`:''} (${t.governs} ratio ${t.utilization.toFixed(2)}, lateral ${t.lateral.toFixed(2)}${t.basis?.passed?', within the targets':', within the deflection limits; the calculation decides'}), before a plate girder. A heavy shape (flanges over 2 in thick): AISC 360 A3.1c, a clause to be verified.`;
+   changes.push(why,...n.changes);rules.push({field:'girder',from:cfg.girder,to:'rolled',why},...n.rules);cfg=n.config;sk=jumbo;
   }
  }
  // A heavy rolled girder (150 plf or more) governed by its top flange: the lightest capped pair within the same targets
@@ -560,11 +585,12 @@ let buildDepth=0;
  * center plus half the gusset and its fillet past the flange tip, stiffenerGussetMisfit, a coordination clash of the
  * calculation where it stays): first the torsion brace where the column twists unbraced, then the layout built again on the
  * lightest heavier W14 that takes them (a wider flange, and a torsionally stiffer column whose smaller twist shortens
- * the bearing slots); the configuration keeps its blank column choice, and the log says why.
+ * the bearing slots); the configuration keeps its blank column choice, and the log says why. Crane columns likewise
+ * (case 047: the jumbo girder's longer bearings put the gussets 0.1 in past a W14X193 flange).
  */
 function withGussetFitColumn(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace,target:number):{q:ProjectInput;target:number}{
  const cfg=configOf(input).config,col=q.existingColumn,misfit=(r:ProjectInput)=>!!stiffenerGussetMisfit(r);
- if(cfg.columnShape||cfg.scope!=='design'||cfg.structure!=='new'||!col?.enabled||!col.isNew||!misfit(q))return {q,target};
+ if(cfg.columnShape||cfg.scope!=='design'||cfg.structure!=='new'&&cfg.support!=='crane-column'||!col?.enabled||!col.isNew||!misfit(q))return {q,target};
  const tieOpen=(r:ProjectInput)=>!!r.configurator?.beyondCatalog?.some(v=>v.member==='tie');
  const accept=(r:ProjectInput,inner:SelectionTrace,why:string)=>{Object.assign(trace,inner);r.notes+=` ${why}`;return r;};
  // The column twist lengthens the bearing slots (the bearings, so the gusset offset): first the torsion brace on the same
@@ -580,7 +606,8 @@ function withGussetFitColumn(q:ProjectInput,input:RunwayConfig,trace:SelectionTr
   if(misfit(r)||validateRunwayDetails(r).length||tieOpen(r)&&!tieOpen(q))continue;
   const why=`The tie's column gussets at the bearing stiffeners do not fit on the ${col.shape} flange (${aiscShapeByName(col.shape)!.bf} in wide) with their fillets: the lightest heavier W14 whose flange takes them, ${shape}.`;
   accept(r,inner,why);
-  if(r.configurator){delete r.configurator.columnShape;r.configurator.selections=[...(r.configurator.selections??[]).filter(v=>v.item!=='New column'),{item:'New column',entered:'configurator default',designed:shape,reason:why}].slice(0,24);}
+  const item=cfg.support==='crane-column'?'Crane column':'New column';
+  if(r.configurator){delete r.configurator.columnShape;r.configurator.selections=[...(r.configurator.selections??[]).filter(v=>v.item!==item),{item,entered:'configurator default',designed:shape,reason:why}].slice(0,24);}
   return {q:r,target};
  }
  return {q,target};
@@ -966,7 +993,7 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  if(cfg.columnShape||baseSizingRatios(q).ratios.drift<=baseTarget&&torsionOk(q)&&twistOk(q))return q;
  const reactions=supportReactions(q,sectionProperties(q.section)),drift0=baseSizingRatios(q).ratios.drift,torsion0=columnTorsionRatio(q),twist0=achievableTwist(q);
  const state=(drift:number,torsion:number,twist:number,cut=true)=>[drift>(cut?baseTarget:1)?`base drift ratio ${drift.toFixed(2)}${cut?` > ${baseTarget}`:''}`:'',torsion>1?`column torsion ratio ${torsion.toFixed(2)}${cut?' > 1.00':''}`:'',twist>1?`seat twist ratio ${twist.toFixed(2)}${cut?' > 1.00':''} with the torsion brace on the stiffest strut that fits`:''].filter(Boolean).join(' and ');
- const why=`the ${q.existingColumn!.shape} chosen for the crane gives ${state(drift0,torsion0,twist0)}: the lightest heavier W14 within the drift, torsion and twist ratios`;
+ const why=`the ${q.existingColumn!.shape} chosen for the crane gives ${state(drift0,torsion0,twist0)}: the lightest heavier W14 within the drift${twist0>1?', torsion and twist':' and torsion'} ratios`;
  const shapes=heavierColumns(q.existingColumn!.shape);
  for(const shape of shapes){
   const t=structuredClone(q),w=aiscShapeByName(shape)!;
@@ -1296,7 +1323,7 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
  const bracket=structuredClone(p.details!.bracket),face=p.details!.brace.flangeAttachment?.columnFace;
  // The farthest column face the tie sizing may move to: none on a column step, whose upper shaft fixes it; on a new
  // freestanding column only as far as its twist and drift allow (columnFaceCap).
- const farthest=hold!==undefined?hold:cfg.reach===undefined&&cfg.support!=='stepped-column'?columnFaceCap(p,30*inch,trace):undefined;
+ const farthest=hold!==undefined?hold:cfg.reach===undefined&&cfg.support!=='stepped-column'?columnFaceCap(p,30*inch,trace,!!cfg.columnShape):undefined;
  p.details=sizeFlangeTie(p,{reach:farthest}).details;
  // A flexible plate still over a code limit when sized (its one ply takes the whole force with the imposed movement in
  // the H1 sum): paired bars on the same saddle, sized from the same column face, where they exceed their limits by less.
@@ -1345,21 +1372,21 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
  * New freestanding columns with a bracket seat (bracing designed here): the farthest column face the tie sizing may move
  * to, at most `farthest`. The girder's offset from the column axis, e = d/2 + reach, is the lever of the eccentric
  * reaction that drifts the column and of the longitudinal force at the seat that twists it (the twist rotation grows
- * as e, the twist movement as e²; cases 072, 073, 077, 083, where the tie sizing had moved the face to 27 to 29 in and
- * the twist past its limits). The face moves out only while the column, with the torsion brace on the stiffest strut
- * that fits (the brace the configurator adds and sizes where the column twists, withTwistLimit), keeps its factored twist
- * and its service twist movement within 0.95 of their limits and its column-alone drift within columnDriftShare of
- * its limit (the footing takes the rest; not where the column is already past it at the face set, too flexible at any
- * reach, which the column sizing judges), on the 1 in grid; never inside the face already set. Where it stops short
- * of `farthest` the selection log says so (trace.face).
+ * as e, the twist movement as e²; cases 072, 073, 077, 083 had the face at 27 to 29 in and the twist past its limits).
+ * The face moves out only as far as the column can be made to take: the heaviest W14 the column sizing goes to (the
+ * W14X398, or the shape configured), with the torsion brace on the stiffest strut that fits, keeps its factored twist and
+ * its service twist movement within 0.95 of their limits and its column-alone drift within columnDriftShare of its limit
+ * (not where it is already past that at the face set: too flexible at any reach, which the column sizing judges), on
+ * the 1 in grid, never inside the face already set; the column sizing then takes the lightest W14 that meets them at
+ * the face the tie settles on (withColumnBase). Where it stops short of `farthest` the selection log says so (trace.face).
  */
-function columnFaceCap(p:ProjectInput,farthest:number,trace:SelectionTrace):number{
+function columnFaceCap(p:ProjectInput,farthest:number,trace:SelectionTrace,configured:boolean):number{
  const b=p.details?.bracket;if(!b?.enabled||farthest<=b.reach+1e-6||!braceTrial(p))return farthest;
- const reactions=supportReactions(p,sectionProperties(p.section));
- // A column already past the drift share at the face set is too flexible at any reach (the column sizing judges it,
- // withColumnBase): its drift then does not hold the tie's face, its twist still does.
- const start=b.reach,first=braceTrial(p,start,reactions)!,drifts=first.drift<=columnDriftShare;
- const fits=(face:number)=>{const v=face===start?first:braceTrial(p,face,reactions)!;return v.twist<=.95&&(!drifts||v.drift<=columnDriftShare);};
+ const q=structuredClone(p),heaviest=configured?undefined:heavierColumns(q.existingColumn!.shape).at(-1);
+ if(heaviest){const w=aiscShapeByName(heaviest)!;Object.assign(q.existingColumn!,{shape:heaviest,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch});Object.assign(q.details!.bracket!.receiver,shapePlates(heaviest));}
+ const reactions=supportReactions(q,sectionProperties(q.section));
+ const start=b.reach,first=braceTrial(q,start,reactions)!,drifts=first.drift<=columnDriftShare;
+ const fits=(face:number)=>{const v=face===start?first:braceTrial(q,face,reactions)!;return v.twist<=.95&&(!drifts||v.drift<=columnDriftShare);};
  if(!fits(start)){trace.face=start;return start;}
  if(fits(farthest))return farthest;
  // Bisection on the 1 in grid (both ratios grow with the reach).
@@ -1538,7 +1565,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  if(!named&&trial){
   const b=trial.basis,kind=cfg.girder==='capped'?'W and channel cap pair':'compact W';
   const ratios=`${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of their limits`;
-  const reason=[b?.passed===false?`No ${kind} meets every sizing target; the closest: ${ratios}`:`Lightest ${kind} within the sizing targets (ratio ≤ ${b?.target??.85}, deflections ≤ ${b?.deflectionTarget??.9} of the limits): ${ratios}`,
+  const reason=[entered.girder===cfg.girder?why('girder').replace(/\.$/,''):'',b?.passed===false?`No ${kind} meets every sizing target; the closest: ${ratios}`:`Lightest ${kind} within the sizing targets (ratio ≤ ${b?.target??.85}, deflections ≤ ${b?.deflectionTarget??.9} of the limits): ${ratios}`,
    b?`flanges at least ${len(b.minFlange)} wide for the end bearing bolt gauge and the rail seat`:'',
    b?.lighter?`lighter candidates rejected: ${Object.entries(b.rejected).map(([k,n])=>`${n} by ${k}`).join(', ')}; the next lighter, ${b.lighter.name}: ${b.lighter.why}`:'',
    b?.alternative?`a capped girder, ${b.alternative.name} (${Math.round(b.alternative.weight)} lb/ft against ${Math.round(trial.weight)} lb/ft), meets the same targets: consider it (girder type capped)`:'',
