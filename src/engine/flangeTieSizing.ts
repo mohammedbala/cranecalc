@@ -512,12 +512,11 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // Paired bars whose two-row bolt groups still leave the imposed movement over its limit: one bolt row in each group
  // (two bolts across the bar, as the gauge), the flexible length longer by a pitch at each end at the same column
  // face, the bars' ends still clamped in plan by the pretensioned bolts (fixed, tieMovementChecks); the same search
- // from the nearest face, its bolts growing where their checks need it. A passing set is taken, so a tie that passes
- // with two rows keeps them; else the one-row set only where it exceeds the limits by less than the set kept.
- let kept1=kept;
+ // from the nearest face, its bolts growing where their checks need it. Only a passing set is taken: a tie that passes
+ // with two rows keeps them, and one that passes in neither keeps its two-row sizing (the sizing demands are estimates).
  if(kept&&kept.worst>1&&over(kept)&&!plate){
-  const before=best;rows=1;tried.length=0;budget=evaluations+300;passed=searchFaces();if(passed)return passed;
-  rows=2;if(best&&best!==before&&better(best,kept))kept1=best;
+  const reached=[...tried];rows=1;tried.length=0;budget=evaluations+300;passed=searchFaces();if(passed)return passed;
+  rows=2;tried.length=0;tried.push(...reached);
  }
  // The imposed movement still over its limit on paired bars with the column-end release: the column-end slide
  // (tieRelease), its travel the whole factored movement along the runway (end rotation × d and thermal travel) with
@@ -526,13 +525,14 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // slips (tieMovementChecks), so a thicker bar can serve: every thickness is tried at each face reached, from the
  // farthest in while a set passes; the nearest passing set is taken, else the slide set only where it exceeds the
  // limits by less than the set kept.
- if(kept&&kept1&&kept1.worst>1&&(over(kept)||over(kept1))&&release&&!plate){
+ if(kept&&kept.worst>1&&over(kept)&&release&&!plate){
   const mv=tieMovements(sizingSnapshot(applyTieProportions(structuredClone(p),{...base,slide:0}),demand));
   const slide=Math.max(inch/8,up(mv.travel+sixteenth+inch/32,sixteenth));
   if(slide<=.75*inch+1e-9){
    // The flexible length helps the bars here too: the farthest face reached first, then nearer while a set passes, so
    // the reach is the shortest at which the slide passes.
-   // Two sleeve rows first; then one (the bar ends turning on it, held by the sleeves' bearing shift, tieMovementChecks).
+   // Two sleeve rows first; then one (the bar ends turning on it, held by the sleeves' bearing shift, tieMovementChecks),
+   // taken only where it passes.
    let found:Trial|undefined,passing:Trial|undefined;
    for(const n of [2,1]){
     rows=n;budget=evaluations+300;
@@ -543,17 +543,17 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
       const {r}=sizeAt(face,thickness,slide);
       if(!r)continue;
       if(r.worst<=1){here=r;break;}
-      if(better(r,found))found=r;
+      if(n===2&&better(r,found))found=r;
      }
      if(!here)break;
      passing=here;
     }
     if(passing)return passing.q;
    }
-   if(found&&better(found,kept1))return found.q;
+   if(found&&better(found,kept))return found.q;
   }
  }
- return kept1?.q??p;
+ return kept?.q??p;
 }
 
 /** Saddle tie checks that load the girder flange (the F·h couple, the saddle toes and fillet terminations, the rail clip over the saddle) or the saddle itself. */
