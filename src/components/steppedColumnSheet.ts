@@ -10,17 +10,18 @@ import {isCapAngleTie} from '../engine/capAngle';
 import {runwayElevations} from '../engine/drawingData';
 import {railPadThickness} from '../engine/railSeat';
 import {drawingElevation,plateInches,dimensionLength} from './drawingFormat';
-import {sheetDrawingScale as drawingScale,text,line,rect,dimH,dimV,detailRef,detailTitles,bearingBoltsTitle,capAngleTitles,labelColumn,breakLine,capChannelSection,textWidth,n,lettering,type XY} from './sheetGraphics';
+import {sheetDrawingScale as drawingScale,text,line,rect,dimH,dimV,detailRef,detailTitles,bearingBoltsTitle,capAngleTitles,labelColumn,breakLine,capChannelSection,circle,textWidth,n,lettering,type XY} from './sheetGraphics';
 import {heading,numbered,table,type Style} from './noteBlocks';
 import {heavyHex,hexSide} from './heavyHex';
 import {bearingStiffenerProfile} from './bearingStiffenerGeometry';
 import {bracketForceBlocks,bracketForceTopic} from './bracketForceTable';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {AnnotationSpace,dimHClear,dimVClear} from './annotationSpace';
+import {stepStrutGeometry} from '../engine/craneLevelStrut';
 
 const inch=25.4;
 /** Detail titles of the stepped column (support 'stepped-column'), referenced from the general arrangement and the bearing details. */
-export const steppedColumnTitles={elevation:'STEPPED COLUMN / ELEVATION',section:'STEP / SECTION',stiffener:'STEP STIFFENER / PLAN AND ELEVATION'} as const;
+export const steppedColumnTitles={elevation:'STEPPED COLUMN / ELEVATION',section:'STEP / SECTION',stiffener:'STEP STIFFENER / PLAN AND ELEVATION',strut:'CRANE-LEVEL STRUT / AT A COLUMN'} as const;
 /** The detail of the top-flange tie the stepped column receives on its upper shaft. */
 export const steppedTieTitle=(p:CalculationSnapshot['input'])=>isCapAngleTie(p)?capAngleTitles.section:p.details?.brace.flangeAttachment?.enabled?detailTitles.flangeTie:detailTitles.tie;
 /** Shape name of a shaft: its catalog W shape, else its plates. */
@@ -53,7 +54,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const lowName=shaftName(g.lower,size),upName=shaftName(g.upper,size),capLabel=`PL ${size(g.cap.thickness)} X ${dim(g.cap.width)} X ${dim(g.cap.length)}`;
  const cap=b.kind==='cap'?b.capTw:0,bt=bs.thickness,hs=g.cap.top,tos=hs+bt+b.d,railDepth=p.aist?.railDepth??p.railHeight,rb=tos+cap+railPadThickness(p),tor=rb+railDepth;
  const sf=g.stiffener,sh=stepStiffenerHeight(g),tieRef=detailRef(steppedTieTitle(p)),gw=g.girderWeb,lowerOut=-g.lower.d/2,lowerIn=g.lower.d/2;
- const girderHalf=Math.max(b.bf,b.kind==='cap'?b.capWidth:0)/2;
+ const girderHalf=Math.max(b.bf,b.kind==='cap'?b.capWidth:0)/2,sq=stepStrutGeometry(p,g),strutRef=sq?detailRef(steppedColumnTitles.strut):'';
  // Girder I-section with its cap channel and the rail on the web centerline, bottom flange at `y0` (mm), in view coordinates.
  const girder=(X:(x:number)=>number,Y:(y:number)=>number,y0:number,withRail:boolean)=>{
   const t=y0+b.d;
@@ -96,6 +97,10 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   svg+=rect(X(gw-bs.width/2),Y(hs+bt),bs.width*kk,bt*kk,'runway-line')+girder(X,Y,hs+bt,true);
   const tieH=Math.min(150,b.d/4);
   svg+=rect(X(g.tieFace),Y(tos-b.tf),(gw-girderHalf-g.tieFace)*kk,tieH*kk,'runway-line');
+  // The new crane-level strut seen end-on beside the crane-side flange, its plate edge-on on the flange face.
+  if(sq){const zt=sq.z+sq.d/2,zb=sq.z-sq.d/2,x0=sq.ys-sq.bf/2,x1=sq.ys+sq.bf/2;
+   svg+=rect(X(sq.face),Y(sq.z+sq.half),sq.tp*kk,sq.height*kk,'runway-line');
+   svg+=`<path data-strut="end" class="runway-line" d="M${n(X(x0))},${n(Y(zt))}H${n(X(x1))}V${n(Y(zt-sq.tf))}H${n(X(sq.ys+sq.tw/2))}V${n(Y(zb+sq.tf))}H${n(X(x1))}V${n(Y(zb))}H${n(X(x0))}V${n(Y(zb+sq.tf))}H${n(X(sq.ys-sq.tw/2))}V${n(Y(zt-sq.tf))}H${n(X(x0))}Z"/>`;}
   // Centerlines: the lower shaft and the girder web.
   svg+=line([X(0),Y(g.cap.bottom)+6],[X(0),Y(Math.max(bands[0][0],g.cap.bottom-sh-3*inch))],'grid-line')+line([X(gw),Y(tor)-10],[X(gw),Y(hs)+4],'grid-line');
   // Across the runway, over the rail: the upper shaft, the tie distance to the girder web, the web to the lower crane-side
@@ -113,6 +118,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
    {at:[X(g.upper.x+g.upper.d/2),Y(Math.min(tos+12*inch,bands.at(-1)![1]-6*inch))],labels:[`(E) UPPER SHAFT ${upName}`,'SURVEY SIZE AND PLUMB']},
    {at:[X(g.cap.width/2),Y(hs-g.cap.thickness/2)],labels:[`(E) STEP CAP ${capLabel}`,'SURVEY THICKNESS AND LEVEL']},
    ...(sf?[{at:[X(g.innerFlange+sf.thickness/2),Y(g.cap.bottom-sh*.5)] as XY,labels:['STEP STIFFENERS (NEW), EACH SIDE',`OF THE WEB; SEE ${detailRef(steppedColumnTitles.stiffener)}`]}]:[]),
+   ...(sq?[{at:[X(sq.ys+sq.bf/2),Y(sq.z)] as XY,labels:[`${sq.shape} CRANE-LEVEL STRUT (NEW)`,`ON THE GIRDER LINE; SEE ${strutRef}`]}]:[]),
    {at:[X(lowerIn),Y(Math.max(bands[0][1]<g.cap.bottom?bands[0][1]-6*inch:hs/2,6*inch))],labels:[`(E) LOWER SHAFT ${lowName}`,'SURVEY SIZE AND CONDITION']},
    {at:[X(lowerIn)+8,Y(0)+.75*inch*kk],labels:['(E) BASE AND FOUNDATION (REF.)']}
   ],lx,Y(Math.max(H,tor))+6,Y(0)-4);
@@ -212,6 +218,40 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   return {svg:svg+'</g>',scale:k.label};
  }});
 
+ // 4: The crane-level strut at a column, seen from the crane aisle: the plate on the lower crane-side flange, its bolts to the
+ // existing flange, and the strut ends lapping it each side with their flanges coped.
+ if(sq)views.push({title:steppedColumnTitles.strut,render:()=>{
+  const st=c.step!.strut!,xMax=sq.plateEnd+6*inch,zLow=sq.z-sq.d/2-3*inch,zTop=hs+2*inch,k=drawingScale(Math.min(300/(2*xMax),320/(zTop-zLow)),u),kk=k.pointsPerMm;
+  const X=(x:number)=>70+(x+xMax)*kk,Y=(z:number)=>50+(zTop-z)*kk,web=sq.d/2-sq.tf;
+  let svg='<g data-view="crane-level-strut">';
+  // Existing: the crane-side flange face below the cap, broken at the bottom; the step cap.
+  svg+=rect(X(-g.lower.bf/2),Y(g.cap.bottom),g.lower.bf*kk,(g.cap.bottom-zLow)*kk,'reference-line')+breakLine([X(-g.lower.bf/2)-6,Y(zLow)],[X(g.lower.bf/2)+6,Y(zLow)]);
+  svg+=rect(X(-g.cap.length/2),Y(hs),g.cap.length*kk,g.cap.thickness*kk,'reference-line');
+  // New: the plate, its column bolts, the strut ends (web over the coped lap, full section beyond) and their bolts.
+  svg+=rect(X(-sq.plateEnd),Y(sq.z+sq.half),2*sq.plateEnd*kk,sq.height*kk,'runway-line');
+  for(const x of [-sq.gauge/2,sq.gauge/2])for(const r of sq.rows)svg+=circle(X(x),Y(sq.z+r),sq.db/2*kk,'runway-line');
+  for(const side of [-1,1]){
+   const a=side*sq.end,bx=side*(sq.end+sq.cope),e=side*xMax,lo=Math.min(a,bx),hi=Math.max(a,bx);
+   svg+=rect(X(lo),Y(sq.z+web),(hi-lo)*kk,2*web*kk,'runway-line');
+   svg+=rect(X(Math.min(bx,e)),Y(sq.z+sq.d/2),Math.abs(e-bx)*kk,sq.d*kk,'runway-line')+line([X(bx),Y(sq.z+web)],[X(e),Y(sq.z+web)],'runway-line')+line([X(bx),Y(sq.z-web)],[X(e),Y(sq.z-web)],'runway-line');
+   svg+=breakLine([X(e),Y(sq.z+sq.d/2)-6],[X(e),Y(sq.z-sq.d/2)+6]);
+   for(const x of sq.bolts)svg+=circle(X(side*x),Y(sq.z),sq.db/2*kk,'runway-line');
+  }
+  svg+=line([X(0),Y(hs)-6],[X(0),Y(zLow)+4],'grid-line')+line([X(-xMax)-4,Y(sq.z)],[X(xMax)+4,Y(sq.z)],'grid-line');
+  const bolts=(n:number,surface:string,to:string)=>`${n} - ${size(sq.db)} ${st.bolts.grade} SC, CLASS ${surface}, ${to}`;
+  svg+=labelColumn([
+   {at:[X(g.cap.length/2),Y(hs-g.cap.thickness/2)],labels:['(E) STEP CAP']},
+   {at:[X(sq.plateEnd*.75),Y(sq.z+sq.half)],labels:[`PL ${size(sq.tp)} X ${dim(sq.height)} X ${dim(2*sq.plateEnd)} (NEW) ON THE`,'(E) FLANGE FACE; '+bolts(2*st.columnRows,'A','FIELD'),'DRILLED, NO FLAME-CUT HOLES']},
+   {at:[X(xMax*.8),Y(sq.z+sq.d/2)],labels:[`${sq.shape} CRANE-LEVEL STRUT (NEW) ON`,'THE GIRDER LINE, FLANGES COPED AT THE LAP;',`${bolts(st.strutBolts,'B','EACH END')}`]},
+   {at:[X(g.lower.bf/2),Y(zLow+1.5*inch)],labels:['(E) LOWER SHAFT CRANE-SIDE FLANGE']}
+  ],X(xMax)+34,Y(zTop),Y(zLow)+4);
+  const space=new AnnotationSpace(svg),yb=Y(zLow)+16;
+  svg+=dimHClear(space,X(-sq.gauge/2),X(sq.gauge/2),Y(sq.z-sq.half),yb,dim(sq.gauge))+dimHClear(space,X(-sq.plateEnd),X(sq.plateEnd),Y(sq.z-sq.half),yb+18,dim(2*sq.plateEnd));
+  svg+=dimHClear(space,X(-sq.plateEnd),X(-sq.end),Y(sq.z+web),Y(sq.z+sq.d/2)-14,dim(sq.plateEnd-sq.end));
+  svg+=dimVClear(space,Y(g.cap.bottom),Y(sq.z+sq.d/2),X(-xMax),X(-xMax)-14,dim(g.cap.bottom-(sq.z+sq.d/2)));
+  return {svg:svg+'</g>',scale:k.label};
+ }});
+
  // Design data and notes.
  const check=(id:string)=>s.checks.find(v=>v.id===id),ratio=(id:string)=>checkDcText(s,check(id));
  const force=(v:number)=>{const t=format(v,'force',u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
@@ -228,6 +268,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   ['H1 RATIOS: UPPER / LOWER SHAFT',`${ratio('column-upper-interaction')} / ${ratio('column-lower-interaction')}`],
   ['RATIOS: BEARING / FLANGE / CAP / PANEL',`${ratio('step-bearing')} / ${ratio('step-flange-yielding')} / ${ratio('step-cap-flexure')} / ${ratio('step-panel-shear')}`],
   ['STEP STIFFENERS',sf?`2 PL ${size(sf.thickness)} X ${size(sf.width)} X ${dim(sh)}, ${weld(sf.weld)} FIELD FILLETS; RATIOS ${ratio('step-stiffener-column')} / ${ratio('step-stiffener-weld')}`:`NOT REQUIRED: WEB ${ratio('step-web-yielding')} (J10.2) / ${ratio('step-web-crippling')} (J10.3)`],
+  ...(sq?[['CRANE-LEVEL STRUT (NEW)',`${sq.shape} ON THE GIRDER LINE, ${dim(sq.ys)} FROM LOWER C/L; RATIOS ${ratio('step-strut-compression')} / ${ratio('step-strut-bolts')} / ${ratio('step-strut-column-bolts')}; TWIST ${ratio('column-lower-twist')}`]]:[]),
   ...(worst||fails?[['MAX. D/C, ALL STEPPED COLUMN CHECKS',`${worst?`${sheetDc(s,worst.dc)} (${worst.check.id})`:'-'}${fails?`; ${fails}`:''}`]]:[])
  ];
  const notes=[
@@ -236,6 +277,8 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `BEARING PLATES SHIMMED TO THE THEORETICAL ELEVATION WITH STEEL SHIMS TO FULL BEARING; FIELD DRILL THE CAP FOR THE BEARING BOLTS AFTER THE GIRDER IS LINED AND LEVELED, CLEAR OF THE CAP-TO-SHAFT WELDS; CONFIRM NUT CLEARANCE UNDER THE CAP. NO FLAME CUTTING OF EXISTING STEEL.`,
   ...(sf?[`STEP STIFFENERS: FIT TO BEAR AGAINST THE UNDERSIDE OF THE CAP, CLIP ${size(stepStiffenerClip)} AT THE CAP-TO-WEB FILLET, FIELD WELD BOTH FACES TO THE EXISTING WEB WITH ${weld(sf.weld)} FILLETS PER THE EXISTING-STEEL WELDING NOTES ON S-00 (CRANE OUT OF SERVICE, COLUMN UNDER DEAD LOAD ONLY).`]:[]),
   `THE TOP FLANGE TIE LANDS ON THE UPPER SHAFT INNER FLANGE (${tieRef}); DO NOT WELD THE GIRDER TO THE CAP.`,
+  ...(sq?[`CRANE-LEVEL STRUT (${strutRef}): CONTINUOUS ON THE GIRDER LINE FROM GRID ${(s.existingColumn?.support?.strut?.designed?.layout.first??0)+1} TO GRID ${(s.existingColumn?.support?.strut?.designed?.layout.last??0)+1}, CONNECTED AT EVERY COLUMN; PRETENSION ALL BOLTS, SLIP-CRITICAL (CLASS A AT THE EXISTING FLANGE: CLEAN MILL SCALE, NO PAINT). THE EXISTING BRACED BAY RECEIVES THE STRUT FORCE AT THE GIRDER LINE (ENGINEER OF RECORD).`]:[]),
+  ...(c.step?.capWeldAdded?[`BUILD UP THE EXISTING STEP FILLETS (CAP TO THE LOWER SHAFT, UPPER SHAFT TO THE CAP) TO ${weld(c.step.capWeldAdded)} IN THE FIELD: GRIND TO SOUND METAL, FUSE OVER THE FULL EXISTING WELD, PER THE EXISTING-STEEL WELDING NOTES ON S-00 (CRANE OUT OF SERVICE, COLUMN UNDER DEAD LOAD ONLY).`]:[]),
   'THE STEPPED COLUMN IS CHECKED IN THE CALCULATION REPORT (STEPPED COLUMN): EFFECTIVE LENGTHS FROM AN ELASTIC BUCKLING ANALYSIS OF THE TWO-SHAFT COLUMN (AISC 360-16 APPENDIX 7), H1 FOR EACH SHAFT, AND THE STEP: BEARING, CAP, FLANGE AND WEB LOCAL CHECKS AND PANEL SHEAR (AISC 360 J7, J10).'
  ];
  return {key:'stepped-column',name:'STEPPED COLUMNS',views,notes:(t:Style)=>[...(bracketForceTopic(s)==='stepped-column'?bracketForceBlocks(s,t):[]),heading(t,'STEPPED COLUMN DESIGN DATA'),table(t,['ITEM','VALUE'],rows,[1.25,1.75]),heading(t,'STEPPED COLUMN NOTES'),...numbered(t,notes)]};

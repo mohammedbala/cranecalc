@@ -86,7 +86,11 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
   forces:[longitudinal&&longitudinal.charAt(0).toUpperCase()+longitudinal.slice(1)+'.',...sentences(cls.note).filter(x=>/\d\s*(kip|kN)/.test(x))].filter(Boolean).join(' ')||'See section @@ref:interfaces@@.',party:EOR});
  const strut=byId.get('brace-by-others')??byId.get('column-longitudinal');
  if(strut){const force=sentences(strut.note).find(x=>/\d\s*(kip|kN)\b/.test(x));
-  take(strut.id,{item:'Crane-level strut on the girder line, collector, brace connections, braced-bay columns and foundation',
+  const designed=!!s.existingColumn?.support?.strut?.designed;
+  if(designed)take(strut.id,{item:'Existing braced bay · receives the new crane-level strut force at the girder line',
+   needed:'The crane-level strut on the girder line and its connections to every column are designed here. Confirm the existing braced bay takes the strut force delivered at the girder line: the bracing\'s connection to the strut (its top work point on the girder line, or a member in plan to it), the brace end connections, the braced-bay columns (with the torque of the force about their centerline where the bracing works on it), anchors and foundation.',
+   criterion:'AISC 360-16 and ACI 318 strength for the delivered force; the bracing\'s crane-level stiffness as used in the twist checks (brace-drift).',forces:[longitudinal&&longitudinal.charAt(0).toUpperCase()+longitudinal.slice(1)+'.',force].filter(Boolean).join(' ')||'See section @@ref:interfaces@@.',party:EOR});
+  else take(strut.id,{item:'Crane-level strut on the girder line, collector, brace connections, braced-bay columns and foundation',
    needed:`Design the crane-level strut at each locating column on the girder line${col?.longitudinalExit==='girder-strut'?' (the existing column check relies on it: the longitudinal force leaves the column at the seat with no column torsion or weak-axis bending)':''}, the collector to the braced bay, the brace end connections (gussets, clevises, bolts, welds), the braced-bay columns, anchors and foundation.`,
    criterion:'AISC 360-16 and ACI 318 strength; the strut stiff enough to hold the girder line at the seat.',forces:[longitudinal&&longitudinal.charAt(0).toUpperCase()+longitudinal.slice(1)+'.',force].filter(Boolean).join(' ')||'See section @@ref:interfaces@@.',party:EOR});}
  // A seat by others: the plan it must give the bearings (two plates and the joint gap at a shared grid), with the holes.

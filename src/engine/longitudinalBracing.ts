@@ -8,6 +8,7 @@ import type {CheckResult,ProjectInput,Section} from './types';
 import {aiscShapeByName} from '../data/aiscSections';
 import {alongSeismic,bracingDesign,bracingLayout,braceCases,designsBracing} from './newColumnBracing';
 import {rodStressArea} from './columnSupport';
+import {activeStepStrut} from './craneLevelStrut';
 
 const inch=25.4;
 /** Angle about the geometric axis parallel to the connected (longer) leg, from leg rectangles without fillets. */
@@ -130,6 +131,6 @@ export function longitudinalBracingChecks(p:ProjectInput,r:LongitudinalBracingRe
   if(r.rodFatigue)need(fat,r.rodFatigue.force/Math.max(r.rodFatigue.allowable,r.rodFatigue.threshold)/.75,'gross area, its threaded area at about 0.75 of it for the fatigue range');
  }
  // Between new columns the collector, connections, columns and foundation are designed here (Brace connections, Crane-level strut, New column).
- if(!G.spans)checks.push({id:'brace-by-others',group:'Longitudinal bracing',title:'Collector, brace connections, braced-bay columns & foundation',status:'excluded',equation:'',note:`Not checked here: the crane-level strut or collector from each locating support to the braced bay, the brace end connections (gussets, clevises, bolts, welds), and the braced-bay columns, anchors and foundation. Per braced bay under ${g.equation}: base shear ${format(r.foundation.shear,'force',u,3)} and column axial ±${format(r.foundation.axial,'force',u,3)} from overturning, in addition to the columns' other loads.`,referenceIds:refs});
+ if(!G.spans)checks.push({id:'brace-by-others',group:'Longitudinal bracing',title:'Collector, brace connections, braced-bay columns & foundation',status:'excluded',equation:'',note:`Not checked here: ${activeStepStrut(p)?`the existing braced bay that the new crane-level strut on the girder line (designed here, Crane-level strut) delivers the line force to, at the girder line over the lower crane-side flange: the connection of the existing bracing to the strut there (its top work point on the girder line, or a member in plan from the strut to it), the brace end connections, the braced-bay columns (with the torque of the line force about their centerline where the bracing works on it), anchors and foundation`:'the crane-level strut or collector from each locating support to the braced bay, the brace end connections (gussets, clevises, bolts, welds), and the braced-bay columns, anchors and foundation'}. Per braced bay under ${g.equation}: base shear ${format(r.foundation.shear,'force',u,3)} and column axial ±${format(r.foundation.axial,'force',u,3)} from overturning, in addition to the columns' other loads.`,referenceIds:refs});
  return checks;
 }

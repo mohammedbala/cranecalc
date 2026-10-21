@@ -62,7 +62,11 @@ import {transverseFilletFatigue,minimumFillet} from './connectionStrength';
 import {stiffenerPairSection} from './detailChecks';
 import {finiteLife,fatigueThreshold} from './fatigueConstants';
 import {columnReactionOffset} from './existingColumn';
-import {stepGeometry,steppedColumnAnalysis,steppedColumnChecks} from './steppedColumn';
+import {stepGeometry,steppedColumnAnalysis,steppedColumnChecks,stepWeldThickness} from './steppedColumn';
+import {stepStrutChecks,stepStrutLayout,type StepStrutForces} from './craneLevelStrut';
+import {bumperAtGrids,locatingGrids} from './columnSupport';
+import {craneLevelStrut} from './existingColumn';
+import type {SupportReactionSet} from './supportReactions';
 import {activeStep} from './steppedColumnInputs';
 import {independentBearings} from './simpleSupports';
 import {twistRotationLimit,twistSlip} from './columnTwistLimit';
@@ -792,7 +796,8 @@ function withoutRailPad(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace,log
  */
 function withPreheat(p:ProjectInput):ProjectInput{
  const c=p.existingColumn;if(!c?.enabled||c.isNew||!c.welding)return p;
- c.welding={...c.welding,preheat:existingWeldingDemand(p,existingColumnSection(p).section.tf).need};
+ const g=activeStep(p)?stepGeometry(p):undefined;
+ c.welding={...c.welding,preheat:existingWeldingDemand(p,g?stepWeldThickness(p,g):existingColumnSection(p).section.tf).need};
  return p;
 }
 /**
@@ -803,14 +808,51 @@ function withPreheat(p:ProjectInput):ProjectInput{
  */
 function withLongitudinalExit(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  const c=p.existingColumn;if(!c?.enabled||c.isNew)return p;
- if(cfg.longitudinalExit){c.longitudinalExit=cfg.longitudinalExit;return p;}
- c.longitudinalExit='column-strut';
  const reactions=supportReactions(p,sectionProperties(p.section));
+ if(cfg.longitudinalExit){c.longitudinalExit=cfg.longitudinalExit;if(cfg.longitudinalExit==='girder-strut'&&activeStep(p))withStepStrut(p,reactions,trace);return p;}
+ c.longitudinalExit='column-strut';
  // A stepped column twists in its lower shaft (steppedColumn.ts, column-lower-torsion).
  // Its twist at the step is limited too (column-lower-twist, factored; column-lower-twist-movement, service): the worst of the three.
  const torsion=activeStep(p)?steppedColumnChecks(p,steppedColumnAnalysis(p,reactions)).filter(v=>/^column-lower-(torsion|twist|twist-movement)$/.test(v.id)).reduce((a:ReturnType<typeof steppedColumnChecks>[number]|undefined,v)=>!a||!(v.utilization!<=a.utilization!)?v:a,undefined):existingColumnChecks(p,existingColumnAnalysis(p,reactions)).find(v=>v.id==='column-torsion');
- if(torsion&&!(torsion.utilization!<=1)){c.longitudinalExit='girder-strut';trace.exit=`${torsion.id} ${Number.isFinite(torsion.utilization)?torsion.utilization!.toFixed(2):'unstable'} > 1.00 with the strut at the column centerline (the girder offset twists the column): the crane-level strut by others on the girder line${activeStep(p)?', stiff enough that the share of the force the column keeps holds the twist limits':''}`;}
+ if(torsion&&!(torsion.utilization!<=1)){c.longitudinalExit='girder-strut';trace.exit=`${torsion.id} ${Number.isFinite(torsion.utilization)?torsion.utilization!.toFixed(2):'unstable'} > 1.00 with the strut at the column centerline (the girder offset twists the column): ${activeStep(p)?'the crane-level strut on the girder line, designed here, its path to the braced bay stiff enough that the share of the force the column keeps holds the twist limits':'the crane-level strut by others on the girder line'}`;
+  if(activeStep(p))withStepStrut(p,reactions,trace);}
  return p;
+}
+/**
+ * The stepped column's crane-level strut on the girder line (craneLevelStrut.ts), new steel: the lightest W8 to W14 with
+ * nonslender elements (B4.1a) and L_c/r ≤ 200 over the longest bay that passes the strut's member checks, its
+ * connection the fewest and smallest bolts and the thinnest plate that pass the connection checks (A572 Gr. 50 plate,
+ * A992 strut, A325 bolts); then, with the strut in the column model, the next heavier shapes while the strut's own checks
+ * (with its share of the force) or the column's twist checks still fail and a stiffer strut lowers the worst ratio.
+ */
+function withStepStrut(p:ProjectInput,reactions:SupportReactionSet,trace:SelectionTrace){
+ const s=activeStep(p)!,E=p.section.E,Fy=50*ksi,limit=(v:number)=>v<=1+1e-9;
+ const g=stepGeometry(p)!,locating=[...new Set([...locatingGrids(p),...bumperAtGrids(p).grids])],layout=stepStrutLayout(p,locating);
+ const shapes=aiscWShapes.filter(w=>/^W(8|10|12|14)X/.test(w.name)&&w.bf/(2*w.tf)<=.56*Math.sqrt(E/Fy)&&(w.d-2*w.kdes)/w.tw<=1.49*Math.sqrt(E/Fy)&&layout.bay/(Math.sqrt(w.Iy/w.A)*inch)<=200).sort((a,b)=>a.weight-b.weight);
+ if(!shapes.length){trace.strut='No W8 to W14 keeps L_c/r ≤ 200 over the bay: the crane-level strut needs intermediate bracing (not designed here).';return;}
+ const run=()=>{const a=steppedColumnAnalysis(p,reactions),z=a.summary,cls=craneLevelStrut(p,z)!;return {a,z,cls};};
+ const memberIds=/^step-strut-(compression|slenderness|tension)$/,strutChecks=(x:StepStrutForces)=>stepStrutChecks(p,g,x,layout);
+ // The connection for a strut and force: fewest bolts, then the smallest bolt and the thinnest plate.
+ const connect=(x:StepStrutForces)=>{
+  for(const n of [2,3,4,5,6])for(const db of [.75,.875,1].map(v=>v*inch))for(const rows of [2,3,4,5,6])for(const tp of [.5,.625,.75,.875,1].map(v=>v*inch)){
+   s.strut={...s.strut!,plate:{...s.strut!.plate,thickness:tp},bolts:{diameter:db,grade:'A325'},strutBolts:n,columnRows:rows};
+   if(strutChecks(x).every(c=>c.status==='pass'))return true;}
+  return false;};
+ let x:StepStrutForces|undefined,best:{U:number;strut:NonNullable<typeof s.strut>}|undefined;
+ for(const w of shapes){
+  s.strut={shape:w.name,Fy,Fu:65*ksi,plate:{thickness:.5*inch,Fy,Fu:65*ksi},bolts:{diameter:.75*inch,grade:'A325'},strutBolts:2,columnRows:2};
+  if(!x){const r=run();x={F:r.cls.force,caseId:'',share:r.z.support?.strut?.designed?.strutShare??1,service:r.z.support!.traction};}
+  if(!strutChecks(x).filter(c=>memberIds.test(c.id)).every(c=>c.status==='pass'))continue;
+  if(!connect(x))continue;
+  // The strut in the column model: its share of the force and the column's twist.
+  const r=run(),list=[...steppedColumnChecks(p,r.a)].filter(c=>/^step-strut-|^column-lower-twist/.test(c.id)),U=Math.max(...list.map(c=>c.utilization??0));
+  x={...x,share:r.z.support?.strut?.designed?.strutShare??x.share};
+  if(!best||U<best.U-1e-6)best={U,strut:structuredClone(s.strut)};else break;
+  if(limit(U))break;
+ }
+ if(!best){delete s.strut;trace.strut='No W8 to W14 strut and connection passed the strut checks: the crane-level strut on the girder line is by others.';return;}
+ s.strut=best.strut;const st=s.strut,len=(v:number)=>p.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
+ trace.strut=`The lightest W8 to W14 (A992, nonslender, L_c/r ≤ 200 over the ${+(layout.bay/foot).toFixed(1)} ft bay) whose member and connection checks pass with the line force${best.U>1+1e-9?` (the column twist with it is still ${best.U.toFixed(2)}: a heavier strut no longer lowers it, the existing bracing's stiffness governs)`:', and with which the column holds its twist limits'}: ${st.shape}, its web lapped on a ${len(st.plate.thickness)} plate bolted to each lower crane-side flange (${2*st.columnRows} - ${len(st.bolts.diameter)} A325), ${st.strutBolts} bolts at each strut end.`;
 }
 /**
  * The welded rib seats (twin-rib, haunched seat) sized for the reactions (sizeWeldedBracket): ribs, seat, fillets, the
@@ -1098,6 +1140,21 @@ function setStepTieFace(p:ProjectInput){
  if(d.brace.capAngle)d.brace.capAngle.columnFace=face;
 }
 /**
+ * Existing step fillets that still fail their Category F throat fatigue (step-weld-fatigue) once the step stiffener is
+ * settled: built up in the field to the required leg (step.capWeldAdded, new work: the next 1/16 in above the required
+ * leg, at most 1 in), a designed new-steel item instead of an open one. Above 1 in the step stays an engineer-of-record item.
+ */
+function buildUpStepWelds(q:ProjectInput,list:CheckResultLike[],trace:SelectionTrace):ProjectInput{
+ const s=activeStep(q)!,w=list.find(v=>v.id==='step-weld-fatigue') as (CheckResultLike&{demand?:number;utilization?:number})|undefined;
+ if(!w||w.status!=='fail'||w.demand===undefined)return q;
+ const leg=Math.ceil(w.demand/(inch/16)-1e-9)*inch/16;
+ if(leg>inch+1e-9)return q;
+ s.capWeldAdded=leg;
+ const why=`The existing ${+((s.capWeld??0)/inch).toFixed(3)} in step fillets fail Category F throat fatigue (step-weld-fatigue ${(w.utilization??0).toFixed(2)}, no bearing credit for an unfinished cap): built up in the field to a ${+(leg/inch).toFixed(4)} in leg (new work, AWS D1.1 Clause 11).`;
+ trace.step=`${trace.step?trace.step+' ':''}${why}`;q.notes+=` ${why}`;
+ return q;
+}
+/**
  * The step finished on the laid-out bearings: the example cap covers both girder bearings along the runway and the
  * bearing plate across it, at the assumed thickness for the crane class (never thickened: a failing cap is an EOR item); a step stiffener pair under
  * the upper inner flange only where the unstiffened lower web fails J10.2 or J10.3, the lightest plate that passes
@@ -1105,7 +1162,9 @@ function setStepTieFace(p:ProjectInput){
  */
 function finishSteppedColumn(q:ProjectInput,trace:SelectionTrace):ProjectInput{
  const s=activeStep(q);if(!s||!q.details)return q;
- const c=q.existingColumn!,d=q.details,N=d.bearing.length,reach=Math.max(0,...independentBearings(q).map(b=>Math.abs(b.center-b.station)));
+ // A continuous girder's runway-end bearing lies wholly on one side of the grid (seatEnds: centered N/2 from it), so the cap
+ // reaches N plus the setting tolerance each way (end-bearing-seat-fit), as a simple span's shared grid does.
+ const c=q.existingColumn!,d=q.details,N=d.bearing.length,reach=q.system==='continuous'?N/2:Math.max(0,...independentBearings(q).map(b=>Math.abs(b.center-b.station)));
  s.cap={...s.cap,width:up(c.d-c.tf+d.bearing.width,inch),length:up(Math.max(c.bf,2*(reach+N/2)+inch,N+inch),inch)};
  const reactions=supportReactions(q,sectionProperties(q.section)),checks=()=>steppedColumnChecks(q,steppedColumnAnalysis(q,reactions));
  const bad=(list:CheckResultLike[],ids:RegExp)=>list.filter(v=>ids.test(v.id)&&v.status==='fail');
@@ -1114,16 +1173,23 @@ function finishSteppedColumn(q:ProjectInput,trace:SelectionTrace):ProjectInput{
  let list=checks();
  const capFails=bad(list,/^step-(bearing|cap-flexure|flange-yielding)$/);
  if(capFails.length){trace.step=`The existing step cap (assumed PL ${+(s.cap.thickness/inch).toFixed(3)} in) fails ${capFails.map(v=>v.id).join(', ')}: a reinforcement or engineer-of-record evaluation item (the configurator does not resize existing members).`;q.notes+=` ${trace.step}`;}
- if(!bad(list,/^step-stiffener-required$/).length)return q;
+ // The existing cap-to-web fillets under the inner flange carry its force range in full when no stiffener is fitted
+ // (step-weld-fatigue, Category F, no bearing credit for an unfinished cap): a stiffener pair fitted to bear under the
+ // inner flange (new steel) takes that force on its own fillets (step-stiffener-fatigue) and relieves those welds.
+ const required=bad(list,/^step-stiffener-required$/).length>0,weldU=list.find(v=>v.id==='step-weld-fatigue')?.utilization??0,weld=weldU>1+1e-9;
+ if(!required&&!weld)return q;
  const tw=c.tw,width=Math.floor((c.bf/2-tw/2-.25*inch)/(inch/4)+1e-9)*inch/4;
  for(const t of [.375,.5,.625,.75,.875,1,1.25].map(v=>v*inch)){
   s.stiffener={thickness:t,width,weld:Math.max(.3125*inch,t>=.75*inch?.375*inch:0)};list=checks();
   if(!bad(list,/^step-stiffener-/).length)break;
  }
+ const after=list.find(v=>v.id==='step-weld-fatigue')?.utilization??0;
+ // Added for the welds alone, the pair stays only where it lowers the weld ratio (the cap-to-web fillet governed).
+ if(!required&&!(after<weldU-1e-9)){delete s.stiffener;return buildUpStepWelds(q,checks(),trace);}
  const web=list.find(v=>v.id==='step-web-yielding'||v.id==='step-web-crippling');
- trace.step=`${trace.step?trace.step+' ':''}The unstiffened lower web fails J10.2/J10.3 under the upper shaft's inner flange (${web?.title??'step web'}): a stiffener pair under the inner flange (J10.8), the thinnest plate passing the stiffener checks${bad(list,/^step-stiffener-/).length?' (none of the sizing steps passes them all; the checks report the stiffener)':''}.`;
+ trace.step=`${trace.step?trace.step+' ':''}${required?`The unstiffened lower web fails J10.2/J10.3 under the upper shaft's inner flange (${web?.title??'step web'})`:`The existing cap-to-web fillets under the upper shaft's inner flange fail Category F throat fatigue (step-weld-fatigue ${weldU.toFixed(2)}, no bearing credit for an unfinished cap)`}: a stiffener pair under the inner flange (J10.8), fitted to bear on the cap, the thinnest plate passing the stiffener checks${bad(list,/^step-stiffener-/).length?' (none of the sizing steps passes them all; the checks report the stiffener)':''}${!required?`; it carries the inner-flange force to the web on its own fillets (step-weld-fatigue ${after.toFixed(2)} with it)`:''}.`;
  q.notes+=` ${trace.step}`;
- return q;
+ return buildUpStepWelds(q,list,trace);
 }
 type CheckResultLike={id:string;status:string};
 /**
@@ -1326,6 +1392,8 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
  columnTie?:string;craneFace?:string;
  /** Stepped column: the lower and upper shaft choice and the step stiffener or cap the step checks needed. */
  lower?:string;upper?:string;step?:string;stepTie?:string;
+ /** Stepped column: the crane-level strut on the girder line designed here (withStepStrut). */
+ strut?:string;
  /** Internal: a rebuild with another tie type at the step (withSteppedTie), which does not try again. */
  stepTieRetry?:boolean;
  /** Stepped column: the existing shafts' governing ratios as built (never resized), a failing one an EOR / reinforcement item. */
@@ -1439,13 +1507,14 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  const step=activeStep(p);
  if(design&&step&&entered.columnShape&&(trace.shafts||trace.stepTie))add('Lower shaft (stepped column)',entered.columnShape,col!.shape,[trace.shafts,trace.stepTie].filter(Boolean).join(' '));
  if(design&&step&&!entered.buildingColumnShape)add('Upper shaft (stepped column)',auto,step.upper.shape,trace.upper??'');
- if(design&&step&&trace.step)add('Step stiffener',`${auto} (none)`,step.stiffener?`Pair of plates ${len(step.stiffener.thickness)} × ${len(step.stiffener.width)}, ${len(step.stiffener.weld)} fillets`:'None',trace.step);
+ if(design&&step&&trace.step)add('Step stiffener',`${auto} (none)`,`${step.stiffener?`Pair of plates ${len(step.stiffener.thickness)} × ${len(step.stiffener.width)}, ${len(step.stiffener.weld)} fillets`:'None'}${step.capWeldAdded?`; existing step fillets built up to ${len(step.capWeldAdded)}`:''}`,trace.step);
  const bracket=p.details?.bracket;
  if(design&&bracket?.enabled&&!activeColumnCap(p)&&entered.reach===undefined&&Math.abs(bracket.reach-20*inch)>1e-6)
   add('Column face to girder web',`${auto} (${len(20*inch)})`,len(bracket.reach),'Set by the tie sizing: the column face moves out from 20 in (to at most 30 in) until the tie passes its imposed-movement and strength checks.');
  if(design&&trace.splice)add('Girder field splices',`${auto} (none: one ${+(p.spans.reduce((a,b)=>a+b,0)/foot).toFixed(1)} ft piece)`,`${trace.splice.stations.length} bolted slip-critical splice${trace.splice.stations.length>1?'s':''}: ${trace.splice.where}`,`The continuous girder exceeds the ${+(practicalPieceLength/foot).toFixed(0)} ft practical shipping and erection piece: automatic placement 0.20 to 0.25 of the span from an interior support (the inflection region, nearest 0.22 L), every piece within ${+(trace.splice.splices.maxPiece/foot).toFixed(0)} ft. ${trace.splice.why}.`);
  if(design&&trace.clip)add('Rail clips',`${auto} (weld-on)`,'Bolted clamp plates',trace.clip);
- if(design&&trace.exit&&!entered.longitudinalExit)add('Longitudinal force exit',`${auto} (strut at the column centerline)`,'Crane-level strut on the girder line, by others',`${trace.exit[0].toUpperCase()}${trace.exit.slice(1)}.`);
+ if(design&&trace.exit&&!entered.longitudinalExit)add('Longitudinal force exit',`${auto} (strut at the column centerline)`,step?.strut?'Crane-level strut on the girder line, designed here':'Crane-level strut on the girder line, by others',`${trace.exit[0].toUpperCase()}${trace.exit.slice(1)}.`);
+ if(design&&step&&trace.strut)add('Crane-level strut (girder line)',`${auto} (by others)`,step.strut?`${step.strut.shape}; at each column PL ${len(step.strut.plate.thickness)} with ${2*step.strut.columnRows} - ${len(step.strut.bolts.diameter)} A325 to the flange and ${step.strut.strutBolts} at each strut end`:'By others',trace.strut);
  return out;
 }
 

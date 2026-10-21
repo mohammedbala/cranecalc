@@ -291,7 +291,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    svg+='<g data-strut-by-others="plan">';
    for(const [side,z] of rows.entries()){
     const zs=cls?.location==='girder-line'?(side?-m.width:0):z;
-    if(cls)for(let i=1;i<m.supports.length;i++)svg+=line([X(m.supports[i-1]+half),Y(zs)],[X(m.supports[i]-half),Y(zs)],'hidden-line');
+    if(cls)for(let i=1;i<m.supports.length;i++)svg+=line([X(m.supports[i-1]+half),Y(zs)],[X(m.supports[i]-half),Y(zs)],cls.designed?'runway-line':'hidden-line');
     for(const i of ebSpans){const x0=X(m.supports[i-1]+half),x1=X(m.supports[i]-half),cy=Y(z),c=cross;svg+=line([x0,cy-c],[x1,cy+c],'hidden-line')+line([x0,cy+c],[x1,cy-c],'hidden-line');}
    }
    svg+='</g>';
@@ -419,7 +419,7 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   // The strut by others and the existing braced bay: location, stiffness and force for the engineer of record.
   if(cls||ebSpans.length){
    const up=(v:string)=>p.units==='US'?v.toUpperCase():v,fails=s.checks.some(c=>c.group==='Longitudinal bracing'&&c.status==='fail');
-   const labels=[...(cls?['CRANE-LEVEL STRUT BY OTHERS -',`${cls.stiffness!==undefined?`k >= ${up(format(cls.stiffness,'stiffness',p.units,2))}, `:''}F = ${up(format(cls.force,'force',p.units,2))} (EOR),`,
+   const labels=[...(cls?.designed?[`${cls.designed} CRANE-LEVEL STRUT (NEW) ON`,`GIRDER LINE, F = ${up(format(cls.force,'force',p.units,2))}; SEE ${detailRef(steppedColumnTitles.strut)}`]:cls?['CRANE-LEVEL STRUT BY OTHERS -',`${cls.stiffness!==undefined?`k >= ${up(format(cls.stiffness,'stiffness',p.units,2))}, `:''}F = ${up(format(cls.force,'force',p.units,2))} (EOR),`,
      `${cls.location==='girder-line'?'ON GIRDER LINE':'ON COLUMN C/L'}, ${cls.grids.length===m.supports.length?'EVERY GRID':`GRID${cls.grids.length>1?'S':''} ${cls.grids.join(', ')}`} TO BRACED BAY`]:[]),
     ...(ebSpans.length?[`(E) BRACED BAY, GRIDS ${ebSpans.map(v=>`${v}-${v+1}`).join(', ')}`,...(fails?['REINFORCE OR REPLACE - EOR']:[])]:[])];
    const i=ebSpans[0]??Math.ceil(p.spans.length/2),cx=X((m.supports[i-1]+m.supports[i])/2),zs=cls?.location==='girder-line'?0:rows[0];

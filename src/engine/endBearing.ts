@@ -157,7 +157,7 @@ export function endBearingChecks(p:ProjectInput,e:EndBearingInput,ctx:{analysis:
   // The existing step cap is the seat, and the app has its geometry (stepGeometry): the bearings on the cap along and
   // across the runway, the nuts below the cap clear of the lower crane-side flange and its cap welds, and the bolt
   // bearing in the cap. Only the survey tolerances are left to the field.
-  const c=p.existingColumn!,st=c.step!,cap=st.cap,gw=st.girderOffset,w=st.capWeld??5/16*inch,Fu=c.Fu;
+  const c=p.existingColumn!,st=c.step!,cap=st.cap,gw=st.girderOffset,w=Math.max(st.capWeld??5/16*inch,st.capWeldAdded??0),Fu=c.Fu;
   const xo=gw+gauge/2,xi=gw-gauge/2,outer=c.d/2,inner=c.d/2-c.tf,clear=Math.min(xo-outer,inner-xi)-w;
   checks.push(
    compared('end-bearing-seat-fit','Bearings and bolts fit on the step cap (along the runway)',(locates?0:simpleSupportInput(p).endGap/2)+bs.length+seatSettingTolerance,cap.length/2,'length','g/2+N+t_{set}\\le L_c/2',`The existing step cap PL ${f(cap.thickness)} × ${f(cap.width)} × ${f(cap.length)} (survey): ${locates?'the bearing, and its bolts, on the cap':'each girder bearing, and its bolts, on its half of the cap at a shared grid'}, with the 1/8 in bearing setting tolerance (AIST TR-13 §5.18 seat plan position ±1/8 in).`),
