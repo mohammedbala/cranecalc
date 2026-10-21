@@ -1,4 +1,4 @@
-import {checkDcText,elementSummary,failingNote,inElements,sheetDc} from './sheetRatios';
+import {checkDcText,elementSummary,failingNote,sheetCheckName,inElements,sheetDc} from './sheetRatios';
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
@@ -306,7 +306,7 @@ export function newColumnTopic(s:CalculationSnapshot):DetailTopic{
    ['SOIL: ALLOWABLE / MAX. SERVICE',r?`${force(b.soil.allowable,'pressure')} / ${force(r.footing.qMax,'pressure')}`:'-'],
    ['RATIOS: PLATE / RODS / SOIL / OVERTURNING / DRIFT',`${ratio('base-plate')} / ${ratio('base-anchor-interaction')} / ${ratio('base-soil')} / ${ratio('base-overturning')} / ${ratio('base-drift')}`],
    // The largest D/C over every check of the column and its base, and the failing ones by name (sheetRatios).
-   ...(()=>{const e=elementSummary(s,inElements(['column','base'])),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL COLUMN AND BASE CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})(),
+   ...(()=>{const e=elementSummary(s,inElements(['column','base'])),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL COLUMN AND BASE CHECKS`,`${m?`${sheetDc(s,m.dc)} (${sheetCheckName(m.check)})`:'-'}${f?`; ${f}`:''}`]]:[];})(),
    // The drift limit is stated with the drift, as it governs the crane's rail alignment.
    ...(()=>{const c=s.checks.find(v=>v.id==='base-drift');return c?.demand!==undefined&&c.capacity!==undefined?[['RUNWAY DRIFT AT RAIL / LIMIT',`${limitLength(c.demand,u,'min')} / ${limitLength(c.capacity,u,'max')} MAX. (COLUMN PLUS FOOTING ROTATION, SERVICE CRANE LOADS)`]]:[];})(),
    ...(s.existingColumn?.seismic?[['SEISMIC ACROSS RUNWAY',`SDC ${s.existingColumn.seismic.basis.sdc}, CS ${s.existingColumn.seismic.basis.Cs.toFixed(3)}, QE ${force(s.existingColumn.seismic.QE)} PER COLUMN; ${s.existingColumn.seismic.basis.integrityOnly?'BASE':'COLUMN AND BASE'} FOR ΩO ${s.existingColumn.seismic.basis.Omega0}`]]:[]),

@@ -1,4 +1,4 @@
-import {checkDcText,elementSummary,failingNote,sheetDc} from './sheetRatios';
+import {checkDcText,elementSummary,failingNote,sheetCheckName,sheetDc} from './sheetRatios';
 import {stiffenerTopCjp} from '../engine/constructionNotes';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
@@ -200,7 +200,7 @@ export function columnCapTopic(s:CalculationSnapshot):DetailTopic{
   [`LARGEST GIRDER END REACTION (${p.method})`,r?force(peak):'-'],
   ['RATIOS: CAP PL / WELDS / BOLTS / STIFFENER / WEB',`${ratio('column-cap-plate')} / ${ratio('column-cap-weld')} / ${ratio('column-cap-bolt-tension')} / ${g.stiffened?ratio('column-cap-stiffener-weld'):'-'} / ${ratio('column-cap-web-yield')}`],
   // The largest D/C over every check of the column cap, and the failing ones by name (sheetRatios).
-  ...(()=>{const e=elementSummary(s,(c,e)=>e==='support'&&c.group==='Column cap'),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL COLUMN CAP CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})(),
+  ...(()=>{const e=elementSummary(s,(c,e)=>e==='support'&&c.group==='Column cap'),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL COLUMN CAP CHECKS`,`${m?`${sheetDc(s,m.dc)} (${sheetCheckName(m.check)})`:'-'}${f?`; ${f}`:''}`]]:[];})(),
   // A crane column tied to the building column: the girder tie, not the end fork, holds the girder top (craneColumn.ts).
   tiedToBuilding(p)?['TOP FLANGE RESTRAINT','GIRDER TIE TO THE BUILDING COLUMN (END FORK NOT RELIED ON)']:['FORK RESTRAINT / REQUIRED',r&&check('column-cap-fork-stiffness')?`${force(r.fork.k,'stiffness')} / ${force(check('column-cap-fork-stiffness')!.demand!,'stiffness')}`:'-']
  ];

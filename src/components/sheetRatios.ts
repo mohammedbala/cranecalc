@@ -107,10 +107,17 @@ export function elementSummary(s:CalculationSnapshot,match:ElementMatch,o:{movem
  out.governing=out.failing[0]?.check??design[0]?.check;
  return out;
 }
-/** "tie-edge 1.22", "flange-tie-flange 2.69 (+3)", "end-stop-fit GEOMETRY CONFLICT": one open item as a sheet names it. */
+/**
+ * A check as the drawings name it: its open item's title (a register detail by its type, "Flange saddle, end fillet
+ * termination, across the flange"), else the check's title, with the separators as commas; never the internal id.
+ */
+export function sheetCheckName(c:Pick<CheckResult,'id'|'title'>,group?:Pick<OpenGroup,'title'>){
+ return (group?.title||c.title||c.id).replace(/\s*·\s*all-cycle bound$/,'').replace(/\s*·\s*/g,', ');
+}
+/** "Edge distance 1.22", "Flange tie, flange local bending 2.69 (+3)", "End stop fit GEOMETRY CONFLICT": one open item as a sheet names it. */
 export function failingText(s:CalculationSnapshot,f:FailingItem){
  const v=f.check.geometry?'GEOMETRY CONFLICT':blockedPackage(s)?'':f.dc===undefined?'':sheetDc(s,f.dc).replace(/ NG$/,'');
- return `${f.check.id}${v?` ${v}`:''}${f.more?` (+${f.more})`:''}`;
+ return `${sheetCheckName(f.check,f.group)}${v?` ${v}`:''}${f.more?` (+${f.more})`:''}`;
 }
 /** Most open items a note names; the rest are counted. */
 const listed=6;
@@ -136,7 +143,7 @@ export function summaryNote(s:CalculationSnapshot,e:ElementSummary,o:{movement?:
 
 /**
  * The stamp in the title block of every sheet: "<g> OPEN ITEMS (<n> CHECKS) - SEE CALCULATION" with g the open items as
- * the report groups them and n the failing checks; for a blocked package "ANALYSIS NOT VERIFIED - NO CALCULATION ISSUED
+ * the report groups them and n their open checks, as the report counts them ("n open checks in g items"); for a blocked package "ANALYSIS NOT VERIFIED - NO CALCULATION ISSUED
  * - SEE DIAGNOSTIC REPORT" with the failed verification. Undefined when nothing is open.
  */
 export function sheetStamp(s:CalculationSnapshot,short=false):{text:string;detail?:string;blocked:boolean}|undefined{
@@ -147,6 +154,8 @@ export function sheetStamp(s:CalculationSnapshot,short=false):{text:string;detai
  // An advisory recommendation not met (e.g. the TR-13 bracket guideline) is listed apart, not counted as a failed check.
  const {tax}=sheetTaxonomy(s),groups=sheetOpenGroups(s),failed=s.checks.filter(c=>c.status==='fail'&&tax.entries.get(c.id)?.gate!=='advisory').length;
  if(!groups.length&&!failed)return undefined;
- const g=groups.length;
- return {blocked:false,text:`${g} OPEN ITEM${g===1?'':'S'}${failed?` (${failed} CHECK${failed===1?'':'S'})`:''} - SEE CALC${short?'':'ULATION'}`};
+ // The open checks counted as the report counts them ("n open checks in g items": every member of every item, failing,
+ // incomplete or unverified), so the stamp and the report agree; the failing checks only where no item lists them.
+ const g=groups.length,n=g?groups.reduce((a,v)=>a+v.members.length,0):failed;
+ return {blocked:false,text:`${g} OPEN ITEM${g===1?'':'S'}${n?` (${n} CHECK${n===1?'':'S'})`:''} - SEE CALC${short?'':'ULATION'}`};
 }

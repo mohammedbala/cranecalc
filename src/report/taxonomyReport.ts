@@ -117,7 +117,11 @@ const governingTitle=(t:string)=>(/fatigue/i.test(t.replace(/\s*·\s*fatigue$/i,
 export function banner(tax:Taxonomy,draft=false,demonstration=false,s?:CalculationSnapshot){
  const groups=s?openItemGroups(tax,s).groups:undefined,kinds0=groups?groups.map(v=>v.kind):tax.openItems.map(o=>o.kind);
  const n=kinds0.length,g=tax.governing,gov=g?` Governing D/C = ${dcText(g.dc,2)} (${esc(g.element)}): ${esc(governingTitle(g.title))}.`:'';
- const head=draft?'<b>REVIEW DRAFT — NOT FOR ISSUE.</b> Open items include missing input (unverified); the calculation cannot be issued until they are resolved.<br/>':'';
+ // What is open, by the statuses of the open checks (as the list counts them): never "missing input" without one.
+ const statuses=new Set((groups?groups.flatMap(v=>v.members):tax.openItems.map(o=>o.check)).map(c=>c.status));
+ const what=[statuses.has('fail')?'failing checks':'',statuses.has('incomplete')?'members or details not designed (incomplete)':'',statuses.has('unverified')?'missing input (unverified)':'',statuses.has('unsupported')?'items outside the scope of this calculation (unsupported)':''].filter(Boolean);
+ const listed=what.length>1?`${what.slice(0,-1).join(', ')} and ${what[what.length-1]}`:what[0];
+ const head=draft?`<b>REVIEW DRAFT — NOT FOR ISSUE.</b> ${listed?`Open items: ${listed}`:'Open items'}; the calculation cannot be issued until they are resolved.<br/>`:'';
  if(n){const kinds=[...new Set(kinds0.map(k=>kindLabel[k].toLowerCase()))];return `<div class="banner fail">${head}<b>${n} OPEN ITEM${n>1?'S':''} — REVIEW REQUIRED, DO NOT ISSUE FOR CONSTRUCTION</b><br/>${esc(sentence(kinds.join('; ')))}: listed below.${gov}</div>`;}
  return `<div class="banner"><b>${demonstration?'Demonstration analysis completed for assumed design criteria.':'All design checks within their limits for the stated design criteria.'}</b>${gov}</div>`;
 }

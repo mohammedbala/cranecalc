@@ -4,6 +4,7 @@ import {drawingSheetSet,detailTopics} from '../src/components/planSheet';
 import {annotationClashes} from '../src/components/detailSheet';
 import {sheetEntities} from '../src/components/svgEntities';
 import {holdsFor,unplacedHolds} from '../src/components/detailHolds';
+import {sheetCheckName,sheetOpenGroups} from '../src/components/sheetRatios';
 import type {CalculationSnapshot} from '../src/engine/types';
 
 /**
@@ -24,14 +25,16 @@ describe('HOLD tags at failing details',()=>{
   failing(s,'end-stop-fit',1.22);failing(s,'torsion-normal',1.31);
   const sheets=drawingSheetSet(s),stop=sheets.find(v=>v.svg.includes('data-detail-title="END STOP / ELEVATION"'))!;
   expect(stop.svg).toMatch(/data-hold="end-stop-fit"/);
+  // Named by the check's (open item's) title, never by its internal id.
+  const name=(id:string)=>{const g=sheetOpenGroups(s).find(v=>v.members.some(c=>c.id===id))!;return sheetCheckName(g.governing,g).toUpperCase();};
   const t=text(stop.svg);
-  expect(t).toContain('HOLD - NG END-STOP-FIT D/C 1.22');expect(t).toContain('HOLDS - NOT FOR FABRICATION');
+  expect(t).toContain('HOLD - NG D/C 1.22');expect(t).toContain(`NG ${name('end-stop-fit')} D/C 1.22`);expect(t).not.toContain('END-STOP-FIT');expect(t).toContain('HOLDS - NOT FOR FABRICATION');
   expect(t).toMatch(/\d+ HOLDS? - NOT FOR FABRICATION/);
   // The girder flange stress is drawn at no detail: it is an S-00 open item.
   const titles=detailTopics(s).flatMap(t=>t.views.map(v=>v.title)),unplaced=unplacedHolds(s,titles).map(h=>h.check.id);
   expect(unplaced).toContain('torsion-normal');expect(unplaced).not.toContain('end-stop-fit');
   const cover=sheets.filter(v=>v.number.startsWith('S-00')).map(v=>text(v.svg)).join(' ');
-  expect(cover).toContain('OPEN ITEMS - NOT FOR FABRICATION');expect(cover).toContain('TORSION-NORMAL D/C 1.31');
+  expect(cover).toContain('OPEN ITEMS - NOT FOR FABRICATION');expect(cover.replace(/\s+/g,' ')).toContain(`${name('torsion-normal')} D/C 1.31`);
   // The tags add no annotation clashes.
   for(const v of sheets)expect(annotationClashes(v.svg),v.number).toBe(0);
  },300000);
