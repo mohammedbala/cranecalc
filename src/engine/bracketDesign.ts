@@ -165,6 +165,16 @@ function ribResponseOf(b:BracketInput,e:number,E:number,G:number){
  * the seat top (the top-flange restraint force times torqueArm); every load acts at the set's transverse position e
  * (seatEccentricity: the web line, the rail eccentricity and M_t/V, within the flange contact).
  */
+/**
+ * Length of each rib's seat fillets that carries the rib reaction: the bearing patch b_p spread through the seat plate
+ * at 2.5:1 each side (b_p + 5t_p, the dispersion of AISC 360-16 J10.2 for a load at a distance from the member end),
+ * within the rib top, 0 to the seat projection from the column face, the patch centered at the reach. The fillets are
+ * continuous along the rib.
+ */
+export function seatWeldLength(p:ProjectInput){
+ const b=p.details!.bracket!,bp=p.details!.bearing.width,spread=2.5*b.seatThickness;
+ return Math.max(bp,Math.min(b.seatProjection,b.reach+bp/2+spread)-Math.max(0,b.reach-bp/2-spread));
+}
 export function bracketResponse(p:ProjectInput,loads:BracketLoads,torque=0){
  const b=p.details!.bracket!,m=p.details!.material,E=p.section.E,G=E/2.6;
  const V=loads.reduce((a,v)=>a+v.vertical,0),Mx=loads.reduce((a,v)=>a+v.vertical*v.offset,0);
@@ -178,7 +188,7 @@ export function bracketResponse(p:ProjectInput,loads:BracketLoads,torque=0){
  const seat=seatStrip(loads,b.ribSpacing,p.details!.bearing.length);
  const seatNormal=6*seat.moment/(p.details!.bearing.width*b.seatThickness**2);
  const seatShear=1.5*seat.shear/(p.details!.bearing.width*b.seatThickness);
- const weldLength=p.details!.bearing.width,seatWeld=R/(2*(b.seatWeld/Math.sqrt(2))*weldLength);
+ const weldLength=seatWeldLength(p),seatWeld=R/(2*(b.seatWeld/Math.sqrt(2))*weldLength);
  // The web and panel zone: the net force of both ribs' elastic root couples at a level, signed, since both deliver them
  // through the same column flange (a rib the seat holds down, P < 0, pushes where the other pulls): 1.5|V|e/h_r. Each
  // rib's own couple is the flange local bending at that rib and the force on its column stiffener plate.
@@ -324,8 +334,8 @@ export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:n
  const wr=parallelWeldGroup({length:b.ribDepth,gauge:b.ribThickness,size:b.rootWeld,Fexx:m.Fexx,method:p.method,vx:0,vy:0,normal:0,mx:0,my:0,mz:0});
  from('rootWeld','root-weld','Rib-to-column · eccentric fillet welds',wr.capacity,'stress',hr?'f_b=\\frac{Pe\\,h_r}{2I_w};\\quad f_w=\\max\\left[\\sqrt{(P/A_w)^2+f_b^2},\\;\\sqrt{(P/A_w+f_b\\tan\\alpha)^2+f_b^2}\\right]':'f_w=\\sqrt{(P/A_w)^2+(Pe\\,h/(2I_w))^2}','Two continuous vertical root fillets per rib. Elastic endpoint resultant includes eccentric moment.'+(hr?` At the bottom of the root the traction-free sloping edge (α = ${hr.degrees.toFixed(1)}°) also puts the shear f_b tan α on the weld; it is added to the uniform shear.`:'')+' J2.2 long-weld reduction; no directional strength increase.');
  from('rootBase','root-base','Column flange / rib · connected metal',Math.min(available(.6*Math.min(m.Fy,c.Fy),p.method,1,1.5),available(.6*Math.min(m.Fu,c.Fu),p.method,.75,2)),'stress','f_{BM}=f_wA_{we}/[2h\\min(t_r,t_{cf})]','Resultant on the smaller joined base-metal area; shear yielding and rupture strengths also bound normal traction. Column local effects checked below.');
- const length=p.details!.bearing.width,ratio=length/b.seatWeld,beta=ratio<=100?1:ratio<=300?1.2-.002*ratio:180/ratio;
- from('seatWeld','seat-weld','Seat-to-rib · continuous fillet welds',available(.6*m.Fexx*beta,p.method,.75,2),'stress','f_w=|P|/[2(0.707w)b_p]','Two continuous fillets along each rib; only bearing-patch length credited. Includes tension in a rib caused by longitudinal seat eccentricity.');
+ const length=seatWeldLength(p),ratio=length/b.seatWeld,beta=ratio<=100?1:ratio<=300?1.2-.002*ratio:180/ratio;
+ from('seatWeld','seat-weld','Seat-to-rib · continuous fillet welds',available(.6*m.Fexx*beta,p.method,.75,2),'stress','f_w=|P|/[2(0.707w)l_w],\\ l_w=\\min(b_p+5t_p,\\ \\text{rib top})',`Two continuous fillets along each rib. Credited length l_w = ${format(length,'length',p.units,3)}: the bearing patch b_p = ${format(p.details!.bearing.width,'length',p.units,3)} spread through the ${format(b.seatThickness,'length',p.units,3)} seat plate at 2.5:1 each side (the J10.2 dispersion of a concentrated load through a flange), within the rib top from the column face to the seat edge. Includes tension in a rib caused by longitudinal seat eccentricity.`);
  // Seat and rib root fillets to the column as one group under every concurrent set with its horizontal forces.
  // J10.2 with the receiving column's k: surveyed, k_des of its AISC shape, else t_f (receiverWebK).
  const K=receiverWebK(p);
@@ -385,7 +395,7 @@ export function bracketChecks(p:ProjectInput,r:BracketResults,serviceReaction?:n
  add('fatigue-column','Column flange at rib weld toes · fatigue',colEq.range,colEq.capacity,'stress',minerEquation(`\\ \\ \\text{(Cat. }${colCat.tex}\\text{)};\\ \\ f_{sr}=\\Delta Ve_c/S_c`),`AISC 360-16 Table A-3.1 item 7.1, Category ${colCat.name}: each rib is an attachment to the column flange without a transition radius, a = ${format(b.ribDepth,'length',p.units,3)} along the column stress and b = ${format(b.ribThickness,'length',p.units,3)} thick (a ${colCat.range}). Range per bin of the column flange stress from the whole bracket moment V·e_c on the receiving section, without splitting it above and below the bracket. Other building stress ranges in the column are excluded. Equivalent constant-amplitude range at n_SR = ${colEq.cycles.toLocaleString('en-US')} cycles; ${damageSum(colEq.damage)}.${colEq.range>colEq.capacity*(1+1e-9)&&!(p.existingColumn?.enabled&&p.existingColumn.isNew)?' The receiving column is existing and is not resized: reinforcement of the column at the seat (designed new steel) or another support (a crane column, a column cap) is an engineer-of-record item.':''}`,undefined,['bracket-basis','aisc-fatigue']);
  if(cwPeaks)add('fatigue-columnWeld','Seat-to-column fillet · fatigue',Math.max(0,...r.fatigue.map(v=>v.columnWeld?.[cw.index]??0)),categoryF(p.fatigue.cycles),'stress','f_{sr}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}','AISC A-3-2M, Category F on the throat. Largest unfactored range, over the duty bins, of the normal throat stress at either end of the seat line from the crane vertical load and side thrust, assigned to ALL project cycles.',undefined,['bracket-basis','aisc-fatigue']);
  for(const key of ['rootWeld','seatWeld'] as const){
-  add('fatigue-'+key,key==='rootWeld'?'Column root weld · fatigue':'Seat fillet weld · fatigue',Math.max(...r.fatigue.map(v=>v[key])),categoryF(p.fatigue.cycles),'stress','f_{sr}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',`AISC A-3-2M, Category F: Table A-3.1 item 8.2, shear on the throat of any fillet weld, longitudinal or transverse. The range of the resultant throat stress of the elastic weld group, ${key==='rootWeld'?'the bending component of the rib moment included (the rib plate\'s own normal stress across these fillets is also checked under item 5.6 as the rib root, R_FIL C″)':'the rib reaction across the fillets'}. Largest unfactored range of the signed weld stress assigned to ALL project cycles; no mixed-spectrum endurance exemption.`,undefined,['bracket-basis','aisc-fatigue']);
+  add('fatigue-'+key,key==='rootWeld'?'Column root weld · fatigue':'Seat fillet weld · fatigue',Math.max(...r.fatigue.map(v=>v[key])),categoryF(p.fatigue.cycles),'stress','f_{sr}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',`AISC A-3-2M, Category F: Table A-3.1 item 8.2, shear on the throat of any fillet weld, longitudinal or transverse. The range of the resultant throat stress of the elastic weld group, ${key==='rootWeld'?'the bending component of the rib moment included (the rib plate\'s own normal stress across these fillets is also checked under item 5.6 as the rib root, R_FIL C″)':`the rib reaction across the fillets over l_w = ${format(seatWeldLength(p),'length',p.units,3)} (b_p + 5t_p within the rib top, as the seat-to-rib weld check)`}. Largest unfactored range of the signed weld stress assigned to ALL project cycles; no mixed-spectrum endurance exemption.`,undefined,['bracket-basis','aisc-fatigue']);
  }
  from(hr?'ribEdge':'ribNormal','fatigue-peak','Bracket rib · maximum cyclic normal stress',.66*m.Fy,'stress','f_{max}\\le0.66F_y','Strength-envelope peak including dead load and impact used as a bound for the unfactored fatigue peak.'+(hr?' Haunched ribs: the stress along the sloping free edge at the critical section.':''));
  return activeColumnStiffeners(b)?weldedRibStiffeners(p,r,checks):checks;
