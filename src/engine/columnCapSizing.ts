@@ -16,7 +16,8 @@
  * Growth on the governing ratio: the cap plate one plate step; the all-around cap fillets 1/16 in (to 5/8 in and
  * t - 1/16 in of the thinner part; then, once the cap weld ratio exceeds 1 at that size, CJP groove welds with
  * reinforcing fillets); the bearing bolts one diameter up (3/4 in to 1 1/4 in) or A490, or a wider gauge,
- * whichever lowers the bolt tension or slip ratio most per pound; the bolt edge distance 1/8 in for the nut clearance at
+ * whichever lowers the bolt tension or slip ratio most per pound; for the bolt fatigue also the next bolt with the gauge
+ * narrowed and the edge grown until its nuts clear the column (boltFit); the bolt edge distance 1/8 in for the nut clearance at
  * the column web; the cap stiffeners thicker, deeper or with larger fillets. After each step the cap plate covers the
  * column, the bearings and the bolt edges, the fillets meet their J2.4 minimum, the end bearing edge distances follow
  * the bolt, the bearing plate lengthens for the larger bolt's nut and washer clearance to the stiffener, and a step that leaves the cap invalid or an end-bearing edge, slot, sleeve or nut clearance unmet is not
@@ -184,11 +185,22 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
  const stiffThicker:Move=v=>{const t=nextPlate(v.cap.stiffener.thickness);if(!t)return false;v.cap.stiffener.thickness=t;return true;};
  const stiffDeeper:Move=v=>{v.cap.stiffener.height+=inch;return true;};
  const stiffWeld:Move=v=>{const w=v.cap.stiffener.weld+sixteenth;if(w>maxFillet(v.cap.stiffener.thickness,col.tf)+1e-6)return false;v.cap.stiffener.weld=w;return true;};
+ // The next bolt with the gauge and edge distance that keep every nut clearance (the larger nut and socket need more room
+ // to the column web and flanges): the gauge narrowed and the edge grown in 1/4 in and 1/8 in steps, by at most 2 in
+ // and 1 in, the first set whose wrench ratios are within 1 (none: no step, the log explains it).
+ const boltFit:Move=v=>{const i=boltSizes.findIndex(x=>x>v.e.bolts.diameter+1e-6);if(i<0)return false;
+  const g0=v.e.bolts.gauge,e0=v.e.bolts.edge;
+  for(let de=0;de<=inch+1e-9;de+=eighth)for(let dg=0;dg<=2*inch+1e-9;dg+=inch/4){
+   const s={cap:structuredClone(v.cap),e:structuredClone(v.e)};s.e.bolts.diameter=boltSizes[i];s.e.bolts.gauge=g0-dg;s.e.bolts.edge=e0+de;
+   if(!settle(s))continue;
+   if(Object.entries(ratios(s)).every(([k,x])=>!/^wrench-/.test(k)||x<=1+1e-9)){v.cap=s.cap;v.e=s.e;return true;}
+  }
+  return false;};
  const bolts:Move[]=[bolt,grade,gauge];
  const moves:Record<string,(Move|Move[])[]>={
   'plate':[plate],'plate-shear':[plate],'web-yield':[plate],'web-cripple':[plate],'prying':[plate],'fork-stiffness':[[plate,bolt]],'bolt-bearing':[plate,bolt],
   'weld':[weld,plate,cjp],'weld-fatigue':[weld,plate,cjp],
-  'bolt-tension':[bolts],'bolt-slip':[bolts],'bolt-fatigue':[[bolt,gauge]],
+  'bolt-tension':[bolts],'bolt-slip':[bolts],'bolt-fatigue':[[bolt,gauge],boltFit],
   'wrench-web':[edge],'wrench-flange':[],'wrench-stiffener':[edge],
   'stiffener-bearing':[stiffThicker],'stiffener-slenderness':[stiffThicker],'stiffener-shear':[[stiffThicker,stiffDeeper]],'stiffener-flange':[stiffDeeper],
   'stiffener-weld':[stiffWeld,stiffDeeper],'stiffener-weld-fatigue':[stiffWeld,stiffDeeper]};

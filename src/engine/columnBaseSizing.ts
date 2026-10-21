@@ -161,7 +161,8 @@ function lowerColumn(p:ProjectInput,delta:number){
  *   larger; bottom bars each way 1 in closer (to 6 in), then the next bar size, for flexure and minimum steel, then
  *   deeper.
  * Nothing shrinks. The rail stays put: a thicker plate lowers the column (lowerColumn). The drift is left to the column
- * where the column alone takes more than columnDriftShare of the target, and the flange fillets where they reach the
+ * where the column alone takes more than columnDriftShare of the target (the footing then grows only while the drift
+ * exceeds its limit and the column alone is within it), and the flange fillets where they reach the
  * column flange or plate thickness; a check that no step can improve stays as it is. The ratios come from the sizing
  * set (baseSizingRatios); once they are met, the full analysis's checks (exactBaseSizingRatios) confirm them and steer
  * any further step. The surveyed existing building beside the runway is not moved here.
@@ -246,7 +247,10 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
     if(shear)return s.shear==='steel'?largerRod()||moreRods():s.shear==='pryout'?embed(s.edgeReduced)||moreRods():widerAll();
     return (s.tension==='steel'?largerRod():s.tension==='pullout'?largerNut():s.tension==='blowout'?widerAll():embed(s.edgeReduced))||moreRods()||longer();
    }
-   case 'soil':case 'overturning':case 'development':case 'drift':return key==='drift'&&s.column>columnDriftShare*target?false:wider();
+   // The drift: to the target by the footing where the column alone leaves it room; where the column takes more (the
+   // column choice's), the footing still grows until the drift is within its limit (1.00), so a column at the catalog
+   // limit (or configured) is not left past it while a larger footing would bring it there.
+   case 'soil':case 'overturning':case 'development':case 'drift':return key==='drift'&&s.column>columnDriftShare*target&&!(s.ratios.drift>1&&s.column<1)?false:wider();
    // Sliding: a shear key engages the soil's lateral bearing deeper (where it is given), then a heavier footing.
    case 'sliding':return keyed()||heavier();
    case 'uplift':return heavier();

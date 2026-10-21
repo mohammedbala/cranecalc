@@ -1004,20 +1004,23 @@ function withHaunch(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):Pro
 function withCapColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  if(cfg.support!=='column-cap'||cfg.columnShape||!activeColumnCap(q))return q;
  const worst=(r:ProjectInput)=>Math.max(0,...Object.values(columnCapSizingRatios(r)));
- let last=worst(q);if(last<=1)return q;
- for(const shape of heavierColumns(q.existingColumn!.shape)){
+ let last=worst(q);if(last<=1&&!((columnCapSizingRatios(q)['bolt-fatigue']??0)>capTarget+1e-6))return q;
+ if(last>1)for(const shape of heavierColumns(q.existingColumn!.shape)){
   const r=buildProject({...cfg,columnShape:shape}),now=worst(r);
   // A heavier W14 that barely changes the governing cap ratio will not bring it to 1: the fork needs another restraint.
   if(now>1&&now>.97*last)break;last=now;
   if(now<=1){r.notes+=` The column cap on the ${q.existingColumn!.shape} column leaves a cap ratio above 1 (the fork couple through the bearing bolts and the cap fillets): the columns are ${shape}.`;return {...r,configurator:{...cfg}};}
  }
  // Still past 1.00: the cap at the limits of its sizing steps (case 099), stated in the log; its checks report it.
- const over=Object.entries(columnCapSizingRatios(q)).filter(([,v])=>v>1+1e-6).sort((x,y)=>y[1]-x[1]),e=q.details?.endBearing?.bolts;
+ // The bolt fatigue also above the sizing target: the calculation's bolt range ran about 14% above the sizing set's (098).
+ const over=Object.entries(columnCapSizingRatios(q)).filter(([k,v])=>v>1+1e-6||k==='bolt-fatigue'&&v>capTarget+1e-6).sort((x,y)=>y[1]-x[1]),e=q.details?.endBearing?.bolts;
  if(over.length&&e){const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
-  trace.cap=`The column cap sized to the limits of its steps still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} (sizing estimates; the calculation reports its own)${over.some(([k])=>k.startsWith('bolt-'))?`: the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end take the fork couple at a ${len(e.gauge)} gauge, and no larger bolt, grade or wider gauge the sizing tries lowers it within the nut clearances to the column flanges (a heavier W14 has about the same clear between its flanges). A fork for this crane needs the bolts spread wider (a column with a wider clear between its flanges, or bearing bolts on the cap beyond the column, designed by hand)`:''}; the support entered is kept and checked (review draft).`;}
+  trace.cap=`The column cap sized to the limits of its steps still ${over.some(([,v])=>v>1+1e-6)?'exceeds':`leaves above its ${capTarget} sizing target`} ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} (sizing estimates; the calculation reports its own)${over.some(([k])=>k.startsWith('bolt-'))?`: the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end take the fork couple at a ${len(e.gauge)} gauge, and no larger bolt, grade or wider gauge the sizing tries lowers it within the nut clearances to the column flanges, the narrower gauge and longer edge distance a larger bolt needs there lengthening the bearings until the cap stiffeners under the girder bearing stiffeners leave the column flanges (a heavier W14 has about the same clear between its flanges). A fork for this crane needs the bolts spread wider (a column with a wider clear between its flanges, or bearing bolts on the cap beyond the column, designed by hand)`:''}; the support entered is kept and checked (review draft).`;}
  return q;
 }
 const baseTarget=.9;
+/** Sizing target of the column cap (sizeColumnCap's default). */
+const capTarget=.9;
 /**
  * The bearing stiffener pair of a girder on a column cap (the end fork: the pair cantilevers the top-flange restraint
  * force over the web depth, diaphragmArrangement 'one-flange') sized for its plate fatigue as the check
@@ -1052,15 +1055,15 @@ function withBracketColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace)
  const b=q.details?.bracket,col=q.existingColumn;
  if(cfg.columnShape||cfg.scope!=='design'||!b?.enabled||!weldedRibBracket(b)||!col?.enabled)return q;
  const first=bracketColumnFatigueRatio(q),Sx=(name:string)=>aiscShapeByName(name)!.Sx;if(first<=bracketTarget)return q;
- for(const shape of heavierColumns(col.shape)){
-  if(first*Sx(col.shape)/Sx(shape)>bracketTarget)continue;
-  const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner),now=bracketColumnFatigueRatio(r);
  // An existing column is never resized: it stays as entered (or as the example assumes), and its flange fatigue at the
  // rib weld toes is a reinforcement item for the engineer of record (the calculation's bracket-fatigue-column check).
  if(!col.isNew){
   trace.column=[trace.column,`The existing ${col.shape} column is kept (an existing member is never resized): its flange at the bracket rib weld toes has a fatigue ratio ${first.toFixed(2)} > ${bracketTarget} (screening estimate; AISC Table A-3.1 item 7.1, the bracket moment range on the column section at all cycles). Reinforcement of the existing column at the seat, or a support that does not load its flange through welded ribs (crane column, column cap), is an engineer-of-record item; the calculation reports the check (Column flange at rib weld toes · fatigue)`].filter(Boolean).join('; ');
   return q;
  }
+ for(const shape of heavierColumns(col.shape)){
+  if(first*Sx(col.shape)/Sx(shape)>bracketTarget)continue;
+  const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner),now=bracketColumnFatigueRatio(r);
   if(now<=bracketTarget){
    Object.assign(trace,inner,{column:[trace.column,`The ${col.shape} column flange at the bracket rib weld toes has a fatigue ratio ${first.toFixed(2)} > ${bracketTarget} (AISC Table A-3.1 item 7.1, the bracket moment range on the column section at all cycles): the lightest heavier W14 within it, ${now.toFixed(2)}`].filter(Boolean).join('; ')});
    return {...r,configurator:{...cfg}};
