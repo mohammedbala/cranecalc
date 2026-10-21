@@ -7,6 +7,9 @@ import {capAngleFits,capAngleForceEstimate,capAngleSizingRatios,capAngleWrenchSe
 import {validateRunwayDetails} from '../src/engine/detailValidation';
 import {stiffenerTieGeometry} from '../src/engine/tieGeometry';
 import {stiffenerGussetMisfit} from '../src/engine/connectionCoordination';
+import {tieSizingRatios} from '../src/engine/flangeTieSizing';
+import {flangeTieStiffenerGeometry} from '../src/engine/flangeTieDesign';
+import {aiscShapeByName} from '../src/data/aiscSections';
 
 const inch=25.4;
 const sim=cases as Record<string,RunwayConfig>;
@@ -51,5 +54,16 @@ describe('cap tieback angle fit and selection',()=>{
   expect(validateRunwayDetails(p)).toEqual([]);
   expect(p.configurator!.selections!.find(v=>v.item==='Top-flange tie')!.reason).toMatch(/the cap tieback angle cannot carry the tie force \(sized L\dX\dX[\d/]+ still exceeds .*\): the paired flat bars bolt to the tie-side bearing stiffener/);
   expect(p.configurator!.beyondCatalog?.some(v=>v.member==='tie')).toBeFalsy();
+ },300000);
+ it('case 046 (W14X82 building column): column stiffeners at the saddle tie gusset and a girder flange thick enough for the saddle, logged',()=>{
+  const p=buildProject(sim['046']),sg=flangeTieStiffenerGeometry(p)!;
+  expect(p.details!.brace.flangeAttachment?.enabled).toBe(true);
+  expect(sg.enabled).toBe(true);expect(sg.thickness).toBeGreaterThanOrEqual(p.details!.brace.gussetThickness/2-1e-6);
+  const r=tieSizingRatios(p);
+  expect(r['flange-tie-column']).toBeLessThanOrEqual(1);expect(r['flange-tie-flange']).toBeLessThanOrEqual(1);
+  // Heavier than the first sizing for the flange the saddle needs: the W27X146 (t_f 0.975 in) left 1.26 on its flange.
+  expect(p.section.tf).toBeGreaterThan(aiscShapeByName('W27X146')!.tf*inch);
+  expect(p.configurator!.beyondCatalog?.some(v=>v.member==='tie')).toBeFalsy();
+  expect(p.configurator!.selections!.find(v=>v.item==='Top-flange tie')!.reason).toMatch(/cannot take the tie saddle's couple \(flange-tie-flange 1\.\d\d.*sized again for a top flange at least/);
  },300000);
 });

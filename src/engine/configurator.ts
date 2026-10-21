@@ -308,7 +308,9 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  * girderSizingRatios, the vertical and lateral deflection limits and the web shear. The lightest section within the
  * targets is returned; the full analysis then checks it completely (fatigue, local and connection checks).
  */
-export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:number;minFlange?:number;capRoom?:number;flexibleTie?:boolean;target?:number;deflectionTarget?:number}):GirderTrial|undefined{
+export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:number;minFlange?:number;capRoom?:number;flexibleTie?:boolean;target?:number;deflectionTarget?:number;
+ /** Least top flange thickness of a rolled girder, mm: a saddle tie's flange couple (withTieGirder). */
+ minFlangeThickness?:number}):GirderTrial|undefined{
  const target=opts.target??.85,deflectionTarget=opts.deflectionTarget??.9;
  const ref=structuredClone(p);ref.section=loadAiscSection(ref.section,'W24X104');
  const props=sectionProperties(ref.section),a=movingAnalysis(ref,props,8),L=Math.max(...p.spans),lrfd=p.method==='LRFD';
@@ -327,7 +329,9 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
  // Flanges wide enough for the bearing bolts, end-stop bolts and saddles (minFlange), and for the rail and clips.
  const minFlange=Math.max(opts.minFlange??0,kind==='rolled'?opts.minSeat:0);
  if(kind==='rolled'){
-  for(const w of wCandidates()){if(w.bf*inch>=minFlange-1e-6)consider(loadAiscSection(p.section,w.name),w.name,w.weight);else misfits.push({name:w.name,weight:w.weight,why:`flange ${ins(w.bf*inch)} narrower than the ${ins(minFlange)} the details need`,kind:'flange width'});}
+  for(const w of wCandidates()){if(w.bf*inch<minFlange-1e-6)misfits.push({name:w.name,weight:w.weight,why:`flange ${ins(w.bf*inch)} narrower than the ${ins(minFlange)} the details need`,kind:'flange width'});
+   else if(opts.minFlangeThickness&&w.tf*inch<opts.minFlangeThickness-1e-6)misfits.push({name:w.name,weight:w.weight,why:`flange ${ins(w.tf*inch)} thinner than the ${ins(opts.minFlangeThickness)} the tie saddle needs`,kind:'flange thickness for the tie saddle'});
+   else consider(loadAiscSection(p.section,w.name),w.name,w.weight);}
  }else{
   for(const ch of capChannels){const c=aiscChannelByName(ch)!;
    for(const w of wCandidates()){
@@ -407,7 +411,7 @@ function skeleton(cfg:RunwayConfig){
  // The flexible plate's estimate factor (less end restraint against twist) only where the plate stays: on a crane column
  // attachTie always replaces it (paired bars on the bearing stiffener, or the cap angle on a capped girder), and the
  // girder sized for the softer plate came out about 1.25 times heavier than the final calculation needed (046, 052).
- const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'&&cfg.support!=='crane-column'};
+ const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'&&cfg.support!=='crane-column',minFlangeThickness:girderMinTf};
  // Girder: the named section, else sized for the moving loads.
  let trial:GirderTrial|undefined;
  if(cfg.girder==='capped'){
@@ -533,8 +537,32 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
    if(stuck)break;
   }
   ({q,target}=withGussetFitColumn(q,input,trace,target));
+  q=withTieGirder(q,input,trace);
   return titleAsDesigned(withTwistLimit(q,configOf(input).config,trace,target),configOf(input).entered);
  }finally{buildDepth--;}
+}
+/**
+ * A rolled girder the configurator sized whose saddle tie, sized and placed (the column stiffened where its flange needs
+ * it), still exceeds the girder flange local check (flange-tie-flange: the saddle couple F·h over the flange outstand,
+ * f ∝ 1/t_f²) with no other tie arrangement passing: the layout is built again with the girder sized for a top flange at
+ * least t_f √(ratio/0.9) thick (the 0.9 sizing target). Kept where the tie then resolves, with the reason logged; else
+ * the first layout stays (the tie an open item). Case 046: the W27X146 (t_f 0.975 in) left 1.26 on a W14X82 building
+ * column whose flange keeps the saddle at the girder end.
+ */
+let girderMinTf:number|undefined;
+function withTieGirder(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace):ProjectInput{
+ const cfg=configOf(input).config,open=(r:ProjectInput)=>!!r.configurator?.beyondCatalog?.some(v=>v.member==='tie');
+ if(cfg.scope!=='design'||cfg.girder!=='rolled'||input.girderShape||girderMinTf!==undefined||!open(q)||!flangeTieGeometry(q))return q;
+ const ratio=tieSizingRatios(q)['flange-tie-flange']??0;if(ratio<=1+1e-6)return q;
+ const tf=q.section.tf,need=Math.ceil(tf*Math.sqrt(ratio/.9)/(inch/16)-1e-9)*inch/16,inner:SelectionTrace={};
+ let r:ProjectInput;girderMinTf=need;try{r=buildLayout(input,inner);}finally{girderMinTf=undefined;}
+ if(open(r)||!flangeTieGeometry(r))return q;
+ const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
+ const why=`The sized ${q.section.name} top flange (${len(tf)}) cannot take the tie saddle's couple (flange-tie-flange ${ratio.toFixed(2)} for the estimated tie demands, the saddle held at the girder end by the bearing and the column flange): the girder is sized again for a top flange at least ${len(need)} thick, ${r.section.name}.`;
+ Object.assign(trace,inner,{tie:[inner.tie,why].filter(Boolean).join(' ')});r.notes+=` ${why}`;
+ // The selection log is written as the layout is built: the tie row takes the reason.
+ const row=r.configurator?.selections?.find(v=>v.item==='Top-flange tie');if(row)row.reason=`${row.reason} ${why}`;else r.configurator?.selections?.unshift({item:'Top-flange tie',entered:'configurator default',designed:tieLabels[tieArrangement(r.details) as keyof typeof tieLabels]??tieArrangement(r.details),reason:why});
+ return r;
 }
 /**
  * The project title (title blocks, report header) names the support and the tie as designed: where the title names the
