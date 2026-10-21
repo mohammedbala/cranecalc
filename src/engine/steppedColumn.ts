@@ -79,6 +79,11 @@ export function validateSteppedColumn(p:ProjectInput):string[]{
  add(s.upper.Fu<s.upper.Fy,'upper.Fu: ultimate strength cannot be less than yield strength.');
  add(!!s.upper.shape&&!aiscShapeByName(s.upper.shape),'upper.shape: select an AISC W shape or clear it to use entered plates.');
  add(c.seatElevation>=c.height-1e-6,'upper: the step (existingColumn.seatElevation) must be below the column top: the upper shaft runs from the step to the top.');
+ if(s.strut){
+  add(!aiscShapeByName(s.strut.shape),'strut.shape: select an AISC W shape for the crane-level strut.');
+  add(s.strut.Fu<s.strut.Fy||s.strut.plate.Fu<s.strut.plate.Fy,'strut: ultimate strength cannot be less than yield strength.');
+  add(![.625,.75,.875,1,1.125].some(v=>Math.abs(v*inch-s.strut!.bolts.diameter)<1e-6),'strut.bolts.diameter: use a standard 5/8 to 1-1/8 in bolt.');
+ }
  const g=stepGeometry(p);if(!g)return errors;
  add(g.lower.d<=g.upper.d,`upper.d: the lower shaft (${L(g.lower.d)}) must be deeper than the upper shaft (${L(g.upper.d)}).`);
  add(s.girderOffset<g.lower.d/2-g.lower.tf-1e-6||s.girderOffset>g.lower.d/2+1e-6,`girderOffset: the girder web must bear over the lower shaft's crane-side flange, ${L(g.lower.d/2-g.lower.tf)} to ${L(g.lower.d/2)} from the lower-shaft centroid.`);
