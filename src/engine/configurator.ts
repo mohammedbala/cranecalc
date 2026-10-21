@@ -312,10 +312,9 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  const h1=Math.max(demand.Mu/Mn+Mf0/phi(section.Fy*Sf),Mneg>0?Mneg/sign.bottom.majorReverse!:0,Mneg>0?Mneg/sign.top.majorReverse!+Mf0/phi(section.Fy*Sf):0),stability=(lrfd?1/.9:1.67)/(.8*Mcr/demand.Mu);
  const ratios={tips,h1,stability,shear:demand.V/strength.shear};
  const [governs,utilization]=Object.entries(ratios).sort((a,b)=>b[1]-a[1])[0];
- // Rail-head lateral movement as the full analysis takes it: the top flange (with the cap) carries its direct share of
- // the side thrust and the warping couple of the torque about the shear center, I_yt for the whole I_y. The factor
- // multiplies the whole-section lateral deflection (at least 1).
- const lateralFactor=Math.max(1,(top+yg/h0)*pr.Iy/Iyt);
+ // Lateral deflection as the full analysis checks it (AISC DG7 practice, 'lateral'): the side thrust on the top flange
+ // (with the cap) alone, I_yt for the whole I_y. The factor multiplies the whole-section lateral deflection (at least 1).
+ const lateralFactor=Math.max(1,pr.Iy/Iyt);
  return {...ratios,utilization,governs,Mcr,cb,amplification,lateralFactor};
 }
 /**

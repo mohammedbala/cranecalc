@@ -53,8 +53,9 @@ describe('catalogue cap-channel assessment',()=>{
   // Direct statics of two flange beams, followed by PL^3/(48EI), in US units.
   const topY=(10.5*.670*(29.7-.670/2)+10*(29.7+.4-.788))/(10.5*.670+10);
   const h=topY-.670/2,It=.670*10.5**3/12+315;
-  const topForce=20*.25/h+2*(29.7+.4+6-.670/2)/h;
-  expect(a.singleLateral/inch).toBeCloseTo(topForce*L**3/(48*29000*It),7);
+  // Lateral deflection (AISC DG7): the side thrust alone on the top flange and cap, I_t; the twist (rail height and
+  // eccentricity, the flange couple 20(0.25)/h + 2(y_r/h)) is the rail-head check's.
+  expect(a.singleLateral/inch).toBeCloseTo(2*L**3/(48*29000*It),7);
   expect(a.singleVertical/inch).toBeCloseTo(20*L**3/(48*29000*5553.283814358975),7);
   // This validates first-order elastic mechanics only; cap design remains gated.
  });

@@ -200,7 +200,10 @@ export function runwayDesignAnalysis(p:ProjectInput,props:Properties,strength:Gi
    result.serviceRotation=Math.max(result.serviceRotation??0,abs(supportNodes.map(i=>s.vs.rotation[i])));
   }
   for(const sign of [-1,1]){
-   if(envelope)for(let n=0;n<t0.x.length;n++){const v=Math.abs(verticalLever*(s.td.displacement[n]+s.tl.displacement[n])+(1+railLever)*s.th.displacement[n]*sign),bay=bayOf(t0.x[n]);result.singleLateral=Math.max(result.singleLateral,v);lateralByBay[bay]=Math.max(lateralByBay[bay],v);}
+   // AISC DG7 lateral deflection: the side thrust H at the rail head on the top flange (with the cap) alone, I_top,
+   // over rigid braces. The twist effects (rail height above the flange, rail eccentricity) are the refined rail-head
+   // check's (rail-head, the thin-walled model with warping, Saint-Venant torsion and the tie play).
+   if(envelope)for(let n=0;n<t0.x.length;n++){const v=Math.abs(s.th.displacement[n]),bay=bayOf(t0.x[n]);result.singleLateral=Math.max(result.singleLateral,v);lateralByBay[bay]=Math.max(lateralByBay[bay],v);}
    observe?.({kind:'service',adjacentReactions:stations.map((x,j)=>({x,r:s.adjacent.vd[j]+s.adjacent.vl[j]})),id:`S-${craneIndex}-${s.origin}-${sign}`,combination:'Single crane · static',cranes:[{index:craneIndex,origin:s.origin,loaded:true}],horizontalCrane:craneIndex,lateralSign:sign,wheels:s.wheels.map(w=>({x:w.x,p:w.static,h:w.lateral*sign})),q:0,railTorquePerLength:0,axial:0,verticalReactions:s.vs.reactions});
   }
  }
