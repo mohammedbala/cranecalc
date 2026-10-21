@@ -171,6 +171,15 @@ const remedies:Remedy[]=[
  [/^column-cap-(web-yield|web-cripple|stiffener-bearing)$/,()=>'A cap stiffener between the column flanges under the bearing stiffener line, or a column with a thicker web.'],
  [/^column-cap-fork-stiffness$/,()=>'Stiffer end fork: thicker or wider bearing stiffeners, more bearing bolts at a wider gauge, or a top-flange tie.'],
  [/^column-cap-/,x=>`Column cap (new, designed here): ${more(x.u)}% more resistance is needed in the part this check names.`],
+ // The configurator's open items (calculate.configuratorOpenItems, status incomplete): the recommendation its note gives.
+ [/^configurator-/,x=>configuratorRemedy(x.c)],
+ // Drift of a new freestanding column: its strong-axis stiffness and the eccentric reaction moment govern, not an
+ // unbraced length; the W14X398 is the heaviest W14 the configurator uses.
+ [/^column-drift$/,x=>x.p.existingColumn?.isNew?newColumnDrift(x,`New column drift exceeded by ${more(x.u)}%`):undefined],
+ [/^base-drift$/,x=>{
+  const col=x.s.checks.find(c=>c.id==='column-drift'),d=x.c.demand,a=col?.demand,share=d&&a!==undefined?Math.min(1,Math.max(0,a/d)):undefined;
+  const parts=share!==undefined?`: of the ${x.len(d!)} at the rail, the column alone gives ${x.len(a!)} (its own check, column-drift) and the footing's rotation on the soil the rest`:'';
+  return newColumnDrift(x,`Runway drift with the footing rotation exceeded by ${more(x.u)}%${parts}`,share!==undefined&&a!<=col!.capacity!?'a larger or deeper footing (a stiffer soil support) for the rotation part':undefined);}],
  [/^column-/,x=>x.p.existingColumn?.isNew?`New column exceeded by ${more(x.u)}%: a heavier column shape, or a smaller demand (bracing, a shorter unbraced length).`
   :`Existing column exceeded by ${more(x.u)}%: reinforce the column or reduce its demand; confirm the restraint assumptions with the building engineer of record.`],
  // The cap tieback plate: its range is split into the axial part (force controlled) and the imposed vertical movement
@@ -190,6 +199,25 @@ const remedies:Remedy[]=[
  [/^end-stop-(girder|uplift)$/,()=>'Lower the bumper or move the stop force into the column (column-mounted stop); the girder at the stop is overstressed.'],
  [/^end-stop-/,x=>`Larger end stop plates or welds: ${Math.ceil((x.u-1)*100)}% more resistance is needed.`],
 ];
+/**
+ * The drift remedy of a new freestanding column: a stiffer column (I_x), the eccentric reaction moment removed (column
+ * caps, where the girder sits on a bracket), or the column top held; with the footing's share first where the column
+ * alone is within its limit.
+ */
+function newColumnDrift(x:RemedyContext,head:string,footing?:string){
+ const shape=x.p.existingColumn?.shape??'',heaviest=/^W14X(398|4\d\d|5\d\d|6\d\d|7\d\d)$/.test(shape),seat=!!x.p.details?.bracket?.enabled;
+ const column=[heaviest?`the ${shape} is already the heaviest W14 the configurator uses, so a stiffer column is a built-up or laced crane column or a deeper W with its strong axis across the runway`:'a heavier column shape (a larger I_x)',
+  seat?'column caps (the girder on the column axis: no eccentric reaction moment)':'',"or the column tops tied to a braced frame or roof diaphragm"].filter(Boolean);
+ return `${head}. ${footing?`${sentenceStart(footing)}; for the column, `:'The drift is set by the column\'s strong-axis stiffness and the eccentric reaction moment, not by an unbraced length: '}${column.join(', ')}${x.s.checks.some(c=>c.id==='configurator-crane-column')?' (the configurator item states its estimate for column caps)':''}.`;
+}
+/** A configurator item's remedy: its recommendation ("recommended …", "Choose …", "Design …"), else a member-specific default. */
+function configuratorRemedy(c:CheckResult){
+ const sentences=c.note.split(/(?<=[.])\s+(?=[A-Z])/),rec=sentences.find(v=>/\brecommended\b/i.test(v)),alt=sentences.find(v=>/^(Choose|Design)\b/.test(v));
+ const v=rec?sentenceStart(rec.slice(rec.search(/\brecommended\b/i)).replace(/;\s*the support entered is kept and checked\.?$/,'.')):alt;
+ const member=c.id.replace(/^configurator-/,'');
+ const fallback=member==='girder'?'Design a built-up plate girder, or shorten the span.':member==='tie'?'Design the tie connection by hand, or choose another tie or support.':'Design the column by hand (a built-up or laced column), or revise the support arrangement.';
+ return `${(v??fallback).replace(/\.?$/,'.')} Then recalculate; the closest member's failing checks are listed as their own items.`;
+}
 /** Detailing rules: the dimension to provide, from the rule's own provided and required values. */
 function detailingRemedy(x:RemedyContext){
  const c=x.c;if(c.demand===undefined||c.capacity===undefined||!Number.isFinite(c.capacity))return undefined;
@@ -228,6 +256,8 @@ export function remedyFor(g:OpenGroup,s:CalculationSnapshot,tax:Taxonomy){
  // A fatigue detail without its own remedy: the reduction of its stress range.
  const f=t?.effect==='fatigue'?fatigueData(s,c):undefined;
  if(f)return `${sentenceStart(range(x))} at this detail: a better detail category, a larger section or a smaller cyclic force.`;
+ // An open item without a ratio past 1.00 (incomplete, not established): no percentage to state.
+ if(c.status!=='fail'||!(u>1))return `Resolve: ${firstSentence(c.note)} Then recalculate.`;
  return `Increase the resistance by at least ${Math.ceil((u-1)*100)}%, or reduce the demand, then recalculate.`;
 }
 

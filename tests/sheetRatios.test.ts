@@ -4,7 +4,7 @@ import {drawingSheetSet,detailTopics} from '../src/components/planSheet';
 import {flangeTieTopic} from '../src/components/flangeTieSheet';
 import {sheetEntities} from '../src/components/svgEntities';
 import {limitLength} from '../src/components/drawingFormat';
-import {elementSummary,inElements,sheetDc,sheetOpenGroups,sheetStamp,sheetTaxonomy,blockedPackage} from '../src/components/sheetRatios';
+import {elementSummary,inElements,sheetCheckName,sheetDc,sheetOpenGroups,sheetStamp,sheetTaxonomy,blockedPackage} from '../src/components/sheetRatios';
 import {noteStyle} from '../src/components/noteBlocks';
 import {holdsFor} from '../src/components/detailHolds';
 import type {CalculationSnapshot,CheckResult} from '../src/engine/types';
@@ -62,7 +62,9 @@ describe('D/C as the sheets print it',()=>{
   const e=elementSummary(v,inElements(['tie'],/^(detail-(fatigue|full-cycle)-(SA|SL)|plate-tie-keeper-flange$)/));
   expect(e.strength?.dc).toBe(Infinity);expect(e.failing[0].check.id).toBe('flange-tie-flange');
   const t=notesText(v).toUpperCase();
-  expect(t).toContain('NO CAPACITY STRENGTH');expect(t).toMatch(/1\.45 NG FATIGUE/);expect(t).toContain(sa.id.toUpperCase());
+  expect(t).toContain('NO CAPACITY STRENGTH');expect(t).toMatch(/1\.45 NG FATIGUE/);
+  // Named by its open item's title (the register detail type), never by the internal id.
+  const f=e.failing.find(x=>x.check===sa||x.group?.members.includes(sa))!;expect(t).toContain(sheetCheckName(f.check,f.group).toUpperCase());expect(t).not.toContain(sa.id.toUpperCase());
   expect(t).not.toMatch(/1000000000000|INFINITY|NULL/);
  });
 });
@@ -81,12 +83,12 @@ describe('every template sheet set',()=>{
    const m=notesText(s).match(/MAX\. D\/C ([\d.]+)/);
    if(strength>0){expect(m,name).not.toBeNull();expect(Number(m![1])).toBeGreaterThanOrEqual(Math.min(strength,99)-.005);}
   }
-  // Every failing check is named on a sheet: by its id, or by the governing check of its open item.
-  const groups=sheetOpenGroups(s);
+  // Every failing check is named on a sheet: by its title, or by its open item's (sheetCheckName), never by its id.
+  const groups=sheetOpenGroups(s),flat=all.replace(/\s+/g,' ');
   // An advisory recommendation (e.g. the TR-13 bracket guideline) is listed apart, not an open item to name on a sheet.
   for(const c of s.checks.filter(v=>v.status==='fail'&&tax.entries.get(v.id)?.gate!=='advisory')){
    const g=groups.find(v=>v.members.includes(c)||v.folded.includes(c));
-   expect(all.includes(c.id.toUpperCase())||(!!g&&all.includes(g.governing.id.toUpperCase())),`${name} ${c.id}`).toBe(true);
+   expect(flat.includes(sheetCheckName(c).toUpperCase())||(!!g&&flat.includes(sheetCheckName(g.governing,g).toUpperCase())),`${name} ${c.id}`).toBe(true);
   }
   const stamp=sheetStamp(s);
   if(groups.length)expect(all).toContain(`${groups.length} OPEN ITEM${groups.length>1?'S':''}`);else expect(stamp).toBeUndefined();

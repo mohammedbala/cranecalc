@@ -1,4 +1,4 @@
-import {checkDcText,elementSummary,failingNote,inElements,sheetDc} from './sheetRatios';
+import {checkDcText,elementSummary,failingNote,sheetCheckName,inElements,sheetDc} from './sheetRatios';
 import type {CalculationSnapshot} from '../engine/types';
 import {bracketSeat} from '../engine/rolledBracketInputs';
 import {rolledUnderSeat} from './rolledBracketSheet';
@@ -370,7 +370,7 @@ export function bracingTopic(s:CalculationSnapshot):DetailTopic{
   ...(sep?[['SEISMIC SEPARATION',`${separationLength(sep.required,u)} MIN. CLEAR TO EXISTING BUILDING (ASCE 7 §12.12.3)`]]:[]),
   ['RATIOS: ROD / GUSSET / WELD / WEB / STRUT / COL. TORSION',ratio('brace-tension','brace-pin-bearing','brace-gusset-weld','brace-column-web','brace-strut','column-torsion')],
   // The largest D/C over every check of the longitudinal system, and the failing ones by name (sheetRatios).
-  ...(()=>{const e=elementSummary(s,inElements(['longitudinal'])),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL BRACING CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})()
+  ...(()=>{const e=elementSummary(s,inElements(['longitudinal'])),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b)=>b!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, ALL BRACING CHECKS`,`${m?`${sheetDc(s,m.dc)} (${sheetCheckName(m.check)})`:'-'}${f?`; ${f}`:''}`]]:[];})()
  ];
  const notes=[
   `RODS: ASTM F1554 GR. 36 (OR A36) ${rodName}, THREADED FOR A FORGED CLEVIS AT EACH END AND A TURNBUCKLE ${Math.round(turnAt*100)}% OF THE LENGTH FROM THE LOWER END (RIGHT- AND LEFT-HAND THREADS). CLEVIS, PIN AND TURNBUCKLE RATED BY THE MANUFACTURER TO DEVELOP THE ROD, ${force(r.develop)}; CLEVIS GRIP TO SUIT THE ${size(g.t)} GUSSET. SUBMIT CATALOG DATA.`,

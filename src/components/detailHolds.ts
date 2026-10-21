@@ -2,7 +2,7 @@ import type {CalculationSnapshot,CheckResult} from '../engine/types';
 import {rect,text,textWidth,lettering} from './sheetGraphics';
 import type {ViewRender} from './detailSheet';
 import type {OpenGroup} from '../report/openItems';
-import {sheetOpenGroups,blockedPackage,sheetDc,checkDc} from './sheetRatios';
+import {sheetOpenGroups,blockedPackage,sheetDc,checkDc,sheetCheckName} from './sheetRatios';
 
 /**
  * A view whose parts cannot be built as dimensioned: a part size or clear length ≤ 0, a failing fit or clearance rule of
@@ -31,7 +31,9 @@ export function conflictView(id:string):ViewRender{
  * while the calculation fails it. An item maps to views by the report's element of its governing check (openItemGroups),
  * and register points and fit rules by their ids; one that maps to no view is listed on S-00 (OPEN ITEMS).
  */
-export interface Hold{group:OpenGroup;check:CheckResult;dc?:number;views?:RegExp;text:string}
+export interface Hold{group:OpenGroup;check:CheckResult;dc?:number;views?:RegExp;text:string;
+ /** The result alone ("NG D/C 1.22", "NG GEOMETRY CONFLICT"), for the boxed tag at a view: the sheet's hold list names the check. */
+ tag:string}
 const byId:[RegExp,RegExp][]=[
  [/^detail-(fatigue|full-cycle)-(SA|SL)/,/SADDLE|FLANGE TIE|TIE AND STIFFENER/],
  [/^detail-(fatigue|full-cycle)-RC/,/RAIL CLIP/],
@@ -64,12 +66,12 @@ export function holdsFor(s:CalculationSnapshot):Hold[]{
  let v=cache.get(s.checks);if(v)return v;
  const coordination=(c:CheckResult)=>c.id==='crane-column-footing-clearance'&&c.status==='unverified';
  v=sheetOpenGroups(s).filter(g=>g.members.some(c=>c.status==='fail'||coordination(c))).map(g=>{
-  if(coordination(g.governing))return {group:g,check:g.governing,views:/^FOOTING \/ PLAN$/,text:'OPEN ITEM: FOOTING COORDINATION'};
+  if(coordination(g.governing))return {group:g,check:g.governing,views:/^FOOTING \/ PLAN$/,text:'OPEN ITEM: FOOTING COORDINATION',tag:'OPEN ITEM: FOOTING COORDINATION'};
   const c=g.members.find(m=>m.status==='fail')===g.governing?g.governing:g.members.find(m=>m.status==='fail')!;
   const views=byId.find(([re])=>re.test(c.id))?.[1]??byElement[g.element];
   const dc=c.geometry?undefined:g.kind==='clash'||g.kind==='detailing'?checkDc(c):g.dc;
   const shown=dc===undefined?'':sheetDc(s,dc).replace(/ NG$/,''),value=c.geometry?'GEOMETRY CONFLICT':blockedPackage(s)||!shown?'':shown==='NO CAPACITY'?shown:`D/C ${shown}`;
-  return {group:g,check:c,dc,views:views&&views.source!=='$^'?views:undefined,text:`NG ${c.id.toUpperCase()}${value?` ${value}`:''}`};
+  return {group:g,check:c,dc,views:views&&views.source!=='$^'?views:undefined,text:`NG ${sheetCheckName(c,g).toUpperCase()}${value?` ${value}`:''}`,tag:`NG${value?` ${value}`:''}`};
  });
  cache.set(s.checks,v);return v;
 }
@@ -77,9 +79,12 @@ export function holdsFor(s:CalculationSnapshot):Hold[]{
 export const viewHolds=(s:CalculationSnapshot,title:string)=>holdsFor(s).filter(h=>h.views?.test(title)).sort((a,b)=>(b.dc??-1)-(a.dc??-1));
 /** The open items no view draws: listed on S-00. */
 export const unplacedHolds=(s:CalculationSnapshot,titles:string[])=>holdsFor(s).filter(h=>!h.views||!titles.some(t=>h.views!.test(t)));
-/** The boxed tag below a view title: "HOLD - NG <id> D/C x.xx (+n)". */
+/**
+ * The boxed tag below a view title: "HOLD - NG D/C x.xx (+n)", the worst hold's result; the sheet's hold list names each
+ * check by its title (a check title in the tag would outgrow narrow views).
+ */
 export function holdTag(cx:number,y:number,holds:Hold[]){
  if(!holds.length)return '';
- const label=`HOLD - ${holds[0].text}${holds.length>1?` (+${holds.length-1})`:''}`,size=lettering.text,w=textWidth(label,size,true)+10;
+ const label=`HOLD - ${holds[0].tag}${holds.length>1?` (+${holds.length-1})`:''}`,size=lettering.text,w=textWidth(label,size,true)+10;
  return `<g data-hold="${holds.map(h=>h.check.id).join(' ')}">${rect(cx-w/2,y-size*.86,w,size*1.16,'divider')}${text(cx,y,label,size,'middle',700)}</g>`;
 }

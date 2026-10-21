@@ -1,7 +1,7 @@
 import {asceCombinations} from './asceCombinations';
 import {twistShift} from './columnTwistLimit';
 import {columnResponse} from './columnAnalysis';
-import {existingColumnEccentricity,existingColumnRailElevation,existingColumnSection,railForce,seismicHeight} from './existingColumn';
+import {atRail,existingColumnEccentricity,existingColumnRailElevation,existingColumnSection,railForce,seismicHeight} from './existingColumn';
 import {anchorGrades,anchorHardware,barSizes,columnBaseElevation,footingKeyWidth,type ColumnBaseInput} from './columnBaseInputs';
 import {minimumFillet} from './connectionStrength';
 import {wrenchClearance} from './endStop';
@@ -451,10 +451,13 @@ export function baseDrift(p:ProjectInput,column:ExistingColumnResult){
  const eccentric=columnResponse(c.height,E*props.Ix,c.strong,[{x:c.seatElevation,moment:1}],[Math.min(ht,c.height)]),side=columnResponse(c.height,E*props.Ix,c.strong,[railForce(c.height,ht)],[c.seatElevation]);
  const arm=b.footing.thickness+b.grout+b.plate.thickness;
  const M=Math.abs(column.crane.lateral*(side.reactions.baseMoment+side.reactions.base*arm))+Math.abs(column.crane.liveStatic*e*(eccentric.reactions.baseMoment+eccentric.reactions.base*arm));
- const theta=M/(b.soil.subgrade*b.footing.B*b.footing.L**3/12),lever=ht+arm;
+ const k=b.soil.subgrade*b.footing.B*b.footing.L**3/12,theta=M/k,lever=ht+arm;
  // The column's drift as checked (column-drift): with the rail's shift across the runway from the column twist.
  const own=column.drift.value+twistShift(column.torsion);
- return {theta,lever,column:own,total:own+theta*lever,limit:column.drift.limit};
+ // The side thrust's part alone, on the same column and footing: an estimate of the drift with the girder on the
+ // column axis (column caps: no eccentric reaction moment, no seat twist), for the configurator's recommendation.
+ const sideTheta=Math.abs(column.crane.lateral*(side.reactions.baseMoment+side.reactions.base*arm))/k,sideOwn=Math.max(0,column.drift.value-Math.abs(column.crane.liveStatic*e*atRail(eccentric,c.height,ht)));
+ return {theta,lever,column:own,total:own+theta*lever,limit:column.drift.limit,sideOnly:{column:sideOwn,total:sideOwn+sideTheta*lever}};
 }
 /**
  * Fillet all around each plate washer to the base plate, so every rod takes its share of the base shear through

@@ -1,4 +1,4 @@
-import {checkDcText,elementSummary,failingNote,sheetDc} from './sheetRatios';
+import {checkDcText,elementSummary,failingNote,sheetCheckName,sheetDc} from './sheetRatios';
 import type {CalculationSnapshot} from '../engine/types';
 import {format,toDisplay,unit} from '../engine/units';
 import {tiedToBuilding} from '../engine/craneColumnInputs';
@@ -285,7 +285,7 @@ export function craneColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
    ['SLOT TRAVEL: DEMAND / PROVIDED, EACH WAY',`${travelMin(cr.slot.demand)} / ${travelMax(cr.slot.capacity)} (LARGER COLUMN SHORTENING PL/EA ${force(Math.max(cr.slot.crane,cr.slot.building),'length')} + TOLERANCE ${size(cr.slot.tolerance)})`]]:[]),
   ['RATIOS: BRACE STIFFNESS / STRENGTH / BOLTS / WELD / SLOTS',`${ratio('crane-column-brace-stiffness')} / ${ratio('crane-column-brace-strength')} / ${ratio('crane-column-tie-bolts')} / ${ratio('crane-column-tie-weld')} / ${ratio('crane-column-tie-slot-travel')}`],
   ['RATIOS: BUILDING COLUMN H1 / DRIFT',`${ratio('building-column-interaction')} / ${ratio('building-column-drift')}`],
-  ...(()=>{const e=elementSummary(s,c2=>c2.group==='Crane column'||c2.group==='Building column'),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b2)=>b2!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, CRANE AND BUILDING COLUMN CHECKS`,`${m?`${sheetDc(s,m.dc)} (${m.check.id})`:'-'}${f?`; ${f}`:''}`]]:[];})()
+  ...(()=>{const e=elementSummary(s,c2=>c2.group==='Crane column'||c2.group==='Building column'),m=[e.strength,e.fatigue].filter(v=>!!v).sort((a,b2)=>b2!.dc-a!.dc)[0],f=failingNote(s,e);return m||f?[[`MAX. D/C, CRANE AND BUILDING COLUMN CHECKS`,`${m?`${sheetDc(s,m.dc)} (${sheetCheckName(m.check)})`:'-'}${f?`; ${f}`:''}`]]:[];})()
  ];
  const notes=[
   `THE NEW CRANE COLUMNS CARRY THE RUNWAY GIRDER REACTIONS ON THEIR CAPS TO THEIR OWN FOOTINGS (AIST TR-13 §5.9.2; AISC DG7 SEPARATE CRANE COLUMN). THE EXISTING BUILDING COLUMNS TAKE ONLY THE HORIZONTAL FORCES OF THE GIRDER TIE AND THE COLUMN TIE LISTED ON S-00; NO RUNWAY VERTICAL LOAD.`,
