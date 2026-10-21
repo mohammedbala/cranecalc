@@ -44,7 +44,7 @@ import {capWorkPointDrop,columnCapGeometry} from './columnCap';
 import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
 import {cantileverHeightLimit} from './runwaySeismic';
-import {columnGussetHeight,flangeTieFamily,flangeTieGeometry,stiffenerTieGeometry} from './tieGeometry';
+import {columnGussetHeight,flangeTieFamily,flangeTieGeometry,stiffenerTieGeometry,stiffenerTieJoint} from './tieGeometry';
 import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener,bracketServiceDeflection} from './flangeTieSizing';
 import {designSplices,type SplicesDesigned} from './spliceSizing';
 import {practicalPieceLength} from './girderPieces';
@@ -1241,6 +1241,9 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
    // A cap angle that does not fit the girder end and column: the saddle tie stays, its checks report it.
    if(misfit)p.details=saddle;
    trace.tie=misfit?`${why}, and no cap tieback angle of the sizing steps fits this girder end and column (${misfit}): the saddle tie stays as sized.`:`${why}: the tie is the cap tieback angle bolted to the channel cap.`;
+   // A cap angle that fits but clearly cannot carry the tie force (capAngleUnresolved): the bars on the bearing stiffener.
+   const stiff=!misfit&&capStiffenerTie({...p,details:saddle},p,farthest,bracket,face);
+   if(stiff){p.details=stiff.details;trace.tie=`${why}, and the cap tieback angle cannot carry the tie force (${stiff.angle}): ${stiff.text}`;}
    p.notes+=` ${trace.tie}`;
   }
  }
@@ -1322,6 +1325,29 @@ function capAngleUnresolved(p:ProjectInput):string|undefined{
  const moved=r.movementControlled??new Set<string>(),over=Object.entries(r as Record<string,number>).filter(([k,v])=>v>(moved.has(k)?2:1.5)).sort((a,b)=>b[1]-a[1]);
  return over.length?`sized ${d.brace.capAngle?.shape} still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${Number.isFinite(v)?v.toFixed(2):'no capacity'}`).join(', ')}`:undefined;
 }
+/**
+ * Paired flat bars on the tie-side bearing stiffener of a capped simple-span girder, in place of a fitting cap tieback
+ * angle that clearly cannot carry the tie force (capAngleUnresolved: its two bolts per group and one tie plate past
+ * 1.5 of their strength, or the movement-controlled fatigue past 2): the bars and the gusset extension drop below the
+ * cap channel's turned-down flanges (stiffenerTieGeometry) and the full-depth stiffener pair takes the force into the
+ * girder (tieOnBearingStiffener, sized by sizeFlangeTie). Kept where the bars validate and their largest sizing ratio is
+ * below the angle's (the estimates of each under the same tie force model); `saddle` is the project with the sized
+ * saddle tie, `angle` with the sized cap angle. Undefined where the angle may pass, or the bars do no better.
+ */
+function capStiffenerTie(saddle:ProjectInput,angle:ProjectInput,reach:number|undefined,bracket:NonNullable<ProjectInput['details']>['bracket'],face:number|undefined){
+ const over=capAngleUnresolved(angle);if(!over)return undefined;
+ const g=capAngleGeometry(angle)!,d=angle.details!,ra=capAngleSizingRatios(angle,g,capAngleForceEstimate(angle),capAngleMovementEstimate(angle,!!d.bracket?.enabled),d.spectrum.reduce((a,v)=>a+v.cycles,0));
+ const worstAngle=Math.max(...Object.values(ra as Record<string,number>));
+ const moved=tieOnBearingStiffener(saddle,{reach,bracket,face,capped:true,misfit:`the cap tieback angle ${over}`});
+ if(!moved)return undefined;
+ const q={...saddle,details:moved.details},r=Object.entries(tieSizingRatios(q)).sort((a,b)=>b[1]-a[1]),worst=r[0]?.[1]??0;
+ // The bearings are laid out again after the tie (setBearings): the column gussets at the bearing stiffeners must still
+ // land on the receiving column flange (coord-tie-gusset-flange) as laid out then.
+ const laid=structuredClone({...angle,details:moved.details});setBearings(laid);
+ if(!(worst<worstAngle-1e-9)||stiffenerGussetMisfit(laid)||validateRunwayDetails(laid).length)return undefined;
+ const left=r.filter(([k,v])=>v>sizingLimit(Object.fromEntries(r),k)+1e-9);
+ return {details:moved.details,angle:over,text:`the paired flat bars bolt to the tie-side bearing stiffener${stiffenerTieJoint(q)==='integral'?', cut as one plate with its gusset extension past the flange tip':', through a gusset plate CJP welded to the stiffener edge (UT)'}, the bars below the cap channel flanges, the full-depth stiffener pair carrying the tie force into the girder${left.length?` (sized, still over ${left.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands)`:''}.`};
+}
 /** Reasons the build steps record for the selection log (selectionLog). */
 export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned;clip?:string;
  /** Crane columns: the footing arrangement chosen by the clearance to the building-column footing (combinedWhereOverlapping). */
@@ -1391,9 +1417,13 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
  */
 function alignTieGusset(p:ProjectInput,trace:SelectionTrace){
  const d=p.details;if(!d||!stiffenerTieGeometry(p))return;
- if(d.brace.gussetThickness<d.bearing.stiffenerThickness-1e-6)d.brace.gussetThickness=d.bearing.stiffenerThickness;
- if(trace.tie&&d.brace.gussetThickness>d.bearing.stiffenerThickness+1e-6)
-  trace.tie=trace.tie.replace(/, cut as one plate with its gusset extension past the flange tip( \(no weld at the gusset\))?/,', through a thicker gusset plate CJP welded to the stiffener edge (UT)');
+ // Not where the thicker gusset would put the column gussets past the receiving column flange tip
+ // (coord-tie-gusset-flange) and the sized one does not: the sized gusset stays, CJP welded to the thicker stiffener.
+ const t0=d.brace.gussetThickness,fits=!stiffenerGussetMisfit(p);
+ if(t0<d.bearing.stiffenerThickness-1e-6){d.brace.gussetThickness=d.bearing.stiffenerThickness;if(fits&&stiffenerGussetMisfit(p))d.brace.gussetThickness=t0;}
+ const t=d.brace.gussetThickness,st=d.bearing.stiffenerThickness;
+ if(trace.tie&&Math.abs(t-st)>1e-6)
+  trace.tie=trace.tie.replace(/, cut as one plate with its gusset extension past the flange tip( \(no weld at the gusset\))?/,`, through a ${t>st?'thicker':'thinner'} gusset plate CJP welded to the stiffener edge (UT)`);
 }
 const sizingRatioNames:Record<string,string>={tips:'top-flange tip stress (DG7, warping and second-order twist)',h1:'H1 top-flange interaction with the load-height LTB strength',stability:'elastic LTB stability margin',shear:'web shear'};
 /**

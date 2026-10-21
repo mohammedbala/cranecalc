@@ -4,13 +4,17 @@ import {buildProject} from '../src/engine/configurator';
 import type {RunwayConfig} from '../src/engine/configInputs';
 import {capAngleGeometry} from '../src/engine/capAngle';
 import {capAngleFits,capAngleForceEstimate,capAngleSizingRatios,capAngleWrenchSetback,validateCapAngle} from '../src/engine/capAngleTie';
+import {validateRunwayDetails} from '../src/engine/detailValidation';
+import {stiffenerTieGeometry} from '../src/engine/tieGeometry';
+import {stiffenerGussetMisfit} from '../src/engine/connectionCoordination';
 
 const inch=25.4;
 const sim=cases as Record<string,RunwayConfig>;
 
 /**
  * Cap tieback angle fit and selection (round 7): the sizing keeps the smallest set that fits (the column nuts clear the
- * web by moving the ties along their girders, in the direction that clears).
+ * web by moving the ties along their girders, in the direction that clears), and a fitting angle that clearly cannot
+ * carry the tie force gives way to the paired bars on the bearing stiffener where those do better.
  */
 describe('cap tieback angle fit and selection',()=>{
  it('steps the setback past a girder end that reaches beyond the column centerline (the tie first moves toward the web)',()=>{
@@ -33,6 +37,19 @@ describe('cap tieback angle fit and selection',()=>{
   expect(validateCapAngle(p)).toEqual([]);
   const g=capAngleGeometry(p)!,r=capAngleSizingRatios(p,g,capAngleForceEstimate(p),undefined,2e6) as Record<string,number>;
   for(const k of capAngleFits)if(r[k]!==undefined)expect(r[k],k).toBeLessThanOrEqual(1);
+  expect(p.configurator!.beyondCatalog?.some(v=>v.member==='tie')).toBeFalsy();
+ },300000);
+ it('case 050 (40 t): paired bars on the bearing stiffener below the cap channel flanges in place of the overloaded cap angle, logged',()=>{
+  const p=buildProject(sim['050']);
+  expect(p.details!.brace.arrangement).toBe('paired-bars');
+  expect(p.details!.brace.flangeAttachment?.enabled).toBe(false);
+  const st=stiffenerTieGeometry(p)!,s=p.section;
+  expect(s.kind).toBe('cap');
+  // The bars and gusset below the turned-down cap flanges, the column gussets on the receiving column flange.
+  expect(st.topCenter+st.height/2).toBeLessThanOrEqual(s.d/2-(s.capDepth-s.capTw)-st.clear+1e-6);
+  expect(stiffenerGussetMisfit(p)).toBeUndefined();
+  expect(validateRunwayDetails(p)).toEqual([]);
+  expect(p.configurator!.selections!.find(v=>v.item==='Top-flange tie')!.reason).toMatch(/the cap tieback angle cannot carry the tie force \(sized L\dX\dX[\d/]+ still exceeds .*\): the paired flat bars bolt to the tie-side bearing stiffener/);
   expect(p.configurator!.beyondCatalog?.some(v=>v.member==='tie')).toBeFalsy();
  },300000);
 });

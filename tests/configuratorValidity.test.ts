@@ -46,11 +46,13 @@ describe('configurator project validity',()=>{
  for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
  // Beyond the catalog the closest member is built (an open item, configuratorOpenItems, the package a review draft),
  // never a validation stop: V059 and V061 need a plate girder (they took the W14X873 column shape before).
- // 034, 061 and CC2 ask for a cap tieback angle that no set of its sizing steps carries (lap slip several times over,
+ // 034 and CC2 ask for a cap tieback angle that no set of its sizing steps carries (lap slip several times over,
  // or the imposed movement in the plate): the closest angle is built with the open item (capAngleUnresolved; the
- // calculation of CC2 gave plate movement 1.96 and end plate weld 1.44 against estimates of 2.56 and 1.87).
+ // calculation of CC2 gave plate movement 1.96 and end plate weld 1.44 against estimates of 2.56 and 1.87). 061 (paired
+ // bars entered, the saddle unsuitable on the cap) takes the paired bars on the bearing stiffener in place of such an
+ // angle (capStiffenerTie; calculated: every tie check within its limit, tie-move-strength 0.91).
  const open=new Map<string,RegExp>([['V059',/^Plate girder required/],['V061',/^Plate girder required/],
-  ['034',/^Top-flange tie not resolved: the cap tieback angle/],['061',/^Top-flange tie not resolved: the cap tieback angle/],['CC2',/^Top-flange tie not resolved: the cap tieback angle/]]);
+  ['034',/^Top-flange tie not resolved: the cap tieback angle/],['CC2',/^Top-flange tie not resolved: the cap tieback angle/]]);
  for(const [id,c] of Object.entries(simulated))it(`simulated configuration ${id} builds a valid project${open.has(id)?', with the configurator open item':''}`,()=>{
   const p=buildProject(c);
   expect(validateProject(p)).toEqual([]);
@@ -58,6 +60,11 @@ describe('configurator project validity',()=>{
    expect(p.configurator!.beyondCatalog!.some(v=>open.get(id)!.test(v.reason))).toBe(true);
    expect(configuratorOpenItems(p).map(v=>v.status)).toContain('incomplete');
    expect(p.configurator!.selections!.some(v=>v.item==='Open item'&&open.get(id)!.test(v.reason))).toBe(true);
+  }
+  if(id==='061'){
+   expect(p.configurator!.beyondCatalog?.some(v=>v.member==='tie')).toBeFalsy();
+   expect(p.details!.brace.arrangement).toBe('paired-bars');expect(p.details!.brace.flangeAttachment?.enabled).toBe(false);
+   expect(p.configurator!.selections!.find(v=>v.item==='Top-flange tie')!.reason).toMatch(/the cap tieback angle cannot carry the tie force \(sized .* still exceeds .*\): the paired flat bars bolt to the tie-side bearing stiffener/);
   }
  },300000);
  it('new freestanding columns take the top of rail to at most 35 ft (ASCE 7 cantilever column height limit), with the reason',()=>{

@@ -195,6 +195,18 @@ export function capAngleFatigue(g:CapAngleGeometry,x:CapAngleDesign,range:number
   root:{...toe,f:toe.axial+toe.movement,allowable:root.capacity,reduction:root.reduction}};
 }
 
+/** AISC Table A-3.1 item 8.5 bolt allowable range for n cycles, at least the 7 ksi threshold. */
+const boltAllow=(n:number)=>Math.max(7*ksi,finiteLife(.39,n));
+/**
+ * Cap bolt axial tension range for fatigue (check cap-angle-cap-bolt-fatigue): the angle is not clamped by the sleeved
+ * bolts, so the whole applied range ΔT = ΔF/2 reaches them, with the larger prying range of the angle leg and the
+ * channel flange T-stubs, on the tensile stress area; allowable AISC Appendix 3.4, Table A-3.1 item 8.5.
+ */
+export function capBoltFatigue(p:ProjectInput,g:CapAngleGeometry,x:CapAngleDesign,range:number,cycles:number){
+ const cb=g.cap,m=p.details!.material,method=p.method,Tr=range/2,At=tensileArea(cb.diameter);
+ const angleF=tStubPrying({T:Tr,t:g.ta,b:cb.gauge-g.ta,a:x.contact,p:x.pa,db:cb.diameter,dPrime:cb.slotLength,Fu:m.Fu,method}),chanF=tStubPrying({T:Tr,t:cb.seat.thickness,b:cb.gauge-p.section.capTw,a:x.contact,p:x.pc,db:cb.diameter,dPrime:cb.hole,Fu:p.capDesign?.Fu??m.Fu,method});
+ return {Tr,At,angleF,chanF,f:(Tr+Math.max(angleF.q,chanF.q))/At,allowable:boltAllow(cycles)};
+}
 /** Restraint for the girder lateral/torsional model and the Appendix 6 brace checks: the tie plate member and the series stiffness. */
 export function capAngleBraceSystem(p:ProjectInput){
  const g=capAngleGeometry(p);if(!g)return undefined;
@@ -363,10 +375,7 @@ export function capAngleChecks(s:CalculationSnapshot,ctx:{force:number}):CheckRe
  add('cap-angle-washer',MG,'Plate washers · thickness',5/16*inch,cb.washer.thickness,'length','t\\ge5/16\\,\\mathrm{in}\\ \\ \\text{(plate washer)}','AISC J3.2: plate washers cover long slots in an outer ply.');
  add('cap-angle-washer-bending',MG,'Plate washers · bending under the bolt pull',6*((x.T+x.Q)/2)*Math.max(0,cb.slotWidth/2-.8*cb.diameter)/(cb.washer.length*cb.washer.thickness**2),available(m.Fy,method,.9,1.67),'stress','f_b=\\frac{6(T/2)a}{bt^2};\\quad a=w_{slot}/2-0.8d_b','AISC F11.1 (rectangular bar, elastic section): in pull the angle leg bears on the washer at both slot edges; the washer cantilevers from the bolt head.',['cap-angle-basis','aisc-connections']);
  // ---------------- Fatigue (service range ΔF, all cycles, AISC Appendix 3)
- const range=loads.range,Tr=range/2,At=tensileArea(cb.diameter);
- const angleF=tStubPrying({T:Tr,t:g.ta,b:cb.gauge-g.ta,a:x.contact,p:x.pa,db:cb.diameter,dPrime:cb.slotLength,Fu:m.Fu,method}),chanF=tStubPrying({T:Tr,t:cb.seat.thickness,b:cb.gauge-sec.capTw,a:x.contact,p:x.pc,db:cb.diameter,dPrime:cb.hole,Fu:p.capDesign?.Fu??m.Fu,method});
- const boltAllow=(n:number)=>Math.max(7*ksi,finiteLife(.39,n));
- const capRange=(Tr+Math.max(angleF.q,chanF.q))/At;
+ const range=loads.range,{Tr,At,angleF,chanF,f:capRange}=capBoltFatigue(p,g,x,range,cyc);
  add('cap-angle-cap-bolt-fatigue',G,'Cap bolts · axial tension fatigue',capRange,boltAllow(cyc),'stress','f_{sr}=(\\Delta T+\\Delta q)/A_t\\le F_{SR}=(C_f/n_{SR})^{0.333}\\ge F_{TH}',`AISC Appendix 3.4 / Table A-3.1 item 8.5: C_f = 3.9 × 10⁸, F_TH = 7 ksi, on the tensile stress area A_t = ${format(At,'area',u,3)} with prying. The angle is not clamped by the sleeved bolts, so the whole applied range ΔT = ΔF/2 = ${force(Tr)} reaches them (no 20% credit). ${cyc.toExponential(2)} cycles.`,['cap-angle-basis','aisc-fatigue']);
  const Mvr=x.Mvc,colAt=tensileArea(cl.diameter),Tcr=range/2+Mvr/(2*cl.gauge);
  const endF=tStubPrying({T:Tcr,t:ep.thickness,b:cl.gauge-g.plate.thickness/2,a:ep.height/2-cl.gauge,p:ep.width,db:cl.diameter,dPrime:cl.hole,Fu:m.Fu,method});
@@ -523,6 +532,7 @@ export function capAngleSizingRatios(q:ProjectInput,g:CapAngleGeometry,F:number,
  const controlled=new Set<string>();Object.defineProperty(r,'movementControlled',{value:controlled,enumerable:false});
  if(movement){
   r['cap-angle-lap-tension']=x.lapTension/x.lapBolt.tension;
+  const fb=capBoltFatigue(q,g,x,movement.range,cycles);r['cap-angle-cap-bolt-fatigue']=fb.f/fb.allowable;
   const f=capAngleFatigue(g,x,movement.range,cycles);
   for(const [k,v] of [['cap-angle-plate-fatigue',f.plate],['cap-angle-weld-toe-fatigue',f.toe],['cap-angle-weld-root-fatigue',f.root]] as const){r[k]=v.f/v.allowable;if(v.movement>v.axial)controlled.add(k);}
  }
