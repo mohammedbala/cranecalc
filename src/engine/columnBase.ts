@@ -440,7 +440,7 @@ export function columnBaseChecks(p:ProjectInput,r:ColumnBaseResult,column?:Exist
   const d=baseDrift(p,column),u=p.units,f=(v:number)=>format(v,'length',u,3);
   checks.push({id:'base-drift',group:'New column base',title:'Runway drift with footing rotation',demand:d.total,capacity:d.limit,quantity:'length',utilization:d.total/d.limit,status:withinLimit(d.total,d.limit)?'pass':'fail',
    equation:'\\Delta=\\Delta_{col}+\\theta\\,h,\\quad\\theta=\\frac{M}{k_s\\,BL^3/12}\\le h/n',substitution:`\\frac{${latexNumber(d.total)}}{${latexNumber(d.limit)}}=${(d.total/d.limit).toFixed(4)}`,
-   note:`Column alone ${f(d.column)} plus the footing's rotation ${d.theta.toExponential(3)} rad on the soil (modulus of subgrade reaction ${format(p.columnBase!.soil.subgrade,'subgrade',u,3)}, full contact) times ${f(d.lever)} from the footing base to the rail, under the service side thrust and static eccentric reaction of the drift check.`,referenceIds:['dg7','aci-318']});
+   note:`Column alone ${f(d.column)} plus the footing's rotation ${d.theta.toExponential(3)} rad on the soil (modulus of subgrade reaction ${format(p.columnBase!.soil.subgrade,'subgrade',u,3)}, full contact) times ${f(d.lever)} from the footing base to the rail, under the service side thrust and static eccentric reaction of the drift check. ${subgradeBasis(p)}`,referenceIds:['dg7','aci-318']});
  }
  return checks;
 }
@@ -598,4 +598,14 @@ export function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
  // §13.3.3.3: a rectangular footing needs the short-direction bars banded; uniform spacing is drawn here.
  if(Math.abs(b.footing.L-b.footing.B)>.01*Math.min(b.footing.L,b.footing.B))checks.push({id:'base-band',group:'New column base',title:'Footing · short-direction band reinforcement',status:'unsupported',equation:'A_{s,band}=\\frac{2}{\\beta+1}A_{s,short}',note:'ACI 318-19 §13.3.3.3 requires part of the short-direction bars of a rectangular footing in a central band; the drawings show uniform bars each way. Use a square footing or detail the band.',referenceIds:['aci-318']});
  return checks;
+}
+
+/**
+ * The basis of the modulus of subgrade reaction k_s in the footing rotation: stated in the geotechnical source, or a
+ * default the geotechnical engineer must confirm; a plate-load value is never corrected for the footing size here.
+ */
+function subgradeBasis(p:ProjectInput){
+ const b=p.columnBase!,stated=/subgrade|\bk_?s\b|\bpci\b|MN\/m³|kN\/m³|kcf/i.test(b.source),k=format(b.soil.subgrade,'subgrade',p.units,3);
+ const size='a plate-load value (1 ft, 0.3 m plate) is used as given, not corrected for the footing size (a wider footing has a lower effective k_s and rotates more).';
+ return stated?`k_s from the geotechnical source; ${size}`:`The geotechnical source states no modulus of subgrade reaction: k_s = ${k} is a default, to be confirmed by the geotechnical engineer; ${size}`;
 }

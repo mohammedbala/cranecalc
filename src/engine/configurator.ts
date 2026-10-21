@@ -72,6 +72,7 @@ import type {SupportReactionSet} from './supportReactions';
 import {activeStep} from './steppedColumnInputs';
 import {independentBearings} from './simpleSupports';
 import {twistMovement,twistRotationLimit,twistSlip} from './columnTwistLimit';
+import {dcText} from './checkPresentation';
 
 const inch=25.4,foot=304.8,kip=4448.2216152605,ksi=6.894757293168,fpm=5.08,g=9.80665;
 /** Fictitious example allowable lateral bearing (passive) pressure, 150 psf/ft (IBC 2018 Table 1806.2, sandy soils). */
@@ -520,15 +521,24 @@ function screened(input:RunwayConfig){
  const R=serviceReactionEstimate(sk.p);
  // Column caps, crane columns and column steps are direct column bearing, not brackets: the recommendation does not apply.
  if(cfg.support==='column-cap'||cfg.support==='crane-column'||cfg.support==='stepped-column'||R<=bracketReactionLimit)return {config:cfg,changes,sk,reaction:R,rules,entered};
- const about=`about ${cfg.units==='SI'?`${Math.round(R/1000)} kN (${Math.round(R/kip)} kip)`:`${Math.round(R/kip)} kip`}`,limit=cfg.units==='SI'?'222 kN (50 kip)':'50 kip';
  // The TR-13 bracket guideline (clause to be verified) is an advisory, not a code limit: it never replaces the support
  // entered, on new or existing columns; the note and the selection log point to the direct column bearing alternatives
  // (column caps on new columns; a crane column or a stepped column beside a building column). The bracket's own
  // strength, fatigue and column checks (and on new columns the twist rule, withTwistLimit) decide its adequacy.
- const consider=cfg.structure==='new'?'consider column caps over the new columns':'consider a crane column tied to the building column or a stepped column';
- const why=`The support reaction, ${about}, is above the AIST TR-13 §5.9.2 guideline of ${limit} for column brackets, a clause to be verified: ${consider}; an advisory, not a code limit, so the support entered (${supportLabels[cfg.support]}) is kept${cfg.support==='by-others'?', by others':' and checked here'}.`;
+ const why=supportAdvisory(cfg,R);
  changes.push(why);rules.push({field:'support',from:cfg.support,to:cfg.support,why});
  return {config:cfg,changes,sk,reaction:R,rules,entered};
+}
+
+/**
+ * The AIST TR-13 §5.9.2 bracket advisory: the support reaction R to the nearest 5 kip (5 kN), the guideline and the
+ * direct column bearing alternatives. The selection log states it with R of the project as built (the support steel
+ * included), the reaction the calculation's TR-13 check reports.
+ */
+function supportAdvisory(cfg:RunwayConfig,R:number){
+ const five=(v:number)=>Math.round(v/5)*5,about=`about ${cfg.units==='SI'?`${five(R/1000)} kN (${five(R/kip)} kip)`:`${five(R/kip)} kip`}`,limit=cfg.units==='SI'?'222 kN (50 kip)':'50 kip';
+ const consider=cfg.structure==='new'?'consider column caps over the new columns':'consider a crane column tied to the building column or a stepped column';
+ return `The support reaction, ${about}, is above the AIST TR-13 §5.9.2 guideline of ${limit} for column brackets, a clause to be verified: ${consider}; an advisory, not a code limit, so the support entered (${supportLabels[cfg.support]}) is kept${cfg.support==='by-others'?', by others':' and checked here'}.`;
 }
 
 /** What a configuration will produce, for the configurator's summary: crane data, duty, rail and girder. */
@@ -690,7 +700,7 @@ function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
  const {config:cfg,sk,rules,entered}=screened(input),{p,depth,clipWidth,spectrum,N,railArea}=sk,spans=p.spans;
  // Both new supports are built: the crane column (craneColumnSupport) and the stepped column (withSteppedColumn).
  p.configurator={...cfg};
- const logged=(q:ProjectInput)=>{alignTieGusset(q,trace);refitCapAngleSetback(q,cfg,trace);const stop=beyondCatalog(entered,cfg,sk.trial,q,trace);q.configurator={...cfg,selections:[...selectionLog(entered,cfg,rules,sk.trial,q,trace).slice(0,24-stop.length),...stop.map(openItemRow)],...(stop.length?{beyondCatalog:stop}:{})};return q;};
+ const logged=(q:ProjectInput)=>{alignTieGusset(q,trace);refitCapAngleSetback(q,cfg,trace);const stop=beyondCatalog(entered,cfg,sk.trial,q,trace);q.configurator={...cfg,selections:[...selectionLog(entered,cfg,rules,sk.trial,q,trace,stop).slice(0,24-stop.length),...stop.map(openItemRow)],...(stop.length?{beyondCatalog:stop}:{})};return q;};
  const scopeText=`${cfg.bays} ${cfg.system==='simple'?'simply supported':'continuous'} ${cfg.span}-ft bay${cfg.bays>1?'s':''}, ${p.section.name} girder${cfg.bays>1?'s':''}, ${cfg.cranes===2?'two':'one'} ${+cfg.capacity.toFixed(2)}-ton ${cfg.control} crane${cfg.cranes===2?'s':''}`;
  if(cfg.scope==='analysis'){
   delete p.details;p.connections.enabled=false;
@@ -981,7 +991,7 @@ function withWeldedBracket(p:ProjectInput,cfg?:RunwayConfig,trace:SelectionTrace
   const over=Object.entries(r).filter(([,v])=>v>1+1e-6).sort((x,y)=>y[1]-x[1]);
   if(over.length){
    const R=serviceReactionEstimate(p),isNew=!!p.existingColumn?.isNew;
-   trace.bracket=`The ${supportLabels[cfg.support]??cfg.support} sized to the limits of its steps still exceeds ${over.slice(0,4).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} (sizing estimates; the calculation reports its own) for the ${formatUnits(R,'force',p.units,3)} support reaction${R>bracketReactionLimit?`, ${(R/bracketReactionLimit).toFixed(1)} times the AIST TR-13 §5.9.2 guideline of ${formatUnits(bracketReactionLimit,'force',p.units,3)} (a clause to be verified)`:''}: a bracket is beyond reasonable use for this crane on ${isNew?'a freestanding cantilever column':'this column'}. Recommended: ${isNew?'column caps over the new columns (support column-cap), the girder bearing on the column axis':'crane columns beside the building columns (support crane-column) with the girders on their caps'}; the support entered is kept and checked (review draft).`;
+   trace.bracket=`The ${supportLabels[cfg.support]??cfg.support} sized to the limits of its steps still exceeds ${over.slice(0,4).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (sizing estimates; the calculation reports its own) for the ${formatUnits(R,'force',p.units,3)} support reaction${R>bracketReactionLimit?`, ${(R/bracketReactionLimit).toFixed(1)} times the AIST TR-13 §5.9.2 guideline of ${formatUnits(bracketReactionLimit,'force',p.units,3)} (a clause to be verified)`:''}: a bracket is beyond reasonable use for this crane on ${isNew?'a freestanding cantilever column':'this column'}. Recommended: ${isNew?'column caps over the new columns (support column-cap), the girder bearing on the column axis':'crane columns beside the building columns (support crane-column) with the girders on their caps'}; the support entered is kept and checked (review draft).`;
   }
  }
  return p;
@@ -1043,7 +1053,7 @@ function withCapColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):
  // The bolt fatigue also above the sizing target: the calculation's bolt range ran about 14% above the sizing set's (098).
  const over=Object.entries(columnCapSizingRatios(q)).filter(([k,v])=>v>1+1e-6||k==='bolt-fatigue'&&v>capTarget+1e-6).sort((x,y)=>y[1]-x[1]),e=q.details?.endBearing?.bolts;
  if(over.length&&e){const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
-  trace.cap=`The column cap sized to the limits of its steps still ${over.some(([,v])=>v>1+1e-6)?'exceeds':`leaves above its ${capTarget} sizing target`} ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} (sizing estimates; the calculation reports its own)${over.some(([k])=>k.startsWith('bolt-'))?`: the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end take the fork couple at a ${len(e.gauge)} gauge, and no larger bolt, grade or wider gauge the sizing tries lowers it within the nut clearances to the column flanges (a larger bolt's edge distance lengthens the bearings past the cap stiffeners' seat on the column flanges; a heavier W14 has about the same clear between its flanges). A fork for this crane needs the bolts spread wider (a column with a wider clear between its flanges, or bearing bolts on the cap beyond the column, designed by hand)`:''}; the support entered is kept and checked (review draft).`;}
+  trace.cap=`The column cap sized to the limits of its steps still ${over.some(([,v])=>v>1+1e-6)?'exceeds':`leaves above its ${capTarget} sizing target`} ${over.slice(0,3).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (sizing estimates; the calculation reports its own)${over.some(([k])=>k.startsWith('bolt-'))?`: the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end take the fork couple at a ${len(e.gauge)} gauge, and no larger bolt, grade or wider gauge the sizing tries lowers it within the nut clearances to the column flanges (a larger bolt's edge distance lengthens the bearings past the cap stiffeners' seat on the column flanges; a heavier W14 has about the same clear between its flanges). A fork for this crane needs the bolts spread wider (a column with a wider clear between its flanges, or bearing bolts on the cap beyond the column, designed by hand)`:''}; the support entered is kept and checked (review draft).`;}
  return q;
 }
 const baseTarget=.9;
@@ -1080,7 +1090,7 @@ function sizeForkStiffenerFatigue(p:ProjectInput,maxWidth:number,fatigueTarget=.
 }
 /**
  * A welded rib bracket (twin-rib, haunched seat) whose column flange at the rib weld toes exceeds the sizing target in
- * fatigue (bracketColumnFatigueRatio: the range of the whole bracket moment on the column section, AISC Table A-3.1
+ * fatigue (bracketColumnFatigueRatio: the range of the column's share of the bracket moment, AISC Table A-3.1
  * item 7.1, which no bracket part lowers): the project is built on the lightest heavier W14 within it, skipping those
  * whose larger S_x alone cannot bring the ratio there; otherwise it stays and the checks report it. A configured
  * column shape is kept, and so is an existing column (a reinforcement / engineer-of-record item, logged).
@@ -1092,7 +1102,7 @@ function withBracketColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace)
  // An existing column is never resized: it stays as entered (or as the example assumes), and its flange fatigue at the
  // rib weld toes is a reinforcement item for the engineer of record (the calculation's bracket-fatigue-column check).
  if(!col.isNew){
-  trace.column=[trace.column,`The existing ${col.shape} column is kept (an existing member is never resized): its flange at the bracket rib weld toes has a fatigue ratio ${first.toFixed(2)} > ${bracketTarget} (screening estimate; AISC Table A-3.1 item 7.1, the bracket moment range on the column section at all cycles). Reinforcement of the existing column at the seat, or a support that does not load its flange through welded ribs (crane column, column cap), is an engineer-of-record item; the calculation reports the check (Column flange at rib weld toes · fatigue)`].filter(Boolean).join('; ');
+  trace.column=[trace.column,`The existing ${col.shape} column is kept (an existing member is never resized): its flange at the bracket rib weld toes has a fatigue ratio ${first.toFixed(2)} > ${bracketTarget} (screening estimate; AISC Table A-3.1 item 7.1, the column's share of the bracket moment range at the rib weld toes, by the project's fatigue method). A shorter reach (a smaller eccentricity), reinforcement of the existing column flange at the bracket, or a support that does not load its flange through welded ribs (a crane column beside the building column, a column cap) is an engineer-of-record item; the calculation reports the check (Column flange at rib weld toes · fatigue)`].filter(Boolean).join('; ');
   return q;
  }
  for(const shape of heavierColumns(col.shape)){
@@ -1392,7 +1402,7 @@ function withSteppedTie(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):Pr
  // The existing shafts as assumed or entered: their governing ratios, reported (never resized).
  const checks=steppedColumnChecks(q,steppedColumnAnalysis(q,supportReactions(q,sectionProperties(q.section)))),U=(id:string)=>checks.find(v=>v.id===id)?.utilization??0;
  const shafts=[['upper',U('column-upper-interaction')],['lower',Math.max(U('column-lower-interaction'),U('column-lower-torsion'))]] as const;
- trace.shafts=`Existing shafts as assumed: H1 ratio ${shafts.map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')}${shafts.some(([,v])=>v>1+1e-9)?': over 1.00, a reinforcement or engineer-of-record evaluation item (the configurator does not resize existing members)':''}.`;
+ trace.shafts=`Existing shafts as assumed: H1 ratio ${shafts.map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')}${shafts.some(([,v])=>v>1+1e-9)?': over 1.00, a reinforcement or engineer-of-record evaluation item (the configurator does not resize existing members)':''}.`;
  if(!flangeTieFamily(q.details))return q;
  const worstOf=(r:ProjectInput)=>{const misfit=validateRunwayDetails(r).find(e=>/^details\.brace|tie/.test(e));
   return misfit?['tie fit',Infinity] as [string,number]:Object.entries(tieSizingRatios(r)).reduce((a,v)=>v[1]>a[1]?v:a,['',0] as [string,number]);};
@@ -1581,7 +1591,7 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
  const movement=['tie-move-strength','tie-move-weld','tie-move-gusset','tie-move-fatigue','tie-move-root-fatigue'];
  if(cfg.reach!==undefined&&(tieArrangement(p.details)==='paired-bars'||tieArrangement(p.details)==='flexible-plate')){
   const over=Object.entries(tieSizingRatios(p)).filter(([k,v])=>movement.includes(k)&&v>1+1e-9).sort((a,b)=>b[1]-a[1]);
-  if(over.length){const why=`The configured reach ${cfg.units==='SI'?`${Math.round(cfg.reach*inch)} mm`:`${cfg.reach} in`} holds the column face, and the tie at it still exceeds ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands: the girder end movement needs a longer flexible length (a longer reach, left blank for the configurator to choose).`;trace.tie=trace.tie?`${trace.tie} ${why}`:why;p.notes+=` ${why}`;}
+  if(over.length){const why=`The configured reach ${cfg.units==='SI'?`${Math.round(cfg.reach*inch)} mm`:`${cfg.reach} in`} holds the column face, and the tie at it still exceeds ${over.slice(0,2).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} for the estimated tie demands: the girder end movement needs a longer flexible length (a longer reach, left blank for the configurator to choose).`;trace.tie=trace.tie?`${trace.tie} ${why}`:why;p.notes+=` ${why}`;}
  }
  // Paired bars that cannot follow the girder end movement with both ends fixed take the column-end slide (sizeFlangeTie).
  const slide=p.details!.brace.release?.slide;
@@ -1704,7 +1714,7 @@ function capStiffenerTie(saddle:ProjectInput,angle:ProjectInput,reach:number|und
  const barsMove=Math.max(0,...r.filter(([k])=>k.startsWith('tie-move-')).map(([,v])=>v));
  if(!(worst<worstAngle-1e-9)||!(barsMove<angleMove-1e-9)||stiffenerGussetMisfit(laid)||validateRunwayDetails(laid).length)return undefined;
  const left=r.filter(([k,v])=>v>sizingLimit(Object.fromEntries(r),k)+1e-9);
- return {details:moved.details,angle:over,text:`the paired flat bars bolt to the tie-side bearing stiffener${stiffenerTieJoint(q)==='integral'?', cut as one plate with its gusset extension past the flange tip':', through a gusset plate CJP welded to the stiffener edge (UT)'}, the bars below the cap channel flanges, the full-depth stiffener pair carrying the tie force into the girder${left.length?` (sized, still over ${left.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands)`:''}.`};
+ return {details:moved.details,angle:over,text:`the paired flat bars bolt to the tie-side bearing stiffener${stiffenerTieJoint(q)==='integral'?', cut as one plate with its gusset extension past the flange tip':', through a gusset plate CJP welded to the stiffener edge (UT)'}, the bars below the cap channel flanges, the full-depth stiffener pair carrying the tie force into the girder${left.length?` (sized, still over ${left.slice(0,2).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} for the estimated tie demands)`:''}.`};
 }
 /** Reasons the build steps record for the selection log (selectionLog). */
 export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned;clip?:string;
@@ -1766,7 +1776,7 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
  const out:NonNullable<RunwayConfig['beyondCatalog']>=[];if(cfg.scope!=='design')return out;
  if(trial&&beyondGirderCatalog(trial)&&!entered.girderShape){
   const capped=cfg.girder==='capped';
-  out.push({member:'girder',shape:p.section.name,reason:clipReason(`Plate girder required: no ${capped?'W and channel cap pair':'compact rolled W or W and channel cap pair'} of the catalog meets the girder sizing targets for this crane and span (the closest, ${trial.name}, screening estimates: ${trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of the limits against targets ${trial.basis?.target} and ${trial.basis?.deflectionTarget}). Design a built-up plate girder with a wide top flange (or a surge plate or lateral truss), or shorten the span; the configurator does not design plate girders.${heavyAlternative(trial)}`)});
+  out.push({member:'girder',shape:p.section.name,reason:clipReason(`Plate girder required: no ${capped?'W and channel cap pair':'compact rolled W or W and channel cap pair'} of the catalog meets the girder sizing targets for this crane and span (the closest, ${trial.name}, screening estimates: ${trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of the limits against targets ${trial.basis?.target} and ${trial.basis?.deflectionTarget}). Design a built-up plate girder with a wide top flange (or a surge plate or lateral truss), or shorten the span with intermediate supports (added columns between the grids); the configurator does not design plate girders.${heavyAlternative(trial)}`)});
  }
  // The flange tie as sized and placed (paired bars, flexible plate, on a saddle or the bearing stiffener) with a sizing
  // ratio of its own still past 1.00 (the targets aside): no arrangement the configurator tried passes, so the tie is an
@@ -1779,9 +1789,14 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
   // One recommendation: on new columns with a bracket seat, column caps (the girder on the column axis: no seat twist
   // for the tie to follow); elsewhere the alternatives the configurator does not try here.
   const seat=cfg.structure==='new'&&!!p.details?.bracket?.enabled&&!!p.existingColumn?.isNew&&cfg.support!=='crane-column';
-  const advice=seat?'Recommended: column caps over the new columns (support column-cap): the girder bears on the column axis, so the traction no longer twists the column at a bracket seat and the tie takes only the girder end rotation and thermal travel; the configurator does not build that alternative here. Otherwise design the tie connection by hand.'
-   :'Choose another tie or support (a capped girder with the cap tieback angle, column caps, a stiffer support), or design the tie connection by hand.';
-  if(over.length)out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:clipReason(`Top-flange tie not resolved: the ${tieLabels[tieArrangement(d) as keyof typeof tieLabels]??tieArrangement(d)}${stiffenerTieGeometry(p)?' on the bearing stiffener':' on a flange saddle'}, as sized for the estimated tie demands, still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} (configurator estimates), and no other tie arrangement the configurator tries fits and passes here. ${advice}`)});
+  // The alternatives this project can take: the cap tieback angle needs a capped girder (none where the catalog has no
+  // capped pair, a plate girder being required); column caps sit on new columns, crane columns beside existing ones.
+  const capped=p.section.kind==='cap',plate=out.some(v=>v.member==='girder');
+  const options=[capped?'the cap tieback angle on the cap channel':plate?'':'a capped girder with the cap tieback angle',
+   cfg.structure==='new'?'column caps, whose end fork replaces the top-flange tie':cfg.support==='crane-column'?'':'crane columns beside the building columns with the girders on their caps','a stiffer support'].filter(Boolean);
+  const advice=seat?'Recommended: column caps over the new columns (support column-cap): the girder bears on the column axis, so the traction no longer twists the column at a bracket seat, and the end fork on the cap (the girder\'s bearing stiffeners with the couple of its bearing bolts) replaces the top-flange tie; the configurator does not build that alternative here. Otherwise design the tie connection by hand.'
+   :`Choose another tie or support (${options.slice(0,-1).join(', ')}${options.length>1?' or ':''}${options[options.length-1]}), or design the tie connection by hand.`;
+  if(over.length)out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:clipReason(`Top-flange tie not resolved: the ${tieLabels[tieArrangement(d) as keyof typeof tieLabels]??tieArrangement(d)}${stiffenerTieGeometry(p)?' on the bearing stiffener':' on a flange saddle'}, as sized for the estimated tie demands, still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (configurator estimates), and no other tie arrangement the configurator tries fits and passes here. ${advice}`)});
  }
  // The cap tieback angle as sized still past its limits (capAngleUnresolved) where no other tie was taken: no set of
  // the sizing steps carries this tie: an open item, never an issued tie its own sizing rejects (case 047).
@@ -1821,7 +1836,7 @@ const sizingRatioNames:Record<string,string>={tips:'top-flange tip stress (DG7, 
  * selected the girder and the next lighter candidate's reason for rejection, or the check that moved the tie, the
  * column or the longitudinal exit.
  */
-function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],trial:GirderTrial|undefined,p:ProjectInput,trace:SelectionTrace):ConfigSelection[]{
+function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],trial:GirderTrial|undefined,p:ProjectInput,trace:SelectionTrace,stop:NonNullable<RunwayConfig['beyondCatalog']>=[]):ConfigSelection[]{
  const out:ConfigSelection[]=[],design=cfg.scope==='design',si=cfg.units==='SI',len=(v:number)=>si?`${Math.round(v)} mm`:`${+(v/inch).toFixed(2)} in`,auto='configurator default';
  const add=(item:string,from:string,to:string,reason:string)=>out.push({item,entered:from.slice(0,160),designed:to.slice(0,200),reason:clipReason(reason)});
  const why=(field:ConfigRule['field'])=>rules.filter(r=>r.field===field).map(r=>r.why).join(' ');
@@ -1829,7 +1844,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  if(design&&entered.structure!==cfg.structure)add('Structure',structureLabel(entered.structure),structureLabel(cfg.structure),why('structure'));
  if(design&&entered.support!==cfg.support)add('Girder support',supportLabels[entered.support],supportLabels[cfg.support],why('support'));
  // The TR-13 bracket guideline above its reaction: an advisory row, the support kept as entered.
- else if(design&&why('support'))add('Girder support, advisory',supportLabels[entered.support],`${supportLabels[cfg.support]}, kept`,why('support'));
+ else if(design&&why('support'))add('Girder support, advisory',supportLabels[entered.support],`${supportLabels[cfg.support]}, kept`,rules.filter(r=>r.field==='support').map(r=>r.from===r.to&&r.why.startsWith('The support reaction, about')?supportAdvisory(cfg,serviceReactionEstimate(p)):r.why).join(' '));
  if(design&&entered.system!==cfg.system)add('Girder system',`${entered.bays} × ${entered.span} ft ${entered.system}`,`${cfg.bays} × ${cfg.span} ft ${cfg.system}`,why('system'));
  if(design&&p.details){
   const cap=!!activeColumnCap(p)&&!tiedToBuilding(p),arrangement=tieArrangement(p.details);
@@ -1864,7 +1879,11 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  if(design&&step&&trace.step)add('Step stiffener',`${auto} (none)`,`${step.stiffener?`Pair of plates ${len(step.stiffener.thickness)} × ${len(step.stiffener.width)}, ${len(step.stiffener.weld)} fillets`:'None'}${step.capWeldAdded?`; existing step fillets built up to ${len(step.capWeldAdded)}`:''}`,trace.step);
  const bracket=p.details?.bracket;
  if(design&&bracket?.enabled&&!activeColumnCap(p)&&entered.reach===undefined&&Math.abs(bracket.reach-20*inch)>1e-6)
-  add('Column face to girder web',`${auto} (${len(20*inch)})`,len(bracket.reach),`Set by the tie sizing: the column face moves out from 20 in (to at most ${trace.face!==undefined&&trace.face<30*inch-1e-6?`${len(trace.face)}, as far as the new column's twist and drift allow: the girder offset from the column axis is the lever of the eccentric reaction and of the longitudinal force at the seat`:'30 in'}) until the tie passes its imposed-movement and strength checks.`);
+  {const limit=trace.face!==undefined&&trace.face<30*inch-1e-6?trace.face:30*inch,why=limit<30*inch-1e-6?`, as far as the new column's twist and drift allow: the girder offset from the column axis is the lever of the eccentric reaction and of the longitudinal force at the seat`:'';
+   // A tie the configurator could not resolve (an open item): the face went as far as it may and the tie still fails there.
+   const open=stop.some(v=>v.member==='tie');
+   add('Column face to girder web',`${auto} (${len(20*inch)})`,len(bracket.reach),open?`Set by the tie sizing: the column face moves out from 20 in to ${Math.abs(bracket.reach-limit)<1e-6?`the ${len(limit)} limit${why}`:`${len(bracket.reach)} (at most ${len(limit)}${why})`}, and the tie still does not pass its imposed-movement and strength checks there (open item: top-flange tie).`
+    :`Set by the tie sizing: the column face moves out from 20 in (to at most ${len(limit)}${why}) until the tie passes its imposed-movement and strength checks.`);}
  if(design&&trace.cap&&activeColumnCap(p))add('Column cap, at its limits',auto,'Column cap with the girder end fork, kept',trace.cap);
  if(design&&trace.bracket&&bracket?.enabled)add('Column bracket, beyond use',supportLabels[entered.support],`${supportLabels[cfg.support]}, at its sizing limits, kept`,trace.bracket);
  if(design&&trace.splice)add('Girder field splices',`${auto} (none: one ${+(p.spans.reduce((a,b)=>a+b,0)/foot).toFixed(1)} ft piece)`,`${trace.splice.stations.length} bolted slip-critical splice${trace.splice.stations.length>1?'s':''}: ${trace.splice.where}`,`The continuous girder exceeds the ${+(practicalPieceLength/foot).toFixed(0)} ft practical shipping and erection piece: automatic placement 0.20 to 0.25 of the span from an interior support (the inflection region, nearest 0.22 L), every piece within ${+(trace.splice.splices.maxPiece/foot).toFixed(0)} ft. ${trace.splice.why}.`);

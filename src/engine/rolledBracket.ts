@@ -1,4 +1,4 @@
-import {categoryF,damageSum,damageText,finiteLife,minerEquation,minerEquivalent} from './fatigueConstants';
+import {categoryF,damageSum,damageText,finiteLife,spectrumFatigue} from './fatigueConstants';
 import {tieColumnScope} from './loadPathScope';
 import {seatSettingTolerance} from './fitTolerances';
 /**
@@ -24,6 +24,7 @@ import {activeEndBearing} from './endBearingInputs';
 import {aiscShapeByName} from '../data/aiscSections';
 import {activeColumnStiffeners} from './columnStiffenerInputs';
 import {columnStiffenerChecks,panelStiffenerNote,columnStiffenerGeometry,stiffenerGauge} from './columnStiffeners';
+import {columnToeShare} from './columnToeMoment';
 import {flangeColumnForces,flangeLevelStrengths,flangeJ10Checks,coupleStiffenerDemand,type FlangeLevels} from './flangeForceSystem';
 
 const inch=25.4,kip=4448.2216152605;
@@ -317,7 +318,7 @@ export function createRolledBracketCollector(p:ProjectInput){
    const w=stubWeldStress(st,g,a,f);let worst=0;
    w.points.forEach((q,i)=>{if(q.part!=='web')return;worst=Math.max(worst,Math.hypot(range(bin,`wn:${i}`,q.n),range(bin,`wx:${i}`,q.tx),range(bin,`wy:${i}`,q.ty)));});
    out.webWeld=Math.max(out.webWeld,worst);
-   put('column','column',f.V*(e+c.depth/2)/Sc);
+   put('column','column',f.V*(e+c.depth/2)*columnToeShare(p).factor/Sc);
    if(sf){f.sides.forEach((s,i)=>put('stiffenerWeld','sw:'+i,Math.sign(s.P)*stiffenerWeldStress(st,sf,Math.abs(s.P),s.x)));put('stiffenerToe','toe',f.V*(e-a)/st.Sx);}
    if(on.strip&&seat){put('seat','seat',6*on.strip.moment/(W*seat.t**2));on.strip.reactions.forEach((v,i)=>put('seatWeld','tw:'+i,Math.max(0,-v)/(seat.weld/Math.SQRT2*W)));}
    if(stiff){const q=stubStiffenerForces(st,f,gauge).plates;for(const level of ['upper','lower'] as const)q[level].forEach((v,i)=>{const key=level==='upper'?'stiffUpper':'stiffLower';out[key]=Math.max(out[key]!,range(bin,`${key}:${i}`,v));});}
@@ -509,14 +510,14 @@ export function rolledBracketChecks(p:ProjectInput,res:RolledBracketResults,serv
  const fatRefs=['w-bracket-basis','aisc-fatigue'],rFlange=transverseFilletFatigue(st.tf,r.flangeWeld,total).reduction,rWeb=transverseFilletFatigue(st.tw,r.webWeld,total).reduction;
  // Miner's rule over the bins as the equivalent constant-amplitude range at n_SR = Σn_i against (R_FIL) F_SR at n_SR.
  const miner=(id:string,title:string,key:'flange'|'web'|'column'|'stiffenerToe'|'seat',cf:number,cat:string,note:string,R=1,extra='')=>{
-  const m=minerEquivalent(F.map(v=>({cycles:v.cycles,range:v[key]})),n=>Cn(cf,n,R));
-  add(id,title,m.range,m.capacity,'stress',minerEquation(`\\ \\ \\text{(Cat. ${cat})}${extra}`,3,R<1),`${note} Miner's rule over the duty bins as the equivalent constant-amplitude range at n_SR = ${m.cycles.toLocaleString('en-US')} cycles, no endurance-limit credit; ${damageSum(m.damage)}.`,undefined,fatRefs);
+  const m=spectrumFatigue(p.fatigue.method,F.map(v=>({cycles:v.cycles,range:v[key]})),n=>Cn(cf,n,R));
+  add(id,title,m.range,m.capacity,'stress',m.equation(`\\ \\ \\text{(Cat. ${cat})}${extra}`,R<1),`${note} ${m.basis(`Miner's rule over the duty bins as the equivalent constant-amplitude range at n_SR = ${m.cycles.toLocaleString('en-US')} cycles, no endurance-limit credit; ${damageSum(m.damage)}.`)}`,undefined,fatRefs);
  };
  if(g.cjp)miner('fatigue-flange','Stub flanges at the CJP welds · fatigue','flange',4.4,'C','Table A-3.1 item 5.4, Category C: base and weld metal at the toe of the CJP T-joint with the reinforcement left in place. Range per bin of the flange-tip stress (bending, axial, flange lateral bending).');
  else miner('fatigue-flange','Stub flanges at the column fillets · fatigue','flange',4.4,rFlange<1?'C}^{\\prime\\prime}\\text{':'C',`Table A-3.1 item 5.6: the flanges are tension-loaded plate elements with a pair of transverse fillets; toe crack Category C, root crack Category C″ with R_FIL = ${rFlange.toFixed(3)} (Eq. A-3-6) for tf = ${fmt(st.tf)}, w = ${fmt(r.flangeWeld)}. Range of the flange-tip stress per bin.`,rFlange);
  miner('fatigue-web','Stub web at the column fillets · fatigue','web',4.4,rWeb<1?'C}^{\\prime\\prime}\\text{':'C',`Table A-3.1 item 5.6 for the web with its pair of fillets: web normal stress range at the ends of the web fillets, root crack Category C″ with R_FIL = ${rWeb.toFixed(3)} for tw = ${fmt(st.tw)}, w = ${fmt(r.webWeld)}.`,rWeb);
  add('fatigue-web-weld','Stub web fillets · throat fatigue',Math.max(0,...F.map(v=>v.webWeld)),weldF,'stress','f_{sr}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}','Table A-3.1 item 8.2, Category F on the throat; the largest unfactored range over the bins, from the ranges of the three throat components, assigned to all project cycles.',undefined,fatRefs);
- {const k=attachmentCategory(st.d,st.tw);miner('fatigue-column','Column flange at the stub weld toes · fatigue','column',k.Cf,k.tex.replace('^\\prime','}^{\\prime}\\text{'),`Table A-3.1 item 7.1, Category ${k.name}: the stub web fillets are an attachment without a transition radius, a = ${fmt(st.d)} along the column and b = t_w = ${fmt(st.tw)} (a ${k.range}). Range of the column flange stress from V·e_c on the receiving section; other building stress ranges excluded.`,1,';\\ \\ f_{sr}=\\Delta Ve_c/S_c');}
+ {const k=attachmentCategory(st.d,st.tw);miner('fatigue-column','Column flange at the stub weld toes · fatigue','column',k.Cf,k.tex.replace('^\\prime','}^{\\prime}\\text{'),`Table A-3.1 item 7.1, Category ${k.name}: the stub web fillets are an attachment without a transition radius, a = ${fmt(st.d)} along the column and b = t_w = ${fmt(st.tw)} (a ${k.range}). Range of the column flange stress from the column's share k_c = ${columnToeShare(p).factor.toFixed(2)} of V·e_c on the receiving section. ${columnToeShare(p).text} Other building stress ranges excluded.`,1,';\\ \\ f_{sr}=k_c\\Delta Ve_c/S_c');}
  if(stiff){
   add('fatigue-stiffener-weld','Stiffener fillets · throat fatigue',Math.max(0,...F.map(v=>v.stiffenerWeld)),weldF,'stress','f_{sr}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}','Table A-3.1 item 8.2, Category F on the throat of the stiffener-to-web and bottom-flange fillets; the largest range for all project cycles.',undefined,fatRefs);
   miner('fatigue-stiffener-toe','Stub at the stiffener weld toes · fatigue','stiffenerToe',4.4,'C','Table A-3.1 item 5.7, Category C: stub flange and web at the toes of the transverse stiffener fillets, range of the stub bending stress at the stiffener. The stiffener itself is in compression.');
@@ -532,7 +533,7 @@ export function rolledBracketChecks(p:ProjectInput,res:RolledBracketResults,serv
  const out=[...checks];
  out.push(...columnStiffenerChecks(p,{prefix:'wbracket',refs,...coupleStiffenerDemand(S,csg?stiffenerGauge(csg):0,'stub'),
   fatigue:F.map(v=>({cycles:v.cycles,upper:v.stiffUpper??0,lower:v.stiffLower??0,column:v.column})),
-  columnStressNote:'Range per duty bin of the column flange stress from V·e_c on the receiving section, as the stub-toe check; other building stress ranges are excluded. No endurance-limit credit.'}));
+  columnStressNote:`Range per duty bin of the column flange stress from the column's share k_c = ${columnToeShare(p).factor.toFixed(2)} of V·e_c on the receiving section (the largest over the bracket depth), as the stub-toe check; other building stress ranges are excluded. No endurance-limit credit.`}));
  return out;
 }
 /**

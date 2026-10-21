@@ -31,9 +31,12 @@ export function presentCheck(check:CheckResult,units:ProjectInput['units']):Chec
 export const noCapacity=(u:number|undefined)=>u!==undefined&&!Number.isNaN(u)&&(!Number.isFinite(u)||u>1e3);
 /**
  * Demand/capacity ratio as printed: NO CAPACITY for a ratio that is infinite or above 1000 (noCapacity), never the
- * sentinel or clamped number itself.
+ * sentinel or clamped number itself. A ratio past 1 never prints as 1 (1.004 is 1.01 at two decimals): rounding must
+ * not hide a failure.
  */
 export function dcText(u:number|undefined,digits:number,empty='-'){
  if(u===undefined||Number.isNaN(u))return empty;
- return noCapacity(u)?'NO CAPACITY':u.toFixed(digits);
+ if(noCapacity(u))return 'NO CAPACITY';
+ const t=u.toFixed(digits);
+ return u>1&&Number(t)<=1?(1+10**-digits).toFixed(digits):t;
 }

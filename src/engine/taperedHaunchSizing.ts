@@ -25,6 +25,7 @@ import {defaultTaperedHaunch,haunchGeometry,isTaperedHaunch,selectTaperedHaunch,
 import {haunchStations,haunchActions,haunchWebShear,haunchStiffener,haunchStiffenerWeldStress,haunchWeldGroup,haunchWeldStress,haunchCjpRatios,topFlangeStrip,stationMoment,haunchTipStresses,haunchColumnForces,haunchColumnStrengths,haunchService,stiffenerLoadPoint,receiverModulus} from './taperedHaunch';
 import {activeColumnStiffeners,initialColumnStiffeners,receiverK} from './columnStiffenerInputs';
 import {columnStiffenerChecks,columnStiffenerGeometry,stiffenerGauge} from './columnStiffeners';
+import {columnToeShare} from './columnToeMoment';
 
 const inch=25.4,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step;
 
@@ -92,7 +93,7 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
  // force on one plate (either girder end loaded), without the geometric checks a selection sets once.
  if(cs){
   const [qa,qb]=[fa,fb].map(f=>haunchColumnForces(g,f,gauge).stiffeners.plates),range=(level:'upper'|'lower')=>Math.max(...[0,1].map(i=>Math.max(Math.abs(qa[level][i]),Math.abs(qb[level][i]),Math.abs(qa[level][i]-qb[level][i]))));
-  const column=Math.abs(fa.V)*(e+c.depth/2)/receiverModulus(c);
+  const column=Math.abs(fa.V)*(e+c.depth/2)*columnToeShare(p).factor/receiverModulus(c);
   const checks=columnStiffenerChecks(p,{prefix:'haunch',refs:['haunch-basis'],demand:{upperT:demand.upperT,upperC:demand.upperC,lowerT:demand.lowerT,lowerC:demand.lowerC},
    couple:{gauge:gauge!,flange:Object.fromEntries((['upperT','upperC','lowerT','lowerC'] as const).filter(k=>demand[k]).map(k=>[k,{P:demand[k].P??0,M:demand[k].M??0}])),symbol:{upper:'T',lower:'C'}},
    fatigue:set.bins.map(v=>({cycles:v.cycles,upper:range('upper')*v.scale,lower:range('lower')*v.scale,column:column*v.scale})),columnStressNote:''});

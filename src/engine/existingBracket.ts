@@ -1,4 +1,4 @@
-import {damageSum,damageText,finiteLife,minerEquation,minerEquivalent} from './fatigueConstants';
+import {damageSum,damageText,finiteLife,spectrumFatigue} from './fatigueConstants';
 import type {ProjectInput,CheckResult} from './types';
 import type {BracketLoads} from './bracketDesign';
 import {seatStrip} from './bracketDesign';
@@ -99,7 +99,7 @@ export function existingBracketChecks(p:ProjectInput,r:ExistingBracketResults):C
  const fatigueReady=e.rating.fatigueRange>0&&e.rating.fatigueRootMoment>0&&e.rating.fatigueSeatMoment>0;
  const fatigueUtilization=fatigueReady?Math.max(0,...r.fatigue.map(f=>f.vertical/e.rating.fatigueRange+f.rootMoment/e.rating.fatigueRootMoment+f.seatMoment/e.rating.fatigueSeatMoment)):0;
  add('fatigue','Existing support · assessed cyclic ranges',fatigueUtilization,fatigueReady?1:0,'ratio','\\Delta V/V_{SR}+\\Delta M_r/M_{r,SR}+\\Delta M_s/M_{s,SR}\\le1','Twice each maximum absolute unfactored bin response bounds reversal; the largest combined ratio applies to all assessed cycles. The source assessment must permit this range interaction.');
- const seatEq=minerEquivalent(r.fatigue.map(f=>({cycles:f.cycles,range:f.seatStress})),n=>finiteLife(.39,n));
- add('seat-fatigue','New bolted spreader · fatigue',seatEq.range,seatEq.capacity,'stress',minerEquation('\\ \\ \\text{(Cat. E}^{\\prime}\\text{)}'),`E-prime base-metal bound at all seat sections; Miner's rule as the equivalent constant-amplitude range at n_SR = ${seatEq.cycles.toLocaleString('en-US')} cycles, no endurance-limit credit, ${damageSum(seatEq.damage)}. Twice peak absolute strip stress bounds full reversal. Bolt fatigue and existing steel are covered by the separate assessment.`);
+ const seatEq=spectrumFatigue(p.fatigue.method,r.fatigue.map(f=>({cycles:f.cycles,range:f.seatStress})),n=>finiteLife(.39,n));
+ add('seat-fatigue','New bolted spreader · fatigue',seatEq.range,seatEq.capacity,'stress',seatEq.equation('\\ \\ \\text{(Cat. E}^{\\prime}\\text{)}'),`E-prime base-metal bound at all seat sections${seatEq.allCycle?'. ':'; '}${seatEq.basis(`Miner's rule as the equivalent constant-amplitude range at n_SR = ${seatEq.cycles.toLocaleString('en-US')} cycles, no endurance-limit credit, ${damageSum(seatEq.damage)}.`)} Twice peak absolute strip stress bounds full reversal. Bolt fatigue and existing steel are covered by the separate assessment.`);
  return checks;
 }

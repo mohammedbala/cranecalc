@@ -1,4 +1,4 @@
-import {categoryF,damageSum,damageText,finiteLife,minerEquation,minerEquivalent} from './fatigueConstants';
+import {categoryF,damageSum,damageText,finiteLife,spectrumFatigue} from './fatigueConstants';
 import {tieColumnScope} from './loadPathScope';
 import {seatSettingTolerance} from './fitTolerances';
 /**
@@ -28,6 +28,7 @@ import {endGridCentered} from './simpleSupports';
 import {activeEndBearing} from './endBearingInputs';
 import {activeColumnStiffeners} from './columnStiffenerInputs';
 import {columnStiffenerChecks,panelStiffenerNote,stiffenerGauge,columnStiffenerGeometry} from './columnStiffeners';
+import {columnToeShare} from './columnToeMoment';
 import {flangeColumnForces,flangeLevelStrengths,flangeJ10Checks,coupleStiffenerDemand,type FlangeLevels} from './flangeForceSystem';
 
 const inch=25.4,kip=4448.2216152605;
@@ -375,7 +376,7 @@ export function createTaperedHaunchCollector(p:ProjectInput){
    // Base metal at the flange-to-web fillets (Category B) at the root: the bending stress at both junctions.
    for(const [id,z] of [['ft',root.h-g.tt],['fb',g.tbv]] as const)put('flangeWeb',id,f.N/root.A+f.Mx*(z-root.ybar)/root.Ix);
    put('stiffenerToe','toe',stationMoment(f,sa,g.a)/sa.Sxt);
-   put('column','column',f.V*(e+c.depth/2)/Sc);
+   put('column','column',f.V*(e+c.depth/2)*columnToeShare(p).factor/Sc);
    // Throat ranges at every weld line end, from the ranges of the three components.
    const w=haunchWeldStress(g,grp,root,f);
    for(const part of ['web','flange'] as const){let worst=0;w.points.forEach((q,i)=>{if((part==='web')!==(q.part==='web'))return;worst=Math.max(worst,Math.hypot(range(bin,`wn:${i}`,q.n),range(bin,`wx:${i}`,q.tx),range(bin,`wy:${i}`,q.ty)));});out[part==='web'?'webWeld':'flangeWeld']=Math.max(out[part==='web'?'webWeld':'flangeWeld'],worst);}
@@ -632,8 +633,8 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
  // (R_FIL F_SR for a fillet root), the same basis as the all-cycle bound; Σn_i/N_i is given in the note.
  const fatRefs=['haunch-basis','aisc-fatigue'],rTop=transverseFilletFatigue(g.tt,g.flangeWeld,total).reduction;
  const miner=(id:string,title:string,key:'topFlange'|'bottomFlange'|'flangeWeb'|'stiffenerToe'|'column'|'flare',cf:number,cat:string,note:string,R=1,extra='')=>{
-  const m=minerEquivalent(F.map(v=>({cycles:v.cycles,range:v[key]})),n=>Cn(cf,n,R));
-  add(id,title,m.range,m.capacity,'stress',minerEquation(`\\ \\ \\text{(Cat. ${cat})}${extra}`,3,R<1),`${note} Miner's rule over the duty bins as the equivalent constant-amplitude range at n_SR = ${m.cycles.toLocaleString('en-US')} cycles against ${R<1?'R_FIL F_SR':'F_SR'} at n_SR, no endurance-limit credit; ${damageSum(m.damage)}.`,undefined,fatRefs);
+  const m=spectrumFatigue(p.fatigue.method,F.map(v=>({cycles:v.cycles,range:v[key]})),n=>Cn(cf,n,R));
+  add(id,title,m.range,m.capacity,'stress',m.equation(`\\ \\ \\text{(Cat. ${cat})}${extra}`,R<1),`${note} ${m.basis(`Miner's rule over the duty bins as the equivalent constant-amplitude range at n_SR = ${m.cycles.toLocaleString('en-US')} cycles against ${R<1?'R_FIL F_SR':'F_SR'} at n_SR, no endurance-limit credit; ${damageSum(m.damage)}.`)}`,undefined,fatRefs);
  };
  if(grp.cjp)miner('fatigue-top-flange','Top flange at the column CJP weld · fatigue','topFlange',4.4,'C','Table A-3.1 item 5.4, Category C: base and weld metal at the toe of the CJP T-joint with the reinforcement left in place. Range per bin of the top flange tip stress (bending, axial, lateral bending from torsion).');
  else miner('fatigue-top-flange','Top flange at the column fillets · fatigue','topFlange',4.4,'C}^{\\prime\\prime}\\text{',`Table A-3.1 item 5.6 (the 360-16 item for a pair of transverse fillets; item 5.5 is the PJP case): toe crack Category C, root crack Category C″ with R_FIL = ${rTop.toFixed(3)} (Eq. A-3-6) for tt = ${fmt(g.tt)}, w = ${fmt(g.flangeWeld)}. Range of the top flange tip stress per bin.`,rTop);
@@ -641,7 +642,7 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
  miner('fatigue-flange-web','Flange-to-web fillets · base metal fatigue (B)','flangeWeb',12,'B','Table A-3.1 item 3.1, Category B: base metal of a built-up member at continuous longitudinal fillet welds, no attachments. Range of the bending stress at the top and bottom flange-to-web junctions at the root.');
  miner('fatigue-stiffener-toe','Top flange and web at the stiffener weld toes · fatigue','stiffenerToe',4.4,'C','Table A-3.1 item 5.7, Category C: tension-loaded flange and web at the toes of the transverse stiffener fillets, range of the top-fiber bending stress at the girder web line. The stiffeners themselves are in compression.');
  if(g.flare)miner('fatigue-flare','Top flange at the flare corner · fatigue','flare',4.4,'C',`Table A-3.1 item 1.3, Category C: base metal at the re-entrant corner where the top flange starts to flare, ${fmt(g.flare.y0)} from the column face, cut to a ${fmt(g.flare.radius)} radius and ground (R >= 1 in). Range of the top-fiber bending stress there per bin.`);
- {const k=attachmentCategory(g.hr,g.tw);miner('fatigue-column','Existing column flange at the haunch weld toes · fatigue','column',k.Cf,k.tex.replace('^\\prime','}^{\\prime}\\text{'),`Table A-3.1 item 7.1, Category ${k.name}: the haunch web fillets are an attachment without a transition radius, a = ${fmt(g.hr)} along the column and b = t_w = ${fmt(g.tw)} (a ${k.range}). Range of the column flange stress from V·e_c on the receiving section; other building stress ranges excluded.`,1,';\\ \\ f_{sr}=\\Delta Ve_c/S_c');}
+ {const k=attachmentCategory(g.hr,g.tw);miner('fatigue-column','Existing column flange at the haunch weld toes · fatigue','column',k.Cf,k.tex.replace('^\\prime','}^{\\prime}\\text{'),`Table A-3.1 item 7.1, Category ${k.name}: the haunch web fillets are an attachment without a transition radius, a = ${fmt(g.hr)} along the column and b = t_w = ${fmt(g.tw)} (a ${k.range}). Range of the column flange stress from the column's share k_c = ${columnToeShare(p).factor.toFixed(2)} of V·e_c on the receiving section. ${columnToeShare(p).text} Other building stress ranges excluded.`,1,';\\ \\ f_{sr}=k_c\\Delta Ve_c/S_c');}
  const throat=(key:'webWeld'|'flangeWeld'|'flangeWebWeld'|'stiffenerWeld',id:string,title:string,what:string)=>add(id,title,Math.max(0,...F.map(v=>v[key])),weldF,'stress','f_{sr}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',`Table A-3.1 item 8.2, Category F on the throat of ${what}; the largest unfactored range over the bins, from the ranges of the throat components, assigned to all project cycles.`,undefined,fatRefs);
  throat('webWeld','fatigue-web-weld','Web-to-column fillets · throat fatigue','the web-to-column fillets');
  if(!grp.cjp)throat('flangeWeld','fatigue-flange-weld','Flange-to-column fillets · throat fatigue','the flange-to-column fillets');
@@ -654,7 +655,7 @@ export function taperedHaunchChecks(p:ProjectInput,res:TaperedHaunchResults,serv
  const out=[...checks];
  out.push(...columnStiffenerChecks(p,{prefix:'haunch',refs,...coupleStiffenerDemand(S,gauge,'haunch'),
   fatigue:F.map(v=>({cycles:v.cycles,upper:v.stiffUpper??0,lower:v.stiffLower??0,column:v.column})),
-  columnStressNote:'Range per duty bin of the column flange stress from V·e_c on the receiving section, as the haunch weld-toe check; other building stress ranges are excluded. No endurance-limit credit.'}));
+  columnStressNote:`Range per duty bin of the column flange stress from the column's share k_c = ${columnToeShare(p).factor.toFixed(2)} of V·e_c on the receiving section (the largest over the bracket depth), as the haunch weld-toe check; other building stress ranges are excluded. No endurance-limit credit.`}));
  return out;
 }
 

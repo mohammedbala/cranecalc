@@ -1,4 +1,4 @@
-import {categoryF,damageSum,damageText,finiteLife,minerEquation,minerEquivalent} from './fatigueConstants';
+import {categoryF,damageSum,damageText,finiteLife,spectrumFatigue} from './fatigueConstants';
 /**
  * Column stiffeners (continuity plates) in the receiving column at a welded column bracket: a pair of plates, one each
  * side of the column web, at each concentrated force level of the bracket. The welded twin-rib and haunched brackets
@@ -272,15 +272,15 @@ export function columnStiffenerChecks(p:ProjectInput,x:ColumnStiffenerContext):C
  const plateRange=x.fatigue.map(v=>Math.max(v.upper,v.lower));
  // Miner's rule as the equivalent constant-amplitude range at n_SR = Σn_i against (R_FIL) F_SR at n_SR.
  const R=transverseFilletFatigue(g.t,g.s.flangeWeld,total).reduction;
- const plate=minerEquivalent(x.fatigue.map((v,i)=>({cycles:v.cycles,range:plateRange[i]/(g.contact*g.t)})),n=>finiteLife(4.4,n,R));
- add('fatigue-plate','Column stiffener plates at the flange fillets · fatigue (A-3.1 item 5.6)',plate.range,plate.capacity,'stress',minerEquation(`\\ \\ \\text{(Cat. C}${R<1?'^{\\prime\\prime}':''}\\text{)};\\ \\ f_{sr,i}=\\frac{\\Delta P_i}{(b_s-c)t_s}`,3,R<1),
-  `Table A-3.1 item 5.6: each plate is a tension-loaded plate element connected at its end by transverse fillets on opposite sides; toe crack Category C, root crack Category C″ with R_FIL = ${R.toFixed(3)} (Eq. A-3-6) for t = ${f(g.t)}, w = ${f(g.s.flangeWeld)}. Range per duty bin of the force on one plate at the more loaded level, over its ${f(g.contact)} contact; both levels treated as tension loaded. Miner's rule over the duty bins as the equivalent constant-amplitude range at n_SR = ${plate.cycles.toLocaleString('en-US')} cycles, no endurance-limit credit; ${damageSum(plate.damage)}.`,undefined,fatRefs);
+ const plate=spectrumFatigue(p.fatigue.method,x.fatigue.map((v,i)=>({cycles:v.cycles,range:plateRange[i]/(g.contact*g.t)})),n=>finiteLife(4.4,n,R));
+ add('fatigue-plate','Column stiffener plates at the flange fillets · fatigue (A-3.1 item 5.6)',plate.range,plate.capacity,'stress',plate.equation(`\\ \\ \\text{(Cat. C}${R<1?'^{\\prime\\prime}':''}\\text{)};\\ \\ f_{sr,i}=\\frac{\\Delta P_i}{(b_s-c)t_s}`,R<1),
+  `Table A-3.1 item 5.6: each plate is a tension-loaded plate element connected at its end by transverse fillets on opposite sides; toe crack Category C, root crack Category C″ with R_FIL = ${R.toFixed(3)} (Eq. A-3-6) for t = ${f(g.t)}, w = ${f(g.s.flangeWeld)}. Range per duty bin of the force on one plate at the more loaded level, over its ${f(g.contact)} contact; both levels treated as tension loaded. ${plate.basis(`Miner's rule over the duty bins as the equivalent constant-amplitude range at n_SR = ${plate.cycles.toLocaleString('en-US')} cycles, no endurance-limit credit; ${damageSum(plate.damage)}.`)}`,undefined,fatRefs);
  const throat=Math.max(0,...plateRange.map(v=>Math.max(v/(te2(g.s.flangeWeld)*g.contact),v/(te2(g.s.webWeld)*g.webLength))));
  add('fatigue-weld','Column stiffener fillets · throat fatigue (A-3.1 item 8.2)',throat,weldF,'stress','f_{sr}=\\frac{\\Delta P}{2(0.707w)l}\\le F_{SR}=690(1.5/n_{SR})^{0.167}\\ge55\\,\\mathrm{MPa}',
   `Table A-3.1 item 8.2, Category F, shear on the throat of the flange and web fillets of one plate; the largest unfactored range over the duty bins assigned to all ${total.toLocaleString('en-US')} project cycles.`,undefined,fatRefs);
- const toe=minerEquivalent(x.fatigue.map(v=>({cycles:v.cycles,range:v.column})),n=>finiteLife(4.4,n));
- add('fatigue-toe','Column flange at the stiffener weld toes · fatigue (A-3.1 item 5.7)',toe.range,toe.capacity,'stress',minerEquation('\\ \\ \\text{(Cat. C)}'),
-  `Table A-3.1 item 5.7, Category C: column flange (and web) base metal at the toe of the transverse fillets of the stiffeners, which are ${f(g.t)} thick along the column (item 7.1 would also give C, a < 2 in). ${x.columnStressNote} Equivalent constant-amplitude range at n_SR = ${toe.cycles.toLocaleString('en-US')} cycles; ${damageSum(toe.damage)}.`,undefined,fatRefs);
+ const toe=spectrumFatigue(p.fatigue.method,x.fatigue.map(v=>({cycles:v.cycles,range:v.column})),n=>finiteLife(4.4,n));
+ add('fatigue-toe','Column flange at the stiffener weld toes · fatigue (A-3.1 item 5.7)',toe.range,toe.capacity,'stress',toe.equation('\\ \\ \\text{(Cat. C)}'),
+  `Table A-3.1 item 5.7, Category C: column flange (and web) base metal at the toe of the transverse fillets of the stiffeners, which are ${f(g.t)} thick along the column (item 7.1 would also give C, a < 2 in). ${x.columnStressNote} ${toe.basis(`Equivalent constant-amplitude range at n_SR = ${toe.cycles.toLocaleString('en-US')} cycles; ${damageSum(toe.damage)}.`)}`,undefined,fatRefs);
  return checks;
 }
 /**
