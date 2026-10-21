@@ -156,7 +156,9 @@ export interface ExistingColumnResult {
 export interface ColumnSupportResult {
  exit:'girder-strut'|'column-strut'|'eave-strut';exitEntered:boolean;offset:number;girderTop:number;
  /** Crane-level strut on the girder line: the column's own stiffness there (k_y, K_θ, k_c), the strut stiffness specified (ratio·k_c) and the share of the force the column keeps. */
- strut?:{kY:number;Ktheta:number;kc:number;ratio:number;required:number;share:number};
+ strut?:{kY:number;Ktheta:number;kc:number;ratio:number;required:number;share:number;
+  /** A stepped column's girder-line strut designed here (craneLevelStrut.ts): its path stiffness and the shares at each grid. */
+  designed?:{shape:string;ys:number;kb:number;EA:number;grids:number[];at:{ks:number;keep:number;arm:number;rot:number;strut:number;move:number}[];layout:import('./craneLevelStrut').StepStrutLayout;strutShare:number}};
  seat:{grid:number;moment:number;case:string}[];traction:number;bumper:number;bumperGrids:number[];
  frame:{type:'braced'|'sway';entered:boolean;B2?:number};
  f13?:{holds:boolean;Afn:number;Afg:number;Yt:number;demand:number;capacity:number;Mn:number};
@@ -378,7 +380,9 @@ export function craneLevelStrut(p:ProjectInput,r:Pick<ExistingColumnResult,'supp
  const z=r.support,c=p.existingColumn;if(!z||!c||c.isNew||c.longitudinal!=='bracing'||z.exit==='eave-strut')return undefined;
  const lrfd=p.method==='LRFD',traction=(lrfd?1.6:1)*z.traction,stop=(lrfd?1:.67)*z.bumper,grids=locatingGrids(p).map(j=>j+1);
  return {location:z.exit==='girder-strut'?'girder-line' as const:'column-centerline' as const,offset:z.exit==='girder-strut'?z.offset:0,grids,traction,stop,stopGrids:z.bumperGrids,
-  force:Math.max(traction,stop),stiffness:z.exit==='girder-strut'?z.strut?.required:undefined,ratio:z.strut?.ratio,assumed:!z.exitEntered};
+  force:Math.max(traction,stop),stiffness:z.exit==='girder-strut'?z.strut?.required:undefined,ratio:z.strut?.ratio,assumed:!z.exitEntered,
+  /** A stepped column's girder-line strut designed here (craneLevelStrut.ts): its shape; the strut is then not by others. */
+  designed:z.strut?.designed?.shape};
 }
 export type CraneLevelStrut=NonNullable<ReturnType<typeof craneLevelStrut>>;
 

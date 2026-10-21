@@ -32,7 +32,7 @@ import {supportReactions} from './supportReactions';
 import {existingColumnAnalysis,existingColumnChecks,existingColumnSection,twistMovementLimit} from './existingColumn';
 import {existingWeldingDemand} from './existingWelding';
 import {baseDrift,footingsOf} from './columnBase';
-import {sizeCapAngle,capAngleForceEstimate,validateCapAngle,capAngleSizingRatios} from './capAngleTie';
+import {sizeCapAngle,capAngleForceEstimate,validateCapAngle,capAngleSizingRatios,capAngleFits,capAngleWrenchSetback} from './capAngleTie';
 import {simpleSupportInput,railClipStations} from './simpleSupports';
 import {seatSettingTolerance} from './fitTolerances';
 import {sizeWeldedBracket,bracketColumnFatigueRatio,bracketSizingRatios} from './bracketSizing';
@@ -44,11 +44,11 @@ import {capWorkPointDrop,columnCapGeometry} from './columnCap';
 import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
 import {cantileverHeightLimit} from './runwaySeismic';
-import {columnGussetHeight,flangeTieFamily,flangeTieGeometry,stiffenerTieGeometry} from './tieGeometry';
+import {columnGussetHeight,flangeTieFamily,flangeTieGeometry,stiffenerTieGeometry,stiffenerTieJoint} from './tieGeometry';
 import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener,bracketServiceDeflection,setBracketReach} from './flangeTieSizing';
 import {designSplices,type SplicesDesigned} from './spliceSizing';
 import {practicalPieceLength} from './girderPieces';
-import {applyBearingLayout,bearingSeat,defaultBearingShim} from './endBearing';
+import {applyBearingLayout,bearingSeat,defaultBearingShim,capTieBearingLength} from './endBearing';
 import {validateRunwayDetails} from './detailValidation';
 import {stiffenerGussetMisfit} from './connectionCoordination';
 import {weldedRibBracket} from './bracketRib';
@@ -62,7 +62,11 @@ import {transverseFilletFatigue,minimumFillet} from './connectionStrength';
 import {stiffenerPairSection} from './detailChecks';
 import {finiteLife,fatigueThreshold} from './fatigueConstants';
 import {columnReactionOffset} from './existingColumn';
-import {stepGeometry,steppedColumnAnalysis,steppedColumnChecks} from './steppedColumn';
+import {stepGeometry,steppedColumnAnalysis,steppedColumnChecks,stepWeldThickness} from './steppedColumn';
+import {stepStrutChecks,stepStrutLayout,type StepStrutForces} from './craneLevelStrut';
+import {bumperAtGrids,locatingGrids} from './columnSupport';
+import {craneLevelStrut} from './existingColumn';
+import type {SupportReactionSet} from './supportReactions';
 import {activeStep} from './steppedColumnInputs';
 import {independentBearings} from './simpleSupports';
 import {twistRotationLimit,twistSlip} from './columnTwistLimit';
@@ -629,7 +633,7 @@ function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
  const {config:cfg,sk,rules,entered}=screened(input),{p,depth,clipWidth,spectrum,N,railArea}=sk,spans=p.spans;
  // Both new supports are built: the crane column (craneColumnSupport) and the stepped column (withSteppedColumn).
  p.configurator={...cfg};
- const logged=(q:ProjectInput)=>{alignTieGusset(q,trace);const stop=beyondCatalog(entered,cfg,sk.trial,q,trace);q.configurator={...cfg,selections:[...selectionLog(entered,cfg,rules,sk.trial,q,trace).slice(0,24-stop.length),...stop.map(openItemRow)],...(stop.length?{beyondCatalog:stop}:{})};return q;};
+ const logged=(q:ProjectInput)=>{alignTieGusset(q,trace);refitCapAngleSetback(q,cfg,trace);const stop=beyondCatalog(entered,cfg,sk.trial,q,trace);q.configurator={...cfg,selections:[...selectionLog(entered,cfg,rules,sk.trial,q,trace).slice(0,24-stop.length),...stop.map(openItemRow)],...(stop.length?{beyondCatalog:stop}:{})};return q;};
  const scopeText=`${cfg.bays} ${cfg.system==='simple'?'simply supported':'continuous'} ${cfg.span}-ft bay${cfg.bays>1?'s':''}, ${p.section.name} girder${cfg.bays>1?'s':''}, ${cfg.cranes===2?'two':'one'} ${+cfg.capacity.toFixed(2)}-ton ${cfg.control} crane${cfg.cranes===2?'s':''}`;
  if(cfg.scope==='analysis'){
   delete p.details;p.connections.enabled=false;
@@ -832,7 +836,8 @@ function withoutRailPad(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace,log
  */
 function withPreheat(p:ProjectInput):ProjectInput{
  const c=p.existingColumn;if(!c?.enabled||c.isNew||!c.welding)return p;
- c.welding={...c.welding,preheat:existingWeldingDemand(p,existingColumnSection(p).section.tf).need};
+ const g=activeStep(p)?stepGeometry(p):undefined;
+ c.welding={...c.welding,preheat:existingWeldingDemand(p,g?stepWeldThickness(p,g):existingColumnSection(p).section.tf).need};
  return p;
 }
 /**
@@ -843,14 +848,51 @@ function withPreheat(p:ProjectInput):ProjectInput{
  */
 function withLongitudinalExit(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  const c=p.existingColumn;if(!c?.enabled||c.isNew)return p;
- if(cfg.longitudinalExit){c.longitudinalExit=cfg.longitudinalExit;return p;}
- c.longitudinalExit='column-strut';
  const reactions=supportReactions(p,sectionProperties(p.section));
+ if(cfg.longitudinalExit){c.longitudinalExit=cfg.longitudinalExit;if(cfg.longitudinalExit==='girder-strut'&&activeStep(p))withStepStrut(p,reactions,trace);return p;}
+ c.longitudinalExit='column-strut';
  // A stepped column twists in its lower shaft (steppedColumn.ts, column-lower-torsion).
  // Its twist at the step is limited too (column-lower-twist, factored; column-lower-twist-movement, service): the worst of the three.
  const torsion=activeStep(p)?steppedColumnChecks(p,steppedColumnAnalysis(p,reactions)).filter(v=>/^column-lower-(torsion|twist|twist-movement)$/.test(v.id)).reduce((a:ReturnType<typeof steppedColumnChecks>[number]|undefined,v)=>!a||!(v.utilization!<=a.utilization!)?v:a,undefined):existingColumnChecks(p,existingColumnAnalysis(p,reactions)).find(v=>v.id==='column-torsion');
- if(torsion&&!(torsion.utilization!<=1)){c.longitudinalExit='girder-strut';trace.exit=`${torsion.id} ${Number.isFinite(torsion.utilization)?torsion.utilization!.toFixed(2):'unstable'} > 1.00 with the strut at the column centerline (the girder offset twists the column): the crane-level strut by others on the girder line${activeStep(p)?', stiff enough that the share of the force the column keeps holds the twist limits':''}`;}
+ if(torsion&&!(torsion.utilization!<=1)){c.longitudinalExit='girder-strut';trace.exit=`${torsion.id} ${Number.isFinite(torsion.utilization)?torsion.utilization!.toFixed(2):'unstable'} > 1.00 with the strut at the column centerline (the girder offset twists the column): ${activeStep(p)?'the crane-level strut on the girder line, designed here, its path to the braced bay stiff enough that the share of the force the column keeps holds the twist limits':'the crane-level strut by others on the girder line'}`;
+  if(activeStep(p))withStepStrut(p,reactions,trace);}
  return p;
+}
+/**
+ * The stepped column's crane-level strut on the girder line (craneLevelStrut.ts), new steel: the lightest W8 to W14 with
+ * nonslender elements (B4.1a) and L_c/r ≤ 200 over the longest bay that passes the strut's member checks, its
+ * connection the fewest and smallest bolts and the thinnest plate that pass the connection checks (A572 Gr. 50 plate,
+ * A992 strut, A325 bolts); then, with the strut in the column model, the next heavier shapes while the strut's own checks
+ * (with its share of the force) or the column's twist checks still fail and a stiffer strut lowers the worst ratio.
+ */
+function withStepStrut(p:ProjectInput,reactions:SupportReactionSet,trace:SelectionTrace){
+ const s=activeStep(p)!,E=p.section.E,Fy=50*ksi,limit=(v:number)=>v<=1+1e-9;
+ const g=stepGeometry(p)!,locating=[...new Set([...locatingGrids(p),...bumperAtGrids(p).grids])],layout=stepStrutLayout(p,locating);
+ const shapes=aiscWShapes.filter(w=>/^W(8|10|12|14)X/.test(w.name)&&w.bf/(2*w.tf)<=.56*Math.sqrt(E/Fy)&&(w.d-2*w.kdes)/w.tw<=1.49*Math.sqrt(E/Fy)&&layout.bay/(Math.sqrt(w.Iy/w.A)*inch)<=200).sort((a,b)=>a.weight-b.weight);
+ if(!shapes.length){trace.strut='No W8 to W14 keeps L_c/r ≤ 200 over the bay: the crane-level strut needs intermediate bracing (not designed here).';return;}
+ const run=()=>{const a=steppedColumnAnalysis(p,reactions),z=a.summary,cls=craneLevelStrut(p,z)!;return {a,z,cls};};
+ const memberIds=/^step-strut-(compression|slenderness|tension)$/,strutChecks=(x:StepStrutForces)=>stepStrutChecks(p,g,x,layout);
+ // The connection for a strut and force: fewest bolts, then the smallest bolt and the thinnest plate.
+ const connect=(x:StepStrutForces)=>{
+  for(const n of [2,3,4,5,6])for(const db of [.75,.875,1].map(v=>v*inch))for(const rows of [2,3,4,5,6])for(const tp of [.5,.625,.75,.875,1].map(v=>v*inch)){
+   s.strut={...s.strut!,plate:{...s.strut!.plate,thickness:tp},bolts:{diameter:db,grade:'A325'},strutBolts:n,columnRows:rows};
+   if(strutChecks(x).every(c=>c.status==='pass'))return true;}
+  return false;};
+ let x:StepStrutForces|undefined,best:{U:number;strut:NonNullable<typeof s.strut>}|undefined;
+ for(const w of shapes){
+  s.strut={shape:w.name,Fy,Fu:65*ksi,plate:{thickness:.5*inch,Fy,Fu:65*ksi},bolts:{diameter:.75*inch,grade:'A325'},strutBolts:2,columnRows:2};
+  if(!x){const r=run();x={F:r.cls.force,caseId:'',share:r.z.support?.strut?.designed?.strutShare??1,service:r.z.support!.traction};}
+  if(!strutChecks(x).filter(c=>memberIds.test(c.id)).every(c=>c.status==='pass'))continue;
+  if(!connect(x))continue;
+  // The strut in the column model: its share of the force and the column's twist.
+  const r=run(),list=[...steppedColumnChecks(p,r.a)].filter(c=>/^step-strut-|^column-lower-twist/.test(c.id)),U=Math.max(...list.map(c=>c.utilization??0));
+  x={...x,share:r.z.support?.strut?.designed?.strutShare??x.share};
+  if(!best||U<best.U-1e-6)best={U,strut:structuredClone(s.strut)};else break;
+  if(limit(U))break;
+ }
+ if(!best){delete s.strut;trace.strut='No W8 to W14 strut and connection passed the strut checks: the crane-level strut on the girder line is by others.';return;}
+ s.strut=best.strut;const st=s.strut,len=(v:number)=>p.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
+ trace.strut=`The lightest W8 to W14 (A992, nonslender, L_c/r ≤ 200 over the ${+(layout.bay/foot).toFixed(1)} ft bay) whose member and connection checks pass with the line force${best.U>1+1e-9?` (the column twist with it is still ${best.U.toFixed(2)}: a heavier strut no longer lowers it, the existing bracing's stiffness governs)`:', and with which the column holds its twist limits'}: ${st.shape}, its web lapped on a ${len(st.plate.thickness)} plate bolted to each lower crane-side flange (${2*st.columnRows} - ${len(st.bolts.diameter)} A325), ${st.strutBolts} bolts at each strut end.`;
 }
 /**
  * The welded rib seats (twin-rib, haunched seat) sized for the reactions (sizeWeldedBracket): ribs, seat, fillets, the
@@ -1195,6 +1237,21 @@ function setStepTieFace(p:ProjectInput){
  if(d.brace.capAngle)d.brace.capAngle.columnFace=face;
 }
 /**
+ * Existing step fillets that still fail their Category F throat fatigue (step-weld-fatigue) once the step stiffener is
+ * settled: built up in the field to the required leg (step.capWeldAdded, new work: the next 1/16 in above the required
+ * leg, at most 1 in), a designed new-steel item instead of an open one. Above 1 in the step stays an engineer-of-record item.
+ */
+function buildUpStepWelds(q:ProjectInput,list:CheckResultLike[],trace:SelectionTrace):ProjectInput{
+ const s=activeStep(q)!,w=list.find(v=>v.id==='step-weld-fatigue') as (CheckResultLike&{demand?:number;utilization?:number})|undefined;
+ if(!w||w.status!=='fail'||w.demand===undefined)return q;
+ const leg=Math.ceil(w.demand/(inch/16)-1e-9)*inch/16;
+ if(leg>inch+1e-9)return q;
+ s.capWeldAdded=leg;
+ const why=`The existing ${+((s.capWeld??0)/inch).toFixed(3)} in step fillets fail Category F throat fatigue (step-weld-fatigue ${(w.utilization??0).toFixed(2)}, no bearing credit for an unfinished cap): built up in the field to a ${+(leg/inch).toFixed(4)} in leg (new work, AWS D1.1 Clause 11).`;
+ trace.step=`${trace.step?trace.step+' ':''}${why}`;q.notes+=` ${why}`;
+ return q;
+}
+/**
  * The step finished on the laid-out bearings: the example cap covers both girder bearings along the runway and the
  * bearing plate across it, at the assumed thickness for the crane class (never thickened: a failing cap is an EOR item); a step stiffener pair under
  * the upper inner flange only where the unstiffened lower web fails J10.2 or J10.3, the lightest plate that passes
@@ -1202,7 +1259,9 @@ function setStepTieFace(p:ProjectInput){
  */
 function finishSteppedColumn(q:ProjectInput,trace:SelectionTrace):ProjectInput{
  const s=activeStep(q);if(!s||!q.details)return q;
- const c=q.existingColumn!,d=q.details,N=d.bearing.length,reach=Math.max(0,...independentBearings(q).map(b=>Math.abs(b.center-b.station)));
+ // A continuous girder's runway-end bearing lies wholly on one side of the grid (seatEnds: centered N/2 from it), so the cap
+ // reaches N plus the setting tolerance each way (end-bearing-seat-fit), as a simple span's shared grid does.
+ const c=q.existingColumn!,d=q.details,N=d.bearing.length,reach=q.system==='continuous'?N/2:Math.max(0,...independentBearings(q).map(b=>Math.abs(b.center-b.station)));
  s.cap={...s.cap,width:up(c.d-c.tf+d.bearing.width,inch),length:up(Math.max(c.bf,2*(reach+N/2)+inch,N+inch),inch)};
  const reactions=supportReactions(q,sectionProperties(q.section)),checks=()=>steppedColumnChecks(q,steppedColumnAnalysis(q,reactions));
  const bad=(list:CheckResultLike[],ids:RegExp)=>list.filter(v=>ids.test(v.id)&&v.status==='fail');
@@ -1211,16 +1270,23 @@ function finishSteppedColumn(q:ProjectInput,trace:SelectionTrace):ProjectInput{
  let list=checks();
  const capFails=bad(list,/^step-(bearing|cap-flexure|flange-yielding)$/);
  if(capFails.length){trace.step=`The existing step cap (assumed PL ${+(s.cap.thickness/inch).toFixed(3)} in) fails ${capFails.map(v=>v.id).join(', ')}: a reinforcement or engineer-of-record evaluation item (the configurator does not resize existing members).`;q.notes+=` ${trace.step}`;}
- if(!bad(list,/^step-stiffener-required$/).length)return q;
+ // The existing cap-to-web fillets under the inner flange carry its force range in full when no stiffener is fitted
+ // (step-weld-fatigue, Category F, no bearing credit for an unfinished cap): a stiffener pair fitted to bear under the
+ // inner flange (new steel) takes that force on its own fillets (step-stiffener-fatigue) and relieves those welds.
+ const required=bad(list,/^step-stiffener-required$/).length>0,weldU=list.find(v=>v.id==='step-weld-fatigue')?.utilization??0,weld=weldU>1+1e-9;
+ if(!required&&!weld)return q;
  const tw=c.tw,width=Math.floor((c.bf/2-tw/2-.25*inch)/(inch/4)+1e-9)*inch/4;
  for(const t of [.375,.5,.625,.75,.875,1,1.25].map(v=>v*inch)){
   s.stiffener={thickness:t,width,weld:Math.max(.3125*inch,t>=.75*inch?.375*inch:0)};list=checks();
   if(!bad(list,/^step-stiffener-/).length)break;
  }
+ const after=list.find(v=>v.id==='step-weld-fatigue')?.utilization??0;
+ // Added for the welds alone, the pair stays only where it lowers the weld ratio (the cap-to-web fillet governed).
+ if(!required&&!(after<weldU-1e-9)){delete s.stiffener;return buildUpStepWelds(q,checks(),trace);}
  const web=list.find(v=>v.id==='step-web-yielding'||v.id==='step-web-crippling');
- trace.step=`${trace.step?trace.step+' ':''}The unstiffened lower web fails J10.2/J10.3 under the upper shaft's inner flange (${web?.title??'step web'}): a stiffener pair under the inner flange (J10.8), the thinnest plate passing the stiffener checks${bad(list,/^step-stiffener-/).length?' (none of the sizing steps passes them all; the checks report the stiffener)':''}.`;
+ trace.step=`${trace.step?trace.step+' ':''}${required?`The unstiffened lower web fails J10.2/J10.3 under the upper shaft's inner flange (${web?.title??'step web'})`:`The existing cap-to-web fillets under the upper shaft's inner flange fail Category F throat fatigue (step-weld-fatigue ${weldU.toFixed(2)}, no bearing credit for an unfinished cap)`}: a stiffener pair under the inner flange (J10.8), fitted to bear on the cap, the thinnest plate passing the stiffener checks${bad(list,/^step-stiffener-/).length?' (none of the sizing steps passes them all; the checks report the stiffener)':''}${!required?`; it carries the inner-flange force to the web on its own fillets (step-weld-fatigue ${after.toFixed(2)} with it)`:''}.`;
  q.notes+=` ${trace.step}`;
- return q;
+ return buildUpStepWelds(q,list,trace);
 }
 type CheckResultLike={id:string;status:string};
 /**
@@ -1361,6 +1427,9 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
    // A cap angle that does not fit the girder end and column: the saddle tie stays, its checks report it.
    if(misfit)p.details=saddle;
    trace.tie=misfit?`${why}, and no cap tieback angle of the sizing steps fits this girder end and column (${misfit}): the saddle tie stays as sized.`:`${why}: the tie is the cap tieback angle bolted to the channel cap.`;
+   // A cap angle that fits but clearly cannot carry the tie force (capAngleUnresolved): the bars on the bearing stiffener.
+   const stiff=!misfit&&capStiffenerTie({...p,details:saddle},p,farthest,bracket,face);
+   if(stiff){p.details=stiff.details;trace.tie=`${why}, and the cap tieback angle cannot carry the tie force (${stiff.angle}): ${stiff.text}`;}
    p.notes+=` ${trace.tie}`;
   }
  }
@@ -1446,10 +1515,14 @@ function fitClipJoints(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):boo
  * setBearings does), and the angle is sized again. Returns the first fit rule no sized angle meets, else undefined.
  */
 function fitCapAngle(p:ProjectInput):string|undefined{
- const d=p.details!,size=()=>{d.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p));return validateCapAngle(p);};
+ // The validateCapAngle rules, then the fit ratios the sizing holds at one (capAngleFits: the cap bolt edge to the
+ // channel flange tip, the hardware below the top of the rail, the column nuts clear of the web fillet).
+ const fitRatios=()=>{const g=capAngleGeometry(p);if(!g)return ['no cap angle geometry'];const m=capAngleMovementEstimate(p),r=capAngleSizingRatios(p,g,capAngleForceEstimate(p),m,d.spectrum.reduce((a,v)=>a+v.cycles,0)) as Record<string,number>;
+  return [...capAngleFits].filter(k=>r[k]>1+1e-9).map(k=>`${k} ${r[k].toFixed(2)}`);};
+ const d=p.details!,size=()=>{d.brace.capAngle=sizeCapAngle(p,capAngleForceEstimate(p),undefined,capAngleMovementEstimate(p));const v=validateCapAngle(p);return v.length?v:fitRatios();};
  let misfit=size();
  if(misfit.length&&p.system==='simple'&&d.simpleSupport?.endGridBearing==='centered'){d.simpleSupport.endGridBearing='on-grid';misfit=size();}
- return misfit[0]?.replace(/^details\.brace\.capAngle: /,'').replace(/[:.].*$/,'');
+ return misfit[0]?.replace(/^details\.brace\.capAngle: /,'').replace(/(: |\. |\.$).*$/,'');
 }
 /**
  * The ratios by which the sized cap tieback angle clearly fails under the estimated tie force and movements, beyond
@@ -1463,6 +1536,29 @@ function capAngleUnresolved(p:ProjectInput):string|undefined{
  const r=capAngleSizingRatios(p,g,capAngleForceEstimate(p),capAngleMovementEstimate(p,!!d.bracket?.enabled),d.spectrum.reduce((a,v)=>a+v.cycles,0));
  const moved=r.movementControlled??new Set<string>(),over=Object.entries(r as Record<string,number>).filter(([k,v])=>v>(moved.has(k)?2:1.5)).sort((a,b)=>b[1]-a[1]);
  return over.length?`sized ${d.brace.capAngle?.shape} still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${Number.isFinite(v)?v.toFixed(2):'no capacity'}`).join(', ')}`:undefined;
+}
+/**
+ * Paired flat bars on the tie-side bearing stiffener of a capped simple-span girder, in place of a fitting cap tieback
+ * angle that clearly cannot carry the tie force (capAngleUnresolved: its two bolts per group and one tie plate past
+ * 1.5 of their strength, or the movement-controlled fatigue past 2): the bars and the gusset extension drop below the
+ * cap channel's turned-down flanges (stiffenerTieGeometry) and the full-depth stiffener pair takes the force into the
+ * girder (tieOnBearingStiffener, sized by sizeFlangeTie). Kept where the bars validate and their largest sizing ratio is
+ * below the angle's (the estimates of each under the same tie force model); `saddle` is the project with the sized
+ * saddle tie, `angle` with the sized cap angle. Undefined where the angle may pass, or the bars do no better.
+ */
+function capStiffenerTie(saddle:ProjectInput,angle:ProjectInput,reach:number|undefined,bracket:NonNullable<ProjectInput['details']>['bracket'],face:number|undefined){
+ const over=capAngleUnresolved(angle);if(!over)return undefined;
+ const g=capAngleGeometry(angle)!,d=angle.details!,ra=capAngleSizingRatios(angle,g,capAngleForceEstimate(angle),capAngleMovementEstimate(angle,!!d.bracket?.enabled),d.spectrum.reduce((a,v)=>a+v.cycles,0));
+ const worstAngle=Math.max(...Object.values(ra as Record<string,number>));
+ const moved=tieOnBearingStiffener(saddle,{reach,bracket,face,capped:true,misfit:`the cap tieback angle ${over}`});
+ if(!moved)return undefined;
+ const q={...saddle,details:moved.details},r=Object.entries(tieSizingRatios(q)).sort((a,b)=>b[1]-a[1]),worst=r[0]?.[1]??0;
+ // The bearings are laid out again after the tie (setBearings): the column gussets at the bearing stiffeners must still
+ // land on the receiving column flange (coord-tie-gusset-flange) as laid out then.
+ const laid=structuredClone({...angle,details:moved.details});setBearings(laid);
+ if(!(worst<worstAngle-1e-9)||stiffenerGussetMisfit(laid)||validateRunwayDetails(laid).length)return undefined;
+ const left=r.filter(([k,v])=>v>sizingLimit(Object.fromEntries(r),k)+1e-9);
+ return {details:moved.details,angle:over,text:`the paired flat bars bolt to the tie-side bearing stiffener${stiffenerTieJoint(q)==='integral'?', cut as one plate with its gusset extension past the flange tip':', through a gusset plate CJP welded to the stiffener edge (UT)'}, the bars below the cap channel flanges, the full-depth stiffener pair carrying the tie force into the girder${left.length?` (sized, still over ${left.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands)`:''}.`};
 }
 /** Reasons the build steps record for the selection log (selectionLog). */
 export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned;clip?:string;
@@ -1480,6 +1576,8 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
  columnTie?:string;craneFace?:string;
  /** Stepped column: the lower and upper shaft choice and the step stiffener or cap the step checks needed. */
  lower?:string;upper?:string;step?:string;stepTie?:string;
+ /** Stepped column: the crane-level strut on the girder line designed here (withStepStrut). */
+ strut?:string;
  /** Internal: a rebuild with another tie type at the step (withSteppedTie), which does not try again. */
  stepTieRetry?:boolean;
  /** Stepped column: the existing shafts' governing ratios as built (never resized), a failing one an EOR / reinforcement item. */
@@ -1545,9 +1643,13 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
  */
 function alignTieGusset(p:ProjectInput,trace:SelectionTrace){
  const d=p.details;if(!d||!stiffenerTieGeometry(p))return;
- if(d.brace.gussetThickness<d.bearing.stiffenerThickness-1e-6)d.brace.gussetThickness=d.bearing.stiffenerThickness;
- if(trace.tie&&d.brace.gussetThickness>d.bearing.stiffenerThickness+1e-6)
-  trace.tie=trace.tie.replace(/, cut as one plate with its gusset extension past the flange tip( \(no weld at the gusset\))?/,', through a thicker gusset plate CJP welded to the stiffener edge (UT)');
+ // Not where the thicker gusset would put the column gussets past the receiving column flange tip
+ // (coord-tie-gusset-flange) and the sized one does not: the sized gusset stays, CJP welded to the thicker stiffener.
+ const t0=d.brace.gussetThickness,fits=!stiffenerGussetMisfit(p);
+ if(t0<d.bearing.stiffenerThickness-1e-6){d.brace.gussetThickness=d.bearing.stiffenerThickness;if(fits&&stiffenerGussetMisfit(p))d.brace.gussetThickness=t0;}
+ const t=d.brace.gussetThickness,st=d.bearing.stiffenerThickness;
+ if(trace.tie&&Math.abs(t-st)>1e-6)
+  trace.tie=trace.tie.replace(/, cut as one plate with its gusset extension past the flange tip( \(no weld at the gusset\))?/,`, through a ${t>st?'thicker':'thinner'} gusset plate CJP welded to the stiffener edge (UT)`);
 }
 const sizingRatioNames:Record<string,string>={tips:'top-flange tip stress (DG7, warping and second-order twist)',h1:'H1 top-flange interaction with the load-height LTB strength',stability:'elastic LTB stability margin',shear:'web shear'};
 /**
@@ -1597,7 +1699,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  const step=activeStep(p);
  if(design&&step&&entered.columnShape&&(trace.shafts||trace.stepTie))add('Lower shaft (stepped column)',entered.columnShape,col!.shape,[trace.shafts,trace.stepTie].filter(Boolean).join(' '));
  if(design&&step&&!entered.buildingColumnShape)add('Upper shaft (stepped column)',auto,step.upper.shape,trace.upper??'');
- if(design&&step&&trace.step)add('Step stiffener',`${auto} (none)`,step.stiffener?`Pair of plates ${len(step.stiffener.thickness)} × ${len(step.stiffener.width)}, ${len(step.stiffener.weld)} fillets`:'None',trace.step);
+ if(design&&step&&trace.step)add('Step stiffener',`${auto} (none)`,`${step.stiffener?`Pair of plates ${len(step.stiffener.thickness)} × ${len(step.stiffener.width)}, ${len(step.stiffener.weld)} fillets`:'None'}${step.capWeldAdded?`; existing step fillets built up to ${len(step.capWeldAdded)}`:''}`,trace.step);
  const bracket=p.details?.bracket;
  if(design&&bracket?.enabled&&!activeColumnCap(p)&&entered.reach===undefined&&Math.abs(bracket.reach-20*inch)>1e-6)
   add('Column face to girder web',`${auto} (${len(20*inch)})`,len(bracket.reach),`Set by the tie sizing: the column face moves out from 20 in (to at most ${trace.face!==undefined&&trace.face<30*inch-1e-6?`${len(trace.face)}, as far as the new column's twist and drift allow: the girder offset from the column axis is the lever of the eccentric reaction and of the longitudinal force at the seat`:'30 in'}) until the tie passes its imposed-movement and strength checks.`);
@@ -1605,10 +1707,28 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  if(design&&trace.bracket&&bracket?.enabled)add('Column bracket, beyond use',supportLabels[entered.support],`${supportLabels[cfg.support]}, at its sizing limits, kept`,trace.bracket);
  if(design&&trace.splice)add('Girder field splices',`${auto} (none: one ${+(p.spans.reduce((a,b)=>a+b,0)/foot).toFixed(1)} ft piece)`,`${trace.splice.stations.length} bolted slip-critical splice${trace.splice.stations.length>1?'s':''}: ${trace.splice.where}`,`The continuous girder exceeds the ${+(practicalPieceLength/foot).toFixed(0)} ft practical shipping and erection piece: automatic placement 0.20 to 0.25 of the span from an interior support (the inflection region, nearest 0.22 L), every piece within ${+(trace.splice.splices.maxPiece/foot).toFixed(0)} ft. ${trace.splice.why}.`);
  if(design&&trace.clip)add('Rail clips',`${auto} (weld-on)`,'Bolted clamp plates',trace.clip);
- if(design&&trace.exit&&!entered.longitudinalExit)add('Longitudinal force exit',`${auto} (strut at the column centerline)`,'Crane-level strut on the girder line, by others',`${trace.exit[0].toUpperCase()}${trace.exit.slice(1)}.`);
+ if(design&&trace.exit&&!entered.longitudinalExit)add('Longitudinal force exit',`${auto} (strut at the column centerline)`,step?.strut?'Crane-level strut on the girder line, designed here':'Crane-level strut on the girder line, by others',`${trace.exit[0].toUpperCase()}${trace.exit.slice(1)}.`);
+ if(design&&step&&trace.strut)add('Crane-level strut (girder line)',`${auto} (by others)`,step.strut?`${step.strut.shape}; at each column PL ${len(step.strut.plate.thickness)} with ${2*step.strut.columnRows} - ${len(step.strut.bolts.diameter)} A325 to the flange and ${step.strut.strutBolts} at each strut end`:'By others',trace.strut);
  return out;
 }
 
+/**
+ * The cap tieback angle on the receiving column as finally chosen (a new column made heavier after the tie was sized,
+ * for its drift or twist, has a larger web fillet): where the column bolt nuts no longer clear the web fillet
+ * (cap-angle-column-wrench), the ties move along their girders (capAngleWrenchSetback). Kept where the angle still
+ * validates and its cap bolt hardware still clears the bearing stiffener at the bearing length as laid out
+ * (capTieBearingLength); else the setback stays and the check reports it.
+ */
+function refitCapAngleSetback(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace){
+ const d=p.details,c=d?.brace.capAngle;if(!d||!c||d.brace.arrangement!=='cap-angle')return;
+ const g=capAngleGeometry(p);if(!g)return;
+ const s=capAngleWrenchSetback(g),before=c.setback;if(s<=before+1e-6)return;
+ c.setback=s;
+ if(validateCapAngle(p).length||validateRunwayDetails(p).length||(capTieBearingLength(p,d.bearing.length)??0)>d.bearing.length+1e-6){c.setback=before;return;}
+ const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
+ const why=`On the ${g.column.receiver?.name??'receiving'} column as chosen, the cap tieback's column bolt nuts clear the web fillet with the ties ${len(s)} from their girder ends (was ${len(before)}).`;
+ trace.tie=trace.tie?`${trace.tie} ${why}`:why;p.notes+=` ${why}`;
+}
 /**
  * The movements the cap tieback angle is sized for (sizeCapAngle): the girder end rotations and the tie force range of
  * the flange tie sizing (tieSizingDemands), and the support's deflection at the bearing under one crane, a designed

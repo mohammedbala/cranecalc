@@ -41,20 +41,24 @@ describe('t16: twist limit, assumed restraints, step fatigue and the seat on the
   expect(t.capacity).toBe(steppedTwistLimit);expect(t.status).toBe('pass');expect(t.demand!).toBeLessThanOrEqual(.02*(1+1e-9));
   expect(t.note).toMatch(/small rotations/);expect(t.note).toMatch(/R·e·θ/);
   expect(m.status).toBe('pass');expect(m.capacity).toBeCloseTo(z.drift.limit,9);
-  // The twist is linear in the torque: the same θ/T for the service and factored torques.
-  const tor=z.torsion!;expect(tor.twist/s.steppedColumn!.twist!.T).toBeCloseTo(tor.service.twist/tor.service.T,9);
-  // The configurator moved the force to a girder-line strut stiff enough for the limits (more than the 10 k_c minimum).
-  expect(z.support!.exit).toBe('girder-strut');expect(z.support!.strut!.ratio).toBeGreaterThan(10);
-  expect(z.support!.strut!.share).toBeCloseTo(1/(1+z.support!.strut!.ratio),12);
+  // The twist is linear in the torque: about the same θ/T for the service and factored torques (the strut's stiffness
+  // differs a little from grid to grid).
+  const tor=z.torsion!,f=tor.twist/s.steppedColumn!.twist!.T,sv=tor.service.twist/tor.service.T;expect(Math.abs(f/sv-1)).toBeLessThan(.1);
+  // The configurator moved the force to a girder-line strut, designed here: the column keeps its share by stiffness.
+  expect(z.support!.exit).toBe('girder-strut');const d=z.support!.strut!.designed!;expect(d.shape).toBe(s.input.existingColumn!.step!.strut!.shape);
+  expect(z.support!.strut!.required).toBeGreaterThan(z.support!.strut!.kc);expect(z.support!.strut!.share).toBeLessThan(.5);
+  for(const j of d.grids)expect(d.at[j].keep+d.at[j].strut).toBeGreaterThan(.99);
   expect(check('column-lower-torsion').note).not.toMatch(/No twist limit is applied/);
   for(const id of ['column-lower-twist','column-lower-twist-movement'])expect(classifyCheck(check(id)).rule).toBe('id');
  });
- it('makes the girder-line strut an open EOR item where the column alone fails, with the column-alone ratios visible',()=>{
-  const c=check('crane-level-strut'),alone=s.steppedColumn!.twist!.alone;
+ it('designs the girder-line strut where the column alone fails, leaving the existing braced bay to the EOR as a delivered force',()=>{
+  const alone=s.steppedColumn!.twist!.alone;
   expect(alone.twist).toBeGreaterThan(steppedTwistLimit);
-  expect(c.status).toBe('unverified');expect(c.utilization!).toBeGreaterThan(1);
-  expect(c.note).toMatch(/Without it \(the column alone/);expect(c.note).toMatch(/conditional on the strut/);
-  expect(classifyCheck(c).type).toBe('by-others');
+  expect(s.checks.some(v=>v.id==='crane-level-strut')).toBe(false);
+  const ids=['step-strut-compression','step-strut-slenderness','step-strut-tension','step-strut-bolts','step-strut-plate','step-strut-column-bolts','step-strut-fit','step-strut-flange-holes'];
+  for(const id of ids){expect(check(id)?.status,id).toBe('pass');expect(check(id).group).toBe('Crane-level strut');}
+  const eor=check('brace-by-others');expect(eor.status).toBe('excluded');expect(eor.note).toMatch(/new crane-level strut on the girder line \(designed here/);
+  expect(check('column-lower-twist').note).toMatch(/crane-level strut on the girder line/);
  });
  it('reports the braced-top restraint reaction for the building engineer of record',()=>{
   const c=check('column-top-restraint'),t=s.steppedColumn!.topRestraint!;
