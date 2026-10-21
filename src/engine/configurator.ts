@@ -585,13 +585,27 @@ let buildDepth=0;
  * center plus half the gusset and its fillet past the flange tip, stiffenerGussetMisfit, a coordination clash of the
  * calculation where it stays): first the torsion brace where the column twists unbraced, then the layout built again on the
  * lightest heavier W14 that takes them (a wider flange, and a torsionally stiffer column whose smaller twist shortens
- * the bearing slots); the configuration keeps its blank column choice, and the log says why. Crane columns likewise
- * (case 047: the jumbo girder's longer bearings put the gussets 0.1 in past a W14X193 flange).
+ * the bearing slots); the configuration keeps its blank column choice, and the log says why. On crane columns the
+ * gussets weld to the building column beside them: its example shape (fictitious, replaced by the survey) moves to the
+ * lightest heavier W14 whose flange takes them, where none is entered (case 047: the jumbo girder's longer bearings put
+ * them 0.1 in past the W14X211 flange).
  */
 function withGussetFitColumn(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace,target:number):{q:ProjectInput;target:number}{
  const cfg=configOf(input).config,col=q.existingColumn,misfit=(r:ProjectInput)=>!!stiffenerGussetMisfit(r);
- if(cfg.columnShape||cfg.scope!=='design'||cfg.structure!=='new'&&cfg.support!=='crane-column'||!col?.enabled||!col.isNew||!misfit(q))return {q,target};
  const tieOpen=(r:ProjectInput)=>!!r.configurator?.beyondCatalog?.some(v=>v.member==='tie');
+ const building=q.craneColumn?.enabled?q.craneColumn.building.shape:undefined;
+ if(cfg.support==='crane-column'&&building&&!cfg.buildingColumnShape&&cfg.scope==='design'&&misfit(q)){
+  for(const shape of heavierColumns(building)){
+   const inner:SelectionTrace={},r=withTwistMovementTarget(target,()=>buildLayout({...input,buildingColumnShape:shape},inner));
+   if(misfit(r)||validateRunwayDetails(r).length||tieOpen(r)&&!tieOpen(q))continue;
+   const why=`The tie's column gussets at the bearing stiffeners do not fit on the example ${building} building column flange (${aiscShapeByName(building)!.bf} in wide) with their fillets: the example building column is the lightest heavier W14 whose flange takes them, ${shape} (fictitious; the survey replaces it, and a narrower surveyed flange needs the gussets rearranged).`;
+   Object.assign(trace,inner);r.notes+=` ${why}`;
+   if(r.configurator){delete r.configurator.buildingColumnShape;r.configurator.selections=[...(r.configurator.selections??[]).filter(v=>v.item!=='Building column'),{item:'Building column',entered:'configurator default',designed:shape,reason:why}].slice(0,24);}
+   return {q:r,target};
+  }
+  return {q,target};
+ }
+ if(cfg.columnShape||cfg.scope!=='design'||cfg.structure!=='new'||!col?.enabled||!col.isNew||!misfit(q))return {q,target};
  const accept=(r:ProjectInput,inner:SelectionTrace,why:string)=>{Object.assign(trace,inner);r.notes+=` ${why}`;return r;};
  // The column twist lengthens the bearing slots (the bearings, so the gusset offset): first the torsion brace on the same
  // column, where the column twists at the seat and has none.
@@ -606,8 +620,7 @@ function withGussetFitColumn(q:ProjectInput,input:RunwayConfig,trace:SelectionTr
   if(misfit(r)||validateRunwayDetails(r).length||tieOpen(r)&&!tieOpen(q))continue;
   const why=`The tie's column gussets at the bearing stiffeners do not fit on the ${col.shape} flange (${aiscShapeByName(col.shape)!.bf} in wide) with their fillets: the lightest heavier W14 whose flange takes them, ${shape}.`;
   accept(r,inner,why);
-  const item=cfg.support==='crane-column'?'Crane column':'New column';
-  if(r.configurator){delete r.configurator.columnShape;r.configurator.selections=[...(r.configurator.selections??[]).filter(v=>v.item!==item),{item,entered:'configurator default',designed:shape,reason:why}].slice(0,24);}
+  if(r.configurator){delete r.configurator.columnShape;r.configurator.selections=[...(r.configurator.selections??[]).filter(v=>v.item!=='New column'),{item:'New column',entered:'configurator default',designed:shape,reason:why}].slice(0,24);}
   return {q:r,target};
  }
  return {q,target};
