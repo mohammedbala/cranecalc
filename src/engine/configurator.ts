@@ -9,7 +9,7 @@
 import type {CalculationSnapshot,Crane,ProjectInput,Section} from './types';
 import {format as formatUnits} from './units';
 import type {RunwayDetails} from './runwayDetails';
-import {runwayConfigSchema,supportLabels,tieLabels,type ConfigSelection,type RunwayConfig} from './configInputs';
+import {newColumnBeyond,runwayConfigSchema,supportLabels,tieLabels,type ConfigSelection,type RunwayConfig} from './configInputs';
 import {demonstrationProject,cappedDemonstrationProject,newColumnDemonstrationProject} from './demonstration';
 import {neutralDetails} from './detailTemplate';
 import {sizeEndStop} from './endStopSizing';
@@ -71,7 +71,7 @@ import {craneLevelStrut} from './existingColumn';
 import type {SupportReactionSet} from './supportReactions';
 import {activeStep} from './steppedColumnInputs';
 import {independentBearings} from './simpleSupports';
-import {twistRotationLimit,twistSlip} from './columnTwistLimit';
+import {twistMovement,twistRotationLimit,twistSlip} from './columnTwistLimit';
 
 const inch=25.4,foot=304.8,kip=4448.2216152605,ksi=6.894757293168,fpm=5.08,g=9.80665;
 /** Fictitious example allowable lateral bearing (passive) pressure, 150 psf/ft (IBC 2018 Table 1806.2, sandy soils). */
@@ -532,6 +532,15 @@ export function previewConfig(input:RunwayConfig){
   sideThrust:sideThrustRule(cfg)};
 }
 
+/**
+ * A selection-log reason within the schema's 800 characters (configSelectionSchema): whole sentences only, never cut
+ * mid-word; where sentences are left out, the text ends at a sentence end with an ellipsis.
+ */
+export function clipReason(text:string,max=800):string{
+ if(text.length<=max)return text;
+ const head=text.slice(0,max-2),ends=[...head.matchAll(/[.;:](?=\s)/g)].map(m=>m.index!+1),end=ends.length?ends[ends.length-1]:head.lastIndexOf(' ');
+ return `${text.slice(0,end>0?end:max-2).trimEnd()} …`;
+}
 /** The configured project. Unknown supplier, survey and site data are fictitious examples, marked as such. */
 export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  // The twist layout rule (withTwistLimit) applies to the outermost build only: the sizing steps rebuild the project with
@@ -832,10 +841,16 @@ function withTwistLimit(q:ProjectInput,cfg:RunwayConfig,_trace:SelectionTrace,ta
  const braced=seatTwist(r)!,len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`,d=bracingDesign(r),tb=d.torsionBrace!;
  const state=(v:NonNullable<ReturnType<typeof seatTwist>>)=>`${Math.abs(v.t.twist).toFixed(4)} rad factored (limit ${twistRotationLimit}) and ${len(v.slip)} of bearing movement at every crane start and stop (limit ${len(v.limit)})`;
  const plate=cfg.units==='SI'?`${Math.round(tb.thickness)} mm`:`${+(tb.thickness/inch).toFixed(3)} in`;
- const why=`The bracket stays: the ${d.strut.shape} crane-level strut is moment-connected in plan at every column by ${plate} plates on its flanges (torsion brace, ${tb.rows} rows of bolt pairs) and holds the new ${r.existingColumn!.shape} columns against the twist: ${state(braced)}${braced.ok?'':`, still beyond a limit (column-twist or column-twist-rotation fails and stays in the calculation: a stiffer strut, a torsionally stiffer column or a column cap is needed)`}. With the strut on the column centerline alone, the girder seated ${len(braced.t.offset)} off the column axis, the traction twists the column ${state(unbraced)}. The strut is sized so the girder's twist movement under the factored traction stays within ${len(target)} (a configurator target${target<inch/8?', tightened from 1/8 in where the tie could not take the movement':', the TR-13 alignment tolerance class'}, so the tie, slots and gaps are not sized by it).`;
+ // The girder's twist movement under the factored traction the strut achieves, against the configurator's target
+ // (sizeTorsionStrut): stated as achieved, and where the stiffest strut that fits leaves it above the target, said so.
+ const moved=twistMovement(existingColumnAnalysis(r,supportReactions(r,sectionProperties(r.section))),r.method).factored,met=moved<=target*(1+1e-6);
+ const aim=`${len(target)} (a configurator target${target<inch/8?', tightened from 1/8 in where the tie could not take the movement':', the TR-13 alignment tolerance class'}, not a code limit)`;
+ const sized=met?`The strut is sized so the girder's twist movement under the factored traction, ${len(moved)}, is within ${aim}.`
+  :`The girder's twist movement under the factored traction is ${len(moved)}, above the ${aim}: the ${d.strut.shape}${d.strut.shape===stiffestTorsionStrut(r)?' is the stiffest strut that fits the torsion plates':' is the strut the sizing reached'}, and the tie, slots and gaps take this movement in their checks.`;
+ const why=`The bracket stays: the ${d.strut.shape} crane-level strut is moment-connected in plan at every column by ${plate} plates on its flanges (torsion brace, ${tb.rows} rows of bolt pairs) and holds the new ${r.existingColumn!.shape} columns against the twist: ${state(braced)}${braced.ok?'':`, still beyond a limit (column-twist or column-twist-rotation fails and stays in the calculation: a stiffer strut, a torsionally stiffer column or a column cap is needed)`}. ${sized} With the strut on the column centerline alone, the girder seated ${len(braced.t.offset)} off the column axis, the traction twists the column ${state(unbraced)}.`;
  r.notes+=` ${why}`;
  const sel=r.configurator?.selections??[];
- if(r.configurator)r.configurator.selections=[...sel.filter(v=>v.item!=='Longitudinal path'),{item:'Longitudinal path',entered:'Crane-level strut on the column centerline',designed:`${d.strut.shape} strut with a torsion brace at the locating columns`,reason:why.slice(0,800)}].slice(0,24);
+ if(r.configurator)r.configurator.selections=[...sel.filter(v=>v.item!=='Longitudinal path'),{item:'Longitudinal path',entered:'Crane-level strut on the column centerline',designed:`${d.strut.shape} strut with a torsion brace at the locating columns`,reason:clipReason(why)}].slice(0,24);
  return r;
 }
 /**
@@ -1065,7 +1080,9 @@ const bracketTarget=.9;
  * rest), or that meets it on the footing already sized; the configuration keeps its blank column choice. A new
  * freestanding column that no W14 to the W14X398 brings within them (cases 073, 077, 081: a heavy crane on a tall
  * cantilever column) is built on the W14X398 where that lowers its governing ratio, and is an open item (beyondCatalog,
- * trace.columnOpen): a built-up column, or the arrangement the log recommends; the support entered is kept.
+ * trace.columnOpen, "New column beyond the W14 range"): the arrangement the log recommends (column caps where the drift
+ * without the eccentric reaction moment leaves the footing its share, else a built-up or laced column, a deeper W by hand
+ * or the column tops tied to a braced frame); the support entered is kept.
  */
 function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  const q=combinedWhereOverlapping(p,sizeColumnBase(p,baseTarget),cfg,trace);clearExistingFootings(q);
@@ -1097,10 +1114,21 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:heaviest},inner),now=[baseSizingRatios(r).ratios.drift,columnTorsionRatio(r),achievableTwist(r)] as const;
  const better=governing(r)<governing(q)-1e-9,kept=better?r:q,left=better?now:[drift0,torsion0,twist0] as const,shape=kept.existingColumn!.shape;
  const past=state(left[0],left[1],left[2],false);
- const cap=cfg.support==='column-cap',arrangement=cap?'a built-up or laced column, or a frame across the runway (the columns braced at the roof)':'column caps over the new columns (support column-cap: the girder on the column axis, no eccentric reaction moment and no seat twist), or crane columns beside a building frame';
- const text=`No rolled W14 to the W14X398 meets the new column's drift, torsion and twist ratios for this crane: ${better?`the heaviest, ${heaviest}, still gives`:`the ${shape} chosen gives`} ${past||state(...left)} (configurator estimates; the calculation reports its own). ${cap?'The cantilever column is beyond the rolled catalog for this crane':'A bracket seat on a freestanding cantilever column is beyond reasonable use for this crane'}: recommended ${arrangement}; the support entered is kept and checked`;
+ // The recommendation, from the drift with the girder on the column axis (baseDrift.sideOnly: the side thrust alone,
+ // no eccentric reaction moment and no seat twist; an estimate on the same column and footing): column caps where the
+ // column alone then leaves the footing its share (columnDriftShare, as the footing sizing does), else what caps alone
+ // cannot give (a stiffer column, or its top held by a braced frame).
+ const cap=cfg.support==='column-cap',drift=left[0]>1+1e-9,dk=baseDrift(kept,existingColumnAnalysis(kept,supportReactions(kept,sectionProperties(kept.section))));
+ const alone=dk.sideOnly.column/dk.limit,withFooting=dk.sideOnly.total/dk.limit,share=columnDriftShare*baseTarget;
+ const est=`${cap?'The column':`Column caps on the ${shape}`} would leave about ${alone.toFixed(2)} of the drift limit for the column alone, ${withFooting.toFixed(2)} with this footing's rotation (estimate${cap?'':' without the eccentric reaction moment and seat twist'})`;
+ const stiffer=`a built-up or laced crane column, a deeper rolled W (W24 to W36, strong axis across the runway, designed by hand), or the column tops tied to a braced frame`;
+ const recommended=!cap&&(!drift||alone<=share+1e-9||withFooting<=1+1e-9)?`${drift?`${est}. `:''}Recommended: column caps over the new columns (support column-cap: the girder on the column axis, no eccentric reaction moment, no seat twist)${drift&&withFooting>1+1e-9?', the footing sized for the rest of the drift':''}.`
+  :alone<=1+1e-9?`${est}: ${cap?'the footing rotation governs':'caps alone are not enough on this footing'}. Recommended: ${cap?'':'column caps with '}a footing stiff enough for the rest of the drift (larger than the configurator sizes for a column above ${share.toFixed(2)} of the limit), else ${stiffer}.`
+  :`${est}: ${cap?'a larger footing is not enough':'caps alone are not enough'}. Recommended: ${stiffer}.`;
+ const text=`the ${better?`heaviest rolled W14, ${heaviest}, still gives`:`${shape} chosen gives`} ${past||state(...left)} (configurator estimate; the calculation reports its own). ${recommended} The support entered is kept and checked.`;
  const open=left[0]>1+1e-9||left[1]>1+1e-9||left[2]>1+1e-9;
- Object.assign(trace,better?inner:{},{column:[trace.column,better?why[0].toUpperCase()+why.slice(1):'',open?text:''].filter(Boolean).join('; ')},open?{columnOpen:`Built-up crane column required: ${text[0].toLowerCase()+text.slice(1)}.`.slice(0,800)}:{});
+ const logged=`no rolled W14 to the W14X398 meets the new column's drift, torsion and twist ratios for this crane: an open item (${newColumnBeyond})`;
+ Object.assign(trace,better?inner:{},{column:[trace.column,better?why[0].toUpperCase()+why.slice(1):'',open?(trace.column||better?logged:logged[0].toUpperCase()+logged.slice(1)):''].filter(Boolean).join('; ')},open?{columnOpen:clipReason(`${newColumnBeyond}: ${text}`)}:{});
  return better?{...r,configurator:{...cfg}}:q;
 }
 /**
@@ -1532,7 +1560,8 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
  * The face moves out only as far as the column can be made to take: the heaviest W14 the column sizing goes to (the
  * W14X398, or the shape configured), with the torsion brace on the stiffest strut that fits, keeps its factored twist and
  * its service twist movement within 0.95 of their limits and its column-alone drift within columnDriftShare of its limit
- * (not where it is already past that at the face set: too flexible at any reach, which the column sizing judges), on
+ * (where it is already past that at the face set, too flexible at any reach, the face stays: the column is then an open
+ * item of the column sizing, not made worse for the tie), on
  * the 1 in grid, never inside the face already set; the column sizing then takes the lightest W14 that meets them at
  * the face the tie settles on (withColumnBase). Where it stops short of `farthest` the selection log says so (trace.face).
  */
@@ -1543,7 +1572,10 @@ function columnFaceCap(p:ProjectInput,farthest:number,trace:SelectionTrace,confi
  const reactions=supportReactions(q,sectionProperties(q.section));
  const start=b.reach,first=braceTrial(q,start,reactions)!,drifts=first.drift<=columnDriftShare;
  const fits=(face:number)=>{const v=face===start?first:braceTrial(q,face,reactions)!;return v.twist<=.95&&(!drifts||v.drift<=columnDriftShare);};
- if(!fits(start)){trace.face=start;return start;}
+ // A column too flexible at the face set even on the heaviest W14 (its drift an open item, withColumnBase) is not made
+ // worse for the tie: a longer reach raises its eccentric-reaction drift and the seat couple F·e (case 073: the stiffer
+ // torsion strut let the tie pass at 29 in, the drift ratio rising 1.66 to 1.87 and the seat fillet past 1.00).
+ if(!fits(start)||!drifts){trace.face=start;return start;}
  if(fits(farthest))return farthest;
  // Bisection on the 1 in grid (both ratios grow with the reach).
  let lo=0,hi=Math.floor((farthest-start)/inch+1e-6);
@@ -1678,7 +1710,7 @@ const beyondGirderCatalog=(t:GirderTrial)=>t.basis?.passed===false&&(Math.max(t.
 const girderStrengthScatter=2.5;
 /** A member beyond the catalog as a row of the selection log (S-00 and the design summary print it). */
 const openItemRow=(v:NonNullable<RunwayConfig['beyondCatalog']>[number]):ConfigSelection=>({item:'Open item',entered:v.member==='girder'?'Girder':v.member==='tie'?'Top-flange tie':'Crane column',
- designed:`${v.shape}, closest; ${v.member==='girder'?'plate girder required (outside the rolled/capped catalog)':v.member==='tie'?'tie to be designed by hand':'built-up crane column required'}`.slice(0,200),reason:v.reason});
+ designed:`${v.shape}, closest; ${v.member==='girder'?'plate girder required (outside the rolled/capped catalog)':v.member==='tie'?'tie to be designed by hand':v.reason.startsWith(newColumnBeyond)?'new column beyond the W14 range':'built-up crane column required'}`.slice(0,200),reason:v.reason});
 /**
  * Members the catalog cannot supply within the sizing targets (configurator.beyondCatalog; calculate reports each as an
  * open item, configuratorOpenItems, and the closest member is built and checked, a review draft): a sized girder for which no compact rolled W (and no W + channel cap pair) meets the targets,
@@ -1699,7 +1731,12 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
  if(d&&(flangeTieGeometry(p)||stiffenerTieGeometry(p))&&cfg.support!=='column-cap'&&cfg.support!=='stepped-column'){
   // The tie's own ratios: the supporting column's checks at the tie (column-*) are the column sizing's.
   const over=Object.entries(tieSizingRatios(p)).filter(([k,v])=>!k.startsWith('column-')&&v>1+1e-6).sort((a,b)=>b[1]-a[1]);
-  if(over.length)out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:`Top-flange tie not resolved: the ${tieLabels[tieArrangement(d) as keyof typeof tieLabels]??tieArrangement(d)}${stiffenerTieGeometry(p)?' on the bearing stiffener':' on a flange saddle'}, as sized for the estimated tie demands, still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')}, and no other tie arrangement the configurator tries fits and passes here. Choose another tie or support (a capped girder with the cap tieback angle, column caps, a stiffer support), or design the tie connection by hand.`});
+  // One recommendation: on new columns with a bracket seat, column caps (the girder on the column axis: no seat twist
+  // for the tie to follow); elsewhere the alternatives the configurator does not try here.
+  const seat=cfg.structure==='new'&&!!p.details?.bracket?.enabled&&!!p.existingColumn?.isNew&&cfg.support!=='crane-column';
+  const advice=seat?'Recommended: column caps over the new columns (support column-cap): the girder bears on the column axis, so the traction no longer twists the column at a bracket seat and the tie takes only the girder end rotation and thermal travel; the configurator does not build that alternative here. Otherwise design the tie connection by hand.'
+   :'Choose another tie or support (a capped girder with the cap tieback angle, column caps, a stiffer support), or design the tie connection by hand.';
+  if(over.length)out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:clipReason(`Top-flange tie not resolved: the ${tieLabels[tieArrangement(d) as keyof typeof tieLabels]??tieArrangement(d)}${stiffenerTieGeometry(p)?' on the bearing stiffener':' on a flange saddle'}, as sized for the estimated tie demands, still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} (configurator estimates), and no other tie arrangement the configurator tries fits and passes here. ${advice}`)});
  }
  // The cap tieback angle as sized still past its limits (capAngleUnresolved) where no other tie was taken: no set of
  // the sizing steps carries this tie: an open item, never an issued tie its own sizing rejects (case 047).
@@ -1741,7 +1778,7 @@ const sizingRatioNames:Record<string,string>={tips:'top-flange tip stress (DG7, 
  */
 function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],trial:GirderTrial|undefined,p:ProjectInput,trace:SelectionTrace):ConfigSelection[]{
  const out:ConfigSelection[]=[],design=cfg.scope==='design',si=cfg.units==='SI',len=(v:number)=>si?`${Math.round(v)} mm`:`${+(v/inch).toFixed(2)} in`,auto='configurator default';
- const add=(item:string,from:string,to:string,reason:string)=>out.push({item,entered:from.slice(0,160),designed:to.slice(0,200),reason:reason.slice(0,800)});
+ const add=(item:string,from:string,to:string,reason:string)=>out.push({item,entered:from.slice(0,160),designed:to.slice(0,200),reason:clipReason(reason)});
  const why=(field:ConfigRule['field'])=>rules.filter(r=>r.field===field).map(r=>r.why).join(' ');
  const structureLabel=(v:RunwayConfig['structure'])=>v==='new'?'New freestanding columns':'Existing building columns';
  if(design&&entered.structure!==cfg.structure)add('Structure',structureLabel(entered.structure),structureLabel(cfg.structure),why('structure'));
