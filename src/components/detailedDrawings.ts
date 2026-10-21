@@ -257,7 +257,7 @@ function capAngleSketch(s:CalculationSnapshot):CadDrawing|undefined{
  const seat=g.cap.seat,cl=g.column,lap=g.lap,ep=g.endPlate;
  const notes=[
   `${c.shape} × ${f(c.length)} long at each girder end, centered ${f(c.setback)} from the girder end`,
-  `Cap bolts: 2 - ${f(g.cap.diameter)} ${g.cap.grade} at ${f(g.cap.pitch)}, ${f(g.cap.gauge)} below top of cap`,
+  `Cap bolts: ${g.cap.count} - ${f(g.cap.diameter)} ${g.cap.grade} at ${f(g.cap.pitch)}, ${f(g.cap.gauge)} below top of cap`,
   `${f(g.cap.slotWidth)} × ${f(g.cap.slotLength)} horizontal slots in the angle; ${g.cap.sleeved?`pretensioned against ${f(g.cap.sleeve!.od)} OD sleeves`:'PRETENSIONED BOLTS REQUIRED (see calc)'}`,
   `Plate washers ${f(g.cap.washer.thickness)} × ${f(g.cap.washer.height)} × ${f(g.cap.washer.length)} over the slots`,
   `${seat.washer.kind==='beveled'?`F436 1:6 beveled washers (${f(seat.washer.width)} sq.)`:'F436 washers'} under the nuts; flange ${f(seat.thickness)} at the bolt line`,

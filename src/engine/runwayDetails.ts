@@ -11,6 +11,7 @@ import type {ExistingBracketResults} from './existingBracket';
 import type {SupportForceEnvelope} from './bracketForces';
 import type {ColumnCapResults} from './columnCap';
 import {spliceSchema} from './spliceInputs';
+import {columnStiffenerSchema} from './columnStiffenerInputs';
 import type {SpliceResults} from './girderSplice';
 const pos=z.number().finite().positive(),nn=z.number().finite().nonnegative();
 const material=z.object({Fy:pos,Fu:pos,Fexx:pos});
@@ -58,7 +59,11 @@ export const runwayDetailsSchema=z.object({
    columnFace:pos.optional()}).optional(),
   /** Column-end movement release: bolts pretensioned against steel sleeves in vertical slots of the column gusset.
    * slide: paired bars only, the column gusset's float along the runway each way on longer sleeves (tieRelease). */
-  release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos,slide:pos.optional()}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
+  release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos,slide:pos.optional()}).optional(),
+  /** Paired bars or flexible plate on a direct flange saddle: horizontal column stiffeners at the top and bottom of each
+   * column gusset, inside the receiving column on the gusset's side of the web, fillet welded to the loaded flange and
+   * the web (flangeTieStiffenerGeometry). Field welded where the column is existing. */
+  columnStiffener:columnStiffenerSchema.optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
  end:lapConnectionSchema,
  bearing:z.object({width:pos,length:pos,thickness:pos,stiffenerWidth:pos,stiffenerThickness:pos,cope:nn,weldSize:pos,
   /** Steel shims under the bearing plate, full bearing, drilled to the bolt pattern: the largest stack (max, mm) and its
