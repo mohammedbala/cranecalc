@@ -51,7 +51,7 @@ import {craneColumnRestraint,craneColumnLayout,tieShortening} from './craneColum
 import {existingColumnAnalysis} from './existingColumn';
 import {twistMovement} from './columnTwistLimit';
 import {girderOffset,torsionBraceActive,bracingDesign} from './newColumnBracing';
-import {stiffestTorsionStrut,twistMovementTarget} from './bracingSizing';
+import {sizeTorsionStrut} from './bracingSizing';
 import {activeStep} from './steppedColumnInputs';
 
 const inch=25.4,sixteenth=inch/16,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step;
@@ -182,13 +182,12 @@ function seatTwist(p:ProjectInput){
  const c=p.existingColumn,none={service:0,factored:0,offset:0};if(!c?.enabled||!c.isNew||activeStep(p)||!p.details?.bracket?.enabled||activeColumnCap(p)||tiedToBuilding(p))return none;
  try{
   const reactions=supportReactions(p,sectionProperties(p.section)),now=twistMovement(existingColumnAnalysis(p,reactions),p.method);
-  // With a torsion brace the bracing sizing grows its strut (sizeTorsionStrut, after the tie) until the factored twist
-  // movement is within 0.9 of the configurator's target (torsion-brace-movement), down to what the stiffest strut that
-  // fits gives: the tie takes that movement, not the trial strut's.
+  // With a torsion brace the bracing sizing grows its strut (sizeTorsionStrut, after the tie) for the twist ratios and
+  // the configurator's movement target: the tie takes the movement of that strut, as the strut sizing picks it (the
+  // bracing sizing may only grow it further), not the trial strut's.
   if(torsionBraceActive(p)&&now.factored>0){
-   const q=structuredClone(p),d=q.longitudinalBracing!.design=structuredClone(bracingDesign(q)),stiff=stiffestTorsionStrut(q);
-   if(stiff)d.strut.shape=stiff;
-   const floor=twistMovement(existingColumnAnalysis(q,reactions),p.method).factored,k=Math.min(1,Math.max(floor,.9*twistMovementTarget())/now.factored);
+   const q=structuredClone(p);q.longitudinalBracing!.design=structuredClone(bracingDesign(q));sizeTorsionStrut(q);
+   const sized=twistMovement(existingColumnAnalysis(q,reactions),p.method),k=Math.min(1,sized.factored/now.factored);
    return {service:k*now.service,factored:k*now.factored,offset:girderOffset(p)};
   }
   return {...now,offset:girderOffset(p)};
