@@ -1,7 +1,7 @@
 import {elementSummary,inElements,summaryNote,calculationRef} from './sheetRatios';
 import {viewConflict,conflictView} from './detailHolds';
 import type {CalculationSnapshot} from '../engine/types';
-import {capAngleGeometry,boltHardware,capAngleStiffenerGeometry,type CapAngleGeometry} from '../engine/capAngle';
+import {capAngleGeometry,boltHardware,capAngleStiffenerGeometry,boltLine,type CapAngleGeometry} from '../engine/capAngle';
 import {capAngleResult} from '../engine/capAngleTie';
 import {clipGeometry,clipOutline,railPadThickness} from '../engine/railSeat';
 import {tieReceiverColumn} from '../engine/drawingData';
@@ -138,9 +138,9 @@ export function capAngleSection(s:CalculationSnapshot):ViewRender{
  const below=Math.max(Z(webEnd),Z(lapBottom))+18,bx=X(-b.tw/2)-4,rightStart=Math.max(bx+60,X(headEnd)+14);
  const leftCol:Callout[]=[
   {at:[X(g.y0+g.ta/2),Z(-g.dv)],labels:[`${c.shape} X ${dim(c.length)} CAP ANGLE,`,`${g.dv===g.bh?'ONE LEG':'LONG LEG'} LEVEL WITH TOP OF CAP`]},
-  {at:[X(headEnd-ch.head/2),Z(zc-ch.corners/2)],labels:[`2 - ${sz(cb.diameter)} ${cb.grade} BOLTS${pitch(cb.pitch)} ${sz(cb.gauge)} BELOW TOP;`,`${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZ. SLOTS, ${cb.sleeved?'SLEEVED':'SNUG-TIGHT'}`]}];
+  {at:[X(headEnd-ch.head/2),Z(zc-ch.corners/2)],labels:[`${cb.count} - ${sz(cb.diameter)} ${cb.grade} BOLTS${pitch(cb.pitch)} ${sz(cb.gauge)} BELOW TOP;`,`${sz(cb.slotWidth)} X ${sz(cb.slotLength)} HORIZ. SLOTS, ${cb.sleeved?'SLEEVED':'SNUG-TIGHT'}`]}];
  const rightCol:Callout[]=[
-  {at:[X(yl),Z(lapBottom)],points:[[X(yl),Z(lapBottom)],[X((g.toe+ep.y0)/2),Z(0)]],labels:[`TIE PL ${sz(tp)} X ${sz(g.plate.width)} X ${dim(g.plate.length)} WITH`,`2 - ${sz(g.lap.diameter)} ${g.lap.grade} SC BOLTS${pitch(g.lap.pitch)}, CLASS ${g.lap.surface},`,`${sz(g.lap.slot.width)} X ${sz(g.lap.slot.length)} SHORT SLOTS IN TIE PL,`,`${sz(g.lap.edge)} TO TIE PL END`]}];
+  {at:[X(yl),Z(lapBottom)],points:[[X(yl),Z(lapBottom)],[X((g.toe+ep.y0)/2),Z(0)]],labels:[`TIE PL ${sz(tp)} X ${sz(g.plate.width)} X ${dim(g.plate.length)} WITH`,`${g.lap.count} - ${sz(g.lap.diameter)} ${g.lap.grade} SC BOLTS${pitch(g.lap.pitch)}, CLASS ${g.lap.surface},`,`${sz(g.lap.slot.width)} X ${sz(g.lap.slot.length)} SHORT SLOTS IN TIE PL,`,`${sz(g.lap.edge)} TO TIE PL END`]}];
  svg+=callouts(leftCol,bx-textWidth(labelCaps(leftCol[1].labels[0]),8.5)+40,below).svg;
  // The cap-side column ends clear of the leaders that rise to the column flange.
  const rightWidth=Math.max(...rightCol.flatMap(v=>v.labels.map(l=>textWidth(labelCaps(l),8.5))));
@@ -170,10 +170,10 @@ export function capAngleSharedPlan(s:CalculationSnapshot):ViewRender{
   // Angle long leg, its short leg below it (hidden) with the slots along the runway; tie plate with the lap bolt slots.
   const x0=v.x-c.length/2,pw=g.plate.width;
   svg+=rect(X(x0),Y(g.y0),c.length*k,(g.toe-g.y0)*k,'runway-line')+line([X(x0),Y(g.y0+g.ta)],[X(x0+c.length),Y(g.y0+g.ta)],'hidden-line');
-  for(const sx of [-1,1]){const bx=v.x+sx*g.cap.pitch/2;svg+=rect(X(bx-g.cap.slotLength/2),Y(g.y0),g.cap.slotLength*k,g.ta*k,'hidden-line');}
+  for(const o of boltLine(g.cap.count,g.cap.pitch)){const bx=v.x+o;svg+=rect(X(bx-g.cap.slotLength/2),Y(g.y0),g.cap.slotLength*k,g.ta*k,'hidden-line');}
   const plate=(y0:number,y1:number)=>rect(X(v.x-pw/2),Y(y0),pw*k,Y(y1)-Y(y0),'runway-line');
   svg+=plate(g.plate.start,g.plate.end);
-  for(const sx of [-1,1]){const bx=v.x+sx*g.lap.pitch/2,r=g.lap.slot.width/2,L=g.lap.slot.length;svg+=`<path class="runway-line" d="M${n(X(bx-r))},${n(Y(g.lap.y-L/2+r))}A${n(r*k)},${n(r*k)} 0 0 1 ${n(X(bx+r))},${n(Y(g.lap.y-L/2+r))}L${n(X(bx+r))},${n(Y(g.lap.y+L/2-r))}A${n(r*k)},${n(r*k)} 0 0 1 ${n(X(bx-r))},${n(Y(g.lap.y+L/2-r))}Z"/>`;}
+  for(const o of boltLine(g.lap.count,g.lap.pitch)){const bx=v.x+o,r=g.lap.slot.width/2,L=g.lap.slot.length;svg+=`<path class="runway-line" d="M${n(X(bx-r))},${n(Y(g.lap.y-L/2+r))}A${n(r*k)},${n(r*k)} 0 0 1 ${n(X(bx+r))},${n(Y(g.lap.y-L/2+r))}L${n(X(bx+r))},${n(Y(g.lap.y+L/2-r))}A${n(r*k)},${n(r*k)} 0 0 1 ${n(X(bx-r))},${n(Y(g.lap.y+L/2-r))}Z"/>`;}
   // End plate and shims on the column flange.
   svg+=rect(X(v.x-ep.width/2),Y(ep.y0),ep.width*k,ep.thickness*k,'runway-line')+rect(X(v.x-ep.width/2),Y(g.shim.y0),ep.width*k,(g.shim.y1-g.shim.y0)*k,'runway-line');
   // Stiffener at the tie level inside the column, on this tie's side of the web.
@@ -196,10 +196,11 @@ export function capAngleSharedPlan(s:CalculationSnapshot):ViewRender{
  // Bolt pitches along the runway on the left tie, each just past its bolts in the open plate: the cap bolts (slots
  // hidden in the short leg) below the leg, the lap bolts below the angle toe on the tie plate.
  {const capY=Y(g.y0+g.ta)+2,lapY=Y(g.lap.y+g.lap.slot.length/2)+2,lapDim=Math.max(Y(g.toe)+16,lapY+16);
-  svg+=dimH(X(left.x-g.cap.pitch/2),X(left.x+g.cap.pitch/2),capY,Math.min(capY+16,Y(g.plate.start)-7),sz(g.cap.pitch));
-  svg+=dimH(X(left.x-g.lap.pitch/2),X(left.x+g.lap.pitch/2),lapY,lapDim,sz(g.lap.pitch));}
+  const c0=boltLine(g.cap.count,g.cap.pitch)[0],l0=boltLine(g.lap.count,g.lap.pitch)[0];
+  svg+=dimH(X(left.x+c0),X(left.x+c0+g.cap.pitch),capY,Math.min(capY+16,Y(g.plate.start)-7),sz(g.cap.pitch));
+  svg+=dimH(X(left.x+l0),X(left.x+l0+g.lap.pitch),lapY,lapDim,sz(g.lap.pitch));}
  const items:Callout[]=[
-  {at:[X(right.x+g.cap.pitch/2+g.cap.slotLength/2),Y(g.y0+g.ta/2)],labels:[`${sz(g.cap.slotLength)} SLOTS ALONG RUNWAY (HIDDEN),`,`${sz(c.travel)} TRAVEL EACH WAY`]},
+  {at:[X(right.x+(g.cap.count-1)*g.cap.pitch/2+g.cap.slotLength/2),Y(g.y0+g.ta/2)],labels:[`${sz(g.cap.slotLength)} SLOTS ALONG RUNWAY (HIDDEN),`,`${sz(c.travel)} TRAVEL EACH WAY`]},
   {at:[X(right.x+c.length/2),Y((g.lap.y+g.toe)/2)],labels:[`${c.shape} X ${dim(c.length)}, EACH GIRDER END`]},
   {at:[X(right.x+g.plate.width/2),Y((g.toe+ep.y0)/2)],labels:[`TIE PL ${sz(g.plate.thickness)} X ${sz(g.plate.width)}`]},
   {at:[X(right.x+ep.width/2),Y(ep.y0+ep.thickness/2)],labels:['END PL ON SHIMS, 2 BOLTS (ONE','ABOVE, ONE BELOW THE TIE PL)']},

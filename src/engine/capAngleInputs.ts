@@ -20,7 +20,9 @@ export const capAngleSchema=z.object({
  /** Girder end to the tie centerline, along the runway. */
  setback:pos,
  /** Bolts through the channel flange and the angle's short leg: gauge down from the top of the cap, pitch along the runway. */
- capBolts:z.object({diameter:pos,grade,gauge:pos,pitch:pos}),
+ capBolts:z.object({diameter:pos,grade,gauge:pos,pitch:pos,
+  /** Bolts in the line along the runway at the pitch (default two). */
+  count:z.number().int().min(2).max(4).optional()}),
  /** Travel each way along the runway in the horizontal long slots of the angle. */
  travel:pos,
  /** Cap bolts pretensioned against steel sleeves through the slots (the angle is not clamped), or snug-tight, which is kept for old projects only and reported as not permitted (AIST TR-13 §5.14). */
@@ -32,7 +34,9 @@ export const capAngleSchema=z.object({
  plateThickness:pos,plateWidth:pos,
  /** Lap bolts (vertical) through the tie plate and the angle's long leg: gauge from the back of the short leg, pitch along
   * the runway, edge from the bolt to the lap end of the tie plate. Short slots across the runway in the tie plate. */
- lapBolts:z.object({diameter:pos,grade,gauge:pos,pitch:pos,edge:pos,surface:z.enum(['A','B'])}),
+ lapBolts:z.object({diameter:pos,grade,gauge:pos,pitch:pos,edge:pos,surface:z.enum(['A','B']),
+  /** Bolts in the line along the runway at the pitch (default two). */
+  count:z.number().int().min(2).max(4).optional()}),
  /** Vertical end plate, centered on the tie plate: thickness, height and width along the runway. */
  endPlate:z.object({thickness:pos,height:pos,width:pos}),
  /** Column bolts, one above and one below the tie plate at this gauge from its centerline. */

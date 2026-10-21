@@ -89,6 +89,8 @@ export function capAngleColumn(p:ProjectInput){
  return {...plates,shape:shape?.name,k1:plates.tw/2+fillet,fillet,isNew:!!c?.isNew,name:shape?.name??(c?.shape||'BUILT-UP')};
 }
 
+/** Positions along the runway of n bolts in a line at the pitch, centered on the tie, mm. */
+export const boltLine=(n:number,pitch:number)=>Array.from({length:n},(_,i)=>(i-(n-1)/2)*pitch);
 /**
  * Geometry of the cap tieback angle, mm. Across the runway (y) from the girder web centerline toward the column;
  * vertically (z) from the top of the cap; along the runway from the tie centerline. One tie at each girder end of
@@ -121,10 +123,10 @@ export function capAngleGeometry(p:ProjectInput){
   return {bay:e.bay,end:e.end,station:e.station,girderEnd,x,offset:x-e.station,bearingCenter:e.center,start:e.start,finish:e.finish};
  });
  return {input:c,shape:L,ta,dv,bh,ka,kc,face,y0,toe:y0+bh,
-  cap:{...cb,hole:capBolt.hole,z:-cb.gauge,slotWidth,slotLength,sleeve,washer,sleeved,travel:c.travel,
+  cap:{...cb,count:cb.count??2,hole:capBolt.hole,z:-cb.gauge,slotWidth,slotLength,sleeve,washer,sleeved,travel:c.travel,
    // The nut side on the sloped channel flange: true flange thickness at the bolt line and the washer under the nut.
    seat:capBoltSeat(s,cb.diameter,cb.gauge)},
-  lap:{...lb,hole:lapBolt.hole,y:yLap,slot:lapSlot},
+  lap:{...lb,count:lb.count??2,hole:lapBolt.hole,y:yLap,slot:lapSlot},
   plate:{thickness:tp,width:c.plateWidth,start:plateStart,end:endPlateBack,length:endPlateBack-plateStart,z0:0,z1:tp,zc:zTie,
    // Clear span from the lap bolt line to the end plate; and from the angle toe to the end plate.
    span:endPlateBack-yLap,gap:endPlateBack-(y0+bh)},
@@ -182,14 +184,14 @@ export function capAngleTieParts(p:ProjectInput,opts:{station?:number;stiffener?
  const col=g.column.receiver;
  if(col)boxes.push({name:'column flange (context)',kind:'column-flange',min:[-offset-col.width/2,g.face,g.endPlate.z0-50],max:[-offset+col.width/2,g.face+col.tf,g.endPlate.z1+50]});
  const bolts:CapAngleBolt[]=[];
- for(const x of [-g.cap.pitch/2,g.cap.pitch/2]){
+ for(const x of boltLine(g.cap.count,g.cap.pitch)){
   const outer=g.y0+g.ta+(g.cap.sleeve?g.input.sleeveClearance:0)+g.cap.washer.thickness;
   boxes.push({name:'plate washer',kind:'plate-washer',min:[x-g.cap.washer.length/2,outer-g.cap.washer.thickness,g.cap.z-g.cap.washer.height/2],max:[x+g.cap.washer.length/2,outer,g.cap.z+g.cap.washer.height/2]});
   if(g.cap.sleeve)boxes.push({name:'steel sleeve',kind:'sleeve',min:[x-g.cap.sleeve.od/2,g.y0,g.cap.z-g.cap.sleeve.od/2],max:[x+g.cap.sleeve.od/2,g.y0+g.cap.sleeve.length,g.cap.z+g.cap.sleeve.od/2]});
   bolts.push({name:'cap bolt',group:'cap',axis:'y',head:[x,outer,g.cap.z],nut:[x,g.y0-g.cap.seat.nutFace,g.cap.z],diameter:g.cap.diameter,grade:g.cap.grade,
    holes:[{ply:'angle short leg',kind:'long-slot',width:g.cap.slotWidth,length:g.cap.slotLength,along:'x'},{ply:'cap channel flange',kind:'standard',width:g.cap.hole,length:g.cap.hole,along:'x'}]});
  }
- for(const x of [-g.lap.pitch/2,g.lap.pitch/2])bolts.push({name:'lap bolt',group:'lap',axis:'z',head:[x,g.lap.y,g.plate.z1],nut:[x,g.lap.y,-g.ta],diameter:g.lap.diameter,grade:g.lap.grade,
+ for(const x of boltLine(g.lap.count,g.lap.pitch))bolts.push({name:'lap bolt',group:'lap',axis:'z',head:[x,g.lap.y,g.plate.z1],nut:[x,g.lap.y,-g.ta],diameter:g.lap.diameter,grade:g.lap.grade,
   holes:[{ply:'tie plate',kind:'short-slot',width:g.lap.slot.width,length:g.lap.slot.length,along:'y'},{ply:'angle long leg',kind:'standard',width:g.lap.hole,length:g.lap.hole,along:'y'}]});
  for(const z of g.column.zs)bolts.push({name:'column bolt',group:'column',axis:'y',head:[0,g.endPlate.y0,z],nut:[0,g.face+(col?.tf??0),z],diameter:g.column.diameter,grade:g.column.grade,
   holes:[{ply:'end plate',kind:'standard',width:g.column.hole,length:g.column.hole,along:'z'},{ply:'shims (finger shims)',kind:'short-slot',width:g.column.hole,length:g.column.hole,along:'z'},{ply:'column flange',kind:'field-drilled',width:g.column.hole,length:g.column.hole,along:'z'}]});
@@ -211,7 +213,7 @@ export function capAngleTieParts(p:ProjectInput,opts:{station?:number;stiffener?
  */
 export function capBoltNutEnvelope(g:CapAngleGeometry){
  const hw=boltHardware(g.cap.diameter),seat=g.cap.seat,inner=g.y0-seat.thickness,face=g.y0-seat.nutFace,z=g.cap.z;
- return [-g.cap.pitch/2,g.cap.pitch/2].map(x=>{
+ return boltLine(g.cap.count,g.cap.pitch).map(x=>{
   const box=(name:string,half:number,y0:number,y1:number):CapAngleBox=>({name,kind:'plate-washer',min:[x-half,y0,z-half],max:[x+half,y1,z+half]});
   return {x,parts:[box(seat.washer.kind==='beveled'?'F436 1:6 beveled washer':'F436 washer',seat.washer.width/2,inner-seat.washer.thick,inner),
    box('heavy hex nut',hw.corners/2,face-hw.nut,face),box('bolt stick-through',g.cap.diameter/2,face-hw.nut-hw.stick,face-hw.nut)]};

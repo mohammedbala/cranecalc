@@ -1358,8 +1358,8 @@ function capAngleUnresolved(p:ProjectInput):string|undefined{
  * angle that clearly cannot carry the tie force (capAngleUnresolved: its two bolts per group and one tie plate past
  * 1.5 of their strength, or the movement-controlled fatigue past 2): the bars and the gusset extension drop below the
  * cap channel's turned-down flanges (stiffenerTieGeometry) and the full-depth stiffener pair takes the force into the
- * girder (tieOnBearingStiffener, sized by sizeFlangeTie). Kept where the bars validate and their largest sizing ratio is
- * below the angle's (the estimates of each under the same tie force model); `saddle` is the project with the sized
+ * girder (tieOnBearingStiffener, sized by sizeFlangeTie). Kept where the bars validate and both their largest sizing ratio
+ * and their largest imposed-movement ratio are below the angle's (the estimates of each under the same tie force model); `saddle` is the project with the sized
  * saddle tie, `angle` with the sized cap angle. Undefined where the angle may pass, or the bars do no better.
  */
 function capStiffenerTie(saddle:ProjectInput,angle:ProjectInput,reach:number|undefined,bracket:NonNullable<ProjectInput['details']>['bracket'],face:number|undefined){
@@ -1372,7 +1372,11 @@ function capStiffenerTie(saddle:ProjectInput,angle:ProjectInput,reach:number|und
  // The bearings are laid out again after the tie (setBearings): the column gussets at the bearing stiffeners must still
  // land on the receiving column flange (coord-tie-gusset-flange) as laid out then.
  const laid=structuredClone({...angle,details:moved.details});setBearings(laid);
- if(!(worst<worstAngle-1e-9)||stiffenerGussetMisfit(laid)||validateRunwayDetails(laid).length)return undefined;
+ // The imposed movement too: the bars' largest movement ratio (tie-move-*) below the angle's (the tie plate's H1 sum
+ // with the support movement, and the fatigue ratios the movement controls).
+ const ma=ra as Record<string,number>,angleMove=Math.max(ma['cap-angle-plate-movement']??0,...[...(ra.movementControlled??[])].map(k=>ma[k]??0));
+ const barsMove=Math.max(0,...r.filter(([k])=>k.startsWith('tie-move-')).map(([,v])=>v));
+ if(!(worst<worstAngle-1e-9)||!(barsMove<angleMove-1e-9)||stiffenerGussetMisfit(laid)||validateRunwayDetails(laid).length)return undefined;
  const left=r.filter(([k,v])=>v>sizingLimit(Object.fromEntries(r),k)+1e-9);
  return {details:moved.details,angle:over,text:`the paired flat bars bolt to the tie-side bearing stiffener${stiffenerTieJoint(q)==='integral'?', cut as one plate with its gusset extension past the flange tip':', through a gusset plate CJP welded to the stiffener edge (UT)'}, the bars below the cap channel flanges, the full-depth stiffener pair carrying the tie force into the girder${left.length?` (sized, still over ${left.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands)`:''}.`};
 }

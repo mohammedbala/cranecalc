@@ -25,9 +25,9 @@ describe('cap tieback angle fit and selection',()=>{
   const g={input:{setback:3.5*inch},column:{diameter:.625*inch,receiver:{k1:.9*inch}},
    stations:[{end:'left',offset:-1.63*inch},{end:'right',offset:1.63*inch}]} as unknown as NonNullable<ReturnType<typeof capAngleGeometry>>;
   const s=capAngleWrenchSetback(g),need=.9*inch+1.3125*inch;
-  // Every tie at least C1 + k1 from the centerline, past it on the girder side, on the 1/4 in grid (the old shortfall
+  // Every tie at least C1 + k1 from the centerline, past it on the girder side, on the 1/8 in grid (the old shortfall
   // step, 3.5 + 0.75 in, left the left tie 0.88 in from the centerline).
-  expect(s).toBeCloseTo(7.5*inch,6);
+  expect(s).toBeCloseTo(7.375*inch,6);
   expect(Math.abs(s-5.13*inch)).toBeGreaterThanOrEqual(need-1e-6);
   // Already clear: kept.
   expect(capAngleWrenchSetback({...g,stations:[{end:'left',offset:3*inch}]} as typeof g)).toBe(3.5*inch);
@@ -54,6 +54,16 @@ describe('cap tieback angle fit and selection',()=>{
   expect(validateRunwayDetails(p)).toEqual([]);
   expect(p.configurator!.selections!.find(v=>v.item==='Top-flange tie')!.reason).toMatch(/the cap tieback angle cannot carry the tie force \(sized L\dX\dX[\d/]+ still exceeds .*\): the paired flat bars bolt to the tie-side bearing stiffener/);
   expect(p.configurator!.beyondCatalog?.some(v=>v.member==='tie')).toBeFalsy();
+ },300000);
+ it('case 072 (40 t, CMAA D): four cap bolts and four lap bolts where no two-bolt set carries the tie',()=>{
+  const p=buildProject(sim['072']),c=p.details!.brace.capAngle!;
+  expect(p.details!.brace.arrangement).toBe('cap-angle');
+  expect(c.capBolts.count).toBe(4);expect(c.lapBolts.count).toBe(4);
+  expect(validateCapAngle(p)).toEqual([]);
+  expect(p.configurator!.beyondCatalog?.some(v=>v.member==='tie')).toBeFalsy();
+  // The geometry places four bolts in each line at the pitch.
+  const g=capAngleGeometry(p)!;expect(g.cap.count).toBe(4);
+  expect(c.length).toBeGreaterThanOrEqual(3*c.capBolts.pitch+g.cap.slotLength-1e-6);
  },300000);
  it('case 046 (W14X82 building column): column stiffeners at the saddle tie gusset and a girder flange thick enough for the saddle, logged',()=>{
   const p=buildProject(sim['046']),sg=flangeTieStiffenerGeometry(p)!;
