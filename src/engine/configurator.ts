@@ -1140,7 +1140,7 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  const reactions=supportReactions(q,sectionProperties(q.section)),drift0=baseSizingRatios(q).ratios.drift,torsion0=columnTorsionRatio(q),twist0=achievableTwist(q);
  const state=(drift:number,torsion:number,twist:number,cut=true)=>[drift>(cut?baseTarget:1)?`base drift ratio ${drift.toFixed(2)}${cut?` > ${baseTarget}`:''}`:'',torsion>1?`column torsion ratio ${torsion.toFixed(2)}${cut?' > 1.00':''}`:'',twist>1?`seat twist ratio ${twist.toFixed(2)}${cut?' > 1.00':''} with the torsion brace on the stiffest strut that fits`:''].filter(Boolean).join(' and ');
  const why=`the ${q.existingColumn!.shape} chosen for the crane gives ${state(drift0,torsion0,twist0)}: the lightest heavier W14 within the drift${twist0>1?', torsion and twist':' and torsion'} ratios`;
- const shapes=heavierColumns(q.existingColumn!.shape);
+ const shapes=heavierColumns(q.existingColumn!.shape,true);
  for(const shape of shapes){
   const t=structuredClone(q),w=aiscShapeByName(shape)!;
   Object.assign(t.existingColumn!,{shape,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch});
@@ -1247,7 +1247,11 @@ function withExistingRod(p:ProjectInput):ProjectInput{
 /** Base plate plan for a column shape: the anchor rows clear the column flange welds and plate washers. */
 function basePlatePlan(shape:string){const w=aiscShapeByName(shape)!;return {N:up(w.d*inch+9.5*inch,.5*inch),B:up(w.bf*inch+3.5*inch,.5*inch)};}
 /** W14 column shapes heavier than the given one, lightest first. */
-const heavierColumns=(shape:string)=>{const w=aiscShapeByName(shape)!;return aiscWShapes.filter(s=>s.name.startsWith('W14X')&&s.weight>w.weight&&s.weight<=398).sort((a,b)=>a.weight-b.weight).map(s=>s.name).slice(0,8);};
+/**
+ * The heavier rolled W14s to the W14X398, lightest first: the next eight for the searches that stop at the first fit, all of
+ * them (`all`) for the beyond-catalog drift search, whose 'heaviest' is then the W14X398 itself.
+ */
+const heavierColumns=(shape:string,all=false)=>{const w=aiscShapeByName(shape)!,list=aiscWShapes.filter(s=>s.name.startsWith('W14X')&&s.weight>w.weight&&s.weight<=398).sort((a,b)=>a.weight-b.weight).map(s=>s.name);return all?list:list.slice(0,8);};
 
 const bracketText=(cfg:RunwayConfig)=>({'twin-rib':'welded twin-rib bracket seats','haunched-seat':'welded haunched rib seats','rolled-corbel':'rolled W-stub brackets','tapered-haunch':'built-up tapered I haunches','by-others':'brackets by others','column-cap':'column caps','crane-column':'column caps on new crane columns tied to the building columns','stepped-column':'the steps of the existing stepped columns'})[cfg.support];
 
@@ -1613,7 +1617,7 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
  */
 function columnFaceCap(p:ProjectInput,farthest:number,trace:SelectionTrace,configured:boolean):number{
  const b=p.details?.bracket;if(!b?.enabled||farthest<=b.reach+1e-6||!braceTrial(p))return farthest;
- const q=structuredClone(p),heaviest=configured?undefined:heavierColumns(q.existingColumn!.shape).at(-1);
+ const q=structuredClone(p),heaviest=configured?undefined:heavierColumns(q.existingColumn!.shape,true).at(-1);
  if(heaviest){const w=aiscShapeByName(heaviest)!;Object.assign(q.existingColumn!,{shape:heaviest,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch});Object.assign(q.details!.bracket!.receiver,shapePlates(heaviest));}
  const reactions=supportReactions(q,sectionProperties(q.section));
  const start=b.reach,first=braceTrial(q,start,reactions)!,drifts=first.drift<=columnDriftShare;
