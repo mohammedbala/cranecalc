@@ -327,9 +327,9 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  // (with the cap) alone, I_yt for the whole I_y. The factor multiplies the whole-section lateral deflection (at least 1).
  const lateralFactor=Math.max(1,pr.Iy/Iyt);
  // The rail-head movement with the twist (the rail-head check): the top flange's share of the side thrust and the
- // warping couple of the torque about the shear center (y_g/h_0), GJ = 0, times railHeadAllowance for the tie play and
- // the girder-end twist this flange model leaves out.
- const railFactor=Math.max(1,(top+yg/h0)*pr.Iy/Iyt)*railHeadAllowance;
+ // warping couple of the torque about the shear center (y_g/h_0, with the Saint-Venant relief), times railHeadAllowance
+ // for the tie play and the girder-end twist this flange model leaves out.
+ const railFactor=Math.max(1,(top+relief*yg/h0)*pr.Iy/Iyt)*railHeadAllowance;
  return {...ratios,utilization,governs,Mcr,cb,amplification,lateralFactor,railFactor};
 }
 /**
@@ -1733,11 +1733,13 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
 const heavyAlternative=(t:GirderTrial)=>{const h=t.basis?.heavy;return h?` A jumbo rolled ${h.name} (${Math.round(h.weight)} lb/ft, ${+(h.depth/inch).toFixed(1)} in deep) would meet the sizing targets as a heavy alternative: heavy-shape Charpy testing and splice rules (AISC 360 A3.1c, clause to be verified) and mill availability to confirm; the configurator does not select it.`:'';};
 const beyondGirderCatalog=(t:GirderTrial)=>t.basis?.passed===false&&(Math.max(t.deflection,t.lateral)>1+1e-9||t.utilization>girderStrengthScatter);
 /**
- * Rail-head screening allowance over the flange-couple estimate (girderSizingRatios railFactor): the calculated
- * rail-head movement (thin-walled model with the tie play) was 1.15 to 1.23 times that estimate on templates t01, t05,
- * t14 and t15 (1.44 on t13, the column cap's fork), so the screen at 0.9 keeps it within about 1.0.
+ * Rail-head screening allowance over the flange-couple estimate with the Saint-Venant relief (girderSizingRatios
+ * railFactor): the calculated rail-head movement (thin-walled model with the tie play) over the estimate without the
+ * allowance was 1.0 to 1.7 on ten templates and ten heavy simulated girders (round-7 set), 2.0 on t08 where the tie
+ * play dominates a small movement (0.54 of the limit). 1.6: the calculation 0.63 to 1.05 of the estimate on all but
+ * t03 and t08 (1.12, 1.24, both small movements); at 1.45 t14 took a W27X258 calculated at 1.03.
  */
-const railHeadAllowance=1.25;
+const railHeadAllowance=1.6;
 /** Above the largest ratio of the screening strength estimate to the calculated top-flange ratio on the heaviest catalog girders (cases 047 and 053: 1.52). */
 const girderStrengthScatter=1.6;
 /** A member beyond the catalog as a row of the selection log (S-00 and the design summary print it). */
