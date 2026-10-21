@@ -97,8 +97,8 @@ export function designSplices(p:ProjectInput,target=.85):SplicesDesigned|undefin
    const hole=db+(db<inch-1e-6?inch/16:inch/8),eFull=up(2*db+hole/2,inch/8),sFull=up(2*db+hole,inch/4);
    const clearDistances=(f:{endDistance:number;pitch:number;rows:number})=>{let c=false;if(f.endDistance<eFull-1e-6){f.endDistance=eFull;c=true;}if(f.rows>1&&f.pitch<sFull-1e-6){f.pitch=sFull;c=true;}if(sp.edge<eFull-1e-6){sp.edge=eFull;c=true;}return c;};
    const webClear=()=>{let c=false;if(sp.web.endDistance<eFull-1e-6){sp.web.endDistance=eFull;c=true;}if(sp.web.columns>1&&sp.web.spacing<sFull-1e-6){sp.web.spacing=sFull;c=true;}if(sp.edge<eFull-1e-6){sp.edge=eFull;c=true;}return c;};
-   if(has(/^splice-top-bearing$/))grow(()=>clearDistances(sp.top)||(sp.top.rows<6?(sp.top.rows++,true):false));
-   else if(has(/^splice-top-(slip|bolt-shear)$/))grow(()=>sp.top.rows<6?(sp.top.rows++,true):false);
+   if(has(/^splice-top-bearing$/))grow(()=>clearDistances(sp.top)||(sp.top.rows<8?(sp.top.rows++,true):false));
+   else if(has(/^splice-top-(slip|bolt-shear)$/))grow(()=>sp.top.rows<8?(sp.top.rows++,true):false);
    if(has(/^splice-top-(plate|block)/))grow(()=>sp.top.innerThickness<2*inch?(sp.top.innerThickness+=inch/8,true):false);
    if(has(/^splice-bottom-bearing$/))grow(()=>clearDistances(sp.bottom)||(sp.bottom.rows<8?(sp.bottom.rows++,true):false));
    else if(has(/^splice-bottom-(slip|bolt-shear)$/))grow(()=>sp.bottom.rows<8?(sp.bottom.rows++,true):false);
