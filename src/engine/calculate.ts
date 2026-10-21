@@ -56,7 +56,8 @@ export function fingerprint(input:unknown):string {const text=JSON.stringify(inp
 const memberChecks:Record<'girder'|'tie'|'crane-column',RegExp>={
  girder:/^(vertical|lateral|major|minor|combined|combined-bottom|torsion-normal|torsion-normal-bottom|torsion-shear|torsion-stability|flexure-load-height|shear|sidesway)$/,
  tie:/^(tie-|flange-tie-|plate-tie-|cap-angle-|brace-member$|brace-stiffness$|coord-tie-|coord-cap-tie-)/,
- 'crane-column':/^column-/};
+ // The column's own checks: not the AIST bracket applicability (column-brackets), a support-system screen.
+ 'crane-column':/^column-(?!brackets$)/};
 export function configuratorOpenItems(p:ProjectInput,checks?:CheckResult[]):CheckResult[]{
  const titles={girder:'Plate girder required (outside the rolled/capped catalog)','crane-column':'Built-up crane column required (outside the rolled catalog)',tie:'Top-flange tie not resolved by the configurator'};
  return (p.configurator?.beyondCatalog??[]).filter(v=>v.member==='girder'?p.section.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)

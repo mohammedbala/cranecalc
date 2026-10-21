@@ -45,7 +45,8 @@ describe('configurator project validity',()=>{
  // t13 to t16: the crane columns tied to the building columns and the stepped columns (girder on the step).
  for(const t of runwayTemplates)it(`template ${t.id} builds a valid project`,()=>{expect(validateProject(buildProject(t.config))).toEqual([]);},300000);
  // Beyond the catalog the closest member is built (an open item, configuratorOpenItems, the package a review draft),
- // never a validation stop: V059 and V061 need a plate girder (they took the W14X873 column shape before).
+ // never a validation stop: V059 and V061 need a plate girder (they took the W14X873 column shape before); V059's open
+ // item names the jumbo rolled W36 that would meet the targets as a heavy alternative, which is not selected.
  // 034 and CC2 ask for a cap tieback angle that no set of its sizing steps carries (lap slip several times over,
  // or the imposed movement in the plate): the closest angle is built with the open item (capAngleUnresolved; the
  // calculation of CC2 gave plate movement 1.96 and end plate weld 1.44 against estimates of 2.56 and 1.87). 061 (paired
@@ -60,6 +61,10 @@ describe('configurator project validity',()=>{
    expect(p.configurator!.beyondCatalog!.some(v=>open.get(id)!.test(v.reason))).toBe(true);
    expect(configuratorOpenItems(p).map(v=>v.status)).toContain('incomplete');
    expect(p.configurator!.selections!.some(v=>v.item==='Open item'&&open.get(id)!.test(v.reason))).toBe(true);
+  }
+  if(id==='V059'){
+   expect(p.section.name).toBe('W36X529');
+   expect(p.configurator!.beyondCatalog!.find(v=>v.member==='girder')!.reason).toMatch(/A jumbo rolled W36X\d+ \(.*\) would meet the sizing targets as a heavy alternative.*the configurator does not select it\.$/);
   }
   if(id==='061'){
    expect(p.configurator!.beyondCatalog?.some(v=>v.member==='tie')).toBeFalsy();

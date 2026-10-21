@@ -18,7 +18,7 @@
  *   lightest heavier one with a larger r_y;
  * - strut bolts (pretensioned slip-critical): a third, fourth and fifth bolt in line for slip, shear and bearing, then
  *   the next diameter (7/8, 1 in);
- * - bracket seat collector fillet (the welded seat): 1/16 in larger, to 5/8 in;
+ * - bracket seat collector fillet (the welded seat): 1/16 in larger, to 3/4 in;
  * - torsion brace (design.torsionBrace, a bracket seat on new columns): its plates 1/8 in thicker (to 1 1/4 in) for their
  *   flexure and fillet base metal, a further row of bolt pairs (to 5) then the plates thicker for the bolts, the fillets
  *   1/16 in larger (to 5/8 in and the plate less 1/16 in); the strut, for its moment in plan (brace-torsion-strut) and for
@@ -42,6 +42,13 @@ const inch=25.4,eighth=inch/8,sixteenth=inch/16,next=(v:number,step:number)=>(Ma
 const rods=[.75,1,1.25,1.5,1.75,2].map(v=>v*inch),boltSizes=[.75,.875,1].map(v=>v*inch);
 /** Strut candidates: W8 to W12 up to 65 lb/ft, lightest first. */
 const struts=aiscWShapes.filter(s=>/^W(8|10|12)X/.test(s.name)&&s.weight<=65&&s.bf>=5.25).sort((a,b)=>a.weight-b.weight);
+/**
+ * Torsion-brace struts: the strut candidates and the heavier W10s to 112 lb/ft, whose 10 in flanges still lie on the
+ * torsion plates between the W14 column flanges (fitsPlate): the strut's weak-axis stiffness 4EI_y/L holds the column
+ * against the twist (I_y 116 in^4 for the W10X60, to 236 in^4 for the W10X112), where the twist of a heavy crane's
+ * bracket seat needs more than a 65 lb/ft strut gives.
+ */
+const torsionStruts=[...struts,...aiscWShapes.filter(s=>/^W10X/.test(s.name)&&s.weight>65&&s.weight<=112)].sort((a,b)=>a.weight-b.weight);
 const ry=(name:string)=>{const s=aiscWShapes.find(v=>v.name===name);return s?Math.sqrt(s.Iy/s.A):0;};
 
 /** The bracing checks as the calculation forms them, and the column torsion ratios they include. */
@@ -77,14 +84,22 @@ export function withTwistMovementTarget<T>(v:number,f:()=>T):T{const was=movemen
  */
 export function sizeTorsionStrut(p:ProjectInput,target=.9){
  const d=p.longitudinalBracing?.design;if(!d||!torsionBraceActive(p))return;
- const reactions=supportReactions(p,sectionProperties(p.section)),now=struts.find(v=>v.name===d.strut.shape);
+ const reactions=supportReactions(p,sectionProperties(p.section)),now=torsionStruts.find(v=>v.name===d.strut.shape);
  const worst=()=>Math.max(...twistRatios(p,existingColumnAnalysis(p,reactions)).map(v=>v.utilization!));
  if(worst()<=target)return;
  let best={name:d.strut.shape,Iy:now?.Iy??0};
- for(const s of struts.filter(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(p,v))){
-  d.strut.shape=s.name;if(worst()<=target)return;if(s.Iy>best.Iy)best={name:s.name,Iy:s.Iy};
- }
- d.strut.shape=best.name;
+ // The heavier W10s only where the 65 lb/ft struts leave a twist limit past 1.00 (not the sizing margin, nor the
+ // configurator's movement target).
+ const pass=(pool:typeof struts)=>{for(const s of pool.filter(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(p,v))){
+  d.strut.shape=s.name;if(worst()<=target)return true;if(s.Iy>best.Iy)best={name:s.name,Iy:s.Iy};
+ }d.strut.shape=best.name;return false;};
+ const limits=()=>Math.max(...twistRatios(p,existingColumnAnalysis(p,reactions)).filter(v=>v.id!=='torsion-brace-movement').map(v=>v.utilization!));
+ if(pass(struts)||limits()<=1)return;
+ pass(torsionStruts.filter(v=>v.weight>65));
+}
+/** The stiffest torsion-brace strut (largest I_y) whose flange lies on the torsion plates of this column, or undefined. */
+export function stiffestTorsionStrut(p:ProjectInput):string|undefined{
+ return torsionStruts.filter(v=>fitsPlate(p,v)).sort((a,b)=>b.Iy-a.Iy||a.weight-b.weight)[0]?.name;
 }
 /**
  * Torsion of a braced new column: the column check with the girder's longitudinal force at its bracket offset
@@ -130,9 +145,9 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
   if(part==='gussetMetal')return gusset();
   const t=next(s.thickness,eighth);if(t>inch+1e-6)return false;s.thickness=t;minimumWelds();return true;
  };
- const strut=(slender:boolean)=>{
-  const now=struts.find(s=>s.name===d.strut.shape),w=now?.weight??0,r=ry(d.strut.shape);
-  const s=struts.find(v=>v.weight>w+1e-9&&(!slender||Math.sqrt(v.Iy/v.A)>r+1e-6)&&(!torsionBraceActive(q)||fitsPlate(q,v)));if(!s)return false;d.strut.shape=s.name;return true;
+ const strut=(slender:boolean,value=0)=>{
+  const pool=torsionBraceActive(q)&&value>1?torsionStruts:struts,now=aiscWShapes.find(s=>s.name===d.strut.shape),w=now?.weight??0,r=ry(d.strut.shape);
+  const s=pool.find(v=>v.weight>w+1e-9&&(!slender||Math.sqrt(v.Iy/v.A)>r+1e-6)&&(!torsionBraceActive(q)||fitsPlate(q,v)));if(!s)return false;d.strut.shape=s.name;return true;
  };
  const bolts=()=>{
   if(d.strut.bolts!<4){d.strut.bolts!++;return true;}
@@ -140,12 +155,13 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
   if(d.strut.bolts!<5){d.strut.bolts!++;return true;}return false;
  };
  // The torsion brace: the strut's weak-axis stiffness and strength (I_y), the plates, their bolt rows and fillets.
- const stiffStrut=()=>{const now=aiscWShapes.find(v=>v.name===d.strut.shape),s=struts.find(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(q,v));if(!s)return false;d.strut.shape=s.name;return true;};
+ // The heavier W10s (torsionStruts) only for a ratio past 1.00, a limit: the sizing margin keeps the 65 lb/ft struts.
+ const stiffStrut=(value:number)=>{const now=aiscWShapes.find(v=>v.name===d.strut.shape),s=(value>1?torsionStruts:struts).find(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(q,v));if(!s)return false;d.strut.shape=s.name;return true;};
  const torsionPlate=()=>{const tb=d.torsionBrace;if(!tb)return false;const t=next(tb.thickness,eighth);if(t>1.25*inch+1e-6)return false;tb.thickness=t;tb.weld=Math.max(tb.weld,filletMinimum([t,column().tf]));return true;};
  const torsionRows=()=>{const tb=d.torsionBrace;if(!tb||tb.rows>=5)return false;tb.rows++;return true;};
  const torsionWeld=()=>{const tb=d.torsionBrace;if(!tb)return false;const w=next(tb.weld,sixteenth);if(w>Math.min(5/8*inch,tb.thickness-sixteenth)+1e-6)return torsionPlate();tb.weld=w;return true;};
  const rod=()=>{const v=rods.find(x=>x>b.rod.diameter+1e-6);if(!v)return false;b.rod.diameter=v;d.pin.diameter=Math.max(d.pin.diameter,v);return true;};
- const grow=(key:string):boolean=>{
+ const grow=(key:string,value=0):boolean=>{
   switch(key){
    case 'brace-tension':case 'brace-rod-fatigue':return rod();
    case 'brace-pin':return pin();
@@ -155,16 +171,20 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
    // The tab's welds, or the force normal to the web (its stiffeners).
    case 'brace-strut-tab':return tabWebGoverns()?stiffen():weld();
    case 'brace-column-web':return stiffen();
-   case 'brace-strut':case 'brace-strut-tension':return strut(false);
-   case 'brace-strut-slenderness':return strut(true);
+   case 'brace-strut':case 'brace-strut-tension':return strut(false,value);
+   case 'brace-strut-slenderness':return strut(true,value);
    case 'brace-strut-slip':case 'brace-strut-bolts':return bolts();
    case 'brace-strut-bearing':case 'brace-strut-block':return bolts()||gusset();
-   case 'brace-torsion-strut':case 'column-twist-rotation':case 'column-twist':case 'torsion-brace-movement':return stiffStrut();
+   case 'brace-torsion-strut':case 'column-twist-rotation':case 'column-twist':return stiffStrut(value);
+   // A configurator target (the tie's movement), not a limit: the 65 lb/ft struts only.
+   case 'torsion-brace-movement':return stiffStrut(0);
    case 'brace-torsion-plate':return torsionPlate();
    case 'brace-torsion-bolts':return torsionRows()||torsionPlate();
    case 'brace-torsion-weld':return torsionWeld();
    case 'brace-seat-weld':{const br=q.details?.bracket;if(!br?.enabled||br.arrangement==='rolled-corbel'||br.arrangement==='tapered-haunch')return false;
-    const w=next(d.seatWeld,sixteenth);if(w>.625*inch+1e-6)return false;d.seatWeld=w;return true;}
+    // To 3/4 in where the 5/8 in fillet is past 1.00 (a limit, not the sizing margin): the seat's top fillet is a T-joint on the column flange (no AISC J2.2b edge maximum; at most the seat
+    // thickness, 1 1/2 in or more on a heavy crane's bracket), a multi-pass fillet the heavy cranes' seat couple F·e needs (072, 073).
+    const w=next(d.seatWeld,sixteenth);if(w>(value>1?Math.min(.75*inch,br.seatThickness):.625*inch)+1e-6)return false;d.seatWeld=w;return true;}
   }
   return false;
  };
@@ -173,7 +193,7 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
  for(let i=0;i<120;i++){
   const r=bracingRatios(q,reactions),open=Object.entries(r).filter(([k,v])=>!stuck.has(k)&&v>target).sort((x,y)=>y[1]-x[1]);
   if(!open.length)break;
-  if(!grow(open[0][0]))stuck.add(open[0][0]);
+  if(!grow(open[0][0],open[0][1]))stuck.add(open[0][0]);
  }
  return q;
 }
