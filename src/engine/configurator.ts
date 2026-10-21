@@ -278,7 +278,10 @@ export interface GirderTrial {name:string;weight:number;utilization:number;defle
  * Top-flange sizing ratios of a girder section under the factored moving-load envelope (canonical units):
  * - flange tips: M_u/S_x + M_f/S_f ≤ φF_y, with M_f the top flange's lateral moment from the rail-head side thrust
  *   (its direct share I_yt/I_y plus the warping couple of the torque about the shear center, height y_g) and from the
- *   rail eccentricity e (M_u e/h_0), amplified for the second-order twist by 1/(1 − M_u/(0.8M_cr));
+ *   rail eccentricity e (M_u e/h_0), amplified for the second-order twist by 1/(1 − αM_u/(0.8M_cr)) (α = 1.6 for ASD,
+ *   AISC 360 Appendix 8.2). The warping part takes the Saint-Venant relief of a fork-supported girder under a torque
+ *   at midspan, r = tanh(λL/2)/(λL/2), λ = √(GJ/EC_w) (bimoment T tanh(λL/2)/(2λ) against TL/4 with GJ = 0);
+ *   H_u is the side thrust of one crane (AIST TR-13: C_ss is a single-crane action), so is the H1 ratio's;
  * - H1 at the top flange (DG7): M_u/φM_n + M_f/φF_yS_f, M_n by F2 with C_b = M_cr/M_ocr (load height) at most 1;
  * - elastic stability: 0.8M_cr/M_u ≥ 1/φ.
  * M_cr is the classical elastic critical moment of the bay with the wheels at the rail head, y_g above the shear
@@ -296,11 +299,15 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  const rho=Iyt/(Iyt+Iyb),betaX=.9*h0*(2*rho-1)*(1-(pr.Iy/pr.Ix)**2);
  const pe=Math.PI**2*E*pr.Iy/L**2,base=pr.Cw/pr.Iy+L*L*G*pr.J/(Math.PI**2*E*pr.Iy),C1=1.13,C2=.46,C3=.53,arm=C2*yg-C3*betaX/2;
  const Mcr=C1*pe*(Math.sqrt(base+arm**2)-arm),Mocr=pe*(Math.sqrt(base+(betaX/2)**2)+betaX/2);
- const top=Iyt/(Iyt+Iyb),Mf0=demand.Hu*(top+yg/h0)+demand.Mcrane*Math.abs(p.railEccentricity)/h0;
- const amplification=demand.Mu<.8*Mcr?1/(1-demand.Mu/(.8*Mcr)):Infinity;
+ const lam=Math.sqrt(G*pr.J/(E*pr.Cw))*L/2,relief=lam>1e-9?Math.tanh(lam)/lam:1,alpha=lrfd?1:1.6;
+ const top=Iyt/(Iyt+Iyb),Mf0=demand.Hu*top+relief*(demand.Hu*yg+demand.Mcrane*Math.abs(p.railEccentricity))/h0;
+ const amplification=alpha*demand.Mu<.8*Mcr?1/(1-alpha*demand.Mu/(.8*Mcr)):Infinity;
  const halfWidth=cap?section.capWidth/2:section.bf/2,Sf=Iyt/halfWidth,Stop=pr.Ix/(section.d+(cap?section.capTw:0)-pr.cy);
  // Calibrated against the full analysis of the simulation set: a capped top flange (the channel tips) and a single
- // flexible plate tie (less end restraint against twist) carry more warping stress than this estimate gives.
+ // flexible plate tie (less end restraint against twist) carry more warping stress than this estimate gives. With the
+ // Saint-Venant relief and the single-crane side thrust, max(tips, h1) over the calculation's governing top-flange
+ // ratio (combined, torsion-normal) is 0.66 to 0.75 on the heaviest sections (005, 024, 047, 053, 072) and 0.5 to 1.0
+ // on most others (round-7 set, 70 cases); the old estimate ran 1.6 to 2.4 times the calculation on the heavy ones.
  const tips=(demand.Mu/Stop+Mf0*amplification/Sf)/phi(section.Fy)*(cap?1.4:1)*(demand.flexibleTie?1.25:1);
  // F2 (F4 for caps, through girderStrength) with the load-height C_b: M_n,LTB scales with C_b below M_p.
  const cb=Math.min(1,Mcr/Mocr),Mn=strength.ltb!==undefined?Math.min(strength.major,cb*strength.major):strength.major;
@@ -333,7 +340,11 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
  const ref=structuredClone(p);ref.section=loadAiscSection(ref.section,'W24X104');
  const props=sectionProperties(ref.section),a=movingAnalysis(ref,props,8),L=Math.max(...p.spans),lrfd=p.method==='LRFD';
  const negative=Math.max(0,...a.envelope.map(v=>-v.momentMin));
- const Md=a.deadMoment,M=a.demand.moment,H=a.demand.lateralMoment,V=a.demand.shear,dv=a.demand.deflection*props.Ix,dh=a.demand.lateralDeflection*props.Iy;
+ // The side thrust and the deflections of one crane (AIST TR-13: C_ss a single-crane action; §5.8.7 deflections under one
+ // crane), the largest of the cranes taken alone; the vertical strength demands of all cranes together.
+ const single=p.cranes.length>1?p.cranes.map((c,i)=>movingAnalysis({...ref,cranes:[ref.cranes[i]]},props,8).demand):[a.demand];
+ const Md=a.deadMoment,M=a.demand.moment,V=a.demand.shear,H1=Math.max(...single.map(v=>v.lateralMoment));
+ const dv=Math.max(...single.map(v=>v.deflection))*props.Ix,dh=Math.max(...single.map(v=>v.lateralDeflection))*props.Iy;
  const vLimit=L/p.verticalLimit,hLimit=L/Math.max(p.lateralLimit,400);
  const trials:GirderTrial[]=[],misfits:{name:string;weight:number;why:string;kind:string}[]=[],ins=(v:number)=>p.units==='SI'?`${Math.round(v)} mm`:`${(v/inch).toFixed(2)} in`;
  const consider=(section:Section,name:string,weight:number)=>{
@@ -341,7 +352,7 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
   // A continuous girder's negative moment: the envelope's least moment less the reference dead moment (the interior
   // support moment) factored as crane load, plus this section's dead moment factored as dead load.
   const Mneg=(lrfd?1.6:1)*Math.max(0,negative-Md)+(lrfd?1.2:1)*dead;
-  const r=girderSizingRatios(p,section,{Mu:(lrfd?1.2:1)*dead+Mcrane,Mcrane,Hu:(lrfd?1.6:1)*H,V:(lrfd?1.6:1)*V,flexibleTie:opts.flexibleTie,Mneg:p.system==='continuous'?Mneg:0});
+  const r=girderSizingRatios(p,section,{Mu:(lrfd?1.2:1)*dead+Mcrane,Mcrane,Hu:(lrfd?1.6:1)*H1,V:(lrfd?1.6:1)*V,flexibleTie:opts.flexibleTie,Mneg:p.system==='continuous'?Mneg:0});
   trials.push({name,weight,utilization:r.utilization,governs:r.governs,deflection:dv/pr.Ix/vLimit,lateral:dh/pr.Iy/hLimit*r.lateralFactor,shear:r.shear,section});
  };
  // Flanges wide enough for the bearing bolts, end-stop bolts and saddles (minFlange), and for the rail and clips.
@@ -371,10 +382,10 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
  }
  const ok=trials.filter(t=>t.utilization<=target&&t.deflection<=deflectionTarget&&t.lateral<=deflectionTarget).sort((x,y)=>x.weight-y.weight);
  // Without a candidate within the targets, the closest: the least of its largest ratio (an unstable trial ranks last),
- // then the least deflection. The strength estimate enters divided by 1.6, the least ratio of the estimate to the
- // calculated top-flange ratio on the heaviest catalog girders (1.63 to 2.42, beyondGirderCatalog), so a section that
+ // then the least deflection. The strength estimate enters divided by 1.3, about the least ratio of the estimate to the
+ // calculated top-flange ratio on the heaviest catalog girders (1.33 to 1.52, beyondGirderCatalog), so a section that
  // meets the deflection limits is not passed over for an estimate the calculation does not bear out.
- const worst=(t:GirderTrial)=>Math.min(1e9,Math.max(t.utilization/1.6,t.deflection,t.lateral));
+ const worst=(t:GirderTrial)=>Math.min(1e9,Math.max(t.utilization/1.3,t.deflection,t.lateral));
  const chosen=ok[0]??trials.sort((x,y)=>worst(x)-worst(y)||x.deflection-y.deflection)[0];
  if(!chosen)return chosen;
  // The next lighter candidate and why it was not taken: a sizing ratio or deflection over its target, or a misfit.
@@ -1664,15 +1675,16 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
  * calculated). The deflection estimates are the moving-load analysis scaled by 1/I (vertical: exact for a prismatic
  * girder; lateral: the top flange's share), 0.95 to 1.00 of the full calculation on the simulation set (cases 005,
  * 024, 047, 053, 072, 099): a deflection estimate above 1.00 is past its limit. The top-flange strength estimate (the
- * tips ratio) was 1.63 to 2.42 times the calculation's governing top-flange ratio (combined, torsion-normal) on the
- * same heavy sections, so it decides only above girderStrengthScatter, where even the least conservative of them
- * fails; below that the calculation's girder checks decide (case 072: estimate 1.67, calculated 0.76).
+ * larger of the tips and H1 ratios, girderSizingRatios) is 1.33 to 1.52 times the calculation's governing top-flange
+ * ratio (combined, torsion-normal) on the same heavy sections (round-7 set: 005, 024, 047, 053, 072), so it decides
+ * only above girderStrengthScatter, where even the least conservative of them fails; below that the calculation's
+ * girder checks decide (case 072: estimate 1.06, calculated 0.76).
  */
 /** The jumbo rolled alternative of a girder beyond the catalog, as the open item and the log name it. */
 const heavyAlternative=(t:GirderTrial)=>{const h=t.basis?.heavy;return h?` A jumbo rolled ${h.name} (${Math.round(h.weight)} lb/ft, ${+(h.depth/inch).toFixed(1)} in deep) would meet the sizing targets as a heavy alternative: heavy-shape Charpy testing and splice rules (AISC 360 A3.1c, clause to be verified) and mill availability to confirm; the configurator does not select it.`:'';};
 const beyondGirderCatalog=(t:GirderTrial)=>t.basis?.passed===false&&(Math.max(t.deflection,t.lateral)>1+1e-9||t.utilization>girderStrengthScatter);
-/** The largest ratio of the screening strength estimate to the calculated top-flange ratio on the heaviest catalog girders (case 005: 1.96 / 0.81). */
-const girderStrengthScatter=2.5;
+/** Above the largest ratio of the screening strength estimate to the calculated top-flange ratio on the heaviest catalog girders (cases 047 and 053: 1.52). */
+const girderStrengthScatter=1.6;
 /** A member beyond the catalog as a row of the selection log (S-00 and the design summary print it). */
 const openItemRow=(v:NonNullable<RunwayConfig['beyondCatalog']>[number]):ConfigSelection=>({item:'Open item',entered:v.member==='girder'?'Girder':v.member==='tie'?'Top-flange tie':'Crane column',
  designed:`${v.shape}, closest; ${v.member==='girder'?'plate girder required (outside the rolled/capped catalog)':v.member==='tie'?'tie to be designed by hand':'built-up crane column required'}`.slice(0,200),reason:v.reason});
@@ -1686,7 +1698,7 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
  const out:NonNullable<RunwayConfig['beyondCatalog']>=[];if(cfg.scope!=='design')return out;
  if(trial&&beyondGirderCatalog(trial)&&!entered.girderShape){
   const capped=cfg.girder==='capped';
-  out.push({member:'girder',shape:p.section.name,reason:`Plate girder required: no ${capped?'W and channel cap pair':'compact rolled W or W and channel cap pair'} of the catalog meets the girder sizing targets for this crane and span (the closest, ${trial.name}: ${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of the limits, screening estimates; targets ratio ${trial.basis?.target} and deflections ${trial.basis?.deflectionTarget}). Design a built-up plate girder with a wide top flange (or a surge plate or lateral truss), or shorten the span; the configurator does not design plate girders.${heavyAlternative(trial)}`.slice(0,800)});
+  out.push({member:'girder',shape:p.section.name,reason:`Plate girder required: no ${capped?'W and channel cap pair':'compact rolled W or W and channel cap pair'} of the catalog meets the girder sizing targets for this crane and span (the closest, ${trial.name}: screening estimates, ${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of the limits; targets ratio ${trial.basis?.target} and deflections ${trial.basis?.deflectionTarget}). Design a built-up plate girder with a wide top flange (or a surge plate or lateral truss), or shorten the span; the configurator does not design plate girders.${heavyAlternative(trial)}`.slice(0,800)});
  }
  // The flange tie as sized and placed (paired bars, flexible plate, on a saddle or the bearing stiffener) with a sizing
  // ratio of its own still past 1.00 (the targets aside): no arrangement the configurator tried passes, so the tie is an
@@ -1756,7 +1768,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  const named=cfg.girder==='capped'?!!(entered.girderShape&&entered.capChannel):!!entered.girderShape;
  if(!named&&trial){
   const b=trial.basis,kind=cfg.girder==='capped'?'W and channel cap pair':'compact W';
-  const ratios=`${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of their limits`;
+  const ratios=`screening estimates, ${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of their limits`;
   const reason=[b?.passed===false?`No ${kind} meets every sizing target; the closest: ${ratios}`:`Lightest ${kind} within the sizing targets (ratio ≤ ${b?.target??.85}, deflections ≤ ${b?.deflectionTarget??.9} of the limits): ${ratios}`,
    b?`flanges at least ${len(b.minFlange)} wide for the end bearing bolt gauge and the rail seat`:'',
    b?.lighter?`lighter candidates rejected: ${Object.entries(b.rejected).map(([k,n])=>`${n} by ${k}`).join(', ')}; the next lighter, ${b.lighter.name}: ${b.lighter.why}`:'',
