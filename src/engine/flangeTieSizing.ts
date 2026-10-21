@@ -514,10 +514,13 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // Paired bars whose two-row bolt groups still leave the imposed movement over its limit: one bolt row in each group
  // (two bolts across the bar, as the gauge), the flexible length longer by a pitch at each end at the same column
  // face, the bars' ends still clamped in plan by the pretensioned bolts (fixed, tieMovementChecks); the same search
- // from the nearest face, its bolts growing where their checks need it. Only a passing set is taken: a tie that passes
- // with two rows keeps them, and one that passes in neither keeps its two-row sizing (the sizing demands are estimates).
+ // from the nearest face, its bolts growing where their checks need it. A passing set is taken (a tie that passes with
+ // two rows keeps them); else a one-row set within 5% of every sizing limit (so within the code limits, the sizing
+ // margin over the estimated demands mostly kept) is noted, taken where nothing below passes.
+ let near:Trial|undefined;const close=(r?:Trial)=>!!r&&r.worst<=1.05&&(!near||better(r,near));
  if(kept&&kept.worst>1&&over(kept)&&!plate){
-  const reached=[...tried];rows=1;tried.length=0;budget=evaluations+300;passed=searchFaces();if(passed)return passed;
+  const reached=[...tried],before=best;rows=1;tried.length=0;budget=evaluations+300;passed=searchFaces();if(passed)return passed;
+  if(best!==before&&close(best))near=best;
   rows=2;tried.length=0;tried.push(...reached);
  }
  // The imposed movement still over its limit on paired bars with the column-end release: the column-end slide
@@ -546,16 +549,18 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
       if(!r)continue;
       if(r.worst<=1){here=r;break;}
       if(n===2&&better(r,found))found=r;
+      if(n===1&&close(r))near=r;
      }
      if(!here)break;
      passing=here;
     }
     if(passing)return passing.q;
    }
+   if(near)return near.q;
    if(found&&better(found,kept))return found.q;
   }
  }
- return kept?.q??p;
+ return (near??kept)?.q??p;
 }
 
 /** Saddle tie checks that load the girder flange (the F·h couple, the saddle toes and fillet terminations, the rail clip over the saddle) or the saddle itself. */
