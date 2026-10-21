@@ -228,7 +228,8 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
  const grow=(tagged:string,s:BaseSizingRatios):boolean=>{
   const braced=tagged.startsWith('braced:'),key=braced?tagged.slice(7):tagged;ft=braced&&b.braced?b.braced.footing:b.footing;
   switch(key){
-   case 'plate':{const t=Math.max(next(pl.thickness,inch/8),up(s.tRequired/target,inch/8));if(!Number.isFinite(t))return longer();if(t>caps.thickness+1e-6)return false;pl.thickness=t;return true;}
+   // The step to the target thickness stops at the cap: a capped plate can still pass at its limit (1.00, not the target).
+   case 'plate':{const t=Math.max(next(pl.thickness,inch/8),up(s.tRequired/target,inch/8));if(!Number.isFinite(t))return longer();if(t>caps.thickness+1e-6){if(pl.thickness>=caps.thickness-1e-6)return false;pl.thickness=caps.thickness;return true;}pl.thickness=t;return true;}
    case 'bearing':return larger();
    // Fatigue: the rods by a larger diameter (more stress area), then more rods, then a longer plate (a longer lever);
    // the flange fillet root by larger fillets, then a CJP flange joint (as 'weld'); the plate thicker. The column

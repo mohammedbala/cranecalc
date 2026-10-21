@@ -11,6 +11,7 @@ import {seatEnds,seatMoment} from '../src/engine/columnSupport';
 import {drawingSheetSet,detailReferences} from '../src/components/planSheet';
 import {compactReport} from '../src/report/compactReport';
 import type {ProjectInput} from '../src/engine/types';
+import {columnWeldGroup,columnWeldStress} from '../src/engine/bracketDesign';
 
 const inch=25.4,foot=304.8,ksi=6.894757293168;
 const texts=(svg:string)=>[...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&')).join(' ');
@@ -130,8 +131,13 @@ describe('rod X-bracing between new freestanding columns',()=>{
  it('checks the bracket seat fillet for the girder force and its couple',()=>{
   const d=p.longitudinalBracing!.design!,br=p.details!.bracket!,F=s.bracingSystem!.seatForce.F,Lw=Math.min(br.seatLength,column.bf)-inch/2,e=girderOffset(p)-column.d/2;
   expect(F).toBeCloseTo(p.cranes[0].design!.bumperForce,3);
-  expect(check('brace-seat-weld')!.demand).toBeCloseTo(Math.hypot(F/Lw,6*F*e/Lw**2),6);
-  expect(check('brace-seat-weld')!.capacity).toBeCloseTo(.75*.6*70*ksi*d.seatWeld/Math.SQRT2,6);
+  // The seat top fillet and the rib root fillets as one elastic group under F at the girder web line (e = reach).
+  const g=columnWeldGroup(br,d.seatWeld),w=columnWeldStress(br,g,0,{V:0,Mseat:0,F,H:0,xH:0});
+  expect(br.reach).toBeCloseTo(e,6);
+  expect(check('brace-seat-weld')!.demand).toBeCloseTo(Math.max(w.seat,w.root),6);
+  expect(check('brace-seat-weld')!.capacity).toBeCloseTo(.75*.6*70*ksi,6);
+  // Crediting the ribs relieves the seat fillet against the seat line alone (line force over its throat).
+  expect(w.seat).toBeLessThan(Math.hypot(F/Lw,6*F*e/Lw**2)/(d.seatWeld/Math.SQRT2));
  });
  it('reports rod bracing along the runway in SDC D unsupported and rejects inputs it cannot design',()=>{
   const r=s.bracingSystem!,checks=bracingSystemChecks(p,{...r,seismic:{...r.seismic!,permitted:false}},column);

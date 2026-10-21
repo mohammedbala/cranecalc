@@ -1,6 +1,7 @@
 import {available,girderStrength} from './aiscStrength';
 import {girderDeadLoad} from './newSteel';
 import {usesRolledBracket,rolledCollectorWeld} from './rolledBracket';
+import {columnWeldGroup,columnWeldStress} from './bracketDesign';
 import {usesTaperedHaunch,haunchCollectorWeld} from './taperedHaunch';
 import {aiscShapeByName,loadAiscSection} from '../data/aiscSections';
 import {emptyAistInputs} from './aistLoads';
@@ -474,8 +475,11 @@ export function bracingSystemChecks(p:ProjectInput,r:BracingSystemResult,column:
   const w=haunchCollectorWeld(p,F);
   add('brace-seat-weld','Crane-level strut','Tapered haunch to column flange · collector welds',w.stress,w.capacity,'stress',w.cjp?'f_v=1.5Q/(bt),\\;Q=FI_{yf}/I_y\\pm T/h_o':'f=\\sqrt{n^2+t_x^2+t_y^2}',`At every column the girder's locating bearing bolts deliver its longitudinal force F = ${f(F)} (${r.seatForce.id}) to the haunch top flange, ${f(w.a,'length')} from the column face; ${w.cjp?'the flanges carry it by lateral shear through their CJP welds':'the haunch-to-column fillet group carries it in weak-axis bending and torsion, elastic, no directional increase'}.`,['aisc-connections','haunch-basis'],r.seatForce.id);
  }else if(br?.enabled){
-  const Lw=Math.min(br.seatLength,column.bf)-inch/2,reach=girderOffset(p)-column.d/2,M=F*reach,fw=Math.hypot(F/Lw,6*M/Lw**2);
-  add('brace-seat-weld','Crane-level strut','Bracket seat to column flange · collector fillet',fw,available(.6*m.Fexx*d.seatWeld/Math.SQRT2,method,.75,2),'lineForce','f=\\sqrt{\\left(\\frac{F}{L}\\right)^2+\\left(\\frac{6Fe}{L^2}\\right)^2}',`At every column the girder's locating bearing bolts deliver its longitudinal force F = ${f(F)} (${r.seatForce.id}) to the bracket seat, which a ${f(d.seatWeld,'length')} top fillet ${f(Lw,'length')} long welds to the column flange. The seat carries the couple F·e, e = ${f(reach,'length')} from the flange to the girder web, in its plane. Ribs not credited.`,['aisc-connections'],r.seatForce.id);
+  // The seat top fillet and the ribs' root fillets on the column flange as one elastic weld group (columnWeldGroup, the
+  // group of the bracket's column-weld check): F along the seat top at the girder web line, the couple F·e about the
+  // vertical axis taken by the whole group (the ribs as opposite normal forces), AISC Manual Part 8 elastic method.
+  const g=columnWeldGroup(br,d.seatWeld),wf=columnWeldStress(br,g,0,{V:0,Mseat:0,F,H:0,xH:0}),fw=Math.max(wf.seat,wf.root),reach=br.reach,M=F*reach;
+  add('brace-seat-weld','Crane-level strut','Bracket seat and rib roots to column flange · collector fillets',fw,available(.6*m.Fexx,method,.75,2),'stress','f=\\sqrt{n^2+t_x^2+t_y^2},\\ n=\\frac{Fe\\,x}{I_y},\\ t=\\frac{F}{A}+\\frac{T\\,r}{J}',`At every column the girder's locating bearing bolts deliver its longitudinal force F = ${f(F)} (${r.seatForce.id}) to the bracket seat, at the girder web line e = ${f(reach,'length')} from the column flange: the couple F·e = ${f(M,'moment')} in plan. The seat's ${f(d.seatWeld,'length')} top fillet ${f(g.L,'length')} long and the ${f(br.rootWeld,'length')} root fillets of both ribs (${f(br.ribDepth,'length')} deep, ${f(br.ribSpacing,'length')} apart) on the column flange resist it as one elastic weld group (AISC Manual Part 8, elastic method; the ribs push and pull on the flange as opposite normal forces): peak throat stress ${f(wf.seat,'stress')} on the seat fillet, ${f(wf.root,'stress')} on the rib root fillets. The same group with the concurrent vertical reaction is the bracket's column-weld check.`,['aisc-connections'],r.seatForce.id);
  }
  // Torsion brace at the locating columns: the strut moment-connected in plan by plates on its flanges, holding the
  // column against the twist from the girder offset (torsionBraceStiffness). Its strut moment, plates, bolts and welds.
