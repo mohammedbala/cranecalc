@@ -128,21 +128,30 @@ export function sizeTaperedHaunch(p:ProjectInput,target=.9,opts:{light?:boolean}
   Object.assign(h,{rootWidth:narrow.rootWidth,bottomWidth:narrow.bottomWidth,stiffener:{...h.stiffener,...narrow.stiffener,thickness:h.stiffener.thickness},
    topThickness:inch/2,bottomThickness:inch/2,flangeJoint:'fillet',flangeWeld:minimumFillet(Math.min(inch/2,b.receiver.flangeThickness))});
  }
- // Deeper, never past the model's 45° bottom flange slope (the tip follows the root at half its depth): at the
- // limit the sizing stops and the checks report what remains.
+ // Deeper, never past the model's 45° bottom flange slope (the tip follows the root at half its depth). A ratio whose
+ // step is left without effect (a deeper haunch at the slope limit, a weld or plate at its bound) is set aside and the
+ // sizing goes on with the others; the checks report what remains.
  let atSlopeLimit=false;
  const h=b.haunch!,grow=(patch:Partial<TaperedHaunchInput>)=>Object.assign(h,patch),deeper=()=>{const rootDepth=h.rootDepth+inch,tipDepth=Math.max(h.tipDepth,up(rootDepth/2,inch));
-  if(Math.atan((rootDepth-tipDepth)/b.seatProjection)*180/Math.PI>haunchSlopeLimit+1e-9){atSlopeLimit=true;return;}grow({rootDepth,tipDepth});};
+  if(Math.atan((rootDepth-tipDepth)/b.seatProjection)*180/Math.PI>haunchSlopeLimit+1e-9){atSlopeLimit=true;return false;}grow({rootDepth,tipDepth});return true;};
+ const stuck=new Set<string>();
  for(let i=0;i<160;i++){
-  const r=haunchSizingRatios(q),[key,worst]=Object.entries(r).sort((x,y)=>y[1]-x[1])[0],column=(r as unknown as {column:Record<string,number>}).column;
+  const r=haunchSizingRatios(q),open=Object.entries(r).filter(([k])=>!stuck.has(k)).sort((x,y)=>y[1]-x[1]),column=(r as unknown as {column:Record<string,number>}).column;
+  const [key,worst]=open[0]??['',0],before=JSON.stringify(b);
   // Column stiffeners where the unstiffened column (J10.1-J10.4) does not take the flange forces.
   if(!activeColumnStiffeners(b)&&(column.J10??0)>target){
    b.columnStiffeners=initialColumnStiffeners(b.receiver,receiverK(b,q.existingColumn)?.k,Math.max(h.topThickness,h.bottomThickness));continue;
   }
-  if(worst<=target||atSlopeLimit)break;
+  if(worst<=target)break;
   const thick=Math.max(h.topThickness,h.bottomThickness)>=2*inch;
   if(key.startsWith('colstiff-')){
-   const s=b.columnStiffeners!,thicker=()=>{if(s.thickness<inch-1e-6)s.thickness+=inch/8;else deeper();};
+   // At the slope limit, full-depth plates lengthen the web fillets and the web shear line (the web-side checks); then
+   // wider plates, 1/8 in at a time to the column fit limit (b_s <= (b_f - t_w)/2, the fit check), lengthen the flange
+   // fillets and the plate contact (the flange-side checks).
+   const s=b.columnStiffeners!,webSide=['colstiff-web-weld','colstiff-fatigue-weld','colstiff-web-shear'].includes(key),flangeSide=!['colstiff-web-weld','colstiff-web-shear'].includes(key);
+   const thicker=()=>{if(s.thickness<inch-1e-6)s.thickness+=inch/8;else if(!deeper()){
+    if(webSide&&s.length==='half')s.length='full';
+    else if(flangeSide&&s.width+inch/8<=(b.receiver.width-b.receiver.webThickness)/2+1e-6)s.width+=inch/8;}};
    const weld=(k:'flangeWeld'|'webWeld')=>{if(s[k]+inch/16<=Math.min(5/8*inch,s.thickness-inch/16)+1e-6){s[k]+=inch/16;return true;}return false;};
    if(key==='colstiff-web-shear'){if(s.length==='half')s.length='full';else deeper();}
    else if(key==='colstiff-flange-weld'||key==='colstiff-fatigue-plate'){if(!weld('flangeWeld'))thicker();}
@@ -177,6 +186,7 @@ export function sizeTaperedHaunch(p:ProjectInput,target=.9,opts:{light?:boolean}
   b.rootWeld=Math.max(b.rootWeld,minimumFillet(Math.max(h.webThickness,b.receiver.flangeThickness)));
   const s=b.columnStiffeners;
   if(s?.enabled){s.flangeWeld=Math.max(s.flangeWeld,minimumFillet(Math.max(s.thickness,b.receiver.flangeThickness)));s.webWeld=Math.max(s.webWeld,minimumFillet(Math.max(s.thickness,b.receiver.webThickness)));}
+  if(JSON.stringify(b)===before)stuck.add(key);
  }
  return q;
 }
