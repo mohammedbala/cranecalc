@@ -364,7 +364,11 @@ export const sizingLimit=(ratios:Record<string,number>,k:string,target=tieSizing
 export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;trace?:(face:number,thickness:number,governs:string,worst:number,x:TieProportions)=>void}={}):ProjectInput{
  const d=p.details;
  if(!d||!flangeTieFamily(d)||(!flangeTieGeometry(p)&&!stiffenerTieGeometry(p)))return p;
- const target=opts.target??tieSizingTarget,base=tieProportions(p),demand=tieSizingDemands(p),gussetFits=!!stiffenerTieGeometry(p)&&!stiffenerGussetMisfit(p);
+ const target=opts.target??tieSizingTarget,base=tieProportions(p),demand=tieSizingDemands(p);
+ // A stiffener tie's column gussets stay on the receiving column flange where the gusset the sizing starts from (the
+ // bearing stiffener's thickness, at most 3/4 in) lands there, whatever gusset the input carried (a saddle tie moved
+ // onto the stiffener keeps its 1 1/2 in slide gusset; 024: 0.95 mm past a W14X211's half flange).
+ const gussetFits=!!stiffenerTieGeometry(p)&&!stiffenerGussetMisfit((()=>{const s=structuredClone(p);s.details!.brace.gussetThickness=Math.min(d.bearing.stiffenerThickness,.75*inch);return s;})());
  const plate=tieArrangement(d)==='flexible-plate',release=!!d.brace.release?.enabled;
  // A stiffener tie's gusset starts at the bearing stiffener's thickness (at most the 3/4 in start of the other ties):
  // the tie-side stiffener is then cut with the gusset as its extension (one plate, no weld; stiffenerTieJoint
