@@ -261,6 +261,8 @@ const capChannels=['C10X15.3','C12X20.7','C12X25','C15X33.9','C15X40','C15X50','
  */
 export const capWeldPocket=1.5*inch;
 export interface GirderTrial {name:string;weight:number;utilization:number;deflection:number;lateral:number;shear:number;section:Section;
+ /** Rail-head movement with the girder twist over its limit (the rail-head check), a screening estimate (railHeadFactor). */
+ railHead?:number;
  /** The governing sizing ratio: top-flange tip stress with warping and second-order twist, the H1 top-flange interaction with the load-height LTB strength, or the elastic stability margin. */
  governs:string;
  /**
@@ -322,7 +324,11 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  // Lateral deflection as the full analysis checks it (AISC DG7 practice, 'lateral'): the side thrust on the top flange
  // (with the cap) alone, I_yt for the whole I_y. The factor multiplies the whole-section lateral deflection (at least 1).
  const lateralFactor=Math.max(1,pr.Iy/Iyt);
- return {...ratios,utilization,governs,Mcr,cb,amplification,lateralFactor};
+ // The rail-head movement with the twist (the rail-head check): the top flange's share of the side thrust and the
+ // warping couple of the torque about the shear center (y_g/h_0), GJ = 0, times railHeadAllowance for the tie play and
+ // the girder-end twist this flange model leaves out.
+ const railFactor=Math.max(1,(top+yg/h0)*pr.Iy/Iyt)*railHeadAllowance;
+ return {...ratios,utilization,governs,Mcr,cb,amplification,lateralFactor,railFactor};
 }
 /**
  * Girder sizing for the moving loads: one moving-load analysis of the configured runway gives the envelope moments
@@ -353,7 +359,7 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
   // support moment) factored as crane load, plus this section's dead moment factored as dead load.
   const Mneg=(lrfd?1.6:1)*Math.max(0,negative-Md)+(lrfd?1.2:1)*dead;
   const r=girderSizingRatios(p,section,{Mu:(lrfd?1.2:1)*dead+Mcrane,Mcrane,Hu:(lrfd?1.6:1)*H1,V:(lrfd?1.6:1)*V,flexibleTie:opts.flexibleTie,Mneg:p.system==='continuous'?Mneg:0});
-  trials.push({name,weight,utilization:r.utilization,governs:r.governs,deflection:dv/pr.Ix/vLimit,lateral:dh/pr.Iy/hLimit*r.lateralFactor,shear:r.shear,section});
+  trials.push({name,weight,utilization:r.utilization,governs:r.governs,deflection:dv/pr.Ix/vLimit,lateral:dh/pr.Iy/hLimit*r.lateralFactor,railHead:dh/pr.Iy/hLimit*r.railFactor,shear:r.shear,section});
  };
  // Flanges wide enough for the bearing bolts, end-stop bolts and saddles (minFlange), and for the rail and clips.
  const minFlange=Math.max(opts.minFlange??0,kind==='rolled'?opts.minSeat:0);
@@ -380,16 +386,16 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
    }
   }
  }
- const ok=trials.filter(t=>t.utilization<=target&&t.deflection<=deflectionTarget&&t.lateral<=deflectionTarget).sort((x,y)=>x.weight-y.weight);
+ const ok=trials.filter(t=>t.utilization<=target&&t.deflection<=deflectionTarget&&t.lateral<=deflectionTarget&&(t.railHead??0)<=deflectionTarget).sort((x,y)=>x.weight-y.weight);
  // Without a candidate within the targets, the closest: the least of its largest ratio (an unstable trial ranks last),
  // then the least deflection. The strength estimate enters divided by 1.3, about the least ratio of the estimate to the
  // calculated top-flange ratio on the heaviest catalog girders (1.33 to 1.52, beyondGirderCatalog), so a section that
  // meets the deflection limits is not passed over for an estimate the calculation does not bear out.
- const worst=(t:GirderTrial)=>Math.min(1e9,Math.max(t.utilization/1.3,t.deflection,t.lateral));
+ const worst=(t:GirderTrial)=>Math.min(1e9,Math.max(t.utilization/1.3,t.deflection,t.lateral,t.railHead??0));
  const chosen=ok[0]??trials.sort((x,y)=>worst(x)-worst(y)||x.deflection-y.deflection)[0];
  if(!chosen)return chosen;
  // The next lighter candidate and why it was not taken: a sizing ratio or deflection over its target, or a misfit.
- const over=(t:GirderTrial)=>[t.utilization>target?`${t.governs} ratio ${t.utilization.toFixed(2)} > ${target}`:'',t.deflection>deflectionTarget?`vertical deflection ${t.deflection.toFixed(2)} of the limit > ${deflectionTarget}`:'',t.lateral>deflectionTarget?`lateral deflection ${t.lateral.toFixed(2)} of the limit > ${deflectionTarget}`:''].filter(Boolean).join('; ');
+ const over=(t:GirderTrial)=>[t.utilization>target?`${t.governs} ratio ${t.utilization.toFixed(2)} > ${target}`:'',t.deflection>deflectionTarget?`vertical deflection ${t.deflection.toFixed(2)} of the limit > ${deflectionTarget}`:'',t.lateral>deflectionTarget?`lateral deflection ${t.lateral.toFixed(2)} of the limit > ${deflectionTarget}`:'',(t.railHead??0)>deflectionTarget?`rail-head movement with twist ${t.railHead!.toFixed(2)} of the limit > ${deflectionTarget}`:''].filter(Boolean).join('; ');
  const lighters=[...trials.filter(t=>t.weight<chosen.weight-1e-9&&over(t)).map(t=>({name:t.name,weight:t.weight,why:over(t),kind:t.utilization>target?'sizing ratio':'deflection'})),...misfits.filter(m=>m.weight<chosen.weight-1e-9)].sort((x,y)=>y.weight-x.weight);
  const rejected:Record<string,number>={};for(const v of lighters)rejected[v.kind]=(rejected[v.kind]??0)+1;
  return {...chosen,basis:{passed:ok[0]===chosen,target,deflectionTarget,minFlange,lighter:lighters[0]&&{name:lighters[0].name,why:lighters[0].why},rejected}};
@@ -1692,6 +1698,12 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
 /** The jumbo rolled alternative of a girder beyond the catalog, as the open item and the log name it. */
 const heavyAlternative=(t:GirderTrial)=>{const h=t.basis?.heavy;return h?` A jumbo rolled ${h.name} (${Math.round(h.weight)} lb/ft, ${+(h.depth/inch).toFixed(1)} in deep) would meet the sizing targets as a heavy alternative: heavy-shape Charpy testing and splice rules (AISC 360 A3.1c, clause to be verified) and mill availability to confirm; the configurator does not select it.`:'';};
 const beyondGirderCatalog=(t:GirderTrial)=>t.basis?.passed===false&&(Math.max(t.deflection,t.lateral)>1+1e-9||t.utilization>girderStrengthScatter);
+/**
+ * Rail-head screening allowance over the flange-couple estimate (girderSizingRatios railFactor): the calculated
+ * rail-head movement (thin-walled model with the tie play) was 1.15 to 1.23 times that estimate on templates t01, t05,
+ * t14 and t15 (1.44 on t13, the column cap's fork), so the screen at 0.9 keeps it within about 1.0.
+ */
+const railHeadAllowance=1.25;
 /** Above the largest ratio of the screening strength estimate to the calculated top-flange ratio on the heaviest catalog girders (cases 047 and 053: 1.52). */
 const girderStrengthScatter=1.6;
 /** A member beyond the catalog as a row of the selection log (S-00 and the design summary print it). */
@@ -1777,7 +1789,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  const named=cfg.girder==='capped'?!!(entered.girderShape&&entered.capChannel):!!entered.girderShape;
  if(!named&&trial){
   const b=trial.basis,kind=cfg.girder==='capped'?'W and channel cap pair':'compact W';
-  const ratios=`screening estimates, ${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of their limits`;
+  const ratios=`screening estimates, ${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)}, lateral ${trial.lateral.toFixed(2)}${trial.railHead!==undefined?` and rail-head movement with twist ${trial.railHead.toFixed(2)}`:''} of their limits`;
   const reason=[b?.passed===false?`No ${kind} meets every sizing target; the closest: ${ratios}`:`Lightest ${kind} within the sizing targets (ratio ≤ ${b?.target??.85}, deflections ≤ ${b?.deflectionTarget??.9} of the limits): ${ratios}`,
    b?`flanges at least ${len(b.minFlange)} wide for the end bearing bolt gauge and the rail seat`:'',
    b?.lighter?`lighter candidates rejected: ${Object.entries(b.rejected).map(([k,n])=>`${n} by ${k}`).join(', ')}; the next lighter, ${b.lighter.name}: ${b.lighter.why}`:'',
