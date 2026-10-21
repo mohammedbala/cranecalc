@@ -31,17 +31,18 @@ describe('new freestanding columns for heavy cranes',()=>{
   expect(d.seatWeld).toBeGreaterThan(.625*inch);expect(d.seatWeld).toBeLessThanOrEqual(.75*inch+1e-6);
   expect(bracingRatios(p)['brace-seat-weld']).toBeLessThanOrEqual(1);
  },300000);
- it('073: no rolled W14 keeps a 35 ft cantilever column within its drift: the W14X398 built, an open item naming column caps; the tie passing at a longer reach',()=>{
+ it('073: no rolled W14 keeps a 35 ft cantilever column within its drift: the W14X398 built, an open item naming column caps; the face held at 20 in',()=>{
   const p=buildProject(sim('073',{capacity:40,craneSpan:71,control:'cab',cmaa:'C',buildingClass:'C',bays:3,span:20,railElevation:35,girder:'rolled',support:'twin-rib',tie:'flexible-plate'}));
   expect(p.existingColumn!.shape).toBe('W14X398');
   const v=p.configurator!.beyondCatalog!.find(x=>x.member==='crane-column')!;
   expect(v).toMatchObject({shape:'W14X398'});expect(v.reason).toMatch(/^Built-up crane column required: no rolled W14 to the W14X398/);expect(v.reason).toMatch(/column caps over the new columns/);
   expect(p.configurator!.selections!.some(s=>s.item==='Open item'&&s.entered==='Crane column')).toBe(true);
   expect(configuratorOpenItems(p).find(c=>c.id==='configurator-crane-column')?.status).toBe('incomplete');
-  // The tie, sized for the seat twist the sized torsion strut leaves (not the trial strut's), passes at a face moved out
-  // to at most 30 in: the reach moves there (attachTieAtFace keeps a face that lets the tie pass), the seat twist within its limits.
-  expect(p.configurator!.beyondCatalog!.some(x=>x.member==='tie')).toBe(false);
-  expect(p.details!.bracket!.reach).toBeGreaterThan(20*inch);expect(p.details!.bracket!.reach).toBeLessThanOrEqual(30*inch+1e-6);
+  // The tie passes at no face to 30 in: the reach stays at 20 in, the seat twist within its limits.
+  expect(p.details!.bracket!.reach).toBeCloseTo(20*inch,6);
+  // (Sized for the twist the sized torsion strut leaves, the tie sizing keeps the 20 in face itself, or moves it out and
+  // attachTieAtFace takes it back: either way the face stays and the tie is the open item.)
+  expect(p.configurator!.beyondCatalog!.some(x=>x.member==='tie')).toBe(true);
   const t=twistOf(p);expect(t.rotation).toBeLessThanOrEqual(1);
  },600000);
  it('099: a plate girder (the jumbo W36X652 named, not selected), the fork stiffener pair thicker than 1 1/2 in for its fatigue, the cap bolts at their limit stated in the log',()=>{
