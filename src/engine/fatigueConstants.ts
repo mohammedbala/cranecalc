@@ -40,3 +40,16 @@ export const damageText=(d:number)=>!Number.isFinite(d)?'—':d<.005?'< 0.01':d.
 export const damageSum=(d:number)=>{const t=damageText(d);return t.startsWith('<')?`Σn_i/N_i ${t}`:`Σn_i/N_i = ${t}`;};
 /** The LaTeX of the equivalent-range check, slope m (3, or 6 for Category F), with an optional suffix. */
 export const minerEquation=(suffix='',m=3,R=false)=>`f_{sr,eq}=\\left(\\frac{\\sum_in_if_{sr,i}^{${m}}}{n_{SR}}\\right)^{1/${m}}\\le ${R?'R_{FIL}':''}F_{SR}${suffix}`;
+/**
+ * A duty-spectrum fatigue check by the project's governing fatigue method (ProjectInput.fatigue.method, the method the
+ * fatigue table and the summary govern by): Miner's rule as the equivalent range f_sr,eq at n_SR (the default), or the
+ * all-cycle bound, the largest duty-bin range f_sr,max at every one of the n_SR cycles. Both are compared with F_SR at
+ * n_SR without the threshold. `basis(miner)` is the method sentence of the note: the check's own Miner sentence for
+ * Miner's method; for the all-cycle bound a sentence stating it, with the Miner ratio for comparison.
+ */
+export function spectrumFatigue(method:'miner'|'all-cycle'|undefined,bins:readonly {cycles:number;range:number}[],allowable:(cycles:number)=>number,m=3){
+ const eq=minerEquivalent(bins,allowable,m),all=method==='all-cycle',largest=Math.max(0,...bins.map(b=>b.range));
+ return {...eq,range:all?largest:eq.range,equivalent:eq.range,allCycle:all,
+  equation:(suffix='',R=false)=>all?`f_{sr,max}=\\max_if_{sr,i}\\le ${R?'R_{FIL}':''}F_{SR}${suffix}`:minerEquation(suffix,m,R),
+  basis:(miner:string)=>all?`All-cycle bound, the project's fatigue method: the largest duty-bin range at every one of the n_SR = ${eq.cycles.toLocaleString('en-US')} cycles against F_SR at n_SR, no endurance-limit credit; Miner's rule over the bins gives f_sr,eq/F_SR = ${eq.capacity>0?(eq.range/eq.capacity).toFixed(2):'—'} for comparison (${damageSum(eq.damage)}).`:miner};
+}

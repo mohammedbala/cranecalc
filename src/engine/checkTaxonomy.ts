@@ -229,13 +229,13 @@ export function fatigueData(s:CalculationSnapshot,c:CheckResult):FatigueData|und
  let cat=parseCategory(note);
  // A weld-root (R_FIL) curve: R from the note, else from the check's allowable against the plain Category C curve.
  const rfil=note.match(/R_FIL\s*=\s*(\d+(?:\.\d+)?)/),rootR=()=>rfil?Number(rfil[1]):c.capacity!==undefined?Math.min(1,c.capacity/allCycleRange('C',n)):1;
- // Miner checks of the supports (f_sr,eq against F_SR at n_SR): the duty-bin ranges from the support results, the curve
+ // Duty-bin checks of the supports (f_sr,eq, or f_sr,max for an all-cycle project, against F_SR at n_SR): the duty-bin ranges from the support results, the curve
  // through the check's own F_SR at n_SR (slope 1/3), so R_FIL and the E′/C″ lower-curve choices carry over.
  // A result stored before the equivalent-range form (a damage-sum ratio) takes F_SR from its category curve.
  const bins=minerBins(s,c);
  if(bins){
   const range=Math.max(0,...bins.map(v=>v.range)),root=/R_\{FIL\}/.test(c.equation)&&rootR()<1-1e-9,k=root?"C''":cat??'C';
-  const FSR=c.equation.startsWith('f_{sr,eq}')&&c.capacity!==undefined&&c.capacity>0?c.capacity:(root?rootR():1)*allCycleRange(root?'C':k,n);
+  const FSR=/^f_\{sr,(eq|max)\}/.test(c.equation)&&c.capacity!==undefined&&c.capacity>0?c.capacity:(root?rootR():1)*allCycleRange(root?'C':k,n);
   const m=minerEquivalent(bins,k2=>FSR*(n/k2)**(1/3));
   return {range,threshold:root?undefined:thresholdOf(k),category:k,miner:m.range/m.capacity,equivalent:m.range,damage:m.damage,capacity:FSR,allCycle:range/FSR,bins,source:'support results'};
  }

@@ -142,8 +142,8 @@ export function bracketSizingRatios(p:ProjectInput,set=bracketSizingSet(p)){
 }
 /**
  * The receiving column's own fatigue ratio under the sizing set's duty bins, which the bracket sizing does not drive
- * (notSized): bracket-fatigue-column, the column flange at the rib weld toes (AISC Table A-3.1 item 7.1, the whole
- * bracket moment on the column section), by the check's method and cycles. The column choice answers it.
+ * (notSized): bracket-fatigue-column, the column flange at the rib weld toes (AISC Table A-3.1 item 7.1, the column's
+ * share of the bracket moment on its section), by the check's method and cycles. The column choice answers it.
  */
 export function bracketColumnFatigueRatio(p:ProjectInput,set=bracketSizingSet(p)){
  const c=createBracketCollector(p);if(!c)return 0;
