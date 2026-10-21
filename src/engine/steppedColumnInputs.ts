@@ -40,8 +40,25 @@ export const stepSchema=z.object({
  upperLcy:pos.optional(),
  /** Surveyed leg of the existing step welds (the cap to the lower shaft, the upper shaft to the cap); blank: not surveyed, the step fatigue check reports the required leg as an open item. */
  capWeld:pos.optional(),
+ /**
+  * New work: the existing step fillets (the cap to the lower shaft, the upper shaft to the cap) built up in the field to
+  * this leg where the existing legs fail their fatigue check (configurator, finishSteppedColumn); AWS D1.1 Clause 11.
+  */
+ capWeldAdded:pos.optional(),
  /** Built-up or laced shafts are not modeled (an unsupported check). */
  construction:z.enum(['rolled','built-up','laced']).optional(),
+ /**
+  * New crane-level strut on the girder line (craneLevelStrut.ts), designed here where the longitudinal exit is
+  * 'girder-strut': a W shape along the runway beside the lower shafts' crane-side flanges below the step, its web lapped
+  * on a plate bolted to each lower crane-side flange, carrying the longitudinal crane force to the existing braced bay.
+  * Absent: the girder-line strut is by others (an engineer-of-record dependency).
+  */
+ strut:z.object({shape:z.string().max(30),Fy:pos,Fu:pos,
+  /** Plate on the crane-side flange face, the strut webs lapping it each side of the column. */
+  plate:z.object({thickness:pos,Fy:pos,Fu:pos}),
+  bolts:z.object({diameter:pos,grade:z.enum(['A325','A490'])}),
+  /** Bolts in line at each strut end (in the strut web), and rows of bolt pairs through the plate and the existing flange. */
+  strutBolts:z.number().int().min(2).max(6),columnRows:z.number().int().min(2).max(6)}).optional(),
  source:z.string().max(300),confirmed:z.boolean()
 });
 export type StepInput=z.infer<typeof stepSchema>;

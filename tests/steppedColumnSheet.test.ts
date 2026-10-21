@@ -21,17 +21,19 @@ describe('stepped column drawings',()=>{
   // t15's W40X199 lower web carries the inner flange unstiffened; the stiffener drawings are shown with a pair added.
   if(stiffened&&!s.input.existingColumn!.step!.stiffener)s.input.existingColumn!.step!.stiffener={thickness:.625*25.4,width:7.25*25.4,weld:.3125*25.4};
   const topics=detailTopics(s),topic=topics.find(t=>t.key==='stepped-column');
-  expect(topic?.views.map(v=>v.title)).toEqual([steppedColumnTitles.elevation,steppedColumnTitles.section,...(stiffened?[steppedColumnTitles.stiffener]:[])]);
+  // Both templates take the force out on a girder-line strut designed here: its detail at a column (craneLevelStrut.ts).
+  expect(topic?.views.map(v=>v.title)).toEqual([steppedColumnTitles.elevation,steppedColumnTitles.section,...(stiffened?[steppedColumnTitles.stiffener]:[]),steppedColumnTitles.strut]);
   expect(topics.flatMap(t=>t.views.map(v=>v.title))).not.toContain(detailTitles.bearing);
   const sheets=drawingSheetSet(s),all=sheets.map(v=>v.svg).join(''),words=texts(all);
   expect(all).not.toContain('NOT IN SET');
-  for(const view of ['stepped-column-elevation','step-section',...(stiffened?['step-stiffener']:[])])expect(all,view).toContain(`data-view="${view}"`);
+  for(const view of ['stepped-column-elevation','step-section',...(stiffened?['step-stiffener']:[]),'crane-level-strut'])expect(all,view).toContain(`data-view="${view}"`);
   expect(all).not.toContain('data-view="bracket-connection"');
   expect(words).not.toMatch(/COLUMN BRACKET|BRACKET SEAT|BRACKET DESIGN|BRACKET'S|BY THE BRACKET DESIGNER|SPREADER BELOW/);
   // S-01: the stepped profile on the section, the lower shaft and step cap on the plan and below the girder elevation.
   const s01=sheets.find(v=>v.number==='S-01')!.svg;
   expect(texts(s01)).toContain('(E) STEPPED COLUMN (REF.): UPPER');expect(texts(s01)).toContain('GIRDER ON THE (E) STEP CAP');
   expect(s01).toContain('data-stepped-column="plan"');expect(s01).toContain('data-stepped-column="elevation"');
+  expect(texts(s01)).toContain(`${s.input.existingColumn!.step!.strut!.shape} CRANE-LEVEL STRUT (NEW) ON`);expect(texts(s01)).not.toContain('CRANE-LEVEL STRUT BY OTHERS');
   // S-00: the schedule, the survey items of the step and the shafts, the forces delivered to the stepped columns.
   const s00=texts(sheets.filter(v=>v.number.startsWith('S-00')).map(v=>v.svg).join(''));
   for(const t of ['STEPPED COLUMN SCHEDULE','EXISTING STEP:','SURVEY AT EVERY STEPPED COLUMN','FORCES DELIVERED TO THE STEPPED BUILDING COLUMNS'])expect(s00,t).toContain(t);

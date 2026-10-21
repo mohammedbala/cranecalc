@@ -21,6 +21,7 @@ import type {SupportReactionSet} from './supportReactions';
 import {latexNumber} from './math';
 import {format} from './units';
 import {columnTwistChecks,twistRotationLimit} from './columnTwistLimit';
+import {activeStepStrut,stepStrutChecks,stepStrutGeometry,stepStrutLayout,stepStrutSection,strutPathStiffness,strutShare} from './craneLevelStrut';
 
 /**
  * Girder on the step of an existing stepped building column (configurator support 'stepped-column'; plan §1B, WP-2).
@@ -78,6 +79,11 @@ export function validateSteppedColumn(p:ProjectInput):string[]{
  add(s.upper.Fu<s.upper.Fy,'upper.Fu: ultimate strength cannot be less than yield strength.');
  add(!!s.upper.shape&&!aiscShapeByName(s.upper.shape),'upper.shape: select an AISC W shape or clear it to use entered plates.');
  add(c.seatElevation>=c.height-1e-6,'upper: the step (existingColumn.seatElevation) must be below the column top: the upper shaft runs from the step to the top.');
+ if(s.strut){
+  add(!aiscShapeByName(s.strut.shape),'strut.shape: select an AISC W shape for the crane-level strut.');
+  add(s.strut.Fu<s.strut.Fy||s.strut.plate.Fu<s.strut.plate.Fy,'strut: ultimate strength cannot be less than yield strength.');
+  add(![.625,.75,.875,1,1.125].some(v=>Math.abs(v*inch-s.strut!.bolts.diameter)<1e-6),'strut.bolts.diameter: use a standard 5/8 to 1-1/8 in bolt.');
+ }
  const g=stepGeometry(p);if(!g)return errors;
  add(g.lower.d<=g.upper.d,`upper.d: the lower shaft (${L(g.lower.d)}) must be deeper than the upper shaft (${L(g.upper.d)}).`);
  add(s.girderOffset<g.lower.d/2-g.lower.tf-1e-6||s.girderOffset>g.lower.d/2+1e-6,`girderOffset: the girder web must bear over the lower shaft's crane-side flange, ${L(g.lower.d/2-g.lower.tf)} to ${L(g.lower.d/2)} from the lower-shaft centroid.`);
@@ -208,17 +214,35 @@ export function steppedColumnAnalysis(p:ProjectInput,reactions:SupportReactionSe
  const twistLimit=steppedTwistLimit,Fmax=(()=>{
   const factorL=Math.max(0,...[...asceCombinations(p.method),...(p.aist?tr13SupportCombinations(p.method):[])].map(k=>Math.abs(k.factors.L)));
   return Math.max(bracingPath&&locatingGrids(p).length?factorL*Cls:0,bracingPath&&bumperAtGrids(p).grids.size?(p.method==='LRFD'?1:.67)*bumperAtGrids(p).Cbs:0);})();
+ const designedStrut=exit==='girder-strut'?stepStrutGeometry(p,g):undefined;
  const strut=exit==='girder-strut'?(()=>{
   // The column's stiffness on the girder line, an upper bound for the strut it needs: weak-axis translation of the stepped
   // model in series with the lower shaft's twist over the full height (warping restrained where the top is free).
   const kY=1/alongF.displacement(hs),Ktheta=c.weak.top==='braced'?1/(pinnedTorsion(lo.section,1,hs,H).twist||Infinity):columnTorsion(lo.section,1,hs,'warping-restrained').Ktheta;
   const kc=1/(1/kY+offset**2/Ktheta);
+  // A strut designed here (craneLevelStrut.ts): at each grid the column and the strut share the force by stiffness
+  // (strutShare), the strut path the strut's EA over the distance to the braced bay in series with the existing bracing
+  // (its crane-level stiffness from its service displacement under the traction; rigid where not entered). Two bounds on
+  // the column's torsion: Saint-Venant of the lower shaft alone (the twist check's K_θ, the softer: the larger twist and
+  // girder-line movement) and the stiffer K_θ above (the larger column share); each result takes the larger.
+  if(designedStrut){
+   const EA=E*sectionProperties(stepStrutSection(p,activeStepStrut(p)!)).A,kb=braceMove>0&&Cls>0?Cls/braceMove:Infinity;
+   const grids=[...new Set([...locatingGrids(p),...(bracingPath?[...stops.grids]:[])])].sort((a,b)=>a-b),layout=stepStrutLayout(p,grids);
+   const at=layout.stations.map((_,j)=>{const ks=strutPathStiffness(EA,layout.distance[j],kb),soft=strutShare(kY,unit.Ktheta,ks,designedStrut.ys,offset),stiff=strutShare(kY,Ktheta,ks,designedStrut.ys,offset);
+    // rot: the twist per unit torque at this grid, the larger twist of the two bounds over the larger torque.
+    const arm=Math.max(Math.abs(soft.torque),Math.abs(stiff.torque)),theta=Math.max(Math.abs(soft.theta),Math.abs(stiff.theta));
+    return {ks,keep:Math.max(Math.abs(soft.keep),Math.abs(stiff.keep)),arm,rot:arm>0?theta/arm:unit.twist,strut:Math.max(Math.abs(soft.strut),Math.abs(stiff.strut)),move:Math.max(Math.abs(soft.move),Math.abs(stiff.move))};});
+   const used=grids.map(j=>at[j]),required=Math.min(...used.map(v=>v.ks));
+   return {kY,Ktheta,kc,ratio:Math.max(1,Math.floor(required/kc)),required,share:Math.max(...used.map(v=>v.keep)),designed:{shape:designedStrut.shape,ys:designedStrut.ys,kb,EA,grids,at,layout,strutShare:Math.max(...used.map(v=>v.strut))}};
+  }
   // At least 10 k_c (the column keeps 1/11 of the force), stiffer where the share the column keeps would twist the lower
   // shaft past the factored or the service limit (the share kept is 1/(1 + ratio)).
   const full={u:unit.twist*Fmax*offset,s:unit.twist*Cls*offset*offset},room=driftLimit0-braceMove;
   const need=Math.max(full.u/twistLimit,room>0?full.s/room:Infinity)-1,ratio=Math.max(10,Number.isFinite(need)?Math.ceil(need-1e-9):10);
-  return {kY,Ktheta,kc,ratio,required:ratio*kc,share:1/(1+ratio)};
+  return {kY,Ktheta,kc,ratio,required:ratio*kc,share:1/(1+ratio),designed:undefined};
  })():undefined,keep=exit==='girder-strut'?strut!.share:1;
+ // The column's weak-axis share and torque arm per unit force at grid j: by the designed strut's stiffness there, else the share kept at the girder offset.
+ const dz=strut?.designed,keepAt=(j:number)=>dz?dz.at[j].keep:keep,armAt=(j:number)=>dz?dz.at[j].arm:keep*offset;
  const frame=c.frame,sway=frame?.type==='sway'&&frame.B2!==undefined?frame.B2:undefined;
  const site=runwaySiteSeismic(p),tr13=p.aist?tr13SupportCombinations(p.method):[],concurrent=p.aist?.concurrency==='full';
  const gravity=['D','L','Lr','S','R'] as const,lateralKeys=['W','E'] as const;
@@ -258,7 +282,7 @@ export function steppedColumnAnalysis(p:ProjectInput,reactions:SupportReactionSe
    const Ml=Math.max(0,...E1.lower.map((a,i)=>B1x.lower*Math.abs(k.runway*e*a.moment)+B2x.lower*Math.abs(k.lat*S1.lower[i].moment)))+B1x.lower*MgL+B2x.lower*MlL;
    const V=(sk:ShaftKey,src:typeof c.existing)=>Math.max(0,...E1[sk].map((a,i)=>Math.abs(k.runway*e*a.shear)+Math.abs(k.lat*S1[sk][i].shear)))+sum(src,f,'V',existingLoadKeys,true);
    // Weak axis: the longitudinal force at the rail (column path), the seat moment and the longitudinal force at the step.
-   const Fw=exit==='eave-strut'?k.F:exit==='girder-strut'?keep*k.F:0;
+   const Fw=exit==='eave-strut'?k.F:exit==='girder-strut'?keepAt(j)*k.F:0;
    const weak=(sk:ShaftKey,src:typeof c.existing)=>Math.abs(k.longit)*alongPeak[sk]+sum(src,f,'My',existingLoadKeys,true)+Math.max(0,...AM[sk].map((a,i)=>Math.abs(k.seat*a.moment)+Math.abs(Fw*AF[sk][i].moment)));
    const B1y=(sk:ShaftKey,P:number)=>P<=0?1:alpha*P>=Pey[sk]?Infinity:1/(1-alpha*P/Pey[sk]);
    const cap={upper:capacity('upper',Lx.upper),lower:capacity('lower',Lx.lower)};
@@ -268,7 +292,7 @@ export function steppedColumnAnalysis(p:ProjectInput,reactions:SupportReactionSe
    };
    const upper=shaft('upper',Pu,Mu,eu),lower=shaft('lower',Pl,Ml,el);
    // Torque at a locating step: the share of the longitudinal force the column keeps, at the girder offset (lower shaft).
-   const T=k.F?keep*k.F*offset:0;
+   const T=k.F?armAt(j)*k.F:0;
    if(T){lower.torque=T;lower.warping=0;lower.Ut=lower.U;}
    return {id:k.id,equation:k.equation,upper,lower,lambda:b.lambda,convergence:b.convergence,Lcx:Lx,capacity:cap,R:k.runway,lat:k.lat,Mstep,Fin:innerFlangeForce(g,Pu,Mstep)};
   };
@@ -317,11 +341,17 @@ export function steppedColumnAnalysis(p:ProjectInput,reactions:SupportReactionSe
  const trows=rowsAll.filter(v=>v.r.lower.torque);
  if(trows.length){
   const cap=available(.6*lo.section.Fy,p.method,.9,1.67),score=(k:ExistingColumnCombination)=>Math.max(k.Ut!,unit.shear*(k.torque??0)/cap);
-  const t=trows.reduce((a,b)=>score(b.r.lower)>score(a.r.lower)?b:a),T=Math.max(...trows.map(v=>v.r.lower.torque!)),Ts=keep*Cls*offset;
-  torsion={U:t.r.lower.Ut!,shear:unit.shear*T,shearCapacity:cap,T:t.r.lower.torque!,stress:0,a:unit.a,offset,station:t.station,case:t.r.lower,model:'warping-free',twist:unit.twist*T,slip:unit.twist*T*offset,
-   service:{T:Ts,twist:unit.twist*Ts,slip:unit.twist*Ts*offset,lateral:offset*(1-Math.cos(unit.twist*Ts))},lateral:offset*(1-Math.cos(unit.twist*T))};
+  const t=trows.reduce((a,b)=>score(b.r.lower)>score(a.r.lower)?b:a),T=Math.max(...trows.map(v=>v.r.lower.torque!)),Ts=dz?Math.max(...dz.grids.map(j=>armAt(j)))*Cls:keep*Cls*offset;
+  // The twist per unit torque: K_θ of the lower shaft alone, or with the designed strut the two-bound solution at the row's grid.
+  const rotAt=(station:number)=>{if(!dz)return unit.twist;const j=dz.layout.stations.findIndex(x=>Math.abs(x-station)<1);return j>=0?dz.at[j].rot:unit.twist;};
+  const tw=Math.max(...trows.map(v=>v.r.lower.torque!*rotAt(v.station))),jw=dz?dz.grids.reduce((a,j)=>dz.at[j].arm>dz.at[a].arm?j:a,dz.grids[0]):-1,tws=dz?dz.at[jw].rot*Ts:unit.twist*Ts;
+  torsion={U:t.r.lower.Ut!,shear:unit.shear*T,shearCapacity:cap,T:t.r.lower.torque!,stress:0,a:unit.a,offset,station:t.station,case:t.r.lower,model:'warping-free',twist:tw,slip:tw*offset,
+   service:{T:Ts,twist:tws,slip:tws*offset,lateral:offset*(1-Math.cos(tws))},lateral:offset*(1-Math.cos(tw))};
  }
  // The rail's shift across the runway from the service twist, e(1 − cos θ), adds to the runway-level displacement.
+ // With the designed strut the girder line's service movement is the two-degree-of-freedom solution (the bracing, the strut
+ // and the column's translation with its twist): the part beyond θ_s·e is reported as the bracing's in series.
+ const moveDesigned=dz?Math.max(...dz.grids.map(j=>dz.at[j].move))*Cls:0,braceSeries=dz&&torsion?Math.max(0,moveDesigned-Math.abs(torsion.service.slip)):braceMove;
  const twistShift=torsion?.service.lateral??0,maxT=trows.reduce((a,b)=>!a||b.r.lower.torque!>a.r.lower.torque!?b:a,undefined as typeof trows[number]|undefined);
  const sv=c.service,spread=sv?.spreadD!==undefined&&sv.spreadS!==undefined&&sv.roofSnow!==undefined?(()=>{const factor=sv.roofSnow!<=30*4.788025898e-5?.5:.75;return {value:2*(sv.spreadD!+factor*sv.spreadS!),factor};})():undefined;
  const gc=all.reduce((a,v)=>Math.abs(v.gaugeCrane)>Math.abs(a)?v.gaugeCrane:a,0);
@@ -340,11 +370,17 @@ export function steppedColumnAnalysis(p:ProjectInput,reactions:SupportReactionSe
    const w=p.details?.bearing.width??g.lower.bf,b=Math.min(p.section.bf,w),a=Math.max(0,(b-g.lower.tf)/2),l=Math.min(p.details?.bearing.length??254,g.cap.length),I=l*g.cap.thickness**3/12;
    const cap=R/b*a**4/(8*E*I);return {value:rot+cap,rotation:rot,cap};})(),
   ...(c.strong.top==='braced'?{topRestraint:(()=>{const t=all.reduce((a,v)=>v.top.factored>a.top.factored?v:a);return {factored:t.top.factored,case:`${t.top.case}, support x=${format(t.station,'length',p.units,3)}`,service:Math.max(...all.map(v=>v.top.service))};})()}:{}),
-  ...(torsion&&maxT?{twist:{limit:twistLimit,braceMove,shift:twistShift,T:maxT.r.lower.torque!,case:tagged(maxT),
+  ...(torsion&&maxT?{twist:{limit:twistLimit,braceMove:braceSeries,shift:twistShift,T:maxT.r.lower.torque!,case:tagged(maxT),
   alone:{twist:unit.twist*Fmax*offset,shear:unit.shear*Fmax*offset/available(.6*lo.section.Fy,p.method,.9,1.67),move:unit.twist*Cls*offset*offset+braceMove}}}:{})};
  return {summary,result,combinations:all.map(v=>({station:v.station,rows:v.rows})),stepChecks:seat.checks};
 }
 
+/**
+ * Thickest existing part at a field weld of the step (the existing-steel welding checks and the configurator's preheat):
+ * the upper shaft's inner flange (a welded tie), the lower web (the step stiffener) and, where the step fillets are built
+ * up (step.capWeldAdded), the cap and the lower crane-side flange.
+ */
+export function stepWeldThickness(p:ProjectInput,g:StepGeometry){const s=activeStep(p);return Math.max(g.upper.tf,g.stiffener?g.lower.tw:0,s?.capWeldAdded?Math.max(g.cap.thickness,g.lower.tf):0);}
 /** The stepped column's checks: the survey, the buckling basis, H1 and its parts for each shaft, the review items and the step. */
 export function steppedColumnChecks(p:ProjectInput,a:SteppedColumnAnalysis):CheckResult[]{
  const c=p.existingColumn!,s=activeStep(p)!,r=a.result,z=a.summary,u=p.units,label='Stepped column',checks:CheckResult[]=[];
@@ -379,17 +415,24 @@ export function steppedColumnChecks(p:ProjectInput,a:SteppedColumnAnalysis):Chec
   const tw=r.twist!,strut=z.support?.exit==='girder-strut'?z.support.strut:undefined;
   checks.push(...columnTwistChecks(p,{...t,case:{id:tw.case}},{label:'Lower shaft',ids:{rotation:'column-lower-twist',movement:'column-lower-twist-movement'},at:'step',limit:z.drift.limit,braceMove:tw.braceMove,refs,movementUsed:false,
    model:`Twist from Saint-Venant torsion of the lower shaft alone over its height ${L(c.seatElevation)} (warping and the upper shaft not credited: an upper bound on the twist), K_θ = GJ/h.`,
-   path:strut?`The crane-level strut on the girder line is specified at least ${strut.ratio} k_c, so the column keeps at most 1/${strut.ratio+1} of the force (${strut.ratio>10?'stiffer than the 10 k_c minimum to hold these limits':'the minimum'}).`:undefined,
-   remedy:`Remedy when exceeded: ${strut?'a stiffer crane-level strut on the girder line':'a crane-level strut on the girder line (or a horizontal torsion brace at the step)'} holds the girder line; the slot travel at the step's bearings is checked without the twist movement (the existing step's own review).`}));
+   path:strut?.designed?(()=>{const d=strut.designed,w=d.grids.reduce((a,j)=>d.at[j].move>d.at[a].move?j:a,d.grids[0]),x=d.at[w];
+    return `The new ${d.shape} crane-level strut on the girder line (${L(d.ys)} from the lower centroid, craneLevelStrut) holds the girder line: at each locating grid its path to the braced bay, EA/l over the distance there in series with the existing bracing (k_b = ${Number.isFinite(d.kb)?format(d.kb,'stiffness',u,3):'rigid, not entered'}), shares the force with the column by stiffness (two degrees of freedom at the step: the column's weak-axis k_y = ${format(strut.kY,'stiffness',u,3)} and K_θ, the strut k_s at y_s, the force at y_g = ${L(t.offset)}). Least stiff at grid ${w+1}: k_s = ${format(x.ks,'stiffness',u,3)}; the column keeps ${(x.keep*100).toFixed(1)}% of the force as weak-axis bending and a torque ${L(x.arm)} × F (K_θ bounded by Saint-Venant of the lower shaft alone and by the pinned-pinned shaft with warping; each result the larger). The movement adds the strut, bracing and column translation (the part beyond θ_s·e, as Δ_brace).`;})()
+    :strut?`The crane-level strut on the girder line is specified at least ${strut.ratio} k_c, so the column keeps at most 1/${strut.ratio+1} of the force (${strut.ratio>10?'stiffer than the 10 k_c minimum to hold these limits':'the minimum'}).`:undefined,
+   remedy:`Remedy when exceeded: ${strut?.designed?'a stiffer path to the braced bay (a heavier strut, or the existing bracing stiffened by the engineer of record, which governs where its k_b is the smaller spring)':strut?'a stiffer crane-level strut on the girder line':'a crane-level strut on the girder line (or a horizontal torsion brace at the step)'} holds the girder line; the slot travel at the step's bearings is checked without the twist movement (the existing step's own review).`}));
  }
  add('column-drift','Stepped column · runway-level lateral displacement',z.drift.value,z.drift.limit,'length','\\Delta\\le\\min(H/400,\;2\\,\\mathrm{in})',`Service side thrust and static eccentric reaction of the crane, stepped column alone (${c.strong.base} base, ${c.strong.top} top), at the rail head ${L(z.railElevation)}${r.twist?.shift?`, plus the rail's shift across the runway from the lower-shaft twist, e(1 − cos θ_s) = ${L(r.twist.shift)}`:''}; AIST TR-13 §5.3 limit ${L(z.drift.limit)} (H = ${L(z.support!.girderTop)} to the top of the girder). Frame and roof diaphragm flexibility excluded.`,undefined,['tr13-service']);
  checks.push(...columnSupportChecks(p,z,label,refs));
- const strut=craneLevelStrut(p,z);
+ const strut=craneLevelStrut(p,z),designed=z.support?.strut?.designed;
+ // The strut designed here: its own checks (craneLevelStrut.ts); the existing braced bay receives its force (brace-by-others).
+ if(strut&&designed){
+  const lrfd=p.method==='LRFD',stopGov=strut.stop>strut.traction;
+  checks.push(...stepStrutChecks(p,r.geometry,{F:strut.force,caseId:stopGov?`${p.method} AIST bumper (${lrfd?'1.0':'0.67'}Cbs)`:`${p.method} traction (${lrfd?'1.6':'1.0'}Cls)`,share:designed.strutShare,service:z.support!.traction},designed.layout));
+ }
  // The column alone, without the girder-line strut: where it fails, the result depends on new steel this package does not
  // design: an open item for the engineer of record, with the force, stiffness and the column-alone ratios.
  const alone=strut?.location==='girder-line'&&r.twist?r.twist.alone:undefined,aloneU=alone?Math.max(alone.twist/r.twist!.limit,alone.shear,alone.move/z.drift.limit):0;
  const depends=aloneU>1+1e-9;
- if(strut)checks.push({id:'crane-level-strut',group:label,title:`Crane-level strut ${depends?'(new, not designed here; the stepped column depends on it) ':'by others '}${strut.location==='girder-line'?'on the girder line':'at the column centerline'}, F = ${F(strut.force)} (${p.method})`,status:depends?'unverified':'excluded',
+ if(strut&&!designed)checks.push({id:'crane-level-strut',group:label,title:`Crane-level strut ${depends?'(new, not designed here; the stepped column depends on it) ':'by others '}${strut.location==='girder-line'?'on the girder line':'at the column centerline'}, F = ${F(strut.force)} (${p.method})`,status:depends?'unverified':'excluded',
   ...(depends?{demand:aloneU,capacity:1,utilization:aloneU,quantity:'ratio' as const}:{}),equation:strut.stiffness!==undefined?`k_s\\ge${strut.ratio}\\,k_c`:'',referenceIds:['tr13-column-path',...refs],
   note:`Not checked here: the stepped-column check relies on a crane-level strut ${strut.location==='girder-line'?`on the girder line (${L(strut.offset)} from the lower centroid)`:'at the column centerline'} at the locating grids ${strut.grids.join(', ')}, factored traction ${F(strut.traction)}${strut.stop?`, crane stop ${F(strut.stop)}`:''}${strut.stiffness!==undefined?`, axial stiffness at least ${format(strut.stiffness,'stiffness',u,3)}`:''}. Strut, its connections and the braced bay by the building engineer of record.${alone?` Without it (the column alone, the whole longitudinal force at the girder offset): factored twist ${alone.twist.toFixed(4)} rad against ${r.twist!.limit} rad, flange shear ratio ${alone.shear.toFixed(2)}, service movement along the runway ${L(alone.move)} against ${L(z.drift.limit)}${depends?`: the column alone fails (ratio ${aloneU.toFixed(2)}), so this result is conditional on the strut: design it (member, stiffness, its connection to the step on the girder line and the path to the braced bay) or record the engineer of record's acceptance.`:': the column alone holds.'}`:''}`});
  if(r.topRestraint){const t=r.topRestraint;
@@ -397,8 +440,8 @@ export function steppedColumnChecks(p:ProjectInput,a:SteppedColumnAnalysis):Chec
    note:`Not checked here: the stepped-column check takes the column top as braced across the runway (strong axis ${c.strong.base} base, braced top; a non-sway column), so the roof bracing or diaphragm must hold each column top against the crane's share of the top reaction, ${F(t.factored)} factored (${t.case}) and ${F(t.service)} unfactored (runway dead load and the static crane at e = ${L(z.eccentricity)}, with the side thrust), added to the building's own top reactions. The building engineer of record confirms the restraint and its strength and stiffness; otherwise enter the column as a sway bent (fixed base and free top across the runway, or the frame type sway with its B2), which the check then uses for the effective lengths, moments and drift.`});}
  checks.push(...buildingSeismicChecks(p));
  checks.push(...a.stepChecks);
- checks.push(...existingWeldingChecks(p,Math.max(r.geometry.upper.tf,r.geometry.stiffener?r.geometry.lower.tw:0)));
- if(c.longitudinal==='bracing'&&!p.longitudinalBracing?.enabled)checks.push({id:'column-longitudinal',group:label,title:'Crane longitudinal force · bracing path',status:'excluded',equation:'',note:'The runway longitudinal force is assigned to building bracing, not to this column. Design the crane-level strut, bracing bay and its foundation for the reported longitudinal force.',referenceIds:refs});
+ checks.push(...existingWeldingChecks(p,stepWeldThickness(p,r.geometry)));
+ if(c.longitudinal==='bracing'&&!p.longitudinalBracing?.enabled)checks.push({id:'column-longitudinal',group:label,title:'Crane longitudinal force · bracing path',status:'excluded',equation:'',note:designed?'The runway longitudinal force is assigned to building bracing, not to this column: the crane-level strut on the girder line is designed here (Crane-level strut); the braced bay, its connection to the strut and its foundation are by the engineer of record for the strut force delivered at the girder line.':'The runway longitudinal force is assigned to building bracing, not to this column. Design the crane-level strut, bracing bay and its foundation for the reported longitudinal force.',referenceIds:refs});
  return checks;
 }
 

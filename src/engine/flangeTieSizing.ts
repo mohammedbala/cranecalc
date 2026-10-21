@@ -339,7 +339,7 @@ export const sizingLimit=(ratios:Record<string,number>,k:string,target=tieSizing
 export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;trace?:(face:number,thickness:number,governs:string,worst:number,x:TieProportions)=>void}={}):ProjectInput{
  const d=p.details;
  if(!d||!flangeTieFamily(d)||(!flangeTieGeometry(p)&&!stiffenerTieGeometry(p)))return p;
- const target=opts.target??tieSizingTarget,base=tieProportions(p),demand=tieSizingDemands(p);
+ const target=opts.target??tieSizingTarget,base=tieProportions(p),demand=tieSizingDemands(p),gussetFits=!!stiffenerTieGeometry(p)&&!stiffenerGussetMisfit(p);
  const plate=tieArrangement(d)==='flexible-plate',release=!!d.brace.release?.enabled;
  // A stiffener tie's gusset starts at the bearing stiffener's thickness (at most the 3/4 in start of the other ties):
  // the tie-side stiffener is then cut with the gusset as its extension (one plate, no weld; stiffenerTieJoint
@@ -375,7 +375,9 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  const evaluate=(x:TieProportions):Trial|undefined=>{
   evaluations++;
   const q=applyTieProportions(structuredClone(p),x);
-  if(validateRunwayDetails(q).length)return undefined;
+  // A stiffener tie's column gussets stay on the receiving column flange (coord-tie-gusset-flange) where the start set's
+  // do: a thicker gusset or larger root fillet that would put them past the flange tip is not a step.
+  if(validateRunwayDetails(q).length||gussetFits&&stiffenerGussetMisfit(q))return undefined;
   const ratios=tieSizingRatios(q,faceDemand(x.face).demand),brace=braceSystem(q);
   // Strength and fatigue ratios against the target (the imposed movement nearer one), fit and detailing limits against one.
   const entries=Object.entries(ratios).map(([k,v])=>[k,v/sizingLimit(ratios,k,target)] as const).sort((u,v)=>v[1]-u[1]);
@@ -573,8 +575,10 @@ export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCyc
  /** A further reason to prefer the stiffener tie (e.g. a crane column: the tie on the flexible building column), stated as given. */
  prefer?:string;
  /** Why the saddle tie cannot be detailed (a validation rule it breaks, stated as given): the stiffener tie is then kept wherever it validates, whatever its ratios. */
- misfit?:string}={}){
- if(p.section.kind==='cap'||p.system!=='simple'||!flangeTieGeometry(p))return undefined;
+ misfit?:string;
+ /** A capped girder (the configurator, where the cap tieback angle cannot carry the tie force): the bars and gusset drop below the cap channel's turned-down flanges (stiffenerTieGeometry). */
+ capped?:boolean}={}){
+ if(p.section.kind==='cap'&&!opts.capped||p.system!=='simple'||!flangeTieGeometry(p))return undefined;
  const ratios=tieSizingRatios(p),over=Object.entries(ratios).filter(([k,v])=>saddleRatio(k)&&v>sizingLimit(ratios,k)+1e-9).sort((a,b)=>b[1]-a[1]);
  // Any other check the sized saddle tie still fails (the imposed movement on a held reach, a plate's H1 sum): the
  // stiffener tie is tried too, and kept only where it exceeds its limits by less.
