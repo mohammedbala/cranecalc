@@ -287,11 +287,11 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
   // level, below the girder) or the column line, and the surveyed existing braced bays dashed on the column line.
   const cls=!newColumns&&s.existingColumn?craneLevelStrut(p,s.existingColumn):undefined,ebSpans=!newColumns?(p.longitudinalBracing?.enabled?p.longitudinalBracing.spans??[]:[]).filter(i=>i>=1&&i<m.supports.length):[];
   if(cls||ebSpans.length){
-   const half=m.column.bf/2;
+   const half=m.column.bf/2,strutRun=cls?.designed?s.existingColumn?.support?.strut?.designed?.layout:undefined;
    svg+='<g data-strut-by-others="plan">';
    for(const [side,z] of rows.entries()){
     const zs=cls?.location==='girder-line'?(side?-m.width:0):z;
-    if(cls)for(let i=1;i<m.supports.length;i++)svg+=line([X(m.supports[i-1]+half),Y(zs)],[X(m.supports[i]-half),Y(zs)],cls.designed?'runway-line':'hidden-line');
+    if(cls)for(let i=1;i<m.supports.length;i++)if(!strutRun||(i-1>=strutRun.first&&i<=strutRun.last))svg+=line([X(m.supports[i-1]+half),Y(zs)],[X(m.supports[i]-half),Y(zs)],cls.designed?'runway-line':'hidden-line');
     for(const i of ebSpans){const x0=X(m.supports[i-1]+half),x1=X(m.supports[i]-half),cy=Y(z),c=cross;svg+=line([x0,cy-c],[x1,cy+c],'hidden-line')+line([x0,cy+c],[x1,cy-c],'hidden-line');}
    }
    svg+='</g>';
@@ -427,7 +427,8 @@ export function planSheetSvg(s: CalculationSnapshot, settings: FramingSettings =
    // The leader lands a quarter span in, clear of the girder mark at mid-span: on the strut, else on the braced bay's X.
    // The strut runs every span, so its leader may land in any (the braced span first); the braced bay's only in its own.
    const order=[i,...m.supports.slice(1).map((_,k)=>k+1).filter(k=>k!==i)],quarter=(k:number)=>X(m.supports[k-1]*.75+m.supports[k]*.25);
-   const targets:XY[]=cls?order.map(k=>[quarter(k),Y(zs)]):[[quarter(i),Y(rows[0])-cross/2]],centre=(t:XY)=>{const k=m.supports.findIndex(x=>X(x)>t[0]);return k>0?(X(m.supports[k-1])+X(m.supports[k]))/2:t[0];};
+   const run=cls?.designed?s.existingColumn?.support?.strut?.designed?.layout:undefined,inRun=(k:number)=>!run||(k-1>=run.first&&k<=run.last);
+   const targets:XY[]=cls?order.filter(inRun).map(k=>[quarter(k),Y(zs)]):[[quarter(i),Y(rows[0])-cross/2]],centre=(t:XY)=>{const k=m.supports.findIndex(x=>X(x)>t[0]);return k>0?(X(m.supports[k-1])+X(m.supports[k]))/2:t[0];};
    const layouts=(labels:string[])=>{const w=width(labels),half=Math.abs(Y(-m.width)-Y(0))/2-lettering.leading*labels.length-12,steps=Array.from({length:Math.max(1,Math.floor(half/12))},(_,j)=>(j+1)*12).flatMap(d=>[-d,d]);
     const inside=targets.flatMap(at=>[0,...steps].map(dy=>midY+dy).flatMap(y=>[centre(at)-w/2,at[0]-w/2,at[0]+10,at[0]-10-w].map(x=>multiLeader([at],[x,y],labels,lettering.text))));
     const outside=[...shifts.flatMap(dy=>[multiLeader([targets[0]],[outLeft(w),midY+dy],labels,lettering.text),multiLeader([targets[0]],[outRight,midY+dy],labels,lettering.text)]),
