@@ -8,7 +8,7 @@ import {activeStep} from '../engine/steppedColumnInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {equationCell,governing,shortReference,statusLabel,subscripts} from './reportParts';
 import {loadPathSteps,supportAssemblyFigure} from './hairline/figures';
-import {classifyCheck,type Taxonomy} from '../engine/checkTaxonomy';
+import {classifyCheck,reviewDraftExportable,type Taxonomy} from '../engine/checkTaxonomy';
 import {groupDc,openByElement,openItemGroups,ruleItem} from './openItems';
 
 /**
@@ -117,10 +117,11 @@ const selectionElements:Record<string,string[]>={Girder:['girder','service'],'Gi
 /**
  * The final calculated ratios beside a configurator selection whose reason quotes screening estimates (the sized girder,
  * the columns, the tie): the governing design D/C of its element after calculate(), and for the girder the vertical and
- * lateral deflection ratios. Undefined for other items or without a ratio.
+ * lateral deflection ratios. Undefined for other items, without a ratio, or for a package whose analysis did not verify
+ * (it quotes no result).
  */
 export function selectionFinal(s:CalculationSnapshot,item:string){
- const keys=selectionElements[item];if(!keys)return undefined;
+ const keys=selectionElements[item];if(!keys||(!s.eligible&&!reviewDraftExportable(s)))return undefined;
  const all=elementChecks(s),of=(k:string)=>all.find(v=>v.element.key===k)?.checks??[];
  const checks=keys.flatMap(of).filter(c=>c.group!=='Serviceability'),g=checks.length?governingForSummary(checks):undefined;
  const dc=(id:string)=>{const u=s.checks.find(c=>c.id===id)?.utilization;return u!==undefined&&Number.isFinite(u)?u.toFixed(2):undefined;};
