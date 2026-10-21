@@ -29,7 +29,7 @@ import {craneDesignMinimum} from './aistLoads';
 import {craneTravel} from './craneTravel';
 import {railTopAboveSteel} from './railSeat';
 import {braceSystem,fatigueSpectrumBin} from './detailAnalysis';
-import {columnFlangeWidth,flangeTieChecks,flangeTieResponse,stiffenerTieChecks} from './flangeTieDesign';
+import {columnFlangeWidth,flangeTieChecks,flangeTieResponse,stiffenerTieChecks,initialTieStiffener,tieColumnSection} from './flangeTieDesign';
 import {tieMovementChecks,tieMovements} from './tieMovement';
 import {isPlateTie,plateTieChecks} from './plateTie';
 import {lapChecks} from './detailChecks';
@@ -235,7 +235,9 @@ export interface TieProportions {diameter:number;thickness:number;gusset:number;
  /** Column-end slide each way along the runway, mm (paired bars with the release; 0: none). */
  slide?:number;
  /** Wall of the release sleeves, mm. */
- wall?:number}
+ wall?:number;
+ /** Horizontal column stiffeners at the column gussets of a direct-saddle tie (brace.columnStiffener, initialTieStiffener). */
+ stiffened?:boolean}
 
 /** Bolt pitch and edge distance on the 1/8 in grid: AISC J3.3 minimum spacing 2 2/3 d, and the 1.5d edge the tie checks use. */
 export const tieBoltSpacing=(db:number)=>({pitch:up(8/3*db,inch/8),edge:up(1.5*db,inch/8)});
@@ -268,6 +270,8 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
  const edge=plate?Math.max(spacing.edge,up(wrenchClearance(x.diameter)-tieBarGap(weld)+weld,inch/8)):spacing.edge;
  Object.assign(c,{diameter:x.diameter,pitch:spacing.pitch,edge,rows:2,thickness:x.thickness,weldSize:weld});
  t.thickness=x.thickness;t.gussetThickness=x.gusset;
+ // Column stiffeners proportioned for the gusset delivering the force (J10.8: t_s ≥ t_g/2).
+ if(x.stiffened&&a?.enabled){const st=initialTieStiffener(p);if(st)t.columnStiffener=st;}
  if(rel){rel.travel=x.travel;if(x.wall)rel.sleeveWall=x.wall;if(x.slide&&!plate)rel.slide=x.slide;else delete rel.slide;}
  c.gauge=up(8/3*x.diameter,inch/4);
  const release=tieRelease(p);if(release){c.gauge=Math.max(c.gauge,release.minimumGauge);c.pitch=Math.max(c.pitch,release.minimumPitch);}
@@ -296,7 +300,7 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
 export function tieProportions(p:ProjectInput):TieProportions{
  const d=p.details!,t=d.brace,a=t.flangeAttachment,g=flangeTieGeometry(p),st=stiffenerTieGeometry(p);
  return {diameter:t.connection.diameter,thickness:t.thickness,gusset:t.gussetThickness,travel:t.release?.travel??inch/8,face:g?.face??st?.face??t.length,widen:0,
-  saddleThickness:a?.saddleThickness??1.5*inch,saddleWeld:a?.weldSize??.375*inch,setback:a?.longitudinalSetback??0,slide:t.release?.slide??0,wall:t.release?.sleeveWall};
+  saddleThickness:a?.saddleThickness??1.5*inch,saddleWeld:a?.weldSize??.375*inch,setback:a?.longitudinalSetback??0,slide:t.release?.slide??0,wall:t.release?.sleeveWall,stiffened:!!t.columnStiffener?.enabled};
 }
 
 /** The fit and detailing limits among a set of sizing ratios (tieSizingRatios). */
@@ -427,6 +431,8 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
     if(release&&x.travel<travel+3/16*inch-1e-6){x.travel+=sixteenth;return true;}
     if(x.widen<maxWiden-1e-6&&widenRoom(r)){x.widen+=inch/4;return true;}
    }
+   // Else horizontal stiffeners in the column at the top and bottom of the column gusset (a column by others: none).
+   if(!x.stiffened&&flangeTieGeometry(r.q)&&tieColumnSection(r.q)){x.stiffened=true;return true;}
   }
   // The saddle plate and the flange under it trade off: a thicker saddle bends less but moves the tie line (the lever on
   // the flange) down by as much. Each takes its step only while the other keeps within the target.

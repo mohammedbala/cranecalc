@@ -321,6 +321,8 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  * targets is returned; the full analysis then checks it completely (fatigue, local and connection checks).
  */
 export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:number;minFlange?:number;capRoom?:number;flexibleTie?:boolean;target?:number;deflectionTarget?:number;
+ /** Least top flange thickness of a rolled girder, mm: a saddle tie's flange couple (withTieGirder). */
+ minFlangeThickness?:number;
  /** Rolled: the jumbo W36 and W40 past 40 in deep as well (jumboCandidates). */
  jumbo?:boolean}):GirderTrial|undefined{
  const target=opts.target??.85,deflectionTarget=opts.deflectionTarget??.9;
@@ -341,7 +343,9 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
  // Flanges wide enough for the bearing bolts, end-stop bolts and saddles (minFlange), and for the rail and clips.
  const minFlange=Math.max(opts.minFlange??0,kind==='rolled'?opts.minSeat:0);
  if(kind==='rolled'){
-  for(const w of [...wCandidates(),...(opts.jumbo?jumboCandidates():[])]){if(w.bf*inch>=minFlange-1e-6)consider(loadAiscSection(p.section,w.name),w.name,w.weight);else misfits.push({name:w.name,weight:w.weight,why:`flange ${ins(w.bf*inch)} narrower than the ${ins(minFlange)} the details need`,kind:'flange width'});}
+  for(const w of [...wCandidates(),...(opts.jumbo?jumboCandidates():[])]){if(w.bf*inch<minFlange-1e-6)misfits.push({name:w.name,weight:w.weight,why:`flange ${ins(w.bf*inch)} narrower than the ${ins(minFlange)} the details need`,kind:'flange width'});
+   else if(opts.minFlangeThickness&&w.tf*inch<opts.minFlangeThickness-1e-6)misfits.push({name:w.name,weight:w.weight,why:`flange ${ins(w.tf*inch)} thinner than the ${ins(opts.minFlangeThickness)} the tie saddle needs`,kind:'flange thickness for the tie saddle'});
+   else consider(loadAiscSection(p.section,w.name),w.name,w.weight);}
  }else{
   for(const ch of capChannels){const c=aiscChannelByName(ch)!;
    for(const w of wCandidates()){
@@ -421,7 +425,7 @@ function skeleton(cfg:RunwayConfig,jumbo=false){
  // The flexible plate's estimate factor (less end restraint against twist) only where the plate stays: on a crane column
  // attachTie always replaces it (paired bars on the bearing stiffener, or the cap angle on a capped girder), and the
  // girder sized for the softer plate came out about 1.25 times heavier than the final calculation needed (046, 052).
- const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'&&cfg.support!=='crane-column',jumbo};
+ const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'&&cfg.support!=='crane-column',minFlangeThickness:girderMinTf,jumbo};
  // Girder: the named section, else sized for the moving loads.
  let trial:GirderTrial|undefined;
  if(cfg.girder==='capped'){
@@ -562,8 +566,32 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
    if(stuck)break;
   }
   ({q,target}=withGussetFitColumn(q,input,trace,target));
+  q=withTieGirder(q,input,trace);
   return titleAsDesigned(withTwistLimit(q,configOf(input).config,trace,target),configOf(input).entered);
  }finally{buildDepth--;}
+}
+/**
+ * A rolled girder the configurator sized whose saddle tie, sized and placed (the column stiffened where its flange needs
+ * it), still exceeds the girder flange local check (flange-tie-flange: the saddle couple F·h over the flange outstand,
+ * f ∝ 1/t_f²) with no other tie arrangement passing: the layout is built again with the girder sized for a top flange at
+ * least t_f √(ratio/0.9) thick (the 0.9 sizing target). Kept where the tie then resolves, with the reason logged; else
+ * the first layout stays (the tie an open item). Case 046: the W27X146 (t_f 0.975 in) left 1.26 on a W14X82 building
+ * column whose flange keeps the saddle at the girder end.
+ */
+let girderMinTf:number|undefined;
+function withTieGirder(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace):ProjectInput{
+ const cfg=configOf(input).config,open=(r:ProjectInput)=>!!r.configurator?.beyondCatalog?.some(v=>v.member==='tie');
+ if(cfg.scope!=='design'||cfg.girder!=='rolled'||input.girderShape||girderMinTf!==undefined||!open(q)||!flangeTieGeometry(q))return q;
+ const ratio=tieSizingRatios(q)['flange-tie-flange']??0;if(ratio<=1+1e-6)return q;
+ const tf=q.section.tf,need=Math.ceil(tf*Math.sqrt(ratio/.9)/(inch/16)-1e-9)*inch/16,inner:SelectionTrace={};
+ let r:ProjectInput;girderMinTf=need;try{r=buildLayout(input,inner);}finally{girderMinTf=undefined;}
+ if(open(r)||!flangeTieGeometry(r))return q;
+ const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
+ const why=`The sized ${q.section.name} top flange (${len(tf)}) cannot take the tie saddle's couple (flange-tie-flange ${ratio.toFixed(2)} for the estimated tie demands, the saddle held at the girder end by the bearing and the column flange): the girder is sized again for a top flange at least ${len(need)} thick, ${r.section.name}.`;
+ Object.assign(trace,inner,{tie:[inner.tie,why].filter(Boolean).join(' ')});r.notes+=` ${why}`;
+ // The selection log is written as the layout is built: the tie row takes the reason.
+ const row=r.configurator?.selections?.find(v=>v.item==='Top-flange tie');if(row)row.reason=`${row.reason} ${why}`;else r.configurator?.selections?.unshift({item:'Top-flange tie',entered:'configurator default',designed:tieLabels[tieArrangement(r.details) as keyof typeof tieLabels]??tieArrangement(r.details),reason:why});
+ return r;
 }
 /**
  * The project title (title blocks, report header) names the support and the tie as designed: where the title names the
@@ -1542,8 +1570,8 @@ function capAngleUnresolved(p:ProjectInput):string|undefined{
  * angle that clearly cannot carry the tie force (capAngleUnresolved: its two bolts per group and one tie plate past
  * 1.5 of their strength, or the movement-controlled fatigue past 2): the bars and the gusset extension drop below the
  * cap channel's turned-down flanges (stiffenerTieGeometry) and the full-depth stiffener pair takes the force into the
- * girder (tieOnBearingStiffener, sized by sizeFlangeTie). Kept where the bars validate and their largest sizing ratio is
- * below the angle's (the estimates of each under the same tie force model); `saddle` is the project with the sized
+ * girder (tieOnBearingStiffener, sized by sizeFlangeTie). Kept where the bars validate and both their largest sizing ratio
+ * and their largest imposed-movement ratio are below the angle's (the estimates of each under the same tie force model); `saddle` is the project with the sized
  * saddle tie, `angle` with the sized cap angle. Undefined where the angle may pass, or the bars do no better.
  */
 function capStiffenerTie(saddle:ProjectInput,angle:ProjectInput,reach:number|undefined,bracket:NonNullable<ProjectInput['details']>['bracket'],face:number|undefined){
@@ -1556,7 +1584,11 @@ function capStiffenerTie(saddle:ProjectInput,angle:ProjectInput,reach:number|und
  // The bearings are laid out again after the tie (setBearings): the column gussets at the bearing stiffeners must still
  // land on the receiving column flange (coord-tie-gusset-flange) as laid out then.
  const laid=structuredClone({...angle,details:moved.details});setBearings(laid);
- if(!(worst<worstAngle-1e-9)||stiffenerGussetMisfit(laid)||validateRunwayDetails(laid).length)return undefined;
+ // The imposed movement too: the bars' largest movement ratio (tie-move-*) below the angle's (the tie plate's H1 sum
+ // with the support movement, and the fatigue ratios the movement controls).
+ const ma=ra as Record<string,number>,angleMove=Math.max(ma['cap-angle-plate-movement']??0,...[...(ra.movementControlled??[])].map(k=>ma[k]??0));
+ const barsMove=Math.max(0,...r.filter(([k])=>k.startsWith('tie-move-')).map(([,v])=>v));
+ if(!(worst<worstAngle-1e-9)||!(barsMove<angleMove-1e-9)||stiffenerGussetMisfit(laid)||validateRunwayDetails(laid).length)return undefined;
  const left=r.filter(([k,v])=>v>sizingLimit(Object.fromEntries(r),k)+1e-9);
  return {details:moved.details,angle:over,text:`the paired flat bars bolt to the tie-side bearing stiffener${stiffenerTieJoint(q)==='integral'?', cut as one plate with its gusset extension past the flange tip':', through a gusset plate CJP welded to the stiffener edge (UT)'}, the bars below the cap channel flanges, the full-depth stiffener pair carrying the tie force into the girder${left.length?` (sized, still over ${left.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands)`:''}.`};
 }

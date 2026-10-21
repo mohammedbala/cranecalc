@@ -55,7 +55,7 @@ export function capAngleFigure(p:ProjectInput,g:SupportGeometry){
  const marks:Mark[]=[
   ['load/H',-6,-18,[xr+G.d*.3,y+G.bf*1.4,zr]],
   [cap?'girder/cap-leg':'girder/top-flange',-26,14,[xt-L/2-G.d*.25,y-(cap?.width??G.bf)/2,top-(cap?.depth??G.tf)/2]],
-  ['cap-angle/bolt',-24,22,[xt-c.cap.pitch/2,y-c.y0-c.ta,top+c.cap.z]],
+  ['cap-angle/bolt',-24,22,[xt-(c.cap.count-1)*c.cap.pitch/2,y-c.y0-c.ta,top+c.cap.z]],
   ['cap-angle/tie-plate',8,-22,[xt,y-(c.lap.y+c.toe)/2,top+c.plate.thickness]],
   ['cap-angle/end-plate',22,-14,[xt,y-c.endPlate.y0,top+c.endPlate.z1]],
   ['column/flange',26,14,[xt+c.endPlate.width,0,top+c.endPlate.z0-G.d*.15]]];
