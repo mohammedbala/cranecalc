@@ -3,7 +3,8 @@ import {twistSlip} from './columnTwistLimit';
 import {categoryF,damageSum,damageText,minerEquation,minerEquivalent} from './fatigueConstants';
 import {format} from './units';
 import {flangeTieChecks,stiffenerTieChecks} from './flangeTieDesign';
-import {tieMovementChecks} from './tieMovement';
+import {sustainedTieForce,tieMovementChecks,tieMovements} from './tieMovement';
+import {activeStepPlate,stepPlateChecks} from './stepTiePlate';
 import {isPlateTie,plateTieChecks} from './plateTie';
 import {isCapAngleTie} from './capAngle';
 import {clearanceEffects,restraintClearances,secantStiffness} from './restraintClearance';
@@ -280,7 +281,7 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
  else checks.push({id:'rail-twist',group:'Serviceability',title:'Rail rotation (no limit specified)',status:'not-applicable',demand:r.twist,quantity:'ratio',equation:'\\theta',referenceIds:['criteria'],note:`Rail rotation ${r.twist.toExponential(3)} rad from the lateral and warping torsion analysis.${twistAt} AIST TR-13 sets no rail rotation limit and the owner and crane supplier specify none.`});
  // Appendix 6 brace force and stiffness (forcesDelivered.braceImperfection: the same numbers the report derives).
  const brace=braceSystem(p),A6=braceImperfection(p,a,props),imperfection=A6.force,requiredK=A6.stiffness;
- const plate=isPlateTie(p),capAngle=isCapAngleTie(p);
+ const plate=isPlateTie(p),capAngle=isCapAngleTie(p)||!!activeStepPlate(p),stepPlate=!!activeStepPlate(p);
  const cap=activeColumnCap(p),capR=r.columnCap,tied=!!cap&&tiedToBuilding(p),fork=!!cap&&!tied;
  // A crane column tied to the building (craneColumn.ts): the top-flange tie's restraint stiffness is in series with the
  // building column at the tie (r.braceStiffness, craneColumnRestraint), and the cap checks run with the tie checks.
@@ -290,6 +291,14 @@ export function completeRunwayChecks(s:CalculationSnapshot):CheckResult[]{
   checks.push(...restraint(columnCapChecks(p,capR,{imperfection,required:requiredK})));
  }
  if(cap&&!tied){/* A column cap fork: no flange tie to check. */}
+ else if(stepPlate){
+  // The horizontal slotted tie plate at a column step: its member and stiffness, then its own checks (stepTiePlate.ts).
+  const sp=brace as ReturnType<typeof braceSystem>&{play?:number},gt=sp.play??0;
+  add('brace-member','Bracing','Top-flange tie strength',r.demands.brace+imperfection,brace.capacity,'force','P_{br}=H+0.02M_rC_d/h_o+0.01P_r','Horizontal slotted tie plate at the column step (the girder plate over its clear span to the column face, D2 and E3 with K = 1.2); the bottom flange is restrained by the end bearing bolts. Full concurrent horizontal reaction plus flexural/axial imperfection demands. The plate, bolts, shelf and column are checked under Step tie plate.',['aisc-brace','aisc-e','aisc-d']);
+  add('brace-stiffness','Bracing','Brace and connection stiffness in series',requiredK,secantStiffness(tieK,gt,imperfection),'stiffness','\\beta_{sec}=\\left(\\sum1/k_i+g_t/P_{br}\\right)^{-1}\\ge\\beta_{br}',`Secant stiffness of the girder plate and the shelf in axial strain, with the sleeves' play across the runway g_t = ${len(gt)} taken up at the Appendix 6 brace force.${building}`,['aisc-brace']);
+  const mv=tieMovements(s);
+  checks.push(...restraint(stepPlateChecks(s,{force:r.demands.brace+imperfection,range:r.demands.braceFatigue,move:{longitudinal:mv.longitudinal,vertical:mv.vertical,cyclicVertical:mv.cyclicVertical,sustained:(r.demands as {braceSustained?:number}).braceSustained??sustainedTieForce(p)}})));
+ }
  else if(capAngle){
   // Cap tieback angle (top flange only; the bolted end bearings restrain the bottom flange): its own member, stiffness and components.
   const c=(brace as {compliance?:Record<string,number>}).compliance??{},share=(k:string)=>`${k} ${(100*(c[k]??0)*brace.stiffness).toFixed(0)}%`;

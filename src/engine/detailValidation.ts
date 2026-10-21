@@ -10,6 +10,7 @@ import {tieArrangement,validateConnectionOptions} from './connectionOptions';
 import type { ProjectInput } from './types';
 import {validateBracket} from './bracketDesign';
 import { boltProperties } from './connectionStrength';
+import {activeStep} from './steppedColumnInputs';
 import { clipGeometry,railClipInput,railPadThickness } from './railSeat';
 import { flangeRestraintGaps } from './detailAnalysis';
 import {girderSegments,simpleSupportInput,railClipStations} from './simpleSupports';
@@ -55,6 +56,13 @@ export function validateRunwayDetails(p:ProjectInput){
  // Paired flat bars and the single flexible plate share the tie dimensions, saddle, gussets and bolt groups.
  const family=flangeTieFamily(d);
  if(family)add(b.reach>b.length,'brace reach cannot exceed its length.');
+ // The horizontal slotted tie plate is the tie at a column step: a rolled girder on a stepped column (stepTiePlate.ts).
+ if(b.arrangement==='step-plate'){
+  add(!activeStep(p),'the horizontal slotted tie plate is the tie at the step of a stepped column: enter the step or choose another tie.');
+  add(p.section.kind==='cap','the horizontal slotted tie plate is welded under the top flange of a rolled girder: a capped girder takes the cap tieback angle.');
+  add(!b.stepPlate,'the horizontal slotted tie plate needs its dimensions (brace.stepPlate).');
+  if(b.stepPlate){try{boltProperties(b.stepPlate.bolts.grade,b.stepPlate.bolts.diameter);}catch(e){errors.push(`details: ${e instanceof Error?e.message:String(e)}`);}}
+ }
  if(b.flangeAttachment?.enabled&&family){
   const g=flangeTieGeometry(p);add(!g,p.system==='simple'?'direct flange ties need the column face: enable the designed column bracket, or enter the column face distance for a bracket by others.':'direct flange ties require independent simple spans.');
   if(g){

@@ -37,6 +37,7 @@ import {tiedToBuilding} from './craneColumnInputs';
 import {craneColumnRestraint} from './craneColumn';
 import {createSpliceCollector} from './girderSplice';
 import {capAngleBraceSystem,capAngleFatigueDetails} from './capAngleTie';
+import {stepPlateBraceSystem,stepPlateFatigueDetails} from './stepTiePlate';
 
 /**
  * Normal stress terms at a flange's tips from a station of the lateral/torsional solution (AISC DG9; the H3.3 first-yield
@@ -54,6 +55,8 @@ export function flangeStressTerms(s:Pick<LateralTorsionStation,'curvature'|'warp
 export function braceSystem(p:ProjectInput){
  // The cap tieback angle: its tie plate member and the series stiffness of its plate, legs, bolts, shims and column flange.
  const capAngle=capAngleBraceSystem(p);if(capAngle)return capAngle;
+ // The horizontal slotted tie plate at a column step: the girder plate over its clear span (stepTiePlate.ts).
+ const stepPlate=stepPlateBraceSystem(p);if(stepPlate)return stepPlate;
  const d=p.details!,b=d.brace,m=d.material,bolt=boltProperties(b.connection.grade,b.connection.diameter),holes=2*(bolt.hole+1.5875),plies=tiePlies(p);
  const plate=plateMember(b.width,b.thickness,b.length,p.section.E,m.Fy,m.Fu,b.width-holes,p.method),cos=b.reach/b.length;
  // Each bar buckles out of plane between the innermost bolt rows, fixed in the girder bolt group and
@@ -128,6 +131,8 @@ export function automaticFatigueDetails(p:ProjectInput){
  if(tie)for(const [i,v] of tie.stations.entries())for(const sign of [-1,1])for(const point of tie.sides.map(side=>side>0?'top-right' as const:'bottom-right' as const))list.push({id:`SL${i}-${sign}-${point}`,name:`Flange saddle ${i+1} · end fillet ${sign<0?1:2} termination, across the flange / ${point}`,x:v.tieX+sign*tie.attachment.saddleLength/2,point,category:across,reference:`AISC Table A-3.1 item 7.1, Category ${across==='E1'?'E′':across} for the ${(tie.rootLength/inch).toFixed(2)} in saddle width across the flange (parallel to the local flange bending stress) and ${(tie.attachment.saddleThickness/inch).toFixed(2)} in thickness: termination of the transverse end fillet; the local flange bending range over the effective width (flange-tie-flange), not added to the longitudinal stress`});
  // Cap tieback angle: bolt holes in the column-side channel flange near each girder end.
  list.push(...capAngleFatigueDetails(p));
+ // Step tie plate: the plate's ends welded under the top flange (item 7.1 by its width along the runway).
+ list.push(...stepPlateFatigueDetails(p));
  // End stop bolt holes through the top flange near each runway end: pretensioned bolted joint, net section.
  const stop=activeEndStop(p);
  // The rows are measured from the girder end, past the grid when the end bearing is centered on the support web; a

@@ -194,6 +194,8 @@ export function tieLine(p:ProjectInput,side:'top'|'bottom'='top'){
  const s=p.section,flange=side==='top'?s.d-s.tf/2:s.tf/2;
  if(activeColumnCap(p)&&!tiedToBuilding(p))return flange;
  if(side==='top'){const cap=capTieLine(p);if(cap!==undefined)return cap;}
+ // The step tie plate under the top flange: its mid-thickness.
+ if(side==='top'&&p.details?.brace.arrangement==='step-plate'&&p.details.brace.stepPlate&&p.section.kind!=='cap')return s.d-s.tf-p.details.brace.stepPlate.plate.thickness/2;
  const tie=flangeTieGeometry(p)??stiffenerTieGeometry(p);
  return tie&&tie.sides.includes(side==='top'?1:-1)?s.d/2+(side==='top'?tie.topCenter:tie.bottomCenter):flange;
 }
