@@ -606,6 +606,6 @@ export function supportChecks(p:ProjectInput,r:ColumnBaseResult):CheckResult[]{
  */
 function subgradeBasis(p:ProjectInput){
  const b=p.columnBase!,stated=/subgrade|\bk_?s\b|\bpci\b|MN\/m³|kN\/m³|kcf/i.test(b.source),k=format(b.soil.subgrade,'subgrade',p.units,3);
- const size='a plate-load value (1 ft plate) is used as given, not corrected for the footing size (a wider footing has a lower effective k_s and rotates more).';
+ const size='a plate-load value (1 ft, 0.3 m plate) is used as given, not corrected for the footing size (a wider footing has a lower effective k_s and rotates more).';
  return stated?`k_s from the geotechnical source; ${size}`:`The geotechnical source states no modulus of subgrade reaction: k_s = ${k} is a default, to be confirmed by the geotechnical engineer; ${size}`;
 }
