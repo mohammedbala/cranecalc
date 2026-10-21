@@ -1,3 +1,4 @@
+import {isStepPlateTie} from '../engine/stepTiePlate';
 import {supportColumn} from '../engine/drawingData';
 import {stiffenerTopCjp} from '../engine/constructionNotes';
 import {bracketSeat} from '../engine/rolledBracketInputs';
@@ -186,7 +187,8 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
  // 3: Plan of an actual flange-to-column tie. The symmetric pair of bars is
  // represented by front/back outlines; arrows identify both end bolt groups.
  // The cap tieback angle has its own details (capAngleSheet.ts).
- if(isCapAngleTie(p)){}
+ // The horizontal slotted tie plate at a column step has its details on the stepped-column sheet.
+ if(isCapAngleTie(p)||isStepPlateTie(p)){}
  else if(d.brace.flangeAttachment?.enabled){if(withFlangeTie)views.push({title:detailTitles.flangeTie,render:()=>flangeTieSection(s,48,436)});}
  else if(!capped||tied)views.push({title:detailTitles.tie,render:()=>{
   let svg='<g data-view="tie-connection">';
@@ -267,7 +269,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
 
  // 3a: Elevation of the stiffener tie looking along the runway: the tie line below the top of steel, the gusset, bars,
  // bolt gauge, the column gusset with its vertical slots and sleeves, and where the tie sits at the runway-end grids.
- if((!capped||tied)&&!isCapAngleTie(p)&&!d.brace.flangeAttachment?.enabled&&stiffenerTieGeometry(p))views.push({title:detailTitles.tieElevation,render:()=>tieElevation()});
+ if((!capped||tied)&&!isCapAngleTie(p)&&!isStepPlateTie(p)&&!d.brace.flangeAttachment?.enabled&&stiffenerTieGeometry(p))views.push({title:detailTitles.tieElevation,render:()=>tieElevation()});
  function tieElevation(){
   const c=d!.brace.connection,t=d!.brace,bs=d!.bearing,g=stiffenerTieGeometry(p)!,rel=tieRelease(p),hg=columnGussetHeight(p),integral=stiffenerTieJoint(p)==='integral',inch=25.4;
   const conflict=viewConflict(s,{sizes:[g.gussetLength,g.columnGussetLength,g.clear,t.length,g.face,hg],fits:/^tie-stiffener-(bar-clearance|fit)$/,checks:/^tie-/});

@@ -18,12 +18,13 @@ import {bracketForceBlocks,bracketForceTopic} from './bracketForceTable';
 import type {DetailTopic,DetailView} from './detailSheet';
 import {AnnotationSpace,dimHClear,dimVClear} from './annotationSpace';
 import {stepStrutGeometry} from '../engine/craneLevelStrut';
+import {isStepPlateTie,stepPlateGeometry} from '../engine/stepTiePlate';
 
 const inch=25.4;
 /** Detail titles of the stepped column (support 'stepped-column'), referenced from the general arrangement and the bearing details. */
-export const steppedColumnTitles={elevation:'STEPPED COLUMN / ELEVATION',section:'STEP / SECTION',stiffener:'STEP STIFFENER / PLAN AND ELEVATION',strut:'CRANE-LEVEL STRUT / AT A COLUMN'} as const;
+export const steppedColumnTitles={elevation:'STEPPED COLUMN / ELEVATION',section:'STEP / SECTION',stiffener:'STEP STIFFENER / PLAN AND ELEVATION',strut:'CRANE-LEVEL STRUT / AT A COLUMN',tiePlate:'STEP TIE PLATE / PLAN'} as const;
 /** The detail of the top-flange tie the stepped column receives on its upper shaft. */
-export const steppedTieTitle=(p:CalculationSnapshot['input'])=>isCapAngleTie(p)?capAngleTitles.section:p.details?.brace.flangeAttachment?.enabled?detailTitles.flangeTie:detailTitles.tie;
+export const steppedTieTitle=(p:CalculationSnapshot['input'])=>isStepPlateTie(p)?steppedColumnTitles.tiePlate:isCapAngleTie(p)?capAngleTitles.section:p.details?.brace.flangeAttachment?.enabled?detailTitles.flangeTie:detailTitles.tie;
 /** Shape name of a shaft: its catalog W shape, else its plates. */
 const shaftName=(v:StepGeometry['lower'],size:(v:number)=>string)=>v.shape||`BUILT-UP ${size(v.d)} X ${size(v.bf)}`;
 
@@ -54,7 +55,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
  const lowName=shaftName(g.lower,size),upName=shaftName(g.upper,size),capLabel=`PL ${size(g.cap.thickness)} X ${dim(g.cap.width)} X ${dim(g.cap.length)}`;
  const cap=b.kind==='cap'?b.capTw:0,bt=bs.thickness,hs=g.cap.top,tos=hs+bt+b.d,railDepth=p.aist?.railDepth??p.railHeight,rb=tos+cap+railPadThickness(p),tor=rb+railDepth;
  const sf=g.stiffener,sh=stepStiffenerHeight(g),tieRef=detailRef(steppedTieTitle(p)),gw=g.girderWeb,lowerOut=-g.lower.d/2,lowerIn=g.lower.d/2;
- const girderHalf=Math.max(b.bf,b.kind==='cap'?b.capWidth:0)/2,sq=stepStrutGeometry(p,g),strutRef=sq?detailRef(steppedColumnTitles.strut):'';
+ const sp=stepPlateGeometry(p),girderHalf=Math.max(b.bf,b.kind==='cap'?b.capWidth:0)/2,sq=stepStrutGeometry(p,g),strutRef=sq?detailRef(steppedColumnTitles.strut):'';
  // Girder I-section with its cap channel and the rail on the web centerline, bottom flange at `y0` (mm), in view coordinates.
  const girder=(X:(x:number)=>number,Y:(y:number)=>number,y0:number,withRail:boolean)=>{
   const t=y0+b.d;
@@ -96,7 +97,10 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   if(sf)svg+=rect(X(g.innerFlange-sf.thickness/2),Y(g.cap.bottom),sf.thickness*kk,sh*kk,'runway-line');
   svg+=rect(X(gw-bs.width/2),Y(hs+bt),bs.width*kk,bt*kk,'runway-line')+girder(X,Y,hs+bt,true);
   const tieH=Math.min(150,b.d/4);
-  svg+=rect(X(g.tieFace),Y(tos-b.tf),(gw-girderHalf-g.tieFace)*kk,tieH*kk,'runway-line');
+  // The step tie plate under the top flange to the shelf on the upper shaft, else the tie drawn schematically.
+  if(sp){const zt=tos-b.tf,tp=sp.t.plate.thickness,ts=sp.t.shelf.thickness;
+   svg+=rect(X(gw-sp.plateEnd),Y(zt),(sp.plateEnd-sp.y0)*kk,tp*kk,'runway-line')+rect(X(g.tieFace),Y(zt-tp),sp.t.shelf.projection*kk,ts*kk,'runway-line');}
+  else svg+=rect(X(g.tieFace),Y(tos-b.tf),(gw-girderHalf-g.tieFace)*kk,tieH*kk,'runway-line');
   // The new crane-level strut seen end-on beside the crane-side flange, its plate edge-on on the flange face.
   if(sq){const zt=sq.z+sq.d/2,zb=sq.z-sq.d/2,x0=sq.ys-sq.bf/2,x1=sq.ys+sq.bf/2;
    svg+=rect(X(sq.face),Y(sq.z+sq.half),sq.tp*kk,sq.height*kk,'runway-line');
@@ -113,7 +117,8 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   const lx=X(xMax)+40;
   svg+=labelColumn([
    {at:[X(gw+rl.headWidth/2),Y(tor-railDepth*.2)],labels:['CRANE RAIL ON THE GIRDER WEB C/L',`SEE ${detailRef(detailTitles.railKeeper)}`]},
-   {at:[X(g.tieFace+(gw-girderHalf-g.tieFace)*.6),Y(tos-b.tf-tieH*.5)],labels:['TOP FLANGE TIE (NEW) TO THE UPPER','SHAFT INNER FLANGE, SCHEMATIC;',`SEE ${tieRef}`]},
+   ...(sp?[{at:[X(g.tieFace+sp.t.shelf.projection*.5),Y(tos-b.tf-sp.t.plate.thickness-sp.t.shelf.thickness)] as XY,labels:['STEP TIE PLATE (NEW) UNDER THE TOP','FLANGE, SHELF ON THE UPPER SHAFT;',`SEE ${tieRef}`]}]
+    :[{at:[X(g.tieFace+(gw-girderHalf-g.tieFace)*.6),Y(tos-b.tf-tieH*.5)] as XY,labels:['TOP FLANGE TIE (NEW) TO THE UPPER','SHAFT INNER FLANGE, SCHEMATIC;',`SEE ${tieRef}`]}]),
    {at:[X(gw+b.tw/2),Y(tos-b.d*.4)],labels:[`${b.name} RUNWAY GIRDER (NEW) ON THE`,'STEP OVER THE CRANE-SIDE FLANGE;',`SEE ${detailRef(steppedColumnTitles.section)}`]},
    {at:[X(g.upper.x+g.upper.d/2),Y(Math.min(tos+12*inch,bands.at(-1)![1]-6*inch))],labels:[`(E) UPPER SHAFT ${upName}`,'SURVEY SIZE AND PLUMB']},
    {at:[X(g.cap.width/2),Y(hs-g.cap.thickness/2)],labels:[`(E) STEP CAP ${capLabel}`,'SURVEY THICKNESS AND LEVEL']},
@@ -218,6 +223,40 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   return {svg:svg+'</g>',scale:k.label};
  }});
 
+ // The step tie plate: plan at a shared grid (the two girder ends, their plates under the top flange, the shelf on the
+ // upper shaft's inner flange, the sleeved bolts in their slots) and the section across the runway at one plate.
+ if(sp)views.push({title:steppedColumnTitles.tiePlate,render:()=>{
+  const t=sp.t,v=sp.stations.find(x=>sp.stations.filter(y=>Math.abs(y.station-x.station)<1).length>1)??sp.stations[0],near=sp.stations.filter(x=>Math.abs(x.station-v.station)<1);
+  const xs=[...near.flatMap(x=>[x.from,x.to]),v.station-sp.shelfWidth/2,v.station+sp.shelfWidth/2],x0=Math.min(...xs)-2*inch,x1=Math.max(...xs)+2*inch,yTop=sp.face+sp.upper.tf+2*inch,yBot=-2*inch;
+  const k=drawingScale(Math.min(250/(x1-x0),220/(yTop-yBot)),u),kk=k.pointsPerMm,PX=(x:number)=>40+(x-x0)*kk,PY=(y:number)=>40+(yTop-y)*kk;
+  let svg='<g data-view="step-tie-plate">';
+  // Plan, looking down: the upper shaft's inner flange (existing), the shelf, the girder flanges (the column-side half) and web lines, the plates, bolts and slots.
+  svg+=rect(PX(v.station-sp.upper.bf/2),PY(sp.face+sp.upper.tf),sp.upper.bf*kk,sp.upper.tf*kk,'reference-line');
+  svg+=rect(PX(v.station-sp.shelfWidth/2),PY(sp.face),sp.shelfWidth*kk,t.shelf.projection*kk,'runway-line');
+  for(const x of near){
+   const gEnd=x.girderEnd,a=gEnd===undefined?x0:gEnd<x.center?gEnd:x0,bnd=gEnd===undefined?x1:gEnd<x.center?x1:gEnd;
+   svg+=line([PX(a),PY(sp.tip)],[PX(bnd),PY(sp.tip)],'runway-line')+line([PX(a),PY(0)],[PX(bnd),PY(0)],'grid-line');
+   if(gEnd!==undefined)svg+=line([PX(gEnd),PY(0)],[PX(gEnd),PY(sp.tip)],'runway-line');
+   // The plate: hidden under the flange, solid beyond the tip.
+   svg+=`<path class="hidden-line" d="M${n(PX(x.from))},${n(PY(sp.tip))}V${n(PY(sp.y0))}H${n(PX(x.to))}V${n(PY(sp.tip))}"/>`+`<path class="runway-line" d="M${n(PX(x.from))},${n(PY(sp.tip))}V${n(PY(sp.plateEnd))}H${n(PX(x.to))}V${n(PY(sp.tip))}"/>`;
+   for(const bx of x.bolts)for(const by of sp.rows){svg+=circle(PX(bx),PY(by),sp.db/2*kk,'runway-line');const w=sp.slotWidth*kk,l=sp.slotLength*kk;svg+=`<rect class="hidden-line" x="${n(PX(bx)-l/2)}" y="${n(PY(by)-w/2)}" width="${n(l)}" height="${n(w)}" rx="${n(w/2)}"/>`;}
+  }
+  svg+=line([PX(v.station),PY(yTop)+4],[PX(v.station),PY(yBot)-4],'grid-line');
+  const bolts=`${near[0].bolts.length*sp.rows.length} - ${size(sp.db)} ${t.bolts.grade} EACH PLATE, PRETENSIONED AGAINST`;
+  svg+=labelColumn([
+   {at:[PX(v.station+sp.upper.bf/2),PY(sp.face+sp.upper.tf/2)],labels:['(E) UPPER SHAFT INNER FLANGE']},
+   {at:[PX(v.station+sp.shelfWidth/2),PY(sp.face-t.shelf.projection/2)],labels:[`SHELF PL ${size(t.shelf.thickness)} X ${dim(t.shelf.projection)} X ${dim(sp.shelfWidth)} (NEW),`,'CENTERED ON THE WEB, FIELD WELD','TOP AND BOTTOM TO THE (E) FLANGE'],weld:size(t.weld),field:true},
+   {at:[PX(near.at(-1)!.bolts.at(-1)!),PY(sp.rows[0])],labels:[bolts,`SLEEVES IN ${size(sp.slotWidth)} X ${size(sp.slotLength)} SLOTS`,'ALONG THE RUNWAY IN THE SHELF']},
+   {at:[PX(near.at(-1)!.to),PY((sp.tip+sp.plateEnd)/2)],labels:[`PL ${size(t.plate.thickness)} X ${dim(t.plate.width)} (NEW) UNDER THE`,'TOP FLANGE, SHOP WELD BOTH EDGES',`ACROSS THE RUNWAY, ${dim(sp.weldLength)} LONG`],weld:size(t.weld)},
+   {at:[PX(near.at(-1)!.to),PY(sp.tip)],labels:['GIRDER TOP FLANGE TIP']}
+  ],PX(x1)+30,PY(yTop),PY(yBot));
+  const space=new AnnotationSpace(svg);
+  svg+=dimVClear(space,PY(sp.face),PY(sp.tip),PX(x0),PX(x0)-14,dim(sp.span));
+  svg+=dimHClear(space,PX(near[0].from),PX(near[0].to),PY(sp.y0),PY(yBot)+14,dim(t.plate.width));
+  svg+=text(PX(x0),PY(yBot)+40,'PLAN AT A SHARED GRID',lettering.text,'start',700);
+  return {svg:svg+'</g>',scale:k.label};
+ }});
+
  // 4: The crane-level strut at a column, seen from the crane aisle: the plate on the lower crane-side flange, its bolts to the
  // existing flange, and the strut ends lapping it each side with their flanges coped.
  if(sq)views.push({title:steppedColumnTitles.strut,render:()=>{
@@ -268,6 +307,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   ['H1 RATIOS: UPPER / LOWER SHAFT',`${ratio('column-upper-interaction')} / ${ratio('column-lower-interaction')}`],
   ['RATIOS: BEARING / FLANGE / CAP / PANEL',`${ratio('step-bearing')} / ${ratio('step-flange-yielding')} / ${ratio('step-cap-flexure')} / ${ratio('step-panel-shear')}`],
   ['STEP STIFFENERS',sf?`2 PL ${size(sf.thickness)} X ${size(sf.width)} X ${dim(sh)}, ${weld(sf.weld)} FIELD FILLETS; RATIOS ${ratio('step-stiffener-column')} / ${ratio('step-stiffener-weld')}`:`NOT REQUIRED: WEB ${ratio('step-web-yielding')} (J10.2) / ${ratio('step-web-crippling')} (J10.3)`],
+  ...(sp?[['TOP FLANGE TIE AT THE STEP (NEW)',`PL ${size(sp.t.plate.thickness)} X ${dim(sp.t.plate.width)} UNDER THE FLANGE, SHELF PL ${size(sp.t.shelf.thickness)}; ${sp.rows.length*sp.stations[0].bolts.length} - ${size(sp.db)} SLEEVED BOLTS, ${size(sp.t.travel)} EACH WAY; RATIOS ${ratio('step-plate-strength')} / ${ratio('step-plate-bolts')} / ${ratio('step-plate-weld-fatigue')}`]]:[]),
   ...(sq?[['CRANE-LEVEL STRUT (NEW)',`${sq.shape} ON THE GIRDER LINE, ${dim(sq.ys)} FROM LOWER C/L; RATIOS ${ratio('step-strut-compression')} / ${ratio('step-strut-bolts')} / ${ratio('step-strut-column-bolts')}; TWIST ${ratio('column-lower-twist')}`]]:[]),
   ...(worst||fails?[['MAX. D/C, ALL STEPPED COLUMN CHECKS',`${worst?`${sheetDc(s,worst.dc)} (${worst.check.id})`:'-'}${fails?`; ${fails}`:''}`]]:[])
  ];
@@ -276,7 +316,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   `SURVEY EVERY STEP BEFORE FABRICATION AND REPORT TO THE ENGINEER OF RECORD: BOTH SHAFT SIZES, THE STEP ELEVATION, THE CAP THICKNESS, LEVEL AND FLATNESS UNDER THE BEARING, THE CAP-TO-SHAFT WELDS, THE UPPER SHAFT POSITION AND PLUMB, AND THE LOWER WEB CONDITION${sf?' AT THE STIFFENERS':''}. DEVIATIONS OVER 1/8" FROM THE DIMENSIONS SHOWN NEED THE ENGINEER'S REVIEW.`,
   `BEARING PLATES SHIMMED TO THE THEORETICAL ELEVATION WITH STEEL SHIMS TO FULL BEARING; FIELD DRILL THE CAP FOR THE BEARING BOLTS AFTER THE GIRDER IS LINED AND LEVELED, CLEAR OF THE CAP-TO-SHAFT WELDS; CONFIRM NUT CLEARANCE UNDER THE CAP. NO FLAME CUTTING OF EXISTING STEEL.`,
   ...(sf?[`STEP STIFFENERS: FIT TO BEAR AGAINST THE UNDERSIDE OF THE CAP, CLIP ${size(stepStiffenerClip)} AT THE CAP-TO-WEB FILLET, FIELD WELD BOTH FACES TO THE EXISTING WEB WITH ${weld(sf.weld)} FILLETS PER THE EXISTING-STEEL WELDING NOTES ON S-00 (CRANE OUT OF SERVICE, COLUMN UNDER DEAD LOAD ONLY).`]:[]),
-  `THE TOP FLANGE TIE LANDS ON THE UPPER SHAFT INNER FLANGE (${tieRef}); DO NOT WELD THE GIRDER TO THE CAP.`,
+  sp?`THE TOP FLANGE TIE AT THE STEP (${tieRef}): SHOP WELD THE TIE PLATE UNDER THE TOP FLANGE BEFORE FITTING THE TIE-SIDE BEARING STIFFENER TO ITS UNDERSIDE; FIELD WELD THE SHELF TO THE UPPER SHAFT AFTER THE GIRDER IS LINED AND LEVELED; SET THE SLEEVED BOLTS CENTERED IN THEIR SLOTS AT THE MEAN TEMPERATURE; DO NOT WELD THE GIRDER TO THE CAP.`:`THE TOP FLANGE TIE LANDS ON THE UPPER SHAFT INNER FLANGE (${tieRef}); DO NOT WELD THE GIRDER TO THE CAP.`,
   ...(sq?[`CRANE-LEVEL STRUT (${strutRef}): CONTINUOUS ON THE GIRDER LINE FROM GRID ${(s.existingColumn?.support?.strut?.designed?.layout.first??0)+1} TO GRID ${(s.existingColumn?.support?.strut?.designed?.layout.last??0)+1}, CONNECTED AT EVERY COLUMN; PRETENSION ALL BOLTS, SLIP-CRITICAL (CLASS A AT THE EXISTING FLANGE: CLEAN MILL SCALE, NO PAINT). THE EXISTING BRACED BAY RECEIVES THE STRUT FORCE AT THE GIRDER LINE (ENGINEER OF RECORD).`]:[]),
   ...(c.step?.capWeldAdded?[`BUILD UP THE EXISTING STEP FILLETS (CAP TO THE LOWER SHAFT, UPPER SHAFT TO THE CAP) TO ${weld(c.step.capWeldAdded)} IN THE FIELD: GRIND TO SOUND METAL, FUSE OVER THE FULL EXISTING WELD, PER THE EXISTING-STEEL WELDING NOTES ON S-00 (CRANE OUT OF SERVICE, COLUMN UNDER DEAD LOAD ONLY).`]:[]),
   'THE STEPPED COLUMN IS CHECKED IN THE CALCULATION REPORT (STEPPED COLUMN): EFFECTIVE LENGTHS FROM AN ELASTIC BUCKLING ANALYSIS OF THE TWO-SHAFT COLUMN (AISC 360-16 APPENDIX 7), H1 FOR EACH SHAFT, AND THE STEP: BEARING, CAP, FLANGE AND WEB LOCAL CHECKS AND PANEL SHEAR (AISC 360 J7, J10).'

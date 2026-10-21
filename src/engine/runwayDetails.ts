@@ -51,7 +51,13 @@ export const runwayDetailsSchema=z.object({
  /** False while template-generated inputs await the engineer's review. */
  reviewed:z.boolean().optional(),
  // Two identical flat bars, one each side of the gusset, at EACH flange.
- brace:z.object({arrangement:z.enum(['paired-bars','flexible-plate','bearing-link','paired-links','single-angle','double-angle','cap-angle']).optional(),
+ brace:z.object({arrangement:z.enum(['paired-bars','flexible-plate','bearing-link','paired-links','single-angle','double-angle','cap-angle','step-plate']).optional(),
+  /**
+   * Horizontal slotted tie plate at a column step ('step-plate', stepTiePlate.ts): a plate welded under the girder top
+   * flange, lapping a shelf welded to the upper shaft's inner flange, with sleeved bolts in long slots along the runway.
+   */
+  stepPlate:z.object({plate:z.object({thickness:pos,width:pos}),shelf:z.object({thickness:pos,projection:pos}),weld:pos,
+   bolts:z.object({diameter:pos,grade:z.enum(['A325','A490']),rows:z.number().int().min(1).max(4),columns:z.number().int().min(1).max(2)}),travel:pos,sleeveWall:pos}).optional(),
   /** Cap tieback angle bolted to the cap channel flange ('cap-angle'). */
   capAngle:capAngleSchema.optional(),
   singleAngle:angleTieSchema.optional(),doubleAngle:angleTieSchema.optional(),

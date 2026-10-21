@@ -107,6 +107,8 @@ const idRules:Rule[]=[
  // The crane-level strut on the girder line of a stepped column (craneLevelStrut.ts): the member and its column plate in
  // axial force; the F13.1 test of the holes in the existing flange is a classification.
  D(/^step-strut-(compression|plate)$/,'axial'),T(/^step-strut-flange-holes$/,'classification'),
+ // The horizontal slotted tie plate at a column step (stepTiePlate.ts).
+ D(/^step-plate-(strength|shelf)$/,'axial'),D(/^step-plate-column$/,'local'),D(/^step-plate-travel$/,'movement'),
  // The existing upper shaft of a stepped column under the off-web column gussets of a stiffener tie (tieMovement.ts).
  D(/^column-upper-tie-flange$/,'local'),
  D(/^((building-)?column-((upper|lower)-)?axial|(building-)?column-seismic-axial|crane-column-brace-strength|crane-column-tie-(compression|buckling))$/,'axial'),

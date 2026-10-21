@@ -6,7 +6,7 @@
  * are filled with clearly marked fictitious example values so the package calculates at once; a project package
  * blocks them until they are replaced (packageContentChecks). Canonical units N, mm, MPa.
  */
-import type {Crane,ProjectInput,Section} from './types';
+import type {CalculationSnapshot,Crane,ProjectInput,Section} from './types';
 import {format as formatUnits} from './units';
 import type {RunwayDetails} from './runwayDetails';
 import {runwayConfigSchema,supportLabels,tieLabels,type ConfigSelection,type RunwayConfig} from './configInputs';
@@ -64,6 +64,8 @@ import {finiteLife,fatigueThreshold} from './fatigueConstants';
 import {columnReactionOffset} from './existingColumn';
 import {stepGeometry,steppedColumnAnalysis,steppedColumnChecks,stepWeldThickness} from './steppedColumn';
 import {stepStrutChecks,stepStrutLayout,type StepStrutForces} from './craneLevelStrut';
+import {stepPlateChecks,stepPlateGeometry} from './stepTiePlate';
+import {tieMovements} from './tieMovement';
 import {bumperAtGrids,locatingGrids} from './columnSupport';
 import {craneLevelStrut} from './existingColumn';
 import type {SupportReactionSet} from './supportReactions';
@@ -1332,7 +1334,15 @@ function withSteppedTie(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):Pr
  if(worst[1]<=1+1e-9)return q;
  const face=+((q.details.brace.flangeAttachment?.columnFace??q.details.brace.reach)/inch).toFixed(2),label=(k:string)=>tieLabels[k as keyof typeof tieLabels]??k;
  const why=`At the step the tie runs only to the upper shaft's inner face (${face} in from the girder web), where ${Number.isFinite(worst[1])?`the sized ${label(tieArrangement(q.details)).toLowerCase()} exceeds its sizing ratio ${worst[0]} (${worst[1].toFixed(2)} > 1.00)`:'the bars do not fit between their bolt groups'}`;
- // New steel first: another flange tie type at the same (existing) geometry, where it passes; never a different column.
+ // The tie that fits the step geometry: the horizontal slotted tie plate (rolled girders), where its sized checks pass.
+ if(q.section.kind!=='cap'){const r=withStepPlate(q);
+  if(r){
+   const text=`${why}: a horizontal slotted tie plate takes the tie instead (new steel): ${r.text}`;
+   trace.stepTie=text;trace.tie=[trace.tie,text].filter(Boolean).join(' ');r.q.notes+=` ${text}`;
+   return r.q;
+  }
+ }
+ // New steel next: another flange tie type at the same (existing) geometry, where it passes; never a different column.
  if(!trace.stepTieRetry)for(const alt of (['paired-bars','flexible-plate'] as const).filter(k=>k!==cfg.tie)){
   const inner:SelectionTrace={stepTieRetry:true},r=buildProject({...cfg,tie:alt},inner);
   if(!activeStep(r)||!r.details||!flangeTieFamily(r.details)||tieArrangement(r.details)===tieArrangement(q.details))continue;
@@ -1349,6 +1359,44 @@ function withSteppedTie(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):Pr
  return q;
 }
 
+/**
+ * The horizontal slotted tie plate at a column step (stepTiePlate.ts) sized for the estimated tie demands
+ * (tieSizingDemands, with the step's own vertical movement): the thinnest and narrowest plate, the fewest and smallest
+ * bolts, the thinnest shelf and smallest fillet with every check at most the sizing target (fit at most one); the shelf
+ * projection follows the bolt rows and the slot travel the factored movement along the runway. Undefined where no set
+ * passes.
+ */
+function withStepPlate(q0:ProjectInput):{q:ProjectInput;text:string}|undefined{
+ const q=structuredClone(q0);q.details=selectTieArrangement(q.details!,'step-plate');
+ const demand=tieSizingDemands(q),a=steppedColumnAnalysis(q,supportReactions(q,sectionProperties(q.section))),step=a.result.stepVertical;
+ const snap={input:q,designAnalysis:{endRotation:demand.rotation,serviceRotation:demand.serviceRotation},steppedColumn:{stepVertical:step},
+  detailResults:{demands:{brace:demand.force,braceFatigue:demand.range,braceSustained:demand.sustained}}} as unknown as CalculationSnapshot;
+ const mv=tieMovements(snap),move={longitudinal:mv.longitudinal,vertical:mv.vertical,cyclicVertical:mv.cyclicVertical,sustained:demand.sustained};
+ const sp=q.details.brace.stepPlate!,target=.9,sixteenth=inch/16;
+ sp.travel=Math.max(inch/4,Math.ceil((mv.longitudinal+sixteenth+inch/32)/sixteenth-1e-9)*sixteenth);
+ let best:{cost:number;sp:typeof sp}|undefined;
+ const ok=(list:CheckResultLike[])=>list.every(c=>{const u=(c as {utilization?:number}).utilization??0;return c.id==='step-plate-fit'||c.id==='step-plate-travel'?u<=1+1e-9:u<=target+1e-9;});
+ for(const db of [.75,.875,1].map(v=>v*inch))for(const rows of [1,2,3])for(const columns of [1,2])for(const tp of [.75,.875,1,1.25,1.5].map(v=>v*inch))for(const w of [6,8,10].map(v=>v*inch))
+ for(const weld of [5/16,3/8,7/16,1/2,5/8].map(v=>v*inch))for(const ts of [.75,1,1.25,1.5].map(v=>v*inch)){
+  if(weld>=tp-sixteenth)continue;
+  Object.assign(sp,{plate:{thickness:tp,width:w},weld,bolts:{diameter:db,grade:'A325',rows,columns},shelf:{thickness:ts,projection:sp.shelf.projection}});
+  // The shelf reaches past the innermost bolt row by the slot half width and the edge distance.
+  const g=stepPlateGeometry(q);if(!g)return undefined;
+  sp.shelf.projection=Math.ceil((g.face-g.rows[g.rows.length-1]+g.slotWidth/2+g.edge)/(inch/4)-1e-9)*inch/4;
+  const list=stepPlateChecks(snap,{force:demand.force,range:demand.range,move});
+  if(list.length&&ok(list)){
+   // The least steel, weld metal (weighted for its labor) and bolts.
+   const cost=tp*w*(g.plateEnd-g.y0)+ts*g.shelfWidth*sp.shelf.projection+3*weld**2*(g.weldLength+g.shelfWidth)+rows*columns*20*db**3;
+   if(!best||cost<best.cost)best={cost,sp:structuredClone(sp)};
+  }
+ }
+ if(!best)return undefined;
+ q.details.brace.stepPlate=best.sp;
+ {const sp=best.sp,g=stepPlateGeometry(q)!,tp=sp.plate.thickness,w=sp.plate.width,weld=sp.weld,ts=sp.shelf.thickness,rows=sp.bolts.rows,columns=sp.bolts.columns,db=sp.bolts.diameter;
+   const L=(v:number)=>q.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
+   return {q,text:`PL ${L(tp)} × ${L(w)} welded under the top flange (${L(weld)} fillets), lapping a PL ${L(ts)} × ${L(g.shelfWidth)} × ${L(sp.shelf.projection)} shelf field welded to the upper shaft's inner flange, ${rows*columns} - ${L(db)} A325 sleeved bolts in long slots along the runway (${L(sp.travel)} each way): the along-runway friction stays in the plates' plane and the step's vertical movement (${L(mv.vertical)}) bends the plate over the ${L(g.span)} span to the column face, every check within ${target} of its limit for the estimated tie demands (the lightest such set).`};
+ }
+}
 /**
  * The girder bearings for the supports and the tie as configured: steel shims under the bearing plates on existing, by-others and field-welded seats (defaultBearingShim); and the plate,
  * bolts and slot travel sized for the girder (applyBearingLayout: the length for the bolt layout, the J10 end bearing

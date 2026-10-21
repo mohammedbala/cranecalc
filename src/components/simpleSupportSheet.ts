@@ -1,3 +1,4 @@
+import {isStepPlateTie} from '../engine/stepTiePlate';
 import {railBearsOnStops,railHasJoints} from '../engine/railLayout';
 import {supportColumn} from '../engine/drawingData';
 import {bracketSeat} from '../engine/rolledBracketInputs';
@@ -77,7 +78,7 @@ export function simpleSupportTopic(s:CalculationSnapshot,f:FramingSettings=defau
 
  // True-scale plan: each end has its OWN transverse tie to the same column.
  // The direct flange tie plan and the bolted end bearing detail draw these at a larger scale when present.
- if(!(d.brace.flangeAttachment?.enabled&&flangeTieGeometry(p))&&!isCapAngleTie(p))views.push({title:detailTitles.supportTies,render:()=>{
+ if(!(d.brace.flangeAttachment?.enabled&&flangeTieGeometry(p))&&!isCapAngleTie(p)&&!isStepPlateTie(p))views.push({title:detailTitles.supportTies,render:()=>{
  let svg='<g data-view="independent-tie-plan">';
  const tieLayout=flangeTieGeometry(p),tieRef=detailRef(tieLayout?detailTitles.flangeTie:detailTitles.tie),tieStart=tieLayout?.start??0,tieReach=tieLayout?.face??d.brace.length,flanges=tieSides(p).length>1?'TOP & BOTTOM':'TOP FLANGE';
  // The column outline and its label stay above the view note at y = 335. The girders' plan stands below the end gap's
