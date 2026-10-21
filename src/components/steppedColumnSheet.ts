@@ -1,4 +1,4 @@
-import {checkDcText,elementSummary,failingNote,sheetDc} from './sheetRatios';
+import {checkDcText,elementSummary,failingNote,sheetCheckName,sheetDc} from './sheetRatios';
 import {stiffenerTopCjp} from '../engine/constructionNotes';
 import type {CalculationSnapshot} from '../engine/types';
 import {format} from '../engine/units';
@@ -309,7 +309,7 @@ export function steppedColumnTopic(s:CalculationSnapshot):DetailTopic|undefined{
   ['STEP STIFFENERS',sf?`2 PL ${size(sf.thickness)} X ${size(sf.width)} X ${dim(sh)}, ${weld(sf.weld)} FIELD FILLETS; RATIOS ${ratio('step-stiffener-column')} / ${ratio('step-stiffener-weld')}`:`NOT REQUIRED: WEB ${ratio('step-web-yielding')} (J10.2) / ${ratio('step-web-crippling')} (J10.3)`],
   ...(sp?[['TOP FLANGE TIE AT THE STEP (NEW)',`PL ${size(sp.t.plate.thickness)} X ${dim(sp.t.plate.width)} UNDER THE FLANGE, SHELF PL ${size(sp.t.shelf.thickness)}; ${sp.rows.length*sp.stations[0].bolts.length} - ${size(sp.db)} SLEEVED BOLTS, ${size(sp.t.travel)} EACH WAY; RATIOS ${ratio('step-plate-strength')} / ${ratio('step-plate-bolts')} / ${ratio('step-plate-weld-fatigue')}`]]:[]),
   ...(sq?[['CRANE-LEVEL STRUT (NEW)',`${sq.shape} ON THE GIRDER LINE, ${dim(sq.ys)} FROM LOWER C/L; RATIOS ${ratio('step-strut-compression')} / ${ratio('step-strut-bolts')} / ${ratio('step-strut-column-bolts')}; TWIST ${ratio('column-lower-twist')}`]]:[]),
-  ...(worst||fails?[['MAX. D/C, ALL STEPPED COLUMN CHECKS',`${worst?`${sheetDc(s,worst.dc)} (${worst.check.id})`:'-'}${fails?`; ${fails}`:''}`]]:[])
+  ...(worst||fails?[['MAX. D/C, ALL STEPPED COLUMN CHECKS',`${worst?`${sheetDc(s,worst.dc)} (${sheetCheckName(worst.check)})`:'-'}${fails?`; ${fails}`:''}`]]:[])
  ];
  const notes=[
   'THE RUNWAY GIRDERS BEAR ON THE STEP OF THE EXISTING STEPPED BUILDING COLUMNS, OVER THE LOWER SHAFT\'S CRANE-SIDE FLANGE: NO BRACKET. EXISTING STEEL IS SHOWN SCREENED AND DASHED; NEW WORK SOLID.',

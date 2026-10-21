@@ -22,11 +22,12 @@ describe('simulation set validity',()=>{
   expect(validateProject(p)).toEqual([]);
   const [c]=configuratorOpenItems(p);
   expect(c).toMatchObject({id:'configurator-girder',status:'incomplete',title:'Plate girder required (outside the rolled/capped catalog)'});
-  expect(c.note).toMatch(/^Plate girder required: test reason\. The closest catalog member .* review draft/);
+  expect(c.note).toMatch(/^Configurator \(its figures are screening estimates, not the calculated ratios\): Plate girder required: test reason\. The closest catalog member .* review draft/);
   expect(openKind({check:c,type:'detailing'})).toBe('redesign');
   // Judged by the calculation's own checks of the member: open while one fails, closed where all pass.
   const girder=(status:'pass'|'fail')=>[{id:'lateral',group:'Serviceability',title:'',status,equation:'',note:'',referenceIds:[]},{id:'major',group:'Strength',title:'',status:'pass',equation:'',note:'',referenceIds:[]}] as CheckResult[];
-  expect(configuratorOpenItems(p,girder('fail'))[0]).toMatchObject({status:'incomplete',note:expect.stringContaining('(lateral)')});
+  // The calculation's failing ratios lead the note, the configurator's estimates follow, labelled.
+  expect(configuratorOpenItems(p,girder('fail'))[0]).toMatchObject({status:'incomplete',note:expect.stringMatching(/^The calculation's ratios of this member \(.*\) past 1\.00: lateral fail\. Configurator/)});
   expect(configuratorOpenItems(p,girder('pass'))[0]).toMatchObject({status:'pass',note:expect.stringContaining('closed by the calculation')});
   // Another girder than the one the configurator could not size: no open item.
   p.configurator.beyondCatalog=[{member:'girder',shape:'W99X999',reason:'x'}];

@@ -248,6 +248,8 @@ export interface TieProportions {diameter:number;thickness:number;gusset:number;
  cjp?:boolean;
  /** Extra bar width beyond the gauge and edge distances, mm. */
  widen:number;saddleThickness:number;saddleWeld:number;setback:number;
+ /** The saddle length along the runway, mm, where the sizing shortens it (else the attachment's). */
+ saddleLength?:number;
  /** Column-end slide each way along the runway, mm (paired bars with the release; 0: none). */
  slide?:number;
  /** Wall of the release sleeves, mm. */
@@ -300,7 +302,7 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
  if(d.bracket?.enabled)setBracketReach(p,x.face);
  const connection=(c.rows-1)*c.pitch+2*c.edge;
  if(a?.enabled&&p.system==='simple'){
-  Object.assign(a,{saddleThickness:x.saddleThickness,weldSize:x.saddleWeld,longitudinalSetback:x.setback});
+  Object.assign(a,{saddleThickness:x.saddleThickness,weldSize:x.saddleWeld,longitudinalSetback:x.setback});if(x.saddleLength!==undefined)a.saddleLength=x.saddleLength;
   if(!d.bracket?.enabled)a.columnFace=x.face;
   const b=p.section,rootStart=snapQuarter(b.tw/2+a.webGap,'up'),rootEnd=rootStart+snapQuarter(b.bf/2-rootStart,'down');
   const start=up(Math.max(rootStart+inch/2,rootEnd-connection+inch/4),inch/4);
@@ -477,7 +479,19 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   if(k==='flange-tie-saddle-weld'||k==='flange-tie-weld-fatigue'){
    const a=r.q.details!.brace.flangeAttachment,st=r.q.details!.bearing,clear=a?a.saddleLength/2+x.saddleWeld+sixteenth+st.stiffenerThickness/2+st.weldSize+a.clearance<=x.setback+1e-6:true;
    // The edge limit is the saddle's (J2.2b: the end fillets run along the saddle end edges; flange-tie-weld-maximum).
-   if(clear&&x.saddleWeld+sixteenth<=x.saddleThickness-sixteenth+1e-6){x.saddleWeld+=sixteenth;return true;}
+   // A larger fillet that still lies on the girder flange at the saddle's far end (validated).
+   const fits=()=>!validateRunwayDetails(applyTieProportions(structuredClone(r.q),{...x,saddleWeld:x.saddleWeld+sixteenth})).length;
+   if(clear&&x.saddleWeld+sixteenth<=x.saddleThickness-sixteenth+1e-6&&fits()){x.saddleWeld+=sixteenth;return true;}
+   // Where the larger fillet would reach the bearing stiffener's zone or run off the flange at the girder end, the saddle
+   // 1/8 in shorter (at least 2 in, and the gusset with its two fillets on it) keeps both fillet ends where they were;
+   // else the saddle moves the 1/16 in farther from the bearing stiffener with it (toward the girder end; the validation
+   // keeps its end fillet on the girder flange, else the step is undone).
+   if(a&&x.saddleWeld+sixteenth<=x.saddleThickness-sixteenth+1e-6){
+    const B=(x.saddleLength??a.saddleLength)-inch/8;x.saddleWeld+=sixteenth;
+    if(B>=Math.max(2*inch,x.gusset+2*x.saddleWeld)-1e-6)x.saddleLength=B;
+    else x.setback=up((x.saddleLength??a.saddleLength)/2+x.saddleWeld+st.stiffenerThickness/2+st.weldSize+a.clearance-1e-6,sixteenth);
+    return true;
+   }
   }
   return false;
  };
@@ -526,6 +540,24 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   if(!atFace||!faceMovement||evaluations>budget)break;
  }
  return undefined;
+ };
+ // A set over its limits (an open item kept for its other checks, e.g. the imposed movement): its saddle-to-flange
+ // fillets still sized where the fillet step alone brings them within their limit, a step taken only where no other
+ // ratio goes over its limit with it. The search ranks whole sets by their total excess, so a set picked for its
+ // movement checks may carry fillets no step was spent on (case 077).
+ const weldsFor=(q:ProjectInput):ProjectInput=>{
+  const fillet=['flange-tie-saddle-weld','flange-tie-weld-fatigue'];
+  for(let i=0;i<12&&flangeTieGeometry(q);i++){
+   const x=tieProportions(q),ratios=tieSizingRatios(q,faceDemand(x.face).demand);
+   // tieProportions reads no widening: the set's bar width kept as it is.
+   x.widen=Math.max(0,q.details!.brace.width-applyTieProportions(structuredClone(q),x).details!.brace.width);
+   const k=fillet.find(id=>(ratios[id]??0)>sizingLimit(ratios,id,target)+1e-9);
+   if(!k||!step(x,k,{q,face:x.face,ratios,worst:0,excess:0,fails:0,score:0,governs:k,compression:0},{grown:true,movement:false}))break;
+   const next=evaluate(x);
+   if(!next||Object.entries(next.ratios).some(([id,v])=>!fillet.includes(id)&&v>Math.max(sizingLimit(next.ratios,id,target),ratios[id]??0)+1e-9))break;
+   q=next.q;
+  }
+  return q;
  };
  let passed=searchFaces();if(passed)return passed;
  // No set fits at any face with 5/8 in bolts (the bars need clear length between their two bolt groups, e.g. on a short
@@ -589,11 +621,11 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
     }
     if(passing)return passing.q;
    }
-   if(near)return near.q;
-   if(found&&better(found,kept))return found.q;
+   if(near)return weldsFor(near.q);
+   if(found&&better(found,kept))return weldsFor(found.q);
   }
  }
- return (near??kept)?.q??p;
+ return weldsFor((near??kept)?.q??p);
 }
 
 /** Saddle tie checks that load the girder flange (the F·h couple, the saddle toes and fillet terminations, the rail clip over the saddle) or the saddle itself. */

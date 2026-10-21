@@ -22,7 +22,8 @@
  * - torsion brace (design.torsionBrace, a bracket seat on new columns): its plates 1/8 in thicker (to 1 1/4 in) for their
  *   flexure and fillet base metal, a further row of bolt pairs (to 5) then the plates thicker for the bolts, the fillets
  *   1/16 in larger (to 5/8 in and the plate less 1/16 in); the strut, for its moment in plan (brace-torsion-strut) and for
- *   the column's twist limits it holds (column-twist-rotation, column-twist), the lightest heavier W with a larger I_y.
+ *   the column's twist limits it holds (column-twist-rotation, column-twist) and the configurator's twist movement
+ *   target (torsion-brace-movement), the lightest heavier W with a larger I_y.
  * The rod starts where the project has it: a configuration starts it at the 1 in minimum, so it is sized by demand.
  * The column (torsion with the offset rod, and the web only where its stiffeners cannot carry the force) is the column
  * choice's, left to the configurator.
@@ -88,13 +89,13 @@ export function sizeTorsionStrut(p:ProjectInput,target=.9){
  const worst=()=>Math.max(...twistRatios(p,existingColumnAnalysis(p,reactions)).map(v=>v.utilization!));
  if(worst()<=target)return;
  let best={name:d.strut.shape,Iy:now?.Iy??0};
- // The heavier W10s only where the 65 lb/ft struts leave a twist limit past 1.00 (not the sizing margin, nor the
- // configurator's movement target).
+ // The heavier W10s only where the 65 lb/ft struts leave a twist limit or the configurator's movement target past
+ // 1.00 (not the sizing margin): the log states the movement the strut is sized for, so it must be the strut that
+ // meets it, or the stiffest that fits (the log then states the movement achieved, withTwistLimit).
  const pass=(pool:typeof struts)=>{for(const s of pool.filter(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(p,v))){
   d.strut.shape=s.name;if(worst()<=target)return true;if(s.Iy>best.Iy)best={name:s.name,Iy:s.Iy};
  }d.strut.shape=best.name;return false;};
- const limits=()=>Math.max(...twistRatios(p,existingColumnAnalysis(p,reactions)).filter(v=>v.id!=='torsion-brace-movement').map(v=>v.utilization!));
- if(pass(struts)||limits()<=1)return;
+ if(pass(struts)||worst()<=1)return;
  pass(torsionStruts.filter(v=>v.weight>65));
 }
 /** The stiffest torsion-brace strut (largest I_y) whose flange lies on the torsion plates of this column, or undefined. */
@@ -155,7 +156,7 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
   if(d.strut.bolts!<5){d.strut.bolts!++;return true;}return false;
  };
  // The torsion brace: the strut's weak-axis stiffness and strength (I_y), the plates, their bolt rows and fillets.
- // The heavier W10s (torsionStruts) only for a ratio past 1.00, a limit: the sizing margin keeps the 65 lb/ft struts.
+ // The heavier W10s (torsionStruts) only for a ratio past 1.00 (a limit, or the movement target): the sizing margin keeps the 65 lb/ft struts.
  const stiffStrut=(value:number)=>{const now=aiscWShapes.find(v=>v.name===d.strut.shape),s=(value>1?torsionStruts:struts).find(v=>v.weight>(now?.weight??0)+1e-9&&v.Iy>(now?.Iy??0)+1e-9&&fitsPlate(q,v));if(!s)return false;d.strut.shape=s.name;return true;};
  const torsionPlate=()=>{const tb=d.torsionBrace;if(!tb)return false;const t=next(tb.thickness,eighth);if(t>1.25*inch+1e-6)return false;tb.thickness=t;tb.weld=Math.max(tb.weld,filletMinimum([t,column().tf]));return true;};
  const torsionRows=()=>{const tb=d.torsionBrace;if(!tb||tb.rows>=5)return false;tb.rows++;return true;};
@@ -176,8 +177,9 @@ export function sizeBracing(p:ProjectInput,target=.9):ProjectInput{
    case 'brace-strut-slip':case 'brace-strut-bolts':return bolts();
    case 'brace-strut-bearing':case 'brace-strut-block':return bolts()||gusset();
    case 'brace-torsion-strut':case 'column-twist-rotation':case 'column-twist':return stiffStrut(value);
-   // A configurator target (the tie's movement), not a limit: the 65 lb/ft struts only.
-   case 'torsion-brace-movement':return stiffStrut(0);
+   // A configurator target (the tie's movement), not a limit: the heavier W10s only past the target itself (the log
+   // states the movement the strut is sized for), not for the sizing margin.
+   case 'torsion-brace-movement':return stiffStrut(value);
    case 'brace-torsion-plate':return torsionPlate();
    case 'brace-torsion-bolts':return torsionRows()||torsionPlate();
    case 'brace-torsion-weld':return torsionWeld();

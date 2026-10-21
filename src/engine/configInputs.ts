@@ -94,6 +94,8 @@ export const runwayConfigSchema=z.object({
  beyondCatalog:z.array(z.object({member:z.enum(['girder','crane-column','tie']),shape:z.string().max(80),reason:z.string().max(800)})).max(4).optional(),
 });
 export type RunwayConfig=z.infer<typeof runwayConfigSchema>;
+/** The reason's opening of a new freestanding column that no W14 brings within its drift, torsion and twist ratios (configurator withColumnBase; beyondCatalog member 'crane-column'). */
+export const newColumnBeyond='New column beyond the W14 range';
 export type SupportKind=RunwayConfig['support'];
 export type TieKind=RunwayConfig['tie'];
 
