@@ -37,10 +37,10 @@ describe('new freestanding columns for heavy cranes',()=>{
   expect(p.existingColumn!.shape).toBe('W14X398');
   const v=p.configurator!.beyondCatalog!.find(x=>x.member==='crane-column')!;
   expect(v).toMatchObject({shape:'W14X398'});expect(v.reason).toMatch(/^New column beyond the W14 range: the heaviest rolled W14, W14X398, still gives base drift ratio/);
-  // The recommendation from the drift without the eccentric reaction moment (an estimate): caps alone leave the column
-  // past its footing share, so caps need a stiffer footing, else a stiffer column or a held column top.
-  expect(v.reason).toMatch(/Column caps on the W14X398 would leave about 0\.\d\d of the drift limit for the column alone, 1\.\d\d with this footing's rotation/);
-  expect(v.reason).toMatch(/caps alone are not enough on this footing\. Recommended: column caps with a footing stiff enough/);
+  // The recommendation from the drift without the eccentric reaction moment (an estimate): under the TR-13 limit
+  // min(H/400, 2 in) caps leave the W14X398 alone past the limit, so a stiffer column or a held column top.
+  expect(v.reason).toMatch(/Column caps on the W14X398 would leave about 1\.\d\d of the drift limit for the column alone, 2\.\d\d with this footing's rotation/);
+  expect(v.reason).toMatch(/caps alone are not enough\. Recommended: a built-up or laced crane column/);
   expect(configuratorOpenItems(p).find(c=>c.id==='configurator-crane-column')?.title).toBe('New column beyond the W14 range (drift, torsion or twist)');
   // The torsion strut sized past the 65 lb/ft struts for the movement target, the log stating the movement achieved.
   expect(p.longitudinalBracing!.design!.strut.shape).toBe(stiffestTorsionStrut(p));

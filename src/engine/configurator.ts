@@ -764,8 +764,9 @@ function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
   p.columnBase=baseInput;
   const seat=seatLevel(columnBaseElevation(baseInput)),top=seat+d.bearing.thickness+p.section.d+(p.section.kind==='cap'?p.section.capTw:0);
   const c=demo.existingColumn!;
-  // Runway drift across the runway: H/240 for cab-operated cranes, H/100 for pendant-operated (AISC DG7 serviceability
-  // recommendations, owner may tighten; clause to be verified).
+  // Runway drift across the runway outside an AIST project: H/240 for cab-operated cranes, H/100 for pendant-operated
+  // (AISC DG7 serviceability recommendations, owner may tighten; clause to be verified). An AIST project holds the column
+  // to TR-13 §5.3, min(H/400, 2 in) (existingColumn.ts).
   p.existingColumn={...c,shape,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch,height:top,seatElevation:seat,Lcx:2.1*top,Lcy:top,Lcz:top,Lb:top,driftLimit:cfg.control==='pendant'?100:240,
    seismic:{...c.seismic!,source:'Fictitious example site data: SDS 0.20, SD1 0.08, Site Class D, Risk Category II, SDC B',building:{drift:1.5*inch,source:'Fictitious example building report: maximum inelastic displacement 1.5 in at the runway level'}},
    adjacent:{...c.adjacent!,source:'Fictitious example survey: existing column faces located at every grid, footings by test pits'}};
