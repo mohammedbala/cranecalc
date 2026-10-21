@@ -292,6 +292,8 @@ export interface GirderTrial {name:string;weight:number;utilization:number;defle
  * the full analysis then checks the chosen one.
  */
 export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:number;Mcrane:number;Hu:number;V:number;flexibleTie?:boolean;
+ /** Girder ends restrained against twist only flexibly (a crane column's tie to the building column): no Saint-Venant relief. */
+ flexibleEnds?:boolean;
  /** Factored negative (hogging) moment of a continuous girder, as a magnitude: the bottom flange in compression. */
  Mneg?:number},strength=girderStrength({...p,section,aist:p.aist?{...p.aist,netFlangeArea:section.bf*section.tf}:p.aist},sectionProperties(section))){
  const pr=sectionProperties(section),E=section.E,G=E/2.6,L=p.unbracedLength,lrfd=p.method==='LRFD',phi=(v:number)=>lrfd?.9*v:v/1.67;
@@ -301,7 +303,9 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  const rho=Iyt/(Iyt+Iyb),betaX=.9*h0*(2*rho-1)*(1-(pr.Iy/pr.Ix)**2);
  const pe=Math.PI**2*E*pr.Iy/L**2,base=pr.Cw/pr.Iy+L*L*G*pr.J/(Math.PI**2*E*pr.Iy),C1=1.13,C2=.46,C3=.53,arm=C2*yg-C3*betaX/2;
  const Mcr=C1*pe*(Math.sqrt(base+arm**2)-arm),Mocr=pe*(Math.sqrt(base+(betaX/2)**2)+betaX/2);
- const lam=Math.sqrt(G*pr.J/(E*pr.Cw))*L/2,relief=lam>1e-9?Math.tanh(lam)/lam:1;
+ // The relief assumes fork supports; a girder whose ends twist with a flexible restraint (a crane column, sample 049:
+ // rail-head 1.49 calculated on a section the relieved estimate passed) takes none.
+ const lam=Math.sqrt(G*pr.J/(E*pr.Cw))*L/2,relief=lam>1e-9&&!demand.flexibleEnds?Math.tanh(lam)/lam:1;
  const top=Iyt/(Iyt+Iyb),Mf0=demand.Hu*top+relief*(demand.Hu*yg+demand.Mcrane*Math.abs(p.railEccentricity))/h0;
  // Second-order amplification as the analysis solves it: at 0.8 of the stiffness and, for ASD, under 1.6 times the ASD
  // combinations (AISC 360-16 C2.1(4), the results divided by 1.6), so alpha = 1.6 multiplies the ASD moment here.
@@ -339,7 +343,7 @@ export function girderSizingRatios(p:ProjectInput,section:Section,demand:{Mu:num
  * girderSizingRatios, the vertical and lateral deflection limits and the web shear. The lightest section within the
  * targets is returned; the full analysis then checks it completely (fatigue, local and connection checks).
  */
-export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:number;minFlange?:number;capRoom?:number;flexibleTie?:boolean;target?:number;deflectionTarget?:number;
+export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:number;minFlange?:number;capRoom?:number;flexibleTie?:boolean;flexibleEnds?:boolean;target?:number;deflectionTarget?:number;
  /** Least top flange thickness of a rolled girder, mm: a saddle tie's flange couple (withTieGirder). */
  minFlangeThickness?:number;
  /** Rolled: the jumbo W36 and W40 past 40 in deep as well (jumboCandidates). */
@@ -360,7 +364,7 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
   // A continuous girder's negative moment: the envelope's least moment less the reference dead moment (the interior
   // support moment) factored as crane load, plus this section's dead moment factored as dead load.
   const Mneg=(lrfd?1.6:1)*Math.max(0,negative-Md)+(lrfd?1.2:1)*dead;
-  const r=girderSizingRatios(p,section,{Mu:(lrfd?1.2:1)*dead+Mcrane,Mcrane,Hu:(lrfd?1.6:1)*H1,V:(lrfd?1.6:1)*V,flexibleTie:opts.flexibleTie,Mneg:p.system==='continuous'?Mneg:0});
+  const r=girderSizingRatios(p,section,{Mu:(lrfd?1.2:1)*dead+Mcrane,Mcrane,Hu:(lrfd?1.6:1)*H1,V:(lrfd?1.6:1)*V,flexibleTie:opts.flexibleTie,flexibleEnds:opts.flexibleEnds,Mneg:p.system==='continuous'?Mneg:0});
   trials.push({name,weight,utilization:r.utilization,governs:r.governs,deflection:dv/pr.Ix/vLimit,lateral:dh/pr.Iy/hLimit*r.lateralFactor,railHead:dh/pr.Iy/hLimit*r.railFactor,shear:r.shear,section});
  };
  // Flanges wide enough for the bearing bolts, end-stop bolts and saddles (minFlange), and for the rail and clips.
@@ -448,7 +452,7 @@ function skeleton(cfg:RunwayConfig,jumbo=false){
  // The flexible plate's estimate factor (less end restraint against twist) only where the plate stays: on a crane column
  // attachTie always replaces it (paired bars on the bearing stiffener, or the cap angle on a capped girder), and the
  // girder sized for the softer plate came out about 1.25 times heavier than the final calculation needed (046, 052).
- const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'&&cfg.support!=='crane-column',minFlangeThickness:girderMinTf,jumbo};
+ const sizing={minSeat,minFlange:8.5*inch,capRoom:cfg.tie==='cap-angle'||cfg.support==='column-cap'?0:2.5*inch,flexibleTie:cfg.tie==='flexible-plate'&&cfg.support!=='crane-column',flexibleEnds:cfg.support==='crane-column',minFlangeThickness:girderMinTf,jumbo};
  // Girder: the named section, else sized for the moving loads.
  let trial:GirderTrial|undefined;
  if(cfg.girder==='capped'){
