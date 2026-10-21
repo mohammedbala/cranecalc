@@ -27,8 +27,9 @@ describe('new freestanding columns for heavy cranes',()=>{
   // The 65 lb/ft struts left the twist at 1.15 of its small-rotation limit.
   expect(strut.weight).toBeGreaterThan(65);expect(strut.Iy).toBeLessThanOrEqual(aiscShapeByName(stiffestTorsionStrut(p)!)!.Iy);
   const t=twistOf(p);expect(t.rotation).toBeLessThanOrEqual(1);expect(t.movement).toBeLessThanOrEqual(1);
-  // The seat couple F·e on the collector fillet (1.08 at the 5/8 in limit before).
-  expect(d.seatWeld).toBeGreaterThan(.625*inch);expect(d.seatWeld).toBeLessThanOrEqual(.75*inch+1e-6);
+  // The seat couple F·e on the collector welds: the seat top fillet and the rib root fillets as one group (1.08 on the
+  // 5/8 in top fillet alone before, which grew to 3/4 in).
+  expect(d.seatWeld).toBeLessThanOrEqual(.75*inch+1e-6);
   expect(bracingRatios(p)['brace-seat-weld']).toBeLessThanOrEqual(1);
  },300000);
  it('073: no rolled W14 keeps a 35 ft cantilever column within its drift: the W14X398 built, an open item beyond the W14 range with its column-cap estimate; the face held at 20 in',()=>{
@@ -53,13 +54,14 @@ describe('new freestanding columns for heavy cranes',()=>{
   expect(p.configurator!.beyondCatalog!.some(x=>x.member==='tie')).toBe(true);
   const t=twistOf(p);expect(t.rotation).toBeLessThanOrEqual(1);
  },600000);
- it('099: a plate girder (the jumbo W36X652 named, not selected), the fork stiffener pair thicker than 1 1/2 in for its fatigue, the cap bolts at their limit stated in the log',()=>{
+ it('099: the W36X529 (no plate girder), the fork stiffener pair thicker than 1 1/2 in for its fatigue, the cap bolts at their limit stated in the log',()=>{
   const p=buildProject(sim('099',{capacity:40,craneSpan:97,control:'cab',cmaa:'D',buildingClass:'B',bays:3,span:45,railElevation:15,girder:'rolled',support:'column-cap',tie:'paired-bars',reach:26}));
-  // No section of the 40 in catalog meets the lateral deflection (W36X529: 1.14 calculated): a plate girder, the open
-  // item naming the jumbo W36X652 as a heavy alternative, not selected.
+  // The lateral deflection on the DG7 model (the top flange alone under one crane's side thrust) is within the catalog
+  // (round 7: 1.14 calculated on the old flange-couple model; the twist-inclusive rail-head movement 0.72): the
+  // W36X529, the closest to the sizing targets, and no plate-girder open item.
   expect(p.section.name).toBe('W36X529');
-  expect(p.configurator!.beyondCatalog!.find(v=>v.member==='girder')!.reason).toMatch(/^Plate girder required.*A jumbo rolled W36X652 \(652 lb\/ft, 41\.1 in deep\) would meet the sizing targets as a heavy alternative/);
-  expect(p.configurator!.selections!.find(s=>s.item==='Girder')?.reason).toMatch(/^A jumbo rolled W36X652/);
+  expect(p.configurator!.beyondCatalog?.some(v=>v.member==='girder')).toBeFalsy();
+  expect(p.configurator!.selections!.find(s=>s.item==='Girder')?.reason).toMatch(/screening estimates/);
   const b=p.details!.bearing,col=aiscShapeByName(p.existingColumn!.shape)!;
   expect(b.stiffenerThickness).toBeGreaterThan(1.5*inch);expect(b.stiffenerThickness).toBeLessThanOrEqual(2*inch+1e-6);
   // The pair stays between the column flanges.

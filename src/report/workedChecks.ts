@@ -277,7 +277,7 @@ export function workedSteps(s:CalculationSnapshot,c:CheckResult,tx:Tx):string[]|
  // Lateral deflection: every criterion stated, the governing one used (the deflection is from the analysis).
  if(c.id==='lateral'){const L=Math.max(...p.spans),n=Math.round(L/cap);
   return [`\\Delta_h\\le L/n_h,\\ n_h=\\max(${p.lateralLimit},\\,400)=${n}:\\ L/${n}=${tx(L,'length')}/${n}=${tx(cap,'length')}\\quad(\\text{owner }L/${p.lateralLimit},\\ \\text{AIST TR-13 }L/400)`,
-   `\\Delta_h=${tx(dem,'length')}${rel.le}${tx(cap,'length')}\\quad ${rel.dc}\\quad(\\text{top flange, rail-head force couple, one crane})`];}
+   `\\Delta_h=${tx(dem,'length')}${rel.le}${tx(cap,'length')}\\quad ${rel.dc}\\quad(\\text{side thrust on the top flange${p.section.kind==='cap'?' and cap':''} alone (DG7), one crane})`];}
  // The demand side of the checks that most often govern a redesign, rebuilt from the inputs and the analysis results and
  // shown only when they reproduce the check: the restraint force with the Appendix 6 brace force, then the stress.
  const A6=s.designAnalysis&&s.properties?braceImperfection(p,s.designAnalysis,s.properties).force:undefined,Ht=s.detailResults?.demands.brace;

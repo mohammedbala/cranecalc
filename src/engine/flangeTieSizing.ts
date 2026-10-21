@@ -440,6 +440,9 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
     if(widenRoom(r,dw)){x.widen+=dw;trial.movement=true;return true;}
    }
   }
+  // The column-end slide short of the travel at this face (the slide was set from the movement at the first face): the
+  // float 1/16 in longer each way (longer sleeves), to 3/4 in.
+  if(k==='tie-slide-travel'&&x.slide&&x.slide+sixteenth<=.75*inch+1e-9){x.slide+=sixteenth;return true;}
   // Gussets to 1 1/4 in; to 1 1/2 in for a column-end slide, whose sleeve friction μF loads both gussets out of plane.
   if(gussetChecks.has(k)&&x.gusset<(x.slide?1.5:1.25)*inch-1e-6){x.gusset+=inch/8;return true;}
   // The gusset roots with the imposed movement at the thickest gusset: the column gusset CJP welded to the column flange
@@ -586,14 +589,15 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  }
  // The imposed movement still over its limit on paired bars with the column-end release: the column-end slide
  // (tieRelease), its travel the whole factored movement along the runway (end rotation × d and thermal travel) with
- // the 1/16 in positioning allowance and a 1/32 in tolerance, on the 1/16 in grid, its fillers at most 3/4 in (AISC
+ // the 1/16 in positioning allowance and a 1/16 in tolerance (the sizing's estimated movement ran about 1 mm short of
+ // the calculation's on case 081), on the 1/16 in grid, its fillers at most 3/4 in (AISC
  // J5.2(b)(1)). The bars then carry the rotation movement while the slide is locked, and buckle fixed-guided where it
  // slips (tieMovementChecks), so a thicker bar can serve: every thickness is tried at each face reached, from the
  // farthest in while a set passes; the nearest passing set is taken, else the slide set only where it exceeds the
  // limits by less than the set kept.
  if(kept&&kept.worst>1&&over(kept)&&release&&!plate){
   const mv=tieMovements(sizingSnapshot(applyTieProportions(structuredClone(p),{...base,slide:0}),demand));
-  const slide=Math.max(inch/8,up(mv.travel+sixteenth+inch/32,sixteenth));
+  const slide=Math.max(inch/8,up(mv.travel+2*sixteenth,sixteenth));
   if(slide<=.75*inch+1e-9){
    // The flexible length helps the bars here too: the farthest face reached first, then nearer while a set passes, so
    // the reach is the shortest at which the slide passes.

@@ -8,6 +8,7 @@ import {flangeTieGeometry} from '../engine/tieGeometry';
 import {capAngleFatigue,capAngleResult} from '../engine/capAngleTie';
 import {maximumRule,sig3,statusLabel,value} from './reportParts';
 import {footingReactionText} from '../engine/craneColumn';
+import {nutClearance} from '../engine/bracketSizing';
 
 /**
  * The open items of a calculation as a reviewer acts on them: one item per detail type and element, never one per
@@ -159,7 +160,11 @@ const remedies:Remedy[]=[
  [/^(bracket|haunch|wbracket)-colstiff-fatigue-(weld|plate)$/,x=>`Column stiffener ${/weld/.test(x.c.id)?'fillet throats (Category F)':'plates at their fillets'}: ${range(x)}. Larger fillets or complete-joint-penetration welds (a better category), or thicker plates.`],
  [/^(bracket|haunch|wbracket)-fatigue-/,x=>`Bracket welds and plates at the column: ${range(x)}. Larger welds or a better detail category, deeper ribs or a thicker seat, or a smaller cyclic reaction.`],
  [/^bracket-root-weld$/,x=>{const w=x.p.details?.bracket?.rootWeld;return `Increase the rib-to-column fillets to w ≥ ${w?x.size(w,x.u):'u·w'}, or deeper ribs.`;}],
- [/^bracket-seat-weld$/,x=>{const w=x.p.details?.bracket?.seatWeld;return `Increase the seat fillets to w ≥ ${w?x.size(w,x.u):'u·w'}.`;}],
+ // Larger seat fillets only where the bearing bolt nuts below the seat keep their clearance to them (end-bearing-wrench-rib,
+ // the nearest rib at either grid, nutClearance): else the seat or ribs are the remedy.
+ [/^bracket-seat-weld$/,x=>{const b=x.p.details?.bracket,w=b?.seatWeld,n=b&&nutClearance(x.p,b),grow=w&&Number.isFinite(x.u)?Math.ceil(w*x.u/(25.4/16)-1e-9)*25.4/16-w:0;
+  if(b&&w&&n&&n.clear-grow<n.required-1e-6)return `Larger seat fillets would leave the bearing bolt nuts below the seat without their wrench clearance to the rib fillets (${x.len(n.clear)} clear, ${x.len(n.required)} needed, end-bearing-wrench-rib): a thicker seat plate (a longer load spread along the ribs), thicker ribs, or the ribs and bearing bolts set farther apart.`;
+  return `Increase the seat fillets to w ≥ ${w?x.size(w,x.u):'u·w'}${n?` (the nut clearance to the rib fillets, ${x.len(n.clear)} against ${x.len(n.required)}, allows it)`:''}.`;}],
  [/^(column-brackets|(bracket|haunch|wbracket)-tr13-load)$/,x=>`The support reaction${x.c.demand!==undefined?` ${value(x.c.demand,'force',x.units)}`:''} exceeds the AIST TR-13 §5.9.2 recommendation of ${value(50*4448.2216152605,'force',x.units)} for column brackets; no bracket proportion changes it: carry the girders on crane columns or a stepped column, or record the engineer of record’s acceptance of brackets for this load with the surveyed capacity of the building column (in the configurator, new columns with the column cap support give direct column bearing).`],
  [/^crane-\d+-bumper-stop$/,x=>x.c.utilization===undefined?'Resolve the end stop first (its own checks): this item restates them and closes with them.':`The end stop is the part to redesign: raise its design strength by at least ${Math.ceil((x.u-1)*100)}% (the end stop checks, section on end stops), or select a bumper with a peak force within the present strength.`],
  [/^column-torsion$/,()=>'Take the longitudinal force out at the girder line: a crane-level strut at the locating columns (by others), or a bracket that brings the force to the column centerline.'],

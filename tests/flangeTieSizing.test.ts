@@ -87,12 +87,13 @@ describe('tie sizing estimates',()=>{
  });
  it('estimates the tie force and range within the analysis of the 10-ton template t01',()=>{
   // t01 analysis (a mill-type cab crane, side thrust 0.4Q; the tie on the bearing stiffener, the restraint at its bar
-  // line): brace force 12.12 kip with the imperfection force, fatigue range 4.81 kip. The estimate is calibrated to the
-  // analysis (tieForceCalibration).
+  // line; the W18X130 the calibrated girder screening sizes): brace force 15.84 kip with the imperfection force
+  // (11.59 + 4.25), fatigue range 6.15 kip (tests/fixtures/sheets/t01). The estimate is calibrated to the analysis
+  // (tieForceCalibration).
   const d=tieSizingDemands(templateProject('t01')),kip=4448.2216152605;
-  expect(d.force/kip).toBeGreaterThan(12.12);expect(d.force/kip).toBeLessThan(12.12*1.15);
-  expect(d.range/kip).toBeGreaterThan(4.81);expect(d.range/kip).toBeLessThan(4.81*1.25);
-  expect(d.rotation).toBeCloseTo(3.080e-3,5);expect(d.serviceRotation).toBeCloseTo(1.462e-3,5);
+  expect(d.force/kip).toBeGreaterThan(15.84);expect(d.force/kip).toBeLessThan(15.84*1.15);
+  expect(d.range/kip).toBeGreaterThan(6.15);expect(d.range/kip).toBeLessThan(6.15*1.25);
+  expect(d.rotation).toBeCloseTo(5.031e-3,5);expect(d.serviceRotation).toBeCloseTo(2.389e-3,5);
  });
 });
 

@@ -182,7 +182,7 @@ describe('configurator selection log',()=>{
   const p=templateProject('t01'),log=p.configurator!.selections!,row=(item:string)=>log.find(v=>v.item===item);
   // The girder sized here: its governing sizing ratio and the lighter candidates rejected, counted by reason.
   expect(row('Girder')).toMatchObject({entered:'configurator default (sized)',designed:p.section.name});
-  expect(row('Girder')!.reason).toMatch(/ratio \d\.\d\d, vertical deflection \d\.\d\d and lateral \d\.\d\d of their limits/);
+  expect(row('Girder')!.reason).toMatch(/screening estimates, .*ratio \d\.\d\d, vertical deflection \d\.\d\d, lateral \d\.\d\d and rail-head movement with twist \d\.\d\d of their limits/);
   expect(row('Girder')!.reason).toMatch(/lighter candidates rejected: \d+ by /);
   expect(row('Existing column')).toMatchObject({entered:'configurator default',designed:p.existingColumn!.shape});
   // Nothing the user entered as built is listed: support and tie are as configured.

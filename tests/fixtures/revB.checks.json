@@ -14,7 +14,7 @@
 {"id":"design-travel","status":"pass","utilization":0},
 {"id":"design-mesh","status":"pass","utilization":7.961788529413134e-10},
 {"id":"vertical","status":"pass","utilization":0.7445634480237032},
-{"id":"lateral","status":"pass","utilization":0.14781775579469317},
+{"id":"lateral","status":"pass","utilization":0.0894932107922421},
 {"id":"compact-flange","status":"pass","utilization":0.8470571180512034},
 {"id":"compact-web","status":"pass","utilization":0.10154007438835413},
 {"id":"flange-net","status":"not-applicable","utilization":null},
