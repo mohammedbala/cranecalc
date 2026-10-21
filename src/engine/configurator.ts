@@ -25,7 +25,7 @@ import {fatigueSpectrumBin,railClipCategory} from './detailAnalysis';
 import {selectBracketArrangement,selectTieArrangement,tieArrangement,tieOptions} from './connectionOptions';
 import {sizeTaperedHaunch} from './taperedHaunchSizing';
 import {baseSizingRatios,columnDriftShare,sizeColumnBase} from './columnBaseSizing';
-import {bracingRatios,columnTorsionRatio,sizeBracing,sizeTorsionStrut,twistMovementTarget,withTwistMovementTarget} from './bracingSizing';
+import {bracingRatios,columnTorsionRatio,sizeBracing,sizeTorsionStrut,stiffestTorsionStrut,twistMovementTarget,withTwistMovementTarget} from './bracingSizing';
 import {bracingDesign,defaultTorsionBrace,designsBracing,girderOffset,torsionBraceActive} from './newColumnBracing';
 import {longitudinalBracingAnalysis,longitudinalBracingChecks} from './longitudinalBracing';
 import {supportReactions} from './supportReactions';
@@ -35,8 +35,8 @@ import {baseDrift,footingsOf} from './columnBase';
 import {sizeCapAngle,capAngleForceEstimate,validateCapAngle,capAngleSizingRatios} from './capAngleTie';
 import {simpleSupportInput,railClipStations} from './simpleSupports';
 import {seatSettingTolerance} from './fitTolerances';
-import {sizeWeldedBracket,bracketColumnFatigueRatio} from './bracketSizing';
-import {sizeRolledBracket} from './rolledBracketSizing';
+import {sizeWeldedBracket,bracketColumnFatigueRatio,bracketSizingRatios} from './bracketSizing';
+import {sizeRolledBracket,rolledBracketSizingRatios} from './rolledBracketSizing';
 import {sizeColumnCap,columnCapSizingRatios} from './columnCapSizing';
 import {defaultRolledBracket,isRolledBracket} from './rolledBracketInputs';
 import {activeColumnCap,defaultColumnCap} from './columnCapInputs';
@@ -45,7 +45,7 @@ import {columnBaseElevation} from './columnBaseInputs';
 import {railTopAboveSteel} from './railSeat';
 import {cantileverHeightLimit} from './runwaySeismic';
 import {columnGussetHeight,flangeTieFamily,flangeTieGeometry,stiffenerTieGeometry} from './tieGeometry';
-import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener,bracketServiceDeflection} from './flangeTieSizing';
+import {sizeFlangeTie,sizingLimit,tieSizingRatios,girderEndEstimate,tieSizingDemands,tieOnBearingStiffener,bracketServiceDeflection,setBracketReach} from './flangeTieSizing';
 import {designSplices,type SplicesDesigned} from './spliceSizing';
 import {practicalPieceLength} from './girderPieces';
 import {applyBearingLayout,bearingSeat,defaultBearingShim} from './endBearing';
@@ -589,7 +589,7 @@ function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
  const {config:cfg,sk,rules,entered}=screened(input),{p,depth,clipWidth,spectrum,N,railArea}=sk,spans=p.spans;
  // Both new supports are built: the crane column (craneColumnSupport) and the stepped column (withSteppedColumn).
  p.configurator={...cfg};
- const logged=(q:ProjectInput)=>{alignTieGusset(q,trace);const stop=beyondCatalog(entered,cfg,sk.trial,q);q.configurator={...cfg,selections:[...selectionLog(entered,cfg,rules,sk.trial,q,trace).slice(0,24-stop.length),...stop.map(openItemRow)],...(stop.length?{beyondCatalog:stop}:{})};return q;};
+ const logged=(q:ProjectInput)=>{alignTieGusset(q,trace);const stop=beyondCatalog(entered,cfg,sk.trial,q,trace);q.configurator={...cfg,selections:[...selectionLog(entered,cfg,rules,sk.trial,q,trace).slice(0,24-stop.length),...stop.map(openItemRow)],...(stop.length?{beyondCatalog:stop}:{})};return q;};
  const scopeText=`${cfg.bays} ${cfg.system==='simple'?'simply supported':'continuous'} ${cfg.span}-ft bay${cfg.bays>1?'s':''}, ${p.section.name} girder${cfg.bays>1?'s':''}, ${cfg.cranes===2?'two':'one'} ${+cfg.capacity.toFixed(2)}-ton ${cfg.control} crane${cfg.cranes===2?'s':''}`;
  if(cfg.scope==='analysis'){
   delete p.details;p.connections.enabled=false;
@@ -700,19 +700,19 @@ function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
  }
  // The tie first, for a trial reach (the configured one, or 20 in growing only as far as the tie needs); then the bracket
  // at the reach the tie settled on, and the tie finished on that bracket.
- attachTie(p,cfg,trace);if(cfg.support!=='column-cap')setBearings(p);
+ attachTieAtFace(p,cfg,trace);if(cfg.support!=='column-cap')setBearings(p);
  // Crane columns: the building column where the sized tie ends, the cap for the bearings as laid out, the column tie.
  if(cfg.support==='crane-column')finishCraneColumn(p,trace);
  // The rail clips across the girder joints within the clip spacing, the bearings laid out again where the tie moved.
  if(fitClipJoints(p,cfg,trace)){setBearings(p);if(cfg.support==='crane-column')finishCraneColumn(p,trace);}
  // The supports carry the bracket (or cap) and tie before the new column bases are sized for their reactions.
- const tie=sizedTieRatios(p),q=finishCapAngle(finishTie(withHaunch(withWeldedBracket(p),cfg,trace),tie));
+ const tie=sizedTieRatios(p),q=finishCapAngle(finishTie(withHaunch(withWeldedBracket(p,cfg,trace),cfg,trace),tie));
  // The end stops sized again for the crane bumper force on the finished girder end (bearing stiffener, tie saddle).
  if(q.details?.endStop)q.details.endStop=sizeEndStop(q).stop;
  // A continuous girder longer than a practical piece: bolted field splices in the inflection regions (spliceSizing.ts).
  const spliced=designSplices(q);if(spliced){q.details!.splices=spliced.splices;trace.splice=spliced;}
  q.notes+=` ${overhangNote(estimateCrane(cfg.capacity,cfg.craneSpan,cfg.control))}`;
- return withoutRailPad(logged(withBracketColumn(newColumns(cfg)?withCraneColumn(withCapColumn(withColumnBase(sizeBracing(q,baseTarget),cfg,trace),cfg),cfg,trace):withSteppedTie(withLongitudinalExit(withPreheat(finishSteppedColumn(withExistingRod(q),trace)),cfg,trace),cfg,trace),cfg,trace)),cfg,trace,logged);
+ return withoutRailPad(logged(withBracketColumn(newColumns(cfg)?withCraneColumn(withCapColumn(withColumnBase(sizeBracing(q,baseTarget),cfg,trace),cfg,trace),cfg,trace):withSteppedTie(withLongitudinalExit(withPreheat(finishSteppedColumn(withExistingRod(q),trace)),cfg,trace),cfg,trace),cfg,trace)),cfg,trace,logged);
 }
 /**
  * The column twist at a new column's bracket seat (columnTwistLimit.ts): the factored twist within the small-rotation limit
@@ -822,10 +822,22 @@ function withLongitudinalExit(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTra
  * (sizeRolledBracket): the stub shape, spreader seat, flange joint and fillets, bearing stiffeners and the full-depth
  * continuity plates an existing column needs (a new column's only where they clear its bracing gussets).
  */
-function withWeldedBracket(p:ProjectInput):ProjectInput{
+function withWeldedBracket(p:ProjectInput,cfg?:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  const b=p.details?.bracket;
  if(b?.enabled&&weldedRibBracket(b))p.details!.bracket=sizeWeldedBracket(p,.9,{reach:'fixed'}).details!.bracket;
  else if(b?.enabled&&isRolledBracket(b))p.details!.bracket=sizeRolledBracket(p,.9,{reach:'fixed'}).details!.bracket;
+ else return p;
+ // A bracket its sizing leaves past 1.00 at the limits of its steps (ribs to 48 in deep, fillets to 5/8 in, the stub
+ // catalog): beyond reasonable use for this crane. The support entered is kept and checked (its failing checks make
+ // the package a review draft); the log says so and names the direct column bearing arrangement (cases 077, 081).
+ if(cfg?.scope==='design'){
+  const r=weldedRibBracket(p.details!.bracket!)?bracketSizingRatios(p):rolledBracketSizingRatios(p);
+  const over=Object.entries(r).filter(([,v])=>v>1+1e-6).sort((x,y)=>y[1]-x[1]);
+  if(over.length){
+   const R=serviceReactionEstimate(p),isNew=!!p.existingColumn?.isNew;
+   trace.bracket=`The ${supportLabels[cfg.support]??cfg.support} sized to the limits of its steps still exceeds ${over.slice(0,4).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} (sizing estimates; the calculation reports its own) for the ${formatUnits(R,'force',p.units,3)} support reaction${R>bracketReactionLimit?`, ${(R/bracketReactionLimit).toFixed(1)} times the AIST TR-13 §5.9.2 guideline of ${formatUnits(bracketReactionLimit,'force',p.units,3)} (a clause to be verified)`:''}: a bracket is beyond reasonable use for this crane on ${isNew?'a freestanding cantilever column':'this column'}. Recommended: ${isNew?'column caps over the new columns (support column-cap), the girder bearing on the column axis':'crane columns beside the building columns (support crane-column) with the girders on their caps'}; the support entered is kept and checked (review draft).`;
+  }
+ }
  return p;
 }
 /** The sizing ratios of a sized paired-bar or flexible-plate tie on a designed bracket (tieSizingRatios), else none. */
@@ -871,7 +883,7 @@ function withHaunch(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):Pro
  * built on the lightest heavier W14 on which the cap sizing passes; otherwise (or when a heavier W14 barely lowers the
  * governing ratio) it stays, and the checks report the cap.
  */
-function withCapColumn(q:ProjectInput,cfg:RunwayConfig):ProjectInput{
+function withCapColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  if(cfg.support!=='column-cap'||cfg.columnShape||!activeColumnCap(q))return q;
  const worst=(r:ProjectInput)=>Math.max(0,...Object.values(columnCapSizingRatios(r)));
  let last=worst(q);if(last<=1)return q;
@@ -881,6 +893,10 @@ function withCapColumn(q:ProjectInput,cfg:RunwayConfig):ProjectInput{
   if(now>1&&now>.97*last)break;last=now;
   if(now<=1){r.notes+=` The column cap on the ${q.existingColumn!.shape} column leaves a cap ratio above 1 (the fork couple through the bearing bolts and the cap fillets): the columns are ${shape}.`;return {...r,configurator:{...cfg}};}
  }
+ // Still past 1.00: the cap at the limits of its sizing steps (case 099), stated in the log; its checks report it.
+ const over=Object.entries(columnCapSizingRatios(q)).filter(([,v])=>v>1+1e-6).sort((x,y)=>y[1]-x[1]),e=q.details?.endBearing?.bolts;
+ if(over.length&&e){const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
+  trace.cap=`The column cap sized to the limits of its steps still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} (sizing estimates; the calculation reports its own)${over.some(([k])=>k.startsWith('bolt-'))?`: the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end take the fork couple at a ${len(e.gauge)} gauge, and no larger bolt, grade or wider gauge the sizing tries lowers it within the nut clearances to the column flanges (a heavier W14 has about the same clear between its flanges). A fork for this crane needs the bolts spread wider (a column with a wider clear between its flanges, or bearing bolts on the cap beyond the column, designed by hand)`:''}; the support entered is kept and checked (review draft).`;}
  return q;
 }
 const baseTarget=.9;
@@ -891,8 +907,10 @@ const baseTarget=.9;
  * section, against Category C (AISC 360-16 Table A-3.1 item 4.1) at all the duty cycles. ΔR is the largest unfactored
  * crane reaction at a support (crane weight and lifted load, all cranes, no impact: the calculation's verticalFatigue on
  * cases 081 and 086) and ΔH the estimated tie force range (tieSizingDemands, 1.26 to 1.33 times the calculation's fork
- * range there); held to fatigueTarget, 0.9 as the other sizings. Thicker plates in 1/8 in steps up to
- * 1 1/2 in, then wider up to `maxWidth` (the clear between the column flanges); never thinner or narrower than laid out.
+ * range there); held to fatigueTarget, 0.9 as the other sizings. The lightest pair of plates 1/8 in thicker
+ * steps up to 2 in (case 099: the 40-ton crane's pair, at 1 1/2 in and the full clear width, still past its fatigue
+ * limit) and 1/4 in wider steps up to `maxWidth` (the clear between the column flanges); never thinner or narrower
+ * than laid out.
  */
 function sizeForkStiffenerFatigue(p:ProjectInput,maxWidth:number,fatigueTarget=.9){
  const d=p.details!,bs=d.bearing;if(!activeColumnCap(p)||tiedToBuilding(p))return;
@@ -902,7 +920,7 @@ function sizeForkStiffenerFatigue(p:ProjectInput,maxWidth:number,fatigueTarget=.
  if(stress(bs.stiffenerThickness,bs.stiffenerWidth)<=fatigueTarget*Fsr)return;
  const e8=inch/8,widths=[bs.stiffenerWidth];for(let b=bs.stiffenerWidth+inch/4;b<=Math.min(maxWidth,(p.section.bf-p.section.tw)/2)+1e-9;b+=inch/4)widths.push(b);
  let best:{t:number;b:number}|undefined;
- for(let t=bs.stiffenerThickness;t<=1.5*inch+1e-9;t+=e8)for(const b of widths)if(stress(t,b)<=fatigueTarget*Fsr&&(!best||t*b<best.t*best.b-1e-9))best={t,b};
+ for(let t=bs.stiffenerThickness;t<=2*inch+1e-9;t+=e8)for(const b of widths)if(stress(t,b)<=fatigueTarget*Fsr&&(!best||t*b<best.t*best.b-1e-9))best={t,b};
  if(best){bs.stiffenerThickness=best.t;bs.stiffenerWidth=best.b;bs.weldSize=Math.max(bs.weldSize,minimumFillet(Math.min(best.t,p.section.tw)));}
 }
 /**
@@ -931,19 +949,26 @@ const bracketTarget=.9;
 /**
  * New columns: the base plates, anchor rods and footings sized for the reactions (sizeColumnBase), and the existing
  * building's column lines moved clear of the sized footings. Where the column chosen here is too flexible for the
- * runway drift with its footing rotating on the soil, the project is built on the lightest heavier W14 that meets the
- * drift: one whose own drift leaves the footing room (at most columnDriftShare of the target, the footing sized for the
- * rest), or that meets it on the footing already sized; the configuration keeps its blank column choice.
+ * runway drift with its footing rotating on the soil, or twists past its limits at a bracket seat (with the torsion
+ * brace on the stiffest strut that fits, achievableTwist), the project is built on the lightest heavier W14 that meets
+ * them: one whose own drift leaves the footing room (at most columnDriftShare of the target, the footing sized for the
+ * rest), or that meets it on the footing already sized; the configuration keeps its blank column choice. A new
+ * freestanding column that no W14 to the W14X398 brings within them (cases 073, 077, 081: a heavy crane on a tall
+ * cantilever column) is built on the W14X398 where that lowers its governing ratio, and is an open item (beyondCatalog,
+ * trace.columnOpen): a built-up column, or the arrangement the log recommends; the support entered is kept.
  */
 function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):ProjectInput{
  const q=combinedWhereOverlapping(p,sizeColumnBase(p,baseTarget),cfg,trace);clearExistingFootings(q);
  // The column twists where the girder's longitudinal force reaches it off its centerline (a bracket) or an offset
- // rod ends: the column torsion ratios (column-torsion, brace-rod-torsion) judge the shape as the drift does.
- const torsionOk=(r:ProjectInput)=>columnTorsionRatio(r)<=1;
- if(cfg.columnShape||baseSizingRatios(q).ratios.drift<=baseTarget&&torsionOk(q))return q;
- const reactions=supportReactions(q,sectionProperties(q.section)),drift0=baseSizingRatios(q).ratios.drift,torsion0=columnTorsionRatio(q);
- const why=`the ${q.existingColumn!.shape} chosen for the crane gives ${[drift0>baseTarget?`base drift ratio ${drift0.toFixed(2)} > ${baseTarget}`:'',torsion0>1?`column torsion ratio ${torsion0.toFixed(2)} > 1.00`:''].filter(Boolean).join(' and ')}: the lightest heavier W14 within the drift and torsion ratios`;
- for(const shape of heavierColumns(q.existingColumn!.shape)){
+ // rod ends: the column torsion ratios (column-torsion, brace-rod-torsion) judge the shape as the drift does, and the
+ // twist at a bracket seat its limits (column-twist-rotation, column-twist).
+ const torsionOk=(r:ProjectInput)=>columnTorsionRatio(r)<=1,twistOk=(r:ProjectInput)=>achievableTwist(r)<=1;
+ if(cfg.columnShape||baseSizingRatios(q).ratios.drift<=baseTarget&&torsionOk(q)&&twistOk(q))return q;
+ const reactions=supportReactions(q,sectionProperties(q.section)),drift0=baseSizingRatios(q).ratios.drift,torsion0=columnTorsionRatio(q),twist0=achievableTwist(q);
+ const state=(drift:number,torsion:number,twist:number,cut=true)=>[drift>(cut?baseTarget:1)?`base drift ratio ${drift.toFixed(2)}${cut?` > ${baseTarget}`:''}`:'',torsion>1?`column torsion ratio ${torsion.toFixed(2)}${cut?' > 1.00':''}`:'',twist>1?`seat twist ratio ${twist.toFixed(2)}${cut?' > 1.00':''} with the torsion brace on the stiffest strut that fits`:''].filter(Boolean).join(' and ');
+ const why=`the ${q.existingColumn!.shape} chosen for the crane gives ${state(drift0,torsion0,twist0)}: the lightest heavier W14 within the drift, torsion and twist ratios`;
+ const shapes=heavierColumns(q.existingColumn!.shape);
+ for(const shape of shapes){
   const t=structuredClone(q),w=aiscShapeByName(shape)!;
   Object.assign(t.existingColumn!,{shape,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch});
   if(t.details?.bracket?.enabled)Object.assign(t.details.bracket.receiver,shapePlates(shape));
@@ -951,9 +976,41 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
   if(d.total>baseTarget*d.limit&&d.column>columnDriftShare*baseTarget*d.limit)continue;
   if(columnTorsionRatio(t,reactions)>1.05)continue;
   const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner);
-  if(baseSizingRatios(r).ratios.drift<=baseTarget&&torsionOk(r)){Object.assign(trace,inner,{column:[trace.column,why[0].toUpperCase()+why.slice(1)].filter(Boolean).join('; ')});return {...r,configurator:{...cfg}};}
+  if(baseSizingRatios(r).ratios.drift<=baseTarget&&torsionOk(r)&&twistOk(r)){Object.assign(trace,inner,{column:[trace.column,why[0].toUpperCase()+why.slice(1)].filter(Boolean).join('; ')});return {...r,configurator:{...cfg}};}
  }
- return q;
+ // No W14 to the catalog limit meets them: a new freestanding column on the heaviest, where it lowers the governing
+ // ratio (the closest member, built and checked), an open item past 1.00. Crane columns have their own catalog limit
+ // (beyondCatalog 'crane-column').
+ const heaviest=shapes[shapes.length-1];
+ if(cfg.structure!=='new'||cfg.support==='crane-column'||!heaviest)return q;
+ const governing=(r:ProjectInput)=>Math.max(baseSizingRatios(r).ratios.drift/baseTarget,columnTorsionRatio(r),achievableTwist(r));
+ const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:heaviest},inner),now=[baseSizingRatios(r).ratios.drift,columnTorsionRatio(r),achievableTwist(r)] as const;
+ const better=governing(r)<governing(q)-1e-9,kept=better?r:q,left=better?now:[drift0,torsion0,twist0] as const,shape=kept.existingColumn!.shape;
+ const past=state(left[0],left[1],left[2],false);
+ const cap=cfg.support==='column-cap',arrangement=cap?'a built-up or laced column, or a frame across the runway (the columns braced at the roof)':'column caps over the new columns (support column-cap: the girder on the column axis, no eccentric reaction moment and no seat twist), or crane columns beside a building frame';
+ const text=`No rolled W14 to the W14X398 meets the new column's drift, torsion and twist ratios for this crane: ${better?`the heaviest, ${heaviest}, still gives`:`the ${shape} chosen gives`} ${past||state(...left)} (configurator estimates; the calculation reports its own). ${cap?'The cantilever column is beyond the rolled catalog for this crane':'A bracket seat on a freestanding cantilever column is beyond reasonable use for this crane'}: recommended ${arrangement}; the support entered is kept and checked`;
+ const open=left[0]>1+1e-9||left[1]>1+1e-9||left[2]>1+1e-9;
+ Object.assign(trace,better?inner:{},{column:[trace.column,better?why[0].toUpperCase()+why.slice(1):'',open?text:''].filter(Boolean).join('; ')},open?{columnOpen:`Built-up crane column required: ${text[0].toLowerCase()+text.slice(1)}.`.slice(0,800)}:{});
+ return better?{...r,configurator:{...cfg}}:q;
+}
+/**
+ * The column twist at a new column's bracket seat with the torsion brace on the stiffest strut that fits (the most the
+ * configurator's bracing gives, withTwistLimit and sizeBracing adding and sizing it where the column needs it): the
+ * larger of the factored twist over the small-rotation limit and the service twist movement over its limit; 0 where no
+ * bracket seat twists the column. `face`: the bracket reach to take (the tie sizing's trial column face).
+ */
+function achievableTwist(p:ProjectInput,face?:number,reactions?:ReturnType<typeof supportReactions>):number{
+ return braceTrial(p,face,reactions)?.twist??0;
+}
+function braceTrial(p:ProjectInput,face?:number,reactions?:ReturnType<typeof supportReactions>){
+ const c=p.existingColumn,b=p.details?.bracket;
+ if(!c?.enabled||!c.isNew||tiedToBuilding(p)||activeStep(p)||!b?.enabled||activeColumnCap(p)||!designsBracing(p))return undefined;
+ const q=structuredClone(p),d=q.longitudinalBracing!.design=structuredClone(bracingDesign(q));
+ d.torsionBrace=d.torsionBrace??{...defaultTorsionBrace};
+ const stiff=stiffestTorsionStrut(q);if(stiff&&aiscShapeByName(stiff)!.Iy>(aiscShapeByName(d.strut.shape)?.Iy??0))d.strut.shape=stiff;
+ if(face!==undefined)setBracketReach(q,face);
+ const a=existingColumnAnalysis(q,reactions??supportReactions(q,sectionProperties(q.section))),t=a.torsion;
+ return {twist:t?Math.max(Math.abs(t.twist)/twistRotationLimit,Math.abs(t.service.slip)/twistMovementLimit(q,a)):0,drift:a.drift.value/a.drift.limit};
 }
 /**
  * Crane columns beside the building columns: the footing clearance checked here. Where the sized isolated footings (the
@@ -1196,7 +1253,29 @@ const highCycle=(cfg:RunwayConfig)=>['D','E','F'].includes(cfg.cmaa)||cfg.buildi
  * needs it, unless the reach is configured. A saddle tie on a capped girder that cannot pass its checks so (the gusset
  * clear of the cap legs, the W flange local bending) takes the cap tieback angle instead, with the reason in the notes.
  */
-function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
+/**
+ * The tie attached (attachTie), and on a new freestanding column with a bracket seat, where the tie sizing moved the
+ * column face out and the tie still exceeds a code limit there (no face to the farthest passes it: an open item
+ * either way), the tie sized again at the face it started from: a longer reach only adds to the bracket moment, the
+ * column's eccentric-reaction drift and the seat twist (cases 073, 077, 081, 083: faces of 27 to 29 in, ties past
+ * their limits at every face). The reach moves out only where it lets the tie pass.
+ */
+function attachTieAtFace(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace){
+ const b0=p.details?.bracket,held=cfg.reach===undefined&&cfg.support!=='stepped-column'&&!!b0?.enabled&&!!braceTrial(p);
+ const start=held?structuredClone(p):undefined,before={...trace};
+ attachTie(p,cfg,trace);
+ const b1=p.details?.bracket;
+ if(!start||!b1?.enabled||b1.reach<=b0!.reach+1e-6||!tieUnresolved(p))return;
+ const inner:SelectionTrace={...before},moved=b1.reach;attachTie(start,cfg,inner,b0!.reach);
+ for(const k of Object.keys(p) as (keyof ProjectInput)[])delete p[k];Object.assign(p,start);
+ for(const k of Object.keys(trace) as (keyof SelectionTrace)[])delete trace[k];
+ const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(2)} in`;
+ const why=`No column face to ${len(moved)} lets the tie pass its checks (an open item at every face): the face stays at ${len(b0!.reach)}, where the new column and its bracket are least loaded (a longer reach adds to the bracket moment, the column's eccentric-reaction drift and the seat twist).`;
+ Object.assign(trace,inner,{tie:inner.tie?`${inner.tie} ${why}`:why});
+}
+/** The sized paired-bar, flexible-plate or stiffener tie with a sizing ratio of its own past 1.00 (as beyondCatalog judges it). */
+const tieUnresolved=(p:ProjectInput)=>!!(flangeTieGeometry(p)||stiffenerTieGeometry(p))&&Object.entries(tieSizingRatios(p)).some(([k,v])=>!k.startsWith('column-')&&v>1+1e-6);
+function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?:number){
  const d=p.details!;let capMisfit:string|undefined;
  if(cfg.support==='column-cap')return;
  if(cfg.tie==='flexible-plate'){
@@ -1215,8 +1294,9 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
   d.brace.arrangement='paired-bars';delete d.brace.capAngle;
  }
  const bracket=structuredClone(p.details!.bracket),face=p.details!.brace.flangeAttachment?.columnFace;
- // The farthest column face the tie sizing may move to: none on a column step, whose upper shaft fixes it.
- const farthest=cfg.reach===undefined&&cfg.support!=='stepped-column'?30*inch:undefined;
+ // The farthest column face the tie sizing may move to: none on a column step, whose upper shaft fixes it; on a new
+ // freestanding column only as far as its twist and drift allow (columnFaceCap).
+ const farthest=hold!==undefined?hold:cfg.reach===undefined&&cfg.support!=='stepped-column'?columnFaceCap(p,30*inch,trace):undefined;
  p.details=sizeFlangeTie(p,{reach:farthest}).details;
  // A flexible plate still over a code limit when sized (its one ply takes the whole force with the imposed movement in
  // the H1 sum): paired bars on the same saddle, sized from the same column face, where they exceed their limits by less.
@@ -1261,6 +1341,32 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}){
  if(slide&&tieArrangement(p.details)==='paired-bars'){const why=`Fixed at both ends at this reach, the paired bars cannot follow the girder end rotation and thermal travel along the runway (the tie movement checks over their limits): the column gusset slides ${cfg.units==='SI'?`${Math.round(slide)} mm`:`${+(slide/inch).toFixed(3)} in`} each way along the runway on longer sleeves (column-end slide, fillers at the girder gusset; checks tie-slide-*).`;trace.tie=trace.tie?`${trace.tie} ${why}`:why;p.notes+=` ${why}`;}
 }
 
+/**
+ * New freestanding columns with a bracket seat (bracing designed here): the farthest column face the tie sizing may move
+ * to, at most `farthest`. The girder's offset from the column axis, e = d/2 + reach, is the lever of the eccentric
+ * reaction that drifts the column and of the longitudinal force at the seat that twists it (the twist rotation grows
+ * as e, the twist movement as e²; cases 072, 073, 077, 083, where the tie sizing had moved the face to 27 to 29 in and
+ * the twist past its limits). The face moves out only while the column, with the torsion brace on the stiffest strut
+ * that fits (the brace the configurator adds and sizes where the column twists, withTwistLimit), keeps its factored twist
+ * and its service twist movement within 0.95 of their limits and its column-alone drift within columnDriftShare of
+ * its limit (the footing takes the rest; not where the column is already past it at the face set, too flexible at any
+ * reach, which the column sizing judges), on the 1 in grid; never inside the face already set. Where it stops short
+ * of `farthest` the selection log says so (trace.face).
+ */
+function columnFaceCap(p:ProjectInput,farthest:number,trace:SelectionTrace):number{
+ const b=p.details?.bracket;if(!b?.enabled||farthest<=b.reach+1e-6||!braceTrial(p))return farthest;
+ const reactions=supportReactions(p,sectionProperties(p.section));
+ // A column already past the drift share at the face set is too flexible at any reach (the column sizing judges it,
+ // withColumnBase): its drift then does not hold the tie's face, its twist still does.
+ const start=b.reach,first=braceTrial(p,start,reactions)!,drifts=first.drift<=columnDriftShare;
+ const fits=(face:number)=>{const v=face===start?first:braceTrial(p,face,reactions)!;return v.twist<=.95&&(!drifts||v.drift<=columnDriftShare);};
+ if(!fits(start)){trace.face=start;return start;}
+ if(fits(farthest))return farthest;
+ // Bisection on the 1 in grid (both ratios grow with the reach).
+ let lo=0,hi=Math.floor((farthest-start)/inch+1e-6);
+ while(hi-lo>1){const mid=(lo+hi)>>1;if(fits(start+mid*inch))lo=mid;else hi=mid;}
+ trace.face=start+lo*inch;return trace.face;
+}
 /**
  * Rail clips across a simple-span girder joint: no clear gap between clips may exceed the clip spacing
  * (validateRunwayDetails). With a direct flange saddle the end clips stand clear of the saddle, its end fillet and the
@@ -1320,6 +1426,14 @@ function capAngleUnresolved(p:ProjectInput):string|undefined{
 }
 /** Reasons the build steps record for the selection log (selectionLog). */
 export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?:SplicesDesigned;clip?:string;
+ /** New freestanding columns: the farthest column face their twist and drift let the tie sizing move to (columnFaceCap). */
+ face?:number;
+ /** New freestanding columns: the column no rolled W14 to the W14X398 brings within its drift, torsion and twist ratios (withColumnBase), an open item. */
+ columnOpen?:string;
+ /** A welded or rolled bracket its sizing leaves past 1.00 (withWeldedBracket): beyond reasonable use for the crane. */
+ bracket?:string;
+ /** A column cap its sizing leaves past 1.00 on the heaviest useful W14 (withCapColumn). */
+ cap?:string;
  /** Crane columns: the footing arrangement chosen by the clearance to the building-column footing (combinedWhereOverlapping). */
  footing?:string;
  /** Crane columns: the column tie sizing and the column face to the girder web (finishCraneColumn). */
@@ -1350,9 +1464,10 @@ const openItemRow=(v:NonNullable<RunwayConfig['beyondCatalog']>[number]):ConfigS
 /**
  * Members the catalog cannot supply within the sizing targets (configurator.beyondCatalog; calculate reports each as an
  * open item, configuratorOpenItems, and the closest member is built and checked, a review draft): a sized girder for which no compact rolled W (and no W + channel cap pair) meets the targets,
- * and a crane column heavier than the W14X398 the column sizing goes to.
+ * a crane column heavier than the W14X398 the column sizing goes to, and a new freestanding column that the W14X398
+ * leaves past its drift, torsion or twist ratios (trace.columnOpen).
  */
-function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|undefined,p:ProjectInput):NonNullable<RunwayConfig['beyondCatalog']>{
+function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|undefined,p:ProjectInput,trace:SelectionTrace={}):NonNullable<RunwayConfig['beyondCatalog']>{
  const out:NonNullable<RunwayConfig['beyondCatalog']>=[];if(cfg.scope!=='design')return out;
  if(trial&&beyondGirderCatalog(trial)&&!entered.girderShape){
   const capped=cfg.girder==='capped';
@@ -1376,6 +1491,9 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
  const col=p.existingColumn,w=col?.shape?aiscShapeByName(col.shape):undefined;
  if(cfg.support==='crane-column'&&!entered.columnShape&&w&&w.weight>398+1e-9)
   out.push({member:'crane-column',shape:col!.shape,reason:`Built-up crane column required: the crane column sizing needs ${col!.shape}, past the W14X398 the rolled crane columns stop at (jumbo W14 shapes are heavy-shape material, AISC 360 A3.1c). Design a built-up or laced crane column, or reduce the crane column demand.`});
+ // A new freestanding column past its drift, torsion or twist ratios on the heaviest rolled W14 the sizing goes to
+ // (withColumnBase): the closest built and checked, an open item with the arrangement the log recommends.
+ if(cfg.structure==='new'&&cfg.support!=='crane-column'&&!entered.columnShape&&trace.columnOpen&&col?.shape)out.push({member:'crane-column',shape:col.shape,reason:trace.columnOpen});
  return out;
 }
 /**
@@ -1442,7 +1560,9 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  if(design&&step&&trace.step)add('Step stiffener',`${auto} (none)`,step.stiffener?`Pair of plates ${len(step.stiffener.thickness)} × ${len(step.stiffener.width)}, ${len(step.stiffener.weld)} fillets`:'None',trace.step);
  const bracket=p.details?.bracket;
  if(design&&bracket?.enabled&&!activeColumnCap(p)&&entered.reach===undefined&&Math.abs(bracket.reach-20*inch)>1e-6)
-  add('Column face to girder web',`${auto} (${len(20*inch)})`,len(bracket.reach),'Set by the tie sizing: the column face moves out from 20 in (to at most 30 in) until the tie passes its imposed-movement and strength checks.');
+  add('Column face to girder web',`${auto} (${len(20*inch)})`,len(bracket.reach),`Set by the tie sizing: the column face moves out from 20 in (to at most ${trace.face!==undefined&&trace.face<30*inch-1e-6?`${len(trace.face)}, as far as the new column's twist and drift allow: the girder offset from the column axis is the lever of the eccentric reaction and of the longitudinal force at the seat`:'30 in'}) until the tie passes its imposed-movement and strength checks.`);
+ if(design&&trace.cap&&activeColumnCap(p))add('Column cap, at its limits',auto,'Column cap with the girder end fork, kept',trace.cap);
+ if(design&&trace.bracket&&bracket?.enabled)add('Column bracket, beyond use',supportLabels[entered.support],`${supportLabels[cfg.support]}, at its sizing limits, kept`,trace.bracket);
  if(design&&trace.splice)add('Girder field splices',`${auto} (none: one ${+(p.spans.reduce((a,b)=>a+b,0)/foot).toFixed(1)} ft piece)`,`${trace.splice.stations.length} bolted slip-critical splice${trace.splice.stations.length>1?'s':''}: ${trace.splice.where}`,`The continuous girder exceeds the ${+(practicalPieceLength/foot).toFixed(0)} ft practical shipping and erection piece: automatic placement 0.20 to 0.25 of the span from an interior support (the inflection region, nearest 0.22 L), every piece within ${+(trace.splice.splices.maxPiece/foot).toFixed(0)} ft. ${trace.splice.why}.`);
  if(design&&trace.clip)add('Rail clips',`${auto} (weld-on)`,'Bolted clamp plates',trace.clip);
  if(design&&trace.exit&&!entered.longitudinalExit)add('Longitudinal force exit',`${auto} (strut at the column centerline)`,'Crane-level strut on the girder line, by others',`${trace.exit[0].toUpperCase()}${trace.exit.slice(1)}.`);
