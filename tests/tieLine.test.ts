@@ -32,9 +32,10 @@ function run(q:ProjectInput){
 }
 
 describe('the tie force acts at the drawn tie line',()=>{
- it('W18 direct flange saddle: the analysis tie height is the drawn bar centroid, the restraint arms follow it',()=>{
+ it('rolled girder direct flange saddle: the analysis tie height is the drawn bar centroid, the restraint arms follow it',()=>{
   const g=flangeTieGeometry(p)!;
-  expect(s.catalogueId).toMatch(/^W18/);expect(g).toBeDefined();
+  // The configurator sizes this girder (a W18 before the calibrated screening, a W14X74 now): the mechanics hold for any W.
+  expect(s.catalogueId).toMatch(/^W\d/);expect(g).toBeDefined();
   // The flange tie sheet draws the bar centroid g.topDrop below the flange underside.
   expect(Math.abs(tieLine(p)-(s.d-s.tf-g.topDrop))).toBeLessThan(1);
   expect(tieLine(p)).toBeCloseTo(s.d/2+g.topCenter,9);
