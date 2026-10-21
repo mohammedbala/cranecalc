@@ -1065,10 +1065,16 @@ function sizeForkStiffenerFatigue(p:ProjectInput,maxWidth:number,fatigueTarget=.
  const props=sectionProperties(p.section),strength=girderStrength(p,props),R=Math.max(0,...supportReactions(p,props).supports.map(v=>v.Cv)),H=tieSizingDemands(p).range;
  const cycles=d.spectrum.reduce((n,b)=>n+b.cycles,0),Fsr=fatigueSpectrumBin('C',1,cycles).allowable;
  const stress=(t:number,b:number)=>{const q={...bs,stiffenerThickness:t,stiffenerWidth:b};return R/(2*(b-bs.cope)*t)+H*strength.h/stiffenerPairSection(q,p.section.tw).S;};
- if(stress(bs.stiffenerThickness,bs.stiffenerWidth)<=fatigueTarget*Fsr)return;
+ // The fork's restraint diaphragm in strength too (stiffener-lateral-flexure, one flange restrained: M = F·h with the
+ // tie force estimate F, which includes the Appendix 6 brace force): the pair narrowed to the clear between the column
+ // flanges loses section the neutral sizing gave it (095: 1.004 at 7/8 in), so it is thickened for it here.
+ const F=tieSizingDemands(p).force,Fb=available(d.material.Fy,p.method,.9,1.67);
+ const flexure=(t:number,b:number)=>F*strength.h/stiffenerPairSection({...bs,stiffenerThickness:t,stiffenerWidth:b},p.section.tw).S;
+ const ok=(t:number,b:number)=>stress(t,b)<=fatigueTarget*Fsr&&flexure(t,b)<=fatigueTarget*Fb;
+ if(ok(bs.stiffenerThickness,bs.stiffenerWidth))return;
  const e8=inch/8,widths=[bs.stiffenerWidth];for(let b=bs.stiffenerWidth+inch/4;b<=Math.min(maxWidth,(p.section.bf-p.section.tw)/2)+1e-9;b+=inch/4)widths.push(b);
  let best:{t:number;b:number}|undefined;
- for(let t=bs.stiffenerThickness;t<=2*inch+1e-9;t+=e8)for(const b of widths)if(stress(t,b)<=fatigueTarget*Fsr&&(!best||t*b<best.t*best.b-1e-9))best={t,b};
+ for(let t=bs.stiffenerThickness;t<=2*inch+1e-9;t+=e8)for(const b of widths)if(ok(t,b)&&(!best||t*b<best.t*best.b-1e-9))best={t,b};
  if(best){bs.stiffenerThickness=best.t;bs.stiffenerWidth=best.b;bs.weldSize=Math.max(bs.weldSize,minimumFillet(Math.min(best.t,p.section.tw)));}
 }
 /**
