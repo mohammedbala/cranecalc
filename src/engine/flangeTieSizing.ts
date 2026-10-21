@@ -475,6 +475,10 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
    const a=r.q.details!.brace.flangeAttachment,st=r.q.details!.bearing,clear=a?a.saddleLength/2+x.saddleWeld+sixteenth+st.stiffenerThickness/2+st.weldSize+a.clearance<=x.setback+1e-6:true;
    // The edge limit is the saddle's (J2.2b: the end fillets run along the saddle end edges; flange-tie-weld-maximum).
    if(clear&&x.saddleWeld+sixteenth<=x.saddleThickness-sixteenth+1e-6){x.saddleWeld+=sixteenth;return true;}
+   // Where the larger fillet would reach the bearing stiffener's zone, the saddle moves the 1/16 in farther from the
+   // bearing stiffener with it (toward the girder end; the validation keeps its end fillet on the girder flange, else
+   // the step is undone), so the clearance is kept.
+   if(a&&!clear&&x.saddleWeld+sixteenth<=x.saddleThickness-sixteenth+1e-6){x.saddleWeld+=sixteenth;x.setback=up(a.saddleLength/2+x.saddleWeld+st.stiffenerThickness/2+st.weldSize+a.clearance-1e-6,sixteenth);return true;}
   }
   return false;
  };
