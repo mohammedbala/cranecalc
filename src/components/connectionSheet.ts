@@ -240,7 +240,7 @@ export function connectionTopic(s:CalculationSnapshot,f:FramingSettings=defaultF
    ...(rel?[{at:[X(tg/2)+offk+tbk+3,Z(columnRows[0])] as XY,labels:[`COLUMN END: SLEEVED BOLTS IN ${size(rel.width)} X`,...(rel.slide?[`${size(rel.slot)} VERT. SLOTS; GUSSET SLIDES ${size(rel.slide)}`,`EACH WAY ALONG THE RUNWAY; ${size(rel.barOffset)} FILLER`,'EACH FACE AT GIRDER GUSSET']:[`${size(rel.slot)} VERT. SLOTS; ${size(rel.clearance)} FILLER AT GIRDER GUSSET`]),
     // The slots take the support's deflection limit handed to its designer (S-00): the same words as there.
     ...(()=>{const lim=s.checks.find(v=>v.id==='tie-move-support')?.capacity;return lim!==undefined&&lim>0?[activeStep(p)?'SLOTS TAKE THE STEP\'S VERTICAL':'SLOTS TAKE THE BRACKET\'S VERTICAL','DEFLECTION AT THE BEARING UNDER CRANE',`LOADS ${limitLength(lim,p.units,'max')} MAX.`]:[];})()]}]:[]),
-   {at:[X(tg/2),colZ],labels:[`COLUMN GUSSET PL ${size(tg)} X ${size(hg)} X ${size(g.columnGussetLength)}`,`2 ROOT FILLETS X ${dim(c.weldLength)}, ${tieWeld}`],weld:'fillet'},
+   {at:[X(tg/2),colZ],labels:[`COLUMN GUSSET PL ${size(tg)} X ${size(hg)} X ${size(g.columnGussetLength)}`,t.columnRoot==='cjp'?`CJP TO COLUMN FLANGE + ${tieWeld} REINF. FILLETS, UT`:`2 ROOT FILLETS X ${dim(c.weldLength)}, ${tieWeld}`],weld:t.columnRoot==='cjp'?'cjp':'fillet'},
    {at:[cx+colW*k*.3,colZ+colT*k],labels:[tieColRef]}
   ];
   const height=(v:typeof items[number])=>(v.weld?17:0)+v.labels.length*11,y0=Z(-b.bf/2)-10,y1=colB+6,total=items.reduce((a,v)=>a+height(v),0),space=Math.max(8,(y1-y0-total)/(items.length-1));

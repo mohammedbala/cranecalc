@@ -40,7 +40,7 @@ describe('one-row bolt groups for the imposed girder end movement',()=>{
   expect(c.rows).toBe(1);expect(t.release?.slide).toBeUndefined();
   expect(p.details!.bracket!.reach).toBeCloseTo(18*inch,6);
   const r=tieSizingRatios(p);
-  for(const id of ['tie-move-strength','tie-move-fatigue','tie-move-root-fatigue','tie-move-gusset','tie-move-weld','tie-shear-rupture'])expect(r[id]/sizingLimit(r,id),id).toBeLessThanOrEqual(1.05);
+  for(const id of ['tie-move-strength','tie-move-fatigue','tie-move-root-fatigue','tie-move-gusset','tie-move-weld','tie-shear-rupture'])if(r[id]!==undefined)expect(r[id]/sizingLimit(r,id),id).toBeLessThanOrEqual(1.05);
  });
  it('a one-sleeve-row slide: the column-end moment bounded by the sleeves\' bearing shift, the sleeve tilt checked',()=>{
   const p=sim('028');p.details!.brace.release!.slide=6.35;
@@ -57,6 +57,16 @@ describe('one-row bolt groups for the imposed girder end movement',()=>{
   const k=tieMovementChecks(s,{force:force/brace.cos,member:brace.member});
   expect(g.gussetLength).toBeGreaterThan(0);
   expect(k.find(v=>v.id==='tie-move-root-fatigue')!.note).toMatch(/Governing (column gusset|girder gusset \((the bearing|CJP))/);
-  expect(k.find(v=>v.id==='tie-move-weld')!.note).toContain('Governing column gusset');
+  const weld=k.find(v=>v.id==='tie-move-weld')!;
+  if(p.details!.brace.columnRoot==='cjp')expect(weld.status).toBe('not-applicable');else expect(weld.note).toContain('Governing column gusset');
+ });
+ it('a column gusset CJP welded to the column flange: Category C at its toe, no fillet weld check',()=>{
+  const p=sim('028');p.details!.brace.columnRoot='cjp';
+  const {s,force}=sized(p),brace=braceSystem(p),k=tieMovementChecks(s,{force:force/brace.cos,member:brace.member});
+  expect(k.find(v=>v.id==='tie-move-weld')!.status).toBe('not-applicable');
+  p.details!.brace.columnRoot=undefined;
+  const fillet=tieMovementChecks(s,{force:force/brace.cos,member:brace.member});
+  const cap=(c:typeof k)=>c.find(v=>v.id==='tie-move-root-fatigue')!;
+  if(cap(fillet).note.startsWith('Governing column gusset'))expect(cap(k).capacity!).toBeGreaterThan(cap(fillet).capacity!);
  });
 });
