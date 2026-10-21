@@ -9,7 +9,7 @@
  * - the column-end release slots with the travel the vertical movement needs, and the gauge, bar width and column
  *   gusset height that follow from the slots;
  * - the thinnest bar or plate, from 1/4 in in 1/16 in steps, that carries the force with the imposed movement;
- * - gussets from 3/4 in in 1/8 in steps, larger bolts, the saddle plate and its fillets and the bar width where those
+ * - gussets from 3/4 in in 1/8 in steps (to 1 1/4 in, 1 1/2 in at a column-end slide), larger bolts, the saddle plate and its fillets and the bar width where those
  *   checks govern; a smaller bolt (shorter bolt groups, a longer flexible length) where the imposed movement governs
  *   and the bolts have the strength;
  * - the flexible length: where the movement still needs it, the column face (the designed bracket's reach, or the
@@ -50,7 +50,8 @@ import {activeColumnCap} from './columnCapInputs';
 import {craneColumnRestraint,craneColumnLayout,tieShortening} from './craneColumn';
 import {existingColumnAnalysis} from './existingColumn';
 import {twistMovement} from './columnTwistLimit';
-import {girderOffset} from './newColumnBracing';
+import {girderOffset,torsionBraceActive,bracingDesign} from './newColumnBracing';
+import {stiffestTorsionStrut,twistMovementTarget} from './bracingSizing';
 import {activeStep} from './steppedColumnInputs';
 
 const inch=25.4,sixteenth=inch/16,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step;
@@ -179,7 +180,19 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
 /** The new column's twist movement at the bracket seat the tie takes (tieMovements), as the calculation finds it. */
 function seatTwist(p:ProjectInput){
  const c=p.existingColumn,none={service:0,factored:0,offset:0};if(!c?.enabled||!c.isNew||activeStep(p)||!p.details?.bracket?.enabled||activeColumnCap(p)||tiedToBuilding(p))return none;
- try{return {...twistMovement(existingColumnAnalysis(p,supportReactions(p,sectionProperties(p.section))),p.method),offset:girderOffset(p)};}catch{return none;}
+ try{
+  const reactions=supportReactions(p,sectionProperties(p.section)),now=twistMovement(existingColumnAnalysis(p,reactions),p.method);
+  // With a torsion brace the bracing sizing grows its strut (sizeTorsionStrut, after the tie) until the factored twist
+  // movement is within 0.9 of the configurator's target (torsion-brace-movement), down to what the stiffest strut that
+  // fits gives: the tie takes that movement, not the trial strut's.
+  if(torsionBraceActive(p)&&now.factored>0){
+   const q=structuredClone(p),d=q.longitudinalBracing!.design=structuredClone(bracingDesign(q)),stiff=stiffestTorsionStrut(q);
+   if(stiff)d.strut.shape=stiff;
+   const floor=twistMovement(existingColumnAnalysis(q,reactions),p.method).factored,k=Math.min(1,Math.max(floor,.9*twistMovementTarget())/now.factored);
+   return {service:k*now.service,factored:k*now.factored,offset:girderOffset(p)};
+  }
+  return {...now,offset:girderOffset(p)};
+ }catch{return none;}
 }
 
 /** A calculation snapshot carrying only the sizing demands, for the tie check functions. */
@@ -426,7 +439,8 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
     if(widenRoom(r,dw)){x.widen+=dw;trial.movement=true;return true;}
    }
   }
-  if(gussetChecks.has(k)&&x.gusset<1.25*inch-1e-6){x.gusset+=inch/8;return true;}
+  // Gussets to 1 1/4 in; to 1 1/2 in for a column-end slide, whose sleeve friction μF loads both gussets out of plane.
+  if(gussetChecks.has(k)&&x.gusset<(x.slide?1.5:1.25)*inch-1e-6){x.gusset+=inch/8;return true;}
   // The gusset roots with the imposed movement at the thickest gusset: the column gusset CJP welded to the column flange
   // (Category C at its toe, no fillet root; the base metal governing its strength), a field weld with UT.
   if((k==='tie-move-root-fatigue'||k==='tie-move-weld')&&!x.cjp){x.cjp=true;return true;}
