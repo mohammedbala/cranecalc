@@ -50,5 +50,8 @@ export function newW14X90Columns(stiffened:boolean){
  const p=newColumnDemonstrationProject();p.existingColumn!.shape='W14X90';
  const b=p.details!.bracket!;b.receiver={...b.receiver,...W14X90,source:'New W14X90 column designed here; no other loads'};
  if(stiffened){p.longitudinalBracing!.enabled=false;p.existingColumn!.longitudinal='column';b.columnStiffeners=plates(inch,5/16*inch);}
+ // The footing 6 in larger each way than the demonstration's: the lighter W14X90 is held to the TR-13 base-drift limit
+ // min(H/400, 2 in) of an AIST project (1.001 on the demonstration's footing).
+ const f=p.columnBase!.footing;p.columnBase!.footing={...f,L:f.L+6*25.4,B:f.B+6*25.4};
  return p;
 }
