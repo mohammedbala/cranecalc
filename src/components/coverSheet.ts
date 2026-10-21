@@ -356,7 +356,7 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew),tied=tiedToBui
  const picks=p.configurator?.selections??[];
  if(picks.length)blocks.push(H('CONFIGURATOR SELECTIONS'),T(['ITEM','AS ENTERED → AS DESIGNED','GOVERNING REASON'],
   // A reason quoting screening estimates carries the final calculated ratios beside them (selectionFinal).
-  picks.map(v=>{const f=selectionFinal(s,v.item),strip=(x:string)=>x.replace(/\s*\([^()]*\)/g,'');return [strip(v.item),strip(`${v.entered} → ${v.designed}`),`${strip(v.reason.split('; ')[0].replace(/\.$/,''))}${f?`: SCREENING ESTIMATE. ${f.replace(/\.$/,'')}`:''}`].map(x=>x.toUpperCase());}),[.8,1.3,1.9]));
+  picks.map(v=>{const f=selectionFinal(s,v.item);return [strip(v.item),strip(`${v.entered} → ${v.designed}`),`${governingClause(v.reason)}${f?`: SCREENING ESTIMATE. ${f.replace(/\.$/,'')}`:''}`].map(x=>x.toUpperCase());}),[.8,1.3,1.9]));
  const r=s.supportReactions;
  // The runway seismic combinations are evaluated by the engineer of record: their item in the existing structure evaluation.
  const runwaySeismic=unevaluatedStructure(s).findIndex(c=>c.id==='building-seismic-runway')+1;
@@ -554,4 +554,17 @@ const railWeight=(Npmm:number,u:'US'|'SI')=>u==='US'?`${+(Npmm/0.01459390294).to
 function cjpToExisting(p:CalculationSnapshot['input']){
  const b=p.details?.bracket;
  return !!b?.enabled&&isTaperedHaunch(b)&&haunchInput(b).flangeJoint==='cjp'&&!(p.existingColumn?.isNew&&p.existingColumn.enabled);
+}
+
+/** Text without its parenthetical remarks, nested ones included. */
+const strip=(x:string)=>{let v=x,w='';while(w!==v){w=v;v=v.replace(/\s*\([^()]*\)/g,'');}return v;};
+/**
+ * The governing reason of a selection, compactly: its first clause (to the first "; " outside parentheses, so a
+ * parenthetical with a semicolon is never cut), without the parentheses, and its recommendation where that comes later.
+ */
+export function governingClause(reason:string){
+ let depth=0,end=reason.length;
+ for(let i=0;i<reason.length;i++){const c=reason[i];if(c==='(')depth++;else if(c===')')depth=Math.max(0,depth-1);else if(!depth&&reason.startsWith('; ',i)){end=i;break;}}
+ const head=strip(reason.slice(0,end)).replace(/\.$/,''),rec=/Recommended:/.test(head)?undefined:reason.slice(end).match(/Recommended:[^;.]*/)?.[0];
+ return rec?`${head}. ${strip(rec)}`:head;
 }
