@@ -26,6 +26,8 @@ export const lapConnectionSchema=z.object({
  diameter:pos,grade:z.enum(['A325','A490']),surface:z.enum(['A','B']),projection:nn,
  weldSize:pos,weldLength:pos
 });
+/** The tie bars' bolt groups: one row of two bolts across the bar (a longer flexible length between the groups) or more. */
+export const tieConnectionSchema=lapConnectionSchema.extend({rows:z.number().int().min(1).max(6)});
 /**
  * Proprietary crane rail clips, specified by the engineer of record from the manufacturer's data ("or equal"): weld-on
  * clips (welded to the girder top plate) or bolted clamp plates, floating (the rail moves along the runway for thermal
@@ -58,7 +60,7 @@ export const runwayDetailsSchema=z.object({
    columnFace:pos.optional()}).optional(),
   /** Column-end movement release: bolts pretensioned against steel sleeves in vertical slots of the column gusset.
    * slide: paired bars only, the column gusset's float along the runway each way on longer sleeves (tieRelease). */
-  release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos,slide:pos.optional()}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:lapConnectionSchema}),
+  release:z.object({enabled:z.boolean(),travel:pos,sleeveWall:pos,clearance:pos,slide:pos.optional()}).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:tieConnectionSchema}),
  end:lapConnectionSchema,
  bearing:z.object({width:pos,length:pos,thickness:pos,stiffenerWidth:pos,stiffenerThickness:pos,cope:nn,weldSize:pos,
   /** Steel shims under the bearing plate, full bearing, drilled to the bolt pattern: the largest stack (max, mm) and its
