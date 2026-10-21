@@ -245,9 +245,10 @@ const compactW=(s:{bf:number;tf:number;d:number;kdes:number;tw:number})=>s.bf/(2
 const wCandidates=()=>aiscWShapes.filter(s=>s.d>=12&&s.d<=40&&girderCandidate(s)&&compactW(s)).sort((a,b)=>a.weight-b.weight);
 /**
  * The jumbo rolled W36 and W40 past the 40 in depth of the girder catalog (actual depth 41 to 44 in: W36X652 to
- * W36X925, W40X431 to W40X655; I_y to 4,940 in^4 against the 2,490 in^4 of the W36X529), compact as the others: taken
- * only where no section of the catalog and no W and channel cap pair meets the sizing targets (screened), before a
- * plate girder. Heavy shapes (flanges over 2 in, as the W36X529 already is): AISC 360 A3.1c, clause to be verified.
+ * W36X925, W40X593 and W40X655; I_y to 4,940 in^4 against the 2,490 in^4 of the W36X529), compact as the others. Off by
+ * default (sizeGirder opts.jumbo): never selected as a runway girder; screened only to name the lightest that would meet
+ * the targets as a heavy alternative in the plate-girder open item (heavy shapes, AISC 360 A3.1c, clause to be verified;
+ * limited mill availability; a plate girder is the economical design).
  */
 const jumboCandidates=()=>aiscWShapes.filter(s=>/^W(36|40)X/.test(s.name)&&s.d>40&&s.d<=44&&compactW(s)).sort((a,b)=>a.weight-b.weight);
 const capChannels=['C10X15.3','C12X20.7','C12X25','C15X33.9','C15X40','C15X50','MC18X42.7'];
@@ -267,6 +268,8 @@ export interface GirderTrial {name:string;weight:number;utilization:number;defle
  basis?:{passed:boolean;target:number;deflectionTarget:number;minFlange:number;lighter?:{name:string;why:string};
   /** A lighter capped pair within the same targets, reported beside a heavy rolled choice (screened). */
   alternative?:{name:string;weight:number};
+  /** Beyond the catalog: the lightest jumbo rolled W (past 40 in deep) that would meet the targets, named, not selected. */
+  heavy?:{name:string;weight:number;depth:number};
   /** The lighter candidates rejected, counted by reason. */
   rejected:Record<string,number>}}
 /**
@@ -474,20 +477,13 @@ function screened(input:RunwayConfig){
    changes.push(why,...n.changes);rules.push({field:'girder',from:'rolled',to:'capped',why},...n.rules);cfg=n.config;sk=capped;
   }
  }
- // Neither a section of the catalog nor a W and channel cap pair within the targets (the girder type entered, and for a
- // rolled girder the capped pair tried above): the jumbo rolled W36 and W40 past 40 in deep (jumboCandidates), with the
- // rolled W of the catalog for a capped girder entered, where the girder so far would be a plate girder (past a
- // deflection limit or the strength scatter, beyondGirderCatalog): taken where one meets the targets, or where the
- // closest is within those limits, the calculation then deciding (cases 005, 024, 047, 053, 059, 099: lateral 1.13 to 1.53
- // on the W36X529 or the W24X370 + MC18X42.7, Iy 2,490 in^4 and less; case 005: the W36X529 within the limits).
- if(cfg.scope==='design'&&!cfg.girderShape&&sk.trial?.basis?.passed===false){
-  const n=normalizeConfig({...cfg,girder:'rolled'}),jumbo=skeleton(n.config,true),t=jumbo.trial,was=sk.trial;
-  if(t&&beyondGirderCatalog(was)&&(t.basis?.passed||!beyondGirderCatalog(t))){
-   const kind=cfg.girder==='capped'?'W and channel cap pair':'compact rolled W of the 40 in catalog or W and channel cap pair';
-   const deep=aiscShapeByName(t.name)!.d>40;
-   const why=`No ${kind} meets the girder sizing targets (closest ${was.name}: ${was.governs} ratio ${was.utilization.toFixed(2)}, vertical deflection ${was.deflection.toFixed(2)} and lateral ${was.lateral.toFixed(2)} of the limits, screening estimates): the girder is the rolled ${t.name}${deep?`, a jumbo W ${+aiscShapeByName(t.name)!.d.toFixed(1)} in deep`:''} (${t.governs} ratio ${t.utilization.toFixed(2)}, lateral ${t.lateral.toFixed(2)}${t.basis?.passed?', within the targets':', within the deflection limits; the calculation decides'}), before a plate girder. A heavy shape (flanges over 2 in thick): AISC 360 A3.1c, a clause to be verified.`;
-   changes.push(why,...n.changes);rules.push({field:'girder',from:cfg.girder,to:'rolled',why},...n.rules);cfg=n.config;sk=jumbo;
-  }
+ // A girder beyond the catalog (beyondGirderCatalog: the plate-girder open item stays): the lightest jumbo rolled W36 or
+ // W40 past 40 in deep that would meet the targets (jumboCandidates) is named in the open item and the log as a heavy
+ // alternative for the engineer, never selected: a 600 to 925 lb/ft rolled runway girder is a heavy shape (AISC 360
+ // A3.1c Charpy and splice rules), of limited mill availability and far less economical than a plate girder.
+ if(cfg.scope==='design'&&!cfg.girderShape&&sk.trial?.basis?.passed===false&&beyondGirderCatalog(sk.trial)){
+  const t=skeleton(normalizeConfig({...cfg,girder:'rolled'}).config,true).trial;
+  if(t?.basis?.passed&&aiscShapeByName(t.name)!.d>40)sk.trial.basis.heavy={name:t.name,weight:t.weight,depth:aiscShapeByName(t.name)!.d*inch};
  }
  // A heavy rolled girder (150 plf or more) governed by its top flange: the lightest capped pair within the same targets
  // is reported beside it where it is at least 20% lighter (AISC DG7: a cap channel carries the side thrust).
@@ -619,8 +615,8 @@ let buildDepth=0;
  * lightest heavier W14 that takes them (a wider flange, and a torsionally stiffer column whose smaller twist shortens
  * the bearing slots); the configuration keeps its blank column choice, and the log says why. On crane columns the
  * gussets weld to the building column beside them: its example shape (fictitious, replaced by the survey) moves to the
- * lightest heavier W14 whose flange takes them, where none is entered (case 047: the jumbo girder's longer bearings put
- * them 0.1 in past the W14X211 flange).
+ * lightest heavier W14 whose flange takes them, where none is entered (a deep girder's longer bearings can put them
+ * past the W14X211 flange).
  */
 function withGussetFitColumn(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace,target:number):{q:ProjectInput;target:number}{
  const cfg=configOf(input).config,col=q.existingColumn,misfit=(r:ProjectInput)=>!!stiffenerGussetMisfit(r);
@@ -1625,6 +1621,8 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
  * same heavy sections, so it decides only above girderStrengthScatter, where even the least conservative of them
  * fails; below that the calculation's girder checks decide (case 072: estimate 1.67, calculated 0.76).
  */
+/** The jumbo rolled alternative of a girder beyond the catalog, as the open item and the log name it. */
+const heavyAlternative=(t:GirderTrial)=>{const h=t.basis?.heavy;return h?` A jumbo rolled ${h.name} (${Math.round(h.weight)} lb/ft, ${+(h.depth/inch).toFixed(1)} in deep) would meet the sizing targets as a heavy alternative: heavy-shape Charpy testing and splice rules (AISC 360 A3.1c, clause to be verified) and mill availability to confirm; the configurator does not select it.`:'';};
 const beyondGirderCatalog=(t:GirderTrial)=>t.basis?.passed===false&&(Math.max(t.deflection,t.lateral)>1+1e-9||t.utilization>girderStrengthScatter);
 /** The largest ratio of the screening strength estimate to the calculated top-flange ratio on the heaviest catalog girders (case 005: 1.96 / 0.81). */
 const girderStrengthScatter=2.5;
@@ -1641,7 +1639,7 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
  const out:NonNullable<RunwayConfig['beyondCatalog']>=[];if(cfg.scope!=='design')return out;
  if(trial&&beyondGirderCatalog(trial)&&!entered.girderShape){
   const capped=cfg.girder==='capped';
-  out.push({member:'girder',shape:p.section.name,reason:`Plate girder required: no ${capped?'W and channel cap pair':'compact rolled W or W and channel cap pair'} of the catalog meets the girder sizing targets for this crane and span (the closest, ${trial.name}: ${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of the limits, screening estimates; targets ratio ${trial.basis?.target} and deflections ${trial.basis?.deflectionTarget}). Design a built-up plate girder with a wide top flange (or a surge plate or lateral truss), or shorten the span; the configurator does not design plate girders.`});
+  out.push({member:'girder',shape:p.section.name,reason:`Plate girder required: no ${capped?'W and channel cap pair':'compact rolled W or W and channel cap pair'} of the catalog meets the girder sizing targets for this crane and span (the closest, ${trial.name}: ${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of the limits, screening estimates; targets ratio ${trial.basis?.target} and deflections ${trial.basis?.deflectionTarget}). Design a built-up plate girder with a wide top flange (or a surge plate or lateral truss), or shorten the span; the configurator does not design plate girders.${heavyAlternative(trial)}`.slice(0,800)});
  }
  // The flange tie as sized and placed (paired bars, flexible plate, on a saddle or the bearing stiffener) with a sizing
  // ratio of its own still past 1.00 (the targets aside): no arrangement the configurator tried passes, so the tie is an
@@ -1712,12 +1710,12 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
  if(!named&&trial){
   const b=trial.basis,kind=cfg.girder==='capped'?'W and channel cap pair':'compact W';
   const ratios=`${sizingRatioNames[trial.governs]??trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of their limits`;
-  const reason=[entered.girder===cfg.girder?why('girder').replace(/\.$/,''):'',b?.passed===false?`No ${kind} meets every sizing target; the closest: ${ratios}`:`Lightest ${kind} within the sizing targets (ratio ≤ ${b?.target??.85}, deflections ≤ ${b?.deflectionTarget??.9} of the limits): ${ratios}`,
+  const reason=[b?.passed===false?`No ${kind} meets every sizing target; the closest: ${ratios}`:`Lightest ${kind} within the sizing targets (ratio ≤ ${b?.target??.85}, deflections ≤ ${b?.deflectionTarget??.9} of the limits): ${ratios}`,
    b?`flanges at least ${len(b.minFlange)} wide for the end bearing bolt gauge and the rail seat`:'',
    b?.lighter?`lighter candidates rejected: ${Object.entries(b.rejected).map(([k,n])=>`${n} by ${k}`).join(', ')}; the next lighter, ${b.lighter.name}: ${b.lighter.why}`:'',
    b?.alternative?`a capped girder, ${b.alternative.name} (${Math.round(b.alternative.weight)} lb/ft against ${Math.round(trial.weight)} lb/ft), meets the same targets: consider it (girder type capped)`:'',
    entered.girderShape?'a capped girder is sized as a pair unless both the W and the channel are named':''].filter(Boolean).join('; ');
-  add('Girder',entered.girderShape?`${entered.girderShape} + cap channel blank`:`${auto} (sized)`,p.section.name,`${reason}. These are the configurator's screening estimates (a simplified model that ranks the catalog), not the final ratios: the calculation checks the section and reports its own ratios.${b?.passed===false?beyondGirderCatalog(trial)?' A built-up plate girder is required: the closest section is built and calculated, and the package is a review draft (open item).':' The closest section is within the limits but not the sizing margins: the calculation decides.':''}`);
+  add('Girder',entered.girderShape?`${entered.girderShape} + cap channel blank`:`${auto} (sized)`,p.section.name,`${beyondGirderCatalog(trial)?heavyAlternative(trial).trim()+' ':''}${reason}. These are the configurator's screening estimates (a simplified model that ranks the catalog), not the final ratios: the calculation checks the section and reports its own ratios.${b?.passed===false?beyondGirderCatalog(trial)?` A built-up plate girder is required: the closest section is built and calculated, and the package is a review draft (open item).`:' The closest section is within the limits but not the sizing margins: the calculation decides.':''}`);
  }
  if(design&&trace.pad)add('Rail pad','configurator default (pad under rails 5 in deep and deeper)',`None: rail on the girder, clips at most ${len(30*inch)} apart`,trace.pad);
  const col=p.existingColumn;

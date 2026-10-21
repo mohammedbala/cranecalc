@@ -43,11 +43,13 @@ describe('new freestanding columns for heavy cranes',()=>{
   expect(p.configurator!.selections!.find(s=>s.item==='Top-flange tie')?.reason).toMatch(/the face stays at 20 in/);
   const t=twistOf(p);expect(t.rotation).toBeLessThanOrEqual(1);
  },600000);
- it('099: the jumbo W36X652 before a plate girder, the fork stiffener pair thicker than 1 1/2 in for its fatigue, the cap bolts at their limit stated in the log',()=>{
+ it('099: a plate girder (the jumbo W36X652 named, not selected), the fork stiffener pair thicker than 1 1/2 in for its fatigue, the cap bolts at their limit stated in the log',()=>{
   const p=buildProject(sim('099',{capacity:40,craneSpan:97,control:'cab',cmaa:'D',buildingClass:'B',bays:3,span:45,railElevation:15,girder:'rolled',support:'column-cap',tie:'paired-bars',reach:26}));
-  // No section of the 40 in catalog meets the lateral deflection (W36X529: 1.14 calculated): the jumbo W36X652.
-  expect(p.section.name).toBe('W36X652');expect(p.configurator!.beyondCatalog?.some(v=>v.member==='girder')??false).toBe(false);
-  expect(p.configurator!.selections!.find(s=>s.item==='Girder')?.reason).toMatch(/^No compact rolled W of the 40 in catalog or W and channel cap pair meets/);
+  // No section of the 40 in catalog meets the lateral deflection (W36X529: 1.14 calculated): a plate girder, the open
+  // item naming the jumbo W36X652 as a heavy alternative, not selected.
+  expect(p.section.name).toBe('W36X529');
+  expect(p.configurator!.beyondCatalog!.find(v=>v.member==='girder')!.reason).toMatch(/^Plate girder required.*A jumbo rolled W36X652 \(652 lb\/ft, 41\.1 in deep\) would meet the sizing targets as a heavy alternative/);
+  expect(p.configurator!.selections!.find(s=>s.item==='Girder')?.reason).toMatch(/^A jumbo rolled W36X652/);
   const b=p.details!.bearing,col=aiscShapeByName(p.existingColumn!.shape)!;
   expect(b.stiffenerThickness).toBeGreaterThan(1.5*inch);expect(b.stiffenerThickness).toBeLessThanOrEqual(2*inch+1e-6);
   // The pair stays between the column flanges.
