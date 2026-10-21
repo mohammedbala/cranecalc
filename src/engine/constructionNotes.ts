@@ -55,6 +55,7 @@ export function cjpWelds(p:ProjectInput):string[]{
  if(stiffenerTopCjp(p))out.push('girder bearing stiffeners to the W top flange');
  // A girder on a column cap has no tie (its end fork restrains the top flange): no tie gusset.
  if(stiffenerTieJoint(p)==='cjp'&&!capFork(p))out.push('tie gussets to the girder bearing stiffeners');
+ if(d.brace.columnRoot==='cjp'&&!capFork(p))out.push(`tie column gussets to the ${p.existingColumn?.enabled&&!p.existingColumn.isNew?'existing ':''}column flange, with reinforcing fillets`);
  if(d.bracket?.enabled&&usesTaperedHaunch(p)&&haunchInput(d.bracket).flangeJoint==='cjp')out.push(`haunch flanges to the ${p.existingColumn?.isNew?'new':'existing'} column flange (field)`);
  if(d.bracket?.enabled&&usesRolledBracket(p)&&d.bracket.rolled?.flangeJoint==='cjp'&&rolledStub(d.bracket))out.push('bracket flanges to the column flange');
  if(activeColumnCap(p)?.joint==='cjp')out.push('column flanges and web to the column cap plate');

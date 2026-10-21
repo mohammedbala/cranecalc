@@ -65,7 +65,10 @@ export const runwayDetailsSchema=z.object({
   /** Paired bars or flexible plate on a direct flange saddle: horizontal column stiffeners at the top and bottom of each
    * column gusset, inside the receiving column on the gusset's side of the web, fillet welded to the loaded flange and
    * the web (flangeTieStiffenerGeometry). Field welded where the column is existing. */
-  columnStiffener:columnStiffenerSchema.optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:tieConnectionSchema}),
+  columnStiffener:columnStiffenerSchema.optional(),
+  /** The column gusset's root to the column flange: fillets each face (absent), or 'cjp', a CJP groove weld with
+   * reinforcing fillets, UT (tieMovementChecks: Category C at the toe in place of the fillet-root reduction). */
+  columnRoot:z.enum(['cjp']).optional(),width:pos,thickness:pos,length:pos,reach:pos,gussetThickness:pos,connectionLength:pos,connection:tieConnectionSchema}),
  end:lapConnectionSchema,
  bearing:z.object({width:pos,length:pos,thickness:pos,stiffenerWidth:pos,stiffenerThickness:pos,cope:nn,weldSize:pos,
   /** Steel shims under the bearing plate, full bearing, drilled to the bolt pattern: the largest stack (max, mm) and its

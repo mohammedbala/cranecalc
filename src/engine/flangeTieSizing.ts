@@ -9,7 +9,7 @@
  * - the column-end release slots with the travel the vertical movement needs, and the gauge, bar width and column
  *   gusset height that follow from the slots;
  * - the thinnest bar or plate, from 1/4 in in 1/16 in steps, that carries the force with the imposed movement;
- * - gussets from 3/4 in in 1/8 in steps, larger bolts, the saddle plate and its fillets and the bar width where those
+ * - gussets from 3/4 in in 1/8 in steps (to 1 1/4 in, 1 1/2 in at a column-end slide), larger bolts, the saddle plate and its fillets and the bar width where those
  *   checks govern; a smaller bolt (shorter bolt groups, a longer flexible length) where the imposed movement governs
  *   and the bolts have the strength;
  * - the flexible length: where the movement still needs it, the column face (the designed bracket's reach, or the
@@ -50,7 +50,8 @@ import {activeColumnCap} from './columnCapInputs';
 import {craneColumnRestraint,craneColumnLayout,tieShortening} from './craneColumn';
 import {existingColumnAnalysis} from './existingColumn';
 import {twistMovement} from './columnTwistLimit';
-import {girderOffset} from './newColumnBracing';
+import {girderOffset,torsionBraceActive,bracingDesign} from './newColumnBracing';
+import {stiffestTorsionStrut,twistMovementTarget} from './bracingSizing';
 import {activeStep} from './steppedColumnInputs';
 
 const inch=25.4,sixteenth=inch/16,up=(v:number,step:number)=>Math.ceil(v/step-1e-9)*step,down=(v:number,step:number)=>Math.floor(v/step+1e-9)*step;
@@ -179,7 +180,19 @@ export function tieSizingDemands(p:ProjectInput):TieSizingDemands{
 /** The new column's twist movement at the bracket seat the tie takes (tieMovements), as the calculation finds it. */
 function seatTwist(p:ProjectInput){
  const c=p.existingColumn,none={service:0,factored:0,offset:0};if(!c?.enabled||!c.isNew||activeStep(p)||!p.details?.bracket?.enabled||activeColumnCap(p)||tiedToBuilding(p))return none;
- try{return {...twistMovement(existingColumnAnalysis(p,supportReactions(p,sectionProperties(p.section))),p.method),offset:girderOffset(p)};}catch{return none;}
+ try{
+  const reactions=supportReactions(p,sectionProperties(p.section)),now=twistMovement(existingColumnAnalysis(p,reactions),p.method);
+  // With a torsion brace the bracing sizing grows its strut (sizeTorsionStrut, after the tie) until the factored twist
+  // movement is within 0.9 of the configurator's target (torsion-brace-movement), down to what the stiffest strut that
+  // fits gives: the tie takes that movement, not the trial strut's.
+  if(torsionBraceActive(p)&&now.factored>0){
+   const q=structuredClone(p),d=q.longitudinalBracing!.design=structuredClone(bracingDesign(q)),stiff=stiffestTorsionStrut(q);
+   if(stiff)d.strut.shape=stiff;
+   const floor=twistMovement(existingColumnAnalysis(q,reactions),p.method).factored,k=Math.min(1,Math.max(floor,.9*twistMovementTarget())/now.factored);
+   return {service:k*now.service,factored:k*now.factored,offset:girderOffset(p)};
+  }
+  return {...now,offset:girderOffset(p)};
+ }catch{return none;}
 }
 
 /** A calculation snapshot carrying only the sizing demands, for the tie check functions. */
@@ -232,6 +245,8 @@ export function tieSizingRatios(p:ProjectInput,demand=tieSizingDemands(p)):Recor
 export interface TieProportions {diameter:number;thickness:number;gusset:number;travel:number;face:number;
  /** Bolt rows in each group along the tie: 2, or 1 (two bolts across the bar) for a longer flexible length. */
  rows?:number;
+ /** The column gusset CJP welded to the column flange (brace.columnRoot), where its fillet root's fatigue governs. */
+ cjp?:boolean;
  /** Extra bar width beyond the gauge and edge distances, mm. */
  widen:number;saddleThickness:number;saddleWeld:number;setback:number;
  /** Column-end slide each way along the runway, mm (paired bars with the release; 0: none). */
@@ -272,6 +287,11 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
  const edge=plate?Math.max(spacing.edge,up(wrenchClearance(x.diameter)-tieBarGap(weld)+weld,inch/8)):spacing.edge;
  Object.assign(c,{diameter:x.diameter,pitch:spacing.pitch,edge,rows:plate?2:x.rows??2,thickness:x.thickness,weldSize:weld});
  t.thickness=x.thickness;t.gussetThickness=x.gusset;
+ if(x.cjp)t.columnRoot='cjp';else delete t.columnRoot;
+ // A stiffener tie's gusset thicker than the bearing stiffeners: the stiffeners grow with it, the tie-side one cut with
+ // the gusset as its extension (one plate). A gusset CJP welded to a thinner stiffener would put the bars' out-of-plane
+ // moment through the thinner plate at the joint (tieMovementChecks).
+ if(!a?.enabled&&!plate&&x.gusset>d.bearing.stiffenerThickness+1e-9&&stiffenerTieGeometry(p))d.bearing.stiffenerThickness=x.gusset;
  // Column stiffeners proportioned for the gusset delivering the force (J10.8: t_s ≥ t_g/2).
  if(x.stiffened&&a?.enabled){const st=initialTieStiffener(p);if(st)t.columnStiffener=st;}
  if(rel){rel.travel=x.travel;if(x.wall)rel.sleeveWall=x.wall;if(x.slide&&!plate)rel.slide=x.slide;else delete rel.slide;}
@@ -301,7 +321,7 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
 /** The current proportions of a project's tie. */
 export function tieProportions(p:ProjectInput):TieProportions{
  const d=p.details!,t=d.brace,a=t.flangeAttachment,g=flangeTieGeometry(p),st=stiffenerTieGeometry(p);
- return {diameter:t.connection.diameter,rows:t.connection.rows,thickness:t.thickness,gusset:t.gussetThickness,travel:t.release?.travel??inch/8,face:g?.face??st?.face??t.length,widen:0,
+ return {diameter:t.connection.diameter,rows:t.connection.rows,cjp:t.columnRoot==='cjp',thickness:t.thickness,gusset:t.gussetThickness,travel:t.release?.travel??inch/8,face:g?.face??st?.face??t.length,widen:0,
   saddleThickness:a?.saddleThickness??1.5*inch,saddleWeld:a?.weldSize??.375*inch,setback:a?.longitudinalSetback??0,slide:t.release?.slide??0,wall:t.release?.sleeveWall,stiffened:!!t.columnStiffener?.enabled};
 }
 
@@ -347,8 +367,8 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  const plate=tieArrangement(d)==='flexible-plate',release=!!d.brace.release?.enabled;
  // A stiffener tie's gusset starts at the bearing stiffener's thickness (at most the 3/4 in start of the other ties):
  // the tie-side stiffener is then cut with the gusset as its extension (one plate, no weld; stiffenerTieJoint
- // 'integral'). Only a check that needs a thicker gusset (a gusset step) makes it a separate plate CJP welded to the
- // stiffener edge.
+ // 'integral'). A check that needs a thicker gusset (a gusset step) thickens the bearing stiffeners with it
+ // (applyTieProportions), so the joint stays one plate.
  const stiffenerGusset=stiffenerTieGeometry(p)?d.bearing.stiffenerThickness:undefined;
  // Release travel: the vertical movement at the tie (a designed support's deflection limit under every crane with
  // impact, or the same allowance for a support by others; the end rotation over the setback) plus the 1/16 in
@@ -419,7 +439,11 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
     if(widenRoom(r,dw)){x.widen+=dw;trial.movement=true;return true;}
    }
   }
-  if(gussetChecks.has(k)&&x.gusset<1.25*inch-1e-6){x.gusset+=inch/8;return true;}
+  // Gussets to 1 1/4 in; to 1 1/2 in for a column-end slide, whose sleeve friction μF loads both gussets out of plane.
+  if(gussetChecks.has(k)&&x.gusset<(x.slide?1.5:1.25)*inch-1e-6){x.gusset+=inch/8;return true;}
+  // The gusset roots with the imposed movement at the thickest gusset: the column gusset CJP welded to the column flange
+  // (Category C at its toe, no fillet root; the base metal governing its strength), a field weld with UT.
+  if((k==='tie-move-root-fatigue'||k==='tie-move-weld')&&!x.cjp){x.cjp=true;return true;}
   // The release sleeves under the bolt pretension (and, at a slide, bending across the float): a thicker wall, to 1/2 in.
   if((k==='tie-release-sleeve'||k==='tie-slide-sleeve')&&x.wall!==undefined&&x.wall<inch/2-1e-6){x.wall+=sixteenth;return true;}
   if(boltChecks.has(k)){const next=bolts.find(v=>v>x.diameter+1e-6);if(next){x.diameter=next;trial.grown=true;return true;}}
@@ -462,7 +486,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // The bolt rows in each group: two, or one where two rows leave the imposed movement over its limit (below).
  let startBolt=.625*inch,rows=2;
  const sizeAt=(face:number,thickness:number,slide=0)=>{
-  const x:TieProportions={...base,face,thickness,travel:faceDemand(face).travel,diameter:startBolt,rows,gusset:stiffenerGusset!==undefined?Math.min(stiffenerGusset,.75*inch):Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0,slide};
+  const x:TieProportions={...base,face,thickness,travel:faceDemand(face).travel,diameter:startBolt,rows,cjp:false,gusset:stiffenerGusset!==undefined?Math.min(stiffenerGusset,.75*inch):Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0,slide};
   let r=evaluate(x);
   // A ratio no step relieves is set aside (the checks report it), so the others are still sized.
   const stuck=new Set<string>(),trial={grown:false,movement:false};
