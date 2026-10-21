@@ -40,8 +40,9 @@ export function deliveredRows(s:CalculationSnapshot,d:DeliveredForces|undefined=
  // column's eccentric top reaction and its Appendix 6 brace force, deliveredForces craneColumn), either way.
  const k=d.craneColumn;
  if(k)return d.grids.flatMap(g=>g.sets.map((x,i)=>[i?'':String(g.grid),sentence(x.label),x.combination,`±${f(x.Htie)}`,`±${f(Math.abs(x.Hseat)+k.eccentric+k.braceForce)}`]));
- // The crane-level strut by others the column check relies on: its design force along the runway at the seat level.
- const z=d.strut,strut=z?[['Strut',`Crane-level strut by others, ${z.location==='girder-line'?'girder line':'column C/L'}`,`traction / stop`,'—','—','—','—','—',`±${f(z.force)}`]]:[];
+ // The crane-level strut the column check relies on (by others, or on a stepped column designed here and delivering to
+ // the existing braced bay): its design force along the runway at the seat level.
+ const z=d.strut,strut=z?[['Strut',z.designed?`Crane-level strut ${z.designed} (new) on the girder line, to the (E) braced bay`:`Crane-level strut by others, ${z.location==='girder-line'?'girder line':'column C/L'}`,`traction / stop`,'—','—','—','—','—',`±${f(z.force)}`]]:[];
  return [...d.grids.flatMap(g=>g.sets.map((x,i)=>row(g.grid,i,x))),...strut];
 }
 

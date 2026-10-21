@@ -104,6 +104,9 @@ const idRules:Rule[]=[
  D(/^(rail-clip-(lateral|uplift)|rail-anchorage)$/,'connection'),
  // Step of a stepped column: J10.2/J10.3 on the lower web under the upper inner flange, J10.6 panel shear (local, as haunch-column-panel).
  D(/^step-(panel-shear|web-yielding|web-crippling|web-sidesway|flange-bending|flange-yielding)$/,'local'),
+ // The crane-level strut on the girder line of a stepped column (craneLevelStrut.ts): the member and its column plate in
+ // axial force; the F13.1 test of the holes in the existing flange is a classification.
+ D(/^step-strut-(compression|plate)$/,'axial'),T(/^step-strut-flange-holes$/,'classification'),
  // The existing upper shaft of a stepped column under the off-web column gussets of a stiffener tie (tieMovement.ts).
  D(/^column-upper-tie-flange$/,'local'),
  D(/^((building-)?column-((upper|lower)-)?axial|(building-)?column-seismic-axial|crane-column-brace-strength|crane-column-tie-(compression|buckling))$/,'axial'),
