@@ -73,7 +73,9 @@ import type {SupportReactionSet} from './supportReactions';
 import {activeStep} from './steppedColumnInputs';
 import {independentBearings} from './simpleSupports';
 import {twistMovement,twistRotationLimit,twistSlip} from './columnTwistLimit';
-import {dcText} from './checkPresentation';
+import {dcText,noCapacity} from './checkPresentation';
+/** A sizing ratio as the log prints it: a ratio with no resistance left (the 1e12 sentinel, a bolt tension at the slip limit) in words. */
+const ratioText=(k:string,v:number)=>noCapacity(v)?`${k} with no ${/slip/.test(k)?'slip resistance (the bolt tension reaches the slip limit)':'capacity'}`:`${k} ${dcText(v,2)} > 1.00`;
 
 const inch=25.4,foot=304.8,kip=4448.2216152605,ksi=6.894757293168,fpm=5.08,g=9.80665;
 /** Fictitious example allowable lateral bearing (passive) pressure, 150 psf/ft (IBC 2018 Table 1806.2, sandy soils). */
@@ -1739,7 +1741,7 @@ function attachTieAtFace(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace){
 /** The sized paired-bar, flexible-plate or stiffener tie with a sizing ratio of its own past 1.00 (as beyondCatalog judges it). */
 const tieUnresolved=(p:ProjectInput)=>!!(flangeTieGeometry(p)||stiffenerTieGeometry(p))&&Object.entries(tieSizingRatios(p)).some(([k,v])=>!k.startsWith('column-')&&v>1+1e-6);
 function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?:number){
- const d=p.details!;let capMisfit:string|undefined;
+ const d=p.details!;let capMisfit:string|undefined,sameSaddle:string|undefined;
  if(cfg.support==='column-cap')return;
  if(cfg.tie==='flexible-plate'){
   p.details=selectTieArrangement(d,'flexible-plate');
@@ -1770,7 +1772,7 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
    if(bracket)q.details.bracket=structuredClone(bracket);if(face!==undefined)q.details.brace.flangeAttachment!.columnFace=face;
    q.details=sizeFlangeTie(q,{reach:farthest}).details;
    const worst=Object.entries(tieSizingRatios(p)).sort((a,b)=>b[1]-a[1])[0];
-   if(excess(q)<now-1e-9){p.details=q.details;trace.tie=`The flexible plate cannot pass as sized (tie sizing ratio ${worst[0]} ${worst[1].toFixed(2)} > 1.00 for the estimated tie demands): the tie is paired flat bars on the same saddle, each bar taking half the force.`;p.notes+=` ${trace.tie}`;}
+   if(excess(q)<now-1e-9){p.details=q.details;sameSaddle=trace.tie=`The flexible plate cannot pass as sized (tie sizing ratio ${ratioText(worst[0],worst[1])} for the estimated tie demands): the tie is paired flat bars on the same saddle, each bar taking half the force.`;p.notes+=` ${trace.tie}`;}
   }
  }
  if(p.section.kind==='cap'&&flangeTieGeometry(p)){
@@ -1780,7 +1782,7 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
    const saddle=structuredClone(p.details!);
    if(bracket)p.details!.bracket=bracket;if(face!==undefined)p.details!.brace.flangeAttachment!.columnFace=face;
    p.details=selectTieArrangement(p.details!,'cap-angle');
-   const misfit=fitCapAngle(p),why=`The ${cfg.tie==='flexible-plate'?'flexible plate':'paired flat bars'} on a direct flange saddle do not suit this capped girder (tie sizing ratio ${worst[0]} ${worst[1].toFixed(2)} > 1.00 for the estimated tie demands)`;
+   const misfit=fitCapAngle(p),why=`The ${cfg.tie==='flexible-plate'?'flexible plate':'paired flat bars'} on a direct flange saddle do not suit this capped girder (tie sizing ratio ${ratioText(worst[0],worst[1])} for the estimated tie demands)`;
    // A cap angle that does not fit the girder end and column: the saddle tie stays, its checks report it.
    if(misfit)p.details=saddle;
    trace.tie=misfit?`${why}, and no cap tieback angle of the sizing steps fits this girder end and column (${misfit}): the saddle tie stays as sized.`:`${why}: the tie is the cap tieback angle bolted to the channel cap.`;
@@ -1794,6 +1796,8 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
  // tie on the bearing stiffener instead (tieOnBearingStiffener).
  const moved=tieOnBearingStiffener(p,{reach:farthest,highCycle:highCycle(cfg)?`CMAA Class ${cfg.cmaa}, AIST Class ${cfg.buildingClass}`:undefined,bracket,face,
   prefer:cfg.support==='crane-column'?'on a crane column the top flange is tied to the building column, a flexible restraint: the girder twists more at the supports, and a welded saddle on the tied flange is a Category D/E attachment in that flange lateral bending':undefined});
+ // The note of the flexible plate's paired bars 'on the same saddle' goes with the saddle (case 073).
+ if(moved&&sameSaddle)p.notes=p.notes.replace(` ${sameSaddle}`,'');
  if(moved){p.details=moved.details;trace.tie=`A direct flange saddle does not suit this rolled girder (${moved.why}): the ${cfg.tie==='flexible-plate'?'tie is paired flat bars, which':'paired flat bars'} bolt to the tie-side bearing stiffener, cut as one plate with its gusset extension past the flange tip (no weld at the gusset), the full-depth stiffener pair carrying the tie force into the girder.`;p.notes+=` ${trace.tie}`;}
  // A configured reach holds the column face: where the sized tie still exceeds an imposed-movement limit there, the log
  // says so (the sizing moves the face out only where the reach is left to it).
