@@ -694,7 +694,7 @@ function withConfirmedGirder(q:ProjectInput,input:RunwayConfig,trace:SelectionTr
  if(closest.basis)closest.basis.heavy=heavy;
  const reason=girderOpenReason(closest,capped,rolledNote),c=q.configurator!;
  c.beyondCatalog=c.beyondCatalog!.map(v=>v.member==='girder'?{...v,reason}:v);
- c.selections=c.selections?.map(v=>v.item==='Open item'&&v.entered==='Girder'?openItemRow({...item,reason}):v.item==='Girder'&&heavy?.confirmed&&!v.reason.includes(heavy.name)?{...v,reason:clipReason(`${heavyAlternative(closest).trim()} ${v.reason}`)}:v);
+ c.selections=c.selections?.map(v=>v.item==='Open item'&&v.entered==='Girder'?openItemRow({...item,reason}):v.item==='Girder'&&heavy?.confirmed&&!v.reason.includes(heavy.name)?{...v,reason:clipReason(`${heavyAlternative(closest).trim()} ${v.reason.trim()}`)}:v);
  return q;
 }
 /**
@@ -1079,7 +1079,7 @@ function withWeldedBracket(p:ProjectInput,cfg?:RunwayConfig,trace:SelectionTrace
   const over=Object.entries(r).filter(([,v])=>v>1+1e-6).sort((x,y)=>y[1]-x[1]);
   if(over.length){
    const R=serviceReactionEstimate(p),isNew=!!p.existingColumn?.isNew;
-   trace.bracket=`The ${supportLabels[cfg.support]??cfg.support} sized to the limits of its steps still exceeds ${over.slice(0,4).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (sizing estimates; the calculation reports its own) for the ${formatUnits(R,'force',p.units,3)} support reaction${R>bracketReactionLimit?`, ${(R/bracketReactionLimit).toFixed(1)} times the AIST TR-13 §5.9.2 guideline of ${formatUnits(bracketReactionLimit,'force',p.units,3)} (a clause to be verified)`:''}: a bracket is beyond reasonable use for this crane on ${isNew?'a freestanding cantilever column':'this column'}. Recommended: ${isNew?'column caps over the new columns (support column-cap), the girder bearing on the column axis':'crane columns beside the building columns (support crane-column) with the girders on their caps'}; the support entered is kept and checked (review draft).`;
+   trace.bracket=`The ${supportLabels[cfg.support]??cfg.support} sized to the limits of its steps still exceeds ${over.slice(0,4).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (sizing estimates; the calculation reports its own) for the ${formatUnits(R,'force',p.units,3)} support reaction (configurator estimate, with the support steel)${R>bracketReactionLimit?`, about ${(R/bracketReactionLimit).toFixed(1)} times the AIST TR-13 §5.9.2 guideline of ${formatUnits(bracketReactionLimit,'force',p.units,3)} (a clause to be verified; the calculation's column-bracket check reports its own reaction and ratio)`:''}: a bracket is beyond reasonable use for this crane on ${isNew?'a freestanding cantilever column':'this column'}. Recommended: ${isNew?'column caps over the new columns (support column-cap), the girder bearing on the column axis':'crane columns beside the building columns (support crane-column) with the girders on their caps'}; the support entered is kept and checked (review draft).`;
   }
  }
  return p;
@@ -1981,7 +1981,7 @@ function selectionLog(entered:RunwayConfig,cfg:RunwayConfig,rules:ConfigRule[],t
    b?.lighter?`lighter candidates rejected: ${Object.entries(b.rejected).map(([k,n])=>`${n} by ${k}`).join(', ')}; the next lighter, ${b.lighter.name}: ${b.lighter.why}`:'',
    b?.alternative?`a capped girder, ${b.alternative.name} (${Math.round(b.alternative.weight)} lb/ft against ${Math.round(trial.weight)} lb/ft), meets the same targets: consider it (girder type capped)`:'',
    entered.girderShape?'a capped girder is sized as a pair unless both the W and the channel are named':''].filter(Boolean).join('; ');
-  add('Girder',entered.girderShape?`${entered.girderShape} + cap channel blank`:`${auto} (sized)`,p.section.name,`${beyondGirderCatalog(trial)?heavyAlternative(trial).trim()+' ':''}${reason}. These are the configurator's screening estimates (a simplified model that ranks the catalog), not the final ratios: the calculation checks the section and reports its own ratios.${b?.passed===false?beyondGirderCatalog(trial)?` A built-up plate girder is required: the closest section is built and calculated, and the package is a review draft (open item).`:' The closest section is within the limits but not the sizing margins: the calculation decides.':''}`);
+  add('Girder',entered.girderShape?`${entered.girderShape} + cap channel blank`:`${auto} (sized)`,p.section.name,`${beyondGirderCatalog(trial)&&heavyAlternative(trial)?heavyAlternative(trial).trim()+' ':''}${reason}. These are the configurator's screening estimates (a simplified model that ranks the catalog), not the final ratios: the calculation checks the section and reports its own ratios.${b?.passed===false?beyondGirderCatalog(trial)?` A built-up plate girder is required: the closest section is built and calculated, and the package is a review draft (open item).`:' The closest section is within the limits but not the sizing margins: the calculation decides.':''}`);
  }
  if(design&&trace.pad)add('Rail pad','configurator default (pad under rails 5 in deep and deeper)',`None: rail on the girder, clips at most ${len(30*inch)} apart`,trace.pad);
  const col=p.existingColumn;

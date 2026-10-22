@@ -1,7 +1,7 @@
 import {asceCombinations} from './asceCombinations';
 import {twistShift} from './columnTwistLimit';
 import {columnResponse} from './columnAnalysis';
-import {atRail,existingColumnEccentricity,existingColumnRailElevation,existingColumnSection,railForce,seismicHeight} from './existingColumn';
+import {atRail,driftBasis,existingColumnEccentricity,existingColumnRailElevation,existingColumnSection,railForce,seismicHeight} from './existingColumn';
 import {anchorGrades,anchorHardware,barSizes,columnBaseElevation,footingKeyWidth,type ColumnBaseInput} from './columnBaseInputs';
 import {minimumFillet} from './connectionStrength';
 import {wrenchClearance} from './endStop';
@@ -440,7 +440,7 @@ export function columnBaseChecks(p:ProjectInput,r:ColumnBaseResult,column?:Exist
   const d=baseDrift(p,column),u=p.units,f=(v:number)=>format(v,'length',u,3);
   checks.push({id:'base-drift',group:'New column base',title:'Runway drift with footing rotation',demand:d.total,capacity:d.limit,quantity:'length',utilization:d.total/d.limit,status:withinLimit(d.total,d.limit)?'pass':'fail',
    equation:'\\Delta=\\Delta_{col}+\\theta\\,h,\\quad\\theta=\\frac{M}{k_s\\,BL^3/12}\\le h/n',substitution:`\\frac{${latexNumber(d.total)}}{${latexNumber(d.limit)}}=${(d.total/d.limit).toFixed(4)}`,
-   note:`Column alone ${f(d.column)} plus the footing's rotation ${d.theta.toExponential(3)} rad on the soil (modulus of subgrade reaction ${format(p.columnBase!.soil.subgrade,'subgrade',u,3)}, full contact) times ${f(d.lever)} from the footing base to the rail, under the service side thrust and static eccentric reaction of the drift check. ${subgradeBasis(p)}`,referenceIds:['dg7','aci-318']});
+   note:`Column alone ${f(d.column)} plus the footing's rotation ${d.theta.toExponential(3)} rad on the soil (modulus of subgrade reaction ${format(p.columnBase!.soil.subgrade,'subgrade',u,3)}, full contact) times ${f(d.lever)} from the footing base to the rail, under the loads of the drift check (${driftBasis(p).replace(/^S/,'s')}). ${subgradeBasis(p)}`,referenceIds:['dg7','aci-318',...(d.tr13?['tr13-service']:[])]});
  }
  return checks;
 }
@@ -457,7 +457,7 @@ export function baseDrift(p:ProjectInput,column:ExistingColumnResult){
  // The side thrust's part alone, on the same column and footing: an estimate of the drift with the girder on the
  // column axis (column caps: no eccentric reaction moment, no seat twist), for the configurator's recommendation.
  const sideTheta=Math.abs(column.crane.lateral*(side.reactions.baseMoment+side.reactions.base*arm))/k,sideOwn=Math.max(0,column.drift.value-Math.abs(column.crane.liveStatic*e*atRail(eccentric,c.height,ht)));
- return {theta,lever,column:own,total:own+theta*lever,limit:column.drift.limit,sideOnly:{column:sideOwn,total:sideOwn+sideTheta*lever}};
+ return {theta,lever,column:own,total:own+theta*lever,limit:column.drift.limit,tr13:column.drift.tr13!==undefined,sideOnly:{column:sideOwn,total:sideOwn+sideTheta*lever}};
 }
 /**
  * Fillet all around each plate washer to the base plate, so every rod takes its share of the base shear through
