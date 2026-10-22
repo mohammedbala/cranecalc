@@ -32,6 +32,14 @@ const codeLimits=new Set(['frost','bar-spacing','min-steel','rod-clear']);
 const rodDiameters=[.75,1,1.25,1.5,1.75,2].map(v=>v*inch);
 /** Largest footing (square, plan and depth), plate, plate thickness and rod embedment the sizing goes to. */
 const caps={footing:30*foot,depth:8*foot,plate:60*inch,thickness:6*inch,embedment:48*inch};
+/** Clear distance kept between the isolated footings of neighbouring grids (validateColumnBase rejects an overlap). */
+export const newFootingClear=6*inch;
+/**
+ * The largest isolated footing plan that leaves newFootingClear to the footings of the neighbouring grids (the
+ * shortest span; square footings), on the 6 in grid, at most caps.footing. A runway that needs more is a combined or
+ * strip footing designed by hand: the sizing stops at this plan and the checks report the rest.
+ */
+export const footingPlanCap=(p:ProjectInput)=>Math.min(caps.footing,Math.floor((Math.min(...p.spans)-newFootingClear)/(6*inch)+1e-9)*6*inch);
 /**
  * Share of the drift target the column alone may take for the footing to be sized for the rest: a column more flexible
  * than that is left to the column choice (the configurator steps to a heavier shape) rather than to a rigid footing.
@@ -176,7 +184,7 @@ function lowerColumn(p:ProjectInput,delta:number){
 export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
  const q=structuredClone(p),col=q.existingColumn,b=q.columnBase;
  if(!col?.enabled||!col.isNew||!b?.enabled)return q;
- const {section}=existingColumnSection(q),reactions=supportReactions(q,sectionProperties(q.section)),pl=b.plate,a=b.anchors;
+ const {section}=existingColumnSection(q),reactions=supportReactions(q,sectionProperties(q.section)),pl=b.plate,a=b.anchors,plan=footingPlanCap(q);
  // Braced runways with unbraced columns too: the braced columns' footing is sized apart from the others' (columnBase.braced),
  // starting from the same footing; the step acting on a 'braced:' ratio grows that one.
  const stations=supportStations(q).map((_,j)=>bracedSupport(q,j));
@@ -204,9 +212,9 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
   while(pl.N<section.d+2*a.edge+2*a.diameter||rodClearance(q,b).required>rodClearance(q,b).available+1e-6)pl.N=next(pl.N,inch/2);
   fitFooting();
  };
- const wider=()=>{const L=next(ft.L,6*inch);if(L>caps.footing+1e-6)return false;ft.L=ft.B=L;return true;};
+ const wider=()=>{const L=next(ft.L,6*inch);if(L>plan+1e-6)return false;ft.L=ft.B=L;return true;};
  // The rods' edge distances: every footing at least as wide as the one grown.
- const widerAll=()=>{const L=next(Math.min(...footings().map(v=>v.L)),6*inch);if(L>caps.footing+1e-6)return false;for(const v of footings())if(v.L<L)v.L=v.B=L;return true;};
+ const widerAll=()=>{const L=next(Math.min(...footings().map(v=>v.L)),6*inch);if(L>plan+1e-6)return false;for(const v of footings())if(v.L<L)v.L=v.B=L;return true;};
  // A shear key below the footing (6 in steps to 3 ft) where the soil's lateral bearing is given (passiveResistance).
  const keyed=()=>{if(!(b.soil.passive??0))return false;const k=next(ft.key??0,6*inch);if(k>36*inch+1e-6)return false;ft.key=k;return true;};
  const deeper=()=>{const t=next(ft.thickness,2*inch);if(t>caps.depth+1e-6)return false;ft.thickness=t;return true;};
@@ -256,8 +264,9 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
    // The drift: to the target by the footing where the column alone leaves it room; where the column takes more (the
    // column choice's), the footing still grows until the drift is within its limit (driftEdge, 0.99 for the margin to
    // the calculation), so a column at the catalog limit (or configured) is not left past it while a larger footing
-   // would bring it there.
-   case 'soil':case 'overturning':case 'development':case 'drift':return key==='drift'&&s.column>columnDriftShare*target&&!(s.ratios.drift>driftEdge&&s.column<1)?false:wider();
+   // would bring it there. A column alone at or past driftEdge: no footing can bring the drift within it (case 080:
+   // column 0.992, the footing grown to the 30 ft cap for nothing); the column item governs.
+   case 'soil':case 'overturning':case 'development':case 'drift':return key==='drift'&&s.column>columnDriftShare*target&&!(s.ratios.drift>driftEdge&&s.column<driftEdge)?false:wider();
    // Sliding: a shear key engages the soil's lateral bearing deeper (where it is given), then a heavier footing.
    case 'sliding':return keyed()||heavier();
    case 'uplift':return heavier();
