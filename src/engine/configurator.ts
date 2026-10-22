@@ -737,8 +737,15 @@ function withConfirmedCap(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace
  const b0=q.details?.endBearing?.bolts,b1=r.details?.endBearing?.bolts,len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
  const was=failing.map(c=>`${c.id} ${dcText(c.utilization!,2)}`).join(', ');
  if(s2.errors.length||!b1||failing.some(c=>after.has(c.id))||[...after].some(id=>!before.has(id))){
-  const row=q.configurator?.selections?.find(v=>v.item==='Crane column');
-  if(row)row.reason=clipReason(`${row.reason} The calculation's cap bolt checks run above the cap sizing estimates (${was}); the cap sized for the calculated ratios does not pass them without another check failing, so the first cap stays (its checks report it).`);
+  // An open item (configurator-column-cap, as withCapColumn raises it for column-cap supports; it closes where every
+  // column-cap check passes): what the sizing could not do, with the calculated ratios.
+  const c=q.configurator,e=b0,cap=q.existingColumn?.shape;
+  if(c&&e&&cap){
+   const tried=b1&&!s2.errors.length?` (sized again for the calculated ratios, ${len(b1.diameter)} ${b1.grade} at a ${len(b1.gauge)} gauge: ${failing.map(x=>{const v=s2.checks.find(y=>y.id===x.id)?.utilization;return `${x.id} ${v!==undefined?dcText(v,2):'n/a'}`;}).join(', ')})`:'';
+   const reason=clipReason(`Column cap not resolved: on this crane column the calculation gives ${was} for the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end at a ${len(e.gauge)} gauge${tried}: the calculation's girder model puts a bottom-flange force on the bolts well above the cap sizing estimates, and no bolt, grade or gauge within the sizing's nut clearances to the column flanges brings it within 1.00. Recommended: a larger bolt (e.g. 1 1/8 in A490) with the end bearing re-laid out for its sleeve and nut clearances, or a wider bolt spread or more bolts, designed by hand. The closest cap is built and checked.`);
+   c.beyondCatalog=[...(c.beyondCatalog??[]).filter(v=>v.member!=='column-cap'),{member:'column-cap',shape:cap,reason}];
+   if(c.selections)c.selections=[...c.selections.filter(v=>!(v.item==='Open item'&&v.entered==='Column cap')),openItemRow({member:'column-cap',shape:cap,reason})].slice(-24);
+  }
   return q;
  }
  const now=failing.map(c=>{const v=s2.checks.find(x=>x.id===c.id)?.utilization;return `${c.id} ${v!==undefined?dcText(v,2):'n/a'}`;}).join(', ');
