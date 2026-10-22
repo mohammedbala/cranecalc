@@ -38,6 +38,9 @@ const simulated:Record<string,RunwayConfig>={
  'V059':cfg('V059',{capacity:40,craneSpan:69,control:'cab',cmaa:'C',buildingClass:'C',bays:2,span:50,railElevation:34,girder:'rolled',support:'crane-column',tie:'paired-bars',craneColumnBase:'pinned',buildingColumnShape:'W14X82'}),
  'V061':cfg('V061',{capacity:40,craneSpan:68,control:'cab',cmaa:'D',cranes:2,buildingClass:'B',bays:4,span:45,railElevation:28,girder:'rolled',support:'stepped-column',tie:'flexible-plate'}),
  'V067':cfg('V067',{capacity:15,craneSpan:45,control:'cab',cmaa:'D',buildingClass:'C',system:'continuous',bays:4,span:22.5,railElevation:27,girder:'rolled',support:'stepped-column',tie:'paired-bars'}),
+ // Round 9: a 40 t cab crane on 45 ft bays entered capped (053, ASD, crane columns): no W and channel cap pair meets the
+ // targets, and the rolled W36X529 the screening does not pass is confirmed by the calculation (withConfirmedGirder).
+ 'R053':cfg('R053',{method:'ASD',capacity:40,craneSpan:75,control:'cab',cmaa:'B',buildingClass:'D',bays:2,span:45,railElevation:32,support:'crane-column',tie:'flexible-plate',craneColumnBase:'pinned'}),
  'V082':cfg('V082',{capacity:2,craneSpan:33,control:'cab',cmaa:'B',buildingClass:'C',bays:4,span:15,railElevation:36,structure:'new',support:'haunched-seat',tie:'cap-angle',reach:18}),
 };
 
@@ -66,10 +69,17 @@ describe('configurator project validity',()=>{
   }
   if(id==='V059'){
    expect(p.section.name).toBe('W36X529');
-   // A jumbo rolled W36 is named only where one meets the targets (on this crane column, without the Saint-Venant
-   // relief of the screening, none does).
+   // A jumbo rolled W36 is named where one meets the targets: on this crane column none does by the screening (without
+   // the Saint-Venant relief), and the lightest near them that the calculation passes is named (W36X802: rail-head 0.96),
+   // never selected. Both catalogs were tried (the open item's title says so).
    const reason=p.configurator!.beyondCatalog!.find(v=>v.member==='girder')!.reason;
-   if(/jumbo/.test(reason))expect(reason).toMatch(/A jumbo rolled W36X\d+ \(.*\) would meet the sizing targets as a heavy alternative.*the configurator does not select it\.$/);
+   expect(reason).toMatch(/A jumbo rolled W36X802 \(.*\) passes every girder check of the calculation of this runway built with it \(rail-head 0\.9\d.*\), the screening did not: a heavy alternative, not selected;.*mill availability to confirm\.$/);
+   expect(configuratorOpenItems(p)[0].title).toBe('Plate girder required (rolled W and capped catalogs exhausted)');
+  }
+  if(id==='R053'){
+   expect(p.section.name).toBe('W36X529');expect(p.configurator!.girder).toBe('rolled');
+   expect(p.configurator!.beyondCatalog?.some(v=>v.member==='girder')).toBeFalsy();
+   expect(p.configurator!.selections!.find(v=>v.item==='Girder type')).toMatchObject({entered:'Capped (W + channel)',designed:'Rolled W',reason:expect.stringMatching(/^No W and channel cap pair of the catalog meets the girder sizing targets .* W36X529 .* is confirmed by the calculation of this runway: every girder check passes/)});
   }
   if(id==='V061')expect(p.configurator!.beyondCatalog?.some(v=>v.member==='girder')).toBeFalsy();
   if(id==='061'){
@@ -77,7 +87,7 @@ describe('configurator project validity',()=>{
    expect(p.details!.brace.arrangement).toBe('paired-bars');expect(p.details!.brace.flangeAttachment?.enabled).toBe(false);
    expect(p.configurator!.selections!.find(v=>v.item==='Top-flange tie')!.reason).toMatch(/the cap tieback angle cannot carry the tie force \(sized .* still exceeds .*\): the paired flat bars bolt to the tie-side bearing stiffener/);
   }
- },300000);
+ },900000);
  it('new freestanding columns take the top of rail to at most 35 ft (ASCE 7 cantilever column height limit), with the reason',()=>{
   const n=normalizeConfig(simulated['V082']);
   expect(n.config.railElevation).toBe(35);

@@ -304,7 +304,9 @@ export function existingColumnAnalysis(p:ProjectInput,reactions:SupportReactionS
  }):[];
  combinations.push(...seismicCases);
  const max=(key:'P'|'Mx'|'My'|'V'|'U')=>combinations.reduce((a,b)=>Math.abs(b[key])>Math.abs(a[key])?b:a);
- // Service drift at the rail head from one crane's side thrust and static eccentric reaction (column alone).
+ // Service drift at the rail head (column alone): the side thrust of one crane (Css, the largest single-crane reaction,
+ // AIST TR-13 a single-crane action) with the static eccentric reaction of the cranes at this support (Cd + Cv, all cranes
+ // present in the arrangement giving the largest reaction, no impact): driftBasis says so.
  const drift=Math.abs(lateral*atRail(side,c.height,ht))+Math.abs(liveStatic*e*atRail(eccentric,c.height,ht));
  // Rail gauge under gravity (TR-13 §5.3): runway dead load and the static crane at this support, both runways alike.
  // A positive eccentric moment turns the column toward the crane span (u > 0 inward), closing the gauge.
@@ -402,6 +404,14 @@ export function twistNote(t:NonNullable<ExistingColumnResult['torsion']>,u:Proje
  * 'Existing column' in the groups and titles (e.g. 'Crane column', 'Building column'), and `prefix` goes before every
  * `column-*` id ('building-' gives building-column-axial, building-column-interaction, ...). Other ids are kept.
  */
+/**
+ * The loads of the column drift check (existingColumnAnalysis drift): the side thrust of one crane, as TR-13 takes it,
+ * and the static eccentric reaction of all cranes present (the arrangement giving the largest reaction at the support).
+ */
+export function driftBasis(p:ProjectInput){
+ const cranes=p.cranes.length>1?'the cranes (all cranes present, in the arrangement giving the largest reaction at the support; static, no impact)':'the crane (static, no impact)';
+ return tiedToBuilding(p)?`Static eccentric reaction of ${cranes}; the side thrust goes to the building column through the ties`:`Service side thrust of one crane (the largest single-crane side-thrust reaction, AIST TR-13 C_ss) with the static eccentric reaction of ${cranes}`;
+}
 export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult,opts:{prefix?:string;label?:string;
  /** The crane-level bracing displacement along the runway, in series with the column twist movement (column-twist). */
  braceMove?:number}={}):CheckResult[]{
@@ -419,7 +429,7 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult,opts:
  // M5: an existing column without the frame data is checked as part of a braced (non-sway) frame: a conditional result.
  const braced=!c.isNew&&!!r.support&&!r.support.frame.entered,condition=braced?`Conditional on a braced (non-sway) frame across the runway (${c.strong.base} base, ${c.strong.top} top, B1 only): the frame type is not available and is by others (responsibility matrix). If the column line is a sway (portal) frame, repeat this check with B2 from the frame analysis (AISC Appendix 8). `:'';
  add('interaction',`${label} · combined axial and flexure (H1)${braced?', braced frame assumed':''}`,g.U.U,1,'ratio','\\frac{P_r}{P_c}+\\frac89\\left(\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\right)\\le1\\ \\ \\text{(H1-1a)};\\quad\\frac{P_r}{2P_c}+\\frac{M_{rx}}{M_{cx}}+\\frac{M_{ry}}{M_{cy}}\\le1\\ \\ \\text{(H1-1b)}',`${condition}Governing ASCE 7 combination ${g.U.equation}: Pr=${format(g.U.P,'force',u,3)}, Mrx=${format(g.U.Mx,'moment',u,3)}, Mry=${format(g.U.My,'moment',u,3)}. ${r.combinations.length} combinations with W and E in both directions${r.support?` (${r.support.combinations.asce} ASCE 7 with crane loads as L, ${r.support.combinations.tr13} AIST TR-13 §3.10 supporting-structure forms with the crane dead load at the dead-load factor${r.support.combinations.bumper?', and the TR-13 crane stop case':''}; the weak-axis moment includes the seat moment and the longitudinal force at the locating seat)`:''}. Column-alone model: frame action, base flexibility and a direct-analysis stability check are not included; second-order effects use B1 with the specified effective lengths.`,g.U.id);
- add('drift',`${label} · runway-level lateral displacement`,r.drift.value+twistShift(r.torsion),r.drift.limit,'length',r.drift.tr13!==undefined?'\\Delta\\le\\min(H/400,\\;2\\,\\mathrm{in})':'\\Delta\\le h/n',r.drift.tr13!==undefined?`Service side thrust and static eccentric reaction of the crane, column alone (${c.strong.top} top). AIST TR-13 §5.3 limit: H/400 or 2 in, whichever is less, with H = ${format(r.drift.tr13,'length',u,3)} from the column base to the top of the crane girder (seat ${format(c.seatElevation,'length',u,3)} + bearing plate, girder and cap): ${format(r.drift.limit,'length',u,3)}. The displacement is taken at the rail head, ${format(r.railElevation,'length',u,3)} above the base (slightly above the top of the girder). Frame and roof diaphragm flexibility are excluded${r.support?': the frame drift under the 10-year wind is by others (responsibility matrix)':''}.`:`Service side thrust and static eccentric reaction of the crane, column alone (${c.strong.top} top). Limit h/${c.driftLimit}; DG7 suggests about h/240 and 2 in for cab-operated cranes and h/100 for pendant cranes. Frame and roof diaphragm flexibility are excluded.`);
+ add('drift',`${label} · runway-level lateral displacement`,r.drift.value+twistShift(r.torsion),r.drift.limit,'length',r.drift.tr13!==undefined?'\\Delta\\le\\min(H/400,\\;2\\,\\mathrm{in})':'\\Delta\\le h/n',r.drift.tr13!==undefined?`${driftBasis(p)}, column alone (${c.strong.top} top). AIST TR-13 §5.3 limit: H/400 or 2 in, whichever is less, with H = ${format(r.drift.tr13,'length',u,3)} from the column base to the top of the crane girder (seat ${format(c.seatElevation,'length',u,3)} + bearing plate, girder and cap): ${format(r.drift.limit,'length',u,3)}. The displacement is taken at the rail head, ${format(r.railElevation,'length',u,3)} above the base (slightly above the top of the girder). Frame and roof diaphragm flexibility are excluded${r.support?': the frame drift under the 10-year wind is by others (responsibility matrix)':''}.`:`${driftBasis(p)}, column alone (${c.strong.top} top). Limit h/${c.driftLimit}; DG7 suggests about h/240 and 2 in for cab-operated cranes and h/100 for pendant cranes. Frame and roof diaphragm flexibility are excluded.`);
  if(twistShift(r.torsion)>0)checks.at(-1)!.note+=` Includes the rail's shift across the runway from the column twist, e(1 − cos θ_s) = ${format(twistShift(r.torsion),'length',u,3)} (column-twist).`;
  if(r.support)checks.push(...columnSupportChecks(p,r,label,refs));
  // The crane-level strut the check relies on: by the building engineer of record, specified here (S-00, S-01, delivered forces).
@@ -457,7 +467,9 @@ export function existingColumnChecks(p:ProjectInput,r:ExistingColumnResult,opts:
     path:b?`Torsion brace: the crane-level strut moment-connected in plan by the torsion plates at every column (grids ${b.all.join(', ')}), continuous through them, each segment 4EI_y/L less the give of its far column (strut I_y = ${format(b.Iy,'inertia',u,3)}), ΣK_s = ${stiff(b.K)} at grid ${b.grid} (${b.segments} segment${b.segments>1?'s':''}, the least of the locating columns): the column keeps K_θ/(K_θ + ΣK_s) = ${b.keep.toFixed(3)} of the torque and twists that much less.`:'No torsion brace: the column alone takes the torque.'}));
   }
  }
- if(r.support)for(const v of checks){if(['column-axial','column-flexure-y','column-interaction'].includes(v.id))v.referenceIds=[...v.referenceIds,'tr13-supporting','tr13-column-path'];if(v.id==='column-drift')v.referenceIds=[...v.referenceIds,'tr13-service'];}
+ if(r.support)for(const v of checks)if(['column-axial','column-flexure-y','column-interaction'].includes(v.id))v.referenceIds=[...v.referenceIds,'tr13-supporting','tr13-column-path'];
+ // The TR-13 §5.3 service limit wherever it applies (r.drift.tr13: every column of an AIST project), new or existing.
+ if(r.drift.tr13!==undefined)for(const v of checks)if(v.id==='column-drift'&&!v.referenceIds.includes('tr13-service'))v.referenceIds=[...v.referenceIds,'tr13-service'];
  for(const v of checks)if(v.id.startsWith('column-seismic-'))v.referenceIds=v.id==='column-seismic-basis'||!r.seismic||r.seismic.basis.integrityOnly?['asce-12','aisc-e']:['asce-12','aisc-341','aisc-e'];
  if(!c.isNew)checks.push(...existingWeldingChecks(p,existingColumnSection(p).section.tf));
  if(c.longitudinal==='bracing'&&!p.longitudinalBracing?.enabled)checks.push({id:'column-longitudinal',group:label,title:'Crane longitudinal force · bracing path',status:'excluded',equation:'',note:'The runway longitudinal force is assigned to building bracing, not to this column. Design the crane-level strut, bracing bay and its foundation for the reported longitudinal force.',referenceIds:refs});

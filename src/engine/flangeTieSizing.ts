@@ -255,7 +255,9 @@ export interface TieProportions {diameter:number;thickness:number;gusset:number;
  /** Wall of the release sleeves, mm. */
  wall?:number;
  /** Horizontal column stiffeners at the column gussets of a direct-saddle tie (brace.columnStiffener, initialTieStiffener). */
- stiffened?:boolean}
+ stiffened?:boolean;
+ /** Gusset root fillets larger than the Table J2.4 minimum (connection.weldSize), mm: the tie-move-weld step (rootFilletStep). */
+ rootWeld?:number}
 
 /** Bolt pitch and edge distance on the 1/8 in grid: AISC J3.3 minimum spacing 2 2/3 d, and the 1.5d edge the tie checks use. */
 export const tieBoltSpacing=(db:number)=>({pitch:up(8/3*db,inch/8),edge:up(1.5*db,inch/8)});
@@ -282,7 +284,7 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
  const d=p.details!,t=d.brace,c=t.connection,a=t.flangeAttachment,rel=t.release,plate=tieArrangement(d)==='flexible-plate';
  // Column root fillets: the Table J2.4 minimum for the gusset and the receiving flange, 5/16 in at least.
  const receiver=d.bracket?.enabled?d.bracket.receiver.flangeThickness:x.gusset;
- const weld=Math.max(5/16*inch,minimumFillet(Math.min(x.gusset,receiver))),spacing=tieBoltSpacing(x.diameter);
+ const weld=Math.max(5/16*inch,minimumFillet(Math.min(x.gusset,receiver)),x.rootWeld??0),spacing=tieBoltSpacing(x.diameter);
  // A single plate is tightened from its face: the column-end bolts keep the socket clearance C1 to the toe of the
  // column root fillet across the clear gap (AISC Manual Table 7-15).
  const edge=plate?Math.max(spacing.edge,up(wrenchClearance(x.diameter)-tieBarGap(weld)+weld,inch/8)):spacing.edge;
@@ -320,10 +322,21 @@ export function applyTieProportions(p:ProjectInput,x:TieProportions){
 }
 
 /** The current proportions of a project's tie. */
+/**
+ * A stiffener tie's column gussets past the receiving flange only by root fillets larger than the Table J2.4 minimum
+ * (rootFilletStep), on the building column beside a crane column that is the configurator's fictitious example (no shape
+ * entered): kept, the configurator's gusset fit (withGussetFitColumn) then taking the lightest heavier example W14 whose
+ * flange takes them (case 053: 7/16 in root fillets). Anywhere else a misfit stays a misfit.
+ */
+export function exampleFilletMisfit(q:ProjectInput){
+ if(!tiedToBuilding(q)||!q.configurator||q.configurator.buildingColumnShape||!stiffenerGussetMisfit(q))return false;
+ const x=tieProportions(q),m=applyTieProportions(structuredClone(q),{...x,rootWeld:undefined});
+ return m.details!.brace.connection.weldSize<q.details!.brace.connection.weldSize-1e-6&&!stiffenerGussetMisfit(m);
+}
 export function tieProportions(p:ProjectInput):TieProportions{
  const d=p.details!,t=d.brace,a=t.flangeAttachment,g=flangeTieGeometry(p),st=stiffenerTieGeometry(p);
  return {diameter:t.connection.diameter,rows:t.connection.rows,cjp:t.columnRoot==='cjp',thickness:t.thickness,gusset:t.gussetThickness,travel:t.release?.travel??inch/8,face:g?.face??st?.face??t.length,widen:0,
-  saddleThickness:a?.saddleThickness??1.5*inch,saddleWeld:a?.weldSize??.375*inch,setback:a?.longitudinalSetback??0,slide:t.release?.slide??0,wall:t.release?.sleeveWall,stiffened:!!t.columnStiffener?.enabled};
+  saddleThickness:a?.saddleThickness??1.5*inch,saddleWeld:a?.weldSize??.375*inch,setback:a?.longitudinalSetback??0,slide:t.release?.slide??0,wall:t.release?.sleeveWall,stiffened:!!t.columnStiffener?.enabled,rootWeld:t.connection.weldSize};
 }
 
 /** The fit and detailing limits among a set of sizing ratios (tieSizingRatios). */
@@ -406,7 +419,7 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   const q=applyTieProportions(structuredClone(p),x);
   // A stiffener tie's column gussets stay on the receiving column flange (coord-tie-gusset-flange) where the start set's
   // do: a thicker gusset or larger root fillet that would put them past the flange tip is not a step.
-  if(validateRunwayDetails(q).length||gussetFits&&stiffenerGussetMisfit(q))return undefined;
+  if(validateRunwayDetails(q).length||gussetFits&&stiffenerGussetMisfit(q)&&!exampleFilletMisfit(q))return undefined;
   const ratios=tieSizingRatios(q,faceDemand(x.face).demand),brace=braceSystem(q);
   // Strength and fatigue ratios against the target (the imposed movement nearer one), fit and detailing limits against one.
   const entries=Object.entries(ratios).map(([k,v])=>[k,v/sizingLimit(ratios,k,target)] as const).sort((u,v)=>v[1]-u[1]);
@@ -499,6 +512,17 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
   }
   return false;
  };
+ /**
+  * The gusset root fillets (connection.weldSize, both gusset roots that are fillet welded) 1/16 in larger, to the AISC
+  * J2.2b limit of the thinner of the gusset and the receiving flange (t − 1/16 in) and at most 3/4 in; the bar gap and
+  * the gusset fit follow (applyTieProportions, validated by evaluate).
+  */
+ const rootFilletStep=(x:TieProportions,r:Trial)=>{
+  const c=r.q.details!.brace.connection,receiver=r.q.details!.bracket?.enabled?r.q.details!.bracket.receiver.flangeThickness:x.gusset;
+  const next=c.weldSize+sixteenth,max=Math.min(.75*inch,Math.min(x.gusset,receiver)-sixteenth);
+  if(x.cjp||next>max+1e-6)return false;
+  x.rootWeld=next;return true;
+ };
  // The largest ratio over its limit that a step may still relieve.
  const governing=(r:Trial,stuck:Set<string>)=>Object.entries(r.ratios).map(([k,v])=>[k,v/sizingLimit(r.ratios,k,target)] as const).filter(([k,v])=>v>1&&!stuck.has(k)).sort((u,v)=>v[1]-u[1])[0]?.[0];
  // One bar or plate thickness at one column face, stepped until every ratio is within its limit or no step helps.
@@ -506,15 +530,18 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
  // The bolt rows in each group: two, or one where two rows leave the imposed movement over its limit (below).
  let startBolt=.625*inch,rows=2;
  const sizeAt=(face:number,thickness:number,slide=0)=>{
-  const x:TieProportions={...base,face,thickness,travel:faceDemand(face).travel,diameter:startBolt,rows,cjp:false,gusset:stiffenerGusset!==undefined?Math.min(stiffenerGusset,.75*inch):Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0,slide};
+  const x:TieProportions={...base,rootWeld:undefined,face,thickness,travel:faceDemand(face).travel,diameter:startBolt,rows,cjp:false,gusset:stiffenerGusset!==undefined?Math.min(stiffenerGusset,.75*inch):Math.max(.75*inch,plate?up(2*thickness,inch/8):0),widen:0,slide};
   let r=evaluate(x);
   // A ratio no step relieves is set aside (the checks report it), so the others are still sized.
   const stuck=new Set<string>(),trial={grown:false,movement:false};
   for(let i=0;i<30&&r&&evaluations<=budget;i++){
    const k=governing(r,stuck);if(!k)break;
    const before={...x};
-   if(!step(x,k,r,trial)){stuck.add(k);continue;}
-   const next=evaluate(x);if(!next){Object.assign(x,before);stuck.add(k);continue;}
+   let next=step(x,k,r,trial)?evaluate(x):undefined;
+   // The gusset roots past their fillets where no other step is left or the thicker gusset does not fit (case 053: the
+   // 1 1/2 in slide gusset past the receiving flange): the root fillets 1/16 in larger instead (rootFilletStep).
+   if(!next&&k==='tie-move-weld'){Object.assign(x,before);if(rootFilletStep(x,r))next=evaluate(x);}
+   if(!next){Object.assign(x,before);stuck.add(k);continue;}
    r=next;
   }
   if(r)opts.trace?.(face,thickness,r.governs,r.worst,{...x});
@@ -666,7 +693,7 @@ export function tieOnBearingStiffener(p:ProjectInput,opts:{reach?:number;highCyc
  t.length=t.reach=reach-up(q.section.tw/2+qd.bearing.stiffenerWidth+inch/4,inch/4);
  q.details=sizeFlangeTie(q,{reach:opts.reach}).details;
  const excess=(r:Record<string,number>)=>Object.entries(r).reduce((n,[k,v])=>n+Math.max(0,v-sizingLimit(r,k)),0);
- if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||stiffenerGussetMisfit(q)||(!opts.misfit&&excess(tieSizingRatios(q))>excess(ratios)+1e-9))return undefined;
+ if(!stiffenerTieGeometry(q)||validateRunwayDetails(q).length||stiffenerGussetMisfit(q)&&!exampleFilletMisfit(q)||(!opts.misfit&&excess(tieSizingRatios(q))>excess(ratios)+1e-9))return undefined;
  const why=[...(over.length?[`the sized saddle leaves ${over.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
   ...(!over.length&&failing.length?[`the sized saddle tie leaves ${failing.slice(0,2).map(([k,v])=>`${k} ${v.toFixed(2)}`).join(', ')} for the estimated tie demands`]:[]),
   ...(opts.highCycle?[`a welded saddle is a Category D/E attachment on the top flange of this high-cycle runway (${opts.highCycle})`]:[]),...(opts.prefer?[opts.prefer]:[]),...(opts.misfit?[opts.misfit]:[])].join('; ');
