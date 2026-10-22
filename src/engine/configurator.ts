@@ -1434,7 +1434,12 @@ function withSteppedTie(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace):Pr
    return {...r,configurator:{...cfg}};
   }
  }
- trace.stepTie=`${why}: the existing column is not resized; the checks report the tie. New-steel remedies: a longer tie to a new stub or stand-off on the upper shaft, a column-end slide, or a different tie type.`;
+ // No tie the configurator offers at the step passes: an open item (configurator-tie, review draft), never a tie its
+ // own sizing rejects handed on as a design (case 061: paired bars on a flange saddle, tie-move-strength 7.1 and the
+ // saddle's full-cycle fatigue 1.9 in the calculation). A column-end slide already in the tie is not offered again.
+ const slide=!!q.details.brace.release?.enabled&&(q.details.brace.release.slide??0)>0,remedies=`a longer tie to a new stub or stand-off on the upper shaft${slide?'':', a column-end slide'}, or a different tie type`;
+ trace.stepTie=`${why}: the existing column is not resized; the checks report the tie. New-steel remedies: ${remedies}.`;
+ trace.stepTieOpen=`Top-flange tie not resolved at the column step: ${why[0].toLowerCase()}${why.slice(1)} (configurator estimates), and ${q.section.kind!=='cap'?'neither the horizontal slotted tie plate nor ':''}the other flange tie type ${q.section.kind!=='cap'?'passes':'does not pass'} there. Remedies (new steel; the existing column is kept as assumed): ${remedies}; or design the tie connection by hand.`;
  q.notes+=` ${trace.stepTie}`;
  return q;
 }
@@ -1736,6 +1741,8 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
  columnTie?:string;craneFace?:string;
  /** Stepped column: the lower and upper shaft choice and the step stiffener or cap the step checks needed. */
  lower?:string;upper?:string;step?:string;stepTie?:string;
+ /** Stepped column: no tie the configurator offers at the step passes its sizing ratios (withSteppedTie), an open item. */
+ stepTieOpen?:string;
  /** Stepped column: the crane-level strut on the girder line designed here (withStepStrut). */
  strut?:string;
  /** Internal: a rebuild with another tie type at the step (withSteppedTie), which does not try again. */
@@ -1802,6 +1809,8 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
    :`Choose another tie or support (${options.slice(0,-1).join(', ')}${options.length>1?' or ':''}${options[options.length-1]}), or design the tie connection by hand.`;
   if(over.length)out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:clipReason(`Top-flange tie not resolved: the ${tieLabels[tieArrangement(d) as keyof typeof tieLabels]??tieArrangement(d)}${stiffenerTieGeometry(p)?' on the bearing stiffener':' on a flange saddle'}, as sized for the estimated tie demands, still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (configurator estimates), and no other tie arrangement the configurator tries fits and passes here. ${advice}`)});
  }
+ // A tie at a column step that no arrangement withSteppedTie tries brings within its sizing ratios.
+ if(d&&cfg.support==='stepped-column'&&trace.stepTieOpen&&flangeTieFamily(d))out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:clipReason(trace.stepTieOpen)});
  // The cap tieback angle as sized still past its limits (capAngleUnresolved) where no other tie was taken: no set of
  // the sizing steps carries this tie: an open item, never an issued tie its own sizing rejects (case 047).
  const cg=d?.brace.arrangement==='cap-angle'&&cfg.support!=='column-cap'&&cfg.support!=='stepped-column'?capAngleGeometry(p):undefined;
