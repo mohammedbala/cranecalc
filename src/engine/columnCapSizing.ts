@@ -135,7 +135,7 @@ function endBearingMisfit(p:ProjectInput,e:EndBearingInput){
 /**
  * Why the next larger bearing bolt does not fit the column cap as laid out (the sizing's bolt steps, boltFit's gauge
  * narrowed by up to 2 in and edge grown by up to 1 in): the bolt, the bearing plate length it needs and the first
- * reason (a cap validation message, or the end bearing fit checks it fails); undefined where some such set fits or no
+ * reason (a cap validation message, or the end bearing fit checks it fails; the gauge also widened by up to 1 in); undefined where some such set fits or no
  * larger bolt exists. `shapes`: heavier column shapes to try the larger bolt on, the first that takes it returned as
  * `column` (a wider clear between the flanges or wider flanges for the cap stiffeners).
  */
@@ -143,8 +143,10 @@ export function largerBoltBlocker(p:ProjectInput,shapes:{name:string;d:number;bf
  const e0=activeEndBearing(p);if(!activeColumnCap(p)||!e0)return undefined;
  const next=boltSizes.find(x=>x>e0.bolts.diameter+1e-6);if(next===undefined)return undefined;
  const fits=(q0:ProjectInput,why?:string[])=>{
-  for(let de=0;de<=inch+1e-9;de+=eighth)for(let dg=0;dg<=2*inch+1e-9;dg+=inch/4){
-   const q=structuredClone(q0),b=q.details!.endBearing!.bolts;b.diameter=next;b.gauge-=dg;b.edge+=de;
+  // The gauge as laid out, narrowed by up to 2 in or widened by up to 1 in (a wider column has room for it).
+  const gauges=[0,...Array.from({length:8},(_,i)=>-(i+1)*inch/4),...Array.from({length:4},(_,i)=>(i+1)*inch/4)];
+  for(let de=0;de<=inch+1e-9;de+=eighth)for(const dg of gauges){
+   const q=structuredClone(q0),b=q.details!.endBearing!.bolts;b.diameter=next;b.gauge+=dg;b.edge+=de;
    const r=sizeColumnCap(q,.9,{settleOnly:true,why:de===0&&dg===0?why:undefined});
    if(r!==q)return r;
   }
@@ -157,7 +159,7 @@ export function largerBoltBlocker(p:ProjectInput,shapes:{name:string;d:number;bf
   return Math.max(bs.length,up(2*(edge+to),inch/4));}catch{return undefined;}})();
  let column:string|undefined;
  for(const w of shapes){const q=structuredClone(p);Object.assign(q.existingColumn!,{shape:w.name,d:w.d,bf:w.bf,tf:w.tf,tw:w.tw});if(fits(q)){column=w.name;break;}}
- return {diameter:next,length:h,why:(why[0]??'').replace(/^columnCap\.[\w.]+: /,'').replace(/: (shorten|use|set|select|enable|choose)\b.*$/,'').replace(/\.$/,''),column};
+ return {diameter:next,length:h,why:(why[0]??'').replace(/^columnCap\.[\w.]+: /,'').replace(/: (shorten|use|set|select|enable|choose)\b.*$/,'').replace(/\.$/,'').replace(/ at -(?=\d)/,' at ').replace(/\bmust land\b/,'would not land').replace(/\bmust clear\b/,'would not clear'),column};
 }
 
 type Move=(v:{cap:ColumnCapInput;e:EndBearingInput})=>boolean;

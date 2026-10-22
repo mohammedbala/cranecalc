@@ -2,7 +2,8 @@ import {describe,expect,it} from 'vitest';
 import {sim002Snapshot} from './fixtures/sim002';
 import {buildTaxonomy,openKind} from '../src/engine/checkTaxonomy';
 import {openGroups} from '../src/report/openItems';
-import {summaryElements,selectionFinal,selectionView} from '../src/report/designSummary';
+import {summaryElements,selectionFinal,selectionView,selectionRows,printForces} from '../src/report/designSummary';
+import {valueCells} from '../src/report/taxonomyReport';
 import {radText,tidyNumbers} from '../src/report/reportParts';
 import type {CalculationSnapshot,CheckResult} from '../src/engine/types';
 
@@ -26,7 +27,7 @@ describe('tie movement strength remedy',()=>{
  });
  it('does not offer a longer tie where P_c is elastic and the least H1 at any length exceeds 1',()=>{
   const r=remedy(failing(' H1 governing state: P_r/P_c = 0.5500. At a longer clear length the least H1 is about 2.07 (P_r/P_c = 0.550 grows as L² with P_c elastic, the movement moment falls as 1/L²).'),'tie-move-strength');
-  expect(r).toContain('A longer clear tie length cannot pass');expect(r).toContain('2.07');expect(r).not.toContain('lengthen the clear tie length');
+  expect(r).toContain('With these bars, a longer clear tie length cannot pass');expect(r).toContain('2.07');expect(r).not.toContain('lengthen the clear tie length');
  });
 });
 
@@ -51,5 +52,37 @@ describe('rotations',()=>{
   expect(radText(1.918e-5)).toBe('0.0000192');expect(radText(0)).toBe('0');expect(radText(.0012)).toBe('0.0012');
   expect(tidyNumbers("the footing's rotation 1.918e-5 rad on the soil")).toBe("the footing's rotation 0.0000192 rad on the soil");
   expect(tidyNumbers('rotation 1.851e-3 rad, 12.3456 kip')).toBe('rotation 0.00185 rad, 12.3 kip');
+ });
+});
+
+describe('tie movement bending remedies (round 9 E)',()=>{
+ const failing=(id:string,u:number,note:string)=>{const s=clone(),c=check(s,id);if(!c)return undefined;c.status='fail';c.utilization=u;c.demand=u;c.capacity=1;c.note=note;return s;};
+ it('keeps the force-controlled part of a fatigue range in the bending cut: (1 - 1/u)/(1 - s)',()=>{
+  const s=failing('tie-move-fatigue',1.38,'Category B. Force-controlled share of the range (axial): 0.110.');if(!s)return;
+  // (1 - 1/1.38)/(1 - 0.11) = 0.309: 31%, not the 28% of 1 - 1/u.
+  expect(remedy(s,'tie-move-fatigue')).toContain('by at least 31%');
+ });
+ it('on the sleeve-friction bound offers thicker or wider bars, never a longer or thinner tie',()=>{
+  const s=failing('tie-move-fatigue',1.85,'Category B. Bending on the sleeve-friction bound: independent of the bar thickness, growing with the clear length. Force-controlled share of the range (axial): 0.045.');if(!s)return;
+  const r=remedy(s,'tie-move-fatigue');expect(r).toContain('thicker or wider bars');expect(r).not.toContain('lengthen the clear tie length');expect(r).not.toContain('thinner, more flexible');
+ });
+ it('a slip-governed H1 asks for bar strength, not a longer tie',()=>{
+  const s=failing('tie-move-strength',1.08,'H1. Slip state on the sleeve-friction bound: M_ry = μ_uP_rL + P_r(θd + Δ_T), independent of the bar thickness, growing with the clear length. H1 governing state: P_r/P_c = 0.1127.');if(!s)return;
+  const r=remedy(s,'tie-move-strength');expect(r).toContain('thicker or wider bars');expect(r).not.toContain('lengthen the clear tie length');
+ });
+});
+
+describe('selection log as printed (round 9 E)',()=>{
+ it('rounds configurator forces to three significant figures, the nearest unit from 100',()=>{
+  expect(printForces('the 154.448 kip support reaction, 976.789 kN, force 63.336 kip, 0.438 in')).toBe('the 154 kip support reaction, 977 kN, force 63.3 kip, 0.438 in');
+ });
+ it('keeps one row per column cap item',()=>{
+  const rows=[{item:'Column cap, at its limits',entered:'configurator default'},{item:'Open item',entered:'Column cap'},{item:'Girder',entered:'x'}];
+  expect(selectionRows(rows).map(v=>v.item)).toEqual(['Open item','Girder']);
+  expect(selectionRows(rows.slice(0,1)).length).toBe(1);
+ });
+ it('a detailing rule that prints alike but differs carries the digits that tell the values apart',()=>{
+  const c:CheckResult={id:'bracket-rib-edge-thickness',group:'Detailing',title:'Haunched ribs · minimum thickness for the free-edge slenderness',status:'fail',demand:1.12991*25.4,capacity:1.125*25.4,utilization:1.0044,quantity:'length',equation:'',note:'',referenceIds:[]};
+  expect(valueCells(c,'detailing','US')).toEqual(['1 1/8 in','≥ 1.130 in']);
  });
 });
