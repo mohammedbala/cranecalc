@@ -134,7 +134,9 @@ type Move=(v:{cap:ColumnCapInput;e:EndBearingInput})=>boolean;
  * reported by the checks; stops when every ratio is at most `target` or after 200 steps. Without an active column cap
  * and bolted end bearings the project is returned unchanged; a sized cap that fails validation is not used.
  */
-export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:number,key:string,ratio:number,next?:ColumnCapInput)=>void}={}):ProjectInput{
+export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:number,key:string,ratio:number,next?:ColumnCapInput)=>void;
+ /** Factors on sizing ratios by key (the calculated over the sized ratio, withConfirmedCap): never below 1. */
+ scale?:Record<string,number>}={}):ProjectInput{
  const q=structuredClone(p),cap0=activeColumnCap(q),e0=activeEndBearing(q);
  if(!cap0||!e0)return q;
  const col=capColumn(q),bs=q.details!.bearing,length0=bs.length;
@@ -167,7 +169,7 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
  const start={cap:structuredClone(cap0),e:structuredClone(e0)};
  if(!settle(start))return p;
  const set=capSizingSet(q);
- const ratios=(v:{cap:ColumnCapInput;e:EndBearingInput})=>{apply(v);return columnCapSizingRatios(q,set);};
+ const ratios=(v:{cap:ColumnCapInput;e:EndBearingInput})=>{apply(v);const r=columnCapSizingRatios(q,set);for(const [k,f] of Object.entries(options.scale??{}))if(r[k]!==undefined)r[k]*=Math.max(1,f);return r;};
  const weight=(v:{cap:ColumnCapInput;e:EndBearingInput})=>{apply(v);return columnCapWeight(q,v.cap,v.e);};
  const step=(from:{cap:ColumnCapInput;e:EndBearingInput},move:Move)=>{const v=structuredClone(from);if(!move(v))return undefined;return settle(v)&&JSON.stringify(v)!==JSON.stringify(from)?v:undefined;};
  const plate:Move=v=>{const t=nextPlate(v.cap.plate.thickness);if(!t)return false;v.cap.plate.thickness=t;return true;};

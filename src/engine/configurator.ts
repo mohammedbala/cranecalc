@@ -596,7 +596,7 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  buildDepth++;
  try{
   if(buildDepth!==1)return buildLayout(input,trace);
-  return withConfirmedFace(withConfirmedGirder(finishedLayout(input,trace),input,trace),input,trace);
+  return withConfirmedCap(withConfirmedFace(withConfirmedGirder(finishedLayout(input,trace),input,trace),input,trace),input,trace);
  }finally{buildDepth--;}
 }
 /** The outermost build (buildProject): the layout, then the tie, column and twist steps that rebuild it. */
@@ -699,6 +699,41 @@ function withConfirmedGirder(q:ProjectInput,input:RunwayConfig,trace:SelectionTr
  c.beyondCatalog=c.beyondCatalog!.map(v=>v.member==='girder'?{...v,reason}:v);
  c.selections=c.selections?.map(v=>v.item==='Open item'&&v.entered==='Girder'?openItemRow({...item,reason}):v.item==='Girder'&&heavy?.confirmed&&!v.reason.includes(heavy.name)?{...v,reason:clipReason(`${heavyAlternative(closest).trim()} ${v.reason.trim()}`)}:v);
  return q;
+}
+/** Factors on the crane-column cap's sizing ratios for a confirmation build (withConfirmedCap; craneColumnCap takes them). */
+let craneCapScale:Record<string,number>|undefined;
+/**
+ * Crane columns tied to the building: the cap's bearing bolts take the girder's bottom-flange force (the top flange's
+ * goes to the column tie, viaCap), which the calculation's second-order girder model gives well above the cap sizing
+ * set's statics (case 059: 62.5 kip against about 32 kip; bolt slip 1.06 calculated where the sizing estimated 0.65).
+ * The runway is calculated; where a cap bolt check (tension, slip) fails, it is built again with those sizing ratios
+ * scaled by the calculated over the sized ratio (craneCapScale: the cap sizing then grows the bolts, grade and gauge
+ * and re-lays the end bearings, sleeves and clearances as it does), and taken where the calculation passes those
+ * checks and fails nothing the first one passed; the log says so. Otherwise the first build stays.
+ */
+function withConfirmedCap(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace):ProjectInput{
+ const cfg=configOf(input).config;
+ if(craneCapScale||girderPick||facePick!==undefined||cfg.scope!=='design'||cfg.support!=='crane-column'||!activeColumnCap(q)||!tiedToBuilding(q))return q;
+ const s=calculate(q),failing=s.checks.filter(c=>/^column-cap-bolt-(tension|slip)$/.test(c.id)&&c.status==='fail'&&typeof c.utilization==='number'&&Number.isFinite(c.utilization));
+ if(!failing.length)return q;
+ const sized=columnCapSizingRatios(q),scale:Record<string,number>={};
+ for(const c of failing){const k=c.id.replace(/^column-cap-/,''),v=sized[k];if(v&&v>0&&v<1e3)scale[k]=c.utilization!/v;}
+ if(!Object.keys(scale).length)return q;
+ const inner:SelectionTrace={};craneCapScale=scale;let r:ProjectInput;
+ try{r=withConfirmedGirder(finishedLayout(input,inner),input,inner);}finally{craneCapScale=undefined;}
+ const s2=calculate(r),bad=(x:typeof s)=>new Set(x.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)).map(c=>c.id)),before=bad(s),after=bad(s2);
+ const b0=q.details?.endBearing?.bolts,b1=r.details?.endBearing?.bolts,len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
+ const was=failing.map(c=>`${c.id} ${dcText(c.utilization!,2)}`).join(', ');
+ if(s2.errors.length||!b1||failing.some(c=>after.has(c.id))||[...after].some(id=>!before.has(id))){
+  const row=q.configurator?.selections?.find(v=>v.item==='Crane column');
+  if(row)row.reason=clipReason(`${row.reason} The calculation's cap bolt checks run above the cap sizing estimates (${was}); the cap sized for the calculated ratios does not pass them without another check failing, so the first cap stays (its checks report it).`);
+  return q;
+ }
+ const now=failing.map(c=>{const v=s2.checks.find(x=>x.id===c.id)?.utilization;return `${c.id} ${v!==undefined?dcText(v,2):'n/a'}`;}).join(', ');
+ const why=`Column cap bearing bolts confirmed by the calculation: the cap sized on the sizing estimates (${b0?`${len(b0.diameter)} ${b0.grade}, ${len(b0.gauge)} gauge`:'as first sized'}) failed ${was} in the calculation, whose girder model gives the bottom-flange force well above the sizing statics; sized again for the calculated ratios, ${len(b1.diameter)} ${b1.grade} bolts at a ${len(b1.gauge)} gauge (end bearings, sleeves and clearances re-laid): ${now}.`;
+ Object.assign(trace,inner);r.notes+=` ${why}`;
+ const sel=r.configurator?.selections;if(sel&&sel.length<24)sel.push({item:'Column cap bolts',entered:'configurator default',designed:`${len(b1.diameter)} ${b1.grade}, ${len(b1.gauge)} gauge`,reason:clipReason(why)});
+ return r;
 }
 /** The column face a confirmation build is made with (withConfirmedFace; columnFaceCap and attachTieAtFace take it as set). */
 let facePick:number|undefined;
@@ -2224,7 +2259,7 @@ function craneColumnSupport(p:ProjectInput,cfg:RunwayConfig,seatLevel:(base:numb
 function columnTieGeometryOf(t:ColumnTieInput){return Math.max(2*inch,(t.bolts.count-1)*t.bolts.pitch+2*t.bolts.edge+2*.5*inch);}
 /** The column cap sized for the reactions on the crane column, and the bearings it takes (sizeColumnCap). */
 function sizeCraneColumnCap(p:ProjectInput){
- const d=p.details!,sized=sizeColumnCap(p);p.columnCap=sized.columnCap;d.endBearing=sized.details!.endBearing;d.bearing=sized.details!.bearing;if(p.aist&&sized.aist)p.aist.bearingLength=sized.aist.bearingLength;
+ const d=p.details!,sized=sizeColumnCap(p,capTarget,craneCapScale?{scale:craneCapScale}:{});p.columnCap=sized.columnCap;d.endBearing=sized.details!.endBearing;d.bearing=sized.details!.bearing;if(p.aist&&sized.aist)p.aist.bearingLength=sized.aist.bearingLength;
  p.longitudinalBracing!.height=p.existingColumn!.seatElevation-capWorkPointDrop(p);
 }
 /**
