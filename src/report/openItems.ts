@@ -3,7 +3,7 @@ import {fatigueData,mergeDefs,registerFamily,type OpenItem,type Taxonomy,type Ta
 import {dcText,noCapacity} from '../engine/checkPresentation';
 import {noteLength} from '../engine/units';
 import {columnStiffenerGeometry} from '../engine/columnStiffeners';
-import {columnFlangeWidth,flangeEffectiveWidth} from '../engine/flangeTieDesign';
+import {columnFlangeWidth,flangeEffectiveWidth,flangeTieStiffenerGeometry} from '../engine/flangeTieDesign';
 import {flangeTieGeometry} from '../engine/tieGeometry';
 import {capAngleFatigue,capAngleResult} from '../engine/capAngleTie';
 import {maximumRule,sig3,statusLabel,value} from './reportParts';
@@ -172,6 +172,11 @@ const remedies:Remedy[]=[
   // The local stress falls with the effective width b_e = B + a + min(a, s_e): a saddle longer by (u - 1) b_e.
   return `The girder flange bends locally under the saddle (elastic, over the effective width b_e = B + a + min(a, s_e)${b?` = ${x.len(b.width)}`:''}): lengthen the saddle to B ≥ ${b?x.size(b.B+(x.u-1)*b.width,1):'B + (u − 1)b_e'} (the end-fillet toe category falls past 4 in), shorten the lever (a thinner saddle or a narrower tie), or take the tie to the bearing stiffener (stiffener tie, no flange bending).`;}],
  [/^flange-tie-column$/,x=>{const g=flangeTieGeometry(x.p),b=g?.receiver&&columnFlangeWidth(x.p,g);
+  // The stiffened form (column stiffeners at the gusset ends, flangeTieDesign): the flange spans h_g between them as a
+  // strip b_w = t_g + 2w + 2t_c, both terms ∝ 1/b_w and the bending ∝ h_g; a stiffener is already there.
+  const st=g?.receiver&&/\(stiffened\)/.test(x.c.title)?flangeTieStiffenerGeometry(x.p,g):undefined;
+  if(st){const t=x.p.details!.brace,bw=t.gussetThickness+2*t.connection.weldSize+2*g!.receiver!.flangeThickness,existing=!st.column.isNew;
+   return `The column flange bends locally between the column stiffeners at the gusset ends (a strip b_w = t_g + 2w + 2t_c = ${x.len(bw)} wide spanning h_g = ${x.len(st.spacing)}, M = F h_g/8; the stiffeners are already in this design): a wider strip (b_w ≥ ${x.size(bw,x.u)}: a thicker column gusset or larger root fillets), the stiffeners closer together (a shorter gusset h_g, with its root fillets rechecked), or ${existing?'a reinforcing plate on the existing column flange (an engineer-of-record item)':'a column with a thicker flange'}.`;}
   return `The column flange bends locally at the tie gusset (elastic, over b_c = h_g + min(x, s_top)${b?` = ${x.len(b.width)}`:''}): a taller column gusset${b?` (h_g ≥ ${x.size(b.hg+(x.u-1)*b.width,1)})`:''}, the gusset nearer the column web, or a column stiffener behind the gusset.`;}],
  [/^flange-tie-(gusset|saddle)$/,x=>`Thicker ${/gusset/.test(x.c.id)?'tie gusset':'saddle plate'} or a longer weld line: the local stress must drop by ${reduction(x.u)}%.`],
  [/^flange-tie-(saddle-weld|gusset-weld)$/,x=>{const a=x.p.details?.brace.flangeAttachment;return `Increase the ${/saddle/.test(x.c.id)?'saddle-to-flange end':'gusset-to-saddle'} fillets to w ≥ ${a?x.size(a.weldSize,x.u):'u·w'} (within the J2.2b edge limit), or lengthen them.`;}],
@@ -268,6 +273,9 @@ function detailingRemedy(x:RemedyContext){
  // A haunched rib's free edge: its slenderness min(a, b)/t, so the plate, its projection or an edge stiffener, not a hole or bolt.
  if(/-rib-edge-thickness$/.test(c.id))return `Provide at least ${value(c.demand,'length',x.units)} (now ${value(c.capacity,'length',x.units)}, ${sig3(Math.abs(c.demand-c.capacity),'length',x.units)} short): a thicker rib where it fits the seat and the column flange, a shorter projection (a smaller min(a, b)), an edge stiffener along the sloping free edge, or a different support.`;
  const max=maximumRule(c),q=c.quantity??'ratio',v=(n:number)=>value(n,q,x.units);
+ // A stiffener tie's column gussets past the receiving column flange (connectionCoordination): the gusset sits at the
+ // bearing center, so the bearings, the girder end gap or the column flange width move it, not a hole or bolt.
+ if(c.id==='coord-tie-gusset-flange')return `Bring the column gussets within the flange: ${v(c.demand)} from the column centerline against the half flange width ${v(c.capacity)} (${sig3(Math.abs(c.demand-c.capacity),'length',x.units)} over). Shorten the bearings or the girder end gap (the gusset sits at the bearing center), widen the column flange, or tie the girder ends another way.`;
  if(q!=='length')return max?`Reduce to at most ${v(c.capacity)} (now ${v(c.demand)}).`:`Provide at least ${v(c.demand)} (now ${v(c.capacity)}).`;
  const short=Math.abs(c.demand-c.capacity);
  return max?`Reduce to at most ${v(c.capacity)} (now ${v(c.demand)}, ${sig3(short,'length',x.units)} over): resize or relocate the part.`

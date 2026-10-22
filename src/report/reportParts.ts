@@ -180,8 +180,19 @@ export const value=(v:number|undefined,q:Quantity,units:ProjectInput['units'],pa
  * three or more places (1.0000, 116.051, 0.0012413), in e-notation, or of 10 and more with two places (121.23 → 121,
  * 12.41 → 12.4). Clause numbers (§3.10.2, J10.8) are left alone; a hyphen used as a minus becomes −.
  */
+/**
+ * A rotation in radians to three significant figures, never rounded to 0 (a footing rotation of 1.918e-5 rad is not
+ * zero): 1.92 × 10⁻⁵ below 0.001, else the plain decimal (0.00185, 0.019); 0 only for an exact zero.
+ */
+export function radText(d:number){
+ if(!Number.isFinite(d))return '—';if(d===0)return '0';
+ if(Math.abs(d)<1e-3){const {m,e}=scientific(Number(d.toPrecision(3)));return `${m.replace(/^-/,'\u2212')} × 10${superscript(e)}`;}
+ return String(Number(d.toPrecision(3))).replace(/^-/,'\u2212');
+}
 export function tidyNumbers(text:string){
- return text.replace(/(?<![\w.§-])(-?\d[\d,]*\.\d{3,}(?:e[-+]?\d+)?|-?\d+(?:\.\d+)?e[-+]?\d+|-?\d[\d,]+\.\d{2})(?!\w|\.\d)/gi,(m)=>num(Number(m.replace(/,/g,'')),{fixed:true}))
+ // Rotations (a number before "rad") keep three significant figures: radText.
+ text=text.replace(/(?<![\w.§-])(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)(?=\s?rad\b)/gi,m=>radText(Number(m)));
+ return text.replace(/(?<![\w.§-])(-?\d[\d,]*\.\d{3,}(?:e[-+]?\d+)?|-?\d+(?:\.\d+)?e[-+]?\d+|-?\d[\d,]+\.\d{2})(?!\w|\.\d|\s?rad\b)/gi,(m)=>num(Number(m.replace(/,/g,'')),{fixed:true}))
   // A hyphen before a number after a space, "(" or "=" is a minus sign: "-3.20 kip" → "−3.20 kip".
   .replace(/(^|[\s(=])-(?=\d)/g,'$1\u2212');
 }
