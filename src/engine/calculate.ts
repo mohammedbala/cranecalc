@@ -43,7 +43,7 @@ import { fatigueCycleCheck } from './buildingClass';
 import { fatigueCycleFamilies } from './railChecks';
 import { tiedToBuilding } from './craneColumnInputs';
 import { fabricationToleranceNote } from './fitTolerances';
-import { newColumnBeyond } from './configInputs';
+import { girderCatalogsExhausted, newColumnBeyond } from './configInputs';
 export function fingerprint(input:unknown):string {const text=JSON.stringify(input);let a=2166136261,b=0x9e3779b9;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),2246822519);}return `${(a>>>0).toString(16).padStart(8,'0')}${(b>>>0).toString(16).padStart(8,'0')}`;}
 /**
  * The configurator's members beyond its catalog (configurator.beyondCatalog: a plate girder, a built-up crane column, a
@@ -54,8 +54,9 @@ export function fingerprint(input:unknown):string {const text=JSON.stringify(inp
  * is closed (status 'pass', the calculation's checks decide; e.g. case 014, a cap tieback angle at estimated lap slip
  * 1.64 that the calculation passes), and stays open while any of them fails.
  */
-const memberChecks:Record<'girder'|'tie'|'crane-column'|'column-cap',RegExp>={
- girder:/^(vertical|lateral|major|minor|combined|combined-bottom|torsion-normal|torsion-normal-bottom|torsion-shear|torsion-stability|flexure-load-height|shear|sidesway)$/,
+export const memberChecks:Record<'girder'|'tie'|'crane-column'|'column-cap',RegExp>={
+ // The girder's strength and serviceability checks, the rail-head movement with its twist among them.
+ girder:/^(vertical|lateral|rail-head|major|minor|combined|combined-bottom|torsion-normal|torsion-normal-bottom|torsion-shear|torsion-stability|flexure-load-height|shear|sidesway)$/,
  tie:/^(tie-|flange-tie-|plate-tie-|cap-angle-|brace-member$|brace-stiffness$|coord-tie-|coord-cap-tie-)/,
  // The column's own checks: not the AIST bracket applicability (column-brackets), a support-system screen; with the
  // runway drift with the footing rotation (base-drift), which a new column's open item names (case 080).
@@ -68,7 +69,7 @@ export function configuratorOpenItems(p:ProjectInput,checks?:CheckResult[]):Chec
   .map(v=>{
    const own=checks?.filter(c=>memberChecks[v.member].test(c.id)),failing=own?.filter(c=>c.status==='fail'),closed=!!own?.length&&!failing!.length;
    // A new freestanding column beyond the W14 range (configurator withColumnBase) is not a crane column: titled as such.
-   const title=v.member==='crane-column'&&v.reason.startsWith(newColumnBeyond)?`${newColumnBeyond} (drift, torsion or twist)`:titles[v.member];
+   const title=v.member==='crane-column'&&v.reason.startsWith(newColumnBeyond)?`${newColumnBeyond} (drift, torsion or twist)`:v.member==='girder'?`Plate girder required (${girderCatalogsExhausted(v.reason)})`:titles[v.member];
    // The calculation's own ratios lead: the configurator's figures in the reason are screening estimates.
    const calculated=failing?.length?`The calculation's ratios of this ${v.member==='tie'?'tie':'member'} (${v.shape}) past 1.00: ${failing.slice(0,4).map(c=>`${(c.title||c.id).replace(/\s*·\s*/g,', ')} ${c.utilization!==undefined&&Number.isFinite(c.utilization)?`D/C ${c.utilization.toFixed(2)}`:c.status}`).join('; ')}${failing.length>4?`; and ${failing.length-4} more`:''}. `:'';
    return {id:`configurator-${v.member}`,group:'Detailing',title,status:closed?'pass':'incomplete',equation:'',referenceIds:['criteria'],

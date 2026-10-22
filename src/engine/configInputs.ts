@@ -96,6 +96,8 @@ export const runwayConfigSchema=z.object({
 export type RunwayConfig=z.infer<typeof runwayConfigSchema>;
 /** The reason's opening of a new freestanding column that no W14 brings within its drift, torsion and twist ratios (configurator withColumnBase; beyondCatalog member 'crane-column'). */
 export const newColumnBeyond='New column beyond the W14 range';
+/** Which girder catalogs the plate-girder open item's reason says were exhausted (configurator girderOpenReason). */
+export const girderCatalogsExhausted=(reason:string)=>/compact rolled W/.test(reason)&&/channel cap/.test(reason)?'rolled W and capped catalogs exhausted':/channel cap/.test(reason)?'capped catalog exhausted':'outside the rolled/capped catalog';
 export type SupportKind=RunwayConfig['support'];
 export type TieKind=RunwayConfig['tie'];
 
