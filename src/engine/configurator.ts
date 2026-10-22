@@ -405,9 +405,12 @@ export function sizeGirder(p:ProjectInput,kind:'rolled'|'capped',opts:{minSeat:n
  }
  const ok=trials.filter(t=>t.utilization<=target&&t.deflection<=deflectionTarget&&t.lateral<=deflectionTarget&&(t.railHead??0)<=deflectionTarget).sort((x,y)=>x.weight-y.weight);
  // Without a candidate within the targets, the closest: the least of its largest ratio (an unstable trial ranks last),
- // then the least deflection. The strength estimate enters divided by 1.3, about the least ratio of the estimate to the
- // calculated top-flange ratio on the heaviest catalog girders (1.33 to 1.52, beyondGirderCatalog), so a section that
- // meets the deflection limits is not passed over for an estimate the calculation does not bear out.
+ // then the least deflection. The strength estimate enters divided by 1.3, about the ratio of the estimate to the
+ // calculated top-flange ratio on the heaviest catalog girders (1.33 to 1.52 in round 7; round 9: 1.45 to 1.51 on the
+ // W36X529 of cases 047 and 053, 1.85 to 2.1 on their capped W24X370 + MC18X42.7, but 1.02 to 1.16 on the W36X529 to
+ // W36X652 of case 059, a saddle tie: beyondGirderCatalog), so a section that meets the deflection limits is not passed
+ // over for an estimate the calculation does not bear out; candidates near the targets are confirmed by the calculation
+ // itself where the closest is beyond the catalog (withConfirmedGirder).
  const worst=(t:GirderTrial)=>Math.min(1e9,Math.max(t.utilization/1.3,t.deflection,t.lateral,t.railHead??0));
  const listed=opts.list?trials.map(({name,weight,utilization,governs,deflection,lateral,railHead})=>({name,weight,utilization,governs,deflection,lateral,railHead})).sort((x,y)=>x.weight-y.weight):undefined;
  const chosen=ok[0]??[...trials].sort((x,y)=>worst(x)-worst(y)||x.deflection-y.deflection)[0];
@@ -673,7 +676,7 @@ function withConfirmedGirder(q:ProjectInput,input:RunwayConfig,trace:SelectionTr
  const rolled=trials.filter(t=>!deep(t.name)),screenedPass=capped&&all?.basis?.passed&&!deep(all.name)?all:undefined;
  for(const t of screenedPass?[screenedPass]:rolled.filter(near).slice(0,2)){
   const c=confirm(t.name,!screenedPass);
-  if(!c.passed){tried.push(`${t.name} calculated: ${c.text}`);continue;}
+  if(!c.passed){tried.push(`${t.name} calculated: ${c.text.split(', ').slice(0,2).join(', ')}`);continue;}
   const why=`${capped?`No W and channel cap pair of the catalog meets the girder sizing targets (the closest, ${closest.name}: ${closest.governs} ratio ${closest.utilization.toFixed(2)}, vertical deflection ${closest.deflection.toFixed(2)}, lateral ${closest.lateral.toFixed(2)} of the limits, screening estimates): the compact rolled W catalog (12 to 40 in deep) is sized in its place. `:''}${screenedPass?`The ${t.name} meets the sizing targets (${est(t)}).`:`No rolled W meets every screening target; the lightest near them, ${t.name} (${est(t)}), is confirmed by the calculation of this runway: every girder check passes (${c.text}). The screening estimates run 1.5 to 2.2 times the calculation on these heavy sections with flexible ends; the calculation decides.`}`;
   Object.assign(trace,c.inner);c.r.notes+=` ${why}`;
   const sel=c.r.configurator?.selections;
@@ -687,7 +690,7 @@ function withConfirmedGirder(q:ProjectInput,input:RunwayConfig,trace:SelectionTr
  let heavy=closest.basis?.heavy;
  if(!heavy)for(const t of trials.filter(t=>deep(t.name)&&near(t)).slice(0,3)){
   const c=confirm(t.name);
-  if(c.passed){heavy={name:t.name,weight:t.weight,depth:aiscShapeByName(t.name)!.d*inch,confirmed:c.text};break;}
+  if(c.passed){heavy={name:t.name,weight:t.weight,depth:aiscShapeByName(t.name)!.d*inch,confirmed:c.text.split(', ').slice(0,2).join(', ')};break;}
  }
  const rolledNote=capped?(tried.length?`the rolled W near them do not pass the calculation (${tried.join('; ')})`:`no compact rolled W comes within the deflection limits and the screening's measured conservatism`):undefined;
  if(heavy===closest.basis?.heavy&&!capped)return q;
@@ -1173,8 +1176,9 @@ const capTarget=.9;
  * metal governing, the fillets grow by 1/16 in to the J2.2b edge limit of the thinner of the web and the stiffener
  * (t − 1/16 in), no further than the weld metal governs the group, while the details validate and a saddle's end fillet
  * keeps its clearance to the stiffener fillets (cases 047, 053 capped: 5/16 in left 1.06 and 1.10; templates 0.14 to 0.48).
+ * The estimate ran 1.02 to 1.5 times the calculation (053, 047, 059, 081, 061), so `target` is one.
  */
-function sizeStiffenerWeld(p:ProjectInput,target=.9){
+function sizeStiffenerWeld(p:ProjectInput,target=1){
  const d=p.details;if(!d)return;
  const bs=d.bearing,props=sectionProperties(p.section),strength=girderStrength(p,props),lrfd=p.method==='LRFD';
  const R=Math.max(0,...supportReactions(p,props).supports.map(v=>(lrfd?1.2:1)*v.D+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci)));
@@ -1879,10 +1883,15 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
  * larger of the tips and H1 ratios, girderSizingRatios) is 1.33 to 1.52 times the calculation's governing top-flange
  * ratio (combined, torsion-normal) on the same heavy sections (round-7 set: 005, 024, 047, 053, 072), so it decides
  * only above girderStrengthScatter, where even the least conservative of them fails; below that the calculation's
- * girder checks decide (case 072: estimate 1.06, calculated 0.76).
+ * girder checks decide (case 072: estimate 1.06, calculated 0.76). Round 9 (crane columns, flexible girder ends): the
+ * capped W24X370 + MC18X42.7 estimate 2.48 and 2.37 against 1.18 and 1.28 calculated (047, 053), the rolled W36X529
+ * 1.09 and 1.03 against 0.72 and 0.71, but 1.45 against 1.42 on case 059 (saddle tie): the scatter is not narrowed,
+ * and the rolled W catalog and the jumbo alternative are confirmed by the calculation (withConfirmedGirder).
  */
 /** The jumbo rolled alternative of a girder beyond the catalog, as the open item and the log name it. */
-const heavyAlternative=(t:GirderTrial)=>{const h=t.basis?.heavy;return h?` A jumbo rolled ${h.name} (${Math.round(h.weight)} lb/ft, ${+(h.depth/inch).toFixed(1)} in deep) ${h.confirmed?`passes every girder check of the calculation of this runway built with it (${h.confirmed}), where the screening estimates did not,`:'would meet the sizing targets'} as a heavy alternative: heavy-shape Charpy testing and splice rules (AISC 360 A3.1c, clause to be verified) and mill availability to confirm; the configurator does not select it.`:'';};
+const heavyAlternative=(t:GirderTrial)=>{const h=t.basis?.heavy;return !h?'':h.confirmed
+ ?` A jumbo rolled ${h.name} (${Math.round(h.weight)} lb/ft, ${+(h.depth/inch).toFixed(1)} in deep) passes every girder check of the calculation of this runway built with it (${h.confirmed}), the screening did not: a heavy alternative, not selected; heavy-shape Charpy and splice rules (AISC 360 A3.1c, to be verified) and mill availability to confirm.`
+ :` A jumbo rolled ${h.name} (${Math.round(h.weight)} lb/ft, ${+(h.depth/inch).toFixed(1)} in deep) would meet the sizing targets as a heavy alternative: heavy-shape Charpy testing and splice rules (AISC 360 A3.1c, clause to be verified) and mill availability to confirm; the configurator does not select it.`;};
 /**
  * The girder open item (beyondCatalog): which catalog was exhausted, the closest section's screening estimates, the
  * rolled W catalog tried for a capped entry (withConfirmedGirder: `rolled`, what it found) and the heavy alternative.
@@ -1890,7 +1899,7 @@ const heavyAlternative=(t:GirderTrial)=>{const h=t.basis?.heavy;return h?` A jum
  */
 function girderOpenReason(trial:GirderTrial,capped:boolean,rolled?:string){
  const catalogs=capped?`no W and channel cap pair of the catalog meets the girder sizing targets${rolled!==undefined?' and no compact rolled W (12 to 40 in deep) passes in its place':''}`:'no compact rolled W or W and channel cap pair of the catalog meets the girder sizing targets';
- return clipReason(`Plate girder required: ${catalogs} for this crane and span (the closest, ${trial.name}, screening estimates: ${trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of the limits against targets ${trial.basis?.target} and ${trial.basis?.deflectionTarget}${rolled?`; ${rolled}`:''}). Design a built-up plate girder with a wide top flange (or a surge plate or lateral truss), or shorten the span with intermediate supports; the configurator does not design plate girders.${heavyAlternative(trial)}`);
+ return clipReason(`Plate girder required: ${catalogs} (the closest, ${trial.name}, screening estimates: ${trial.governs} ratio ${trial.utilization.toFixed(2)}, vertical deflection ${trial.deflection.toFixed(2)} and lateral ${trial.lateral.toFixed(2)} of the limits against targets ${trial.basis?.target} and ${trial.basis?.deflectionTarget}${rolled?`; ${rolled}`:''}). Design a built-up plate girder with a wide top flange, or shorten the span with intermediate supports; the configurator does not design plate girders.${heavyAlternative(trial)}`);
 }
 const beyondGirderCatalog=(t:GirderTrial)=>t.basis?.passed===false&&(Math.max(t.deflection,t.lateral)>1+1e-9||t.utilization>girderStrengthScatter);
 /**
@@ -1898,10 +1907,13 @@ const beyondGirderCatalog=(t:GirderTrial)=>t.basis?.passed===false&&(Math.max(t.
  * railFactor): the calculated rail-head movement (thin-walled model with the tie play) over the estimate without the
  * allowance was 1.0 to 1.7 on ten templates and ten heavy simulated girders (round-7 set), 2.0 on t08 where the tie
  * play dominates a small movement (0.54 of the limit). 1.6: the calculation 0.63 to 1.05 of the estimate on all but
- * t03 and t08 (1.12, 1.24, both small movements); at 1.45 t14 took a W27X258 calculated at 1.03.
+ * t03 and t08 (1.12, 1.24, both small movements); at 1.45 t14 took a W27X258 calculated at 1.03. Round 9, heavy girders
+ * on crane columns: 0.45 to 0.50 of the estimate on the W36X529 of 047 and 053, 0.54 to 0.69 on the W36X529 to W36X925
+ * of 059 (W36X802: 1.40 estimated, 0.96 calculated). The allowance stays (a lower one would pass the templates above
+ * 1.00); candidates within railHeadScatter of the limit are confirmed by the calculation (withConfirmedGirder).
  */
 const railHeadAllowance=1.6;
-/** Above the largest ratio of the screening strength estimate to the calculated top-flange ratio on the heaviest catalog girders (cases 047 and 053: 1.52). */
+/** Above the largest ratio of the screening strength estimate to the calculated top-flange ratio on the heaviest rolled catalog girders (cases 047 and 053: 1.52; their capped W24X370 + MC18X42.7 on crane columns 1.85 to 2.1, which withConfirmedGirder then replaces by a rolled W the calculation passes). */
 const girderStrengthScatter=1.6;
 /** A member beyond the catalog as a row of the selection log (S-00 and the design summary print it). */
 const openItemRow=(v:NonNullable<RunwayConfig['beyondCatalog']>[number]):ConfigSelection=>({item:'Open item',entered:v.member==='girder'?'Girder':v.member==='tie'?'Top-flange tie':v.member==='column-cap'?'Column cap':'Crane column',
