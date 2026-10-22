@@ -24,7 +24,7 @@ import {movingAnalysis} from './analysis';
 import {fatigueSpectrumBin,railClipCategory} from './detailAnalysis';
 import {selectBracketArrangement,selectTieArrangement,tieArrangement,tieOptions} from './connectionOptions';
 import {sizeTaperedHaunch} from './taperedHaunchSizing';
-import {baseSizingRatios,columnDriftShare,sizeColumnBase} from './columnBaseSizing';
+import {baseSizingRatios,columnDriftShare,driftEdge,sizeColumnBase} from './columnBaseSizing';
 import {bracingRatios,columnTorsionRatio,sizeBracing,sizeTorsionStrut,stiffestTorsionStrut,twistMovementTarget,withTwistMovementTarget} from './bracingSizing';
 import {bracingDesign,defaultTorsionBrace,designsBracing,girderOffset,torsionBraceActive} from './newColumnBracing';
 import {longitudinalBracingAnalysis,longitudinalBracingChecks} from './longitudinalBracing';
@@ -1138,7 +1138,7 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  const torsionOk=(r:ProjectInput)=>columnTorsionRatio(r)<=1,twistOk=(r:ProjectInput)=>achievableTwist(r)<=1;
  if(cfg.columnShape||baseSizingRatios(q).ratios.drift<=baseTarget&&torsionOk(q)&&twistOk(q))return q;
  const reactions=supportReactions(q,sectionProperties(q.section)),drift0=baseSizingRatios(q).ratios.drift,torsion0=columnTorsionRatio(q),twist0=achievableTwist(q);
- const state=(drift:number,torsion:number,twist:number,cut=true)=>[drift>(cut?baseTarget:1)?`base drift ratio ${drift.toFixed(2)}${cut?` > ${baseTarget}`:''}`:'',torsion>1?`column torsion ratio ${torsion.toFixed(2)}${cut?' > 1.00':''}`:'',twist>1?`seat twist ratio ${twist.toFixed(2)}${cut?' > 1.00':''} with the torsion brace on the stiffest strut that fits`:''].filter(Boolean).join(' and ');
+ const state=(drift:number,torsion:number,twist:number,cut=true)=>[drift>(cut?baseTarget:driftEdge)?`base drift ratio ${drift.toFixed(2)}${cut?` > ${baseTarget}`:''}`:'',torsion>1?`column torsion ratio ${torsion.toFixed(2)}${cut?' > 1.00':''}`:'',twist>1?`seat twist ratio ${twist.toFixed(2)}${cut?' > 1.00':''} with the torsion brace on the stiffest strut that fits`:''].filter(Boolean).join(' and ');
  const why=`the ${q.existingColumn!.shape} chosen for the crane gives ${state(drift0,torsion0,twist0)}: the lightest heavier W14 within the drift${twist0>1?', torsion and twist':' and torsion'} ratios`;
  const shapes=heavierColumns(q.existingColumn!.shape,true);
  for(const shape of shapes){
@@ -1164,7 +1164,7 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  // no eccentric reaction moment and no seat twist; an estimate on the same column and footing): column caps where the
  // column alone then leaves the footing its share (columnDriftShare, as the footing sizing does), else what caps alone
  // cannot give (a stiffer column, or its top held by a braced frame).
- const cap=cfg.support==='column-cap',drift=left[0]>1+1e-9,dk=baseDrift(kept,existingColumnAnalysis(kept,supportReactions(kept,sectionProperties(kept.section))));
+ const cap=cfg.support==='column-cap',drift=left[0]>driftEdge,dk=baseDrift(kept,existingColumnAnalysis(kept,supportReactions(kept,sectionProperties(kept.section))));
  const alone=dk.sideOnly.column/dk.limit,withFooting=dk.sideOnly.total/dk.limit,share=columnDriftShare*baseTarget;
  const est=`${cap?'The column':`Column caps on the ${shape}`} would leave about ${alone.toFixed(2)} of the drift limit for the column alone, ${withFooting.toFixed(2)} with this footing's rotation (estimate${cap?'':' without the eccentric reaction moment and seat twist'})`;
  const stiffer=`a built-up or laced crane column, a deeper rolled W (W24 to W36, strong axis across the runway, designed by hand), or the column tops tied to a braced frame`;
@@ -1172,7 +1172,8 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
   :alone<=1+1e-9?`${est}: ${cap?'the footing rotation governs':'caps alone are not enough on this footing'}. Recommended: ${cap?'':'column caps with '}a footing stiff enough for the rest of the drift (larger than the configurator sizes for a column above ${share.toFixed(2)} of the limit), else ${stiffer}.`
   :`${est}: ${cap?'a larger footing is not enough':'caps alone are not enough'}. Recommended: ${stiffer}.`;
  const text=`the ${better?`heaviest rolled W14, ${heaviest}, still gives`:`${shape} chosen gives`} ${past||state(...left)} (configurator estimate; the calculation reports its own). ${recommended} The support entered is kept and checked.`;
- const open=left[0]>1+1e-9||left[1]>1+1e-9||left[2]>1+1e-9;
+ // The drift past driftEdge (0.99): an estimate at 1.00 is not taken as within the calculation's limit (case 080).
+ const open=left[0]>driftEdge||left[1]>1+1e-9||left[2]>1+1e-9;
  const logged=`no rolled W14 to the W14X398 meets the new column's drift, torsion and twist ratios for this crane: an open item (${newColumnBeyond})`;
  Object.assign(trace,better?inner:{},{column:[trace.column,better?why[0].toUpperCase()+why.slice(1):'',open?(trace.column||better?logged:logged[0].toUpperCase()+logged.slice(1)):''].filter(Boolean).join('; ')},open?{columnOpen:clipReason(`${newColumnBeyond}: ${text}`)}:{});
  return better?{...r,configurator:{...cfg}}:q;
