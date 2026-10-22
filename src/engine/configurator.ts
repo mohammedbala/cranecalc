@@ -1339,14 +1339,14 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  const all=heavierColumns(q.existingColumn!.shape,true,cfg.support==='crane-column'?craneColumnLimit:heavyColumnLimit);
  const standard=all.filter(v=>aiscShapeByName(v)!.weight<=craneColumnLimit+1e-9),jumbo=all.filter(v=>!standard.includes(v));
  const withinLimits=(r:ProjectInput)=>baseSizingRatios(r).ratios.drift<=driftEdge&&torsionOk(r)&&twistOk(r);
- let shapes=standard;
+ let shapes=standard,r398:ProjectInput|undefined,jumboOpened:string|undefined;
  for(let tier=0;tier<2;tier++){
  if(tier===1){
   // The W14X398 within the limits (above the target): it is the closest, and the jumbo shapes are not searched.
   const last=standard.at(-1);if(!jumbo.length||cfg.structure!=='new'||cfg.support==='crane-column')break;
   // A drift estimate just past driftEdge but within the limit is confirmed by the calculation's drift checks (case 072:
   // 0.995 estimated on the W14X398 with a 30 ft footing, base-drift 0.99 calculated).
-  const inner:SelectionTrace={},r398=last?buildProject({...cfg,columnShape:last},inner):undefined,drift=r398?baseSizingRatios(r398).ratios.drift:Infinity;
+  const inner:SelectionTrace={};r398=last?buildProject({...cfg,columnShape:last},inner):undefined;const drift=r398?baseSizingRatios(r398).ratios.drift:Infinity;
   if(r398&&withinLimits(r398))break;
   if(r398&&drift<=1+1e-9&&torsionOk(r398)&&twistOk(r398)&&calculate(r398).checks.filter(c=>c.id==='base-drift'||c.id==='column-drift').every(c=>c.status==='pass')){
    const row=`${whyHead}: no W14 to the ${last} meets the 0.9 drift target; the ${last} leaves a base drift ratio ${drift.toFixed(3)} (configurator estimate) within the limit, confirmed by the calculation's drift checks, so it is built (the jumbo ${jumbo[0]} to ${jumbo.at(-1)} are searched only where the ${last} leaves a ratio past its limit)`;
@@ -1362,13 +1362,17 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
   if(d.total>baseTarget*d.limit&&d.column>columnDriftShare*baseTarget*d.limit)continue;
   if(columnTorsionRatio(t,reactions)>1.05)continue;
   const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner);
+  // A jumbo that leaves another member an open item the W14X398 did not (case 092: the column cap's fork bolts on the
+  // W14X665) is not taken: the W14X398 stays the closest, its drift the open item with the recommendation.
+  const opened=(x:ProjectInput)=>(x.configurator?.beyondCatalog??[]).filter(v=>!(r398?.configurator?.beyondCatalog??[]).some(w=>w.member===v.member)).length>0;
+  if(tier===1&&r398&&opened(r)){jumboOpened??=shape;continue;}
   if(baseSizingRatios(r).ratios.drift<=baseTarget&&torsionOk(r)&&twistOk(r)){Object.assign(trace,inner,{column:[trace.column,why[0].toUpperCase()+why.slice(1)].filter(Boolean).join('; ')});return {...r,configurator:{...cfg}};}
  }
  }
  // No W14 to the catalog limit meets them: a new freestanding column on the heaviest, where it lowers the governing
  // ratio (the closest member, built and checked), an open item past 1.00. Crane columns have their own catalog limit
  // (beyondCatalog 'crane-column').
- const heaviest=shapes[shapes.length-1];
+ const heaviest=jumboOpened&&r398?standard.at(-1)!:shapes[shapes.length-1];
  if(cfg.structure!=='new'||cfg.support==='crane-column'||!heaviest)return q;
  const governing=(r:ProjectInput)=>Math.max(baseSizingRatios(r).ratios.drift/baseTarget,columnTorsionRatio(r),achievableTwist(r));
  const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:heaviest},inner),now=[baseSizingRatios(r).ratios.drift,columnTorsionRatio(r),achievableTwist(r)] as const;
@@ -1385,12 +1389,12 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  const recommended=!cap&&(!drift||alone<=share+1e-9||withFooting<=1+1e-9)?`${drift?`${est}. `:''}Recommended: column caps over the new columns (support column-cap: the girder on the column axis, no eccentric reaction moment, no seat twist)${drift&&withFooting>1+1e-9?', the footing sized for the rest of the drift':''}.`
   :alone<=1+1e-9?`${est}: ${cap?'the footing rotation governs':'caps alone are not enough on this footing'}. Recommended: ${cap?'':'column caps with '}a footing stiff enough for the rest of the drift (larger than the configurator sizes for a column above ${share.toFixed(2)} of the limit), else ${stiffer}.`
   :`${est}: ${cap?'a larger footing is not enough':'caps alone are not enough'}. Recommended: ${stiffer}.`;
- const text=`the ${better?`heaviest W14 searched, ${heaviest}, still gives`:`${shape} chosen gives`} ${past||state(...left)} (configurator estimate; the calculation reports its own). ${recommended} The support entered is kept and checked.`;
+ const text=`the ${better?jumboOpened?`${heaviest} (the jumbo W14s from the ${jumboOpened} on leave another member an open item) still gives`:`heaviest W14 searched, ${heaviest}, still gives`:`${shape} chosen gives`} ${past||state(...left)} (configurator estimate; the calculation reports its own). ${recommended} The support entered is kept and checked.`;
  // The drift past driftEdge (0.99): an estimate at 1.00 is not taken as within the calculation's limit (case 080).
  const open=left[0]>driftEdge||left[1]>1+1e-9||left[2]>1+1e-9;
  // The log row says what was done: no W14 searched meets the sizing ratios; the heaviest is built where it lowers the
  // governing ratio (an open item where it is still past the limits), else the column chosen stays.
- const none=`no W14 to the ${heaviest} meets the new column's drift, torsion and twist ratios for this crane${shapes===standard&&jumbo.length?` (the jumbo ${jumbo[0]} to ${jumbo.at(-1)} are searched only where the ${heaviest} leaves a ratio past its limit)`:''}`,item=`an open item (${newColumnBeyond})`;
+ const none=`no W14 to the ${heaviest} meets the new column's drift, torsion and twist ratios for this crane${jumboOpened?` (the jumbo ${jumbo[0]} to ${jumbo.at(-1)} searched; from the ${jumboOpened} on they leave another member an open item the ${heaviest} does not, so the ${heaviest} stays)`:shapes===standard&&jumbo.length?` (the jumbo ${jumbo[0]} to ${jumbo.at(-1)} are searched only where the ${heaviest} leaves a ratio past its limit)`:''}`,item=`an open item (${newColumnBeyond})`;
  const row=better?`${whyHead}: ${none}; the heaviest searched, ${heaviest}, lowers the governing ratio and is built, ${open?`still giving ${past||state(...left)}: ${item}`:`giving ${state(...left)||'ratios within the sizing targets'} (configurator estimate, within the calculation's limits)`}`:open?`${none}: ${item}`:'';
  Object.assign(trace,better?inner:{},{column:[trace.column,row&&row[0].toUpperCase()+row.slice(1)].filter(Boolean).join('; ')},open?{columnOpen:clipReason(`${newColumnBeyond}: ${text}`)}:{});
  return better?{...r,configurator:{...cfg}}:q;
