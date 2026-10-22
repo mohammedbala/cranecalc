@@ -18,15 +18,14 @@ const check=(s:CalculationSnapshot,id:string)=>s.checks.find(c=>c.id===id)!;
 const remedy=(s:CalculationSnapshot,id:string)=>{const tax=buildTaxonomy(s,summaryElements(s.input));return openGroups(tax,s).groups.find(g=>g.members.some(c=>c.id===id))!.remedy;};
 
 describe('tie movement strength remedy',()=>{
- const failing=(note:string)=>{const s=clone(),c=check(s,'tie-move-strength');c.status='fail';c.utilization=2.5;c.demand=2.5;c.capacity=1;c.note=c.note.replace(/ H1 governing state:[^.]*\.$/,'')+note;return s;};
+ const failing=(note:string)=>{const s=clone(),c=check(s,'tie-move-strength');c.status='fail';c.utilization=2.5;c.demand=2.5;c.capacity=1;c.note=c.note.replace(/ H1 governing state:.*$/,'')+note;return s;};
  it('states the bending reduction with the axial term: (1 - a)/(u - a)',()=>{
   const r=remedy(failing(' H1 governing state: P_r/P_c = 0.5500.'),'tie-move-strength');
   // (1 - 0.55)/(2.5 - 0.55) = 0.231: 77%, not the 60% of 1 - 1/u.
   expect(r).toContain('by at least 77%');expect(r).toContain('P_r/P_c = 0.55');expect(r).toContain('lengthen the clear tie length');
  });
  it('does not offer a longer tie where P_c is elastic and the least H1 at any length exceeds 1',()=>{
-  const r=remedy(failing(' H1 governing state: P_r/P_c = 0.5500 (P_c elastic and the movement moment ∝ 1/L²).'),'tie-move-strength');
-  // 2√(0.55 × 1.95) = 2.07.
+  const r=remedy(failing(' H1 governing state: P_r/P_c = 0.5500. At a longer clear length the least H1 is about 2.07 (P_r/P_c = 0.550 grows as L² with P_c elastic, the movement moment falls as 1/L²).'),'tie-move-strength');
   expect(r).toContain('A longer clear tie length cannot pass');expect(r).toContain('2.07');expect(r).not.toContain('lengthen the clear tie length');
  });
 });
@@ -40,7 +39,7 @@ describe('configurator items',()=>{
   const s=clone();s.checks.push(item('pass'));
   const row={item:'Open item',entered:'Column cap',designed:'W14X398, closest; cap bearing bolts to be designed by hand',reason:'Column cap not resolved: sized to the limits of its steps it still exceeds bolt-slip 1.80. Recommended: designed by hand.'};
   const v=selectionView(s,row);
-  expect(v.item).toBe('Closed item');expect(v.designed).toBe('W14X398 as built, confirmed by the calculation');expect(v.reason).toMatch(/^Column cap, screening estimate: /);
+  expect(v.item).toBe('Closed item');expect(v.designed).toBe('Column cap on the W14X398 as built, confirmed by the calculation');expect(v.reason).toMatch(/^Column cap, screening estimate: /);
   const open=clone();open.checks.push(item('incomplete'));expect(selectionView(open,row)).toEqual(row);
   // The final calculation annotation, when the snapshot quotes results.
   const f=selectionFinal(s,'Open item','Column cap');if(f)expect(f).toContain('closed by the calculation');

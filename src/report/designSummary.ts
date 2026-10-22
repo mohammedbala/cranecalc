@@ -136,7 +136,7 @@ export function selectionView<T extends {item:string,entered:string,designed:str
  const v=R===undefined?v0:{...v0,reason:v0.reason.replace(/^The support reaction, about ([^,]*?), is above/,(_,est:string)=>`The support reaction ${sig3(R,'force',s.input.units)} (the calculation's; configurator estimate about ${est.replace(/\s*\(([^()]*)\)/,', $1')}) is above`)};
  if(!selectionClosed(s,v.item,v.entered))return v;
  const reason=v.reason.replace(/^([^:]{1,60}) not resolved: /,'$1, screening estimate: ').replace(/\s*\(review draft: open item\)/,'').replace(/\s*Open item: the package is a review draft[^.]*\./,'');
- return v.item==='Open item'?{...v,item:'Closed item',designed:`${v.designed.split(/[,;]/)[0]} as built, confirmed by the calculation`,reason}:{...v,reason};
+ return v.item==='Open item'?{...v,item:'Closed item',designed:`${v.entered==='Column cap'?'Column cap on the ':''}${v.designed.split(/[,;]/)[0]} as built, confirmed by the calculation`,reason}:{...v,reason};
 }
 /**
  * The final calculated ratios beside a configurator selection whose reason quotes screening estimates (the sized girder,

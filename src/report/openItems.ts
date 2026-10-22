@@ -127,17 +127,13 @@ const negativeMoment=(x:RemedyContext)=>/^(combined-bottom|major|flexure-load-he
  * 2√(a · 8/9 M/M_c) (a ≥ 0.2 form; found by a scan of the lengths otherwise).
  */
 function tieMoveStrength(x:RemedyContext){
- const m=x.c.note.match(/H1 governing state: P_r\/P_c = (\d+(?:\.\d+)?)( \(P_c elastic)?/);if(!m||!Number.isFinite(x.u)||!Number.isFinite(Number(m[1])))return undefined;
- const a=Number(m[1]),scales=!!m[2],u=x.u,big=a>=.2;
- // Σ M/M_c at the present length; H1 at a length with (L'/L)² = k: a·k and Σ/k in the H1-1a or H1-1b form.
- const sum=big?9/8*(u-a):u-a/2,h1=(k:number)=>a*k>=.2?a*k+8/9*sum/k:a*k/2+sum/k;
- // The least H1 over longer lengths (k = (L'/L)² ≥ 1).
- const best=scales?Math.min(...Array.from({length:401},(_,i)=>h1(10**(i/100)))):undefined;
+ const m=x.c.note.match(/H1 governing state: P_r\/P_c = (\d+(?:\.\d+)?)/);if(!m||!Number.isFinite(x.u)||!Number.isFinite(Number(m[1])))return undefined;
+ const a=Number(m[1]),u=x.u,big=a>=.2,bound=x.c.note.match(/At a longer clear length the least H1 is about (\d+(?:\.\d+)?)/),best=bound?Number(bound[1]):undefined;
  const slid=/Column-end slide/.test(x.c.note),release=slid?'the column-end release (sleeved vertical slots and the slide along the runway) is already in this design':'release the column end (sleeved vertical slots, and the column-end slide along the runway for paired bars)';
  if(a>=1)return `The axial term alone, P_r/P_c = ${a.toFixed(2)}, exceeds 1: no reduction of the imposed movement passes H1; a stronger tie (a larger plate or bars, a shorter buckling length), or remove the tie force from the movement (column caps, the girder end held by its end fork), designed by hand.`;
  const ratio=big?(1-a)/(u-a):(1-a/2)/(u-a/2),cut=Math.ceil((1-ratio)*100-1e-9);
  const head=`Reduce the bending from the imposed movement by at least ${cut}%: H1 keeps the axial term P_r/P_c = ${a.toFixed(2)}, so M_new/M = ${big?'(1 − P_r/P_c)/(u − P_r/P_c)':'(1 − P_r/2P_c)/(u − P_r/2P_c)'} = ${ratio.toFixed(2)} at u = ${u.toFixed(2)}`;
- if(best!==undefined&&best>1)return `${head}. A longer clear tie length cannot pass: P_c is elastic and the movement moment falls as 1/L², so P_r/P_c grows as L² while the moment term falls as 1/L², and the least H1 at any length is about ${big?'2√(P_r/P_c · 8/9 M/M_c) = ':''}${best.toFixed(2)}. ${sentenceStart(release)}; remove the imposed movement at the tie instead (column caps over the columns, the girder end held by its end fork with no tie), or a tie designed by hand. Then recalculate.`;
+ if(best!==undefined&&best>1)return `${head}. A longer clear tie length cannot pass: P_c is elastic and the movement moment falls as 1/L², so P_r/P_c grows as L² while the moment term falls as 1/L², and the least H1 at any length is about ${best.toFixed(2)} (2√(P_r/P_c · 8/9 M/M_c) in the H1-1a form). ${sentenceStart(release)}; remove the imposed movement at the tie instead (column caps over the columns, the girder end held by its end fork with no tie), or a tie designed by hand. Then recalculate.`;
  return `${head}: ${slid?`${release}, so `:`${release}, `}lengthen the clear tie length, or a thinner, more flexible tie out of plane with the axial strength kept.`;
 }
 const remedies:Remedy[]=[
