@@ -29,7 +29,7 @@ import {craneDesignMinimum} from './aistLoads';
 import {craneTravel} from './craneTravel';
 import {railTopAboveSteel} from './railSeat';
 import {braceSystem,fatigueSpectrumBin} from './detailAnalysis';
-import {columnFlangeWidth,flangeTieChecks,flangeTieResponse,stiffenerTieChecks,initialTieStiffener,tieColumnSection} from './flangeTieDesign';
+import {columnFlangeWidth,flangeEffectiveWidth,flangeTieChecks,flangeTieResponse,stiffenerTieChecks,initialTieStiffener,tieColumnSection} from './flangeTieDesign';
 import {tieMovementChecks,tieMovements} from './tieMovement';
 import {isPlateTie,plateTieChecks} from './plateTie';
 import {lapChecks} from './detailChecks';
@@ -490,6 +490,17 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
    if(x.saddleThickness>minSaddle+1e-6&&saddlePlate*(x.saddleThickness/(x.saddleThickness-inch/8))**2<=target){x.saddleThickness-=inch/8;return true;}
    // A smaller bolt narrows the bars, their slots and the lever, where the bolts have the strength.
    if(smaller&&!trial.grown&&boltRoom(r,x.diameter,smaller)){x.diameter=smaller;return true;}
+   // A saddle 1/8 in longer on a 1/16 in smaller end fillet: the fillet ends stay where they were (the bearing stiffener
+   // clearance, the fit at the girder end) and the flange's effective width B + a + min(a, end) grows by 1/8 in; where
+   // the saddle welds keep within their limits with the smaller fillet (their ratios scaled by the size) and the saddle
+   // keeps its fatigue category (case 083: the 3 1/2 in saddle on 1/2 in fillets left flange-tie-flange 1.006; 3 5/8 in
+   // on 7/16 in fillets 0.96, the weld ratios 0.90 and 0.97).
+   const at=r.q.details!.brace.flangeAttachment;
+   if(at&&k==='flange-tie-flange'){
+    const B=x.saddleLength??at.saddleLength,w=x.saddleWeld-sixteenth,t=x.saddleThickness,cat=(v:number)=>v<2*inch?'C':v<=Math.min(12*t,4*inch)?'D':t<=.8*inch?'E':'E1';
+    const welds=Math.max(...['flange-tie-saddle-weld','flange-tie-weld-fatigue','flange-tie-weld-minimum'].map(id=>r.ratios[id]??0))*x.saddleWeld/Math.max(w,1e-9);
+    if(w>=inch/8-1e-9&&welds<=1&&cat(B+inch/8)===cat(B)&&!validateRunwayDetails(applyTieProportions(structuredClone(r.q),{...x,saddleWeld:w,saddleLength:B+inch/8})).length){x.saddleWeld=w;x.saddleLength=B+inch/8;return true;}
+   }
   }
   // Larger saddle fillets, within the plate-edge limit and keeping the end fillet clear of the bearing stiffener and its
   // fillets (flange-tie-stiffener-clearance).
@@ -499,6 +510,12 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
    // A larger fillet that still lies on the girder flange at the saddle's far end (validated).
    const fits=()=>!validateRunwayDetails(applyTieProportions(structuredClone(r.q),{...x,saddleWeld:x.saddleWeld+sixteenth})).length;
    if(clear&&x.saddleWeld+sixteenth<=x.saddleThickness-sixteenth+1e-6&&fits()){x.saddleWeld+=sixteenth;return true;}
+   // Shortening the saddle or moving it toward the girder end narrows the girder flange's effective width (B + a +
+   // min(a, end), at most 1/8 in less): taken only while the flange under it keeps within the target, or within its
+   // limit where the weld is past its own (case 083: a 1/2 in fillet for a 0.965 weld fatigue ratio took the saddle from
+   // 3 5/8 to 3 1/2 in and the flange local check from 0.96 to 1.006).
+   const width=flangeTieGeometry(r.q)?flangeEffectiveWidth(r.q).width:0;
+   if(!(width>inch/8)||flangeLocalOf(r)*width/(width-inch/8)>(r.ratios[k]>1+1e-9?1:target)+1e-9)return false;
    // Where the larger fillet would reach the bearing stiffener's zone or run off the flange at the girder end, the saddle
    // 1/8 in shorter (at least 2 in, and the gusset with its two fillets on it) keeps both fillet ends where they were;
    // else the saddle moves the 1/16 in farther from the bearing stiffener with it (toward the girder end; the validation

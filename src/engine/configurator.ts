@@ -596,7 +596,7 @@ export function buildProject(input:RunwayConfig,trace:SelectionTrace={}):Project
  buildDepth++;
  try{
   if(buildDepth!==1)return buildLayout(input,trace);
-  return withConfirmedGirder(finishedLayout(input,trace),input,trace);
+  return withConfirmedFace(withConfirmedGirder(finishedLayout(input,trace),input,trace),input,trace);
  }finally{buildDepth--;}
 }
 /** The outermost build (buildProject): the layout, then the tie, column and twist steps that rebuild it. */
@@ -698,6 +698,41 @@ function withConfirmedGirder(q:ProjectInput,input:RunwayConfig,trace:SelectionTr
  const reason=girderOpenReason(closest,capped,rolledNote),c=q.configurator!;
  c.beyondCatalog=c.beyondCatalog!.map(v=>v.member==='girder'?{...v,reason}:v);
  c.selections=c.selections?.map(v=>v.item==='Open item'&&v.entered==='Girder'?openItemRow({...item,reason}):v.item==='Girder'&&heavy?.confirmed&&!v.reason.includes(heavy.name)?{...v,reason:clipReason(`${heavyAlternative(closest).trim()} ${v.reason.trim()}`)}:v);
+ return q;
+}
+/** The column face a confirmation build is made with (withConfirmedFace; columnFaceCap and attachTieAtFace take it as set). */
+let facePick:number|undefined;
+/** The column face limit of the tie sizing on a bracket (attachTie, columnFaceCap). */
+const faceLimit=30*inch;
+/**
+ * A new freestanding column's bracket whose tie the configurator left an open item with the column face short of its
+ * 30 in limit, where the face stopped at the screening estimates of the column's twist and drift (columnFaceCap,
+ * braceTrial, conservative near their targets) or went back to where it started (attachTieAtFace): the runway built
+ * with the face at the limit (facePick), the column, base and tie sized for it as usual, and calculated; taken where
+ * every check of the calculation passes, the log saying it was confirmed by the calculation, not the screening. Else the
+ * first build stays and the tie row says what the face at the limit gave. Case 083: the face held at 20 in (screening
+ * stop at 22 in); at 30 in the calculation passed every check.
+ */
+function withConfirmedFace(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace):ProjectInput{
+ const cfg=configOf(input).config,b=q.details?.bracket;
+ if(facePick!==undefined||girderPick||cfg.scope!=='design'||cfg.reach!==undefined||cfg.support==='stepped-column'||cfg.support==='column-cap'||!b?.enabled||b.reach>=faceLimit-1e-6||!q.configurator?.beyondCatalog?.some(v=>v.member==='tie')||!braceTrial(q))return q;
+ const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(2)} in`,from=b.reach;
+ const inner:SelectionTrace={};facePick=faceLimit;let r:ProjectInput;
+ try{r=withConfirmedGirder(finishedLayout(input,inner),input,inner);}finally{facePick=undefined;}
+ const s=calculate(r),bad=s.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status));
+ const worst=(list:typeof bad)=>list.filter(c=>typeof c.utilization==='number'&&Number.isFinite(c.utilization)).sort((x,y)=>y.utilization!-x.utilization!).slice(0,3).map(c=>`${c.id} ${dcText(c.utilization!,2)}`).join(', ');
+ const sel=(p:ProjectInput)=>p.configurator?.selections;
+ if(!s.errors.length&&!bad.length&&r.details?.bracket?.enabled){
+  const tieChecks=s.checks.filter(c=>memberChecks.tie.test(c.id)&&c.status==='pass'),why=`Confirmed by the calculation, not by the screening: the column face at the ${len(faceLimit)} limit (the screening estimates of the new column's twist and drift held it at ${len(from)}, where the tie stayed an open item), with the column, base and tie sized for it, passes every check of the calculation (tie: ${worst(tieChecks)||'all pass'}).`;
+  Object.assign(trace,inner);r.notes+=` ${why}`;
+  const c=r.configurator!;
+  // The tie the calculation confirms is no longer an open item.
+  if(c.beyondCatalog){c.beyondCatalog=c.beyondCatalog.filter(v=>v.member!=='tie');if(!c.beyondCatalog.length)delete c.beyondCatalog;}
+  c.selections=sel(r)?.filter(v=>!(v.item==='Open item'&&v.entered==='Top-flange tie')).map(v=>v.item==='Column face to girder web'?{...v,reason:clipReason(`${why} ${v.reason}`)}:v);
+  return r;
+ }
+ const row=sel(q)?.find(v=>v.item==='Top-flange tie'),also=`The column face at the ${len(faceLimit)} limit, built and calculated with the column, base and tie sized for it, does not pass either (${s.errors.length?'validation errors':worst(bad)||`${bad.length} checks open`}): the face stays at ${len(from)}.`;
+ if(row)row.reason=clipReason(`${row.reason} ${also}`);
  return q;
 }
 /**
@@ -1658,12 +1693,12 @@ function attachTieAtFace(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace){
  const start=held?structuredClone(p):undefined,before={...trace};
  attachTie(p,cfg,trace);
  const b1=p.details?.bracket;
- if(!start||!b1?.enabled||b1.reach<=b0!.reach+1e-6||!tieUnresolved(p))return;
+ if(!start||facePick!==undefined||!b1?.enabled||b1.reach<=b0!.reach+1e-6||!tieUnresolved(p))return;
  const inner:SelectionTrace={...before},moved=b1.reach;attachTie(start,cfg,inner,b0!.reach);
  for(const k of Object.keys(p) as (keyof ProjectInput)[])delete p[k];Object.assign(p,start);
  for(const k of Object.keys(trace) as (keyof SelectionTrace)[])delete trace[k];
  const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(2)} in`;
- const why=`No column face to ${len(moved)} lets the tie pass its checks (an open item at every face): the face stays at ${len(b0!.reach)}, where the new column and its bracket are least loaded (a longer reach adds to the bracket moment, the column's eccentric-reaction drift and the seat twist).`;
+ const why=`No column face to ${len(moved)}${moved<faceLimit-1e-6?` (as far as the screening estimates of the new column's twist and drift let it move; the face limit is ${len(faceLimit)})`:''} lets the tie pass its checks (an open item at every face): the face stays at ${len(b0!.reach)}, where the new column and its bracket are least loaded (a longer reach adds to the bracket moment, the column's eccentric-reaction drift and the seat twist).`;
  Object.assign(trace,inner,{tie:inner.tie?`${inner.tie} ${why}`:why});
 }
 /** The sized paired-bar, flexible-plate or stiffener tie with a sizing ratio of its own past 1.00 (as beyondCatalog judges it). */
@@ -1752,6 +1787,8 @@ function attachTie(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={},hold?
  */
 function columnFaceCap(p:ProjectInput,farthest:number,trace:SelectionTrace,configured:boolean):number{
  const b=p.details?.bracket;if(!b?.enabled||farthest<=b.reach+1e-6||!braceTrial(p))return farthest;
+ // A face the calculation is to confirm (withConfirmedFace): as set.
+ if(facePick!==undefined)return Math.min(farthest,Math.max(b.reach,facePick));
  const q=structuredClone(p),heaviest=configured?undefined:heavierColumns(q.existingColumn!.shape,true).at(-1);
  if(heaviest){const w=aiscShapeByName(heaviest)!;Object.assign(q.existingColumn!,{shape:heaviest,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch});Object.assign(q.details!.bracket!.receiver,shapePlates(heaviest));}
  const reactions=supportReactions(q,sectionProperties(q.section));
