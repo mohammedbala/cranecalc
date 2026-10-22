@@ -31,12 +31,17 @@ export function presentCheck(check:CheckResult,units:ProjectInput['units']):Chec
 export const noCapacity=(u:number|undefined)=>u!==undefined&&!Number.isNaN(u)&&(!Number.isFinite(u)||u>1e3);
 /**
  * Demand/capacity ratio as printed: NO CAPACITY for a ratio that is infinite or above 1000 (noCapacity), never the
- * sentinel or clamped number itself. A ratio past 1 never prints as 1 (1.004 is 1.01 at two decimals): rounding must
- * not hide a failure.
+ * sentinel or clamped number itself. A failing ratio past 1 never prints as 1 (1.004 is 1.01 at two decimals): rounding
+ * must not hide a failure. A passing ratio never prints above 1: float noise on a rule met exactly (7.15 in ≥ 7.15 in,
+ * u = 1.0000000000000002) is not rounded up, nor printed above 1.00. With the check's status known, it decides (pass:
+ * never; fail or unverified: any ratio past 1); otherwise a ratio rounds up only past the pass/fail tolerance (1 + 1e-6,
+ * the widest the checks use).
  */
-export function dcText(u:number|undefined,digits:number,empty='-'){
+export const failingRatio=(u:number,status?:string)=>status==='pass'?false:status==='fail'||status==='unverified'?u>1:u>1+1e-6;
+export function dcText(u:number|undefined,digits:number,empty='-',status?:string){
  if(u===undefined||Number.isNaN(u))return empty;
  if(noCapacity(u))return 'NO CAPACITY';
  const t=u.toFixed(digits);
- return u>1&&Number(t)<=1?(1+10**-digits).toFixed(digits):t;
+ if(failingRatio(u,status))return Number(t)<=1?(1+10**-digits).toFixed(digits):t;
+ return u>1&&Number(t)>1&&(status==='pass'||status===undefined)?(1).toFixed(digits):t;
 }

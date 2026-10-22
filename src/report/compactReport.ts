@@ -154,7 +154,7 @@ const statusText=statusLabel;
   // A result with its numbers and the relation that holds: "41.9 ksi > 29.9 ksi, D/C = 1.40, NG".
   const result=(c:CheckResult,label:string)=>{const q=c.quantity??'ratio';
    const values=q!=='ratio'&&c.demand!==undefined&&c.capacity!==undefined?`${q3(c.demand,q)} ${textRelation(c)} ${q3(c.capacity,q)}, `:'';
-   return `<p><b>${label}: ${e(calloutTitle(c))}</b>${c.caseId?`, ${e(caseName(s,c.caseId).split(',')[0])}`:''} (${refText(c)}): ${values}D/C = ${dcText(c.utilization,2)}, ${e(statusText(c.status))}.</p>`;};
+   return `<p><b>${label}: ${e(calloutTitle(c))}</b>${c.caseId?`, ${e(caseName(s,c.caseId).split(',')[0])}`:''} (${refText(c)}): ${values}D/C = ${dcText(c.utilization,2,'-',c.status)}, ${e(statusText(c.status))}.</p>`;};
   const governing=g&&has(g)?result(g,'Governing'):'';
   // A check that cannot be rebuilt here: the terms behind its D/C as the engine states them (the sentences of its note
   // that carry values), so a governing or failing result is never a bare ratio.

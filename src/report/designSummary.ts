@@ -101,7 +101,7 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
   const status=items.some(i=>i.governing.status==='fail')?'fail':(items.find(i=>i.members.includes(g.c))??(checked?undefined:items[0]))?.governing.status??g.c.status;
   const others=items.filter(i=>!i.members.includes(g.c));
   const note=others.length?`<small class="open">Open: ${others.slice(0,2).map(i=>`${esc(title(i.title))} (${esc(groupDc(i))})`).join('; ')}${others.length>2?`; ${others.length-2} more`:''} (open items, page 1)</small>`:'';
-  return `<tr class="${status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b></td><td>${esc(title(g.c.title))}<small class="ref">${esc(shortReference(g.c))}</small>${note}</td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—')}</td><td class="res"><b class="${status}">${esc(statusLabel(status))}</b></td></tr>`;
+  return `<tr class="${status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b></td><td>${esc(title(g.c.title))}<small class="ref">${esc(shortReference(g.c))}</small>${note}</td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—',g.c.status)}</td><td class="res"><b class="${status}">${esc(statusLabel(status))}</b></td></tr>`;
  }).join('')}</tbody></table>`;
 }
 /**

@@ -290,7 +290,7 @@ export function openByElement(groups:OpenGroup[]){
  */
 export const ruleItem=(g:OpenGroup)=>g.kind==='clash'||g.kind==='detailing';
 /** An item's result in a sentence: "D/C 2.21", "NO CAPACITY", "not met" for a rule, or its open status. */
-export const groupDc=(g:OpenGroup)=>g.governing.status!=='fail'?statusLabel(g.governing.status):ruleItem(g)?'not met':g.dc===undefined?'NG':noCapacity(g.dc)?'NO CAPACITY':`D/C ${dcText(g.dc,2)}`;
+export const groupDc=(g:OpenGroup)=>g.governing.status!=='fail'?statusLabel(g.governing.status):ruleItem(g)?'not met':g.dc===undefined?'NG':noCapacity(g.dc)?'NO CAPACITY':`D/C ${dcText(g.dc,2,'-','fail')}`;
 /** An item's result in the open-items table: the D/C with NG, NG alone for a rule, or its open status. */
-export const groupDcCell=(g:OpenGroup)=>g.governing.status!=='fail'?`<b>${statusLabel(g.governing.status)}</b>`:ruleItem(g)||g.dc===undefined?'<b>NG</b>':`<b>${dcText(g.dc,2)}</b> NG`;
+export const groupDcCell=(g:OpenGroup)=>g.governing.status!=='fail'?`<b>${statusLabel(g.governing.status)}</b>`:ruleItem(g)||g.dc===undefined?'<b>NG</b>':`<b>${dcText(g.dc,2,'-','fail')}</b> NG`;
 export type {TaxonEntry};
