@@ -17,7 +17,7 @@ import {runwayElevations,issueStatus,revisionIdentity,supportColumn,delegatedChe
 import {activeEndStop,stopLocation} from '../engine/endStopInputs';
 import {railJointType} from '../engine/railLayout';
 import {supplierRailJointText,fatigueCycleFamilies} from '../engine/railChecks';
-import {selectionFinal,selectionView} from '../report/designSummary';
+import {selectionFinal,selectionRows,selectionView} from '../report/designSummary';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {usesExistingBracket} from '../engine/existingBracket';
 import {usesRolledBracket,projectStub} from '../engine/rolledBracket';
@@ -355,8 +355,10 @@ const isNew=!!(p.existingColumn?.enabled&&p.existingColumn.isNew),tied=tiedToBui
  // in its first clause without the parentheses (the full reasons are in the calculation's design summary).
  const picks=p.configurator?.selections??[];
  if(picks.length)blocks.push(H('CONFIGURATOR SELECTIONS'),T(['ITEM','AS ENTERED → AS DESIGNED','GOVERNING REASON'],
-  // A reason quoting screening estimates carries the final calculated ratios beside them (selectionFinal).
-  picks.map(v0=>{const f=selectionFinal(s,v0.item,v0.entered),v=selectionView(s,v0);return [strip(v.item),strip(`${v.entered} → ${v.designed}`),`${governingClause(v.reason)}${f?`: SCREENING ESTIMATE. ${f.replace(/\.$/,'')}`:''}`].map(x=>x.toUpperCase());}),[.8,1.3,1.9]));
+  // A reason quoting screening estimates carries the final calculated ratios beside them (selectionFinal); only its
+  // screening figures are labeled as such (screeningClause), and an item the calculation closed says only that.
+  selectionRows(picks).map(v0=>{const f=selectionFinal(s,v0.item,v0.entered),v=selectionView(s,v0),closed=v.item==='Closed item'&&f;
+   return [strip(v.item),strip(`${v.entered} → ${v.designed}`),closed?f.replace(/^Final calculation: /,'').replace(/\.$/,''):`${screeningClause(s,governingClause(v.reason))}${f?`. ${f.replace(/\.$/,'')}`:''}`].map(x=>x.toUpperCase());}),[.8,1.3,1.9]));
  const r=s.supportReactions;
  // The runway seismic combinations are evaluated by the engineer of record: their item in the existing structure evaluation.
  const runwaySeismic=unevaluatedStructure(s).findIndex(c=>c.id==='building-seismic-runway')+1;
@@ -560,7 +562,23 @@ function cjpToExisting(p:CalculationSnapshot['input']){
  * Text without its parenthetical remarks, nested ones included; a remark that labels figures as estimates (the
  * configurator's, screening or sizing estimates) is kept as '(configurator estimate)' where it stood.
  */
-const strip=(x:string)=>{let v=x,w='';while(w!==v){w=v;v=v.replace(/\s*\([^()]*\)/g,m=>/\bestimates?\b/i.test(m)?' \u0001':'');}return v.replace(/\u0001/g,'(configurator estimate)');};
+const strip=(x:string)=>{let v=x,w='';while(w!==v){w=v;v=v.replace(/\s*\([^()]*\)/g,m=>/^\s*\(the calculation's\b/i.test(m)?' \u0002':/\bestimates?\b/i.test(m)?' \u0001':'');}return v.replace(/\u0001/g,'(configurator estimate)').replace(/\u0002/g,'(calculated)');};
+/**
+ * A governing clause as S-00 prints it beside the final calculation: each '(configurator estimate)' list of named
+ * screening ratios (bolt-slip 16.18, …) with the calculated ratios of the same checks beside it, and the clause labeled a
+ * screening estimate only where it quotes unlabeled screening ratios (a decimal ratio, not a size or force), never a
+ * calculated statement.
+ */
+function screeningClause(s:CalculationSnapshot,clause:string){
+ const calc=(name:string)=>{for(const id of [name,`column-cap-${name}`,`bracket-${name}`,`haunch-${name}`,`wbracket-${name}`]){const c=s.checks.find(x=>x.id===id);if(c&&(c.status==='pass'||c.status==='fail')&&c.utilization!==undefined&&Number.isFinite(c.utilization))return c.utilization;}return undefined;};
+ let from=0;
+ const out=clause.replace(/\s*\(configurator estimate\)/g,(m,at:number)=>{
+  const named=[...clause.slice(from,at).matchAll(/\b([a-z][a-z0-9]*(?:-[a-z0-9]+)+) (\d+\.\d{2})\b/gi)].map(x=>[x[1],calc(x[1].toLowerCase())] as const).filter(x=>x[1]!==undefined);
+  from=at+m.length;
+  return named.length?` (configurator estimate; calculated ${named.map(([k,u])=>`${k} ${u!.toFixed(2)}`).join(', ')})`:m;});
+ const figures=/(?<![\w.])\d+\.\d{2}\b(?!\s*(?:in|mm|ft|m|kip|kn|lb|ksi|mpa|rad|%)\b)/i;
+ return !/estimate/i.test(out)&&!/\bcalculation (gives|passes|reports)\b|\bof the calculation\b|\bcalculated\b/i.test(out)&&figures.test(out)?`${out} (screening estimate)`:out;
+}
 /**
  * The governing reason of a selection, compactly: its first clause (to the first "; " outside parentheses, so a
  * parenthetical with a semicolon is never cut), without the parentheses, and its recommendation where that comes later.
