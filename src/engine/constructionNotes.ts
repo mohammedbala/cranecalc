@@ -48,6 +48,21 @@ export function preheatBasis(p:ProjectInput){
  return {t,thickest,need,specified,governing,project,text,range};
 }
 
+/**
+ * New columns of a heavy rolled shape (AISC 360-16 A3.1c: an ASTM A6 hot-rolled shape with flanges over 2 in thick,
+ * W14X283 and heavier): where the package groove-welds through the column flange thickness (CJP column flanges to a
+ * column cap plate), Charpy V-notch testing is required (20 ft-lbf at +70 °F, alternate core location, ASTM A6
+ * Supplementary Requirement S30); otherwise a note that a splice or such a weld added later needs it.
+ */
+export function heavyColumnNote(p:ProjectInput):string[]{
+ const c=p.existingColumn;if(!c?.enabled||!c.isNew||!(c.tf>2*inch+1e-6))return [];
+ const what=`${p.craneColumn?.enabled?'crane columns':'columns'}${c.shape?` (${c.shape})`:''}`,tf=inches(c.tf,p.units);
+ const cvn='Charpy V-notch testing per AISC 360-16 A3.1c: 20 ft-lbf at +70 °F at the alternate core location (ASTM A6 Supplementary Requirement S30)';
+ return [activeColumnCap(p)?.joint==='cjp'
+  ?`Heavy shapes: the new ${what} have ${tf} flanges (over 2 in, AISC 360-16 A3.1c) and their flanges are CJP groove welded to the column cap plates: ${cvn}; weld access holes and thermally cut surfaces per J1.6.`
+  :`Heavy shapes: the new ${what} have ${tf} flanges (over 2 in, AISC 360-16 A3.1c); they are neither spliced nor CJP groove welded through their flanges here, so A3.1c adds no toughness requirement. A column splice or a CJP groove weld through the column flange added later requires ${cvn}.`];
+}
+
 /** Complete-joint-penetration groove welds in this package, by name. */
 export function cjpWelds(p:ProjectInput):string[]{
  const d=p.details;if(!d)return [];
@@ -123,6 +138,7 @@ export function constructionRequirements(p:ProjectInput):ConstructionNote[]{
  const welding=[
   `E70XX low-hydrogen weld metal, ${awsCode}, cyclically loaded provisions (Clause 4 Part C); qualified or prequalified WPS and qualified welders.`,
   ...(joint==='welded'?[`${weldedRailJointNote} ${floating}`]:[]),
+  ...heavyColumnNote(p),
   ...(existing?[`Field welds to the existing column: base metal confirmed before welding (AISC 360-16 Appendix 5.2.3: mill certificates or chemical analysis), a WPS approved by the engineer of record for that steel, ${heat?heat.text:'preheat per AWS D1.1 Table 5.8'}; weld with the crane out of service (${awsCode} Clause 11).`]:[]),
   ...(haunchCjp?[`Haunch flange CJPs to the column flange: single-bevel groove on the haunch flange, on steel backing, welded through weld access holes in the haunch web (AISC 360-16 J1.6); backing removed, root backgouged and rewelded, reinforcing fillet (${awsCode}, cyclically loaded T-joints). Details on the haunch sheet.`]:[])];
  const inspection=[
