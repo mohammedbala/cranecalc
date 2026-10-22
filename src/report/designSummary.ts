@@ -6,7 +6,7 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {tiedToBuilding,girderEndFork} from '../engine/craneColumnInputs';
 import {activeStep} from '../engine/steppedColumnInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
-import {equationCell,governing,shortReference,statusLabel,subscripts} from './reportParts';
+import {equationCell,governing,shortReference,sig3,statusLabel,subscripts} from './reportParts';
 import {loadPathSteps,supportAssemblyFigure} from './hairline/figures';
 import {classifyCheck,reviewDraftExportable,type Taxonomy} from '../engine/checkTaxonomy';
 import {groupDc,openByElement,openItemGroups,ruleItem} from './openItems';
@@ -129,7 +129,11 @@ export function selectionClosed(s:CalculationSnapshot,item:string,entered?:strin
  * A log row as printed: a row whose configurator item the calculation closed reads as closed (an 'Open item' is titled
  * 'Closed item', its member as built and confirmed; its reason is the configurator's screening estimate, not an open item).
  */
-export function selectionView<T extends {item:string,entered:string,designed:string,reason:string}>(s:CalculationSnapshot,v:T):T{
+export function selectionView<T extends {item:string,entered:string,designed:string,reason:string}>(s:CalculationSnapshot,v0:T):T{
+ // The bracket advisory quotes the configurator's reaction estimate (to the nearest 5): with the calculation's reaction
+ // (its column bracket reaction check) available, that value leads and the estimate is labeled as such.
+ const R=s.checks.find(c=>/^(column-brackets|(bracket|haunch|wbracket)-tr13-load)$/.test(c.id)&&c.demand!==undefined&&Number.isFinite(c.demand))?.demand;
+ const v=R===undefined?v0:{...v0,reason:v0.reason.replace(/^The support reaction, about ([^,]*?), is above/,(_,est:string)=>`The support reaction ${sig3(R,'force',s.input.units)} (the calculation's; configurator estimate about ${est.replace(/\s*\(([^()]*)\)/,', $1')}) is above`)};
  if(!selectionClosed(s,v.item,v.entered))return v;
  const reason=v.reason.replace(/^([^:]{1,60}) not resolved: /,'$1, screening estimate: ').replace(/\s*\(review draft: open item\)/,'').replace(/\s*Open item: the package is a review draft[^.]*\./,'');
  return v.item==='Open item'?{...v,item:'Closed item',designed:`${v.designed.split(/[,;]/)[0]} as built, confirmed by the calculation`,reason}:{...v,reason};
