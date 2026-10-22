@@ -21,5 +21,5 @@ export const sampleCalcs:SampleCalc[]=[{
   'Drawing sheets S-00 to S-04: cover and notes (continued on S-00A), general arrangement, connections, cap tiebacks and end stops',
  ],
  file:'samples/CraneRunway-Sample-Calculation.pdf',cover:'samples/CraneRunway-Sample-Calculation-cover.jpg',
- pages:35,bytes:1645624,issued:'2026-10-19',
+ pages:35,bytes:1645914,issued:'2026-10-22',
 }];
