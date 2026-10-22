@@ -60,7 +60,7 @@ import {minimumEdge,capAngleGeometry} from './capAngle';
 import {flangeStrengths} from './designAnalysis';
 import {calculate,memberChecks} from './calculate';
 import {transverseFilletFatigue,minimumFillet} from './connectionStrength';
-import {stiffenerPairSection} from './detailChecks';
+import {diaphragmArrangement,diaphragmDemand,diaphragmWeldEquivalent,stiffenerPairSection,stiffenerWeldGroup} from './detailChecks';
 import {finiteLife,fatigueThreshold} from './fatigueConstants';
 import {columnReactionOffset} from './existingColumn';
 import {stepGeometry,steppedColumnAnalysis,steppedColumnChecks,stepWeldThickness} from './steppedColumn';
@@ -907,6 +907,7 @@ function buildLayout(input:RunwayConfig,trace:SelectionTrace):ProjectInput{
  if(fitClipJoints(p,cfg,trace)){setBearings(p);if(cfg.support==='crane-column')finishCraneColumn(p,trace);}
  // The supports carry the bracket (or cap) and tie before the new column bases are sized for their reactions.
  const tie=sizedTieRatios(p),q=finishCapAngle(finishTie(withHaunch(withWeldedBracket(p,cfg,trace),cfg,trace),tie));
+ sizeStiffenerWeld(q);
  // The end stops sized again for the crane bumper force on the finished girder end (bearing stiffener, tie saddle).
  if(q.details?.endStop)q.details.endStop=sizeEndStop(q).stop;
  // A continuous girder longer than a practical piece: bolted field splices in the inflection regions (spliceSizing.ts).
@@ -1164,6 +1165,29 @@ const capTarget=.9;
  * limit) and 1/4 in wider steps up to `maxWidth` (the clear between the column flanges); never thinner or narrower
  * than laid out.
  */
+/**
+ * The bearing stiffener fillets for the reaction with the restraint diaphragm's forces (stiffener-combined-weld): the
+ * factored reaction R (all cranes with impact, dead load) with the diaphragm moment and shear of the tie force estimate
+ * F (tieSizingDemands, the Appendix 6 brace force in it), the support torque bounded by F·h as the check bounds it
+ * without a solved case, and the Appendix 6.3.2 moment 0.02M_rC_d. Where the estimate exceeds `target` with the weld
+ * metal governing, the fillets grow by 1/16 in to the J2.2b edge limit of the thinner of the web and the stiffener
+ * (t − 1/16 in), no further than the weld metal governs the group, while the details validate and a saddle's end fillet
+ * keeps its clearance to the stiffener fillets (cases 047, 053 capped: 5/16 in left 1.06 and 1.10; templates 0.14 to 0.48).
+ */
+function sizeStiffenerWeld(p:ProjectInput,target=.9){
+ const d=p.details;if(!d)return;
+ const bs=d.bearing,props=sectionProperties(p.section),strength=girderStrength(p,props),lrfd=p.method==='LRFD';
+ const R=Math.max(0,...supportReactions(p,props).supports.map(v=>(lrfd?1.2:1)*v.D+(lrfd?1.6:1)*(v.Cd+v.Cv+v.Ci)));
+ const F=tieSizingDemands(p).force,couple=.02*girderEndEstimate(p).moment*(p.system==='continuous'?2:1);
+ const dia=diaphragmDemand(diaphragmArrangement(p),{H:F,torque:F*strength.h,couple,h:strength.h,h0:props.h0});
+ const ratio=()=>{const w=stiffenerWeldGroup(p,strength.h);return {r:diaphragmWeldEquivalent(R,dia,stiffenerPairSection(bs,p.section.tw),w.Lw)/w.capacity,weld:w.governs==='weld metal'};};
+ const edge=Math.min(p.section.tw,bs.stiffenerThickness)-inch/16,a=d.brace.flangeAttachment;
+ const clear=()=>!a?.enabled||!flangeTieGeometry(p)||a.saddleLength/2+a.weldSize+bs.stiffenerThickness/2+bs.weldSize+a.clearance<=a.longitudinalSetback+1e-6;
+ for(let r=ratio();r.r>target&&r.weld&&bs.weldSize+inch/16<=edge+1e-6;r=ratio()){
+  const was=bs.weldSize;bs.weldSize+=inch/16;
+  if(!clear()||validateRunwayDetails(p).length){bs.weldSize=was;return;}
+ }
+}
 function sizeForkStiffenerFatigue(p:ProjectInput,maxWidth:number,fatigueTarget=.9){
  const d=p.details!,bs=d.bearing;if(!activeColumnCap(p)||tiedToBuilding(p))return;
  const props=sectionProperties(p.section),strength=girderStrength(p,props),R=Math.max(0,...supportReactions(p,props).supports.map(v=>v.Cv)),H=tieSizingDemands(p).range;
