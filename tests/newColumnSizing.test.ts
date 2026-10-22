@@ -32,15 +32,17 @@ describe('new freestanding columns for heavy cranes',()=>{
   expect(d.seatWeld).toBeLessThanOrEqual(.75*inch+1e-6);
   expect(bracingRatios(p)['brace-seat-weld']).toBeLessThanOrEqual(1);
  },300000);
- it('073: no rolled W14 keeps a 35 ft cantilever column within its drift: the W14X398 built, an open item beyond the W14 range with its column-cap estimate; the face held at 20 in',()=>{
+ it('073: no W14 to the W14X730 keeps a 35 ft cantilever column within its drift: the W14X730 built, an open item beyond the W14 range with its column-cap estimate; the face held at 20 in',()=>{
   const p=buildProject(sim('073',{capacity:40,craneSpan:71,control:'cab',cmaa:'C',buildingClass:'C',bays:3,span:20,railElevation:35,girder:'rolled',support:'twin-rib',tie:'flexible-plate'}));
-  expect(p.existingColumn!.shape).toBe('W14X398');
+  // The search runs past the W14X398 through the jumbo W14s (heavy shapes, as the W14X283 to W14X398 are) and builds
+  // the heaviest searched, the one closest to the drift limit.
+  expect(p.existingColumn!.shape).toBe('W14X730');
   const v=p.configurator!.beyondCatalog!.find(x=>x.member==='crane-column')!;
-  expect(v).toMatchObject({shape:'W14X398'});expect(v.reason).toMatch(/^New column beyond the W14 range: the heaviest rolled W14, W14X398, still gives base drift ratio/);
-  // The recommendation from the drift without the eccentric reaction moment (an estimate): under the TR-13 limit
-  // min(H/400, 2 in) caps leave the W14X398 alone past the limit, so a stiffer column or a held column top.
-  expect(v.reason).toMatch(/Column caps on the W14X398 would leave about 1\.\d\d of the drift limit for the column alone, 2\.\d\d with this footing's rotation/);
-  expect(v.reason).toMatch(/caps alone are not enough\. Recommended: a built-up or laced crane column/);
+  expect(v).toMatchObject({shape:'W14X730'});expect(v.reason).toMatch(/^New column beyond the W14 range: the heaviest W14 searched, W14X730, still gives base drift ratio/);
+  // The recommendation from the drift without the eccentric reaction moment (an estimate): caps leave the W14X730 alone
+  // within the limit, the footing sized for the rest.
+  expect(v.reason).toMatch(/Column caps on the W14X730 would leave about 0\.\d\d of the drift limit for the column alone, 1\.\d\d with this footing's rotation/);
+  expect(v.reason).toMatch(/Recommended: column caps over the new columns .*the footing sized for the rest of the drift/);
   expect(configuratorOpenItems(p).find(c=>c.id==='configurator-crane-column')?.title).toBe('New column beyond the W14 range (drift, torsion or twist)');
   // The torsion strut sized past the 65 lb/ft struts for the movement target, the log stating the movement achieved.
   expect(p.longitudinalBracing!.design!.strut.shape).toBe(stiffestTorsionStrut(p));

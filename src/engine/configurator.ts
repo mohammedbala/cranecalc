@@ -769,7 +769,10 @@ const faceLimit=30*inch;
  */
 function withConfirmedFace(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace):ProjectInput{
  const cfg=configOf(input).config,b=q.details?.bracket;
- if(facePick!==undefined||girderPick||cfg.scope!=='design'||cfg.reach!==undefined||cfg.support==='stepped-column'||cfg.support==='column-cap'||!b?.enabled||b.reach>=faceLimit-1e-6||!q.configurator?.beyondCatalog?.some(v=>v.member==='tie')||!braceTrial(q))return q;
+ if(facePick!==undefined||girderPick||cfg.scope!=='design'||cfg.reach!==undefined||cfg.support==='stepped-column'||cfg.support==='column-cap'||!b?.enabled||b.reach>=faceLimit-1e-6||!q.configurator?.beyondCatalog?.some(v=>v.member==='tie')
+  // Only where the tie is the one open item: the confirmation accepts a runway whose every check passes, which another
+  // member beyond its catalog (the column, the girder, the cap) rules out whatever the face.
+  ||q.configurator.beyondCatalog.some(v=>v.member!=='tie')||!braceTrial(q))return q;
  const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(2)} in`,from=b.reach;
  const inner:SelectionTrace={};facePick=faceLimit;let r:ProjectInput;
  try{r=withConfirmedGirder(finishedLayout(input,inner),input,inner);}finally{facePick=undefined;}

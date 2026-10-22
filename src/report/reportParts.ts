@@ -182,12 +182,12 @@ export const value=(v:number|undefined,q:Quantity,units:ProjectInput['units'],pa
  */
 /**
  * A rotation in radians to three significant figures, never rounded to 0 (a footing rotation of 1.918e-5 rad is not
- * zero): 1.92 × 10⁻⁵ below 0.001, else the plain decimal (0.00185, 0.019); 0 only for an exact zero.
+ * zero): the plain decimal, as every ordinary value prints (0.0000192, 0.00185, 0.019); 0 only for an exact zero.
  */
 export function radText(d:number){
  if(!Number.isFinite(d))return '—';if(d===0)return '0';
- if(Math.abs(d)<1e-3){const {m,e}=scientific(Number(d.toPrecision(3)));return `${m.replace(/^-/,'\u2212')} × 10${superscript(e)}`;}
- return String(Number(d.toPrecision(3))).replace(/^-/,'\u2212');
+ const v=Number(d.toPrecision(3)),places=Math.max(0,2-Math.floor(Math.log10(Math.abs(v))));
+ return v.toFixed(Math.min(places,20)).replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'').replace(/^-/,'\u2212');
 }
 export function tidyNumbers(text:string){
  // Rotations (a number before "rad") keep three significant figures: radText.
