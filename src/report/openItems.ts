@@ -11,6 +11,8 @@ import {footingReactionText} from '../engine/craneColumn';
 import {tiedToBuilding} from '../engine/craneColumnInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
 import {nutClearance} from '../engine/bracketSizing';
+import {activeColumnCap} from '../engine/columnCapInputs';
+import {aiscShapeByName} from '../data/aiscSections';
 
 /**
  * The open items of a calculation as a reviewer acts on them: one item per detail type and element, never one per
@@ -130,11 +132,56 @@ function tieMoveStrength(x:RemedyContext){
  const m=x.c.note.match(/H1 governing state: P_r\/P_c = (\d+(?:\.\d+)?)/);if(!m||!Number.isFinite(x.u)||!Number.isFinite(Number(m[1])))return undefined;
  const a=Number(m[1]),u=x.u,big=a>=.2,bound=x.c.note.match(/At a longer clear length the least H1 is about (\d+(?:\.\d+)?)/),best=bound?Number(bound[1]):undefined;
  const slid=/Column-end slide/.test(x.c.note),release=slid?'the column-end release (sleeved vertical slots and the slide along the runway) is already in this design':'release the column end (sleeved vertical slots, and the column-end slide along the runway for paired bars)';
- if(a>=1)return `The axial term alone, P_r/P_c = ${a.toFixed(2)}, exceeds 1: no reduction of the imposed movement passes H1; a stronger tie (a larger plate or bars, a shorter buckling length), or remove the tie force from the movement (column caps, the girder end held by its end fork), designed by hand.`;
+ if(a>=1)return `The axial term alone, P_r/P_c = ${a.toFixed(2)}, exceeds 1: no reduction of the imposed movement passes H1; a stronger tie (a larger plate or bars, a shorter buckling length), or remove the tie force from the movement (${forkAlternative(x.p)}), designed by hand.`;
  const ratio=big?(1-a)/(u-a):(1-a/2)/(u-a/2),cut=Math.ceil((1-ratio)*100-1e-9);
  const head=`Reduce the bending from the imposed movement by at least ${cut}%: H1 keeps the axial term P_r/P_c = ${a.toFixed(2)}, so M_new/M = ${big?'(1 − P_r/P_c)/(u − P_r/P_c)':'(1 − P_r/2P_c)/(u − P_r/2P_c)'} = ${ratio.toFixed(2)} at u = ${u.toFixed(2)}`;
- if(best!==undefined&&best>1)return `${head}. A longer clear tie length cannot pass: the movement moment falls as 1/L² but P_c falls with the length too (as 1/L² once elastic), and the least H1 at any longer length is about ${best.toFixed(2)} (the least of P_r/P_c + 8/9 M/M_c over the lengths; 2√(P_r/P_c · 8/9 M/M_c) once P_c is elastic). ${sentenceStart(release)}; remove the imposed movement at the tie instead (column caps over the columns, the girder end held by its end fork with no tie), or a tie designed by hand. Then recalculate.`;
+ // The slip state on the sleeve-friction bound (tieMovement): the bars' moment μ_uP_rL + P_r(θd + Δ_T) does not fall with a
+ // thinner or longer bar; a thicker or wider bar raises M_c (∝ b·t²) and P_c.
+ if(/on the sleeve-friction bound/.test(x.c.note)){const grow=Math.ceil(((u-a)/Math.max(1-a,1e-9)-1)*100-1e-9);
+  return `The bars' moment is the sleeve-friction bound of the slip state (μ_uP_rL + P_r(θd + Δ_T)), independent of the bar thickness and growing with the clear length: raise the bars' weak-axis strength by at least ${grow}% (H1 keeps P_r/P_c = ${a.toFixed(2)}; M_c grows as b·t²) with thicker or wider bars, or lower the sleeve friction; a longer clear length or a thinner tie does not help. Then recalculate.`;}
+ const face=longerFaceFailure(x.p),drift=!!face&&/drift/.test(face);
+ if(best!==undefined&&best>1)return `${head}. With these bars, a longer clear tie length cannot pass: the movement moment falls as 1/L² but P_c falls with the length too (as 1/L² once elastic), and the least H1 at any longer length is about ${best.toFixed(2)} (the least of P_r/P_c + 8/9 M/M_c over the lengths; 2√(P_r/P_c · 8/9 M/M_c) once P_c is elastic)${drift?`; a longer tie also needs the column face farther out, where the configurator's runway failed the column drift (${face})`:''}. ${sentenceStart(release)}; remove the imposed movement at the tie instead (${forkAlternative(x.p)}), or a tie designed by hand. Then recalculate.`;
+ // No longer tie where the column face is at its limit, or where the longer face failed on the column drift.
+ const noLonger=faceAtLimit(x.p)?'the column face is already at its limit, so the tie cannot be longer':drift?`a longer tie needs the column face farther out, where the configurator's runway failed the column drift (${face})`:'';
+ if(noLonger)return `${head}: ${slid?`${release}, and `:`${release}; `}${noLonger}: a thinner, more flexible tie out of plane with the axial strength kept, or remove the imposed movement at the tie (${forkAlternative(x.p)}).`;
  return `${head}: ${slid?`${release}, so `:`${release}, `}lengthen the clear tie length, or a thinner, more flexible tie out of plane with the axial strength kept.`;
+}
+/** Whether the girder already has a top-flange tie: on a column cap only a crane column tied to the building has one (validateColumnCap), always. */
+const girderTie=(p:ProjectInput)=>!activeColumnCap(p)||tiedToBuilding(p);
+/**
+ * What removes the tie's imposed movement: the girder on a column cap held by its end fork with no tie. On existing
+ * building columns that is a crane column beside each (the configurator's crane-column support), never a cap on the
+ * existing column; on a cap already, the end fork alone.
+ */
+const forkAlternative=(p:ProjectInput)=>activeColumnCap(p)?'the girder end held by its end fork on the cap with no top-flange tie'
+ :p.existingColumn?.enabled&&!p.existingColumn.isNew?'crane columns beside the building columns with the girders on their caps, each girder end held by its end fork with no tie'
+ :'column caps over the columns, the girder end held by its end fork with no tie';
+/** The configurator log: the column face moved out to its limit by the tie sizing (the tie still failing there). */
+const faceAtLimit=(p:ProjectInput)=>(p.configurator?.selections??[]).some(v=>v.item==='Column face to girder web'&&/moves out from .* to the [^,(]*\blimit\b/.test(v.reason));
+/** The configurator log: the checks the runway failed with the column face at its limit (withConfirmedFace), e.g. 'base-drift 1.83, column-drift 1.10'. */
+const longerFaceFailure=(p:ProjectInput)=>(p.configurator?.selections??[]).find(v=>v.item==='Top-flange tie')?.reason.match(/With the column face left free to its .*? does not pass either \(([^()]*)\)/)?.[1];
+/**
+ * The bending remedy of the tie movement checks other than H1 (tie-move-fatigue, -root-fatigue, -gusset): the cut of
+ * the bending range that keeps the force-controlled part (its share s of the range, from the check note): (1 − 1/u)/(1 − s).
+ * On the sleeve-friction bound (the slip state, tieMovement) a thinner or longer bar does not relieve it: thicker or wider
+ * bars for the bars' own check, lower sleeve friction (a release) or a stronger gusset root for the gussets. A longer
+ * tie is not offered where the column face is at its limit, the H1 bound says no longer tie passes, or the longer face
+ * failed on the column drift.
+ */
+function tieMoveBending(x:RemedyContext){
+ const fatigue=/fatigue/.test(x.c.id),bars=x.c.id==='tie-move-fatigue',friction=/on the sleeve-friction bound/.test(x.c.note);
+ const slid=/Column-end slide/.test(x.c.note??'');
+ const share=Number(x.c.note.match(/Force-controlled share of the range[^:]*: (\d+(?:\.\d+)?)/)?.[1]);
+ const u=x.u,known=fatigue&&Number.isFinite(share)&&Number.isFinite(u);
+ if(known&&share*u>=1)return `The force-controlled part of the range alone (${Math.round(share*100)}% of it) exceeds F_SR: no reduction of the bending passes; a larger ${bars?'bar section (thicker or wider bars)':'gusset section (a thicker or taller gusset)'} or a better detail category, designed by hand. Then recalculate.`;
+ const cut=known?Math.ceil((1-1/u)/(1-share)*100-1e-9):undefined;
+ const need=fatigue?`${cut!==undefined?`the bending range must drop by at least ${cut}%${share>0?` (the force-controlled ${Math.round(share*100)}% of the range stays)`:''}`:range(x)}`:`reduce the bending from the imposed movement by ${reduction(u)}%`;
+ if(friction)return `${sentenceStart(need)}. The ${fatigue?'range of the ':''}${bars?'bars\' moment':'bars\' end shear and moment at the gusset'} is the sleeve-friction bound of the column-end slide, independent of the bar thickness and growing with the clear length: ${bars?'thicker or wider bars (the stress falls as 1/(b·t²)), or lower sleeve friction':'lower sleeve friction (or a release of the slide), or a stronger gusset root (a thicker or taller gusset)'}; a longer or thinner tie does not help. Then recalculate.`;
+ const strength=x.s.checks.find(c=>c.id==='tie-move-strength'),bound=Number(strength?.note.match(/At a longer clear length the least H1 is about (\d+(?:\.\d+)?)/)?.[1]);
+ const face=longerFaceFailure(x.p),drift=!!face&&/drift/.test(face);
+ const noLonger=faceAtLimit(x.p)?'the column face is already at its limit, so the tie cannot be longer':bound>1?`no longer tie with these bars passes H1 (the least at any longer length about ${bound.toFixed(2)}, tie-move-strength)`:drift?`a longer tie needs the column face farther out, where the configurator's runway failed the column drift (${face})`:'';
+ const release=slid?'the column-end release (sleeved vertical slots and the slide along the runway) is already in this design':'release the column end (sleeved vertical slots, and the column-end slide along the runway for paired bars)';
+ return `${sentenceStart(need)}: ${release}${noLonger?`; ${noLonger}: a thinner, more flexible tie out of plane with the axial strength kept, or remove the imposed movement at the tie (${forkAlternative(x.p)}).`:`, so lengthen the clear tie length, or a thinner, more flexible tie out of plane with the axial strength kept.`}`;
 }
 const remedies:Remedy[]=[
  // Fatigue register points, by detail family (the register id prefix).
@@ -178,7 +225,7 @@ const remedies:Remedy[]=[
  [/^flange-tie-(saddle-weld|gusset-weld)$/,x=>{const a=x.p.details?.brace.flangeAttachment;return `Increase the ${/saddle/.test(x.c.id)?'saddle-to-flange end':'gusset-to-saddle'} fillets to w ≥ ${a?x.size(a.weldSize,x.u):'u·w'} (within the J2.2b edge limit), or lengthen them.`;}],
  [/^(flange-tie-column-weld|tie-weld|tie-move-weld)$/,x=>{const w=x.p.details?.brace.connection.weldSize;return `Increase the column gusset root fillets to w ≥ ${w?x.size(w,x.u):'u·w'}, or a taller gusset${/move/.test(x.c.id)?'; or release the imposed movement at the column end (sleeved slots)':''}.`;}],
  [/^tie-(slip|bolts?|bolt-shear|bearing)$|^tie-.*-(slip|bolt)$/,x=>`Raise the lap bolt resistance by ${Math.ceil((x.u-1)*100)}%: more or larger bolts, or a Class B faying surface (slip).`],
- [/^tie-move-(strength|gusset|fatigue|root-fatigue)$/,x=>noCapacity(x.u)?'The tie buckles under its force with the imposed movement (no capacity): a thicker plate or bars, or a shorter clear length between the bolt groups.':(/strength/.test(x.c.id)?tieMoveStrength(x):undefined)??`Reduce the bending from the imposed movement by ${/strength/.test(x.c.id)?`more than ${reduction(x.u)}% (the axial term P_r/P_c stays in H1)`:`${reduction(x.u)}%`}: ${/Column-end slide/.test(x.c.note??'')?'the column-end release (sleeved vertical slots and the slide along the runway) is already in this design, so ':'release the column end (sleeved vertical slots, and the column-end slide along the runway for paired bars), '}lengthen the clear tie length, or a thinner, more flexible tie out of plane with the axial strength kept.`],
+ [/^tie-move-(strength|gusset|fatigue|root-fatigue)$/,x=>noCapacity(x.u)?'The tie buckles under its force with the imposed movement (no capacity): a thicker plate or bars, or a shorter clear length between the bolt groups.':(/strength/.test(x.c.id)?tieMoveStrength(x):tieMoveBending(x))??`Reduce the bending from the imposed movement by ${/strength/.test(x.c.id)?`more than ${reduction(x.u)}% (the axial term P_r/P_c stays in H1)`:`${reduction(x.u)}%`}: ${/Column-end slide/.test(x.c.note??'')?'the column-end release (sleeved vertical slots and the slide along the runway) is already in this design, so ':'release the column end (sleeved vertical slots, and the column-end slide along the runway for paired bars), '}lengthen the clear tie length, or a thinner, more flexible tie out of plane with the axial strength kept.`],
  [/^(brace-member|brace-stiffness)$/,x=>`Stronger or stiffer tie (larger plate or bars, stiffer connections): ${Math.ceil((x.u-1)*100)}% more is needed.`],
  [/^flange-tie-.*fatigue$/,x=>`Tie attachment: ${range(x)}: a stiffer, longer saddle or taller gusset, or take the tie to the bearing stiffener.`],
  // Supports
@@ -203,7 +250,7 @@ const remedies:Remedy[]=[
  // The cap's faying surfaces are already Class B (columnCap), and a top-flange tie is allowed on a column cap only for a
  // crane column tied to the building (validateColumnCap): neither is offered where it is not available.
  [/^column-cap-bolt-slip$/,x=>{const classB=/^Class B\b/.test(x.c.note),tie=tiedToBuilding(x.p),a490=activeEndBearing(x.p)?.bolts.grade==='A490';
-  return `Raise the locating bolts' slip resistance by at least ${more(x.u)}%: more or larger bearing bolts${classB?' (the faying surfaces are already Class B)':', Class B faying surfaces'}${a490?'':', A490 bolts (a larger pretension)'}, bearing-type bolts with a shear lug on the cap for the longitudinal force${tie?', or a top-flange tie that takes the fork force off the bearing bolts':''}; a lower fork tension on each bolt (a wider bolt spread) also raises it (k_sc).`;}],
+  return `Raise the locating bolts' slip resistance by at least ${more(x.u)}%: more or larger bearing bolts${classB?' (the faying surfaces are already Class B)':', Class B faying surfaces'}${a490?'':', A490 bolts (a larger pretension)'}, bearing-type bolts with a shear lug on the cap for the longitudinal force${tie&&!girderTie(x.p)?', or a top-flange tie that takes the fork force off the bearing bolts':''}; a lower fork tension on each bolt (a wider bolt spread) also raises it (k_sc).`;}],
  // The bolt tension range is each bolt's share of the uplift range plus the fork couple range on its side, F/(2l)
  // (columnCap bolt-fatigue): more bolts or a wider spread cut the range per bolt, a larger bolt the stress.
  [/^column-cap-bolt-fatigue$/,x=>`Bearing bolts in cyclic tension from the fork couple: ${range(x)}. The range on each bolt is its share of the uplift range plus the fork couple on its side of the girder, F/(2l): more bolts or a wider bolt spread l (bearing bolts on the cap plate beyond the column flanges, or a column with a wider clear between its flanges) cut the range per bolt, and a larger bolt (a larger tensile stress area A_t) the stress; the fork for this crane designed by hand. Then recalculate.`],
@@ -247,14 +294,23 @@ const remedies:Remedy[]=[
  * alone is within its limit.
  */
 function newColumnDrift(x:RemedyContext,head:string,footing?:string){
- const shape=x.p.existingColumn?.shape??'',heaviest=/^W14X(730|808|873)$/.test(shape),seat=!!x.p.details?.bracket?.enabled;
+ const shape=x.p.existingColumn?.shape??'',w=aiscShapeByName(shape),seat=!!x.p.details?.bracket?.enabled,cap=!!activeColumnCap(x.p);
  // The configurator's estimate for column caps (its new-column item): caps alone not enough for the column (dropped from
  // the remedy), or not on this footing (caps with a stiffer footing).
  const item=x.s.checks.find(c=>c.id==='configurator-crane-column'),capsShort=!!item&&/caps alone are not enough(?! on this footing)/.test(item.note),capsFooting=!!item&&/caps alone are not enough on this footing/.test(item.note);
- const column=[heaviest?`the ${shape} is already the heaviest W14 the configurator uses, so a stiffer column is a built-up or laced crane column or a deeper W with its strong axis across the runway`:'a heavier column shape (a larger I_x)',
+ // The heaviest W14 the configurator uses (the W14X730) or heavier; or the jumbo W14s searched and not taken because they
+ // leave another member (the column cap) an open item (configurator withColumnBase): no heavier rolled W14 is the remedy.
+ const heaviest=!!w&&/^W14X/.test(w.name)&&w.weight>=heaviestW14-1e-6,opened=item?.note.match(/\bleaves? (the [\w -]+?|another member) an open item/)?.[1],jumboOpen=!!opened&&/\bjumbo W14/.test(item!.note);
+ const stiffer='a built-up or laced crane column or a deeper W with its strong axis across the runway';
+ const column=[heaviest?`the ${shape} is already the heaviest W14 the configurator uses, so a stiffer column is ${stiffer}`:jumboOpen?`the jumbo W14s heavier than the ${shape} are not taken (${opened==='another member'?'they leave another member':`the heavier ones leave ${opened}`} an open item; the configurator item states each reason), so a stiffer column is ${stiffer}`:'a heavier column shape (a larger I_x)',
   seat&&!capsShort?`column caps (the girder on the column axis: no eccentric reaction moment)${capsFooting?' with a footing stiff enough for the rest of the drift':''}`:'',"or the column tops tied to a braced frame or roof diaphragm"].filter(Boolean);
- return `${head}. ${footing?`${sentenceStart(footing)}; for the column, `:'The drift is set by the column\'s strong-axis stiffness and the eccentric reaction moment, not by an unbraced length: '}${column.join(', ')}${item?seat&&capsShort?' (column caps alone are not enough: the configurator item states its estimate)':' (the configurator item states its estimate for column caps)':''}.`;
+ // On a column cap the girder already bears on the column axis (the reaction's eccentricity is the rail's): caps are
+ // not offered, nor is the eccentric reaction moment named as a cause.
+ const set=cap?'The drift is set by the column\'s strong-axis stiffness (the girder already bears on the column cap, on the column axis), not by an unbraced length: ':'The drift is set by the column\'s strong-axis stiffness and the eccentric reaction moment, not by an unbraced length: ';
+ return `${head}. ${footing?`${sentenceStart(footing)}; for the column, `:set}${column.join(', ')}${item?cap?' (the configurator item states its estimate)':seat&&capsShort?' (column caps alone are not enough: the configurator item states its estimate)':' (the configurator item states its estimate for column caps)':''}.`;
 }
+/** The heaviest W14 the configurator's new-column search uses (configurator heavyColumnLimit, the W14X730). */
+const heaviestW14=730;
 /** A configurator item's remedy: its recommendation ("recommended …", "Choose …", "Design …"), else a member-specific default. */
 function configuratorRemedy(c:CheckResult){
  const sentences=c.note.split(/(?<=[.])\s+(?=[A-Z])/),rec=sentences.find(v=>/\brecommended\b/i.test(v)),alt=sentences.find(v=>/^(Choose|Design)\b/.test(v));

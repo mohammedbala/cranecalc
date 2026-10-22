@@ -657,11 +657,15 @@ export function sizeFlangeTie(p:ProjectInput,opts:{reach?:number;target?:number;
    // Two sleeve rows first; then one (the bar ends turning on it, held by the sleeves' bearing shift, tieMovementChecks),
    // taken only where it passes.
    let found:Trial|undefined,passing:Trial|undefined;
+   // Slipping, the bars' moment is bounded by the sleeve friction, μ_uP_rL + P_rΔ, whatever their thickness, so thicker
+   // bars still lower their H1 and fatigue ratios (M_c and S grow as t²): the slide sets go on to 7/8 in and 1 in bars,
+   // as far as they fit (validated) and lower the set's excess (case 081: 3/4 in bars at tie-move-strength 1.08).
+   const slideThicknesses=[...thicknesses,14*sixteenth,16*sixteenth];
    for(const n of [2,1]){
     rows=n;budget=evaluations+300;
     for(const face of [...tried].reverse()){
      let here:Trial|undefined;
-     for(const thickness of thicknesses){
+     for(const thickness of slideThicknesses){
       if(evaluations>budget)break;
       const {r}=sizeAt(face,thickness,slide);
       if(!r)continue;

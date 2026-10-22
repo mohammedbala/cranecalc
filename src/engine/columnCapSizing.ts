@@ -127,6 +127,41 @@ function endBearingFit(p:ProjectInput,e:EndBearingInput){
  try{return endBearingChecks(p,e,{analysis:none,lateral:0}).filter((c:CheckResult)=>c.id!=='end-bearing-travel').every(c=>c.status!=='fail');}catch{return false;}
 }
 
+/** The end bearing checks a bolt set fails on its fit alone (endBearingFit), as 'end-bearing-wrench-web 1.07'. */
+function endBearingMisfit(p:ProjectInput,e:EndBearingInput){
+ const none={axial:0,uplift:0,endRotation:0} as unknown as DesignAnalysis;
+ try{return endBearingChecks(p,e,{analysis:none,lateral:0}).filter((c:CheckResult)=>c.id!=='end-bearing-travel'&&c.status==='fail').map(c=>`${c.id}${c.utilization!==undefined&&Number.isFinite(c.utilization)?` ${c.utilization.toFixed(2)}`:''}`).join(', ');}catch{return 'the end bearing layout';}
+}
+/**
+ * Why the next larger bearing bolt does not fit the column cap as laid out (the sizing's bolt steps, boltFit's gauge
+ * narrowed by up to 2 in and edge grown by up to 1 in): the bolt, the bearing plate length it needs and the first
+ * reason (a cap validation message, or the end bearing fit checks it fails; the gauge also widened by up to 1 in); undefined where some such set fits or no
+ * larger bolt exists. `shapes`: heavier column shapes to try the larger bolt on, the first that takes it returned as
+ * `column` (a wider clear between the flanges or wider flanges for the cap stiffeners).
+ */
+export function largerBoltBlocker(p:ProjectInput,shapes:{name:string;d:number;bf:number;tf:number;tw:number}[]=[]){
+ const e0=activeEndBearing(p);if(!activeColumnCap(p)||!e0)return undefined;
+ const next=boltSizes.find(x=>x>e0.bolts.diameter+1e-6);if(next===undefined)return undefined;
+ const fits=(q0:ProjectInput,why?:string[])=>{
+  // The gauge as laid out, narrowed by up to 2 in or widened by up to 1 in (a wider column has room for it).
+  const gauges=[0,...Array.from({length:8},(_,i)=>-(i+1)*inch/4),...Array.from({length:4},(_,i)=>(i+1)*inch/4)];
+  for(let de=0;de<=inch+1e-9;de+=eighth)for(const dg of gauges){
+   const q=structuredClone(q0),b=q.details!.endBearing!.bolts;b.diameter=next;b.gauge+=dg;b.edge+=de;
+   const r=sizeColumnCap(q,.9,{settleOnly:true,why:de===0&&dg===0?why:undefined});
+   if(r!==q)return r;
+  }
+  return undefined;};
+ const why:string[]=[];
+ if(fits(p,why))return undefined;
+ // The bearing plate length the larger bolt needs (settle lengthens it for the nut and washer clearance to the stiffener).
+ const h=(()=>{try{const q=structuredClone(p),e=q.details!.endBearing!;e.bolts.diameter=next;const g=endBearingGeometry(q,e),bs=q.details!.bearing;
+  const edge=Math.max(e.bolts.edge,up(slotEndDistance(next,g.hole,g.slot).required,eighth)),to=Math.max(wrenchClearance(next),g.washer.length/2+g.travel+slidingClearance)+bs.stiffenerThickness/2+bs.weldSize;
+  return Math.max(bs.length,up(2*(edge+to),inch/4));}catch{return undefined;}})();
+ let column:string|undefined;
+ for(const w of shapes){const q=structuredClone(p);Object.assign(q.existingColumn!,{shape:w.name,d:w.d,bf:w.bf,tf:w.tf,tw:w.tw});if(fits(q)){column=w.name;break;}}
+ return {diameter:next,length:h,why:(why[0]??'').replace(/^columnCap\.[\w.]+: /,'').replace(/: (shorten|use|set|select|enable|choose)\b.*$/,'').replace(/\.$/,'').replace(/ at -(?=\d)/,' at ').replace(/\bmust land\b/,'would not land').replace(/\bmust clear\b/,'would not clear'),column};
+}
+
 type Move=(v:{cap:ColumnCapInput;e:EndBearingInput})=>boolean;
 /**
  * The project with its column cap sized for the reactions (see the file header): the cap plate, cap fillets, cap
@@ -136,7 +171,11 @@ type Move=(v:{cap:ColumnCapInput;e:EndBearingInput})=>boolean;
  */
 export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:number,key:string,ratio:number,next?:ColumnCapInput)=>void;
  /** Factors on sizing ratios by key (the calculated over the sized ratio, withConfirmedCap): never below 1. */
- scale?:Record<string,number>}={}):ProjectInput{
+ scale?:Record<string,number>;
+ /** Only the dependent sizes of the cap as given (settled), no sizing: the project, or `p` where they do not fit. */
+ settleOnly?:boolean;
+ /** Why a settled set does not fit (the first cap validation message, or the end bearing checks it fails). */
+ why?:string[]}={}):ProjectInput{
  const q=structuredClone(p),cap0=activeColumnCap(q),e0=activeEndBearing(q);
  if(!cap0||!e0)return q;
  const col=capColumn(q),bs=q.details!.bearing,length0=bs.length;
@@ -164,10 +203,14 @@ export function sizeColumnCap(p:ProjectInput,target=.9,options:{trace?:(step:num
   c.plate.width=Math.max(c.plate.width,up(Math.max(col.d+2*(c.weld+eighth),bs.width,b.gauge+3*b.diameter),inch/2));
   c.plate.length=Math.max(c.plate.length,up(Math.max(col.bf,2*(reach+inch/2),2*(xb+1.5*b.diameter)),inch/2));
   apply(v);
-  return validateColumnCap(q).length===0&&endBearingFit(q,v.e);
+  const invalid=validateColumnCap(q);
+  if(invalid.length){options.why?.push(invalid[0]);return false;}
+  if(!endBearingFit(q,v.e)){options.why?.push(endBearingMisfit(q,v.e));return false;}
+  return true;
  };
  const start={cap:structuredClone(cap0),e:structuredClone(e0)};
  if(!settle(start))return p;
+ if(options.settleOnly)return q;
  const set=capSizingSet(q);
  const ratios=(v:{cap:ColumnCapInput;e:EndBearingInput})=>{apply(v);const r=columnCapSizingRatios(q,set);for(const [k,f] of Object.entries(options.scale??{}))if(r[k]!==undefined)r[k]*=Math.max(1,f);return r;};
  const weight=(v:{cap:ColumnCapInput;e:EndBearingInput})=>{apply(v);return columnCapWeight(q,v.cap,v.e);};

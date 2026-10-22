@@ -6,7 +6,7 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {tiedToBuilding,girderEndFork} from '../engine/craneColumnInputs';
 import {activeStep} from '../engine/steppedColumnInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
-import {equationCell,governing,shortReference,sig3,statusLabel,subscripts} from './reportParts';
+import {equationCell,governing,num,shortReference,sig3,statusLabel,subscripts} from './reportParts';
 import {loadPathSteps,supportAssemblyFigure} from './hairline/figures';
 import {classifyCheck,reviewDraftExportable,type Taxonomy} from '../engine/checkTaxonomy';
 import {groupDc,openByElement,openItemGroups,ruleItem} from './openItems';
@@ -109,7 +109,7 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
  * summary: what was built in place of the configuration as entered, or chosen where it was blank, and why.
  */
 export function selectionsTable(p:ProjectInput,s?:CalculationSnapshot){
- const rows=p.configurator?.selections??[];if(!rows.length)return '';
+ const rows=selectionRows(p.configurator?.selections??[]);if(!rows.length)return '';
  return `<h3>Configurator selections</h3><table class="selections"><thead><tr><th>Item</th><th>As entered</th><th>As designed</th><th>Governing reason</th></tr></thead><tbody>${rows.map(v0=>{const v=s?selectionView(s,v0):v0,f=s&&selectionFinal(s,v0.item,v0.entered);return `<tr><td>${esc(v.item)}</td><td>${esc(v.entered)}</td><td>${esc(v.designed)}</td><td>${esc(v.reason)}${f?` <b>${esc(f)}</b>`:''}</td></tr>`;}).join('')}</tbody></table>`;
 }
 /** The summary element whose final ratios a configurator selection is judged by. */
@@ -129,14 +129,33 @@ export function selectionClosed(s:CalculationSnapshot,item:string,entered?:strin
  * A log row as printed: a row whose configurator item the calculation closed reads as closed (an 'Open item' is titled
  * 'Closed item', its member as built and confirmed; its reason is the configurator's screening estimate, not an open item).
  */
-export function selectionView<T extends {item:string,entered:string,designed:string,reason:string}>(s:CalculationSnapshot,v0:T):T{
+export function selectionView<T extends {item:string,entered:string,designed:string,reason:string}>(s:CalculationSnapshot,v1:T):T{
+ // The configurator's forces to three significant figures (the nearest unit from 100) for print.
+ const v0=printForces(v1.reason)===v1.reason?v1:{...v1,reason:printForces(v1.reason)};
  // The bracket advisory quotes the configurator's reaction estimate (to the nearest 5): with the calculation's reaction
  // (its column bracket reaction check) available, that value leads and the estimate is labeled as such.
  const R=s.checks.find(c=>/^(column-brackets|(bracket|haunch|wbracket)-tr13-load)$/.test(c.id)&&c.demand!==undefined&&Number.isFinite(c.demand))?.demand;
  const v=R===undefined?v0:{...v0,reason:v0.reason.replace(/^The support reaction, about ([^,]*?), is above/,(_,est:string)=>`The support reaction ${sig3(R,'force',s.input.units)} (the calculation's; configurator estimate about ${est.replace(/\s*\(([^()]*)\)/,', $1')}) is above`)};
  if(!selectionClosed(s,v.item,v.entered))return v;
- const reason=v.reason.replace(/^([^:]{1,60}) not resolved: /,'$1, screening estimate: ').replace(/\s*\(review draft: open item\)/,'').replace(/\s*Open item: the package is a review draft[^.]*\./,'');
- return v.item==='Open item'?{...v,item:'Closed item',designed:`${v.entered==='Column cap'?'Column cap on the ':''}${v.designed.split(/[,;]/)[0]} as built, confirmed by the calculation`,reason}:{...v,reason};
+ // A closed item recommends no redesign: its hand-design recommendation and 'the closest … is built' are dropped.
+ const reason=v.reason.replace(/^([^:]{1,60}) not resolved: /,'$1, screening estimate: ').replace(/\s*\(review draft: open item\)/,'').replace(/\s*Open item: the package is a review draft[^.]*\./,'')
+  ,kept=topSentences(reason).filter(x=>!/^(Recommended\b|The (closest|first)\b.* is built and checked\.$)/.test(x)).join(' ');
+ const first=v.designed.split(/[,;]/)[0];
+ return v.item==='Open item'?{...v,item:'Closed item',designed:`${v.entered==='Column cap'&&!/^column cap\b/i.test(first)?'Column cap on the ':''}${first.charAt(0).toUpperCase()+first.slice(1)} as built, confirmed by the calculation`,reason:kept}:{...v,reason:kept};
+}
+/** A text's sentences, split at '. ' outside parentheses (an 'e.g.' inside a parenthesis never splits one). */
+const topSentences=(t:string)=>{const out:string[]=[];let depth=0,start=0;
+ for(let i=0;i<t.length;i++){const c=t[i];if(c==='(')depth++;else if(c===')')depth=Math.max(0,depth-1);else if(!depth&&c==='.'&&(i===t.length-1||/\s/.test(t[i+1]))){out.push(t.slice(start,i+1).trim());start=i+1;}}
+ if(t.slice(start).trim())out.push(t.slice(start).trim());return out;};
+/** Configurator forces with more than three significant figures (154.448 kip, 976.789 kN) to three, the nearest unit from 100. */
+export const printForces=(t:string)=>t.replace(/(?<![\w.§-])(\d[\d,]*\.\d+)(?=\s?(?:kip|kN)\b)/g,m=>{const v=Number(m.replace(/,/g,''));return Math.abs(v)>=100?Math.round(v).toLocaleString('en-US'):num(v);});
+/**
+ * The log rows as printed: one row per item. A column cap at its sizing limits is also the 'Open item' (or, closed by
+ * the calculation, 'Closed item') row of the same cap, which says the same: that row is kept, the other dropped.
+ */
+export function selectionRows<T extends {item:string,entered:string}>(rows:T[]):T[]{
+ const capItem=rows.some(v=>v.item==='Open item'&&v.entered==='Column cap');
+ return rows.filter(v=>!(capItem&&v.item==='Column cap, at its limits'));
 }
 /**
  * The final calculated ratios beside a configurator selection whose reason quotes screening estimates (the sized girder,

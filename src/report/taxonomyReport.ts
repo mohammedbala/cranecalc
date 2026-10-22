@@ -52,10 +52,25 @@ const sentence=(v:string)=>v.charAt(0).toUpperCase()+v.slice(1);
 export function valueCells(c:CheckResult,type:CheckType|undefined,units:Units):[string,string]{
  const qq=q(c);
  if(c.sense==='min')return [value(c.capacity,qq,units,c.demand),`${exceedsLimit(c)?'&lt;':'≥'} ${value(c.demand,qq,units)}`];
- if(type==='detailing')return maximumRule(c)?[value(c.demand,qq,units),`≤ ${value(c.capacity,qq,units,c.demand)}`]:[value(c.capacity,qq,units,c.demand),`≥ ${value(c.demand,qq,units)}`];
+ if(type==='detailing')return ruleCells(c,units);
  return [qq==='ratio'&&noCapacity(c.demand)?'—':value(c.demand,qq,units),value(c.capacity,qq,units,c.demand)];
 }
 
+/**
+ * A detailing rule's two cells: the provided value and the requirement with its sense (≥ a minimum, ≤ a maximum). Where
+ * both print alike but differ (a 1 1/8 in rib against a 1.1299 in minimum, '1.13 in ≥ 1.13 in'), the provided size of
+ * whole sixteenths prints as its fraction and both carry the digits that tell them apart ('1 1/8 in ≥ 1.130 in').
+ */
+function ruleCells(c:CheckResult,units:Units):[string,string]{
+ const qq=q(c),max=maximumRule(c),given=max?c.demand:c.capacity,need=max?c.capacity:c.demand;
+ let a=max?value(given,qq,units):value(given,qq,units,need),b=max?value(need,qq,units,given):value(need,qq,units);
+ if(a===b&&given!==undefined&&need!==undefined&&Number.isFinite(given)&&Number.isFinite(need)&&Math.abs(given-need)>1e-9*Math.max(1,Math.abs(need))){
+  const u=unit(qq,units),digits=(v:number,n:number)=>{const d=toDisplay(v,qq,units),k=Math.max(0,n-1-Math.floor(Math.log10(Math.max(Math.abs(d),1e-12))));return `${d.toFixed(Math.min(k,8))}${u?` ${u}`:''}`;};
+  const fraction=value(given,qq,units);
+  for(let n=4;n<=9;n++){const x=digits(given,n),y=digits(need,n);if(x!==y){a=/\//.test(fraction)?fraction:x;b=y;break;}}
+ }
+ return [a,`${max?'≤':'≥'} ${b}`];
+}
 /** One body row per line: the controlling limit state with its equation, demand, limit and D/C; merged lines name it. */
 export function bodyTable(lines:BodyLine[],tax:Taxonomy,units:Units){
  if(!lines.length)return '';
@@ -188,7 +203,7 @@ const flagText=(c:CheckResult,reason:string)=>c.status!=='pass'?reason:/exactly|
 /** The detailing checklist: failures and rules met with less than 1/8 in (or 10%) margin; everything else in one line. */
 export function detailingChecklist(tax:Taxonomy,units:Units){
  const D=tax.detailing,flags=D.flagged;
- const rows=flags.map(({entry:t,reason})=>{const c=t.check;return `<tr class="${c.status}"><td><b>${esc(checkTitle(c.title))}</b><small>${esc(t.elementLabel)}; ${esc(shortReference(c))}</small></td><td class="num">${maximumRule(c)?value(c.demand,q(c),units):value(c.capacity,q(c),units,c.demand)}</td><td class="num">${maximumRule(c)?'≤ ':'≥ '}${maximumRule(c)?value(c.capacity,q(c),units,c.demand):value(c.demand,q(c),units)}</td><td class="num">${margin(c,units)}</td><td>${esc(flagText(c,reason))}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`;}).join('');
+ const rows=flags.map(({entry:t,reason})=>{const c=t.check;return `<tr class="${c.status}"><td><b>${esc(checkTitle(c.title))}</b><small>${esc(t.elementLabel)}; ${esc(shortReference(c))}</small></td><td class="num">${ruleCells(c,units)[0]}</td><td class="num">${ruleCells(c,units)[1]}</td><td class="num">${margin(c,units)}</td><td>${esc(flagText(c,reason))}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`;}).join('');
  const gated=D.gated.filter(t=>t.gate==='advisory'||t.gate==='not-applicable'),names=(v:TaxonEntry[])=>v.map(t=>esc(t.check.title.replace(/\s*·\s*/g,', '))).join('; ');
  const na=gated.filter(t=>t.gate==='not-applicable'),adv=gated.filter(t=>t.gate==='advisory');
  return `<p>Detailing rules not met, or met with less than 1/8 in or 10% margin.</p>`

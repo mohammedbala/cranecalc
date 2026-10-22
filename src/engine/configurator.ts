@@ -37,7 +37,7 @@ import {simpleSupportInput,railClipStations} from './simpleSupports';
 import {seatSettingTolerance} from './fitTolerances';
 import {sizeWeldedBracket,bracketColumnFatigueRatio,bracketSizingRatios} from './bracketSizing';
 import {sizeRolledBracket,rolledBracketSizingRatios} from './rolledBracketSizing';
-import {sizeColumnCap,columnCapSizingRatios} from './columnCapSizing';
+import {sizeColumnCap,columnCapSizingRatios,largerBoltBlocker} from './columnCapSizing';
 import {defaultRolledBracket,isRolledBracket} from './rolledBracketInputs';
 import {activeColumnCap,defaultColumnCap} from './columnCapInputs';
 import {capWorkPointDrop,columnCapGeometry} from './columnCap';
@@ -741,8 +741,17 @@ function withConfirmedCap(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace
   // column-cap check passes): what the sizing could not do, with the calculated ratios.
   const c=q.configurator,e=b0,cap=q.existingColumn?.shape;
   if(c&&e&&cap){
-   const tried=b1&&!s2.errors.length?` (sized again for the calculated ratios, ${len(b1.diameter)} ${b1.grade} at a ${len(b1.gauge)} gauge: ${failing.map(x=>{const v=s2.checks.find(y=>y.id===x.id)?.utilization;return `${x.id} ${v!==undefined?dcText(v,2):'n/a'}`;}).join(', ')})`:'';
-   const reason=clipReason(`Column cap not resolved: on this crane column the calculation gives ${was} for the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end at a ${len(e.gauge)} gauge${tried}: the calculation's girder model puts a bottom-flange force on the bolts well above the cap sizing estimates, and no bolt, grade or gauge within the sizing's nut clearances to the column flanges brings it within 1.00. Recommended (calculated ${was}): a larger bolt (e.g. 1 1/8 in A490) with the end bearing re-laid out for its sleeve and nut clearances, or a wider bolt spread or more bolts, designed by hand. The closest cap is built and checked.`);
+   // The re-sized cap and why it was not taken (it still fails, or fails a check the first cap passed).
+   const still=failing.filter(x=>after.has(x.id)).map(x=>x.id),added=[...after].filter(id=>!before.has(id));
+   const notTaken=s2.errors.length?'':still.length?', still failing, not taken':added.length?`, not taken: it fails ${added.slice(0,2).join(', ')}`:'';
+   const tried=b1&&!s2.errors.length?` (re-sized for the calculated ratios, ${len(b1.diameter)} ${b1.grade} at a ${len(b1.gauge)} gauge: ${failing.map(x=>{const v=s2.checks.find(y=>y.id===x.id)?.utilization;return `${x.id} ${v!==undefined?dcText(v,2):'n/a'}`;}).join(', ')}${notTaken})`:'';
+   // What stops the next larger bolt on this column (largerBoltBlocker: the cap layout, or the end bearing fit), and the
+   // lightest heavier crane column that takes it.
+   const frac=(v:number)=>{if(cfg.units==='SI')return `${Math.round(v)} mm`;const n=Math.round(v/inch*8),w=Math.floor(n/8),r=n%8,g=r?(r%4===0?[r/4,2]:r%2===0?[r/2,4]:[r,8]):undefined;return `${w?w:''}${w&&g?' ':''}${g?`${g[0]}/${g[1]}`:''} in`;};
+   const wider=heavierColumns(cap,true,craneColumnLimit).map(n=>aiscShapeByName(n)!).map(w=>({name:w.name,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch}));
+   const k=largerBoltBlocker(q,wider),bearing=q.details?.bearing?.length;
+   const blocked=k?`A ${frac(k.diameter)} bolt does not fit this cap: ${k.length!==undefined&&bearing!==undefined&&k.length>bearing+1e-6?`the bearing plate grows to ${len(k.length)} and `:''}${k.why||'its end bearing layout fails'}`:`No bolt, grade or gauge within the sizing's nut clearances to the column flanges brings it within 1.00`;
+   const reason=clipReason(`Column cap not resolved: on this crane column the calculation gives ${was} for the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end at a ${len(e.gauge)} gauge${tried}: the girder model's bottom-flange force exceeds the cap sizing estimates. ${blocked}. Recommended: ${k?.column?`a wider crane column (e.g. ${k.column}) with the larger bolts, `:''}a larger bolt with the end bearing re-laid out, or a wider bolt spread or more bolts, designed by hand. The first cap (${len(e.diameter)} ${e.grade}, ${len(e.gauge)} gauge) is built and checked.`);
    c.beyondCatalog=[...(c.beyondCatalog??[]).filter(v=>v.member!=='column-cap'),{member:'column-cap',shape:cap,reason}];
    if(c.selections)c.selections=[...c.selections.filter(v=>!(v.item==='Open item'&&v.entered==='Column cap')),openItemRow({member:'column-cap',shape:cap,reason})].slice(-24);
   }
@@ -1360,6 +1369,8 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  const standard=all.filter(v=>aiscShapeByName(v)!.weight<=craneColumnLimit+1e-9),jumbo=all.filter(v=>!standard.includes(v));
  const withinLimits=(r:ProjectInput)=>baseSizingRatios(r).ratios.drift<=driftEdge&&torsionOk(r)&&twistOk(r);
  let shapes=standard,r398:ProjectInput|undefined,jumboOpened:string|undefined;
+ // Why each jumbo searched was not taken (the log states it, grouped: W14X426 to W14X605: …).
+ const jumboWhy=new Map<string,string>();
  for(let tier=0;tier<2;tier++){
  if(tier===1){
   // The W14X398 within the limits (above the target): it is the closest, and the jumbo shapes are not searched.
@@ -1379,8 +1390,8 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
   Object.assign(t.existingColumn!,{shape,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch});
   if(t.details?.bracket?.enabled)Object.assign(t.details.bracket.receiver,shapePlates(shape));
   const d=baseDrift(t,existingColumnAnalysis(t,reactions));
-  if(d.total>baseTarget*d.limit&&d.column>columnDriftShare*baseTarget*d.limit)continue;
-  if(columnTorsionRatio(t,reactions)>1.05)continue;
+  if(d.total>baseTarget*d.limit&&d.column>columnDriftShare*baseTarget*d.limit){if(tier===1)jumboWhy.set(shape,`the column alone over ${(columnDriftShare*baseTarget).toFixed(2)} of the drift limit, not built`);continue;}
+  if(columnTorsionRatio(t,reactions)>1.05){if(tier===1)jumboWhy.set(shape,'column torsion ratio over 1.05, not built');continue;}
   const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner);
   // A jumbo that leaves another member an open item the W14X398 did not (case 092: the column cap's fork bolts on the
   // W14X665) is not taken: the W14X398 stays the closest, its drift the open item with the recommendation.
@@ -1389,8 +1400,12 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
   // calculation passed; no slip resistance on the W14X665, 3.40 calculated).
   const capWorst=(x:ProjectInput)=>activeColumnCap(x)?Math.max(0,...Object.values(columnCapSizingRatios(x))):0;
   const opened=(x:ProjectInput)=>(x.configurator?.beyondCatalog??[]).some(v=>!(r398?.configurator?.beyondCatalog??[]).some(w=>w.member===v.member))||capWorst(x)>Math.max(1,capWorst(r398!))+1e-6;
-  if(tier===1&&r398&&opened(r)){jumboOpened??=shape;continue;}
+  if(tier===1&&r398&&opened(r)){jumboOpened??=shape;
+   // Which member it leaves open: a member beyond its catalog the W14X398 did not have, else the column cap past its sizing ratios.
+   const added=(r.configurator?.beyondCatalog??[]).filter(v=>!(r398?.configurator?.beyondCatalog??[]).some(w=>w.member===v.member)).map(v=>memberNames[v.member]??v.member);
+   jumboWhy.set(shape,`built, it leaves ${added.length?`the ${added.join(' and the ')}`:'the column cap'} an open item the ${standard.at(-1)} does not`);continue;}
   if(baseSizingRatios(r).ratios.drift<=baseTarget&&torsionOk(r)&&twistOk(r)){Object.assign(trace,inner,{column:[trace.column,why[0].toUpperCase()+why.slice(1)].filter(Boolean).join('; ')});return {...r,configurator:{...cfg}};}
+  if(tier===1)jumboWhy.set(shape,'built, still past the drift, torsion or twist ratios');
  }
  }
  // No W14 to the catalog limit meets them: a new freestanding column on the heaviest, where it lowers the governing
@@ -1413,13 +1428,19 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  const recommended=!cap&&(!drift||alone<=share+1e-9||withFooting<=1+1e-9)?`${drift?`${est}. `:''}Recommended: column caps over the new columns (support column-cap: the girder on the column axis, no eccentric reaction moment, no seat twist)${drift&&withFooting>1+1e-9?', the footing sized for the rest of the drift':''}.`
   :alone<=1+1e-9?`${est}: ${cap?'the footing rotation governs':'caps alone are not enough on this footing'}. Recommended: ${cap?'':'column caps with '}a footing stiff enough for the rest of the drift (larger than the configurator sizes for a column above ${share.toFixed(2)} of the limit), else ${stiffer}.`
   :`${est}: ${cap?'a larger footing is not enough':'caps alone are not enough'}. Recommended: ${stiffer}.`;
- const text=`the ${better?jumboOpened?`${heaviest} (the jumbo W14s from the ${jumboOpened} on leave another member an open item) still gives`:`heaviest W14 searched, ${heaviest}, still gives`:`${shape} chosen gives`} ${past||state(...left)} (configurator estimate; the calculation reports its own). ${recommended} The support entered is kept and checked.`;
+ // The jumbo W14s searched and not taken, grouped by the reason (consecutive shapes alike: 'W14X426 to W14X605: …').
+ const groups:{from:string;to:string;why:string}[]=[];
+ for(const v of jumbo){const w=jumboWhy.get(v);if(!w)continue;const g=groups.at(-1);if(g&&g.why===w&&jumbo.indexOf(g.to)===jumbo.indexOf(v)-1)g.to=v;else groups.push({from:v,to:v,why:w});}
+ const jumboNote=groups.map(g=>`${g.from===g.to?`the ${g.from}`:`the ${g.from} to ${g.to}`}: ${g.why}`).join('; ');
+ const text=`the ${better?jumboOpened?`${heaviest}, the heaviest W14 taken (the jumbo W14s are not: ${jumboNote}), still gives`:`heaviest W14 searched, ${heaviest}, still gives`:`${shape} chosen gives`} ${past||state(...left)} (configurator estimate; the calculation reports its own). ${recommended} The support entered is kept and checked.`;
  // The drift past driftEdge (0.99): an estimate at 1.00 is not taken as within the calculation's limit (case 080).
  const open=left[0]>driftEdge||left[1]>1+1e-9||left[2]>1+1e-9;
  // The log row says what was done: no W14 searched meets the sizing ratios; the heaviest is built where it lowers the
  // governing ratio (an open item where it is still past the limits), else the column chosen stays.
- const none=`no W14 to the ${heaviest} meets the new column's drift, torsion and twist ratios for this crane${jumboOpened?` (the jumbo ${jumbo[0]} to ${jumbo.at(-1)} searched; from the ${jumboOpened} on they leave another member an open item the ${heaviest} does not, so the ${heaviest} stays)`:shapes===standard&&jumbo.length?` (the jumbo ${jumbo[0]} to ${jumbo.at(-1)} are searched only where the ${heaviest} leaves a ratio past its limit)`:''}`,item=`an open item (${newColumnBeyond})`;
- const row=better?`${whyHead}: ${none}; the heaviest searched, ${heaviest}, lowers the governing ratio and is built, ${open?`still giving ${past||state(...left)}: ${item}`:`giving ${state(...left)||'ratios within the sizing targets'} (configurator estimate, within the calculation's limits)`}`:open?`${none}: ${item}`:'';
+ // The jumbo W14s searched and none taken (each leaves another member an open item, or is no better): said outside the
+ // parentheses, so the clause S-00 prints keeps it, with each one's reason inside.
+ const none=`no W14 to the ${heaviest} meets the new column's drift, torsion and twist ratios for this crane${jumboOpened?`, and the jumbo ${jumbo[0]} to ${jumbo.at(-1)} searched are not taken (${jumboNote})`:shapes===standard&&jumbo.length?` (the jumbo ${jumbo[0]} to ${jumbo.at(-1)} are searched only where the ${heaviest} leaves a ratio past its limit)`:''}`,item=`an open item (${newColumnBeyond})`;
+ const row=better?`${whyHead}: ${none}; ${jumboOpened?`the ${heaviest}, the heaviest W14 taken,`:`the heaviest searched, ${heaviest},`} lowers the governing ratio and is built, ${open?`still giving ${past||state(...left)}: ${item}`:`giving ${state(...left)||'ratios within the sizing targets'} (configurator estimate, within the calculation's limits)`}`:open?`${none}: ${item}`:'';
  Object.assign(trace,better?inner:{},{column:[trace.column,row&&row[0].toUpperCase()+row.slice(1)].filter(Boolean).join('; ')},open?{columnOpen:clipReason(`${newColumnBeyond}: ${text}`)}:{});
  return better?{...r,configurator:{...cfg}}:q;
 }
@@ -1500,6 +1521,8 @@ function basePlatePlan(shape:string){const w=aiscShapeByName(shape)!;return {N:u
  * (18.6 in and wider flanges) are left out for mill availability.
  */
 const heavyColumnLimit=730,craneColumnLimit=398;
+/** Members beyond the catalog as the log names them. */
+const memberNames:Record<string,string>={girder:'girder',tie:'top-flange tie','column-cap':'column cap','crane-column':'column'};
 const heavierColumns=(shape:string,all=false,limit=heavyColumnLimit)=>{const w=aiscShapeByName(shape)!,list=aiscWShapes.filter(s=>s.name.startsWith('W14X')&&s.weight>w.weight&&s.weight<=limit+1e-9).sort((a,b)=>a.weight-b.weight).map(s=>s.name);return all?list:list.slice(0,8);};
 /** The heaviest W14 the new column searches go to (heavierColumns). */
 const heaviestColumn=`W14X${heavyColumnLimit}`;
@@ -2050,7 +2073,7 @@ const railHeadAllowance=1.6;
 const girderStrengthScatter=1.6;
 /** A member beyond the catalog as a row of the selection log (S-00 and the design summary print it). */
 const openItemRow=(v:NonNullable<RunwayConfig['beyondCatalog']>[number]):ConfigSelection=>({item:'Open item',entered:v.member==='girder'?'Girder':v.member==='tie'?'Top-flange tie':v.member==='column-cap'?'Column cap':'Crane column',
- designed:`${v.shape}, closest; ${v.member==='girder'?`plate girder required (${girderCatalogsExhausted(v.reason)})`:v.member==='tie'?'tie to be designed by hand':v.member==='column-cap'?'cap bearing bolts to be designed by hand':v.reason.startsWith(newColumnBeyond)?'new column beyond the W14 range':'built-up crane column required'}`.slice(0,200),reason:v.reason});
+ designed:`${v.member==='column-cap'?`column cap on the ${v.shape}`:v.shape}, closest; ${v.member==='girder'?`plate girder required (${girderCatalogsExhausted(v.reason)})`:v.member==='tie'?'tie to be designed by hand':v.member==='column-cap'?'cap bearing bolts to be designed by hand':v.reason.startsWith(newColumnBeyond)?'new column beyond the W14 range':'built-up crane column required'}`.slice(0,200),reason:v.reason});
 /**
  * Members the catalog cannot supply within the sizing targets (configurator.beyondCatalog; calculate reports each as an
  * open item, configuratorOpenItems, and the closest member is built and checked, a review draft): a sized girder for which no compact rolled W (and no W + channel cap pair) meets the targets,
