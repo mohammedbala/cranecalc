@@ -91,7 +91,7 @@ export const runwayConfigSchema=z.object({
   * sizing targets (a plate girder or a built-up crane column required). calculate reports each as an open item while the
   * project still has that member (configuratorOpenItems): the closest member is built and checked, a review draft.
   */
- beyondCatalog:z.array(z.object({member:z.enum(['girder','crane-column','tie']),shape:z.string().max(80),reason:z.string().max(800)})).max(4).optional(),
+ beyondCatalog:z.array(z.object({member:z.enum(['girder','crane-column','tie','column-cap']),shape:z.string().max(80),reason:z.string().max(800)})).max(4).optional(),
 });
 export type RunwayConfig=z.infer<typeof runwayConfigSchema>;
 /** The reason's opening of a new freestanding column that no W14 brings within its drift, torsion and twist ratios (configurator withColumnBase; beyondCatalog member 'crane-column'). */

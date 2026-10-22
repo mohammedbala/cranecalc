@@ -1053,7 +1053,12 @@ function withCapColumn(q:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={}):
  // The bolt fatigue also above the sizing target: the calculation's bolt range ran about 14% above the sizing set's (098).
  const over=Object.entries(columnCapSizingRatios(q)).filter(([k,v])=>v>1+1e-6||k==='bolt-fatigue'&&v>capTarget+1e-6).sort((x,y)=>y[1]-x[1]),e=q.details?.endBearing?.bolts;
  if(over.length&&e){const len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
-  trace.cap=`The column cap sized to the limits of its steps still ${over.some(([,v])=>v>1+1e-6)?'exceeds':`leaves above its ${capTarget} sizing target`} ${over.slice(0,3).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (sizing estimates; the calculation reports its own)${over.some(([k])=>k.startsWith('bolt-'))?`: the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end take the fork couple at a ${len(e.gauge)} gauge, and no larger bolt, grade or wider gauge the sizing tries lowers it within the nut clearances to the column flanges (a larger bolt's edge distance lengthens the bearings past the cap stiffeners' seat on the column flanges; a heavier W14 has about the same clear between its flanges). A fork for this crane needs the bolts spread wider (a column with a wider clear between its flanges, or bearing bolts on the cap beyond the column, designed by hand)`:''}; the support entered is kept and checked (review draft).`;}
+  trace.cap=`The column cap sized to the limits of its steps still ${over.some(([,v])=>v>1+1e-6)?'exceeds':`leaves above its ${capTarget} sizing target`} ${over.slice(0,3).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (sizing estimates; the calculation reports its own)${over.some(([k])=>k.startsWith('bolt-'))?`: the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end take the fork couple at a ${len(e.gauge)} gauge, and no larger bolt, grade or wider gauge the sizing tries lowers it within the nut clearances to the column flanges (a larger bolt's edge distance lengthens the bearings past the cap stiffeners' seat on the column flanges; a heavier W14 has about the same clear between its flanges). A fork for this crane needs the bolts spread wider (a column with a wider clear between its flanges, or bearing bolts on the cap beyond the column, designed by hand)`:''}; the support entered is kept and checked${over.some(([,v])=>v>1+1e-6)?' (review draft: open item)':''}.`;
+  // Still past 1.00 at the limits of its steps: an open item (configurator-column-cap, a review draft), never a cap its
+  // own sizing rejects handed on as a design (case 099: bolt slip 1.11 and bolt fatigue 2.02 in the calculation).
+  if(over.some(([,v])=>v>1+1e-6)){const bolts=over.some(([k,v])=>k.startsWith('bolt-')&&v>1+1e-6);
+   trace.capOpen=clipReason(`Column cap not resolved: sized to the limits of its steps it still exceeds ${over.filter(([,v])=>v>1+1e-6).slice(0,3).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (sizing estimates; the calculation reports its own)${bolts?`: the four ${len(e.diameter)} ${e.grade} bearing bolts of each girder end take the fork couple at a ${len(e.gauge)} gauge, and no larger bolt, grade or wider gauge within the nut clearances to the column flanges brings them within 1.00`:''}. Recommended: ${bolts?'the fork couple on a wider bolt spread or more bolts (bearing bolts on the cap plate beyond the column flanges, or a column with a wider clear between its flanges), designed by hand':'the cap designed by hand, or another support'}. The closest cap is built and checked.`);}
+ }
  return q;
 }
 const baseTarget=.9;
@@ -1736,6 +1741,8 @@ export interface SelectionTrace {tie?:string;column?:string;exit?:string;splice?
  bracket?:string;
  /** A column cap its sizing leaves past 1.00 on the heaviest useful W14 (withCapColumn). */
  cap?:string;
+ /** The column cap still past 1.00 at the limits of its sizing steps (withCapColumn): an open item (configurator-column-cap). */
+ capOpen?:string;
  /** Crane columns: the footing arrangement chosen by the clearance to the building-column footing (combinedWhereOverlapping). */
  footing?:string;
  /** Crane columns: the column tie sizing and the column face to the girder web (finishCraneColumn). */
@@ -1776,8 +1783,8 @@ const railHeadAllowance=1.6;
 /** Above the largest ratio of the screening strength estimate to the calculated top-flange ratio on the heaviest catalog girders (cases 047 and 053: 1.52). */
 const girderStrengthScatter=1.6;
 /** A member beyond the catalog as a row of the selection log (S-00 and the design summary print it). */
-const openItemRow=(v:NonNullable<RunwayConfig['beyondCatalog']>[number]):ConfigSelection=>({item:'Open item',entered:v.member==='girder'?'Girder':v.member==='tie'?'Top-flange tie':'Crane column',
- designed:`${v.shape}, closest; ${v.member==='girder'?'plate girder required (outside the rolled/capped catalog)':v.member==='tie'?'tie to be designed by hand':v.reason.startsWith(newColumnBeyond)?'new column beyond the W14 range':'built-up crane column required'}`.slice(0,200),reason:v.reason});
+const openItemRow=(v:NonNullable<RunwayConfig['beyondCatalog']>[number]):ConfigSelection=>({item:'Open item',entered:v.member==='girder'?'Girder':v.member==='tie'?'Top-flange tie':v.member==='column-cap'?'Column cap':'Crane column',
+ designed:`${v.shape}, closest; ${v.member==='girder'?'plate girder required (outside the rolled/capped catalog)':v.member==='tie'?'tie to be designed by hand':v.member==='column-cap'?'cap bearing bolts to be designed by hand':v.reason.startsWith(newColumnBeyond)?'new column beyond the W14 range':'built-up crane column required'}`.slice(0,200),reason:v.reason});
 /**
  * Members the catalog cannot supply within the sizing targets (configurator.beyondCatalog; calculate reports each as an
  * open item, configuratorOpenItems, and the closest member is built and checked, a review draft): a sized girder for which no compact rolled W (and no W + channel cap pair) meets the targets,
@@ -1810,6 +1817,8 @@ function beyondCatalog(entered:RunwayConfig,cfg:RunwayConfig,trial:GirderTrial|u
    :`Choose another tie or support (${options.slice(0,-1).join(', ')}${options.length>1?' or ':''}${options[options.length-1]}), or design the tie connection by hand.`;
   if(over.length)out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:clipReason(`Top-flange tie not resolved: the ${tieLabels[tieArrangement(d) as keyof typeof tieLabels]??tieArrangement(d)}${stiffenerTieGeometry(p)?' on the bearing stiffener':' on a flange saddle'}, as sized for the estimated tie demands, still exceeds ${over.slice(0,3).map(([k,v])=>`${k} ${dcText(v,2)}`).join(', ')} (configurator estimates), and no other tie arrangement the configurator tries fits and passes here. ${advice}`)});
  }
+ // A column cap its sizing leaves past 1.00 (withCapColumn).
+ if(cfg.support==='column-cap'&&trace.capOpen&&activeColumnCap(p))out.push({member:'column-cap',shape:p.existingColumn?.shape??'column cap',reason:trace.capOpen});
  // A tie at a column step that no arrangement withSteppedTie tries brings within its sizing ratios.
  if(d&&cfg.support==='stepped-column'&&trace.stepTieOpen&&flangeTieFamily(d))out.push({member:'tie',shape:d.brace.arrangement??'paired-bars',reason:clipReason(trace.stepTieOpen)});
  // The cap tieback angle as sized still past its limits (capAngleUnresolved) where no other tie was taken: no set of
