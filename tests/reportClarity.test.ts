@@ -6,7 +6,7 @@ import {deliveredForces} from '../src/engine/forcesDelivered';
 import {newSteelTakeoff} from '../src/engine/newSteel';
 import {summaryElements,summaryTable} from '../src/report/designSummary';
 import {detailTypeName,openGroups} from '../src/report/openItems';
-import {banner,bodyTable,countsLine,openItemsBlock,valueCells} from '../src/report/taxonomyReport';
+import {appendixA,banner,bodyTable,checksCsv,countsLine,openItemsBlock,valueCells} from '../src/report/taxonomyReport';
 import {compactReport} from '../src/report/compactReport';
 import {reportHtml} from '../src/report/reportHtml';
 import {workedSteps} from '../src/report/workedChecks';
@@ -189,6 +189,28 @@ describe('the element results include every open item',()=>{
    const label=summaryElements(base.input).find(e=>row.includes(`<b>${e.label}</b>`))?.label;
    if(label&&open.has(label))expect(row,label).toContain('<b class="fail">NG</b>');
   }
+ });
+});
+
+describe('Ratios at 1.00: a failure never reads 1.00, float noise on a passing rule never reads above it',()=>{
+ it('dcText rounds up only a failing ratio',()=>{
+  const noise=7.15/7.1499999999999995;expect(noise).toBeGreaterThan(1);
+  expect(dcText(noise,2)).toBe('1.00');expect(dcText(noise,2,'-','pass')).toBe('1.00');expect(dcText(1.0000000000000002,5,'—','pass')).toBe('1.00000');
+  expect(dcText(1.003,2)).toBe('1.01');expect(dcText(1.003,2,'-','fail')).toBe('1.01');expect(dcText(1.0000001,2,'-','fail')).toBe('1.01');
+  expect(dcText(1.0000001,2,'-','unverified')).toBe('1.01');expect(dcText(1.004,2,'-','pass')).toBe('1.00');
+  expect(dcText(1.006,2,'-','fail')).toBe('1.01');expect(dcText(1.02,2)).toBe('1.02');expect(dcText(.996,2,'-','pass')).toBe('1.00');
+ });
+ it('the report rows and the checks CSV follow the same rule',()=>{
+  const s=clone(),tax0=buildTaxonomy(s),ids=[...tax0.entries.values()].map(t=>t.check).filter(c=>c.status==='pass'&&c.utilization!==undefined&&c.utilization>.3&&!c.record).map(c=>c.id);
+  const ok=check(s,ids[0]),ng=check(s,ids[1]);
+  ok.utilization=1+2e-16;ng.utilization=1.003;ng.status='fail';
+  const tax=buildTaxonomy(s),csv=checksCsv(s,tax).trim().split('\n'),col=csv[0].split(',').indexOf('utilization');
+  const cellOf=(id:string)=>csv.find(r=>r.startsWith(`${id},`))!;
+  expect(cellOf(ok.id)).toMatch(/,1,/);expect(cellOf(ok.id)).not.toContain('1.01');
+  expect(cellOf(ng.id)).toContain(',1.01,');expect(col).toBeGreaterThan(0);
+  const html=appendixA(tax,s.input.units),row=(id:string)=>html.split('<tr').find(r=>r.includes(`data-check="${id}"`)||r.includes(` ${id} `)||r.includes(` ${id}"`))??'';
+  expect(row(ok.id)).not.toBe('');expect(text(row(ok.id))).not.toContain('1.01');
+  expect(text(row(ng.id))).toContain('1.01');
  });
 });
 

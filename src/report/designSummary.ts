@@ -6,7 +6,7 @@ import {activeColumnCap} from '../engine/columnCapInputs';
 import {tiedToBuilding,girderEndFork} from '../engine/craneColumnInputs';
 import {activeStep} from '../engine/steppedColumnInputs';
 import {activeEndBearing} from '../engine/endBearingInputs';
-import {equationCell,governing,shortReference,statusLabel,subscripts} from './reportParts';
+import {equationCell,governing,shortReference,sig3,statusLabel,subscripts} from './reportParts';
 import {loadPathSteps,supportAssemblyFigure} from './hairline/figures';
 import {classifyCheck,reviewDraftExportable,type Taxonomy} from '../engine/checkTaxonomy';
 import {groupDc,openByElement,openItemGroups,ruleItem} from './openItems';
@@ -101,7 +101,7 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
   const status=items.some(i=>i.governing.status==='fail')?'fail':(items.find(i=>i.members.includes(g.c))??(checked?undefined:items[0]))?.governing.status??g.c.status;
   const others=items.filter(i=>!i.members.includes(g.c));
   const note=others.length?`<small class="open">Open: ${others.slice(0,2).map(i=>`${esc(title(i.title))} (${esc(groupDc(i))})`).join('; ')}${others.length>2?`; ${others.length-2} more`:''} (open items, page 1)</small>`:'';
-  return `<tr class="${status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b></td><td>${esc(title(g.c.title))}<small class="ref">${esc(shortReference(g.c))}</small>${note}</td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—')}</td><td class="res"><b class="${status}">${esc(statusLabel(status))}</b></td></tr>`;
+  return `<tr class="${status}"><td>${e.step?stepBadge(e.step)+' ':''}<b>${esc(e.label)}</b></td><td>${esc(title(g.c.title))}<small class="ref">${esc(shortReference(g.c))}</small>${note}</td><td class="eq">${equationCell(g.c)}</td><td class="num">${dcText(g.dc,2,'—',g.c.status)}</td><td class="res"><b class="${status}">${esc(statusLabel(status))}</b></td></tr>`;
  }).join('')}</tbody></table>`;
 }
 /**
@@ -110,23 +110,48 @@ export function summaryTable(s:CalculationSnapshot,tax:Taxonomy){
  */
 export function selectionsTable(p:ProjectInput,s?:CalculationSnapshot){
  const rows=p.configurator?.selections??[];if(!rows.length)return '';
- return `<h3>Configurator selections</h3><table class="selections"><thead><tr><th>Item</th><th>As entered</th><th>As designed</th><th>Governing reason</th></tr></thead><tbody>${rows.map(v=>{const f=s&&selectionFinal(s,v.item);return `<tr><td>${esc(v.item)}</td><td>${esc(v.entered)}</td><td>${esc(v.designed)}</td><td>${esc(v.reason)}${f?` <b>${esc(f)}</b>`:''}</td></tr>`;}).join('')}</tbody></table>`;
+ return `<h3>Configurator selections</h3><table class="selections"><thead><tr><th>Item</th><th>As entered</th><th>As designed</th><th>Governing reason</th></tr></thead><tbody>${rows.map(v0=>{const v=s?selectionView(s,v0):v0,f=s&&selectionFinal(s,v0.item,v0.entered);return `<tr><td>${esc(v.item)}</td><td>${esc(v.entered)}</td><td>${esc(v.designed)}</td><td>${esc(v.reason)}${f?` <b>${esc(f)}</b>`:''}</td></tr>`;}).join('')}</tbody></table>`;
 }
 /** The summary element whose final ratios a configurator selection is judged by. */
-const selectionElements:Record<string,string[]>={Girder:['girder','service'],'Girder type':['girder','service'],'Crane column':['column'],'New column':['column'],'Existing column':['column'],'Lower shaft (stepped column)':['column'],'Top-flange tie':['tie'],'Column tie':['tie']};
+const selectionElements:Record<string,string[]>={Girder:['girder','service'],'Girder type':['girder','service'],'Crane column':['column'],'New column':['column'],'Existing column':['column'],'Lower shaft (stepped column)':['column'],'Top-flange tie':['tie'],'Column tie':['tie'],'Column cap, at its limits':['support']};
+/** An 'Open item' row of the log (configurator openItemRow): its member, as entered, and the element its ratios are in. */
+const openItemMember:Record<string,{member:string,keys:string[]}>={Girder:{member:'girder',keys:['girder','service']},'Top-flange tie':{member:'tie',keys:['tie']},'Column cap':{member:'column-cap',keys:['support']},'Crane column':{member:'crane-column',keys:['column']}};
+/** The configurator item (configurator-<member>, calculate.configuratorOpenItems) a log row stands for. */
+const selectionMember=(item:string,entered?:string)=>item==='Open item'?openItemMember[entered??'']?.member:item==='Column cap, at its limits'?'column-cap':undefined;
+/**
+ * Whether the calculation closed the configurator item a log row stands for (its configurator-<member> item passes: the
+ * member's own checks all pass). Such a row reads as closed everywhere (the log, S-00): never as an open item.
+ */
+export function selectionClosed(s:CalculationSnapshot,item:string,entered?:string){
+ const m=selectionMember(item,entered);return !!m&&s.checks.find(c=>c.id===`configurator-${m}`)?.status==='pass';
+}
+/**
+ * A log row as printed: a row whose configurator item the calculation closed reads as closed (an 'Open item' is titled
+ * 'Closed item', its member as built and confirmed; its reason is the configurator's screening estimate, not an open item).
+ */
+export function selectionView<T extends {item:string,entered:string,designed:string,reason:string}>(s:CalculationSnapshot,v0:T):T{
+ // The bracket advisory quotes the configurator's reaction estimate (to the nearest 5): with the calculation's reaction
+ // (its column bracket reaction check) available, that value leads and the estimate is labeled as such.
+ const R=s.checks.find(c=>/^(column-brackets|(bracket|haunch|wbracket)-tr13-load)$/.test(c.id)&&c.demand!==undefined&&Number.isFinite(c.demand))?.demand;
+ const v=R===undefined?v0:{...v0,reason:v0.reason.replace(/^The support reaction, about ([^,]*?), is above/,(_,est:string)=>`The support reaction ${sig3(R,'force',s.input.units)} (the calculation's; configurator estimate about ${est.replace(/\s*\(([^()]*)\)/,', $1')}) is above`)};
+ if(!selectionClosed(s,v.item,v.entered))return v;
+ const reason=v.reason.replace(/^([^:]{1,60}) not resolved: /,'$1, screening estimate: ').replace(/\s*\(review draft: open item\)/,'').replace(/\s*Open item: the package is a review draft[^.]*\./,'');
+ return v.item==='Open item'?{...v,item:'Closed item',designed:`${v.entered==='Column cap'?'Column cap on the ':''}${v.designed.split(/[,;]/)[0]} as built, confirmed by the calculation`,reason}:{...v,reason};
+}
 /**
  * The final calculated ratios beside a configurator selection whose reason quotes screening estimates (the sized girder,
  * the columns, the tie): the governing design D/C of its element after calculate(), and for the girder the vertical and
  * lateral deflection ratios. Undefined for other items, without a ratio, or for a package whose analysis did not verify
  * (it quotes no result).
  */
-export function selectionFinal(s:CalculationSnapshot,item:string){
- const keys=selectionElements[item];if(!keys||(!s.eligible&&!reviewDraftExportable(s)))return undefined;
+export function selectionFinal(s:CalculationSnapshot,item:string,entered?:string){
+ const keys=item==='Open item'?openItemMember[entered??'']?.keys:selectionElements[item];if(!keys||(!s.eligible&&!reviewDraftExportable(s)))return undefined;
  const all=elementChecks(s),of=(k:string)=>all.find(v=>v.element.key===k)?.checks??[];
  const checks=keys.flatMap(of).filter(c=>c.group!=='Serviceability'),g=checks.length?governingForSummary(checks):undefined;
  const dc=(id:string)=>{const u=s.checks.find(c=>c.id===id)?.utilization;return u!==undefined&&Number.isFinite(u)?u.toFixed(2):undefined;};
  const v=item.startsWith('Girder')?dc('vertical'):undefined,h=item.startsWith('Girder')?dc('lateral'):undefined;
  if(!g||g.utilization===undefined||!Number.isFinite(g.utilization))return undefined;
- return `Final calculation: governing D/C ${g.utilization.toFixed(2)} (${g.title})${v&&h?`, vertical deflection ${v} and lateral ${h} of the limits`:''}.`;
+ const closed=selectionClosed(s,item,entered)?'closed by the calculation (the member\'s own checks pass), ':'';
+ return `Final calculation: ${closed}governing D/C ${dcText(g.utilization,2,'-',g.status)} (${g.title})${v&&h?`, vertical deflection ${v} and lateral ${h} of the limits`:''}.`;
 }
 export const summaryCss=`table.selections{font-size:8.5px}table.selections td{vertical-align:top;padding:2px 4px}table.selections td:nth-child(1){width:13%}table.selections td:nth-child(2),table.selections td:nth-child(3){width:16%}.summary-head{display:grid;grid-template-columns:330px 1fr;gap:12px;align-items:start;margin:6px 0}.summary-head svg{width:330px;height:auto;border:1px solid #000}.summary-head .key td,.summary-head .key th{padding:2px 5px;font-size:8.5px}.summary-head .key th:first-child{width:24%}.banner{border:2px solid #000;padding:6px 10px;margin:8px 0;font-size:11px}.banner b{font-size:12px}.banner.fail{background:#e6e6e6}table.summary-checks{font-size:9px}table.summary-checks col.s-el{width:20%}table.summary-checks col.s-check{width:32%}table.summary-checks col.s-eq{width:34%}table.summary-checks col.s-dc{width:6%}table.summary-checks col.s-res{width:8%}table.summary-checks td{vertical-align:middle;padding:3px 4px}table.summary-checks td small{display:block;font-size:7.5px;color:#222}table.summary-checks td small.path{font-style:italic}table.summary-checks td.num{text-align:right}table.summary-checks td.res{text-align:center}table.summary-checks td.eq .katex{font-size:1em;white-space:normal}table.summary-checks tr.fail td{background:#e6e6e6;font-weight:700}`;

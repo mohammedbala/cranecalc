@@ -4,7 +4,7 @@ import {withDesignCache,type DesignProgress} from './designAnalysis';
 import {packageContentChecks} from './detailTemplate';
 import {connectionCoordination,coordinationChecks} from './connectionCoordination';
 import {constructionNoteChecks} from './constructionNotes';
-import {presentCheck} from './checkPresentation';
+import {dcText,presentCheck} from './checkPresentation';
 import {connectionOptionChecks} from './connectionOptions';
 import {capInputChecks} from './capChecks';
 import { projectSchema, type CalculationSnapshot, type CheckResult, type ProjectInput } from './types';
@@ -69,9 +69,11 @@ export function configuratorOpenItems(p:ProjectInput,checks?:CheckResult[]):Chec
   .map(v=>{
    const own=checks?.filter(c=>memberChecks[v.member].test(c.id)),failing=own?.filter(c=>c.status==='fail'),closed=!!own?.length&&!failing!.length;
    // A new freestanding column beyond the W14 range (configurator withColumnBase) is not a crane column: titled as such.
-   const title=v.member==='crane-column'&&v.reason.startsWith(newColumnBeyond)?`${newColumnBeyond} (drift, torsion or twist)`:v.member==='girder'?`Plate girder required (${girderCatalogsExhausted(v.reason)})`:titles[v.member];
+   // Closed by the calculation: titled as confirmed, never as a member not resolved (Appendix A prints it with OK).
+   const closedTitles={girder:`Girder ${v.shape}`,tie:'Top-flange tie','crane-column':`Column ${v.shape}`,'column-cap':'Column cap (bearing bolts of the end fork)'};
+   const title=closed?`${closedTitles[v.member]}: flagged by the configurator's screening estimates, confirmed by the calculation`:v.member==='crane-column'&&v.reason.startsWith(newColumnBeyond)?`${newColumnBeyond} (drift, torsion or twist)`:v.member==='girder'?`Plate girder required (${girderCatalogsExhausted(v.reason)})`:titles[v.member];
    // The calculation's own ratios lead: the configurator's figures in the reason are screening estimates.
-   const calculated=failing?.length?`The calculation's ratios of this ${v.member==='tie'?'tie':'member'} (${v.shape}) past 1.00: ${failing.slice(0,4).map(c=>`${(c.title||c.id).replace(/\s*·\s*/g,', ')} ${c.utilization!==undefined&&Number.isFinite(c.utilization)?`D/C ${c.utilization.toFixed(2)}`:c.status}`).join('; ')}${failing.length>4?`; and ${failing.length-4} more`:''}. `:'';
+   const calculated=failing?.length?`The calculation's ratios of this ${v.member==='tie'?'tie':'member'} (${v.shape}) past 1.00: ${failing.slice(0,4).map(c=>`${(c.title||c.id).replace(/\s*·\s*/g,', ')} ${c.utilization!==undefined&&Number.isFinite(c.utilization)?`D/C ${dcText(c.utilization,2,'-',c.status)}`:c.status}`).join('; ')}${failing.length>4?`; and ${failing.length-4} more`:''}. `:'';
    return {id:`configurator-${v.member}`,group:'Detailing',title,status:closed?'pass':'incomplete',equation:'',referenceIds:['criteria'],
     note:closed?`${v.reason} The configurator's screening estimates did not confirm the ${v.member==='tie'?'tie':'member'} (${v.shape}); the calculation checks it, and its ${own!.length} checks of this ${v.member==='tie'?'tie':'member'} pass: closed by the calculation.`
      :`${calculated}Configurator (its figures are screening estimates, not the calculated ratios): ${v.reason} The closest ${v.member==='tie'?'tie':'catalog member'} (${v.shape}) is built and checked here so the package can be reviewed; its failing checks are listed as they are. Open item: the package is a review draft until the member is designed.`} as CheckResult;});

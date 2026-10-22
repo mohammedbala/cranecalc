@@ -1,4 +1,5 @@
 import type {CalculationSnapshot} from '../engine/types';
+import {dcText} from '../engine/checkPresentation';
 import {format} from '../engine/units';
 import {activeSplices,spliceGeometry,spliceLayout,spliceMark,spliceRules,type FlangeSpliceGeometry} from '../engine/spliceInputs';
 import {spliceBasis} from '../engine/girderSplice';
@@ -275,7 +276,7 @@ export function spliceTopic(s:CalculationSnapshot):DetailTopic{
 
  // Notes and design data.
  const results=s.detailResults?.splices,props=s.properties!,basis=spliceBasis(p,props,sp,g),force=(v:number,q:Parameters<typeof format>[1]='force')=>{const t=format(v,q,u,u==='SI'?1:2);return u==='US'?t.toUpperCase():t;};
- const ratio=(id:string)=>{const c=s.checks.find(v=>v.id===id);return c?.utilization!==undefined?`${c.status==='fail'?'FAILS ':''}${c.utilization.toFixed(2)}`:'-';};
+ const ratio=(id:string)=>{const c=s.checks.find(v=>v.id===id);return c?.utilization!==undefined?`${c.status==='fail'?'FAILS ':''}${dcText(c.utilization,2,'-',c.status)}`:'-';};
  const grids=p.spans.reduce((a,v)=>[...a,a.at(-1)!+v],[0]),from=(x:number)=>{const i=grids.reduce((best,gx,j)=>Math.abs(gx-x)<Math.abs(grids[best]-x)?j:best,0);return `${dim(Math.abs(x-grids[i]))} ${x<grids[i]?'BEFORE':'PAST'} GRID ${i+1}`;};
  const env=results?.stations??[];
  const rows=[

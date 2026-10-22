@@ -180,8 +180,19 @@ export const value=(v:number|undefined,q:Quantity,units:ProjectInput['units'],pa
  * three or more places (1.0000, 116.051, 0.0012413), in e-notation, or of 10 and more with two places (121.23 → 121,
  * 12.41 → 12.4). Clause numbers (§3.10.2, J10.8) are left alone; a hyphen used as a minus becomes −.
  */
+/**
+ * A rotation in radians to three significant figures, never rounded to 0 (a footing rotation of 1.918e-5 rad is not
+ * zero): 1.92 × 10⁻⁵ below 0.001, else the plain decimal (0.00185, 0.019); 0 only for an exact zero.
+ */
+export function radText(d:number){
+ if(!Number.isFinite(d))return '—';if(d===0)return '0';
+ if(Math.abs(d)<1e-3){const {m,e}=scientific(Number(d.toPrecision(3)));return `${m.replace(/^-/,'\u2212')} × 10${superscript(e)}`;}
+ return String(Number(d.toPrecision(3))).replace(/^-/,'\u2212');
+}
 export function tidyNumbers(text:string){
- return text.replace(/(?<![\w.§-])(-?\d[\d,]*\.\d{3,}(?:e[-+]?\d+)?|-?\d+(?:\.\d+)?e[-+]?\d+|-?\d[\d,]+\.\d{2})(?!\w|\.\d)/gi,(m)=>num(Number(m.replace(/,/g,'')),{fixed:true}))
+ // Rotations (a number before "rad") keep three significant figures: radText.
+ text=text.replace(/(?<![\w.§-])(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)(?=\s?rad\b)/gi,m=>radText(Number(m)));
+ return text.replace(/(?<![\w.§-])(-?\d[\d,]*\.\d{3,}(?:e[-+]?\d+)?|-?\d+(?:\.\d+)?e[-+]?\d+|-?\d[\d,]+\.\d{2})(?!\w|\.\d|\s?rad\b)/gi,(m)=>num(Number(m.replace(/,/g,'')),{fixed:true}))
   // A hyphen before a number after a space, "(" or "=" is a minus sign: "-3.20 kip" → "−3.20 kip".
   .replace(/(^|[\s(=])-(?=\d)/g,'$1\u2212');
 }
@@ -207,7 +218,7 @@ export const maximumRule=(c:CheckResult)=>/-max(imum)?$|-fit$/.test(c.id)||/\bma
 /** TeX relations of a demand to its limit (demand first) and of a limit to its demand (limit first), with the verdict. */
 export function texRelations(c:Pick<CheckResult,'status'|'utilization'>){
  const over=exceedsLimit(c);
- return {over,le:over?'\\ >\\ ':'\\ \\le\\ ',ge:over?'\\ <\\ ':'\\ \\ge\\ ',ng:over?'\\quad\\textbf{NG}':'',dc:`D/C=${dcText(c.utilization,2)}${over?'\\quad\\textbf{NG}':''}`};
+ return {over,le:over?'\\ >\\ ':'\\ \\le\\ ',ge:over?'\\ <\\ ':'\\ \\ge\\ ',ng:over?'\\quad\\textbf{NG}':'',dc:`D/C=${dcText(c.utilization,2,'-',c.status)}${over?'\\quad\\textbf{NG}':''}`};
 }
 /** The relation of a demand to its limit in text: "≤", or ">" where the check fails. */
 export const textRelation=(c:Pick<CheckResult,'status'|'utilization'>)=>exceedsLimit(c)?'&gt;':'≤';
@@ -260,7 +271,7 @@ export function checkTable(checks:CheckResult[],x:CheckTableContext){
  const rows=[...families.values()].flatMap(v=>v.length>=3?[{c:governing(v),n:v.length,members:v}]:v.map(c=>({c,n:1,members:[c]})));
  for(const c of checks)x.rendered.add(c.id);
  const q=(c:CheckResult)=>c.quantity??'ratio';
- return `<table class="checks"><colgroup><col class="c-title"/><col class="c-eq"/><col class="c-num"/><col class="c-num"/><col class="c-dc"/><col class="c-res"/></colgroup><thead><tr><th>Check</th><th>Equation</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(({c,n,members})=>`<tr class="${c.status}" data-checks="${esc(members.map(m=>m.id).join(' '))}"><td><b>${esc(checkTitle(tidyNumbers(c.title)))}</b>${n>1?` <span class="family">governing of ${n}</span>`:''}<small class="ref">${esc(shortReference(c))}</small>${c.caseId?`<small class="ref">Governing case ${esc(c.caseId)}</small>`:''}</td><td class="eq">${equationCell(c)}</td><td class="num">${sig3(c.demand,q(c),x.units)}</td><td class="num">${sig3(c.capacity,q(c),x.units)}</td><td class="num">${dcText(c.utilization,2,'—')}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`).join('')}</tbody></table>`;
+ return `<table class="checks"><colgroup><col class="c-title"/><col class="c-eq"/><col class="c-num"/><col class="c-num"/><col class="c-dc"/><col class="c-res"/></colgroup><thead><tr><th>Check</th><th>Equation</th><th>Demand</th><th>Limit</th><th>D/C</th><th>Result</th></tr></thead><tbody>${rows.map(({c,n,members})=>`<tr class="${c.status}" data-checks="${esc(members.map(m=>m.id).join(' '))}"><td><b>${esc(checkTitle(tidyNumbers(c.title)))}</b>${n>1?` <span class="family">governing of ${n}</span>`:''}<small class="ref">${esc(shortReference(c))}</small>${c.caseId?`<small class="ref">Governing case ${esc(c.caseId)}</small>`:''}</td><td class="eq">${equationCell(c)}</td><td class="num">${sig3(c.demand,q(c),x.units)}</td><td class="num">${sig3(c.capacity,q(c),x.units)}</td><td class="num">${dcText(c.utilization,2,'—',c.status)}</td><td class="res"><b class="${c.status}">${esc(statusLabel(c.status))}</b></td></tr>`).join('')}</tbody></table>`;
 }
 export const checkTableCss=`table.checks{font-size:9px;margin:6px 0 10px}table.checks col.c-title{width:27%}table.checks col.c-eq{width:37%}table.checks col.c-num{width:11%}table.checks col.c-dc{width:6%}table.checks col.c-res{width:8%}table.checks td{padding:3px 4px;vertical-align:middle}table.checks td.num{text-align:right;white-space:nowrap}table.checks th:nth-child(n+3){text-align:right}table.checks td.res,table.checks th:last-child{text-align:center}table.checks td small.ref{display:block;font-size:7.5px;color:#333;margin-top:1px}table.checks .family{font-size:7.5px;border:1px solid #000;padding:0 3px;white-space:nowrap}table.checks td.eq{font-size:9px;overflow:hidden}table.checks td.eq .katex{font-size:1.02em;white-space:normal}table.checks td.eq i{font-size:8px}table.checks td.eq small.where{display:block;font-size:7px;line-height:1.25;color:#222;margin-top:1px}table.checks td.eq small.where .katex{font-size:1em}table.checks tr.fail td{background:#e6e6e6;font-weight:700}table.checks b.fail{text-decoration:underline}`;
 /** Any hex color in embedded linework as the gray of equal luminance, so the printed calculation is black and white. */
