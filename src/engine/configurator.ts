@@ -1364,7 +1364,9 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
   const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner);
   // A jumbo that leaves another member an open item the W14X398 did not (case 092: the column cap's fork bolts on the
   // W14X665) is not taken: the W14X398 stays the closest, its drift the open item with the recommendation.
-  const opened=(x:ProjectInput)=>(x.configurator?.beyondCatalog??[]).filter(v=>!(r398?.configurator?.beyondCatalog??[]).some(w=>w.member===v.member)).length>0;
+  // (A column cap is judged by its sizing ratios: withCapColumn records its open item on the outer build only.)
+  const capOver=(x:ProjectInput)=>!!activeColumnCap(x)&&Math.max(0,...Object.values(columnCapSizingRatios(x)))>1+1e-6;
+  const opened=(x:ProjectInput)=>(x.configurator?.beyondCatalog??[]).some(v=>!(r398?.configurator?.beyondCatalog??[]).some(w=>w.member===v.member))||capOver(x)&&!capOver(r398!);
   if(tier===1&&r398&&opened(r)){jumboOpened??=shape;continue;}
   if(baseSizingRatios(r).ratios.drift<=baseTarget&&torsionOk(r)&&twistOk(r)){Object.assign(trace,inner,{column:[trace.column,why[0].toUpperCase()+why.slice(1)].filter(Boolean).join('; ')});return {...r,configurator:{...cfg}};}
  }
