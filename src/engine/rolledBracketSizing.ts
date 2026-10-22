@@ -166,8 +166,13 @@ export function sizeRolledBracket(p:ProjectInput,target=.9,options:BracketSizing
  const exact=new Set(['stiffener-proportions','colstiff-proportions','release']);
  const step=(from:BracketInput,move:Move)=>{const v=structuredClone(from);if(!move(v))return undefined;return settle(v)&&JSON.stringify(v)!==JSON.stringify(from)?v:undefined;};
  // The stub: the next heavier shape of each family, or the next with a wider flange or a deeper web.
- const heavier=(test:(s:typeof shapes[number],now:typeof shapes[number])=>boolean):Move=>v=>{const now=shape(v),next=shapes.find(s=>s.weight>now.weight+1e-9&&test(s,now));if(!next)return false;v.corbelShape=next.name;return true;};
- const stub:Move[]=[...['W12X','W14X','W16X','W18X','W21X'].map(f=>heavier(s=>s.name.startsWith(f))),heavier((s,n)=>s.bf>n.bf+.5),heavier((s,n)=>s.d>n.d+1)];
+ type Test=(s:typeof shapes[number],now:typeof shapes[number])=>boolean;
+ const heavier=(test:Test):Move=>v=>{const now=shape(v),next=shapes.find(s=>s.weight>now.weight+1e-9&&test(s,now));if(!next)return false;v.corbelShape=next.name;return true;};
+ const stubTests:Test[]=[...['W12X','W14X','W16X','W18X','W21X'].map(f=>(s:typeof shapes[number])=>s.name.startsWith(f)),(s,n)=>s.bf>n.bf+.5,(s,n)=>s.d>n.d+1];
+ const stub:Move[]=stubTests.map(heavier);
+ // Every heavier shape of each of those choices, lightest first: past the next one, which may not lower the ratio (a
+ // shape of another family lighter per foot than the stub, a wider flange whose bolts lose their nut clearance).
+ const heavierAll=(test:Test):Move[]=>shapes.map(s=>(v:BracketInput)=>{const now=shape(v);if(!(s.weight>now.weight+1e-9&&test(s,now)))return false;v.corbelShape=s.name;return true;});
  const seat:Move=v=>{const t=nextPlate(v.seatThickness);if(!t)return false;v.seatThickness=t;return true;};
  const seatWeld:Move=v=>{const st=rolledStub(v)!,w=v.seatWeld+sixteenth;if(w>maxFillet(st.tf,v.seatThickness)+1e-6)return false;v.seatWeld=w;return true;};
  const flangeWeld:Move=v=>{const r=v.rolled!,st=rolledStub(v)!;if(r.flangeJoint!=='fillet')return false;const w=r.flangeWeld+sixteenth;if(w>maxFillet(st.tf,c.flangeThickness)+1e-6||st.bf+2*w>c.width-1e-6)return false;r.flangeWeld=w;return true;};
@@ -224,6 +229,17 @@ export function sizeRolledBracket(p:ProjectInput,target=.9,options:BracketSizing
     // A single move is taken where it lowers the governing ratio (else the next one is tried).
     const v=step(b,m);if(!v)continue;const rv=ratios(v);
     if(value-(exact.has(key)?target:1)*(rv[key]??0)>1e-9){next=v;r=rv;break;}
+   }
+   // No listed move lowers the ratio while the stub may change: the lightest heavier stub of each choice that settles
+   // and lowers it, the one with the larger drop per pound (case 086: from a W21X201, whose next W21 does not fit the
+   // bearing bolts' nut clearances and whose next W18 is the weaker, to the W18X311).
+   if(!next&&stubs&&(moves[key]??[stub]).some(e=>e===stub||Array.isArray(e)&&e.some(m=>stub.includes(m)))){
+    let best:{v:BracketInput;score:number;r:Record<string,number>}|undefined;
+    for(const test of stubTests)for(const move of heavierAll(test)){
+     const v=step(b,move);if(!v)continue;const rv=ratios(v),drop=value-(exact.has(key)?target:1)*(rv[key]??0);
+     if(drop>1e-9){const score=drop/Math.max(weight(v)-weight(b),4.448);if(!best||score>best.score)best={v,score,r:rv};break;}
+    }
+    if(best){next=best.v;r=best.r;}
    }
    options.trace?.(pass*1000+i,key,value,next);
    if(!next){stuck.add(key);continue;}

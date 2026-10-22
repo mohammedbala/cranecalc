@@ -54,14 +54,17 @@ export function fingerprint(input:unknown):string {const text=JSON.stringify(inp
  * is closed (status 'pass', the calculation's checks decide; e.g. case 014, a cap tieback angle at estimated lap slip
  * 1.64 that the calculation passes), and stays open while any of them fails.
  */
-const memberChecks:Record<'girder'|'tie'|'crane-column',RegExp>={
+const memberChecks:Record<'girder'|'tie'|'crane-column'|'column-cap',RegExp>={
  girder:/^(vertical|lateral|major|minor|combined|combined-bottom|torsion-normal|torsion-normal-bottom|torsion-shear|torsion-stability|flexure-load-height|shear|sidesway)$/,
  tie:/^(tie-|flange-tie-|plate-tie-|cap-angle-|brace-member$|brace-stiffness$|coord-tie-|coord-cap-tie-)/,
- // The column's own checks: not the AIST bracket applicability (column-brackets), a support-system screen.
- 'crane-column':/^column-(?!brackets$)/};
+ // The column's own checks: not the AIST bracket applicability (column-brackets), a support-system screen; with the
+ // runway drift with the footing rotation (base-drift), which a new column's open item names (case 080).
+ 'crane-column':/^(column-(?!brackets$)|base-drift$)/,
+ // The cap, its fillets, stiffeners and bearing bolts.
+ 'column-cap':/^column-cap-/};
 export function configuratorOpenItems(p:ProjectInput,checks?:CheckResult[]):CheckResult[]{
- const titles={girder:'Plate girder required (outside the rolled/capped catalog)','crane-column':'Built-up crane column required (outside the rolled catalog)',tie:'Top-flange tie not resolved by the configurator'};
- return (p.configurator?.beyondCatalog??[]).filter(v=>v.member==='girder'?p.section.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:p.existingColumn?.shape===v.shape)
+ const titles={girder:'Plate girder required (outside the rolled/capped catalog)','crane-column':'Built-up crane column required (outside the rolled catalog)',tie:'Top-flange tie not resolved by the configurator','column-cap':'Column cap not resolved by the configurator (bearing bolts of the end fork)'};
+ return (p.configurator?.beyondCatalog??[]).filter(v=>v.member==='girder'?p.section.name===v.shape:v.member==='tie'?(p.details?.brace.arrangement??'paired-bars')===v.shape:v.member==='column-cap'?!!p.columnCap?.enabled&&p.existingColumn?.shape===v.shape:p.existingColumn?.shape===v.shape)
   .map(v=>{
    const own=checks?.filter(c=>memberChecks[v.member].test(c.id)),failing=own?.filter(c=>c.status==='fail'),closed=!!own?.length&&!failing!.length;
    // A new freestanding column beyond the W14 range (configurator withColumnBase) is not a crane column: titled as such.

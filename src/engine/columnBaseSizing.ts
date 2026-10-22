@@ -37,6 +37,12 @@ const caps={footing:30*foot,depth:8*foot,plate:60*inch,thickness:6*inch,embedmen
  * than that is left to the column choice (the configurator steps to a heavier shape) rather than to a rigid footing.
  */
 export const columnDriftShare=.8;
+/**
+ * The drift ratio a footing at the column's limit is grown to (and below which the configurator takes the drift as met):
+ * 1% inside the limit, so the sizing estimate and the calculation's base-drift check, which differ in the last digits
+ * (case 080: 1.00 estimated, 1.00004 calculated at the 30 ft footing cap), agree at the 1.00 boundary.
+ */
+export const driftEdge=.99;
 const finite=(v:number)=>Number.isNaN(v)?Infinity:v;
 
 /**
@@ -248,9 +254,10 @@ export function sizeColumnBase(p:ProjectInput,target=.9):ProjectInput{
     return (s.tension==='steel'?largerRod():s.tension==='pullout'?largerNut():s.tension==='blowout'?widerAll():embed(s.edgeReduced))||moreRods()||longer();
    }
    // The drift: to the target by the footing where the column alone leaves it room; where the column takes more (the
-   // column choice's), the footing still grows until the drift is within its limit (1.00), so a column at the catalog
-   // limit (or configured) is not left past it while a larger footing would bring it there.
-   case 'soil':case 'overturning':case 'development':case 'drift':return key==='drift'&&s.column>columnDriftShare*target&&!(s.ratios.drift>1&&s.column<1)?false:wider();
+   // column choice's), the footing still grows until the drift is within its limit (driftEdge, 0.99 for the margin to
+   // the calculation), so a column at the catalog limit (or configured) is not left past it while a larger footing
+   // would bring it there.
+   case 'soil':case 'overturning':case 'development':case 'drift':return key==='drift'&&s.column>columnDriftShare*target&&!(s.ratios.drift>driftEdge&&s.column<1)?false:wider();
    // Sliding: a shear key engages the soil's lateral bearing deeper (where it is given), then a heavier footing.
    case 'sliding':return keyed()||heavier();
    case 'uplift':return heavier();
