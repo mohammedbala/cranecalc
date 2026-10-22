@@ -8,6 +8,8 @@ import {flangeTieGeometry} from '../engine/tieGeometry';
 import {capAngleFatigue,capAngleResult} from '../engine/capAngleTie';
 import {maximumRule,sig3,statusLabel,value} from './reportParts';
 import {footingReactionText} from '../engine/craneColumn';
+import {tiedToBuilding} from '../engine/craneColumnInputs';
+import {activeEndBearing} from '../engine/endBearingInputs';
 import {nutClearance} from '../engine/bracketSizing';
 
 /**
@@ -117,6 +119,27 @@ const sentenceStart=(v:string)=>v.charAt(0).toUpperCase()+v.slice(1);
 const more=(u:number)=>Math.ceil((u-1)*100-1e-9);
 const negativeMoment=(x:RemedyContext)=>/^(combined-bottom|major|flexure-load-height)$/.test(x.c.id)&&/negative moment: bottom flange in compression\)|the negative moment governs|negative moment \((W )?bottom flange in compression\)\./.test(x.c.note)
  ?`Raise the negative-moment strength by at least ${more(x.u)}%: the W bottom flange is in compression over the interior support. A heavier W (wider, thicker bottom flange), or brace the bottom flange near the support (a shorter unbraced length for negative moment than L_b = ${x.len(x.p.unbracedLength)}). Then recalculate.`:undefined;
+/**
+ * The tie movement strength remedy (tie-move-strength, AISC H1-1 with the imposed-movement moments): the bending
+ * reduction keeps the axial term a = P_r/P_c the check states (tieMovement, 'H1 governing state'): M_new/M = (1 − a)/(u − a)
+ * (a ≥ 0.2; (1 − a/2)/(u − a/2) below). A longer clear length L is offered only where it can pass: with P_c elastic and the
+ * movement moment ∝ 1/L², a grows as L² and the moment term falls as 1/L², so the least H1 at any longer length is about
+ * 2√(a · 8/9 M/M_c) (a ≥ 0.2 form; found by a scan of the lengths otherwise).
+ */
+function tieMoveStrength(x:RemedyContext){
+ const m=x.c.note.match(/H1 governing state: P_r\/P_c = ([\d.]+)( \(P_c elastic)?/);if(!m||!Number.isFinite(x.u))return undefined;
+ const a=Number(m[1]),scales=!!m[2],u=x.u,big=a>=.2;
+ // Σ M/M_c at the present length; H1 at a length with (L'/L)² = k: a·k and Σ/k in the H1-1a or H1-1b form.
+ const sum=big?9/8*(u-a):u-a/2,h1=(k:number)=>a*k>=.2?a*k+8/9*sum/k:a*k/2+sum/k;
+ // The least H1 over longer lengths (k = (L'/L)² ≥ 1).
+ const best=scales?Math.min(...Array.from({length:401},(_,i)=>h1(10**(i/100)))):undefined;
+ const slid=/Column-end slide/.test(x.c.note),release=slid?'the column-end release (sleeved vertical slots and the slide along the runway) is already in this design':'release the column end (sleeved vertical slots, and the column-end slide along the runway for paired bars)';
+ if(a>=1)return `The axial term alone, P_r/P_c = ${a.toFixed(2)}, exceeds 1: no reduction of the imposed movement passes H1; a stronger tie (a larger plate or bars, a shorter buckling length), or remove the tie force from the movement (column caps, the girder end held by its end fork), designed by hand.`;
+ const ratio=big?(1-a)/(u-a):(1-a/2)/(u-a/2),cut=Math.ceil((1-ratio)*100-1e-9);
+ const head=`Reduce the bending from the imposed movement by at least ${cut}%: H1 keeps the axial term P_r/P_c = ${a.toFixed(2)}, so M_new/M = ${big?'(1 − P_r/P_c)/(u − P_r/P_c)':'(1 − P_r/2P_c)/(u − P_r/2P_c)'} = ${ratio.toFixed(2)} at u = ${u.toFixed(2)}`;
+ if(best!==undefined&&best>1)return `${head}. A longer clear tie length cannot pass: P_c is elastic and the movement moment falls as 1/L², so P_r/P_c grows as L² while the moment term falls as 1/L², and the least H1 at any length is about ${big?'2√(P_r/P_c · 8/9 M/M_c) = ':''}${best.toFixed(2)}. ${sentenceStart(release)}; remove the imposed movement at the tie instead (column caps over the columns, the girder end held by its end fork with no tie), or a tie designed by hand. Then recalculate.`;
+ return `${head}: ${slid?`${release}, so `:`${release}, `}lengthen the clear tie length, or a thinner, more flexible tie out of plane with the axial strength kept.`;
+}
 const remedies:Remedy[]=[
  // Fatigue register points, by detail family (the register id prefix).
  // Saddle end fillets: the toe on the flange under the girder's longitudinal stress (SA), and the fillet terminations under
@@ -154,7 +177,7 @@ const remedies:Remedy[]=[
  [/^flange-tie-(saddle-weld|gusset-weld)$/,x=>{const a=x.p.details?.brace.flangeAttachment;return `Increase the ${/saddle/.test(x.c.id)?'saddle-to-flange end':'gusset-to-saddle'} fillets to w ≥ ${a?x.size(a.weldSize,x.u):'u·w'} (within the J2.2b edge limit), or lengthen them.`;}],
  [/^(flange-tie-column-weld|tie-weld|tie-move-weld)$/,x=>{const w=x.p.details?.brace.connection.weldSize;return `Increase the column gusset root fillets to w ≥ ${w?x.size(w,x.u):'u·w'}, or a taller gusset${/move/.test(x.c.id)?'; or release the imposed movement at the column end (sleeved slots)':''}.`;}],
  [/^tie-(slip|bolts?|bolt-shear|bearing)$|^tie-.*-(slip|bolt)$/,x=>`Raise the lap bolt resistance by ${Math.ceil((x.u-1)*100)}%: more or larger bolts, or a Class B faying surface (slip).`],
- [/^tie-move-(strength|gusset|fatigue|root-fatigue)$/,x=>noCapacity(x.u)?'The tie buckles under its force with the imposed movement (no capacity): a thicker plate or bars, or a shorter clear length between the bolt groups.':`Reduce the bending from the imposed movement by ${/strength/.test(x.c.id)?`more than ${reduction(x.u)}% (the axial term P_r/P_c stays in H1)`:`${reduction(x.u)}%`}: ${/Column-end slide/.test(x.c.note??'')?'the column-end release (sleeved vertical slots and the slide along the runway) is already in this design, so ':'release the column end (sleeved vertical slots, and the column-end slide along the runway for paired bars), '}lengthen the clear tie length, or a thinner, more flexible tie out of plane with the axial strength kept.`],
+ [/^tie-move-(strength|gusset|fatigue|root-fatigue)$/,x=>noCapacity(x.u)?'The tie buckles under its force with the imposed movement (no capacity): a thicker plate or bars, or a shorter clear length between the bolt groups.':(/strength/.test(x.c.id)?tieMoveStrength(x):undefined)??`Reduce the bending from the imposed movement by ${/strength/.test(x.c.id)?`more than ${reduction(x.u)}% (the axial term P_r/P_c stays in H1)`:`${reduction(x.u)}%`}: ${/Column-end slide/.test(x.c.note??'')?'the column-end release (sleeved vertical slots and the slide along the runway) is already in this design, so ':'release the column end (sleeved vertical slots, and the column-end slide along the runway for paired bars), '}lengthen the clear tie length, or a thinner, more flexible tie out of plane with the axial strength kept.`],
  [/^(brace-member|brace-stiffness)$/,x=>`Stronger or stiffer tie (larger plate or bars, stiffer connections): ${Math.ceil((x.u-1)*100)}% more is needed.`],
  [/^flange-tie-.*fatigue$/,x=>`Tie attachment: ${range(x)}: a stiffer, longer saddle or taller gusset, or take the tie to the bearing stiffener.`],
  // Supports
@@ -176,7 +199,13 @@ const remedies:Remedy[]=[
  [/^crane-\d+-bumper-stop$/,x=>x.c.utilization===undefined?'Resolve the end stop first (its own checks): this item restates them and closes with them.':`The end stop is the part to redesign: raise its design strength by at least ${Math.ceil((x.u-1)*100)}% (the end stop checks, section on end stops), or select a bumper with a peak force within the present strength.`],
  [/^column-torsion$/,()=>'Take the longitudinal force out at the girder line: a crane-level strut at the locating columns (by others), or a bracket that brings the force to the column centerline.'],
  // Column caps: new parts designed here, each with the remedy of its own part.
- [/^column-cap-bolt-slip$/,x=>`Raise the locating bolts' slip resistance by at least ${more(x.u)}%: more or larger bearing bolts, Class B faying surfaces, bearing-type bolts with a shear lug on the cap for the longitudinal force, or a top-flange tie that takes the fork force off the bearing bolts.`],
+ // The cap's faying surfaces are already Class B (columnCap), and a top-flange tie is allowed on a column cap only for a
+ // crane column tied to the building (validateColumnCap): neither is offered where it is not available.
+ [/^column-cap-bolt-slip$/,x=>{const classB=/^Class B\b/.test(x.c.note),tie=tiedToBuilding(x.p),a490=activeEndBearing(x.p)?.bolts.grade==='A490';
+  return `Raise the locating bolts' slip resistance by at least ${more(x.u)}%: more or larger bearing bolts${classB?' (the faying surfaces are already Class B)':', Class B faying surfaces'}${a490?'':', A490 bolts (a larger pretension)'}, bearing-type bolts with a shear lug on the cap for the longitudinal force${tie?', or a top-flange tie that takes the fork force off the bearing bolts':''}; a lower fork tension on each bolt (a wider bolt spread) also raises it (k_sc).`;}],
+ // The bolt tension range is each bolt's share of the uplift range plus the fork couple range on its side, F/(2l)
+ // (columnCap bolt-fatigue): more bolts or a wider spread cut the range per bolt, a larger bolt the stress.
+ [/^column-cap-bolt-fatigue$/,x=>`Bearing bolts in cyclic tension from the fork couple: ${range(x)}. The range on each bolt is its share of the uplift range plus the fork couple on its side of the girder, F/(2l): more bolts or a wider bolt spread l (bearing bolts on the cap plate beyond the column flanges, or a column with a wider clear between its flanges) cut the range per bolt, and a larger bolt (a larger tensile stress area A_t) the stress; the fork for this crane designed by hand. Then recalculate.`],
  [/^column-cap-bolt-tension$/,x=>`Raise the bearing bolt tension resistance by at least ${more(x.u)}%: more or larger bolts, a higher grade, or a wider bolt gauge (a longer lever for the fork couple).`],
  [/^column-cap-(prying|flange-prying|plate|plate-shear|bolt-bearing)$/,x=>`Thicker ${/flange/.test(x.c.id)?'girder bottom flange (a heavier girder) or a bearing plate under it':'cap plate'}: ${more(x.u)}% more resistance is needed.`],
  [/^column-cap-(weld|weld-base|stiffener-weld|weld-fatigue)$/,x=>`Larger cap fillets, or a cap stiffener under the bearing: ${more(x.u)}% more resistance is needed.`],
@@ -230,7 +259,7 @@ function configuratorRemedy(c:CheckResult){
  const sentences=c.note.split(/(?<=[.])\s+(?=[A-Z])/),rec=sentences.find(v=>/\brecommended\b/i.test(v)),alt=sentences.find(v=>/^(Choose|Design)\b/.test(v));
  const v=rec?sentenceStart(rec.slice(rec.search(/\brecommended\b/i)).replace(/;\s*the support entered is kept and checked\.?$/,'.')):alt;
  const member=c.id.replace(/^configurator-/,'');
- const fallback=member==='girder'?'Design a built-up plate girder, or shorten the span with intermediate supports (columns added between the grids).':member==='tie'?'Design the tie connection by hand, or choose another tie or support.':'Design the column by hand (a built-up or laced column), or revise the support arrangement.';
+ const fallback=member==='girder'?'Design a built-up plate girder, or shorten the span with intermediate supports (columns added between the grids).':member==='tie'?'Design the tie connection by hand, or choose another tie or support.':member==='column-cap'?'Design the column cap and its bearing bolts by hand, or choose another support.':'Design the column by hand (a built-up or laced column), or revise the support arrangement.';
  return `${(v??fallback).replace(/\.?$/,'.')} Then recalculate; the closest member's failing checks are listed as their own items.`;
 }
 /** Detailing rules: the dimension to provide, from the rule's own provided and required values. */
