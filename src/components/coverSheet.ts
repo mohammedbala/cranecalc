@@ -562,7 +562,7 @@ function cjpToExisting(p:CalculationSnapshot['input']){
  * Text without its parenthetical remarks, nested ones included; a remark that labels figures as estimates (the
  * configurator's, screening or sizing estimates) is kept as '(configurator estimate)' where it stood.
  */
-const strip=(x:string)=>{let v=x,w='';while(w!==v){w=v;v=v.replace(/\s*\([^()]*\)/g,m=>/^\s*\(the calculation's\b/i.test(m)?' \u0002':/\bestimates?\b/i.test(m)?' \u0001':'');}return v.replace(/\u0001/g,'(configurator estimate)').replace(/\u0002/g,'(calculated)');};
+const strip=(x:string)=>{let v=x,w='';while(w!==v){w=v;v=v.replace(/\s*\([^()]*\)/g,m=>/^\s*\(the calculation's\b/i.test(m)?' \u0002':/\bestimates?\b/i.test(m)?' \u0001':'');}return v.replace(/\s*\([^()]*…\s*$/,' …').replace(/\u0001/g,'(configurator estimate)').replace(/\u0002/g,'(calculated)');};
 /**
  * A governing clause as S-00 prints it beside the final calculation: each '(configurator estimate)' list of named
  * screening ratios (bolt-slip 16.18, …) with the calculated ratios of the same checks beside it, and the clause labeled a
