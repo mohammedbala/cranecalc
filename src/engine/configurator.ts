@@ -721,9 +721,19 @@ function withConfirmedCap(q:ProjectInput,input:RunwayConfig,trace:SelectionTrace
  const sized=columnCapSizingRatios(q),scale:Record<string,number>={};
  for(const c of failing){const k=c.id.replace(/^column-cap-/,''),v=sized[k];if(v&&v>0&&v<1e3)scale[k]=c.utilization!/v;}
  if(!Object.keys(scale).length)return q;
- const inner:SelectionTrace={};craneCapScale=scale;let r:ProjectInput;
- try{r=withConfirmedGirder(finishedLayout(input,inner),input,inner);}finally{craneCapScale=undefined;}
- const s2=calculate(r),bad=(x:typeof s)=>new Set(x.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)).map(c=>c.id)),before=bad(s),after=bad(s2);
+ // The calculated-over-sized factor changes with the bolts and gauge (case 059: 7 in to 8.5 in gauge took the slip
+ // only from 1.06 to 1.003): a second round with the factor measured on the first candidate.
+ const bad=(x:typeof s)=>new Set(x.checks.filter(c=>!['pass','not-applicable','excluded'].includes(c.status)).map(c=>c.id)),before=bad(s);
+ let inner:SelectionTrace={},r:ProjectInput=q,s2=s,after=before;
+ for(let round=0;round<2;round++){
+  inner={};craneCapScale=scale;
+  try{r=withConfirmedGirder(finishedLayout(input,inner),input,inner);}finally{craneCapScale=undefined;}
+  s2=calculate(r);after=bad(s2);
+  const still=failing.filter(c=>after.has(c.id));if(!still.length||s2.errors.length)break;
+  const raw=columnCapSizingRatios(r);let grown=false;
+  for(const c of still){const k=c.id.replace(/^column-cap-/,''),u=s2.checks.find(x=>x.id===c.id)?.utilization,v=raw[k];if(u!==undefined&&Number.isFinite(u)&&v&&v>0&&v<1e3&&u/v>(scale[k]??1)*(1+1e-6)){scale[k]=u/v;grown=true;}else if(scale[k]){scale[k]*=u!==undefined&&Number.isFinite(u)?Math.max(1.05,u):1.05;grown=true;}}
+  if(!grown)break;
+ }
  const b0=q.details?.endBearing?.bolts,b1=r.details?.endBearing?.bolts,len=(v:number)=>cfg.units==='SI'?`${Math.round(v)} mm`:`${+(v/inch).toFixed(3)} in`;
  const was=failing.map(c=>`${c.id} ${dcText(c.utilization!,2)}`).join(', ');
  if(s2.errors.length||!b1||failing.some(c=>after.has(c.id))||[...after].some(id=>!before.has(id))){
