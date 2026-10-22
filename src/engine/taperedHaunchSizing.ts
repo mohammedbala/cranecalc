@@ -1,4 +1,4 @@
-import {categoryF,fatigueCoefficient,filletRootReduction} from './fatigueConstants';
+import {categoryF,filletRootReduction,finiteLife,spectrumFatigue} from './fatigueConstants';
 /**
  * Template sizing of the tapered I haunch for the project's support reactions. The largest reaction at a grid is put
  * on one girder end at its bearing offset (the torsion of a runway-end grid or of one loaded bay), with one crane's
@@ -8,7 +8,8 @@ import {categoryF,fatigueCoefficient,filletRootReduction} from './fatigueConstan
  * - the receiving column (J10.1-J10.4) under the two flange forces: where the unstiffened column does not carry them,
  *   column stiffeners (continuity plates) at both flange levels, sized with the column stiffener checks;
  * - fatigue, the crane reaction without impact on either girder end, scaled per duty bin: flange tips at the column
- *   welds (Category C, Miner sum) and the stiffener fillets (Category F, full range at all cycles);
+ *   welds (Category C, by the project's fatigue method as the checks: the all-cycle bound or the Miner sum) and the
+ *   stiffener fillets (Category F, full range at all cycles);
  * - service: deflection of the outer bearing edge with the twist, against the bracket limit.
  * Plates grow in standard increments until every ratio is at most the target; the full analysis then checks every
  * concurrent case. Canonical units N, mm.
@@ -79,9 +80,11 @@ export function haunchSizingRatios(p:ProjectInput,set=haunchSizingSet(p)){
   for(const [k,v,sys] of [['upperT',col.stiffeners.upperT,fl.upper],['upperC',col.stiffeners.upperC,fl.upper],['lowerT',col.stiffeners.lowerT,fl.lower],['lowerC',col.stiffeners.lowerC,fl.lower]] as const)peak(k,v,sys);
  }
  // Fatigue: the crane reaction without impact on one girder end, then the other (the warping stress reverses), each
- // duty bin scaled by its lift; the Category C Miner sum as an equivalent stress ratio D^(1/3). Fillet throats
- // (Category F) take the full range at all cycles.
- const N=d.spectrum.reduce((n,v)=>n+v.cycles,0),Fw=categoryF(N),miner=(range:number)=>Math.cbrt(set.bins.reduce((sum,v)=>sum+v.cycles*(range*v.scale)**3,0)/(fatigueCoefficient**3*4.4));
+ // duty bin scaled by its lift; Category C by the project's fatigue method (spectrumFatigue, as the haunch checks: the
+ // largest bin range at all n_SR cycles for the all-cycle bound, else the Miner equivalent range), against F_SR at n_SR.
+ // Fillet throats (Category F) take the full range at all cycles.
+ const N=d.spectrum.reduce((n,v)=>n+v.cycles,0),Fw=categoryF(N);
+ const miner=(range:number)=>{const m=spectrumFatigue(p.fatigue.method,set.bins.map(v=>({cycles:v.cycles,range:range*v.scale})),n=>finiteLife(4.4,n));return m.capacity>0?m.range/m.capacity:0;};
  const [fa,fb]=set.fatigue.map(loads=>haunchActions(g,root,e,loads,{longitudinal:0,bottom:0,offset:0})),ta=haunchTipStresses(g,root,fa),tb=haunchTipStresses(g,root,fb);
  const tipRange=(i:number)=>Math.max(Math.abs(ta[i]),Math.abs(tb[i]),Math.abs(ta[i]-tb[i]));
  // A fillet flange joint's root crack (Table A-3.1 item 5.6, C″): the Category C curve times R_FIL; its throats Category F.
