@@ -1365,8 +1365,10 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
   // A jumbo that leaves another member an open item the W14X398 did not (case 092: the column cap's fork bolts on the
   // W14X665) is not taken: the W14X398 stays the closest, its drift the open item with the recommendation.
   // (A column cap is judged by its sizing ratios: withCapColumn records its open item on the outer build only.)
-  const capOver=(x:ProjectInput)=>!!activeColumnCap(x)&&Math.max(0,...Object.values(columnCapSizingRatios(x)))>1+1e-6;
-  const opened=(x:ProjectInput)=>(x.configurator?.beyondCatalog??[]).some(v=>!(r398?.configurator?.beyondCatalog??[]).some(w=>w.member===v.member))||capOver(x)&&!capOver(r398!);
+  // A cap past 1.00 and worse than on the W14X398 (case 092: bolt slip 1.80 sized on the W14X398, which the
+  // calculation passed; no slip resistance on the W14X665, 3.40 calculated).
+  const capWorst=(x:ProjectInput)=>activeColumnCap(x)?Math.max(0,...Object.values(columnCapSizingRatios(x))):0;
+  const opened=(x:ProjectInput)=>(x.configurator?.beyondCatalog??[]).some(v=>!(r398?.configurator?.beyondCatalog??[]).some(w=>w.member===v.member))||capWorst(x)>Math.max(1,capWorst(r398!))+1e-6;
   if(tier===1&&r398&&opened(r)){jumboOpened??=shape;continue;}
   if(baseSizingRatios(r).ratios.drift<=baseTarget&&torsionOk(r)&&twistOk(r)){Object.assign(trace,inner,{column:[trace.column,why[0].toUpperCase()+why.slice(1)].filter(Boolean).join('; ')});return {...r,configurator:{...cfg}};}
  }
