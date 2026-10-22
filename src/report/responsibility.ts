@@ -11,7 +11,7 @@ import {columnStiffenerGeometry} from '../engine/columnStiffeners';
 import {capAngleGeometry} from '../engine/capAngle';
 import {simpleSupportInput} from '../engine/simpleSupports';
 import type {Taxonomy} from '../engine/checkTaxonomy';
-import {deliveredForces} from '../engine/forcesDelivered';
+import {deliveredForces,girderTieColumnScope} from '../engine/forcesDelivered';
 import {runwayMass,runwaySeismicBound} from '../engine/columnSupport';
 import {drawingElevation} from '../components/drawingFormat';
 import {caseLabel,sig3,tidyNumbers} from './reportParts';
@@ -111,7 +111,8 @@ export function responsibilityMatrix(tax:Taxonomy,s:CalculationSnapshot):Respons
  // and the footing coordination are needed from others.
  const cc=tiedToBuilding(p)?s.craneColumn:undefined;
  if(cc&&p.craneColumn){const k=p.craneColumn,g=cc.layout,dc=dl?.craneColumn,datum=(z:number)=>el((p.drawing?.datumElevation??0)+(p.columnBase?.enabled?p.columnBase.plate.thickness+p.columnBase.grout-p.columnBase.footing.soil:0)+z);
-  rows.push({item:'Building column · flange and web at the girder tie',needed:`Check each existing ${g.buildingColumn.shape} building column flange and web for the local girder tie force at its column gusset or end plate (the gusset or end plate with its welds or bolts, and the column tie's tab with its field welds and the column web under it, are designed in this calculation).`,
+  const sc=girderTieColumnScope(s);
+  rows.push({item:sc.flange?'Building column · web at the girder tie':'Building column · flange and web at the girder tie',needed:sc.flange?`Check each existing ${g.buildingColumn.shape} building column web at the girder tie for the local girder tie force${sc.stiffened?' the stiffeners deliver':' through its flange'} (${sc.designed}, the gusset or end plate with its welds or bolts, and the column tie's tab with its field welds and the column web under it, are designed in this calculation).`:`Check each existing ${g.buildingColumn.shape} building column flange and web for the local girder tie force at its column gusset or end plate (the gusset or end plate with its welds or bolts, and the column tie's tab with its field welds and the column web under it, are designed in this calculation).`,
    criterion:'AISC 360-16 J10 (or a yield-line flange model) for the girder tie design force in either direction.',
    forces:`Horizontal only, either direction: girder tie ${f(dl?.tie.design)} at${datum(g.girderTie.elevation)}, column tie ${f(dc?.columnTie)} at${datum(g.columnTie.elevation)} (per grid: S-00 and section @@ref:interfaces@@).`,party:EOR});
   rows.push({item:'Building column survey',needed:`Field-verify every building column beside the crane columns before fabrication: ${g.buildingColumn.shape}, plumb, its face ${len(g.girderTie.face)} from the girder web and ${len(g.gap)} clear of the crane column, the column top and base, and its footing (${k.building.source||'source not entered'}).`,

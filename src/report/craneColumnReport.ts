@@ -2,7 +2,7 @@ import type {CalculationSnapshot,CheckResult} from '../engine/types';
 import type {Quantity} from '../engine/units';
 import {tiedToBuilding} from '../engine/craneColumnInputs';
 import {columnTieCapacities,columnTieGeometry,columnTieEndClearance} from '../engine/craneColumn';
-import {deliveredForces} from '../engine/forcesDelivered';
+import {deliveredForces,girderTieColumnScope} from '../engine/forcesDelivered';
 import type {ExistingColumnCombination} from '../engine/existingColumn';
 
 /** The report's own helpers (compactReport.ts), handed in so these sections print as the others do. */
@@ -63,6 +63,7 @@ export function craneColumnPages(s:CalculationSnapshot,k:ReportKit):string[]{
   +`<p>The base plate, anchor rods and footing are designed in section ${ref('base')}${s.bracingSystem?`, the crane-level bracing in section ${ref('bracing')}`:''}. Across the runway the crane column takes no side thrust and no seismic force: both reach the building column through the ties.</p>`,[]);
  const bc=s.buildingColumn,bk=kc.building;
  const at=(z:number)=>f(z);
+ const tieScope=girderTieColumnScope(s);
  const building=page(sec('Building column (lateral from ties)','building-column'),
   `<p>The existing ${e(g.buildingColumn.shape)} building column takes only horizontal forces from the runway: the girder tie at ${at(g.girderTie.elevation)} and the column tie at ${at(g.columnTie.elevation)} above the crane-column base, in either direction (no runway vertical load), with its own existing effects as surveyed (${e(bk.source)}). It is also the nodal brace of the crane column (section ${ref('crane-column')}): its stiffness at the column tie is k<sub>b</sub> = ${q3(st.building,'stiffness')}.</p>`
   +basis(`Side thrust C<sub>ss</sub> at the rail head, resolved into the girder tie and the bottom-flange (column tie) forces of the girder model, plus at the column tie the crane column's eccentric top reaction and the Appendix 6 brace force, and at the girder tie the girder's own Appendix 6 brace force; the runway mass across the runway in the seismic combinations. ASCE 7-16 ${p.method} combinations with the building's D, L, L<sub>r</sub>, S, R, W and E as entered.${dl?.craneColumn?` Design tie forces: girder tie ${q3(dl.tie.design,'force')}, column tie ${q3(dl.craneColumn.columnTie,'force')} (section ${ref('interfaces')}).`:''}`)
@@ -72,6 +73,6 @@ export function craneColumnPages(s:CalculationSnapshot,k:ReportKit):string[]{
    ['Ends (strong axis)',e(`${bk.strong.base} base, ${bk.strong.top} top`),'Frame',e(bk.frame?.type??'not entered')]])
   +(bc?`<h3>Governing combinations (H1)</h3>${combos(bc.combinations)}`:'')
   +worked(selected(['Building column']))+numeric(selected(['Building column']))
-  +`<p>The column tie's tab on the building column (its bolts, field fillets and the column web under it) is checked in section ${ref('crane-column')}, and the girder tie's column gusset or end plate with the tie. The building column flange and web at the girder tie, the building frame, its foundations and the lateral system for the added runway mass are by others for the forces of section ${ref('interfaces')} (section ${ref('by-others')}).</p>`,[]);
+  +`<p>The column tie's tab on the building column (its bolts, field fillets and the column web under it) is checked in section ${ref('crane-column')}, and the girder tie's column gusset or end plate${tieScope.flange?` and ${tieScope.designed}`:''} with the tie. ${tieScope.byOthers.charAt(0).toUpperCase()+tieScope.byOthers.slice(1)}, the building frame, its foundations and the lateral system for the added runway mass are by others for the forces of section ${ref('interfaces')} (section ${ref('by-others')}).</p>`,[]);
  return [crane,building];
 }

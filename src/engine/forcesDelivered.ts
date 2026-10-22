@@ -51,6 +51,20 @@ const near=(a:number,b:number)=>Math.abs(a-b)<=1e-6*Math.max(Math.abs(a),Math.ab
 const same=(a:SupportForceSet,b:SupportForceSet)=>a.id===b.id&&near(a.vertical,b.vertical)&&near(a.moment,b.moment)&&near(a.longitudinal,b.longitudinal)&&near(a.top,b.top)&&near(a.bottom,b.bottom);
 
 /** The concurrent force sets at every grid, their elevations and the tie design force. */
+/**
+ * What the package itself checks of the building column at the girder tie of a crane column (tiedToBuilding): the column
+ * flange's local stress at the tie's column gusset (flange-tie-column), with the J10.8 stiffeners welded into the column
+ * where the tie sizing adds them (flange-tie-column-stiffener-*); else neither. The scope statements (S-00, the delivered
+ * forces key, the building column section and the by-others list) say the same: `designed` lists what is checked here,
+ * `byOthers` (singular or plural by `are`) what is left to the engineer of record.
+ */
+export function girderTieColumnScope(s:CalculationSnapshot){
+ const on=(re:RegExp)=>s.checks.some(c=>re.test(c.id)&&!['not-applicable','excluded'].includes(c.status));
+ const flange=on(/^flange-tie-column$/),stiffened=flange&&on(/^flange-tie-column-stiffener/);
+ return {flange,stiffened,
+  designed:flange?`the building column flange at the girder tie${stiffened?' with the J10.8 stiffeners welded into the column there':''} (flange-tie-column${stiffened?', flange-tie-column-stiffener':''})`:'',
+  byOthers:flange?`the building column web at the girder tie${stiffened?' beyond the stiffener fillets':''}`:'the building column flange and web at the girder tie',are:flange?'is':'are'};
+}
 export function deliveredForces(s:CalculationSnapshot){
  const p=s.input,r=s.detailResults,a=s.designAnalysis,props=s.properties;
  if(!r?.bracketForces?.length||!a||!props)return undefined;
