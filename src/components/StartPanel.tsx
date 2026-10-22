@@ -83,7 +83,7 @@ function Select<T extends string|number>({label,value,options,onChange}:{label:s
 }
 
 const compactW=aiscWShapes.filter(s=>s.d>=12&&s.d<=40&&s.bf/(2*s.tf)<=.38*Math.sqrt(29000/50)&&(s.d-2*s.kdes)/s.tw<=3.76*Math.sqrt(29000/50)).sort((a,b)=>a.d-b.d||a.weight-b.weight).map(s=>s.name);
-const columnShapes=aiscWShapes.filter(s=>s.name.startsWith('W14X')&&s.weight>=61&&s.weight<=398).sort((a,b)=>a.weight-b.weight).map(s=>s.name);
+const columnShapes=aiscWShapes.filter(s=>s.name.startsWith('W14X')&&s.weight>=61&&s.weight<=730).sort((a,b)=>a.weight-b.weight).map(s=>s.name);
 /** Crane columns: W12 and W14. The lower shaft of a stepped column: W24 to W44 (the upper shaft is a W14 within its flanges). */
 const craneColumnShapes=aiscWShapes.filter(s=>(s.name.startsWith('W12X')&&s.weight>=50||s.name.startsWith('W14X')&&s.weight>=61)&&s.weight<=398).sort((a,b)=>a.d-b.d||a.weight-b.weight).map(s=>s.name);
 const lowerShaftShapes=aiscWShapes.filter(s=>/^W(24|27|30|33|36|40|44)X/.test(s.name)&&s.bf>=12).sort((a,b)=>a.d-b.d||a.weight-b.weight).map(s=>s.name);

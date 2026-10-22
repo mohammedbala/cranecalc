@@ -216,12 +216,12 @@ const remedies:Remedy[]=[
  // The configurator's open items (calculate.configuratorOpenItems, status incomplete): the recommendation its note gives.
  [/^configurator-/,x=>configuratorRemedy(x.c)],
  // Drift of a new freestanding column: its strong-axis stiffness and the eccentric reaction moment govern, not an
- // unbraced length; the W14X398 is the heaviest W14 the configurator uses.
+ // unbraced length; the W14X730 is the heaviest W14 the configurator uses.
  [/^column-drift$/,x=>x.p.existingColumn?.isNew?newColumnDrift(x,`New column drift exceeded by ${more(x.u)}%`):undefined],
  [/^base-drift$/,x=>{
   const col=x.s.checks.find(c=>c.id==='column-drift'),d=x.c.demand,a=col?.demand,share=d&&a!==undefined?Math.min(1,Math.max(0,a/d)):undefined;
   const parts=share!==undefined?`: of the ${x.len(d!)} at the rail, the column alone gives ${x.len(a!)} (its own check, column-drift) and the footing's rotation on the soil the rest`:'';
-  return newColumnDrift(x,`Runway drift with the footing rotation exceeded by ${more(x.u)}%${parts}`,share!==undefined&&a!<=col!.capacity!?'a larger or deeper footing (a stiffer soil support) for the rotation part':undefined);}],
+  return newColumnDrift(x,`Runway drift with the footing rotation exceeded by ${more(x.u)}%${parts}`,share!==undefined&&a!<=col!.capacity!?'a larger footing plan (a stiffer soil support: its rotational stiffness k_s B L³/12 grows with the plan, not the depth) for the rotation part':undefined);}],
  [/^column-/,x=>x.p.existingColumn?.isNew?`New column exceeded by ${more(x.u)}%: a heavier column shape, or a smaller demand (bracing, a shorter unbraced length).`
   :`Existing column exceeded by ${more(x.u)}%: reinforce the column or reduce its demand; confirm the restraint assumptions with the building engineer of record.`],
  // The cap tieback plate: its range is split into the axial part (force controlled) and the imposed vertical movement
@@ -247,7 +247,7 @@ const remedies:Remedy[]=[
  * alone is within its limit.
  */
 function newColumnDrift(x:RemedyContext,head:string,footing?:string){
- const shape=x.p.existingColumn?.shape??'',heaviest=/^W14X(398|4\d\d|5\d\d|6\d\d|7\d\d)$/.test(shape),seat=!!x.p.details?.bracket?.enabled;
+ const shape=x.p.existingColumn?.shape??'',heaviest=/^W14X(730|808|873)$/.test(shape),seat=!!x.p.details?.bracket?.enabled;
  // The configurator's estimate for column caps (its new-column item): caps alone not enough for the column (dropped from
  // the remedy), or not on this footing (caps with a stiffer footing).
  const item=x.s.checks.find(c=>c.id==='configurator-crane-column'),capsShort=!!item&&/caps alone are not enough(?! on this footing)/.test(item.note),capsFooting=!!item&&/caps alone are not enough on this footing/.test(item.note);

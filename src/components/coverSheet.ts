@@ -556,8 +556,11 @@ function cjpToExisting(p:CalculationSnapshot['input']){
  return !!b?.enabled&&isTaperedHaunch(b)&&haunchInput(b).flangeJoint==='cjp'&&!(p.existingColumn?.isNew&&p.existingColumn.enabled);
 }
 
-/** Text without its parenthetical remarks, nested ones included. */
-const strip=(x:string)=>{let v=x,w='';while(w!==v){w=v;v=v.replace(/\s*\([^()]*\)/g,'');}return v;};
+/**
+ * Text without its parenthetical remarks, nested ones included; a remark that labels figures as estimates (the
+ * configurator's, screening or sizing estimates) is kept as '(configurator estimate)' where it stood.
+ */
+const strip=(x:string)=>{let v=x,w='';while(w!==v){w=v;v=v.replace(/\s*\([^()]*\)/g,m=>/\bestimates?\b/i.test(m)?' \u0001':'');}return v.replace(/\u0001/g,'(configurator estimate)');};
 /**
  * The governing reason of a selection, compactly: its first clause (to the first "; " outside parentheses, so a
  * parenthetical with a semicolon is never cut), without the parentheses, and its recommendation where that comes later.

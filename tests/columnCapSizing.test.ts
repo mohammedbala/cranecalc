@@ -11,7 +11,7 @@ import {railTopAboveSteel} from '../src/engine/railSeat';
 import {boltCapacity} from '../src/engine/connectionStrength';
 
 const inch=25.4;
-/** A 25-ton CMAA D crane in a Class B building on new columns with column caps (W36X247 girders, W14X211 columns). */
+/** A 25-ton CMAA D crane in a Class B building on new columns with column caps (W27X281 girders, W14X426 columns: the base drift governs the column). */
 const heavy:RunwayConfig={...defaultRunwayConfig,capacity:25,craneSpan:70,control:'cab',cmaa:'D',buildingClass:'B',bays:4,span:30,structure:'new',support:'column-cap',railElevation:28};
 
 describe('column cap sizing',()=>{
@@ -41,7 +41,10 @@ describe('column cap sizing',()=>{
   // With the configured 3/4 in A325 bolts the fork couple's tension exceeded 1.13 T_b: k_sc = 0, no slip capacity.
   const before=boltCapacity({grade:'A325',diameter:.75*inch,planes:1,surface:'B',shear:1,tension:1.2*1.13*28*4448.2216152605,method:'LRFD'});expect(before.slip).toBe(0);
   expect(e.bolts.diameter).toBeGreaterThan(.75*inch);
-  for(const k of ['bolt-slip','bolt-tension','weld','wrench-web','plate','prying'])expect(r[k],k).toBeLessThanOrEqual(.9);
+  for(const k of ['bolt-slip','bolt-tension','weld','plate','prying'])expect(r[k],k).toBeLessThanOrEqual(.9);
+  // The nut clearance to the column web is a geometric limit (1.00): on the W14X426 this runway now takes (the column
+  // search past the W14X398, which was the closest fallback above the 0.9 drift target) its thicker web leaves 0.92.
+  expect(r['wrench-web']).toBeLessThanOrEqual(1);
   // The all-around cap fillets in fatigue (Category F on the throat under the alternating girder-end reactions along the
   // runway) fail at 5/8 in and still at 7/8 in, where the nuts below the cap stop the fillet on the web growing: the cap
   // takes CJP groove welds with reinforcing fillets (Category C at the toe in the column flanges and web).

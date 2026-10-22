@@ -15,7 +15,7 @@ import {alongSeismic,baseWarping,braceCases,braceShare,bracingGeometry,bracingLa
 import {activeColumnCap} from './columnCapInputs';
 import {capAlongEccentricity} from './columnCap';
 import {seatEnds,seatMoment} from './columnSupport';
-import type {SupportReactionSet} from './supportReactions';
+import {supportStations,type SupportReactionSet} from './supportReactions';
 import type {CheckResult,ProjectInput} from './types';
 import type {ExistingColumnResult} from './existingColumn';
 
@@ -50,6 +50,10 @@ export function validateColumnBase(p:ProjectInput):string[]{
  add(row-hw.washer/2<section.d/2+pl.weld,`plate.N: the plate washers clash with the column flange welds; the rod rows must be at least ${format(section.d/2+pl.weld+hw.washer/2,'length',p.units,3)} from the column centerline (provided ${format(row,'length',p.units,3)}).`);
  add(a.perRow>2&&a.gauge/(a.perRow-1)<Math.max(4*a.diameter,hw.washer),'anchors.gauge: rods in a row need at least four diameters and a washer width between them.');
  add(f.L<pl.N||f.B<pl.B,'footing: the footing must be larger than the base plate.');
+ // Isolated footings of neighbouring grids must not overlap or touch (square plans; a strip or combined footing for
+ // more is designed by hand). The combined crane-column footings stand across the runway from each other's line.
+ if(!b.combined){const st=supportStations(p);for(let j=0;j+1<st.length;j++){const x=baseAt(p,j).footing,y=baseAt(p,j+1).footing,gap=st[j+1]-st[j]-x.B/2-y.B/2;
+  if(gap<=1e-6){add(true,`footing: the footings at grids ${j+1} and ${j+2} (${format(x.B,'length',p.units,3)} and ${format(y.B,'length',p.units,3)} along the runway, ${format(st[j+1]-st[j],'length',p.units,3)} apart) ${gap<-1e-6?'overlap':'touch'}; use smaller footings, or a strip or combined footing designed by hand.`);break;}}}
  add(a.embedment+f.cover+2*barDiameter[f.bar]>f.thickness+1e-6,'anchors.embedment: the anchor heads must stay above both layers of bottom bars and their cover.');
  add(c.strong.base!=='fixed'&&c.strong.top==='free','enabled: a freestanding column needs a fixed base.');
  add(f.slab>f.thickness+f.soil,'footing.slab: the saw cut slab must not be deeper than the footing below the floor.');
