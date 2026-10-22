@@ -723,7 +723,7 @@ function withConfirmedFace(q:ProjectInput,input:RunwayConfig,trace:SelectionTrac
  const worst=(list:typeof bad)=>list.filter(c=>typeof c.utilization==='number'&&Number.isFinite(c.utilization)).sort((x,y)=>y.utilization!-x.utilization!).slice(0,3).map(c=>`${c.id} ${dcText(c.utilization!,2)}`).join(', ');
  const sel=(p:ProjectInput)=>p.configurator?.selections;
  if(!s.errors.length&&!bad.length&&r.details?.bracket?.enabled){
-  const tieChecks=s.checks.filter(c=>memberChecks.tie.test(c.id)&&c.status==='pass'),why=`Confirmed by the calculation, not by the screening: the column face at the ${len(faceLimit)} limit (the screening estimates of the new column's twist and drift held it at ${len(from)}, where the tie stayed an open item), with the column, base and tie sized for it, passes every check of the calculation (tie: ${worst(tieChecks)||'all pass'}).`;
+  const tieChecks=s.checks.filter(c=>memberChecks.tie.test(c.id)&&c.status==='pass'),why=`Confirmed by the calculation, not by the screening: the column face left free to its ${len(faceLimit)} limit (the tie sizing settles it at ${len(r.details.bracket.reach)}; the screening estimates of the new column's twist and drift held it at ${len(from)}, where the tie stayed an open item), with the column, base and tie sized for it, passes every check of the calculation (tie: ${worst(tieChecks)||'all pass'}).`;
   Object.assign(trace,inner);r.notes+=` ${why}`;
   const c=r.configurator!;
   // The tie the calculation confirms is no longer an open item.
@@ -731,7 +731,7 @@ function withConfirmedFace(q:ProjectInput,input:RunwayConfig,trace:SelectionTrac
   c.selections=sel(r)?.filter(v=>!(v.item==='Open item'&&v.entered==='Top-flange tie')).map(v=>v.item==='Column face to girder web'?{...v,reason:clipReason(`${why} ${v.reason}`)}:v);
   return r;
  }
- const row=sel(q)?.find(v=>v.item==='Top-flange tie'),also=`The column face at the ${len(faceLimit)} limit, built and calculated with the column, base and tie sized for it, does not pass either (${s.errors.length?'validation errors':worst(bad)||`${bad.length} checks open`}): the face stays at ${len(from)}.`;
+ const row=sel(q)?.find(v=>v.item==='Top-flange tie'),also=`With the column face left free to its ${len(faceLimit)} limit (the tie sizing took it to ${len(r.details?.bracket?.reach??from)}), the runway built and calculated with the column, base and tie sized for it does not pass either (${s.errors.length?'validation errors':worst(bad)||`${bad.length} checks open`}): the face stays at ${len(from)}.`;
  if(row)row.reason=clipReason(`${row.reason} ${also}`);
  return q;
 }

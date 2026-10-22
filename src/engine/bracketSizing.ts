@@ -9,7 +9,7 @@
  *
  * The bracket starts light and grows in standard increments until every ratio is at most the target (or no growth
  * helps): ribs 1 in deeper or one plate step thicker, whichever lowers the governing ratio more per pound; root and seat
- * fillets 1/16 in at a time (to 5/8 in, and t - 1/16 in); the seat one plate step; continuity plates in the receiving
+ * fillets 1/16 in at a time (to 5/8 in, and t - 1/16 in; past 5/8 in to the J2.2b t - 1/16 in once the plate steps are spent); the seat one plate step; continuity plates in the receiving
  * column (existing columns, or new ones where they clear the bracing gussets) where the unstiffened column does not
  * take the rib forces, then their fillets, thickness and length. The ribs stand under the girder bearing stiffeners, or
  * as near as the receiving flange allows, clear of the bearing bolt nuts below the seat; the bracket stays stiff enough
@@ -44,6 +44,8 @@ export const plateSteps=[.375,.5,.625,.75,.875,1,1.125,1.25,1.375,1.5,1.75,2,2.2
 const nextPlate=(t:number)=>plateSteps.find(v=>v>t+1e-6);
 /** Largest fillet the sizing grows to: 5/8 in, a few passes; and the plate-edge limit t - 1/16 in of the thinner part. */
 const maxFillet=(...t:number[])=>Math.min(5/8*inch,Math.min(...t)-sixteenth);
+/** AISC 360-16 J2.2b maximum fillet along an edge: t for t < 1/4 in, else t - 1/16 in (the thinner part); the last step once the others are spent. */
+const edgeFillet=(...t:number[])=>{const m=Math.min(...t);return m<inch/4?m:m-sixteenth;};
 /** Deepest rib the sizing grows to: the haunch's 45° free edge (h_r - h_t <= L), and 48 in for a rectangular rib. */
 const maxRibDepth=(b:BracketInput)=>haunchedBracket(b)?b.seatProjection*2:48*inch;
 
@@ -293,30 +295,32 @@ export function sizeWeldedBracket(p:ProjectInput,target=.9,options:BracketSizing
  const step=(from:BracketInput,move:Move)=>{const v=structuredClone(from);if(!move(v))return undefined;return settle(v)&&JSON.stringify(v)!==JSON.stringify(from)?v:undefined;};
  const deeper:Move=v=>{if(v.ribDepth+inch>maxRibDepth(v)+1e-6)return false;v.ribDepth+=inch;return true;};
  const thicker:Move=v=>{const t=nextPlate(v.ribThickness);if(!t||t>3*inch)return false;v.ribThickness=t;return true;};
- const rootWeld:Move=v=>{const w=v.rootWeld+sixteenth;if(w>maxFillet(v.ribThickness,c.flangeThickness)+1e-6)return false;v.rootWeld=w;return true;};
- const seatWeld:Move=v=>{const w=v.seatWeld+sixteenth;if(w>maxFillet(v.ribThickness,v.seatThickness)+1e-6)return false;v.seatWeld=w;return true;};
+ // The fillets grow to 5/8 in first; past it (to the J2.2b limit, edgeFillet) only once the plate moves are spent (`past`).
+ const rootWeld=(past=false):Move=>v=>{const w=v.rootWeld+sixteenth;if(w>(past?edgeFillet:maxFillet)(v.ribThickness,c.flangeThickness)+1e-6)return false;v.rootWeld=w;return true;};
+ const seatWeld=(past=false):Move=>v=>{const w=v.seatWeld+sixteenth;if(w>(past?edgeFillet:maxFillet)(v.ribThickness,v.seatThickness)+1e-6)return false;v.seatWeld=w;return true;};
  const seat:Move=v=>{const t=nextPlate(v.seatThickness);if(!t)return false;v.seatThickness=t;return true;};
  const thinner:Move=v=>v.seatThickness<=v.ribThickness?seat(v):thicker(v);
  const stiffen:Move=v=>{if(v.columnStiffeners?.enabled)return false;v.columnStiffeners=initialColumnStiffeners(v.receiver,receiverK(v,q.existingColumn)?.k,Math.max(v.seatThickness,v.ribThickness));return stiffenersFit(v);};
- const plateWeld=(k:'flangeWeld'|'webWeld'):Move=>v=>{const s=v.columnStiffeners;if(!s)return false;const w=s[k]+sixteenth;if(w>maxFillet(s.thickness)+1e-6)return false;s[k]=w;return true;};
+ // Past 5/8 in, the stiffener fillets still fit the stiffener (columnStiffenerErrors: smaller than the plate, the corner clips).
+ const plateWeld=(k:'flangeWeld'|'webWeld',past=false):Move=>v=>{const s=v.columnStiffeners;if(!s)return false;const w=s[k]+sixteenth;if(w>(past?edgeFillet:maxFillet)(s.thickness)+1e-6)return false;s[k]=w;return !past||stiffenersFit(v);};
  const plateThicker:Move=v=>{const s=v.columnStiffeners;if(!s||s.thickness+eighth>1.25*inch+1e-6)return false;s.thickness+=eighth;return true;};
  const fullDepth:Move=v=>{const s=v.columnStiffeners;if(!s||s.length==='full')return false;s.length='full';return true;};
- const both:Move=v=>{const flange=plateWeld('flangeWeld')(v),web=plateWeld('webWeld')(v);return flange||web;};
+ const both=(past=false):Move=>v=>{const flange=plateWeld('flangeWeld',past)(v),web=plateWeld('webWeld',past)(v);return flange||web;};
  // Moves for each governing ratio: each list is tried in order (the first that applies), a nested list is a choice
  // made by the larger drop of that ratio per pound of steel added.
  const rib:Move[]=[deeper,thicker],moves:Record<string,(Move|Move[])[]>={
   'rib-flexure':[rib],'rib-interaction':[rib],'rib-flexure-root':[rib],'rib-edge':[rib],'fatigue-rib-edge':[rib],'fatigue-peak':[rib],'rotation':[rib],'uplift-rib-flexure':[rib],'column-panel':[deeper],
   // The deflection adds the rib's and the seat's: either may govern it, also where the tie's release takes it.
   'deflection':[[deeper,thicker,seat]],'release':[[deeper,thicker,seat]],
-  'fatigue-rib':[[deeper,thicker,rootWeld]],
+  'fatigue-rib':[[deeper,thicker,rootWeld()]],
   'rib-shear':[[thicker,deeper]],'rib-shear-root':[[thicker,deeper]],'uplift-rib-shear':[[thicker,deeper]],'rib-edge-thickness':[thicker],'root-base':[thicker,deeper],
-  'root-weld':[rootWeld,deeper,thicker],'fatigue-rootWeld':[rootWeld,deeper,thicker],'uplift-root-weld':[rootWeld,deeper],'column-weld':[rootWeld,deeper],'fatigue-columnWeld':[rootWeld,deeper],
+  'root-weld':[rootWeld(),deeper,thicker,rootWeld(true)],'fatigue-rootWeld':[rootWeld(),deeper,thicker,rootWeld(true)],'uplift-root-weld':[rootWeld(),deeper,rootWeld(true)],'column-weld':[rootWeld(),deeper,rootWeld(true)],'fatigue-columnWeld':[rootWeld(),deeper,rootWeld(true)],
   'seat-flexure':[seat],'seat-shear':[seat],'fatigue-seat':[seat],'uplift-seat-flexure':[seat],
-  'seat-weld':[seatWeld,thinner],'fatigue-seatWeld':[seatWeld,thinner],'uplift-seat-weld':[seatWeld,thinner],
+  'seat-weld':[seatWeld(),thinner,seatWeld(true)],'fatigue-seatWeld':[seatWeld(),thinner,seatWeld(true)],'uplift-seat-weld':[seatWeld(),thinner,seatWeld(true)],
   'column-flange':[stiffen,deeper],'uplift-column-flange':[stiffen,deeper],'seat-flange':[stiffen,deeper],'seat-web':[stiffen,deeper],'column-yield':[stiffen,deeper],'column-crippling':[stiffen,deeper],'column-sidesway':[stiffen,deeper],
   'colstiff-upper':[plateThicker,deeper],'colstiff-lower':[plateThicker,deeper],'colstiff-proportions':[plateThicker],
-  'colstiff-flange-weld':[plateWeld('flangeWeld'),plateThicker,deeper],'colstiff-fatigue-plate':[plateWeld('flangeWeld'),plateThicker,deeper],
-  'colstiff-web-weld':[plateWeld('webWeld'),plateThicker,deeper],'colstiff-fatigue-weld':[both,plateThicker,deeper],'colstiff-web-shear':[fullDepth,deeper],
+  'colstiff-flange-weld':[plateWeld('flangeWeld'),plateThicker,deeper,plateWeld('flangeWeld',true)],'colstiff-fatigue-plate':[plateWeld('flangeWeld'),plateThicker,deeper,plateWeld('flangeWeld',true)],
+  'colstiff-web-weld':[plateWeld('webWeld'),plateThicker,deeper,plateWeld('webWeld',true)],'colstiff-fatigue-weld':[both(),plateThicker,deeper,both(true)],'colstiff-web-shear':[fullDepth,deeper],
   'nuts':[]};
  let r=ratios(b);
  for(let i=0;i<200;i++){
