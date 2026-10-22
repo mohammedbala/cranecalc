@@ -127,7 +127,7 @@ const negativeMoment=(x:RemedyContext)=>/^(combined-bottom|major|flexure-load-he
  * 2√(a · 8/9 M/M_c) (a ≥ 0.2 form; found by a scan of the lengths otherwise).
  */
 function tieMoveStrength(x:RemedyContext){
- const m=x.c.note.match(/H1 governing state: P_r\/P_c = ([\d.]+)( \(P_c elastic)?/);if(!m||!Number.isFinite(x.u))return undefined;
+ const m=x.c.note.match(/H1 governing state: P_r\/P_c = (\d+(?:\.\d+)?)( \(P_c elastic)?/);if(!m||!Number.isFinite(x.u)||!Number.isFinite(Number(m[1])))return undefined;
  const a=Number(m[1]),scales=!!m[2],u=x.u,big=a>=.2;
  // Σ M/M_c at the present length; H1 at a length with (L'/L)² = k: a·k and Σ/k in the H1-1a or H1-1b form.
  const sum=big?9/8*(u-a):u-a/2,h1=(k:number)=>a*k>=.2?a*k+8/9*sum/k:a*k/2+sum/k;
