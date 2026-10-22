@@ -48,8 +48,8 @@ describe('configurator items',()=>{
 
 describe('rotations',()=>{
  it('keep three significant figures, never 0 for a small rotation',()=>{
-  expect(radText(1.918e-5)).toBe('1.92 × 10⁻⁵');expect(radText(0)).toBe('0');expect(radText(.0012)).toBe('0.0012');
-  expect(tidyNumbers("the footing's rotation 1.918e-5 rad on the soil")).toBe("the footing's rotation 1.92 × 10⁻⁵ rad on the soil");
+  expect(radText(1.918e-5)).toBe('0.0000192');expect(radText(0)).toBe('0');expect(radText(.0012)).toBe('0.0012');
+  expect(tidyNumbers("the footing's rotation 1.918e-5 rad on the soil")).toBe("the footing's rotation 0.0000192 rad on the soil");
   expect(tidyNumbers('rotation 1.851e-3 rad, 12.3456 kip')).toBe('rotation 0.00185 rad, 12.3 kip');
  });
 });
