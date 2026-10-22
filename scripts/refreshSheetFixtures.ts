@@ -47,6 +47,10 @@ const configFixtures:Record<string,RunwayConfig>={
  c086:{"title":"15 t cab · new columns · rolled-corbel · paired-bars · 3×35 ft simple · ASD","number":"SIM-086","units":"US","method":"ASD","scope":"design","capacity":15,"craneSpan":56,"control":"cab","cmaa":"B","cranes":1,"buildingClass":"B","system":"simple","bays":3,"span":35,"railElevation":18,"girder":"rolled","structure":"new","support":"rolled-corbel","tie":"paired-bars"} as RunwayConfig,
  // Sample case 088 (general arrangement: section name on the crane-level strut under the girder).
  c088:{"title":"10 t cab · new columns · tapered-haunch · flexible-plate · 1×35 ft simple","number":"SIM-088","units":"US","method":"LRFD","scope":"design","capacity":10,"craneSpan":49,"control":"cab","cmaa":"D","cranes":1,"buildingClass":"C","system":"simple","bays":1,"span":35,"railElevation":23,"girder":"rolled","structure":"new","support":"tapered-haunch","tie":"flexible-plate"} as RunwayConfig,
+ // Sample case 073 (welded bracket plan on a jumbo W14X730 column: the section key's reference on the thick column flange).
+ c073:{"title":"40 t cab · new columns · twin-rib · flexible-plate · 3×20 ft simple","number":"SIM-073","units":"US","method":"LRFD","scope":"design","capacity":40,"craneSpan":71,"control":"cab","cmaa":"C","cranes":1,"buildingClass":"C","system":"simple","bays":3,"span":20,"railElevation":35,"girder":"rolled","structure":"new","support":"twin-rib","tie":"flexible-plate"} as RunwayConfig,
+ // Sample case 077 (welded bracket plan on a jumbo W14X730 column in SI: the seat length value on the grid line beyond the thick flange).
+ c077:{"title":"30 t cab · new columns · twin-rib · paired-bars · 3×35 ft simple · SI","number":"SIM-077","units":"SI","method":"LRFD","scope":"design","capacity":30,"craneSpan":64,"control":"cab","cmaa":"C","cranes":1,"buildingClass":"D","system":"simple","bays":3,"span":35,"railElevation":32,"girder":"rolled","structure":"new","support":"twin-rib","tie":"paired-bars"} as RunwayConfig,
 };
 const dir=new URL('../tests/fixtures/sheets/',import.meta.url);
 const file=(name:string)=>new URL(`${name}.json.gz`,dir);

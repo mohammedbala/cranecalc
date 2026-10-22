@@ -22,6 +22,7 @@ import {haunchedRibView,haunchedFaceRibs,haunchedRibCallout,haunchedRibNotes} fr
 import {stiffenerDrawing,stiffenerSideEdges,lowerEdgeTarget,stiffenerPlan,stiffenerFaceHidden,columnStiffenerView,columnStiffenerTitle,stiffenerNotes} from './columnStiffenerDrawing';
 import {torsionBraceNotes} from './bracingSheet';
 import {topFlangeRestraint} from './tieNames';
+import {AnnotationSpace} from './annotationSpace';
 /** Column bracket details on their own sheet. */
 export function bracketSheetSvg(s:CalculationSnapshot,number='S-05'){
  const topic=bracketTopic(s);return topic?topicSheetSvg(s,topic,number,usesExistingBracket(s.input)?'EXISTING BRACKETS / NEW BOLTED SEATS':'WELDED COLUMN BRACKETS'):'';
@@ -99,9 +100,10 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   }
   // Column stiffeners at the seat: the column broken just beyond the flange, the plates cut.
   if(cs)svg+=stiffenerPlan(cs.g,{cx,face,k,cls:sc.isNew?'runway-line':'reference-line',stub:10}).svg;
-  svg+=line([cx,face-b.receiver.flangeThickness*k-14],[cx,tip+8],'grid-line');
+  // The column flange's far edge: a jumbo column's thick flange reaches well beyond the seat.
+  const back=face-b.receiver.flangeThickness*k;
+  svg+=line([cx,back-14],[cx,tip+8],'grid-line');
   svg+=line([left-10,Y(b.reach)],[right+10,Y(b.reach)],'grid-line');
-  svg+=dimH(left,right,face,87,dim(b.seatLength));
   // The girder C/L from the column face and the projection beyond it, extension lines clear of the seat edge;
   // the hole columns as ordinates from the grid below the seat, the rows at the gauge on the girder C/L.
   svg+=dimV(face,Y(b.reach),left-2,left-16,dim(b.reach))+dimV(face,tip,left-2,left-34,dim(b.seatProjection));
@@ -112,15 +114,29 @@ export function bracketTopic(s:CalculationSnapshot):DetailTopic|undefined{
   }
   // Keys: the transverse section between the rib and the outer hole column, the elevation from the runway side.
   const cut=X(g?(b.ribSpacing/2+b.ribThickness/2+g.rows[1]+gap/2)/2:(b.ribSpacing/2+half)/2);
-  svg+=sectionCut([cut,face-3],[cut,tip+3],[-1,0],detailTitles.weldedBracket,['a'],'over');
-  svg+=sectionCut([left-4,tip+6],[right+4,tip+6],[0,-1],bracketElevationTitle,['b']);
   const plate=plates[plates.length-1],items:{at:XY;labels:string[];weld?:string}[]=[
    {at:[X(b.ribSpacing/2+b.ribThickness/2),Y(b.seatProjection*.1)],labels:['CONT. SEAT-TO-RIB','BOTH SIDES / EACH RIB'],weld:size(b.seatWeld)},
    {at:[right,Y(b.seatProjection*.3)],labels:[`SEAT PL ${size(b.seatThickness)}`,`${dim(b.seatLength)} X ${dim(b.seatProjection)}`]},
    {at:[X(plate.end+plate.dir*L*.8),Y(b.reach-W/2)],labels:[`BEARING PL ${size(d.bearing.thickness)} X ${dim(W)} X ${dim(L)}`,`EACH GIRDER END; SEE ${detailRef(bearingBoltsTitle(p))}`]},
    ...(g&&eb?[{at:[X(plate.end+plate.dir*g.rows[1])+g.hole/2*k,Y(rowsY[1])] as XY,labels:[`${plates.length*4} - ${size(g.hole)} STD HOLES IN SEAT`,`FOR ${size(eb.bolts.diameter)} ${eb.bolts.grade} BEARING BOLTS`]}]:[])
   ];
-  svg+=labelColumn(items,right+40,cs?face-20:face+10,cs?tip-10:tip);
+  const callouts=labelColumn(items,right+40,cs?face-20:face+10,cs?tip-10:tip);
+  // The elevation key below the seat at its right end, else at its left end, its reference clear of the callout leaders.
+  const drawn=new AnnotationSpace(svg+callouts);
+  const elevation=drawn.pick((['tail','tip'] as const).flatMap(label=>(['b','a'] as const).map(end=>sectionCut([left-4,tip+6],[right+4,tip+6],[0,-1],bracketElevationTitle,[end],label))));
+  // The seat length above the column and the section key from beyond the seat, each reading clear of the column
+  // flange, the grid line and each other. The key's reference stands beyond the column flange (a jumbo column's thick
+  // flange, the key crossing it) and below the seat length, which is raised clear of the grid line and the key.
+  const length=(y:number)=>dimH(left,right,face,y,dim(b.seatLength)),nearest=Math.min(87,back-9);
+  const sections=[...new Set([Math.min(face-3,back+15),back-3,back-9,back-15])].flatMap(y=>(['over','tail'] as const).map(label=>({y,svg:sectionCut([cut,y],[cut,tip+3],[-1,0],detailTitles.weldedBracket,['a'],label)})));
+  let keyed:[string,string]|undefined;
+  for(let i=0;i<16&&!keyed;i++){
+   const at=nearest-6*i,seat=length(at);if(drawn.cost(seat))continue;
+   const room=new AnnotationSpace(svg+callouts+elevation+seat),section=sections.find(v=>v.y-25>at&&room.cost(v.svg)===0);
+   if(section)keyed=[seat,section.svg];
+  }
+  const [seat,section]=keyed??[length(nearest),new AnnotationSpace(svg+callouts+elevation+length(nearest)).pick(sections.map(v=>v.svg))];
+  svg+=seat+section+elevation+callouts;
   return {svg:svg+'</g>',scale:scale.label};
  }});
  views.push({title:bracketElevationTitle,render:()=>{
