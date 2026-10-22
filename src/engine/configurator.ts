@@ -1333,8 +1333,21 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  const reactions=supportReactions(q,sectionProperties(q.section)),drift0=baseSizingRatios(q).ratios.drift,torsion0=columnTorsionRatio(q),twist0=achievableTwist(q);
  const state=(drift:number,torsion:number,twist:number,cut=true)=>[drift>(cut?baseTarget:driftEdge)?`base drift ratio ${drift.toFixed(2)}${cut?` > ${baseTarget}`:''}`:'',torsion>1?`column torsion ratio ${torsion.toFixed(2)}${cut?' > 1.00':''}`:'',twist>1?`seat twist ratio ${twist.toFixed(2)}${cut?' > 1.00':''} with the torsion brace on the stiffest strut that fits`:''].filter(Boolean).join(' and ');
  const whyHead=`the ${q.existingColumn!.shape} chosen for the crane gives ${state(drift0,torsion0,twist0)}`,why=`${whyHead}: the lightest heavier W14 within the drift${twist0>1?', torsion and twist':' and torsion'} ratios`;
- const shapes=heavierColumns(q.existingColumn!.shape,true);
- for(const shape of shapes){
+ // The rolled W14s to the W14X398 first; the jumbo W14X426 to W14X730 only where the W14X398 leaves a ratio past its
+ // limit (drift past driftEdge, torsion or twist past 1.00): a jumbo is not taken for margin alone (case 072: the
+ // W14X398 within the drift limit, a W14X550 for the 0.9 target made the cap tieback fail). Crane columns: to the W14X398.
+ const all=heavierColumns(q.existingColumn!.shape,true,cfg.support==='crane-column'?craneColumnLimit:heavyColumnLimit);
+ const standard=all.filter(v=>aiscShapeByName(v)!.weight<=craneColumnLimit+1e-9),jumbo=all.filter(v=>!standard.includes(v));
+ const withinLimits=(r:ProjectInput)=>baseSizingRatios(r).ratios.drift<=driftEdge&&torsionOk(r)&&twistOk(r);
+ let shapes=standard;
+ for(let tier=0;tier<2;tier++){
+ if(tier===1){
+  // The W14X398 within the limits (above the target): it is the closest, and the jumbo shapes are not searched.
+  const last=standard.at(-1);if(!jumbo.length||cfg.structure!=='new'||cfg.support==='crane-column')break;
+  if(last&&withinLimits(buildProject({...cfg,columnShape:last},{})))break;
+  shapes=all;
+ }
+ for(const shape of tier===1?jumbo:standard){
   const t=structuredClone(q),w=aiscShapeByName(shape)!;
   Object.assign(t.existingColumn!,{shape,d:w.d*inch,bf:w.bf*inch,tf:w.tf*inch,tw:w.tw*inch});
   if(t.details?.bracket?.enabled)Object.assign(t.details.bracket.receiver,shapePlates(shape));
@@ -1343,6 +1356,7 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
   if(columnTorsionRatio(t,reactions)>1.05)continue;
   const inner:SelectionTrace={},r=buildProject({...cfg,columnShape:shape},inner);
   if(baseSizingRatios(r).ratios.drift<=baseTarget&&torsionOk(r)&&twistOk(r)){Object.assign(trace,inner,{column:[trace.column,why[0].toUpperCase()+why.slice(1)].filter(Boolean).join('; ')});return {...r,configurator:{...cfg}};}
+ }
  }
  // No W14 to the catalog limit meets them: a new freestanding column on the heaviest, where it lowers the governing
  // ratio (the closest member, built and checked), an open item past 1.00. Crane columns have their own catalog limit
@@ -1369,7 +1383,7 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  const open=left[0]>driftEdge||left[1]>1+1e-9||left[2]>1+1e-9;
  // The log row says what was done: no W14 searched meets the sizing ratios; the heaviest is built where it lowers the
  // governing ratio (an open item where it is still past the limits), else the column chosen stays.
- const none=`no W14 to the ${heaviest} meets the new column's drift, torsion and twist ratios for this crane`,item=`an open item (${newColumnBeyond})`;
+ const none=`no W14 to the ${heaviest} meets the new column's drift, torsion and twist ratios for this crane${shapes===standard&&jumbo.length?` (the jumbo ${jumbo[0]} to ${jumbo.at(-1)} are searched only where the ${heaviest} leaves a ratio past its limit)`:''}`,item=`an open item (${newColumnBeyond})`;
  const row=better?`${whyHead}: ${none}; the heaviest searched, ${heaviest}, lowers the governing ratio and is built, ${open?`still giving ${past||state(...left)}: ${item}`:`giving ${state(...left)||'ratios within the sizing targets'} (configurator estimate, within the calculation's limits)`}`:open?`${none}: ${item}`:'';
  Object.assign(trace,better?inner:{},{column:[trace.column,row&&row[0].toUpperCase()+row.slice(1)].filter(Boolean).join('; ')},open?{columnOpen:clipReason(`${newColumnBeyond}: ${text}`)}:{});
  return better?{...r,configurator:{...cfg}}:q;
