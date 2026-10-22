@@ -1344,7 +1344,14 @@ function withColumnBase(p:ProjectInput,cfg:RunwayConfig,trace:SelectionTrace={})
  if(tier===1){
   // The W14X398 within the limits (above the target): it is the closest, and the jumbo shapes are not searched.
   const last=standard.at(-1);if(!jumbo.length||cfg.structure!=='new'||cfg.support==='crane-column')break;
-  if(last&&withinLimits(buildProject({...cfg,columnShape:last},{})))break;
+  // A drift estimate just past driftEdge but within the limit is confirmed by the calculation's drift checks (case 072:
+  // 0.995 estimated on the W14X398 with a 30 ft footing, base-drift 0.99 calculated).
+  const inner:SelectionTrace={},r398=last?buildProject({...cfg,columnShape:last},inner):undefined,drift=r398?baseSizingRatios(r398).ratios.drift:Infinity;
+  if(r398&&withinLimits(r398))break;
+  if(r398&&drift<=1+1e-9&&torsionOk(r398)&&twistOk(r398)&&calculate(r398).checks.filter(c=>c.id==='base-drift'||c.id==='column-drift').every(c=>c.status==='pass')){
+   const row=`${whyHead}: no W14 to the ${last} meets the 0.9 drift target; the ${last} leaves a base drift ratio ${drift.toFixed(3)} (configurator estimate) within the limit, confirmed by the calculation's drift checks, so it is built (the jumbo ${jumbo[0]} to ${jumbo.at(-1)} are searched only where the ${last} leaves a ratio past its limit)`;
+   Object.assign(trace,inner,{column:[trace.column,row[0].toUpperCase()+row.slice(1)].filter(Boolean).join('; ')});return {...r398,configurator:{...cfg}};
+  }
   shapes=all;
  }
  for(const shape of tier===1?jumbo:standard){
